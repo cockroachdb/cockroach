@@ -671,6 +671,49 @@ func TestServerConnSettings(t *testing.T) {
 	}
 }
 
+func TestServerSocketSettings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Avoid leaking configuration changes after the tests end.
+	defer initCLIDefaults()
+
+	f := startCmd.Flags()
+	testData := []struct {
+		args           []string
+		expectedSocket string
+	}{
+		{[]string{"start"}, ""},
+		// No socket unless requested.
+		{[]string{"start", "--listen-addr=:12345"}, ""},
+		// File name is auto-generated.
+		{[]string{"start", "--socket-dir=/blah"}, "/blah/.s.PGSQL." + base.DefaultPort},
+		{[]string{"start", "--socket-dir=/blah", "--listen-addr=:12345"}, "/blah/.s.PGSQL.12345"},
+		// Empty socket dir disables the socket.
+		{[]string{"start", "--socket-dir="}, ""},
+		{[]string{"start", "--socket-dir=", "--listen-addr=:12345"}, ""},
+		// Deprecated behavior (remove in 20.2):
+		{[]string{"start", "--socket=/blah/xxxx"}, "/blah/xxxx"},
+		{[]string{"start", "--socket-dir=/foo", "--socket=/blah/xxxx"}, "/blah/xxxx"},
+	}
+
+	for i, td := range testData {
+		t.Run(strings.Join(td.args, " "), func(t *testing.T) {
+			initCLIDefaults()
+			if err := f.Parse(td.args); err != nil {
+				t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
+			}
+
+			if err := extraServerFlagInit(startCmd); err != nil {
+				t.Fatal(err)
+			}
+			if td.expectedSocket != serverCfg.SocketFile {
+				t.Errorf("%d. serverCfg.SocketFile expected '%s', but got '%s'. td.args was '%#v'.",
+					i, td.expectedSocket, serverCfg.SocketFile, td.args)
+			}
+		})
+	}
+}
+
 func TestLocalityAdvAddrFlag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

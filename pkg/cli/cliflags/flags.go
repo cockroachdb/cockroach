@@ -561,6 +561,12 @@ To use, for example: psql -h /path/to -p NNNN ...
 `,
 	}
 
+	SocketDir = FlagInfo{
+		Name:        "socket-dir",
+		EnvVar:      "COCKROACH_SOCKET_DIR",
+		Description: `Deprecated in favor of --socket-dir.`,
+	}
+
 	ClientInsecure = FlagInfo{
 		Name:   "insecure",
 		EnvVar: "COCKROACH_INSECURE",
