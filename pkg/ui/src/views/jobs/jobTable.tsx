@@ -84,16 +84,7 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
   }
 
   componentDidUpdate(prevProps: Readonly<JobTableProps>): void {
-    if (prevProps.jobs !== this.props.jobs) {
-      this.setState((prevState: Readonly<any>) => {
-        return {
-          pagination: {
-            ...prevState.pagination,
-            current: 1,
-          },
-        };
-      });
-    }
+    this.setCurrentPageToOneIfJobsChanged(prevProps);
   }
 
   onChangePage = (current: number) => {
@@ -163,5 +154,25 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
         />
       </React.Fragment>
     );
+  }
+
+  private setCurrentPageToOneIfJobsChanged(prevProps: Readonly<JobTableProps>) {
+    if (!_.isEqual(
+      _.map(prevProps.jobs.data.jobs, (j) => {
+        return j.id;
+      }),
+      _.map(this.props.jobs.data.jobs, (j) => {
+        return j.id;
+      }),
+    )) {
+      this.setState((prevState: Readonly<any>) => {
+        return {
+          pagination: {
+            ...prevState.pagination,
+            current: 1,
+          },
+        };
+      });
+    }
   }
 }
