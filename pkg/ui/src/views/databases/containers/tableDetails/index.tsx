@@ -11,8 +11,8 @@
 import { Col, Row, Tabs } from "antd";
 import { Highlight } from "oss/src/views/shared/components/sql/highlight";
 import { SummaryCard } from "oss/src/views/shared/components/summaryCard";
-import { selectStatements } from "oss/src/views/statements/statementsPage";
-import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "oss/src/views/statements/statementsTable";
+import { selectStatements, selectLastReset } from "oss/src/views/statements/statementsPage";
+import { AggregateStatistics } from "oss/src/views/statements/statementsTable";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
@@ -21,11 +21,12 @@ import * as protos from "src/js/protos";
 import { generateTableID, refreshStatements, refreshTableDetails, refreshTableStats, refreshDatabaseDetails } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
-import { appAttr, databaseNameAttr, tableNameAttr } from "src/util/constants";
+import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import { Bytes } from "src/util/format";
 import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
+import StatementSortTable from "src/views/statements/statementSortTable";
 import "./styles.styl";
 const { TabPane } = Tabs;
 import { getMatchParamByName } from "src/util/query";
@@ -46,6 +47,7 @@ interface TableMainData {
   tableInfo: TableInfo;
   grantsSortSetting: SortSetting;
   statements: AggregateStatistics[];
+  lastReset: string;
 }
 
 /**
@@ -103,10 +105,9 @@ export class TableMain extends React.Component<TableMainProps, {}> {
   }
 
   render() {
-    const { tableInfo, grantsSortSetting, statements, match, dbResponse } = this.props;
+    const { tableInfo, lastReset, grantsSortSetting,  match, dbResponse } = this.props;
     const database = getMatchParamByName(match, databaseNameAttr);
     const table = getMatchParamByName(match, tableNameAttr);
-    const selectedApp = getMatchParamByName(match, appAttr);
 
     const title = `${database}.${table}`;
     if (tableInfo) {
@@ -162,12 +163,10 @@ export class TableMain extends React.Component<TableMainProps, {}> {
                 </Row>
               </TabPane>
               <TabPane tab="Statements" key="2">
-                <SummaryCard>
-                  <StatementsSortedTable
-                    data={this.getStatementsTableData()}
-                    columns={statements && makeStatementsColumns(statements, selectedApp)}
-                  />
-                </SummaryCard>
+                <StatementSortTable
+                  statements={this.getStatementsTableData()}
+                  lastReset={lastReset}
+                />
               </TabPane>
               <TabPane tab="Grants" key="3">
                 <SummaryCard>
@@ -215,6 +214,7 @@ const mapStateToProps = (state: AdminUIState, ownProps: RouteComponentProps) => 
   grantsSortSetting: databaseTableGrantsSortSetting.selector(state),
   statements: selectStatements(state, ownProps),
   dbResponse: databaseDetails(state)[getMatchParamByName(ownProps.match, databaseNameAttr)] && databaseDetails(state)[getMatchParamByName(ownProps.match, databaseNameAttr)].data,
+  lastReset: selectLastReset(state),
 });
 
 const mapDispatchToProps = {

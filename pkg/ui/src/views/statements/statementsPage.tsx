@@ -8,10 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Icon, Pagination } from "antd";
 import _ from "lodash";
-import moment from "moment";
-import { DATE_FORMAT } from "src/util/format";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
@@ -31,10 +28,8 @@ import { PrintTime } from "src/views/reports/containers/range/print";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
-import { SortSetting } from "src/views/shared/components/sortabletable";
-import Empty from "../app/components/empty";
 import { Search } from "../app/components/Search";
-import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
+import { AggregateStatistics } from "./statementsTable";
 import ActivateDiagnosticsModal, { ActivateDiagnosticsModalRef } from "src/views/statements/diagnostics/activateDiagnosticsModal";
 import "./statements.styl";
 import {
@@ -42,6 +37,7 @@ import {
 } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
+import StatementSortTable from "./statementSortTable";
 
 import "./statements.styl";
 
@@ -57,14 +53,8 @@ interface StatementsPageProps {
   refreshStatementDiagnosticsRequests: typeof refreshStatementDiagnosticsRequests;
   dismissAlertMessage: () => void;
 }
-type PaginationSettings = {
-  pageSize: number;
-  current: number;
-};
 
 interface StatementsPageState {
-  sortSetting: SortSetting;
-  pagination: PaginationSettings;
   search?: string;
 }
 
@@ -74,23 +64,9 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
   constructor(props: StatementsPageProps & RouteComponentProps<any>) {
     super(props);
     this.state = {
-      sortSetting: {
-        sortKey: 6,  // Latency
-        ascending: false,
-      },
-      pagination: {
-        pageSize: 20,
-        current: 1,
-      },
       search: "",
     };
     this.activateDiagnosticsRef = React.createRef();
-  }
-
-  changeSortSetting = (ss: SortSetting) => {
-    this.setState({
-      sortSetting: ss,
-    });
   }
 
   selectApp = (app: DropdownOption) => {
@@ -111,91 +87,19 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
     this.props.dismissAlertMessage();
   }
 
-  onChangePage = (current: number) => {
-    const { pagination } = this.state;
-    this.setState({ pagination: { ...pagination, current }});
-  }
-
-  getStatementsData = () => {
-    const { pagination: { current, pageSize } } = this.state;
-    const currentDefault = current - 1;
-    const start = (currentDefault * pageSize);
-    const end = (currentDefault * pageSize + pageSize);
-    const data = this.filteredStatementsData().slice(start, end);
-    return data;
-  }
-
-  onSubmitSearchField = (search: string) => this.setState({ pagination: { ...this.state.pagination, current: 1 }, search });
+  onSubmitSearchField = (search: string) => this.setState({ search });
 
   onClearSearchField = () => this.setState({ search: "" });
 
-  filteredStatementsData = () => {
-    const { search } = this.state;
-    const { statements } = this.props;
-    return statements.filter(statement => search.split(" ").every(val => statement.label.toLowerCase().includes(val.toLowerCase())));
-  }
-
-  renderPage = (_page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next", originalElement: React.ReactNode) => {
-    switch (type) {
-      case "jump-prev":
-        return (
-          <div className="_pg-jump">
-            <Icon type="left" />
-            <span className="_jump-dots">•••</span>
-          </div>
-        );
-      case "jump-next":
-        return (
-          <div className="_pg-jump">
-            <Icon type="right" />
-            <span className="_jump-dots">•••</span>
-          </div>
-        );
-      default:
-        return originalElement;
-    }
-  }
-
-  renderCounts = () => {
-    const { pagination: { current, pageSize }, search } = this.state;
-    const { match } = this.props;
-    const appAttrValue = getMatchParamByName(match, appAttr);
-    const selectedApp = appAttrValue || "";
-    const total = this.filteredStatementsData().length;
-    const pageCount = current * pageSize > total ? total : current * pageSize;
-    const count = total > 10 ? pageCount : current * total;
-    if (search.length > 0) {
-      const text = `${total} ${total > 1 || total === 0 ? "results" : "result"} for`;
-      const filter = selectedApp ? <React.Fragment>in <span className="label">{selectedApp}</span></React.Fragment> : null;
-      return (
-        <React.Fragment>{text} <span className="label">{search}</span> {filter}</React.Fragment>
-      );
-    }
-    return `${count} of ${total} statements`;
-  }
-
-  renderLastCleared = () => {
-    const { lastReset } = this.props;
-    return `Last cleared ${moment.utc(lastReset).format(DATE_FORMAT)}`;
-  }
-
-  noStatementResult = () => (
-    <>
-      <p>There are no SQL statements that match your search or filter since this page was last cleared.</p>
-      <a href="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html" target="_blank">Learn more about the statement page</a>
-    </>
-  )
-
   renderStatements = () => {
-    const { pagination, search } = this.state;
-    const { statements, match } = this.props;
+    const { match, statements, lastReset } = this.props;
+    const { search } = this.state;
     const appAttrValue = getMatchParamByName(match, appAttr);
     const selectedApp = appAttrValue || "";
     const appOptions = [{ value: "", label: "All" }];
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
-    const data = this.getStatementsData();
     return (
-      <div>
+      <>
         <PageConfig>
           <PageConfigItem>
             <Search
@@ -212,52 +116,14 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
             />
           </PageConfigItem>
         </PageConfig>
-        <section className="cl-table-container">
-          <div className="cl-table-statistic">
-            <h4 className="cl-count-title">
-              {this.renderCounts()}
-            </h4>
-            <h4 className="last-cleared-title">
-              {this.renderLastCleared()}
-            </h4>
-          </div>
-          {data.length === 0 && search.length === 0 && (
-            <Empty
-              title="This page helps you identify frequently executed or high latency SQL statements."
-              description="No SQL statements were executed since this page was last cleared."
-              buttonHref="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html"
-            />
-          )}
-          {(data.length > 0 || search.length > 0) && (
-            <div className="cl-table-wrapper">
-              <StatementsSortedTable
-                className="statements-table"
-                data={data}
-                columns={
-                  makeStatementsColumns(
-                    statements,
-                    selectedApp,
-                    search,
-                    this.activateDiagnosticsRef.current?.showModalFor,
-                  )
-                }
-                sortSetting={this.state.sortSetting}
-                onChangeSortSetting={this.changeSortSetting}
-                renderNoResult={this.noStatementResult()}
-              />
-            </div>
-          )}
-        </section>
-        <Pagination
-          size="small"
-          itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
-          pageSize={pagination.pageSize}
-          current={pagination.current}
-          total={this.filteredStatementsData().length}
-          onChange={this.onChangePage}
-          hideOnSinglePage={data.length === 0}
-        />
-      </div>
+        <div className="section">
+          <StatementSortTable
+            statements={statements}
+            search={search}
+            lastReset={lastReset}
+          />
+        </div>
+      </>
     );
   }
 
