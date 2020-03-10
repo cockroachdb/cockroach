@@ -846,10 +846,8 @@ long and not particularly human-readable.`,
 	}
 
 	Decommission = FlagInfo{
-		Name: "decommission",
-		Description: `
-If specified, decommissions the node and waits for it to rebalance before
-shutting down the node.`,
+		Name:        "decommission",
+		Description: `Deprecated: use 'node decommission' instead.`,
 	}
 
 	Wait = FlagInfo{
