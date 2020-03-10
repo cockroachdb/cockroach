@@ -75,7 +75,7 @@ export function makeStatementsColumns(
   search?: string,
   activateDiagnosticsRef?: React.RefObject<ActivateDiagnosticsModalRef>,
 ): ColumnDescriptor<AggregateStatistics>[]  {
-  const columns: ColumnDescriptor<AggregateStatistics>[] = [
+  const original: ColumnDescriptor<AggregateStatistics>[] = [
     {
       title: "Statement",
       className: "cl-table__col-query-text",
@@ -96,33 +96,33 @@ export function makeStatementsColumns(
       sort: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
     },
   ];
-  columns.push(...makeCommonColumns(statements));
 
-  if (activateDiagnosticsRef) {
-    const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
-      title: "Diagnostics",
-      cell: (stmt) => {
-        if (stmt.diagnosticsReport) {
-          return <DiagnosticStatusBadge status={stmt.diagnosticsReport.completed ? "READY" : "WAITING FOR QUERY"}/>;
-        }
-        return (
-          <Anchor
-            onClick={() => activateDiagnosticsRef?.current?.showModalFor(stmt.label)}
-          >
-            Activate
-          </Anchor>
-        );
-      },
-      sort: (stmt) => {
-        if (stmt.diagnosticsReport) {
-          return stmt.diagnosticsReport.completed ? "READY" : "WAITING FOR QUERY";
-        }
-        return null;
-      },
-    };
-    columns.push(diagnosticsColumn);
-  }
-  return columns;
+  const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
+    title: "Diagnostics",
+    cell: (stmt) => {
+      if (stmt.diagnosticsReport) {
+        return <DiagnosticStatusBadge status={stmt.diagnosticsReport.completed ? "READY" : "WAITING FOR QUERY"} />;
+      }
+      return (
+        <Anchor
+          className="statements-table__col--show-on-hover"
+          onClick={() => activateDiagnosticsRef?.current?.showModalFor(stmt.label)}
+        >
+          Activate
+        </Anchor>
+      );
+    },
+    sort: (stmt) => {
+      if (stmt.diagnosticsReport) {
+        return stmt.diagnosticsReport.completed ? "READY" : "WAITING FOR QUERY";
+      }
+      return null;
+    },
+  };
+
+  return original
+    .concat(makeCommonColumns(statements))
+    .concat([diagnosticsColumn]);
 }
 
 function NodeLink(props: { nodeId: string, nodeNames: { [nodeId: string]: string } }) {
