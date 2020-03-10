@@ -507,13 +507,13 @@ func importPlanHook(
 			var intoCols []string
 			var isTargetCol = make(map[string]bool)
 			for _, name := range importStmt.IntoCols {
-				var err error
-				if _, err = found.FindActiveColumnByName(name.String()); err != nil {
+				active, err := found.FindActiveColumnsByNames(tree.NameList{name})
+				if err != nil {
 					return errors.Wrap(err, "verifying target columns")
 				}
 
-				isTargetCol[name.String()] = true
-				intoCols = append(intoCols, name.String())
+				isTargetCol[active[0].Name] = true
+				intoCols = append(intoCols, active[0].Name)
 			}
 
 			// IMPORT INTO does not support columns with DEFAULT expressions. Ensure
