@@ -294,7 +294,7 @@ func MakeExternalStorage(
 		return makeS3Storage(ctx, conf, dest.S3Config, settings)
 	case roachpb.ExternalStorageProvider_GoogleCloud:
 		telemetry.Count("external-io.google_cloud")
-		return makeGCSStorage(ctx, dest.GoogleCloudConfig, settings)
+		return makeGCSStorage(ctx, conf, dest.GoogleCloudConfig, settings)
 	case roachpb.ExternalStorageProvider_Azure:
 		telemetry.Count("external-io.azure")
 		return makeAzureStorage(dest.AzureConfig, settings)

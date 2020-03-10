@@ -367,7 +367,10 @@ func init() {
 
 		// Enable/disable various external storage endpoints.
 		serverCfg.ExternalIOConfig = base.ExternalIOConfig{}
-		BoolFlag(f, &serverCfg.ExternalIOConfig.DisableHTTP, cliflags.ExternalIODisableHTTP, false)
+		BoolFlag(f, &serverCfg.ExternalIOConfig.DisableHTTP,
+			cliflags.ExternalIODisableHTTP, false)
+		BoolFlag(f, &serverCfg.ExternalIOConfig.DisableImplicitCredentials,
+			cliflags.ExtenralIODisableImplicitCredentials, false)
 
 		// Certificates directory. Use a server-specific flag and value to ignore environment
 		// variables, but share the same default.

@@ -706,7 +706,11 @@ type ExternalIOConfig struct {
 	// This turns off http:// external storage as well as any custom
 	// endpoints cloud storage implementations.
 	DisableHTTP bool
-	// TODO(yevgeniy): Support disabling of implicit credentials in cloud storage.
+	// Disables the use of implicit credentials when accessing external services.
+	// Implicit credentials are obtained from the system environment.
+	// This turns off implicit credentials, and requires the user to provide
+	// necessary access keys.
+	DisableImplicitCredentials bool
 }
 
 // TempStorageConfigFromEnv creates a TempStorageConfig.
