@@ -107,6 +107,10 @@ func makeS3Storage(
 		}
 		opts.Config.MergeIn(config)
 	case authParamImplicit:
+		if ioConf.DisableImplicitCredentials {
+			return nil, errors.New(
+				"implicit credentials disallowed for s3 due to --external-io-implicit-credentials flag")
+		}
 		opts.SharedConfigState = session.SharedConfigEnable
 	default:
 		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, AuthParam)

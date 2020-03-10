@@ -590,6 +590,13 @@ a public network without combining it with --listen-addr.`,
 		Description: `Disable use of HTTP when accessing external data.`,
 	}
 
+	ExtenralIODisableImplicitCredentials = FlagInfo{
+		Name: "external-io-disable-implicit-credentials",
+		Description: `
+Disable use of implicit credentials when accessing external data.  
+Instead, require the user to always specify access keys.`,
+	}
+
 	// KeySize, CertificateLifetime, AllowKeyReuse, and OverwriteFiles are used for
 	// certificate generation functions.
 	KeySize = FlagInfo{

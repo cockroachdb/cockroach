@@ -63,7 +63,10 @@ func (g *gcsStorage) Conf() roachpb.ExternalStorage {
 }
 
 func makeGCSStorage(
-	ctx context.Context, conf *roachpb.ExternalStorage_GCS, settings *cluster.Settings,
+	ctx context.Context,
+	ioConf base.ExternalIOConfig,
+	conf *roachpb.ExternalStorage_GCS,
+	settings *cluster.Settings,
 ) (ExternalStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("google cloud storage upload requested but info missing")
@@ -111,6 +114,10 @@ func makeGCSStorage(
 		}
 		opts = append(opts, option.WithTokenSource(source.TokenSource(ctx)))
 	case authParamImplicit:
+		if ioConf.DisableImplicitCredentials {
+			return nil, errors.New(
+				"implicit credentials disallowed for gs due to --external-io-implicit-credentials flag")
+		}
 		// Do nothing; use implicit params:
 		// https://godoc.org/golang.org/x/oauth2/google#FindDefaultCredentials
 	default:
