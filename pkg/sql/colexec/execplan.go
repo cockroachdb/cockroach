@@ -1454,6 +1454,16 @@ func planTypedMaybeNullProjectionOperators(
 	return planProjectionOperators(ctx, evalCtx, expr, columnTypes, input, acc)
 }
 
+func checkCastSupported(fromType, toType *types.T) error {
+	switch toType.Family() {
+	case types.DecimalFamily:
+		if !fromType.Equal(*toType) {
+			return errors.New("decimal casts with rounding unsupported")
+		}
+	}
+	return nil
+}
+
 // planCastOperator plans a CAST operator that casts the column at index
 // 'inputIdx' coming from input of type 'fromType' into a column of type
 // 'toType' that will be output at index 'resultIdx'.
@@ -1466,6 +1476,9 @@ func planCastOperator(
 	fromType *types.T,
 	toType *types.T,
 ) (op Operator, resultIdx int, ct []types.T, err error) {
+	if err := checkCastSupported(fromType, toType); err != nil {
+		return op, resultIdx, ct, err
+	}
 	outputIdx := len(columnTypes)
 	op, err = GetCastOperator(NewAllocator(ctx, acc), input, inputIdx, outputIdx, fromType, toType)
 	ct = append(columnTypes, *toType)
