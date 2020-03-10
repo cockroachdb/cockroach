@@ -2563,3 +2563,28 @@ query T
 SELECT getdatabaseencoding()
 ----
 UTF8
+
+subtest get_bit
+
+query I
+SELECT get_bit(B'100101110101', 3) UNION SELECT get_bit(B'100101110101', 2)
+----
+1
+0
+
+query error get_bit\(\): GetBitAtIndex: bit index 10 out of valid range \(0..4\)
+SELECT get_bit(B'10110', 10)
+
+subtest set_bit
+
+query T
+SELECT set_bit(B'1101010', 0, 0) UNION SELECT set_bit(B'1101010', 2, 1)
+----
+0101010
+1111010
+
+query error set_bit\(\): SetBitAtIndex: bit index 10 out of valid range \(0..6\)
+SELECT set_bit(B'1101010', 10, 1)
+
+query error set_bit\(\): to_set value must be either 0 or 1 only.
+SELECT set_bit(B'1001010', 0, 2)
