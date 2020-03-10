@@ -198,14 +198,14 @@ func evaluateBatch(
 	// starved. So, for blind writes, we swallow the error and instead we set the
 	// WriteTooOld flag on the response. For non-blind writes (e.g. CPut), we
 	// can't do that and so we just return the WriteTooOldError - see note on
-	// IsReadAndWrite() stanza below. Upon receiving either a WriteTooOldError or
-	// a response with the WriteTooOld flag set, the client will attempt to bump
-	// the txn's read timestamp through a refresh. If successful, the client will
-	// retry this batch (in both cases).
+	// IsRead() stanza below. Upon receiving either a WriteTooOldError or a
+	// response with the WriteTooOld flag set, the client will attempt to bump
+	// the txn's read timestamp through a refresh. If successful, the client
+	// will retry this batch (in both cases).
 	//
 	// In any case, evaluation of the current batch always continue after a
-	// WriteTooOldError in order to find out if there's more conflicts and chose a
-	// final write timestamp.
+	// WriteTooOldError in order to find out if there's more conflicts and chose
+	// a final write timestamp.
 	var writeTooOldState struct {
 		err *roachpb.WriteTooOldError
 		// cantDeferWTOE is set when a WriteTooOldError cannot be deferred past the
@@ -276,22 +276,33 @@ func evaluateBatch(
 					writeTooOldState.err = tErr
 				}
 
-				// For requests that are both read and write, we don't have the option
-				// of leaving an intent behind when they encounter a WriteTooOldError,
-				// so we have to return an error instead of a response with the
-				// WriteTooOld flag set (which would also leave intents behind). These
-				// requests need to be re-evaluated at the bumped timestamp in order for
-				// their write to be valid. The current evaluation resulted in an intent
-				// that could well be different from what the request would write if it
-				// were evaluated at the bumped timestamp, which would cause the request
-				// to be rejected if it were sent again with the same sequence number
-				// after a refresh.
+				// For read-write requests that observe key-value state, we don't have
+				// the option of leaving an intent behind when they encounter a
+				// WriteTooOldError, so we have to return an error instead of a response
+				// with the WriteTooOld flag set (which would also leave intents
+				// behind). These requests need to be re-evaluated at the bumped
+				// timestamp in order for their results to be valid. The current
+				// evaluation resulted in an result that could well be different from
+				// what the request would return if it were evaluated at the bumped
+				// timestamp, which would cause the request to be rejected if it were
+				// sent again with the same sequence number after a refresh.
+				//
+				// Similarly, for read-only requests that encounter a WriteTooOldError,
+				// we don't have the option of returning a response with the WriteTooOld
+				// flag set because a response is not even generated in tandem with the
+				// WriteTooOldError. We could fix this and then allow WriteTooOldErrors
+				// to be deferred in these cases, but doing so would buy more into the
+				// extremely error-prone approach of retuning responses and errors
+				// together throughout the MVCC read path. Doing so it not desirable as
+				// it has repeatedly caused bugs in the past. Instead, we'd like to get
+				// rid of this pattern entirely and instead address the TODO below.
+				//
 				// TODO(andrei): What we really want to do here is either speculatively
 				// evaluate the request at the bumped timestamp and return that
 				// speculative result, or leave behind a type of lock that wouldn't
 				// prevent the request for evaluating again at the same sequence number
 				// but at a bumped timestamp.
-				if roachpb.IsReadAndWrite(args) {
+				if !roachpb.IsBlindWrite(args) {
 					writeTooOldState.cantDeferWTOE = true
 				}
 
