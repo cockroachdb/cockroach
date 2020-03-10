@@ -829,10 +829,16 @@ func backup(
 				requestFinishedCh <- struct{}{}
 
 				if checkpointFiles != nil {
+					// Make a copy while holding mu to avoid races while marshaling the
+					// manifest into the checkpoint file.
+					mu.Lock()
+					descCopy := *backupDesc
+					mu.Unlock()
+
 					checkpointMu.Lock()
-					backupDesc.Files = checkpointFiles
+					descCopy.Files = checkpointFiles
 					err := writeBackupDescriptor(
-						ctx, settings, defaultStore, BackupDescriptorCheckpointName, backupDesc,
+						ctx, settings, defaultStore, BackupDescriptorCheckpointName, &descCopy,
 					)
 					checkpointMu.Unlock()
 					if err != nil {
