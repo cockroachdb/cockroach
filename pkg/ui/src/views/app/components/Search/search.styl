@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 @require '~styl/base/palette.styl'
+@require "~src/components/core/index.styl"
 
 ._search-form
   width 280px
@@ -37,7 +38,7 @@
     &:hover
       color $text-color
   ._submit-search
-    font-family Lato-Regular
+    font-family $font-family--base
     font-size 14px
     color $adminui-grey-2
     line-height 0px !important
@@ -45,7 +46,7 @@
       color $adminui-grey-2
   .ant-input
     font-size 14px
-    font-family Lato-Regular
+    font-family $font-family--base
     color $adminui-grey-1
     border-radius 3px
     border 2px solid $grey5

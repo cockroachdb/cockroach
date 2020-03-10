@@ -10,6 +10,7 @@
 
 @require nib
 @require "~styl/base/palette.styl"
+@require "~src/components/core/index.styl"
 
 $viz-bottom = 65px
 $viz-sides = 62px
@@ -39,14 +40,14 @@ $viz-sides = 62px
 
   &__title
     font-size 14px
-    font-family Lato-Bold
+    font-family $font-family--bold
     color $body-color
 
   &__subtitle
     color $tooltip-color
     margin-left 5px
     font-size 12px
-    font-family Lato-Regular
+    font-family $font-family--base
 
   &__spinner
     width 40px
