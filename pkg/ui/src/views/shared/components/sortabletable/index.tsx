@@ -10,13 +10,13 @@
 
 import React from "react";
 import classNames from "classnames";
-import map from 'lodash/map';
-import isUndefined from 'lodash/isUndefined';
-import times from 'lodash/times';
+import map from "lodash/map";
+import isUndefined from "lodash/isUndefined";
+import times from "lodash/times";
 
 import getHighlightedText from "oss/src/util/highlightedText";
 import { DrawerComponent } from "../drawer";
-import { analytics } from '../../../../redux/analytics';
+import { analytics } from "src/redux/analytics";
 
 import "./sortabletable.styl";
 
@@ -242,7 +242,7 @@ export class SortableTable extends React.Component<TableProps> {
     const path = window.location.pathname + window.location.hash;
     const tableName = name || "";
     const columnName = col.title || "";
-    const sortDirection = (sortSetting.ascending) ? 'asc' : 'desc';
+    const sortDirection = (sortSetting.ascending) ? "asc" : "desc";
 
     const payload = {
       event: "Table Sort",
