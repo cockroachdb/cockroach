@@ -71,12 +71,7 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
     }
   }
 
-  arrowRenderer = ({ isOpen }: { isOpen: boolean }) => {
-    if (!isOpen) {
-      return <span><Icon type="caret-up" /></span>;
-    }
-    return <span className="active"><Icon type="caret-down" /></span>;
-  }
+  arrowRenderer = () => <span className="active"><Icon type="caret-up" /></span>;
 
   render() {
     const { selected, options, onChange, onArrowClick, disabledArrows, content, isTimeRange } = this.props;

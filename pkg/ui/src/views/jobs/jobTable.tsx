@@ -14,10 +14,10 @@ import {cockroach} from "src/js/protos";
 import {TimestampToMoment} from "src/util/convert";
 import {DATE_FORMAT} from "src/util/format";
 import {JobStatusCell} from "oss/src/views/jobs/jobStatusCell";
-import {Icon, Pagination} from "antd";
 import Empty from "src/views/app/components/empty";
 import {SortSetting} from "oss/src/views/shared/components/sortabletable";
 import {CachedDataReducerState} from "oss/src/redux/cachedDataReducer";
+import {PaginationComponent} from "oss/src/components/pagination/pagination";
 import _ from "lodash";
 import {JobDescriptionCell} from "oss/src/views/jobs/jobDescriptionCell";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
@@ -61,6 +61,7 @@ export interface JobTableProps {
   jobs: CachedDataReducerState<JobsResponse>;
   pageSize?: number;
   current?: number;
+  isUsedFilter: boolean;
 }
 
 export interface JobTableState {
@@ -83,42 +84,12 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
   }
 
   componentDidUpdate(prevProps: Readonly<JobTableProps>): void {
-    if (prevProps.jobs !== this.props.jobs) {
-      this.setState((prevState: Readonly<any>) => {
-        return {
-          pagination: {
-            ...prevState.pagination,
-            current: 1,
-          },
-        };
-      });
-    }
+    this.setCurrentPageToOneIfJobsChanged(prevProps);
   }
 
   onChangePage = (current: number) => {
     const { pagination } = this.state;
     this.setState({ pagination: { ...pagination, current }});
-  }
-
-  renderPage = (_page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next", originalElement: React.ReactNode) => {
-    switch (type) {
-      case "jump-prev":
-        return (
-          <div className="_pg-jump">
-            <Icon type="left" />
-            <span className="_jump-dots">•••</span>
-          </div>
-        );
-      case "jump-next":
-        return (
-          <div className="_pg-jump">
-            <Icon type="right" />
-            <span className="_jump-dots">•••</span>
-          </div>
-        );
-      default:
-        return originalElement;
-    }
   }
 
   renderCounts = () => {
@@ -139,14 +110,21 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
     return data;
   }
 
+  noJobResult = () => (
+    <>
+      <p>There are no jobs that match your search in filter.</p>
+      <a href="https://www.cockroachlabs.com/docs/stable/admin-ui-jobs-page.html" target="_blank">Learn more about jobs</a>
+    </>
+  )
+
   render() {
     const jobs = this.props.jobs.data.jobs;
     const { pagination } = this.state;
-    if (_.isEmpty(jobs)) {
+    if (_.isEmpty(jobs) && !this.props.isUsedFilter) {
       return (
         <Empty
-          title="Jobs will show up here"
-          description="Jobs can include backup, import, restore or cdc running."
+          title="There are no jobs to display."
+          description="The jobs page provides details about backup/restore jobs, schema changes, user-created table statistics, automatic table statistics jobs and changefeeds."
           buttonHref="https://www.cockroachlabs.com/docs/stable/admin-ui-jobs-page.html"
         />
       );
@@ -166,18 +144,35 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
             className="jobs-table"
             rowClass={job => "jobs-table__row--" + job.status}
             columns={jobsTableColumns}
+            renderNoResult={this.noJobResult()}
           />
         </section>
-        <Pagination
-          size="small"
-          itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
-          pageSize={pagination.pageSize}
-          current={pagination.current}
-          total={jobs.length}
+        <PaginationComponent
+          pagination={{ ...pagination, total: jobs.length }}
           onChange={this.onChangePage}
           hideOnSinglePage
         />
       </React.Fragment>
     );
+  }
+
+  private setCurrentPageToOneIfJobsChanged(prevProps: Readonly<JobTableProps>) {
+    if (!_.isEqual(
+      _.map(prevProps.jobs.data.jobs, (j) => {
+        return j.id;
+      }),
+      _.map(this.props.jobs.data.jobs, (j) => {
+        return j.id;
+      }),
+    )) {
+      this.setState((prevState: Readonly<any>) => {
+        return {
+          pagination: {
+            ...prevState.pagination,
+            current: 1,
+          },
+        };
+      });
+    }
   }
 }

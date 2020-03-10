@@ -13,10 +13,12 @@ import cn from "classnames";
 
 import "./badge.styl";
 
+export type BadgeStatus = "success" | "danger" | "default" | "info" | "warning";
+
 export interface BadgeProps {
   text: string;
   size?: "small" | "medium" | "large";
-  status?: "success" | "danger" | "default" | "info" | "warning";
+  status?: BadgeStatus;
   tag?: boolean; // TODO (koorosh): Tag behavior isn't implemented yet.
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";

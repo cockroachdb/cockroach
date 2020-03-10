@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Button } from "antd";
 import React from "react";
 import heroBannerLp from "assets/heroBannerLp.png";
 import "./styles.styl";
+import { Button } from "oss/src/components/button";
 
 export interface IEmptyProps {
   title?: string;
@@ -29,11 +29,12 @@ export default function Empty (props: IEmptyProps) {
     backgroundImage = heroBannerLp,
     buttonHref = "https://www.cockroachlabs.com/docs/stable/",
   } = props;
+  const openLink = () => window.open(buttonHref);
   return (
     <div className="empty-container">
       <h2 className="base-heading empty-container__title">{title}</h2>
       {description && <p className="empty-container__description">{description}</p>}
-      <Button target="_blank" href={buttonHref} className="empty-container__button" type="primary">{button}</Button>
+      <Button onClick={openLink} className="empty-container__button" type="primary">{button}</Button>
       <img className="empty-container__background" src={backgroundImage} alt="Empty screen" />
     </div>
   );

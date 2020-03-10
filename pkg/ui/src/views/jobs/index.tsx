@@ -139,13 +139,21 @@ export class JobsTable extends React.Component<JobsTableProps> {
                 onChange={this.onTypeSelected}
               />
             </PageConfigItem>
+            <PageConfigItem>
+              <Dropdown
+                title="Show"
+                options={showOptions}
+                selected={this.props.show}
+                onChange={this.onShowSelected}
+              />
+            </PageConfigItem>
           </PageConfig>
         </div>
         <section className="section">
           <Loading
             loading={!this.props.jobs || !this.props.jobs.data}
             error={this.props.jobs && this.props.jobs.lastError}
-            render={() => <JobTable jobs={this.props.jobs}  setSort={this.props.setSort} sort={this.props.sort}/>}
+            render={() => <JobTable isUsedFilter={this.props.status.length > 0 || this.props.type > 0} jobs={this.props.jobs}  setSort={this.props.setSort} sort={this.props.sort}/>}
           />
         </section>
       </div>

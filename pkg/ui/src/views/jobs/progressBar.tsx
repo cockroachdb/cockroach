@@ -10,29 +10,28 @@
 
 import React from "react";
 import {
-  JOB_STATUS_CANCELED,
-  JOB_STATUS_FAILED, JOB_STATUS_SUCCEEDED,
-  jobHasOneOfStatuses,
-  renamedStatuses,
+  jobStatusToBadgeStatus,
 } from "src/views/jobs/jobStatusOptions";
-import classNames from "classnames";
-import {Line} from "rc-progress";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import {cockroach} from "src/js/protos";
+import { Badge } from "oss/src/components";
+import { Line } from "rc-progress";
 
-export class Progress extends React.PureComponent<{ job: Job; lineWidth: number; showPercentage: boolean}> {
+export class JobStatusBadge extends React.PureComponent<{jobStatus: string}> {
   render() {
-    if (jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED, JOB_STATUS_FAILED, JOB_STATUS_CANCELED)) {
-      const className = classNames("jobs-table__status", {
-        "jobs-table__status--succeed": jobHasOneOfStatuses(this.props.job, JOB_STATUS_SUCCEEDED),
-        "jobs-table__status--failed": jobHasOneOfStatuses(this.props.job, JOB_STATUS_FAILED, JOB_STATUS_CANCELED),
-      });
-      return (
-        <div className={className}>
-          {renamedStatuses(this.props.job.status)}
-        </div>
-      );
-    }
+    const jobStatus = this.props.jobStatus;
+    const badgeStatus = jobStatusToBadgeStatus(jobStatus);
+    return (
+      <Badge
+        status={badgeStatus}
+        text={jobStatus}
+      />
+    );
+  }
+}
+
+export class ProgressBar extends React.PureComponent<{ job: Job; lineWidth: number; showPercentage: boolean}> {
+  render() {
     const percent = this.props.job.fraction_completed * 100;
     return (
       <div className="jobs-table__progress">
