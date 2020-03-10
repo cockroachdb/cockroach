@@ -242,21 +242,22 @@ limit
 
 # DistinctOn operator.
 opt
-SELECT DISTINCT z FROM t LIMIT 2
+SELECT DISTINCT z FROM t LIMIT 1
 ----
 limit
  ├── columns: z:3
- ├── cardinality: [0 - 2]
- ├── key: (3)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3)
  ├── distinct-on
  │    ├── columns: z:3
  │    ├── grouping columns: z:3
  │    ├── key: (3)
- │    ├── limit hint: 2.00
+ │    ├── limit hint: 1.00
  │    └── scan t
  │         ├── columns: z:3
- │         └── limit hint: 3.44
- └── 2
+ │         └── limit hint: 1.23
+ └── 1
 
 # No limit hint propagation if number of distinct rows < required number of rows.
 opt
