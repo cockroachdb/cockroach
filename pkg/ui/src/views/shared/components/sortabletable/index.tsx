@@ -16,7 +16,7 @@ import times from 'lodash/times';
 
 import getHighlightedText from "oss/src/util/highlightedText";
 import { DrawerComponent } from "../drawer";
-import { analytics } from '../../../../redux/analytics';
+import { analytics } from 'src/redux/analytics';
 
 import "./sortabletable.styl";
 
