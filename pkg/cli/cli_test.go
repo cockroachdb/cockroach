@@ -62,11 +62,12 @@ type cliTest struct {
 }
 
 type cliTestParams struct {
-	t          *testing.T
-	insecure   bool
-	noServer   bool
-	storeSpecs []base.StoreSpec
-	locality   roachpb.Locality
+	t           *testing.T
+	insecure    bool
+	noServer    bool
+	storeSpecs  []base.StoreSpec
+	locality    roachpb.Locality
+	noNodelocal bool
 }
 
 func (c *cliTest) fail(err interface{}) {
@@ -125,13 +126,17 @@ func newCLITest(params cliTestParams) cliTest {
 			baseCfg.SSLCertsDir = certsDir
 		}
 
-		s, err := serverutils.StartServerRaw(base.TestServerArgs{
+		args := base.TestServerArgs{
 			Insecure:      params.insecure,
 			SSLCertsDir:   c.certsDir,
 			StoreSpecs:    params.storeSpecs,
 			Locality:      params.locality,
 			ExternalIODir: filepath.Join(certsDir, "extern"),
-		})
+		}
+		if params.noNodelocal {
+			args.ExternalIODir = ""
+		}
+		s, err := serverutils.StartServerRaw(args)
 		if err != nil {
 			c.fail(err)
 		}

@@ -351,7 +351,8 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 				return ts.finishTxn(args.Payload.(eventTxnFinishPayload))
 			},
 		},
-		eventNonRetriableErr{IsCommit: fsm.Any}: {
+		// Any statement.
+		eventNonRetriableErr{IsCommit: fsm.False}: {
 			// This event doesn't change state, but it returns a skipBatch code.
 			Description: "any other statement",
 			Next:        stateAborted{},
@@ -359,6 +360,13 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 				args.Extended.(*txnState).setAdvanceInfo(skipBatch, noRewind, noEvent)
 				return nil
 			},
+		},
+		// ConnExecutor closing.
+		eventNonRetriableErr{IsCommit: fsm.True}: {
+			// This event doesn't change state, but it returns a skipBatch code.
+			Description: "ConnExecutor closing",
+			Next:        stateAborted{},
+			Action:      cleanupAndFinishOnError,
 		},
 		// ROLLBACK TO SAVEPOINT <not cockroach_restart> success.
 		eventSavepointRollback{}: {

@@ -14,7 +14,7 @@ digraph finite_state_machine {
 
 	node [shape = circle];
 	"Aborted{}" -> "Aborted{}" [label = <NonRetriableErr{IsCommit:false}<BR/><I>any other statement</I>>]
-	"Aborted{}" -> "Aborted{}" [label = <NonRetriableErr{IsCommit:true}<BR/><I>any other statement</I>>]
+	"Aborted{}" -> "Aborted{}" [label = <NonRetriableErr{IsCommit:true}<BR/><I>ConnExecutor closing</I>>]
 	"Aborted{}" -> "Aborted{}" [label = <RetriableErr{CanAutoRetry:false, IsCommit:false}<BR/><I>ROLLBACK TO SAVEPOINT (not cockroach_restart) failed because txn needs restart</I>>]
 	"Aborted{}" -> "Aborted{}" [label = <RetriableErr{CanAutoRetry:false, IsCommit:true}<BR/><I>ROLLBACK TO SAVEPOINT (not cockroach_restart) failed because txn needs restart</I>>]
 	"Aborted{}" -> "Aborted{}" [label = <RetriableErr{CanAutoRetry:true, IsCommit:false}<BR/><I>ROLLBACK TO SAVEPOINT (not cockroach_restart) failed because txn needs restart</I>>]
