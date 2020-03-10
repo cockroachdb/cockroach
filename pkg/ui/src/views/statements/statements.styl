@@ -11,10 +11,19 @@
 @require '~styl/base/palette.styl'
 @require '~src/views/shared/util/table.styl'
 
+$medium-screen-width = 1440px
+
+.cl-statements-table-wrapper
+  overflow-y auto
+
 .statements-table
   &__col-query-text
     font-family monospace
     white-space pre-wrap
+
+  @media (max-width: $medium-screen-width)
+    .sort-table__cell
+      padding 10px 16px
 
 .statements
   &__last-hour-note
@@ -164,6 +173,13 @@
 
   .latency-overall-dev
     background-color $blue
+
+@media (max-width: $medium-screen-width)
+  .statements-table__col-rows, .statements-table__col-latency
+    .bar-chart
+      min-width 0
+  .bar-chart > div[class^='bar-chart__'], div[class*=' bar-chart__']
+      display none
 
 .numeric-stats-table
   @extend $table-base

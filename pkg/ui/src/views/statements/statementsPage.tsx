@@ -308,7 +308,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
             />
           )}
           {(data.length > 0 || search.length > 0) && (
-            <div className="cl-table-wrapper">
+            <div className="cl-table-wrapper cl-statements-table-wrapper">
               <StatementsSortedTable
                 className="statements-table"
                 data={data}
