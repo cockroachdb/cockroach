@@ -11,8 +11,6 @@
 package tree
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -28,15 +26,27 @@ import (
 // first call to its Resolve() method.
 
 // ResolvableFunctionReference implements the editable reference cell
-// of a FuncExpr. The FunctionRerence is updated by the Normalize()
-// method.
+// of a FuncExpr.
 type ResolvableFunctionReference struct {
-	FunctionReference
+	Name             *UnresolvedName
+	ResolvedFunction *FunctionDefinition
 }
 
 // Format implements the NodeFormatter interface.
 func (fn *ResolvableFunctionReference) Format(ctx *FmtCtx) {
-	ctx.FormatNode(fn.FunctionReference)
+	// This Format method tries to use the UnresolvedName component first, because
+	// ResolvableFunctionReference is unfortunately mutable at the current time,
+	// which leads to data races when formatting ASTs for SHOW QUERIES and the
+	// like, because the Optimizer might be mutating this node while someone is
+	// asking to read it. To get around this, we just print out the UnresolvedName
+	// if it exists. If it doesn't, which sometimes happen when we synthesize an
+	// RFR internally, we fall back to formatting the resolved function itself,
+	// which in that case will be immutable as well.
+	if fn.Name != nil {
+		ctx.FormatNode(fn.Name)
+	} else {
+		ctx.FormatNode(fn.ResolvedFunction)
+	}
 }
 func (fn *ResolvableFunctionReference) String() string { return AsString(fn) }
 
@@ -45,21 +55,14 @@ func (fn *ResolvableFunctionReference) String() string { return AsString(fn) }
 func (fn *ResolvableFunctionReference) Resolve(
 	searchPath sessiondata.SearchPath,
 ) (*FunctionDefinition, error) {
-	switch t := fn.FunctionReference.(type) {
-	case *FunctionDefinition:
-		return t, nil
-	case *UnresolvedName:
-		fd, err := t.ResolveFunction(searchPath)
+	if fn.ResolvedFunction == nil {
+		fd, err := fn.Name.ResolveFunction(searchPath)
 		if err != nil {
 			return nil, err
 		}
-		fn.FunctionReference = fd
-		return fd, nil
-	default:
-		return nil, errors.AssertionFailedf("unknown function name type: %+v (%T)",
-			fn.FunctionReference, fn.FunctionReference,
-		)
+		fn.ResolvedFunction = fd
 	}
+	return fn.ResolvedFunction, nil
 }
 
 // WrapFunction creates a new ResolvableFunctionReference
@@ -69,14 +72,7 @@ func WrapFunction(n string) ResolvableFunctionReference {
 	if !ok {
 		panic(errors.AssertionFailedf("function %s() not defined", log.Safe(n)))
 	}
-	return ResolvableFunctionReference{fd}
-}
-
-// FunctionReference is the common interface to UnresolvedName and QualifiedFunctionName.
-type FunctionReference interface {
-	fmt.Stringer
-	NodeFormatter
-	functionReference()
+	return ResolvableFunctionReference{ResolvedFunction: fd}
 }
 
 func (*UnresolvedName) functionReference()     {}

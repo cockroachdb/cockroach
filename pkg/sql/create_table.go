@@ -1757,7 +1757,7 @@ func makeHashShardComputeExpr(colNames []string, buckets int) *string {
 	}
 	unresolvedFunc := func(funcName string) tree.ResolvableFunctionReference {
 		return tree.ResolvableFunctionReference{
-			FunctionReference: unresolvedName(funcName),
+			Name: unresolvedName(funcName),
 		}
 	}
 	hashedColumnExpr := func(colName string) tree.Expr {

@@ -441,7 +441,7 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 	// Cast the return and arguments to prevent ambiguity during function
 	// implementation choosing.
 	return castType(tree.NewTypedFuncExpr(
-		tree.ResolvableFunctionReference{FunctionReference: fn.def},
+		tree.ResolvableFunctionReference{ResolvedFunction: fn.def},
 		0, /* aggQualifier */
 		args,
 		nil, /* filter */

@@ -1336,8 +1336,9 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 	}
 
 	// We need to remove name anonymization for the function name in
-	// particular. Do this by overriding the flags.
-	ctx.WithFlags(ctx.flags&^FmtAnonymize, func() {
+	// particular, as well as show-types, which will be handled by this node.
+	// Do this by overriding the flags.
+	ctx.WithFlags(ctx.flags&^FmtAnonymize&^FmtShowTypes, func() {
 		ctx.FormatNode(&node.Func)
 	})
 

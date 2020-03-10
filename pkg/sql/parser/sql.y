@@ -154,9 +154,6 @@ func (u *sqlSymUnion) unresolvedName() *tree.UnresolvedName {
 func (u *sqlSymUnion) unresolvedObjectName() *tree.UnresolvedObjectName {
     return u.val.(*tree.UnresolvedObjectName)
 }
-func (u *sqlSymUnion) functionReference() tree.FunctionReference {
-    return u.val.(tree.FunctionReference)
-}
 func (u *sqlSymUnion) tablePatterns() tree.TablePatterns {
     return u.val.(tree.TablePatterns)
 }
@@ -482,7 +479,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
     return u.val.(tree.ScrubOption)
 }
 func (u *sqlSymUnion) resolvableFuncRefFromName() tree.ResolvableFunctionReference {
-    return tree.ResolvableFunctionReference{FunctionReference: u.unresolvedName()}
+    return tree.ResolvableFunctionReference{Name: u.unresolvedName()}
 }
 func (u *sqlSymUnion) rowsFromExpr() *tree.RowsFromExpr {
     return u.val.(*tree.RowsFromExpr)

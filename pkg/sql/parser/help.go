@@ -95,7 +95,7 @@ func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
 	}
 
 	msg := HelpMessage{
-		Function: f.String(),
+		Function: f.ResolvedFunction.String(),
 		HelpMessageBody: HelpMessageBody{
 			Category: d.Category,
 			SeeAlso:  base.DocsURL("functions-and-operators.html"),
@@ -133,7 +133,7 @@ func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
 
 func helpWithFunctionByName(sqllex sqlLexer, s string) int {
 	un := &tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{s}}
-	return helpWithFunction(sqllex, tree.ResolvableFunctionReference{FunctionReference: un})
+	return helpWithFunction(sqllex, tree.ResolvableFunctionReference{Name: un})
 }
 
 const (

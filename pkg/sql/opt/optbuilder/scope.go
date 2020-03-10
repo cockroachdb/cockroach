@@ -1224,9 +1224,7 @@ func (s *scope) replaceCount(
 			// take any arguments).
 			e := &tree.FuncExpr{
 				Func: tree.ResolvableFunctionReference{
-					FunctionReference: &tree.UnresolvedName{
-						NumParts: 1, Parts: tree.NameParts{"count_rows"},
-					},
+					ResolvedFunction: tree.FunDefs["count_rows"],
 				},
 			}
 			// We call TypeCheck to fill in FuncExpr internals. This is a fixed
