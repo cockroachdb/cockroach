@@ -9690,6 +9690,24 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				return
 			},
 		},
+		// Serverside-refresh will not be allowed because the request contains
+		// a read-only request that acquires read-latches. We cannot bump the
+		// request's timestamp without re-acquiring latches, so we don't even
+		// try to.
+		{
+			name: "no serverside-refresh of write too old on get and put",
+			setupFn: func() (hlc.Timestamp, error) {
+				return put("a", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba.Timestamp = ts.Prev()
+				get := getArgs(roachpb.Key("a"))
+				put := putArgs(roachpb.Key("a"), []byte("put2"))
+				ba.Add(&get, &put)
+				return
+			},
+			expErr: "write at timestamp .* too old",
+		},
 		{
 			name: "serializable push without retry",
 			setupFn: func() (hlc.Timestamp, error) {

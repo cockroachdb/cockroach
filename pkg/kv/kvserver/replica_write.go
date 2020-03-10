@@ -523,7 +523,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only; a non-txn batch containing overlapping
 		// spans will always experience WriteTooOldError.
-		if success || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, deadline) {
+		if success || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, spans, deadline) {
 			break
 		}
 	}
@@ -570,8 +570,21 @@ func canDoServersideRetry(
 	pErr *roachpb.Error,
 	ba *roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
+	spans *spanset.SpanSet,
 	deadline *hlc.Timestamp,
 ) bool {
+	if !spans.MinTimestamp(spanset.SpanReadOnly).IsEmpty() {
+		// If the batch acquired any read latches with bounded (MVCC) timestamps
+		// then we can not trivially bump the batch's timestamp without dropping
+		// and re-acquiring those latches. Doing so could allow the request to
+		// read at an unprotected timestamp.
+		// TODO(nvanbenschoten): we could consider adding a retry-loop above the
+		// latch acquisition to allow this to be retried, but given that we try
+		// not to mix read-only and read-write requests, doing so doesn't seem
+		// worth it.
+		return false
+	}
+
 	if ba.Txn != nil {
 		if deadline != nil {
 			log.Fatal(ctx, "deadline passed for transactional request")

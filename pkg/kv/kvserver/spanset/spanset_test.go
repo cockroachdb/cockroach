@@ -88,6 +88,30 @@ func TestSpanSetMerge(t *testing.T) {
 	require.Equal(t, []Span{{Span: spBE}}, ss2.GetSpans(SpanReadWrite, SpanGlobal))
 }
 
+func TestSpanSetMinTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	spA := roachpb.Span{Key: roachpb.Key("a")}
+	spBC := roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}
+	spCE := roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("e")}
+	spLocal := roachpb.Span{Key: keys.RangeLastGCKey(1)}
+
+	var ss SpanSet
+	ss.AddNonMVCC(SpanReadOnly, spLocal)
+	ss.AddNonMVCC(SpanReadOnly, spA)
+	ss.AddNonMVCC(SpanReadWrite, spBC)
+	require.Equal(t, hlc.Timestamp{}, ss.MinTimestamp(SpanReadOnly))
+	require.Equal(t, hlc.Timestamp{}, ss.MinTimestamp(SpanReadWrite))
+
+	var ss2 SpanSet
+	ss.AddNonMVCC(SpanReadOnly, spLocal)
+	ss2.AddMVCC(SpanReadOnly, spA, hlc.Timestamp{WallTime: 11})
+	ss.AddNonMVCC(SpanReadWrite, spCE)
+	ss2.AddMVCC(SpanReadWrite, spBC, hlc.Timestamp{WallTime: 12})
+	require.Equal(t, hlc.Timestamp{WallTime: 11}, ss2.MinTimestamp(SpanReadOnly))
+	require.Equal(t, hlc.Timestamp{WallTime: 12}, ss2.MinTimestamp(SpanReadWrite))
+}
+
 // Test that CheckAllowed properly enforces span boundaries.
 func TestSpanSetCheckAllowedBoundaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()

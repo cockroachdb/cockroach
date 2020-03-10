@@ -177,6 +177,23 @@ func (s *SpanSet) BoundarySpan(scope SpanScope) roachpb.Span {
 	return boundary
 }
 
+// MinTimestamp returns the minimum timestamp from all spans with the provided
+// access that have MVCC timestamps associated with them. If no span with the
+// provided access has a bounded timestamps then the zero value timestamp will
+// be returned.
+func (s *SpanSet) MinTimestamp(access SpanAccess) hlc.Timestamp {
+	var minTS hlc.Timestamp
+	for ss := SpanScope(0); ss < NumSpanScope; ss++ {
+		for _, cur := range s.GetSpans(access, ss) {
+			curTS := cur.Timestamp
+			if !curTS.IsEmpty() && (minTS.IsEmpty() || curTS.Less(minTS)) {
+				minTS = curTS
+			}
+		}
+	}
+	return minTS
+}
+
 // AssertAllowed calls CheckAllowed and fatals if the access is not allowed.
 // Timestamps associated with the spans in the spanset are not considered,
 // only the span boundaries are checked.
