@@ -162,15 +162,15 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
     }
   }
 
-  componentWillMount() {
+  componentDidMount() {
     // Refresh nodes status query when mounting.
     this.refreshMetricsIfStale(this.props);
   }
 
-  componentWillReceiveProps(props: MetricsDataProviderProps) {
+  componentDidUpdate() {
     // Refresh nodes status query when props are received; this will immediately
     // trigger a new request if previous results are invalidated.
-    this.refreshMetricsIfStale(props);
+    this.refreshMetricsIfStale(this.props);
   }
 
   getData() {

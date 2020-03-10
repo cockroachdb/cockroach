@@ -73,7 +73,7 @@ type TableMainProps = TableMainData & TableMainActions & RouteComponentProps;
  * data table of all databases.
  */
 export class TableMain extends React.Component<TableMainProps, {}> {
-  componentWillMount() {
+  componentDidMount() {
     const database = getMatchParamByName(this.props.match, databaseNameAttr);
     const table = getMatchParamByName(this.props.match, tableNameAttr);
     this.props.refreshDatabaseDetails(new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database: getMatchParamByName(this.props.match, databaseNameAttr) }));

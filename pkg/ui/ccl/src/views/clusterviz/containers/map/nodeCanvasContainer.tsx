@@ -52,16 +52,16 @@ export interface NodeCanvasContainerOwnProps {
 }
 
 class NodeCanvasContainer extends React.Component<NodeCanvasContainerProps & NodeCanvasContainerOwnProps & RouteComponentProps> {
-  componentWillMount() {
+  componentDidMount() {
     this.props.refreshNodes();
     this.props.refreshLiveness();
     this.props.refreshLocations();
   }
 
-  componentWillReceiveProps(props: NodeCanvasContainerProps & NodeCanvasContainerOwnProps & RouteComponentProps) {
-    props.refreshNodes();
-    props.refreshLiveness();
-    props.refreshLocations();
+  componentDidUpdate() {
+    this.props.refreshNodes();
+    this.props.refreshLiveness();
+    this.props.refreshLocations();
   }
 
   render() {
