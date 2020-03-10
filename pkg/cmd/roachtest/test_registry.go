@@ -132,6 +132,7 @@ func (r *testRegistry) prepareSpec(spec *testSpec) error {
 	if _, ok := roachtestOwners[spec.Owner]; !ok {
 		return fmt.Errorf(`%s: unknown owner [%s]`, spec.Name, spec.Owner)
 	}
+	spec.Tags = append(spec.Tags, "owner-"+string(spec.Owner))
 
 	return nil
 }
