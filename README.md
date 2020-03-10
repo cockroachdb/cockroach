@@ -33,6 +33,8 @@ Here’s a quick explainer video:
 
 <a href='https://www.youtube.com/watch?v=VgXiMcbGwzQ'> <img src='docs/media/explainer-video-preview.png' width='50%'> </a>
 
+CLA TEST
+
 ## Docs
 
 For guidance on installation, development, deployment, and administration, see our [User Documentation](https://cockroachlabs.com/docs/stable/).
