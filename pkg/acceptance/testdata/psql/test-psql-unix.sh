@@ -19,14 +19,14 @@ set -x
 # We use a different port number from standard for an extra guarantee that
 # "psql" is not going to find it.
 "$crdb" start-single-node --background --insecure \
-              --socket=/tmp/.s.PGSQL.1111 \
+              --socket-dir=/tmp \
               --listen-addr=:12345
 
 # Wait for server ready.
 "$crdb" sql --insecure -e "select 1" -p 12345
 
 # Verify that psql can connect to the server.
-psql -h /tmp -p 1111 -c "select 1" | grep "1 row"
+psql -h /tmp -p 12345 -c "select 1" | grep "1 row"
 
 # It worked.
 "$crdb" quit --insecure -p 12345
@@ -38,14 +38,14 @@ set -x
 
 # Restart the server in secure mode.
 "$crdb" start-single-node --background \
-              --certs-dir="$CERTS_DIR" --socket=/tmp/.s.PGSQL.1111 \
+              --certs-dir="$CERTS_DIR" --socket-dir=/tmp \
               --listen-addr=:12345
 
 # Wait for server ready; also create a user that can log in.
 "$crdb" sql --certs-dir="$CERTS_DIR" -e "create user foo with password 'pass'" -p 12345
 
 # Also verify that psql can connect to the server.
-env PGPASSWORD=pass psql -U foo -h /tmp -p 1111 -c "select 1" | grep "1 row"
+env PGPASSWORD=pass psql -U foo -h /tmp -p 12345 -c "select 1" | grep "1 row"
 
 set +x
 # Done.

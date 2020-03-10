@@ -13,6 +13,7 @@ package cli
 import (
 	"flag"
 	"net"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -43,7 +44,7 @@ import (
 // - the underlying context parameters must receive defaults in
 //   initCLIDefaults() even when they are otherwise overridden by the
 //   flags logic, because some tests to not use the flag logic at all.
-var serverListenPort string
+var serverListenPort, serverSocketDir string
 var serverAdvertiseAddr, serverAdvertisePort string
 var serverSQLAddr, serverSQLPort string
 var serverSQLAdvertiseAddr, serverSQLAdvertisePort string
@@ -54,6 +55,7 @@ var localityAdvertiseHosts localityList
 // defined above.
 func initPreFlagsDefaults() {
 	serverListenPort = base.DefaultPort
+	serverSocketDir = ""
 	serverAdvertiseAddr = ""
 	serverAdvertisePort = ""
 
@@ -316,6 +318,11 @@ func init() {
 		VarFlag(f, addrSetter{&serverSQLAddr, &serverSQLPort}, cliflags.ListenSQLAddr)
 		VarFlag(f, addrSetter{&serverSQLAdvertiseAddr, &serverSQLAdvertisePort}, cliflags.SQLAdvertiseAddr)
 		VarFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
+		StringFlag(f, &serverSocketDir, cliflags.SocketDir, serverSocketDir)
+		// --socket is deprecated as of 20.1.
+		// TODO(knz): remove in 20.2.
+		StringFlag(f, &serverCfg.SocketFile, cliflags.Socket, serverCfg.SocketFile)
+		_ = f.MarkDeprecated(cliflags.Socket.Name, "use the --socket-dir and --listen-addr flags instead")
 
 		// Backward-compatibility flags.
 
@@ -349,8 +356,6 @@ func init() {
 		VarFlag(f, &serverCfg.Stores, cliflags.Store)
 		VarFlag(f, &serverCfg.StorageEngine, cliflags.StorageEngine)
 		VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
-
-		StringFlag(f, &serverCfg.SocketFile, cliflags.Socket, serverCfg.SocketFile)
 
 		StringFlag(f, &startCtx.listeningURLFile, cliflags.ListeningURLFile, startCtx.listeningURLFile)
 
@@ -703,6 +708,23 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	// Construct the main RPC listen address.
 	serverCfg.Addr = net.JoinHostPort(startCtx.serverListenAddr, serverListenPort)
 
+	fs := flagSetForCmd(cmd)
+
+	// Construct the socket name, if requested.
+	if !fs.Lookup(cliflags.Socket.Name).Changed && fs.Lookup(cliflags.SocketDir.Name).Changed {
+		// If --socket (DEPRECATED) was set, then serverCfg.SocketFile is
+		// already set and we don't want to change it.
+		// However, if --socket-dir is set, then we'll use that.
+		// There are two cases:
+		// --socket-dir is set and is empty; in this case the user is telling us "disable the socket".
+		// is set and non-empty. Then it should be used as specified.
+		if serverSocketDir == "" {
+			serverCfg.SocketFile = ""
+		} else {
+			serverCfg.SocketFile = filepath.Join(serverSocketDir, ".s.PGSQL."+serverListenPort)
+		}
+	}
+
 	// Fill in the defaults for --advertise-addr.
 	if serverAdvertiseAddr == "" {
 		serverAdvertiseAddr = startCtx.serverListenAddr
@@ -720,11 +742,11 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		serverSQLPort = serverListenPort
 	}
 	serverCfg.SQLAddr = net.JoinHostPort(serverSQLAddr, serverSQLPort)
-	serverCfg.SplitListenSQL = flagSetForCmd(cmd).Lookup(cliflags.ListenSQLAddr.Name).Changed
+	serverCfg.SplitListenSQL = fs.Lookup(cliflags.ListenSQLAddr.Name).Changed
 
 	// Fill in the defaults for --advertise-sql-addr.
-	advSpecified := flagSetForCmd(cmd).Lookup(cliflags.AdvertiseAddr.Name).Changed ||
-		flagSetForCmd(cmd).Lookup(cliflags.AdvertiseHost.Name).Changed
+	advSpecified := fs.Lookup(cliflags.AdvertiseAddr.Name).Changed ||
+		fs.Lookup(cliflags.AdvertiseHost.Name).Changed
 	if serverSQLAdvertiseAddr == "" {
 		if advSpecified {
 			serverSQLAdvertiseAddr = serverAdvertiseAddr
