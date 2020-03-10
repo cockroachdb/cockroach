@@ -58,10 +58,6 @@ interface OwnProps {
   refreshStatementDiagnosticsRequests: typeof refreshStatementDiagnosticsRequests;
   dismissAlertMessage: () => void;
 }
-type PaginationSettings = {
-  pageSize: number;
-  current: number;
-};
 
 export interface StatementsPageState {
   sortSetting: SortSetting;
