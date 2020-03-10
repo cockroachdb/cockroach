@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -132,10 +133,22 @@ func TestPutS3Endpoint(t *testing.T) {
 func TestS3DisallowCustomEndpoints(t *testing.T) {
 	s3, err := makeS3Storage(context.TODO(),
 		base.ExternalIOConfig{DisableHTTP: true},
-		&roachpb.ExternalStorage_S3{
-			Endpoint: "http://do.not.go.there/",
-		}, nil,
+		&roachpb.ExternalStorage_S3{Endpoint: "http://do.not.go.there/"}, nil,
 	)
 	require.Nil(t, s3)
 	require.Error(t, err)
+}
+
+func TestS3DisallowImplicitCredentials(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s3, err := makeS3Storage(context.TODO(),
+		base.ExternalIOConfig{DisableImplicitCredentials: true},
+		&roachpb.ExternalStorage_S3{
+			Endpoint: "http://do-not-go-there",
+			Auth:     authParamImplicit,
+		}, testSettings,
+	)
+	require.Nil(t, s3)
+	require.Error(t, err)
+	require.True(t, strings.Contains(err.Error(), "implicit"))
 }
