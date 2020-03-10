@@ -15,10 +15,11 @@
 
 @require "../src/components/core/index.styl"
 
-.Select-option
-  padding 10px 25px !important
-  &.is-selected
-    color $link-color !important
+.Select.is-focused
+  &:not(.is-open)
+    .Select-control
+      box-shadow none
+      border none
 
 .Select.is-focused
   &:not(.is-open)
@@ -54,7 +55,6 @@
 
 .Select-menu-outer
   width auto !important
-  top calc(100% + 21px) !important
   border none !important
   box-shadow 0 2px 4px rgba(0, 0, 0, .2) !important
   max-height 200px
