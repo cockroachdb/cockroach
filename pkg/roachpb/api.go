@@ -112,14 +112,21 @@ func IsReadOnly(args Request) bool {
 	return (flags&isRead) != 0 && (flags&isWrite) == 0
 }
 
-// IsReadAndWrite returns true if the request both reads and writes
-// (such as conditional puts and increments). These requests contrast
-// with blind-writes, which do not observe any state when modifying
-// replicated state and can be more freely re-ordered with other writes
-// as a result.
-func IsReadAndWrite(args Request) bool {
+// IsBlindWrite returns true iff the request is a blind-write. A request is a
+// blind-write if it is a write that does not observe any key-value state when
+// modifying that state (such as puts and deletes). This is in contrast with
+// read-write requests, which do observe key-value state when modifying the
+// state and may base their modifications off of this existing state (such as
+// conditional puts and increments).
+//
+// As a result of being "blind", blind-writes are allowed to be more freely
+// re-ordered with other writes. In practice, this means that they can be
+// evaluated with a read timestamp below another write and a write timestamp
+// above that write without needing to re-evaluate. This allows the WriteTooOld
+// error that is generated during such an occurrence to be deferred.
+func IsBlindWrite(args Request) bool {
 	flags := args.flags()
-	return (flags&isRead) != 0 && (flags&isWrite) != 0
+	return (flags&isRead) == 0 && (flags&isWrite) != 0
 }
 
 // IsTransactional returns true if the request may be part of a

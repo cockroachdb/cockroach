@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -9704,7 +9705,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		},
 		// Non-1PC serializable txn cput will fail with write too old error.
 		{
-			name: "no serverside-refresh of write too old on non-1PC txn",
+			name: "no serverside-refresh of write too old on non-1PC txn cput",
 			setupFn: func() (hlc.Timestamp, error) {
 				_, _ = put("c", "put")
 				return put("c", "put")
@@ -9729,6 +9730,21 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				iput := iPutArgs(roachpb.Key("c-iput"), []byte("iput"))
 				ba.Add(&iput)
 				assignSeqNumsForReqs(ba.Txn, &iput)
+				return
+			},
+			expErr: "write at timestamp .* too old",
+		},
+		// Non-1PC serializable txn locking scan will fail with write too old error.
+		{
+			name: "no serverside-refresh of write too old on non-1PC txn locking scan",
+			setupFn: func() (hlc.Timestamp, error) {
+				return put("c-scan", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba.Txn = newTxn("c-scan", ts.Prev())
+				scan := scanArgs(roachpb.Key("c-scan"), roachpb.Key("c-scan\x00"))
+				scan.KeyLocking = lock.Exclusive
+				ba.Add(scan)
 				return
 			},
 			expErr: "write at timestamp .* too old",
@@ -9776,7 +9792,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// The previous test shows different behavior for a non-transactional
 		// request or a 1PC one.
 		{
-			name: "no local retry with failed CPut despite write too old errors on txn",
+			name: "no serverside-refresh with failed cput despite write too old errors on txn",
 			setupFn: func() (hlc.Timestamp, error) {
 				return put("e1", "put")
 			},
