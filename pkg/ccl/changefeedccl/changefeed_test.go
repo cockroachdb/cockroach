@@ -2073,6 +2073,66 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+func TestChangefeedPauseUnpauseCursorAndInitialScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer func(i time.Duration) { jobs.DefaultAdoptInterval = i }(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 10 * time.Millisecond
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b'), (4, 'c'), (7, 'd'), (8, 'e')`)
+		var tsStr string
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp() from foo`).Scan(&tsStr)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
+			`WITH initial_scan, resolved='10ms', cursor='`+tsStr+`'`).(*cdctest.TableFeed)
+		defer closeFeed(t, foo)
+
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
+			`foo: [4]->{"after": {"a": 4, "b": "c"}}`,
+			`foo: [7]->{"after": {"a": 7, "b": "d"}}`,
+			`foo: [8]->{"after": {"a": 8, "b": "e"}}`,
+		})
+
+		// Wait for the high-water mark on the job to be updated after the initial
+		// scan, to make sure we don't get the initial scan data again.
+		expectResolvedTimestamp(t, foo)
+		expectResolvedTimestamp(t, foo)
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, foo.JobID)
+		// PAUSE JOB only requests the job to be paused. Block until it's paused.
+		opts := retry.Options{
+			InitialBackoff: 1 * time.Millisecond,
+			MaxBackoff:     time.Second,
+			Multiplier:     2,
+		}
+		ctx := context.Background()
+		if err := retry.WithMaxAttempts(ctx, opts, 10, func() error {
+			var status string
+			sqlDB.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, foo.JobID).Scan(&status)
+			if jobs.Status(status) != jobs.StatusPaused {
+				return errors.New("could not pause job")
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		foo.ResetSeen()
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (16, 'f')`)
+		sqlDB.Exec(t, `RESUME JOB $1`, foo.JobID)
+		assertPayloads(t, foo, []string{
+			`foo: [16]->{"after": {"a": 16, "b": "f"}}`,
+		})
+	}
+
+	// Only the enterprise version uses jobs.
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
 func TestManyChangefeedsOneTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
