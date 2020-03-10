@@ -16,7 +16,7 @@ import "os"
 var drainSignals = []os.Signal{os.Interrupt}
 
 // quitSignal is the signal to recognize to dump Go stacks.
-var quitSignal os.Signal = -1
+var quitSignal os.Signal = nil
 
 func handleSignalDuringShutdown(os.Signal) {
 	// Windows doesn't indicate whether a process exited due to a signal in the
