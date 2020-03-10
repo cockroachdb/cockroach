@@ -179,7 +179,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
     return `Last cleared ${moment.utc(lastReset).format(DATE_FORMAT)}`;
   }
 
-  noStatementsResult = () => (
+  noStatementResult = () => (
     <>
       <p>There are no SQL statements that match your search or filter since this page was last cleared.</p>
       <a href="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html" target="_blank">Learn more about the statement page</a>
@@ -243,7 +243,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
                 }
                 sortSetting={this.state.sortSetting}
                 onChangeSortSetting={this.changeSortSetting}
-                renderNoResult={this.noStatementsResult()}
+                renderNoResult={this.noStatementResult()}
               />
             </div>
           )}

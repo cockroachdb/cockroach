@@ -20,6 +20,12 @@
   &.is-selected
     color $link-color !important
 
+.Select.is-focused
+  &:not(.is-open)
+    .Select-control
+      box-shadow none
+      border none
+
 .Select-value, .Select-placeholder
   line-height inherit !important
   height auto !important
@@ -32,10 +38,10 @@
   line-height inherit !important
   height auto !important
   border-width 0 !important
-  box-shadow 0 0 0 black !important
-  border-radius 0 3px 3px 0 !important
   background-color transparent !important
   width auto !important 
+  &:hover
+    box-shadow none
 
 .Select-input
   line-height inherit !important
