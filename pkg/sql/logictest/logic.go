@@ -165,6 +165,14 @@ import (
 //            testutils.SucceedsSoon for more information. If run with the
 //            -rewrite flag, inserts a 500ms sleep before executing the query
 //            once.
+//      - kvtrace: runs the query and compares against the results of the
+//            kv operations trace of the query. kvtrace optionally accepts
+//            arguments of the form kvtrace(op,op,...). Op is one of
+//            the accepted k/v arguments such as 'CPut', 'Scan' etc. It
+//            also accepts arguments of the form 'prefix=...'. For example,
+//            if kvtrace(CPut,Del,prefix=/Table/54,prefix=/Table/55), the
+//            results will be filtered to contain messages starting with
+//            CPut /Table/54, CPut /Table/55, Del /Table/54, Del /Table/55.
 //
 //    The label is optional. If specified, the test runner stores a hash
 //    of the results of the query under the given label. If the label is
@@ -865,10 +873,35 @@ type logicQuery struct {
 
 	// kvtrace indicates that we're comparing the output of a kv trace.
 	kvtrace bool
+	// kvOpTypes can be used only when kvtrace is true. It contains
+	// the particular operation types to filter on, such as CPut or Del.
+	kvOpTypes        []string
+	keyPrefixFilters []string
 
 	// rawOpts are the query options, before parsing. Used to display in error
 	// messages.
 	rawOpts string
+}
+
+var allowedKVOpTypes = []string{
+	"CPut",
+	"Put",
+	"InitPut",
+	"Del",
+	"ClearRange",
+	"Get",
+	"Scan",
+	"FKScan",
+	"CascadeScan",
+}
+
+func isAllowedKVOp(op string) bool {
+	for _, s := range allowedKVOpTypes {
+		if op == s {
+			return true
+		}
+	}
+	return false
 }
 
 // logicTest executes the test cases specified in a file. The file format is
@@ -1523,19 +1556,24 @@ func (t *logicTest) processSubtest(
 
 					tokens := strings.Split(query.rawOpts, ",")
 
-					// One of the options can be partialSort(1,2,3); we want this to be
-					// a single token.
-					for i := 0; i < len(tokens)-1; i++ {
-						if strings.HasPrefix(tokens[i], "partialsort(") && !strings.HasSuffix(tokens[i], ")") {
-							// Merge this token with the next.
-							tokens[i] = tokens[i] + "," + tokens[i+1]
-							// Delete tokens[i+1].
-							copy(tokens[i+1:], tokens[i+2:])
-							tokens = tokens[:len(tokens)-1]
-							// Look at the new token again.
-							i--
+					// For tokens of the form tok(arg1, arg2, arg3), we want to collapse
+					// these split tokens into one.
+					buildArgumentTokens := func(argToken string) {
+						for i := 0; i < len(tokens)-1; i++ {
+							if strings.HasPrefix(tokens[i], argToken+"(") && !strings.HasSuffix(tokens[i], ")") {
+								// Merge this token with the next.
+								tokens[i] = tokens[i] + "," + tokens[i+1]
+								// Delete tokens[i+1].
+								copy(tokens[i+1:], tokens[i+2:])
+								tokens = tokens[:len(tokens)-1]
+								// Look at the new token again.
+								i--
+							}
 						}
 					}
+
+					buildArgumentTokens("partialsort")
+					buildArgumentTokens("kvtrace")
 
 					for _, opt := range tokens {
 						if strings.HasPrefix(opt, "partialsort(") && strings.HasSuffix(opt, ")") {
@@ -1560,6 +1598,31 @@ func (t *logicTest) processSubtest(
 							continue
 						}
 
+						if strings.HasPrefix(opt, "kvtrace(") && strings.HasSuffix(opt, ")") {
+							s := opt
+							s = strings.TrimPrefix(s, "kvtrace(")
+							s = strings.TrimSuffix(s, ")")
+
+							query.kvtrace = true
+							query.kvOpTypes = nil
+							query.keyPrefixFilters = nil
+							for _, c := range strings.Split(s, ",") {
+								if strings.HasPrefix(c, "prefix=") {
+									matched := strings.TrimPrefix(c, "prefix=")
+									query.keyPrefixFilters = append(query.keyPrefixFilters, matched)
+								} else if isAllowedKVOp(c) {
+									query.kvOpTypes = append(query.kvOpTypes, c)
+								} else {
+									return errors.Errorf(
+										"invalid filter '%s' provided. Expected one of %v or a prefix of the form 'prefix=x'",
+										c,
+										allowedKVOpTypes,
+									)
+								}
+							}
+							continue
+						}
+
 						switch opt {
 						case "nosort":
 							query.sorter = nil
@@ -1577,7 +1640,12 @@ func (t *logicTest) processSubtest(
 							query.retry = true
 
 						case "kvtrace":
+							// kvtrace without any arguments doesn't perform any additional
+							// filtering of results. So it displays kv's from all tables
+							// and all operation types.
 							query.kvtrace = true
+							query.kvOpTypes = nil
+							query.keyPrefixFilters = nil
 
 						default:
 							return errors.Errorf("%s: unknown sort mode: %s", query.pos, opt)
@@ -1676,17 +1744,33 @@ func (t *logicTest) processSubtest(
 					if err != nil {
 						return err
 					}
+
+					queryPrefix := `SELECT message FROM [SHOW KV TRACE FOR SESSION] `
+					buildQuery := func(ops []string, keyFilters []string) string {
+						var sb strings.Builder
+						sb.WriteString(queryPrefix)
+						if len(keyFilters) == 0 {
+							keyFilters = []string{""}
+						}
+						for i, c := range ops {
+							for j, f := range keyFilters {
+								if i+j == 0 {
+									sb.WriteString("WHERE ")
+								} else {
+									sb.WriteString("OR ")
+								}
+								sb.WriteString(fmt.Sprintf("message like '%s %s%%'", c, f))
+							}
+						}
+						return sb.String()
+					}
+
 					query.colTypes = "T"
-					query.sql = `SELECT message FROM [SHOW KV TRACE FOR SESSION]
-					WHERE message LIKE 'CPut%'
-					OR message LIKE 'Put%'
-          OR message LIKE 'InitPut%'
-          OR message LIKE 'Del%'
-          OR message LIKE 'ClearRange%'
-          OR message LIKE 'Get%'
-          OR message LIKE 'Scan%'
-          OR message LIKE 'FKScan%'
-          OR message LIKE 'CascadeScan%'`
+					if len(query.kvOpTypes) == 0 {
+						query.sql = buildQuery(allowedKVOpTypes, query.keyPrefixFilters)
+					} else {
+						query.sql = buildQuery(query.kvOpTypes, query.keyPrefixFilters)
+					}
 				}
 
 				for i := 0; i < repeat; i++ {
