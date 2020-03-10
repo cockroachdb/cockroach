@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+@require '~src/components/core/index'
+
 .multiple-filter__selection
   position absolute
   top 50px
@@ -38,21 +40,21 @@
     font-size 14px
     line-height 1.57
     letter-spacing 0.1px
-    color #5f6c87
+    color $colors--neutral-6
   .ant-select-arrow
     color #475872
   .ant-select-selection
     &:hover
-      border-color #3a7ce1
+      border-color $colors--primary-blue-3
     &:focus, &:active
-      border-color #3a7ce1
+      border-color $colors--primary-blue-3
 
 .filter--label
   font-family SourceSansPro-SemiBold
   font-size 12px
   line-height 1.67
   letter-spacing 0.3px
-  color #5f6c87
+  color $colors--neutral-6
   margin-bottom 7.5px
 
 .select-selection__deselect
@@ -62,7 +64,7 @@
     font-size 14px
     line-height 1.57
     letter-spacing 0.1px
-    color #3a7ce1
+    color $colors--primary-blue-3
 
 .filter__checkbox
   padding 7.5px 15px
@@ -75,4 +77,4 @@
     color #7e89a9
     margin-left 14px
     &__active
-      color #3a7ce1
+      color $colors--primary-blue-3

@@ -26,7 +26,7 @@ type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
 // Global set of colors for graph series.
 const seriesPalette = [
-  "#5F6C87", "#F2BE2C", "#F16969", "#4E9FD1", "#49D990", "#D77FBF", "#87326D", "#A3415B",
+  "#475872", "#FFCD02", "#F16969", "#4E9FD1", "#49D990", "#D77FBF", "#87326D", "#A3415B",
   "#B59153", "#C9DB6D", "#203D9B", "#748BF2", "#91C8F2", "#FF9696", "#EF843C", "#DCCD4B",
 ];
 

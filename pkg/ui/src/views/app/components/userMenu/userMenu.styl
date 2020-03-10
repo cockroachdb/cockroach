@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 @require "~styl/base/palette.styl"
+@require '~src/components/core/index'
 
 .user-menu
   display flex
@@ -29,7 +30,7 @@
   font-weight bold
 
 .user-menu__logout-menu-item
-  color #3a7ce1
+  color $colors--primary-blue-3
   border-top-width 1px
   border-top-color $popover-border-color
   border-top-style solid
