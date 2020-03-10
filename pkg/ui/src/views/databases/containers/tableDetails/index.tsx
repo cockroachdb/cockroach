@@ -11,6 +11,8 @@
 import { Col, Row, Tabs } from "antd";
 import { Highlight } from "src/views/shared/components/sql/highlight";
 import { SummaryCard } from "src/views/shared/components/summaryCard";
+import { selectLastReset } from "src/views/statements/statementsPage";
+import { AggregateStatistics } from "src/views/statements/statementsTable";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
@@ -43,6 +45,8 @@ const databaseTableGrantsSortSetting = new LocalSetting<AdminUIState, SortSettin
 interface TableMainData {
   tableInfo: TableInfo;
   grantsSortSetting: SortSetting;
+  statements: AggregateStatistics[];
+  lastReset: string;
 }
 
 /**
@@ -86,7 +90,7 @@ export class TableMain extends React.Component<TableMainProps, {}> {
   prevPage = () => this.props.history.goBack();
 
   render() {
-    const { tableInfo, grantsSortSetting, match, dbResponse } = this.props;
+    const { tableInfo, grantsSortSetting,  match, dbResponse } = this.props;
     const database = getMatchParamByName(match, databaseNameAttr);
     const table = getMatchParamByName(match, tableNameAttr);
 
@@ -188,6 +192,7 @@ const mapStateToProps = (state: AdminUIState, ownProps: RouteComponentProps) => 
   tableInfo: selectTableInfo(state, ownProps),
   grantsSortSetting: databaseTableGrantsSortSetting.selector(state),
   dbResponse: databaseDetails(state)[getMatchParamByName(ownProps.match, databaseNameAttr)] && databaseDetails(state)[getMatchParamByName(ownProps.match, databaseNameAttr)].data,
+  lastReset: selectLastReset(state),
 });
 
 const mapDispatchToProps = {

@@ -12,6 +12,7 @@ import { Icon, Pagination } from "antd";
 import { isNil, merge, forIn } from "lodash";
 import moment from "moment";
 import { DATE_FORMAT } from "src/util/format";
+import _ from "lodash";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
@@ -31,10 +32,8 @@ import { PrintTime } from "src/views/reports/containers/range/print";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
-import { SortSetting } from "src/views/shared/components/sortabletable";
-import Empty from "../app/components/empty";
 import { Search } from "../app/components/Search";
-import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
+import { AggregateStatistics } from "./statementsTable";
 import ActivateDiagnosticsModal, { ActivateDiagnosticsModalRef } from "src/views/statements/diagnostics/activateDiagnosticsModal";
 import "./statements.styl";
 import {
@@ -43,6 +42,7 @@ import {
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
 import { trackPaginate, trackSearch } from "src/util/analytics";
+import StatementSortTable from "./statementSortTable";
 
 import "./statements.styl";
 import { ISortedTablePagination } from "../shared/components/sortedtable";
@@ -176,7 +176,6 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
   }
   onSubmitSearchField = (search: string) => {
     this.setState({ search });
-    this.resetPagination();
     this.syncHistory({
       "q": search,
     });
@@ -189,55 +188,16 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     });
   }
 
-  filteredStatementsData = () => {
-    const { search } = this.state;
-    const { statements } = this.props;
-    return statements.filter(statement => search.split(" ").every(val => statement.label.toLowerCase().includes(val.toLowerCase())));
-  }
-
-  renderPage = (_page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next", originalElement: React.ReactNode) => {
-    switch (type) {
-      case "jump-prev":
-        return (
-          <div className="_pg-jump">
-            <Icon type="left" />
-            <span className="_jump-dots">•••</span>
-          </div>
-        );
-      case "jump-next":
-        return (
-          <div className="_pg-jump">
-            <Icon type="right" />
-            <span className="_jump-dots">•••</span>
-          </div>
-        );
-      default:
-        return originalElement;
-    }
-  }
-
-  renderLastCleared = () => {
-    const { lastReset } = this.props;
-    return `Last cleared ${moment.utc(lastReset).format(DATE_FORMAT)}`;
-  }
-
-  noStatementResult = () => (
-    <>
-      <p>There are no SQL statements that match your search or filter since this page was last cleared.</p>
-      <a href="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html" target="_blank">Learn more about the statement page</a>
-    </>
-  )
-
   renderStatements = () => {
-    const { pagination, search } = this.state;
-    const { statements, match } = this.props;
+    const { match, statements, lastReset } = this.props;
+    const { search } = this.state;
     const appAttrValue = getMatchParamByName(match, appAttr);
     const selectedApp = appAttrValue || "";
     const appOptions = [{ value: "", label: "All" }];
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
     const data = this.filteredStatementsData();
     return (
-      <div>
+      <>
         <PageConfig>
           <PageConfigItem>
             <Search
@@ -301,7 +261,14 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
           onChange={this.onChangePage}
           hideOnSinglePage
         />
-      </div>
+        <div className="section">
+          <StatementSortTable
+            statements={statements}
+            search={search}
+            lastReset={lastReset}
+          />
+        </div>
+      </>
     );
   }
 
