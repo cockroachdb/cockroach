@@ -273,6 +273,9 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 // according to ordering.
 // - matchLen specifies the length of the prefix of ordering columns the input
 // is already ordered on.
+// - maxNumberPartitions (when non-zero) overrides the semi-dynamically
+// computed maximum number of partitions that the external sorter will have
+// at once.
 // - processorID is the ProcessorID of the processor core that requested
 // creation of this operator. It is used only to distinguish memory monitors.
 // - post describes the post-processing spec of the processor. It will be used
@@ -286,6 +289,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 	inputTypes []coltypes.T,
 	ordering execinfrapb.Ordering,
 	matchLen uint32,
+	maxNumberPartitions int,
 	processorID int32,
 	post *execinfrapb.PostProcessSpec,
 	memMonitorNamePrefix string,
@@ -381,13 +385,16 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 			diskQueueCfg := args.DiskQueueCfg
 			diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
 			diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
+			if args.TestingKnobs.NumForcedRepartitions != 0 {
+				maxNumberPartitions = args.TestingKnobs.NumForcedRepartitions
+			}
 			return newExternalSorter(
 				ctx,
 				unlimitedAllocator,
 				standaloneMemAccount,
 				input, inputTypes, ordering,
 				execinfra.GetWorkMemLimit(flowCtx.Cfg),
-				args.TestingKnobs.NumForcedRepartitions,
+				maxNumberPartitions,
 				diskQueueCfg,
 				args.FDSemaphore,
 			)
@@ -778,6 +785,13 @@ func NewColOperator(
 							execinfra.GetWorkMemLimit(flowCtx.Cfg),
 							diskQueueCfg,
 							args.FDSemaphore,
+							func(input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (Operator, error) {
+								return result.createDiskBackedSort(
+									ctx, flowCtx, args, input, inputTypes,
+									execinfrapb.Ordering{Columns: orderingCols},
+									0 /* matchLen */, maxNumberPartitions, spec.ProcessorID,
+									&execinfrapb.PostProcessSpec{}, monitorNamePrefix+"-")
+							},
 							args.TestingKnobs.NumForcedRepartitions,
 						)
 					},
@@ -836,8 +850,9 @@ func NewColOperator(
 				ctx, result.createBufferingUnlimitedMemAccount(
 					ctx, flowCtx, "merge-joiner",
 				))
-			result.Op, err = NewMergeJoinOp(
-				unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx.Cfg), args.DiskQueueCfg, args.FDSemaphore,
+			result.Op, err = newMergeJoinOp(
+				unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx.Cfg),
+				args.DiskQueueCfg, args.FDSemaphore,
 				joinType, inputs[0], inputs[1], leftPhysTypes, rightPhysTypes,
 				core.MergeJoiner.LeftOrdering.Columns, core.MergeJoiner.RightOrdering.Columns,
 			)
@@ -870,7 +885,7 @@ func NewColOperator(
 			ordering := core.Sorter.OutputOrdering
 			matchLen := core.Sorter.OrderingMatchLen
 			result.Op, err = result.createDiskBackedSort(
-				ctx, flowCtx, args, input, inputTypes, ordering, matchLen,
+				ctx, flowCtx, args, input, inputTypes, ordering, matchLen, 0, /* maxNumberPartitions */
 				spec.ProcessorID, post, "", /* memMonitorNamePrefix */
 			)
 			result.ColumnTypes = spec.Input[0].ColumnTypes
@@ -909,8 +924,8 @@ func NewColOperator(
 						func(input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column) (Operator, error) {
 							return result.createDiskBackedSort(
 								ctx, flowCtx, args, input, inputTypes,
-								execinfrapb.Ordering{Columns: orderingCols},
-								0 /* matchLen */, spec.ProcessorID,
+								execinfrapb.Ordering{Columns: orderingCols}, 0, /* matchLen */
+								0 /* maxNumberPartitions */, spec.ProcessorID,
 								&execinfrapb.PostProcessSpec{}, memMonitorsPrefix)
 						},
 					)
@@ -920,7 +935,8 @@ func NewColOperator(
 				} else {
 					if len(wf.Ordering.Columns) > 0 {
 						input, err = result.createDiskBackedSort(
-							ctx, flowCtx, args, input, typs, wf.Ordering, 0, /* matchLen */
+							ctx, flowCtx, args, input, typs,
+							wf.Ordering, 0 /* matchLen */, 0, /* maxNumberPartitions */
 							spec.ProcessorID, &execinfrapb.PostProcessSpec{}, memMonitorsPrefix,
 						)
 					}

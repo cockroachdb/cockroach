@@ -159,9 +159,6 @@ func (p *allSpooler) getValues(i int) coldata.Vec {
 }
 
 func (p *allSpooler) getNumTuples() int {
-	if !p.spooled {
-		execerror.VectorizedInternalPanic("getNumTuples() is called before spool()")
-	}
 	return p.bufferedTuples.Length()
 }
 
@@ -186,12 +183,12 @@ func (p *allSpooler) getWindowedBatch(startIdx, endIdx int) coldata.Batch {
 }
 
 func (p *allSpooler) reset() {
-	p.spooled = false
-	p.bufferedTuples.SetLength(0)
-	p.bufferedTuples.ResetInternalBatch()
 	if r, ok := p.input.(resetter); ok {
 		r.reset()
 	}
+	p.spooled = false
+	p.bufferedTuples.SetLength(0)
+	p.bufferedTuples.ResetInternalBatch()
 }
 
 type sortOp struct {
