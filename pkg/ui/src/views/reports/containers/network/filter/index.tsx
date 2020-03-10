@@ -11,6 +11,7 @@
 import { Checkbox, Select } from "antd";
 import Dropdown from "oss/src/views/shared/components/dropdown";
 import React from "react";
+import classNames from "classnames";
 import { NetworkFilter, NetworkSort } from "..";
 import "./filter.styl";
 
@@ -113,6 +114,7 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
           title="Filter"
           options={[]}
           selected=""
+          className={classNames({ "dropdown__focused": opened })}
           content={
             <div ref={this.rangeContainer} className="Range">
               <div className="click-zone" onClick={() => this.setState({ opened: !opened })}/>
