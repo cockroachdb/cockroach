@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Col, Divider, Row } from "antd";
+import { Col, Row } from "antd";
 import _ from "lodash";
 import { TimestampToMoment } from "oss/src/util/convert";
 import React from "react";
@@ -27,13 +27,9 @@ import { SummaryCard } from "../shared/components/summaryCard";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
-import {
-  JOB_STATUS_CANCELED, JOB_STATUS_FAILED,
-  JOB_STATUS_SUCCEEDED,
-} from "src/views/jobs/jobStatusOptions";
-import {Duration} from "oss/src/views/jobs/duration";
-import {Progress} from "oss/src/views/jobs/progress";
-import { Button, BackIcon } from "oss/src/components/button";
+import { Button, BackIcon } from "src/components/button";
+import { DATE_FORMAT } from "src/util/format";
+import { JobStatusCell } from "./jobStatusCell";
 
 interface JobsTableProps extends RouteComponentProps {
   status: string;
@@ -59,35 +55,6 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
 
   prevPage = () => this.props.history.goBack();
 
-  renderStatus = () => {
-    const { job } = this.props;
-    const percent = job.fraction_completed * 100;
-    switch (job.status) {
-      case JOB_STATUS_SUCCEEDED:
-        return (
-          <div className="job-status__line">
-            <Progress job={this.props.job} lineWidth={2} showPercentage={false} /> - <Duration job={this.props.job} />
-          </div>
-        );
-      case JOB_STATUS_FAILED || JOB_STATUS_CANCELED:
-        return (
-          <div>
-            <Progress job={this.props.job} lineWidth={2} showPercentage={false} />
-          </div>
-        );
-      default:
-        return (
-          <div>
-            <Progress job={this.props.job} lineWidth={2} showPercentage={false} />
-            <div className="job-status__line--percentage">
-              <span>{percent.toFixed() + "%"} done</span>
-              <Divider type="vertical" /><Duration job={this.props.job} />
-            </div>
-          </div>
-        );
-    }
-  }
-
   renderContent = () => {
     const { job } = this.props;
     return (
@@ -96,7 +63,7 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
           <SqlBox value={ job.description } />
           <SummaryCard>
             <h3 className="summary--card__status--title">Status</h3>
-            {this.renderStatus()}
+            <JobStatusCell job={job} lineWidth={1.5} />
           </SummaryCard>
         </Col>
         <Col className="gutter-row" span={8}>
@@ -104,7 +71,7 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
             <Row>
               <Col span={24}>
                 <div className="summary--card__counting">
-                  <h3 className="summary--card__counting--value">{TimestampToMoment(job.created).format("MM/DD/YYYY [at] hh:mma")}</h3>
+                  <h3 className="summary--card__counting--value">{TimestampToMoment(job.created).format(DATE_FORMAT)}</h3>
                   <p className="summary--card__counting--label">Creation time</p>
                 </div>
               </Col>

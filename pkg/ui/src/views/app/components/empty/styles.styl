@@ -12,29 +12,36 @@
 
 .empty-container
   width 100%
-  min-height 192px
-  padding 35px 0 35px 37px
+  height 192px
+  padding $spacing-large 0 $spacing-large $spacing-large
   background $adminui-white
   position relative
   h2, p
     font-family SourceSansPro-Regular
-    color $adminui-grey-1
+    position relative
+    z-index 2
+  h2.empty-container__title
+    padding 0
+    font-weight normal
   &__title
+    color $colors--neutral-8
     font-size 20px
     letter-spacing -0.2px
     line-height 1.6
-    margin-bottom 6px
   &__description
+    color $colors--neutral-6
+    margin-top 8px
     font-size 14px
     letter-spacing 0.1px
     line-height 1.57
-    margin-bottom 29px
+    max-width 600px
   .empty-container__button
-    background-color $green
-    color $adminui-white
+    margin-top 10px
+    background-color $colors--primary-green-3
+    padding 8.5px 11px
+    color $colors--neutral-0
     border none
-    padding 8px 15px 0
-    height 40px
+    height auto
     border-radius 3px
     font-family SourceSansPro-SemiBold
     font-size 14px
@@ -43,11 +50,10 @@
     letter-spacing 0.1px
     margin 0
     &:hover, &:focus, &:active
-      background-color $green
-      opacity 0.7
-      color $adminui-white !important
+      background-color $colors--primary-green-4
   &__background
     position absolute
     right 0
     top 0
     height 100%
+    z-index 1

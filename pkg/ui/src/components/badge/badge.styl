@@ -15,7 +15,7 @@
   flex-direction row
   border-radius 3px
   text-transform uppercase
-  width fit-content
+  width max-content
   padding $spacing-xx-small $spacing-x-small
   cursor default
 
@@ -28,26 +28,30 @@
   font-size $font-size--small
   font-weight $font-weight--medium
   line-height $line-height--xx-small
+  font-family $font-family--semi-bold
   letter-spacing 1.5px
 
 .badge--status-success
-  background rgba(180, 241, 170, 0.5);
-  border-radius 3px
   color $colors--primary-green-3
+  background-color $colors--primary-green-1
+  background rgba(180, 241, 170, 0.5);
 
 .badge--status-danger
   color $colors--functional-red-4
+  background-color $colors--functional-red-1
   background $colors--functional-red-1
 
 .badge--status-default
   background-color $colors--neutral-2
-  color $colors--secondary-text
+  color $colors--neutral-6
 
 .badge--status-info
   color $colors--primary-blue-4
   background-color $colors--primary-blue-1
 
 .badge--status-warning
+  color $colors--functional-orange-4
+  background-color $colors--functional-orange-1
 
 .badge__icon
   margin 0 $spacing-base
