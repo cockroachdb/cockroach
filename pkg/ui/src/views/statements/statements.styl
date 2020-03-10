@@ -10,6 +10,7 @@
 
 @require '~styl/base/palette.styl'
 @require '~src/views/shared/util/table.styl'
+@require '~src/components/core/index'
 
 .statements-table
   &__col-query-text
@@ -210,7 +211,7 @@ $plan-node-line-color = #DADADA                                 // connecting li
 $plan-node-warning-color = #b26000                              // dark orange
 $plan-node-warning-background-color = rgba(209, 135, 55, 0.06)  // light orange
 $plan-node-warning-border-color = rgba(209, 135, 55, 0.3)       // dark orange 2
-$plan-node-details-background-color = #F6F6F6                   // grayish-white
+$plan-node-details-background-color = $colors--background       // grayish-white
 $plan-node-details-border-color = #ACB8CB                       // dark gray
 $plan-node-attribute-key-color = #37a806                        // light green
 
@@ -385,7 +386,7 @@ $plan-node-attribute-key-color = #37a806                        // light green
     top 50%
     left 50%
     transform: translate(-50%, -50%)
-    color #b8bbbc
+    color $colors--neutral-5
     font-size 14px
     letter-spacing 1.5px
   .anticon

@@ -88,7 +88,7 @@ export let warningIcon: string = `<svg width="21px" height="21px" viewBox="0 0 2
         <g id="Alert" transform="translate(-18.000000, -20.000000)">
             <g id="Group-4">
                 <g id="Group-2" transform="translate(18.000000, 20.000000)">
-                    <circle id="Oval-5" fill="#F2BE2C" cx="10.5" cy="10.5" r="10.5"></circle>
+                    <circle id="Oval-5" fill="#FFCD02" cx="10.5" cy="10.5" r="10.5"></circle>
                     <text id="!" font-family="Lato-Bold, Lato" font-size="14" font-weight="bold" fill="#FFFFFF">
                         <tspan x="8" y="16">!</tspan>
                     </text>
