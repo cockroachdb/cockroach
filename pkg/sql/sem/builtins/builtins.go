@@ -321,6 +321,53 @@ var builtins = map[string]builtinDefinition{
 				"Supports encodings 'UTF8' and 'LATIN1'.",
 		}),
 
+	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
+	"get_bit": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.VarBit}, {"position", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				val := tree.MustBeDBitArray(args[0])
+				position := tree.MustBeDInt(args[1])
+
+				// Checking whether index asked is inside array of bits.
+				if position < 0 || uint(position) >= val.BitLen() {
+					return nil, pgerror.Newf(
+						pgcode.ArraySubscript, "bit index %d out of valid range (0..%d)", position, val.BitLen()-1)
+				}
+				return tree.NewDInt(tree.DInt(val.BitArray.String()[position] - '0')), nil
+			},
+			Info: "extract a particular bit from a given array of bits",
+		}),
+
+	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
+	"set_bit": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"val", types.VarBit},
+				{"position", types.Int},
+				{"toSet", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.VarBit),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				val := tree.MustBeDBitArray(args[0])
+				position := tree.MustBeDInt(args[1])
+				toSet := tree.MustBeDInt(args[2])
+
+				// Checking whether index asked is inside array of bits.
+				if position < 0 || uint(position) >= val.BitLen() {
+					return nil, pgerror.Newf(
+						pgcode.ArraySubscript, "bit index %d out of valid range (0..%d)", position, val.BitLen()-1)
+				}
+				// Converted BitArray to rune format, and update the given index.
+				encodedString := []rune(val.BitArray.String())
+				encodedString[position] = rune('0' + toSet)
+
+				return tree.ParseDBitArray(string(encodedString))
+			},
+			Info: "Set particular bit in a given array of bits",
+		}),
+
 	"gen_random_uuid": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categoryIDGeneration,
