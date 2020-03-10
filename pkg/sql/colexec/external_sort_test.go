@@ -52,7 +52,7 @@ func TestExternalSort(t *testing.T) {
 		memAccounts []*mon.BoundAccount
 		memMonitors []*mon.BytesMonitor
 	)
-	const maxNumberPartitions = 2
+	const maxNumberPartitions = 3
 	// Test the case in which the default memory is used as well as the case in
 	// which the joiner spills to disk.
 	for _, spillForced := range []bool{false, true} {
@@ -149,7 +149,7 @@ func TestExternalSortRandomized(t *testing.T) {
 		memAccounts []*mon.BoundAccount
 		memMonitors []*mon.BytesMonitor
 	)
-	const maxNumberPartitions = 2
+	const maxNumberPartitions = 3
 	// Interesting disk spilling scenarios:
 	// 1) The sorter is forced to spill to disk as soon as possible.
 	// 2) The memory limit is dynamically set to repartition twice, this will also
