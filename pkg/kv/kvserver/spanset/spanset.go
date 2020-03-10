@@ -177,6 +177,24 @@ func (s *SpanSet) BoundarySpan(scope SpanScope) roachpb.Span {
 	return boundary
 }
 
+// MaxProtectedTimestamp returns the maximum timestamp that is protected across
+// all MVCC spans in the SpanSet. ReadWrite spans are protected from their
+// declared timestamp forward, so they have no maximum protect timestamp.
+// However, ReadOnly are protected only up to their declared timestamp and
+// are not protected at later timestamps.
+func (s *SpanSet) MaxProtectedTimestamp() hlc.Timestamp {
+	maxTS := hlc.MaxTimestamp
+	for ss := SpanScope(0); ss < NumSpanScope; ss++ {
+		for _, cur := range s.GetSpans(SpanReadOnly, ss) {
+			curTS := cur.Timestamp
+			if !curTS.IsEmpty() {
+				maxTS.Backward(curTS)
+			}
+		}
+	}
+	return maxTS
+}
+
 // AssertAllowed calls CheckAllowed and fatals if the access is not allowed.
 // Timestamps associated with the spans in the spanset are not considered,
 // only the span boundaries are checked.
