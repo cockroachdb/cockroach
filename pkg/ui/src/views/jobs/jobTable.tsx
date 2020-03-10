@@ -14,10 +14,10 @@ import {cockroach} from "src/js/protos";
 import {TimestampToMoment} from "src/util/convert";
 import {DATE_FORMAT} from "src/util/format";
 import {JobStatusCell} from "oss/src/views/jobs/jobStatusCell";
+import {Icon, Pagination} from "antd";
 import Empty from "src/views/app/components/empty";
 import {SortSetting} from "oss/src/views/shared/components/sortabletable";
 import {CachedDataReducerState} from "oss/src/redux/cachedDataReducer";
-import {PaginationComponent} from "oss/src/components/pagination/pagination";
 import _ from "lodash";
 import {JobDescriptionCell} from "oss/src/views/jobs/jobDescriptionCell";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
@@ -92,6 +92,27 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
     this.setState({ pagination: { ...pagination, current }});
   }
 
+  renderPage = (_page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next", originalElement: React.ReactNode) => {
+    switch (type) {
+      case "jump-prev":
+        return (
+          <div className="_pg-jump">
+            <Icon type="left" />
+            <span className="_jump-dots">•••</span>
+          </div>
+        );
+      case "jump-next":
+        return (
+          <div className="_pg-jump">
+            <Icon type="right" />
+            <span className="_jump-dots">•••</span>
+          </div>
+        );
+      default:
+        return originalElement;
+    }
+  }
+
   renderCounts = () => {
     const { pagination: { current, pageSize } } = this.state;
     const total = this.props.jobs.data.jobs.length;
@@ -110,7 +131,7 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
     return data;
   }
 
-  noJobResult = () => (
+  noJobsResult = () => (
     <>
       <p>There are no jobs that match your search in filter.</p>
       <a href="https://www.cockroachlabs.com/docs/stable/admin-ui-jobs-page.html" target="_blank">Learn more about jobs</a>
@@ -144,11 +165,15 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
             className="jobs-table"
             rowClass={job => "jobs-table__row--" + job.status}
             columns={jobsTableColumns}
-            renderNoResult={this.noJobResult()}
+            renderNoResult={this.noJobsResult()}
           />
         </section>
-        <PaginationComponent
-          pagination={{ ...pagination, total: jobs.length }}
+        <Pagination
+          size="small"
+          itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
+          pageSize={pagination.pageSize}
+          current={pagination.current}
+          total={jobs.length}
           onChange={this.onChangePage}
           hideOnSinglePage
         />
