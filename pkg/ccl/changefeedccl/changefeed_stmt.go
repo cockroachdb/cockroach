@@ -173,7 +173,7 @@ func changefeedPlanHook(
 			StatementTime: statementTime,
 		}
 		progress := jobspb.Progress{
-			Progress: &jobspb.Progress_HighWater{HighWater: &initialHighWater},
+			Progress: &jobspb.Progress_HighWater{},
 			Details: &jobspb.Progress_Changefeed{
 				Changefeed: &jobspb.ChangefeedProgress{},
 			},
@@ -488,16 +488,6 @@ func (b *changefeedResumer) Resume(
 	jobID := *b.job.ID()
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	progress := b.job.Progress()
-
-	// TODO(dan): This is a workaround for not being able to set an initial
-	// progress high-water when creating a job (currently only the progress
-	// details can be set). I didn't want to pick off the refactor to get this
-	// fix in, but it'd be nice to remove this hack.
-	if _, ok := details.Opts[changefeedbase.OptCursor]; ok {
-		if h := progress.GetHighWater(); h == nil || *h == (hlc.Timestamp{}) {
-			progress.Progress = &jobspb.Progress_HighWater{HighWater: &details.StatementTime}
-		}
-	}
 
 	// We'd like to avoid failing a changefeed unnecessarily, so when an error
 	// bubbles up to this level, we'd like to "retry" the flow if possible. This
