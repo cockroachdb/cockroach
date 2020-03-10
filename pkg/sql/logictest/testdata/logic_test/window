@@ -10,6 +10,7 @@ CREATE TABLE kv (
   d DECIMAL,
   s STRING,
   b BOOL,
+  i INTERVAL,
   FAMILY (k, v, w, f, b),
   FAMILY (d),
   FAMILY (s)
@@ -17,12 +18,12 @@ CREATE TABLE kv (
 
 statement OK
 INSERT INTO kv VALUES
-(1, 2, 3, 1.0, 1, 'a', true),
-(3, 4, 5, 2, 8, 'a', true),
-(5, NULL, 5, 9.9, -321, NULL, false),
-(6, 2, 3, 4.4, 4.4, 'b', true),
-(7, 2, 2, 6, 7.9, 'b', true),
-(8, 4, 2, 3, 3, 'A', false)
+(1, 2, 3, 1.0, 1, 'a', true, '1min'),
+(3, 4, 5, 2, 8, 'a', true, '2sec'),
+(5, NULL, 5, 9.9, -321, NULL, false, NULL),
+(6, 2, 3, 4.4, 4.4, 'b', true, '1ms'),
+(7, 2, 2, 6, 7.9, 'b', true, '4 days'),
+(8, 4, 2, 3, 3, 'A', false, '3 years')
 
 query error window functions are not allowed in GROUP BY
 SELECT * FROM kv GROUP BY v, count(w) OVER ()
@@ -208,38 +209,38 @@ SELECT avg(k) OVER (w ORDER BY w) FROM kv WINDOW w AS (PARTITION BY v) ORDER BY 
 7
 8
 
-query IIIRRTBR colnames
+query IIIRRTBTR colnames
 SELECT *, avg(k) OVER (w ORDER BY w) FROM kv WINDOW w AS (PARTITION BY v) ORDER BY 1
 ----
-k  v     w  f    d     s     b      avg
-1  2     3  1    1     a     true   4.6666666666666666667
-3  4     5  2    8     a     true   5.5
-5  NULL  5  9.9  -321  NULL  false  5
-6  2     3  4.4  4.4   b     true   4.6666666666666666667
-7  2     2  6    7.9   b     true   7
-8  4     2  3    3     A     false  8
+k  v     w  f    d     s     b      i             avg
+1  2     3  1    1     a     true   00:01:00      4.6666666666666666667
+3  4     5  2    8     a     true   00:00:02      5.5
+5  NULL  5  9.9  -321  NULL  false  NULL          5
+6  2     3  4.4  4.4   b     true   00:00:00.001  4.6666666666666666667
+7  2     2  6    7.9   b     true   4 days        7
+8  4     2  3    3     A     false  3 years       8
 
-query IIIRRTBR colnames
+query IIIRRTBTR colnames
 SELECT *, avg(k) OVER w FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY avg(k) OVER w, k
 ----
-k  v     w  f    d     s     b      avg
-1  2     3  1    1     a     true   4.6666666666666666667
-6  2     3  4.4  4.4   b     true   4.6666666666666666667
-5  NULL  5  9.9  -321  NULL  false  5
-3  4     5  2    8     a     true   5.5
-7  2     2  6    7.9   b     true   7
-8  4     2  3    3     A     false  8
+k  v     w  f    d     s     b      i             avg
+1  2     3  1    1     a     true   00:01:00      4.6666666666666666667
+6  2     3  4.4  4.4   b     true   00:00:00.001  4.6666666666666666667
+5  NULL  5  9.9  -321  NULL  false  NULL          5
+3  4     5  2    8     a     true   00:00:02      5.5
+7  2     2  6    7.9   b     true   4 days        7
+8  4     2  3    3     A     false  3 years       8
 
-query IIIRRTB colnames
+query IIIRRTBT colnames
 SELECT * FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY avg(k) OVER w DESC, k
 ----
-k  v     w  f    d     s     b
-8  4     2  3    3     A     false
-7  2     2  6    7.9   b     true
-3  4     5  2    8     a     true
-5  NULL  5  9.9  -321  NULL  false
-1  2     3  1    1     a     true
-6  2     3  4.4  4.4   b     true
+k  v     w  f    d     s     b      i
+8  4     2  3    3     A     false  3 years
+7  2     2  6    7.9   b     true   4 days
+3  4     5  2    8     a     true   00:00:02
+5  NULL  5  9.9  -321  NULL  false  NULL
+1  2     3  1    1     a     true   00:01:00
+6  2     3  4.4  4.4   b     true   00:00:00.001
 
 query error window "w" is already defined
 SELECT avg(k) OVER w FROM kv WINDOW w AS (), w AS ()
@@ -3078,3 +3079,58 @@ SELECT a, b, avg(b) OVER (ROWS 0 PRECEDING) FROM t ORDER BY a
 # Regression test for #40409.
 statement error window functions are not supported in CREATE TABLE AS.*\nHINT.*This feature was added in CockroachDB 19.2. Consider upgrading.
 CREATE TABLE ctas AS (SELECT row_number() OVER (), * FROM t)
+
+query IIIRRTBTTTTTTTTT
+SELECT
+  *,
+  array_agg(v) OVER (ORDER BY v DESC RANGE BETWEEN UNBOUNDED PRECEDING AND 0 PRECEDING),
+  array_agg(v) OVER (ORDER BY v DESC RANGE BETWEEN 0 PRECEDING AND 1 PRECEDING),
+  array_agg(f) OVER (ORDER BY f RANGE BETWEEN UNBOUNDED PRECEDING AND -0.0 PRECEDING),
+  array_agg(f) OVER (ORDER BY f RANGE BETWEEN 0.0 PRECEDING AND 1.0 PRECEDING),
+  array_agg(d) OVER (ORDER BY d DESC RANGE BETWEEN 0.0 FOLLOWING AND 0.0 FOLLOWING),
+  array_agg(d) OVER (ORDER BY d DESC RANGE BETWEEN 1.0 FOLLOWING AND UNBOUNDED FOLLOWING),
+  array_agg(i) OVER (ORDER BY i RANGE BETWEEN '1s'::INTERVAL PRECEDING AND '0s'::INTERVAL PRECEDING),
+  array_agg(i) OVER (ORDER BY i RANGE BETWEEN '1s'::INTERVAL FOLLOWING AND '1s'::INTERVAL FOLLOWING)
+FROM
+  kv
+ORDER BY
+  k
+----
+1   2     3  1    1     a     true   00:01:00      {4,4,4,2,2,2,2}            NULL         {0.1,0.2,0.3,1.0}                      NULL  {1}               {-321,NULL,NULL,NULL}          {00:01:00}             NULL
+3   4     5  2    8     a     true   00:00:02      {4,4,4}                    NULL         {0.1,0.2,0.3,1.0,2.0}                  NULL  {8}               {4.4,3,1,-321,NULL,NULL,NULL}  {00:00:02}             NULL
+5   NULL  5  9.9  -321  NULL  false  NULL          {4,4,4,2,2,2,2,NULL,NULL}  {NULL,NULL}  {0.1,0.2,0.3,1.0,2.0,3.0,4.4,6.0,9.9}  NULL  {-321}            {NULL,NULL,NULL}               {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+6   2     3  4.4  4.4   b     true   00:00:00.001  {4,4,4,2,2,2,2}            NULL         {0.1,0.2,0.3,1.0,2.0,3.0,4.4}          NULL  {4.4}             {3,1,-321,NULL,NULL,NULL}      {00:00:00.001}         NULL
+7   2     2  6    7.9   b     true   4 days        {4,4,4,2,2,2,2}            NULL         {0.1,0.2,0.3,1.0,2.0,3.0,4.4,6.0}      NULL  {7.9}             {4.4,3,1,-321,NULL,NULL,NULL}  {"4 days"}             NULL
+8   4     2  3    3     A     false  3 years       {4,4,4}                    NULL         {0.1,0.2,0.3,1.0,2.0,3.0}              NULL  {3}               {1,-321,NULL,NULL,NULL}        {"3 years"}            NULL
+9   2     9  0.1  NULL  NULL  NULL   NULL          {4,4,4,2,2,2,2}            NULL         {0.1}                                  NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}               {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+10  4     9  0.2  NULL  NULL  NULL   NULL          {4,4,4}                    NULL         {0.1,0.2}                              NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}               {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+11  NULL  9  0.3  NULL  NULL  NULL   NULL          {4,4,4,2,2,2,2,NULL,NULL}  {NULL,NULL}  {0.1,0.2,0.3}                          NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}               {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+
+# Regression test for #43083 (CBO optimizing out the single column from ORDER
+# BY clause which led to a crash in the execution engine).
+query IIIRRTBTTTTTTTTT
+SELECT
+  *,
+  array_agg(v) OVER (PARTITION BY v ORDER BY v RANGE BETWEEN UNBOUNDED PRECEDING AND 0 PRECEDING),
+  array_agg(v) OVER (PARTITION BY v ORDER BY v RANGE BETWEEN 0 PRECEDING AND 1 PRECEDING),
+  array_agg(f) OVER (PARTITION BY f ORDER BY f DESC RANGE BETWEEN UNBOUNDED PRECEDING AND -0.0 PRECEDING),
+  array_agg(f) OVER (PARTITION BY f ORDER BY f DESC RANGE BETWEEN 0.0 PRECEDING AND 1.0 PRECEDING),
+  array_agg(d) OVER (PARTITION BY d ORDER BY d RANGE BETWEEN 0.0 FOLLOWING AND 0.0 FOLLOWING),
+  array_agg(d) OVER (PARTITION BY d ORDER BY d RANGE BETWEEN 1.0 FOLLOWING AND UNBOUNDED FOLLOWING),
+  array_agg(i) OVER (PARTITION BY i ORDER BY i DESC RANGE BETWEEN '1s'::INTERVAL PRECEDING AND '0s'::INTERVAL PRECEDING),
+  array_agg(i) OVER (PARTITION BY i ORDER BY i DESC RANGE BETWEEN '1s'::INTERVAL FOLLOWING AND '1s'::INTERVAL FOLLOWING)
+FROM
+  kv
+ORDER BY
+  k
+----
+1   2     3  1    1     a     true   00:01:00      {2,2,2,2}    NULL         {1.0}  NULL  {1}               NULL              {00:01:00}             NULL
+3   4     5  2    8     a     true   00:00:02      {4,4,4}      NULL         {2.0}  NULL  {8}               NULL              {00:00:02}             NULL
+5   NULL  5  9.9  -321  NULL  false  NULL          {NULL,NULL}  {NULL,NULL}  {9.9}  NULL  {-321}            NULL              {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+6   2     3  4.4  4.4   b     true   00:00:00.001  {2,2,2,2}    NULL         {4.4}  NULL  {4.4}             NULL              {00:00:00.001}         NULL
+7   2     2  6    7.9   b     true   4 days        {2,2,2,2}    NULL         {6.0}  NULL  {7.9}             NULL              {"4 days"}             NULL
+8   4     2  3    3     A     false  3 years       {4,4,4}      NULL         {3.0}  NULL  {3}               NULL              {"3 years"}            NULL
+9   2     9  0.1  NULL  NULL  NULL   NULL          {2,2,2,2}    NULL         {0.1}  NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+10  4     9  0.2  NULL  NULL  NULL   NULL          {4,4,4}      NULL         {0.2}  NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+11  NULL  9  0.3  NULL  NULL  NULL   NULL          {NULL,NULL}  {NULL,NULL}  {0.3}  NULL  {NULL,NULL,NULL}  {NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}  {NULL,NULL,NULL,NULL}
+
