@@ -139,6 +139,14 @@ export class JobsTable extends React.Component<JobsTableProps> {
                 onChange={this.onTypeSelected}
               />
             </PageConfigItem>
+            <PageConfigItem>
+              <Dropdown
+                title="Show"
+                options={showOptions}
+                selected={this.props.show}
+                onChange={this.onShowSelected}
+              />
+            </PageConfigItem>
           </PageConfig>
         </div>
         <section className="section">
