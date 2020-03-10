@@ -2174,6 +2174,25 @@ func TestImportIntoCSV(t *testing.T) {
 		)
 	})
 
+	// Tests that we can import into the table even if the table has columns named with
+	// reserved keywords.
+	t.Run("cols-named-with-reserved-keywords", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE t ("select" INT PRIMARY KEY, "from" INT, "Some-c,ol-'Name'" STRING NOT NULL)`)
+		defer sqlDB.Exec(t, `DROP TABLE t`)
+
+		const data = "today,1,2"
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
+
+		sqlDB.Exec(t, fmt.Sprintf(
+			`IMPORT INTO t ("Some-c,ol-'Name'", "select", "from") CSV DATA ("%s")`, srv.URL))
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1", "2", "today"}})
+	})
+
 	// Tests behvior when the existing table being imported into has fewer columns
 	// in its schema then the source CSV file.
 	t.Run("fewer-table-cols-than-csv", func(t *testing.T) {
