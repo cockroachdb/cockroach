@@ -639,6 +639,69 @@ func (l pgxTestLogger) Log(level pgx.LogLevel, msg string, data map[string]inter
 // pgxTestLogger implements pgx.Logger.
 var _ pgx.Logger = pgxTestLogger{}
 
+// Test that closing a pgwire connection causes transactions to be rolled back
+// and release their locks.
+func TestConnCloseReleasesLocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// We're going to test closing the connection in both the Open and Aborted
+	// state.
+	testutils.RunTrueAndFalse(t, "open state", func(t *testing.T, open bool) {
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		ctx := context.TODO()
+		defer s.Stopper().Stop(ctx)
+
+		pgURL, cleanupFunc := sqlutils.PGUrl(
+			t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(security.RootUser),
+		)
+		defer cleanupFunc()
+		db, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		defer db.Close()
+
+		r := sqlutils.MakeSQLRunner(db)
+		r.Exec(t, "CREATE DATABASE test")
+		r.Exec(t, "CREATE TABLE test.t (x int primary key)")
+
+		pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		conn, err := pgx.Connect(pgxConfig)
+		require.NoError(t, err)
+		tx, err := conn.Begin()
+		require.NoError(t, err)
+		_, err = tx.Exec("INSERT INTO test.t(x) values (1)")
+		require.NoError(t, err)
+		readCh := make(chan error)
+		go func() {
+			conn2, err := pgx.Connect(pgxConfig)
+			require.NoError(t, err)
+			_, err = conn2.Exec("SELECT * FROM test.t")
+			readCh <- err
+		}()
+
+		select {
+		case err := <-readCh:
+			t.Fatalf("unexpected read unblocked: %v", err)
+		case <-time.After(10 * time.Millisecond):
+		}
+
+		if !open {
+			_, err = tx.Exec("bogus")
+			require.NotNil(t, err)
+		}
+		err = conn.Close()
+		require.NoError(t, err)
+		select {
+		case readErr := <-readCh:
+			require.NoError(t, readErr)
+		case <-time.After(10 * time.Second):
+			t.Fatal("read not unblocked in a timely manner")
+		}
+	})
+}
+
 // Test that closing a client connection such that producing results rows
 // encounters network errors doesn't crash the server (#23694).
 //
@@ -649,7 +712,7 @@ var _ pgx.Logger = pgxTestLogger{}
 // b) the connection's server-side results buffer has overflowed, and so
 // attempting to produce results (through CommandResult.AddRow()) observes
 // network errors.
-func TestConnClose(t *testing.T) {
+func TestConnCloseWhileProducingRows(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.TODO()
