@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { Icon, Pagination } from "antd";
-import _ from "lodash";
+import isNil from "lodash/isNil";
 import moment from "moment";
 import { DATE_FORMAT } from "src/util/format";
 import React from "react";
@@ -22,6 +22,7 @@ import * as protos from "src/js/protos";
 import { refreshStatementDiagnosticsRequests, refreshStatements } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
+import { analytics } from "src/redux/analytics";
 import { StatementsResponseMessage } from "src/util/api";
 import { aggregateStatementStats, combineStatementStats, ExecutionStatistics, flattenStatementStats, StatementStatistics } from "src/util/appStats";
 import { appAttr } from "src/util/constants";
@@ -154,9 +155,15 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
     this.props.dismissAlertMessage();
   }
 
+  componentDidUpdate = () => {
+    if (this.state.search) {
+      this.trackSearch(this.state.search, this.filteredStatementsData().length);
+    }
+  }
+
   onChangePage = (current: number) => {
     const { pagination } = this.state;
-    this.setState({ pagination: { ...pagination, current }});
+    this.setState({ pagination: { ...pagination, current } });
   }
 
   getStatementsData = () => {
@@ -186,6 +193,21 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
     const { search } = this.state;
     const { statements } = this.props;
     return statements.filter(statement => search.split(" ").every(val => statement.label.toLowerCase().includes(val.toLowerCase())));
+  }
+
+  trackSearch = (searchTerm: string, numberOfResults: number) => {
+    const pagePath = window.location.pathname + window.location.hash;
+
+    const payload = {
+      event: "Search",
+      properties: {
+        searchTerm,
+        numberOfResults,
+        pagePath,
+      },
+    };
+
+    analytics.track(payload);
   }
 
   renderPage = (_page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next", originalElement: React.ReactNode) => {
@@ -320,14 +342,14 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
     const app = getMatchParamByName(match, appAttr);
     return (
       <React.Fragment>
-        <Helmet title={ app ? `${app} App | Statements` : "Statements"} />
+        <Helmet title={app ? `${app} App | Statements` : "Statements"} />
 
         <section className="section">
           <h1 className="base-heading">Statements</h1>
         </section>
 
         <Loading
-          loading={_.isNil(this.props.statements)}
+          loading={isNil(this.props.statements)}
           error={this.props.statementsError}
           render={this.renderStatements}
         />
