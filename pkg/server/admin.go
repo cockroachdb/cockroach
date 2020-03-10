@@ -1728,6 +1728,7 @@ func (s *adminServer) Decommission(
 	if nodeIDs == nil {
 		// If no NodeIDs are specified, decommission the current node. This is
 		// used by `quit --decommission`.
+		// TODO(knz): This behavior is deprecated in 20.1. Remove in 20.2.
 		nodeIDs = []roachpb.NodeID{s.server.NodeID()}
 	}
 

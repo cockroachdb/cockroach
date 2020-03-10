@@ -535,7 +535,15 @@ func init() {
 	VarFlag(decommissionNodeCmd.Flags(), &nodeCtx.nodeDecommissionWait, cliflags.Wait)
 
 	// Quit command.
-	BoolFlag(quitCmd.Flags(), &quitCtx.serverDecommission, cliflags.Decommission, quitCtx.serverDecommission)
+	{
+		f := quitCmd.Flags()
+		// The --decommission flag for quit is now deprecated.
+		// Users should use `node decommission` and then `quit` after
+		// decommission completes.
+		// TODO(knz): Remove in 20.2.
+		BoolFlag(f, &quitCtx.serverDecommission, cliflags.Decommission, quitCtx.serverDecommission)
+		_ = f.MarkDeprecated(cliflags.Decommission.Name, `use 'cockroach node decommission' then 'cockroach quit' instead`)
+	}
 
 	for _, cmd := range append([]*cobra.Command{sqlShellCmd, demoCmd}, demoCmd.Commands()...) {
 		f := cmd.Flags()
