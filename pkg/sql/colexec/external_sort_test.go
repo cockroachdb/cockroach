@@ -87,10 +87,10 @@ func TestExternalSort(t *testing.T) {
 						tc.expected,
 						orderedVerifier,
 						func(input []Operator) (Operator, error) {
-							// A sorter should never exceed maxNumberPartitions+1, even during
+							// A sorter should never exceed maxNumberPartitions, even during
 							// repartitioning. A panic will happen if a sorter requests more
 							// than this number of file descriptors.
-							sem := NewTestingSemaphore(maxNumberPartitions + 1)
+							sem := NewTestingSemaphore(maxNumberPartitions)
 							// If a limit is satisfied before the sorter is drained of all its
 							// tuples, the sorter will not close its partitioner. During a
 							// flow this will happen in Cleanup, since there is no way to tell
@@ -194,7 +194,7 @@ func TestExternalSortRandomized(t *testing.T) {
 						expected,
 						orderedVerifier,
 						func(input []Operator) (Operator, error) {
-							sem := NewTestingSemaphore(maxNumberPartitions + 1)
+							sem := NewTestingSemaphore(maxNumberPartitions)
 							semsToCheck = append(semsToCheck, sem)
 							sorter, accounts, monitors, err := createDiskBackedSorter(
 								ctx, flowCtx, input, logTypes[:nCols], ordCols,
