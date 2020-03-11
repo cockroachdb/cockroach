@@ -29,7 +29,6 @@ SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name IN ('sql
 sql.schema.new_column_type.timetz_3_
 sql.schema.new_column_type.timetz_4_
 
-
 statement ok
 CREATE TABLE sec_col_fam(x INT, y INT, z INT, FAMILY (x), FAMILY (y), FAMILY (z), INDEX (x) STORING (y, z));
 CREATE INDEX ON sec_col_fam (x) STORING (y, z)
@@ -71,3 +70,23 @@ t  CREATE TABLE t (
    rowid_1 INT8 NULL,
    FAMILY fam_0_rowid_rowid_1_rowid_2 (rowid, rowid_1, rowid_2)
 )
+
+subtest regression_qualification_feature_counts
+
+statement ok
+CREATE TABLE telemetry_test (a int DEFAULT 1, b int UNIQUE CHECK(b > 1), c int AS (a + b) STORED)
+
+query T rowsort
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name IN (
+  'sql.schema.new_column.qualification.computed',
+  'sql.schema.new_column.qualification.default_expr',
+  'sql.schema.new_column.qualification.unique'
+)
+----
+sql.schema.new_column.qualification.unique
+sql.schema.new_column.qualification.computed
+sql.schema.new_column.qualification.default_expr
+
+statement ok
+DROP TABLE telemetry_test
