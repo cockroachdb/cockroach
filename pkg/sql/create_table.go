@@ -1655,7 +1655,7 @@ func makeTableDesc(
 		}
 		// Do not include virtual tables in these statistics.
 		if !sqlbase.IsVirtualTable(id) {
-			telemetry.Inc(sqltelemetry.SchemaNewTypeCounter(d.Type.TelemetryName()))
+			incTelemetryForNewColumn(d)
 		}
 		newDef, seqDbDesc, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, &n.Table)
 		if err != nil {
@@ -2071,4 +2071,19 @@ func MakeCheckConstraint(
 		ColumnIDs: colIDs,
 		Hidden:    d.Hidden,
 	}, nil
+}
+
+// incTelemetryForNewColumn increments relevant telemetry every time a new column
+// is added to a table.
+func incTelemetryForNewColumn(d *tree.ColumnTableDef) {
+	telemetry.Inc(sqltelemetry.SchemaNewTypeCounter(d.Type.TelemetryName()))
+	if d.IsComputed() {
+		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("computed"))
+	}
+	if d.HasDefaultExpr() {
+		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("default_expr"))
+	}
+	if d.Unique {
+		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("unique"))
+	}
 }

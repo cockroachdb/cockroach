@@ -1065,3 +1065,27 @@ ALTER TABLE t43092 ALTER COLUMN x DROP NOT NULL
 
 statement ok
 DROP TABLE t43092
+
+subtest regression_qualification_feature_counts
+
+statement ok
+CREATE TABLE telemetry_test (d int);
+ALTER TABLE telemetry_test
+  ADD COLUMN a int DEFAULT 1,
+  ADD COLUMN b int UNIQUE CHECK(b > 1),
+  ADD COLUMN c int AS (a + b) STORED
+
+query T rowsort
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name IN (
+  'sql.schema.new_column.qualification.computed',
+  'sql.schema.new_column.qualification.default_expr',
+  'sql.schema.new_column.qualification.unique'
+)
+----
+sql.schema.new_column.qualification.unique
+sql.schema.new_column.qualification.computed
+sql.schema.new_column.qualification.default_expr
+
+statement ok
+DROP TABLE telemetry_test

@@ -50,6 +50,12 @@ var (
 	TempObjectCleanerDeletionCounter = telemetry.GetCounterOnce("sql.schema.temp_object_cleaner.num_cleaned")
 )
 
+// SchemaNewColumnTypeQualificationCounter is to be incremented every time
+// a new qualification is used for a newly created column.
+func SchemaNewColumnTypeQualificationCounter(qual string) telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.new_column.qualification." + qual)
+}
+
 // SchemaChangeCreate is to be incremented every time a CREATE
 // schema change was made.
 func SchemaChangeCreate(typ string) telemetry.Counter {
