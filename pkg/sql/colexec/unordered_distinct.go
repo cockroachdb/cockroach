@@ -116,14 +116,14 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 }
 
 // reset resets the unorderedDistinct.
-func (op *unorderedDistinct) reset() {
+func (op *unorderedDistinct) reset(ctx context.Context) {
 	if r, ok := op.input.(resetter); ok {
-		r.reset()
+		r.reset(ctx)
 	}
 	op.ht.vals.ResetInternalBatch()
 	op.ht.vals.SetLength(0)
 	op.buildFinished = false
-	op.ht.reset()
+	op.ht.reset(ctx)
 	op.distinctCount = 0
 	op.outputBatchStart = 0
 }

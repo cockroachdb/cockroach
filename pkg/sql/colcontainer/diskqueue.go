@@ -12,6 +12,7 @@ package colcontainer
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"path/filepath"
 	"strconv"
@@ -19,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/snappy"
@@ -187,6 +190,8 @@ type diskQueue struct {
 	readFileIdx                  int
 	readFile                     fs.File
 	scratchDecompressedReadBytes []byte
+
+	diskAcc *mon.BoundAccount
 }
 
 var _ RewindableQueue = &diskQueue{}
@@ -197,19 +202,19 @@ type Queue interface {
 	// Enqueue enqueues a coldata.Batch to this queue. A zero-length batch should
 	// be enqueued when no more elements will be enqueued.
 	// WARNING: Selection vectors are ignored.
-	Enqueue(coldata.Batch) error
+	Enqueue(context.Context, coldata.Batch) error
 	// Dequeue dequeues a coldata.Batch from the queue into the batch that is
 	// passed in. The boolean returned specifies whether the queue was not empty
 	// (i.e. whether there was a batch to Dequeue). If true is returned and the
 	// batch has a length of zero, the Queue is finished and will not be Enqueued
 	// to. If an error is returned, the batch and boolean returned are
 	// meaningless.
-	Dequeue(coldata.Batch) (bool, error)
+	Dequeue(context.Context, coldata.Batch) (bool, error)
 	// CloseRead closes the read file descriptor. If Dequeued, the file may be
 	// reopened.
 	CloseRead() error
 	// Close closes any resources associated with the Queue.
-	Close() error
+	Close(context.Context) error
 }
 
 // RewindableQueue is a Queue that can be read from multiple times. Note that
@@ -322,14 +327,17 @@ func (cfg *DiskQueueCfg) SetDefaultBufferSizeBytesForCacheMode() {
 }
 
 // NewDiskQueue creates a Queue that spills to disk.
-// TODO(asubiotto): Plumb down a monitor for disk space.
-func NewDiskQueue(typs []coltypes.T, cfg DiskQueueCfg) (Queue, error) {
-	return newDiskQueue(typs, cfg)
+func NewDiskQueue(
+	ctx context.Context, typs []coltypes.T, cfg DiskQueueCfg, diskAcc *mon.BoundAccount,
+) (Queue, error) {
+	return newDiskQueue(ctx, typs, cfg, diskAcc)
 }
 
 // NewRewindableDiskQueue creates a RewindableQueue that spills to disk.
-func NewRewindableDiskQueue(typs []coltypes.T, cfg DiskQueueCfg) (RewindableQueue, error) {
-	d, err := newDiskQueue(typs, cfg)
+func NewRewindableDiskQueue(
+	ctx context.Context, typs []coltypes.T, cfg DiskQueueCfg, diskAcc *mon.BoundAccount,
+) (RewindableQueue, error) {
+	d, err := newDiskQueue(ctx, typs, cfg, diskAcc)
 	if err != nil {
 		return nil, err
 	}
@@ -337,7 +345,9 @@ func NewRewindableDiskQueue(typs []coltypes.T, cfg DiskQueueCfg) (RewindableQueu
 	return d, nil
 }
 
-func newDiskQueue(typs []coltypes.T, cfg DiskQueueCfg) (*diskQueue, error) {
+func newDiskQueue(
+	ctx context.Context, typs []coltypes.T, cfg DiskQueueCfg, diskAcc *mon.BoundAccount,
+) (*diskQueue, error) {
 	if err := cfg.EnsureDefaults(); err != nil {
 		return nil, err
 	}
@@ -350,6 +360,7 @@ func newDiskQueue(typs []coltypes.T, cfg DiskQueueCfg) (*diskQueue, error) {
 		cfg:              cfg,
 		files:            make([]file, 0, 4),
 		writeBufferLimit: cfg.BufferSizeBytes / 3,
+		diskAcc:          diskAcc,
 	}
 	// Refer to the DiskQueueCacheMode comment for why this division of
 	// BufferSizeBytes.
@@ -360,7 +371,7 @@ func newDiskQueue(typs []coltypes.T, cfg DiskQueueCfg) (*diskQueue, error) {
 		return nil, err
 	}
 	// rotateFile will create a new file to write to.
-	return d, d.rotateFile()
+	return d, d.rotateFile(ctx)
 }
 
 func (d *diskQueue) CloseRead() error {
@@ -383,9 +394,9 @@ func (d *diskQueue) closeFileDeserializer() error {
 	return nil
 }
 
-func (d *diskQueue) Close() error {
+func (d *diskQueue) Close(ctx context.Context) error {
 	if d.serializer != nil {
-		if err := d.writeFooterAndFlush(); err != nil {
+		if err := d.writeFooterAndFlush(ctx); err != nil {
 			return err
 		}
 		d.serializer = nil
@@ -406,6 +417,15 @@ func (d *diskQueue) Close() error {
 	if err := d.cfg.FS.DeleteDirAndFiles(filepath.Join(d.cfg.Path, d.dirName)); err != nil {
 		return err
 	}
+	totalSize := int64(0)
+	leftOverFileIdx := 0
+	if !d.rewindable {
+		leftOverFileIdx = d.readFileIdx
+	}
+	for _, file := range d.files[leftOverFileIdx : d.writeFileIdx+1] {
+		totalSize += int64(file.totalSize)
+	}
+	d.diskAcc.Shrink(ctx, totalSize)
 	return nil
 }
 
@@ -415,7 +435,7 @@ func (d *diskQueue) Close() error {
 // It is valid to call rotateFile when the diskQueue is not currently writing to
 // any file (i.e. during initialization). This will simply create the first file
 // to write to.
-func (d *diskQueue) rotateFile() error {
+func (d *diskQueue) rotateFile(ctx context.Context) error {
 	fName := filepath.Join(d.cfg.Path, d.dirName, strconv.Itoa(d.seqNo))
 	f, err := d.cfg.FS.CreateFileWithSync(fName, bytesPerSync)
 	if err != nil {
@@ -431,7 +451,7 @@ func (d *diskQueue) rotateFile() error {
 		}
 		d.writer = writer
 	} else {
-		if err := d.writeFooterAndFlush(); err != nil {
+		if err := d.writeFooterAndFlush(ctx); err != nil {
 			return err
 		}
 		if err := d.resetWriters(f); err != nil {
@@ -457,7 +477,7 @@ func (d *diskQueue) resetWriters(f fs.File) error {
 	return d.serializer.Reset(d.writer)
 }
 
-func (d *diskQueue) writeFooterAndFlush() error {
+func (d *diskQueue) writeFooterAndFlush(ctx context.Context) error {
 	err := d.serializer.Finish()
 	if err != nil {
 		return err
@@ -467,13 +487,16 @@ func (d *diskQueue) writeFooterAndFlush() error {
 		return err
 	}
 	d.numBufferedBatches = 0
-	// Append offset for the readers.
 	d.files[d.writeFileIdx].totalSize += written
+	if err := d.diskAcc.Grow(ctx, int64(written)); err != nil {
+		execerror.VectorizedInternalPanic(err)
+	}
+	// Append offset for the readers.
 	d.files[d.writeFileIdx].offsets = append(d.files[d.writeFileIdx].offsets, d.files[d.writeFileIdx].totalSize)
 	return nil
 }
 
-func (d *diskQueue) Enqueue(b coldata.Batch) error {
+func (d *diskQueue) Enqueue(ctx context.Context, b coldata.Batch) error {
 	if d.state == diskQueueStateDequeueing {
 		if d.cfg.CacheMode != DiskQueueCacheModeDefault {
 			return errors.Errorf("attempted to Enqueue to DiskQueue in mode that disallows it: %d", d.cfg.CacheMode)
@@ -488,7 +511,7 @@ func (d *diskQueue) Enqueue(b coldata.Batch) error {
 			// Already done.
 			return nil
 		}
-		if err := d.writeFooterAndFlush(); err != nil {
+		if err := d.writeFooterAndFlush(ctx); err != nil {
 			return err
 		}
 		if err := d.writeFile.Close(); err != nil {
@@ -521,9 +544,9 @@ func (d *diskQueue) Enqueue(b coldata.Batch) error {
 	if bufferSizeLimitReached || fileSizeLimitReached {
 		if fileSizeLimitReached {
 			// rotateFile will flush and reset writers.
-			return d.rotateFile()
+			return d.rotateFile(ctx)
 		}
-		if err := d.writeFooterAndFlush(); err != nil {
+		if err := d.writeFooterAndFlush(ctx); err != nil {
 			return err
 		}
 		return d.resetWriters(d.writeFile)
@@ -531,7 +554,7 @@ func (d *diskQueue) Enqueue(b coldata.Batch) error {
 	return nil
 }
 
-func (d *diskQueue) maybeInitDeserializer() (bool, error) {
+func (d *diskQueue) maybeInitDeserializer(ctx context.Context) (bool, error) {
 	if d.deserializerState.FileDeserializer != nil {
 		return true, nil
 	}
@@ -555,11 +578,12 @@ func (d *diskQueue) maybeInitDeserializer() (bool, error) {
 				if err := d.cfg.FS.DeleteFile(d.files[d.readFileIdx].name); err != nil {
 					return false, err
 				}
+				d.diskAcc.Shrink(ctx, int64(d.files[d.readFileIdx].totalSize))
 			}
 			d.readFile = nil
 			// Read next file.
 			d.readFileIdx++
-			return d.maybeInitDeserializer()
+			return d.maybeInitDeserializer(ctx)
 		}
 		// Not finished writing. there is currently no data to read.
 		return false, nil
@@ -628,16 +652,16 @@ func (d *diskQueue) maybeInitDeserializer() (bool, error) {
 			return false, err
 		}
 		d.files[d.readFileIdx].curOffsetIdx++
-		return d.maybeInitDeserializer()
+		return d.maybeInitDeserializer(ctx)
 	}
 	return true, nil
 }
 
 // Dequeue dequeues a batch from disk and deserializes it into b. Note that the
 // deserialized batch is only valid until the next call to Dequeue.
-func (d *diskQueue) Dequeue(b coldata.Batch) (bool, error) {
+func (d *diskQueue) Dequeue(ctx context.Context, b coldata.Batch) (bool, error) {
 	if d.serializer != nil && d.numBufferedBatches > 0 {
-		if err := d.writeFooterAndFlush(); err != nil {
+		if err := d.writeFooterAndFlush(ctx); err != nil {
 			return false, err
 		}
 		if err := d.resetWriters(d.writeFile); err != nil {
@@ -663,7 +687,7 @@ func (d *diskQueue) Dequeue(b coldata.Batch) (bool, error) {
 		d.files[d.readFileIdx].curOffsetIdx++
 	}
 
-	if dataToRead, err := d.maybeInitDeserializer(); err != nil {
+	if dataToRead, err := d.maybeInitDeserializer(ctx); err != nil {
 		return false, err
 	} else if !dataToRead {
 		// No data to read.

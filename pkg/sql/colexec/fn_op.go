@@ -37,4 +37,8 @@ func (f fnOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (f fnOp) reset() {}
+func (f fnOp) reset(ctx context.Context) {
+	if resettableOp, ok := f.input.(resetter); ok {
+		resettableOp.reset(ctx)
+	}
+}

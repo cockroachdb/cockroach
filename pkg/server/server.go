@@ -668,6 +668,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ExternalStorage:        externalStorage,
 		ExternalStorageFromURI: externalStorageFromURI,
 	}
+	s.cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurByteDiskCount, distSQLMetrics.MaxDiskByteHist)
 	if distSQLTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)
 	}
