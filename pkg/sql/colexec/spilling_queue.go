@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
@@ -57,6 +58,8 @@ type spillingQueue struct {
 	rewindableState struct {
 		numItemsDequeued int
 	}
+
+	diskAcc *mon.BoundAccount
 }
 
 // newSpillingQueue creates a new spillingQueue. An unlimited allocator must be
@@ -71,6 +74,7 @@ func newSpillingQueue(
 	cfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	batchSize int,
+	diskAcc *mon.BoundAccount,
 ) *spillingQueue {
 	// Reduce the memory limit by what the DiskQueue may need to buffer
 	// writes/reads.
@@ -94,6 +98,7 @@ func newSpillingQueue(
 		diskQueueCfg:       cfg,
 		fdSemaphore:        fdSemaphore,
 		dequeueScratch:     unlimitedAllocator.NewMemBatchWithSize(typs, 0 /* size */),
+		diskAcc:            diskAcc,
 	}
 }
 
@@ -108,8 +113,9 @@ func newRewindableSpillingQueue(
 	cfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	batchSize int,
+	diskAcc *mon.BoundAccount,
 ) *spillingQueue {
-	q := newSpillingQueue(unlimitedAllocator, typs, memoryLimit, cfg, fdSemaphore, batchSize)
+	q := newSpillingQueue(unlimitedAllocator, typs, memoryLimit, cfg, fdSemaphore, batchSize, diskAcc)
 	q.rewindable = true
 	return q
 }
@@ -117,7 +123,7 @@ func newRewindableSpillingQueue(
 func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error {
 	if batch.Length() == 0 {
 		if q.diskQueue != nil {
-			if err := q.diskQueue.Enqueue(batch); err != nil {
+			if err := q.diskQueue.Enqueue(ctx, batch); err != nil {
 				return err
 			}
 		}
@@ -134,7 +140,7 @@ func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error 
 			return err
 		}
 		q.unlimitedAllocator.ReleaseBatch(batch)
-		if err := q.diskQueue.Enqueue(batch); err != nil {
+		if err := q.diskQueue.Enqueue(ctx, batch); err != nil {
 			return err
 		}
 		q.numOnDiskItems++
@@ -150,7 +156,7 @@ func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error 
 	return nil
 }
 
-func (q *spillingQueue) dequeue() (coldata.Batch, error) {
+func (q *spillingQueue) dequeue(ctx context.Context) (coldata.Batch, error) {
 	if q.empty() {
 		return coldata.ZeroBatch, nil
 	}
@@ -169,7 +175,7 @@ func (q *spillingQueue) dequeue() (coldata.Batch, error) {
 		// is acceptable.
 		// Release a batch to make space for a new batch from disk.
 		q.unlimitedAllocator.ReleaseBatch(q.dequeueScratch)
-		ok, err := q.diskQueue.Dequeue(q.dequeueScratch)
+		ok, err := q.diskQueue.Dequeue(ctx, q.dequeueScratch)
 		if err != nil {
 			return nil, err
 		}
@@ -230,9 +236,9 @@ func (q *spillingQueue) maybeSpillToDisk(ctx context.Context) error {
 	}
 	log.VEvent(ctx, 1, "spilled to disk")
 	if q.rewindable {
-		q.diskQueue, err = colcontainer.NewRewindableDiskQueue(q.typs, q.diskQueueCfg)
+		q.diskQueue, err = colcontainer.NewRewindableDiskQueue(ctx, q.typs, q.diskQueueCfg, q.diskAcc)
 	} else {
-		q.diskQueue, err = colcontainer.NewDiskQueue(q.typs, q.diskQueueCfg)
+		q.diskQueue, err = colcontainer.NewDiskQueue(ctx, q.typs, q.diskQueueCfg, q.diskAcc)
 	}
 	return err
 }
@@ -249,12 +255,12 @@ func (q *spillingQueue) spilled() bool {
 	return q.diskQueue != nil
 }
 
-func (q *spillingQueue) close() error {
+func (q *spillingQueue) close(ctx context.Context) error {
 	if q.diskQueue != nil {
 		if q.fdSemaphore != nil {
 			q.fdSemaphore.Release(q.numFDsOpenAtAnyGivenTime())
 		}
-		return q.diskQueue.Close()
+		return q.diskQueue.Close(ctx)
 	}
 	return nil
 }
@@ -273,8 +279,8 @@ func (q *spillingQueue) rewind() error {
 	return nil
 }
 
-func (q *spillingQueue) reset() {
-	if err := q.close(); err != nil {
+func (q *spillingQueue) reset(ctx context.Context) {
+	if err := q.close(ctx); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
 	q.diskQueue = nil

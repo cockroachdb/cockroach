@@ -500,9 +500,9 @@ func (op *hashAggregator) onlineAgg() {
 
 // reset resets the hashAggregator for another run. Primarily used for
 // benchmarks.
-func (op *hashAggregator) reset() {
+func (op *hashAggregator) reset(ctx context.Context) {
 	if r, ok := op.input.(resetter); ok {
-		r.reset()
+		r.reset(ctx)
 	}
 
 	op.aggFuncMap = hashAggFuncMap{}

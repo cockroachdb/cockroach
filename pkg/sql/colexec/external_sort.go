@@ -143,6 +143,7 @@ type externalSorter struct {
 }
 
 var _ resettableOperator = &externalSorter{}
+var _ closableOperator = &externalSorter{}
 
 // newExternalSorter returns a disk-backed general sort operator.
 // - ctx is the same context that standaloneMemAccount was created with.
@@ -173,6 +174,7 @@ func newExternalSorter(
 	delegateFDAcquisitions bool,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
+	diskAcc *mon.BoundAccount,
 ) Operator {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeReuseCache {
 		execerror.VectorizedInternalPanic(errors.Errorf("external sorter instantiated with suboptimal disk queue cache mode: %d", diskQueueCfg.CacheMode))
@@ -220,7 +222,7 @@ func newExternalSorter(
 		inMemSorter:        inMemSorter,
 		inMemSorterInput:   inputPartitioner.(*inputPartitioningOperator),
 		partitionerCreator: func() colcontainer.PartitionedQueue {
-			return colcontainer.NewPartitionedDiskQueue(inputTypes, diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyCloseOnNewPartition)
+			return colcontainer.NewPartitionedDiskQueue(inputTypes, diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyCloseOnNewPartition, diskAcc)
 		},
 		inputTypes:          inputTypes,
 		ordering:            ordering,
@@ -266,7 +268,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				// sorter (which will do the "shallow" reset of
 				// inputPartitioningOperator).
 				s.inMemSorterInput.interceptReset = true
-				s.inMemSorter.reset()
+				s.inMemSorter.reset(ctx)
 				s.numPartitions++
 				if s.numPartitions == s.maxNumberPartitions-1 {
 					// We have reached the maximum number of active partitions that we
@@ -305,7 +307,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			// Reclaim disk space by closing the inactive read partitions. Since the
 			// merger must have exhausted all inputs, this is all the partitions just
 			// read from.
-			if err := s.partitioner.CloseInactiveReadPartitions(); err != nil {
+			if err := s.partitioner.CloseInactiveReadPartitions(ctx); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			s.firstPartitionIdx += s.numPartitions
@@ -334,7 +336,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			}
 			return b
 		case externalSorterFinished:
-			if err := s.Close(); err != nil {
+			if err := s.Close(ctx); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			return coldata.ZeroBatch
@@ -344,12 +346,12 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (s *externalSorter) reset() {
+func (s *externalSorter) reset(ctx context.Context) {
 	if r, ok := s.input.(resetter); ok {
-		r.reset()
+		r.reset(ctx)
 	}
 	s.state = externalSorterNewPartition
-	if err := s.Close(); err != nil {
+	if err := s.Close(ctx); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
 	s.closed = false
@@ -357,13 +359,13 @@ func (s *externalSorter) reset() {
 	s.numPartitions = 0
 }
 
-func (s *externalSorter) Close() error {
+func (s *externalSorter) Close(ctx context.Context) error {
 	if s.closed {
 		return nil
 	}
 	var err error
 	if s.partitioner != nil {
-		err = s.partitioner.Close()
+		err = s.partitioner.Close(ctx)
 		s.partitioner = nil
 	}
 	if !s.testingKnobs.delegateFDAcquisitions && s.fdState.fdSemaphore != nil && s.fdState.acquiredFDs > 0 {
@@ -476,10 +478,10 @@ func (o *inputPartitioningOperator) Next(ctx context.Context) coldata.Batch {
 	return b
 }
 
-func (o *inputPartitioningOperator) reset() {
+func (o *inputPartitioningOperator) reset(ctx context.Context) {
 	if !o.interceptReset {
 		if r, ok := o.input.(resetter); ok {
-			r.reset()
+			r.reset(ctx)
 		}
 	}
 	o.interceptReset = false

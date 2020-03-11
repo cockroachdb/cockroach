@@ -1374,6 +1374,14 @@ var charts = []sectionDescription{
 				Title:   "Vectorized Temporary Storage Open File Descriptors",
 				Metrics: []string{"sql.distsql.vec.openfds"},
 			},
+			{
+				Title:   "Current Disk Usage",
+				Metrics: []string{"sql.disk.distsql.current"},
+			},
+			{
+				Title:   "Disk Usage per Statement",
+				Metrics: []string{"sql.disk.distsql.max"},
+			},
 		},
 	},
 	{

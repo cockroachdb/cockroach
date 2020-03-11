@@ -29,6 +29,7 @@ import (
 func TestDiskQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 
@@ -87,9 +88,9 @@ func TestDiskQueue(t *testing.T) {
 						err error
 					)
 					if rewindable {
-						q, err = colcontainer.NewRewindableDiskQueue(typs, queueCfg)
+						q, err = colcontainer.NewRewindableDiskQueue(ctx, typs, queueCfg, testDiskAcc)
 					} else {
-						q, err = colcontainer.NewDiskQueue(typs, queueCfg)
+						q, err = colcontainer.NewDiskQueue(ctx, typs, queueCfg, testDiskAcc)
 					}
 					require.NoError(t, err)
 
@@ -102,12 +103,12 @@ func TestDiskQueue(t *testing.T) {
 					ctx := context.Background()
 					for {
 						b := op.Next(ctx)
-						require.NoError(t, q.Enqueue(b))
+						require.NoError(t, q.Enqueue(ctx, b))
 						if b.Length() == 0 {
 							break
 						}
 						if rng.Float64() < dequeuedProbabilityBeforeAllEnqueuesAreDone {
-							if ok, err := q.Dequeue(b); !ok {
+							if ok, err := q.Dequeue(ctx, b); !ok {
 								t.Fatal("queue incorrectly considered empty")
 							} else if err != nil {
 								t.Fatal(err)
@@ -124,7 +125,7 @@ func TestDiskQueue(t *testing.T) {
 						batchIdx := 0
 						b := coldata.NewMemBatch(typs)
 						for batchIdx < len(batches) {
-							if ok, err := q.Dequeue(b); !ok {
+							if ok, err := q.Dequeue(ctx, b); !ok {
 								t.Fatal("queue incorrectly considered empty")
 							} else if err != nil {
 								t.Fatal(err)
@@ -136,10 +137,10 @@ func TestDiskQueue(t *testing.T) {
 						if testReuseCache {
 							// Trying to Enqueue after a Dequeue should return an error in these
 							// CacheModes.
-							require.Error(t, q.Enqueue(b))
+							require.Error(t, q.Enqueue(ctx, b))
 						}
 
-						if ok, err := q.Dequeue(b); ok {
+						if ok, err := q.Dequeue(ctx, b); ok {
 							if b.Length() != 0 {
 								t.Fatal("queue should be empty")
 							}
@@ -153,7 +154,7 @@ func TestDiskQueue(t *testing.T) {
 					}
 
 					// Close queue.
-					require.NoError(t, q.Close())
+					require.NoError(t, q.Close(ctx))
 
 					// Verify no directories are left over.
 					directories, err = queueCfg.FS.ListDir(queueCfg.Path)
@@ -204,11 +205,11 @@ func BenchmarkDiskQueue(b *testing.B) {
 	ctx := context.Background()
 	for i := 0; i < b.N; i++ {
 		op.ResetBatchesToReturn(numBatches)
-		q, err := colcontainer.NewDiskQueue(typs, queueCfg)
+		q, err := colcontainer.NewDiskQueue(ctx, typs, queueCfg, testDiskAcc)
 		require.NoError(b, err)
 		for {
 			batchToEnqueue := op.Next(ctx)
-			if err := q.Enqueue(batchToEnqueue); err != nil {
+			if err := q.Enqueue(ctx, batchToEnqueue); err != nil {
 				b.Fatal(err)
 			}
 			if batchToEnqueue.Length() == 0 {
@@ -217,11 +218,11 @@ func BenchmarkDiskQueue(b *testing.B) {
 		}
 		dequeuedBatch := coldata.NewMemBatch(typs)
 		for dequeuedBatch.Length() != 0 {
-			if _, err := q.Dequeue(dequeuedBatch); err != nil {
+			if _, err := q.Dequeue(ctx, dequeuedBatch); err != nil {
 				b.Fatal(err)
 			}
 		}
-		if err := q.Close(); err != nil {
+		if err := q.Close(ctx); err != nil {
 			b.Fatal(err)
 		}
 	}
