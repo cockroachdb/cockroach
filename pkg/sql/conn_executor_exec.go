@@ -942,7 +942,13 @@ func (ex *connExecutor) execStmtInNoTxnState(
 //   allowing it to be retried.
 func (ex *connExecutor) execStmtInAbortedState(
 	ctx context.Context, stmt Statement, res RestrictedCommandResult,
-) (fsm.Event, fsm.EventPayload) {
+) (_ fsm.Event, payload fsm.EventPayload) {
+	ex.incrementStartedStmtCounter(stmt)
+	defer func() {
+		if !payloadHasError(payload) {
+			ex.incrementExecutedStmtCounter(stmt)
+		}
+	}()
 	_, inRestartWait := ex.machine.CurState().(stateRestartWait)
 
 	// TODO(andrei/cuongdo): Figure out what statements to count here.
