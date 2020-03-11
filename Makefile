@@ -832,9 +832,15 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/vec_comparators.eg.go \
   pkg/sql/colexec/window_peer_grouper.eg.go
 
-execgen-exclusions = $(addprefix -not -path ,$(EXECGEN_TARGETS))
+.PHONY: remove_obsolete_execgen
+remove_obsolete_execgen:
+	@obsolete="$(filter-out $(EXECGEN_TARGETS), $(shell find pkg/col/coldata pkg/sql/colexec pkg/sql/exec -name '*.eg.go' 2>/dev/null))"; \
+	for file in $${obsolete}; do \
+	  echo "Removing obsolete file $${file}..."; \
+	  rm -f $${file}; \
+	done
 
-$(shell build/cleanup.sh $(execgen-exclusions))
+-include remove_obsolete_execgen
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
