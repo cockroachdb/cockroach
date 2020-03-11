@@ -138,6 +138,8 @@ type NewColOperatorResult struct {
 	CanRunInAutoMode       bool
 	BufferingOpMemMonitors []*mon.BytesMonitor
 	BufferingOpMemAccounts []*mon.BoundAccount
+	DiskMonitors           []*mon.BytesMonitor
+	DiskAccounts           []*mon.BoundAccount
 }
 
 // resetToState resets r to the state specified in arg. arg may be a shallow
@@ -151,7 +153,15 @@ func (r *NewColOperatorResult) resetToState(ctx context.Context, arg NewColOpera
 	for _, a := range arg.BufferingOpMemAccounts {
 		accs[a] = struct{}{}
 	}
+	for _, a := range arg.DiskAccounts {
+		accs[a] = struct{}{}
+	}
 	for _, a := range r.BufferingOpMemAccounts {
+		if _, ok := accs[a]; !ok {
+			a.Close(ctx)
+		}
+	}
+	for _, a := range r.DiskAccounts {
 		if _, ok := accs[a]; !ok {
 			a.Close(ctx)
 		}
@@ -161,8 +171,16 @@ func (r *NewColOperatorResult) resetToState(ctx context.Context, arg NewColOpera
 	for _, m := range arg.BufferingOpMemMonitors {
 		mons[m] = struct{}{}
 	}
+	for _, m := range arg.DiskMonitors {
+		mons[m] = struct{}{}
+	}
 
 	for _, m := range r.BufferingOpMemMonitors {
+		if _, ok := mons[m]; !ok {
+			m.Stop(ctx)
+		}
+	}
+	for _, m := range r.DiskMonitors {
 		if _, ok := mons[m]; !ok {
 			m.Stop(ctx)
 		}
@@ -379,6 +397,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 			standaloneMemAccount := r.createStandaloneMemAccount(
 				ctx, flowCtx, monitorNamePrefix,
 			)
+			diskAccount := r.createDiskAccount(ctx, flowCtx, monitorNamePrefix)
 			// Make a copy of the DiskQueueCfg and set defaults for the sorter.
 			// The cache mode is chosen to reuse the cache to have a smaller
 			// cache per partition without affecting performance.
@@ -397,6 +416,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 				maxNumberPartitions,
 				diskQueueCfg,
 				args.FDSemaphore,
+				diskAccount,
 			)
 		},
 		args.TestingKnobs.SpillingCallbackFn,
@@ -483,6 +503,14 @@ func NewColOperator(
 				memMonitor.Stop(ctx)
 			}
 			result.BufferingOpMemMonitors = result.BufferingOpMemMonitors[:0]
+			for _, diskAccount := range result.DiskAccounts {
+				diskAccount.Close(ctx)
+			}
+			result.DiskAccounts = result.DiskAccounts[:0]
+			for _, diskMonitor := range result.DiskMonitors {
+				diskMonitor.Stop(ctx)
+			}
+			result.DiskMonitors = result.DiskMonitors[:0]
 		}
 		if panicErr != nil {
 			execerror.VectorizedInternalPanic(panicErr)
@@ -764,6 +792,7 @@ func NewColOperator(
 				// joiner.
 				result.Op = inMemoryHashJoiner
 			} else {
+				diskAccount := result.createDiskAccount(ctx, flowCtx, hashJoinerMemMonitorName)
 				result.Op = newTwoInputDiskSpiller(
 					inputs[0], inputs[1], inMemoryHashJoiner.(bufferingInMemoryOperator),
 					hashJoinerMemMonitorName,
@@ -793,6 +822,7 @@ func NewColOperator(
 									&execinfrapb.PostProcessSpec{}, monitorNamePrefix+"-")
 							},
 							args.TestingKnobs.NumForcedRepartitions,
+							diskAccount,
 						)
 					},
 					args.TestingKnobs.SpillingCallbackFn,
@@ -843,18 +873,22 @@ func NewColOperator(
 				onExpr = &core.MergeJoiner.OnExpr
 			}
 
+			monitorName := "merge-joiner"
+
 			// We are using an unlimited memory monitor here because merge joiner
 			// itself is responsible for making sure that we stay within the memory
 			// limit, and it will fall back to disk if necessary.
 			unlimitedAllocator := NewAllocator(
 				ctx, result.createBufferingUnlimitedMemAccount(
-					ctx, flowCtx, "merge-joiner",
+					ctx, flowCtx, monitorName,
 				))
+			diskAccount := result.createDiskAccount(ctx, flowCtx, monitorName)
 			result.Op, err = newMergeJoinOp(
 				unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx.Cfg),
 				args.DiskQueueCfg, args.FDSemaphore,
 				joinType, inputs[0], inputs[1], leftPhysTypes, rightPhysTypes,
 				core.MergeJoiner.LeftOrdering.Columns, core.MergeJoiner.RightOrdering.Columns,
+				diskAccount,
 			)
 			if err != nil {
 				return result, err
@@ -1255,6 +1289,20 @@ func (r *NewColOperatorResult) createStandaloneMemAccount(
 	standaloneMemAccount := standaloneMemMonitor.MakeBoundAccount()
 	r.BufferingOpMemAccounts = append(r.BufferingOpMemAccounts, &standaloneMemAccount)
 	return &standaloneMemAccount
+}
+
+// createDiskAccount instantiates an unlimited disk monitor and a disk account
+// to be used for disk spilling infrastructure in vectorized engine.
+// TODO(azhng): consolidates all allocation monitors/account manage into one
+// place after branch cut for 20.1.
+func (r *NewColOperatorResult) createDiskAccount(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
+) *mon.BoundAccount {
+	opDiskMonitor := execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, name)
+	r.DiskMonitors = append(r.DiskMonitors, opDiskMonitor)
+	opDiskAccount := opDiskMonitor.MakeBoundAccount()
+	r.DiskAccounts = append(r.DiskAccounts, &opDiskAccount)
+	return &opDiskAccount
 }
 
 type postProcessResult struct {

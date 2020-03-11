@@ -76,11 +76,13 @@ func TestSpillingQueue(t *testing.T) {
 					q = newRewindableSpillingQueue(
 						testAllocator, typs, memoryLimit, queueCfg,
 						NewTestingSemaphore(2), coldata.BatchSize(),
+						testDiskAcc,
 					)
 				} else {
 					q = newSpillingQueue(
 						testAllocator, typs, memoryLimit, queueCfg,
 						NewTestingSemaphore(2), coldata.BatchSize(),
+						testDiskAcc,
 					)
 				}
 
@@ -97,7 +99,7 @@ func TestSpillingQueue(t *testing.T) {
 						break
 					}
 					if rng.Float64() < dequeuedProbabilityBeforeAllEnqueuesAreDone {
-						if b, err = q.dequeue(); err != nil {
+						if b, err = q.dequeue(ctx); err != nil {
 							t.Fatal(err)
 						} else if b.Length() == 0 {
 							t.Fatal("queue incorrectly considered empty")
@@ -113,7 +115,7 @@ func TestSpillingQueue(t *testing.T) {
 				for i := 0; i < numReadIterations; i++ {
 					batchIdx := 0
 					for batches[batchIdx].Length() > 0 {
-						if b, err = q.dequeue(); err != nil {
+						if b, err = q.dequeue(ctx); err != nil {
 							t.Fatal(err)
 						} else if b == nil {
 							t.Fatal("unexpectedly dequeued nil batch")
@@ -124,7 +126,7 @@ func TestSpillingQueue(t *testing.T) {
 						batchIdx++
 					}
 
-					if b, err := q.dequeue(); err != nil {
+					if b, err := q.dequeue(ctx); err != nil {
 						t.Fatal(err)
 					} else if b.Length() != 0 {
 						t.Fatal("queue should be empty")
@@ -136,7 +138,7 @@ func TestSpillingQueue(t *testing.T) {
 				}
 
 				// Close queue.
-				require.NoError(t, q.close())
+				require.NoError(t, q.close(ctx))
 
 				// Verify no directories are left over.
 				directories, err := queueCfg.FS.ListDir(queueCfg.Path)

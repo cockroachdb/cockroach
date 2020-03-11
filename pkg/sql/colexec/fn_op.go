@@ -37,4 +37,4 @@ func (f fnOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (f fnOp) reset() {}
+func (f fnOp) reset(_ context.Context) {}

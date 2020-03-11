@@ -13,7 +13,6 @@ package colexec
 import (
 	"context"
 	"fmt"
-	"io"
 	"math"
 	"math/rand"
 	"reflect"
@@ -23,6 +22,11 @@ import (
 	"testing/quick"
 
 	"github.com/cockroachdb/apd"
+	"github.com/pkg/errors"
+	"github.com/pmezard/go-difflib/difflib"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -31,10 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/pkg/errors"
-	"github.com/pmezard/go-difflib/difflib"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // tuple represents a row with any-type columns.
@@ -276,11 +276,11 @@ func runTestsWithTyps(
 				"non-nulls in the input tuples, we expect for all nulls injection to "+
 				"change the output")
 		}
-		if c, ok := originalOp.(io.Closer); ok {
-			require.NoError(t, c.Close())
+		if c, ok := originalOp.(closer); ok {
+			require.NoError(t, c.Close(ctx))
 		}
-		if c, ok := opWithNulls.(io.Closer); ok {
-			require.NoError(t, c.Close())
+		if c, ok := opWithNulls.(closer); ok {
+			require.NoError(t, c.Close(ctx))
 		}
 	})
 }
@@ -403,10 +403,10 @@ func runTestsWithoutAllNullsInjection(
 						assert.False(t, maybeHasNulls(b))
 					}
 				}
-				if c, ok := op.(io.Closer); ok {
+				if c, ok := op.(closer); ok {
 					// Some operators need an explicit Close if not drained completely of
 					// input.
-					assert.NoError(t, c.Close())
+					assert.NoError(t, c.Close(ctx))
 				}
 			}
 		})

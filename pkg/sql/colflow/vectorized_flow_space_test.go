@@ -37,7 +37,10 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &execinfra.FlowCtx{
-		Cfg:     &execinfra.ServerConfig{Settings: st},
+		Cfg: &execinfra.ServerConfig{
+			Settings:    st,
+			DiskMonitor: testDiskMonitor,
+		},
 		EvalCtx: &evalCtx,
 	}
 
@@ -121,7 +124,10 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &execinfra.FlowCtx{
-		Cfg:     &execinfra.ServerConfig{Settings: st},
+		Cfg: &execinfra.ServerConfig{
+			Settings:    st,
+			DiskMonitor: testDiskMonitor,
+		},
 		EvalCtx: &evalCtx,
 	}
 

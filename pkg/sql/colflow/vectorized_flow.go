@@ -101,6 +101,12 @@ type vectorizedFlow struct {
 	// memory usage of the buffering components.
 	bufferingMemAccounts []*mon.BoundAccount
 
+	// diskMonitors are the disk monitors for disk spilling.
+	diskMonitors []*mon.BytesMonitor
+	// diskAccounts are the disk accounts that are tracking the dynamic usage
+	// of disk queue.
+	diskAccounts []*mon.BoundAccount
+
 	tempStorage struct {
 		// path is the path to this flow's temporary storage directory.
 		path string
@@ -195,6 +201,8 @@ func (f *vectorizedFlow) Setup(
 		f.streamingMemAccounts = append(f.streamingMemAccounts, creator.streamingMemAccounts...)
 		f.bufferingMemMonitors = append(f.bufferingMemMonitors, creator.bufferingMemMonitors...)
 		f.bufferingMemAccounts = append(f.bufferingMemAccounts, creator.bufferingMemAccounts...)
+		f.diskMonitors = append(f.diskMonitors, creator.diskMonitors...)
+		f.diskAccounts = append(f.diskAccounts, creator.diskAccounts...)
 		log.VEventf(ctx, 1, "vectorized flow setup succeeded")
 		return ctx, nil
 	}
@@ -267,7 +275,7 @@ func (f *vectorizedFlow) tryRemoveAll(root string) error {
 
 // Cleanup is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) Cleanup(ctx context.Context) {
-	// This cleans up all the memory monitoring of the vectorized flow.
+	// This cleans up all the memory and disk monitoring of the vectorized flow.
 	for _, memAcc := range f.streamingMemAccounts {
 		memAcc.Close(ctx)
 	}
@@ -277,6 +285,13 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	for _, memMonitor := range f.bufferingMemMonitors {
 		memMonitor.Stop(ctx)
 	}
+	for _, diskAcc := range f.diskAccounts {
+		diskAcc.Close(ctx)
+	}
+	for _, diskMonitor := range f.diskMonitors {
+		diskMonitor.Stop(ctx)
+	}
+
 	if atomic.LoadInt32(&f.tempStorage.created) == 1 {
 		if err := f.tryRemoveAll(f.tempStorage.path); err != nil {
 			// Log error as a Warning but keep on going to close the memory
@@ -448,6 +463,12 @@ type vectorizedFlowCreator struct {
 	// components in the vectorized flow.
 	bufferingMemAccounts []*mon.BoundAccount
 
+	// diskMonitors are the disk monitors for disk spilling.
+	diskMonitors []*mon.BytesMonitor
+	// diskAccounts are the disk accounts that are tracking the dynamic usage
+	// of disk queue.
+	diskAccounts []*mon.BoundAccount
+
 	diskQueueCfg colcontainer.DiskQueueCfg
 	fdSemaphore  semaphore.Semaphore
 }
@@ -494,6 +515,20 @@ func (s *vectorizedFlowCreator) createBufferingUnlimitedMemMonitor(
 	)
 	s.bufferingMemMonitors = append(s.bufferingMemMonitors, bufferingOpUnlimitedMemMonitor)
 	return bufferingOpUnlimitedMemMonitor
+}
+
+// createDiskAccount instantiates an unlimited disk monitor and a disk account
+// to be used for disk spilling infrastructure in vectorized engine.
+// TODO(azhng): consolidates all allocation monitors/account manage into one
+// place after branch cut for 20.1.
+func (s *vectorizedFlowCreator) createDiskAccount(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
+) *mon.BoundAccount {
+	diskMonitor := execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, name)
+	s.diskMonitors = append(s.diskMonitors, diskMonitor)
+	diskAccount := diskMonitor.MakeBoundAccount()
+	s.diskAccounts = append(s.diskAccounts, &diskAccount)
+	return &diskAccount
 }
 
 // newStreamingMemAccount creates a new memory account bound to the monitor in
@@ -582,7 +617,9 @@ func (s *vectorizedFlowCreator) setupRouter(
 	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
 		limit = 1
 	}
-	router, outputs := colexec.NewHashRouter(allocators, input, outputTyps, output.HashColumns, limit, s.diskQueueCfg, s.fdSemaphore)
+	diskAccount := s.createDiskAccount(ctx, flowCtx, mmName)
+	router, outputs := colexec.NewHashRouter(
+		allocators, input, outputTyps, output.HashColumns, limit, s.diskQueueCfg, s.fdSemaphore, diskAccount)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		logtags.AddTag(ctx, "hashRouterID", mmName)
 		router.Run(ctx)
@@ -907,6 +944,8 @@ func (s *vectorizedFlowCreator) setupFlow(
 		// them for a proper cleanup.
 		s.bufferingMemMonitors = append(s.bufferingMemMonitors, result.BufferingOpMemMonitors...)
 		s.bufferingMemAccounts = append(s.bufferingMemAccounts, result.BufferingOpMemAccounts...)
+		s.diskMonitors = append(s.diskMonitors, result.DiskMonitors...)
+		s.diskAccounts = append(s.diskAccounts, result.DiskAccounts...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "unable to vectorize execution plan")
 		}
@@ -1165,6 +1204,12 @@ func SupportsVectorized(
 		}
 		for _, memMon := range creator.bufferingMemMonitors {
 			memMon.Stop(ctx)
+		}
+		for _, diskAcc := range creator.diskAccounts {
+			diskAcc.Close(ctx)
+		}
+		for _, diskMon := range creator.diskMonitors {
+			diskMon.Stop(ctx)
 		}
 	}()
 	if vecErr := execerror.CatchVectorizedRuntimeError(func() {

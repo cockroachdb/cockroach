@@ -140,6 +140,13 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		for _, memMonitor := range result.BufferingOpMemMonitors {
 			memMonitor.Stop(ctx)
 		}
+
+		for _, diskAccount := range result.DiskAccounts {
+			diskAccount.Close(ctx)
+		}
+		for _, diskMonitor := range result.DiskMonitors {
+			diskMonitor.Stop(ctx)
+		}
 	}()
 
 	outColOp, err := colexec.NewMaterializer(

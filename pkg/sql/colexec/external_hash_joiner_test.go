@@ -50,15 +50,18 @@ func TestExternalHashJoiner(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg:     &execinfra.ServerConfig{Settings: st},
+		Cfg: &execinfra.ServerConfig{
+			Settings:    st,
+			DiskMonitor: testDiskMonitor,
+		},
 	}
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 
 	var (
-		memAccounts []*mon.BoundAccount
-		memMonitors []*mon.BytesMonitor
+		accounts []*mon.BoundAccount
+		monitors []*mon.BytesMonitor
 	)
 	// Test the case in which the default memory is used as well as the case in
 	// which the joiner spills to disk.
@@ -95,12 +98,12 @@ func TestExternalHashJoiner(t *testing.T) {
 						sem := NewTestingSemaphore(externalHJTestMaxNumberPartitions)
 						semsToCheck = append(semsToCheck, sem)
 						spec := createSpecForHashJoiner(tc)
-						hjOp, accounts, monitors, err := createDiskBackedHashJoiner(
+						hjOp, newAccounts, newMonitors, err := createDiskBackedHashJoiner(
 							ctx, flowCtx, spec, sources, func() {}, queueCfg,
 							2 /* numForcedPartitions */, sem,
 						)
-						memAccounts = append(memAccounts, accounts...)
-						memMonitors = append(memMonitors, monitors...)
+						accounts = append(accounts, newAccounts...)
+						monitors = append(monitors, newMonitors...)
 						return hjOp, err
 					})
 					for i, sem := range semsToCheck {
@@ -110,11 +113,11 @@ func TestExternalHashJoiner(t *testing.T) {
 			}
 		}
 	}
-	for _, memAccount := range memAccounts {
-		memAccount.Close(ctx)
+	for _, acc := range accounts {
+		acc.Close(ctx)
 	}
-	for _, memMonitor := range memMonitors {
-		memMonitor.Stop(ctx)
+	for _, mon := range monitors {
+		mon.Stop(ctx)
 	}
 }
 
@@ -136,6 +139,7 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 				ForceDiskSpill:   true,
 				MemoryLimitBytes: 1,
 			},
+			DiskMonitor: testDiskMonitor,
 		},
 	}
 	sourceTypes := []coltypes.T{coltypes.Int64}
@@ -163,11 +167,11 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 		NewTestingSemaphore(externalHJTestMaxNumberPartitions),
 	)
 	defer func() {
-		for _, memAccount := range accounts {
-			memAccount.Close(ctx)
+		for _, acc := range accounts {
+			acc.Close(ctx)
 		}
-		for _, memMonitor := range monitors {
-			memMonitor.Stop(ctx)
+		for _, mon := range monitors {
+			mon.Stop(ctx)
 		}
 	}()
 	require.NoError(t, err)
@@ -309,5 +313,7 @@ func createDiskBackedHashJoiner(
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	result, err := NewColOperator(ctx, flowCtx, args)
-	return result.Op, result.BufferingOpMemAccounts, result.BufferingOpMemMonitors, err
+	accounts := append(result.BufferingOpMemAccounts, result.DiskAccounts...)
+	monitors := append(result.BufferingOpMemMonitors, result.DiskMonitors...)
+	return result.Op, accounts, monitors, err
 }

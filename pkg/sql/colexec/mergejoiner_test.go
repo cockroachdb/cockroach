@@ -1488,13 +1488,16 @@ func TestMergeJoiner(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
-		Cfg:     &execinfra.ServerConfig{Settings: st},
+		Cfg: &execinfra.ServerConfig{
+			Settings:    st,
+			DiskMonitor: testDiskMonitor,
+		},
 	}
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 	var (
-		memAccounts []*mon.BoundAccount
-		memMonitors []*mon.BytesMonitor
+		accounts []*mon.BoundAccount
+		monitors []*mon.BytesMonitor
 	)
 	for _, tc := range mjTestCases {
 		tc.init()
@@ -1548,18 +1551,20 @@ func TestMergeJoiner(t *testing.T) {
 						if err != nil {
 							return nil, err
 						}
-						memAccounts = append(memAccounts, result.BufferingOpMemAccounts...)
-						memMonitors = append(memMonitors, result.BufferingOpMemMonitors...)
+						accounts = append(accounts, result.BufferingOpMemAccounts...)
+						monitors = append(monitors, result.BufferingOpMemMonitors...)
+						accounts = append(accounts, result.DiskAccounts...)
+						monitors = append(monitors, result.DiskMonitors...)
 						return result.Op, nil
 					})
 			})
 		}
 	}
-	for _, memAccount := range memAccounts {
-		memAccount.Close(ctx)
+	for _, acc := range accounts {
+		acc.Close(ctx)
 	}
-	for _, memMonitor := range memMonitors {
-		memMonitor.Stop(ctx)
+	for _, mon := range monitors {
+		mon.Stop(ctx)
 	}
 }
 
@@ -1598,6 +1603,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 					leftSource, rightSource, typs, typs,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+					testDiskAcc,
 				)
 				if err != nil {
 					t.Fatal("error in merge join op constructor", err)
@@ -1672,6 +1678,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+						testDiskAcc,
 					)
 					if err != nil {
 						t.Fatal("error in merge join op constructor", err)
@@ -1751,6 +1758,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
+						testDiskAcc,
 					)
 					if err != nil {
 						t.Fatal("error in merge join op constructor", err)
@@ -1880,6 +1888,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 								leftSource, rightSource, typs, typs,
 								[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 								[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+								testDiskAcc,
 							)
 
 							if err != nil {
@@ -1983,6 +1992,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 					[]uint32{0, 1}, []uint32{2, 3}, sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+					testDiskAcc,
 				)
 				require.NoError(b, err)
 				s := mergeJoinInnerOp{mergeJoinBase: base}
@@ -2014,6 +2024,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 					[]uint32{0, 1}, []uint32{2, 3}, sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+					testDiskAcc,
 				)
 				require.NoError(b, err)
 				s := mergeJoinInnerOp{mergeJoinBase: base}
@@ -2047,6 +2058,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 					[]uint32{0, 1}, []uint32{2, 3}, sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+					testDiskAcc,
 				)
 				require.NoError(b, err)
 				s := mergeJoinInnerOp{mergeJoinBase: base}

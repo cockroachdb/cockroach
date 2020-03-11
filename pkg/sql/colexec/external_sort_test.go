@@ -41,7 +41,8 @@ func TestExternalSort(t *testing.T) {
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings: st,
+			Settings:    st,
+			DiskMonitor: testDiskMonitor,
 		},
 	}
 
@@ -49,8 +50,8 @@ func TestExternalSort(t *testing.T) {
 	defer cleanup()
 
 	var (
-		memAccounts []*mon.BoundAccount
-		memMonitors []*mon.BytesMonitor
+		accounts []*mon.BoundAccount
+		monitors []*mon.BytesMonitor
 	)
 	const maxNumberPartitions = 3
 	// Test the case in which the default memory is used as well as the case in
@@ -98,12 +99,12 @@ func TestExternalSort(t *testing.T) {
 							if tc.k == 0 || int(tc.k) >= len(tc.tuples) {
 								semsToCheck = append(semsToCheck, sem)
 							}
-							sorter, accounts, monitors, err := createDiskBackedSorter(
+							sorter, newAccounts, newMonitors, err := createDiskBackedSorter(
 								ctx, flowCtx, input, tc.logTypes, tc.ordCols, tc.matchLen, tc.k, func() {},
 								maxNumberPartitions, queueCfg, sem,
 							)
-							memAccounts = append(memAccounts, accounts...)
-							memMonitors = append(memMonitors, monitors...)
+							accounts = append(accounts, newAccounts...)
+							monitors = append(monitors, newMonitors...)
 							return sorter, err
 						})
 					for i, sem := range semsToCheck {
@@ -113,11 +114,11 @@ func TestExternalSort(t *testing.T) {
 			}
 		}
 	}
-	for _, account := range memAccounts {
-		account.Close(ctx)
+	for _, acc := range accounts {
+		acc.Close(ctx)
 	}
-	for _, monitor := range memMonitors {
-		monitor.Stop(ctx)
+	for _, mon := range monitors {
+		mon.Stop(ctx)
 	}
 }
 
@@ -130,7 +131,8 @@ func TestExternalSortRandomized(t *testing.T) {
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings: st,
+			Settings:    st,
+			DiskMonitor: testDiskMonitor,
 		},
 	}
 	rng, _ := randutil.NewPseudoRand()
@@ -146,8 +148,8 @@ func TestExternalSortRandomized(t *testing.T) {
 	defer cleanup()
 
 	var (
-		memAccounts []*mon.BoundAccount
-		memMonitors []*mon.BytesMonitor
+		accounts []*mon.BoundAccount
+		monitors []*mon.BytesMonitor
 	)
 	const maxNumberPartitions = 3
 	// Interesting disk spilling scenarios:
@@ -196,12 +198,12 @@ func TestExternalSortRandomized(t *testing.T) {
 						func(input []Operator) (Operator, error) {
 							sem := NewTestingSemaphore(maxNumberPartitions + 1)
 							semsToCheck = append(semsToCheck, sem)
-							sorter, accounts, monitors, err := createDiskBackedSorter(
+							sorter, newAccounts, newMonitors, err := createDiskBackedSorter(
 								ctx, flowCtx, input, logTypes[:nCols], ordCols,
 								0 /* matchLen */, 0 /* k */, func() {},
 								maxNumberPartitions, queueCfg, sem)
-							memAccounts = append(memAccounts, accounts...)
-							memMonitors = append(memMonitors, monitors...)
+							accounts = append(accounts, newAccounts...)
+							monitors = append(monitors, newMonitors...)
 							return sorter, err
 						})
 					for i, sem := range semsToCheck {
@@ -211,11 +213,11 @@ func TestExternalSortRandomized(t *testing.T) {
 			}
 		}
 	}
-	for _, account := range memAccounts {
-		account.Close(ctx)
+	for _, acc := range accounts {
+		acc.Close(ctx)
 	}
-	for _, monitor := range memMonitors {
-		monitor.Stop(ctx)
+	for _, mon := range monitors {
+		mon.Stop(ctx)
 	}
 }
 
@@ -346,5 +348,7 @@ func createDiskBackedSorter(
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = maxNumberPartitions
 	result, err := NewColOperator(ctx, flowCtx, args)
-	return result.Op, result.BufferingOpMemAccounts, result.BufferingOpMemMonitors, err
+	accounts := append(result.BufferingOpMemAccounts, result.DiskAccounts...)
+	monitors := append(result.BufferingOpMemMonitors, result.DiskMonitors...)
+	return result.Op, accounts, monitors, err
 }

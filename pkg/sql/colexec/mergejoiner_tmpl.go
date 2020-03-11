@@ -788,6 +788,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftGroupsFromBatch(
 // look at rowStartIdx and rowEndIdx). Also, all rows in the buffered group do
 // have a match, so the group can neither be "nullGroup" nor "unmatched".
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftBufferedGroup(
+	ctx context.Context,
 	leftGroup group,
 	colOffset int,
 	input *mergeJoinInput,
@@ -797,7 +798,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftBufferedGroup(
 	var err error
 	currentBatch := o.builderState.lBufferedGroupBatch
 	if currentBatch == nil {
-		currentBatch, err = bufferedGroup.dequeue()
+		currentBatch, err = bufferedGroup.dequeue(ctx)
 		if err != nil {
 			execerror.VectorizedInternalPanic(err)
 		}
@@ -880,7 +881,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftBufferedGroup(
 				// We have processed all tuples in the current batch from the
 				// buffered group, so we need to dequeue the next one.
 				o.unlimitedAllocator.ReleaseBatch(currentBatch)
-				currentBatch, err = bufferedGroup.dequeue()
+				currentBatch, err = bufferedGroup.dequeue(ctx)
 				if err != nil {
 					execerror.VectorizedInternalPanic(err)
 				}
@@ -1075,6 +1076,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightGroupsFromBatch(
 // look at rowStartIdx and rowEndIdx). Also, all rows in the buffered group do
 // have a match, so the group can neither be "nullGroup" nor "unmatched".
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightBufferedGroup(
+	ctx context.Context,
 	rightGroup group,
 	colOffset int,
 	input *mergeJoinInput,
@@ -1090,7 +1092,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightBufferedGroup(
 			for ; o.builderState.right.numRepeatsIdx < rightGroup.numRepeats; o.builderState.right.numRepeatsIdx++ {
 				currentBatch := o.builderState.rBufferedGroupBatch
 				if currentBatch == nil {
-					currentBatch, err = bufferedGroup.dequeue()
+					currentBatch, err = bufferedGroup.dequeue(ctx)
 					if err != nil {
 						execerror.VectorizedInternalPanic(err)
 					}
@@ -1153,7 +1155,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightBufferedGroup(
 					// We have fully processed the current batch, so we need to get the
 					// next one.
 					o.unlimitedAllocator.ReleaseBatch(currentBatch)
-					currentBatch, err = bufferedGroup.dequeue()
+					currentBatch, err = bufferedGroup.dequeue(ctx)
 					if err != nil {
 						execerror.VectorizedInternalPanic(err)
 					}
@@ -1355,7 +1357,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) calculateOutputCount(groups []group) int 
 }
 
 // build creates the cross product, and writes it to the output member.
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) build() {
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) build(ctx context.Context) {
 	outStartIdx := o.builderState.outCount
 	o.builderState.outCount = o.calculateOutputCount(o.builderState.lGroups)
 	if o.output.Width() != 0 && o.builderState.outCount > outStartIdx {
@@ -1370,9 +1372,9 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) build() {
 			o.buildRightGroupsFromBatch(o.builderState.rGroups, len(o.left.outCols), &o.right, o.proberState.rBatch, outStartIdx)
 		// {{ end }}
 		case mjBuildFromBufferedGroup:
-			o.buildLeftBufferedGroup(o.builderState.lGroups[0], 0 /* colOffset */, &o.left, o.proberState.lBufferedGroup, outStartIdx)
+			o.buildLeftBufferedGroup(ctx, o.builderState.lGroups[0], 0 /* colOffset */, &o.left, o.proberState.lBufferedGroup, outStartIdx)
 			// {{ if not (or _JOIN_TYPE.IsLeftSemi _JOIN_TYPE.IsLeftAnti) }}
-			o.buildRightBufferedGroup(o.builderState.rGroups[0], len(o.left.outCols), &o.right, o.proberState.rBufferedGroup, outStartIdx)
+			o.buildRightBufferedGroup(ctx, o.builderState.rGroups[0], len(o.left.outCols), &o.right, o.proberState.rBufferedGroup, outStartIdx)
 		// {{ end }}
 
 		default:
@@ -1461,7 +1463,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			o.setBuilderSourceToBatch()
 			o.state = mjBuild
 		case mjBuild:
-			o.build()
+			o.build(ctx)
 
 			if o.builderState.outFinished {
 				o.state = mjEntry
@@ -1482,10 +1484,10 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 				return o.output
 			}
 		case mjDone:
-			if err := o.proberState.lBufferedGroup.close(); err != nil {
+			if err := o.proberState.lBufferedGroup.close(ctx); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
-			if err := o.proberState.rBufferedGroup.close(); err != nil {
+			if err := o.proberState.rBufferedGroup.close(ctx); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			return coldata.ZeroBatch
