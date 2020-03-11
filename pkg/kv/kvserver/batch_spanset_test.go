@@ -304,13 +304,15 @@ func TestSpanSetBatchTimestamps(t *testing.T) {
 	defer batchAfter.Close()
 
 	// Writes.
-	if err := batchDuring.Put(wkey, value); err != nil {
-		t.Fatalf("failed to write inside the range at same ts as latch declaration: %+v", err)
+	for _, batch := range []storage.Batch{batchAfter, batchDuring} {
+		if err := batch.Put(wkey, value); err != nil {
+			t.Fatalf("failed to write inside the range at same or greater ts than latch declaration: %+v", err)
+		}
 	}
 
-	for _, batch := range []storage.Batch{batchAfter, batchBefore, batchNonMVCC} {
+	for _, batch := range []storage.Batch{batchBefore, batchNonMVCC} {
 		if err := batch.Put(wkey, value); err == nil {
-			t.Fatalf("was able to write inside the range at ts greater than latch declaration: %+v", err)
+			t.Fatalf("was able to write inside the range at ts less than latch declaration: %+v", err)
 		}
 	}
 
@@ -321,7 +323,7 @@ func TestSpanSetBatchTimestamps(t *testing.T) {
 		return testutils.IsError(err, "cannot write undeclared span")
 	}
 
-	for _, batch := range []storage.Batch{batchAfter, batchBefore, batchNonMVCC} {
+	for _, batch := range []storage.Batch{batchBefore, batchNonMVCC} {
 		if err := batch.Clear(wkey); !isWriteSpanErr(err) {
 			t.Errorf("Clear: unexpected error %v", err)
 		}

@@ -167,10 +167,12 @@ func TestSpanSetCheckAllowedAtTimestamps(t *testing.T) {
 		// equal to or below associated timestamp.
 		{roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 2}},
 		{roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 1}},
+		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 3}},
 		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 2}},
 		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 1}},
 		{roachpb.Span{Key: roachpb.Key("g")}, hlc.Timestamp{WallTime: 2}},
 		{roachpb.Span{Key: roachpb.Key("g")}, hlc.Timestamp{WallTime: 1}},
+		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 3}},
 		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 2}},
 		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 1}},
 
@@ -191,13 +193,20 @@ func TestSpanSetCheckAllowedAtTimestamps(t *testing.T) {
 		// Write access allowed for a subspan or included point at exactly the
 		// declared timestamp.
 		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 2}},
+		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 3}},
 		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 2}},
+		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 3}},
 
 		// Points within the non-zero-length span.
 		{roachpb.Span{Key: roachpb.Key("n")}, hlc.Timestamp{WallTime: 2}},
 
-		// Sub span at the declared timestamp.
+		// Points within the non-zero-length span at a timestamp higher than what's
+		// declared.
+		{roachpb.Span{Key: roachpb.Key("n")}, hlc.Timestamp{WallTime: 3}},
+
+		// Sub span at and above the declared timestamp.
 		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}, hlc.Timestamp{WallTime: 2}},
+		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}, hlc.Timestamp{WallTime: 3}},
 
 		// Local keys.
 		{roachpb.Span{Key: keys.RangeLastGCKey(1)}, hlc.Timestamp{}},
@@ -218,9 +227,7 @@ func TestSpanSetCheckAllowedAtTimestamps(t *testing.T) {
 		// Read access disallowed for subspan or included point at timestamp greater
 		// than the associated timestamp.
 		{roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 3}},
-		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 3}},
 		{roachpb.Span{Key: roachpb.Key("g")}, hlc.Timestamp{WallTime: 3}},
-		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 3}},
 	}
 	for _, tc := range disallowedRO {
 		if err := ss.CheckAllowedAt(SpanReadOnly, tc.span, tc.ts); !testutils.IsError(err, readErr) {
@@ -233,22 +240,19 @@ func TestSpanSetCheckAllowedAtTimestamps(t *testing.T) {
 		ts   hlc.Timestamp
 	}{
 		// Write access disallowed for subspan or included point at timestamp
-		// different from the associated timestamp.
+		// less than the associated timestamp.
 		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 1}},
-		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 3}},
 		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 1}},
-		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 3}},
 
 		// Read only spans.
 		{roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 2}},
 		{roachpb.Span{Key: roachpb.Key("c")}, hlc.Timestamp{WallTime: 2}},
 
-		// Points within the non-zero-length span at a timestamp higher than what's
+		// Points within the non-zero-length span at a timestamp lower than what's
 		// declared.
-		{roachpb.Span{Key: roachpb.Key("n")}, hlc.Timestamp{WallTime: 3}},
+		{roachpb.Span{Key: roachpb.Key("n")}, hlc.Timestamp{WallTime: 1}},
 
-		// Sub spans at timestamps different from the one declared.
-		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}, hlc.Timestamp{WallTime: 3}},
+		// Sub span below the declared timestamp.
 		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}, hlc.Timestamp{WallTime: 1}},
 	}
 	for _, tc := range disallowedRW {
