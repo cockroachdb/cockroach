@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -813,6 +814,23 @@ func (tc *TableCollection) validatePrimaryKeys() error {
 	return nil
 }
 
+// MigrationSchemaChangeRequiredContext flags a schema change as necessary to
+// run even in a mixed-version 19.2/20.1 state where schema changes are normally
+// banned, because the schema change is being run in a startup migration. It's
+// the caller's responsibility to ensure that the schema change job is safe to
+// run in a mixed-version state.
+//
+// TODO (lucy): Remove this in 20.2.
+func MigrationSchemaChangeRequiredContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, migrationSchemaChangeRequiredHint{}, migrationSchemaChangeRequiredHint{})
+}
+
+type migrationSchemaChangeRequiredHint struct{}
+
+// errSchemaChangeDisallowedInMixedState signifies that an attempted schema
+// change was disallowed from running in a mixed-version
+var errSchemaChangeDisallowedInMixedState = errors.New("schema change cannot be initiated in this version until the version upgrade is finalized")
+
 // createDropDatabaseJob queues a job for dropping a database.
 func (p *planner) createDropDatabaseJob(
 	ctx context.Context,
@@ -820,6 +838,11 @@ func (p *planner) createDropDatabaseJob(
 	droppedDetails []jobspb.DroppedTableDetails,
 	jobDesc string,
 ) error {
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionSchemaChangeJob) {
+		if ctx.Value(migrationSchemaChangeRequiredHint{}) == nil {
+			return errSchemaChangeDisallowedInMixedState
+		}
+	}
 	// TODO (lucy): This should probably be deleting the queued jobs for all the
 	// tables being dropped, so that we don't have duplicate schema changers.
 	descriptorIDs := make([]sqlbase.ID, 0, len(droppedDetails))
@@ -849,6 +872,11 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 	jobDesc string,
 	mutationID sqlbase.MutationID,
 ) error {
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionSchemaChangeJob) {
+		if ctx.Value(migrationSchemaChangeRequiredHint{}) == nil {
+			return errSchemaChangeDisallowedInMixedState
+		}
+	}
 	var job *jobs.Job
 	// Iterate through the queued jobs to find an existing schema change job for
 	// this table, if it exists.
