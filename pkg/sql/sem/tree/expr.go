@@ -1266,26 +1266,6 @@ func (node *FuncExpr) ResolvedOverload() *Overload {
 	return node.fn
 }
 
-// GetAggregateConstructor exposes the AggregateFunc field for use by
-// the group node in package sql.
-func (node *FuncExpr) GetAggregateConstructor() func(*EvalContext, Datums) AggregateFunc {
-	if node.fn == nil || node.fn.AggregateFunc == nil {
-		return nil
-	}
-	return func(evalCtx *EvalContext, arguments Datums) AggregateFunc {
-		types := typesOfExprs(node.Exprs)
-		return node.fn.AggregateFunc(types, evalCtx, arguments)
-	}
-}
-
-func typesOfExprs(exprs Exprs) []*types.T {
-	types := make([]*types.T, len(exprs))
-	for i, expr := range exprs {
-		types[i] = expr.(TypedExpr).ResolvedType()
-	}
-	return types
-}
-
 // IsGeneratorApplication returns true iff the function applied is a generator (SRF).
 func (node *FuncExpr) IsGeneratorApplication() bool {
 	return node.fn != nil && node.fn.Generator != nil
