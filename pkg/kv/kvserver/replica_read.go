@@ -13,12 +13,14 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -79,7 +81,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// as we're performing a non-locking read.
 
 	var result result.Result
-	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), rw, rec, nil, ba, true /* readOnly */)
+	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, spans)
 	if err := r.handleReadOnlyLocalEvalResult(ctx, ba, result.Local); err != nil {
 		pErr = roachpb.NewError(err)
 	}
@@ -91,6 +93,31 @@ func (r *Replica) executeReadOnlyBatch(
 		log.Event(ctx, "read completed")
 	}
 	return br, g, pErr
+}
+
+// executeReadOnlyBatchWithServersideRefreshes invokes evaluateBatch and retries
+// at a higher timestamp in the event of some retriable errors if allowed by the
+// batch/txn.
+func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
+	ctx context.Context,
+	rw storage.ReadWriter,
+	rec batcheval.EvalContext,
+	ba *roachpb.BatchRequest,
+	spans *spanset.SpanSet,
+) (br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
+	for retries := 0; ; retries++ {
+		if retries > 0 {
+			log.VEventf(ctx, 2, "server-side retry of batch")
+		}
+		br, res, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), rw, rec, nil, ba, true /* readOnly */)
+
+		// If we can retry, set a higher batch timestamp and continue.
+		// Allow one retry only.
+		if pErr == nil || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, spans, nil /* deadline */) {
+			break
+		}
+	}
+	return br, res, pErr
 }
 
 func (r *Replica) handleReadOnlyLocalEvalResult(

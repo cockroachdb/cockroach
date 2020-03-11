@@ -15743,6 +15743,11 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   ::cockroach::roachpb::ReadConsistencyType read_consistency() const;
   void set_read_consistency(::cockroach::roachpb::ReadConsistencyType value);
 
+  void clear_gateway_node_id();
+  static const int kGatewayNodeIdFieldNumber = 11;
+  ::google::protobuf::int32 gateway_node_id() const;
+  void set_gateway_node_id(::google::protobuf::int32 value);
+
   // bool distinct_spans = 9;
   void clear_distinct_spans();
   static const int kDistinctSpansFieldNumber = 9;
@@ -15761,10 +15766,11 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   bool async_consensus() const;
   void set_async_consensus(bool value);
 
-  void clear_gateway_node_id();
-  static const int kGatewayNodeIdFieldNumber = 11;
-  ::google::protobuf::int32 gateway_node_id() const;
-  void set_gateway_node_id(::google::protobuf::int32 value);
+  // bool can_forward_read_timestamp = 16;
+  void clear_can_forward_read_timestamp();
+  static const int kCanForwardReadTimestampFieldNumber = 16;
+  bool can_forward_read_timestamp() const;
+  void set_can_forward_read_timestamp(bool value);
 
   // int64 target_bytes = 15;
   void clear_target_bytes();
@@ -15783,10 +15789,11 @@ class Header : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   double user_priority_;
   ::google::protobuf::int64 max_span_request_keys_;
   int read_consistency_;
+  ::google::protobuf::int32 gateway_node_id_;
   bool distinct_spans_;
   bool return_range_info_;
   bool async_consensus_;
-  ::google::protobuf::int32 gateway_node_id_;
+  bool can_forward_read_timestamp_;
   ::google::protobuf::int64 target_bytes_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
@@ -33451,6 +33458,20 @@ inline void Header::set_async_consensus(bool value) {
   
   async_consensus_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.async_consensus)
+}
+
+// bool can_forward_read_timestamp = 16;
+inline void Header::clear_can_forward_read_timestamp() {
+  can_forward_read_timestamp_ = false;
+}
+inline bool Header::can_forward_read_timestamp() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Header.can_forward_read_timestamp)
+  return can_forward_read_timestamp_;
+}
+inline void Header::set_can_forward_read_timestamp(bool value) {
+  
+  can_forward_read_timestamp_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Header.can_forward_read_timestamp)
 }
 
 // -------------------------------------------------------------------

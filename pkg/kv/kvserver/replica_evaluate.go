@@ -16,10 +16,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -495,4 +497,92 @@ func returnRangeInfo(reply roachpb.Response, rec batcheval.EvalContext) {
 		},
 	}
 	reply.SetHeader(header)
+}
+
+// canDoServersideRetry looks at the error produced by evaluating ba (or the
+// WriteTooOldFlag in br.Txn if there's no error) and decides if it's possible
+// to retry the batch evaluation at a higher timestamp. Retrying is sometimes
+// possible in case of some retriable errors which ask for higher timestamps:
+// for transactional requests, retrying is possible if the transaction had not
+// performed any prior reads that need refreshing.
+//
+// deadline, if not nil, specifies the highest timestamp (exclusive) at which
+// the request can be evaluated. If ba is a transactional request, then dealine
+// cannot be specified; a transaction's deadline comes from it's EndTxn request.
+//
+// If true is returned, ba and ba.Txn will have been updated with the new
+// timestamp.
+func canDoServersideRetry(
+	ctx context.Context,
+	pErr *roachpb.Error,
+	ba *roachpb.BatchRequest,
+	br *roachpb.BatchResponse,
+	spans *spanset.SpanSet,
+	deadline *hlc.Timestamp,
+) bool {
+	if ba.Txn != nil {
+		if deadline != nil {
+			log.Fatal(ctx, "deadline passed for transactional request")
+		}
+		canFwdRTS := ba.CanForwardReadTimestamp
+		if etArg, ok := ba.GetArg(roachpb.EndTxn); ok {
+			// If the request provided an EndTxn request, also check its
+			// CanCommitAtHigherTimestamp flag. This ensures that we're backwards
+			// compatable and gives us a chance to make sure that these flags are
+			// in-sync until the CanCommitAtHigherTimestamp is migrated away.
+			et := etArg.(*roachpb.EndTxnRequest)
+			canFwdCTS := batcheval.CanForwardCommitTimestampWithoutRefresh(ba.Txn, et)
+			if canFwdRTS && !canFwdCTS {
+				log.Fatalf(ctx, "unexpected mismatch between Batch.CanForwardReadTimestamp "+
+					"(%+v) and EndTxn.CanCommitAtHigherTimestamp (%+v)", ba, et)
+			}
+			canFwdRTS = canFwdCTS
+			deadline = et.Deadline
+		}
+		if !canFwdRTS {
+			return false
+		}
+	}
+	var newTimestamp hlc.Timestamp
+
+	if pErr != nil {
+		switch tErr := pErr.GetDetail().(type) {
+		case *roachpb.WriteTooOldError:
+			newTimestamp = tErr.ActualTimestamp
+		case *roachpb.TransactionRetryError:
+			if ba.Txn == nil {
+				// TODO(andrei): I don't know if TransactionRetryError is possible for
+				// non-transactional batches, but some tests inject them for 1PC
+				// transactions. I'm not sure how to deal with them, so let's not retry.
+				return false
+			}
+			newTimestamp = pErr.GetTxn().WriteTimestamp
+		default:
+			// TODO(andrei): Handle other retriable errors too.
+			return false
+		}
+	} else {
+		if !br.Txn.WriteTooOld {
+			log.Fatalf(ctx, "programming error: expected the WriteTooOld flag to be set")
+		}
+		newTimestamp = br.Txn.WriteTimestamp
+	}
+
+	if spans.MaxProtectedTimestamp().Less(newTimestamp) {
+		// If the batch acquired any read latches with bounded (MVCC) timestamps
+		// below this new timestamp then we can not trivially bump the batch's
+		// timestamp without dropping and re-acquiring those latches. Doing so
+		// could allow the request to read at an unprotected timestamp.
+		//
+		// NOTE: we could consider adding a retry-loop above the latch
+		// acquisition to allow this to be retried, but given that we try not to
+		// mix read-only and read-write requests, doing so doesn't seem worth
+		// it.
+		return false
+	}
+	if deadline != nil && deadline.LessEq(newTimestamp) {
+		return false
+	}
+	bumpBatchTimestamp(ctx, ba, newTimestamp)
+	return true
 }
