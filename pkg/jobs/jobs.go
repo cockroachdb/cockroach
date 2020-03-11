@@ -82,7 +82,11 @@ func init() {
 	// race.
 	var jobPayload jobspb.Payload
 	jobsDetailsInterfaceType := reflect.TypeOf(&jobPayload.Details).Elem()
+	var jobProgress jobspb.Progress
+	jobsProgressDetailsInterfaceType := reflect.TypeOf(&jobProgress.Details).Elem()
 	protoutil.RegisterUnclonableType(jobsDetailsInterfaceType, reflect.Array)
+	protoutil.RegisterUnclonableType(jobsProgressDetailsInterfaceType, reflect.Array)
+
 }
 
 // Status represents the status of a job in the system.jobs table.
@@ -267,7 +271,7 @@ func FractionUpdater(f float32) FractionProgressedFn {
 // HighWaterProgressedFn is a callback that computes a job's high-water mark
 // given its details. It is safe to modify details in the callback; those
 // modifications will be automatically persisted to the database record.
-type HighWaterProgressedFn func(ctx context.Context, details jobspb.ProgressDetails) hlc.Timestamp
+type HighWaterProgressedFn func(ctx context.Context, txn *kv.Txn, details jobspb.ProgressDetails) (hlc.Timestamp, error)
 
 // FractionProgressed updates the progress of the tracked job. It sets the job's
 // FractionCompleted field to the value returned by progressedFn and persists
@@ -307,7 +311,10 @@ func (j *Job) HighWaterProgressed(ctx context.Context, progressedFn HighWaterPro
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
-		highWater := progressedFn(ctx, md.Progress.Details)
+		highWater, err := progressedFn(ctx, txn, md.Progress.Details)
+		if err != nil {
+			return err
+		}
 		if highWater.Less(hlc.Timestamp{}) {
 			return errors.Errorf(
 				"Job: high-water %s is outside allowable range > 0.0 (job %d)",

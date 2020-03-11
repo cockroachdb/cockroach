@@ -183,14 +183,17 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 			return err
 		}
 
-		// Exit the schema change after resolving all of the spans if the schema
-		// change policy indicates we should do so.
-		if f.schemaChangePolicy == changefeedbase.OptSchemaChangePolicyStop {
+		// Resolve all of the spans as a boundary if the policy indicates that
+		// we should do so.
+		if f.schemaChangePolicy != changefeedbase.OptSchemaChangePolicyNoBackfill {
 			for _, span := range f.spans {
 				if err := f.sink.AddResolved(ctx, span, highWater, true); err != nil {
 					return err
 				}
 			}
+		}
+		// Exit if the policy says we should.
+		if f.schemaChangePolicy == changefeedbase.OptSchemaChangePolicyStop {
 			return schemaChangeDetectedError{highWater.Next()}
 		}
 	}

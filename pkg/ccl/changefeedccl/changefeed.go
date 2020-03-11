@@ -14,8 +14,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -355,43 +355,6 @@ func emitEntries(
 	}
 }
 
-// checkpointResolvedTimestamp checkpoints a changefeed-level resolved timestamp
-// to the jobs record.
-func checkpointResolvedTimestamp(
-	ctx context.Context,
-	jobProgressedFn func(context.Context, jobs.HighWaterProgressedFn) error,
-	sf *span.Frontier,
-) error {
-	resolved := sf.Frontier()
-	var resolvedSpans []jobspb.ResolvedSpan
-	sf.Entries(func(span roachpb.Span, ts hlc.Timestamp) {
-		resolvedSpans = append(resolvedSpans, jobspb.ResolvedSpan{
-			Span: span, Timestamp: ts,
-		})
-	})
-
-	// Some benchmarks want to skip the job progress update for a bit more
-	// isolation.
-	//
-	// NB: To minimize the chance that a user sees duplicates from below
-	// this resolved timestamp, keep this update of the high-water mark
-	// before emitting the resolved timestamp to the sink.
-	if jobProgressedFn != nil {
-		progressedClosure := func(ctx context.Context, d jobspb.ProgressDetails) hlc.Timestamp {
-			// TODO(dan): This was making enormous jobs rows, especially in
-			// combination with how many mvcc versions there are. Cut down on
-			// the amount of data used here dramatically and re-enable.
-			//
-			// d.(*jobspb.Progress_Changefeed).Changefeed.ResolvedSpans = resolvedSpans
-			return resolved
-		}
-		if err := jobProgressedFn(ctx, progressedClosure); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // emitResolvedTimestamp emits a changefeed-level resolved timestamp to the
 // sink.
 func emitResolvedTimestamp(
@@ -406,4 +369,32 @@ func emitResolvedTimestamp(
 		log.Infof(ctx, `resolved %s`, resolved)
 	}
 	return nil
+}
+
+func makeSpansToProtect(targets jobspb.ChangefeedTargets) []roachpb.Span {
+	// NB: We add 1 because we're also going to protect system.descriptors.
+	// We protect system.descriptors because a changefeed needs all of the history
+	// of table descriptors to version data.
+	spansToProtect := make([]roachpb.Span, 0, len(targets)+1)
+	addTablePrefix := func(id uint32) {
+		tablePrefix := roachpb.Key(keys.MakeTablePrefix(id))
+		spansToProtect = append(spansToProtect, roachpb.Span{
+			Key:    tablePrefix,
+			EndKey: tablePrefix.PrefixEnd(),
+		})
+	}
+	for t := range targets {
+		addTablePrefix(uint32(t))
+	}
+	addTablePrefix(keys.DescriptorTableID)
+	return spansToProtect
+}
+
+// initialScanFromOptions returns whether or not the options indicate the need
+// for an initial scan on the first run.
+func initialScanFromOptions(opts map[string]string) bool {
+	_, cursor := opts[changefeedbase.OptCursor]
+	_, initialScan := opts[changefeedbase.OptInitialScan]
+	_, noInitialScan := opts[changefeedbase.OptNoInitialScan]
+	return (cursor && initialScan) || (!cursor && !noInitialScan)
 }
