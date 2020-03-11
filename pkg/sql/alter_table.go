@@ -164,8 +164,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 			d = newDef
+			incTelemetryForNewColumn(d)
 
-			telemetry.Inc(sqltelemetry.SchemaNewTypeCounter(d.Type.TelemetryName()))
 			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx)
 			if err != nil {
 				return err
