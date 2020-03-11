@@ -55,6 +55,7 @@ const (
 	VersionHashShardedIndexes
 	VersionCreateRolePrivilege
 	VersionStatementDiagnosticsSystemTables
+	VersionSchemaChangeJob
 
 	// Add new versions here (step one of two).
 )
@@ -426,6 +427,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// are part of the system bootstap schema.
 		Key:     VersionStatementDiagnosticsSystemTables,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 14},
+	},
+	{
+		// VersionSchemaChangeJob is https://github.com/cockroachdb/cockroach/pull/45870.
+		//
+		// From this version on, schema changes are run as jobs instead of being
+		// scheduled by the SchemaChangeManager.
+		Key:     VersionSchemaChangeJob,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 15},
 	},
 	// Add new versions here (step two of two).
 
