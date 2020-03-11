@@ -553,3 +553,37 @@ WITH RECURSIVE points AS (
 ····························································oo····························································
 ··························································································································
 ··························································································································
+
+# Regression test for #45869 (CTE inside recursive CTE).
+query T rowsort
+WITH RECURSIVE x(a) AS (
+    VALUES ('a'), ('b')
+  UNION ALL
+    (WITH z AS (SELECT * FROM x)
+      SELECT z.a || z1.a AS a FROM z CROSS JOIN z AS z1 WHERE length(z.a) < 3
+    )
+)
+SELECT * FROM x
+----
+a
+b
+aa
+ba
+ab
+bb
+aaaa
+baaa
+abaa
+bbaa
+aaba
+baba
+abba
+bbba
+aaab
+baab
+abab
+bbab
+aabb
+babb
+abbb
+bbbb

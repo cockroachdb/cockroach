@@ -74,6 +74,24 @@ message MVCCMetadata {
   optional util.hlc.LegacyTimestamp merge_timestamp = 7;
 }
 
+// A mirror of MVCCMetadata intended for serializing non-MVCC data that is
+// merged within the RocksDB or Pebble engines. Such data only populates
+// raw_bytes and optionally merge_timestamp. The C++ serialization of
+// MVCCMetadata does not serialize any of the missing optional fields, but
+// the Go serialization treats the optional fields annotated with
+// [(gogoproto.nullable) = false] in a manner that cannot distinguish
+// between the default and missing value, and causes them to serialized
+// (e.g. fields with tag 2, 3, 4, 5). By using the following proto in the
+// Go merge code, the Go and C++ serialization match.
+message MVCCMetadataSubsetForMergeSerialization {
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  optional bytes raw_bytes = 6;
+  optional util.hlc.LegacyTimestamp merge_timestamp = 7;
+}
+
 // MVCCStats tracks byte and instance counts for various groups of keys,
 // values, or key-value pairs; see the field comments for details.
 //

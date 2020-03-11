@@ -144,6 +144,8 @@ func TestPebbleWritesSameSSTs(t *testing.T) {
 		}
 	}
 	require.Equal(t, string(sstRocks), string(sstPebble))
+	itRocks.Close()
+	itPebble.Close()
 }
 
 func BenchmarkWriteRocksSSTable(b *testing.B) {

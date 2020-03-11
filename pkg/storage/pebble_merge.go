@@ -267,7 +267,8 @@ func (t *MVCCValueMerger) Finish() ([]byte, error) {
 		for _, rawByteOp := range t.rawByteOps {
 			totalLen += len(rawByteOp)
 		}
-		var meta enginepb.MVCCMetadata
+		// See the motivating comment in mvcc.proto.
+		var meta enginepb.MVCCMetadataSubsetForMergeSerialization
 		meta.RawBytes = make([]byte, mvccHeaderSize, mvccHeaderSize+totalLen)
 		meta.RawBytes[mvccTagPos] = byte(roachpb.ValueType_BYTES)
 		for _, rawByteOp := range t.rawByteOps {
@@ -313,7 +314,8 @@ func (t *MVCCValueMerger) Finish() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	var meta enginepb.MVCCMetadata
+	// See the motivating comment in mvcc.proto.
+	var meta enginepb.MVCCMetadataSubsetForMergeSerialization
 	if !(t.oldestMergeTS == hlc.LegacyTimestamp{}) {
 		meta.MergeTimestamp = &t.oldestMergeTS
 	}

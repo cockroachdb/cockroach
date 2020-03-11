@@ -97,7 +97,11 @@ func (b *Builder) buildCTE(
 			cte.Name.Alias,
 		))
 	}
+	// If the initial statement contains CTEs, we don't want the Withs hoisted
+	// above the recursive CTE.
+	b.pushWithFrame()
 	initialScope := b.buildStmt(initial, nil /* desiredTypes */, cteScope)
+	b.popWithFrame(initialScope)
 
 	initialScope.removeHiddenCols()
 	b.dropOrderingAndExtraCols(initialScope)
@@ -139,7 +143,11 @@ func (b *Builder) buildCTE(
 		numRefs++
 	}
 
+	// If the recursive statement contains CTEs, we don't want the Withs hoisted
+	// above the recursive CTE.
+	b.pushWithFrame()
 	recursiveScope := b.buildStmt(recursive, initialTypes /* desiredTypes */, cteScope)
+	b.popWithFrame(recursiveScope)
 
 	if numRefs == 0 {
 		// Build this as a non-recursive CTE.
