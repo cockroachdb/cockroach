@@ -20,7 +20,60 @@
 # double-hash (##) comments throughout this Makefile. Please submit
 # improvements!
 
--include build/defs.mk
+# We need to define $(GO) early because it's needed for defs.mk.
+GO      ?= go
+# xgo is needed also for defs.mk.
+override xgo := GOFLAGS= $(GO)
+
+# defs.mk stores cached values of shell commands to avoid recomputing them on
+# every Make invocation. This has a small but noticeable effect, especially on
+# noop builds.
+# This needs to be the first rule because we're including build/defs.mk
+# first thing below, and Make needs to know how to build it.
+.SECONDARY: build/defs.mk
+build/defs.mk: Makefile build/defs.mk.sig
+ifndef IGNORE_GOVERS
+	@build/go-version-check.sh $(GO) || { echo "Disable this check with IGNORE_GOVERS=1." >&2; exit 1; }
+endif
+	@echo "macos-version = $$(sw_vers -productVersion 2>/dev/null | grep -oE '[0-9]+\.[0-9]+')" > $@.tmp
+	@echo "GOEXE = $$($(xgo) env GOEXE)" >> $@.tmp
+	@echo "NCPUS = $$({ getconf _NPROCESSORS_ONLN || sysctl -n hw.ncpu || nproc; } 2>/dev/null)" >> $@.tmp
+	@echo "UNAME = $$(uname)" >> $@.tmp
+	@echo "HOST_TRIPLE = $$($$($(GO) env CC) -dumpmachine)" >> $@.tmp
+	@echo "GIT_DIR = $$(git rev-parse --git-dir 2>/dev/null)" >> $@.tmp
+	@echo "GITHOOKSDIR = $$(test -d .git && echo '.git/hooks' || git rev-parse --git-path hooks)" >> $@.tmp
+	@echo "have-defs = 1" >> $@.tmp
+	@set -e; \
+	if ! cmp -s $@.tmp $@; then \
+	   mv -f $@.tmp $@; \
+	   echo "Detected change in build system. Rebooting make." >&2; \
+	else rm -f $@.tmp; fi
+
+include build/defs.mk
+
+# Nearly everything below this point needs to have the vendor directory ready
+# for use and will depend on bin/.submodules-initialized. In order to
+# ensure this is available before the first "include" directive depending
+# on it, we'll have it listed first thing.
+#
+# Note how the actions for this rule are *not* using $(GIT_DIR) which
+# is otherwise defined in defs.mk above. This is because submodules
+# are used in the process of definining the .mk files included by the
+# Makefile, so it is not yet defined by the time
+# `.submodules-initialized` is needed during a fresh build after a
+# checkout.
+.SECONDARY: bin/.submodules-initialized
+bin/.submodules-initialized:
+	gitdir=$$(git rev-parse --git-dir 2>/dev/null || true); \
+	if test -n "$$gitdir"; then \
+	   git submodule update --init --recursive; \
+	fi
+	mkdir -p $(@D)
+	touch $@
+
+# If the user wants to persist customizations for some variables, they
+# can do so by defining `customenv.mk` in their work tree.
+-include customenv.mk
 
 ifeq "$(findstring bench,$(MAKECMDGOALS))" "bench"
 $(if $(TESTS),$(error TESTS cannot be specified with `make bench` (did you mean BENCHES?)))
@@ -41,6 +94,11 @@ TYPE :=
 ifneq "$(TYPE)" ""
 $(error Make no longer understands TYPE. Use 'build/builder.sh mkrelease $(subst release-,,$(TYPE))' instead)
 endif
+
+# dep-build is set to non-empty if the .d files should be included.
+# This definition makes it empty when only the targets "help" and/or "clean"
+# are specified.
+build-with-dep-files := $(or $(if $(MAKECMDGOALS),,implicit-all),$(filter-out help clean,$(MAKECMDGOALS)))
 
 ## Which package to run tests against, e.g. "./pkg/foo".
 PKG := ./pkg/...
@@ -163,7 +221,6 @@ export CFLAGS CXXFLAGS LDFLAGS CGO_CFLAGS CGO_CXXFLAGS CGO_LDFLAGS
 # toolchain.
 override LINKFLAGS = -X github.com/cockroachdb/cockroach/pkg/build.typ=$(BUILDTYPE) -extldflags "$(LDFLAGS)"
 
-GO      ?= go
 GOFLAGS ?=
 TAR     ?= tar
 
@@ -249,19 +306,6 @@ $(call make-lazy,yellow)
 $(call make-lazy,cyan)
 $(call make-lazy,term-reset)
 
-# Print an error if the user specified any variables on the command line that
-# don't appear in this Makefile. The list of valid variables is automatically
-# rebuilt on the first successful `make` invocation after the Makefile changes.
-#
-# TODO(peter): Figure out how to disallow overriding of variables that
-# are not in the valid list from the environment. The problem is that
-# any environment variable becomes a make variable and environments
-# are dirty. For instance, my includes GREP_COLOR.
-include build/variables.mk
-$(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
-	$(if $(findstring command line,$(origin $v)),$(error Variable '$v' is not recognized by this Makefile)))
--include customenv.mk
-
 # Tell Make to delete the target if its recipe fails. Otherwise, if a recipe
 # modifies its target before failing, the target's timestamp will make it appear
 # up-to-date on the next invocation of Make, even though it is likely corrupt.
@@ -329,38 +373,7 @@ bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
 		./vendor/honnef.co/go/tools/cmd/staticcheck
 	touch $@
 
-.SECONDARY: bin/.submodules-initialized
-bin/.submodules-initialized:
-ifneq ($(GIT_DIR),)
-	git submodule update --init --recursive
-endif
-	mkdir -p $(@D)
-	touch $@
-
 IGNORE_GOVERS :=
-
-# Make doesn't expose a list of the variables declared in a given file, so we
-# resort to sed magic. Roughly, this sed command prints VARIABLE in lines of the
-# following forms:
-#
-#     [export] VARIABLE [:+?]=
-#     TARGET-NAME: [export] VARIABLE [:+?]=
-#
-# The additional complexity below handles whitespace and comments.
-#
-# The special comments at the beginning are for Github/Go/Reviewable:
-# https://github.com/golang/go/issues/13560#issuecomment-277804473
-# https://github.com/Reviewable/Reviewable/wiki/FAQ#how-do-i-tell-reviewable-that-a-file-is-generated-and-should-not-be-reviewed
-build/variables.mk: Makefile build/archive/contents/Makefile pkg/ui/Makefile build/defs.mk
-	@echo '# Code generated by Make. DO NOT EDIT.' > $@
-	@echo '# GENERATED FILE DO NOT EDIT' >> $@
-	@echo 'define VALID_VARS' >> $@
-	@sed -nE -e '/^	/d' -e 's/([^#]*)#.*/\1/' \
-	  -e 's/(^|^[^:]+:)[ ]*(export)?[ ]*([[:upper:]_]+)[ ]*[:?+]?=.*/  \3/p' $^ \
-	  | sort -u >> $@
-	# Special case for 'prefix' variable, which is required by Homebrew.
-	@echo '  prefix' >> $@
-	@echo 'endef' >> $@
 
 # The following section handles building our C/C++ dependencies. These are
 # common because both the root Makefile and protobuf.mk have C dependencies.
@@ -409,7 +422,6 @@ configure-flags :=
 # Similarly for xconfigure-flags and configure-flags, and xgo and GO.
 xcmake-flags := $(cmake-flags) $(EXTRA_XCMAKE_FLAGS)
 xconfigure-flags := $(configure-flags) $(EXTRA_XCONFIGURE_FLAGS)
-override xgo := GOFLAGS= $(GO)
 
 # If we're cross-compiling, inform Autotools and CMake.
 ifdef is-cross-compile
@@ -753,23 +765,6 @@ override TAGS += make $(native-tag)
 # set LC_ALL so this is consistent across systems.
 export LC_ALL=C
 
-# defs.mk stores cached values of shell commands to avoid recomputing them on
-# every Make invocation. This has a small but noticeable effect, especially on
-# noop builds.
-build/defs.mk: Makefile build/defs.mk.sig
-ifndef IGNORE_GOVERS
-	@build/go-version-check.sh $(GO) || { echo "Disable this check with IGNORE_GOVERS=1." >&2; exit 1; }
-endif
-	@echo "macos-version = $$(sw_vers -productVersion 2>/dev/null | grep -oE '[0-9]+\.[0-9]+')" > $@
-	@echo "GOEXE = $$($(xgo) env GOEXE)" >> $@
-	@echo "NCPUS = $$({ getconf _NPROCESSORS_ONLN || sysctl -n hw.ncpu || nproc; } 2>/dev/null)" >> $@
-	@echo "UNAME = $$(uname)" >> $@
-	@echo "HOST_TRIPLE = $$($$($(GO) env CC) -dumpmachine)" >> $@
-	@echo "GIT_DIR = $$(git rev-parse --git-dir 2>/dev/null)" >> $@
-	@echo "GITHOOKSDIR = $$(test -d .git && echo '.git/hooks' || git rev-parse --git-path hooks)" >> $@
-	@echo "have-defs = 1" >> $@
-	$(if $(have-defs),$(info Detected change in build system. Rebooting Make.))
-
 # defs.mk.sig attempts to capture common cases where defs.mk needs to be
 # recomputed, like when compiling for a different platform or using a different
 # Go binary. It is not intended to be perfect. Upgrading the compiler toolchain
@@ -839,11 +834,7 @@ EXECGEN_TARGETS = \
 
 execgen-exclusions = $(addprefix -not -path ,$(EXECGEN_TARGETS))
 
-$(shell for obsolete in $$(find pkg/sql/colexec -type f -name '*.eg.go' $(execgen-exclusions) 2>/dev/null) \
-			$$(find pkg/sql/exec -type f -name '*.eg.go' $(execgen-exclusions) 2>/dev/null); do \
-	  echo "Removing obsolete file $$obsolete..."; \
-	  rm -f $$obsolete; \
-	done)
+$(shell build/cleanup.sh $(execgen-exclusions))
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
@@ -1499,11 +1490,16 @@ $(SETTINGS_DOC_PAGE): $(settings-doc-gen)
 # Produce the dependency list for all the .eg.go files, to make them
 # depend on the right template. We use the -M flag to execgen which
 # produces the dependencies, then include them below.
+.SECONDARY: bin/execgen_out.d
 bin/execgen_out.d: bin/execgen
 	@echo EXECGEN $@; execgen -M $(EXECGEN_TARGETS) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	@mv -f $@.tmp $@
 
-include bin/execgen_out.d
+# No need to pull all the world in when a user just wants
+# to know how to invoke `make` or clean up.
+ifneq ($(build-with-dep-files),)
+-include bin/execgen_out.d
+endif
 
 # Generate the colexec files.
 #
@@ -1686,7 +1682,53 @@ fuzz: ## Run fuzz tests.
 fuzz: bin/fuzz
 	bin/fuzz $(TESTFLAGS) -tests $(TESTS) -timeout $(TESTTIMEOUT) $(PKG)
 
+
+# No need to include all the dependency files if the user is just
+# requesting help or cleanup.
+ifneq ($(build-with-dep-files),)
+.SECONDARY: bin/%.d
 .PRECIOUS: bin/%.d
 bin/%.d: ;
 
 include $(wildcard bin/*.d)
+endif
+
+# Make doesn't expose a list of the variables declared in a given file, so we
+# resort to sed magic. Roughly, this sed command prints VARIABLE in lines of the
+# following forms:
+#
+#     [export] VARIABLE [:+?]=
+#     TARGET-NAME: [export] VARIABLE [:+?]=
+#
+# The additional complexity below handles whitespace and comments.
+#
+# The special comments at the beginning are for Github/Go/Reviewable:
+# https://github.com/golang/go/issues/13560#issuecomment-277804473
+# https://github.com/Reviewable/Reviewable/wiki/FAQ#how-do-i-tell-reviewable-that-a-file-is-generated-and-should-not-be-reviewed
+# Note how the 'prefix' variable is manually appended. This is required by Homebrew.
+.SECONDARY: build/variables.mk
+build/variables.mk: Makefile build/archive/contents/Makefile pkg/ui/Makefile build/defs.mk
+	@echo '# Code generated by Make. DO NOT EDIT.' > $@.tmp
+	@echo '# GENERATED FILE DO NOT EDIT' >> $@.tmp
+	@echo 'define VALID_VARS' >> $@.tmp
+	@sed -nE -e '/^	/d' -e 's/([^#]*)#.*/\1/' \
+	  -e 's/(^|^[^:]+:)[ ]*(export)?[ ]*([[:upper:]_]+)[ ]*[:?+]?=.*/  \3/p' $^ \
+	  | sort -u >> $@.tmp
+	@echo '  prefix' >> $@.tmp
+	@echo 'endef' >> $@.tmp
+	@set -e; \
+	if ! cmp -s $@.tmp $@; then \
+	   mv -f $@.tmp $@; \
+	else rm -f $@.tmp; fi
+
+# Print an error if the user specified any variables on the command line that
+# don't appear in this Makefile. The list of valid variables is automatically
+# rebuilt on the first successful `make` invocation after the Makefile changes.
+#
+# TODO(peter): Figure out how to disallow overriding of variables that
+# are not in the valid list from the environment. The problem is that
+# any environment variable becomes a make variable and environments
+# are dirty. For instance, my includes GREP_COLOR.
+include build/variables.mk
+$(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
+	$(if $(findstring command line,$(origin $v)),$(error Variable '$v' is not recognized by this Makefile)))
