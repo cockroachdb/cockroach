@@ -207,13 +207,7 @@
       height 3px
       background-color $blue
 
-$plan-node-line-color = #DADADA                                 // connecting line: light gray
-$plan-node-warning-color = #b26000                              // dark orange
 $plan-node-warning-background-color = rgba(209, 135, 55, 0.06)  // light orange
-$plan-node-warning-border-color = rgba(209, 135, 55, 0.3)       // dark orange 2
-$plan-node-details-background-color = $colors--background       // grayish-white
-$plan-node-details-border-color = #ACB8CB                       // dark gray
-$plan-node-attribute-key-color = #37a806                        // light green
 
 .plan-view-table
   @extend $table-base
@@ -263,12 +257,12 @@ $plan-node-attribute-key-color = #37a806                        // light green
     position relative
     top 3px
     path
-      fill $plan-node-warning-color
+      fill $colors--functional-orange-4
 
   .warn
     position relative
     left -5px
-    color $plan-node-warning-color
+    color $colors--functional-orange-4
     background-color $plan-node-warning-background-color
     border-radius 2px
     padding 2px
@@ -296,7 +290,7 @@ $plan-node-attribute-key-color = #37a806                        // light green
     line-height 1.83
 
     .nodeAttributeKey
-      color $plan-node-attribute-key-color
+      color $colors--primary-green-3
 
   ul
     padding 0
