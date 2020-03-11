@@ -41,7 +41,8 @@ func TestExternalSort(t *testing.T) {
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings: st,
+			Settings:    st,
+			DiskMonitor: testDiskMonitor,
 		},
 	}
 
@@ -49,8 +50,8 @@ func TestExternalSort(t *testing.T) {
 	defer cleanup()
 
 	var (
-		memAccounts []*mon.BoundAccount
-		memMonitors []*mon.BytesMonitor
+		accounts []*mon.BoundAccount
+		monitors []*mon.BytesMonitor
 	)
 	// Test the case in which the default memory is used as well as the case in
 	// which the joiner spills to disk.
@@ -97,12 +98,12 @@ func TestExternalSort(t *testing.T) {
 							if tc.k == 0 || int(tc.k) >= len(tc.tuples) {
 								semsToCheck = append(semsToCheck, sem)
 							}
-							sorter, accounts, monitors, err := createDiskBackedSorter(
+							sorter, newAccounts, newMonitors, err := createDiskBackedSorter(
 								ctx, flowCtx, input, tc.logTypes, tc.ordCols, tc.matchLen, tc.k, func() {},
 								externalSorterMinPartitions, false /* delegateFDAcquisition */, queueCfg, sem,
 							)
-							memAccounts = append(memAccounts, accounts...)
-							memMonitors = append(memMonitors, monitors...)
+							accounts = append(accounts, newAccounts...)
+							monitors = append(monitors, newMonitors...)
 							return sorter, err
 						})
 					for i, sem := range semsToCheck {
@@ -112,11 +113,11 @@ func TestExternalSort(t *testing.T) {
 			}
 		}
 	}
-	for _, account := range memAccounts {
-		account.Close(ctx)
+	for _, acc := range accounts {
+		acc.Close(ctx)
 	}
-	for _, monitor := range memMonitors {
-		monitor.Stop(ctx)
+	for _, mon := range monitors {
+		mon.Stop(ctx)
 	}
 }
 
@@ -129,7 +130,8 @@ func TestExternalSortRandomized(t *testing.T) {
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings: st,
+			Settings:    st,
+			DiskMonitor: testDiskMonitor,
 		},
 	}
 	rng, _ := randutil.NewPseudoRand()
@@ -145,8 +147,8 @@ func TestExternalSortRandomized(t *testing.T) {
 	defer cleanup()
 
 	var (
-		memAccounts []*mon.BoundAccount
-		memMonitors []*mon.BytesMonitor
+		accounts []*mon.BoundAccount
+		monitors []*mon.BytesMonitor
 	)
 	// Interesting disk spilling scenarios:
 	// 1) The sorter is forced to spill to disk as soon as possible.
@@ -196,12 +198,12 @@ func TestExternalSortRandomized(t *testing.T) {
 						func(input []Operator) (Operator, error) {
 							sem := NewTestingSemaphore(externalSorterMinPartitions)
 							semsToCheck = append(semsToCheck, sem)
-							sorter, accounts, monitors, err := createDiskBackedSorter(
+							sorter, newAccounts, newMonitors, err := createDiskBackedSorter(
 								ctx, flowCtx, input, logTypes[:nCols], ordCols,
 								0 /* matchLen */, 0 /* k */, func() {},
 								externalSorterMinPartitions, delegateFDAcquisition, queueCfg, sem)
-							memAccounts = append(memAccounts, accounts...)
-							memMonitors = append(memMonitors, monitors...)
+							accounts = append(accounts, newAccounts...)
+							monitors = append(monitors, newMonitors...)
 							return sorter, err
 						})
 					for i, sem := range semsToCheck {
@@ -211,11 +213,11 @@ func TestExternalSortRandomized(t *testing.T) {
 			}
 		}
 	}
-	for _, account := range memAccounts {
-		account.Close(ctx)
+	for _, acc := range accounts {
+		acc.Close(ctx)
 	}
-	for _, monitor := range memMonitors {
-		monitor.Stop(ctx)
+	for _, m := range monitors {
+		m.Stop(ctx)
 	}
 }
 
@@ -228,7 +230,8 @@ func BenchmarkExternalSort(b *testing.B) {
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings: st,
+			Settings:    st,
+			DiskMonitor: testDiskMonitor,
 		},
 	}
 	rng, _ := randutil.NewPseudoRand()
@@ -348,5 +351,5 @@ func createDiskBackedSorter(
 	args.TestingKnobs.NumForcedRepartitions = maxNumberPartitions
 	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions
 	result, err := NewColOperator(ctx, flowCtx, args)
-	return result.Op, result.BufferingOpMemAccounts, result.BufferingOpMemMonitors, err
+	return result.Op, result.OpAccounts, result.OpMonitors, err
 }

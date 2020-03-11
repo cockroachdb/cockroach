@@ -765,7 +765,7 @@ func BenchmarkAggregator(b *testing.B) {
 										// Only count the int64 column.
 										b.SetBytes(int64(8 * nTuples))
 										for i := 0; i < b.N; i++ {
-											a.(resetter).reset()
+											a.(resetter).reset(ctx)
 											source.reset()
 											// Exhaust aggregator until all batches have been read.
 											for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {

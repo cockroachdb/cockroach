@@ -91,6 +91,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			[]coltypes.T{coltypes.Int64}, []coltypes.T{coltypes.Int64},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
+			testDiskAcc,
 		)
 		if err != nil {
 			t.Fatal(err)

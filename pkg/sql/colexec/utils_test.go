@@ -13,7 +13,6 @@ package colexec
 import (
 	"context"
 	"fmt"
-	"io"
 	"math"
 	"math/rand"
 	"reflect"
@@ -276,11 +275,11 @@ func runTestsWithTyps(
 				"non-nulls in the input tuples, we expect for all nulls injection to "+
 				"change the output")
 		}
-		if c, ok := originalOp.(io.Closer); ok {
-			require.NoError(t, c.Close())
+		if c, ok := originalOp.(closer); ok {
+			require.NoError(t, c.Close(ctx))
 		}
-		if c, ok := opWithNulls.(io.Closer); ok {
-			require.NoError(t, c.Close())
+		if c, ok := opWithNulls.(closer); ok {
+			require.NoError(t, c.Close(ctx))
 		}
 	})
 }
@@ -403,10 +402,10 @@ func runTestsWithoutAllNullsInjection(
 						assert.False(t, maybeHasNulls(b))
 					}
 				}
-				if c, ok := op.(io.Closer); ok {
+				if c, ok := op.(closer); ok {
 					// Some operators need an explicit Close if not drained completely of
 					// input.
-					assert.NoError(t, c.Close())
+					assert.NoError(t, c.Close(ctx))
 				}
 			}
 		})
