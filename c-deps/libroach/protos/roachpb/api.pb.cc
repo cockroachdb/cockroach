@@ -35329,6 +35329,7 @@ const int Header::kDistinctSpansFieldNumber;
 const int Header::kReturnRangeInfoFieldNumber;
 const int Header::kGatewayNodeIdFieldNumber;
 const int Header::kAsyncConsensusFieldNumber;
+const int Header::kCanForwardReadTimestampFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Header::Header()
@@ -35425,7 +35426,7 @@ bool Header::MergePartialFromCodedStream(
       &unknown_fields_output, false);
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.Header)
   for (;;) {
-    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(16383u);
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
@@ -35587,6 +35588,20 @@ bool Header::MergePartialFromCodedStream(
         break;
       }
 
+      // bool can_forward_read_timestamp = 16;
+      case 16: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(128u /* 128 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &can_forward_read_timestamp_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -35672,6 +35687,11 @@ void Header::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(15, this->target_bytes(), output);
   }
 
+  // bool can_forward_read_timestamp = 16;
+  if (this->can_forward_read_timestamp() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(16, this->can_forward_read_timestamp(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.Header)
@@ -35725,6 +35745,12 @@ size_t Header::ByteSizeLong() const {
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->read_consistency());
   }
 
+  if (this->gateway_node_id() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int32Size(
+        this->gateway_node_id());
+  }
+
   // bool distinct_spans = 9;
   if (this->distinct_spans() != 0) {
     total_size += 1 + 1;
@@ -35740,10 +35766,9 @@ size_t Header::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
-  if (this->gateway_node_id() != 0) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::Int32Size(
-        this->gateway_node_id());
+  // bool can_forward_read_timestamp = 16;
+  if (this->can_forward_read_timestamp() != 0) {
+    total_size += 2 + 1;
   }
 
   // int64 target_bytes = 15;
@@ -35791,6 +35816,9 @@ void Header::MergeFrom(const Header& from) {
   if (from.read_consistency() != 0) {
     set_read_consistency(from.read_consistency());
   }
+  if (from.gateway_node_id() != 0) {
+    set_gateway_node_id(from.gateway_node_id());
+  }
   if (from.distinct_spans() != 0) {
     set_distinct_spans(from.distinct_spans());
   }
@@ -35800,8 +35828,8 @@ void Header::MergeFrom(const Header& from) {
   if (from.async_consensus() != 0) {
     set_async_consensus(from.async_consensus());
   }
-  if (from.gateway_node_id() != 0) {
-    set_gateway_node_id(from.gateway_node_id());
+  if (from.can_forward_read_timestamp() != 0) {
+    set_can_forward_read_timestamp(from.can_forward_read_timestamp());
   }
   if (from.target_bytes() != 0) {
     set_target_bytes(from.target_bytes());
@@ -35832,10 +35860,11 @@ void Header::InternalSwap(Header* other) {
   swap(user_priority_, other->user_priority_);
   swap(max_span_request_keys_, other->max_span_request_keys_);
   swap(read_consistency_, other->read_consistency_);
+  swap(gateway_node_id_, other->gateway_node_id_);
   swap(distinct_spans_, other->distinct_spans_);
   swap(return_range_info_, other->return_range_info_);
   swap(async_consensus_, other->async_consensus_);
-  swap(gateway_node_id_, other->gateway_node_id_);
+  swap(can_forward_read_timestamp_, other->can_forward_read_timestamp_);
   swap(target_bytes_, other->target_bytes_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
