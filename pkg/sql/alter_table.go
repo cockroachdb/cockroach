@@ -820,6 +820,8 @@ func (p *planner) setAuditMode(
 		return false, err
 	}
 
+	telemetry.Inc(sqltelemetry.SchemaSetAuditModeCounter(auditMode.TelemetryName()))
+
 	return desc.SetAuditMode(auditMode)
 }
 
