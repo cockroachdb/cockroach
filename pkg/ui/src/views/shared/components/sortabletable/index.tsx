@@ -19,6 +19,7 @@ import { DrawerComponent } from "../drawer";
 import { trackTableSort } from "src/util/analytics";
 
 import "./sortabletable.styl";
+import Empty, { IEmptyProps } from "oss/src/components/empty/empty";
 
 /**
  * SortableColumn describes the contents a single column of a
@@ -76,6 +77,9 @@ interface TableProps {
   drawer?: boolean;
   firstCellBordered?: boolean;
   renderNoResult?: React.ReactNode;
+  // empty state for table
+  empty?: boolean;
+  emptyProps?: IEmptyProps;
 }
 
 export interface ExpandableConfig {
@@ -239,10 +243,13 @@ export class SortableTable extends React.Component<TableProps> {
   }
 
   render() {
-    const { sortSetting, columns, expandableConfig, drawer, firstCellBordered, count, renderNoResult, className } = this.props;
+    const { sortSetting, columns, expandableConfig, drawer, firstCellBordered, count, renderNoResult, empty, emptyProps, className } = this.props;
     const { visible, drawerData } = this.state;
+    if (empty) {
+      return <Empty {...emptyProps}/>;
+    }
     return (
-      <React.Fragment>
+      <div className="cl-table-wrapper">
         <table className={classNames("sort-table", className)}>
           <thead>
             <tr className="sort-table__row sort-table__row--header">
@@ -294,7 +301,7 @@ export class SortableTable extends React.Component<TableProps> {
             {renderNoResult}
           </div>
         )}
-      </React.Fragment>
+      </div>
     );
   }
 }
