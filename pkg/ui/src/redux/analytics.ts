@@ -189,8 +189,8 @@ export class AnalyticsSync {
     /** Analytics Track for Segment: https://segment.com/docs/connections/spec/track/ */
     track(msg: TrackMessage) {
       const cluster = this.getCluster();
-      const { cluster_id } = cluster;
-      const message = Object.assign({ userId: cluster_id }, msg);
+      const clusterId = cluster ? cluster.cluster_id : "null";
+      const message = { userId: clusterId, ...msg };
       this.analyticsService.track(message);
     }
 

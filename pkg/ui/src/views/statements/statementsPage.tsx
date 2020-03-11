@@ -155,8 +155,8 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
     this.props.dismissAlertMessage();
   }
 
-  componentDidUpdate = () => {
-    if (this.state.search) {
+  componentDidUpdate = (__: StatementsPageProps, prevState: StatementsPageState) => {
+    if (this.state.search && this.state.search !== prevState.search) {
       this.trackSearch(this.state.search, this.filteredStatementsData().length);
     }
   }
