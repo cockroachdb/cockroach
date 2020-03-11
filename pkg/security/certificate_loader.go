@@ -13,7 +13,6 @@ package security
 import (
 	"context"
 	"crypto/x509"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -451,15 +450,7 @@ func validateDualPurposeNodeCert(ci *CertInfo) error {
 	//
 	// TODO(peter): Test this function when a certNamePattern is present.
 	if a, e := transformCommonName(cert.Subject.CommonName), NodeUser; a != e {
-		certNamePattern.Lock()
-		var extra string
-		if certNamePattern.re != nil {
-			extra = fmt.Sprintf(", name-pattern %q", certNamePattern.re)
-		}
-		certNamePattern.Unlock()
-
-		return errors.Errorf("client/server node certificate has Subject \"CN=%s\", expected \"CN=%s\"%s",
-			a, e, extra)
+		return errors.Errorf("client/server node certificate has Subject \"CN=%s\", expected \"CN=%s\"", a, e)
 	}
 
 	return nil

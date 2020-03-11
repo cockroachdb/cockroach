@@ -376,9 +376,9 @@ func init() {
 		// variables, but share the same default.
 		StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir, startCtx.serverSSLCertsDir)
 
-		// Certificate name pattern.
-		StringFlag(f, &startCtx.serverCertsNamePattern,
-			cliflags.CertNamePattern, startCtx.serverCertsNamePattern)
+		// Certificate principal map.
+		StringSlice(f, &startCtx.serverCertPrincipalMap,
+			cliflags.CertPrincipalMap, startCtx.serverCertPrincipalMap)
 
 		// Cluster joining flags. We need to enable this both for 'start'
 		// and 'start-single-node' although the latter does not support

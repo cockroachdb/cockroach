@@ -12,7 +12,7 @@ package security
 
 import (
 	"crypto/tls"
-	"regexp"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
@@ -25,49 +25,42 @@ const (
 	RootUser = "root"
 )
 
-var certNamePattern struct {
-	syncutil.Mutex
-	re *regexp.Regexp
+var certPrincipalMap struct {
+	syncutil.RWMutex
+	m map[string]string
 }
 
 // UserAuthHook authenticates a user based on their username and whether their
 // connection originates from a client or another node in the cluster.
 type UserAuthHook func(string, bool) error
 
-// SetCertNamePattern specifies a regular expression that is used to extract
-// the "user" component from a certificate's common name field instead of
-// treating the full common name as the user. If not specified, the default
-// behavior is the same as specifying `(.*)`. The regex must specify exactly
-// one parenthesized subexpression that will be captured.
-func SetCertNamePattern(pattern string) error {
-	re, err := regexp.Compile("^" + pattern + "$")
-	if err != nil {
-		return err
+// SetCertPrincipalMap TODO(peter)
+func SetCertPrincipalMap(vals []string) error {
+	m := make(map[string]string, len(vals))
+	for _, v := range vals {
+		if v == "" {
+			continue
+		}
+		parts := strings.Split(v, ":")
+		if len(parts) != 2 {
+			return errors.Errorf("invalid <cert-principal>:<db-principal> mapping: %q", v)
+		}
+		m[parts[0]] = parts[1]
 	}
-	if re.NumSubexp() != 1 {
-		return errors.Errorf("%q must specify exactly one parenthesized subexpression: %d",
-			pattern, re.NumSubexp())
-	}
-	certNamePattern.Lock()
-	certNamePattern.re = re
-	certNamePattern.Unlock()
+	certPrincipalMap.Lock()
+	certPrincipalMap.m = m
+	certPrincipalMap.Unlock()
 	return nil
 }
 
 func transformCommonName(commonName string) string {
-	// If a certNamePattern is specified, use it to extract the component that
-	// will be returned. We fail open. If the substring doesn't match we return
-	// the entire common name field.
-	certNamePattern.Lock()
-	re := certNamePattern.re
-	certNamePattern.Unlock()
-	if re != nil {
-		match := re.FindStringSubmatch(commonName)
-		if len(match) == 2 {
-			commonName = match[1]
-		}
+	certPrincipalMap.RLock()
+	mappedName, ok := certPrincipalMap.m[commonName]
+	certPrincipalMap.RUnlock()
+	if !ok {
+		return commonName
 	}
-	return commonName
+	return mappedName
 }
 
 // GetCertificateUser extract the username from a client certificate.

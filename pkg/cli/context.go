@@ -293,7 +293,7 @@ var startCtx struct {
 	// server-specific values of some flags.
 	serverInsecure         bool
 	serverSSLCertsDir      string
-	serverCertsNamePattern string
+	serverCertPrincipalMap []string
 	serverListenAddr       string
 
 	// temporary directory to use to spill computation results to disk.

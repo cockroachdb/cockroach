@@ -15,6 +15,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -77,22 +78,21 @@ func TestGetCertificateUser(t *testing.T) {
 	}
 }
 
-func TestSetCertNamePattern(t *testing.T) {
+func TestSetCertPrincipalMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		pattern  string
+		vals     []string
 		expected string
 	}{
-		{``, "must specify exactly one parenthesized subexpression"},
-		{`(`, "error parsing regexp"},
-		{`(a)(b)`, "must specify exactly one parenthesized subexpression"},
-		{`(.*)\.cockroachlabs\.com`, ""},
-		{`(.*)`, ""},
+		{[]string{}, ""},
+		{[]string{"foo"}, "invalid <cert-principal>:<db-principal> mapping:"},
+		{[]string{"foo:bar"}, ""},
+		{[]string{"foo:bar", "blah:blah"}, ""},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			err := security.SetCertNamePattern(c.pattern)
+			err := security.SetCertPrincipalMap(c.vals)
 			if !testutils.IsError(err, c.expected) {
 				t.Fatalf("expected %q, but found %v", c.expected, err)
 			}
@@ -100,23 +100,25 @@ func TestSetCertNamePattern(t *testing.T) {
 	}
 }
 
-func TestGetCertificateUserPattern(t *testing.T) {
+func TestGetCertificateUserMapped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
 		user     string
-		pattern  string
+		val      string
 		expected string
 	}{
-		{"foo", `(.*)`, "foo"},
-		{"foo", `(.*)o`, "fo"},
-		{"node", `(.*)o`, "node"},                    // fail open (anchored regexp doesn't match)
-		{"node", `(.*)\.cockroachlabs\.com`, "node"}, // fail open (regexp doesn't match)
-		{"node.cockroachlabs.com", `(.*)\.cockroachlabs\.com`, "node"},
+		{"foo", "", "foo"},
+		{"foo", "foo:foo", "foo"},
+		{"foo", "foo:bar", "bar"},
+		{"foo", "bar:bar", "foo"},
+		{"foo", "foo:bar,foo:blah", "blah"},
+		{"node.cockroachlabs.com", "node.cockroachlabs.com:node", "node"},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			if err := security.SetCertNamePattern(c.pattern); err != nil {
+			vals := strings.Split(c.val, ",")
+			if err := security.SetCertPrincipalMap(vals); err != nil {
 				t.Fatal(err)
 			}
 			name, err := security.GetCertificateUser(makeFakeTLSState([]string{c.user}, []int{2}))

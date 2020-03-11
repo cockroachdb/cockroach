@@ -641,14 +641,16 @@ Instead, require the user to always specify access keys.`,
 		Description: CertsDir.Description,
 	}
 
-	CertNamePattern = FlagInfo{
-		Name: "cert-name-pattern",
+	CertPrincipalMap = FlagInfo{
+		Name: "cert-principal-map",
 		Description: `
-A regular expression used to extract the user from certificate CommonName. If
-not set, the default is equivalent to specifying "(.*)". The regular expression
-must specify exactly one parenthesized subexpression which becomes the user if
-the regular expression matches a certificate's CommonName. If the regular
-expression does not match, the entire CommonName field is used for the user.
+A comma separated list of <cert-principal>:<db-principal> mappings. This allows
+mapping the principal in a cert to a DB principal such as "node" or "root" or
+any SQL user. This is intended for use in situations where the certificate
+management system places restrictions on the Subject.CommonName field in the
+certificate (e.g. disallowing a CommonName such as "node" or "root"). If
+multiple mappings are provided for the same <cert-principal>, the last one
+specified in the list takes precedence.
 `,
 	}
 
