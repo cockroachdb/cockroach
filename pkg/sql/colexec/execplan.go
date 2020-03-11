@@ -984,24 +984,20 @@ func NewColOperator(
 						int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx,
 					)
 				case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
-					memAccount := streamingMemAccount
-					if !useStreamingMemAccountForBuffering {
-						// TODO(asubiotto): Once we support spilling to disk in these window
-						//  functions, make this a limited account. Done this way so that we
-						//  can still run plans that include these window functions with a
-						//  low memory limit to test disk spilling of other components for
-						//  the time being.
-						memAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, memMonitorsPrefix+"relative-rank")
-					}
+					// We are using an unlimited memory monitor here because
+					// relative rank operators themselves are responsible for
+					// making sure that we stay within the memory limit, and
+					// they will fall back to disk if necessary.
+					unlimitedAllocator := NewAllocator(
+						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, memMonitorsPrefix+"relative-rank"),
+					)
 					result.Op, err = NewRelativeRankOperator(
-						NewAllocator(ctx, memAccount), input, typs, windowFn, wf.Ordering.Columns,
+						unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx.Cfg), args.DiskQueueCfg,
+						args.FDSemaphore, input, typs, windowFn, wf.Ordering.Columns,
 						int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx,
 					)
-					// Relative rank operators are buffering operators, and currently
-					// they don't support falling back to disk, so we cannot run such
-					// plan in 'auto' mode.
-					// TODO(yuzefovich): add spilling to disk for percent_rank and
-					// cume_dist.
+					// Relative rank operators are buffering operators, and we
+					// are not comfortable running them with `auto` mode.
 					canRunInAutoMode = false
 				default:
 					return result, errors.AssertionFailedf("window function %s is not supported", wf.String())
