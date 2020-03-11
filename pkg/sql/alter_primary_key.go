@@ -49,11 +49,6 @@ func (p *planner) AlterPrimaryKey(
 		}
 	}
 
-	if tableDesc.IsNewTable() {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"cannot create table and change it's primary key in the same transaction")
-	}
-
 	// Ensure that other schema changes on this table are not currently
 	// executing, and that other schema changes have not been performed
 	// in the current transaction.

@@ -1318,11 +1318,18 @@ func runSchemaChangesInTxn(
 	// Checks are validated after all other mutations have been applied.
 	var constraintsToValidate []sqlbase.ConstraintToUpdate
 
-	for _, m := range tableDesc.Mutations {
+	// We use a range loop here as the processing of some mutations
+	// such as the primary key swap mutations result in queueing more
+	// mutations that need to be processed.
+	for i := 0; i < len(tableDesc.Mutations); i++ {
+		m := tableDesc.Mutations[i]
 		immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc.TableDesc())
 		switch m.Direction {
 		case sqlbase.DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
+			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
+				// Don't need to do anything here, as the call to MakeMutationComplete
+				// will perform the steps for this operation.
 			case *sqlbase.DescriptorMutation_Column:
 				if doneColumnBackfill || !sqlbase.ColumnNeedsBackfill(m.GetColumn()) {
 					break
@@ -1389,7 +1396,7 @@ func runSchemaChangesInTxn(
 
 			case *sqlbase.DescriptorMutation_Index:
 				if err := indexTruncateInTxn(
-					ctx, planner.Txn(), planner.ExecCfg(), immutDesc, traceKV,
+					ctx, planner.Txn(), planner.ExecCfg(), immutDesc, t.Index, traceKV,
 				); err != nil {
 					return err
 				}
@@ -1429,6 +1436,53 @@ func runSchemaChangesInTxn(
 		// unvalidated FKs get added twice?
 		if err := tableDesc.MakeMutationComplete(m); err != nil {
 			return err
+		}
+
+		// If the mutation we processed was a primary key swap, there is some
+		// extra work that needs to be done. Note that we don't need to create
+		// a job to clean up the dropped indexes because those mutations can
+		// get processed in this txn on the new table.
+		if pkSwap := m.GetPrimaryKeySwap(); pkSwap != nil {
+			// If any old index had an interleaved parent, remove the
+			// backreference from the parent.
+			// N.B. This logic needs to be kept up to date with the
+			// corresponding piece in (*SchemaChanger).done. It is slightly
+			// different because of how it access tables and how it needs to
+			// write the modified table descriptors explicitly.
+			for _, idxID := range append(
+				[]sqlbase.IndexID{pkSwap.OldPrimaryIndexId}, pkSwap.OldIndexes...) {
+				oldIndex, err := tableDesc.FindIndexByID(idxID)
+				if err != nil {
+					return err
+				}
+				if len(oldIndex.Interleave.Ancestors) != 0 {
+					ancestorInfo := oldIndex.Interleave.Ancestors[len(oldIndex.Interleave.Ancestors)-1]
+					ancestor, err := planner.Tables().getMutableTableVersionByID(ctx, ancestorInfo.TableID, planner.txn)
+					if err != nil {
+						return err
+					}
+					ancestorIdx, err := ancestor.FindIndexByID(ancestorInfo.IndexID)
+					if err != nil {
+						return err
+					}
+					foundAncestor := false
+					for k, ref := range ancestorIdx.InterleavedBy {
+						if ref.Table == tableDesc.ID && ref.Index == oldIndex.ID {
+							if foundAncestor {
+								return errors.AssertionFailedf(
+									"ancestor entry in %s for %s@%s found more than once",
+									ancestor.Name, tableDesc.Name, oldIndex.Name)
+							}
+							ancestorIdx.InterleavedBy = append(
+								ancestorIdx.InterleavedBy[:k], ancestorIdx.InterleavedBy[k+1:]...)
+							foundAncestor = true
+							if err := planner.writeSchemaChange(ctx, ancestor, sqlbase.InvalidMutationID, ""); err != nil {
+								return err
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 	tableDesc.Mutations = nil
@@ -1650,7 +1704,7 @@ func indexBackfillInTxn(
 	return nil
 }
 
-// indexTruncateInTxn deletes the index in the table's first mutation.
+// indexTruncateInTxn deletes an index from a table.
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
 func indexTruncateInTxn(
@@ -1658,10 +1712,10 @@ func indexTruncateInTxn(
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
+	idx *sqlbase.IndexDescriptor,
 	traceKV bool,
 ) error {
 	alloc := &sqlbase.DatumAlloc{}
-	idx := tableDesc.Mutations[0].GetIndex()
 	var sp roachpb.Span
 	for done := false; !done; done = sp.Key == nil {
 		rd, err := row.MakeDeleter(
