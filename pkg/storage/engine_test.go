@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"math/rand"
@@ -434,7 +435,8 @@ func addMergeTimestamp(t *testing.T, data []byte, ts int64) []byte {
 func TestEngineMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, engineImpl := range mvccEngineImpls {
+	engineBytes := make([][][]byte, len(mvccEngineImpls))
+	for engineIndex, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
@@ -445,6 +447,7 @@ func TestEngineMerge(t *testing.T) {
 				expected []byte
 			}{
 				{
+					// Test case with RawBytes only.
 					mvccKey("haste not in life"),
 					[][]byte{
 						appender("x"),
@@ -454,6 +457,7 @@ func TestEngineMerge(t *testing.T) {
 					appender("xyz"),
 				},
 				{
+					// Test case with RawBytes and MergeTimestamp.
 					mvccKey("timeseriesmerged"),
 					[][]byte{
 						addMergeTimestamp(t, timeSeriesRow(testtime, 1000, []tsSample{
@@ -480,13 +484,15 @@ func TestEngineMerge(t *testing.T) {
 					}...), 27),
 				},
 			}
-			for _, tc := range testcases {
+			engineBytes[engineIndex] = make([][]byte, len(testcases))
+			for tcIndex, tc := range testcases {
 				for i, update := range tc.merges {
 					if err := engine.Merge(tc.testKey, update); err != nil {
 						t.Fatalf("%d: %+v", i, err)
 					}
 				}
 				result, _ := engine.Get(tc.testKey)
+				engineBytes[engineIndex][tcIndex] = result
 				var resultV, expectedV enginepb.MVCCMetadata
 				if err := protoutil.Unmarshal(result, &resultV); err != nil {
 					t.Fatal(err)
@@ -499,6 +505,21 @@ func TestEngineMerge(t *testing.T) {
 				}
 			}
 		})
+	}
+	for i := 0; i < len(engineBytes); i++ {
+		// Pair-wise comparison of bytes since difference in serialization
+		// can trigger replica consistency checker failures #45811
+		if i+1 == len(engineBytes) {
+			break
+		}
+		eng1 := i
+		eng2 := i + 1
+		for j := 0; j < len(engineBytes[eng1]); j++ {
+			if !bytes.Equal(engineBytes[eng1][j], engineBytes[eng2][j]) {
+				t.Errorf("engines %d, %d differ at test %d:\n%s\n != \n%s\n", eng1, eng2, j,
+					hex.Dump(engineBytes[eng1][j]), hex.Dump(engineBytes[eng2][j]))
+			}
+		}
 	}
 }
 
