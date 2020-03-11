@@ -11,6 +11,8 @@
 package tree
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -502,6 +504,12 @@ var auditModeName = [...]string{
 
 func (m AuditMode) String() string {
 	return auditModeName[m]
+}
+
+// TelemetryName returns a friendly string for use in telemetry that represents
+// the AuditMode.
+func (m AuditMode) TelemetryName() string {
+	return strings.ReplaceAll(strings.ToLower(m.String()), " ", "_")
 }
 
 // AlterTableSetAudit represents an ALTER TABLE AUDIT SET statement.

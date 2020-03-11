@@ -820,6 +820,11 @@ ROLLBACK
 statement ok
 CREATE TABLE audit(x INT); ALTER TABLE audit EXPERIMENTAL_AUDIT SET READ WRITE;
 
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.set_audit_mode.read_write'
+----
+sql.schema.set_audit_mode.read_write
+
 # The user must be able to issue ALTER for this test to be meaningful.
 statement ok
 GRANT CREATE ON audit TO testuser
@@ -832,9 +837,17 @@ ALTER TABLE audit ADD COLUMN y INT
 
 # But not the audit settings.
 statement error change auditing settings on a table
-ALTER TABLE audit EXPERIMENTAL_AUDIT SET OFF;
+ALTER TABLE audit EXPERIMENTAL_AUDIT SET OFF
 
 user root
+
+statement ok
+ALTER TABLE audit EXPERIMENTAL_AUDIT SET OFF
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.set_audit_mode.off'
+----
+sql.schema.set_audit_mode.off
 
 # Check column backfill in the presence of fks
 subtest 27402
