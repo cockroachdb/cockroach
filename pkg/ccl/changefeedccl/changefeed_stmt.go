@@ -321,6 +321,19 @@ func changefeedPlanHook(
 				}
 				return err
 			}
+			// If we created a protected timestamp for an initial scan, verify it.
+			// Doing this synchronously here rather than asynchronously later provides
+			// a nice UX win in the case that the data isn't actually available.
+			if protectedTimestampID != uuid.Nil {
+				if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, protectedTimestampID); err != nil {
+					if cancelErr := sj.Cancel(ctx); cancelErr != nil {
+						if ctx.Err() == nil {
+							log.Warningf(ctx, "failed to cancel job: %v", cancelErr)
+						}
+					}
+					return err
+				}
+			}
 		}
 
 		// Start the job and wait for it to signal on startedCh.
