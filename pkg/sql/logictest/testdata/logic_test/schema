@@ -1,0 +1,29 @@
+statement ok
+CREATE SCHEMA IF NOT EXISTS public
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS crdb_internal
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS pg_catalog
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS information_schema
+
+statement error unimplemented: new schemas are unsupported
+CREATE SCHEMA IF NOT EXISTS derp
+
+statement error unimplemented: new schemas are unsupported
+CREATE SCHEMA derp
+
+statement error schema .* already exists
+CREATE SCHEMA public
+
+statement error schema .* already exists
+CREATE SCHEMA crdb_internal
+
+statement error schema .* already exists
+CREATE SCHEMA pg_catalog
+
+statement error schema .* already exists
+CREATE SCHEMA information_schema
