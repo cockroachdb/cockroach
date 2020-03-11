@@ -1168,6 +1168,12 @@ CREATE TABLE t.test (
 // a retry.
 func TestSchemaChangeRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// Decrease the adopt loop interval so that retries happen quickly.
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
 	params, _ := tests.CreateTestServerParams()
 
 	currChunk := 0
@@ -1242,6 +1248,12 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // the number of chunks operated on during a retry.
 func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// Decrease the adopt loop interval so that retries happen quickly.
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
 	params, _ := tests.CreateTestServerParams()
 	var upTableVersion func()
 	const maxValue = 2000
