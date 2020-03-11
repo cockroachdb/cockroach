@@ -10,8 +10,10 @@ package importccl
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -30,6 +32,88 @@ import (
 
 const exportFilePatternPart = "%part%"
 const exportFilePatternDefault = exportFilePatternPart + ".csv"
+
+// csvExporter data structure to augment the compression
+// and csv writer, encapsulating the internals to make
+// exporting oblivious for the consumers
+type csvExporter struct {
+	compressor io.WriteCloser
+	buf        *bytes.Buffer
+	csvWriter  *csv.Writer
+}
+
+// Write
+func (c *csvExporter) Write(record []string) error {
+	return c.csvWriter.Write(record)
+}
+
+// Close
+func (c *csvExporter) Close() error {
+	if c.compressor != nil {
+		return c.compressor.Close()
+	}
+	return nil
+}
+
+// Flush
+func (c *csvExporter) Flush() {
+	c.csvWriter.Flush()
+}
+
+// ResetBuffer
+func (c *csvExporter) ResetBuffer() {
+	c.buf.Reset()
+}
+
+func (c *csvExporter) Bytes() []byte {
+	return c.buf.Bytes()
+}
+
+// Len
+func (c *csvExporter) Len() int {
+	return c.buf.Len()
+}
+
+func (c *csvExporter) FileName(spec execinfrapb.CSVWriterSpec, part string) string {
+	pattern := exportFilePatternDefault
+	if spec.NamePattern != "" {
+		pattern = spec.NamePattern
+	}
+
+	fileName := strings.Replace(pattern, exportFilePatternPart, part, -1)
+	// TODO: add suffix based on compressor type
+	if c.compressor != nil {
+		fileName += ".gz"
+	}
+	return fileName
+}
+
+func newCSVExporter(sp execinfrapb.CSVWriterSpec) *csvExporter {
+	buf := bytes.NewBuffer([]byte{})
+	var exporter *csvExporter
+	switch sp.CompressionCodec {
+	case execinfrapb.CSVWriterSpec_gzip:
+		{
+			writer := gzip.NewWriter(buf)
+			exporter = &csvExporter{
+				compressor: writer,
+				buf:        buf,
+				csvWriter:  csv.NewWriter(writer),
+			}
+		}
+	default:
+		{
+			exporter = &csvExporter{
+				buf:       buf,
+				csvWriter: csv.NewWriter(buf),
+			}
+		}
+	}
+	if sp.Options.Comma != 0 {
+		exporter.csvWriter.Comma = sp.Options.Comma
+	}
+	return exporter
+}
 
 func newCSVWriterProcessor(
 	flowCtx *execinfra.FlowCtx,
@@ -85,22 +169,15 @@ func (sp *csvWriter) Run(ctx context.Context) {
 	defer tracing.FinishSpan(span)
 
 	err := func() error {
-		pattern := exportFilePatternDefault
-		if sp.spec.NamePattern != "" {
-			pattern = sp.spec.NamePattern
-		}
-
 		typs := sp.input.OutputTypes()
 		sp.input.Start(ctx)
 		input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
 
 		alloc := &sqlbase.DatumAlloc{}
 
-		var buf bytes.Buffer
-		writer := csv.NewWriter(&buf)
-		if sp.spec.Options.Comma != 0 {
-			writer.Comma = sp.spec.Options.Comma
-		}
+		writer := newCSVExporter(sp.spec)
+		defer writer.Close()
+
 		nullsAs := ""
 		if sp.spec.Options.NullEncoding != nil {
 			nullsAs = *sp.spec.Options.NullEncoding
@@ -114,7 +191,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 		done := false
 		for {
 			var rows int64
-			buf.Reset()
+			writer.ResetBuffer()
 			for {
 				if sp.spec.ChunkRows > 0 && rows >= sp.spec.ChunkRows {
 					break
@@ -160,12 +237,12 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			}
 			defer es.Close()
 
-			size := buf.Len()
+			size := writer.Len()
 
 			part := fmt.Sprintf("n%d.%d", sp.flowCtx.EvalCtx.NodeID, chunk)
 			chunk++
-			filename := strings.Replace(pattern, exportFilePatternPart, part, -1)
-			if err := es.WriteFile(ctx, filename, bytes.NewReader(buf.Bytes())); err != nil {
+			filename := writer.FileName(sp.spec, part)
+			if err := es.WriteFile(ctx, filename, bytes.NewReader(writer.Bytes())); err != nil {
 				return err
 			}
 			res := sqlbase.EncDatumRow{

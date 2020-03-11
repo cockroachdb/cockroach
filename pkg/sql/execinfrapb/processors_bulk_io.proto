@@ -65,12 +65,10 @@ message BackfillerSpec {
   optional util.hlc.Timestamp readAsOf = 7 [(gogoproto.nullable) = false];
 }
 
-
 // JobProgress identifies the job to report progress on. This reporting
 // happens outside this package.
 message JobProgress {
-  optional int64 job_id = 1 [(gogoproto.nullable) = false,
-    (gogoproto.customname) = "JobID"];
+  optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
   // contribution is the percent of work of the total this processor will
   // process.
   optional float contribution = 2 [(gogoproto.nullable) = false];
@@ -145,6 +143,17 @@ message CSVWriterSpec {
   optional roachpb.CSVOptions options = 3 [(gogoproto.nullable) = false];
   // chunk_rows is num rows to write per file. 0 = no limit.
   optional int64 chunk_rows = 4 [(gogoproto.nullable) = false];
+
+  // Compression list of the compression codecs which are currently
+  // supported for CSVWriter spec
+  enum Compression {
+    none = 0;
+    gzip = 1;
+  }
+
+  // compression code type to be used while epxporting CSV file,
+  // if it's null (i.e. not defined), no compression will be used.
+  optional Compression compression_codec = 5 [(gogoproto.nullable) = false];
 }
 
 // BulkRowWriterSpec is the specification for a processor that consumes rows and

@@ -3219,11 +3219,19 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 		return PhysicalPlan{}, err
 	}
 
+	// read value of compression codec, default is no compression
+	// otherwise lookup from supported set of codec values
+	compessionCodec := execinfrapb.CSVWriterSpec_none
+	if codec, exist := execinfrapb.CSVWriterSpec_Compression_value[n.codecName]; exist {
+		compessionCodec = execinfrapb.CSVWriterSpec_Compression(codec)
+	}
+
 	core := execinfrapb.ProcessorCoreUnion{CSVWriter: &execinfrapb.CSVWriterSpec{
-		Destination: n.fileName,
-		NamePattern: exportFilePatternDefault,
-		Options:     n.csvOpts,
-		ChunkRows:   int64(n.chunkSize),
+		Destination:      n.fileName,
+		NamePattern:      exportFilePatternDefault,
+		Options:          n.csvOpts,
+		ChunkRows:        int64(n.chunkSize),
+		CompressionCodec: compessionCodec,
 	}}
 
 	resTypes := make([]types.T, len(sqlbase.ExportColumns))
