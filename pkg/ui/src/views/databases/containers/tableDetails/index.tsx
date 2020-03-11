@@ -31,6 +31,7 @@ const { TabPane } = Tabs;
 import { getMatchParamByName } from "src/util/query";
 import { databaseDetails } from "../databaseSummary";
 import { Button, BackIcon } from "oss/src/components/button";
+import { databaseTable } from "oss/src/util/docs";
 
 class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.IGrant> {}
 
@@ -99,7 +100,7 @@ export class TableMain extends React.Component<TableMainProps, {}> {
     if (statements) {
       return statements.filter((statement: AggregateStatistics) => statement.label.indexOf(title) !== -1);
     }
-    return;
+    return [];
   }
 
   render() {
@@ -107,7 +108,7 @@ export class TableMain extends React.Component<TableMainProps, {}> {
     const database = getMatchParamByName(match, databaseNameAttr);
     const table = getMatchParamByName(match, tableNameAttr);
     const selectedApp = getMatchParamByName(match, appAttr);
-
+    const statementsData = this.getStatementsTableData();
     const title = `${database}.${table}`;
     if (tableInfo) {
       return (
@@ -162,32 +163,36 @@ export class TableMain extends React.Component<TableMainProps, {}> {
                 </Row>
               </TabPane>
               <TabPane tab="Statements" key="2">
-                <SummaryCard>
-                  <StatementsSortedTable
-                    data={this.getStatementsTableData()}
-                    columns={statements && makeStatementsColumns(statements, selectedApp)}
-                  />
-                </SummaryCard>
+                <StatementsSortedTable
+                  data={statementsData}
+                  columns={statements && makeStatementsColumns(statements, selectedApp)}
+                  empty={statementsData.length === 0}
+                  emptyProps={{
+                    title: "There are no statements since this page was last cleared.",
+                    description: "Statements help you identify frequently executed or high latency SQL statements. Statements are cleared every hour by default, or according to your configuration.",
+                    label: "Learn more",
+                    onClick: () => window.open(databaseTable),
+                  }}
+                />
               </TabPane>
               <TabPane tab="Grants" key="3">
-                <SummaryCard>
-                  <GrantsSortedTable
-                    data={tableInfo.grants}
-                    sortSetting={grantsSortSetting}
-                    onChangeSortSetting={(setting) => this.props.setSort(setting) }
-                    columns={[
-                      {
-                        title: "User",
-                        cell: (grants) => grants.user,
-                        sort: (grants) => grants.user,
-                      },
-                      {
-                        title: "Grants",
-                        cell: (grants) => grants.privileges.join(", "),
-                        sort: (grants) => grants.privileges.join(", "),
-                      },
-                    ]}/>
-                </SummaryCard>
+                <GrantsSortedTable
+                  data={tableInfo.grants}
+                  sortSetting={grantsSortSetting}
+                  onChangeSortSetting={(setting) => this.props.setSort(setting) }
+                  columns={[
+                    {
+                      title: "User",
+                      cell: (grants) => grants.user,
+                      sort: (grants) => grants.user,
+                    },
+                    {
+                      title: "Grants",
+                      cell: (grants) => grants.privileges.join(", "),
+                      sort: (grants) => grants.privileges.join(", "),
+                    },
+                  ]}
+                />
               </TabPane>
             </Tabs>
           </section>

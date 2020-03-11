@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2019 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -10,25 +10,50 @@
 
 @require '~src/components/core/index.styl'
 
-.crl-statements-diagnostics-view
+.summary--card.summary--card__empty-state
+  padding 0
+  .cl-empty-view
+    &__content
+      max-width 650px
+
+.cl-empty-view
   display flex
   flex-direction column
+  background-color $colors--white
+  position relative
+  padding $spacing-large 0 $spacing-large $spacing-large
 
   &__title
     display flex
     flex-direction row
     justify-content space-between
-    margin-bottom $spacing-mid-large
+    font-size $font-size--x-large
+    color $colors--neutral-7
+    line-height $line-height--x-large
+    margin-bottom 0
+    z-index 2
 
   &__footer
-    margin $spacing-medium 0 0 $spacing-smaller
+    margin 20px 0 0
 
   &__content
-    max-width 650px
+    max-width 600px
+    z-index 2
 
   &__main
-    margin-bottom $spacing-small
-    color $colors--secondary-text
+    .text
+      color $colors--neutral-6
+      font-size $font-size--medium
+      line-height $line-height--medium-small
+    .crl-anchor
+      margin-left 6px
+  
+  &__banner
+    position absolute
+    right 0
+    top 0
+    height 100%
+    z-index 1
 
   &__actions-column
     display flex

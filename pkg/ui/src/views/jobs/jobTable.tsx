@@ -15,13 +15,13 @@ import {TimestampToMoment} from "src/util/convert";
 import {DATE_FORMAT} from "src/util/format";
 import {JobStatusCell} from "oss/src/views/jobs/jobStatusCell";
 import {Icon, Pagination} from "antd";
-import Empty from "src/views/app/components/empty";
 import {SortSetting} from "oss/src/views/shared/components/sortabletable";
 import {CachedDataReducerState} from "oss/src/redux/cachedDataReducer";
 import _ from "lodash";
 import {JobDescriptionCell} from "oss/src/views/jobs/jobDescriptionCell";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
+import { jobTable } from "oss/src/util/docs";
 
 class JobsSortedTable extends SortedTable<Job> {}
 
@@ -133,23 +133,16 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
 
   noJobResult = () => (
     <>
-      <p>There are no jobs that match your search in filter.</p>
-      <a href="https://www.cockroachlabs.com/docs/stable/admin-ui-jobs-page.html" target="_blank">Learn more about jobs</a>
+      <h3 className="table__no-results--title">There are no jobs that match your search or filter.</h3>
+      <p className="table__no-results--description">
+        <a href={jobTable} target="_blank">Learn more</a>
+      </p>
     </>
   )
 
   render() {
     const jobs = this.props.jobs.data.jobs;
     const { pagination } = this.state;
-    if (_.isEmpty(jobs) && !this.props.isUsedFilter) {
-      return (
-        <Empty
-          title="There are no jobs to display."
-          description="The jobs page provides details about backup/restore jobs, schema changes, user-created table statistics, automatic table statistics jobs and changefeeds."
-          buttonHref="https://www.cockroachlabs.com/docs/stable/admin-ui-jobs-page.html"
-        />
-      );
-    }
     return (
       <React.Fragment>
         <div className="cl-table-statistic">
@@ -157,17 +150,22 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
             {this.renderCounts()}
           </h4>
         </div>
-        <section className="cl-table-wrapper">
-          <JobsSortedTable
-            data={this.getData()}
-            sortSetting={this.props.sort}
-            onChangeSortSetting={this.props.setSort}
-            className="jobs-table"
-            rowClass={job => "jobs-table__row--" + job.status}
-            columns={jobsTableColumns}
-            renderNoResult={this.noJobResult()}
-          />
-        </section>
+        <JobsSortedTable
+          data={this.getData()}
+          sortSetting={this.props.sort}
+          onChangeSortSetting={this.props.setSort}
+          className="jobs-table"
+          rowClass={job => "jobs-table__row--" + job.status}
+          columns={jobsTableColumns}
+          renderNoResult={this.noJobResult()}
+          empty={_.isEmpty(jobs) && !this.props.isUsedFilter}
+          emptyProps={{
+            title: "There are no jobs to display.",
+            description: "The jobs page provides details about backup/restore jobs, schema changes, user-created table statistics, automatic table statistics jobs and changefeeds.",
+            label: "Learn more",
+            onClick: () => window.open(jobTable),
+          }}
+        />
         <Pagination
           size="small"
           itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}

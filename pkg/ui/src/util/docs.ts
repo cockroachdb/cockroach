@@ -32,6 +32,9 @@ export const configureReplicationZones = docsURL("configure-replication-zones.ht
 export const transactionalPipelining = docsURL("architecture/transaction-layer.html#transaction-pipelining");
 export const adminUIAccess = docsURL("admin-ui-overview.html#admin-ui-access");
 export const statementDiagnostics = docsURLNoVersion("admin-ui-statements-page.html#diagnostics");
+export const databaseTable = docsURLNoVersion("admin-ui-databases-page.html");
+export const jobTable = docsURLNoVersion("admin-ui-jobs-page.html");
+export const statementsTable = docsURLNoVersion("admin-ui-statements-page.html");
 
 // Note that these explicitly don't use the current version, since we want to
 // link to the most up-to-date documentation available.

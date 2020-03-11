@@ -32,7 +32,6 @@ import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
-import Empty from "../app/components/empty";
 import { Search } from "../app/components/Search";
 import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
 import ActivateDiagnosticsModal, { ActivateDiagnosticsModalRef } from "src/views/statements/diagnostics/activateDiagnosticsModal";
@@ -44,6 +43,7 @@ import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
 
 import "./statements.styl";
+import { statementsTable } from "oss/src/util/docs";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
@@ -181,8 +181,11 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
 
   noStatementResult = () => (
     <>
-      <p>There are no SQL statements that match your search or filter since this page was last cleared.</p>
-      <a href="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html" target="_blank">Learn more about the statement page</a>
+      <h3 className="table__no-results--title">There are no SQL statements that match your search or filter since this page was last cleared.</h3>
+      <p className="table__no-results--description">
+        <span>Statements are cleared every hour by default, or according to your configuration.</span>
+        <a href={statementsTable} target="_blank">Learn more</a>
+      </p>
     </>
   )
 
@@ -221,32 +224,28 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
               {this.renderLastCleared()}
             </h4>
           </div>
-          {data.length === 0 && search.length === 0 && (
-            <Empty
-              title="This page helps you identify frequently executed or high latency SQL statements."
-              description="No SQL statements were executed since this page was last cleared."
-              buttonHref="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html"
-            />
-          )}
-          {(data.length > 0 || search.length > 0) && (
-            <div className="cl-table-wrapper">
-              <StatementsSortedTable
-                className="statements-table"
-                data={data}
-                columns={
-                  makeStatementsColumns(
-                    statements,
-                    selectedApp,
-                    search,
-                    this.activateDiagnosticsRef.current?.showModalFor,
-                  )
-                }
-                sortSetting={this.state.sortSetting}
-                onChangeSortSetting={this.changeSortSetting}
-                renderNoResult={this.noStatementResult()}
-              />
-            </div>
-          )}
+          <StatementsSortedTable
+            className="statements-table"
+            data={data}
+            columns={
+              makeStatementsColumns(
+                statements,
+                selectedApp,
+                search,
+                this.activateDiagnosticsRef.current?.showModalFor,
+              )
+            }
+            empty={data.length === 0 && search.length === 0}
+            emptyProps={{
+              title: "There are no statements since this page was last cleared.",
+              description: "Statements help you identify frequently executed or high latency SQL statements. Statements are cleared every hour by default, or according to your configuration.",
+              label: "Learn more",
+              onClick: () => window.open(statementsTable),
+            }}
+            sortSetting={this.state.sortSetting}
+            onChangeSortSetting={this.changeSortSetting}
+            renderNoResult={this.noStatementResult()}
+          />
         </section>
         <Pagination
           size="small"
@@ -255,7 +254,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
           current={pagination.current}
           total={this.filteredStatementsData().length}
           onChange={this.onChangePage}
-          hideOnSinglePage={data.length === 0}
+          hideOnSinglePage
         />
       </div>
     );

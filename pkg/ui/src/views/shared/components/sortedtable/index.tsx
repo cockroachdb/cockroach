@@ -14,6 +14,7 @@ import { Moment } from "moment";
 import React from "react";
 import { createSelector } from "reselect";
 import { ExpandableConfig, SortableColumn, SortableTable, SortSetting } from "src/views/shared/components/sortabletable";
+import { IEmptyProps } from "oss/src/components/empty";
 
 /**
  * ColumnDescriptor is used to describe metadata about an individual column
@@ -74,6 +75,9 @@ interface SortedTableProps<T> {
   drawer?: boolean;
   firstCellBordered?: boolean;
   renderNoResult?: React.ReactNode;
+  // empty state for table
+  empty?: boolean;
+  emptyProps?: IEmptyProps;
 }
 
 interface SortedTableState {
@@ -193,7 +197,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
   }
 
   render() {
-    const { data, sortSetting, onChangeSortSetting, firstCellBordered, renderNoResult } = this.props;
+    const { data, sortSetting, onChangeSortSetting, firstCellBordered, renderNoResult, empty, emptyProps } = this.props;
     let expandableConfig: ExpandableConfig = null;
     if (this.props.expandableConfig) {
       expandableConfig = {
@@ -216,6 +220,8 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
           drawer={this.props.drawer}
           firstCellBordered={firstCellBordered}
           renderNoResult={renderNoResult}
+          empty={empty}
+          emptyProps={emptyProps}
         />
       );
     }
