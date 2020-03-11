@@ -86,6 +86,11 @@ func SchemaChangeAlterWithExtra(typ string, extra string) telemetry.Counter {
 	return telemetry.GetCounter(fmt.Sprintf("sql.schema.alter_%s%s", typ, extra))
 }
 
+// SchemaSetAuditMode is to be incremented every time an audit mode is set.
+func SchemaSetAuditMode(mode string) telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.set_audit_mode." + mode)
+}
+
 // SecondaryIndexColumnFamiliesCounter is a counter that is incremented every time
 // a secondary index that is separated into different column families is created.
 var SecondaryIndexColumnFamiliesCounter = telemetry.GetCounterOnce("sql.schema.secondary_index_column_families")
