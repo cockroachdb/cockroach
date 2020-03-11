@@ -214,7 +214,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 			case *sqlbase.DescriptorMutation_Column:
 				needColumnBackfill = true
 			case *sqlbase.DescriptorMutation_Index:
-				if !sc.canClearRangeForDrop(t.Index) {
+				if !canClearRangeForDrop(t.Index) {
 					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
 				}
 			case *sqlbase.DescriptorMutation_Constraint:
@@ -626,7 +626,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
 					return err
 				}
-				if !sc.canClearRangeForDrop(&desc) {
+				if !canClearRangeForDrop(&desc) {
 					resume, err = td.deleteIndex(
 						ctx,
 						&desc,
@@ -647,7 +647,7 @@ func (sc *SchemaChanger) truncateIndexes(
 		// All the data chunks have been removed. Now also removed the
 		// zone configs for the dropped indexes, if any.
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return removeIndexZoneConfigs(ctx, txn, sc.execCfg, sc.tableID, dropped)
+			return RemoveIndexZoneConfigs(ctx, txn, sc.execCfg, sc.tableID, dropped)
 		}); err != nil {
 			return err
 		}
@@ -1678,5 +1678,5 @@ func indexTruncateInTxn(
 		}
 	}
 	// Remove index zone configs.
-	return removeIndexZoneConfigs(ctx, txn, execCfg, tableDesc.ID, []sqlbase.IndexDescriptor{*idx})
+	return RemoveIndexZoneConfigs(ctx, txn, execCfg, tableDesc.ID, []sqlbase.IndexDescriptor{*idx})
 }
