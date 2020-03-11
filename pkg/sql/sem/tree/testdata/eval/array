@@ -20,10 +20,10 @@ ARRAY['a', 'b', 'c']
 ----
 ARRAY['a','b','c']
 
-eval
-ARRAY[ARRAY[1, 2], ARRAY[2, 3]]
-----
-ARRAY[ARRAY[1,2],ARRAY[2,3]]
+#eval
+#ARRAY[ARRAY[1, 2], ARRAY[2, 3]]
+#----
+#ARRAY[ARRAY[1,2],ARRAY[2,3]]
 
 eval
 ARRAY[1, NULL]

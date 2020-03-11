@@ -21,7 +21,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -276,6 +279,146 @@ func TestEval(t *testing.T) {
 			return row[0].Datum.String()
 		})
 	})
+	t.Run("tableData", func(t *testing.T) {
+		// The tableData subtest finds all constants within each expression, and
+		// inserts them into a fresh table. The expression then is run with column
+		// references into the table in a SELECT, to make sure that expression
+		// evaluation works properly even when operating against real table data.
+		//
+		// For example, an expression like: true OR (2 = 3) would be replaced by:
+		// CREATE TABLE tn AS SELECT true c1, 2 c2, 3 c3;
+		// SELECT c1 OR (c2 = c3) FROM tn
+		params := base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				// Specify a fixed memory limit (some test cases verify OOM conditions; we
+				// don't want those to take long on large machines).
+				SQLMemoryPoolSize: 192 * 1024 * 1024,
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						// The consistency queue makes a lot of noisy logs during logic tests.
+						DisableConsistencyQueue: true,
+					},
+				},
+				UseDatabase: "test",
+			},
+		}
+		cluster := serverutils.StartTestCluster(t, 1, params)
+		c := cluster.ServerConn(0)
+		defer func() {
+			cluster.Stopper().Stop(context.TODO())
+		}()
+		if _, err := c.Exec("CREATE DATABASE test"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c.Exec("SET CLUSTER SETTING sql.defaults.vectorize=experimental_on"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c.Exec("SET CLUSTER SETTING sql.defaults.distsql=on"); err != nil {
+			t.Fatal(err)
+		}
+		ex := cluster.Server(0).InternalExecutor().(*sql.InternalExecutor)
+		ex.SetSessionData(&sessiondata.SessionData{
+			VectorizeMode: sessiondata.VectorizeExperimentalOn,
+		})
+
+		n := -1
+		walk(t, func(t *testing.T, d *datadriven.TestData) string {
+			n++
+			expr, err := parser.ParseExpr(d.Input)
+			if err != nil {
+				t.Fatalf("%s: %v", d.Input, err)
+			}
+			te, err := expr.TypeCheck(nil, types.Any)
+			if err != nil {
+				t.Fatalf("%s: %v", d.Input, err)
+			}
+
+			// Swap the constants with column references.
+			visitor := &constantSwappingVisitor{}
+			expr, _ = tree.WalkExpr(visitor, te)
+			if len(visitor.constants) == 0 {
+				return strings.TrimSpace(d.Expected)
+			}
+			// Create a table with one column per constant in the expression.
+			tableName := fmt.Sprintf("t%d", n)
+			createTable := strings.Builder{}
+			createTable.WriteString("CREATE TABLE ")
+			createTable.WriteString(tableName)
+			createTable.WriteString(" AS SELECT ")
+			for i := range visitor.constants {
+				if i > 0 {
+					createTable.WriteString(", ")
+				}
+				col := visitor.cols[i]
+				d := visitor.constants[i]
+				typ := d.ResolvedType().SQLString()
+				createTable.WriteString(tree.AsStringWithFlags(d, tree.FmtParsableNumerics))
+				createTable.WriteString("::")
+				createTable.WriteString(typ)
+				createTable.WriteString(" AS ")
+				createTable.WriteString(col)
+			}
+
+			s := createTable.String()
+			if _, err := c.Exec(s); err != nil {
+				t.Fatalf("error executing %s: %v", s, err)
+			}
+
+			// Run the expression as a SELECT against the replaced columns.
+			query := fmt.Sprintf("SELECT %s FROM %s",
+				expr.String(), tableName)
+			fmt.Println(query)
+			fmt.Println()
+			der, err := ex.QueryRowEx(ctx, "foo", nil,
+				sqlbase.InternalExecutorSessionDataOverride{
+					User:     "root",
+					Database: "test",
+				},
+				"show vectorize")
+			fmt.Println(der, err)
+			datums, err := ex.QueryRowEx(
+				ctx,
+				"test",
+				nil,
+				sqlbase.InternalExecutorSessionDataOverride{
+					User:     "root",
+					Database: "test",
+				},
+				query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if datums == nil {
+				t.Fatalf("expected 1 row, found none")
+			}
+			if len(datums) != 1 {
+				t.Fatalf("expected 1 col, found %d", len(datums))
+			}
+			fmt.Println(datums[0])
+			return datums[0].String()
+		})
+	})
+}
+
+type constantSwappingVisitor struct {
+	foundConstant bool
+	cols          []string
+	constants     []tree.Datum
+}
+
+func (v *constantSwappingVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if d, ok := expr.(tree.Datum); ok && expr != tree.DNull {
+		v.constants = append(v.constants, d)
+		colName := fmt.Sprintf("c%d", len(v.constants)-1)
+		v.cols = append(v.cols, colName)
+		return false, &tree.UnresolvedName{
+			NumParts: 1, Parts: tree.NameParts{colName}}
+	}
+	return true, expr
+}
+
+func (v *constantSwappingVisitor) VisitPost(expr tree.Expr) (newNode tree.Expr) {
+	return expr
 }
 
 func optBuildScalar(evalCtx *tree.EvalContext, e tree.Expr) (tree.TypedExpr, error) {
