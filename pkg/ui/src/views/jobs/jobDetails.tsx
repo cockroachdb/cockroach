@@ -28,6 +28,7 @@ import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
 import { Button, BackIcon } from "src/components/button";
+import { DATE_FORMAT } from "src/util/format";
 import { JobStatusCell } from "./jobStatusCell";
 
 interface JobsTableProps extends RouteComponentProps {
@@ -70,7 +71,7 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
             <Row>
               <Col span={24}>
                 <div className="summary--card__counting">
-                  <h3 className="summary--card__counting--value">{TimestampToMoment(job.created).format("MMM DD, YYYY [at] hh:mma")}</h3>
+                  <h3 className="summary--card__counting--value">{TimestampToMoment(job.created).format(DATE_FORMAT)}</h3>
                   <p className="summary--card__counting--label">Creation time</p>
                 </div>
               </Col>
