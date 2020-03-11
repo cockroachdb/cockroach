@@ -1370,6 +1370,14 @@ var charts = []sectionDescription{
 				Title:   "Vectorized Temporary Storage Open File Descriptors",
 				Metrics: []string{"sql.distsql.vec.openfds"},
 			},
+			{
+				Title:   "Current Disk Monitors",
+				Metrics: []string{"sql.distsql.diskmon.current"},
+			},
+			{
+				Title:   "Max Disk Monitors",
+				Metrics: []string{"sql.distsql.diskmon.max"},
+			},
 		},
 	},
 	{

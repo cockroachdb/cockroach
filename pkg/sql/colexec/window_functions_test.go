@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 type windowFnTestCase struct {
@@ -43,7 +44,8 @@ func TestWindowFunctions(t *testing.T) {
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings: st,
+			Settings:    st,
+			DiskMonitor: testDiskMonitor,
 		},
 	}
 
@@ -52,6 +54,8 @@ func TestWindowFunctions(t *testing.T) {
 	denseRankFn := execinfrapb.WindowerSpec_DENSE_RANK
 	percentRankFn := execinfrapb.WindowerSpec_PERCENT_RANK
 	cumeDistFn := execinfrapb.WindowerSpec_CUME_DIST
+	accounts := make([]*mon.BoundAccount, 0)
+	monitors := make([]*mon.BytesMonitor, 0)
 	for _, tc := range []windowFnTestCase{
 		// With PARTITION BY, no ORDER BY.
 		//
@@ -274,5 +278,13 @@ func TestWindowFunctions(t *testing.T) {
 			}
 			return result.Op, nil
 		})
+	}
+
+	for _, acc := range accounts {
+		acc.Close(ctx)
+	}
+
+	for _, mon := range monitors {
+		mon.Stop(ctx)
 	}
 }

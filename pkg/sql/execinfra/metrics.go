@@ -28,6 +28,8 @@ type DistSQLMetrics struct {
 	MaxBytesHist  *metric.Histogram
 	CurBytesCount *metric.Gauge
 	VecOpenFDs    *metric.Gauge
+	DiskMonsCount *metric.Gauge
+	DiskMonsHist  *metric.Histogram
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -90,6 +92,18 @@ var (
 		Measurement: "Files",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDiskMonitors = metric.Metadata{
+		Name:        "sql.distsql.diskmon.current",
+		Help:        "Current number of disk monitors opened for distsql",
+		Measurement: "Disk",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDiskMaxMonitors = metric.Metadata{
+		Name:        "sql.distsql.diskmon.max",
+		Help:        "Max number of disk monitors opened for distsql",
+		Measurement: "Disk",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // See pkg/sql/mem_metrics.go
@@ -108,6 +122,8 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		MaxBytesHist:  metric.NewHistogram(metaMemMaxBytes, histogramWindow, log10int64times1000, 3),
 		CurBytesCount: metric.NewGauge(metaMemCurBytes),
 		VecOpenFDs:    metric.NewGauge(metaVecOpenFDs),
+		DiskMonsCount: metric.NewGauge(metaDiskMonitors),
+		DiskMonsHist:  metric.NewHistogram(metaDiskMaxMonitors, histogramWindow, log10int64times1000, 3),
 	}
 }
 

@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 )
@@ -31,6 +30,7 @@ type limitOp struct {
 }
 
 var _ Operator = &limitOp{}
+var _ closableOperator = &limitOp{}
 
 // NewLimitOp returns a new limit operator with the given limit.
 func NewLimitOp(input Operator, limit int) Operator {
@@ -72,9 +72,9 @@ func (c *limitOp) Next(ctx context.Context) coldata.Batch {
 //  exhaust the sorter (e.g. allNullsInjection) need to close the operator
 //  explicitly. This should be removed once we have a better way of closing
 //  operators even when they are not exhausted.
-func (c *limitOp) Close() error {
-	if closer, ok := c.input.(io.Closer); ok {
-		return closer.Close()
+func (c *limitOp) Close(ctx context.Context) error {
+	if c, ok := c.input.(closer); ok {
+		return c.Close(ctx)
 	}
 	return nil
 }
