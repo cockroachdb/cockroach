@@ -95,6 +95,11 @@ ifneq "$(TYPE)" ""
 $(error Make no longer understands TYPE. Use 'build/builder.sh mkrelease $(subst release-,,$(TYPE))' instead)
 endif
 
+# dep-build is set to non-empty if the .d files should be included.
+# This definition makes it empty when only the targets "help" and/or "clean"
+# are specified.
+build-with-dep-files := $(or $(if $(MAKECMDGOALS),,implicit-all),$(filter-out help clean,$(MAKECMDGOALS)))
+
 ## Which package to run tests against, e.g. "./pkg/foo".
 PKG := ./pkg/...
 
@@ -1494,7 +1499,11 @@ bin/execgen_out.d: bin/execgen
 	@echo EXECGEN $@; execgen -M $(EXECGEN_TARGETS) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	@mv -f $@.tmp $@
 
-include bin/execgen_out.d
+# No need to pull all the world in when a user just wants
+# to know how to invoke `make` or clean up.
+ifneq ($(build-with-dep-files),)
+-include bin/execgen_out.d
+endif
 
 # Generate the colexec files.
 #
@@ -1677,11 +1686,16 @@ fuzz: ## Run fuzz tests.
 fuzz: bin/fuzz
 	bin/fuzz $(TESTFLAGS) -tests $(TESTS) -timeout $(TESTTIMEOUT) $(PKG)
 
+
+# No need to include all the dependency files if the user is just
+# requesting help or cleanup.
+ifneq ($(build-with-dep-files),)
 .SECONDARY: bin/%.d
 .PRECIOUS: bin/%.d
 bin/%.d: ;
 
 include $(wildcard bin/*.d)
+endif
 
 # Make doesn't expose a list of the variables declared in a given file, so we
 # resort to sed magic. Roughly, this sed command prints VARIABLE in lines of the
