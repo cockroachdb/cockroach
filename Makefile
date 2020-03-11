@@ -31,7 +31,7 @@ override xgo := GOFLAGS= $(GO)
 # This needs to be the first rule because we're including build/defs.mk
 # first thing below, and Make needs to know how to build it.
 .SECONDARY: build/defs.mk
-build/defs.mk: Makefile build/defs.mk.sig
+build/defs.mk: Makefile build/defs.mk.sig remove_obsolete_execgen
 ifndef IGNORE_GOVERS
 	@build/go-version-check.sh $(GO) || { echo "Disable this check with IGNORE_GOVERS=1." >&2; exit 1; }
 endif
@@ -832,9 +832,13 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/vec_comparators.eg.go \
   pkg/sql/colexec/window_peer_grouper.eg.go
 
-execgen-exclusions = $(addprefix -not -path ,$(EXECGEN_TARGETS))
-
-$(shell build/cleanup.sh $(execgen-exclusions))
+.PHONY: remove_obsolete_execgen
+remove_obsolete_execgen:
+	@obsolete="$(filter-out $(EXECGEN_TARGETS), $(shell find pkg/col/coldata pkg/sql/colexec pkg/sql/exec -name '*.eg.go' 2>/dev/null))"; \
+	for file in $${obsolete}; do \
+	  echo "Removing obsolete file $${file}..."; \
+	  rm -f $${file}; \
+	done
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
