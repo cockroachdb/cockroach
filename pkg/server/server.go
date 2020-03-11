@@ -873,6 +873,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory = ieFactory
 	s.jobRegistry.SetSessionBoundInternalExecutorFactory(ieFactory)
 
+	s.distSQLServer.ServerConfig.ProtectedTimestampProvider = execCfg.ProtectedTimestampProvider
+
 	for _, m := range s.pgServer.Metrics() {
 		s.registry.AddMetricStruct(m)
 	}

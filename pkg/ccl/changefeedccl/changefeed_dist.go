@@ -11,7 +11,6 @@ package changefeedccl
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -79,15 +78,12 @@ func distChangefeedFlow(
 	// changefeed from a checkpoint at its start time. Initialize the progress
 	// based on whether we should perform an initial scan.
 	{
-		_, cursor := details.Opts[changefeedbase.OptCursor]
-		_, initialScan := details.Opts[changefeedbase.OptInitialScan]
-		_, noInitialScan := details.Opts[changefeedbase.OptNoInitialScan]
 		h := progress.GetHighWater()
 		noHighWater := (h == nil || *h == (hlc.Timestamp{}))
 		// We want to set the highWater and thus avoid an initial scan if either
 		// this is a cursor and there was no request for one, or we don't have a
 		// cursor but we have a request to not have an initial scan.
-		if noHighWater && (cursor && !initialScan || !cursor && noInitialScan) {
+		if noHighWater && !initialScanFromOptions(details.Opts) {
 			// If there is a cursor, the statement time has already been set to it.
 			progress.Progress = &jobspb.Progress_HighWater{HighWater: &details.StatementTime}
 		}
