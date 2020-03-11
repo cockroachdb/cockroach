@@ -55,16 +55,12 @@ func registerAlterPK(r *testRegistry) {
 
 			// Run the workload while the primary key change is happening.
 			cmd = fmt.Sprintf("./workload run bank --duration=%s {pgurl%s}", duration, roachNodes)
-			if err := c.RunE(ctx, loadNode, cmd); err != nil {
-				t.Fatal(err)
-			}
+			c.Run(ctx, loadNode, cmd)
 			// Wait for the primary key change to finish.
 			<-pkChangeDone
 			t.Status("starting second run of the workload after primary key change")
 			// Run the workload after the primary key change occurs.
-			if err := c.RunE(ctx, loadNode, cmd); err != nil {
-				t.Fatal(err)
-			}
+			c.Run(ctx, loadNode, cmd)
 			return nil
 		})
 		m.Go(func(ctx context.Context) error {
@@ -94,6 +90,8 @@ func registerAlterPK(r *testRegistry) {
 	// runAlterPKTPCC runs a primary key change while the TPCC workload runs.
 	runAlterPKTPCC := func(ctx context.Context, t *test, c *cluster) {
 		const warehouses = 500
+		// TODO (rohany): This should be bumped up to 20-30 minutes if
+		//  500 warehouses are used.
 		const duration = 1 * time.Minute
 
 		roachNodes, loadNode := setupTest(ctx, t, c)
@@ -115,9 +113,9 @@ func registerAlterPK(r *testRegistry) {
 				duration,
 				roachNodes,
 			)
-			if err := c.RunE(ctx, loadNode, runCmd); err != nil {
-				t.Fatal(err)
-			}
+			t.Status("beginning workload")
+			c.Run(ctx, loadNode, runCmd)
+			t.Status("finished running workload")
 			return nil
 		})
 		m.Go(func(ctx context.Context) error {
@@ -160,9 +158,9 @@ func registerAlterPK(r *testRegistry) {
 			warehouses,
 			c.Node(roachNodes[0]),
 		)
-		if err := c.RunE(ctx, loadNode, checkCmd); err != nil {
-			t.Fatal(err)
-		}
+		t.Status("beginning database verification")
+		c.Run(ctx, loadNode, checkCmd)
+		t.Status("finished database verification")
 	}
 	r.Add(testSpec{
 		Name:  "alterpk-bank",
@@ -179,7 +177,8 @@ func registerAlterPK(r *testRegistry) {
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
 		MinVersion: "v20.1.0",
-		Cluster:    makeClusterSpec(4),
-		Run:        runAlterPKTPCC,
+		// TODO (rohany): This should be bumped to cpu(16) if 500 warehouses are used.
+		Cluster: makeClusterSpec(4, cpu(16)),
+		Run:     runAlterPKTPCC,
 	})
 }
