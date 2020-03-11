@@ -679,3 +679,67 @@ func TestConcatRand(t *testing.T) {
 
 	}
 }
+
+func TestGetBitAtIndex(t *testing.T) {
+	testData := []struct {
+		bitString, err string
+		index, res     int
+	}{
+		{"1001010", "", 0, 1},
+		{"1010101", "", 1, 0},
+		{"111111111111110001010101000000", "", 20, 0},
+		{"111111111111110001011101000000", "", 20, 1},
+		{"11111111", "", 7, 1},
+		{"010110", "GetBitAtIndex: bit index -1 out of valid range (0..5)", -1, 0},
+		{"", "GetBitAtIndex: bit index 0 out of valid range (0..-1)", 0, 0},
+		{"10100110", "GetBitAtIndex: bit index 8 out of valid range (0..7)", 8, 0},
+	}
+	for _, test := range testData {
+		t.Run(fmt.Sprintf("{%v,%d}", test.bitString, test.index), func(t *testing.T) {
+			ba, err := Parse(test.bitString)
+			if err != nil {
+				t.Fatal(err)
+			}
+			res, err := ba.GetBitAtIndex(test.index)
+			if test.err != "" && (err == nil || test.err != err.Error()) {
+				t.Errorf("expected %q error, but got: %+v", test.err, err)
+			} else if test.err == "" && err != nil {
+				t.Errorf("unexpected error: %s", err.Error())
+			} else if !reflect.DeepEqual(test.res, res) {
+				t.Errorf("expected %d, got %d", test.res, res)
+			}
+		})
+	}
+}
+
+func TestSetBitAtIndex(t *testing.T) {
+	testData := []struct {
+		bitString, err, res string
+		index, toSet        int
+	}{
+		{"1001010", "", "1101010", 1, 1},
+		{"1010101", "", "0010101", 0, 0},
+		{"1010101011", "", "1010101011", 0, 1},
+		{"1010101011", "", "1010101011", 1, 0},
+		{"111111111111110001010101000000", "", "111111111111110001011101000000", 20, 1},
+		{"010110", "SetBitAtIndex: bit index -1 out of valid range (0..5)", "", -1, 0},
+		{"10100110", "SetBitAtIndex: bit index 8 out of valid range (0..7)", "", 8, 0},
+		{"", "SetBitAtIndex: bit index 0 out of valid range (0..-1)", "", 0, 0},
+	}
+	for _, test := range testData {
+		t.Run(fmt.Sprintf("{%v,%d,%d}", test.bitString, test.index, test.toSet), func(t *testing.T) {
+			ba, err := Parse(test.bitString)
+			if err != nil {
+				t.Fatal(err)
+			}
+			res, err := ba.SetBitAtIndex(test.index, test.toSet)
+			if test.err != "" && (err == nil || test.err != err.Error()) {
+				t.Errorf("expected %q error, but got: %+v", test.err, err)
+			} else if test.err == "" && err != nil {
+				t.Errorf("unexpected error: %s", err.Error())
+			} else if !reflect.DeepEqual(test.res, res.String()) {
+				t.Errorf("expected %s, got %s", test.res, res.String())
+			}
+		})
+	}
+}
