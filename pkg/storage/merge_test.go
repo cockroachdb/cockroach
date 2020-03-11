@@ -62,7 +62,7 @@ func mustMarshal(m protoutil.Message) []byte {
 
 func appender(s string) []byte {
 	val := roachpb.MakeValueFromString(s)
-	v := &enginepb.MVCCMetadata{RawBytes: val.RawBytes}
+	v := &enginepb.MVCCMetadataSubsetForMergeSerialization{RawBytes: val.RawBytes}
 	return mustMarshal(v)
 }
 
@@ -72,7 +72,7 @@ func appender(s string) []byte {
 // MVCCMetadata object and marshaled to bytes.
 func timeSeriesRow(start int64, duration int64, samples ...tsSample) []byte {
 	tsv := timeSeriesRowAsValue(start, duration, samples...)
-	return mustMarshal(&enginepb.MVCCMetadata{RawBytes: tsv.RawBytes})
+	return mustMarshal(&enginepb.MVCCMetadataSubsetForMergeSerialization{RawBytes: tsv.RawBytes})
 }
 
 func timeSeriesRowAsValue(start int64, duration int64, samples ...tsSample) roachpb.Value {

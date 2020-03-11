@@ -1187,50 +1187,103 @@ WITH RECURSIVE cte(a, b) AS (
     (WITH foo AS (SELECT * FROM cte) SELECT c1.a+c2.a, c1.b+c2.b FROM foo AS c1, foo AS c2)
 ) SELECT * FROM cte;
 ----
-with &2 (foo)
+with &3 (cte)
  ├── columns: a:13 b:14
- ├── with-scan &1 (cte)
- │    ├── columns: a:5 b:6
- │    └── mapping:
- │         ├──  a:3 => a:5
- │         └──  b:4 => b:6
- └── with &3 (cte)
+ ├── recursive-c-t-e
+ │    ├── columns: a:3 b:4
+ │    ├── working table binding: &1
+ │    ├── initial columns: "?column?":1 "?column?":2
+ │    ├── recursive columns: "?column?":11 "?column?":12
+ │    ├── project
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         ├── 1 [as="?column?":1]
+ │    │         └── 2 [as="?column?":2]
+ │    └── with &2 (foo)
+ │         ├── columns: "?column?":11 "?column?":12
+ │         ├── with-scan &1 (cte)
+ │         │    ├── columns: a:5 b:6
+ │         │    └── mapping:
+ │         │         ├──  a:3 => a:5
+ │         │         └──  b:4 => b:6
+ │         └── project
+ │              ├── columns: "?column?":11 "?column?":12
+ │              ├── inner-join (cross)
+ │              │    ├── columns: a:7 b:8 a:9 b:10
+ │              │    ├── with-scan &2 (foo)
+ │              │    │    ├── columns: a:7 b:8
+ │              │    │    └── mapping:
+ │              │    │         ├──  a:5 => a:7
+ │              │    │         └──  b:6 => b:8
+ │              │    ├── with-scan &2 (foo)
+ │              │    │    ├── columns: a:9 b:10
+ │              │    │    └── mapping:
+ │              │    │         ├──  a:5 => a:9
+ │              │    │         └──  b:6 => b:10
+ │              │    └── filters (true)
+ │              └── projections
+ │                   ├── a:7 + a:9 [as="?column?":11]
+ │                   └── b:8 + b:10 [as="?column?":12]
+ └── with-scan &3 (cte)
       ├── columns: a:13 b:14
-      ├── recursive-c-t-e
-      │    ├── columns: a:3 b:4
-      │    ├── working table binding: &1
-      │    ├── initial columns: "?column?":1 "?column?":2
-      │    ├── recursive columns: "?column?":11 "?column?":12
-      │    ├── project
-      │    │    ├── columns: "?column?":1!null "?column?":2!null
-      │    │    ├── values
-      │    │    │    └── ()
-      │    │    └── projections
-      │    │         ├── 1 [as="?column?":1]
-      │    │         └── 2 [as="?column?":2]
-      │    └── project
-      │         ├── columns: "?column?":11 "?column?":12
-      │         ├── inner-join (cross)
-      │         │    ├── columns: a:7 b:8 a:9 b:10
-      │         │    ├── with-scan &2 (foo)
-      │         │    │    ├── columns: a:7 b:8
-      │         │    │    └── mapping:
-      │         │    │         ├──  a:5 => a:7
-      │         │    │         └──  b:6 => b:8
-      │         │    ├── with-scan &2 (foo)
-      │         │    │    ├── columns: a:9 b:10
-      │         │    │    └── mapping:
-      │         │    │         ├──  a:5 => a:9
-      │         │    │         └──  b:6 => b:10
-      │         │    └── filters (true)
-      │         └── projections
-      │              ├── a:7 + a:9 [as="?column?":11]
-      │              └── b:8 + b:10 [as="?column?":12]
-      └── with-scan &3 (cte)
-           ├── columns: a:13 b:14
-           └── mapping:
-                ├──  a:3 => a:13
-                └──  b:4 => b:14
+      └── mapping:
+           ├──  a:3 => a:13
+           └──  b:4 => b:14
+
+# Veryify use of WITH inside the initial statement.
+build
+WITH RECURSIVE cte(a) AS (
+    (WITH v(x) AS (VALUES (1), (2)) SELECT v.x + v1.x FROM v, v AS v1)
+  UNION ALL
+    (SELECT a*10 FROM cte WHERE a < 100)
+) SELECT * FROM cte;
+----
+with &3 (cte)
+ ├── columns: a:8
+ ├── recursive-c-t-e
+ │    ├── columns: a:5
+ │    ├── working table binding: &1
+ │    ├── initial columns: "?column?":4
+ │    ├── recursive columns: "?column?":7
+ │    ├── with &2 (v)
+ │    │    ├── columns: "?column?":4!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:1!null
+ │    │    │    ├── (1,)
+ │    │    │    └── (2,)
+ │    │    └── project
+ │    │         ├── columns: "?column?":4!null
+ │    │         ├── inner-join (cross)
+ │    │         │    ├── columns: x:2!null x:3!null
+ │    │         │    ├── with-scan &2 (v)
+ │    │         │    │    ├── columns: x:2!null
+ │    │         │    │    └── mapping:
+ │    │         │    │         └──  column1:1 => x:2
+ │    │         │    ├── with-scan &2 (v)
+ │    │         │    │    ├── columns: x:3!null
+ │    │         │    │    └── mapping:
+ │    │         │    │         └──  column1:1 => x:3
+ │    │         │    └── filters (true)
+ │    │         └── projections
+ │    │              └── x:2 + x:3 [as="?column?":4]
+ │    └── project
+ │         ├── columns: "?column?":7!null
+ │         ├── select
+ │         │    ├── columns: a:6!null
+ │         │    ├── with-scan &1 (cte)
+ │         │    │    ├── columns: a:6
+ │         │    │    └── mapping:
+ │         │    │         └──  a:5 => a:6
+ │         │    └── filters
+ │         │         └── a:6 < 100
+ │         └── projections
+ │              └── a:6 * 10 [as="?column?":7]
+ └── with-scan &3 (cte)
+      ├── columns: a:8
+      └── mapping:
+           └──  a:5 => a:8
 
 # Mutating WITHs not allowed at non-root positions.
 build

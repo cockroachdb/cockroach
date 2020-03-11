@@ -121,9 +121,9 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 
 func init() {
 	if storage.DefaultStorageEngine != enginepb.EngineTypeRocksDB && storage.DefaultStorageEngine != enginepb.EngineTypeDefault {
-		// This is marshaled below Raft by the Pebble merge operator. The Pebble
+		// These are marshaled below Raft by the Pebble merge operator. The Pebble
 		// merge operator can be called below Raft whenever a Pebble Iterator is
-		// used. Note that we only see this proto marshaled below Raft when the
+		// used. Note that we only see these protos marshaled below Raft when the
 		// engine type is not RocksDB. If the engine type is RocksDB the marshaling
 		// occurs in C++ which is invisible to the tracking mechanism.
 		belowRaftGoldenProtos[reflect.TypeOf(&roachpb.InternalTimeSeriesData{})] = fixture{
@@ -133,6 +133,14 @@ func init() {
 			emptySum:     5531676819244041709,
 			populatedSum: 8911200268508796945,
 		}
+		belowRaftGoldenProtos[reflect.TypeOf(&enginepb.MVCCMetadataSubsetForMergeSerialization{})] =
+			fixture{
+				populatedConstructor: func(r *rand.Rand) protoutil.Message {
+					return enginepb.NewPopulatedMVCCMetadataSubsetForMergeSerialization(r, false)
+				},
+				emptySum:     14695981039346656037,
+				populatedSum: 7432412240713840291,
+			}
 	}
 }
 
