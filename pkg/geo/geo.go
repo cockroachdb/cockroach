@@ -41,6 +41,11 @@ type Geography struct {
 	SRID   geopb.SRID
 }
 
+// NewGeography constructs a new Geography with the given figure and SRID.
+func NewGeography(srid geopb.SRID, figure ...s2.Region) *Geography {
+	return &Geography{Figure: figure, SRID: srid}
+}
+
 // MarshalGeometry and UnmarshalGeometry roundtrip a Geometry through a byte
 // format designed for long-term storage.
 func MarshalGeometry(g *Geometry) ([]byte, error) {
