@@ -1064,6 +1064,16 @@ func depublicizeSystemComments(ctx context.Context, r runner) error {
 	// with all privileges granted to the "public" role (i.e. everyone).
 	// This migration cleans this up.
 
+	// Schema changes are normally banned in the mixed-version 19.2/20.1 state, so
+	// we override the ban and force the schema change to run anyway. This is safe
+	// because updating privileges on a table only requires an update to the table
+	// descriptor, and the job created will only wait for leases to expire. We
+	// don't expect any other schema changes to happen on the comments table that
+	// the 20.1 job could interfere with. The update to the table descriptor would
+	// cause a 19.2 SchemaChangeManager to attempt a schema change, but it would
+	// be a no-op.
+	ctx = sql.MigrationSchemaChangeRequiredContext(ctx)
+
 	for _, priv := range []string{"GRANT", "INSERT", "DELETE", "UPDATE"} {
 		stmt := fmt.Sprintf(`REVOKE %s ON TABLE system.comments FROM public`, priv)
 		// REVOKE should never fail here -- it's always possible for root

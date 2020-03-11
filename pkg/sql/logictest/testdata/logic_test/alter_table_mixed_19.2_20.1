@@ -1,0 +1,161 @@
+# Most schema changes are banned in the mixed 19.2/20.1 state, so this file is
+# essentially completely different from the alter_table test file.
+# LogicTest: local-mixed-19.2-20.1
+
+subtest create_and_drop_table
+
+# Explicitly specify the column family to avoid having the column families
+# rewritten in a way that's incompatible with 19.2.
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT, INDEX (b), FAMILY (a, b))
+
+# A foreign key in CREATE TABLE requires a schema change job to finish adding
+# the table, so we can't support it.
+statement error schema change cannot be initiated in this version until the version upgrade is finalized
+CREATE TABLE table_with_fk (a INT PRIMARY KEY REFERENCES t)
+
+# TODO (lucy): The behavior below reflects a bug (#45985). We shouldn't be
+# queuing a job for schema changes in the transaction in which the table is
+# created; the schema change should just happen entirely in the transaction
+# itself. When the bug is fixed, update this to not expect an error.
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE t_in_txn (a INT PRIMARY KEY)
+
+statement error schema change cannot be initiated in this version until the version upgrade is finalized
+ALTER TABLE t_in_txn ADD COLUMN b INT
+
+statement ok
+ROLLBACK
+
+statement error schema change cannot be initiated in this version until the version upgrade is finalized
+DROP TABLE t
+
+statement error schema change cannot be initiated in this version until the version upgrade is finalized
+TRUNCATE TABLE t
+
+query T
+SHOW TABLES
+----
+t
+
+subtest columns
+
+# Ensure the table exists for the subtest.
+statement ok
+CREATE TABLE IF NOT EXISTS t (a INT PRIMARY KEY, b INT, INDEX (b), FAMILY (a, b))
+
+statement error schema change cannot be initiated in this version until the version upgrade is finalized
+ALTER TABLE t ADD COLUMN c INT
+
+statement error schema change cannot be initiated in this version until the version upgrade is finalized
+ALTER TABLE t DROP COLUMN b
+
+# IF NOT EXISTS can be used if no schema change would have occurred.
+statement ok
+ALTER TABLE t ADD COLUMN IF NOT EXISTS b INT
+
+# Errors during validation should still occur.
+statement error duplicate column name
+ALTER TABLE t ADD COLUMN b INT
+
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE t (
+   a INT8 NOT NULL,
+   b INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (a ASC),
+   INDEX t_b_idx (b ASC),
+   FAMILY fam_0_a_b (a, b)
+)
+
+subtest indexes
+
+# Ensure the table exists for the subtest.
+statement ok
+CREATE TABLE IF NOT EXISTS t (a INT PRIMARY KEY, b INT, INDEX (b), FAMILY (a, b))
+
+statement error schema change cannot be initiated in this version until the version upgrade is finalized
+CREATE INDEX idx ON t (b)
+
+statement error schema change cannot be initiated in this version until the version upgrade is finalized
+DROP INDEX t@t_b_idx
+
+# IF NOT EXISTS can be used if no schema change would have occurred.
+statement ok
+CREATE INDEX IF NOT EXISTS t_b_idx ON t (b)
+
+# Errors during validation should still occur.
+statement error duplicate index name
+CREATE INDEX t_b_idx ON t (b)
+
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE t (
+   a INT8 NOT NULL,
+   b INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (a ASC),
+   INDEX t_b_idx (b ASC),
+   FAMILY fam_0_a_b (a, b)
+)
+
+subtest fks
+
+# Ensure the table exists for the subtest.
+statement ok
+CREATE TABLE IF NOT EXISTS t (a INT PRIMARY KEY, b INT, INDEX (b), FAMILY (a, b))
+
+statement ok
+CREATE TABLE t2 (z INT PRIMARY KEY)
+
+statement error schema change cannot be initiated in this version until the version upgrade is finalized
+ALTER TABLE t ADD FOREIGN KEY (a) REFERENCES t2
+
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE t (
+   a INT8 NOT NULL,
+   b INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (a ASC),
+   INDEX t_b_idx (b ASC),
+   FAMILY fam_0_a_b (a, b)
+)
+
+subtest create_and_drop_database
+
+statement ok
+CREATE DATABASE empty_db
+
+statement error schema change cannot be initiated in this version until the version upgrade is finalized
+DROP DATABASE empty_db
+
+statement ok
+CREATE DATABASE db
+
+statement ok
+CREATE TABLE db.t (a INT)
+
+statement error schema change cannot be initiated in this version until the version upgrade is finalized
+DROP DATABASE db
+
+query T
+SHOW TABLES FROM db
+----
+t
+
+subtest non_backfill_schema_changes
+
+# Ensure the table exists for the subtest.
+statement ok
+CREATE TABLE IF NOT EXISTS t (a INT PRIMARY KEY, b INT, INDEX (b), FAMILY (a, b))
+
+statement error schema change cannot be initiated in this version until the version upgrade is finalized
+ALTER TABLE t RENAME COLUMN b TO c
+
+statement error schema change cannot be initiated in this version until the version upgrade is finalized
+ALTER TABLE t RENAME TO s
