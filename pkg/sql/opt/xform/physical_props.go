@@ -178,13 +178,17 @@ func BuildChildPhysicalProps(
 // twice as high as needed) tend to occur when distinctCount is very close to
 // neededRows.
 func distinctOnLimitHint(distinctCount, neededRows float64) float64 {
-	if neededRows >= distinctCount {
+	// The harmonic function below is not intended for values under 1 (for one,
+	// it's not monotonic until 0.5); make sure we never return negative results.
+	if neededRows >= distinctCount-1.0 {
 		return 0
 	}
 
 	// Return an approximation of the nth harmonic number.
 	H := func(n float64) float64 {
-		const gamma = 0.5772156649 // Euler–Mascheroni constant
+		// Euler–Mascheroni constant; this is included for clarity but is canceled
+		// out in our formula below.
+		const gamma = 0.5772156649
 		return math.Log(n) + gamma + 1/(2*n)
 	}
 
