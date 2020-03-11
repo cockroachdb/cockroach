@@ -312,6 +312,13 @@ func (meta *MVCCMetadata) FormatW(buf io.Writer, expand bool) {
 	}
 }
 
+func (meta *MVCCMetadataSubsetForMergeSerialization) String() string {
+	var m MVCCMetadata
+	m.RawBytes = meta.RawBytes
+	m.MergeTimestamp = meta.MergeTimestamp
+	return m.String()
+}
+
 // SafeMessage implements the SafeMessager interface.
 //
 // This method should be kept largely synchronized with String(), except that it
