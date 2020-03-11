@@ -1223,6 +1223,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 func (ex *connExecutor) execStmtInAbortedState(
 	ctx context.Context, stmt Statement, res RestrictedCommandResult,
 ) (fsm.Event, fsm.EventPayload) {
+	ex.incrementStmtCounter(stmt)
 	_, inRestartWait := ex.machine.CurState().(stateRestartWait)
 
 	// TODO(andrei/cuongdo): Figure out what statements to count here.
