@@ -220,15 +220,32 @@ func (s *SpanSet) CheckAllowedAt(
 			return true
 		}
 
-		switch access {
+		switch declAccess {
 		case SpanReadOnly:
-			// Read spans acquired at a specific timestamp only allow reads
-			// at that timestamp and below. Non-MVCC access is not allowed.
-			return !timestamp.IsEmpty() && timestamp.LessEq(declTimestamp)
+			switch access {
+			case SpanReadOnly:
+				// Read spans acquired at a specific timestamp only allow reads
+				// at that timestamp and below. Non-MVCC access is not allowed.
+				return !timestamp.IsEmpty() && timestamp.LessEq(declTimestamp)
+			case SpanReadWrite:
+				// NB: should not get here, see checkAllowed.
+				panic("unexpected SpanReadWrite access")
+			default:
+				panic("unexpected span access")
+			}
 		case SpanReadWrite:
-			// Writes under a write span with an associated timestamp at that
-			// specific timestamp.
-			return timestamp.Equal(declTimestamp)
+			switch access {
+			case SpanReadOnly:
+				// Write spans acquired at a specific timestamp allow reads at
+				// any timestamp. Non-MVCC access is not allowed.
+				return !timestamp.IsEmpty()
+			case SpanReadWrite:
+				// Write spans acquired at a specific timestamp allow writes at
+				// that timestamp of above. Non-MVCC access is not allowed.
+				return !timestamp.IsEmpty() && declTimestamp.LessEq(timestamp)
+			default:
+				panic("unexpected span access")
+			}
 		default:
 			panic("unexpected span access")
 		}
