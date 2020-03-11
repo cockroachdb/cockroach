@@ -212,10 +212,6 @@ func (e errTableVersionMismatch) Error() string {
 	return fmt.Sprintf("table version mismatch: %d, expected: %d", e.version, e.expected)
 }
 
-func (sc *SchemaChanger) canClearRangeForDrop(index *sqlbase.IndexDescriptor) bool {
-	return !index.IsInterleaved()
-}
-
 // DropTableDesc removes a descriptor from the KV database.
 func (sc *SchemaChanger) DropTableDesc(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, traceKV bool,
@@ -272,7 +268,7 @@ func (sc *SchemaChanger) truncateTable(ctx context.Context, table *sqlbase.Table
 	// If DropTime isn't set, assume this drop request is from a version
 	// 1.1 server and invoke legacy code that uses DeleteRange and range GC.
 	if table.DropTime == 0 {
-		return truncateTableInChunks(ctx, table, sc.db, false /* traceKV */)
+		return ClearTableDataInChunks(ctx, table, sc.db, false /* traceKV */)
 	}
 
 	tableKey := roachpb.RKey(keys.MakeTablePrefix(uint32(table.ID)))
@@ -1083,7 +1079,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 			isRollback = mutation.Rollback
 			if indexDesc := mutation.GetIndex(); mutation.Direction == sqlbase.DescriptorMutation_DROP &&
 				indexDesc != nil {
-				if sc.canClearRangeForDrop(indexDesc) {
+				if canClearRangeForDrop(indexDesc) {
 					// We continue adding dropped indexes to GCMutations because that's
 					// how we keep track of dropped index names (for, e.g., zone config
 					// lookups), even though in the absence of a GC job there's nothing to

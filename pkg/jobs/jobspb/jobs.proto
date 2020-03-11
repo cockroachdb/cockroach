@@ -181,6 +181,45 @@ message DroppedTableDetails {
   Status status = 3;
 }
 
+// SchemaChangeGCDetails should resemble one of the following:
+//
+// 1. Index (non-interleaved) deletions: One or more deletions of an index on a
+// table.
+//      details.Indexes -> the indexes to GC. These indexes must be
+//      non-interleaved.
+//      details.ParentID -> the table with the indexes.
+//
+// 2. Table deletions: The deletion of a single table.
+//      details.Tables -> the tables to be deleted.
+//
+// 3. Database deletions: The deletion of a database and therefore all its tables.
+//      details.Tables -> the IDs of the tables to GC.
+//      details.ParentID -> the ID of the database to drop.
+message SchemaChangeGCDetails {
+  message DroppedIndex {
+    int64 index_id = 1 [(gogoproto.customname) = "IndexID",
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.IndexID"];
+    int64 drop_time = 2;
+  }
+
+  message DroppedID {
+    int64 id = 1 [(gogoproto.customname) = "ID",
+                 (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+    int64 drop_time = 2;
+  }
+
+  // Indexes to GC.
+  repeated DroppedIndex indexes = 1 [(gogoproto.nullable) = false];
+
+  // Entire tables to GC.
+  repeated DroppedID tables = 2 [(gogoproto.nullable) = false];
+
+  // If dropping indexes, the table ID which has those indexes. If dropping a
+  // database, the database ID.
+  int64 parent_id = 3 [(gogoproto.customname) = "ParentID",
+                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+}
+
 message SchemaChangeDetails {
   reserved 1;
   // A schema change can involve running multiple processors backfilling
@@ -202,6 +241,36 @@ message SchemaChangeDetails {
 
 message SchemaChangeProgress {
 
+}
+
+message SchemaChangeGCProgress {
+  enum Status {
+    // Waiting for the index/table to expire.
+    WAITING_FOR_GC = 0;
+    // The GC TTL has expired. This element is marked for imminent deletion
+    DELETING = 1;
+    // This element has been deleted. The job is done when all elements are in
+    // this state.
+    DELETED = 2;
+  }
+
+  message IndexProgress {
+    int64 index_id = 1 [(gogoproto.customname) = "IndexID",
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.IndexID"];
+    Status status = 2;
+  }
+
+  message TableProgress {
+    int64 id = 1 [(gogoproto.customname) = "ID",
+                 (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+    Status status = 2;
+  }
+
+  // Indexes to GC.
+  repeated IndexProgress indexes = 1 [(gogoproto.nullable) = false];
+
+  // Entire tables to GC.
+  repeated TableProgress tables = 2 [(gogoproto.nullable) = false];
 }
 
 message ChangefeedTarget {
@@ -333,6 +402,7 @@ message Payload {
     ImportDetails import = 13;
     ChangefeedDetails changefeed = 14;
     CreateStatsDetails createStats = 15;
+    SchemaChangeGCDetails schemaChangeGC = 21;
   }
 }
 
@@ -351,6 +421,7 @@ message Progress {
     ImportProgress import = 13;
     ChangefeedProgress changefeed = 14;
     CreateStatsProgress createStats = 15;
+    SchemaChangeGCProgress schemaChangeGC = 16;
   }
 }
 
@@ -366,6 +437,7 @@ enum Type {
   CHANGEFEED = 5 [(gogoproto.enumvalue_customname) = "TypeChangefeed"];
   CREATE_STATS = 6 [(gogoproto.enumvalue_customname) = "TypeCreateStats"];
   AUTO_CREATE_STATS = 7 [(gogoproto.enumvalue_customname) = "TypeAutoCreateStats"];
+  SCHEMA_CHANGE_GC = 8 [(gogoproto.enumvalue_customname) = "TypeSchemaChangeGC"];
 }
 
 message Job {
