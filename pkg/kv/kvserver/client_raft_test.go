@@ -441,6 +441,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	runFilter.Store(true)
 
 	sc := kvserver.TestStoreConfig(nil)
+	sc.Clock = nil // manual clock
 	sc.TestingKnobs.EvalKnobs.TestingEvalFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 		if runFilter.Load().(bool) {
 			if et, ok := filterArgs.Req.(*roachpb.EndTxnRequest); ok && et.Commit {
@@ -1160,6 +1161,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 	sc.TestingKnobs.DisableReplicaGCQueue = true
 	// Disable eager replica removal so we can manually remove the replica.
 	sc.TestingKnobs.DisableEagerReplicaRemoval = true
+	sc.Clock = nil // manual clock
 	mtc := &multiTestContext{
 		storeConfig: &sc,
 		// This test was written before the multiTestContext started creating many
@@ -1263,6 +1265,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 			// Disable periodic gossip tasks which can move the range 1 lease
 			// unexpectedly.
 			sc.TestingKnobs.DisablePeriodicGossips = true
+			sc.Clock = nil // manual clock
 			mtc := &multiTestContext{
 				storeConfig: &sc,
 				// This test was written before the multiTestContext started creating
@@ -1744,7 +1747,7 @@ func TestProgressWithDownNode(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			values := []int64{}
 			for _, eng := range mtc.engines {
-				val, _, err := storage.MVCCGet(context.Background(), eng, roachpb.Key("a"), mtc.clock.Now(),
+				val, _, err := storage.MVCCGet(context.Background(), eng, roachpb.Key("a"), mtc.clock().Now(),
 					storage.MVCCGetOptions{})
 				if err != nil {
 					return err
@@ -1803,6 +1806,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	// RaftElectionTimeoutTicks and rangeLeaseActiveDuration). This test expects
 	// mtc.stores[0] to hold the range lease for range 1.
 	sc.RaftElectionTimeoutTicks = 1000000
+	sc.Clock = nil // manual clock
 	mtc := &multiTestContext{
 		storeConfig: &sc,
 		// This test was written before the multiTestContext started creating many
@@ -1900,6 +1904,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	// and run it manually when we're ready.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
 	sc.TestingKnobs.DisableEagerReplicaRemoval = true
+	sc.Clock = nil // manual clock
 	mtc := &multiTestContext{
 		storeConfig: &sc,
 		// This test was written before the multiTestContext started creating many
@@ -1915,7 +1920,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 		return func() error {
 			values := make([]int64, len(mtc.engines))
 			for i, eng := range mtc.engines {
-				val, _, err := storage.MVCCGet(context.Background(), eng, key, mtc.clock.Now(),
+				val, _, err := storage.MVCCGet(context.Background(), eng, key, mtc.clock().Now(),
 					storage.MVCCGetOptions{})
 				if err != nil {
 					return err
@@ -2143,7 +2148,7 @@ func TestQuotaPool(t *testing.T) {
 		value := bytes.Repeat([]byte("v"), (3*quota)/4)
 		var ba roachpb.BatchRequest
 		ba.Add(putArgs(key, value))
-		if err := ba.SetActiveTimestamp(mtc.clock.Now); err != nil {
+		if err := ba.SetActiveTimestamp(mtc.clock().Now); err != nil {
 			t.Fatal(err)
 		}
 		if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
@@ -2164,7 +2169,7 @@ func TestQuotaPool(t *testing.T) {
 		go func() {
 			var ba roachpb.BatchRequest
 			ba.Add(putArgs(key, value))
-			if err := ba.SetActiveTimestamp(mtc.clock.Now); err != nil {
+			if err := ba.SetActiveTimestamp(mtc.clock().Now); err != nil {
 				ch <- roachpb.NewError(err)
 				return
 			}
@@ -2202,6 +2207,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	const rangeID = 1
 
 	sc := kvserver.TestStoreConfig(nil)
+	sc.Clock = nil // manual clock
 	// Suppress timeout-based elections to avoid leadership changes in ways
 	// this test doesn't expect.
 	sc.RaftElectionTimeoutTicks = 100000
@@ -2257,7 +2263,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	value := []byte("value")
 	var ba roachpb.BatchRequest
 	ba.Add(putArgs(key, value))
-	if err := ba.SetActiveTimestamp(mtc.clock.Now); err != nil {
+	if err := ba.SetActiveTimestamp(mtc.clock().Now); err != nil {
 		t.Fatal(err)
 	}
 	if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
@@ -2609,6 +2615,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.Clock = nil // manual clock
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
 	}
@@ -3099,6 +3106,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// Newly-started stores (including the "rogue" one) should not GC
 	// their replicas. We'll turn this back on when needed.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
+	sc.Clock = nil // manual clock
 	mtc := &multiTestContext{
 		storeConfig: &sc,
 		// This test was written before the multiTestContext started creating many
@@ -3678,6 +3686,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	// and remove a replica in the middle of the test. Disable the
 	// replication queue; we'll control replication manually.
 	sc.TestingKnobs.DisableReplicateQueue = true
+	sc.Clock = nil // manual clock
 	mtc := &multiTestContext{
 		storeConfig: &sc,
 		// This test was written before the multiTestContext started creating many
@@ -4357,7 +4366,6 @@ func TestTracingDoesNotRaceWithCancelation(t *testing.T) {
 	sc.TestingKnobs.DisableMergeQueue = true
 	mtc := &multiTestContext{
 		storeConfig: &sc,
-		clock:       hlc.NewClock(hlc.UnixNano, time.Millisecond),
 	}
 	mtc.Start(t, 3)
 	defer mtc.Stop()
@@ -4428,7 +4436,6 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 		t.Skip("disabled on teeing engine")
 	}
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
@@ -4460,7 +4467,6 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	sc := kvserver.TestStoreConfig(nil)
 	mtc := &multiTestContext{
 		storeConfig:     &sc,
-		clock:           clock,
 		rpcTestingKnobs: knobs,
 	}
 
