@@ -3227,10 +3227,11 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 	}
 
 	core := execinfrapb.ProcessorCoreUnion{CSVWriter: &execinfrapb.CSVWriterSpec{
-		Destination: n.fileName,
-		NamePattern: exportFilePatternDefault,
-		Options:     n.csvOpts,
-		ChunkRows:   int64(n.chunkSize),
+		Destination:      n.fileName,
+		NamePattern:      exportFilePatternDefault,
+		Options:          n.csvOpts,
+		ChunkRows:        int64(n.chunkSize),
+		CompressionCodec: n.fileCompression,
 	}}
 
 	resTypes := make([]types.T, len(sqlbase.ExportColumns))
