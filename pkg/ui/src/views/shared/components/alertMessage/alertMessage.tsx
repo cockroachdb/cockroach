@@ -63,7 +63,7 @@ export class AlertMessage extends React.Component<AlertMessageProps> {
   componentDidMount() {
     const { autoClose, dismiss } = this.props;
     if (autoClose) {
-      this.timeoutHandler = setTimeout(dismiss, 6000);
+      this.timeoutHandler = window.setTimeout(dismiss, 6000);
     }
   }
 
