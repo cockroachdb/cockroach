@@ -213,11 +213,11 @@ func (p *sortedDistinct_TYPEOp) Init() {
 	p.input.Init()
 }
 
-func (p *sortedDistinct_TYPEOp) reset() {
+func (p *sortedDistinct_TYPEOp) reset(ctx context.Context) {
 	p.foundFirstRow = false
 	p.lastValNull = false
 	if resetter, ok := p.input.(resetter); ok {
-		resetter.reset()
+		resetter.reset(ctx)
 	}
 }
 

@@ -34,6 +34,11 @@ var (
 	// and a memory account bound to it for use in tests.
 	testMemMonitor *mon.BytesMonitor
 	testMemAcc     *mon.BoundAccount
+
+	// testDiskMonitor and testDiskmAcc are a test monitor with an unlimited budget
+	// and a disk account bound to it for use in tests.
+	testDiskMonitor *mon.BytesMonitor
+	testDiskAcc     *mon.BoundAccount
 )
 
 func TestMain(m *testing.M) {
@@ -46,6 +51,13 @@ func TestMain(m *testing.M) {
 		testMemAcc = &memAcc
 		testAllocator = NewAllocator(ctx, testMemAcc)
 		defer testMemAcc.Close(ctx)
+
+		testDiskMonitor = execinfra.NewTestDiskMonitor(ctx, cluster.MakeTestingClusterSettings())
+		defer testDiskMonitor.Stop(ctx)
+		diskAcc := testDiskMonitor.MakeBoundAccount()
+		testDiskAcc = &diskAcc
+		defer testDiskAcc.Close(ctx)
+
 		// Pick a random batch size in [coldata.MinBatchSize, coldata.MaxBatchSize]
 		// range. The randomization can be disabled using COCKROACH_RANDOMIZE_BATCH_SIZE=false.
 		randomBatchSize := generateBatchSize()

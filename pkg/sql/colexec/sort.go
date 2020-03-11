@@ -182,9 +182,9 @@ func (p *allSpooler) getWindowedBatch(startIdx, endIdx int) coldata.Batch {
 	return p.windowedBatch
 }
 
-func (p *allSpooler) reset() {
+func (p *allSpooler) reset(ctx context.Context) {
 	if r, ok := p.input.(resetter); ok {
-		r.reset()
+		r.reset(ctx)
 	}
 	p.spooled = false
 	p.bufferedTuples.SetLength(0)
@@ -411,9 +411,9 @@ func (p *sortOp) resetOutput() {
 	}
 }
 
-func (p *sortOp) reset() {
+func (p *sortOp) reset(ctx context.Context) {
 	if r, ok := p.input.(resetter); ok {
-		r.reset()
+		r.reset(ctx)
 	}
 	p.emitted = 0
 	p.exported = 0

@@ -13,7 +13,6 @@ package colexec
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -233,28 +232,28 @@ func (d *diskSpillerBase) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (d *diskSpillerBase) reset() {
+func (d *diskSpillerBase) reset(ctx context.Context) {
 	for _, input := range d.inputs {
 		if r, ok := input.(resetter); ok {
-			r.reset()
+			r.reset(ctx)
 		}
 	}
 	if d.inMemoryOpInitStatus == OperatorInitialized {
 		if r, ok := d.inMemoryOp.(resetter); ok {
-			r.reset()
+			r.reset(ctx)
 		}
 	}
 	if d.distBackedOpInitStatus == OperatorInitialized {
 		if r, ok := d.diskBackedOp.(resetter); ok {
-			r.reset()
+			r.reset(ctx)
 		}
 	}
 	d.spilled = false
 }
 
-func (d *diskSpillerBase) Close() error {
-	if c, ok := d.diskBackedOp.(io.Closer); ok {
-		return c.Close()
+func (d *diskSpillerBase) Close(ctx context.Context) error {
+	if c, ok := d.diskBackedOp.(closer); ok {
+		return c.Close(ctx)
 	}
 	return nil
 }
@@ -335,12 +334,12 @@ func (b *bufferExportingOperator) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (b *bufferExportingOperator) reset() {
+func (b *bufferExportingOperator) reset(ctx context.Context) {
 	if r, ok := b.firstSource.(resetter); ok {
-		r.reset()
+		r.reset(ctx)
 	}
 	if r, ok := b.secondSource.(resetter); ok {
-		r.reset()
+		r.reset(ctx)
 	}
 	b.firstSourceDone = false
 }

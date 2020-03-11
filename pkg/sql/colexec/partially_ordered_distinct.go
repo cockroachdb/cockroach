@@ -108,7 +108,7 @@ func (p *partiallyOrderedDistinct) Next(ctx context.Context) coldata.Batch {
 				return coldata.ZeroBatch
 			}
 			// p.distinct will reset p.input.
-			p.distinct.reset()
+			p.distinct.reset(ctx)
 		} else {
 			return batch
 		}
@@ -224,7 +224,7 @@ func (c *chunkerOperator) done() bool {
 	return c.input.done()
 }
 
-func (c *chunkerOperator) reset() {
+func (c *chunkerOperator) reset(_ context.Context) {
 	c.currentChunkFinished = false
 	if c.newChunksCol != nil {
 		if c.outputTupleStartIdx == c.numTuplesInChunks {

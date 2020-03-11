@@ -418,9 +418,9 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 
 // reset resets the orderedAggregator for another run. Primarily used for
 // benchmarks.
-func (a *orderedAggregator) reset() {
+func (a *orderedAggregator) reset(ctx context.Context) {
 	if resetter, ok := a.input.(resetter); ok {
-		resetter.reset()
+		resetter.reset(ctx)
 	}
 	a.done = false
 	a.seenNonEmptyBatch = false
