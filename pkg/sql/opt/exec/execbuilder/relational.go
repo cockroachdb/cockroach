@@ -1796,6 +1796,9 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		item := &w.Windows[i]
 		fn := b.extractWindowFunction(item.Function)
 		name, overload := memo.FindWindowOverload(fn)
+		if !b.disableTelemetry {
+			telemetry.Inc(sqltelemetry.WindowFunctionCounter(name))
+		}
 		props, _ := builtins.GetBuiltinProperties(name)
 
 		args := make([]tree.TypedExpr, fn.ChildCount())
