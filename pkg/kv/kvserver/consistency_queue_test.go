@@ -44,6 +44,7 @@ import (
 func TestConsistencyQueueRequiresLive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := kvserver.TestStoreConfig(nil)
+	sc.Clock = nil // manual clock
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
@@ -55,7 +56,7 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 
 	// Verify that queueing is immediately possible.
 	if shouldQ, priority := mtc.stores[0].ConsistencyQueueShouldQueue(
-		context.TODO(), mtc.clock.Now(), repl, config.NewSystemConfig(sc.DefaultZoneConfig)); !shouldQ {
+		context.TODO(), mtc.clock().Now(), repl, config.NewSystemConfig(sc.DefaultZoneConfig)); !shouldQ {
 		t.Fatalf("expected shouldQ true; got %t, %f", shouldQ, priority)
 	}
 
@@ -64,7 +65,7 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 	mtc.advanceClock(context.TODO())
 
 	if shouldQ, priority := mtc.stores[0].ConsistencyQueueShouldQueue(
-		context.TODO(), mtc.clock.Now(), repl, config.NewSystemConfig(sc.DefaultZoneConfig)); shouldQ {
+		context.TODO(), mtc.clock().Now(), repl, config.NewSystemConfig(sc.DefaultZoneConfig)); shouldQ {
 		t.Fatalf("expected shouldQ false; got %t, %f", shouldQ, priority)
 	}
 }
@@ -176,6 +177,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	sc := kvserver.TestStoreConfig(nil)
+	sc.Clock = nil // manual clock
 	mtc := &multiTestContext{
 		storeConfig: &sc,
 		// This test was written before the multiTestContext started creating many

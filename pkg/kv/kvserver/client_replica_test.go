@@ -126,7 +126,8 @@ func TestRejectFutureCommand(t *testing.T) {
 
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, 100*time.Millisecond)
-	mtc := &multiTestContext{clock: clock}
+	sc := kvserver.TestStoreConfig(clock)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 1)
 
@@ -525,6 +526,7 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 	}
 
 	cfg := kvserver.TestStoreConfig(nil)
+	cfg.Clock = nil // manual clock
 	// Ensure the node liveness duration isn't too short. By default it is 900ms
 	// for TestStoreConfig().
 	cfg.RangeLeaseRaftElectionTimeoutMultiplier =
@@ -912,6 +914,7 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 	cfg := kvserver.TestStoreConfig(nil)
 	cfg.RangeLeaseRaftElectionTimeoutMultiplier =
 		float64((9 * time.Second) / cfg.RaftElectionTimeout())
+	cfg.Clock = nil // manual clock
 	mtc := &multiTestContext{}
 	mtc.storeConfig = &cfg
 	keyA := roachpb.Key("a")
@@ -995,6 +998,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 			}
 			return nil
 		}
+	sc.Clock = nil // manual clock
 	mtc := &multiTestContext{
 		storeConfig: &sc,
 		// This test was written before the multiTestContext started creating many
@@ -1091,6 +1095,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 	ctx := context.Background()
 
 	sc := kvserver.TestStoreConfig(nil)
+	sc.Clock = nil // manual clock
 	var leaseAcquisitionTrap atomic.Value
 	// Disable the split queue so that no ranges are split. This makes it easy
 	// below to trap any lease request and infer that it refers to the range we're
@@ -1545,7 +1550,7 @@ func TestRangeInfo(t *testing.T) {
 			EndKey: roachpb.KeyMax,
 		},
 	}
-	txn := roachpb.MakeTransaction("test", roachpb.KeyMin, 1, mtc.clock.Now(), 0)
+	txn := roachpb.MakeTransaction("test", roachpb.KeyMin, 1, mtc.clock().Now(), 0)
 	h.Txn = &txn
 	reply, pErr = kv.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &scanArgs)
 	if pErr != nil {
@@ -1947,7 +1952,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	// mark of the new leaseholder's timestamp cache. Amusingly, if the bug
 	// we're regression testing against here still existed, we would not have
 	// to do this.
-	hb, hbH := heartbeatArgs(txnOld.TestingCloneTxn(), mtc.clock.Now())
+	hb, hbH := heartbeatArgs(txnOld.TestingCloneTxn(), mtc.clock().Now())
 	if _, pErr := kv.SendWrappedWith(ctx, mtc.stores[0].TestSender(), hbH, hb); pErr != nil {
 		t.Fatal(pErr)
 	}
