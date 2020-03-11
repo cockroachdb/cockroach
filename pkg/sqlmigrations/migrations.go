@@ -233,30 +233,9 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: updateSystemLocationData,
 	},
 	{
-		// Introduced in v19.2.
+		// Introduced in v19.2, baked into v20.1.
 		name:                "change reports fields from timestamp to timestamptz",
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.Version19_2),
-		workFn: func(ctx context.Context, r runner) error {
-			// Note that these particular schema changes are idempotent.
-			if _, err := r.sqlExecutor.ExecEx(ctx, "update-reports-meta-generated", nil, /* txn */
-				sqlbase.InternalExecutorSessionDataOverride{
-					User: security.NodeUser,
-				},
-				`ALTER TABLE system.reports_meta ALTER generated TYPE TIMESTAMP WITH TIME ZONE`,
-			); err != nil {
-				return err
-			}
-			if _, err := r.sqlExecutor.ExecEx(ctx, "update-reports-meta-generated", nil, /* txn */
-				sqlbase.InternalExecutorSessionDataOverride{
-					User: security.NodeUser,
-				},
-				"ALTER TABLE system.replication_constraint_stats ALTER violation_start "+
-					"TYPE TIMESTAMP WITH TIME ZONE",
-			); err != nil {
-				return err
-			}
-			return nil
-		},
 	},
 	{
 		// Introduced in v20.1.
