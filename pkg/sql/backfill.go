@@ -283,6 +283,10 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 			return err
 		}
 	}
+
+	log.Infof(ctx, "Completed backfill for %q, v=%d, m=%d",
+		tableDesc.Name, tableDesc.Version, sc.mutationID)
+
 	return nil
 }
 
