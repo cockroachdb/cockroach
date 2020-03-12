@@ -1250,11 +1250,6 @@ func (g *Gossip) Start(advertAddr net.Addr, resolvers []resolver.Resolver) {
 	g.manage()                 // manage gossip clients
 }
 
-// Stopper returns the stopper for this gossip instance.
-func (g *Gossip) Stopper() *stop.Stopper {
-	return g.server.stopper
-}
-
 // hasIncomingLocked returns whether the server has an incoming gossip
 // client matching the provided node ID. Mutex should be held by
 // caller.

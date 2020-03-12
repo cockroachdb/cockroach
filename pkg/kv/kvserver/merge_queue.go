@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -129,25 +128,6 @@ func (mq *mergeQueue) enabled() bool {
 	return storagebase.MergeQueueEnabled.Get(&st.SV)
 }
 
-func (mq *mergeQueue) mergesDisabledForRange(desc *roachpb.RangeDescriptor) bool {
-	_, tableID, err := keys.DecodeTablePrefix(desc.StartKey.AsRawKey())
-	if err == nil {
-		_, err = mq.gossip.GetInfo(gossip.MakeTableDisableMergesKey(uint32(tableID)))
-		if err == nil {
-			return true
-		}
-	}
-	_, tableID2, err := keys.DecodeTablePrefix(desc.EndKey.AsRawKey())
-	if err != nil {
-		return false
-	}
-	if tableID == tableID2 {
-		return false
-	}
-	_, err = mq.gossip.GetInfo(gossip.MakeTableDisableMergesKey(uint32(tableID2)))
-	return err == nil
-}
-
 func (mq *mergeQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
@@ -166,10 +146,6 @@ func (mq *mergeQueue) shouldQueue(
 		// This range would need to be split if it extended just one key further.
 		// There is thus no possible right-hand neighbor that it could be merged
 		// with.
-		return false, 0
-	}
-
-	if mq.mergesDisabledForRange(desc) {
 		return false, 0
 	}
 
@@ -223,12 +199,6 @@ func (mq *mergeQueue) process(
 		return nil
 	}
 
-	lhsDesc := lhsRepl.Desc()
-	if mq.mergesDisabledForRange(lhsDesc) {
-		log.VEventf(ctx, 2, "skipping merge: merges are temporarily disabled for this table")
-		return nil
-	}
-
 	lhsStats := lhsRepl.GetMVCCStats()
 	minBytes := lhsRepl.GetMinBytes()
 	if lhsStats.Total() >= minBytes {
@@ -237,6 +207,7 @@ func (mq *mergeQueue) process(
 		return nil
 	}
 
+	lhsDesc := lhsRepl.Desc()
 	lhsQPS := lhsRepl.GetSplitQPS()
 	rhsDesc, rhsStats, rhsQPS, err := mq.requestRangeStats(ctx, lhsDesc.EndKey.AsRawKey())
 	if err != nil {

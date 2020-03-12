@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -45,13 +44,6 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 
 	config.TestingSetZoneConfig(keys.MaxReservedDescID+1, *zonepb.NewZoneConfig())
 	config.TestingSetZoneConfig(keys.MaxReservedDescID+2, *zonepb.NewZoneConfig())
-
-	// Disable merges for table ID 4.
-	if err := testCtx.gossip.AddInfo(
-		gossip.MakeTableDisableMergesKey(keys.MaxReservedDescID+4),
-		nil /* value */, 0 /* ttl */); err != nil {
-		t.Fatal(err)
-	}
 
 	type testCase struct {
 		startKey, endKey []byte
@@ -150,24 +142,6 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 			bytes:       768,
 			expShouldQ:  true,
 			expPriority: 0.25,
-		},
-
-		// Merges disabled for a table via gossip. Merges are disabled on table
-		// 4. We test it both for the start key and the end key.
-		{
-			startKey: tableKey(3),
-			endKey:   tableKey(4),
-			minBytes: 1,
-		},
-		{
-			startKey: tableKey(4),
-			endKey:   append(tableKey(4), 'z'),
-			minBytes: 1,
-		},
-		{
-			startKey: tableKey(4),
-			endKey:   tableKey(5),
-			minBytes: 1,
 		},
 	}
 
