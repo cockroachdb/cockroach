@@ -70,10 +70,10 @@ type dropRoleRun struct {
 func (n *DropRoleNode) startExec(params runParams) error {
 	var opName string
 	if n.isRole {
-		sqltelemetry.IncIAMDrop(sqltelemetry.Role)
+		sqltelemetry.IncIAMDropCounter(sqltelemetry.Role)
 		opName = "drop-role"
 	} else {
-		sqltelemetry.IncIAMDrop(sqltelemetry.User)
+		sqltelemetry.IncIAMDropCounter(sqltelemetry.User)
 		opName = "drop-user"
 	}
 
