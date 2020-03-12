@@ -178,10 +178,6 @@ type mergeJoinInput struct {
 	// merge join.
 	eqCols []uint32
 
-	// outCols specify the indices of the columns that should be outputted by the
-	// merge joiner.
-	outCols []uint32
-
 	// directions specifies the ordering direction of each column. Note that each
 	// direction corresponds to an equality column at the same location, i.e. the
 	// direction of eqCols[x] is encoded at directions[x], or
@@ -235,23 +231,9 @@ func newMergeJoinOp(
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 ) (resettableOperator, error) {
-	// TODO(yuzefovich): get rid off "outCols" entirely and plumb the assumption
-	// of outputting all columns into the merge joiner itself.
-	leftOutCols := make([]uint32, len(leftTypes))
-	for i := range leftOutCols {
-		leftOutCols[i] = uint32(i)
-	}
-	rightOutCols := make([]uint32, len(rightTypes))
-	for i := range rightOutCols {
-		rightOutCols[i] = uint32(i)
-	}
-	if joinType == sqlbase.JoinType_LEFT_SEMI || joinType == sqlbase.JoinType_LEFT_ANTI {
-		rightOutCols = rightOutCols[:0]
-	}
 	base, err := newMergeJoinBase(
-		unlimitedAllocator, memoryLimit, diskQueueCfg, fdSemaphore,
-		left, right, leftOutCols, rightOutCols,
-		leftTypes, rightTypes, leftOrdering, rightOrdering,
+		unlimitedAllocator, memoryLimit, diskQueueCfg, fdSemaphore, joinType,
+		left, right, leftTypes, rightTypes, leftOrdering, rightOrdering,
 	)
 	switch joinType {
 	case sqlbase.JoinType_INNER:
@@ -305,10 +287,9 @@ func newMergeJoinBase(
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
+	joinType sqlbase.JoinType,
 	left Operator,
 	right Operator,
-	leftOutCols []uint32,
-	rightOutCols []uint32,
 	leftTypes []coltypes.T,
 	rightTypes []coltypes.T,
 	leftOrdering []execinfrapb.Ordering_Column,
@@ -336,16 +317,15 @@ func newMergeJoinBase(
 		memoryLimit:        memoryLimit,
 		diskQueueCfg:       diskQueueCfg,
 		fdSemaphore:        fdSemaphore,
+		joinType:           joinType,
 		left: mergeJoinInput{
 			source:      left,
-			outCols:     leftOutCols,
 			sourceTypes: leftTypes,
 			eqCols:      lEqCols,
 			directions:  lDirections,
 		},
 		right: mergeJoinInput{
 			source:      right,
-			outCols:     rightOutCols,
 			sourceTypes: rightTypes,
 			eqCols:      rEqCols,
 			directions:  rDirections,
@@ -376,6 +356,7 @@ type mergeJoinBase struct {
 	memoryLimit        int64
 	diskQueueCfg       colcontainer.DiskQueueCfg
 	fdSemaphore        semaphore.Semaphore
+	joinType           sqlbase.JoinType
 	left               mergeJoinInput
 	right              mergeJoinInput
 
@@ -426,17 +407,6 @@ func (o *mergeJoinBase) reset() {
 	o.resetBuilderCrossProductState()
 }
 
-func (o *mergeJoinBase) getOutColTypes() []coltypes.T {
-	outColTypes := make([]coltypes.T, 0, len(o.left.outCols)+len(o.right.outCols))
-	for _, leftOutCol := range o.left.outCols {
-		outColTypes = append(outColTypes, o.left.sourceTypes[leftOutCol])
-	}
-	for _, rightOutCol := range o.right.outCols {
-		outColTypes = append(outColTypes, o.right.sourceTypes[rightOutCol])
-	}
-	return outColTypes
-}
-
 func (o *mergeJoinBase) InternalMemoryUsage() int {
 	const sizeOfGroup = int(unsafe.Sizeof(group{}))
 	return 8 * coldata.BatchSize() * sizeOfGroup // o.groups
@@ -447,7 +417,11 @@ func (o *mergeJoinBase) Init() {
 }
 
 func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
-	o.output = o.unlimitedAllocator.NewMemBatchWithSize(o.getOutColTypes(), outBatchSize)
+	outputTypes := append([]coltypes.T{}, o.left.sourceTypes...)
+	if o.joinType != sqlbase.LeftSemiJoin && o.joinType != sqlbase.LeftAntiJoin {
+		outputTypes = append(outputTypes, o.right.sourceTypes...)
+	}
+	o.output = o.unlimitedAllocator.NewMemBatchWithSize(outputTypes, outBatchSize)
 	o.left.source.Init()
 	o.right.source.Init()
 	o.outputBatchSize = outBatchSize

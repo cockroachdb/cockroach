@@ -28,16 +28,11 @@ func NewUnorderedDistinct(
 	colTypes []coltypes.T,
 	numHashBuckets uint64,
 ) Operator {
-	outCols := make([]uint32, len(colTypes))
-	for i := range outCols {
-		outCols[i] = uint32(i)
-	}
 	ht := newHashTable(
 		allocator,
 		numHashBuckets,
 		colTypes,
 		distinctCols,
-		outCols,
 		true, /* allowNullEquality */
 		hashTableDistinctMode,
 	)
@@ -46,7 +41,7 @@ func NewUnorderedDistinct(
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
 		ht:           ht,
-		output:       allocator.NewMemBatch(ht.outTypes),
+		output:       allocator.NewMemBatch(colTypes),
 	}
 }
 
@@ -99,13 +94,13 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	nSelected = batchEnd - op.outputBatchStart
 
 	op.allocator.PerformOperation(op.output.ColVecs(), func() {
-		for i, colIdx := range op.ht.outCols {
-			toCol := op.output.ColVec(i)
-			fromCol := op.ht.vals.ColVec(int(colIdx))
+		for colIdx, typ := range op.ht.valTypes {
+			toCol := op.output.ColVec(colIdx)
+			fromCol := op.ht.vals.ColVec(colIdx)
 			toCol.Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
-						ColType:     op.ht.valTypes[op.ht.outCols[i]],
+						ColType:     typ,
 						Src:         fromCol,
 						SrcStartIdx: op.outputBatchStart,
 						SrcEndIdx:   batchEnd,
