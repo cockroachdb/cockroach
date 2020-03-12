@@ -165,7 +165,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	// Canceling a query cancels its transaction's context so we take a reference
 	// to the cancelation function here.
-	unregisterFn := ex.addActiveQuery(stmt.queryID, stmt.AST, ex.state.cancel)
+	unregisterFn := ex.addActiveQuery(stmt.queryID, stmt, ex.state.cancel)
 
 	// queryDone is a cleanup function dealing with unregistering a query.
 	// It also deals with overwriting res.Error to a more user-friendly message in
@@ -1180,13 +1180,13 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 // longer executing. NOTE(andrei): As of Feb 2018, "executing" does not imply
 // that the results have been delivered to the client.
 func (ex *connExecutor) addActiveQuery(
-	queryID ClusterWideID, stmt tree.Statement, cancelFun context.CancelFunc,
+	queryID ClusterWideID, stmt Statement, cancelFun context.CancelFunc,
 ) func() {
 
-	_, hidden := stmt.(tree.HiddenFromShowQueries)
+	_, hidden := stmt.AST.(tree.HiddenFromShowQueries)
 	qm := &queryMeta{
 		start:         ex.phaseTimes[sessionQueryReceived],
-		stmt:          stmt,
+		rawStmt:       stmt.SQL,
 		phase:         preparing,
 		isDistributed: false,
 		ctxCancel:     cancelFun,
@@ -1203,7 +1203,7 @@ func (ex *connExecutor) addActiveQuery(
 			panic(fmt.Sprintf("query %d missing from ActiveQueries", queryID))
 		}
 		delete(ex.mu.ActiveQueries, queryID)
-		ex.mu.LastActiveQuery = qm.stmt
+		ex.mu.LastActiveQuery = stmt.AST
 
 		ex.mu.Unlock()
 	}

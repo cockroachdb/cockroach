@@ -959,3 +959,22 @@ func TestLintClusterSettingNames(t *testing.T) {
 	}
 
 }
+
+// TestCancelQueriesRace can be stressed to try and reproduce a race
+// between SHOW QUERIES and currently executing statements. For
+// more details, see #28033.
+func TestCancelQueriesRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	go func() {
+		_, _ = sqlDB.Exec(`SELECT pg_sleep(1000)`)
+	}()
+	_, _ = sqlDB.Exec(`CANCEL QUERIES (
+		SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'SELECT pg_sleep%'
+	)`)
+	_, _ = sqlDB.Exec(`CANCEL QUERIES (
+		SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'SELECT pg_sleep%'
+	)`)
+}
