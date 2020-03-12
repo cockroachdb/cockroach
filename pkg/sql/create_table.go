@@ -158,7 +158,7 @@ func getTableCreateParams(
 }
 
 func (n *createTableNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeCreate("table"))
+	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("table"))
 	isTemporary := n.n.Temporary
 
 	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.ID, isTemporary, n.n.Table.Table())

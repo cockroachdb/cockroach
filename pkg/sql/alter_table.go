@@ -120,7 +120,7 @@ func isAlterCmdValidWithoutPrimaryKey(cmd tree.AlterTableCmd) bool {
 func (n *alterTableNode) ReadingOwnWrites() {}
 
 func (n *alterTableNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeAlter("table"))
+	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounter("table"))
 
 	// Commands can either change the descriptor directly (for
 	// alterations that don't require a backfill) or add a mutation to
@@ -819,6 +819,8 @@ func (p *planner) setAuditMode(
 	if err := p.RequireAdminRole(ctx, "change auditing settings on a table"); err != nil {
 		return false, err
 	}
+
+	telemetry.Inc(sqltelemetry.SchemaSetAuditModeCounter(auditMode.TelemetryName()))
 
 	return desc.SetAuditMode(auditMode)
 }
