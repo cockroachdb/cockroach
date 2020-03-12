@@ -959,3 +959,18 @@ func TestLintClusterSettingNames(t *testing.T) {
 	}
 
 }
+
+func TestCancelQueriesRace(t *testing.T) {
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	go func() {
+		_, _ = sqlDB.Exec(`SELECT pg_sleep(1000)`)
+	}()
+	sqlDB.Exec(`CANCEL QUERIES (
+		SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'SELECT pg_sleep%'
+	)`)
+	sqlDB.Exec(`CANCEL QUERIES (
+		SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'SELECT pg_sleep%'
+	)`)
+}
