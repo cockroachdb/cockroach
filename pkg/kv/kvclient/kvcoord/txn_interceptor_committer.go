@@ -218,7 +218,7 @@ func (tc *txnCommitter) SendLocked(
 	// we transition to an explicitly committed transaction as soon as possible.
 	// This also has the side-effect of kicking off intent resolution.
 	mergedLockSpans, _ := mergeIntoSpans(et.LockSpans, et.InFlightWrites)
-	tc.makeTxnCommitExplicitAsync(ctx, br.Txn, mergedLockSpans, et.CanCommitAtHigherTimestamp)
+	tc.makeTxnCommitExplicitAsync(ctx, br.Txn, mergedLockSpans, ba.CanForwardReadTimestamp)
 
 	// Switch the status on the batch response's transaction to COMMITTED. No
 	// interceptor above this one in the stack should ever need to deal with
@@ -389,7 +389,7 @@ func needTxnRetryAfterStaging(br *roachpb.BatchResponse) *roachpb.Error {
 // written) to explicitly committed (COMMITTED status). It does so by sending a
 // second EndTxnRequest, this time with no InFlightWrites attached.
 func (tc *txnCommitter) makeTxnCommitExplicitAsync(
-	ctx context.Context, txn *roachpb.Transaction, lockSpans []roachpb.Span, noRefreshSpans bool,
+	ctx context.Context, txn *roachpb.Transaction, lockSpans []roachpb.Span, canFwdRTS bool,
 ) {
 	// TODO(nvanbenschoten): consider adding tracing for this request.
 	// TODO(nvanbenschoten): add a timeout to this request.
@@ -401,7 +401,7 @@ func (tc *txnCommitter) makeTxnCommitExplicitAsync(
 		context.Background(), "txnCommitter: making txn commit explicit", func(ctx context.Context) {
 			tc.mu.Lock()
 			defer tc.mu.Unlock()
-			if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, lockSpans, noRefreshSpans); err != nil {
+			if err := makeTxnCommitExplicitLocked(ctx, tc.wrapped, txn, lockSpans, canFwdRTS); err != nil {
 				log.Errorf(ctx, "making txn commit explicit failed for %s: %v", txn, err)
 			}
 		},
@@ -415,18 +415,18 @@ func makeTxnCommitExplicitLocked(
 	s lockedSender,
 	txn *roachpb.Transaction,
 	lockSpans []roachpb.Span,
-	noRefreshSpans bool,
+	canFwdRTS bool,
 ) error {
 	// Clone the txn to prevent data races.
 	txn = txn.Clone()
 
 	// Construct a new batch with just an EndTxn request.
 	ba := roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: txn}
+	ba.Header = roachpb.Header{Txn: txn, CanForwardReadTimestamp: canFwdRTS}
 	et := roachpb.EndTxnRequest{Commit: true}
 	et.Key = txn.Key
 	et.LockSpans = lockSpans
-	et.CanCommitAtHigherTimestamp = noRefreshSpans
+	et.CanCommitAtHigherTimestamp = canFwdRTS
 	ba.Add(&et)
 
 	_, pErr := s.SendLocked(ctx, ba)

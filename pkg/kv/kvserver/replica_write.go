@@ -525,7 +525,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only; a non-txn batch containing overlapping
 		// spans will always experience WriteTooOldError.
-		if success || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, deadline) {
+		if success || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, spans, deadline) {
 			break
 		}
 	}
@@ -552,74 +552,6 @@ func (r *Replica) evaluateWriteBatchWrapper(
 		}
 	}
 	return batch, br, res, pErr
-}
-
-// canDoServersideRetry looks at the error produced by evaluating ba (or the
-// WriteTooOldFlag in br.Txn if there's no error) and decides if it's possible
-// to retry the batch evaluation at a higher timestamp. Retrying is sometimes
-// possible in case of some retriable errors which ask for higher timestamps:
-// for transactional requests, retrying is possible if the transaction had not
-// performed any prior reads that need refreshing.
-//
-// deadline, if not nil, specifies the highest timestamp (exclusive) at which
-// the request can be evaluated. If ba is a transactional request, then dealine
-// cannot be specified; a transaction's deadline comes from it's EndTxn request.
-//
-// If true is returned, ba and ba.Txn will have been updated with the new
-// timestamp.
-func canDoServersideRetry(
-	ctx context.Context,
-	pErr *roachpb.Error,
-	ba *roachpb.BatchRequest,
-	br *roachpb.BatchResponse,
-	deadline *hlc.Timestamp,
-) bool {
-	if ba.Txn != nil {
-		if deadline != nil {
-			log.Fatal(ctx, "deadline passed for transactional request")
-		}
-		// Transaction requests can only be retried if there's an EndTransaction
-		// telling us that there's been no prior reads in the transaction.
-		etArg, ok := ba.GetArg(roachpb.EndTxn)
-		if !ok {
-			return false
-		}
-		et := etArg.(*roachpb.EndTxnRequest)
-		if !batcheval.CanForwardCommitTimestampWithoutRefresh(ba.Txn, et) {
-			return false
-		}
-		deadline = et.Deadline
-	}
-	var newTimestamp hlc.Timestamp
-
-	if pErr != nil {
-		switch tErr := pErr.GetDetail().(type) {
-		case *roachpb.WriteTooOldError:
-			newTimestamp = tErr.ActualTimestamp
-		case *roachpb.TransactionRetryError:
-			if ba.Txn == nil {
-				// TODO(andrei): I don't know if TransactionRetryError is possible for
-				// non-transactional batches, but some tests inject them for 1PC
-				// transactions. I'm not sure how to deal with them, so let's not retry.
-				return false
-			}
-			newTimestamp = pErr.GetTxn().WriteTimestamp
-		default:
-			// TODO(andrei): Handle other retriable errors too.
-			return false
-		}
-	} else {
-		if !br.Txn.WriteTooOld {
-			log.Fatalf(ctx, "programming error: expected the WriteTooOld flag to be set")
-		}
-		newTimestamp = br.Txn.WriteTimestamp
-	}
-
-	if deadline != nil && deadline.LessEq(newTimestamp) {
-		return false
-	}
-	bumpBatchTimestamp(ctx, ba, newTimestamp)
-	return true
 }
 
 // newBatchedEngine creates an engine.Batch. Depending on whether rangefeeds

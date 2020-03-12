@@ -177,6 +177,24 @@ func (s *SpanSet) BoundarySpan(scope SpanScope) roachpb.Span {
 	return boundary
 }
 
+// MaxProtectedTimestamp returns the maximum timestamp that is protected across
+// all MVCC spans in the SpanSet. ReadWrite spans are protected from their
+// declared timestamp forward, so they have no maximum protect timestamp.
+// However, ReadOnly are protected only up to their declared timestamp and
+// are not protected at later timestamps.
+func (s *SpanSet) MaxProtectedTimestamp() hlc.Timestamp {
+	maxTS := hlc.MaxTimestamp
+	for ss := SpanScope(0); ss < NumSpanScope; ss++ {
+		for _, cur := range s.GetSpans(SpanReadOnly, ss) {
+			curTS := cur.Timestamp
+			if !curTS.IsEmpty() {
+				maxTS.Backward(curTS)
+			}
+		}
+	}
+	return maxTS
+}
+
 // AssertAllowed calls CheckAllowed and fatals if the access is not allowed.
 // Timestamps associated with the spans in the spanset are not considered,
 // only the span boundaries are checked.
@@ -187,8 +205,9 @@ func (s *SpanSet) AssertAllowed(access SpanAccess, span roachpb.Span) {
 }
 
 // CheckAllowed returns an error if the access is not allowed over the given
-// keyspan. Timestamps associated with the spans in the spanset are not
-// considered, only the span boundaries are checked.
+// keyspan based on the collection of spans in the spanset. Timestamps
+// associated with the spans in the spanset are not considered, only the span
+// boundaries are checked.
 //
 // If the provided span contains only an (exclusive) EndKey and has a nil
 // (inclusive) Key then Key is considered to be the key previous to EndKey,
@@ -207,10 +226,11 @@ func (s *SpanSet) CheckAllowed(access SpanAccess, span roachpb.Span) error {
 }
 
 // CheckAllowedAt is like CheckAllowed, except it returns an error if the access
-// is not allowed at over the given keyspan at the given timestamp.
+// is not allowed over the given keyspan at the given timestamp.
 func (s *SpanSet) CheckAllowedAt(
 	access SpanAccess, span roachpb.Span, timestamp hlc.Timestamp,
 ) error {
+	mvcc := !timestamp.IsEmpty()
 	return s.checkAllowed(access, span, func(declAccess SpanAccess, declSpan Span) bool {
 		declTimestamp := declSpan.Timestamp
 		if declTimestamp.IsEmpty() {
@@ -220,15 +240,32 @@ func (s *SpanSet) CheckAllowedAt(
 			return true
 		}
 
-		switch access {
+		switch declAccess {
 		case SpanReadOnly:
-			// Read spans acquired at a specific timestamp only allow reads
-			// at that timestamp and below. Non-MVCC access is not allowed.
-			return !timestamp.IsEmpty() && timestamp.LessEq(declTimestamp)
+			switch access {
+			case SpanReadOnly:
+				// Read spans acquired at a specific timestamp only allow reads
+				// at that timestamp and below. Non-MVCC access is not allowed.
+				return mvcc && timestamp.LessEq(declTimestamp)
+			case SpanReadWrite:
+				// NB: should not get here, see checkAllowed.
+				panic("unexpected SpanReadWrite access")
+			default:
+				panic("unexpected span access")
+			}
 		case SpanReadWrite:
-			// Writes under a write span with an associated timestamp at that
-			// specific timestamp.
-			return timestamp.Equal(declTimestamp)
+			switch access {
+			case SpanReadOnly:
+				// Write spans acquired at a specific timestamp allow reads at
+				// any timestamp. Non-MVCC access is not allowed.
+				return mvcc
+			case SpanReadWrite:
+				// Write spans acquired at a specific timestamp allow writes at
+				// that timestamp of above. Non-MVCC access is not allowed.
+				return mvcc && declTimestamp.LessEq(timestamp)
+			default:
+				panic("unexpected span access")
+			}
 		default:
 			panic("unexpected span access")
 		}
