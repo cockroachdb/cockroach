@@ -1698,6 +1698,8 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Start garbage collecting system events.
 	s.startSystemLogsGC(ctx)
+	// Start system.eventlog sink to local logs
+	s.startEventlogSink(ctx)
 
 	// Serve UI assets.
 	//
