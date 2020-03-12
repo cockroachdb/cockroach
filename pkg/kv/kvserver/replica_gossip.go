@@ -216,7 +216,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 		ctx, "storage.Replica: acquiring lease to gossip",
 		func(ctx context.Context) {
 			// Check for or obtain the lease, if none active.
-			_, pErr = r.redirectOnOrAcquireLease(ctx)
+			_, _, pErr = r.redirectOnOrAcquireLease(ctx)
 			hasLease = pErr == nil
 			if pErr != nil {
 				switch e := pErr.GetDetail().(type) {

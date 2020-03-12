@@ -811,3 +811,10 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 	sj.registry.unregister(*sj.ID())
 	return nil
 }
+
+// Cancel will mark the job as canceled and release its resources in the
+// Registry.
+func (sj *StartableJob) Cancel(ctx context.Context) error {
+	defer sj.registry.unregister(*sj.ID())
+	return sj.registry.CancelRequested(ctx, nil, *sj.ID())
+}

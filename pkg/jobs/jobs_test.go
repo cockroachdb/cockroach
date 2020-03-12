@@ -2049,4 +2049,19 @@ func TestStartableJob(t *testing.T) {
 			require.NotEqual(t, id, *sj.ID())
 		}
 	})
+	t.Run("Cancel", func(t *testing.T) {
+		txn := db.NewTxn(ctx, "test")
+		sj, err := jr.CreateStartableJobWithTxn(ctx, rec, txn, nil)
+		require.NoError(t, err)
+		require.NoError(t, txn.Commit(ctx))
+		require.NoError(t, sj.Cancel(ctx))
+		status, err := sj.CurrentStatus(ctx)
+		require.NoError(t, err)
+		require.Equal(t, jobs.StatusCancelRequested, status)
+		for _, id := range jr.CurrentlyRunningJobs() {
+			require.NotEqual(t, id, *sj.ID())
+		}
+		_, err = sj.Start(ctx)
+		require.Regexp(t, "job with status cancel-requested cannot be marked started", err)
+	})
 }

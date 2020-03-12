@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -55,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	crdberrors "github.com/cockroachdb/errors"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -2303,6 +2305,62 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 				waitForNoRecord()
 				unblock()
 			}
+		}))
+}
+
+// This test ensures that the changefeed attempts to verify its initial protected
+// timestamp record and that when that verification fails, the job is canceled
+// and the record removed.
+func TestChangefeedProtectedTimestampsVerificationFails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer func(i time.Duration) { jobs.DefaultAdoptInterval = i }(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 10 * time.Millisecond
+
+	verifyRequestCh := make(chan *roachpb.AdminVerifyProtectedTimestampRequest, 1)
+	requestFilter := storagebase.ReplicaRequestFilter(func(
+		ctx context.Context, ba roachpb.BatchRequest,
+	) *roachpb.Error {
+		if r, ok := ba.GetArg(roachpb.AdminVerifyProtectedTimestamp); ok {
+			req := r.(*roachpb.AdminVerifyProtectedTimestampRequest)
+			verifyRequestCh <- req
+			return roachpb.NewError(errors.Errorf("failed to verify protection %v on %v", req.RecordID, ba.RangeID))
+		}
+		return nil
+	})
+	t.Run(`enterprise`, enterpriseTestWithServerArgs(
+		func(args *base.TestServerArgs) {
+			storeKnobs := &kvserver.StoreTestingKnobs{}
+			storeKnobs.TestingRequestFilter = requestFilter
+			args.Knobs.Store = storeKnobs
+		},
+		func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+			ctx := context.TODO()
+			sqlDB := sqlutils.MakeSQLRunner(db)
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+			_, err := f.Feed(`CREATE CHANGEFEED FOR foo WITH resolved`)
+			// Make sure we got the injected error.
+			require.Regexp(t, "failed to verify", err)
+			// Make sure we tried to verify the request.
+			r := <-verifyRequestCh
+			cfg := f.Server().ExecutorConfig().(sql.ExecutorConfig)
+			kvDB := cfg.DB
+			pts := cfg.ProtectedTimestampProvider
+			// Make sure that the canceled job gets moved through its OnFailOrCancel
+			// phase and removes its protected timestamp.
+			testutils.SucceedsSoon(t, func() error {
+				err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					_, err := pts.GetRecord(ctx, txn, r.RecordID)
+					return err
+				})
+				if err == nil {
+					return errors.Errorf("expected record to be removed")
+				}
+				if crdberrors.Is(err, protectedts.ErrNotExists) {
+					return nil
+				}
+				return err
+			})
 		}))
 }
 
