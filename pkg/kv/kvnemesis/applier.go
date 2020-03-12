@@ -78,7 +78,6 @@ func applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 		err := db.AdminMerge(ctx, o.Key)
 		o.Result = resultError(ctx, err)
 	case *ChangeReplicasOperation:
-		ctx = kv.ChangeReplicasCanMixAddAndRemoveContext(ctx)
 		desc := getRangeDesc(ctx, o.Key, db)
 		_, err := db.AdminChangeReplicas(ctx, o.Key, desc, o.Changes)
 		// TODO(dan): Save returned desc?

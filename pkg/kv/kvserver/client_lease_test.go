@@ -372,8 +372,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err = tc.Server(0).DB().AdminChangeReplicas(
-				kv.ChangeReplicasCanMixAddAndRemoveContext(ctx),
+			_, err = tc.Server(0).DB().AdminChangeReplicas(ctx,
 				scratchStartKey, desc, []roachpb.ReplicationChange{
 					{ChangeType: roachpb.REMOVE_REPLICA, Target: tc.Target(2)},
 					{ChangeType: roachpb.ADD_REPLICA, Target: tc.Target(3)},
