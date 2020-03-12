@@ -424,6 +424,7 @@ JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc
 PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf
 ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb
 SNAPPY_SRC_DIR   := $(C_DEPS_DIR)/snappy
+GEOS_SRC_DIR     := $(C_DEPS_DIR)/geos
 LIBEDIT_SRC_DIR  := $(C_DEPS_DIR)/libedit
 LIBROACH_SRC_DIR := $(C_DEPS_DIR)/libroach
 KRB5_SRC_DIR     := $(C_DEPS_DIR)/krb5
@@ -452,6 +453,7 @@ JEMALLOC_DIR := $(BUILD_DIR)/jemalloc$(if $(use-msan),_msan)
 PROTOBUF_DIR := $(BUILD_DIR)/protobuf$(if $(use-msan),_msan)
 ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb$(if $(use-msan),_msan)$(if $(use-stdmalloc),_stdmalloc)$(if $(ENABLE_ROCKSDB_ASSERTIONS),_assert)
 SNAPPY_DIR   := $(BUILD_DIR)/snappy$(if $(use-msan),_msan)
+GEOS_DIR     := $(BUILD_DIR)/geos$(if $(use-msan),_msan)
 LIBEDIT_DIR  := $(BUILD_DIR)/libedit$(if $(use-msan),_msan)
 LIBROACH_DIR := $(BUILD_DIR)/libroach$(if $(use-msan),_msan)$(if $(ENABLE_LIBROACH_ASSERTIONS),_assert)
 KRB5_DIR     := $(BUILD_DIR)/krb5$(if $(use-msan),_msan)
@@ -463,6 +465,7 @@ LIBJEMALLOC := $(JEMALLOC_DIR)/lib/libjemalloc.a
 LIBPROTOBUF := $(PROTOBUF_DIR)/libprotobuf.a
 LIBROCKSDB  := $(ROCKSDB_DIR)/librocksdb.a
 LIBSNAPPY   := $(SNAPPY_DIR)/libsnappy.a
+LIBGEOS     := $(GEOS_DIR)/lib/libgeos.a
 LIBEDIT     := $(LIBEDIT_DIR)/src/.libs/libedit.a
 LIBROACH    := $(LIBROACH_DIR)/libroach.a
 LIBROACHCCL := $(LIBROACH_DIR)/libroachccl.a
@@ -472,7 +475,7 @@ PROTOC 		 := $(PROTOC_DIR)/protoc
 C_LIBS_COMMON = \
 	$(if $(use-stdmalloc),,$(LIBJEMALLOC)) \
 	$(if $(target-is-windows),,$(LIBEDIT)) \
-	$(LIBPROTOBUF) $(LIBSNAPPY) $(LIBROCKSDB)
+	$(LIBPROTOBUF) $(LIBSNAPPY) $(LIBGEOS) $(LIBROCKSDB)
 C_LIBS_OSS = $(C_LIBS_COMMON) $(LIBROACH)
 C_LIBS_CCL = $(C_LIBS_COMMON) $(LIBCRYPTOPP) $(LIBROACHCCL)
 
@@ -512,7 +515,8 @@ CGO_PKGS := \
 	pkg/storage/engine \
 	pkg/ccl/storageccl/engineccl \
 	pkg/ccl/gssapiccl \
-	vendor/github.com/knz/go-libedit/unix
+	vendor/github.com/knz/go-libedit/unix \
+	vendor/github.com/otan-cockroach/gogeos/geos
 vendor/github.com/knz/go-libedit/unix-package := libedit_unix
 CGO_UNSUFFIXED_FLAGS_FILES := $(addprefix ./,$(addsuffix /zcgo_flags.go,$(CGO_PKGS)))
 CGO_SUFFIXED_FLAGS_FILES   := $(addprefix ./,$(addsuffix /zcgo_flags_$(native-tag).go,$(CGO_PKGS)))
@@ -527,8 +531,8 @@ $(BASE_CGO_FLAGS_FILES): Makefile build/defs.mk.sig | bin/.submodules-initialize
 	@echo >> $@
 	@echo 'package $(if $($(@D)-package),$($(@D)-package),$(notdir $(@D)))' >> $@
 	@echo >> $@
-	@echo '// #cgo CPPFLAGS: $(addprefix -I,$(JEMALLOC_DIR)/include $(KRB_CPPFLAGS))' >> $@
-	@echo '// #cgo LDFLAGS: $(addprefix -L,$(CRYPTOPP_DIR) $(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(LIBEDIT_DIR)/src/.libs $(ROCKSDB_DIR) $(LIBROACH_DIR) $(KRB_DIR))' >> $@
+	@echo '// #cgo CPPFLAGS: $(addprefix -I,$(JEMALLOC_DIR)/include $(KRB_CPPFLAGS) $(GEOS_DIR)/capi)' >> $@
+	@echo '// #cgo LDFLAGS: $(addprefix -L,$(CRYPTOPP_DIR) $(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(GEOS_DIR)/lib $(LIBEDIT_DIR)/src/.libs $(ROCKSDB_DIR) $(LIBROACH_DIR) $(KRB_DIR))' >> $@
 	@echo 'import "C"' >> $@
 
 vendor/github.com/knz/go-libedit/unix/zcgo_flags_extra.go: Makefile | bin/.submodules-initialized
@@ -641,6 +645,17 @@ $(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild | bin/.submodules-initializ
 	cd $(SNAPPY_DIR) && cmake $(xcmake-flags) $(SNAPPY_SRC_DIR) \
 	  -DCMAKE_BUILD_TYPE=Release
 
+$(GEOS_DIR)/Makefile: $(C_DEPS_DIR)/geos-rebuild | bin/.submodules-initialized
+	rm -rf $(GEOS_DIR)
+	mkdir -p $(GEOS_DIR)
+	@# NOTE: If you change the CMake flags below, bump the version in
+	@# $(C_DEPS_DIR)/geos-rebuild. See above for rationale.
+	cd $(GEOS_DIR) && \
+	  cmake $(xcmake-flags) $(GEOS_SRC_DIR) -DCMAKE_BUILD_TYPE=Release && \
+		cmake --build . --target geos-static && \
+		mkdir $(GEOS_DIR)/capi/geos && \
+		cp $(GEOS_SRC_DIR)/include/geos/export.h $(GEOS_DIR)/capi/geos
+
 $(LIBEDIT_SRC_DIR)/configure.ac: | bin/.submodules-initialized
 
 $(LIBEDIT_SRC_DIR)/configure: $(LIBEDIT_SRC_DIR)/configure.ac
@@ -711,6 +726,9 @@ $(LIBPROTOBUF): $(PROTOBUF_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 $(LIBSNAPPY): $(SNAPPY_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $@ $(SNAPPY_SRC_DIR) || $(MAKE) --no-print-directory -C $(SNAPPY_DIR) snappy
 
+$(LIBGEOS): $(GEOS_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
+	@uptodate $@ $(GEOS_SRC_DIR) || $(MAKE) --no-print-directory -C $(GEOS_DIR) geos
+
 $(LIBEDIT): $(LIBEDIT_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $@ $(LIBEDIT_SRC_DIR) || $(MAKE) --no-print-directory -C $(LIBEDIT_DIR)/src
 
@@ -729,13 +747,14 @@ $(LIBKRB5): $(KRB5_DIR)/Makefile bin/uptodate .ALWAYS_REBUILD
 	@uptodate $@ $(KRB5_SRC_DIR)/src || $(MAKE) --no-print-directory -C $(KRB5_DIR)
 
 # Convenient names for maintainers. Not used by other targets in the Makefile.
-.PHONY: protoc libcryptopp libjemalloc libprotobuf libsnappy librocksdb libroach libroachccl libkrb5
+.PHONY: protoc libcryptopp libjemalloc libprotobuf libsnappy libgeos librocksdb libroach libroachccl libkrb5
 protoc:      $(PROTOC)
 libcryptopp: $(LIBCRYPTOPP)
 libedit:     $(LIBEDIT)
 libjemalloc: $(LIBJEMALLOC)
 libprotobuf: $(LIBPROTOBUF)
 libsnappy:   $(LIBSNAPPY)
+libgeos:     $(LIBGEOS)
 librocksdb:  $(LIBROCKSDB)
 libroach:    $(LIBROACH)
 libroachccl: $(LIBROACHCCL)
@@ -1567,6 +1586,7 @@ clean-c-deps:
 	rm -rf $(PROTOBUF_DIR)
 	rm -rf $(ROCKSDB_DIR)
 	rm -rf $(SNAPPY_DIR)
+	rm -rf $(GEOS_DIR)
 	rm -rf $(LIBROACH_DIR)
 	rm -rf $(KRB5_DIR)
 
@@ -1577,6 +1597,7 @@ unsafe-clean-c-deps:
 	git -C $(PROTOBUF_SRC_DIR) clean -dxf
 	git -C $(ROCKSDB_SRC_DIR)  clean -dxf
 	git -C $(SNAPPY_SRC_DIR)   clean -dxf
+	git -C $(GEOS_SRC_DIR)   clean -dxf
 	git -C $(LIBROACH_SRC_DIR) clean -dxf
 	git -C $(KRB5_SRC_DIR)     clean -dxf
 
