@@ -2280,7 +2280,13 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		if query.hidden {
 			continue
 		}
-		sql := truncateSQL(query.stmt.String())
+		sql, err := query.getStatement()
+		if err != nil {
+			// The statement recorded must have parsed correctly to get to
+			// this point. We should not error out accessing it right now.
+			panic(err)
+		}
+		sql = truncateSQL(sql)
 		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
 			ID:            id.String(),
