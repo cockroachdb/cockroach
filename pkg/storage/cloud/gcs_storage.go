@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/oauth2/google"
@@ -160,9 +161,63 @@ func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.
 	return errors.Wrap(err, "write to google cloud")
 }
 
+// resumingGoogleStorageReader is a GS reader which retries
+// reads in case of a transient connection reset by peer error.
+type resumingGoogleStorageReader struct {
+	ctx    context.Context   // Reader context
+	bucket *gcs.BucketHandle // Bucket to read the data from
+	object string            // Object to read
+	data   io.ReadCloser     // Currently opened object data stream
+	pos    int64             // How much data was received so far
+}
+
+var _ io.ReadCloser = &resumingGoogleStorageReader{}
+
+func (r *resumingGoogleStorageReader) Read(p []byte) (n int, err error) {
+	for retries := 0; n == 0 && err == nil; retries++ {
+		n, err = r.data.Read(p)
+		r.pos += int64(n)
+
+		if err != nil && !errors.IsAny(err, io.EOF, io.ErrUnexpectedEOF) {
+			log.Errorf(r.ctx, "GCS:Read err: %s", err)
+		}
+
+		if isResumableHTTPError(err) {
+			log.Errorf(r.ctx, "GCS:Retry: error %s", err)
+			if retries > maxNoProgressReads {
+				err = errors.Wrap(err, "multiple Read calls return no data")
+				return
+			}
+			err = r.doRead()
+		}
+	}
+
+	return
+}
+
+func (r *resumingGoogleStorageReader) Close() error {
+	if r.data != nil {
+		return r.data.Close()
+	}
+	return nil
+}
+
+func (r *resumingGoogleStorageReader) doRead() error {
+	if r.data != nil {
+		if err := r.data.Close(); err != nil {
+			return err
+		}
+	}
+
+	return delayedRetry(r.ctx, func() error {
+		var readErr error
+		r.data, readErr = r.bucket.Object(r.object).NewRangeReader(r.ctx, r.pos, -1)
+		return readErr
+	})
+}
+
 func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
-
 	var rc io.ReadCloser
 	err := delayedRetry(ctx, func() error {
 		var readErr error
