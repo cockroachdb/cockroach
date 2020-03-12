@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -71,10 +70,10 @@ type dropRoleRun struct {
 func (n *DropRoleNode) startExec(params runParams) error {
 	var opName string
 	if n.isRole {
-		telemetry.Inc(sqltelemetry.SchemaChangeDrop("role"))
+		sqltelemetry.IncIAMDrop(sqltelemetry.Role)
 		opName = "drop-role"
 	} else {
-		telemetry.Inc(sqltelemetry.SchemaChangeDrop("user"))
+		sqltelemetry.IncIAMDrop(sqltelemetry.User)
 		opName = "drop-user"
 	}
 

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -94,6 +95,8 @@ func grantRolePlanHook(
 	if !ok {
 		return nil, nil, nil, false, nil
 	}
+
+	sqltelemetry.IncIAMGrant(grant.AdminOption)
 
 	fn = func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
@@ -246,6 +249,8 @@ func revokeRolePlanHook(
 	if !ok {
 		return nil, nil, nil, false, nil
 	}
+
+	sqltelemetry.IncIAMRevoke(revoke.AdminOption)
 
 	fn = func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
