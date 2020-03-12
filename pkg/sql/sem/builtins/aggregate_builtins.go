@@ -192,6 +192,11 @@ var aggregates = map[string]builtinDefinition{
 		},
 	),
 
+	"every": makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.Bool}, types.Bool, newBoolAndAggregate,
+			"Calculates the boolean value of `AND`ing all selected values."),
+	),
+
 	"max": collectOverloads(aggProps(), types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeAggOverload([]*types.T{t}, t, newMaxAggregate,

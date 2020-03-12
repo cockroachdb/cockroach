@@ -61,7 +61,7 @@ import (
 //
 // ATTENTION: When updating these fields, add to version_history.txt explaining
 // what changed.
-const Version execinfrapb.DistSQLVersion = 27
+const Version execinfrapb.DistSQLVersion = 28
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
