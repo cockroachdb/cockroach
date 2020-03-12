@@ -858,6 +858,20 @@
   revision = "22125cfaa6ddc71e145b1535d4b7ee9744fefff2"
 
 [[projects]]
+  branch = "master"
+  digest = "1:9cf4b2d3c07de2ed0229e6b06b785e5e181df5aeb7a458cb75d75c45e8a7f088"
+  name = "github.com/golang/geo"
+  packages = [
+    "r1",
+    "r2",
+    "r3",
+    "s1",
+    "s2",
+  ]
+  pruneopts = "UT"
+  revision = "5b978397cfecc7280e598e9ac5854e9534b0918b"
+
+[[projects]]
   digest = "1:1ba1d79f2810270045c328ae5d674321db34e3aae468eb4233883b473c5c0467"
   name = "github.com/golang/glog"
   packages = ["."]
@@ -1382,6 +1396,14 @@
   version = "v0.3.5"
 
 [[projects]]
+  branch = "master"
+  digest = "1:5c5db323e14934caa4a35f03e59baf0b09c46705bea02d9ac35ed627f5aa94b7"
+  name = "github.com/otan-cockroach/gogeos"
+  packages = ["geos"]
+  pruneopts = "UT"
+  revision = "cacdfc96683494783d719e2c4d4254b8c0468cac"
+
+[[projects]]
   digest = "1:95741de3af260a92cc5c7f3f3061e85273f5a81b5db20d4bd68da74bd521675e"
   name = "github.com/pelletier/go-toml"
   packages = ["."]
@@ -1582,6 +1604,21 @@
   pruneopts = "UT"
   revision = "221dbe5ed46703ee255b1da0dec05086f5035f62"
   version = "v1.4.0"
+
+[[projects]]
+  digest = "1:3bc76fd5b4d8f4613a8062ef06ce97d70ff215bb369f04d86cedc183c5ec8487"
+  name = "github.com/twpayne/go-geom"
+  packages = [
+    ".",
+    "encoding/ewkb",
+    "encoding/ewkbhex",
+    "encoding/wkb",
+    "encoding/wkbcommon",
+    "encoding/wkbhex",
+  ]
+  pruneopts = "UT"
+  revision = "e21b3afba225b21d05fbcbeb8ece2c79c96554c5"
+  version = "v1.0.5"
 
 [[projects]]
   branch = "master"
@@ -2078,6 +2115,7 @@
     "github.com/gogo/protobuf/vanity/command",
     "github.com/golang-commonmark/markdown",
     "github.com/golang/dep/cmd/dep",
+    "github.com/golang/geo/s2",
     "github.com/golang/protobuf/proto",
     "github.com/golang/snappy",
     "github.com/google/btree",
@@ -2121,6 +2159,7 @@
     "github.com/opentracing/opentracing-go",
     "github.com/opentracing/opentracing-go/log",
     "github.com/openzipkin-contrib/zipkin-go-opentracing",
+    "github.com/otan-cockroach/gogeos/geos",
     "github.com/petermattis/goid",
     "github.com/pkg/browser",
     "github.com/pkg/errors",
@@ -2143,6 +2182,10 @@
     "github.com/spf13/pflag",
     "github.com/stretchr/testify/assert",
     "github.com/stretchr/testify/require",
+    "github.com/twpayne/go-geom",
+    "github.com/twpayne/go-geom/encoding/ewkb",
+    "github.com/twpayne/go-geom/encoding/ewkbhex",
+    "github.com/twpayne/go-geom/encoding/wkbhex",
     "github.com/wadey/gocovmerge",
     "go.etcd.io/etcd/raft",
     "go.etcd.io/etcd/raft/confchange",
