@@ -61,7 +61,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 	for _, cmd := range n.n.Cmds {
 		switch t := cmd.(type) {
 		case *tree.AlterIndexPartitionBy:
-			telemetry.Inc(sqltelemetry.SchemaChangeAlterWithExtra("index", "partition_by"))
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("index", "partition_by"))
 			partitioning, err := CreatePartitioning(
 				params.ctx, params.extendedEvalCtx.Settings,
 				params.EvalContext(),

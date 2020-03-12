@@ -68,7 +68,7 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 func (n *dropIndexNode) ReadingOwnWrites() {}
 
 func (n *dropIndexNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeDrop("index"))
+	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter("index"))
 
 	ctx := params.ctx
 	for _, index := range n.idxNames {

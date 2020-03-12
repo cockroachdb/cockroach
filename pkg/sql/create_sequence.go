@@ -51,7 +51,7 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 func (n *createSequenceNode) ReadingOwnWrites() {}
 
 func (n *createSequenceNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeCreate("sequence"))
+	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("sequence"))
 	isTemporary := n.n.Temporary
 
 	_, schemaID, err := getTableCreateParams(params, n.dbDesc.ID, isTemporary, n.n.Name.Table())
