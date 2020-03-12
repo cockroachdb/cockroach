@@ -169,6 +169,9 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	if n.n.Interleave != nil {
+		telemetry.Inc(sqltelemetry.CreateInterleavedTableCounter)
+	}
 	if isTemporary {
 		telemetry.Inc(sqltelemetry.CreateTempTableCounter)
 	}

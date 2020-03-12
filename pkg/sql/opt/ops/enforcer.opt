@@ -15,7 +15,7 @@
 # be sorted by one or more of the input columns, each of which can be sorted in
 # either ascending or descending order. See the Ordering field in the
 # PhysicalProps struct.
-[Enforcer]
+[Enforcer, Telemetry]
 define Sort {
     # InputOrdering specifies the ordering that the sort requires
     # from its input. It allows the optimizer and DistSQL to plan
