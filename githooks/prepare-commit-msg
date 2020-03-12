@@ -93,7 +93,7 @@ $cchar     <pkg>: <short description>\\
 
 if [ "$require_justification" = 1 ]; then
   sed_script+="$cchar\\
-$cchar     Release justification (category): <release justification>\\
+$cchar     Release justification: <release justification>\\
 "
 fi
 sed_script+="$cchar\\
