@@ -1594,6 +1594,20 @@ func MakeTableDesc(
 	//
 	// See https://github.com/golang/go/issues/23188.
 	err := desc.AllocateIDs()
+
+	// Record the types of indexes that the table has.
+	if err := desc.ForeachNonDropIndex(func(idx *sqlbase.IndexDescriptor) error {
+		if idx.IsSharded() {
+			telemetry.Inc(sqltelemetry.HashShardedIndexCounter)
+		}
+		if idx.Type == sqlbase.IndexDescriptor_INVERTED {
+			telemetry.Inc(sqltelemetry.InvertedIndexCounter)
+		}
+		return nil
+	}); err != nil {
+		return desc, err
+	}
+
 	return desc, err
 }
 
