@@ -349,14 +349,22 @@ func TestTxnCommitterAsyncExplicitCommitTask(t *testing.T) {
 	etArgs.InFlightWrites = []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}
 	ba.Add(&putArgs, &etArgs)
 
+	// Set the CanForwardReadTimestamp and CanCommitAtHigherTimestamp flags so
+	// we can make sure that these are propagated to the async explicit commit
+	// task.
+	ba.Header.CanForwardReadTimestamp = true
+	etArgs.CanCommitAtHigherTimestamp = true
+
 	explicitCommitCh := make(chan struct{})
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Len(t, ba.Requests, 2)
+		require.True(t, ba.CanForwardReadTimestamp)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[1].GetInner())
 
 		et := ba.Requests[1].GetInner().(*roachpb.EndTxnRequest)
 		require.True(t, et.Commit)
+		require.True(t, et.CanCommitAtHigherTimestamp)
 		require.Len(t, et.InFlightWrites, 1)
 		require.Equal(t, roachpb.SequencedWrite{Key: keyA, Sequence: 1}, et.InFlightWrites[0])
 
@@ -370,10 +378,12 @@ func TestTxnCommitterAsyncExplicitCommitTask(t *testing.T) {
 		mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			defer close(explicitCommitCh)
 			require.Len(t, ba.Requests, 1)
+			require.True(t, ba.CanForwardReadTimestamp)
 			require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
 			et := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
 			require.True(t, et.Commit)
+			require.True(t, et.CanCommitAtHigherTimestamp)
 			require.Len(t, et.InFlightWrites, 0)
 
 			br = ba.CreateReply()

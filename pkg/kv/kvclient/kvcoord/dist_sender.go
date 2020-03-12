@@ -618,22 +618,23 @@ func (ds *DistSender) initAndVerifyBatch(
 var errNo1PCTxn = roachpb.NewErrorf("cannot send 1PC txn to multiple ranges")
 
 // splitBatchAndCheckForRefreshSpans splits the batch according to the
-// canSplitET parameter and checks whether the final request is an
-// EndTxn. If so, the EndTxnRequest.CanCommitAtHigherTimestamp
-// flag is reset to indicate whether earlier parts of the split may
-// result in refresh spans.
+// canSplitET parameter and checks whether the batch can forward its
+// read timestamp. If the batch has its CanForwardReadTimestamp flag
+// set but is being split across multiple sub-batches then the flag in
+// the batch header is unset.
 func splitBatchAndCheckForRefreshSpans(
-	ba roachpb.BatchRequest, canSplitET bool,
+	ba *roachpb.BatchRequest, canSplitET bool,
 ) [][]roachpb.RequestUnion {
 	parts := ba.Split(canSplitET)
-	// If the final part contains an EndTxn, we need to check
-	// whether earlier split parts contain any refresh spans and properly
-	// set the CanCommitAtHigherTimestamp flag on the end transaction.
-	lastPart := parts[len(parts)-1]
-	lastReq := lastPart[len(lastPart)-1].GetInner()
-	if et, ok := lastReq.(*roachpb.EndTxnRequest); ok && et.CanCommitAtHigherTimestamp {
+
+	// If the batch is split and the header has its CanForwardReadTimestamp flag
+	// set then we much check whether any request would need to be refreshed in
+	// the event that the one of the partial batches was to forward its read
+	// timestamp during a server-side refresh. If any such request exists then
+	// we unset the CanForwardReadTimestamp flag.
+	if len(parts) > 1 && ba.CanForwardReadTimestamp {
 		hasRefreshSpans := func() bool {
-			for _, part := range parts[:len(parts)-1] {
+			for _, part := range parts {
 				for _, req := range part {
 					if roachpb.NeedsRefresh(req.GetInner()) {
 						return true
@@ -643,11 +644,18 @@ func splitBatchAndCheckForRefreshSpans(
 			return false
 		}()
 		if hasRefreshSpans {
-			etCopy := *et
-			etCopy.CanCommitAtHigherTimestamp = false
-			lastPart = append([]roachpb.RequestUnion(nil), lastPart...)
-			lastPart[len(lastPart)-1].MustSetInner(&etCopy)
-			parts[len(parts)-1] = lastPart
+			ba.CanForwardReadTimestamp = false
+
+			// If the final part contains an EndTxn request, unset its
+			// CanCommitAtHigherTimestamp flag as well.
+			lastPart := parts[len(parts)-1]
+			if et := lastPart[len(lastPart)-1].GetEndTxn(); et != nil {
+				etCopy := *et
+				etCopy.CanCommitAtHigherTimestamp = false
+				lastPart = append([]roachpb.RequestUnion(nil), lastPart...)
+				lastPart[len(lastPart)-1].MustSetInner(&etCopy)
+				parts[len(parts)-1] = lastPart
+			}
 		}
 	}
 	return parts
@@ -691,7 +699,7 @@ func (ds *DistSender) Send(
 	if ba.Txn != nil && ba.Txn.Epoch > 0 && !require1PC {
 		splitET = true
 	}
-	parts := splitBatchAndCheckForRefreshSpans(ba, splitET)
+	parts := splitBatchAndCheckForRefreshSpans(&ba, splitET)
 	if len(parts) > 1 && (ba.MaxSpanRequestKeys != 0 || ba.TargetBytes != 0) {
 		// We already verified above that the batch contains only scan requests of the same type.
 		// Such a batch should never need splitting.
@@ -737,7 +745,7 @@ func (ds *DistSender) Send(
 			} else if require1PC {
 				log.Fatalf(ctx, "required 1PC transaction cannot be split: %s", ba)
 			}
-			parts = splitBatchAndCheckForRefreshSpans(ba, true /* split ET */)
+			parts = splitBatchAndCheckForRefreshSpans(&ba, true /* split ET */)
 			// Restart transaction of the last chunk as multiple parts with
 			// EndTxn in the last part.
 			continue
@@ -1056,8 +1064,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// Clone the BatchRequest's transaction so that future mutations to the
 	// proto don't affect the proto in this batch.
 	if ba.Txn != nil {
-		txnCopy := *ba.Txn
-		ba.Txn = &txnCopy
+		ba.Txn = ba.Txn.Clone()
 	}
 	// Get initial seek key depending on direction of iteration.
 	var scanDir ScanDirection

@@ -1559,6 +1559,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		afterTxnStart  func(context.Context, *kv.DB) error  // called after the txn chooses a timestamp
 		retryable      func(context.Context, *kv.Txn) error // called during the txn; may be retried
 		filter         func(storagebase.FilterArgs) *roachpb.Error
+		priorReads     bool
 		tsLeaked       bool
 		// If both of these are false, no retries.
 		txnCoordRetry bool
@@ -1576,7 +1577,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 		},
 		{
-			name: "forwarded timestamp with get and put timestamp leaked",
+			name: "forwarded timestamp with get and put after timestamp leaked",
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				_, err := db.Get(ctx, "a") // read key to set ts cache
 				return err
@@ -1608,7 +1609,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 		},
 		{
-			name: "forwarded timestamp with get and cput timestamp leaked",
+			name: "forwarded timestamp with get and cput after timestamp leaked",
 			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
 				return db.Put(ctx, "a", "put")
 			},
@@ -1775,10 +1776,20 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.Put(ctx, "a", "put")
 			},
+		},
+		{
+			name: "write too old with put after prior read",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				return txn.Put(ctx, "a", "put")
+			},
+			priorReads:    true,
 			txnCoordRetry: true,
 		},
 		{
-			name: "write too old with put timestamp leaked",
+			name: "write too old with put after timestamp leaked",
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				return db.Put(ctx, "a", "put")
 			},
@@ -1881,20 +1892,33 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.CPut(ctx, "a", "cput", strToValue("value"))
 			},
+		},
+		{
+			name: "write too old with cput matching older and newer values after prior read",
+			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "value")
+			},
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "value")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				return txn.CPut(ctx, "a", "cput", strToValue("value"))
+			},
+			priorReads:    true,
 			txnCoordRetry: true,
 		},
 		{
 			name: "write too old with increment",
 			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				_, err := db.Inc(ctx, "inc", 1)
+				_, err := db.Inc(ctx, "inc1", 1)
 				return err
 			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				_, err := db.Inc(ctx, "inc", 1)
+				_, err := db.Inc(ctx, "inc1", 1)
 				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				val, err := txn.Inc(ctx, "inc", 1)
+				val, err := txn.Inc(ctx, "inc1", 1)
 				if err != nil {
 					return err
 				}
@@ -1903,6 +1927,28 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				return nil
 			},
+		},
+		{
+			name: "write too old with increment after prior read",
+			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
+				_, err := db.Inc(ctx, "inc2", 1)
+				return err
+			},
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				_, err := db.Inc(ctx, "inc2", 1)
+				return err
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				val, err := txn.Inc(ctx, "inc2", 1)
+				if err != nil {
+					return err
+				}
+				if vInt := val.ValueInt(); vInt != 3 {
+					return errors.Errorf("expected val=3; got %d", vInt)
+				}
+				return nil
+			},
+			priorReads:    true,
 			txnCoordRetry: true,
 		},
 		{
@@ -1913,6 +1959,16 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.InitPut(ctx, "iput", "put", false)
 			},
+		},
+		{
+			name: "write too old with initput after prior read",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "iput", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				return txn.InitPut(ctx, "iput", "put", false)
+			},
+			priorReads:    true,
 			txnCoordRetry: true, // fails on first attempt at cput with write too old
 			// Succeeds on second attempt.
 		},
@@ -1927,6 +1983,19 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.InitPut(ctx, "iput", "put", false)
 			},
+		},
+		{
+			name: "write too old with initput matching older and newer values after prior read",
+			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "iput", "put")
+			},
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "iput", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				return txn.InitPut(ctx, "iput", "put", false)
+			},
+			priorReads: true,
 			// Expect a transaction coord retry, which should succeed.
 			txnCoordRetry: true,
 		},
@@ -1984,6 +2053,28 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			txnCoordRetry: false,              // non-matching value means we fail txn coord retry
 			expFailure:    "unexpected value", // condition failed error when failing on tombstones
+		},
+		{
+			name: "write too old with locking read",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForUpdate(ctx, "a", "a\x00", 0)
+				return err
+			},
+		},
+		{
+			name: "write too old with locking read after prior read",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForUpdate(ctx, "a", "a\x00", 0)
+				return err
+			},
+			priorReads:    true,
+			txnCoordRetry: true,
 		},
 		{
 			// This test sends a 1PC batch with Put+EndTxn.
@@ -2225,7 +2316,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			txnCoordRetry: true,
 		},
 		{
-			name: "cput within uncertainty interval timestamp leaked",
+			name: "cput within uncertainty interval after timestamp leaked",
 			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
 				return db.Put(ctx, "a", "value")
 			},
@@ -2423,6 +2514,12 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			var hadClientRetry bool
 			epoch := 0
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				if tc.priorReads {
+					_, err := txn.Get(ctx, "prior read")
+					if err != nil {
+						t.Fatalf("unexpected error during prior read: %v", err)
+					}
+				}
 				if tc.tsLeaked {
 					// Read the commit timestamp so the expectation is that
 					// this transaction cannot be restarted internally.

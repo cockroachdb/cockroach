@@ -614,6 +614,8 @@ message EndTxnRequest {
   // any reads that must be refreshed prior to sending this current batch. When
   // set, it allows the server to handle pushes and write too old conditions
   // locally.
+  // TODO(nvanbenschoten): remove this in favor of can_forward_read_timestamp
+  // in v20.2.
   bool can_commit_at_higher_timestamp = 8;
   // True to indicate that lock spans should be resolved with poison=true.
   // This is used when the transaction is being aborted independently of the
@@ -1857,6 +1859,18 @@ message Header {
   // be much more straightforward if all transactional requests were
   // idempotent. We could just re-issue requests. See #26915.
   bool async_consensus = 13;
+  // can_forward_read_timestamp indicates that the batch can be evaluated at a
+  // higher timestamp than the transaction's read timestamp. The flag is only
+  // applicable to transactional batches and is assumed to be true for all
+  // non-transactional batches. It is set by the client if the transaction
+  // has not performed any reads that must be refreshed prior to sending this
+  // current batch. When set, it allows the server to handle pushes and write
+  // too old conditions locally.
+  //
+  // NOTE: this flag is a generalization of EndTxn.CanCommitAtHigherTimestamp.
+  // That flag should be deprecated in favor of this one.
+  // TODO(nvanbenschoten): perform this migration.
+  bool can_forward_read_timestamp = 16;
   reserved 7, 12, 14;
 }
 
