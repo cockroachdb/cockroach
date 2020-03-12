@@ -234,12 +234,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					result.Op.Next(ctx)
 					result.Op.Next(ctx)
 				})
-				for _, memAccount := range result.BufferingOpMemAccounts {
-					memAccount.Close(ctx)
-				}
-				for _, memMonitor := range result.BufferingOpMemMonitors {
-					memMonitor.Stop(ctx)
-				}
+				result.MonitorRegistry.CleanupBufferingMonitorsAndAccounts(ctx)
 				if expectNoMemoryError {
 					require.NoError(t, err, "expected success, found: ", err)
 				} else {

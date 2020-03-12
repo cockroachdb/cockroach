@@ -16,6 +16,9 @@ import (
 	"math"
 	"reflect"
 
+	"github.com/cockroachdb/errors"
+	"github.com/marusama/semaphore"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -28,8 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/errors"
-	"github.com/marusama/semaphore"
 )
 
 func checkNumIn(inputs []Operator, numIn int) error {
@@ -135,9 +136,8 @@ type NewColOperatorResult struct {
 	// also operators such as the hash aggregator that buffer, but not
 	// proportionally to the input size (in the hash aggregator's case, it is the
 	// number of distinct groups).
-	CanRunInAutoMode       bool
-	BufferingOpMemMonitors []*mon.BytesMonitor
-	BufferingOpMemAccounts []*mon.BoundAccount
+	CanRunInAutoMode bool
+	MonitorRegistry  *MonitorRegistry
 }
 
 // resetToState resets r to the state specified in arg. arg may be a shallow
@@ -145,28 +145,7 @@ type NewColOperatorResult struct {
 func (r *NewColOperatorResult) resetToState(ctx context.Context, arg NewColOperatorResult) {
 	// MetadataSources are left untouched since there is no need to do any
 	// cleaning there.
-
-	// Close BoundAccounts that are not present in arg.BufferingOpMemAccounts.
-	accs := make(map[*mon.BoundAccount]struct{})
-	for _, a := range arg.BufferingOpMemAccounts {
-		accs[a] = struct{}{}
-	}
-	for _, a := range r.BufferingOpMemAccounts {
-		if _, ok := accs[a]; !ok {
-			a.Close(ctx)
-		}
-	}
-	// Stop BytesMonitors that are not present in arg.BufferingOpMemMonitors.
-	mons := make(map[*mon.BytesMonitor]struct{})
-	for _, m := range arg.BufferingOpMemMonitors {
-		mons[m] = struct{}{}
-	}
-
-	for _, m := range r.BufferingOpMemMonitors {
-		if _, ok := mons[m]; !ok {
-			m.Stop(ctx)
-		}
-	}
+	arg.MonitorRegistry.CleanupBufferingMonitorsAndAccounts(ctx)
 
 	// Shallow copy over the rest.
 	*r = arg
@@ -313,7 +292,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 		if useStreamingMemAccountForBuffering {
 			sortChunksMemAccount = streamingMemAccount
 		} else {
-			sortChunksMemAccount = r.createMemAccountForSpillStrategy(
+			sortChunksMemAccount = r.MonitorRegistry.CreateLimitedBufferingMemAccount(
 				ctx, flowCtx, sorterMemMonitorName,
 			)
 		}
@@ -330,7 +309,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 		if useStreamingMemAccountForBuffering {
 			topKSorterMemAccount = streamingMemAccount
 		} else {
-			topKSorterMemAccount = r.createMemAccountForSpillStrategy(
+			topKSorterMemAccount = r.MonitorRegistry.CreateLimitedBufferingMemAccount(
 				ctx, flowCtx, sorterMemMonitorName,
 			)
 		}
@@ -346,7 +325,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 		if useStreamingMemAccountForBuffering {
 			sorterMemAccount = streamingMemAccount
 		} else {
-			sorterMemAccount = r.createMemAccountForSpillStrategy(
+			sorterMemAccount = r.MonitorRegistry.CreateLimitedBufferingMemAccount(
 				ctx, flowCtx, sorterMemMonitorName,
 			)
 		}
@@ -373,10 +352,10 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 			// sort itself is responsible for making sure that we stay within
 			// the memory limit.
 			unlimitedAllocator := NewAllocator(
-				ctx, r.createBufferingUnlimitedMemAccount(
+				ctx, r.MonitorRegistry.CreateUnlimitedBufferingMemAccount(
 					ctx, flowCtx, monitorNamePrefix,
 				))
-			standaloneMemAccount := r.createStandaloneMemAccount(
+			standaloneMemAccount := r.MonitorRegistry.CreateStandaloneMemAccount(
 				ctx, flowCtx, monitorNamePrefix,
 			)
 			// Make a copy of the DiskQueueCfg and set defaults for the sorter.
@@ -469,20 +448,14 @@ func (r *NewColOperatorResult) createAndWrapRowSource(
 func NewColOperator(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, args NewColOperatorArgs,
 ) (result NewColOperatorResult, err error) {
+	result.MonitorRegistry = NewMonitorRegistry(flowCtx)
 	// Make sure that we clean up memory monitoring infrastructure in case of an
 	// error or a panic.
 	defer func() {
 		returnedErr := err
 		panicErr := recover()
 		if returnedErr != nil || panicErr != nil {
-			for _, memAccount := range result.BufferingOpMemAccounts {
-				memAccount.Close(ctx)
-			}
-			result.BufferingOpMemAccounts = result.BufferingOpMemAccounts[:0]
-			for _, memMonitor := range result.BufferingOpMemMonitors {
-				memMonitor.Stop(ctx)
-			}
-			result.BufferingOpMemMonitors = result.BufferingOpMemMonitors[:0]
+			result.MonitorRegistry.CleanupBufferingMonitorsAndAccounts(ctx)
 		}
 		if panicErr != nil {
 			execerror.VectorizedInternalPanic(panicErr)
@@ -652,7 +625,8 @@ func NewColOperator(
 					// The row execution engine also gives an unlimited amount (that still
 					// needs to be approved by the upstream monitor, so not really
 					// "unlimited") amount of memory to the aggregator.
-					hashAggregatorMemAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, "hash-aggregator")
+					hashAggregatorMemAccount = result.MonitorRegistry.CreateUnlimitedBufferingMemAccount(
+						ctx, flowCtx, "hash-aggregator")
 				}
 				result.Op, err = NewHashAggregator(
 					NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], typs, aggFns,
@@ -695,7 +669,8 @@ func NewColOperator(
 					// The row execution engine also gives an unlimited amount (that still
 					// needs to be approved by the upstream monitor, so not really
 					// "unlimited") amount of memory to the unordered distinct operator.
-					distinctMemAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, "distinct")
+					distinctMemAccount = result.MonitorRegistry.CreateUnlimitedBufferingMemAccount(
+						ctx, flowCtx, "distinct")
 				}
 				// TODO(yuzefovich): we have an implementation of partially ordered
 				// distinct, and we should plan it when we have non-empty ordered
@@ -735,7 +710,7 @@ func NewColOperator(
 			if useStreamingMemAccountForBuffering {
 				hashJoinerMemAccount = streamingMemAccount
 			} else {
-				hashJoinerMemAccount = result.createMemAccountForSpillStrategy(
+				hashJoinerMemAccount = result.MonitorRegistry.CreateLimitedBufferingMemAccount(
 					ctx, flowCtx, hashJoinerMemMonitorName,
 				)
 			}
@@ -770,7 +745,7 @@ func NewColOperator(
 					func(inputOne, inputTwo Operator) Operator {
 						monitorNamePrefix := "external-hash-joiner"
 						unlimitedAllocator := NewAllocator(
-							ctx, result.createBufferingUnlimitedMemAccount(
+							ctx, result.MonitorRegistry.CreateUnlimitedBufferingMemAccount(
 								ctx, flowCtx, monitorNamePrefix,
 							))
 						// Make a copy of the DiskQueueCfg and set defaults for the hash
@@ -847,7 +822,7 @@ func NewColOperator(
 			// itself is responsible for making sure that we stay within the memory
 			// limit, and it will fall back to disk if necessary.
 			unlimitedAllocator := NewAllocator(
-				ctx, result.createBufferingUnlimitedMemAccount(
+				ctx, result.MonitorRegistry.CreateUnlimitedBufferingMemAccount(
 					ctx, flowCtx, "merge-joiner",
 				))
 			result.Op, err = newMergeJoinOp(
@@ -974,7 +949,8 @@ func NewColOperator(
 						//  can still run plans that include these window functions with a
 						//  low memory limit to test disk spilling of other components for
 						//  the time being.
-						memAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, memMonitorsPrefix+"relative-rank")
+						memAccount = result.MonitorRegistry.CreateUnlimitedBufferingMemAccount(
+							ctx, flowCtx, memMonitorsPrefix+"relative-rank")
 					}
 					result.Op, err = NewRelativeRankOperator(
 						NewAllocator(ctx, memAccount), input, typs, windowFn, wf.Ordering.Columns,
@@ -1186,75 +1162,6 @@ func (r *postProcessResult) planPostProcessSpec(
 		r.Op = NewLimitOp(r.Op, int(post.Limit))
 	}
 	return nil
-}
-
-// createBufferingUnlimitedMemMonitor instantiates an unlimited memory monitor.
-// These should only be used when spilling to disk and an operator is made aware
-// of a memory usage limit separately.
-// The receiver is updated to have a reference to the unlimited memory monitor.
-func (r *NewColOperatorResult) createBufferingUnlimitedMemMonitor(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
-) *mon.BytesMonitor {
-	bufferingOpUnlimitedMemMonitor := execinfra.NewMonitor(
-		ctx, flowCtx.EvalCtx.Mon, name+"-unlimited",
-	)
-	r.BufferingOpMemMonitors = append(r.BufferingOpMemMonitors, bufferingOpUnlimitedMemMonitor)
-	return bufferingOpUnlimitedMemMonitor
-}
-
-// createMemAccountForSpillStrategy instantiates a memory monitor and a memory
-// account to be used with a buffering Operator that can fall back to disk.
-// The default memory limit is used, if flowCtx.Cfg.ForceDiskSpill is used, this
-// will be 1. The receiver is updated to have references to both objects.
-func (r *NewColOperatorResult) createMemAccountForSpillStrategy(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
-) *mon.BoundAccount {
-	bufferingOpMemMonitor := execinfra.NewLimitedMonitor(
-		ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, name+"-limited",
-	)
-	r.BufferingOpMemMonitors = append(r.BufferingOpMemMonitors, bufferingOpMemMonitor)
-	bufferingMemAccount := bufferingOpMemMonitor.MakeBoundAccount()
-	r.BufferingOpMemAccounts = append(r.BufferingOpMemAccounts, &bufferingMemAccount)
-	return &bufferingMemAccount
-}
-
-// createBufferingUnlimitedMemAccount instantiates an unlimited memory monitor
-// and a memory account to be used with a buffering disk-backed Operator. The
-// receiver is updated to have references to both objects. Note that the
-// returned account is only "unlimited" in that it does not have a hard limit
-// that it enforces, but a limit might be enforced by a root monitor.
-func (r *NewColOperatorResult) createBufferingUnlimitedMemAccount(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
-) *mon.BoundAccount {
-	bufferingOpUnlimitedMemMonitor := r.createBufferingUnlimitedMemMonitor(ctx, flowCtx, name)
-	bufferingMemAccount := bufferingOpUnlimitedMemMonitor.MakeBoundAccount()
-	r.BufferingOpMemAccounts = append(r.BufferingOpMemAccounts, &bufferingMemAccount)
-	return &bufferingMemAccount
-}
-
-// createStandaloneMemAccount instantiates an unlimited memory monitor and a
-// memory account that have a standalone budget. This means that the memory
-// registered with these objects is *not* reported to the root monitor (i.e.
-// it will not count towards max-sql-memory). Use it only when the memory in
-// use is accounted for with a different memory monitor. The receiver is
-// updated to have references to both objects.
-func (r *NewColOperatorResult) createStandaloneMemAccount(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
-) *mon.BoundAccount {
-	standaloneMemMonitor := mon.MakeMonitor(
-		name+"-standalone",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment: use default increment */
-		math.MaxInt64, /* noteworthy */
-		flowCtx.Cfg.Settings,
-	)
-	r.BufferingOpMemMonitors = append(r.BufferingOpMemMonitors, &standaloneMemMonitor)
-	standaloneMemMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
-	standaloneMemAccount := standaloneMemMonitor.MakeBoundAccount()
-	r.BufferingOpMemAccounts = append(r.BufferingOpMemAccounts, &standaloneMemAccount)
-	return &standaloneMemAccount
 }
 
 type postProcessResult struct {

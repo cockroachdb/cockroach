@@ -1548,8 +1548,9 @@ func TestMergeJoiner(t *testing.T) {
 						if err != nil {
 							return nil, err
 						}
-						memAccounts = append(memAccounts, result.BufferingOpMemAccounts...)
-						memMonitors = append(memMonitors, result.BufferingOpMemMonitors...)
+						// TODO(azhng): use Merge
+						memAccounts = append(memAccounts, result.MonitorRegistry.BufferingMemAccounts...)
+						memMonitors = append(memMonitors, result.MonitorRegistry.BufferingMemMonitors...)
 						return result.Op, nil
 					})
 			})

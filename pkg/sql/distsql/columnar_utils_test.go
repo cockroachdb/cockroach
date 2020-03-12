@@ -134,10 +134,10 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		return err
 	}
 	defer func() {
-		for _, memAccount := range result.BufferingOpMemAccounts {
+		for _, memAccount := range result.MonitorRegistry.BufferingMemAccounts {
 			memAccount.Close(ctx)
 		}
-		for _, memMonitor := range result.BufferingOpMemMonitors {
+		for _, memMonitor := range result.MonitorRegistry.BufferingMemMonitors {
 			memMonitor.Stop(ctx)
 		}
 	}()
