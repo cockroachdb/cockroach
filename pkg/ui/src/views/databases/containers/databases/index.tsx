@@ -84,7 +84,7 @@ type DatabaseListProps = DatabaseListData & DatabaseListActions & RouteComponent
 
 // DatabaseTablesList displays the "Tables" sub-tab of the main database page.
 class DatabaseTablesList extends React.Component<DatabaseListProps> {
-  componentWillMount() {
+  componentDidMount() {
     this.props.refreshDatabases();
   }
 
@@ -115,7 +115,7 @@ class DatabaseTablesList extends React.Component<DatabaseListProps> {
 
 // DatabaseTablesList displays the "Grants" sub-tab of the main database page.
 class DatabaseGrantsList extends React.Component<DatabaseListProps> {
-  componentWillMount() {
+  componentDidMount() {
     this.props.refreshDatabases();
   }
 

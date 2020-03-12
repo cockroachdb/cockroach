@@ -92,12 +92,12 @@ export class JobsTable extends React.Component<JobsTableProps> {
     }));
   }
 
-  componentWillMount() {
+  componentDidMount() {
     this.refresh();
   }
 
-  componentWillReceiveProps(props: JobsTableProps) {
-    this.refresh(props);
+  componentDidUpdate() {
+    this.refresh(this.props);
   }
 
   onStatusSelected = (selected: DropdownOption) => {

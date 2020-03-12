@@ -165,12 +165,12 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
     });
   }
 
-  componentWillMount() {
+  componentDidMount() {
     this.props.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
   }
 
-  componentWillReceiveProps() {
+  componentDidUpdate() {
     this.props.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
   }

@@ -95,13 +95,13 @@ export class CustomChart extends React.Component<CustomChartProps & RouteCompone
     }
   }
 
-  componentWillMount() {
+  componentDidMount() {
     this.refresh();
     this.props.refreshMetricMetadata();
   }
 
-  componentWillReceiveProps(props: CustomChartProps & RouteComponentProps) {
-    this.refresh(props);
+  componentDidUpdate() {
+    this.refresh(this.props);
   }
 
   currentCharts(): CustomChartState[] {
