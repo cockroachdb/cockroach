@@ -97,7 +97,7 @@ func (rol List) GetSQLStmts(op string) (map[string]func() (bool, string, error),
 	}
 
 	for _, ro := range rol {
-		sqltelemetry.IncIAMOption(
+		sqltelemetry.IncIAMOptionCounter(
 			op,
 			strings.ToLower(ro.Option.String()),
 		)

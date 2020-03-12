@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	tpchworkload "github.com/cockroachdb/cockroach/pkg/workload/tpch"
 )
 
 func registerTPCHVec(r *testRegistry) {
@@ -48,10 +47,6 @@ func registerTPCHVec(r *testRegistry) {
 		8:  "can cause OOM",
 		9:  "can cause OOM",
 		19: "can cause OOM",
-	}
-	queriesToSkipByVersionPrefix["v20.1"] = map[int]string{
-		// TODO(yuzefovich): remove this once disk spilling is in place.
-		9: "needs disk spilling",
 	}
 
 	runTPCHVec := func(ctx context.Context, t *test, c *cluster) {
@@ -522,14 +517,7 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 				if err != nil {
 					// Note: if you see an error like "exit status 1", it is likely caused
 					// by the erroneous output of the query.
-					t.Status(fmt.Sprintf("\n%s", err))
-					// We expect that with low workmem limit some queries can hit OOM
-					// error, and we don't want to fail the test in such scenarios.
-					// TODO(yuzefovich): remove the condition once disk spilling is in
-					// place.
-					if !strings.Contains(string(workloadOutput), "memory budget exceeded") {
-						t.Fatal(err)
-					}
+					t.Fatal(err)
 				}
 				parseOutput := func(output []byte, timeByQueryNum map[int][]float64) {
 					runtimeRegex := regexp.MustCompile(`.*\[q([\d]+)\] returned \d+ rows after ([\d]+\.[\d]+) seconds.*`)
@@ -551,17 +539,9 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 					}
 				}
 				parseOutput(workloadOutput, timeByQueryNum[configIdx])
-				// We want to fail the test only if wrong results were returned (we
-				// ignore errors like OOM and unsupported features in order to not
-				// short-circuit the run of this test).
-				if strings.Contains(string(workloadOutput), tpchworkload.TPCHWrongOutputErrorPrefix) {
-					t.Fatal("tpch workload found wrong results")
-				}
 			}
 		}
-		// TODO(yuzefovich): remove the note when disk spilling is in place.
-		t.Status("comparing the runtimes (only median values for each query are compared).\n" +
-			"NOTE: the comparison might not be fair because vec ON doesn't spill to disk")
+		t.Status("comparing the runtimes (only median values for each query are compared)")
 		for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
 			if _, skipped := queriesToSkip[queryNum]; skipped {
 				continue
@@ -572,32 +552,36 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 			}
 			vecOnTimes := timeByQueryNum[vecOnConfig][queryNum]
 			vecOffTimes := timeByQueryNum[vecOffConfig][queryNum]
+			if len(vecOnTimes) != numRunsPerQuery {
+				t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
+					"recorded with vec ON config: %v", queryNum, vecOnTimes))
+			}
 			if len(vecOffTimes) != numRunsPerQuery {
 				t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
 					"recorded with vec OFF config: %v", queryNum, vecOffTimes))
 			}
-			// It is possible that the query errored out on vec ON config. We want to
-			// compare the run times only if that's not the case.
-			if len(vecOnTimes) > 0 {
-				vecOnTime := findMedian(vecOnTimes)
-				vecOffTime := findMedian(vecOffTimes)
-				if vecOffTime < vecOnTime {
-					t.l.Printf(
-						fmt.Sprintf("[q%d] vec OFF was faster by %.2f%%: "+
-							"%.2fs ON vs %.2fs OFF --- WARNING",
-							queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime, vecOnTime, vecOffTime))
-				} else {
-					t.l.Printf(
-						fmt.Sprintf("[q%d] vec ON was faster by %.2f%%: "+
-							"%.2fs ON vs %.2fs OFF",
-							queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime, vecOnTime, vecOffTime))
-				}
-				if vecOnTime >= vecOnSlowerFailFactor*vecOffTime {
-					t.Fatal(fmt.Sprintf(
-						"[q%d] vec ON is slower by %.2f%% than vec OFF\n"+
-							"vec ON times: %v\nvec OFF times: %v",
-						queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime, vecOnTimes, vecOffTimes))
-				}
+			vecOnTime := findMedian(vecOnTimes)
+			vecOffTime := findMedian(vecOffTimes)
+			if vecOffTime < vecOnTime {
+				t.l.Printf(
+					fmt.Sprintf("[q%d] vec OFF was faster by %.2f%%: "+
+						"%.2fs ON vs %.2fs OFF --- WARNING\n"+
+						"vec ON times: %v\t vec OFF times: %v",
+						queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime,
+						vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
+			} else {
+				t.l.Printf(
+					fmt.Sprintf("[q%d] vec ON was faster by %.2f%%: "+
+						"%.2fs ON vs %.2fs OFF\n"+
+						"vec ON times: %v\t vec OFF times: %v",
+						queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime,
+						vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
+			}
+			if vecOnTime >= vecOnSlowerFailFactor*vecOffTime {
+				t.Fatal(fmt.Sprintf(
+					"[q%d] vec ON is slower by %.2f%% than vec OFF\n"+
+						"vec ON times: %v\nvec OFF times: %v",
+					queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime, vecOnTimes, vecOffTimes))
 			}
 		}
 	}

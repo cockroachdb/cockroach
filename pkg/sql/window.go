@@ -13,9 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -73,74 +70,8 @@ func (n *windowNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
 }
 
-type extractWindowFuncsVisitor struct {
-	n *windowNode
-
-	// Avoids allocations.
-	subWindowVisitor transform.ContainsWindowVisitor
-
-	// Persisted visitor state.
-	aggregatesSeen map[*tree.FuncExpr]struct{}
-	windowFnCount  int
-	err            error
-}
-
-var _ tree.Visitor = &extractWindowFuncsVisitor{}
-
-func (v *extractWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
-	if v.err != nil {
-		return false, expr
-	}
-
-	switch t := expr.(type) {
-	case *tree.FuncExpr:
-		switch {
-		case t.IsWindowFunctionApplication():
-			// Check if a parent node above this window function is an aggregate.
-			if len(v.aggregatesSeen) > 0 {
-				v.err = sqlbase.NewWindowInAggError()
-				return false, expr
-			}
-
-			// Make sure this window function does not contain another window function.
-			for _, argExpr := range t.Exprs {
-				if v.subWindowVisitor.ContainsWindowFunc(argExpr) {
-					v.err = pgerror.Newf(pgcode.Windowing, "window function calls cannot be nested")
-					return false, expr
-				}
-			}
-
-			f := &windowFuncHolder{
-				expr:         t,
-				args:         t.Exprs,
-				window:       v.n,
-				filterColIdx: noFilterIdx,
-			}
-			v.windowFnCount++
-			v.n.funcs = append(v.n.funcs, f)
-			return false, f
-
-		case t.GetAggregateConstructor() != nil:
-			// If we see an aggregation that is not used in a window function, we save it
-			// in the visitor's seen aggregate set. The aggregate function will remain in
-			// this set until the recursion into its children is complete.
-			v.aggregatesSeen[t] = struct{}{}
-		}
-	}
-	return true, expr
-}
-
-func (v *extractWindowFuncsVisitor) VisitPost(expr tree.Expr) tree.Expr {
-	if fn, ok := expr.(*tree.FuncExpr); ok {
-		delete(v.aggregatesSeen, fn)
-	}
-	return expr
-}
-
 var _ tree.TypedExpr = &windowFuncHolder{}
 var _ tree.VariableExpr = &windowFuncHolder{}
-
-const noFilterIdx = -1
 
 type windowFuncHolder struct {
 	window *windowNode

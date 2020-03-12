@@ -31,9 +31,9 @@ import (
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 	if n.Targets.Databases != nil {
-		sqltelemetry.IncIAMGrantPrivileges(sqltelemetry.OnDatabase)
+		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnDatabase)
 	} else {
-		sqltelemetry.IncIAMGrantPrivileges(sqltelemetry.OnTable)
+		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnTable)
 	}
 
 	return &changePrivilegesNode{
@@ -57,9 +57,9 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
 	if n.Targets.Databases != nil {
-		sqltelemetry.IncIAMRevokePrivileges(sqltelemetry.OnDatabase)
+		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnDatabase)
 	} else {
-		sqltelemetry.IncIAMRevokePrivileges(sqltelemetry.OnTable)
+		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnTable)
 	}
 
 	return &changePrivilegesNode{
