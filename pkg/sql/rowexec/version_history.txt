@@ -105,3 +105,7 @@
     - Add the numeric tuple field accessor and the ByIndex field to ColumnAccessExpr.
 - Version: 27 (MinAcceptedVersion: 27)
     - Change how DArray datums are hashed for distinct and aggregation operations.
+- Version: 28 (MinAcceptedVersion: 28)
+    - The CORR aggregate function has been added which will not be recognized
+      by older nodes. However, new nodes can process plans from older nodes,
+      so MinAcceptedVersion is unchanged.
