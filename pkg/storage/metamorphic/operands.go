@@ -167,12 +167,7 @@ func (v *valueGenerator) toString(value []byte) string {
 }
 
 func (v *valueGenerator) parse(input string) []byte {
-	var value = make([]byte, 0, maxValueSize)
-	_, err := fmt.Sscanf(input, "%s", &value)
-	if err != nil {
-		panic(err)
-	}
-	return value
+	return []byte(input)
 }
 
 type txnID string
