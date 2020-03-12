@@ -104,7 +104,7 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 func (n *dropTableNode) ReadingOwnWrites() {}
 
 func (n *dropTableNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeDrop("table"))
+	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter("table"))
 
 	ctx := params.ctx
 	for _, toDel := range n.td {

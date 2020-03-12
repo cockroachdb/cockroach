@@ -72,7 +72,7 @@ type createStatsRun struct {
 }
 
 func (n *createStatsNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeCreate("stats"))
+	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("stats"))
 	n.run.resultsCh = make(chan tree.Datums)
 	n.run.errCh = make(chan error)
 	go func() {

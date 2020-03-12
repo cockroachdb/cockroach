@@ -75,7 +75,7 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 }
 
 func (n *createDatabaseNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeCreate("database"))
+	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("database"))
 	desc := makeDatabaseDesc(n.n)
 
 	created, err := params.p.createDatabase(

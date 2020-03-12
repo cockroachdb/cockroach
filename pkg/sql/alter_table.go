@@ -120,7 +120,7 @@ func isAlterCmdValidWithoutPrimaryKey(cmd tree.AlterTableCmd) bool {
 func (n *alterTableNode) ReadingOwnWrites() {}
 
 func (n *alterTableNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeAlter("table"))
+	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounter("table"))
 
 	// Commands can either change the descriptor directly (for
 	// alterations that don't require a backfill) or add a mutation to

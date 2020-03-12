@@ -265,7 +265,7 @@ func maybeCreateAndAddShardCol(
 }
 
 func (n *createIndexNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeCreate("index"))
+	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("index"))
 	_, dropped, err := n.tableDesc.FindIndexByName(string(n.n.Name))
 	if err == nil {
 		if dropped {
