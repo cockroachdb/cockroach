@@ -96,7 +96,7 @@ func grantRolePlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	sqltelemetry.IncIAMGrant(grant.AdminOption)
+	sqltelemetry.IncIAMGrantCounter(grant.AdminOption)
 
 	fn = func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
@@ -250,7 +250,7 @@ func revokeRolePlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	sqltelemetry.IncIAMRevoke(revoke.AdminOption)
+	sqltelemetry.IncIAMRevokeCounter(revoke.AdminOption)
 
 	fn = func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.

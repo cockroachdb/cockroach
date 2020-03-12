@@ -16,53 +16,51 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 )
 
-// Role is used when the syntax used is the ROLE version (ie. CREATE ROLE).
-const Role = "role"
+const (
+	// Role is used when the syntax used is the ROLE version (ie. CREATE ROLE).
+	Role = "role"
+	// User is used when the syntax used is the USER version (ie. CREATE USER).
+	User = "user"
 
-// User is used when the syntax used is the USER version (ie. CREATE USER).
-const User = "user"
+	// AlterRole is used when an ALTER ROLE / USER is the operation.
+	AlterRole = "alter"
+	// CreateRole is used when an CREATE ROLE / USER is the operation.
+	CreateRole = "create"
+	// OnDatabase is used when a GRANT/REVOKE is happening on a database.
+	OnDatabase = "on_database"
+	// OnTable is used when a GRANT/REVOKE is happening on a table.
+	OnTable = "on_table"
 
-// AlterRole is used when an ALTER ROLE / USER is the operation.
-const AlterRole = "alter"
+	iamRoles = "iam.roles"
+)
 
-// CreateRole is used when an CREATE ROLE / USER is the operation.
-const CreateRole = "create"
-
-// OnDatabase is used when a GRANT/REVOKE is happening on a database.
-const OnDatabase = "on_database"
-
-// OnTable is used when a GRANT/REVOKE is happening on a table.
-const OnTable = "on_table"
-
-const iamRoles = "iam.roles"
-
-// IncIAMOption is to be incremented every time a CREATE/ALTER role
+// IncIAMOptionCounter is to be incremented every time a CREATE/ALTER role
 // with an OPTION (ie. NOLOGIN) happens.
-func IncIAMOption(opName string, option string) {
+func IncIAMOptionCounter(opName string, option string) {
 	telemetry.Inc(telemetry.GetCounter(
 		fmt.Sprintf("%s.%s.%s", iamRoles, opName, option)))
 }
 
-// IncIAMCreate is to be incremented every time a CREATE ROLE happens.
-func IncIAMCreate(typ string) {
+// IncIAMCreateCounter is to be incremented every time a CREATE ROLE happens.
+func IncIAMCreateCounter(typ string) {
 	telemetry.Inc(telemetry.GetCounter(
 		fmt.Sprintf("%s.%s.%s", iamRoles, "create", typ)))
 }
 
-// IAMAlter is to be incremented every time an ALTER ROLE happens.
-func IAMAlter(typ string) {
+// IncIAMAlterCounter is to be incremented every time an ALTER ROLE happens.
+func IncIAMAlterCounter(typ string) {
 	telemetry.Inc(telemetry.GetCounter(
 		fmt.Sprintf("%s.%s.%s", iamRoles, "alter", typ)))
 }
 
-// IncIAMDrop is to be incremented every time a DROP ROLE happens.
-func IncIAMDrop(typ string) {
+// IncIAMDropCounter is to be incremented every time a DROP ROLE happens.
+func IncIAMDropCounter(typ string) {
 	telemetry.Inc(telemetry.GetCounter(
 		fmt.Sprintf("%s.%s.%s", iamRoles, "drop", typ)))
 }
 
-// IncIAMGrant is to be incremented every time a GRANT ROLE happens.
-func IncIAMGrant(withAdmin bool) {
+// IncIAMGrantCounter is to be incremented every time a GRANT ROLE happens.
+func IncIAMGrantCounter(withAdmin bool) {
 	var s string
 	if withAdmin {
 		s = fmt.Sprintf("%s.%s.with_admin", iamRoles, "grant")
@@ -72,8 +70,8 @@ func IncIAMGrant(withAdmin bool) {
 	telemetry.Inc(telemetry.GetCounter(s))
 }
 
-// IncIAMRevoke is to be incremented every time a REVOKE ROLE happens.
-func IncIAMRevoke(withAdmin bool) {
+// IncIAMRevokeCounter is to be incremented every time a REVOKE ROLE happens.
+func IncIAMRevokeCounter(withAdmin bool) {
 	var s string
 	if withAdmin {
 		s = fmt.Sprintf("%s.%s.with_admin", iamRoles, "revoke")
@@ -83,14 +81,14 @@ func IncIAMRevoke(withAdmin bool) {
 	telemetry.Inc(telemetry.GetCounter(s))
 }
 
-// IncIAMGrantPrivileges is to be incremented every time a GRANT <privileges> happens.
-func IncIAMGrantPrivileges(on string) {
+// IncIAMGrantPrivilegesCounter is to be incremented every time a GRANT <privileges> happens.
+func IncIAMGrantPrivilegesCounter(on string) {
 	telemetry.Inc(telemetry.GetCounter(
 		fmt.Sprintf("%s.%s.%s.%s", iamRoles, "grant", "privileges", on)))
 }
 
-// IncIAMRevokePrivileges is to be incremented every time a REVOKE <privileges> happens.
-func IncIAMRevokePrivileges(on string) {
+// IncIAMRevokePrivilegesCounter is to be incremented every time a REVOKE <privileges> happens.
+func IncIAMRevokePrivilegesCounter(on string) {
 	telemetry.Inc(telemetry.GetCounter(
 		fmt.Sprintf("%s.%s.%s.%s", iamRoles, "revoke", "privileges", on)))
 }

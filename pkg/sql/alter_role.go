@@ -86,10 +86,10 @@ type alterRoleRun struct {
 func (n *alterRoleNode) startExec(params runParams) error {
 	var opName string
 	if n.isRole {
-		sqltelemetry.IAMAlter(sqltelemetry.Role)
+		sqltelemetry.IncIAMAlterCounter(sqltelemetry.Role)
 		opName = "alter-role"
 	} else {
-		sqltelemetry.IAMAlter(sqltelemetry.User)
+		sqltelemetry.IncIAMAlterCounter(sqltelemetry.User)
 		opName = "alter-user"
 	}
 	name, err := n.name()
