@@ -1012,8 +1012,7 @@ var specs = []stmtSpec{
 		stmt:    "rollback_stmt",
 		inline:  []string{"opt_transaction"},
 		match:   []*regexp.Regexp{regexp.MustCompile("'ROLLBACK'")},
-		replace: map[string]string{"'TRANSACTION'": "", "'TO'": "'TO' 'SAVEPOINT'", "savepoint_name": "cockroach_restart"},
-		unlink:  []string{"cockroach_restart"},
+		replace: map[string]string{"'TRANSACTION'": "", "'TO'": "'TO' 'SAVEPOINT'"},
 	},
 	{
 		name:   "limit_clause",
@@ -1263,6 +1262,11 @@ var specs = []stmtSpec{
 		name:  "show_transaction",
 		stmt:  "show_stmt",
 		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'TRANSACTION'")},
+	},
+	{
+		name:  "show_savepoint_status",
+		stmt:  "show_savepoint_stmt",
+		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'SAVEPOINT' 'STATUS'")},
 	},
 	{
 		name:  "show_users",
