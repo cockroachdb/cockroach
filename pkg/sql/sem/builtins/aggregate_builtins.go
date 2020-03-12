@@ -145,6 +145,11 @@ var aggregates = map[string]builtinDefinition{
 			"Calculates the boolean value of `AND`ing all selected values."),
 	),
 
+	"every": makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.Bool}, types.Bool, newBoolAndAggregate,
+			"Calculates the boolean value of `AND`ing all selected values."),
+	),
+
 	"bool_or": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Bool}, types.Bool, newBoolOrAggregate,
 			"Calculates the boolean value of `OR`ing all selected values."),
