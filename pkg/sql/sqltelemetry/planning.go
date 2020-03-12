@@ -120,3 +120,9 @@ func ReportJoinReorderLimit(value int) {
 		telemetry.Inc(reorderJoinLimitMoreCounter)
 	}
 }
+
+// WindowFunctionCounter is to be incremented every time a window function is
+// being planned.
+func WindowFunctionCounter(wf string) telemetry.Counter {
+	return telemetry.GetCounter("sql.plan.window_function." + wf)
+}
