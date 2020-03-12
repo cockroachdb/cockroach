@@ -36,7 +36,7 @@ func makeStorageConfig(path string) base.StorageConfig {
 	}
 }
 
-func createTestRocksDBEngine(path string) (storage.Engine, error) {
+func createTestRocksDBEngine(path string, seed int64) (storage.Engine, error) {
 	cache := storage.NewRocksDBCache(1 << 20)
 	defer cache.Release()
 	cfg := storage.RocksDBConfig{
@@ -47,7 +47,7 @@ func createTestRocksDBEngine(path string) (storage.Engine, error) {
 	return storage.NewRocksDB(cfg, cache)
 }
 
-func createTestPebbleEngine(path string) (storage.Engine, error) {
+func createTestPebbleEngine(path string, seed int64) (storage.Engine, error) {
 	pebbleConfig := storage.PebbleConfig{
 		StorageConfig: makeStorageConfig(path),
 		Opts:          storage.DefaultPebbleOptions(),
@@ -58,9 +58,73 @@ func createTestPebbleEngine(path string) (storage.Engine, error) {
 	return storage.NewPebble(context.Background(), pebbleConfig)
 }
 
+func createTestPebbleManySSTs(path string, seed int64) (storage.Engine, error) {
+	pebbleConfig := storage.PebbleConfig{
+		StorageConfig: makeStorageConfig(path),
+		Opts:          storage.DefaultPebbleOptions(),
+	}
+	levels := pebbleConfig.Opts.Levels
+	for i := range levels {
+		if i == 0 {
+			levels[i].TargetFileSize = 1 << 8 // 256 bytes
+		} else {
+			levels[i].TargetFileSize = levels[i-1].TargetFileSize * 2
+		}
+	}
+	pebbleConfig.Opts.Cache = pebble.NewCache(1 << 20)
+	defer pebbleConfig.Opts.Cache.Unref()
+
+	return storage.NewPebble(context.Background(), pebbleConfig)
+}
+
+func rngIntRange(rng *rand.Rand, min int64, max int64) int64 {
+	return min + rng.Int63n(max)
+}
+
+func createTestPebbleVarOpts(path string, seed int64) (storage.Engine, error) {
+	opts := storage.DefaultPebbleOptions()
+
+	rng := rand.New(rand.NewSource(seed))
+	opts.BytesPerSync = int(rngIntRange(rng, 1 << 8, 1 << 20))
+	opts.LBaseMaxBytes = rngIntRange(rng, 1 << 8, 128 << 20)
+	opts.L0CompactionThreshold = int(rngIntRange(rng, 1, 8))
+	opts.L0StopWritesThreshold = int(rngIntRange(rng, 1, 32))
+	for i := range opts.Levels {
+		if i == 0 {
+			opts.Levels[i].BlockRestartInterval = int(rngIntRange(rng, 1, 32))
+			opts.Levels[i].BlockSize = int(rngIntRange(rng, 128, 8192))
+			opts.Levels[i].BlockSizeThreshold = int(rngIntRange(rng, 40, 180))
+			opts.Levels[i].IndexBlockSize = opts.Levels[i].BlockSize
+			opts.Levels[i].TargetFileSize = rngIntRange(rng, 1 << 8, 4 << 20)
+		} else {
+			opts.Levels[i] = opts.Levels[i-1]
+			opts.Levels[i].TargetFileSize = opts.Levels[i-1].TargetFileSize * 2
+		}
+	}
+	opts.MaxManifestFileSize = rngIntRange(rng, 1, 256 << 20)
+	opts.MaxOpenFiles = int(rngIntRange(rng, 10, 2000))
+	opts.MemTableSize = int(rngIntRange(rng, 1 << 8, 8 << 20))
+	opts.MemTableStopWritesThreshold = int(rngIntRange(rng, 1, 4))
+	opts.MinCompactionRate = int(rngIntRange(rng, 1 << 8, 8 << 20))
+	opts.MinFlushRate = int(rngIntRange(rng, 1 << 8, 4 << 20))
+	opts.MaxConcurrentCompactions = int(rngIntRange(rng, 1, 4))
+
+	opts.Cache = pebble.NewCache(rngIntRange(rng, 1 << 8, 2 << 20))
+	defer opts.Cache.Unref()
+
+	fmt.Printf("pebble options:\n%s\n", opts.String())
+
+	pebbleConfig := storage.PebbleConfig{
+		StorageConfig: makeStorageConfig(path),
+		Opts:          opts,
+	}
+
+	return storage.NewPebble(context.Background(), pebbleConfig)
+}
+
 type engineImpl struct {
 	name   string
-	create func(path string) (storage.Engine, error)
+	create func(path string, seed int64) (storage.Engine, error)
 }
 
 var _ fmt.Stringer = &engineImpl{}
@@ -71,6 +135,8 @@ func (e *engineImpl) String() string {
 
 var engineImplRocksDB = engineImpl{"rocksdb", createTestRocksDBEngine}
 var engineImplPebble = engineImpl{"pebble", createTestPebbleEngine}
+var engineImplPebbleManySSTs = engineImpl{"pebble_many_ssts", createTestPebbleManySSTs}
+var engineImplPebbleVarOpts = engineImpl{"pebble_var_opts", createTestPebbleVarOpts}
 
 // Object to store info corresponding to one metamorphic test run. Responsible
 // for generating and executing operations.
@@ -110,7 +176,7 @@ func (m *metaTestRunner) init() {
 	m.curEngine = 0
 
 	var err error
-	m.engine, err = m.engineImpls[0].create(m.path)
+	m.engine, err = m.engineImpls[0].create(m.path, m.seed)
 	if err != nil {
 		m.t.Fatal(err)
 	}
@@ -281,7 +347,7 @@ func (m *metaTestRunner) restart() (string, string) {
 	}
 
 	var err error
-	m.engine, err = m.engineImpls[m.curEngine].create(m.path)
+	m.engine, err = m.engineImpls[m.curEngine].create(m.path, m.seed)
 	if err != nil {
 		m.t.Fatal(err)
 	}
