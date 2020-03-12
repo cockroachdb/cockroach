@@ -48,7 +48,7 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
     }));
   }
 
-  componentWillMount() {
+  componentDidMount() {
     this.refresh();
   }
 

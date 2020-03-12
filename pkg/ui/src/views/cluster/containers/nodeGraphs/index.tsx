@@ -139,12 +139,12 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     this.setClusterPath(getMatchParamByName(this.props.match, nodeIDAttr), selected.value);
   }
 
-  componentWillMount() {
+  componentDidMount() {
     this.refresh();
   }
 
-  componentWillReceiveProps(props: NodeGraphsProps) {
-    this.refresh(props);
+  componentDidUpdate() {
+    this.refresh(this.props);
   }
 
   render() {

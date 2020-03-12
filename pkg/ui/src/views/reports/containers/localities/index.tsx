@@ -88,14 +88,14 @@ interface LocalitiesProps {
 }
 
 export class Localities extends React.Component<LocalitiesProps, {}> {
-  componentWillMount() {
+  componentDidMount() {
     this.props.refreshLocations();
     this.props.refreshNodes();
   }
 
-  componentWillReceiveProps(props: LocalitiesProps) {
-    props.refreshLocations();
-    props.refreshNodes();
+  componentDidUpdate() {
+    this.props.refreshLocations();
+    this.props.refreshNodes();
   }
 
   render() {

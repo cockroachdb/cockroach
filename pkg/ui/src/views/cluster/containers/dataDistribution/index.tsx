@@ -157,7 +157,7 @@ export class DataDistributionPage extends React.Component<DataDistributionPagePr
     this.props.refreshLiveness();
   }
 
-  componentWillReceiveProps() {
+  componentDidUpdate() {
     this.props.refreshDataDistribution();
     this.props.refreshNodes();
     this.props.refreshLiveness();

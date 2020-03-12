@@ -163,11 +163,13 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
     this.rezoomToLocalities(this.state.zoomTransform);
   }
 
-  componentWillReceiveProps(props: MapLayoutProps) {
-    const zoomTransform = this.state.zoomTransform.withViewportSize(props.viewportSize);
-    this.setState({
-      zoomTransform,
-    });
+  componentDidUpdate() {
+    const zoomTransform = this.state.zoomTransform.withViewportSize(this.props.viewportSize);
+    if (!_.isEqual(this.state.zoomTransform, zoomTransform)) {
+      this.setState({
+        zoomTransform,
+      });
+    }
     this.rezoomToLocalities(zoomTransform);
   }
 
