@@ -90,3 +90,23 @@ sql.schema.new_column.qualification.default_expr
 
 statement ok
 DROP TABLE telemetry_test
+
+statement ok
+SET experimental_enable_hash_sharded_indexes = true;
+CREATE TABLE telemetry (
+  x INT PRIMARY KEY,
+  y INT,
+  z JSONB,
+  INVERTED INDEX (z),
+  INDEX (y) USING HASH WITH BUCKET_COUNT = 4
+)
+
+query T rowsort
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name IN (
+  'sql.schema.inverted_index',
+  'sql.schema.hash_sharded_index'
+)
+----
+sql.schema.inverted_index
+sql.schema.hash_sharded_index

@@ -142,6 +142,7 @@ func MakeIndexDescriptor(
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique")
 		}
 		indexDesc.Type = sqlbase.IndexDescriptor_INVERTED
+		telemetry.Inc(sqltelemetry.InvertedIndexCounter)
 	}
 
 	if n.Sharded != nil {
@@ -169,6 +170,7 @@ func MakeIndexDescriptor(
 				return nil, err
 			}
 		}
+		telemetry.Inc(sqltelemetry.HashShardedIndexCounter)
 	}
 
 	if err := indexDesc.FillColumns(n.Columns); err != nil {
