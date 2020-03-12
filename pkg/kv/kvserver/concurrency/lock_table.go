@@ -1146,16 +1146,20 @@ func (l *lockState) acquireLock(
 		}
 		seqs := l.holder.holder[durability].seqs
 		if len(seqs) > 0 && seqs[len(seqs)-1] >= txn.Sequence {
-			// Idempotent lock acquisition. In this case, we simply ignore
-			// the lock acquisition as long as it corresponds to an existing
-			// sequence number. The validity of such a lock re-acquisition
-			// should have already been determined at the MVCC level.
+			// Idempotent lock acquisition. In this case, we simply ignore the lock
+			// acquisition as long as it corresponds to an existing sequence number.
+			// If the sequence number is not being tracked yet, insert it into the
+			// sequence history. The validity of such a lock re-acquisition should
+			// have already been determined at the MVCC level.
 			if i := sort.Search(len(seqs), func(i int) bool {
 				return seqs[i] >= txn.Sequence
 			}); i == len(seqs) {
 				panic("lockTable bug - search value <= last element")
 			} else if seqs[i] != txn.Sequence {
-				return errors.Errorf("missing lock at sequence: %v not in %v", txn.Sequence, seqs)
+				seqs = append(seqs, 0)
+				copy(seqs[i+1:], seqs[i:])
+				seqs[i] = txn.Sequence
+				l.holder.holder[durability].seqs = seqs
 			}
 			return nil
 		}
