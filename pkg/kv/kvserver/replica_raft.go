@@ -319,6 +319,9 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (index int64, pE
 	// Insert into the proposal buffer, which passes the command to Raft to be
 	// proposed. The proposal buffer assigns the command a maximum lease index
 	// when it sequences it.
+	//
+	// NB: we must not hold r.mu while using the proposal buffer, see comment
+	// on the field.
 	maxLeaseIndex, err := r.mu.proposalBuf.Insert(p, data)
 	if err != nil {
 		return 0, roachpb.NewError(err)
