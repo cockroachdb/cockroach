@@ -1,5 +1,5 @@
 create_role_stmt ::=
-	'CREATE' role_or_group name opt_with role_options
-	| 'CREATE' role_or_group name 
-	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' name opt_with role_options
-	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' name 
+	'CREATE' role_or_group_or_user name opt_with role_options
+	| 'CREATE' role_or_group_or_user name 
+	| 'CREATE' role_or_group_or_user 'IF' 'NOT' 'EXISTS' name opt_with role_options
+	| 'CREATE' role_or_group_or_user 'IF' 'NOT' 'EXISTS' name 

@@ -93,7 +93,6 @@ transaction_stmt ::=
 alter_stmt ::=
 	alter_ddl_stmt
 	| alter_role_stmt
-	| alter_user_stmt
 
 backup_stmt ::=
 	'BACKUP' 'TO' partitioned_backup opt_as_of_clause opt_incremental opt_with_options
@@ -106,7 +105,6 @@ cancel_stmt ::=
 
 create_stmt ::=
 	create_role_stmt
-	| create_user_stmt
 	| create_ddl_stmt
 	| create_stats_stmt
 
@@ -116,7 +114,6 @@ delete_stmt ::=
 drop_stmt ::=
 	drop_ddl_stmt
 	| drop_role_stmt
-	| drop_user_stmt
 
 explain_stmt ::=
 	'EXPLAIN' preparable_stmt
@@ -301,12 +298,8 @@ alter_ddl_stmt ::=
 	| alter_partition_stmt
 
 alter_role_stmt ::=
-	'ALTER' role_or_group string_or_placeholder opt_role_options
-	| 'ALTER' role_or_group 'IF' 'EXISTS' string_or_placeholder opt_role_options
-
-alter_user_stmt ::=
-	'ALTER' 'USER' string_or_placeholder opt_role_options
-	| 'ALTER' 'USER' 'IF' 'EXISTS' string_or_placeholder opt_role_options
+	'ALTER' role_or_group_or_user string_or_placeholder opt_role_options
+	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' string_or_placeholder opt_role_options
 
 partitioned_backup ::=
 	string_or_placeholder
@@ -337,12 +330,8 @@ cancel_sessions_stmt ::=
 	| 'CANCEL' 'SESSIONS' 'IF' 'EXISTS' select_stmt
 
 create_role_stmt ::=
-	'CREATE' role_or_group string_or_placeholder opt_role_options
-	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' string_or_placeholder opt_role_options
-
-create_user_stmt ::=
-	'CREATE' 'USER' string_or_placeholder opt_role_options
-	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' string_or_placeholder opt_role_options
+	'CREATE' role_or_group_or_user string_or_placeholder opt_role_options
+	| 'CREATE' role_or_group_or_user 'IF' 'NOT' 'EXISTS' string_or_placeholder opt_role_options
 
 create_ddl_stmt ::=
 	create_changefeed_stmt
@@ -391,12 +380,8 @@ drop_ddl_stmt ::=
 	| drop_sequence_stmt
 
 drop_role_stmt ::=
-	'DROP' role_or_group string_or_placeholder_list
-	| 'DROP' role_or_group 'IF' 'EXISTS' string_or_placeholder_list
-
-drop_user_stmt ::=
-	'DROP' 'USER' string_or_placeholder_list
-	| 'DROP' 'USER' 'IF' 'EXISTS' string_or_placeholder_list
+	'DROP' role_or_group_or_user string_or_placeholder_list
+	| 'DROP' role_or_group_or_user 'IF' 'EXISTS' string_or_placeholder_list
 
 explain_option_list ::=
 	( explain_option_name ) ( ( ',' explain_option_name ) )*
@@ -1011,8 +996,9 @@ alter_range_stmt ::=
 alter_partition_stmt ::=
 	alter_zone_partition_stmt
 
-role_or_group ::=
+role_or_group_or_user ::=
 	'ROLE'
+	| 'USER'
 
 opt_role_options ::=
 	opt_with role_options

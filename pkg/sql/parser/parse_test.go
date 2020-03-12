@@ -2637,7 +2637,7 @@ SELECT ANNOTATE_TYPE(1.2+2.3, notatype)
 DETAIL: source SQL:
 CREATE USER foo WITH PASSWORD
                              ^
-HINT: try \h CREATE USER`,
+HINT: try \h CREATE ROLE`,
 		},
 		{
 			`ALTER TABLE t RENAME TO t[TRUE]`,

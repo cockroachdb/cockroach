@@ -360,16 +360,6 @@ var specs = []stmtSpec{
 		unlink: []string{"name", "password"},
 	},
 	{
-		name:   "alter_user_stmt",
-		inline: []string{"opt_role_options"},
-		replace: map[string]string{
-			"string_or_placeholder":             "name'",
-			"opt_role_options":                  "OPTIONS",
-			"string_or_placeholder  'PASSWORD'": "name 'PASSWORD'",
-			"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
-		unlink: []string{"name", "password"},
-	},
-	{
 		name:    "alter_sequence_options_stmt",
 		inline:  []string{"sequence_option_list", "sequence_option_elem"},
 		replace: map[string]string{"relation_expr": "sequence_name", "signed_iconst64": "integer"},
@@ -607,15 +597,6 @@ var specs = []stmtSpec{
 			"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
 	},
 	{
-		name:   "create_user_stmt",
-		inline: []string{"opt_role_options"},
-		replace: map[string]string{
-			"string_or_placeholder":             "name",
-			"opt_role_options":                  "OPTIONS",
-			"string_or_placeholder  'PASSWORD'": "name 'PASSWORD'",
-			"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
-	},
-	{
 		name: "default_value_column_level",
 		stmt: "stmt_block",
 		replace: map[string]string{
@@ -686,10 +667,6 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "drop_role_stmt",
-		replace: map[string]string{"string_or_placeholder_list": "name"},
-	},
-	{
-		name:    "drop_user_stmt",
 		replace: map[string]string{"string_or_placeholder_list": "name"},
 	},
 	{
