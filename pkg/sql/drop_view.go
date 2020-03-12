@@ -77,7 +77,7 @@ func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, err
 func (n *dropViewNode) ReadingOwnWrites() {}
 
 func (n *dropViewNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeDrop("view"))
+	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter("view"))
 
 	ctx := params.ctx
 	for _, toDel := range n.td {

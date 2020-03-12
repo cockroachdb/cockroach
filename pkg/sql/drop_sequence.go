@@ -63,7 +63,7 @@ func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planN
 func (n *dropSequenceNode) ReadingOwnWrites() {}
 
 func (n *dropSequenceNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeDrop("sequence"))
+	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter("sequence"))
 
 	ctx := params.ctx
 	for _, toDel := range n.td {

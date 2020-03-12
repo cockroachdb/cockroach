@@ -124,7 +124,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 }
 
 func (n *dropDatabaseNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeDrop("database"))
+	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter("database"))
 
 	ctx := params.ctx
 	p := params.p

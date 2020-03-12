@@ -46,7 +46,7 @@ type createViewNode struct {
 func (n *createViewNode) ReadingOwnWrites() {}
 
 func (n *createViewNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeCreate("view"))
+	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("view"))
 
 	viewName := string(n.viewName)
 	isTemporary := n.temporary

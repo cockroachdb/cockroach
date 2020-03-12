@@ -146,7 +146,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 					"unsupported zone config parameter: %q", tree.ErrString(&opt.Key))
 			}
 			telemetry.Inc(
-				sqltelemetry.SchemaSetZoneConfig(
+				sqltelemetry.SchemaSetZoneConfigCounter(
 					n.ZoneSpecifier.TelemetryName(),
 					string(opt.Key),
 				),
@@ -305,7 +305,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	}
 
 	telemetry.Inc(
-		sqltelemetry.SchemaChangeAlterWithExtra(n.zoneSpecifier.TelemetryName(), "configure_zone"),
+		sqltelemetry.SchemaChangeAlterCounterWithExtra(n.zoneSpecifier.TelemetryName(), "configure_zone"),
 	)
 
 	// If the specifier is for a table, partition or index, this will

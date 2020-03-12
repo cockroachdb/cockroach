@@ -50,7 +50,7 @@ func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (pla
 func (n *alterSequenceNode) ReadingOwnWrites() {}
 
 func (n *alterSequenceNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeAlter("sequence"))
+	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounter("sequence"))
 	desc := n.seqDesc
 
 	err := assignSequenceOptions(desc.SequenceOpts, n.n.Options, false /* setDefaults */, &params, desc.GetID())
