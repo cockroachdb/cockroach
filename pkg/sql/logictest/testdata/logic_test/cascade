@@ -544,6 +544,12 @@ CREATE TABLE c3 (
   id STRING PRIMARY KEY REFERENCES b2 ON DELETE CASCADE
 ) INTERLEAVE IN PARENT b2 (id);
 
+# Check that telemetry is being collected on creation of interleaved tables.
+query B
+SELECT usage_count >= 5 FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.create_interleaved_table'
+----
+true
+
 statement ok
 INSERT INTO a VALUES ('pk1'), ('pk2');
 INSERT INTO b1 VALUES ('pk1'), ('pk2');
