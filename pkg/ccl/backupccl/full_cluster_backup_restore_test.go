@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/roleccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )

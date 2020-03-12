@@ -1330,32 +1330,12 @@ type CreateRole struct {
 
 // Format implements the NodeFormatter interface.
 func (node *CreateRole) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE ROLE ")
-	if node.IfNotExists {
-		ctx.WriteString("IF NOT EXISTS ")
+	ctx.WriteString("CREATE")
+	if node.IsRole {
+		ctx.WriteString(" ROLE ")
+	} else {
+		ctx.WriteString(" USER ")
 	}
-	ctx.FormatNode(node.Name)
-
-	if len(node.KVOptions) > 0 {
-		ctx.WriteString(" WITH")
-		node.KVOptions.formatAsRoleOptions(ctx)
-	}
-}
-
-// CreateUser represents a CREATE USER statement.
-// CreateUser is an alias for CREATE ROLE.
-// CreateUser is separated from CreateUser syntax since we disable
-// CREATE ROLE syntax for non-enterprise.
-type CreateUser struct {
-	Name        Expr
-	IfNotExists bool
-	IsRole      bool
-	KVOptions   KVOptions
-}
-
-// Format implements the NodeFormatter interface.
-func (node *CreateUser) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE USER ")
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
@@ -1377,29 +1357,12 @@ type AlterRole struct {
 
 // Format implements the NodeFormatter interface.
 func (node *AlterRole) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER ROLE ")
-	if node.IfExists {
-		ctx.WriteString("IF EXISTS ")
+	ctx.WriteString("ALTER")
+	if node.IsRole {
+		ctx.WriteString(" ROLE ")
+	} else {
+		ctx.WriteString(" USER ")
 	}
-	ctx.FormatNode(node.Name)
-
-	if len(node.KVOptions) > 0 {
-		ctx.WriteString(" WITH")
-		node.KVOptions.formatAsRoleOptions(ctx)
-	}
-}
-
-// AlterUser is an alias for AlterRole.
-type AlterUser struct {
-	Name      Expr
-	IfExists  bool
-	IsRole    bool
-	KVOptions KVOptions
-}
-
-// Format implements the NodeFormatter interface.
-func (node *AlterUser) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER USER ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}

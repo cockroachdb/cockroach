@@ -5,4 +5,3 @@ drop_stmt ::=
 	| drop_view_stmt
 	| drop_sequence_stmt
 	| drop_role_stmt
-	| drop_user_stmt
