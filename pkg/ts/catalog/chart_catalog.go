@@ -769,6 +769,10 @@ var charts = []sectionDescription{
 				Metrics: []string{"txn.autoretries"},
 			},
 			{
+				Title:   "Refresh Span Bytes Exceeded",
+				Metrics: []string{"txn.refreshspanbytesexceeded"},
+			},
+			{
 				Title: "Commits",
 				Metrics: []string{
 					"txn.commits",

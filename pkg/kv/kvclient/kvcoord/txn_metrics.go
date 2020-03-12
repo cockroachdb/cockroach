@@ -19,12 +19,13 @@ import (
 
 // TxnMetrics holds all metrics relating to KV transactions.
 type TxnMetrics struct {
-	Aborts          *metric.Counter
-	Commits         *metric.Counter
-	Commits1PC      *metric.Counter // Commits which finished in a single phase
-	ParallelCommits *metric.Counter // Commits which entered the STAGING state
-	AutoRetries     *metric.Counter // Auto retries which avoid client-side restarts
-	Durations       *metric.Histogram
+	Aborts                   *metric.Counter
+	Commits                  *metric.Counter
+	Commits1PC               *metric.Counter // Commits which finished in a single phase
+	ParallelCommits          *metric.Counter // Commits which entered the STAGING state
+	AutoRetries              *metric.Counter // Auto retries which avoid client-side restarts
+	RefreshSpanBytesExceeded *metric.Counter // Transactions which don't refresh due to span bytes
+	Durations                *metric.Histogram
 
 	// Restarts is the number of times we had to restart the transaction.
 	Restarts *metric.Histogram
@@ -68,6 +69,12 @@ var (
 	metaAutoRetriesRates = metric.Metadata{
 		Name:        "txn.autoretries",
 		Help:        "Number of automatic retries to avoid serializable restarts",
+		Measurement: "Retries",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRefreshSpanBytesExceeded = metric.Metadata{
+		Name:        "txn.refreshspanbytesexceeded",
+		Help:        "Number of transaction retries which fail to refresh due to the refresh span bytes",
 		Measurement: "Retries",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -169,6 +176,7 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		Commits1PC:                    metric.NewCounter(metaCommits1PCRates),
 		ParallelCommits:               metric.NewCounter(metaParallelCommitsRates),
 		AutoRetries:                   metric.NewCounter(metaAutoRetriesRates),
+		RefreshSpanBytesExceeded:      metric.NewCounter(metaRefreshSpanBytesExceeded),
 		Durations:                     metric.NewLatency(metaDurationsHistograms, histogramWindow),
 		Restarts:                      metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
 		RestartsWriteTooOld:           telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),
