@@ -25,11 +25,12 @@ import (
 func makeMockTxnSpanRefresher() (txnSpanRefresher, *mockLockedSender) {
 	mockSender := &mockLockedSender{}
 	return txnSpanRefresher{
-		st:               cluster.MakeTestingClusterSettings(),
-		knobs:            new(ClientTestingKnobs),
-		wrapped:          mockSender,
-		canAutoRetry:     true,
-		autoRetryCounter: metric.NewCounter(metaAutoRetriesRates),
+		st:                              cluster.MakeTestingClusterSettings(),
+		knobs:                           new(ClientTestingKnobs),
+		wrapped:                         mockSender,
+		canAutoRetry:                    true,
+		autoRetryCounter:                metric.NewCounter(metaAutoRetriesRates),
+		refreshSpanBytesExceededCounter: metric.NewCounter(metaRefreshSpanBytesExceeded),
 	}, mockSender
 }
 
@@ -259,10 +260,12 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 				require.Equal(t, tc.expRefreshTS, br.Txn.WriteTimestamp)
 				require.Equal(t, tc.expRefreshTS, br.Txn.ReadTimestamp)
 				require.Equal(t, tc.expRefreshTS, tsr.refreshedTimestamp)
+				require.Equal(t, int64(1), tsr.autoRetryCounter.Count())
 			} else {
 				require.Nil(t, br)
 				require.NotNil(t, pErr)
 				require.Equal(t, ba.Txn.ReadTimestamp, tsr.refreshedTimestamp)
+				require.Equal(t, int64(0), tsr.autoRetryCounter.Count())
 			}
 		})
 	}
@@ -347,7 +350,7 @@ func TestTxnSpanRefresherMaxRefreshAttempts(t *testing.T) {
 func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	tsr, _ := makeMockTxnSpanRefresher()
+	tsr, mockSender := makeMockTxnSpanRefresher()
 
 	txn := makeTxnProto()
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
@@ -399,6 +402,23 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	require.True(t, tsr.refreshInvalid)
 	require.Equal(t, int64(0), tsr.refreshSpansBytes)
 	require.Equal(t, txn.ReadTimestamp, tsr.refreshedTimestamp)
+
+	// Make sure that the metric due to the refresh span bytes being exceeded
+	// has not been incremented.
+	require.Equal(t, int64(0), tsr.refreshSpanBytesExceededCounter.Count())
+
+	// Return a transaction retry error and make sure the metric indicating that
+	// we did not retry due to the refresh span bytes in incremented.
+	mockSender.MockSend(func(request roachpb.BatchRequest) (batchResponse *roachpb.BatchResponse, r *roachpb.Error) {
+		return nil, roachpb.NewErrorWithTxn(
+			roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, ""), ba.Txn)
+	})
+
+	br, pErr = tsr.SendLocked(ctx, ba)
+	exp := roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "")
+	require.Equal(t, exp, pErr.GetDetail())
+	require.Nil(t, br)
+	require.Equal(t, int64(1), tsr.refreshSpanBytesExceededCounter.Count())
 }
 
 // TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp tests that the
