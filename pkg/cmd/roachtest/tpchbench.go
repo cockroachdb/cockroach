@@ -263,7 +263,7 @@ func registerTPCHBench(r *testRegistry) {
 			ScaleFactor:     1,
 			benchType:       tpch,
 			numRunsPerQuery: 3,
-			minVersion:      `v19.1.0`,
+			minVersion:      `v19.2.0`,
 			maxLatency:      500 * time.Second,
 		},
 	}
