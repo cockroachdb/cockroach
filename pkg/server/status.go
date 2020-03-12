@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -2061,14 +2062,23 @@ func (s *statusServer) JobStatus(
 		return nil, err
 	}
 
-	ctx = propagateGatewayMetadata(ctx)
-	ctx = s.AnnotateCtx(ctx)
+	ctx = s.AnnotateCtx(propagateGatewayMetadata(ctx))
 
 	j, err := s.admin.server.jobRegistry.LoadJob(ctx, req.JobId)
 	if err != nil {
 		return nil, err
 	}
-	return &serverpb.JobStatusResponse{
-		Job: j.ToProto(),
-	}, nil
+	res := &jobspb.Job{
+		Payload:  &jobspb.Payload{},
+		Progress: &jobspb.Progress{},
+	}
+	res.Id = *j.ID()
+	// j is not escaping this function and hence is immutable so a shallow copy
+	// is fine. Also we can't really clone the field Payload as it may contain
+	// types that are not supported by Clone().
+	// See https://github.com/cockroachdb/cockroach/issues/46049.
+	*res.Payload = j.Payload()
+	*res.Progress = j.Progress()
+
+	return &serverpb.JobStatusResponse{Job: res}, nil
 }
