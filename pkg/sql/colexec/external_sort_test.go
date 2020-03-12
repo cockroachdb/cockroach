@@ -100,7 +100,7 @@ func TestExternalSort(t *testing.T) {
 							}
 							sorter, accounts, monitors, err := createDiskBackedSorter(
 								ctx, flowCtx, input, tc.logTypes, tc.ordCols, tc.matchLen, tc.k, func() {},
-								maxNumberPartitions, queueCfg, sem,
+								maxNumberPartitions, false /* delegateFDAcquisition */, queueCfg, sem,
 							)
 							memAccounts = append(memAccounts, accounts...)
 							memMonitors = append(memMonitors, monitors...)
@@ -172,7 +172,8 @@ func TestExternalSortRandomized(t *testing.T) {
 				if tk.ForceDiskSpill {
 					namePrefix = "ForceDiskSpill=true"
 				}
-				name := fmt.Sprintf("%s/nCols=%d/nOrderingCols=%d", namePrefix, nCols, nOrderingCols)
+				delegateFDAcquisition := rng.Float64() < 0.5
+				name := fmt.Sprintf("%s/nCols=%d/nOrderingCols=%d/delegateFDAcquisition=%t", namePrefix, nCols, nOrderingCols, delegateFDAcquisition)
 				t.Run(name, func(t *testing.T) {
 					// Unfortunately, there is currently no better way to check that a
 					// sorter does not have leftover file descriptors other than appending
@@ -199,7 +200,7 @@ func TestExternalSortRandomized(t *testing.T) {
 							sorter, accounts, monitors, err := createDiskBackedSorter(
 								ctx, flowCtx, input, logTypes[:nCols], ordCols,
 								0 /* matchLen */, 0 /* k */, func() {},
-								maxNumberPartitions, queueCfg, sem)
+								maxNumberPartitions, delegateFDAcquisition, queueCfg, sem)
 							memAccounts = append(memAccounts, accounts...)
 							memMonitors = append(memMonitors, monitors...)
 							return sorter, err
@@ -276,7 +277,7 @@ func BenchmarkExternalSort(b *testing.B) {
 						sorter, accounts, monitors, err := createDiskBackedSorter(
 							ctx, flowCtx, []Operator{source}, logTypes, ordCols,
 							0 /* matchLen */, 0 /* k */, func() { spilled = true },
-							64 /* maxNumberPartitions */, queueCfg, &TestingSemaphore{},
+							64 /* maxNumberPartitions */, false /* delegateFDAcquisitions */, queueCfg, &TestingSemaphore{},
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
@@ -317,6 +318,7 @@ func createDiskBackedSorter(
 	k uint16,
 	spillingCallbackFn func(),
 	maxNumberPartitions int,
+	delegateFDAcquisitions bool,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
 ) (Operator, []*mon.BoundAccount, []*mon.BytesMonitor, error) {
@@ -345,6 +347,7 @@ func createDiskBackedSorter(
 	// the streaming memory account.
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = maxNumberPartitions
+	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions
 	result, err := NewColOperator(ctx, flowCtx, args)
 	return result.Op, result.BufferingOpMemAccounts, result.BufferingOpMemMonitors, err
 }
