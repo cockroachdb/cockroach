@@ -81,12 +81,6 @@ const (
 	// the keys are used to notify nodes to invalidate table statistic caches.
 	KeyTableStatAddedPrefix = "table-stat-added"
 
-	// KeyTableDisableMergesPrefix is the prefix for keys that indicate range
-	// merges for the specified table ID should be disabled. This is used by
-	// IMPORT and RESTORE to disable range merging while those operations are in
-	// progress.
-	KeyTableDisableMergesPrefix = "table-disable-merges"
-
 	// KeyGossipClientsPrefix is the prefix for keys that indicate which gossip
 	// client connections a node has open. This is used by other nodes in the
 	// cluster to build a map of the gossip network.
@@ -207,12 +201,6 @@ func TableIDFromTableStatAddedKey(key string) (uint32, error) {
 		return 0, errors.Wrapf(err, "failed parsing table ID from key %q", key)
 	}
 	return uint32(tableID), nil
-}
-
-// MakeTableDisableMergesKey returns the gossip key used to disable merges for
-// the specified table ID.
-func MakeTableDisableMergesKey(tableID uint32) string {
-	return MakeKey(KeyTableDisableMergesPrefix, strconv.FormatUint(uint64(tableID), 10 /* base */))
 }
 
 // removePrefixFromKey removes the key prefix and separator and returns what's
