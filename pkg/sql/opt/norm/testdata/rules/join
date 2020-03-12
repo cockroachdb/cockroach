@@ -133,7 +133,7 @@ right-join (merge)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1 opt(4) [actual: +1]
  │    └── filters
- │         ├── (i < 0) OR (i > 10) [type=bool, outer=(2), constraints=(/2: (/NULL - /-1] [/11 - ])]
+ │         ├── (i < 0) OR (i > 10) [type=bool, outer=(2), constraints=(/2: (/NULL - /-1] [/11 - ]; tight)]
  │         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  ├── scan b
  │    ├── columns: x:6(int!null) y:7(int)
@@ -259,7 +259,7 @@ left-join (merge)
  │    │    ├── fd: (3)-->(4-7)
  │    │    └── ordering: +3 opt(6) [actual: +3]
  │    └── filters
- │         ├── (i < 0) OR (i > 10) [type=bool, outer=(4), constraints=(/4: (/NULL - /-1] [/11 - ])]
+ │         ├── (i < 0) OR (i > 10) [type=bool, outer=(4), constraints=(/4: (/NULL - /-1] [/11 - ]; tight)]
  │         └── s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
  └── filters
       └── y = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]

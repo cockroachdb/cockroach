@@ -551,7 +551,7 @@ select
  │    │    └── ordering: +6
  │    └── filters (true)
  └── filters
-      └── (x = 6) OR (x IS NULL) [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL] [/6 - /6])]
+      └── (x = 6) OR (x IS NULL) [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL] [/6 - /6]; tight)]
 
 opt expect=PushSelectCondLeftIntoJoinLeftAndRight
 SELECT * FROM a WHERE EXISTS (SELECT * FROM xy WHERE a.k=xy.x) AND a.k > 5
@@ -680,7 +680,7 @@ select
  │    │    │    └── fd: (1)-->(2-5)
  │    │    └── filters
  │    │         ├── f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight), fd=()-->(3)]
- │    │         └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(4), constraints=(/4: [/'bar' - /'bar'] [/'foo' - /'foo'])]
+ │    │         └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(4), constraints=(/4: [/'bar' - /'bar'] [/'foo' - /'foo']; tight)]
  │    └── filters (true)
  └── filters
       └── (i < y) OR (y IS NULL) [type=bool, outer=(2,7)]
@@ -745,7 +745,7 @@ select
  │    │    └── ordering: +6
  │    └── filters (true)
  └── filters
-      └── (i = 100) OR (i IS NULL) [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL] [/100 - /100])]
+      └── (i = 100) OR (i IS NULL) [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL] [/100 - /100]; tight)]
 
 # Don't push down conditions in case of FULL JOIN.
 opt
@@ -773,7 +773,7 @@ select
  │    │    └── ordering: +6
  │    └── filters (true)
  └── filters
-      └── (i = 100) OR (i IS NULL) [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL] [/100 - /100])]
+      └── (i = 100) OR (i IS NULL) [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL] [/100 - /100]; tight)]
 
 # Push into semi-join.
 opt expect=PushSelectIntoJoinLeft
@@ -867,7 +867,7 @@ select
  │    │    │    └── fd: (3)-->(4-7)
  │    │    └── filters
  │    │         ├── f = 1.1 [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight), fd=()-->(5)]
- │    │         └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(6), constraints=(/6: [/'bar' - /'bar'] [/'foo' - /'foo'])]
+ │    │         └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(6), constraints=(/6: [/'bar' - /'bar'] [/'foo' - /'foo']; tight)]
  │    └── filters (true)
  └── filters
       └── (i < y) OR (y IS NULL) [type=bool, outer=(2,4)]
@@ -898,7 +898,7 @@ select
  │    │    └── ordering: +3
  │    └── filters (true)
  └── filters
-      └── (i = 100) OR (i IS NULL) [type=bool, outer=(4), constraints=(/4: [/NULL - /NULL] [/100 - /100])]
+      └── (i = 100) OR (i IS NULL) [type=bool, outer=(4), constraints=(/4: [/NULL - /NULL] [/100 - /100]; tight)]
 
 # Don't push down conditions in case of FULL JOIN.
 opt
@@ -926,7 +926,7 @@ select
  │    │    └── ordering: +3
  │    └── filters (true)
  └── filters
-      └── (i = 100) OR (i IS NULL) [type=bool, outer=(4), constraints=(/4: [/NULL - /NULL] [/100 - /100])]
+      └── (i = 100) OR (i IS NULL) [type=bool, outer=(4), constraints=(/4: [/NULL - /NULL] [/100 - /100]; tight)]
 
 # --------------------------------------------------
 # MergeSelectInnerJoin
