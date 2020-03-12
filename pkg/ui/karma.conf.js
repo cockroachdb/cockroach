@@ -70,8 +70,8 @@ module.exports = function(config) {
     // preprocess matching files before serving them to the browser
     // available preprocessors: https://npmjs.org/browse/keyword/karma-preprocessor
     preprocessors: {
-      "ccl/src/**": ["webpack", "sourcemap"],
-      "src/**": ["webpack", "sourcemap"],
+      "ccl/src/**": ["webpack"],
+      "src/**": ["webpack"],
     },
 
     // test results reporter to use
@@ -85,8 +85,8 @@ module.exports = function(config) {
 
     // https://github.com/airbnb/enzyme/blob/master/docs/guides/webpack.md
     webpack: {
-      devtool: "source-map",
-      mode: "development",
+      devtool: "eval",
+      mode: "none",
       module: webpackConfig.module,
       resolve: webpackConfig.resolve,
     },
