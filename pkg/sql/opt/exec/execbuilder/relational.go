@@ -1221,6 +1221,12 @@ func (b *Builder) buildSort(sort *memo.SortExpr) (execPlan, error) {
 		alreadyOrderedPrefix = i + 1
 	}
 
+	if !b.disableTelemetry {
+		if c := opt.OpTelemetryCounters[sort.Op()]; c != nil {
+			telemetry.Inc(c)
+		}
+	}
+
 	node, err := b.factory.ConstructSort(input.root, input.sqlOrdering(ordering), alreadyOrderedPrefix)
 	if err != nil {
 		return execPlan{}, err
