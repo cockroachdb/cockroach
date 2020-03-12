@@ -583,27 +583,6 @@ func (db *DB) AdminTransferLease(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-// ChangeReplicasCanMixAddAndRemoveContext convinces
-// (*client.DB).AdminChangeReplicas that the caller is aware that 19.1 nodes
-// don't know how to handle requests that mix additions and removals; 19.2+
-// binaries understand this due to the work done in the context of atomic
-// replication changes. If 19.1 nodes received such a request they'd mistake the
-// removals for additions.
-//
-// In effect users of the RPC need to check the cluster version which in the
-// past has been a brittle pattern, so this time the DB disallows the new
-// behavior unless it can determine (via the ctx) that the caller went through
-// this method and is thus aware of the intricacies.
-//
-// See https://github.com/cockroachdb/cockroach/pull/39611.
-//
-// TODO(tbg): remove in 20.1.
-func ChangeReplicasCanMixAddAndRemoveContext(ctx context.Context) context.Context {
-	return context.WithValue(ctx, adminChangeReplicasMixHint{}, adminChangeReplicasMixHint{})
-}
-
-type adminChangeReplicasMixHint struct{}
-
 // AdminChangeReplicas adds or removes a set of replicas for a range.
 func (db *DB) AdminChangeReplicas(
 	ctx context.Context,
@@ -611,23 +590,6 @@ func (db *DB) AdminChangeReplicas(
 	expDesc roachpb.RangeDescriptor,
 	chgs []roachpb.ReplicationChange,
 ) (*roachpb.RangeDescriptor, error) {
-	if ctx.Value(adminChangeReplicasMixHint{}) == nil {
-		// Disallow trying to add and remove replicas in the same set of
-		// changes. This will only work when the node receiving the request is
-		// running 19.2 (code, not cluster version).
-		//
-		// TODO(tbg): remove this when 19.2 is released.
-		var typ *roachpb.ReplicaChangeType
-		for i := range chgs {
-			chg := &chgs[i]
-			if typ == nil {
-				typ = &chg.ChangeType
-			} else if *typ != chg.ChangeType {
-				return nil, errors.Errorf("can not mix %s and %s", *typ, chg.ChangeType)
-			}
-		}
-	}
-
 	b := &Batch{}
 	b.adminChangeReplicas(key, expDesc, chgs)
 	if err := getOneErr(db.Run(ctx, b), b); err != nil {

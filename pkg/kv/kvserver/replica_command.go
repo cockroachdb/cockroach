@@ -2022,22 +2022,6 @@ func updateRangeDescriptor(
 func (s *Store) AdminRelocateRange(
 	ctx context.Context, rangeDesc roachpb.RangeDescriptor, targets []roachpb.ReplicationTarget,
 ) error {
-	useAtomic := s.ClusterSettings().Version.IsActive(
-		ctx, clusterversion.VersionAtomicChangeReplicas)
-	if useAtomic {
-		// AdminChangeReplicas will only allow atomic replication changes when
-		// this magic flag is set because we changed the corresponding request
-		// to accommodate them; only 19.2 nodes will understand it. We're going
-		// to make sure below that when !useAtomic we carry out ops one by one.
-		// Other uses of ChangeReplicas have a Replica that they can call into
-		// directly, bypassing the RPC layer, which is morally possible here as
-		// well but seems more likely to invite undesired fallout, so we stick
-		// with this hack for a few weeks.
-		//
-		// TODO(tbg): remove in 20.1.
-		ctx = kv.ChangeReplicasCanMixAddAndRemoveContext(ctx)
-	}
-
 	// Step 0: Remove everything that's not a full voter so we don't have to think
 	// about them.
 	newDesc, err := maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, s, &rangeDesc)
@@ -2120,11 +2104,6 @@ func (s *Store) AdminRelocateRange(
 			if fn := s.cfg.TestingKnobs.BeforeRelocateOne; fn != nil {
 				fn(ops, leaseTarget, err)
 			}
-			// When a swap is in order but we're not sure that all nodes are running
-			// 19.2+ (in which the AdminChangeReplicas RPC was extended to support
-			// mixing additions and removals), don't send such requests but unroll
-			// the ops here, running them one by one; see for details:
-			_ = kv.ChangeReplicasCanMixAddAndRemoveContext
 
 			// Make sure we don't issue anything but singles and swaps before
 			// this migration is gone (for it doesn't support anything else).
@@ -2132,17 +2111,9 @@ func (s *Store) AdminRelocateRange(
 				log.Fatalf(ctx, "received more than 2 ops: %+v", ops)
 			}
 			opss := [][]roachpb.ReplicationChange{ops}
-			if !useAtomic && len(ops) == 2 {
-				opss = [][]roachpb.ReplicationChange{ops[:1], ops[1:]}
-			}
 			success := true
 			for _, ops := range opss {
-				newDesc, err := s.DB().AdminChangeReplicas(
-					kv.ChangeReplicasCanMixAddAndRemoveContext(ctx),
-					startKey,
-					rangeDesc,
-					ops,
-				)
+				newDesc, err := s.DB().AdminChangeReplicas(ctx, startKey, rangeDesc, ops)
 				if err != nil {
 					returnErr := errors.Wrapf(err, "while carrying out changes %v", ops)
 					if !canRetry(err) {

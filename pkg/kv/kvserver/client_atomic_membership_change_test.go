@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -60,10 +59,7 @@ func TestAtomicReplicationChange(t *testing.T) {
 
 	runChange := func(expDesc roachpb.RangeDescriptor, chgs []roachpb.ReplicationChange) roachpb.RangeDescriptor {
 		t.Helper()
-		desc, err := tc.Servers[0].DB().AdminChangeReplicas(
-			kv.ChangeReplicasCanMixAddAndRemoveContext(ctx),
-			k, expDesc, chgs,
-		)
+		desc, err := tc.Servers[0].DB().AdminChangeReplicas(ctx, k, expDesc, chgs)
 		require.NoError(t, err)
 
 		return *desc
