@@ -437,7 +437,10 @@ func (b batchCommitOp) run(ctx context.Context) string {
 	if b.id == "engine" {
 		return "noop"
 	}
-	batch := b.m.getReadWriter(b.id)
+	batch := b.m.getReadWriter(b.id).(storage.Batch)
+	if err := batch.Commit(true); err != nil {
+		return err.Error()
+	}
 	batch.Close()
 	delete(b.m.openBatches, b.id)
 	return "ok"
