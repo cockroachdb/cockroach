@@ -292,8 +292,9 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 		// because those are the only places where we have all of the
 		// refresh spans. If this is a leaf, as in a distributed sql flow,
 		// we need to propagate the error to the root for an epoch restart.
-		canAutoRetry:     typ == kv.RootTxn,
-		autoRetryCounter: tc.metrics.AutoRetries,
+		canAutoRetry:                    typ == kv.RootTxn,
+		autoRetryCounter:                tc.metrics.AutoRetries,
+		refreshSpanBytesExceededCounter: tc.metrics.RefreshSpanBytesExceeded,
 	}
 	tc.interceptorAlloc.txnLockGatekeeper = txnLockGatekeeper{
 		wrapped:                 tc.wrapped,

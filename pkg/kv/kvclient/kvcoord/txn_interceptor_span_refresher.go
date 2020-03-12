@@ -130,6 +130,9 @@ type txnSpanRefresher struct {
 	// autoRetryCounter counts the number of auto retries which avoid
 	// client-side restarts.
 	autoRetryCounter *metric.Counter
+	// refreshSpanBytesExceeded counter counts the number of transactions which
+	// do not refresh because they exceed the MaxRefreshSpanBytes.
+	refreshSpanBytesExceededCounter *metric.Counter
 }
 
 // SendLocked implements the lockedSender interface.
@@ -212,6 +215,7 @@ func (sr *txnSpanRefresher) SendLocked(
 	// doesn't exceed the max threshold.
 	if sr.refreshSpansBytes > MaxTxnRefreshSpansBytes.Get(&sr.st.SV) {
 		log.VEventf(ctx, 2, "refresh spans max size exceeded; clearing")
+		sr.refreshSpanBytesExceededCounter.Inc(1)
 		sr.refreshSpans = nil
 		sr.refreshInvalid = true
 		sr.refreshSpansBytes = 0

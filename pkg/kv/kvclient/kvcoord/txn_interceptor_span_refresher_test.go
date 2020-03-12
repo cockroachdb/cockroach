@@ -25,11 +25,12 @@ import (
 func makeMockTxnSpanRefresher() (txnSpanRefresher, *mockLockedSender) {
 	mockSender := &mockLockedSender{}
 	return txnSpanRefresher{
-		st:               cluster.MakeTestingClusterSettings(),
-		knobs:            new(ClientTestingKnobs),
-		wrapped:          mockSender,
-		canAutoRetry:     true,
-		autoRetryCounter: metric.NewCounter(metaAutoRetriesRates),
+		st:                              cluster.MakeTestingClusterSettings(),
+		knobs:                           new(ClientTestingKnobs),
+		wrapped:                         mockSender,
+		canAutoRetry:                    true,
+		autoRetryCounter:                metric.NewCounter(metaAutoRetriesRates),
+		refreshSpanBytesExceededCounter: metric.NewCounter(metaRefreshSpanBytesExceeded),
 	}, mockSender
 }
 
