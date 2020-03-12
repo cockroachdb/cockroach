@@ -97,10 +97,10 @@ func (p *planner) CreateRoleNode(
 func (n *CreateRoleNode) startExec(params runParams) error {
 	var opName string
 	if n.isRole {
-		sqltelemetry.IncIAMCreate(sqltelemetry.Role)
+		sqltelemetry.IncIAMCreateCounter(sqltelemetry.Role)
 		opName = "create-role"
 	} else {
-		sqltelemetry.IncIAMCreate(sqltelemetry.User)
+		sqltelemetry.IncIAMCreateCounter(sqltelemetry.User)
 		opName = "create-user"
 	}
 
