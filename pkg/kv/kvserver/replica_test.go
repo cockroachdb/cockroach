@@ -922,7 +922,7 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 	key := roachpb.RKey("a")
 	firstRepl := tc.store.LookupReplica(key)
 	newRepl := splitTestRange(tc.store, key, key, t)
-	if _, pErr := newRepl.redirectOnOrAcquireLease(context.Background()); pErr != nil {
+	if _, _, pErr := newRepl.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1011,7 +1011,7 @@ func TestReplicaLease(t *testing.T) {
 	}
 
 	{
-		_, pErr := tc.repl.redirectOnOrAcquireLease(context.Background())
+		_, _, pErr := tc.repl.redirectOnOrAcquireLease(context.Background())
 		if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok || lErr == nil {
 			t.Fatalf("wanted NotLeaseHolderError, got %s", pErr)
 		}
@@ -1027,7 +1027,7 @@ func TestReplicaLease(t *testing.T) {
 	filterErr.Store(roachpb.NewError(&roachpb.LeaseRejectedError{Message: "replica not found"}))
 
 	{
-		_, err := tc.repl.redirectOnOrAcquireLease(context.Background())
+		_, _, err := tc.repl.redirectOnOrAcquireLease(context.Background())
 		if _, ok := err.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
 			t.Fatalf("expected %T, got %s", &roachpb.NotLeaseHolderError{}, err)
 		}
@@ -1409,7 +1409,7 @@ func TestReplicaDrainLease(t *testing.T) {
 
 	// Acquire initial lease.
 	ctx := context.Background()
-	status, pErr := tc.repl.redirectOnOrAcquireLease(ctx)
+	status, _, pErr := tc.repl.redirectOnOrAcquireLease(ctx)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1424,7 +1424,7 @@ func TestReplicaDrainLease(t *testing.T) {
 	}
 	tc.store.SetDraining(false)
 	// Newly undrained, leases work again.
-	if _, pErr := tc.repl.redirectOnOrAcquireLease(ctx); pErr != nil {
+	if _, _, pErr := tc.repl.redirectOnOrAcquireLease(ctx); pErr != nil {
 		t.Fatal(pErr)
 	}
 }
@@ -1557,7 +1557,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 
 	// Make sure the information for db1 is not gossiped. Since obtaining
 	// a lease updates the gossiped information, we do that.
-	if _, pErr := tc.repl.redirectOnOrAcquireLease(context.Background()); pErr != nil {
+	if _, _, pErr := tc.repl.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
 	}
 	// Fetch the raw gossip info. GetSystemConfig is based on callbacks at

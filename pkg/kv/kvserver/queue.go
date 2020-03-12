@@ -242,7 +242,7 @@ type replicaInQueue interface {
 	IsDestroyed() (DestroyReason, error)
 	Desc() *roachpb.RangeDescriptor
 	maybeInitializeRaftGroup(context.Context)
-	redirectOnOrAcquireLease(context.Context) (storagepb.LeaseStatus, *roachpb.Error)
+	redirectOnOrAcquireLease(context.Context) (storagepb.LeaseStatus, hlc.Timestamp, *roachpb.Error)
 	IsLeaseValid(roachpb.Lease, hlc.Timestamp) bool
 	GetLease() (roachpb.Lease, roachpb.Lease)
 }
@@ -932,7 +932,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 			// order to be processed, check whether this replica has range lease
 			// and renew or acquire if necessary.
 			if bq.needsLease {
-				if _, pErr := repl.redirectOnOrAcquireLease(ctx); pErr != nil {
+				if _, _, pErr := repl.redirectOnOrAcquireLease(ctx); pErr != nil {
 					switch v := pErr.GetDetail().(type) {
 					case *roachpb.NotLeaseHolderError, *roachpb.RangeNotFoundError:
 						log.VEventf(ctx, 3, "%s; skipping", v)

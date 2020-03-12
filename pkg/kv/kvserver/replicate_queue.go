@@ -311,7 +311,7 @@ func (rq *replicateQueue) processOneChange(
 	if _, err := repl.IsDestroyed(); err != nil {
 		return false, err
 	}
-	if _, pErr := repl.redirectOnOrAcquireLease(ctx); pErr != nil {
+	if _, _, pErr := repl.redirectOnOrAcquireLease(ctx); pErr != nil {
 		return false, pErr.GoError()
 	}
 

@@ -886,6 +886,10 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.TODO())
 
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with addImmediateGCZoneConfig.
+	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
@@ -1396,6 +1400,10 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.TODO())
 
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with addImmediateGCZoneConfig.
+	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
@@ -1611,6 +1619,10 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with addImmediateGCZoneConfig.
+	defer disableGCTTLStrictEnforcement(t, sqlDB)()
 
 	// Create a k-v table.
 	if _, err := sqlDB.Exec(`
@@ -2819,6 +2831,11 @@ func TestPrimaryKeyIndexRewritesGetRemoved(t *testing.T) {
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with addImmediateGCZoneConfig.
+	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT NOT NULL, w INT, INDEX i (w));
@@ -2879,6 +2896,10 @@ func TestPrimaryKeyChangeWithCancel(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	db = sqlDB
 	defer s.Stopper().Stop(ctx)
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with addImmediateGCZoneConfig.
+	defer disableGCTTLStrictEnforcement(t, sqlDB)()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -3800,6 +3821,10 @@ func TestTruncateCompletion(t *testing.T) {
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with addImmediateGCZoneConfig.
+	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.pi (d DECIMAL PRIMARY KEY);
@@ -4347,6 +4372,10 @@ func TestCancelSchemaChange(t *testing.T) {
 	db = tc.ServerConn(0)
 	kvDB := tc.Server(0).DB()
 	sqlDB = sqlutils.MakeSQLRunner(db)
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with addImmediateGCZoneConfig.
+	defer disableGCTTLStrictEnforcement(t, db)()
 
 	sqlDB.Exec(t, `
 		CREATE DATABASE t;
@@ -5548,6 +5577,10 @@ func TestOrphanedGCMutationsRemoved(t *testing.T) {
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with addImmediateGCZoneConfig.
+	defer disableGCTTLStrictEnforcement(t, sqlDB)()
 
 	retryOpts := retry.Options{
 		InitialBackoff: 20 * time.Millisecond,

@@ -321,7 +321,7 @@ func MakeTableFeedFactory(
 }
 
 // Feed implements the TestFeedFactory interface
-func (f *tableFeedFactory) Feed(create string, args ...interface{}) (TestFeed, error) {
+func (f *tableFeedFactory) Feed(create string, args ...interface{}) (_ TestFeed, err error) {
 	sink := f.sink
 	sink.Path = fmt.Sprintf(`table_%d`, timeutil.Now().UnixNano())
 
@@ -329,6 +329,11 @@ func (f *tableFeedFactory) Feed(create string, args ...interface{}) (TestFeed, e
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if err != nil {
+			_ = db.Close()
+		}
+	}()
 
 	sink.Scheme = `experimental-sql`
 	c := &TableFeed{

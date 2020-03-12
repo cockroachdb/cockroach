@@ -807,14 +807,14 @@ func newNotLeaseHolderError(
 // leaseGoodToGo is a fast-path for lease checks which verifies that an
 // existing lease is valid and owned by the current store. This method should
 // not be called directly. Use redirectOnOrAcquireLease instead.
-func (r *Replica) leaseGoodToGo(ctx context.Context) (storagepb.LeaseStatus, bool) {
+func (r *Replica) leaseGoodToGo(ctx context.Context) (storagepb.LeaseStatus, hlc.Timestamp, bool) {
 	timestamp := r.store.Clock().Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	if r.requiresExpiringLeaseRLocked() {
 		// Slow-path for expiration-based leases.
-		return storagepb.LeaseStatus{}, false
+		return storagepb.LeaseStatus{}, hlc.Timestamp{}, false
 	}
 
 	status := r.leaseStatus(*r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
@@ -823,20 +823,19 @@ func (r *Replica) leaseGoodToGo(ctx context.Context) (storagepb.LeaseStatus, boo
 		if repDesc, err := r.getReplicaDescriptorRLocked(); err == nil {
 			if _, ok := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID); !ok {
 				// ...and there is no transfer pending.
-				return status, true
+				return status, timestamp, true
 			}
 		}
 	}
-	return storagepb.LeaseStatus{}, false
+	return storagepb.LeaseStatus{}, hlc.Timestamp{}, false
 }
 
-// redirectOnOrAcquireLease checks whether this replica has the lease
-// at the current timestamp. If it does, returns success. If another
-// replica currently holds the lease, redirects by returning
-// NotLeaseHolderError. If the lease is expired, a renewal is
-// synchronously requested. Leases are eagerly renewed when a request
-// with a timestamp within rangeLeaseRenewalDuration of the lease
-// expiration is served.
+// redirectOnOrAcquireLease checks whether this replica has the lease at the
+// current timestamp. If it does, returns success and the current view of time.
+// If another replica currently holds the lease, redirects by returning
+// NotLeaseHolderError. If the lease is expired, a renewal is synchronously
+// requested. Leases are eagerly renewed when a request with a timestamp within
+// rangeLeaseRenewalDuration of the lease expiration is served.
 //
 // TODO(spencer): for write commands, don't wait while requesting
 //  the range lease. If the lease acquisition fails, the write cmd
@@ -845,9 +844,9 @@ func (r *Replica) leaseGoodToGo(ctx context.Context) (storagepb.LeaseStatus, boo
 //  Reads, however, must wait.
 func (r *Replica) redirectOnOrAcquireLease(
 	ctx context.Context,
-) (storagepb.LeaseStatus, *roachpb.Error) {
-	if status, ok := r.leaseGoodToGo(ctx); ok {
-		return status, nil
+) (storagepb.LeaseStatus, hlc.Timestamp, *roachpb.Error) {
+	if status, timestamp, ok := r.leaseGoodToGo(ctx); ok {
+		return status, timestamp, nil
 	}
 
 	// Loop until the lease is held or the replica ascertains the actual
@@ -975,11 +974,11 @@ func (r *Replica) redirectOnOrAcquireLease(
 			return nil, nil
 		}()
 		if pErr != nil {
-			return storagepb.LeaseStatus{}, pErr
+			return storagepb.LeaseStatus{}, hlc.Timestamp{}, pErr
 		}
 		if llHandle == nil {
 			// We own a valid lease.
-			return status, nil
+			return status, timestamp, nil
 		}
 
 		// Wait for the range lease to finish, or the context to expire.
@@ -1047,7 +1046,7 @@ func (r *Replica) redirectOnOrAcquireLease(
 			}
 		}()
 		if pErr != nil {
-			return storagepb.LeaseStatus{}, pErr
+			return storagepb.LeaseStatus{}, hlc.Timestamp{}, pErr
 		}
 	}
 }

@@ -704,9 +704,8 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 		t.Fatal("replica was not marked as destroyed")
 	}
 
-	if err = repl1.checkExecutionCanProceed(
-		&roachpb.BatchRequest{}, nil /* lg */, nil, /* st */
-	); err != expErr {
+	now := repl1.Clock().Now()
+	if err = repl1.checkExecutionCanProceed(&roachpb.BatchRequest{}, nil /* g */, now, nil /* st */); err != expErr {
 		t.Fatalf("expected error %s, but got %v", expErr, err)
 	}
 }
