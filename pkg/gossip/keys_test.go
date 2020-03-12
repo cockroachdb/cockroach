@@ -88,21 +88,3 @@ func TestStoreIDFromKey(t *testing.T) {
 		})
 	}
 }
-
-func TestMakeTableDisableMergesKey(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testCases := []struct {
-		tableID  uint32
-		expected string
-	}{
-		{0, "table-disable-merges:0"},
-		{123, "table-disable-merges:123"},
-	}
-	for _, c := range testCases {
-		key := MakeTableDisableMergesKey(c.tableID)
-		if c.expected != key {
-			t.Fatalf("expected %s, but found %s", c.expected, key)
-		}
-	}
-}
