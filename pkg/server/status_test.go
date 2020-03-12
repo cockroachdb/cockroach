@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -55,6 +57,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func getStatusJSONProto(
@@ -1579,4 +1582,64 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 		!strings.Contains(json, "statement execution committed the txn") {
 		t.Fatal("statement diagnostics did not capture a trace")
 	}
+}
+
+func TestJobStatusResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ts := startServer(t)
+	defer ts.Stopper().Stop(context.TODO())
+
+	rootConfig := testutils.NewTestBaseContext(security.RootUser)
+	rpcContext := newRPCTestContext(ts, rootConfig)
+
+	url := ts.ServingRPCAddr()
+	nodeID := ts.NodeID()
+	conn, err := rpcContext.GRPCDialNode(url, nodeID, rpc.DefaultClass).Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := serverpb.NewStatusClient(conn)
+
+	request := &serverpb.JobStatusRequest{JobId: -1}
+	response, err := client.JobStatus(context.Background(), request)
+	require.Regexp(t, `job with ID -1 does not exist`, err)
+	require.Nil(t, response)
+
+	ctx := context.Background()
+	job, err := ts.JobRegistry().(*jobs.Registry).CreateJobWithTxn(
+		ctx,
+		jobs.Record{
+			Description: "testing",
+			Statement:   "SELECT 1",
+			Username:    "root",
+			Details: jobspb.ImportDetails{
+				Tables: []jobspb.ImportDetails_Table{
+					{
+						Desc: &sqlbase.TableDescriptor{
+							ID: 1,
+						},
+					},
+					{
+						Desc: &sqlbase.TableDescriptor{
+							ID: 2,
+						},
+					},
+				},
+				URIs: []string{"a", "b"},
+			},
+			Progress:      jobspb.ImportProgress{},
+			DescriptorIDs: []sqlbase.ID{1, 2, 3},
+		},
+		nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.JobId = *job.ID()
+	response, err = client.JobStatus(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, *job.ID(), response.Job.Id)
+	require.Equal(t, job.Payload(), *response.Job.Payload)
+	require.Equal(t, job.Progress(), *response.Job.Progress)
 }
