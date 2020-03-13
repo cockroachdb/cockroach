@@ -176,7 +176,7 @@ func (s *TestingSemaphore) Acquire(_ context.Context, n int) error {
 		return errors.New("acquiring a negative amount")
 	}
 	if s.limit != 0 && s.count+n > s.limit {
-		return errors.New("testing semaphore limit exceeded")
+		return errors.Errorf("testing semaphore limit exceeded: tried acquiring %d but already have a count of %d from a total limit of %d", n, s.count, s.limit)
 	}
 	s.count += n
 	return nil

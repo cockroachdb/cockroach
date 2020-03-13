@@ -62,6 +62,8 @@ type spillingQueue struct {
 // newSpillingQueue creates a new spillingQueue. An unlimited allocator must be
 // passed in. The spillingQueue will use this allocator to check whether memory
 // usage exceeds the given memory limit and use disk if so.
+// If fdSemaphore is nil, no Acquire or Release calls will happen. The caller
+// may want to do this if requesting FDs up front.
 func newSpillingQueue(
 	unlimitedAllocator *Allocator,
 	typs []coltypes.T,
@@ -211,8 +213,10 @@ func (q *spillingQueue) maybeSpillToDisk(ctx context.Context) error {
 	var err error
 	// Acquire two file descriptors for the DiskQueue: one for the write file and
 	// one for the read file.
-	if err = q.fdSemaphore.Acquire(ctx, 2); err != nil {
-		return err
+	if q.fdSemaphore != nil {
+		if err = q.fdSemaphore.Acquire(ctx, 2); err != nil {
+			return err
+		}
 	}
 	log.VEvent(ctx, 1, "spilled to disk")
 	if q.rewindable {
@@ -237,7 +241,9 @@ func (q *spillingQueue) spilled() bool {
 
 func (q *spillingQueue) close() error {
 	if q.diskQueue != nil {
-		q.fdSemaphore.Release(2)
+		if q.fdSemaphore != nil {
+			q.fdSemaphore.Release(2)
+		}
 		return q.diskQueue.Close()
 	}
 	return nil
