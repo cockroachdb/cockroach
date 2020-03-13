@@ -227,7 +227,7 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	lRepls := replsForRange(ctx, t, tc, lr)
 	rRepls := replsForRange(ctx, t, tc, rr)
 	// Now immediately query both the ranges and there's 1 value per range.
-	// We need to tollerate RangeNotFound as the split range may not have been
+	// We need to tolerate RangeNotFound as the split range may not have been
 	// created yet.
 	baReadL := makeReadBatchRequestForDesc(lr, ts)
 	require.Nil(t, verifyCanReadFromAllRepls(ctx, t, baReadL, lRepls,
@@ -235,6 +235,7 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	baReadR := makeReadBatchRequestForDesc(rr, ts)
 	require.Nil(t, verifyCanReadFromAllRepls(ctx, t, baReadR, rRepls,
 		respFuncs(retryOnRangeNotFound, expectRows(1))))
+
 	// Now merge the ranges back together and ensure that there's two values in
 	// the merged range.
 	merged, err := tc.Server(0).MergeRanges(lr.StartKey.AsRawKey())
