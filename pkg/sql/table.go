@@ -23,10 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -999,6 +1001,9 @@ func (p *planner) writeSchemaChange(
 	mutationID sqlbase.MutationID,
 	jobDesc string,
 ) error {
+	if !p.EvalContext().TxnImplicit {
+		telemetry.Inc(sqltelemetry.SchemaChangeInExplicitTxnCounter)
+	}
 	if tableDesc.Dropped() {
 		// We don't allow schema changes on a dropped table.
 		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
@@ -1012,6 +1017,9 @@ func (p *planner) writeSchemaChange(
 func (p *planner) writeSchemaChangeToBatch(
 	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, b *kv.Batch,
 ) error {
+	if !p.EvalContext().TxnImplicit {
+		telemetry.Inc(sqltelemetry.SchemaChangeInExplicitTxnCounter)
+	}
 	if tableDesc.Dropped() {
 		// We don't allow schema changes on a dropped table.
 		return fmt.Errorf("table %q is being dropped", tableDesc.Name)

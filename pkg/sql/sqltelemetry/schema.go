@@ -103,6 +103,10 @@ func SchemaJobControlCounter(desiredStatus string) telemetry.Counter {
 	return telemetry.GetCounter("sql.schema.job.control." + desiredStatus)
 }
 
+// SchemaChangeInExplicitTxnCounter is to be incremented every time a schema change
+// is scheduled using an explicit transaction.
+var SchemaChangeInExplicitTxnCounter = telemetry.GetCounterOnce("sql.schema.change_in_explicit_txn")
+
 // SecondaryIndexColumnFamiliesCounter is a counter that is incremented every time
 // a secondary index that is separated into different column families is created.
 var SecondaryIndexColumnFamiliesCounter = telemetry.GetCounterOnce("sql.schema.secondary_index_column_families")
