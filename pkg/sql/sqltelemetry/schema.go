@@ -97,6 +97,12 @@ func SchemaSetAuditModeCounter(mode string) telemetry.Counter {
 	return telemetry.GetCounter("sql.schema.set_audit_mode." + mode)
 }
 
+// SchemaJobControlCounter is to be incremented every time a job control action
+// is taken.
+func SchemaJobControlCounter(desiredStatus string) telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.job.control." + desiredStatus)
+}
+
 // SecondaryIndexColumnFamiliesCounter is a counter that is incremented every time
 // a secondary index that is separated into different column families is created.
 var SecondaryIndexColumnFamiliesCounter = telemetry.GetCounterOnce("sql.schema.secondary_index_column_families")

@@ -388,7 +388,7 @@ func (j *Job) resumed(ctx context.Context) error {
 func (j *Job) cancelRequested(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Payload.Noncancelable {
-			return errors.Newf("job %d: not cancelable", j.ID())
+			return errors.Newf("job %d: not cancelable", *j.ID())
 		}
 		if md.Status == StatusCancelRequested || md.Status == StatusCanceled {
 			return nil
@@ -398,7 +398,7 @@ func (j *Job) cancelRequested(ctx context.Context, fn func(context.Context, *kv.
 		}
 		if md.Status == StatusPaused && md.Payload.FinalResumeError != nil {
 			decodedErr := errors.DecodeError(ctx, *md.Payload.FinalResumeError)
-			return fmt.Errorf("job %d is paused and has non-nil FinalResumeError %s hence cannot be canceled and should be reverted", j.ID(), decodedErr.Error())
+			return fmt.Errorf("job %d is paused and has non-nil FinalResumeError %s hence cannot be canceled and should be reverted", *j.ID(), decodedErr.Error())
 		}
 		if fn != nil {
 			if err := fn(ctx, txn); err != nil {
@@ -564,17 +564,6 @@ func (j *Job) Progress() jobspb.Progress {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	return j.mu.progress
-}
-
-// ToProto returns the protobuf representation of the job.
-func (j *Job) ToProto() *jobspb.Job {
-	jpb := &jobspb.Job{}
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	jpb.Id = *j.ID()
-	jpb.Payload = protoutil.Clone(&j.mu.payload).(*jobspb.Payload)
-	jpb.Progress = protoutil.Clone(&j.mu.progress).(*jobspb.Progress)
-	return jpb
 }
 
 // Details returns the details from the most recently sent Payload for this Job.
