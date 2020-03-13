@@ -70,11 +70,10 @@ func TestKVNemesisMultiNode(t *testing.T) {
 
 	config := NewDefaultConfig()
 	config.NumNodes, config.NumReplicas = numNodes, 3
-	// kvnemesis found a rare bug with closed timestamps when splits (and maybe
-	// merges) happen on a multinode cluster. Disable the combo for now to keep
-	// the test from flaking. #44878
+	// kvnemesis found a rare bug with closed timestamps when merges happen
+	// on a multinode cluster. Disable the combo for now to keep the test
+	// from flaking. See #44878.
 	config.Ops.Merge = MergeConfig{}
-	config.Ops.Split = SplitConfig{}
 	rng, _ := randutil.NewPseudoRand()
 	ct := sqlClosedTimestampTargetInterval{sqlDBs: sqlDBs}
 	failures, err := RunNemesis(ctx, rng, ct, config, dbs...)
