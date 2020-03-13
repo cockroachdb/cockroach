@@ -309,7 +309,7 @@ func backup(
 				}
 				rawRes, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 				if pErr != nil {
-					return pErr.GoError()
+					return errors.Wrapf(pErr.GoError(), "exporting %s", span.span)
 				}
 				res := rawRes.(*roachpb.ExportResponse)
 
