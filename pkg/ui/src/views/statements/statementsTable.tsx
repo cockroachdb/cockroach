@@ -20,9 +20,10 @@ import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sorte
 import { countBarChart, latencyBarChart, retryBarChart, rowsBarChart } from "./barCharts";
 import { Anchor } from "src/components";
 import "./statements.styl";
-import { DiagnosticStatusBadge } from "oss/src/views/statements/diagnostics/diagnosticStatusBadge";
+import { DiagnosticStatusBadge } from "./diagnostics/diagnosticStatusBadge";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+import { ActivateDiagnosticsModalRef } from "./diagnostics/activateDiagnosticsModal";
 
 const longToInt = (d: number | Long) => FixLong(d).toInt();
 
@@ -72,8 +73,9 @@ export function makeStatementsColumns(
   statements: AggregateStatistics[],
   selectedApp: string,
   search?: string,
-  activateDiagnostics?: (statement: string) => void): ColumnDescriptor<AggregateStatistics>[] {
-  const original: ColumnDescriptor<AggregateStatistics>[] = [
+  activateDiagnosticsRef?: React.RefObject<ActivateDiagnosticsModalRef>,
+): ColumnDescriptor<AggregateStatistics>[]  {
+  const columns: ColumnDescriptor<AggregateStatistics>[] = [
     {
       title: "Statement",
       className: "cl-table__col-query-text",
@@ -94,16 +96,18 @@ export function makeStatementsColumns(
       sort: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
     },
   ];
+  columns.push(...makeCommonColumns(statements));
 
-  const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
+  if (activateDiagnosticsRef) {
+    const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
       title: "Diagnostics",
       cell: (stmt) => {
         if (stmt.diagnosticsReport) {
-          return <DiagnosticStatusBadge status={stmt.diagnosticsReport.completed ? "READY" : "WAITING FOR QUERY"} />;
+          return <DiagnosticStatusBadge status={stmt.diagnosticsReport.completed ? "READY" : "WAITING FOR QUERY"}/>;
         }
         return (
           <Anchor
-            onClick={() => activateDiagnostics(stmt.label)}
+            onClick={() => activateDiagnosticsRef?.current?.showModalFor(stmt.label)}
           >
             Activate
           </Anchor>
@@ -115,11 +119,10 @@ export function makeStatementsColumns(
         }
         return null;
       },
-  };
-
-  return original
-    .concat(makeCommonColumns(statements))
-    .concat([diagnosticsColumn]);
+    };
+    columns.push(diagnosticsColumn);
+  }
+  return columns;
 }
 
 function NodeLink(props: { nodeId: string, nodeNames: { [nodeId: string]: string } }) {
