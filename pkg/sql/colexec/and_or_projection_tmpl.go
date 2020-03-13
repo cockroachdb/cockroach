@@ -136,33 +136,39 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	// {{ else }}
 	knownResult := false
 	// {{ end }}
-	leftCol := batch.ColVec(o.leftIdx)
-	leftColVals := leftCol.Bool()
-	var curIdx uint16
-	if usesSel {
-		sel := batch.Selection()
-		origSel := o.origSel[:origLen]
-		if leftCol.MaybeHasNulls() {
-			leftNulls := leftCol.Nulls()
-			for _, i := range origSel {
-				_ADD_TUPLE_FOR_RIGHT(true)
+	var (
+		leftCol     coldata.Vec
+		leftColVals []bool
+		curIdx      uint16
+	)
+	if origLen > 0 {
+		leftCol = batch.ColVec(o.leftIdx)
+		leftColVals = leftCol.Bool()
+		if usesSel {
+			sel := batch.Selection()
+			origSel := o.origSel[:origLen]
+			if leftCol.MaybeHasNulls() {
+				leftNulls := leftCol.Nulls()
+				for _, i := range origSel {
+					_ADD_TUPLE_FOR_RIGHT(true)
+				}
+			} else {
+				for _, i := range origSel {
+					_ADD_TUPLE_FOR_RIGHT(false)
+				}
 			}
 		} else {
-			for _, i := range origSel {
-				_ADD_TUPLE_FOR_RIGHT(false)
-			}
-		}
-	} else {
-		batch.SetSelection(true)
-		sel := batch.Selection()
-		if leftCol.MaybeHasNulls() {
-			leftNulls := leftCol.Nulls()
-			for i := uint16(0); i < origLen; i++ {
-				_ADD_TUPLE_FOR_RIGHT(true)
-			}
-		} else {
-			for i := uint16(0); i < origLen; i++ {
-				_ADD_TUPLE_FOR_RIGHT(false)
+			batch.SetSelection(true)
+			sel := batch.Selection()
+			if leftCol.MaybeHasNulls() {
+				leftNulls := leftCol.Nulls()
+				for i := uint16(0); i < origLen; i++ {
+					_ADD_TUPLE_FOR_RIGHT(true)
+				}
+			} else {
+				for i := uint16(0); i < origLen; i++ {
+					_ADD_TUPLE_FOR_RIGHT(false)
+				}
 			}
 		}
 	}
