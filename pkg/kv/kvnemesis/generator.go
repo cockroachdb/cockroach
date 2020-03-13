@@ -22,69 +22,106 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// OpP is a key used to configure the relative proportions of various options.
-type OpP string
+// GeneratorConfig contains all the tunable knobs necessary to run a Generator.
+type GeneratorConfig struct {
+	Ops                   OperationConfig
+	NumNodes, NumReplicas int
+}
 
-// The various values of OpP. In the following, wording such as "likely exists"
-// or "definitely doesn't exist" is according to previously generated steps.
+// OperationConfig configures the relative probabilities of producing various
+// operations.
+//
+// In this struct and all sub-configurations, wording such as "likely exists" or
+// "definitely doesn't exist" is according to previously generated steps.
 // "likely" is a result of non-determinism due to concurrent execution of the
 // generated operations.
-const (
-	// OpPGetExisting is an operation that Gets a key that likely exists.
-	OpPGetExisting OpP = "GetExisting"
+type OperationConfig struct {
+	DB             ClientOperationConfig
+	Batch          BatchOperationConfig
+	ClosureTxn     ClosureTxnConfig
+	Split          SplitConfig
+	Merge          MergeConfig
+	ChangeReplicas ChangeReplicasConfig
+}
 
-	// OpPGetMissing is an operation that Gets a key that definitely doesn't
-	// exist.
-	OpPGetMissing OpP = "GetMissing"
+// ClosureTxnConfig configures the relative probability of running some
+// operations in a transaction by using the closure-based kv.DB.Txn method. This
+// family of operations mainly varies in how it commits (or doesn't commit). The
+// composition of the operations in the txn is controlled by TxnClientOps and
+// TxnBatchOps
+type ClosureTxnConfig struct {
+	TxnClientOps ClientOperationConfig
+	TxnBatchOps  BatchOperationConfig
 
-	// OpPPutExisting is an operation that Puts a key that likely exists.
-	OpPPutExisting OpP = "PutExisting"
+	// Commit is a transaction that commits normally.
+	Commit int
+	// Rollback is a transaction that encounters an error at the end and has to
+	// roll back.
+	Rollback int
+	// CommitInBatch is a transaction that commits via the CommitInBatchMethod.
+	// This is an important part of the 1pc txn fastpath.
+	CommitInBatch int
+	// When CommitInBatch is selected, CommitBatchOps controls the composition of
+	// the kv.Batch used.
+	CommitBatchOps ClientOperationConfig
+}
 
-	// OpPPutMissing is an operation that Puts a key that definitely doesn't
-	// exist.
-	OpPPutMissing OpP = "PutMissing"
+// ClientOperationConfig configures the relative probabilities of the
+// bread-and-butter kv operations such as Get/Put/Delete/etc. These can all be
+// run on a DB, a Txn, or a Batch.
+type ClientOperationConfig struct {
+	// GetMissing is an operation that Gets a key that definitely doesn't exist.
+	GetMissing int
+	// GetExisting is an operation that Gets a key that likely exists.
+	GetExisting int
+	// PutMissing is an operation that Puts a key that definitely doesn't exist.
+	PutMissing int
+	// PutExisting is an operation that Puts a key that likely exists.
+	PutExisting int
+}
 
-	// OpPBatch is an operation that represents a series of Operations performed
-	// on a client.Batch. These can be run in various ways including client.DB.Run
-	// or client.Txn.Run.
-	OpPBatch OpP = "Batch"
+// BatchOperationConfig configures the relative probability of generating a
+// kv.Batch of some number of operations as well as the composition of the
+// operations in the batch itself. These can be run in various ways including
+// kv.DB.Run or kv.Txn.Run.
+type BatchOperationConfig struct {
+	Batch int
+	Ops   ClientOperationConfig
+}
 
-	// OpPBatch is an operation that represents a series of Operations performed
-	// inside a closure handed to client.DB.Txn.
-	OpPClosureTxn OpP = "ClosureTxn"
-
-	// OpPClosureTxnCommitInBatch is the same as OpPBatch except that the
-	// transaction is committed by client.Txn.CommitInBatch instead of by db.Txn
-	// after running the closure.
-	OpPClosureTxnCommitInBatch OpP = "ClosureTxnCommitInBatch"
-
-	// OpPSplitNew is an operation that Splits at a key that has never previously
+// SplitConfig configures the relative probability of generating a Split
+// operation.
+type SplitConfig struct {
+	// SplitNew is an operation that Splits at a key that has never previously
 	// been a split point.
-	OpPSplitNew OpP = "SplitNew"
-
-	// OpPSplitAgain is an operation that Splits at a key that likely has
+	SplitNew int
+	// SplitAgain is an operation that Splits at a key that likely has
 	// previously been a split point, though it may or may not have been merged
 	// since.
-	OpPSplitAgain OpP = "SplitAgain"
+	SplitAgain int
+}
 
-	// OpPMergeNotSplit is an operation that Merges at a key that has never been
+// MergeConfig configures the relative probability of generating a Merge
+// operation.
+type MergeConfig struct {
+	// MergeNotSplit is an operation that Merges at a key that has never been
 	// split at (meaning this should be a no-op).
-	OpPMergeNotSplit OpP = "MergeNotSplit"
-
-	// OpPMergeIsSplit is an operation that Merges at a key that is likely to
+	MergeNotSplit int
+	// MergeIsSplit is an operation that Merges at a key that is likely to
 	// currently be split.
-	OpPMergeIsSplit OpP = "MergeIsSplit"
+	MergeIsSplit int
+}
 
-	// OpPChangeReplicas is an operation that adds and/or removes replicas from
-	// the range containing a key.
-	OpPChangeReplicas OpP = "ChangeReplicas"
-)
-
-// GeneratorConfig configures the relative probabilities of producing various
-// operations.
-type GeneratorConfig struct {
-	OpPs                  map[OpP]int
-	NumNodes, NumReplicas int
+// ChangeReplicasConfig configures the relative probability of generating a
+// ChangeReplicas operation.
+type ChangeReplicasConfig struct {
+	// AddReplica adds a single replica.
+	AddReplica int
+	// RemoveReplica removes a single replica.
+	RemoveReplica int
+	// AtomicSwapReplica adds 1 replica and removes 1 replica in a single
+	// ChangeReplicas call.
+	AtomicSwapReplica int
 }
 
 // newAllOperationsConfig returns a GeneratorConfig that exercises *all*
@@ -92,19 +129,40 @@ type GeneratorConfig struct {
 // the same, but having both allows us to merge code for operations that do not
 // yet pass (for example, if the new operation finds a kv bug or edge case).
 func newAllOperationsConfig() GeneratorConfig {
-	return GeneratorConfig{OpPs: map[OpP]int{
-		OpPGetMissing:              1,
-		OpPGetExisting:             1,
-		OpPPutMissing:              1,
-		OpPPutExisting:             1,
-		OpPBatch:                   1,
-		OpPClosureTxn:              5,
-		OpPClosureTxnCommitInBatch: 5,
-		OpPSplitNew:                1,
-		OpPSplitAgain:              1,
-		OpPMergeNotSplit:           1,
-		OpPMergeIsSplit:            1,
-		OpPChangeReplicas:          1,
+	clientOpConfig := ClientOperationConfig{
+		GetMissing:  1,
+		GetExisting: 1,
+		PutMissing:  1,
+		PutExisting: 1,
+	}
+	batchOpConfig := BatchOperationConfig{
+		Batch: 4,
+		Ops:   clientOpConfig,
+	}
+	return GeneratorConfig{Ops: OperationConfig{
+		DB:    clientOpConfig,
+		Batch: batchOpConfig,
+		ClosureTxn: ClosureTxnConfig{
+			Commit:         5,
+			Rollback:       5,
+			CommitInBatch:  5,
+			TxnClientOps:   clientOpConfig,
+			TxnBatchOps:    batchOpConfig,
+			CommitBatchOps: clientOpConfig,
+		},
+		Split: SplitConfig{
+			SplitNew:   1,
+			SplitAgain: 1,
+		},
+		Merge: MergeConfig{
+			MergeNotSplit: 1,
+			MergeIsSplit:  1,
+		},
+		ChangeReplicas: ChangeReplicasConfig{
+			AddReplica:        1,
+			RemoveReplica:     1,
+			AtomicSwapReplica: 1,
+		},
 	}}
 }
 
@@ -121,7 +179,10 @@ func NewDefaultConfig() GeneratorConfig {
 	// nontransactional batch are disjoint and upgrading to a transactional batch
 	// (see CrossRangeTxnWrapperSender) if they are. roachpb.SpanGroup can be used
 	// to efficiently check this.
-	config.OpPs[OpPBatch] = 0
+	//
+	// TODO(dan): Make this `config.Ops.Batch.Ops.PutExisting = 0` once #46081 is
+	// fixed.
+	config.Ops.Batch = BatchOperationConfig{}
 	return config
 }
 
@@ -224,22 +285,34 @@ type generator struct {
 //
 // RandStep is not concurrency safe.
 func (g *generator) RandStep(rng *rand.Rand) Step {
-	allowed := make(map[OpP]opGenFunc)
-	g.registerClientOps(allowed)
-	allowed[OpPBatch] = randBatch
-	allowed[OpPClosureTxn] = randClosureTxn
-	allowed[OpPClosureTxnCommitInBatch] = randClosureTxnCommitInBatch
-	allowed[OpPSplitNew] = randSplitNew
-	allowed[OpPMergeNotSplit] = randMergeNotSplit
+	var allowed []opGen
+	g.registerClientOps(&allowed, &g.Config.Ops.DB)
+	g.registerBatchOps(&allowed, &g.Config.Ops.Batch)
+	g.registerClosureTxnOps(&allowed, &g.Config.Ops.ClosureTxn)
 
+	addOpGen(&allowed, randSplitNew, g.Config.Ops.Split.SplitNew)
 	if len(g.historicalSplits) > 0 {
-		allowed[OpPSplitAgain] = randSplitAgain
+		addOpGen(&allowed, randSplitAgain, g.Config.Ops.Split.SplitAgain)
 	}
+
+	addOpGen(&allowed, randMergeNotSplit, g.Config.Ops.Merge.MergeNotSplit)
 	if len(g.currentSplits) > 0 {
-		allowed[OpPMergeIsSplit] = randMergeIsSplit
+		addOpGen(&allowed, randMergeIsSplit, g.Config.Ops.Merge.MergeIsSplit)
 	}
-	if g.Config.NumNodes > g.Config.NumReplicas {
-		allowed[OpPChangeReplicas] = randChangeReplicas
+
+	key := randKey(rng)
+	current := g.replicasFn(roachpb.Key(key))
+	if len(current) < g.Config.NumNodes {
+		addReplicaFn := makeAddReplicaFn(key, current, false /* atomicSwap */)
+		addOpGen(&allowed, addReplicaFn, g.Config.Ops.ChangeReplicas.AddReplica)
+	}
+	if len(current) == g.Config.NumReplicas && len(current) < g.Config.NumNodes {
+		atomicSwapReplicaFn := makeAddReplicaFn(key, current, true /* atomicSwap */)
+		addOpGen(&allowed, atomicSwapReplicaFn, g.Config.Ops.ChangeReplicas.AtomicSwapReplica)
+	}
+	if len(current) > g.Config.NumReplicas {
+		removeReplicaFn := makeRemoveReplicaFn(key, current)
+		addOpGen(&allowed, removeReplicaFn, g.Config.Ops.ChangeReplicas.RemoveReplica)
 	}
 
 	return step(g.selectOp(rng, allowed))
@@ -247,29 +320,42 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 
 type opGenFunc func(*generator, *rand.Rand) Operation
 
-func (g *generator) selectOp(rng *rand.Rand, contextuallyValid map[OpP]opGenFunc) Operation {
+type opGen struct {
+	fn     opGenFunc
+	weight int
+}
+
+func addOpGen(valid *[]opGen, fn opGenFunc, weight int) {
+	*valid = append(*valid, opGen{fn: fn, weight: weight})
+}
+
+func (g *generator) selectOp(rng *rand.Rand, contextuallyValid []opGen) Operation {
 	var total int
-	for op := range contextuallyValid {
-		total += g.Config.OpPs[op]
+	for _, x := range contextuallyValid {
+		total += x.weight
 	}
 	target := rng.Intn(total)
 	var sum int
-	for op, fn := range contextuallyValid {
-		sum += g.Config.OpPs[op]
+	for _, x := range contextuallyValid {
+		sum += x.weight
 		if sum > target {
-			return fn(g, rng)
+			return x.fn(g, rng)
 		}
 	}
 	panic(`unreachable`)
 }
 
-func (g *generator) registerClientOps(allowed map[OpP]opGenFunc) {
-	allowed[OpPGetMissing] = randGetMissing
-	allowed[OpPPutMissing] = randPutMissing
+func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig) {
+	addOpGen(allowed, randGetMissing, c.GetMissing)
+	addOpGen(allowed, randPutMissing, c.PutMissing)
 	if len(g.keys) > 0 {
-		allowed[OpPGetExisting] = randGetExisting
-		allowed[OpPPutExisting] = randPutExisting
+		addOpGen(allowed, randGetExisting, c.GetExisting)
+		addOpGen(allowed, randPutExisting, c.PutExisting)
 	}
+}
+
+func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
+	addOpGen(allowed, makeRandBatch(&c.Ops), c.Batch)
 }
 
 func randGetMissing(_ *generator, rng *rand.Rand) Operation {
@@ -320,16 +406,18 @@ func randMergeIsSplit(g *generator, rng *rand.Rand) Operation {
 	return merge(key)
 }
 
-func randChangeReplicas(g *generator, rng *rand.Rand) Operation {
-	key := randKey(rng)
-	current := g.replicasFn(roachpb.Key(key))
-	var changes []roachpb.ReplicationChange
-	if len(current) > g.Config.NumReplicas {
-		changes = append(changes, roachpb.ReplicationChange{
+func makeRemoveReplicaFn(key string, current []roachpb.ReplicationTarget) opGenFunc {
+	return func(g *generator, rng *rand.Rand) Operation {
+		change := roachpb.ReplicationChange{
 			ChangeType: roachpb.REMOVE_REPLICA,
 			Target:     current[rng.Intn(len(current))],
-		})
-	} else if len(current) < g.Config.NumNodes {
+		}
+		return changeReplicas(key, change)
+	}
+}
+
+func makeAddReplicaFn(key string, current []roachpb.ReplicationTarget, atomicSwap bool) opGenFunc {
+	return func(g *generator, rng *rand.Rand) Operation {
 		candidatesMap := make(map[roachpb.ReplicationTarget]struct{})
 		for i := 0; i < g.Config.NumNodes; i++ {
 			t := roachpb.ReplicationTarget{NodeID: roachpb.NodeID(i + 1), StoreID: roachpb.StoreID(i + 1)}
@@ -343,52 +431,67 @@ func randChangeReplicas(g *generator, rng *rand.Rand) Operation {
 			candidates = append(candidates, candidate)
 		}
 		candidate := candidates[rng.Intn(len(candidates))]
-		changes = append(changes, roachpb.ReplicationChange{
+		changes := []roachpb.ReplicationChange{{
 			ChangeType: roachpb.ADD_REPLICA,
 			Target:     candidate,
-		})
-		// Sometimes test atomic swaps
-		if len(current) == g.Config.NumReplicas && rng.Intn(2) == 0 {
+		}}
+		if atomicSwap {
 			changes = append(changes, roachpb.ReplicationChange{
 				ChangeType: roachpb.REMOVE_REPLICA,
 				Target:     current[rng.Intn(len(current))],
 			})
 		}
+		return changeReplicas(key, changes...)
 	}
-	return changeReplicas(key, changes...)
 }
 
-func randBatch(g *generator, rng *rand.Rand) Operation {
-	allowed := make(map[OpP]opGenFunc)
-	g.registerClientOps(allowed)
+func makeRandBatch(c *ClientOperationConfig) opGenFunc {
+	return func(g *generator, rng *rand.Rand) Operation {
+		var allowed []opGen
+		g.registerClientOps(&allowed, c)
 
-	numOps := rng.Intn(4)
-	ops := make([]Operation, numOps)
-	for i := range ops {
-		ops[i] = g.selectOp(rng, allowed)
+		numOps := rng.Intn(4)
+		ops := make([]Operation, numOps)
+		for i := range ops {
+			ops[i] = g.selectOp(rng, allowed)
+		}
+		return batch(ops...)
 	}
-	return batch(ops...)
 }
 
-func randClosureTxn(g *generator, rng *rand.Rand) Operation {
-	allowed := make(map[OpP]opGenFunc)
-	g.registerClientOps(allowed)
-	allowed[OpPBatch] = randBatch
-
-	numOps := rng.Intn(4)
-	ops := make([]Operation, numOps)
-	for i := range ops {
-		ops[i] = g.selectOp(rng, allowed)
-	}
-	typ := ClosureTxnType(rng.Intn(2))
-	return closureTxn(typ, ops...)
+func (g *generator) registerClosureTxnOps(allowed *[]opGen, c *ClosureTxnConfig) {
+	addOpGen(allowed,
+		makeClosureTxn(ClosureTxnType_Commit, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.Commit)
+	addOpGen(allowed,
+		makeClosureTxn(ClosureTxnType_Rollback, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.Rollback)
+	addOpGen(allowed,
+		makeClosureTxn(ClosureTxnType_Commit, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps), c.CommitInBatch)
 }
 
-func randClosureTxnCommitInBatch(g *generator, rng *rand.Rand) Operation {
-	o := randClosureTxn(g, rng)
-	o.ClosureTxn.CommitInBatch = randBatch(g, rng).Batch
-	o.ClosureTxn.Type = ClosureTxnType_Commit
-	return o
+func makeClosureTxn(
+	txnType ClosureTxnType,
+	txnClientOps *ClientOperationConfig,
+	txnBatchOps *BatchOperationConfig,
+	commitInBatch *ClientOperationConfig,
+) opGenFunc {
+	return func(g *generator, rng *rand.Rand) Operation {
+		var allowed []opGen
+		g.registerClientOps(&allowed, txnClientOps)
+		g.registerBatchOps(&allowed, txnBatchOps)
+		numOps := rng.Intn(4)
+		ops := make([]Operation, numOps)
+		for i := range ops {
+			ops[i] = g.selectOp(rng, allowed)
+		}
+		op := closureTxn(txnType, ops...)
+		if commitInBatch != nil {
+			if txnType != ClosureTxnType_Commit {
+				panic(errors.AssertionFailedf(`CommitInBatch must commit got: %s`, txnType))
+			}
+			op.ClosureTxn.CommitInBatch = makeRandBatch(commitInBatch)(g, rng).Batch
+		}
+		return op
+	}
 }
 
 func (g *generator) getNextValue() string {
