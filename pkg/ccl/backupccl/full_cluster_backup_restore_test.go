@@ -282,3 +282,17 @@ func TestRestoreSystemTableFromFullClusterBackup(t *testing.T) {
 
 	sqlDB.CheckQueryResults(t, "SELECT * FROM temp_sys.users", sqlDB.QueryStr(t, "SELECT * FROM system.users"))
 }
+
+func TestCreateDBAndTableIncrementalFullClusterBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDB.Exec(t, `CREATE DATABASE foo`)
+	sqlDB.Exec(t, `CREATE TABLE foo.bar (a int)`)
+
+	// Ensure that the new backup succeeds.
+	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+}
