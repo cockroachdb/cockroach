@@ -115,6 +115,44 @@ func splitPreApply(
 	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
 		log.Fatal(ctx, err)
 	}
+
+	// The initialMaxClosed is assigned to the RHS replica to ensure that
+	// follower reads do not regress following the split. After the split occurs
+	// there will be no information in the closedts subsystem about the newly
+	// minted RHS range from its leaseholder's store. Furthermore, the RHS will
+	// have a lease start time equal to that of the LHS which might be quite
+	// old. This means that timestamps which follow the least StartTime for the
+	// LHS part are below the current closed timestamp for the LHS would no
+	// longer be readable on the RHS after the split.
+	//
+	// It is necessary for correctness that the call to maxClosed used to
+	// determine the current closed timestamp happens during the splitPreApply
+	// so that it uses a LAI that is _before_ the index at which this split is
+	// applied. If it were to refer to a LAI equal to or after the split then
+	// the value of initialMaxClosed might be unsafe.
+	//
+	// Concretely, any closed timestamp based on an LAI that is equal to or
+	// above the split index might be larger than the initial closed timestamp
+	// assigned to the RHS range's initial leaseholder. This is because the LHS
+	// range's leaseholder could continue closing out timestamps at the split's
+	// LAI after applying the split. Slow followers in that range could hear
+	// about these closed timestamp notifications before applying the split
+	// themselves. If these slow followers were allowed to pass these closed
+	// timestamps created after the split to the RHS replicas they create during
+	// the application of the split then these RHS replicas might end up with
+	// initialMaxClosed values above their current range's official closed
+	// timestamp. The leaseholder of the RHS range could then propose a write at
+	// a timestamp below this initialMaxClosed, violating the closed timestamp
+	// systems most important property.
+	//
+	// Using an LAI from before the index at which this split is applied avoids
+	// the hazard and ensures that no replica on the RHS is created with an
+	// initialMaxClosed that could be violated by a proposal on the RHS's
+	// initial leaseholder. See #44878.
+	initialMaxClosed := r.maxClosed(ctx)
+	rightRepl.mu.Lock()
+	rightRepl.mu.initialMaxClosed = initialMaxClosed
+	rightRepl.mu.Unlock()
 }
 
 // splitPostApply is the part of the split trigger which coordinates the actual
@@ -122,14 +160,14 @@ func splitPreApply(
 func splitPostApply(
 	ctx context.Context, deltaMS enginepb.MVCCStats, split *roachpb.SplitTrigger, r *Replica,
 ) {
-	// rightRngOrNil will be nil if the RHS replica at the ID of the split is
+	// rightReplOrNil will be nil if the RHS replica at the ID of the split is
 	// already known to be removed, generally because we know that this store has
 	// been re-added at a higher replica ID.
-	rightRngOrNil := prepareRightReplicaForSplit(ctx, split, r)
+	rightReplOrNil := prepareRightReplicaForSplit(ctx, split, r)
 	// Add the RHS replica to the store. This step atomically updates
 	// the EndKey of the LHS replica and also adds the RHS replica
 	// to the store's replica map.
-	if err := r.store.SplitRange(ctx, r, rightRngOrNil, split); err != nil {
+	if err := r.store.SplitRange(ctx, r, rightReplOrNil, split); err != nil {
 		// Our in-memory state has diverged from the on-disk state.
 		log.Fatalf(ctx, "%s: failed to update Store after split: %+v", r, err)
 	}
@@ -149,15 +187,15 @@ func splitPostApply(
 	// replication. See #7022 and #7800.
 	r.store.replicateQueue.MaybeAddAsync(ctx, r, now)
 
-	if rightRngOrNil != nil {
-		r.store.splitQueue.MaybeAddAsync(ctx, rightRngOrNil, now)
-		r.store.replicateQueue.MaybeAddAsync(ctx, rightRngOrNil, now)
+	if rightReplOrNil != nil {
+		r.store.splitQueue.MaybeAddAsync(ctx, rightReplOrNil, now)
+		r.store.replicateQueue.MaybeAddAsync(ctx, rightReplOrNil, now)
 		if len(split.RightDesc.Replicas().All()) == 1 {
 			// TODO(peter): In single-node clusters, we enqueue the right-hand side of
 			// the split (the new range) for Raft processing so that the corresponding
 			// Raft group is created. This shouldn't be necessary for correctness, but
 			// some tests rely on this (e.g. server.TestNodeStatusWritten).
-			r.store.enqueueRaftUpdateCheck(rightRngOrNil.RangeID)
+			r.store.enqueueRaftUpdateCheck(rightReplOrNil.RangeID)
 		}
 	}
 }
@@ -169,7 +207,7 @@ func prepareRightReplicaForSplit(
 ) (rightReplicaOrNil *Replica) {
 	// The right hand side of the split was already created (and its raftMu
 	// acquired) in Replica.acquireSplitLock. It must be present here.
-	rightRng, err := r.store.GetReplica(split.RightDesc.RangeID)
+	rightRepl, err := r.store.GetReplica(split.RightDesc.RangeID)
 	// If the RHS replica at the point of the split was known to be removed
 	// during the application of the split then we may not find it here. That's
 	// fine, carry on. See also:
@@ -181,43 +219,30 @@ func prepareRightReplicaForSplit(
 		log.Fatalf(ctx, "unable to find RHS replica: %+v", err)
 	}
 	// Already holding raftMu, see above.
-	rightRng.mu.Lock()
+	rightRepl.mu.Lock()
 
 	// If we know that the RHS has already been removed at this replica ID
 	// then we also know that its data has already been removed by the preApply
 	// so we skip initializing it as the RHS of the split.
-	if rightRng.isNewerThanSplitRLocked(split) {
-		rightRng.mu.Unlock()
+	if rightRepl.isNewerThanSplitRLocked(split) {
+		rightRepl.mu.Unlock()
 		return nil
 	}
 
 	// Finish initialization of the RHS.
-	err = rightRng.loadRaftMuLockedReplicaMuLocked(&split.RightDesc)
-	rightRng.mu.Unlock()
+	err = rightRepl.loadRaftMuLockedReplicaMuLocked(&split.RightDesc)
+	rightRepl.mu.Unlock()
 	if err != nil {
 		log.Fatal(ctx, err)
 	}
 
-	// This initialMaxClosedValue is created here to ensure that follower reads
-	// do not regress following the split. After the split occurs there will be no
-	// information in the closedts subsystem about the newly minted RHS range from
-	// its leaseholder's store. Furthermore, the RHS will have a lease start time
-	// equal to that of the LHS which might be quite old. This means that
-	// timestamps which follow the least StartTime for the LHS part are below the
-	// current closed timestamp for the LHS would no longer be readable on the RHS
-	// after the split. It is critical that this call to maxClosed happen during
-	// the splitPostApply so that it refers to a LAI that is equal to the index at
-	// which this lease was applied. If it were to refer to a LAI after the split
-	// then the value of initialMaxClosed might be unsafe.
-	initialMaxClosed := r.maxClosed(ctx)
-	r.mu.Lock()
-	rightRng.mu.Lock()
-	// Copy the minLeaseProposedTS from the LHS.
-	rightRng.mu.minLeaseProposedTS = r.mu.minLeaseProposedTS
-	rightRng.mu.initialMaxClosed = initialMaxClosed
-	rightLease := *rightRng.mu.state.Lease
-	rightRng.mu.Unlock()
-	r.mu.Unlock()
+	// Copy the minLeaseProposedTS from the LHS and grab the RHS's lease.
+	r.mu.RLock()
+	rightRepl.mu.Lock()
+	rightRepl.mu.minLeaseProposedTS = r.mu.minLeaseProposedTS
+	rightLease := *rightRepl.mu.state.Lease
+	rightRepl.mu.Unlock()
+	r.mu.RUnlock()
 
 	// We need to explicitly wake up the Raft group on the right-hand range or
 	// else the range could be underreplicated for an indefinite period of time.
@@ -228,7 +253,7 @@ func prepareRightReplicaForSplit(
 	// until it receives a Raft message addressed to the right-hand range. But
 	// since new replicas start out quiesced, unless we explicitly awaken the
 	// Raft group, there might not be any Raft traffic for quite a while.
-	err = rightRng.withRaftGroup(true, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
+	err = rightRepl.withRaftGroup(true, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
 		return true, nil
 	})
 	if err != nil {
@@ -238,8 +263,8 @@ func prepareRightReplicaForSplit(
 	// Invoke the leasePostApply method to ensure we properly initialize
 	// the replica according to whether it holds the lease. This enables
 	// the txnWaitQueue.
-	rightRng.leasePostApply(ctx, rightLease, false /* permitJump */)
-	return rightRng
+	rightRepl.leasePostApply(ctx, rightLease, false /* permitJump */)
+	return rightRepl
 }
 
 // SplitRange shortens the original range to accommodate the new range. The new
