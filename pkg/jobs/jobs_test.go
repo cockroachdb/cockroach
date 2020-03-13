@@ -1741,7 +1741,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 			}
 			if *job.ID() != out.id {
 				return errors.Errorf(
-					"Expected job id %d but got %d", job.ID(), out.id)
+					"Expected job id %d but got %d", *job.ID(), out.id)
 			}
 			return nil
 		})
