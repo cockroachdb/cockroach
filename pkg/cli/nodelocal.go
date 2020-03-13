@@ -70,19 +70,14 @@ func openSourceFile(source string) (io.ReadCloser, error) {
 
 func uploadFile(conn *sqlConn, reader io.Reader, destination string) error {
 	err := conn.ExecTxn(func(cn *sqlConn) error {
-		stmt, err := cn.conn.Prepare(sql.CopyInFileStmt(destination, "crdb_internal", "file_upload"))
-		if err != nil {
-			return err
-		}
-		defer func() {
-			_ = stmt.Close()
-		}()
 		send := make([]byte, chunkSize)
 		for {
 			n, err := reader.Read(send)
 			if n > 0 {
-				_, err = stmt.Exec([]driver.Value{string(send[:n])})
-				if err != nil {
+				if err := conn.Exec(
+					sql.CopyInFileStmt(destination, "crdb_internal", "file_upload"),
+					[]driver.Value{string(send[:n])},
+				); err != nil {
 					return err
 				}
 			} else if err == io.EOF {

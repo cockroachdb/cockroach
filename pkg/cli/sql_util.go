@@ -37,20 +37,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
+	"github.com/jackc/pgx"
 )
-
-type sqlConnI interface {
-	driver.Conn
-	//lint:ignore SA1019 TODO(mjibson): clean this up to use go1.8 APIs
-	driver.Execer
-	//lint:ignore SA1019 TODO(mjibson): clean this up to use go1.8 APIs
-	driver.Queryer
-}
 
 type sqlConn struct {
 	url          string
-	conn         sqlConnI
+	conn         *pgx.Conn
 	reconnecting bool
 
 	// dbName is the last known current database, to be reconfigured in
@@ -110,30 +102,31 @@ func (c *sqlConn) ensureConn() error {
 			fmt.Fprintf(stderr, "warning: connection lost!\n"+
 				"opening new connection: all session settings will be lost\n")
 		}
-		base, err := pq.NewConnector(c.url)
+		pgxConfig, err := pgx.ParseURI(c.url)
 		if err != nil {
-			return wrapConnError(err)
+			return err
 		}
-		// Add a notice handler - re-use the cliOutputError function in this case.
-		connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
-			cliOutputError(stderr, notice, true /*showSeverity*/, false /*verbose*/)
-		})
-		// TODO(cli): we can't thread ctx through ensureConn usages, as it needs
-		// to follow the gosql.DB interface. We should probably look at initializing
-		// connections only once instead. The context is only used for dialing.
-		conn, err := connector.Connect(context.TODO())
+		pgxConfig.OnNotice = func(conn *pgx.Conn, notice *pgx.Notice) {
+			cliOutputError(
+				stderr,
+				(*pgx.PgError)(notice),
+				true,  // showSeverity
+				false, // verbose
+			)
+		}
+		conn, err := pgx.Connect(pgxConfig)
 		if err != nil {
 			return wrapConnError(err)
 		}
 		if c.reconnecting && c.dbName != "" {
 			// Attempt to reset the current database.
-			if _, err := conn.(sqlConnI).Exec(
+			if _, err := conn.Exec(
 				`SET DATABASE = `+tree.NameStringP(&c.dbName), nil,
 			); err != nil {
 				fmt.Fprintf(stderr, "warning: unable to restore current database: %v\n", err)
 			}
 		}
-		c.conn = conn.(sqlConnI)
+		c.conn = conn
 		if err := c.checkServerMetadata(); err != nil {
 			c.Close()
 			return wrapConnError(err)
@@ -429,19 +422,8 @@ func (c *sqlConn) Close() {
 	}
 }
 
-type sqlRowsI interface {
-	driver.RowsColumnTypeScanType
-	Result() driver.Result
-	Tag() string
-
-	// Go 1.8 multiple result set interfaces.
-	// TODO(mjibson): clean this up after 1.8 is released.
-	HasNextResultSet() bool
-	NextResultSet() error
-}
-
 type sqlRows struct {
-	rows sqlRowsI
+	rows *pgx.Rows
 	conn *sqlConn
 }
 
@@ -449,21 +431,9 @@ func (r *sqlRows) Columns() []string {
 	return r.rows.Columns()
 }
 
-func (r *sqlRows) Result() driver.Result {
-	return r.rows.Result()
-}
-
-func (r *sqlRows) Tag() string {
-	return r.rows.Tag()
-}
-
 func (r *sqlRows) Close() error {
-	err := r.rows.Close()
-	if err == driver.ErrBadConn {
-		r.conn.reconnecting = true
-		r.conn.Close()
-	}
-	return err
+	r.rows.Close()
+	return nil
 }
 
 // Next populates values with the next row of results. []byte values are copied
@@ -647,18 +617,6 @@ func handleCopyError(conn *sqlConn, err error) error {
 	conn.Close()
 	conn.reconnecting = true
 	return errors.New("woops! COPY has confused this client! Suggestion: use 'psql' for COPY")
-}
-
-// All tags where the RowsAffected value should be reported to
-// the user.
-var tagsWithRowsAffected = map[string]struct{}{
-	"INSERT":    {},
-	"UPDATE":    {},
-	"DELETE":    {},
-	"DROP USER": {},
-	// This one is used with e.g. CREATE TABLE AS (other SELECT
-	// statements have type Rows, not RowsAffected).
-	"SELECT": {},
 }
 
 // runQueryAndFormatResults takes a 'query' with optional 'parameters'.

@@ -86,8 +86,7 @@ func (u urlParser) Set(v string) error {
 	//
 	// The canonical PostgreSQL URL scheme is "postgresql", however our
 	// own client commands also accept "postgres" which is the scheme
-	// registered/supported by lib/pq. Internally, lib/pq supports
-	// both.
+	// registered/supported by our driver.
 	if parsedURL.Scheme != "postgresql" && parsedURL.Scheme != "postgres" {
 		return fmt.Errorf(`URL scheme must be "postgresql", not "%s"`, parsedURL.Scheme)
 	}

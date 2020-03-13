@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,13 +43,13 @@ func TestOutputError(t *testing.T) {
 		// Check the verbose output. This includes the uncategorized sqlstate.
 		{errBase, false, true, "woo\nSQLSTATE: " + pgcode.Uncategorized + "\nLOCATION: " + refLoc},
 		{errBase, true, true, "ERROR: woo\nSQLSTATE: " + pgcode.Uncategorized + "\nLOCATION: " + refLoc},
-		// Check the same over pq.Error objects.
-		{&pq.Error{Message: "woo"}, false, false, "woo"},
-		{&pq.Error{Message: "woo"}, true, false, "ERROR: woo"},
-		{&pq.Error{Message: "woo"}, false, true, "woo"},
-		{&pq.Error{Message: "woo"}, true, true, "ERROR: woo"},
-		{&pq.Error{Severity: "W", Message: "woo"}, false, false, "woo"},
-		{&pq.Error{Severity: "W", Message: "woo"}, true, false, "W: woo"},
+		// Check the same over pgx.Error objects.
+		{&pgx.PgError{Message: "woo"}, false, false, "woo"},
+		{&pgx.PgError{Message: "woo"}, true, false, "ERROR: woo"},
+		{&pgx.PgError{Message: "woo"}, false, true, "woo"},
+		{&pgx.PgError{Message: "woo"}, true, true, "ERROR: woo"},
+		{&pgx.PgError{Severity: "W", Message: "woo"}, false, false, "woo"},
+		{&pgx.PgError{Severity: "W", Message: "woo"}, true, false, "W: woo"},
 		// Check hint printed after message.
 		{errors.WithHint(errBase, "hello"), false, false, "woo\nHINT: hello"},
 		// Check sqlstate printed before hint, location after hint.
@@ -85,16 +84,18 @@ func TestFormatLocation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
-		file, line, fn string
-		exp            string
+		file string
+		line int
+		fn   string
+		exp  string
 	}{
-		{"", "", "", ""},
-		{"a.b", "", "", "a.b"},
-		{"", "123", "", "<unknown>:123"},
-		{"", "", "abc", "abc"},
-		{"a.b", "", "abc", "abc, a.b"},
-		{"a.b", "123", "", "a.b:123"},
-		{"", "123", "abc", "abc, <unknown>:123"},
+		{"", 0, "", ""},
+		{"a.b", 0, "", "a.b"},
+		{"", 123, "", "<unknown>:123"},
+		{"", 0, "abc", "abc"},
+		{"a.b", 0, "abc", "abc, a.b"},
+		{"a.b", 123, "", "a.b:123"},
+		{"", 123, "abc", "abc, <unknown>:123"},
 	}
 
 	for _, tc := range testData {

@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
+	"github.com/jackc/pgx"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -69,14 +69,14 @@ func (f *formattedError) Error() string {
 
 	// Extract the fields.
 	var message, code, hint, detail, location string
-	if pqErr, ok := errors.UnwrapAll(f.err).(*pq.Error); ok {
+	if pqErr, ok := errors.UnwrapAll(f.err).(*pgx.PgError); ok {
 		if pqErr.Severity != "" {
 			severity = pqErr.Severity
 		}
 		message = pqErr.Message
 		code = string(pqErr.Code)
 		hint, detail = pqErr.Hint, pqErr.Detail
-		location = formatLocation(pqErr.File, pqErr.Line, pqErr.Routine)
+		location = formatLocation(pqErr.File, int(pqErr.Line), pqErr.Routine)
 	} else {
 		message = f.err.Error()
 		code = pgerror.GetPGCode(f.err)
@@ -84,7 +84,7 @@ func (f *formattedError) Error() string {
 		hint = errors.FlattenHints(f.err)
 		detail = errors.FlattenDetails(f.err)
 		if file, line, fn, ok := errors.GetOneLineSource(f.err); ok {
-			location = formatLocation(file, strconv.FormatInt(int64(line), 10), fn)
+			location = formatLocation(file, line, fn)
 		}
 	}
 
@@ -132,10 +132,10 @@ func (f *formattedError) Error() string {
 // formatLocation spells out the error's location in a format
 // similar to psql: routine then file:num. The routine part is
 // skipped if empty.
-func formatLocation(file, line, fn string) string {
+func formatLocation(file string, line int, fn string) string {
 	var res strings.Builder
 	res.WriteString(fn)
-	if file != "" || line != "" {
+	if file != "" || line != 0 {
 		if fn != "" {
 			res.WriteString(", ")
 		}
@@ -144,9 +144,9 @@ func formatLocation(file, line, fn string) string {
 		} else {
 			res.WriteString(file)
 		}
-		if line != "" {
+		if line != 0 {
 			res.WriteByte(':')
-			res.WriteString(line)
+			res.WriteString(strconv.FormatInt(int64(line), 10))
 		}
 	}
 	return res.String()
@@ -233,7 +233,8 @@ func MaybeDecorateGRPCError(
 		}
 
 		// Is this an "unable to connect" type of error?
-		if errors.Is(err, pq.ErrSSLNotSupported) {
+		// TODO(XXX): rediscover
+		if false {
 			// SQL command failed after establishing a TCP connection
 			// successfully, but discovering that it cannot use TLS while it
 			// expected the server supports TLS.
@@ -258,7 +259,7 @@ func MaybeDecorateGRPCError(
 			return connRefused()
 		}
 
-		if wErr := (*pq.Error)(nil); errors.As(err, &wErr) {
+		if wErr := (*pgx.PgError)(nil); errors.As(err, &wErr) {
 			// SQL commands will fail with a pq error but only after
 			// establishing a TCP connection successfully. So if we got
 			// here, there was a TCP connection already.
