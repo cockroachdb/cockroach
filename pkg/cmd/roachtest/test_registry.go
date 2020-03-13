@@ -42,20 +42,21 @@ const (
 // OwnerMetadata contains information about a roachtest owning team, such as
 // team slack room, and github project.
 type OwnerMetadata struct {
-	SlackRoom string
+	SlackRoom    string
+	ContactEmail string
 }
 
 // roachtestOwners maps an owner in code (as specified on a roachtest spec) to
 // metadata used for github issue posting/slack rooms, etc.
 var roachtestOwners = map[Owner]OwnerMetadata{
-	OwnerAppDev:       {SlackRoom: `app-dev`},
-	OwnerBulkIO:       {SlackRoom: `bulk-io`},
-	OwnerCDC:          {SlackRoom: `cdc`},
-	OwnerKV:           {SlackRoom: `kv`},
-	OwnerPartitioning: {SlackRoom: `partitioning`},
-	OwnerSQLExec:      {SlackRoom: `sql-execution-team`},
-	OwnerSQLSchema:    {SlackRoom: `sql-schema`},
-	OwnerStorage:      {SlackRoom: `storage`},
+	OwnerAppDev:       {SlackRoom: `app-dev`, ContactEmail: `rafi@cockroachlabs.com`},
+	OwnerBulkIO:       {SlackRoom: `bulk-io`, ContactEmail: `david@cockroachlabs.com`},
+	OwnerCDC:          {SlackRoom: `cdc`, ContactEmail: `ajwerner@cockroachlabs.com`},
+	OwnerKV:           {SlackRoom: `kv`, ContactEmail: `andrei@cockroachlabs.com`},
+	OwnerPartitioning: {SlackRoom: `partitioning`, ContactEmail: `andrei@cockroachlabs.com`},
+	OwnerSQLExec:      {SlackRoom: `sql-execution-team`, ContactEmail: `jordan@cockroachlabs.com`},
+	OwnerSQLSchema:    {SlackRoom: `sql-schema`, ContactEmail: `lucy@cockroachlabs.com`},
+	OwnerStorage:      {SlackRoom: `storage`, ContactEmail: `peter@cockroachlabs.com`},
 	// Only for use in roachtest package unittests.
 	`unittest`: {},
 }
