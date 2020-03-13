@@ -247,7 +247,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, a
 ----
 tree                      field        description        columns                                   ordering
 ·                         distributed  true               ·                                         ·
-·                         vectorized   false              ·                                         ·
+·                         vectorized   true               ·                                         ·
 distinct                  ·            ·                  (name)                                    ·
  │                        distinct on  name               ·                                         ·
  └── render               ·            ·                  (name)                                    ·
