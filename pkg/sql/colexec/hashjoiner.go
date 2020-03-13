@@ -59,10 +59,6 @@ type hashJoinerSourceSpec struct {
 	// hash join.
 	eqCols []uint32
 
-	// outCols specify the indices of the columns that should be outputted by the
-	// hash joiner.
-	outCols []uint32
-
 	// sourceTypes specify the types of the input columns of the source table for
 	// the hash joiner.
 	sourceTypes []coltypes.T
@@ -227,7 +223,6 @@ func (hj *hashJoiner) Init() {
 		hashTableNumBuckets,
 		hj.spec.right.sourceTypes,
 		hj.spec.right.eqCols,
-		hj.spec.right.outCols,
 		false, /* allowNullEquality */
 		hashTableFullMode,
 	)
@@ -282,9 +277,12 @@ func (hj *hashJoiner) build(ctx context.Context) {
 	hj.state = hjProbing
 }
 
+// emitUnmatched populates the output batch to emit tuples from the build side
+// that didn't get a match. This will be called only for RIGHT OUTER and FULL
+// OUTER joins.
 func (hj *hashJoiner) emitUnmatched() {
 	// Set all elements in the probe columns of the output batch to null.
-	for i := range hj.spec.left.outCols {
+	for i := range hj.spec.left.sourceTypes {
 		outCol := hj.output.ColVec(i)
 		outCol.Nulls().SetNulls()
 	}
@@ -299,11 +297,10 @@ func (hj *hashJoiner) emitUnmatched() {
 		hj.emittingUnmatchedState.rowIdx++
 	}
 
-	outCols := hj.output.ColVecs()[len(hj.spec.left.outCols) : len(hj.spec.left.outCols)+len(hj.ht.outCols)]
-	for outColIdx, inColIdx := range hj.ht.outCols {
-		outCol := outCols[outColIdx]
-		valCol := hj.ht.vals.ColVec(int(inColIdx))
-		colType := hj.ht.valTypes[inColIdx]
+	outCols := hj.output.ColVecs()[len(hj.spec.left.sourceTypes) : len(hj.spec.left.sourceTypes)+len(hj.spec.right.sourceTypes)]
+	for i, colType := range hj.spec.right.sourceTypes {
+		outCol := outCols[i]
+		valCol := hj.ht.vals.ColVec(i)
 		// NOTE: this Copy is not accounted for because we don't want for memory
 		// limit error to occur at this point - we have already built the hash
 		// table and now are only consuming the left source one batch at a time,
@@ -454,49 +451,48 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch, batchSize in
 	// concern here is only for the variable-sized types that exceed our
 	// estimations.
 
-	rightColOffset := len(hj.spec.left.outCols)
-	// If the hash table is empty, then there is nothing to copy. The nulls
-	// will be set below.
-	if hj.ht.vals.Length() > 0 {
-		outCols := hj.output.ColVecs()[rightColOffset : rightColOffset+len(hj.ht.outCols)]
-		for outColIdx, inColIdx := range hj.ht.outCols {
-			outCol := outCols[outColIdx]
-			valCol := hj.ht.vals.ColVec(int(inColIdx))
-			colType := hj.ht.valTypes[inColIdx]
-			// Note that if for some index i, probeRowUnmatched[i] is true, then
-			// hj.buildIdx[i] == 0 which will copy the garbage zeroth row of the
-			// hash table, but we will set the NULL value below.
-			outCol.Copy(
-				coldata.CopySliceArgs{
-					SliceArgs: coldata.SliceArgs{
-						ColType:   colType,
-						Src:       valCol,
-						SrcEndIdx: nResults,
-						Sel:       hj.probeState.buildIdx,
+	if hj.spec.joinType != sqlbase.LeftSemiJoin && hj.spec.joinType != sqlbase.LeftAntiJoin {
+		rightColOffset := len(hj.spec.left.sourceTypes)
+		// If the hash table is empty, then there is nothing to copy. The nulls
+		// will be set below.
+		if hj.ht.vals.Length() > 0 {
+			outCols := hj.output.ColVecs()[rightColOffset : rightColOffset+len(hj.spec.right.sourceTypes)]
+			for i, colType := range hj.spec.right.sourceTypes {
+				outCol := outCols[i]
+				valCol := hj.ht.vals.ColVec(i)
+				// Note that if for some index i, probeRowUnmatched[i] is true, then
+				// hj.buildIdx[i] == 0 which will copy the garbage zeroth row of the
+				// hash table, but we will set the NULL value below.
+				outCol.Copy(
+					coldata.CopySliceArgs{
+						SliceArgs: coldata.SliceArgs{
+							ColType:   colType,
+							Src:       valCol,
+							SrcEndIdx: nResults,
+							Sel:       hj.probeState.buildIdx,
+						},
 					},
-				},
-			)
+				)
+			}
 		}
-	}
-	if hj.spec.left.outer {
-		// Add in the nulls we needed to set for the outer join.
-		for outColIdx := range hj.ht.outCols {
-			outCol := hj.output.ColVec(outColIdx + rightColOffset)
-			nulls := outCol.Nulls()
-			for i, isNull := range hj.probeState.probeRowUnmatched {
-				if isNull {
-					nulls.SetNull(i)
+		if hj.spec.left.outer {
+			// Add in the nulls we needed to set for the outer join.
+			for i := range hj.spec.right.sourceTypes {
+				outCol := hj.output.ColVec(i + rightColOffset)
+				nulls := outCol.Nulls()
+				for i, isNull := range hj.probeState.probeRowUnmatched {
+					if isNull {
+						nulls.SetNull(i)
+					}
 				}
 			}
 		}
 	}
 
-	outCols := hj.output.ColVecs()[:len(hj.spec.left.outCols)]
-	for outColIdx, inColIdx := range hj.spec.left.outCols {
-		outCol := outCols[outColIdx]
-		valCol := batch.ColVec(int(inColIdx))
-		colType := hj.spec.left.sourceTypes[inColIdx]
-
+	outCols := hj.output.ColVecs()[:len(hj.spec.left.sourceTypes)]
+	for i, colType := range hj.spec.left.sourceTypes {
+		outCol := outCols[i]
+		valCol := batch.ColVec(i)
 		outCol.Copy(
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
@@ -564,14 +560,11 @@ func (hj *hashJoiner) ExportBuffered(input Operator) coldata.Batch {
 
 func (hj *hashJoiner) resetOutput() {
 	if hj.output == nil {
-		var outColTypes []coltypes.T
-		for _, probeOutCol := range hj.spec.left.outCols {
-			outColTypes = append(outColTypes, hj.spec.left.sourceTypes[probeOutCol])
+		outputTypes := append([]coltypes.T{}, hj.spec.left.sourceTypes...)
+		if hj.spec.joinType != sqlbase.LeftSemiJoin && hj.spec.joinType != sqlbase.LeftAntiJoin {
+			outputTypes = append(outputTypes, hj.spec.right.sourceTypes...)
 		}
-		for _, buildOutCol := range hj.spec.right.outCols {
-			outColTypes = append(outColTypes, hj.spec.right.sourceTypes[buildOutCol])
-		}
-		hj.output = hj.allocator.NewMemBatch(outColTypes)
+		hj.output = hj.allocator.NewMemBatch(outputTypes)
 	} else {
 		hj.output.ResetInternalBatch()
 	}
@@ -613,16 +606,6 @@ func makeHashJoinerSpec(
 		spec                  hashJoinerSpec
 		leftOuter, rightOuter bool
 	)
-	// TODO(yuzefovich): get rid of "outCols" entirely and plumb the assumption
-	// of outputting all columns into the hash joiner itself.
-	leftOutCols := make([]uint32, len(leftTypes))
-	for i := range leftOutCols {
-		leftOutCols[i] = uint32(i)
-	}
-	rightOutCols := make([]uint32, len(rightTypes))
-	for i := range rightOutCols {
-		rightOutCols[i] = uint32(i)
-	}
 	switch joinType {
 	case sqlbase.JoinType_INNER:
 	case sqlbase.JoinType_RIGHT_OUTER:
@@ -641,22 +624,18 @@ func makeHashJoinerSpec(
 		// with the row on the right to emit it. However, we don't support ON
 		// conditions just yet. When we do, we'll have a separate case for that.
 		rightDistinct = true
-		rightOutCols = rightOutCols[:0]
 	case sqlbase.JoinType_LEFT_ANTI:
-		rightOutCols = rightOutCols[:0]
 	default:
 		return spec, errors.Errorf("hash join of type %s not supported", joinType)
 	}
 
 	left := hashJoinerSourceSpec{
 		eqCols:      leftEqCols,
-		outCols:     leftOutCols,
 		sourceTypes: leftTypes,
 		outer:       leftOuter,
 	}
 	right := hashJoinerSourceSpec{
 		eqCols:      rightEqCols,
-		outCols:     rightOutCols,
 		sourceTypes: rightTypes,
 		outer:       rightOuter,
 	}
