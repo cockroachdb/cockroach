@@ -91,7 +91,7 @@ query TTT
 EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY y
 ----
 ·               distributed  false
-·               vectorized   false
+·               vectorized   true
 sort            ·            ·
  │              order        +w
  └── distinct   ·            ·
