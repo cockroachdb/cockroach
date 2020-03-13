@@ -347,43 +347,51 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 	err1 := roachpb.NewErrorf("error1")
 	err2 := roachpb.NewErrorf("error2")
 
+	txn := makeTxnProto("request")
 	req := Request{
-		Timestamp: hlc.Timestamp{WallTime: 10},
-		Priority:  roachpb.NormalUserPriority,
+		Txn:       &txn,
+		Timestamp: txn.ReadTimestamp,
 	}
 
-	keyA := roachpb.Key("keyA")
-	pusheeTxn := makeTxnProto("pushee")
-	g.state = waitingState{
-		stateKind:   waitForDistinguished,
-		txn:         &pusheeTxn.TxnMeta,
-		ts:          pusheeTxn.WriteTimestamp,
-		key:         keyA,
-		held:        true,
-		access:      spanset.SpanReadWrite,
-		guardAccess: spanset.SpanReadWrite,
-	}
+	// Test with both synchronous and asynchronous pushes.
+	// See the comments on pushLockTxn and pushRequestTxn.
+	testutils.RunTrueAndFalse(t, "sync", func(t *testing.T, sync bool) {
+		keyA := roachpb.Key("keyA")
+		pusheeTxn := makeTxnProto("pushee")
+		lockHeld := sync
+		g.state = waitingState{
+			stateKind:   waitForDistinguished,
+			txn:         &pusheeTxn.TxnMeta,
+			ts:          pusheeTxn.WriteTimestamp,
+			key:         keyA,
+			held:        lockHeld,
+			access:      spanset.SpanReadWrite,
+			guardAccess: spanset.SpanReadWrite,
+		}
 
-	// Errors are propagated when observed while pushing transactions.
-	g.notify()
-	ir.pushTxn = func(
-		_ context.Context, _ *enginepb.TxnMeta, _ roachpb.Header, _ roachpb.PushTxnType,
-	) (roachpb.Transaction, *Error) {
-		return roachpb.Transaction{}, err1
-	}
-	err := w.WaitOn(ctx, req, g)
-	require.Equal(t, err1, err)
+		// Errors are propagated when observed while pushing transactions.
+		g.notify()
+		ir.pushTxn = func(
+			_ context.Context, _ *enginepb.TxnMeta, _ roachpb.Header, _ roachpb.PushTxnType,
+		) (roachpb.Transaction, *Error) {
+			return roachpb.Transaction{}, err1
+		}
+		err := w.WaitOn(ctx, req, g)
+		require.Equal(t, err1, err)
 
-	// Errors are propagated when observed while resolving intents.
-	g.notify()
-	ir.pushTxn = func(
-		_ context.Context, _ *enginepb.TxnMeta, _ roachpb.Header, _ roachpb.PushTxnType,
-	) (roachpb.Transaction, *Error) {
-		return roachpb.Transaction{}, nil
-	}
-	ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
-		return err2
-	}
-	err = w.WaitOn(ctx, req, g)
-	require.Equal(t, err2, err)
+		if lockHeld {
+			// Errors are propagated when observed while resolving intents.
+			g.notify()
+			ir.pushTxn = func(
+				_ context.Context, _ *enginepb.TxnMeta, _ roachpb.Header, _ roachpb.PushTxnType,
+			) (roachpb.Transaction, *Error) {
+				return roachpb.Transaction{}, nil
+			}
+			ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
+				return err2
+			}
+			err = w.WaitOn(ctx, req, g)
+			require.Equal(t, err2, err)
+		}
+	})
 }
