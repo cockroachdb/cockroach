@@ -121,7 +121,7 @@ func requireSuperUser(ctx context.Context) error {
 		// This is an in-process request. Bypass authentication check.
 	} else if peer, ok := peer.FromContext(ctx); ok {
 		if tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo); ok {
-			certUser, err := security.GetCertificateUser(&tlsInfo.State)
+			certUsers, err := security.GetCertificateUsers(&tlsInfo.State)
 			if err != nil {
 				return err
 			}
@@ -129,8 +129,9 @@ func requireSuperUser(ctx context.Context) error {
 			// NodeUser. This is not a security concern, as RootUser has access to
 			// read and write all data, merely good hygiene. For example, there is
 			// no reason to permit the root user to send raw Raft RPCs.
-			if certUser != security.NodeUser && certUser != security.RootUser {
-				return errors.Errorf("user %s is not allowed to perform this RPC", certUser)
+			if !security.ContainsUser(security.NodeUser, certUsers) &&
+				!security.ContainsUser(security.RootUser, certUsers) {
+				return errors.Errorf("user %s is not allowed to perform this RPC", certUsers)
 			}
 		}
 	} else {
