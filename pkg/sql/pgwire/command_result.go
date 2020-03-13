@@ -324,6 +324,7 @@ func (c *conn) newCommandResult(
 	if limit == 0 {
 		return r
 	}
+	telemetry.Inc(sqltelemetry.PortalWithLimitRequestCounter)
 	return &limitedCommandResult{
 		limit:         limit,
 		portalName:    portalName,
