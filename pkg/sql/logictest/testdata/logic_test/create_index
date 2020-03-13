@@ -117,3 +117,28 @@ table_name  index_name  non_unique  seq_in_index  column_name  direction  storin
 privs       primary     false       1             a            ASC        false    false
 privs       foo         true        1             b            ASC        false    false
 privs       foo         true        2             a            ASC        false    true
+
+
+user root
+
+statement ok
+SET experimental_enable_hash_sharded_indexes = true;
+CREATE TABLE telemetry (
+  x INT PRIMARY KEY,
+  y INT,
+  z JSONB
+)
+
+statement ok
+CREATE INVERTED INDEX ON telemetry (z);
+CREATE INDEX ON telemetry (y) USING HASH WITH BUCKET_COUNT = 4
+
+query T rowsort
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name IN (
+  'sql.schema.inverted_index',
+  'sql.schema.hash_sharded_index'
+)
+----
+sql.schema.inverted_index
+sql.schema.hash_sharded_index
