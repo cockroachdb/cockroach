@@ -516,40 +516,9 @@ func backupPlanHook(
 				dbsInPrev[d] = struct{}{}
 			}
 
-			for _, d := range targetDescs {
-				if t := d.Table(hlc.Timestamp{}); t != nil {
-					// If we're trying to use a previous backup for this table, ideally it
-					// actually contains this table.
-					if _, ok := tablesInPrev[t.ID]; ok {
-						continue
-					}
-					// This table isn't in the previous backup... maybe was added to a
-					// DB that the previous backup captured?
-					if _, ok := dbsInPrev[t.ParentID]; ok {
-						continue
-					}
-					// Maybe this table is missing from the previous backup because it was
-					// truncated?
-					if t.ReplacementOf.ID != sqlbase.InvalidID {
-
-						// Check if we need to lazy-load the priorIDs (i.e. if this is the first
-						// truncate we've encountered in non-MVCC backup).
-						if priorIDs == nil {
-							priorIDs = make(map[sqlbase.ID]sqlbase.ID)
-							_, err := getAllDescChanges(ctx, p.ExecCfg().DB, startTime, endTime, priorIDs)
-							if err != nil {
-								return err
-							}
-						}
-						found := false
-						for was := t.ReplacementOf.ID; was != sqlbase.InvalidID && !found; was = priorIDs[was] {
-							_, found = tablesInPrev[was]
-						}
-						if found {
-							continue
-						}
-					}
-					return errors.Errorf("previous backup does not contain table %q", t.Name)
+			if backupStmt.DescriptorCoverage != tree.AllDescriptors {
+				if err := checkForNewTables(ctx, p.ExecCfg().DB, targetDescs, tablesInPrev, dbsInPrev, priorIDs, startTime, endTime); err != nil {
+					return err
 				}
 			}
 
@@ -702,6 +671,59 @@ func backupPlanHook(
 		return <-errCh
 	}
 	return fn, header, nil, false, nil
+}
+
+// checkForNewTables returns an error if any new tables were introduced with the
+// following exceptions:
+// 1. A previous backup contained the entire DB.
+// 2. The table was truncated after a previous backup was taken, so it's ID has
+// changed.
+func checkForNewTables(
+	ctx context.Context,
+	db *kv.DB,
+	targetDescs []sqlbase.Descriptor,
+	tablesInPrev map[sqlbase.ID]struct{},
+	dbsInPrev map[sqlbase.ID]struct{},
+	priorIDs map[sqlbase.ID]sqlbase.ID,
+	startTime hlc.Timestamp,
+	endTime hlc.Timestamp,
+) error {
+	for _, d := range targetDescs {
+		if t := d.Table(hlc.Timestamp{}); t != nil {
+			// If we're trying to use a previous backup for this table, ideally it
+			// actually contains this table.
+			if _, ok := tablesInPrev[t.ID]; ok {
+				continue
+			}
+			// This table isn't in the previous backup... maybe was added to a
+			// DB that the previous backup captured?
+			if _, ok := dbsInPrev[t.ParentID]; ok {
+				continue
+			}
+			// Maybe this table is missing from the previous backup because it was
+			// truncated?
+			if t.ReplacementOf.ID != sqlbase.InvalidID {
+				// Check if we need to lazy-load the priorIDs (i.e. if this is the first
+				// truncate we've encountered in non-MVCC backup).
+				if priorIDs == nil {
+					priorIDs = make(map[sqlbase.ID]sqlbase.ID)
+					_, err := getAllDescChanges(ctx, db, startTime, endTime, priorIDs)
+					if err != nil {
+						return err
+					}
+				}
+				found := false
+				for was := t.ReplacementOf.ID; was != sqlbase.InvalidID && !found; was = priorIDs[was] {
+					_, found = tablesInPrev[was]
+				}
+				if found {
+					continue
+				}
+			}
+			return errors.Errorf("previous backup does not contain table %q", t.Name)
+		}
+	}
+	return nil
 }
 
 func init() {
