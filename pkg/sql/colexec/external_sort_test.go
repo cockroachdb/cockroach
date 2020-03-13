@@ -52,7 +52,6 @@ func TestExternalSort(t *testing.T) {
 		memAccounts []*mon.BoundAccount
 		memMonitors []*mon.BytesMonitor
 	)
-	const maxNumberPartitions = 3
 	// Test the case in which the default memory is used as well as the case in
 	// which the joiner spills to disk.
 	for _, spillForced := range []bool{false, true} {
@@ -90,7 +89,7 @@ func TestExternalSort(t *testing.T) {
 							// A sorter should never exceed maxNumberPartitions+1, even during
 							// repartitioning. A panic will happen if a sorter requests more
 							// than this number of file descriptors.
-							sem := NewTestingSemaphore(maxNumberPartitions + 1)
+							sem := NewTestingSemaphore(externalSorterMinPartitions)
 							// If a limit is satisfied before the sorter is drained of all its
 							// tuples, the sorter will not close its partitioner. During a
 							// flow this will happen in Cleanup, since there is no way to tell
@@ -100,7 +99,7 @@ func TestExternalSort(t *testing.T) {
 							}
 							sorter, accounts, monitors, err := createDiskBackedSorter(
 								ctx, flowCtx, input, tc.logTypes, tc.ordCols, tc.matchLen, tc.k, func() {},
-								maxNumberPartitions, queueCfg, sem,
+								externalSorterMinPartitions, false /* delegateFDAcquisition */, queueCfg, sem,
 							)
 							memAccounts = append(memAccounts, accounts...)
 							memMonitors = append(memMonitors, monitors...)
@@ -149,7 +148,6 @@ func TestExternalSortRandomized(t *testing.T) {
 		memAccounts []*mon.BoundAccount
 		memMonitors []*mon.BytesMonitor
 	)
-	const maxNumberPartitions = 3
 	// Interesting disk spilling scenarios:
 	// 1) The sorter is forced to spill to disk as soon as possible.
 	// 2) The memory limit is dynamically set to repartition twice, this will also
@@ -172,7 +170,8 @@ func TestExternalSortRandomized(t *testing.T) {
 				if tk.ForceDiskSpill {
 					namePrefix = "ForceDiskSpill=true"
 				}
-				name := fmt.Sprintf("%s/nCols=%d/nOrderingCols=%d", namePrefix, nCols, nOrderingCols)
+				delegateFDAcquisition := rng.Float64() < 0.5
+				name := fmt.Sprintf("%s/nCols=%d/nOrderingCols=%d/delegateFDAcquisition=%t", namePrefix, nCols, nOrderingCols, delegateFDAcquisition)
 				t.Run(name, func(t *testing.T) {
 					// Unfortunately, there is currently no better way to check that a
 					// sorter does not have leftover file descriptors other than appending
@@ -194,12 +193,12 @@ func TestExternalSortRandomized(t *testing.T) {
 						expected,
 						orderedVerifier,
 						func(input []Operator) (Operator, error) {
-							sem := NewTestingSemaphore(maxNumberPartitions + 1)
+							sem := NewTestingSemaphore(externalSorterMinPartitions)
 							semsToCheck = append(semsToCheck, sem)
 							sorter, accounts, monitors, err := createDiskBackedSorter(
 								ctx, flowCtx, input, logTypes[:nCols], ordCols,
 								0 /* matchLen */, 0 /* k */, func() {},
-								maxNumberPartitions, queueCfg, sem)
+								externalSorterMinPartitions, delegateFDAcquisition, queueCfg, sem)
 							memAccounts = append(memAccounts, accounts...)
 							memMonitors = append(memMonitors, monitors...)
 							return sorter, err
@@ -276,7 +275,7 @@ func BenchmarkExternalSort(b *testing.B) {
 						sorter, accounts, monitors, err := createDiskBackedSorter(
 							ctx, flowCtx, []Operator{source}, logTypes, ordCols,
 							0 /* matchLen */, 0 /* k */, func() { spilled = true },
-							64 /* maxNumberPartitions */, queueCfg, &TestingSemaphore{},
+							64 /* maxNumberPartitions */, false /* delegateFDAcquisitions */, queueCfg, &TestingSemaphore{},
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
@@ -317,6 +316,7 @@ func createDiskBackedSorter(
 	k uint16,
 	spillingCallbackFn func(),
 	maxNumberPartitions int,
+	delegateFDAcquisitions bool,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
 ) (Operator, []*mon.BoundAccount, []*mon.BytesMonitor, error) {
@@ -345,6 +345,7 @@ func createDiskBackedSorter(
 	// the streaming memory account.
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = maxNumberPartitions
+	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions
 	result, err := NewColOperator(ctx, flowCtx, args)
 	return result.Op, result.BufferingOpMemAccounts, result.BufferingOpMemMonitors, err
 }
