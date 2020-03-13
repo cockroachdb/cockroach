@@ -18,6 +18,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -51,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -3779,4 +3782,106 @@ func TestImportAvro(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestImportClientDisconnect ensures that an import job can complete even if
+// the client connection which started it closes. This test uses a helper
+// subprocess to force a closed client connection without needing to rely
+// on the driver to close a TCP connection. See TestImportClientDisconnectHelper
+// for the subprocess.
+func TestImportClientDisconnect(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	args := base.TestClusterArgs{}
+	tc := testcluster.StartTestCluster(t, 1, args)
+	defer tc.Stopper().Stop(ctx)
+
+	tc.WaitForNodeLiveness(t)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	conn := tc.ServerConn(0)
+	runner := sqlutils.MakeSQLRunner(conn)
+	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '100ms';")
+
+	// Make a server that will tell us when somebody has sent a request, wait to
+	// be signaled, and then serve a CSV row for our table.
+	allowResponse := make(chan struct{})
+	gotRequest := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			return
+		}
+		select {
+		case gotRequest <- struct{}{}:
+		default:
+		}
+		select {
+		case <-allowResponse:
+		case <-ctx.Done(): // Deal with test failures.
+		}
+		_, _ = w.Write([]byte("1,asdfasdfasdfasdf"))
+	}))
+	defer srv.Close()
+
+	// Make credentials for our subprocess.
+	runner.Exec(t, `CREATE USER testuser`)
+	runner.Exec(t, `GRANT admin TO testuser`)
+	pgURL, cleanup := sqlutils.PGUrl(t, tc.Server(0).ServingSQLAddr(),
+		"TestImportClientDisconnect-testuser", url.User("testuser"))
+	defer cleanup()
+
+	// Launch a subprocess ot kick off the IMPORT.
+	cmd := exec.Command(os.Args[0], "--test.run", "TestImportClientDisconnectHelper",
+		"--", pgURL.String(), srv.URL)
+	cmd.Env = append([]string{"GO_TEST_HELPER=1"}, os.Environ()...)
+	require.NoError(t, cmd.Start())
+
+	// Wait for the import job to start.
+	var jobID string
+	testutils.SucceedsSoon(t, func() error {
+		row := conn.QueryRow("SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT' ORDER BY created DESC LIMIT 1")
+		return row.Scan(&jobID)
+	})
+
+	// Wait for it to actually start.
+	<-gotRequest
+
+	// Kill the subprocess and wait for it.
+	require.NoError(t, cmd.Process.Kill())
+	_, err := cmd.Process.Wait()
+	require.NoError(t, err)
+
+	// Allow the import to proceed.
+	close(allowResponse)
+
+	// Wait for the job to get marked as succeeded.
+	testutils.SucceedsSoon(t, func() error {
+		var status string
+		if err := conn.QueryRow("SELECT status FROM [SHOW JOB " + jobID + "]").Scan(&status); err != nil {
+			return err
+		}
+		const succeeded = "succeeded"
+		if status != succeeded {
+			return errors.Errorf("expected %s, got %v", succeeded, status)
+		}
+		return nil
+	})
+
+}
+
+// TestImportClientDisconnectHelper is a helper for TestImportClientDisconnect
+// that runs a subprocess.
+func TestImportClientDisconnectHelper(t *testing.T) {
+	if os.Getenv("GO_TEST_HELPER") != "1" {
+		t.Skip("not a helper")
+	}
+
+	pgURL, url := os.Args[len(os.Args)-2], os.Args[len(os.Args)-1]
+	connCfg, err := pgx.ParseConnectionString(pgURL)
+	require.NoError(t, err)
+	db, err := pgx.Connect(connCfg)
+	require.NoError(t, err)
+	_, err = db.ExecEx(context.Background(), `IMPORT TABLE foo (k INT PRIMARY KEY, v STRING) CSV DATA ($1)`,
+		nil /* options */, url)
+	require.NoError(t, err)
 }

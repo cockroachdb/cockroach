@@ -657,9 +657,14 @@ func importPlanHook(
 			Details:     importDetails,
 			Progress:    jobspb.ImportProgress{},
 		}
+		// NB: We create a new channel to receive the results so that we can deal
+		// with the client disconnecting. If we did not use this intermediate
+		// channel, we could leave the job blocked forever trying to send results.
+		// See copyToResultChannel().
+		jobResultsCh := make(chan tree.Datums)
 		var sj *jobs.StartableJob
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, resultsCh)
+			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, jobResultsCh)
 			if err != nil {
 				return err
 			}
@@ -685,9 +690,43 @@ func importPlanHook(
 		if err != nil {
 			return err
 		}
-		return <-errCh
+		return copyToResultsChannel(ctx, errCh, resultsCh, jobResultsCh)
 	}
 	return fn, backupccl.RestoreHeader, nil, false, nil
+}
+
+// copyToResultsChannel exists to deal with the fact that the resultsCh hooked
+// up to the conn executor does not notify the plan hook when the connection
+// goes away. When that connection goes away however, the context will be
+// canceled. Because the started job needs to send on the resultsFromJobs
+// channel in order to complete, this function launches a goroutine to consume
+// from that channel in the case of context cancellation.
+func copyToResultsChannel(
+	ctx context.Context,
+	errCh <-chan error,
+	resultsCh chan<- tree.Datums,
+	resultsFromJob <-chan tree.Datums,
+) error {
+	readResultsFromJob := func() {
+		for range resultsFromJob {
+		}
+	}
+	for {
+		select {
+		case r := <-resultsFromJob:
+			select {
+			case <-ctx.Done():
+				go readResultsFromJob()
+				return ctx.Err()
+			case resultsCh <- r:
+			}
+		case <-ctx.Done():
+			go readResultsFromJob()
+			return ctx.Err()
+		case err := <-errCh:
+			return err
+		}
+	}
 }
 
 func parseAvroOptions(
