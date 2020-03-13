@@ -113,7 +113,10 @@ void DBIncrementalIterator::maybeSkipKeys() {
       // phantom MVCCKey.Keys. These keys may not be seen by the main iterator
       // due to aborted transactions and keys which have been subsumed due to
       // range tombstones. In this case we can SeekGE() the TBI to the main iterator.
-      state = DBIterSeek(time_bound_iter.get(), ToDBKey(iter_key));
+      DBKey seek_to;
+      // NB: We don't ToDBKey as iter_key is already split.
+      seek_to.key = ToDBSlice(iter_key);
+      state = DBIterSeek(time_bound_iter.get(), seek_to);
       if (!state.valid) {
         status = state.status;
         valid = false;
@@ -131,7 +134,10 @@ void DBIncrementalIterator::maybeSkipKeys() {
       // keys. The main iterator is seeked to the TBI in hopes that many keys
       // were skipped. Note that a Seek() is an order of magnitude more
       // expensive than a Next().
-      state = DBIterSeek(iter.get(), ToDBKey(tbi_key));
+      DBKey seek_to;
+      // NB: We don't ToDBKey as iter_key is already split.
+      seek_to.key = ToDBSlice(tbi_key);
+      state = DBIterSeek(iter.get(), seek_to);
       if (!state.valid) {
         status = state.status;
         valid = false;

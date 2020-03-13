@@ -445,10 +445,10 @@ func validateDualPurposeNodeCert(ci *CertInfo) error {
 
 	// The first certificate is used in client auth.
 	cert := ci.ParsedCertificates[0]
-
-	// Check Subject Common Name.
-	if a, e := cert.Subject.CommonName, NodeUser; a != e {
-		return errors.Errorf("client/server node certificate has Subject \"CN=%s\", expected \"CN=%s\"", a, e)
+	principals := getCertificatePrincipals(cert)
+	if !ContainsUser(NodeUser, principals) {
+		return errors.Errorf("client/server node certificate has principals %q, expected %q",
+			principals, NodeUser)
 	}
 
 	return nil
@@ -464,8 +464,10 @@ func validateCockroachCertificate(ci *CertInfo, cert *x509.Certificate) error {
 		// This is done in validateDualPurposeNodeCert.
 	case ClientPem:
 		// Check that CommonName matches the username extracted from the filename.
-		if a, e := cert.Subject.CommonName, ci.Name; a != e {
-			return errors.Errorf("client certificate has Subject \"CN=%s\", expected \"CN=%s\" (must match filename)", a, e)
+		principals := getCertificatePrincipals(cert)
+		if !ContainsUser(ci.Name, principals) {
+			return errors.Errorf("client certificate has principals %q, expected %q",
+				principals, ci.Name)
 		}
 	}
 	return nil
