@@ -1978,9 +1978,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 				benchMemAccount.Clear(ctx)
 				base, err := newMergeJoinBase(
-					NewAllocator(ctx, &benchMemAccount), defaultMemoryLimit, queueCfg,
-					NewTestingSemaphore(mjFDLimit), leftSource, rightSource,
-					[]uint32{0, 1}, []uint32{2, 3}, sourceTypes, sourceTypes,
+					NewAllocator(ctx, &benchMemAccount), defaultMemoryLimit, queueCfg, NewTestingSemaphore(mjFDLimit),
+					sqlbase.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 				)
@@ -2009,9 +2008,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 				benchMemAccount.Clear(ctx)
 				base, err := newMergeJoinBase(
-					NewAllocator(ctx, &benchMemAccount), defaultMemoryLimit, queueCfg,
-					NewTestingSemaphore(mjFDLimit), leftSource, rightSource,
-					[]uint32{0, 1}, []uint32{2, 3}, sourceTypes, sourceTypes,
+					NewAllocator(ctx, &benchMemAccount), defaultMemoryLimit, queueCfg, NewTestingSemaphore(mjFDLimit),
+					sqlbase.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 				)
@@ -2042,9 +2040,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 				benchMemAccount.Clear(ctx)
 				base, err := newMergeJoinBase(
-					NewAllocator(ctx, &benchMemAccount), defaultMemoryLimit, queueCfg,
-					NewTestingSemaphore(mjFDLimit), leftSource, rightSource,
-					[]uint32{0, 1}, []uint32{2, 3}, sourceTypes, sourceTypes,
+					NewAllocator(ctx, &benchMemAccount), defaultMemoryLimit, queueCfg, NewTestingSemaphore(mjFDLimit),
+					sqlbase.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 				)

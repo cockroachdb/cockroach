@@ -132,17 +132,10 @@ type hashTable struct {
 	vals coldata.Batch
 	// valTypes stores the corresponding types of the val columns.
 	valTypes []coltypes.T
-	// valCols stores the union of the keyCols and outCols.
-	valCols []uint32
 	// keyCols stores the corresponding types of key columns.
 	keyTypes []coltypes.T
 	// keyCols stores the indices of vals which are key columns.
 	keyCols []uint32
-
-	// outCols stores the indices of vals which are output columns.
-	outCols []uint32
-	// outTypes stores the types of the output columns.
-	outTypes []coltypes.T
 
 	// numBuckets returns the number of buckets the hashTable employs. This is
 	// equivalent to the size of first.
@@ -166,57 +159,13 @@ func newHashTable(
 	numBuckets uint64,
 	sourceTypes []coltypes.T,
 	eqCols []uint32,
-	outCols []uint32,
 	allowNullEquality bool,
 	mode hashTableMode,
 ) *hashTable {
-	// Compute the union of eqCols and outCols and compress vals to only keep the
-	// important columns.
-	nCols := len(sourceTypes)
-	keepCol := make([]bool, nCols)
-	compressed := make([]uint32, nCols)
-	for _, colIdx := range eqCols {
-		keepCol[colIdx] = true
-	}
-
-	for _, colIdx := range outCols {
-		keepCol[colIdx] = true
-	}
-
-	// Extract the important columns and discard the rest.
-	nKeep := uint32(0)
-
-	keepTypes := make([]coltypes.T, 0, nCols)
-	keepCols := make([]uint32, 0, nCols)
-
-	for i := 0; i < nCols; i++ {
-		if keepCol[i] {
-			keepTypes = append(keepTypes, sourceTypes[i])
-			keepCols = append(keepCols, uint32(i))
-
-			compressed[i] = nKeep
-			nKeep++
-		}
-	}
-
-	// Extract and types and indices of the	eqCols and outCols.
-	nKeys := len(eqCols)
-	keyTypes := make([]coltypes.T, nKeys)
-	keys := make([]uint32, nKeys)
-
+	keyTypes := make([]coltypes.T, len(eqCols))
 	for i, colIdx := range eqCols {
 		keyTypes[i] = sourceTypes[colIdx]
-		keys[i] = compressed[colIdx]
 	}
-
-	nOutCols := len(outCols)
-	outTypes := make([]coltypes.T, nOutCols)
-	outs := make([]uint32, nOutCols)
-	for i, colIdx := range outCols {
-		outTypes[i] = sourceTypes[colIdx]
-		outs[i] = compressed[colIdx]
-	}
-
 	ht := &hashTable{
 		allocator: allocator,
 
@@ -233,13 +182,10 @@ func newHashTable(
 			differs: make([]bool, coldata.BatchSize()),
 		},
 
-		vals:     allocator.NewMemBatchWithSize(keepTypes, 0 /* initialSize */),
-		valTypes: keepTypes,
-		valCols:  keepCols,
+		vals:     allocator.NewMemBatchWithSize(sourceTypes, 0 /* initialSize */),
+		valTypes: sourceTypes,
+		keyCols:  eqCols,
 		keyTypes: keyTypes,
-		keyCols:  keys,
-		outCols:  outs,
-		outTypes: outTypes,
 
 		numBuckets: numBuckets,
 
@@ -310,11 +256,11 @@ func (ht *hashTable) build(ctx context.Context, input Operator) {
 			}
 
 			ht.allocator.PerformOperation(targetVecs, func() {
-				for i, colIdx := range ht.valCols {
+				for i, typ := range ht.valTypes {
 					targetVecs[i].Append(
 						coldata.SliceArgs{
-							ColType:   ht.valTypes[i],
-							Src:       srcVecs[colIdx],
+							ColType:   typ,
+							Src:       srcVecs[i],
 							Sel:       batch.Selection(),
 							DestIdx:   ht.vals.Length(),
 							SrcEndIdx: batch.Length(),
@@ -404,11 +350,11 @@ func (ht *hashTable) loadBatch(batch coldata.Batch) {
 	batchSize := batch.Length()
 	ht.allocator.PerformOperation(ht.vals.ColVecs(), func() {
 		htSize := ht.vals.Length()
-		for i, colIdx := range ht.valCols {
+		for i, typ := range ht.valTypes {
 			ht.vals.ColVec(i).Append(
 				coldata.SliceArgs{
-					ColType:   ht.valTypes[i],
-					Src:       batch.ColVec(int(colIdx)),
+					ColType:   typ,
+					Src:       batch.ColVec(i),
 					Sel:       batch.Selection(),
 					DestIdx:   htSize,
 					SrcEndIdx: batchSize,
