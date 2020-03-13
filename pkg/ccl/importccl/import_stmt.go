@@ -657,6 +657,10 @@ func importPlanHook(
 			Details:     importDetails,
 			Progress:    jobspb.ImportProgress{},
 		}
+		// NB: We create a new channel to receive the results so that we can deal
+		// with the client disconnecting. If we did not use this intermediate
+		// channel, we could leave the job blocked forever trying to send results.
+		// See copyToResultChannel().
 		var sj *jobs.StartableJob
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, resultsCh)
@@ -681,11 +685,7 @@ func importPlanHook(
 			}
 			return err
 		}
-		errCh, err := sj.Start(ctx)
-		if err != nil {
-			return err
-		}
-		return <-errCh
+		return sj.Run(ctx)
 	}
 	return fn, backupccl.RestoreHeader, nil, false, nil
 }
