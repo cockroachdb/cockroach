@@ -1529,7 +1529,7 @@ func (r *Replica) acquireSplitLock(
 	ctx context.Context, split *roachpb.SplitTrigger,
 ) (func(), error) {
 	rightReplDesc, _ := split.RightDesc.GetReplicaDescriptor(r.StoreID())
-	rightRng, _, err := r.store.getOrCreateReplica(ctx, split.RightDesc.RangeID,
+	rightRepl, _, err := r.store.getOrCreateReplica(ctx, split.RightDesc.RangeID,
 		rightReplDesc.ReplicaID, nil, /* creatingReplica */
 		rightReplDesc.GetType() == roachpb.LEARNER)
 	// If getOrCreateReplica returns RaftGroupDeletedError we know that the RHS
@@ -1540,11 +1540,11 @@ func (r *Replica) acquireSplitLock(
 	if err != nil {
 		return nil, err
 	}
-	if rightRng.IsInitialized() {
+	if rightRepl.IsInitialized() {
 		return nil, errors.Errorf("RHS of split %s / %s already initialized before split application",
 			&split.LeftDesc, &split.RightDesc)
 	}
-	return rightRng.raftMu.Unlock, nil
+	return rightRepl.raftMu.Unlock, nil
 }
 
 func (r *Replica) acquireMergeLock(
