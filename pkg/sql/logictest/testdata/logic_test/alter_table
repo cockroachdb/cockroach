@@ -604,6 +604,11 @@ ALTER TABLE add_default ALTER COLUMN fee DROP DEFAULT
 statement error pgcode XXA00 null value in column "fee" violates not-null constraint
 COMMIT
 
+query T rowsort
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.change_in_explicit_txn'
+----
+sql.schema.change_in_explicit_txn
+
 statement error pgcode 42703 column "fee" does not exist
 ALTER TABLE add_default DROP fee
 

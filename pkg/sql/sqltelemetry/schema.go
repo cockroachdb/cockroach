@@ -45,6 +45,16 @@ var (
 )
 
 var (
+	// HashShardedIndexCounter is to be incremented every time a hash
+	// sharded index is created.
+	HashShardedIndexCounter = telemetry.GetCounterOnce("sql.schema.hash_sharded_index")
+
+	// InvertedIndexCounter is to be incremented every time an inverted
+	// index is created.
+	InvertedIndexCounter = telemetry.GetCounterOnce("sql.schema.inverted_index")
+)
+
+var (
 	// TempObjectCleanerDeletionCounter is to be incremented every time a temporary schema
 	// has been deleted by the temporary object cleaner.
 	TempObjectCleanerDeletionCounter = telemetry.GetCounterOnce("sql.schema.temp_object_cleaner.num_cleaned")
@@ -102,6 +112,10 @@ func SchemaSetAuditModeCounter(mode string) telemetry.Counter {
 func SchemaJobControlCounter(desiredStatus string) telemetry.Counter {
 	return telemetry.GetCounter("sql.schema.job.control." + desiredStatus)
 }
+
+// SchemaChangeInExplicitTxnCounter is to be incremented every time a schema change
+// is scheduled using an explicit transaction.
+var SchemaChangeInExplicitTxnCounter = telemetry.GetCounterOnce("sql.schema.change_in_explicit_txn")
 
 // SecondaryIndexColumnFamiliesCounter is a counter that is incremented every time
 // a secondary index that is separated into different column families is created.
