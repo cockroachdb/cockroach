@@ -847,7 +847,7 @@ func (r *Registry) stepThroughStateMachine(
 		}
 		if err, ok := errors.Cause(err).(*InvalidStatusError); ok {
 			if err.status != StatusPauseRequested {
-				errorMsg := fmt.Sprintf("job %d: unexpected status %s provided for a reverting job", job.ID(), err.status)
+				errorMsg := fmt.Sprintf("job %d: unexpected status %s provided for a reverting job", *job.ID(), err.status)
 				return errors.NewAssertionErrorWithWrappedErrf(jobErr, errorMsg)
 			}
 			return err
@@ -1027,7 +1027,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		// has been upgraded to 2.1 then we know nothing is running the job and it
 		// can be safely failed.
 		if nullProgress, ok := row[2].(*tree.DBool); ok && bool(*nullProgress) {
-			log.Warningf(ctx, "job %d predates cluster upgrade and must be re-run", id)
+			log.Warningf(ctx, "job %d predates cluster upgrade and must be re-run", *id)
 			versionErr := errors.New("job predates cluster upgrade and must be re-run")
 			payload.Error = versionErr.Error()
 			payloadBytes, err := protoutil.Marshal(payload)
@@ -1045,7 +1045,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 				return err
 			})
 			if err != nil {
-				log.Warningf(ctx, "job %d: has no progress but unable to mark failed: %s", id, err)
+				log.Warningf(ctx, "job %d: has no progress but unable to mark failed: %s", *id, err)
 			}
 			continue
 		}

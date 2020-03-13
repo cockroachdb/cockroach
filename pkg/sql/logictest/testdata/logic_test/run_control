@@ -108,3 +108,17 @@ PAUSE JOB 1
 
 query error only users with the admin role are allowed to RESUME JOBS
 RESUME JOB 1
+
+user root
+
+query T rowsort
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name IN (
+  'sql.schema.job.control.pause',
+  'sql.schema.job.control.resume',
+  'sql.schema.job.control.cancel'
+)
+----
+sql.schema.job.control.pause
+sql.schema.job.control.cancel
+sql.schema.job.control.resume
