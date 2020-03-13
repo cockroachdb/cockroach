@@ -628,6 +628,12 @@ func (r *testRunner) runTest(
 			// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
 			if issues.CanPost() && t.spec.Run != nil && t.spec.Cluster.NodeCount > 0 {
 				authorEmail := getAuthorEmail(t.spec.Tags, failLoc.file, failLoc.line)
+				if authorEmail == "" {
+					ownerInfo, ok := roachtestOwners[t.spec.Owner]
+					if ok {
+						authorEmail = ownerInfo.ContactEmail
+					}
+				}
 				branch := "<unknown branch>"
 				if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
 					branch = b
