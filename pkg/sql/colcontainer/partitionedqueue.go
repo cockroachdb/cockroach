@@ -124,6 +124,9 @@ type PartitionedDiskQueue struct {
 // enqueueing to a new partition. Each new partition will use
 // cfg.BufferSizeBytes, so memory usage may increase in an unbounded fashion if
 // used unmethodically. The file descriptors are acquired through fdSemaphore.
+// If fdSemaphore is nil, the partitioned disk queue will not Acquire or Release
+// file descriptors. Do this if the caller knows that it will use a constant
+// maximum number of file descriptors and wishes to acquire these up front.
 // Note that actual file descriptors open may be less than, but never more than
 // the number acquired through the semaphore.
 func NewPartitionedDiskQueue(
@@ -171,7 +174,7 @@ func (p *PartitionedDiskQueue) closeWritePartition(
 	if err := p.partitions[idx].Enqueue(coldata.ZeroBatch); err != nil {
 		return err
 	}
-	if releaseFDOption == releaseFD {
+	if releaseFDOption == releaseFD && p.fdSemaphore != nil {
 		p.fdSemaphore.Release(1)
 		p.numOpenFDs--
 	}
@@ -186,13 +189,18 @@ func (p *PartitionedDiskQueue) closeReadPartition(idx int) error {
 	if err := p.partitions[idx].CloseRead(); err != nil {
 		return err
 	}
-	p.fdSemaphore.Release(1)
-	p.numOpenFDs--
+	if p.fdSemaphore != nil {
+		p.fdSemaphore.Release(1)
+		p.numOpenFDs--
+	}
 	p.partitions[idx].state = partitionStateClosedForReading
 	return nil
 }
 
 func (p *PartitionedDiskQueue) acquireNewFD(ctx context.Context) error {
+	if p.fdSemaphore == nil {
+		return nil
+	}
 	if err := p.fdSemaphore.Acquire(ctx, 1); err != nil {
 		return err
 	}
@@ -370,6 +378,8 @@ func (p *PartitionedDiskQueue) Close() error {
 		p.partitions[i].state = partitionStatePermanentlyClosed
 	}
 	if p.numOpenFDs != 0 {
+		// Note that if p.numOpenFDs is non-zero, it must be the case that
+		// fdSemaphore is non-nil.
 		p.fdSemaphore.Release(p.numOpenFDs)
 		p.numOpenFDs = 0
 	}
