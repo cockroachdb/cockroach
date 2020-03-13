@@ -786,6 +786,64 @@ func (sj *StartableJob) Start(ctx context.Context) (errCh <-chan error, err erro
 	return errCh, nil
 }
 
+// Run will resume the job and wait for it to finish or the context to be
+// canceled. The transaction used to create the StartableJob must be committed.
+// Results will be copied to the channel used to create this StartableJob
+// even if job is canceled.
+func (sj *StartableJob) Run(ctx context.Context) error {
+	resultsFromJob := make(chan tree.Datums)
+	resultsCh := sj.resultsCh
+	sj.resultsCh = resultsFromJob
+	errCh, err := sj.Start(ctx)
+	if err != nil {
+		return err
+	}
+	var r tree.Datums // stores a row if we've received one.
+	for {
+		// Alternate between receiving rows and sending them. Nil channels block.
+		var fromJob <-chan tree.Datums
+		var toClient chan<- tree.Datums
+		if r == nil {
+			fromJob = resultsFromJob
+		} else {
+			toClient = resultsCh
+		}
+		var ok bool
+		select {
+		case r, ok = <-fromJob:
+			// If the results channel is closed, set it to nil so that we don't
+			// loop infinitely. We still want to wait for the job to notify us on
+			// errCh.
+			if !ok {
+				close(resultsCh)
+				resultsCh, resultsFromJob = nil, nil
+			}
+		case toClient <- r:
+			r = nil
+		case <-ctx.Done():
+			// Launch a goroutine to continue consuming results from the job.
+			if resultsFromJob != nil {
+				go sj.registry.stopper.RunWorker(ctx, func(ctx context.Context) {
+					for {
+						select {
+						case <-errCh:
+							return
+						case _, ok := <-resultsFromJob:
+							if !ok {
+								return
+							}
+						}
+					}
+				})
+			}
+			return ctx.Err()
+		case err := <-errCh:
+			// The job has completed, return its final error.
+			return err
+		}
+	}
+}
+
 // CleanupOnRollback will unregister the job in the case that the creating
 // transaction has been rolled back.
 func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {

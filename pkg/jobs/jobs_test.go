@@ -44,6 +44,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -184,7 +185,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
-			OnResume: func(ctx context.Context) error {
+			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
 				t.Log("Starting resume")
 				rts.mu.Lock()
 				rts.mu.a.ResumeStart = true
@@ -785,7 +786,7 @@ func TestJobLifecycle(t *testing.T) {
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
-			OnResume: func(ctx context.Context) error {
+			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -1702,7 +1703,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 	jobs.RegisterConstructor(
 		jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return jobs.FakeResumer{
-				OnResume: func(ctx context.Context) error {
+				OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
 					select {
 					case <-ctx.Done():
 						return ctx.Err()
@@ -1860,7 +1861,7 @@ func TestJobInTxn(t *testing.T) {
 	)
 	jobs.RegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
-			OnResume: func(ctx context.Context) error {
+			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
 				t.Logf("Resuming job: %+v", job.Payload())
 				atomic.AddInt32(&hasRun, 1)
 				return nil
@@ -1895,7 +1896,7 @@ func TestJobInTxn(t *testing.T) {
 	)
 	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
-			OnResume: func(_ context.Context) error {
+			OnResume: func(_ context.Context, _ chan<- tree.Datums) error {
 				return errors.New("RESTORE failed")
 			},
 		}
@@ -1978,10 +1979,21 @@ func TestStartableJob(t *testing.T) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	jr := s.JobRegistry().(*jobs.Registry)
+	var resumeFunc atomic.Value
+	resumeFunc.Store(func(ctx context.Context, _ chan<- tree.Datums) error {
+		return nil
+	})
+	setResumeFunc := func(f func(ctx context.Context, _ chan<- tree.Datums) error) (cleanup func()) {
+		fmt.Println("hi")
+		prev := resumeFunc.Load()
+		resumeFunc.Store(f)
+		return func() { resumeFunc.Store(prev) }
+	}
 	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
-			OnResume: func(ctx context.Context) error {
-				return nil
+			OnResume: func(ctx context.Context, resultsCh chan<- tree.Datums) error {
+				fmt.Println("hey")
+				return resumeFunc.Load().(func(ctx context.Context, _ chan<- tree.Datums) error)(ctx, resultsCh)
 			},
 		}
 	})
@@ -2063,5 +2075,99 @@ func TestStartableJob(t *testing.T) {
 		}
 		_, err = sj.Start(ctx)
 		require.Regexp(t, "job with status cancel-requested cannot be marked started", err)
+	})
+	setUpRunTest := func(t *testing.T) (
+		sj *jobs.StartableJob,
+		resultCh <-chan tree.Datums,
+		blockResume func() (waitForBlocked func() (resultsCh chan<- tree.Datums, unblockWithError func(error))),
+		cleanup func(),
+	) {
+		type blockResp struct {
+			errCh     chan error
+			resultsCh chan<- tree.Datums
+		}
+		blockCh := make(chan chan blockResp, 1)
+		blockResume = func() (waitForBlocked func() (resultsCh chan<- tree.Datums, unblockWithError func(error))) {
+			blockRequest := make(chan blockResp, 1)
+			blockCh <- blockRequest // from test to resumer
+			return func() (resultsCh chan<- tree.Datums, unblockWithError func(error)) {
+				blocked := <-blockRequest // from resumer to test
+				return blocked.resultsCh, func(err error) {
+					blocked.errCh <- err // from test to resumer
+				}
+			}
+		}
+		cleanup = setResumeFunc(func(ctx context.Context, resultsCh chan<- tree.Datums) error {
+			select {
+			case blockRequest := <-blockCh:
+				unblock := make(chan error)
+				blockRequest <- blockResp{
+					errCh:     unblock,
+					resultsCh: resultsCh,
+				}
+				if err := <-unblock; err != nil {
+					return err
+				}
+			default:
+			}
+			return nil
+		})
+		clientResults := make(chan tree.Datums)
+		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			sj, err = jr.CreateStartableJobWithTxn(ctx, rec, txn, clientResults)
+			return err
+		}))
+		return sj, clientResults, blockResume, cleanup
+	}
+	t.Run("Run - error during resume", func(t *testing.T) {
+		sj, _, blockResume, cleanup := setUpRunTest(t)
+		defer cleanup()
+		waitForBlocked := blockResume()
+		runErr := make(chan error)
+		go func() { runErr <- sj.Run(ctx) }()
+		_, unblock := waitForBlocked()
+		unblock(errors.New("boom"))
+		require.Regexp(t, "boom", <-runErr)
+	})
+	t.Run("Run - client canceled", func(t *testing.T) {
+		sj, _, blockResume, cleanup := setUpRunTest(t)
+		defer cleanup()
+		ctxToCancel, cancel := context.WithCancel(ctx)
+		runErr := make(chan error)
+		waitForBlocked := blockResume()
+		go func() { runErr <- sj.Run(ctxToCancel) }()
+		resultsCh, unblock := waitForBlocked()
+		cancel()
+		require.Regexp(t, context.Canceled, <-runErr)
+		resultsCh <- tree.Datums{}
+		unblock(nil)
+		testutils.SucceedsSoon(t, func() error {
+			loaded, err := jr.LoadJob(ctx, *sj.ID())
+			require.NoError(t, err)
+			st, err := loaded.CurrentStatus(ctx)
+			require.NoError(t, err)
+			if st != jobs.StatusSucceeded {
+				return errors.Errorf("expected %s, got %s", jobs.StatusSucceeded, st)
+			}
+			return nil
+		})
+	})
+	t.Run("Run - results chan closed", func(t *testing.T) {
+		sj, clientResultsChan, blockResume, cleanup := setUpRunTest(t)
+		defer cleanup()
+		runErr := make(chan error)
+		waitForBlocked := blockResume()
+		go func() { runErr <- sj.Run(ctx) }()
+		resultsCh, unblock := waitForBlocked()
+		go func() {
+			_, ok := <-clientResultsChan
+			assert.True(t, ok)
+			_, ok = <-clientResultsChan
+			assert.False(t, ok)
+			unblock(nil)
+		}()
+		resultsCh <- tree.Datums{}
+		close(resultsCh)
+		require.NoError(t, <-runErr)
 	})
 }
