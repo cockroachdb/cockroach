@@ -200,15 +200,15 @@ func registerKVContention(r *testRegistry) {
 
 			// Start the cluster with an extremely high txn liveness threshold.
 			// If requests ever get stuck on a transaction that was abandoned
-			// then it will take 2m for them to get unstuck, at which point the
-			// QPS threshold check in the test is likely to fail.
+			// then it will take 10m for them to get unstuck, at which point the
+			// QPS threshold check in the test is guaranteed to fail.
 			//
 			// Additionally, ensure that even transactions that issue a 1PC
 			// batch begin heartbeating. This ensures that if they end up in
 			// part of a dependency cycle, they can never be expire without
 			// being actively aborted.
 			args := startArgs(
-				"--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=120 COCKROACH_TXN_HEARTBEAT_DURING_1PC=true",
+				"--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600 COCKROACH_TXN_HEARTBEAT_DURING_1PC=true",
 			)
 			c.Start(ctx, t, args, c.Range(1, nodes))
 

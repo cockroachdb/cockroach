@@ -278,12 +278,12 @@ func (w *lockTableWaiterImpl) WaitOn(
 				pushCtx, pushCancel := context.WithCancel(ctx)
 				go w.watchForNotifications(pushCtx, pushCancel, newStateC)
 				err = w.pushRequestTxn(pushCtx, req, timerWaitingState)
-				pushCancel()
 				if pushCtx.Err() == context.Canceled {
 					// Ignore the context canceled error. If this was for the
 					// parent context then we'll notice on the next select.
 					err = nil
 				}
+				pushCancel()
 			}
 			if err != nil {
 				return err
@@ -381,6 +381,14 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 // caller is expected to terminate the push if it observes any state transitions
 // in the lockTable. As such, the push is only expected to be allowed to run to
 // completion in cases where requests are truly deadlocked.
+//
+// TODO(nvanbenschoten): what if both the pusher and pusher are deadlocked on
+// each other and both are aborted but notice that the other is aborted first?
+// They with both wait for the other to exit its lock wait-queue and they will
+// deadlock. Even if we pushed again, there's no guarantee that the same thing
+// wouldn't happen. This seems exceedingly rare, but it isn't handled properly.
+// The best way to fix this seems to be to confirm that the pusher is not
+// aborted _after_ performing the push using a QueryTxn request.
 func (w *lockTableWaiterImpl) pushRequestTxn(
 	ctx context.Context, req Request, ws waitingState,
 ) *Error {
