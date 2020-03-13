@@ -1986,3 +1986,100 @@ CREATE TABLE t.after (k CHAR PRIMARY KEY, v CHAR);
 	t.expectLeases(beforeDesc.ID, "")
 	t.expectLeases(afterDesc.ID, "/1/1")
 }
+
+// Test that acquiring a lease doesn't block on other transactions performing
+// schema changes. Lease acquisitions run in high-priority transactions, thereby
+// pushing any locks held by schema-changing transactions out of their ways.
+func TestLeaseAcquisitionDoesntBlock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	_, err := db.Exec(`CREATE DATABASE t; CREATE TABLE t.test(k CHAR PRIMARY KEY, v CHAR);`)
+	require.NoError(t, err)
+
+	// Figure out the table ID.
+	row := db.QueryRow("SELECT id FROM system.namespace WHERE name='test'")
+	var descID sqlbase.ID
+	require.NoError(t, row.Scan(&descID))
+
+	// Spin up another goroutine performing a schema change. We'll suspend its
+	// execution until the main goroutine is able to acquire its lease.
+	schemaCh := make(chan error)
+	schemaUnblock := make(chan struct{})
+	go func() {
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			schemaCh <- err
+			return
+		}
+		_, err = tx.Exec("ALTER TABLE t.test ADD COLUMN v2 CHAR")
+		schemaCh <- err
+		if err != nil {
+			return
+		}
+
+		<-schemaUnblock
+		schemaCh <- tx.Commit()
+	}()
+
+	require.NoError(t, <-schemaCh)
+	lease, _, err := s.LeaseManager().(*sql.LeaseManager).Acquire(ctx, s.Clock().Now(), descID)
+	require.NoError(t, err)
+
+	// Release the lease so that the schema change can proceed.
+	require.NoError(t, s.LeaseManager().(*sql.LeaseManager).Release(lease))
+	// Unblock the schema change.
+	close(schemaUnblock)
+
+	// Wait for the schema change to finish.
+	require.NoError(t, <-schemaCh)
+}
+
+// Test that acquiring a lease doesn't block on other transactions performing
+// schema changes. This is similar to the previous test, except it acquires a
+// lease by table name instead of ID, and correspondingly the schema change
+// touches the namespace table.
+func TestLeaseAcquisitionByNameDoesntBlock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	_, err := db.Exec(`CREATE DATABASE t`)
+	require.NoError(t, err)
+
+	// Spin up another goroutine performing a schema change - creating a table.
+	// We'll suspend its execution until the main goroutine is able to acquire its
+	// lease. The idea is that, before being suspended, this transaction has put
+	// down locks on the system.namespace table. The point of the test is to check
+	// that a lease acquisition pushes these locks out of its way.
+	schemaCh := make(chan error)
+	schemaUnblock := make(chan struct{})
+	go func() {
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			schemaCh <- err
+			return
+		}
+		_, err = tx.Exec("CREATE TABLE t.test()")
+		schemaCh <- err
+		if err != nil {
+			return
+		}
+
+		<-schemaUnblock
+		schemaCh <- tx.Commit()
+	}()
+
+	require.NoError(t, <-schemaCh)
+	_, err = db.Exec("SELECT * from t.test")
+	require.Error(t, err, `pq: relation "t.test" does not exist`)
+	close(schemaUnblock)
+
+	// Wait for the schema change to finish.
+	require.NoError(t, <-schemaCh)
+}
