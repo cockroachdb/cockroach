@@ -490,3 +490,62 @@ ALTER TABLE orders VALIDATE CONSTRAINT fk_customer;
 		t.Fatalf("expected: %s\ngot: %s", want1, dump1)
 	}
 }
+
+func TestDatabaseDumpCommand(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := []struct {
+		name     string
+		create   string
+		expected string
+	}{
+		{
+			name: "columnsless_table",
+			create: `
+CREATE DATABASE bar;
+USE bar;
+CREATE TABLE foo ();
+`,
+			expected: `dump bar
+CREATE TABLE foo (FAMILY "primary" (rowid)
+);
+`,
+		},
+		{
+			name: "table_with_columns",
+			create: `
+CREATE DATABASE bar;
+USE bar;
+CREATE TABLE foo (id int primary key, text string not null);
+`,
+			expected: `dump bar
+CREATE TABLE foo (
+	id INT8 NOT NULL,
+	text STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, text)
+);
+`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c := newCLITest(cliTestParams{t: t})
+			defer c.cleanup()
+
+			_, err := c.RunWithCaptureArgs([]string{"sql", "-e", test.create})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			dump, err := c.RunWithCaptureArgs([]string{"dump", "bar"})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if dump != test.expected {
+				t.Fatalf("expected: %s\ngot: %s", test.expected, dump)
+			}
+		})
+	}
+}
