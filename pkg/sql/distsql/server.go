@@ -307,6 +307,7 @@ func (ds *ServerImpl) setupFlow(
 			SessionAccessor:    &sqlbase.DummySessionAccessor{},
 			PrivilegedAccessor: &sqlbase.DummyPrivilegedAccessor{},
 			Sequence:           &sqlbase.DummySequenceOperators{},
+			ClientNoticeSender: &sqlbase.DummyClientNoticeSender{},
 			InternalExecutor:   ie,
 			Txn:                leafTxn,
 		}

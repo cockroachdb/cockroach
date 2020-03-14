@@ -7,6 +7,25 @@ source [file join [file dirname $argv0] common.tcl]
 spawn $argv demo --empty
 eexpect root@
 
+start_test "Test that notices always appear at the end after all results."
+send "SELECT IF(@1=4,crdb_internal.notice('hello'),@1) AS MYRES FROM generate_series(1,10);\r"
+eexpect myres
+eexpect 1
+eexpect 10
+eexpect "10 rows"
+eexpect "NOTICE: hello"
+eexpect root@
+
+# Ditto with multiple result sets. Notices after all result sets.
+send "SELECT crdb_internal.notice('hello') AS STAGE1;"
+send "SELECT crdb_internal.notice('world') AS STAGE2;\r"
+eexpect stage1
+eexpect stage2
+eexpect "NOTICE: hello"
+eexpect "NOTICE: world"
+eexpect root@
+end_test
+
 start_test "Test creating a view without TEMP set on a TEMP TABLE notifies it will become a TEMP VIEW."
 send "SET experimental_enable_temp_tables = true; CREATE TEMP TABLE temp_view_test_tbl(a int); CREATE VIEW temp_view_test AS SELECT a FROM temp_view_test_tbl;\r"
 eexpect "NOTICE: view \"temp_view_test\" will be a temporary view"

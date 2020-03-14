@@ -53,6 +53,15 @@ type sqlConn struct {
 	conn         sqlConnI
 	reconnecting bool
 
+	pendingNotices []*pq.Error
+
+	// delayNotices, if set, makes notices accumulate for printing
+	// when the SQL execution completes. The default (false)
+	// indicates that notices must be printed as soon as they are received.
+	// This is used by the Query() interface to avoid interleaving
+	// notices with result rows.
+	delayNotices bool
+
 	// dbName is the last known current database, to be reconfigured in
 	// case of automatic reconnects.
 	dbName string
@@ -104,6 +113,21 @@ func wrapConnError(err error) error {
 	return err
 }
 
+func (c *sqlConn) flushNotices() {
+	for _, notice := range c.pendingNotices {
+		cliOutputError(stderr, notice, true /*showSeverity*/, false /*verbose*/)
+	}
+	c.pendingNotices = nil
+	c.delayNotices = false
+}
+
+func (c *sqlConn) handleNotice(notice *pq.Error) {
+	c.pendingNotices = append(c.pendingNotices, notice)
+	if !c.delayNotices {
+		c.flushNotices()
+	}
+}
+
 func (c *sqlConn) ensureConn() error {
 	if c.conn == nil {
 		if c.reconnecting && cliCtx.isInteractive {
@@ -116,7 +140,7 @@ func (c *sqlConn) ensureConn() error {
 		}
 		// Add a notice handler - re-use the cliOutputError function in this case.
 		connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
-			cliOutputError(stderr, notice, true /*showSeverity*/, false /*verbose*/)
+			c.handleNotice(notice)
 		})
 		// TODO(cli): we can't thread ctx through ensureConn usages, as it needs
 		// to follow the gosql.DB interface. We should probably look at initializing
@@ -370,6 +394,7 @@ func (c *sqlConn) Exec(query string, args []driver.Value) error {
 		fmt.Fprintln(stderr, ">", query)
 	}
 	_, err := c.conn.Exec(query, args)
+	c.flushNotices()
 	if err == driver.ErrBadConn {
 		c.reconnecting = true
 		c.Close()
@@ -420,6 +445,7 @@ func (c *sqlConn) QueryRow(query string, args []driver.Value) ([]driver.Value, e
 }
 
 func (c *sqlConn) Close() {
+	c.flushNotices()
 	if c.conn != nil {
 		err := c.conn.Close()
 		if err != nil && err != driver.ErrBadConn {
@@ -458,6 +484,7 @@ func (r *sqlRows) Tag() string {
 }
 
 func (r *sqlRows) Close() error {
+	r.conn.flushNotices()
 	err := r.rows.Close()
 	if err == driver.ErrBadConn {
 		r.conn.reconnecting = true
@@ -481,6 +508,9 @@ func (r *sqlRows) Next(values []driver.Value) error {
 			values[i] = append([]byte{}, b...)
 		}
 	}
+	// After the first row was received, we want to delay all
+	// further notices until the end of execution.
+	r.conn.delayNotices = true
 	return err
 }
 
