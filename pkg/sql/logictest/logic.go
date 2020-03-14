@@ -438,7 +438,7 @@ var logicTestConfigs = []testClusterConfig{
 		name:              "local-vec",
 		numNodes:          1,
 		overrideAutoStats: "false",
-		overrideVectorize: "experimental_on",
+		overrideVectorize: "on",
 	},
 	{
 		name:                "fakedist",
@@ -470,7 +470,7 @@ var logicTestConfigs = []testClusterConfig{
 		useFakeSpanResolver: true,
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
-		overrideVectorize:   "experimental_on",
+		overrideVectorize:   "on",
 	},
 	{
 		name:                "fakedist-vec-disk",
@@ -478,7 +478,7 @@ var logicTestConfigs = []testClusterConfig{
 		useFakeSpanResolver: true,
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
-		overrideVectorize:   "experimental_on",
+		overrideVectorize:   "on",
 		sqlExecUseDisk:      true,
 		skipShort:           true,
 	},
@@ -516,7 +516,7 @@ var logicTestConfigs = []testClusterConfig{
 		name:                "5node-dist-vec",
 		numNodes:            5,
 		overrideDistSQLMode: "on",
-		overrideVectorize:   "experimental_on",
+		overrideVectorize:   "on",
 		overrideAutoStats:   "false",
 	},
 	{

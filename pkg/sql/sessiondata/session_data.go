@@ -265,14 +265,14 @@ const (
 	// VectorizeOff means that columnar execution is disabled.
 	VectorizeOff VectorizeExecMode = iota
 	// Vectorize192Auto means that that any supported queries that use only
-	// streaming operators (i.e. those that do not require any buffering) will be
-	// run using the columnar execution.
-	// TODO(asubiotto): This was the auto setting for 19.2 and is kept around as
-	//  an escape hatch. Remove in 20.2.
+	// streaming operators (i.e. those that do not require any buffering) will
+	// be run using the columnar execution.
+	// TODO(asubiotto): This was the auto setting for 19.2 and is kept around
+	// as an escape hatch. Remove in 20.2.
 	Vectorize192Auto
-	// VectorizeExperimentalOn means that any supported queries will be run using
-	// the columnar execution on.
-	VectorizeExperimentalOn
+	// VectorizeOn means that any supported queries will be run using the
+	// columnar execution.
+	VectorizeOn
 	// VectorizeExperimentalAlways means that we attempt to vectorize all
 	// queries; unsupported queries will fail. Mostly used for testing.
 	VectorizeExperimentalAlways
@@ -291,8 +291,8 @@ func (m VectorizeExecMode) String() string {
 		return "192auto"
 	case VectorizeAuto:
 		return "auto"
-	case VectorizeExperimentalOn:
-		return "experimental_on"
+	case VectorizeOn:
+		return "on"
 	case VectorizeExperimentalAlways:
 		return "experimental_always"
 	default:
@@ -311,8 +311,8 @@ func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 		m = Vectorize192Auto
 	case "AUTO":
 		m = VectorizeAuto
-	case "EXPERIMENTAL_ON":
-		m = VectorizeExperimentalOn
+	case "ON":
+		m = VectorizeOn
 	case "EXPERIMENTAL_ALWAYS":
 		m = VectorizeExperimentalAlways
 	default:
