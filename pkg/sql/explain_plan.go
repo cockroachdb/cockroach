@@ -243,6 +243,9 @@ func populateExplain(
 				}
 				_, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.Processors, fuseOpt, nil /* output */)
 				isVec = isVec && (err == nil)
+				if !isVec {
+					break
+				}
 			}
 		}
 	}

@@ -619,7 +619,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 				t.Fatal(err)
 			}
 			if vectorize {
-				if _, err := conn.Exec("set vectorize='experimental_on'"); err != nil {
+				if _, err := conn.Exec("set vectorize='on'"); err != nil {
 					t.Fatal(err)
 				}
 			}

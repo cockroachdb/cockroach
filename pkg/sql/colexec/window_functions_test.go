@@ -46,7 +46,7 @@ func TestWindowFunctions(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	evalCtx.SessionData.VectorizeMode = sessiondata.VectorizeExperimentalOn
+	evalCtx.SessionData.VectorizeMode = sessiondata.VectorizeOn
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
