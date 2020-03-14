@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTraceRequest(t *testing.T) {
+func TestDiagnosticsRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
@@ -32,8 +32,8 @@ func TestTraceRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	// Ask to trace a particular query.
-	reqID, err := s.ExecutorConfig().(ExecutorConfig).stmtInfoRequestRegistry.InsertRequest(
-		ctx, "INSERT INTO test VALUES (_)")
+	registry := s.ExecutorConfig().(ExecutorConfig).stmtInfoRequestRegistry
+	reqID, err := registry.insertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
 	require.NoError(t, err)
 	reqRow := db.QueryRow(
 		"SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1", reqID)
@@ -48,11 +48,15 @@ func TestTraceRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check that the row from statement_diagnostics_request was marked as completed.
-	traceRow := db.QueryRow(
-		"SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1", reqID)
-	require.NoError(t, traceRow.Scan(&completed, &traceID))
-	require.True(t, completed)
-	require.True(t, traceID.Valid)
+	checkCompleted := func(reqID stmtDiagRequestID) {
+		traceRow := db.QueryRow(
+			"SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1", reqID)
+		require.NoError(t, traceRow.Scan(&completed, &traceID))
+		require.True(t, completed)
+		require.True(t, traceID.Valid)
+	}
+
+	checkCompleted(reqID)
 
 	// Check the trace.
 	row := db.QueryRow("SELECT jsonb_pretty(trace) FROM system.statement_diagnostics WHERE ID = $1", traceID.Int64)
@@ -60,10 +64,31 @@ func TestTraceRequest(t *testing.T) {
 	require.NoError(t, row.Scan(&json))
 	require.Contains(t, json, "traced statement")
 	require.Contains(t, json, "statement execution committed the txn")
+
+	// Verify that we can handle multiple requests at the same time.
+	id1, err := registry.insertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
+	require.NoError(t, err)
+	id2, err := registry.insertRequestInternal(ctx, "SELECT x FROM test")
+	require.NoError(t, err)
+	id3, err := registry.insertRequestInternal(ctx, "SELECT x FROM test WHERE x > _")
+	require.NoError(t, err)
+
+	// Run the queries in a different order.
+	_, err = db.Exec("SELECT x FROM test")
+	require.NoError(t, err)
+	checkCompleted(id2)
+
+	_, err = db.Exec("SELECT x FROM test WHERE x > 1")
+	require.NoError(t, err)
+	checkCompleted(id3)
+
+	_, err = db.Exec("INSERT INTO test VALUES (2)")
+	require.NoError(t, err)
+	checkCompleted(id1)
 }
 
-// Test that a different node can service a trace request.
-func TestTraceRequestDifferentNode(t *testing.T) {
+// Test that a different node can service a diagnostics request.
+func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := serverutils.StartTestCluster(t, 2, base.TestClusterArgs{})
 	ctx := context.Background()
@@ -74,11 +99,12 @@ func TestTraceRequestDifferentNode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Ask to trace a particular query using node 0.
-	reqID, err := tc.Server(0).ExecutorConfig().(ExecutorConfig).stmtInfoRequestRegistry.InsertRequest(
-		ctx, "INSERT INTO test VALUES (_)")
+	registry := tc.Server(0).ExecutorConfig().(ExecutorConfig).stmtInfoRequestRegistry
+	reqID, err := registry.insertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
 	require.NoError(t, err)
 	reqRow := db0.QueryRow(
-		"SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1", reqID)
+		`SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests
+		 WHERE ID = $1`, reqID)
 	var completed bool
 	var traceID gosql.NullInt64
 	require.NoError(t, reqRow.Scan(&completed, &traceID))
@@ -86,30 +112,45 @@ func TestTraceRequestDifferentNode(t *testing.T) {
 	require.False(t, traceID.Valid) // traceID should be NULL
 
 	// Repeatedly run the query through node 1 until we get a trace.
-	testutils.SucceedsSoon(t, func() error {
-		// Run the query using node 1.
-		_, err = db1.Exec("INSERT INTO test VALUES (1)")
-		require.NoError(t, err)
-
-		// Check that the row from statement_diagnostics_request was marked as completed.
-		traceRow := db0.QueryRow(
-			"SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1",
-			reqID)
-		require.NoError(t, traceRow.Scan(&completed, &traceID))
-		if !completed {
-			_, err := db0.Exec("DELETE FROM test")
+	runUntilTraced := func(query string, reqID stmtDiagRequestID) {
+		testutils.SucceedsSoon(t, func() error {
+			// Run the query using node 1.
+			_, err = db1.Exec(query)
 			require.NoError(t, err)
-			return fmt.Errorf("not completed yet")
-		}
-		return nil
-	})
-	require.True(t, traceID.Valid)
 
-	// Check the trace.
-	row := db0.QueryRow("SELECT jsonb_pretty(trace) FROM system.statement_diagnostics WHERE ID = $1",
-		traceID.Int64)
-	var json string
-	require.NoError(t, row.Scan(&json))
-	require.Contains(t, json, "traced statement")
-	require.Contains(t, json, "statement execution committed the txn")
+			// Check that the row from statement_diagnostics_request was marked as completed.
+			traceRow := db0.QueryRow(
+				`SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests
+				 WHERE ID = $1`, reqID)
+			require.NoError(t, traceRow.Scan(&completed, &traceID))
+			if !completed {
+				_, err := db0.Exec("DELETE FROM test")
+				require.NoError(t, err)
+				return fmt.Errorf("not completed yet")
+			}
+			return nil
+		})
+		require.True(t, traceID.Valid)
+
+		// Check the trace.
+		row := db0.QueryRow(`SELECT jsonb_pretty(trace) FROM system.statement_diagnostics
+                         WHERE ID = $1`, traceID.Int64)
+		var json string
+		require.NoError(t, row.Scan(&json))
+		require.Contains(t, json, "traced statement")
+	}
+	runUntilTraced("INSERT INTO test VALUES (1)", reqID)
+
+	// Verify that we can handle multiple requests at the same time.
+	id1, err := registry.insertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
+	require.NoError(t, err)
+	id2, err := registry.insertRequestInternal(ctx, "SELECT x FROM test")
+	require.NoError(t, err)
+	id3, err := registry.insertRequestInternal(ctx, "SELECT x FROM test WHERE x > _")
+	require.NoError(t, err)
+
+	// Run the queries in a different order.
+	runUntilTraced("SELECT x FROM test", id2)
+	runUntilTraced("SELECT x FROM test WHERE x > 1", id3)
+	runUntilTraced("INSERT INTO test VALUES (2)", id1)
 }
