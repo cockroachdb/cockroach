@@ -97,6 +97,24 @@ const (
 	// externalHJDiskQueuesMemFraction determines the fraction of the available
 	// RAM that is allocated for the in-memory cache of disk queues.
 	externalHJDiskQueuesMemFraction = 0.5
+	// We need at least two buckets per side to make progress. However, the
+	// minimum number of partitions necessary are the partitions in use during a
+	// fallback to sort and merge join. We'll be using the minimum necessary per
+	// input + 2 (1 for each spilling queue that the merge joiner uses). For
+	// clarity this is what happens:
+	// - The 2 partitions that need to be sorted + merged will use an FD each: 2
+	//   FDs. Meanwhile, each sorter will use up to externalSorterMinPartitions to
+	//   sort and partition this input. At this stage 2 + 2 *
+	//   externalMinPartitions FDs are used.
+	// - Once the inputs (the hash joiner partitions) are finished, both FDs will
+	//   be released. The merge joiner will now be in use, which uses two
+	//   spillingQueues with 1 FD each for a total of 2. Since each sorter will
+	//   use externalSorterMinPartitions, the FDs used at this stage are 2 +
+	//   (2 * externalSorterMinPartitions) as well. Note that as soon as the
+	//   sorter emits its first batch, it must be the case that the input to it
+	//   has returned a zero batch, and thus the FD has been closed.
+	sortMergeNonSortMinFDsOpen = 2
+	externalHJMinPartitions    = sortMergeNonSortMinFDsOpen + (externalSorterMinPartitions * 2)
 )
 
 // externalHashJoiner is an operator that performs Grace hash join algorithm
@@ -140,6 +158,12 @@ type externalHashJoiner struct {
 	unlimitedAllocator *Allocator
 	spec               hashJoinerSpec
 	diskQueueCfg       colcontainer.DiskQueueCfg
+
+	// fdState is used to acquire file descriptors up front.
+	fdState struct {
+		fdSemaphore semaphore.Semaphore
+		acquiredFDs int
+	}
 
 	// Partitioning phase variables.
 	leftPartitioner  colcontainer.PartitionedQueue
@@ -202,6 +226,11 @@ type externalHashJoiner struct {
 		// is forced to recursively repartition (even if it is otherwise not
 		// needed) before it proceeds to actual join partitions.
 		numForcedRepartitions int
+		// delegateFDAcquisitions, if true, means that a test wants to force the
+		// PartitionedDiskQueues to track the number of file descriptors the hash
+		// joiner will open/close. This disables the default behavior of acquiring
+		// all file descriptors up front in Next.
+		delegateFDAcquisitions bool
 	}
 }
 
@@ -227,6 +256,9 @@ const (
 // - numForcedRepartitions is a number of times that the external hash joiner
 // is forced to recursively repartition (even if it is otherwise not needed).
 // This should be non-zero only in tests.
+// - delegateFDAcquisitions specifies whether the external hash joiner should
+// let the partitioned disk queues acquire file descriptors instead of acquiring
+// them up front in Next. Should be true only in tests.
 func newExternalHashJoiner(
 	unlimitedAllocator *Allocator,
 	spec hashJoinerSpec,
@@ -236,15 +268,27 @@ func newExternalHashJoiner(
 	fdSemaphore semaphore.Semaphore,
 	createReusableDiskBackedSorter func(input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (Operator, error),
 	numForcedRepartitions int,
+	delegateFDAcquisitions bool,
 ) Operator {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeClearAndReuseCache {
 		execerror.VectorizedInternalPanic(errors.Errorf("external hash joiner instantiated with suboptimal disk queue cache mode: %d", diskQueueCfg.CacheMode))
 	}
-	leftPartitioner := colcontainer.NewPartitionedDiskQueue(spec.left.sourceTypes, diskQueueCfg, fdSemaphore, colcontainer.PartitionerStrategyDefault)
+	partitionedDiskQueueSemaphore := fdSemaphore
+	if !delegateFDAcquisitions {
+		// To avoid deadlocks with other disk queues, we manually attempt to acquire
+		// the maximum number of descriptors all at once in Next. Passing in a nil
+		// semaphore indicates that the caller will do the acquiring.
+		partitionedDiskQueueSemaphore = nil
+	}
+	leftPartitioner := colcontainer.NewPartitionedDiskQueue(
+		spec.left.sourceTypes, diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyDefault,
+	)
 	leftJoinerInput := newPartitionerToOperator(
 		unlimitedAllocator, spec.left.sourceTypes, leftPartitioner, 0, /* partitionIdx */
 	)
-	rightPartitioner := colcontainer.NewPartitionedDiskQueue(spec.right.sourceTypes, diskQueueCfg, fdSemaphore, colcontainer.PartitionerStrategyDefault)
+	rightPartitioner := colcontainer.NewPartitionedDiskQueue(
+		spec.right.sourceTypes, diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyDefault,
+	)
 	rightJoinerInput := newPartitionerToOperator(
 		unlimitedAllocator, spec.right.sourceTypes, rightPartitioner, 0, /* partitionIdx */
 	)
@@ -261,9 +305,8 @@ func newExternalHashJoiner(
 			maxNumberActivePartitions = numDiskQueuesThatFit
 		}
 	}
-	if maxNumberActivePartitions < 4 {
-		// We need at least two buckets per side to make progress.
-		maxNumberActivePartitions = 4
+	if maxNumberActivePartitions < externalHJMinPartitions {
+		maxNumberActivePartitions = externalHJMinPartitions
 	}
 	makeOrderingCols := func(eqCols []uint32) []execinfrapb.Ordering_Column {
 		res := make([]execinfrapb.Ordering_Column, len(eqCols))
@@ -272,10 +315,17 @@ func newExternalHashJoiner(
 		}
 		return res
 	}
-	// We need to allocate 2 FDs for the merge joiner plus 2 FDs for reading
-	// the partitions that we need to join using sort + merge join strategy, and
-	// all others are divided between the two inputs.
-	externalSorterMaxNumberPartitions := (maxNumberActivePartitions - 4) / 2
+	// We need to allocate 2 FDs for reading the partitions (reused by the merge
+	// joiner) that we need to join using sort + merge join strategy, and all
+	// others are divided between the two inputs.
+	externalSorterMaxNumberPartitions := (maxNumberActivePartitions - sortMergeNonSortMinFDsOpen) / 2
+	if externalSorterMaxNumberPartitions < externalSorterMinPartitions {
+		// This code gets a maximum number of partitions based on the semaphore
+		// limit. In tests, this limit is set artificially low to catch any
+		// violations of the limit, resulting in possibly computing a low number of
+		// partitions for the sorter, which we overwrite here.
+		externalSorterMaxNumberPartitions = externalSorterMinPartitions
+	}
 	leftOrdering := makeOrderingCols(spec.left.eqCols)
 	leftPartitionSorter, err := createReusableDiskBackedSorter(
 		leftJoinerInput, spec.left.sourceTypes, leftOrdering, externalSorterMaxNumberPartitions,
@@ -292,7 +342,7 @@ func newExternalHashJoiner(
 	}
 	diskBackedSortMerge, err := newMergeJoinOp(
 		unlimitedAllocator, memoryLimit, diskQueueCfg,
-		fdSemaphore, spec.joinType, leftPartitionSorter, rightPartitionSorter,
+		partitionedDiskQueueSemaphore, spec.joinType, leftPartitionSorter, rightPartitionSorter,
 		spec.left.sourceTypes, spec.right.sourceTypes, leftOrdering, rightOrdering,
 	)
 	if err != nil {
@@ -321,6 +371,7 @@ func newExternalHashJoiner(
 		).(*hashJoiner),
 		diskBackedSortMerge: diskBackedSortMerge,
 	}
+	ehj.fdState.fdSemaphore = fdSemaphore
 	// To simplify the accounting, we will assume that the in-memory hash
 	// joiner's memory usage is equal to the size of the right partition to be
 	// joined (which will be fully buffered). This is an underestimate because a
@@ -346,6 +397,7 @@ func newExternalHashJoiner(
 		ehj.recursiveScratch.rightBatch = unlimitedAllocator.NewMemBatchNoCols(spec.right.sourceTypes, 0 /* size */)
 	}
 	ehj.testingKnobs.numForcedRepartitions = numForcedRepartitions
+	ehj.testingKnobs.delegateFDAcquisitions = delegateFDAcquisitions
 	return ehj
 }
 
@@ -452,6 +504,13 @@ StateChanged:
 				hj.partitionIdxOffset += hj.numBuckets
 				hj.state = externalHJJoinNewPartition
 				continue
+			}
+			if !hj.testingKnobs.delegateFDAcquisitions && hj.fdState.acquiredFDs == 0 {
+				toAcquire := hj.maxNumberActivePartitions
+				if err := hj.fdState.fdSemaphore.Acquire(ctx, toAcquire); err != nil {
+					execerror.VectorizedInternalPanic(err)
+				}
+				hj.fdState.acquiredFDs = toAcquire
 			}
 			hj.partitionBatch(ctx, leftBatch, leftSide, math.MaxInt64)
 			hj.partitionBatch(ctx, rightBatch, rightSide, math.MaxInt64)
@@ -653,6 +712,10 @@ func (hj *externalHashJoiner) Close() error {
 		if err := c.Close(); err != nil && retErr == nil {
 			retErr = err
 		}
+	}
+	if !hj.testingKnobs.delegateFDAcquisitions && hj.fdState.acquiredFDs > 0 {
+		hj.fdState.fdSemaphore.Release(hj.fdState.acquiredFDs)
+		hj.fdState.acquiredFDs = 0
 	}
 	hj.closed = true
 	return retErr
