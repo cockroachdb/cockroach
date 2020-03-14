@@ -30,7 +30,7 @@ INSERT INTO d VALUES (1, 1), (1, 2)
 
 # Test that vectorized stats are collected correctly.
 statement ok
-SET vectorize = experimental_on
+SET vectorize = on
 
 statement ok
 SET distsql = on
