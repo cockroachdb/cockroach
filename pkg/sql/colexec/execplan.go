@@ -119,6 +119,14 @@ type NewColOperatorArgs struct {
 		// sorter it is merging already created partitions into new one before
 		// proceeding to the next partition from the input).
 		NumForcedRepartitions int
+		// DelegateFDAcquisitions should be observed by users of a
+		// PartitionedDiskQueue. During normal operations, these should acquire the
+		// maximum number of file descriptors they will use from FDSemaphore up
+		// front. Setting this testing knob to true disables that behavior and
+		// lets the PartitionedDiskQueue interact with the semaphore as partitions
+		// are opened/closed, which ensures that the number of open files never
+		// exceeds what is expected.
+		DelegateFDAcquisitions bool
 	}
 }
 
@@ -395,6 +403,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 				input, inputTypes, ordering,
 				execinfra.GetWorkMemLimit(flowCtx.Cfg),
 				maxNumberPartitions,
+				args.TestingKnobs.DelegateFDAcquisitions,
 				diskQueueCfg,
 				args.FDSemaphore,
 			)
@@ -786,13 +795,21 @@ func NewColOperator(
 							diskQueueCfg,
 							args.FDSemaphore,
 							func(input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (Operator, error) {
+								sortArgs := args
+								if !args.TestingKnobs.DelegateFDAcquisitions {
+									// Set the FDSemaphore to nil. This indicates that no FDs
+									// should be acquired. The external hash joiner will do this
+									// up front.
+									sortArgs.FDSemaphore = nil
+								}
 								return result.createDiskBackedSort(
-									ctx, flowCtx, args, input, inputTypes,
+									ctx, flowCtx, sortArgs, input, inputTypes,
 									execinfrapb.Ordering{Columns: orderingCols},
 									0 /* matchLen */, maxNumberPartitions, spec.ProcessorID,
 									&execinfrapb.PostProcessSpec{}, monitorNamePrefix+"-")
 							},
 							args.TestingKnobs.NumForcedRepartitions,
+							args.TestingKnobs.DelegateFDAcquisitions,
 						)
 					},
 					args.TestingKnobs.SpillingCallbackFn,
