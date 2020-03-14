@@ -689,7 +689,7 @@ func (f *DiskBackedIndexedRowContainer) GetRow(
 		if f.idxRowIter > pos {
 			// The iterator has been advanced further than we need, so we need to
 			// start iterating from the beginning.
-			log.Infof(ctx, "rewinding: cache contains indices [%d, %d) but index %d requested", f.firstCachedRowPos, f.nextPosToCache, pos)
+			log.VEventf(ctx, 1, "rewinding: cache contains indices [%d, %d) but index %d requested", f.firstCachedRowPos, f.nextPosToCache, pos)
 			f.idxRowIter = 0
 			f.diskRowIter.Rewind()
 			f.resetCache(ctx)
