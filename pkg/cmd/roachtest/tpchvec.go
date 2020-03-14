@@ -25,11 +25,8 @@ import (
 
 func registerTPCHVec(r *testRegistry) {
 	const (
-		nodeCount       = 3
-		numTPCHQueries  = 22
-		vecOnConfig     = 0
-		vecOffConfig    = 1
-		numRunsPerQuery = 3
+		nodeCount      = 3
+		numTPCHQueries = 22
 		// vecOnSlowerFailFactor describes the threshold at which we fail the test
 		// if vec ON is slower that vec OFF, meaning that if
 		// vec_on_time > vecOnSlowerFailFactor * vec_off_time, the test is failed.
@@ -454,14 +451,6 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 			t.Fatal(err)
 		}
 
-		rng, _ := randutil.NewPseudoRand()
-		workmemInMiB := 1 + rng.Intn(64)
-		workmem := fmt.Sprintf("%dMiB", workmemInMiB)
-		t.Status(fmt.Sprintf("setting workmem='%s'", workmem))
-		if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.distsql.temp_storage.workmem='%s'", workmem)); err != nil {
-			t.Fatal(err)
-		}
-
 		t.Status("scattering the data")
 		if _, err := conn.Exec("USE tpch;"); err != nil {
 			t.Fatal(err)
@@ -491,97 +480,153 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 				break
 			}
 		}
-		t.Status("setting vmodule=bytes_usage=1 on all nodes")
-		for node := 1; node <= nodeCount; node++ {
-			conn := c.Conn(ctx, node)
-			if _, err := conn.Exec("SELECT crdb_internal.set_vmodule('bytes_usage=1');"); err != nil {
-				t.Fatal(err)
+		const (
+			// These correspond to the first run configuration below.
+			vecOnConfig  = 0
+			vecOffConfig = 1
+		)
+		rng, _ := randutil.NewPseudoRand()
+		for _, runConfig := range []struct {
+			vectorizeOptions   []bool
+			stressDiskSpilling bool
+			numRunsPerQuery    int
+		}{
+			{
+				vectorizeOptions:   []bool{true, false},
+				stressDiskSpilling: false,
+				numRunsPerQuery:    3,
+			},
+			{
+				vectorizeOptions:   []bool{true},
+				stressDiskSpilling: true,
+				numRunsPerQuery:    1,
+			},
+		} {
+			var (
+				vmoduleValue int
+				workmem      string
+			)
+			if runConfig.stressDiskSpilling {
+				vmoduleValue = 0
+				// In order to stress the disk spilling of the vectorized
+				// engine, we will set workmem limit to a random value in range
+				// [100KiB, 1000KiB).
+				workmemInKiB := 100 + rng.Intn(900)
+				workmem = fmt.Sprintf("%dKiB", workmemInKiB)
+			} else {
+				vmoduleValue = 2
+				// We are interested in the performance comparison between
+				// vectorized and row-by-row engines, so we will set workmem
+				// limit to a random value in range [1MiB, 64MiB].
+				workmemInMiB := 1 + rng.Intn(64)
+				workmem = fmt.Sprintf("%dMiB", workmemInMiB)
 			}
-		}
-		timeByQueryNum := []map[int][]float64{make(map[int][]float64), make(map[int][]float64)}
-		for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
-			for configIdx, vectorize := range []bool{true, false} {
-				if reason, skip := queriesToSkip[queryNum]; skip {
-					t.Status(fmt.Sprintf("skipping q%d because of %q", queryNum, reason))
-					continue
-				}
-				vectorizeSetting := "off"
-				if vectorize {
-					vectorizeSetting = "experimental_on"
-				}
-				cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
-					"--max-ops=%d --queries=%d --vectorize=%s {pgurl:1-%d}",
-					numRunsPerQuery, queryNum, vectorizeSetting, nodeCount)
-				workloadOutput, err := c.RunWithBuffer(ctx, t.l, firstNode, cmd)
-				t.l.Printf("\n" + string(workloadOutput))
-				if err != nil {
-					// Note: if you see an error like "exit status 1", it is likely caused
-					// by the erroneous output of the query.
+			t.Status(fmt.Sprintf("setting vmodule=vectorized_flow=%d on all nodes", vmoduleValue))
+			for node := 1; node <= nodeCount; node++ {
+				conn := c.Conn(ctx, node)
+				if _, err := conn.Exec(
+					fmt.Sprintf("SELECT crdb_internal.set_vmodule('vectorized_flow=%d');", vmoduleValue),
+				); err != nil {
 					t.Fatal(err)
 				}
-				parseOutput := func(output []byte, timeByQueryNum map[int][]float64) {
-					runtimeRegex := regexp.MustCompile(`.*\[q([\d]+)\] returned \d+ rows after ([\d]+\.[\d]+) seconds.*`)
-					scanner := bufio.NewScanner(bytes.NewReader(output))
-					for scanner.Scan() {
-						line := scanner.Bytes()
-						match := runtimeRegex.FindSubmatch(line)
-						if match != nil {
-							queryNum, err := strconv.Atoi(string(match[1]))
-							if err != nil {
-								t.Fatalf("failed parsing %q as int with %s", match[1], err)
+			}
+			t.Status(fmt.Sprintf("setting workmem='%s'", workmem))
+			if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.distsql.temp_storage.workmem='%s'", workmem)); err != nil {
+				t.Fatal(err)
+			}
+			timeByQueryNum := []map[int][]float64{make(map[int][]float64), make(map[int][]float64)}
+			for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
+				for configIdx, vectorize := range runConfig.vectorizeOptions {
+					if reason, skip := queriesToSkip[queryNum]; skip {
+						t.Status(fmt.Sprintf("skipping q%d because of %q", queryNum, reason))
+						continue
+					}
+					vectorizeSetting := "off"
+					if vectorize {
+						vectorizeSetting = "experimental_on"
+					}
+					cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
+						"--max-ops=%d --queries=%d --vectorize=%s {pgurl:1-%d}",
+						runConfig.numRunsPerQuery, queryNum, vectorizeSetting, nodeCount)
+					workloadOutput, err := c.RunWithBuffer(ctx, t.l, firstNode, cmd)
+					t.l.Printf("\n" + string(workloadOutput))
+					if err != nil {
+						// Note: if you see an error like "exit status 1", it is likely caused
+						// by the erroneous output of the query.
+						t.Fatal(err)
+					}
+					parseOutput := func(output []byte, timeByQueryNum map[int][]float64) {
+						runtimeRegex := regexp.MustCompile(`.*\[q([\d]+)\] returned \d+ rows after ([\d]+\.[\d]+) seconds.*`)
+						scanner := bufio.NewScanner(bytes.NewReader(output))
+						for scanner.Scan() {
+							line := scanner.Bytes()
+							match := runtimeRegex.FindSubmatch(line)
+							if match != nil {
+								queryNum, err := strconv.Atoi(string(match[1]))
+								if err != nil {
+									t.Fatalf("failed parsing %q as int with %s", match[1], err)
+								}
+								queryTime, err := strconv.ParseFloat(string(match[2]), 64)
+								if err != nil {
+									t.Fatalf("failed parsing %q as float with %s", match[2], err)
+								}
+								timeByQueryNum[queryNum] = append(timeByQueryNum[queryNum], queryTime)
 							}
-							queryTime, err := strconv.ParseFloat(string(match[2]), 64)
-							if err != nil {
-								t.Fatalf("failed parsing %q as float with %s", match[2], err)
-							}
-							timeByQueryNum[queryNum] = append(timeByQueryNum[queryNum], queryTime)
 						}
 					}
+					if !runConfig.stressDiskSpilling {
+						// We don't need to parse the output if we're stressing
+						// the disk spilling.
+						parseOutput(workloadOutput, timeByQueryNum[configIdx])
+					}
 				}
-				parseOutput(workloadOutput, timeByQueryNum[configIdx])
 			}
-		}
-		t.Status("comparing the runtimes (only median values for each query are compared)")
-		for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
-			if _, skipped := queriesToSkip[queryNum]; skipped {
-				continue
-			}
-			findMedian := func(times []float64) float64 {
-				sort.Float64s(times)
-				return times[len(times)/2]
-			}
-			vecOnTimes := timeByQueryNum[vecOnConfig][queryNum]
-			vecOffTimes := timeByQueryNum[vecOffConfig][queryNum]
-			if len(vecOnTimes) != numRunsPerQuery {
-				t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
-					"recorded with vec ON config: %v", queryNum, vecOnTimes))
-			}
-			if len(vecOffTimes) != numRunsPerQuery {
-				t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
-					"recorded with vec OFF config: %v", queryNum, vecOffTimes))
-			}
-			vecOnTime := findMedian(vecOnTimes)
-			vecOffTime := findMedian(vecOffTimes)
-			if vecOffTime < vecOnTime {
-				t.l.Printf(
-					fmt.Sprintf("[q%d] vec OFF was faster by %.2f%%: "+
-						"%.2fs ON vs %.2fs OFF --- WARNING\n"+
-						"vec ON times: %v\t vec OFF times: %v",
-						queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime,
-						vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
-			} else {
-				t.l.Printf(
-					fmt.Sprintf("[q%d] vec ON was faster by %.2f%%: "+
-						"%.2fs ON vs %.2fs OFF\n"+
-						"vec ON times: %v\t vec OFF times: %v",
-						queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime,
-						vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
-			}
-			if vecOnTime >= vecOnSlowerFailFactor*vecOffTime {
-				t.Fatal(fmt.Sprintf(
-					"[q%d] vec ON is slower by %.2f%% than vec OFF\n"+
-						"vec ON times: %v\nvec OFF times: %v",
-					queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime, vecOnTimes, vecOffTimes))
+			if !runConfig.stressDiskSpilling {
+				// We are only interested in comparison if we're not stressing
+				// the disk spilling.
+				t.Status("comparing the runtimes (only median values for each query are compared)")
+				for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
+					if _, skipped := queriesToSkip[queryNum]; skipped {
+						continue
+					}
+					findMedian := func(times []float64) float64 {
+						sort.Float64s(times)
+						return times[len(times)/2]
+					}
+					vecOnTimes := timeByQueryNum[vecOnConfig][queryNum]
+					vecOffTimes := timeByQueryNum[vecOffConfig][queryNum]
+					if len(vecOnTimes) != runConfig.numRunsPerQuery {
+						t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
+							"recorded with vec ON config: %v", queryNum, vecOnTimes))
+					}
+					if len(vecOffTimes) != runConfig.numRunsPerQuery {
+						t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
+							"recorded with vec OFF config: %v", queryNum, vecOffTimes))
+					}
+					vecOnTime := findMedian(vecOnTimes)
+					vecOffTime := findMedian(vecOffTimes)
+					if vecOffTime < vecOnTime {
+						t.l.Printf(
+							fmt.Sprintf("[q%d] vec OFF was faster by %.2f%%: "+
+								"%.2fs ON vs %.2fs OFF --- WARNING\n"+
+								"vec ON times: %v\t vec OFF times: %v",
+								queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime,
+								vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
+					} else {
+						t.l.Printf(
+							fmt.Sprintf("[q%d] vec ON was faster by %.2f%%: "+
+								"%.2fs ON vs %.2fs OFF\n"+
+								"vec ON times: %v\t vec OFF times: %v",
+								queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime,
+								vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
+					}
+					if vecOnTime >= vecOnSlowerFailFactor*vecOffTime {
+						t.Fatal(fmt.Sprintf(
+							"[q%d] vec ON is slower by %.2f%% than vec OFF\n"+
+								"vec ON times: %v\nvec OFF times: %v",
+							queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime, vecOnTimes, vecOffTimes))
+					}
+				}
 			}
 		}
 	}
