@@ -59,6 +59,28 @@ func MakeDeleter(
 		if err != nil {
 			return Deleter{}, err
 		}
+		// If we are performing a cascade operation for a particular foreign
+		// key constraint, we don't also need to perform a foreign key
+		// existence check after the delete for the same foreign key
+		// constraint. This pass removes unnecessary existence helpers.
+		// In particular, we omit checks for CASCADE and SET NULL because
+		// after the cascader has finished deleting or setting rows to
+		// NULL, we don't need to verify the result of those operations.
+		// TODO (rohany): This code will be removed once the optimizer
+		//  handles cascade operations.
+		for k, helpers := range rowDeleter.Fks.fks {
+			index := 0
+			for i := range helpers {
+				helper := &helpers[i]
+				if helper.ref.OnDelete == sqlbase.ForeignKeyReference_CASCADE ||
+					helper.ref.OnDelete == sqlbase.ForeignKeyReference_SET_NULL {
+					continue
+				}
+				helpers[index] = *helper
+				index++
+			}
+			rowDeleter.Fks.fks[k] = helpers[:index]
+		}
 	}
 	return rowDeleter, nil
 }
