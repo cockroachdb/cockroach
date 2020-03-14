@@ -265,6 +265,7 @@ func TestWindowFunctions(t *testing.T) {
 				Spec:                spec,
 				Inputs:              inputs,
 				StreamingMemAccount: testMemAcc,
+				FDSemaphore:         NewTestingSemaphore(VecMaxOpenFDsLimit),
 			}
 			args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 			result, err := NewColOperator(ctx, flowCtx, args)
