@@ -226,9 +226,9 @@ func isSupported(
 		if core.Distinct.ErrorOnDup != "" {
 			return false, errors.Newf("distinct with error on duplicates not supported")
 		}
-		if mode != sessiondata.VectorizeExperimentalOn && mode != sessiondata.VectorizeExperimentalAlways {
+		if mode != sessiondata.VectorizeFull && mode != sessiondata.VectorizeExperimentalAlways {
 			if len(core.Distinct.OrderedColumns) < len(core.Distinct.DistinctColumns) {
-				return false, errors.Newf("unordered distinct can only run in 'experimental_on' vectorize mode")
+				return false, errors.Newf("unordered distinct can only run in 'full' vectorize mode")
 			}
 		}
 		return true, nil
@@ -273,10 +273,10 @@ func isSupported(
 			if _, supported := SupportedWindowFns[*wf.Func.WindowFunc]; !supported {
 				return false, errors.Newf("window function %s is not supported", wf.String())
 			}
-			if mode != sessiondata.VectorizeExperimentalOn && mode != sessiondata.VectorizeExperimentalAlways {
+			if mode != sessiondata.VectorizeFull && mode != sessiondata.VectorizeExperimentalAlways {
 				switch *wf.Func.WindowFunc {
 				case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
-					return false, errors.Newf("window function %s can only run in 'experimental_on' vectorize mode", wf.String())
+					return false, errors.Newf("window function %s can only run in 'full' vectorize mode", wf.String())
 				}
 			}
 		}

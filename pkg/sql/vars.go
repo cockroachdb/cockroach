@@ -392,7 +392,7 @@ var varGen = map[string]sessionVar{
 			mode, ok := sessiondata.VectorizeExecModeFromString(s)
 			if !ok {
 				return newVarValueError(`vectorize`, s,
-					"off", "auto", "experimental_on", "experimental_always")
+					"off", "auto", "full", "experimental_always")
 			}
 			m.SetVectorize(mode)
 			return nil
