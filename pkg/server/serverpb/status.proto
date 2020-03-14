@@ -79,13 +79,12 @@ message CertificatesResponse {
 }
 
 // DetailsRequest requests a nodes details.
+// Note: this does *not* check readiness. Use the Health RPC for that purpose.
 message DetailsRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
-  // ready specifies whether the client wants to know whether a node is ready to
-  // receive traffic. If a node is unready, an error will be returned.
-  bool ready = 2;
+  reserved 2;
 }
 
 // SystemInfo contains information about the host system.
@@ -833,7 +832,6 @@ service Status {
   rpc Details(DetailsRequest) returns (DetailsResponse) {
     option (google.api.http) = {
       get : "/_status/details/{node_id}"
-      additional_bindings {get : "/health"}
     };
   }
   rpc Nodes(NodesRequest) returns (NodesResponse) {

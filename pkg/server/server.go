@@ -1392,6 +1392,11 @@ func (s *Server) Start(ctx context.Context) error {
 			return err
 		}
 	}
+	// Handle /health early. This is necessary for orchestration.  Note
+	// that /health is not authenticated, on purpose. This is both
+	// because it needs to be available before the cluster is up and can
+	// serve authentication requests, and also because it must work for
+	// monitoring tools which operate without authentication.
 	s.mux.Handle("/health", gwMux)
 
 	s.engines, err = s.cfg.CreateEngines(ctx)
@@ -1729,11 +1734,14 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.mux.Handle(adminPrefix, authHandler)
 	// Exempt the health check endpoint from authentication.
+	// This mirrors the handling of /health above.
 	s.mux.Handle("/_admin/v1/health", gwMux)
 	s.mux.Handle(ts.URLPrefix, authHandler)
 	s.mux.Handle(statusPrefix, authHandler)
+	// The /login endpoint is, by definition, available pre-authentication.
 	s.mux.Handle(loginPath, gwMux)
 	s.mux.Handle(logoutPath, authHandler)
+	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	log.Event(ctx, "added http endpoints")
 
