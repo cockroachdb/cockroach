@@ -490,3 +490,119 @@ ALTER TABLE orders VALIDATE CONSTRAINT fk_customer;
 		t.Fatalf("expected: %s\ngot: %s", want1, dump1)
 	}
 }
+
+func TestDatabaseDumpCommand(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := []struct {
+		name     string
+		create   string
+		expected string
+	}{
+		{
+			name: "columnsless_table",
+			create: `
+CREATE DATABASE bar;
+USE bar;
+CREATE TABLE foo ();
+`,
+			expected: `CREATE TABLE foo (FAMILY "primary" (rowid)
+);
+`,
+		},
+		{
+			name: "table_with_columns",
+			create: `
+CREATE DATABASE bar;
+USE bar;
+CREATE TABLE foo (id int primary key, text string not null);
+`,
+			expected: `CREATE TABLE foo (
+	id INT8 NOT NULL,
+	text STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, text)
+);
+`,
+		},
+		{
+			name: "autogenerate_hidden_colum",
+			create: `
+CREATE DATABASE bar;
+USE bar;
+CREATE TABLE foo(id int);
+`,
+			expected: `CREATE TABLE foo (
+	id INT8 NULL,
+	FAMILY "primary" (id, rowid)
+);
+`,
+		},
+		{
+			name: "columns_less_table_with_data",
+			create: `
+CREATE DATABASE bar;
+USE bar;
+CREATE TABLE foo(id int);
+
+INSERT INTO foo(id) VALUES(1);
+INSERT INTO foo(id) VALUES(2);
+INSERT INTO foo(id) VALUES(3);
+
+ALTER TABLE foo DROP COLUMN id; 
+`,
+			expected: `CREATE TABLE foo (FAMILY "primary" (rowid)
+);
+`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c := newCLITest(cliTestParams{t: t})
+			c.omitArgs = true
+			defer c.cleanup()
+
+			_, err := c.RunWithCaptureArgs([]string{"sql", "-e", test.create})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			dump, err := c.RunWithCaptureArgs([]string{"dump", "bar", "--dump-mode=schema"})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if dump != test.expected {
+				t.Fatalf("expected: %s\ngot: %s", test.expected, dump)
+			}
+
+			dumpWithData, err := c.RunWithCaptureArgs([]string{"dump", "bar", "--dump-mode=data"})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// check we can actually reuse dump output
+			_, err = c.RunWithCaptureArgs([]string{"sql", "-e", fmt.Sprintf(`CREATE DATABASE TEST;
+USE TEST;
+%s
+%s`, dump, dumpWithData)})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			result1, err := c.RunWithCaptureArgs([]string{"sql", "-e", "select * from bar.foo"})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			result2, err := c.RunWithCaptureArgs([]string{"sql", "-e", "select * from test.foo"})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if result1 != result2 {
+				t.Fatalf("expected: %s\ngot: %s", test.expected, dump)
+			}
+		})
+	}
+}
