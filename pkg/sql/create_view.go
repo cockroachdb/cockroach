@@ -62,7 +62,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 		if !isTemporary && backRefMutable.Temporary {
 			// This notice is sent from pg, let's imitate.
-			params.p.noticeSender.AppendNotice(
+			params.p.SendClientNotice(params.ctx,
 				pgerror.Noticef(`view "%s" will be a temporary view`, viewName),
 			)
 			isTemporary = true

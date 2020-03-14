@@ -318,7 +318,7 @@ func (p *planner) AlterPrimaryKey(
 	// until the primary key swap actually occurs. Deletions will get enqueued in the phase when the swap happens.
 
 	// Send a notice to users about the async cleanup jobs.
-	p.noticeSender.AppendNotice(
+	p.SendClientNotice(ctx,
 		pgerror.Noticef(
 			"primary key changes spawn async cleanup jobs. Future schema changes on %q may be delayed as these jobs finish",
 			tableDesc.Name,

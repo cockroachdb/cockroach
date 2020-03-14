@@ -470,7 +470,7 @@ func (p *planner) dropIndexByName(
 	if err := p.writeSchemaChange(ctx, tableDesc, mutationID, jobDesc); err != nil {
 		return err
 	}
-	p.noticeSender.AppendNotice(pgerror.Noticef(
+	p.SendClientNotice(ctx, pgerror.Noticef(
 		"index %q will be dropped asynchronously and will be complete after the GC TTL",
 		idxName.String(),
 	))
