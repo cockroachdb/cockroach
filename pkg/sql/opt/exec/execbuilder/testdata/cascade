@@ -621,3 +621,35 @@ SELECT count(*) FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE 'cascading %
 # Clean up after the test.
 statement ok
 DROP TABLE c3, c2, c1, b2, b1, a;
+
+# Regression for #46094.
+
+statement ok
+CREATE TABLE parent (x INT PRIMARY KEY);
+CREATE TABLE child1 (
+  id INT PRIMARY KEY,
+  x INT REFERENCES parent (x) ON DELETE CASCADE,
+  FAMILY (id, x)
+);
+CREATE TABLE child2 (
+  id INT PRIMARY KEY,
+  x INT REFERENCES parent (x) ON DELETE SET NULL,
+  FAMILY (id, x)
+);
+INSERT INTO parent VALUES (1), (2);
+INSERT INTO child1 VALUES (1, 1), (2, 1);
+INSERT INTO child2 VALUES (1, 1), (2, 1)
+
+# Here we ensure that after the cascaded deletes we don't need
+# to perform additional and unneeded FKScan operations after
+# cascade deleting or setting null to referencing rows.
+query T kvtrace(Del,FKScan)
+DELETE FROM parent WHERE x = 1
+----
+Del /Table/109/1/1/0
+Del /Table/110/2/1/1/0
+Del /Table/110/1/1/0
+Del /Table/110/2/1/2/0
+Del /Table/110/1/2/0
+Del /Table/111/2/1/1/0
+Del /Table/111/2/1/2/0
