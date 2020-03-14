@@ -124,15 +124,16 @@ func registerAlterPK(r *testRegistry) {
 
 			// Pick a random table to change the primary key of.
 			alterStmts := []string{
-				`ALTER TABLE warehouse ALTER PRIMARY KEY USING COLUMNS (w_id)`,
-				`ALTER TABLE district ALTER PRIMARY KEY USING COLUMNS (d_w_id, d_id)`,
-				`ALTER TABLE history ALTER PRIMARY KEY USING COLUMNS (h_w_id, rowid)`,
+				// TODO (rohany): reenable these options once #45812 is fixed.
+				//`ALTER TABLE warehouse ALTER PRIMARY KEY USING COLUMNS (w_id)`,
+				//`ALTER TABLE district ALTER PRIMARY KEY USING COLUMNS (d_w_id, d_id)`,
+				//`ALTER TABLE history ALTER PRIMARY KEY USING COLUMNS (h_w_id, rowid)`,
 				`ALTER TABLE customer ALTER PRIMARY KEY USING COLUMNS (c_w_id, c_d_id, c_id)`,
-				`ALTER TABLE "order" ALTER PRIMARY KEY USING COLUMNS (o_w_id, o_d_id, o_id DESC)`,
-				`ALTER TABLE new_order ALTER PRIMARY KEY USING COLUMNS (no_w_id, no_d_id, no_o_id)`,
-				`ALTER TABLE item ALTER PRIMARY KEY USING COLUMNS (i_id)`,
-				`ALTER TABLE stock ALTER PRIMARY KEY USING COLUMNS (s_w_id, s_i_id)`,
-				`ALTER TABLE order_line ALTER PRIMARY KEY USING COLUMNS (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)`,
+				//`ALTER TABLE "order" ALTER PRIMARY KEY USING COLUMNS (o_w_id, o_d_id, o_id DESC)`,
+				//`ALTER TABLE new_order ALTER PRIMARY KEY USING COLUMNS (no_w_id, no_d_id, no_o_id)`,
+				//`ALTER TABLE item ALTER PRIMARY KEY USING COLUMNS (i_id)`,
+				//`ALTER TABLE stock ALTER PRIMARY KEY USING COLUMNS (s_w_id, s_i_id)`,
+				//`ALTER TABLE order_line ALTER PRIMARY KEY USING COLUMNS (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)`,
 			}
 
 			rand, _ := randutil.NewPseudoRand()
