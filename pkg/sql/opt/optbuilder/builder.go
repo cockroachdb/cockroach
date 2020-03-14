@@ -303,6 +303,10 @@ func (b *Builder) buildStmt(
 	case *tree.Export:
 		return b.buildExport(stmt, inScope)
 
+	case *tree.ExplainBundle:
+		// This statement should have been handled by the executor.
+		panic(errors.Errorf("%s can only be used as a top-level statement", stmt.StatementTag()))
+
 	default:
 		// See if this statement can be rewritten to another statement using the
 		// delegate functionality.
@@ -325,7 +329,7 @@ func (b *Builder) buildStmt(
 			b.DisableMemoReuse = true
 			return outScope
 		}
-		panic(unimplementedWithIssueDetailf(34848, stmt.StatementTag(), "unsupported statement: %T", stmt))
+		panic(errors.AssertionFailedf("unexpected statement: %T", stmt))
 	}
 }
 

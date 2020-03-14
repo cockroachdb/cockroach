@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 var queryCacheEnabled = settings.RegisterBoolSetting(
@@ -43,13 +44,8 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 	opc := &p.optPlanningCtx
 	opc.reset()
 
-	// These statements do not have result columns and do not support placeholders
-	// so there is no need to do anything during prepare.
-	//
-	// Some of these statements (like BeginTransaction) aren't supported by the
-	// optbuilder so they would error out. Others (like CreateIndex) have planning
-	// code that can introduce unnecessary txn retries (because of looking up
-	// descriptors and such).
+	stmt.Prepared.AnonymizedStr = anonymizeStmt(stmt.AST)
+
 	switch stmt.AST.(type) {
 	case *tree.AlterIndex, *tree.AlterTable, *tree.AlterSequence,
 		*tree.BeginTransaction,
@@ -68,6 +64,22 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		*tree.RollbackToSavepoint, *tree.RollbackTransaction,
 		*tree.Savepoint, *tree.SetTransaction, *tree.SetTracing, *tree.SetSessionAuthorizationDefault,
 		*tree.SetSessionCharacteristics:
+		// These statements do not have result columns and do not support placeholders
+		// so there is no need to do anything during prepare.
+		//
+		// Some of these statements (like BeginTransaction) aren't supported by the
+		// optbuilder so they would error out. Others (like CreateIndex) have planning
+		// code that can introduce unnecessary txn retries (because of looking up
+		// descriptors and such).
+		return opc.flags, nil
+
+	case *tree.ExplainBundle:
+		// This statement returns result columns but does not support placeholders,
+		// and we don't want to do anything during prepare.
+		if len(p.semaCtx.Placeholders.Types) != 0 {
+			return 0, errors.Errorf("%s does not support placeholders", stmt.AST.StatementTag())
+		}
+		stmt.Prepared.Columns = sqlbase.ExplainBundleColumns
 		return opc.flags, nil
 	}
 
@@ -101,8 +113,6 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		}
 		opc.flags.Set(planFlagOptCacheMiss)
 	}
-
-	stmt.Prepared.AnonymizedStr = anonymizeStmt(stmt.AST)
 
 	memo, err := opc.buildReusableMemo(ctx)
 	if err != nil {

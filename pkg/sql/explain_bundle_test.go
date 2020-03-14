@@ -38,17 +38,50 @@ func TestExplainBundle(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(godb)
 
-	r.Exec(t, "CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE)")
-	rows := r.QueryStr(t, "EXPLAIN BUNDLE SELECT * FROM abc WHERE c=1")
-	checkBundle(t, fmt.Sprint(rows), "statement.txt opt.txt opt-v.txt opt-vv.txt plan.txt trace.json")
+	// Expected list of files for a successful statement.
+	expSuccess := "statement.txt opt.txt opt-v.txt opt-vv.txt plan.txt trace.json"
+	// Expected list of files for a statement that fails during planning.
+	expPlanFail := "statement.txt trace.json"
 
-	// Even on query errors, we should still get a bundle.
-	_, err := godb.QueryContext(ctx, "EXPLAIN BUNDLE SELECT * FROM badtable")
-	if !testutils.IsError(err, "relation.*does not exist") {
-		t.Fatalf("unexpected error %v\n", err)
-	}
-	// The bundle url is inside the error detail.
-	checkBundle(t, fmt.Sprintf("%+v", err.(*pq.Error).Detail), "statement.txt trace.json")
+	t.Run("basic", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE)")
+		rows := r.QueryStr(t, "EXPLAIN BUNDLE SELECT * FROM abc WHERE c=1")
+		checkBundle(t, fmt.Sprint(rows), expSuccess)
+	})
+
+	// Even on query errors we should still get a bundle.
+	t.Run("error", func(t *testing.T) {
+		_, err := godb.QueryContext(ctx, "EXPLAIN BUNDLE SELECT * FROM badtable")
+		if !testutils.IsError(err, "relation.*does not exist") {
+			t.Fatalf("unexpected error %v\n", err)
+		}
+		// The bundle url is inside the error detail.
+		checkBundle(t, fmt.Sprintf("%+v", err.(*pq.Error).Detail), expPlanFail)
+	})
+
+	// Verify that we can issue the statement with prepare (which can happen
+	// depending on the client).
+	t.Run("prepare", func(t *testing.T) {
+		stmt, err := godb.Prepare("EXPLAIN BUNDLE SELECT * FROM abc WHERE c=1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer stmt.Close()
+		rows, err := stmt.Query()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var rowsBuf bytes.Buffer
+		for rows.Next() {
+			var row string
+			if err := rows.Scan(&row); err != nil {
+				t.Fatal(err)
+			}
+			rowsBuf.WriteString(row)
+			rowsBuf.WriteByte('\n')
+		}
+		checkBundle(t, rowsBuf.String(), expSuccess)
+	})
 }
 
 // checkBundle searches text strings for a bundle URL and then verifies that the
