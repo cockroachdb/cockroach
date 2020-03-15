@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -661,17 +663,28 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		assertRangefeedRetryErr(t, pErr, roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT)
 	})
 	t.Run(roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING.String(), func(t *testing.T) {
-		mtc, rangeID := setup(t)
+		mtc, _ := setup(t)
 		defer mtc.Stop()
+
+		// Split the range so that the RHS is not a system range and thus will
+		// respect the rangefeed_enabled cluster setting.
+		startKey := keys.UserTableDataMin
+		splitArgs := adminSplitArgs(startKey)
+		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], splitArgs); pErr != nil {
+			t.Fatalf("split saw unexpected error: %v", pErr)
+		}
+		rightRangeID := mtc.Store(0).LookupReplica(roachpb.RKey(startKey)).RangeID
 
 		// Establish a rangefeed.
 		stream := newTestStream()
 		streamErrC := make(chan *roachpb.Error, 1)
-		rangefeedSpan := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
+
+		endKey := keys.TableDataMax
+		rangefeedSpan := roachpb.Span{Key: startKey, EndKey: endKey}
 		go func() {
 			req := roachpb.RangeFeedRequest{
 				Header: roachpb.Header{
-					RangeID: rangeID,
+					RangeID: rightRangeID,
 				},
 				Span: rangefeedSpan,
 			}
@@ -688,7 +701,8 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		kvserver.RangefeedEnabled.Override(&mtc.storeConfig.Settings.SV, false)
 
 		// Perform a write on the range.
-		pArgs := putArgs(roachpb.Key("c"), []byte("val2"))
+		writeKey := encoding.EncodeStringAscending(keys.SystemSQLCodec.TablePrefix(55), "c")
+		pArgs := putArgs(writeKey, []byte("val2"))
 		if _, pErr := kv.SendWrapped(ctx, mtc.distSenders[0], pArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
