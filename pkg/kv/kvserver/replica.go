@@ -775,7 +775,7 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 
 	// The GC threshold is the oldest value we can return here.
 	if isAdmin || !StrictGCEnforcement.Get(&r.store.ClusterSettings().SV) ||
-		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.UserTableDataMin)) {
+		r.isSystemRangeRLocked() {
 		return threshold
 	}
 
@@ -801,6 +801,17 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 		threshold = c.earliestRecord.Timestamp.Prev()
 	}
 	return threshold
+}
+
+// isSystemRange returns true if r's key range precedes keys.UserTableDataMin.
+func (r *Replica) isSystemRange() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.isSystemRangeRLocked()
+}
+
+func (r *Replica) isSystemRangeRLocked() bool {
+	return r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.UserTableDataMin))
 }
 
 // maxReplicaIDOfAny returns the maximum ReplicaID of any replica, including
