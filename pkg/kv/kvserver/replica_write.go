@@ -572,7 +572,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 func (r *Replica) newBatchedEngine(spans *spanset.SpanSet) (storage.Batch, *storage.OpLoggerBatch) {
 	batch := r.store.Engine().NewBatch()
 	var opLogger *storage.OpLoggerBatch
-	if RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
+	if r.isSystemRange() || RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		// TODO(nvanbenschoten): once we get rid of the RangefeedEnabled
 		// cluster setting we'll need a way to turn this on when any
 		// replica (not just the leaseholder) wants it and off when no
