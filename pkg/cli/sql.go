@@ -830,55 +830,7 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 	c.partialLines = []string{}
 
 	if cliCtx.isInteractive {
-		// If a human user is providing the input, we want to help them with
-		// what they are entering:
-		c.errExit = false // let the user retry failing commands
-		if !sqlCtx.debugMode {
-			// Also, try to enable syntax checking if supported by the server.
-			// This is a form of client-side error checking to help with large txns.
-			c.tryEnableCheckSyntax()
-		}
-
 		fmt.Println("#\n# Enter \\? for a brief introduction.\n#")
-	} else {
-		// When running non-interactive, by default we want errors to stop
-		// further processing and we can just let syntax checking to be
-		// done server-side to avoid client-side churn.
-		c.errExit = true
-		c.checkSyntax = false
-		// We also don't need (smart) prompts at all.
-	}
-
-	if c.hasEditor() {
-		// We only enable prompt and history management when the
-		// interactive input prompter is enabled. This saves on churn and
-		// memory when e.g. piping a large SQL script through the
-		// command-line client.
-
-		// Default prompt is part of the connection URL. eg: "marc@localhost:26257>".
-		c.customPromptPattern = defaultPromptPattern
-		if sqlCtx.debugMode {
-			c.customPromptPattern = debugPromptPattern
-		}
-
-		c.ins.SetCompleter(c)
-		if err := c.ins.UseHistory(-1 /*maxEntries*/, true /*dedup*/); err != nil {
-			log.Warningf(context.TODO(), "cannot enable history: %v", err)
-		} else {
-			homeDir, err := envutil.HomeDir()
-			if err != nil {
-				log.Warningf(context.TODO(), "cannot retrieve user information: %v", err)
-				log.Warning(context.TODO(), "history will not be saved")
-			} else {
-				histFile := filepath.Join(homeDir, cmdHistFile)
-				err = c.ins.LoadHistory(histFile)
-				if err != nil {
-					log.Warningf(context.TODO(), "cannot load the command-line history (file corrupted?): %v", err)
-					log.Warning(context.TODO(), "the history file will be cleared upon first entry")
-				}
-				c.ins.SetAutoSaveHistory(histFile, true)
-			}
-		}
 	}
 
 	return nextState
@@ -1319,59 +1271,14 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 		}
 		switch state {
 		case cliStart:
-			if len(sqlCtx.setStmts) > 0 {
-				// Execute any \set commands to allow setting client variables
-				// before statement execution non-interactive mode.
-				for i := range sqlCtx.setStmts {
-					if c.handleSet(sqlCtx.setStmts[i:i+1], cliStart, cliStop) == cliStop {
-						return c.exitErr
-					}
-				}
+			cleanupFn, err := c.configurePreShellDefaults()
+			defer cleanupFn()
+			if err != nil {
+				return err
 			}
-
 			if len(sqlCtx.execStmts) > 0 {
 				// Single-line sql; run as simple as possible, without noise on stdout.
 				return c.runStatements(sqlCtx.execStmts)
-			}
-
-			if cliCtx.terminalOutput {
-				// If results are shown on a terminal also enable printing of
-				// times by default.
-				sqlCtx.showTimes = true
-			}
-			if cliCtx.isInteractive && !sqlCtx.debugMode {
-				// If the terminal is interactive and this was not explicitly disabled by setting the debug mode,
-				// enable the smart prompt.
-				c.smartPrompt = true
-			}
-
-			// An interactive readline prompter is comparatively slow at
-			// reading input, so we only use it in interactive mode and when
-			// there is also a terminal on stdout.
-			if cliCtx.isInteractive && cliCtx.terminalOutput {
-				// The readline initialization is not placed in
-				// the doStart() method because of the defer.
-				c.ins, c.exitErr = readline.InitFiles("cockroach",
-					true, /* wideChars */
-					stdin, os.Stdout, stderr)
-				if c.exitErr == readline.ErrWidecharNotSupported {
-					log.Warning(context.TODO(), "wide character support disabled")
-					c.ins, c.exitErr = readline.InitFiles("cockroach",
-						false, stdin, os.Stdout, stderr)
-				}
-				if c.exitErr != nil {
-					return c.exitErr
-				}
-				// If the user has used bind -v or bind -l in their ~/.editrc,
-				// this will reset the standard bindings. However we really
-				// want in this shell that Ctrl+C, tab, Ctrl+Z and Ctrl+R
-				// always have the same meaning.  So reload these bindings
-				// explicitly no matter what ~/.editrc may have changed.
-				c.ins.RebindControlKeys()
-				defer c.ins.Close()
-			} else {
-				c.ins = noLineEditor
-				c.buf = bufio.NewReader(stdin)
 			}
 
 			state = c.doStart(cliStartLine)
@@ -1414,6 +1321,115 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 	}
 
 	return c.exitErr
+}
+
+// configurePreShellDefaults should be called after command-line flags
+// have been loaded into the cliCtx/sqlCtx and .isInteractive /
+// .terminalOutput have been initialized, but before the SQL shell or
+// execution starts.
+//
+// The returned cleanupFn must be called even when the err return is
+// not nil.
+func (c *cliState) configurePreShellDefaults() (cleanupFn func(), err error) {
+	if cliCtx.terminalOutput {
+		// If results are shown on a terminal also enable printing of
+		// times by default.
+		sqlCtx.showTimes = true
+	}
+	if cliCtx.isInteractive && !sqlCtx.debugMode {
+		// If the terminal is interactive and this was not explicitly
+		// disabled by setting the debug mode, enable the smart prompt.
+		c.smartPrompt = true
+	}
+
+	if cliCtx.isInteractive {
+		// If a human user is providing the input, we want to help them with
+		// what they are entering:
+		c.errExit = false // let the user retry failing commands
+		if !sqlCtx.debugMode {
+			// Also, try to enable syntax checking if supported by the server.
+			// This is a form of client-side error checking to help with large txns.
+			c.tryEnableCheckSyntax()
+		}
+	} else {
+		// When running non-interactive, by default we want errors to stop
+		// further processing and we can just let syntax checking to be
+		// done server-side to avoid client-side churn.
+		c.errExit = true
+		c.checkSyntax = false
+		// We also don't need (smart) prompts at all.
+	}
+
+	// An interactive readline prompter is comparatively slow at
+	// reading input, so we only use it in interactive mode and when
+	// there is also a terminal on stdout.
+	if cliCtx.isInteractive && cliCtx.terminalOutput {
+		// The readline initialization is not placed in
+		// the doStart() method because of the defer.
+		c.ins, c.exitErr = readline.InitFiles("cockroach",
+			true, /* wideChars */
+			stdin, os.Stdout, stderr)
+		if c.exitErr == readline.ErrWidecharNotSupported {
+			log.Warning(context.TODO(), "wide character support disabled")
+			c.ins, c.exitErr = readline.InitFiles("cockroach",
+				false, stdin, os.Stdout, stderr)
+		}
+		if c.exitErr != nil {
+			return cleanupFn, c.exitErr
+		}
+		// If the user has used bind -v or bind -l in their ~/.editrc,
+		// this will reset the standard bindings. However we really
+		// want in this shell that Ctrl+C, tab, Ctrl+Z and Ctrl+R
+		// always have the same meaning.  So reload these bindings
+		// explicitly no matter what ~/.editrc may have changed.
+		c.ins.RebindControlKeys()
+		cleanupFn = func() { c.ins.Close() }
+	} else {
+		c.ins = noLineEditor
+		c.buf = bufio.NewReader(stdin)
+		cleanupFn = func() {}
+	}
+
+	if c.hasEditor() {
+		// We only enable prompt and history management when the
+		// interactive input prompter is enabled. This saves on churn and
+		// memory when e.g. piping a large SQL script through the
+		// command-line client.
+
+		// Default prompt is part of the connection URL. eg: "marc@localhost:26257>".
+		c.customPromptPattern = defaultPromptPattern
+		if sqlCtx.debugMode {
+			c.customPromptPattern = debugPromptPattern
+		}
+
+		c.ins.SetCompleter(c)
+		if err := c.ins.UseHistory(-1 /*maxEntries*/, true /*dedup*/); err != nil {
+			log.Warningf(context.TODO(), "cannot enable history: %v", err)
+		} else {
+			homeDir, err := envutil.HomeDir()
+			if err != nil {
+				log.Warningf(context.TODO(), "cannot retrieve user information: %v", err)
+				log.Warning(context.TODO(), "history will not be saved")
+			} else {
+				histFile := filepath.Join(homeDir, cmdHistFile)
+				err = c.ins.LoadHistory(histFile)
+				if err != nil {
+					log.Warningf(context.TODO(), "cannot load the command-line history (file corrupted?): %v", err)
+					log.Warning(context.TODO(), "the history file will be cleared upon first entry")
+				}
+				c.ins.SetAutoSaveHistory(histFile, true)
+			}
+		}
+	}
+
+	// After all the local options have been computed/initialized above,
+	// process any overrides from the command line.
+	for i := range sqlCtx.setStmts {
+		if c.handleSet(sqlCtx.setStmts[i:i+1], cliStart, cliStop) == cliStop {
+			return cleanupFn, c.exitErr
+		}
+	}
+	return cleanupFn, nil
 }
 
 // runOneStatement executes one statement and terminates
