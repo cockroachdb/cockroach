@@ -130,7 +130,7 @@ func (i iteratorWithCloser) Close() {
 func (r *Replica) RangeFeed(
 	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) *roachpb.Error {
-	if !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
+	if !r.isSystemRangeRLocked() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
 			base.DocsURL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 	}

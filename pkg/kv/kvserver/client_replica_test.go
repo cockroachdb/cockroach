@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -3136,6 +3138,73 @@ func TestStrictGCEnforcement(t *testing.T) {
 		require.NoError(t, tc.TransferRangeLease(desc, tc.Target(1)))
 		assertScanOk(t)
 	})
+}
+
+// TestProposalOverhead ensures that the command overhead for put operations
+// is as expected. It exists to prevent changes which might increase the
+// byte overhead of replicating commands.
+//
+// Note that it intentionally avoids using a system range which incurs the
+// overhead due to the logical op log.
+func TestProposalOverhead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var overhead uint32
+	var key atomic.Value
+	key.Store(roachpb.Key{})
+	filter := func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+		if len(args.Req.Requests) != 1 {
+			return nil
+		}
+		req, ok := args.Req.GetArg(roachpb.Put)
+		if !ok {
+			return nil
+		}
+		put := req.(*roachpb.PutRequest)
+		if !bytes.Equal(put.Key, key.Load().(roachpb.Key)) {
+			return nil
+		}
+		// Sometime the logical portion of the timestamp can be non-zero which makes
+		// the overhead non-deterministic.
+		args.Cmd.ReplicatedEvalResult.Timestamp.Logical = 0
+		atomic.StoreUint32(&overhead, uint32(args.Cmd.Size()-args.Cmd.WriteBatch.Size()))
+		// We don't want to print the WriteBatch because it's explicitly
+		// excluded from the size computation. Nil'ing it out does not
+		// affect the memory held by the caller because neither `args` nor
+		// `args.Cmd` are pointers.
+		args.Cmd.WriteBatch = nil
+		t.Logf(pretty.Sprint(args.Cmd))
+		return nil
+	}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{TestingProposalFilter: filter},
+			},
+		},
+	})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.Server(0).DB()
+	// NB: the expected overhead reflects the space overhead currently
+	// present in Raft commands. This test will fail if that overhead
+	// changes. Try to make this number go down and not up. It slightly
+	// undercounts because our proposal filter is called before
+	// maxLeaseIndex is filled in. The difference between the user and system
+	// overhead is that users ranges do not have rangefeeds on by default whereas
+	// system ranges do.
+	const (
+		expectedUserOverhead uint32 = 42
+	)
+	t.Run("user-key overhead", func(t *testing.T) {
+		userKey := tc.ScratchRange(t)
+		k := roachpb.Key(encoding.EncodeStringAscending(userKey, "foo"))
+		key.Store(k)
+		require.NoError(t, db.Put(ctx, k, "v"))
+		require.Equal(t, expectedUserOverhead, atomic.LoadUint32(&overhead))
+	})
+
 }
 
 // getRangeInfo retreives range info by performing a get against the provided
