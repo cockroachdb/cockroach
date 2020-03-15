@@ -250,6 +250,43 @@ eexpect "syntax error"
 eexpect ":/# "
 end_test
 
+start_test "Check that client-side options can be overridden with set"
+
+# First establish a baseline with all the defaults.
+send "$argv demo --empty\r"
+eexpect root@
+send "\\set display_format csv\r"
+send "\\set\r"
+eexpect "auto_trace,off"
+eexpect "check_syntax,true"
+eexpect "echo,false"
+eexpect "errexit,false"
+eexpect "prompt1,%n@"
+eexpect "show_times,true"
+eexpect "smart_prompt,true"
+eexpect root@
+interrupt
+eexpect ":/# "
+
+# Then verify that the defaults can be overridden.
+send "$argv demo --empty --set=auto_trace=on --set=check_syntax=false --set=echo=true --set=errexit=true --set=prompt1=%n@haa --set=show_times=false --set=smart_prompt=false\r"
+eexpect root@
+send "\\set display_format csv\r"
+send "\\set\r"
+eexpect "auto_trace,\"on"
+eexpect "check_syntax,false"
+eexpect "echo,true"
+eexpect "errexit,true"
+eexpect "prompt1,%n@haa"
+eexpect "show_times,false"
+eexpect "smart_prompt,false"
+eexpect root@
+interrupt
+eexpect ":/# "
+
+end_test
+
+
 send "exit 0\r"
 eexpect eof
 
