@@ -93,6 +93,15 @@ eexpect "ERROR: license acquisition was unsuccessful"
 eexpect eof
 end_test
 
+start_test "Expect an error if geo-partitioning is requested and the user disabled license acquisition"
+spawn $argv demo --geo-partitioned-replicas --disable-demo-license
+# expect a failure
+eexpect ERROR:
+eexpect "enterprise features are needed for this demo"
+# clean up after the test
+eexpect eof
+end_test
+
 start_test "Expect an error if geo-partitioning is requested and license acquisition is disabled"
 
 # set the proper environment variable
