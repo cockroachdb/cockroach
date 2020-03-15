@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -3136,6 +3137,63 @@ func TestStrictGCEnforcement(t *testing.T) {
 		require.NoError(t, tc.TransferRangeLease(desc, tc.Target(1)))
 		assertScanOk(t)
 	})
+}
+
+func TestProposalOverhead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var overhead uint32
+	var key atomic.Value
+	key.Store(roachpb.Key{})
+	filter := func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+		if len(args.Req.Requests) != 1 {
+			return nil
+		}
+		req, ok := args.Req.GetArg(roachpb.Put)
+		if !ok {
+			return nil
+		}
+		put := req.(*roachpb.PutRequest)
+		if !bytes.Equal(put.Key, key.Load().(roachpb.Key)) {
+			return nil
+		}
+		atomic.StoreUint32(&overhead, uint32(args.Cmd.Size()-args.Cmd.WriteBatch.Size()))
+		// We don't want to print the WriteBatch because it's explicitly
+		// excluded from the size computation. Nil'ing it out does not
+		// affect the memory held by the caller because neither `args` nor
+		// `args.Cmd` are pointers.
+		args.Cmd.WriteBatch = nil
+		t.Logf(pretty.Sprint(args.Cmd))
+		return nil
+	}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{TestingProposalFilter: filter},
+			},
+		},
+	})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.Server(0).DB()
+	// NB: the expected overhead reflects the space overhead currently
+	// present in Raft commands. This test will fail if that overhead
+	// changes. Try to make this number go down and not up. It slightly
+	// undercounts because our proposal filter is called before
+	// maxLeaseIndex is filled in. The difference between the user and system
+	// overhead is that users ranges do not have rangefeeds on by default whereas
+	// system ranges do.
+	const (
+		expectedUserOverhead uint32 = 42
+	)
+	t.Run("user-key overhead", func(t *testing.T) {
+		userKey := tc.ScratchRange(t)
+		key.Store(userKey)
+		require.NoError(t, db.Put(ctx, userKey, "v"))
+		require.Equal(t, expectedUserOverhead, atomic.LoadUint32(&overhead))
+	})
+
 }
 
 // getRangeInfo retreives range info by performing a get against the provided
