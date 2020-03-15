@@ -610,40 +610,9 @@ func setupTransientCluster(
 	return c, nil
 }
 
-func (c *transientCluster) setupWorkload(ctx context.Context, gen workload.Generator) error {
-	// Communicate information about license acquisition to services
-	// that depend on it.
-	licenseDone := make(chan struct{})
-	if demoCtx.disableLicenseAcquisition {
-		close(licenseDone)
-	} else {
-		// If we allow telemetry, then also try and get an enterprise license for the demo.
-		// GetAndApplyLicense will be nil in the pure OSS/BSL build of cockroach.
-		db, err := gosql.Open("postgres", c.connURL)
-		if err != nil {
-			return err
-		}
-		// Perform license acquisition asynchronously to avoid delay in cli startup.
-		go func() {
-			defer db.Close()
-			success, err := GetAndApplyLicense(db, c.s.ClusterID(), demoOrg)
-			if err != nil {
-				exitWithError("demo", err)
-			}
-			if !success {
-				if demoCtx.geoPartitionedReplicas {
-					log.Shout(ctx, log.Severity_ERROR,
-						"license acquisition was unsuccessful.\nNote: enterprise features are needed for --geo-partitioned-replicas.")
-					exitWithError("demo", errors.New("unable to acquire a license for this demo"))
-				}
-
-				const msg = "\nwarning: unable to acquire demo license - enterprise features are not enabled."
-				fmt.Fprintln(stderr, msg)
-			}
-			close(licenseDone)
-		}()
-	}
-
+func (c *transientCluster) setupWorkload(
+	ctx context.Context, gen workload.Generator, licenseDone chan struct{},
+) error {
 	// If there is a load generator, create its database and load its
 	// fixture.
 	if gen != nil {
@@ -835,11 +804,15 @@ func checkDemoConfiguration(
 	}
 
 	demoCtx.disableTelemetry = cluster.TelemetryOptOut()
-	demoCtx.disableLicenseAcquisition = demoCtx.disableTelemetry || (GetAndApplyLicense == nil)
+	// disableLicenseAcquisition can also be set by the the user as an
+	// input flag, so make sure it include it when considering the final
+	// value of disableLicenseAcquisition.
+	demoCtx.disableLicenseAcquisition =
+		demoCtx.disableTelemetry || (GetAndApplyLicense == nil) || demoCtx.disableLicenseAcquisition
 
 	if demoCtx.geoPartitionedReplicas {
 		if demoCtx.disableLicenseAcquisition {
-			return nil, errors.New("enterprise features are needed for this demo (--geo-partitioning-replicas)")
+			return nil, errors.New("enterprise features are needed for this demo (--geo-partitioned-replicas)")
 		}
 
 		// Make sure that the user didn't request to have a topology and an empty database.
@@ -884,6 +857,49 @@ func checkDemoConfiguration(
 	return gen, nil
 }
 
+// acquireDemoLicense begins an asynchronous process to obtain a
+// temporary demo license from the Cockroach Labs website. It returns
+// a channel that can be waited on if it is needed to wait on the
+// license acquisition.
+func (c *transientCluster) acquireDemoLicense(ctx context.Context) (chan struct{}, error) {
+	// Communicate information about license acquisition to services
+	// that depend on it.
+	licenseDone := make(chan struct{})
+	if demoCtx.disableLicenseAcquisition {
+		// If we are not supposed to acquire a license, close the channel
+		// immediately so that future waiters don't hang.
+		close(licenseDone)
+	} else {
+		// If we allow telemetry, then also try and get an enterprise license for the demo.
+		// GetAndApplyLicense will be nil in the pure OSS/BSL build of cockroach.
+		db, err := gosql.Open("postgres", c.connURL)
+		if err != nil {
+			return nil, err
+		}
+		go func() {
+			defer db.Close()
+
+			success, err := GetAndApplyLicense(db, c.s.ClusterID(), demoOrg)
+			if err != nil {
+				exitWithError("demo", err)
+			}
+			if !success {
+				if demoCtx.geoPartitionedReplicas {
+					log.Shout(ctx, log.Severity_ERROR,
+						"license acquisition was unsuccessful.\nNote: enterprise features are needed for --geo-partitioned-replicas.")
+					exitWithError("demo", errors.New("unable to acquire a license for this demo"))
+				}
+
+				const msg = "\nwarning: unable to acquire demo license - enterprise features are not enabled."
+				fmt.Fprintln(stderr, msg)
+			}
+			close(licenseDone)
+		}()
+	}
+
+	return licenseDone, nil
+}
+
 func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	if gen, err = checkDemoConfiguration(cmd, gen); err != nil {
 		return err
@@ -925,7 +941,13 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 		}
 	}
 
-	if err := c.setupWorkload(ctx, gen); err != nil {
+	// Start license acquisition in the background.
+	licenseDone, err := c.acquireDemoLicense(ctx)
+	if err != nil {
+		return checkAndMaybeShout(err)
+	}
+
+	if err := c.setupWorkload(ctx, gen, licenseDone); err != nil {
 		return checkAndMaybeShout(err)
 	}
 
@@ -955,6 +977,11 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 				defaultRootPassword,
 			)
 		}
+	} else {
+		// If we are not running an interactive shell, we need to wait to ensure
+		// that license acquisition is successful. If license acquisition is
+		// disabled, then a read on this channel will return immediately.
+		<-licenseDone
 	}
 
 	conn := makeSQLConn(c.connURL)

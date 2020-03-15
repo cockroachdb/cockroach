@@ -83,6 +83,18 @@ interrupt
 eexpect eof
 end_test
 
+# Test interaction of -e and license acquisition.
+start_test "Ensure we can run licensed commands with -e"
+spawn $argv demo -e "ALTER TABLE users PARTITION BY LIST (city) (PARTITION p1 VALUES IN ('new york'))"
+eexpect "ALTER TABLE"
+eexpect eof
+end_test
+
+start_test "Ensure that licensed commands with -e error when license acquisition is disabled"
+spawn $argv demo --disable-demo-license -e "ALTER TABLE users PARTITION BY LIST (city) (PARTITION p1 VALUES IN ('new york'))"
+eexpect "ERROR: use of partitions requires an enterprise license"
+eexpect eof
+end_test
 
 start_test "Expect an error if geo-partitioning is requested and a license cannot be acquired"
 set env(COCKROACH_DEMO_LICENSE_URL) "https://127.0.0.1:9999/"
