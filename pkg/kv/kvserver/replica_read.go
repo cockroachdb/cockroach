@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/kr/pretty"
 )
@@ -37,16 +36,15 @@ func (r *Replica) executeReadOnlyBatch(
 	// If the read is not inconsistent, the read requires the range lease or
 	// permission to serve via follower reads.
 	var status storagepb.LeaseStatus
-	var now hlc.Timestamp
 	if ba.ReadConsistency.RequiresReadLease() {
-		if status, now, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
+		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
 			if nErr := r.canServeFollowerRead(ctx, ba, pErr); nErr != nil {
 				return nil, g, nErr
 			}
 			r.store.metrics.FollowerReadsCount.Inc(1)
 		}
 	} else {
-		now = r.Clock().Now() // get a clock reading for checkExecutionCanProceed
+		status.Timestamp = r.Clock().Now() // get a clock reading for checkExecutionCanProceed
 	}
 	r.limitTxnMaxTimestamp(ctx, ba, status)
 
@@ -55,7 +53,7 @@ func (r *Replica) executeReadOnlyBatch(
 	defer r.readOnlyCmdMu.RUnlock()
 
 	// Verify that the batch can be executed.
-	if err := r.checkExecutionCanProceed(ba, g, now, &status); err != nil {
+	if err := r.checkExecutionCanProceed(ba, g, &status); err != nil {
 		return nil, g, roachpb.NewError(err)
 	}
 
