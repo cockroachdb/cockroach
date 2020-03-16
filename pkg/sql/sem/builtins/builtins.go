@@ -2160,6 +2160,9 @@ may increase either contention or retry errors, or both.`,
 			_, err := tree.ExactCtx.Floor(&dd.Decimal, x)
 			return dd, err
 		}, "Calculates the largest integer not greater than `val`."),
+		integerOverload1(func(x int64) (tree.Datum, error) {
+			return tree.NewDInt(tree.DInt(x)), nil
+		}, "Calculates the largest integer not greater than `val`."),
 	),
 
 	"isnan": makeBuiltin(defProps(),
@@ -3853,7 +3856,7 @@ var uuidV4Impl = makeBuiltin(
 var ceilImpl = makeBuiltin(defProps(),
 	floatOverload1(func(x float64) (tree.Datum, error) {
 		return tree.NewDFloat(tree.DFloat(math.Ceil(x))), nil
-	}, "Calculates the smallest integer greater than `val`."),
+	}, "Calculates the smallest integer not smaller than `val`."),
 	decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
 		dd := &tree.DDecimal{}
 		_, err := tree.ExactCtx.Ceil(&dd.Decimal, x)
@@ -3861,7 +3864,10 @@ var ceilImpl = makeBuiltin(defProps(),
 			dd.Negative = false
 		}
 		return dd, err
-	}, "Calculates the smallest integer greater than `val`."),
+	}, "Calculates the smallest integer not smaller than `val`."),
+	integerOverload1(func(x int64) (tree.Datum, error) {
+		return tree.NewDInt(tree.DInt(x)), nil
+	}, "Calculates the smallest integer not smaller than `val`."),
 )
 
 const txnTSContextDoc = `
@@ -4472,6 +4478,17 @@ func decimalLogFn(
 		_, err := logFn(&dd.Decimal, x)
 		return dd, err
 	}, info)
+}
+
+func integerOverload1(f func(int64) (tree.Datum, error), info string) tree.Overload {
+	return tree.Overload{
+		Types:      tree.ArgTypes{{"val", types.Int}},
+		ReturnType: tree.FixedReturnType(types.Int),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			return f(int64(*args[0].(*tree.DInt)))
+		},
+		Info: info,
+	}
 }
 
 func floatOverload1(f func(float64) (tree.Datum, error), info string) tree.Overload {
