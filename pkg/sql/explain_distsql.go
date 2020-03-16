@@ -127,13 +127,8 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	}
 
 	distSQLPlanner.FinalizePlan(planCtx, &plan)
-	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
-	showInputTypes := n.options.Flags.Contains(tree.ExplainFlagTypes)
-	diagram, err := execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows, showInputTypes)
-	if err != nil {
-		return err
-	}
 
+	var diagram execinfrapb.FlowDiagram
 	if n.analyze {
 		// TODO(andrei): We don't create a child span if the parent is already
 		// recording because we don't currently have a good way to ask for a
@@ -182,6 +177,12 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			newParams.extendedEvalCtx.Tracing,
 		)
 		defer recv.Release()
+
+		planCtx.saveDiagram = func(d execinfrapb.FlowDiagram) {
+			diagram = d
+		}
+		planCtx.saveDiagramShowInputTypes = n.options.Flags.Contains(tree.ExplainFlagTypes)
+
 		distSQLPlanner.Run(
 			planCtx, newParams.p.txn, &plan, recv, newParams.extendedEvalCtx, nil, /* finishedSetupFn */
 		)()
@@ -195,6 +196,13 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			return err
 		}
 		diagram.AddSpans(spans)
+	} else {
+		flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
+		showInputTypes := n.options.Flags.Contains(tree.ExplainFlagTypes)
+		diagram, err = execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows, showInputTypes)
+		if err != nil {
+			return err
+		}
 	}
 
 	if n.analyze && len(n.postqueryPlans) > 0 {

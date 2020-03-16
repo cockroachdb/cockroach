@@ -490,7 +490,7 @@ func getTraceAndBundle(
 	trace tracing.Recording, plan *planTop,
 ) (traceJSON tree.Datum, bundle *bytes.Buffer, _ error) {
 	traceJSON, traceStr, err := traceToJSON(trace)
-	bundle, bundleErr := buildStatementBundle(plan, traceStr)
+	bundle, bundleErr := buildStatementBundle(plan, trace, traceStr)
 	if bundleErr != nil {
 		if err == nil {
 			err = bundleErr

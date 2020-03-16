@@ -324,8 +324,24 @@ func (dsp *DistSQLPlanner) Run(
 		return func() {}
 	}
 
-	if logPlanDiagram {
+	if planCtx.saveDiagram != nil {
 		log.VEvent(ctx, 1, "creating plan diagram")
+		var stmtStr string
+		if planCtx.planner != nil && planCtx.planner.stmt != nil {
+			stmtStr = planCtx.planner.stmt.String()
+		}
+		diagram, err := execinfrapb.GeneratePlanDiagram(
+			stmtStr, flows, planCtx.saveDiagramShowInputTypes,
+		)
+		if err != nil {
+			recv.SetError(err)
+			return func() {}
+		}
+		planCtx.saveDiagram(diagram)
+	}
+
+	if logPlanDiagram {
+		log.VEvent(ctx, 1, "creating plan diagram for logging")
 		var stmtStr string
 		if planCtx.planner != nil && planCtx.planner.stmt != nil {
 			stmtStr = planCtx.planner.stmt.String()
@@ -858,10 +874,14 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryPlanCtx.isLocal = !distributeSubquery
 	subqueryPlanCtx.planner = planner
 	subqueryPlanCtx.stmtType = tree.Rows
+	if planner.collectBundle {
+		subqueryPlanCtx.saveDiagram = func(diagram execinfrapb.FlowDiagram) {
+			planner.curPlan.distSQLDiagrams = append(planner.curPlan.distSQLDiagrams, diagram)
+		}
+	}
 	// Don't close the top-level plan from subqueries - someone else will handle
 	// that.
 	subqueryPlanCtx.ignoreClose = true
-
 	subqueryPhysPlan, err := dsp.createPlanForNode(subqueryPlanCtx, subqueryPlan.plan)
 	if err != nil {
 		return err
@@ -1063,6 +1083,11 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryPlanCtx.planner = planner
 	postqueryPlanCtx.stmtType = tree.Rows
 	postqueryPlanCtx.ignoreClose = true
+	if planner.collectBundle {
+		postqueryPlanCtx.saveDiagram = func(diagram execinfrapb.FlowDiagram) {
+			planner.curPlan.distSQLDiagrams = append(planner.curPlan.distSQLDiagrams, diagram)
+		}
+	}
 
 	postqueryPhysPlan, err := dsp.createPlanForNode(postqueryPlanCtx, postqueryPlan.plan)
 	if err != nil {
