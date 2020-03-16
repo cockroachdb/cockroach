@@ -881,7 +881,10 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				if fn := sc.testingKnobs.RunBeforePrimaryKeySwap; fn != nil {
 					fn()
 				}
-				// If any old index had an interleaved parent, remove the backreference from the parent.
+				// If any old index had an interleaved parent, remove the
+				// backreference from the parent.
+				// N.B. This logic needs to be kept up to date with the
+				// corresponding piece in runSchemaChangesInTxn.
 				for _, idxID := range append(
 					[]sqlbase.IndexID{pkSwap.OldPrimaryIndexId}, pkSwap.OldIndexes...) {
 					oldIndex, err := scDesc.FindIndexByID(idxID)

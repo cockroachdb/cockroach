@@ -2667,6 +2667,32 @@ UPDATE t.test SET z = NULL, a = $1, b = NULL, c = NULL, d = $1 WHERE y = $2`, 2*
 	}
 }
 
+// TestPrimaryKeyChangeInTxn tests running a primary key
+// change on a table created in the same transaction.
+func TestPrimaryKeyChangeInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+BEGIN;
+CREATE TABLE t.test (x INT PRIMARY KEY, y INT NOT NULL, z INT, INDEX (z));
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (y);
+COMMIT;
+`); err != nil {
+		t.Fatal(err)
+	}
+	// Ensure that t.test doesn't have any pending mutations
+	// after the primary key change.
+	desc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if len(desc.Mutations) != 0 {
+		t.Fatalf("expected to find 0 mutations, but found %d", len(desc.Mutations))
+	}
+}
+
 // TestPrimaryKeyChangeKVOps tests sequences of k/v operations
 // on the new primary index while it is staged as a special
 // secondary index. We cannot test this in a standard logic

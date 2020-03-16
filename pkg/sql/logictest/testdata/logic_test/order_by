@@ -444,3 +444,9 @@ SELECT a, b, c FROM abc2 AS x ORDER BY INDEX x@bc
 
 statement error no data source matches prefix: test.public.abc2
 SELECT a, b, c FROM abc2 AS x ORDER BY INDEX abc2@bc
+
+# Check that telemetry is being collected on the usage of ORDER BY.
+query B
+SELECT usage_count > 0 FROM crdb_internal.feature_usage WHERE feature_name = 'sql.plan.opt.node.sort'
+----
+true

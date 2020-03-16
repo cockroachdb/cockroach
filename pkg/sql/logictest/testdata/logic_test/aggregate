@@ -2170,3 +2170,56 @@ SELECT x, SUM (y) FROM t GROUP BY (x) ORDER BY SUM (y)
 [1, 2]                        25
 {"bar": "baz", "foo": "bar"}  35
 {"foo": {"bar": "baz"}}       45
+
+# Tests for the 'every' aggregate function.
+subtest every
+
+statement ok
+CREATE TABLE t_every (x BOOL)
+
+query B
+SELECT every (x) FROM t_every
+----
+NULL
+
+statement ok
+INSERT INTO t_every VALUES (true), (true)
+
+query B
+SELECT every (x) FROM t_every
+----
+true
+
+statement ok
+INSERT INTO t_every VALUES (NULL), (true)
+
+query B
+SELECT every (x) FROM t_every
+----
+true
+
+statement ok
+INSERT INTO t_every VALUES (false), (NULL)
+
+query B
+SELECT every (x) FROM t_every
+----
+false
+
+statement ok
+TRUNCATE t_every;
+INSERT INTO t_every VALUES (false)
+
+query B
+SELECT every (x) FROM t_every
+----
+false
+
+statement ok
+TRUNCATE t_every;
+INSERT INTO t_every VALUES (NULL), (NULL), (NULL)
+
+query B
+SELECT every (x) FROM t_every
+----
+NULL

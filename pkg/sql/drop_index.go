@@ -470,10 +470,10 @@ func (p *planner) dropIndexByName(
 	if err := p.writeSchemaChange(ctx, tableDesc, mutationID, jobDesc); err != nil {
 		return err
 	}
-	p.noticeSender.AppendNotice(pgerror.Noticef(
-		"index %q will be dropped asynchronously and will be complete after the GC TTL",
-		idxName.String(),
-	))
+	p.SendClientNotice(ctx,
+		errors.WithHint(
+			pgerror.Noticef("the data for dropped indexes is reclaimed asynchronously"),
+			"The reclamation delay can be customized in the zone configuration for the table."))
 	// Record index drop in the event log. This is an auditable log event
 	// and is recorded in the same transaction as the table descriptor
 	// update.

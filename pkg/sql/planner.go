@@ -189,6 +189,8 @@ type planner struct {
 	optPlanningCtx optPlanningCtx
 
 	// noticeSender allows the sending of notices.
+	// Do not use this object directly; use the SendClientNotice() method
+	// instead.
 	noticeSender noticeSender
 
 	queryCacheSession querycache.Session
@@ -289,6 +291,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.Planner = p
 	p.extendedEvalCtx.PrivilegedAccessor = p
 	p.extendedEvalCtx.SessionAccessor = p
+	p.extendedEvalCtx.ClientNoticeSender = p
 	p.extendedEvalCtx.Sequence = p
 	p.extendedEvalCtx.ClusterID = execCfg.ClusterID()
 	p.extendedEvalCtx.ClusterName = execCfg.RPCContext.ClusterName()

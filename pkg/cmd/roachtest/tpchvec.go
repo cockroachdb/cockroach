@@ -25,11 +25,8 @@ import (
 
 func registerTPCHVec(r *testRegistry) {
 	const (
-		nodeCount       = 3
-		numTPCHQueries  = 22
-		vecOnConfig     = 0
-		vecOffConfig    = 1
-		numRunsPerQuery = 3
+		nodeCount      = 3
+		numTPCHQueries = 22
 		// vecOnSlowerFailFactor describes the threshold at which we fail the test
 		// if vec ON is slower that vec OFF, meaning that if
 		// vec_on_time > vecOnSlowerFailFactor * vec_off_time, the test is failed.
@@ -49,13 +46,12 @@ func registerTPCHVec(r *testRegistry) {
 		19: "can cause OOM",
 	}
 
-	runTPCHVec := func(ctx context.Context, t *test, c *cluster) {
-		TPCHTables := []string{
-			"nation", "region", "part", "supplier",
-			"partsupp", "customer", "orders", "lineitem",
-		}
-		TPCHTableStatsInjection := []string{
-			`ALTER TABLE region INJECT STATISTICS '[
+	TPCHTables := []string{
+		"nation", "region", "part", "supplier",
+		"partsupp", "customer", "orders", "lineitem",
+	}
+	TPCHTableStatsInjection := []string{
+		`ALTER TABLE region INJECT STATISTICS '[
 				{
 					"columns": ["r_regionkey"],
 					"created_at": "2018-01-01 1:00:00.00000+00:00",
@@ -75,7 +71,7 @@ func registerTPCHVec(r *testRegistry) {
 					"distinct_count": 5
 				}
 			]';`,
-			`ALTER TABLE nation INJECT STATISTICS '[
+		`ALTER TABLE nation INJECT STATISTICS '[
 				{
 					"columns": ["n_nationkey"],
 					"created_at": "2018-01-01 1:00:00.00000+00:00",
@@ -101,7 +97,7 @@ func registerTPCHVec(r *testRegistry) {
 					"distinct_count": 25
 				}
 			]';`,
-			`ALTER TABLE supplier INJECT STATISTICS '[
+		`ALTER TABLE supplier INJECT STATISTICS '[
 				{
 					"columns": ["s_suppkey"],
 					"created_at": "2018-01-01 1:00:00.00000+00:00",
@@ -145,7 +141,7 @@ func registerTPCHVec(r *testRegistry) {
 					"distinct_count": 10000
 				}
 			]';`,
-			`ALTER TABLE public.part INJECT STATISTICS '[
+		`ALTER TABLE public.part INJECT STATISTICS '[
 				{
 					"columns": ["p_partkey"],
 					"created_at": "2018-01-01 1:00:00.00000+00:00",
@@ -201,7 +197,7 @@ func registerTPCHVec(r *testRegistry) {
 					"distinct_count": 130000
 				}
 			]';`,
-			`ALTER TABLE partsupp INJECT STATISTICS '[
+		`ALTER TABLE partsupp INJECT STATISTICS '[
 				{
 					"columns": ["ps_partkey"],
 					"created_at": "2018-01-01 1:00:00.00000+00:00",
@@ -233,7 +229,7 @@ func registerTPCHVec(r *testRegistry) {
 					"distinct_count": 800000
 				}
 			]';`,
-			`ALTER TABLE customer INJECT STATISTICS '[
+		`ALTER TABLE customer INJECT STATISTICS '[
 				{
 					"columns": ["c_custkey"],
 					"created_at": "2018-01-01 1:00:00.00000+00:00",
@@ -283,7 +279,7 @@ func registerTPCHVec(r *testRegistry) {
 					"distinct_count": 150000
 				}
 			]';`,
-			`ALTER TABLE orders INJECT STATISTICS '[
+		`ALTER TABLE orders INJECT STATISTICS '[
 				{
 					"columns": ["o_orderkey"],
 					"created_at": "2018-01-01 1:00:00.00000+00:00",
@@ -339,7 +335,7 @@ func registerTPCHVec(r *testRegistry) {
 					"distinct_count": 1500000
 				}
 			]';`,
-			`ALTER TABLE lineitem INJECT STATISTICS '[
+		`ALTER TABLE lineitem INJECT STATISTICS '[
 				{
 					"columns": ["l_orderkey"],
 					"created_at": "2018-01-01 1:00:00.00000+00:00",
@@ -437,8 +433,41 @@ func registerTPCHVec(r *testRegistry) {
 					"distinct_count": 4500000
 				}
 			]';`,
-		}
+	}
 
+	type runOption int
+	const (
+		// perf configuration is meant to be used to check the correctness of
+		// the vectorized engine and compare the queries' runtimes against
+		// row-by-row engine.
+		perf runOption = iota
+		// stressDiskSpilling configuration is meant to stress disk spilling of
+		// the vectorized engine. There is no comparison of the runtimes.
+		stressDiskSpilling
+	)
+	type runConfig struct {
+		vectorizeOptions   []bool
+		stressDiskSpilling bool
+		numRunsPerQuery    int
+	}
+	runConfigs := make(map[runOption]runConfig)
+	const (
+		// These correspond to "perf" run configuration below.
+		vecOnConfig  = 0
+		vecOffConfig = 1
+	)
+	runConfigs[perf] = runConfig{
+		vectorizeOptions:   []bool{true, false},
+		stressDiskSpilling: false,
+		numRunsPerQuery:    3,
+	}
+	runConfigs[stressDiskSpilling] = runConfig{
+		vectorizeOptions:   []bool{true},
+		stressDiskSpilling: true,
+		numRunsPerQuery:    1,
+	}
+
+	runTPCHVec := func(ctx context.Context, t *test, c *cluster, option runOption) {
 		firstNode := c.Node(1)
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Put(ctx, workload, "./workload", firstNode)
@@ -451,14 +480,6 @@ CREATE DATABASE tpch;
 RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup' WITH into_db = 'tpch';
 `
 		if _, err := conn.Exec(setup); err != nil {
-			t.Fatal(err)
-		}
-
-		rng, _ := randutil.NewPseudoRand()
-		workmemInMiB := 1 + rng.Intn(64)
-		workmem := fmt.Sprintf("%dMiB", workmemInMiB)
-		t.Status(fmt.Sprintf("setting workmem='%s'", workmem))
-		if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.distsql.temp_storage.workmem='%s'", workmem)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -491,16 +512,42 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 				break
 			}
 		}
-		t.Status("setting vmodule=bytes_usage=1 on all nodes")
+		runConfig := runConfigs[option]
+		rng, _ := randutil.NewPseudoRand()
+		var vmoduleValue int
+		if runConfig.stressDiskSpilling {
+			// In order to stress the disk spilling of the vectorized
+			// engine, we will set workmem limit to a random value in range
+			// [100KiB, 1000KiB). We will also enable some logging.
+			vmoduleValue = 2
+			workmemInKiB := 100 + rng.Intn(900)
+			workmem := fmt.Sprintf("%dKiB", workmemInKiB)
+			t.Status(fmt.Sprintf("setting workmem='%s'", workmem))
+			if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.distsql.temp_storage.workmem='%s'", workmem)); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			// We are interested in the performance comparison between
+			// vectorized and row-by-row engines, so we will reset workmem
+			// limit to the default value. We will also disable logging.
+			vmoduleValue = 0
+			t.Status("resetting workmem to default")
+			if _, err := conn.Exec("RESET CLUSTER SETTING sql.distsql.temp_storage.workmem"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		t.Status(fmt.Sprintf("setting vmodule=vectorized_flow=%d on all nodes", vmoduleValue))
 		for node := 1; node <= nodeCount; node++ {
 			conn := c.Conn(ctx, node)
-			if _, err := conn.Exec("SELECT crdb_internal.set_vmodule('bytes_usage=1');"); err != nil {
+			if _, err := conn.Exec(
+				fmt.Sprintf("SELECT crdb_internal.set_vmodule('vectorized_flow=%d');", vmoduleValue),
+			); err != nil {
 				t.Fatal(err)
 			}
 		}
 		timeByQueryNum := []map[int][]float64{make(map[int][]float64), make(map[int][]float64)}
 		for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
-			for configIdx, vectorize := range []bool{true, false} {
+			for configIdx, vectorize := range runConfig.vectorizeOptions {
 				if reason, skip := queriesToSkip[queryNum]; skip {
 					t.Status(fmt.Sprintf("skipping q%d because of %q", queryNum, reason))
 					continue
@@ -511,7 +558,7 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 				}
 				cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
 					"--max-ops=%d --queries=%d --vectorize=%s {pgurl:1-%d}",
-					numRunsPerQuery, queryNum, vectorizeSetting, nodeCount)
+					runConfig.numRunsPerQuery, queryNum, vectorizeSetting, nodeCount)
 				workloadOutput, err := c.RunWithBuffer(ctx, t.l, firstNode, cmd)
 				t.l.Printf("\n" + string(workloadOutput))
 				if err != nil {
@@ -538,59 +585,76 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 						}
 					}
 				}
-				parseOutput(workloadOutput, timeByQueryNum[configIdx])
+				if option == perf {
+					// We only need to parse the output with 'perf' run option.
+					parseOutput(workloadOutput, timeByQueryNum[configIdx])
+				}
 			}
 		}
-		t.Status("comparing the runtimes (only median values for each query are compared)")
-		for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
-			if _, skipped := queriesToSkip[queryNum]; skipped {
-				continue
-			}
-			findMedian := func(times []float64) float64 {
-				sort.Float64s(times)
-				return times[len(times)/2]
-			}
-			vecOnTimes := timeByQueryNum[vecOnConfig][queryNum]
-			vecOffTimes := timeByQueryNum[vecOffConfig][queryNum]
-			if len(vecOnTimes) != numRunsPerQuery {
-				t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
-					"recorded with vec ON config: %v", queryNum, vecOnTimes))
-			}
-			if len(vecOffTimes) != numRunsPerQuery {
-				t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
-					"recorded with vec OFF config: %v", queryNum, vecOffTimes))
-			}
-			vecOnTime := findMedian(vecOnTimes)
-			vecOffTime := findMedian(vecOffTimes)
-			if vecOffTime < vecOnTime {
-				t.l.Printf(
-					fmt.Sprintf("[q%d] vec OFF was faster by %.2f%%: "+
-						"%.2fs ON vs %.2fs OFF --- WARNING\n"+
-						"vec ON times: %v\t vec OFF times: %v",
-						queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime,
-						vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
-			} else {
-				t.l.Printf(
-					fmt.Sprintf("[q%d] vec ON was faster by %.2f%%: "+
-						"%.2fs ON vs %.2fs OFF\n"+
-						"vec ON times: %v\t vec OFF times: %v",
-						queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime,
-						vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
-			}
-			if vecOnTime >= vecOnSlowerFailFactor*vecOffTime {
-				t.Fatal(fmt.Sprintf(
-					"[q%d] vec ON is slower by %.2f%% than vec OFF\n"+
-						"vec ON times: %v\nvec OFF times: %v",
-					queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime, vecOnTimes, vecOffTimes))
+		if option == perf {
+			// We are only interested in comparison with 'perf' run option.
+			t.Status("comparing the runtimes (only median values for each query are compared)")
+			for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
+				if _, skipped := queriesToSkip[queryNum]; skipped {
+					continue
+				}
+				findMedian := func(times []float64) float64 {
+					sort.Float64s(times)
+					return times[len(times)/2]
+				}
+				vecOnTimes := timeByQueryNum[vecOnConfig][queryNum]
+				vecOffTimes := timeByQueryNum[vecOffConfig][queryNum]
+				if len(vecOnTimes) != runConfig.numRunsPerQuery {
+					t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
+						"recorded with vec ON config: %v", queryNum, vecOnTimes))
+				}
+				if len(vecOffTimes) != runConfig.numRunsPerQuery {
+					t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
+						"recorded with vec OFF config: %v", queryNum, vecOffTimes))
+				}
+				vecOnTime := findMedian(vecOnTimes)
+				vecOffTime := findMedian(vecOffTimes)
+				if vecOffTime < vecOnTime {
+					t.l.Printf(
+						fmt.Sprintf("[q%d] vec OFF was faster by %.2f%%: "+
+							"%.2fs ON vs %.2fs OFF --- WARNING\n"+
+							"vec ON times: %v\t vec OFF times: %v",
+							queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime,
+							vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
+				} else {
+					t.l.Printf(
+						fmt.Sprintf("[q%d] vec ON was faster by %.2f%%: "+
+							"%.2fs ON vs %.2fs OFF\n"+
+							"vec ON times: %v\t vec OFF times: %v",
+							queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime,
+							vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
+				}
+				if vecOnTime >= vecOnSlowerFailFactor*vecOffTime {
+					t.Fatal(fmt.Sprintf(
+						"[q%d] vec ON is slower by %.2f%% than vec OFF\n"+
+							"vec ON times: %v\nvec OFF times: %v",
+						queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime, vecOnTimes, vecOffTimes))
+				}
 			}
 		}
 	}
 
 	r.Add(testSpec{
-		Name:       "tpchvec",
+		Name:       "tpchvec/perf",
 		Owner:      OwnerSQLExec,
 		Cluster:    makeClusterSpec(nodeCount),
 		MinVersion: "v19.2.0",
-		Run:        runTPCHVec,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCHVec(ctx, t, c, perf)
+		},
+	})
+	r.Add(testSpec{
+		Name:       "tpchvec/disk",
+		Owner:      OwnerSQLExec,
+		Cluster:    makeClusterSpec(nodeCount),
+		MinVersion: "v19.2.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCHVec(ctx, t, c, stressDiskSpilling)
+		},
 	})
 }
