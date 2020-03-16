@@ -144,7 +144,7 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	// record or we're not and if we don't then we'll push the cache and re-assert
 	// that we're still the leaseholder. If somebody else becomes the leaseholder
 	// then they will have to go through the same process.
-	ls, _, pErr := r.redirectOnOrAcquireLease(ctx)
+	ls, pErr := r.redirectOnOrAcquireLease(ctx)
 	if pErr != nil {
 		return false, false, pErr.GoError()
 	}
