@@ -105,3 +105,16 @@ SELECT y, z, w, v, u FROM t@i
 2 3 4 5 20
 7 8 9 10 20
 12 13 14 15 20
+
+# Regression for #42992.
+statement ok
+CREATE TABLE t42992 (x TIMESTAMP PRIMARY KEY, y INT, z INT, UNIQUE INDEX i (y) STORING (z), FAMILY (x), FAMILY (y), FAMILY (z))
+
+statement ok
+INSERT INTO t42992 VALUES (now(), NULL, 2)
+
+query II
+SELECT y, z FROM t42992@i
+----
+NULL 2
+
