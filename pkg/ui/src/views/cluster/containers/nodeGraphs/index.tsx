@@ -18,7 +18,6 @@ import { withRouter, RouteComponentProps } from "react-router-dom";
 import {
   nodeIDAttr, dashboardNameAttr,
 } from "src/util/constants";
-import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import ClusterSummaryBar from "./summaryBar";
@@ -45,6 +44,7 @@ import requestsDashboard from "./dashboards/requests";
 import hardwareDashboard from "./dashboards/hardware";
 import changefeedsDashboard from "./dashboards/changefeeds";
 import { getMatchParamByName } from "src/util/query";
+import { Select, SelectOption } from "oss/src/components/select";
 
 interface GraphDashboard {
   label: string;
@@ -99,7 +99,7 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     (summary: NodesSummary) => summary.nodeStatuses,
     (summary: NodesSummary) => summary.nodeDisplayNameByID,
     (summary: NodesSummary) => summary.livenessStatusByNodeID,
-    (nodeStatuses, nodeDisplayNameByID, livenessStatusByNodeID): DropdownOption[] => {
+    (nodeStatuses, nodeDisplayNameByID, livenessStatusByNodeID): SelectOption[] => {
       const base = [{value: "", label: "Cluster"}];
       return base.concat(
         _.chain(nodeStatuses)
@@ -131,11 +131,11 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     }
   }
 
-  nodeChange = (selected: DropdownOption) => {
+  nodeChange = (selected: SelectOption) => {
     this.setClusterPath(selected.value, getMatchParamByName(this.props.match, dashboardNameAttr));
   }
 
-  dashChange = (selected: DropdownOption) => {
+  dashChange = (selected: SelectOption) => {
     this.setClusterPath(getMatchParamByName(this.props.match, nodeIDAttr), selected.value);
   }
 
@@ -210,20 +210,19 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
         <section className="section"><h1 className="base-heading">{ title }</h1></section>
         <PageConfig>
           <PageConfigItem>
-            <Dropdown
-              title="Graph"
-              options={this.nodeDropdownOptions(this.props.nodesSummary)}
-              selected={selectedNode}
+            <Select
+              value={selectedNode}
               onChange={this.nodeChange}
+              options={this.nodeDropdownOptions(this.props.nodesSummary)}
+              title="Graph"
             />
           </PageConfigItem>
           <PageConfigItem>
-            <Dropdown
-              title="Dashboard"
-              options={dashboardDropdownOptions}
-              selected={dashboard}
+            <Select
+              value={dashboard}
               onChange={this.dashChange}
-              className="full-size"
+              options={dashboardDropdownOptions}
+              title="Dashboard"
             />
           </PageConfigItem>
           <PageConfigItem>

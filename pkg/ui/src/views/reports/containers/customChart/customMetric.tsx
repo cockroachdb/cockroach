@@ -10,24 +10,24 @@
 
 import _ from "lodash";
 import * as React from "react";
-import Select from "react-select";
+import ReactSelect from "react-select";
 
 import * as protos from  "src/js/protos";
 import { AxisUnits } from "src/views/shared/components/metricQuery";
-import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 
 import { MetricOption } from "./metricOption";
 
 import TimeSeriesQueryAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator;
 import TimeSeriesQueryDerivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative;
+import { Select, SelectOption } from "oss/src/components/select";
 
-const axisUnitsOptions: DropdownOption[] = [
+const axisUnitsOptions: SelectOption[] = [
   AxisUnits.Count,
   AxisUnits.Bytes,
   AxisUnits.Duration,
 ].map(au => ({ label: AxisUnits[au], value: au.toString() }));
 
-const downsamplerOptions: DropdownOption[] = [
+const downsamplerOptions: SelectOption[] = [
   TimeSeriesQueryAggregator.AVG,
   TimeSeriesQueryAggregator.MAX,
   TimeSeriesQueryAggregator.MIN,
@@ -36,7 +36,7 @@ const downsamplerOptions: DropdownOption[] = [
 
 const aggregatorOptions = downsamplerOptions;
 
-const derivativeOptions: DropdownOption[] = [
+const derivativeOptions: SelectOption[] = [
   { label: "Normal", value: TimeSeriesQueryDerivative.NONE.toString() },
   { label: "Rate", value: TimeSeriesQueryDerivative.DERIVATIVE.toString() },
   { label: "Non-negative Rate", value: TimeSeriesQueryDerivative.NON_NEGATIVE_DERIVATIVE.toString() },
@@ -61,8 +61,8 @@ export class CustomChartState {
 }
 
 interface CustomMetricRowProps {
-  metricOptions: DropdownOption[];
-  nodeOptions: DropdownOption[];
+  metricOptions: SelectOption[];
+  nodeOptions: SelectOption[];
   index: number;
   rowState: CustomMetricState;
   onChange: (index: number, newState: CustomMetricState) => void;
@@ -74,31 +74,31 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
     this.props.onChange(this.props.index, _.assign(this.props.rowState, newState));
   }
 
-  changeMetric = (selectedOption: DropdownOption) => {
+  changeMetric = (selectedOption: SelectOption) => {
     this.changeState({
       metric: selectedOption.value,
     });
   }
 
-  changeDownsampler = (selectedOption: DropdownOption) => {
+  changeDownsampler = (selectedOption: SelectOption) => {
     this.changeState({
       downsampler: +selectedOption.value,
     });
   }
 
-  changeAggregator = (selectedOption: DropdownOption) => {
+  changeAggregator = (selectedOption: SelectOption) => {
     this.changeState({
       aggregator: +selectedOption.value,
     });
   }
 
-  changeDerivative = (selectedOption: DropdownOption) => {
+  changeDerivative = (selectedOption: SelectOption) => {
     this.changeState({
       derivative: +selectedOption.value,
     });
   }
 
-  changeSource = (selectedOption: DropdownOption) => {
+  changeSource = (selectedOption: SelectOption) => {
     this.changeState({
       source: selectedOption.value,
     });
@@ -125,7 +125,7 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
       <tr>
         <td>
           <div className="metric-table-dropdown">
-            <Select
+            <ReactSelect
               className="metric-table-dropdown__select"
               clearable={true}
               resetValue=""
@@ -141,48 +141,40 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
         <td>
           <div className="metric-table-dropdown">
             <Select
-              className="metric-table-dropdown__select"
-              clearable={false}
-              searchable={false}
               value={downsampler.toString()}
               options={downsamplerOptions}
               onChange={this.changeDownsampler}
+              title="Down Sampler"
             />
           </div>
         </td>
         <td>
           <div className="metric-table-dropdown">
             <Select
-              className="metric-table-dropdown__select"
-              clearable={false}
-              searchable={false}
               value={aggregator.toString()}
               options={aggregatorOptions}
               onChange={this.changeAggregator}
+              title="Aggregator"
             />
           </div>
         </td>
         <td>
           <div className="metric-table-dropdown">
             <Select
-              className="metric-table-dropdown__select"
-              clearable={false}
-              searchable={false}
               value={derivative.toString()}
               options={derivativeOptions}
               onChange={this.changeDerivative}
+              title="Derivative"
             />
           </div>
         </td>
         <td>
           <div className="metric-table-dropdown">
             <Select
-              className="metric-table-dropdown__select"
-              clearable={false}
-              searchable={false}
               value={source}
               options={nodeOptions}
               onChange={this.changeSource}
+              title="Node"
             />
           </div>
         </td>
@@ -198,8 +190,8 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
 }
 
 interface CustomChartTableProps {
-  metricOptions: DropdownOption[];
-  nodeOptions: DropdownOption[];
+  metricOptions: SelectOption[];
+  nodeOptions: SelectOption[];
   index: number;
   chartState: CustomChartState;
   onChange: (index: number, newState: CustomChartState) => void;
@@ -239,7 +231,7 @@ export class CustomChartTable extends React.Component<CustomChartTableProps> {
     return this.props.chartState.axisUnits;
   }
 
-  changeAxisUnits = (selected: DropdownOption) => {
+  changeAxisUnits = (selected: SelectOption) => {
     this.props.onChange(this.props.index, {
       metrics: this.currentMetrics(),
       axisUnits: +selected.value,
@@ -289,11 +281,11 @@ export class CustomChartTable extends React.Component<CustomChartTableProps> {
 
     return (
       <div>
-        <Dropdown
-          title="Units"
-          selected={this.currentAxisUnits().toString()}
-          options={axisUnitsOptions}
+        <Select
+          value={this.currentAxisUnits().toString()}
           onChange={this.changeAxisUnits}
+          options={axisUnitsOptions}
+          title="Units"
         />
         <button className="edit-button chart-edit-button chart-edit-button--remove" onClick={this.removeChart}>Remove Chart</button>
         { table }

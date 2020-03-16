@@ -15,7 +15,6 @@ import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { withRouter, RouteComponentProps } from "react-router-dom";
 
-import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 
 import { AdminUIState } from "src/redux/state";
@@ -27,6 +26,7 @@ import DatabaseSummaryGrants from "src/views/databases/containers/databaseGrants
 import NonTableSummary from "./nonTableSummary";
 
 import "./databases.styl";
+import { Select, SelectOption } from "oss/src/components/select";
 
 const databasePages = [
   { value: "tables", label: "Tables" },
@@ -46,18 +46,18 @@ interface DatabaseListNavProps {
 }
 // DatabaseListNav displays the database page navigation bar.
 class DatabaseListNav extends React.Component<DatabaseListNavProps> {
+  onChangeOption = (option: SelectOption) => this.props.onChange(option.value);
   render() {
-    const { selected, onChange } = this.props;
+    const { selected } = this.props;
     return (
       <PageConfig>
         <PageConfigItem>
-          <Dropdown
-            title="View"
+          <Select
+            value={selected}
+            onChange={this.onChangeOption}
             options={databasePages}
-            selected={selected}
-            onChange={({ value }: DropdownOption) => {
-              onChange(value);
-            }} />
+            title="View"
+          />
         </PageConfigItem>
       </PageConfig>
     );

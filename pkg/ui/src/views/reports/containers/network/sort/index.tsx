@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { Checkbox, Divider } from "antd";
-import Dropdown, { DropdownOption } from "oss/src/views/shared/components/dropdown";
 import React from "react";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
@@ -17,6 +16,7 @@ import { getMatchParamByName } from "src/util/query";
 import { NetworkFilter, NetworkSort } from "..";
 import { Filter } from "../filter";
 import "./sort.styl";
+import { Select, SelectOption } from "oss/src/components/select";
 
 interface ISortProps {
   onChangeFilter: (key: string, value: string) => void;
@@ -36,7 +36,7 @@ class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
     return nodeId || "cluster";
   }
 
-  navigateTo = (selected: DropdownOption) => {
+  navigateTo = (selected: SelectOption) => {
     this.props.onChangeCollapse(false);
     this.props.history.push(`/reports/network/${selected.value}`);
   }
@@ -61,11 +61,11 @@ class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
     const nodeId = getMatchParamByName(match, "node_id");
     return (
       <div className="Sort-latency">
-        <Dropdown
-          title="Sort By"
-          options={this.getSortValues(sort)}
-          selected={this.pageView()}
+        <Select
+          value={this.pageView()}
           onChange={this.navigateTo}
+          options={this.getSortValues(sort)}
+          title="Sort By"
         />
         <Filter sort={sort} onChangeFilter={onChangeFilter} deselectFilterByKey={deselectFilterByKey} filter={filter} />
         <Divider type="vertical" style={{ height: "100%" }} />

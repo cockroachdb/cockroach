@@ -14,8 +14,10 @@ import Back from "assets/back-arrow.svg";
 
 import "./button.styl";
 
+export type ButtonTypes = "primary" | "secondary" | "flat";
+
 export interface ButtonProps {
-  type?: "primary" | "secondary" | "flat";
+  type?: ButtonTypes;
   disabled?: boolean;
   size?: "default" | "small";
   children?: React.ReactNode;

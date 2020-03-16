@@ -8,11 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Checkbox, Select } from "antd";
-import Dropdown from "oss/src/views/shared/components/dropdown";
+import { Checkbox, Select as AntdSelect } from "antd";
 import React from "react";
 import { NetworkFilter, NetworkSort } from "..";
 import "./filter.styl";
+import { Select } from "oss/src/components/select";
 
 interface IFilterProps {
   onChangeFilter: (key: string, value: string) => void;
@@ -27,26 +27,6 @@ interface IFilterState {
 }
 
 export class Filter extends React.Component<IFilterProps, IFilterState> {
-  state = {
-    opened: false,
-    width: window.innerWidth,
-  };
-
-  private rangeContainer = React.createRef<HTMLDivElement>();
-
-  componentDidMount() {
-    window.addEventListener("resize", this.updateDimensions);
-  }
-
-  componentWillUnmount() {
-    window.removeEventListener("resize", this.updateDimensions);
-  }
-
-  updateDimensions = () => {
-    this.setState({
-      width: window.innerWidth,
-    });
-  }
 
   onChange = (key: string, value: string) => () => this.props.onChangeFilter(key, value);
 
@@ -77,13 +57,14 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
 
   renderSelect = () => {
     const { sort, filter } = this.props;
-    return sort.map(value => (
-      <div style={{ width: "100%" }} className="select__container">
+    return sort.map((value, index) => (
+      <div key={index} style={{ width: "200px" }} className="select__container">
         <p className="filter--label">{`${value.id === "cluster" ? "Nodes" : this.firstLetterToUpperCase(value.id)}`}</p>
-        <Select
+        <AntdSelect
           style={{ width: "100%" }}
           placeholder={`Filter ${value.id === "cluster" ? "node" : value.id}(s)`}
           value={this.renderSelectValue(value.id)}
+          getPopupContainer={() => document.getElementById("filterArea")}
           dropdownRender={_ =>
             <div onMouseDown={e => e.preventDefault()}>
               <div className="select-selection__deselect"><a onClick={this.onDeselect(value.id)}>Deselect all</a></div>
@@ -104,38 +85,14 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
   }
 
   render() {
-    const { opened, width } = this.state;
-    const containerLeft = this.rangeContainer.current ? this.rangeContainer.current.getBoundingClientRect().left : 0;
-    const left = width >= (containerLeft + 240) ? 0 : width - (containerLeft + 240);
     return (
       <div className="Filter-latency">
-        <Dropdown
+        <Select
           title="Filter"
-          options={[]}
-          selected=""
-          content={
-            <div ref={this.rangeContainer} className="Range">
-              <div className="click-zone" onClick={() => this.setState({ opened: !opened })}/>
-              {opened && <div className="trigger-container" onClick={() => this.setState({ opened: false })} />}
-              <div className="trigger-wrapper">
-                <div
-                  className={`trigger Select ${opened && "is-open" || ""}`}
-                >
-                  <div className="Select-control">
-                    <div className="Select-arrow-zone">
-                      <span className="Select-arrow"></span>
-                    </div>
-                  </div>
-                </div>
-                {opened &&
-                  <div className="multiple-filter__selection" style={{ left }}>
-                    {this.renderSelect()}
-                  </div>
-                }
-              </div>
-            </div>
-          }
-        />
+          id="filterArea"
+        >
+          {this.renderSelect()}
+        </Select>
       </div>
     );
   }

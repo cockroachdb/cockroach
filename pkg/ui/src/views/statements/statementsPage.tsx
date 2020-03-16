@@ -28,7 +28,6 @@ import { appAttr } from "src/util/constants";
 import { TimestampToMoment } from "src/util/convert";
 import { Pick } from "src/util/pick";
 import { PrintTime } from "src/views/reports/containers/range/print";
-import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
@@ -44,6 +43,7 @@ import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
 
 import "./statements.styl";
+import { Select, SelectOption } from "oss/src/components/select";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
@@ -93,7 +93,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
     });
   }
 
-  selectApp = (app: DropdownOption) => {
+  selectApp = (app: SelectOption) => {
     this.props.history.push(`/statements/${app.value}`);
   }
 
@@ -204,11 +204,11 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
             />
           </PageConfigItem>
           <PageConfigItem>
-            <Dropdown
-              title="App"
-              options={appOptions}
-              selected={selectedApp}
+            <Select
+              value={selectedApp}
               onChange={this.selectApp}
+              options={appOptions}
+              title="App"
             />
           </PageConfigItem>
         </PageConfig>

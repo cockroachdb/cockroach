@@ -20,7 +20,6 @@ import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
-import { DropdownOption } from "src/views/shared/components/dropdown";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
@@ -30,6 +29,7 @@ import { INodeStatus } from "src/util/proto";
 import { CustomChartState, CustomChartTable } from "./customMetric";
 import "./customChart.styl";
 import { queryByName } from "src/util/query";
+import { SelectOption } from "oss/src/components";
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
@@ -49,7 +49,7 @@ export class CustomChart extends React.Component<CustomChartProps & RouteCompone
   private nodeOptions = createSelector(
     (summary: NodesSummary) => summary.nodeStatuses,
     (summary: NodesSummary) => summary.nodeDisplayNameByID,
-    (nodeStatuses, nodeDisplayNameByID): DropdownOption[] => {
+    (nodeStatuses, nodeDisplayNameByID): SelectOption[] => {
       const base = [{value: "", label: "Cluster"}];
       return base.concat(_.chain(nodeStatuses)
         .map(ns => {
@@ -69,7 +69,7 @@ export class CustomChart extends React.Component<CustomChartProps & RouteCompone
   private metricOptions = createSelector(
     (summary: NodesSummary) => summary.nodeStatuses,
     (_summary: NodesSummary, metricsMetadata: MetricsMetadata) => metricsMetadata,
-    (nodeStatuses, metadata = {}): DropdownOption[] => {
+    (nodeStatuses, metadata = {}): SelectOption[] => {
       if (_.isEmpty(nodeStatuses)) {
         return [];
       }

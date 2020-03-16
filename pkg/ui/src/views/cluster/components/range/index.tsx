@@ -13,6 +13,7 @@ import moment, { Moment } from "moment";
 import { TimeWindow } from "oss/src/redux/timewindow";
 import React from "react";
 import "./range.styl";
+import { CaretDownIcon } from "oss/src/components/icon/caretDown";
 
 export enum DateTypes {
   DATE_FROM,
@@ -296,12 +297,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     );
   }
 
-  arrowRenderer = (isOpen: boolean) => {
-    if (!isOpen) {
-      return <span><Icon type="caret-up" /></span>;
-    }
-    return <span className="active"><Icon type="caret-down" /></span>;
-  }
+  arrowRenderer = () => <CaretDownIcon />;
 
   render() {
     const { opened, width, custom } = this.state;
@@ -322,7 +318,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
             </span>
             <div className="Select-control">
               <div className="Select-arrow-zone">
-                {this.arrowRenderer(opened)}
+                {this.arrowRenderer()}
               </div>
             </div>
           </div>

@@ -21,11 +21,11 @@ import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import { GraphDashboardProps, storeIDsForNode } from "src/views/cluster/containers/nodeGraphs/dashboards/dashboardUtils";
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
-import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import messagesDashboard from "./messages";
 import { getMatchParamByName } from "src/util/query";
+import { Select, SelectOption } from "oss/src/components";
 
 interface NodeGraphsOwnProps {
   refreshNodes: typeof refreshNodes;
@@ -48,7 +48,7 @@ export class RaftMessages extends React.Component<RaftMessagesProps> {
   private nodeDropdownOptions = createSelector(
     (summary: NodesSummary) => summary.nodeStatuses,
     (summary: NodesSummary) => summary.nodeDisplayNameByID,
-    (nodeStatuses, nodeDisplayNameByID): DropdownOption[] => {
+    (nodeStatuses, nodeDisplayNameByID): SelectOption[] => {
       const base = [{value: "", label: "Cluster"}];
       return base.concat(_.map(nodeStatuses, (ns) => {
         return {
@@ -77,7 +77,7 @@ export class RaftMessages extends React.Component<RaftMessagesProps> {
     }
   }
 
-  nodeChange = (selected: DropdownOption) => {
+  nodeChange = (selected: SelectOption) => {
     this.setClusterPath(selected.value);
   }
 
@@ -139,11 +139,11 @@ export class RaftMessages extends React.Component<RaftMessagesProps> {
       <div>
         <PageConfig>
           <PageConfigItem>
-            <Dropdown
-              title="Graph"
-              options={this.nodeDropdownOptions(this.props.nodesSummary)}
-              selected={selectedNode}
+            <Select
+              value={selectedNode}
               onChange={this.nodeChange}
+              options={this.nodeDropdownOptions(this.props.nodesSummary)}
+              title="Graph"
             />
           </PageConfigItem>
           <PageConfigItem>

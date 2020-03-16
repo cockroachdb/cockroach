@@ -19,7 +19,6 @@ import {jobsKey, refreshJobs} from "src/redux/apiReducers";
 import {CachedDataReducerState} from "src/redux/cachedDataReducer";
 import {LocalSetting} from "src/redux/localsettings";
 import {AdminUIState} from "src/redux/state";
-import Dropdown, {DropdownOption} from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import {PageConfig, PageConfigItem} from "src/views/shared/components/pageconfig";
 import {SortSetting} from "src/views/shared/components/sortabletable";
@@ -29,6 +28,8 @@ import {JobTable} from "oss/src/views/jobs/jobTable";
 import JobType = cockroach.sql.jobs.jobspb.Type;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
+import { Select, SelectOption } from "oss/src/components/select";
+import _ from "lodash";
 
 export const statusSetting = new LocalSetting<AdminUIState, string>(
   "jobs/status_setting", s => s.localSettings, statusOptions[0].value,
@@ -100,18 +101,17 @@ export class JobsTable extends React.Component<JobsTableProps> {
     this.refresh(props);
   }
 
-  onStatusSelected = (selected: DropdownOption) => {
+  onStatusSelected = (selected: SelectOption) => {
     this.props.setStatus(selected.value);
   }
 
-  onTypeSelected = (selected: DropdownOption) => {
+  onTypeSelected = (selected: SelectOption) => {
     this.props.setType(parseInt(selected.value, 10));
   }
 
-  onShowSelected = (selected: DropdownOption) => {
+  onShowSelected = (selected: SelectOption) => {
     this.props.setShow(selected.value);
   }
-
   render() {
     return (
       <div className="jobs-page">
@@ -124,27 +124,27 @@ export class JobsTable extends React.Component<JobsTableProps> {
         <div>
           <PageConfig>
             <PageConfigItem>
-              <Dropdown
-                title="Status"
-                options={statusOptions}
-                selected={this.props.status}
+              <Select
+                value={this.props.status}
                 onChange={this.onStatusSelected}
+                options={statusOptions}
+                title="Status"
               />
             </PageConfigItem>
             <PageConfigItem>
-              <Dropdown
-                title="Type"
-                options={typeOptions}
-                selected={this.props.type.toString()}
+              <Select
+                value={this.props.type.toString()}
                 onChange={this.onTypeSelected}
+                options={typeOptions}
+                title="Type"
               />
             </PageConfigItem>
             <PageConfigItem>
-              <Dropdown
-                title="Show"
-                options={showOptions}
-                selected={this.props.show}
+              <Select
+                value={this.props.show}
                 onChange={this.onShowSelected}
+                options={showOptions}
+                title="Show"
               />
             </PageConfigItem>
           </PageConfig>

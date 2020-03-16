@@ -10,23 +10,54 @@
 
 @require '~src/components/core/index.styl'
 
-.select
-  &--type-link
-    padding 0
-    border none
-    @extends $text--body
-    color $colors--link
-    font-weight $font-weight--bold
+.crl-select
+  position relative
+  &--active
+    z-index 999
+  .crl-button__icon--push-right
+    margin-left $spacing-base
+  .crl-button__icon--push-left
+    margin-right $spacing-base
+  &--options
+    position absolute
+    left 0
+    top 100%
+    list-style-type none
+    padding $spacing-base 0
+    background: $colors--neutral-0
+    border 0.5px solid $colors--neutral-2
+    box-shadow 0px 0px $spacing-xx-small rgba(154, 161, 171, 0.33)
+    border-radius $spacing-xx-small
+    min-width 180px
+    display none
+    &-custom
+      padding 15px
+    &-visible
+      animation fadeIn 0.5s normal forwards
+      display block
+  &--item
+    cursor pointer
+    padding $spacing-base $spacing-small
+    font-family $font-family--base
+    font-size $font-size--medium
+    line-height 22px
+    display flex
+    align-items center
     letter-spacing $letter-spacing--compact
-    & > .ant-select-selection
-      border none
-      & > .ant-select-arrow
-        font-size $spacing-base
-        color $colors--link
-        top 18px
-      & > .ant-select-selection__rendered
-        margin-right $spacing-large
-    & > .ant-select-selection:focus
-      outline-style none
-      box-shadow none
-      border-color transparent
+    transition $transition-base
+    color $colors--neutral-7
+    &-active
+      color $colors--primary-blue-4
+    &:hover
+      color $colors--primary-blue-3
+      transition $transition-base
+
+@keyframes fadeIn
+  0%
+    display none
+    opacity 0
+  5%
+    display block
+  100%
+    top calc(100% + 8px)
+    opacity 1
