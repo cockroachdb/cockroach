@@ -997,8 +997,10 @@ type queryMeta struct {
 	// The timestamp when this query began execution.
 	start time.Time
 
-	// AST of the SQL statement - converted to query string only when necessary.
-	stmt tree.Statement
+	// The string of the SQL statement being executed. This string may
+	// contain sensitive information, so it must be converted back into
+	// an AST and dumped before use in logging.
+	rawStmt string
 
 	// States whether this query is distributed. Note that all queries,
 	// including those that are distributed, have this field set to false until
@@ -1024,6 +1026,16 @@ type queryMeta struct {
 // txn context.
 func (q *queryMeta) cancel() {
 	q.ctxCancel()
+}
+
+// getStatement returns a cleaned version of the query associated
+// with this queryMeta.
+func (q *queryMeta) getStatement() string {
+	parsed, err := parser.ParseOne(q.rawStmt)
+	if err != nil {
+		return fmt.Sprintf("error retrieving statement: %+v", err)
+	}
+	return parsed.AST.String()
 }
 
 // SessionDefaults mirrors fields in Session, for restoring default

@@ -2281,7 +2281,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		if query.hidden {
 			continue
 		}
-		sql := truncateSQL(query.stmt.String())
+		sql := truncateSQL(query.getStatement())
 		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
 			ID:            id.String(),
