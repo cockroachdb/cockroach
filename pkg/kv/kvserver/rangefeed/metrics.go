@@ -11,8 +11,6 @@
 package rangefeed
 
 import (
-	"time"
-
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
@@ -47,7 +45,7 @@ func (*Metrics) MetricStruct() {}
 func NewMetrics() *Metrics {
 	return &Metrics{
 		RangeFeedCatchupScanNanos:            metric.NewCounter(metaRangeFeedCatchupScanNanos),
-		RangeFeedSlowClosedTimestampLogN:     log.Every(5 * time.Second),
+		RangeFeedSlowClosedTimestampLogN:     log.Every(0),
 		RangeFeedSlowClosedTimestampNudgeSem: make(chan struct{}, 1024),
 	}
 }
