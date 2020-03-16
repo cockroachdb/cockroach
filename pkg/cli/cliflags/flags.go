@@ -1007,6 +1007,12 @@ https://www.cockroachlabs.com/docs/v19.1/topology-geo-partitioned-replicas.html
 		`,
 	}
 
+	DemoNoLicense = FlagInfo{
+		Name: "disable-demo-license",
+		Description: `
+If set, disable cockroach demo from attempting to obtain a temporary license.`,
+	}
+
 	UseEmptyDatabase = FlagInfo{
 		Name: "empty",
 		Description: `
