@@ -1,3 +1,6 @@
+import file=tpcc_schema
+----
+
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT NOT NULL, s STRING, j JSON)
 ----
@@ -1128,6 +1131,89 @@ inner-join (merge)
                 │    └── projections
                 │         └── const: 5 [type=int]
                 └── variable: k [type=int]
+
+# Regression test for #46151. Do not push down a filter with a correlated
+# subquery.
+norm expect-not=PushFilterIntoJoinLeftAndRight
+SELECT (SELECT i_name FROM item LIMIT 1)
+  FROM history INNER JOIN order_line ON h_data = ol_dist_info
+ WHERE (
+        EXISTS(
+            SELECT *
+              FROM history
+             WHERE h_data IS NOT NULL AND ol_dist_info IS NOT NULL
+        )
+       )
+    OR (SELECT ol_i_id FROM order_line LIMIT 1) IS NOT NULL;
+----
+project
+ ├── columns: i_name:47(varchar)
+ ├── fd: ()-->(47)
+ ├── inner-join (hash)
+ │    ├── columns: h_data:9(varchar!null) ol_o_id:10(int!null) ol_d_id:11(int!null) ol_w_id:12(int!null) ol_number:13(int!null) ol_dist_info:19(char!null) true_agg:40(bool)
+ │    ├── fd: (10-13)-->(19,40), (9)==(19), (19)==(9)
+ │    ├── scan history
+ │    │    └── columns: h_data:9(varchar)
+ │    ├── select
+ │    │    ├── columns: ol_o_id:10(int!null) ol_d_id:11(int!null) ol_w_id:12(int!null) ol_number:13(int!null) ol_dist_info:19(char) true_agg:40(bool)
+ │    │    ├── key: (10-13)
+ │    │    ├── fd: (10-13)-->(19,40)
+ │    │    ├── group-by
+ │    │    │    ├── columns: ol_o_id:10(int!null) ol_d_id:11(int!null) ol_w_id:12(int!null) ol_number:13(int!null) ol_dist_info:19(char) true_agg:40(bool)
+ │    │    │    ├── grouping columns: ol_o_id:10(int!null) ol_d_id:11(int!null) ol_w_id:12(int!null) ol_number:13(int!null)
+ │    │    │    ├── key: (10-13)
+ │    │    │    ├── fd: (10-13)-->(19,40)
+ │    │    │    ├── left-join (cross)
+ │    │    │    │    ├── columns: ol_o_id:10(int!null) ol_d_id:11(int!null) ol_w_id:12(int!null) ol_number:13(int!null) ol_dist_info:19(char) true:39(bool)
+ │    │    │    │    ├── fd: (10-13)-->(19)
+ │    │    │    │    ├── scan order_line
+ │    │    │    │    │    ├── columns: ol_o_id:10(int!null) ol_d_id:11(int!null) ol_w_id:12(int!null) ol_number:13(int!null) ol_dist_info:19(char)
+ │    │    │    │    │    ├── key: (10-13)
+ │    │    │    │    │    └── fd: (10-13)-->(19)
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── columns: true:39(bool!null)
+ │    │    │    │    │    ├── fd: ()-->(39)
+ │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── columns: h_data:28(varchar!null)
+ │    │    │    │    │    │    ├── scan history
+ │    │    │    │    │    │    │    └── columns: h_data:28(varchar)
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── h_data IS NOT NULL [type=bool, outer=(28), constraints=(/28: (/NULL - ]; tight)]
+ │    │    │    │    │    └── projections
+ │    │    │    │    │         └── true [type=bool]
+ │    │    │    │    └── filters
+ │    │    │    │         └── ol_dist_info IS NOT NULL [type=bool, outer=(19), constraints=(/19: (/NULL - ]; tight)]
+ │    │    │    └── aggregations
+ │    │    │         ├── const-not-null-agg [type=bool, outer=(39)]
+ │    │    │         │    └── variable: true [type=bool]
+ │    │    │         └── const-agg [type=char, outer=(19)]
+ │    │    │              └── variable: ol_dist_info [type=char]
+ │    │    └── filters
+ │    │         └── or [type=bool, outer=(40), subquery]
+ │    │              ├── true_agg IS NOT NULL [type=bool]
+ │    │              └── is-not [type=bool]
+ │    │                   ├── subquery [type=int]
+ │    │                   │    └── limit
+ │    │                   │         ├── columns: ol_i_id:33(int!null)
+ │    │                   │         ├── cardinality: [0 - 1]
+ │    │                   │         ├── key: ()
+ │    │                   │         ├── fd: ()-->(33)
+ │    │                   │         ├── scan order_line
+ │    │                   │         │    └── columns: ol_i_id:33(int!null)
+ │    │                   │         └── const: 1 [type=int]
+ │    │                   └── null [type=unknown]
+ │    └── filters
+ │         └── h_data = ol_dist_info [type=bool, outer=(9,19), constraints=(/9: (/NULL - ]; /19: (/NULL - ]), fd=(9)==(19), (19)==(9)]
+ └── projections
+      └── subquery [type=varchar, subquery]
+           └── limit
+                ├── columns: item.i_name:44(varchar)
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(44)
+                ├── scan item
+                │    └── columns: item.i_name:44(varchar)
+                └── const: 1 [type=int]
 
 # --------------------------------------------------
 # PushFilterIntoJoinLeft + PushFilterIntoJoinRight

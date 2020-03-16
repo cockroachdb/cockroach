@@ -1334,6 +1334,11 @@ func (b *logicalPropsBuilder) buildZipItemProps(item *ZipItem, scalar *props.Sca
 
 // BuildSharedProps fills in the shared properties derived from the given
 // expression's subtree.
+//
+// Note that shared is an "input-output" argument, and should be assumed
+// to be partially filled in already. Boolean fields such as HasPlaceholder,
+// CanHaveSideEffects and HasCorrelatedSubquery should never be reset to false
+// once set to true.
 func BuildSharedProps(mem *Memo, e opt.Expr, shared *props.Shared) {
 	switch t := e.(type) {
 	case *VariableExpr:
@@ -1351,9 +1356,11 @@ func BuildSharedProps(mem *Memo, e opt.Expr, shared *props.Shared) {
 
 	case *SubqueryExpr, *ExistsExpr, *AnyExpr, *ArrayFlattenExpr:
 		shared.HasSubquery = true
-		shared.HasCorrelatedSubquery = !e.Child(0).(RelExpr).Relational().OuterCols.Empty()
-		if t.Op() == opt.AnyOp && !shared.HasCorrelatedSubquery {
-			shared.HasCorrelatedSubquery = hasOuterCols(mem, e.Child(1))
+		if hasOuterCols(mem, e.Child(0)) {
+			shared.HasCorrelatedSubquery = true
+		}
+		if t.Op() == opt.AnyOp && hasOuterCols(mem, e.Child(1)) {
+			shared.HasCorrelatedSubquery = true
 		}
 
 	case *FunctionExpr:
