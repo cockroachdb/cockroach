@@ -156,3 +156,11 @@ func (ep *DummySessionAccessor) SetSessionVar(_ context.Context, _, _ string) er
 func (ep *DummySessionAccessor) HasAdminRole(_ context.Context) (bool, error) {
 	return false, errors.WithStack(errEvalSessionVar)
 }
+
+// DummyClientNoticeSender implements the tree.ClientNoticeSender interface.
+type DummyClientNoticeSender struct{}
+
+var _ tree.ClientNoticeSender = &DummyClientNoticeSender{}
+
+// SendClientNotice is part of the tree.ClientNoticeSender interface.
+func (c *DummyClientNoticeSender) SendClientNotice(_ context.Context, _ error) {}

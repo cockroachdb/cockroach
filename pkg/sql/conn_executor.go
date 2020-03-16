@@ -1987,6 +1987,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SessionData:        ex.sessionData,
 			SessionAccessor:    p,
 			PrivilegedAccessor: p,
+			ClientNoticeSender: p,
 			Settings:           ex.server.cfg.Settings,
 			TestingKnobs:       ex.server.cfg.EvalContextTestingKnobs,
 			ClusterID:          ex.server.cfg.ClusterID(),
@@ -2060,7 +2061,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	ex.initEvalCtx(ctx, &p.extendedEvalCtx, p)
 
 	p.sessionDataMutator = ex.dataMutator
-	p.noticeSender = noopNoticeSender
+	p.noticeSender = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 
 	p.queryCacheSession.Init()

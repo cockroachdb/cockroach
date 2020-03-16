@@ -2630,6 +2630,17 @@ type EvalSessionAccessor interface {
 	HasAdminRole(ctx context.Context) (bool, error)
 }
 
+// ClientNoticeSender is a limited interface to send notices to the
+// client.
+//
+// TODO(knz): as of this writing, the implementations of this
+// interface only work on the gateway node (i.e. not from
+// distributed processors).
+type ClientNoticeSender interface {
+	// SendClientNotice sends a notice out-of-band to the client.
+	SendClientNotice(ctx context.Context, notice error)
+}
+
 // InternalExecutor is a subset of sqlutil.InternalExecutor (which, in turn, is
 // implemented by sql.InternalExecutor) used by this sem/tree package which
 // can't even import sqlutil.
@@ -2804,6 +2815,8 @@ type EvalContext struct {
 	PrivilegedAccessor PrivilegedAccessor
 
 	SessionAccessor EvalSessionAccessor
+
+	ClientNoticeSender ClientNoticeSender
 
 	Sequence SequenceOperators
 

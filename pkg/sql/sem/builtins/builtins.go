@@ -3342,6 +3342,26 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"crdb_internal.notice": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+			Impure:   true,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"msg", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if ctx.ClientNoticeSender == nil {
+					return nil, errors.AssertionFailedf("notice sender not set")
+				}
+				msg := string(*args[0].(*tree.DString))
+				ctx.ClientNoticeSender.SendClientNotice(ctx.Context, pgerror.Noticef("%s", msg))
+				return tree.NewDInt(0), nil
+			},
+			Info: "This function is used only by CockroachDB's developers for testing purposes.",
+		},
+	),
+
 	"crdb_internal.force_assertion_error": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,

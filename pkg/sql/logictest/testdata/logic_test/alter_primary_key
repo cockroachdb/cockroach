@@ -465,19 +465,6 @@ SELECT * FROM t@i5
 ----
 1 2 3 4 {}
 
-# Regression test for #44782
-statement ok
-BEGIN
-
-statement ok
-CREATE TABLE t44782 (x INT PRIMARY KEY, y INT NOT NULL)
-
-statement error pq: cannot create table and change it's primary key in the same transaction
-ALTER TABLE t44782 ALTER PRIMARY KEY USING COLUMNS (y)
-
-statement ok
-ROLLBACK
-
 subtest hash_sharded
 
 statement ok
@@ -690,6 +677,16 @@ t2 CREATE TABLE t2 (
      CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC),
      FAMILY fam_0_x_y_rowid (x, y, rowid)
 ) INTERLEAVE IN PARENT t1 (x)
+
+# Check that changing the primary key of a table removes interleave
+# backreferences from the parent. The final drop will succeed if
+# the backreferences have been removed.
+statement ok
+DROP TABLE IF EXISTS t1, t2 CASCADE;
+CREATE TABLE t1 (x INT PRIMARY KEY);
+CREATE TABLE t2 (x INT, y INT, PRIMARY KEY (x, y), FAMILY (x, y)) INTERLEAVE IN PARENT t1 (x);
+ALTER TABLE t2 ALTER PRIMARY KEY USING COLUMNS (x, y);
+DROP TABLE t1
 
 statement ok
 DROP TABLE IF EXISTS t;
@@ -961,3 +958,187 @@ t2  CREATE TABLE t2 (
     FAMILY fam_0_x (x),
     FAMILY fam_1_y (y)
 ) INTERLEAVE IN PARENT t (x)
+
+subtest create_table_change_pk
+
+statement ok
+DROP TABLE IF EXISTS t CASCADE
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE t (x INT NOT NULL, y INT, FAMILY (x, y), INDEX (y))
+
+statement ok
+ALTER TABLE t ADD PRIMARY KEY (x)
+
+statement ok
+COMMIT
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   y INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (x ASC),
+   INDEX t_y_idx (y ASC),
+   FAMILY fam_0_x_y_rowid (x, y, rowid)
+)
+
+# Ensure that index y got rewritten. If it was not rewritten,
+# it would have an id less than 3.
+query IT
+SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
+----
+3  primary
+4  t_y_idx
+
+# Repeat the above test using ALTER PRIMARY KEY.
+
+statement ok
+DROP TABLE IF EXISTS t
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE t (x INT NOT NULL, y INT, FAMILY (x, y), INDEX (y))
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x)
+
+statement ok
+COMMIT
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   y INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (x ASC),
+   INDEX t_y_idx (y ASC),
+   FAMILY fam_0_x_y_rowid (x, y, rowid)
+)
+
+# Ensure that index y got rewritten. If it was not rewritten,
+# it would have an id less than 3.
+query IT
+SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
+----
+3  primary
+4  t_y_idx
+
+# Try interleaving into another table.
+
+statement ok
+DROP TABLE IF EXISTS t1, t2
+
+statement ok
+CREATE TABLE t1 (x INT PRIMARY KEY)
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE t2 (x INT NOT NULL, y INT NOT NULL, FAMILY (x, y))
+
+statement ok
+ALTER TABLE t2 ADD PRIMARY KEY (x, y) INTERLEAVE IN PARENT t1 (x)
+
+statement ok
+COMMIT
+
+query TT
+SHOW CREATE t2
+----
+t2 CREATE TABLE t2 (
+     x INT8 NOT NULL,
+     y INT8 NOT NULL,
+     CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC),
+     FAMILY fam_0_x_y_rowid (x, y, rowid)
+   ) INTERLEAVE IN PARENT t1 (x)
+
+# We should get an error if we try to drop t1.
+statement error pq: unimplemented: "t1" is interleaved by table "t2"
+DROP TABLE t1
+
+# De-interleave t2.
+statement ok
+ALTER TABLE t2 ALTER PRIMARY KEY USING COLUMNS (x, y)
+
+statement ok
+DROP TABLE t1
+
+# Test that we can de-interleave a table in the same txn.
+statement ok
+DROP TABLE IF EXISTS t1, t2
+
+statement ok
+CREATE TABLE t1 (x INT PRIMARY KEY)
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE t2 (x INT NOT NULL, y INT NOT NULL, FAMILY (x, y))
+
+statement ok
+ALTER TABLE t2 ADD PRIMARY KEY (x, y) INTERLEAVE IN PARENT t1 (x)
+
+statement ok
+ALTER TABLE t2 ALTER PRIMARY KEY USING COLUMNS (x, y)
+
+# If we can drop t1, then t2 has been de-interleaved successfully.
+statement ok
+DROP TABLE t1
+
+statement ok
+COMMIT
+
+# Test when multiple indexes get created and destroyed.
+statement ok
+DROP TABLE IF EXISTS t
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE t (
+  x INT NOT NULL, y INT, z INT, w INT,
+  INDEX i1 (y), UNIQUE INDEX i2 (z),
+  INDEX i3 (w) STORING (y, z),
+  FAMILY (x, y, z, w)
+)
+
+statement ok
+ALTER TABLE t ADD PRIMARY KEY (x)
+
+statement ok
+COMMIT
+
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE t (
+   x INT8 NOT NULL,
+   y INT8 NULL,
+   z INT8 NULL,
+   w INT8 NULL,
+   CONSTRAINT "primary" PRIMARY KEY (x ASC),
+   INDEX i1 (y ASC),
+   UNIQUE INDEX i2 (z ASC),
+   INDEX i3 (w ASC) STORING (y, z),
+   FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
+)
+
+# All index id's should be larger than 4.
+query IT
+SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
+----
+5  primary
+6  i1
+7  i2
+8  i3
