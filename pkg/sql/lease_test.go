@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -569,20 +569,6 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 }
 
-func isDeleted(tableID sqlbase.ID, cfg *config.SystemConfig) bool {
-	descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableID)
-	val := cfg.GetValue(descKey)
-	if val == nil {
-		return false
-	}
-	var descriptor sqlbase.Descriptor
-	if err := val.GetProto(&descriptor); err != nil {
-		panic("unable to unmarshal table descriptor")
-	}
-	table := descriptor.Table(val.Timestamp)
-	return table.Dropped()
-}
-
 func acquire(
 	ctx context.Context, s *server.TestServer, descID sqlbase.ID,
 ) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
@@ -604,14 +590,15 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
-			TestingLeasesRefreshedEvent: func(cfg *config.SystemConfig) {
+			TestingTableRefreshedEvent: func(table *sqlbase.TableDescriptor) {
 				mu.Lock()
 				defer mu.Unlock()
-				if waitTableID != 0 {
-					if isDeleted(waitTableID, cfg) {
-						close(deleted)
-						waitTableID = 0
-					}
+				if waitTableID != table.ID {
+					return
+				}
+				if table.Dropped() {
+					close(deleted)
+					waitTableID = 0
 				}
 			},
 		},
@@ -1722,7 +1709,7 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 					atomic.AddInt32(&testAcquisitionBlockCount, 1)
 				},
 			},
-			GossipUpdateEvent: func(cfg *config.SystemConfig) error {
+			TestingTableUpdateEvent: func(_ *sqlbase.TableDescriptor) error {
 				return errors.Errorf("ignore gossip update")
 			},
 		},
@@ -2151,6 +2138,97 @@ func TestIntentOnSystemConfigDoesNotPreventSchemaChange(t *testing.T) {
 	require.NoError(t, txA.Rollback())
 
 	const extremelyLongTime = 10 * time.Second
+	select {
+	case <-time.After(extremelyLongTime):
+		t.Fatalf("schema change did not complete in %v", extremelyLongTime)
+	case err := <-errCh:
+		require.NoError(t, err)
+	}
+}
+
+// TestIntentOnSystemConfigDoesNotPreventSchemaChange tests that failures to
+// gossip the system config due to intents are rectified when later intents
+// are aborted.
+func TestIntentOnSystemConfigDoesNotPreventSchemaChange2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+					AlwaysUseRangefeeds: true,
+				},
+				Server: &server.TestingKnobs{
+					// TODO(ajwerner): A
+
+					BootstrapVersionOverride: clusterversion.TestingBinaryVersion,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.ServerConn(0)
+	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms';")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true;")
+	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+	time.Sleep(time.Second)
+
+	log.Infof(ctx, "created table at %v", tc.Server(0).Clock().Now())
+	connA, err := db.Conn(ctx)
+	require.NoError(t, err)
+	connB, err := db.Conn(ctx)
+	require.NoError(t, err)
+
+	txA, err := connA.BeginTx(ctx, &gosql.TxOptions{})
+	require.NoError(t, err)
+	txB, err := connB.BeginTx(ctx, &gosql.TxOptions{})
+	require.NoError(t, err)
+
+	// Lay down an intent on the system config span.
+	_, err = txA.Exec("CREATE TABLE bar (i INT PRIMARY KEY)")
+	require.NoError(t, err)
+
+	_, err = txB.Exec("ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 2")
+	require.NoError(t, err)
+
+	getFooVersion := func() (version int) {
+		tx, err := db.Begin()
+		require.NoError(t, err)
+		// Prevent this transaction from blocking on intents.
+		_, err = tx.Exec("SET TRANSACTION PRIORITY HIGH")
+		require.NoError(t, err)
+		require.NoError(t, tx.QueryRow(
+			"SELECT version FROM crdb_internal.tables WHERE name = 'foo'").
+			Scan(&version))
+		require.NoError(t, tx.Commit())
+		return version
+	}
+
+	// Fire off the commit. In order to return, the table descriptor will need
+	// to make it through several versions. We wait until the version has been
+	// incremented once before we rollback txA.
+	origVersion := getFooVersion()
+	errCh := make(chan error)
+	go func() {
+		errCh <- txB.Commit()
+		log.Infof(ctx, "committed txn at %v", tc.Server(0).Clock().Now())
+	}()
+	testutils.SucceedsSoon(t, func() error {
+		if got := getFooVersion(); got < origVersion {
+			return fmt.Errorf("got origVersion %d, expected greater", got)
+		}
+		return nil
+	})
+
+	// Roll back txA which had left an intent on the system config span which
+	// prevented the leaseholders of origVersion of foo from being notified.
+	// Ensure that those leaseholders are notified in a timely manner.
+	require.NoError(t, txA.Rollback())
+
+	const extremelyLongTime = 100 * time.Second
 	select {
 	case <-time.After(extremelyLongTime):
 		t.Fatalf("schema change did not complete in %v", extremelyLongTime)
