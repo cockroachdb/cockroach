@@ -1,5 +1,3 @@
-# LogicTest: local-vec fakedist-vec
-
 statement ok
 CREATE TABLE t (a INT, b INT, c INT PRIMARY KEY)
 
@@ -9,9 +7,6 @@ INSERT INTO t VALUES
   (1, 1, 1),
   (0, 2, 2),
   (1, 2, 3)
-
-statement ok
-SET vectorize=experimental_always
 
 # We sort the output on all queries with row_number window function to get
 # deterministic results.

@@ -417,6 +417,7 @@ func Example_demo() {
 		// commands that require a secure cluster.
 		{`demo`, `--insecure=false`, `-e`, `CREATE USER test WITH PASSWORD 'testpass'`},
 		{`demo`, `-e`, `CREATE USER test WITH PASSWORD 'testpass'`},
+		{`demo`, `--geo-partitioned-replicas`, `--disable-demo-license`},
 	}
 	setCLIDefaultsForTests()
 	// We must reset the security asset loader here, otherwise the dummy
@@ -475,6 +476,8 @@ func Example_demo() {
 	// demo -e CREATE USER test WITH PASSWORD 'testpass'
 	// ERROR: setting or updating a password is not supported in insecure mode
 	// SQLSTATE: 28P01
+	// demo --geo-partitioned-replicas --disable-demo-license
+	// ERROR: enterprise features are needed for this demo (--geo-partitioned-replicas)
 }
 
 func Example_sql() {
