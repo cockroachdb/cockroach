@@ -1,22 +1,7 @@
 # Test notices work as expected by creating a VIEW on a TEMP TABLE.
 
 send
-Parse {"Query": "SET experimental_enable_temp_tables = true"}
-Bind
-Execute
-Sync
-----
-
-until
-ReadyForQuery
-----
-{"Type":"ParseComplete"}
-{"Type":"BindComplete"}
-{"Type":"CommandComplete","CommandTag":"SET"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-send
-Parse {"Query": "CREATE TEMP TABLE a (a int)"}
+Parse {"Query": "CREATE TABLE t(x INT, y INT, INDEX (x), INDEX (y))"}
 Bind
 Execute
 Sync
@@ -30,8 +15,10 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+
+
 send
-Parse {"Query": "CREATE VIEW a_view AS SELECT a FROM a"}
+Parse {"Query": "DROP INDEX t@t_x_idx"}
 Bind
 Execute
 Sync
@@ -42,8 +29,8 @@ ReadyForQuery
 ----
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
-{"Severity":"NOTICE","Code":"00000","Message":"view \"a_view\" will be a temporary view","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"create_view.go","Line":66,"Routine":"startExec","UnknownFields":null}
-{"Type":"CommandComplete","CommandTag":"CREATE VIEW"}
+{"Severity":"NOTICE","Code":"00000","Message":"the data for dropped indexes is reclaimed asynchronously","Detail":"","Hint":"The reclamation delay can be customized in the zone configuration for the table.","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"drop_index.go","Line":475,"Routine":"dropIndexByName","UnknownFields":null}
+{"Type":"CommandComplete","CommandTag":"DROP INDEX"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Disable notices and assert now it is not sent.
@@ -63,7 +50,7 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
-Parse {"Query": "CREATE VIEW a_view_notice_disabled AS SELECT a FROM a"}
+Parse {"Query": "DROP INDEX t@t_y_idx"}
 Bind
 Execute
 Sync
@@ -74,5 +61,5 @@ ReadyForQuery
 ----
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
-{"Type":"CommandComplete","CommandTag":"CREATE VIEW"}
+{"Type":"CommandComplete","CommandTag":"DROP INDEX"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
