@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	opentracing "github.com/opentracing/opentracing-go"
 )
@@ -325,6 +326,16 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	if planCtx.saveDiagram != nil {
+		// Local flows might not have the UUID field set. We need it to be set to
+		// distinguish statistics for processors in subqueries vs the main query vs
+		// postqueries.
+		if len(flows) == 1 {
+			for _, f := range flows {
+				if f.FlowID == (execinfrapb.FlowID{}) {
+					f.FlowID.UUID = uuid.MakeV4()
+				}
+			}
+		}
 		log.VEvent(ctx, 1, "creating plan diagram")
 		var stmtStr string
 		if planCtx.planner != nil && planCtx.planner.stmt != nil {

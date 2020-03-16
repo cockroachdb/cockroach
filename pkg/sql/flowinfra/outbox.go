@@ -207,6 +207,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 	ctx, span = execinfra.ProcessorSpan(ctx, "outbox")
 	if span != nil && tracing.IsRecording(span) {
 		m.statsCollectionEnabled = true
+		span.SetTag(execinfrapb.FlowIDTagKey, m.flowCtx.ID.String())
 		span.SetTag(execinfrapb.StreamIDTagKey, m.streamID)
 	}
 	// spanFinished specifies whether we called tracing.FinishSpan on the span.
