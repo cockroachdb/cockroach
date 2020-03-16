@@ -105,14 +105,8 @@ GRANT CREATE ON TABLE users TO testuser
 
 user testuser
 
-statement error in use as unique constraint
-DROP INDEX users@bar
-
-statement error in use as unique constraint
-DROP INDEX users@bar RESTRICT
-
 statement ok
-DROP INDEX users@bar CASCADE
+DROP INDEX users@bar
 
 query TTBITTBB colnames
 SHOW INDEXES FROM users

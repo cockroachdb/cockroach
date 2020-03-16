@@ -1372,10 +1372,11 @@ func MakeTableDesc(
 			}
 		case *tree.UniqueConstraintTableDef:
 			idx := sqlbase.IndexDescriptor{
-				Name:             string(d.Name),
-				Unique:           true,
-				StoreColumnNames: d.Storing.ToStrings(),
-				Version:          indexEncodingVersion,
+				Name:              string(d.Name),
+				Unique:            true,
+				StoreColumnNames:  d.Storing.ToStrings(),
+				Version:           indexEncodingVersion,
+				CreatedExplicitly: true,
 			}
 			if d.Sharded != nil {
 				if n.Interleave != nil && d.PrimaryKey {
