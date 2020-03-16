@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -88,27 +87,6 @@ func TestRenameTable(t *testing.T) {
 	}
 }
 
-// isRenamed tests if a descriptor is updated by gossip to the specified name
-// and version.
-func isRenamed(
-	tableID sqlbase.ID,
-	expectedName string,
-	expectedVersion sqlbase.DescriptorVersion,
-	cfg *config.SystemConfig,
-) bool {
-	descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableID)
-	val := cfg.GetValue(descKey)
-	if val == nil {
-		return false
-	}
-	var descriptor sqlbase.Descriptor
-	if err := val.GetProto(&descriptor); err != nil {
-		panic("unable to unmarshal table descriptor")
-	}
-	table := descriptor.Table(val.Timestamp)
-	return table.Name == expectedName && table.Version == expectedVersion
-}
-
 // Test that a SQL txn that resolved a name can keep resolving that name during
 // its lifetime even after the table has been renamed.
 // Also tests that the name of a renamed table cannot be reused until everybody
@@ -142,15 +120,16 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 	// leases using the old name (an update with the new name but the original
 	// version is ignored by the leasing refresh mechanism).
 	renamed := make(chan interface{})
-	lmKnobs.TestingLeasesRefreshedEvent =
-		func(cfg *config.SystemConfig) {
+	lmKnobs.TestingTableRefreshedEvent =
+		func(table *sqlbase.TableDescriptor) {
 			mu.Lock()
 			defer mu.Unlock()
-			if waitTableID != 0 {
-				if isRenamed(waitTableID, "t2", 2, cfg) {
-					close(renamed)
-					waitTableID = 0
-				}
+			if waitTableID != table.ID {
+				return
+			}
+			if table.Name == "t2" && table.Version == 2 {
+				close(renamed)
+				waitTableID = 0
 			}
 		}
 	s, db, kvDB := serverutils.StartServer(t, serverParams)
