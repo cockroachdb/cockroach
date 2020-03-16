@@ -159,13 +159,18 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
           >
             Statement diagnostics
           </Text>
-          <Button
-            onClick={this.onActivateButtonClick}
-            disabled={!canRequestDiagnostics}
-            type="secondary"
-          >
-            Activate diagnostics
-          </Button>
+          {
+            canRequestDiagnostics && (
+              <Button
+                onClick={this.onActivateButtonClick}
+                disabled={!canRequestDiagnostics}
+                type="secondary"
+                className="crl-statements-diagnostics-view__activate-button"
+              >
+                Activate diagnostics
+              </Button>
+            )
+          }
         </div>
         <Table
           dataSource={dataSource}
