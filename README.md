@@ -1,6 +1,8 @@
 ![CockroachDB](docs/media/cockroach_db.png?raw=true "CockroachDB logo")
 =======================================================================
 
+CLA TEST
+
 CockroachDB is a cloud-native SQL database for building global, scalable cloud services that survive disasters.
 
 [![TeamCity CI](https://teamcity.cockroachdb.com/guestAuth/app/rest/builds/buildType:(id:Cockroach_UnitTests)/statusIcon.svg)](https://teamcity.cockroachdb.com/viewLog.html?buildTypeId=Cockroach_UnitTests&buildId=lastFinished&guest=1)
