@@ -217,6 +217,22 @@ func (m *Memo) checkExpr(e opt.Expr) {
 		}
 
 		if opt.IsJoinOp(e) {
+			left := e.Child(0).(RelExpr)
+			right := e.Child(1).(RelExpr)
+			// The left side cannot depend on the right side columns.
+			if left.Relational().OuterCols.Intersects(right.Relational().OutputCols) {
+				panic(pgerror.NewAssertionErrorf(
+					"%s left side has outer cols in right side",
+					log.Safe(e.Op()),
+				))
+			}
+
+			// The reverse is allowed but only for apply variants.
+			if !opt.IsJoinApplyOp(e) {
+				if right.Relational().OuterCols.Intersects(left.Relational().OutputCols) {
+					panic(pgerror.NewAssertionErrorf("%s is correlated", log.Safe(e.Op())))
+				}
+			}
 			checkFilters(*e.Child(2).(*FiltersExpr))
 		}
 	}
