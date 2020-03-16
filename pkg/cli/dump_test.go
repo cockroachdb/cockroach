@@ -490,3 +490,30 @@ ALTER TABLE orders VALIDATE CONSTRAINT fk_customer;
 		t.Fatalf("expected: %s\ngot: %s", want1, dump1)
 	}
 }
+
+func TestDumpingUUIDColumns(t *testing.T) {
+	// Testing use case described in #33664, that's it
+	// to create a table with UUID generated columns and
+	// then insert few rows. Dump table with the content
+	// and assert it can do it successfully.
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	const create = `
+CREATE DATABASE foo;
+USE foo;
+CREATE TABLE bar(id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name String);
+INSERT INTO bar (name) VALUES ('a'), VALUES ('b'), VALUES ('c');
+`
+	_, err := c.RunWithCaptureArgs([]string{"sql", "-e", create})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = c.RunWithCaptureArgs([]string{"dump", "foo", "bar"})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
