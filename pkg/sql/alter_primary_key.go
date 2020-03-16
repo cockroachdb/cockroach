@@ -314,15 +314,17 @@ func (p *planner) AlterPrimaryKey(
 	// Mark the primary key of the table as valid.
 	tableDesc.PrimaryIndex.Disabled = false
 
-	// N.B. We don't schedule index deletions here because the existing indexes need to be visible to the user
-	// until the primary key swap actually occurs. Deletions will get enqueued in the phase when the swap happens.
+	// N.B. We don't schedule index deletions here because the existing
+	// indexes need to be visible to the user until the primary key swap
+	// actually occurs. Deletions will get enqueued in the phase when
+	// the swap happens.
 
 	// Send a notice to users about the async cleanup jobs.
+	// TODO(knz): Mention the job ID in the client notice.
 	p.SendClientNotice(ctx,
 		pgerror.Noticef(
-			"primary key changes spawn async cleanup jobs. Future schema changes on %q may be delayed as these jobs finish",
-			tableDesc.Name,
-		),
+			"primary key changes are finalized asynchronously; "+
+				"further schema changes on this table may be restricted until the job completes"),
 	)
 
 	return nil
