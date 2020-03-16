@@ -1663,17 +1663,12 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 	if guard == nil {
 		g = newLockTableGuardImpl()
 		g.seqNum = atomic.AddUint64(&t.seqNum, 1)
+		g.txn = req.txnMeta()
 		g.spans = req.LockSpans
-		g.readTS = req.Timestamp
-		g.writeTS = req.Timestamp
+		g.readTS = req.readConflictTimestamp()
+		g.writeTS = req.writeConflictTimestamp()
 		g.sa = spanset.NumSpanAccess - 1
 		g.index = -1
-		if req.Txn != nil {
-			g.txn = &req.Txn.TxnMeta
-			g.readTS = req.Txn.ReadTimestamp
-			g.readTS.Forward(req.Txn.MaxTimestamp)
-			g.writeTS = req.Txn.WriteTimestamp
-		}
 	} else {
 		g = guard.(*lockTableGuardImpl)
 		g.key = nil
