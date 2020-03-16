@@ -51,7 +51,7 @@ import (
 //
 // The input files use the following DSL:
 //
-// new-txn      name=<txn-name> ts=<int>[,<int>] epoch=<int>
+// new-txn      name=<txn-name> ts=<int>[,<int>] epoch=<int> [maxts=<int>[,<int>]]
 // new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [consistency]
 //   <proto-name> [<field-name>=<field-value>...]
 // sequence     req=<req-name>
@@ -61,8 +61,8 @@ import (
 // handle-txn-push-error      req=<req-name> txn=<txn-name> key=<key>  TODO(nvanbenschoten): implement this
 //
 // on-lock-acquired  txn=<txn-name> key=<key>
-// on-lock-updated   txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts<int>[,<int>]]
-// on-txn-updated    txn=<txn-name> status=[committed|aborted|pending] [ts<int>[,<int>]]
+// on-lock-updated   txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts=<int>[,<int>]]
+// on-txn-updated    txn=<txn-name> status=[committed|aborted|pending] [ts=<int>[,<int>]]
 //
 // on-lease-updated  leaseholder=<bool>
 // on-split
@@ -94,6 +94,11 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				var epoch int
 				d.ScanArgs(t, "epoch", &epoch)
 
+				maxTS := ts
+				if d.HasArg("maxts") {
+					maxTS = scanTimestampWithName(t, d, "maxts")
+				}
+
 				txn, ok := c.txnsByName[txnName]
 				var id uuid.UUID
 				if ok {
@@ -110,6 +115,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 						Priority:       1, // not min or max
 					},
 					ReadTimestamp: ts,
+					MaxTimestamp:  maxTS,
 				}
 				txn.UpdateObservedTimestamp(c.nodeDesc.NodeID, ts)
 				c.registerTxn(txnName, txn)
@@ -445,7 +451,6 @@ func (c *cluster) makeConfig() concurrency.Config {
 func (c *cluster) PushTransaction(
 	ctx context.Context, pushee *enginepb.TxnMeta, h roachpb.Header, pushType roachpb.PushTxnType,
 ) (roachpb.Transaction, *roachpb.Error) {
-	log.Eventf(ctx, "pushing txn %s", pushee.ID.Short())
 	pusheeRecord, err := c.getTxnRecord(pushee.ID)
 	if err != nil {
 		return roachpb.Transaction{}, roachpb.NewError(err)

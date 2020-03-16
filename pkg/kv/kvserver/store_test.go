@@ -1499,7 +1499,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	manual := hlc.NewManualClock(123)
-	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, 1000*time.Nanosecond))
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			pr, ok := filterArgs.Req.(*roachpb.PushTxnRequest)
