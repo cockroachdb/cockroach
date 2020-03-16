@@ -624,13 +624,17 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="cbrt"></a><code>cbrt(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the cube root (∛) of <code>val</code>.</p>
 </span></td></tr>
-<tr><td><a name="ceil"></a><code>ceil(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the smallest integer greater than <code>val</code>.</p>
+<tr><td><a name="ceil"></a><code>ceil(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the smallest integer not smaller than <code>val</code>.</p>
 </span></td></tr>
-<tr><td><a name="ceil"></a><code>ceil(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the smallest integer greater than <code>val</code>.</p>
+<tr><td><a name="ceil"></a><code>ceil(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the smallest integer not smaller than <code>val</code>.</p>
 </span></td></tr>
-<tr><td><a name="ceiling"></a><code>ceiling(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the smallest integer greater than <code>val</code>.</p>
+<tr><td><a name="ceil"></a><code>ceil(val: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the smallest integer not smaller than <code>val</code>.</p>
 </span></td></tr>
-<tr><td><a name="ceiling"></a><code>ceiling(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the smallest integer greater than <code>val</code>.</p>
+<tr><td><a name="ceiling"></a><code>ceiling(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the smallest integer not smaller than <code>val</code>.</p>
+</span></td></tr>
+<tr><td><a name="ceiling"></a><code>ceiling(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the smallest integer not smaller than <code>val</code>.</p>
+</span></td></tr>
+<tr><td><a name="ceiling"></a><code>ceiling(val: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the smallest integer not smaller than <code>val</code>.</p>
 </span></td></tr>
 <tr><td><a name="cos"></a><code>cos(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the cosine of <code>val</code>.</p>
 </span></td></tr>
@@ -659,6 +663,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="floor"></a><code>floor(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the largest integer not greater than <code>val</code>.</p>
 </span></td></tr>
 <tr><td><a name="floor"></a><code>floor(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the largest integer not greater than <code>val</code>.</p>
+</span></td></tr>
+<tr><td><a name="floor"></a><code>floor(val: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the largest integer not greater than <code>val</code>.</p>
 </span></td></tr>
 <tr><td><a name="fnv32"></a><code>fnv32(<a href="bytes.html">bytes</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the 32-bit FNV-1 hash value of a set of values.</p>
 </span></td></tr>
