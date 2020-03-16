@@ -903,7 +903,17 @@ func makeBoolGetStringValFn(varName string) getStringValFn {
 	return func(
 		ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr,
 	) (string, error) {
-		s, err := getSingleBool(varName, evalCtx, values)
+		if len(values) != 1 {
+			return "", newSingleArgVarError(varName)
+		}
+		val, err := values[0].Eval(&evalCtx.EvalContext)
+		if err != nil {
+			return "", err
+		}
+		if s, ok := val.(*tree.DString); ok {
+			return string(*s), nil
+		}
+		s, err := getSingleBool(varName, val)
 		if err != nil {
 			return "", err
 		}
@@ -1027,22 +1037,13 @@ var varNames = func() []string {
 	return res
 }()
 
-func getSingleBool(
-	name string, evalCtx *extendedEvalContext, values []tree.TypedExpr,
-) (*tree.DBool, error) {
-	if len(values) != 1 {
-		return nil, newSingleArgVarError(name)
-	}
-	val, err := values[0].Eval(&evalCtx.EvalContext)
-	if err != nil {
-		return nil, err
-	}
+func getSingleBool(name string, val tree.Datum) (*tree.DBool, error) {
 	b, ok := val.(*tree.DBool)
 	if !ok {
-		err = pgerror.Newf(pgcode.InvalidParameterValue,
+		err := pgerror.Newf(pgcode.InvalidParameterValue,
 			"parameter %q requires a Boolean value", name)
 		err = errors.WithDetailf(err,
-			"%s is a %s", values[0], errors.Safe(val.ResolvedType()))
+			"%s is a %s", val, errors.Safe(val.ResolvedType()))
 		return nil, err
 	}
 	return b, nil
