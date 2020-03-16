@@ -167,70 +167,105 @@ func TestQueryCounts(t *testing.T) {
 func TestAbortCountConflictingWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, cmdFilters := tests.CreateTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	testutils.RunTrueAndFalse(t, "retry loop", func(t *testing.T, retry bool) {
+		params, cmdFilters := tests.CreateTestServerParams()
+		s, sqlDB, _ := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(context.TODO())
 
-	accum := initializeQueryCounter(s)
+		accum := initializeQueryCounter(s)
 
-	if _, err := sqlDB.Exec("CREATE DATABASE db"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.Exec("CREATE TABLE db.t (k TEXT PRIMARY KEY, v TEXT)"); err != nil {
-		t.Fatal(err)
-	}
+		if _, err := sqlDB.Exec("CREATE DATABASE db"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.Exec("CREATE TABLE db.t (k TEXT PRIMARY KEY, v TEXT)"); err != nil {
+			t.Fatal(err)
+		}
 
-	// Inject errors on the INSERT below.
-	restarted := false
-	cmdFilters.AppendFilter(func(args storagebase.FilterArgs) *roachpb.Error {
-		switch req := args.Req.(type) {
-		// SQL INSERT generates ConditionalPuts for unique indexes (such as the PK).
-		case *roachpb.ConditionalPutRequest:
-			if bytes.Contains(req.Value.RawBytes, []byte("marker")) && !restarted {
-				restarted = true
-				return roachpb.NewErrorWithTxn(
-					roachpb.NewTransactionAbortedError(
-						roachpb.ABORT_REASON_ABORTED_RECORD_FOUND), args.Hdr.Txn)
+		// Inject errors on the INSERT below.
+		restarted := false
+		cmdFilters.AppendFilter(func(args storagebase.FilterArgs) *roachpb.Error {
+			switch req := args.Req.(type) {
+			// SQL INSERT generates ConditionalPuts for unique indexes (such as the PK).
+			case *roachpb.ConditionalPutRequest:
+				if bytes.Contains(req.Value.RawBytes, []byte("marker")) && !restarted {
+					restarted = true
+					return roachpb.NewErrorWithTxn(
+						roachpb.NewTransactionAbortedError(
+							roachpb.ABORT_REASON_ABORTED_RECORD_FOUND), args.Hdr.Txn)
+				}
+			}
+			return nil
+		}, false)
+
+		txn, err := sqlDB.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if retry {
+			if _, err := txn.Exec("SAVEPOINT cockroach_restart"); err != nil {
+				t.Fatal(err)
 			}
 		}
-		return nil
-	}, false)
+		// Run a batch of statements to move the txn out of the AutoRetry state,
+		// otherwise the INSERT below would be automatically retried.
+		if _, err := txn.Exec("SELECT 1"); err != nil {
+			t.Fatal(err)
+		}
 
-	txn, err := sqlDB.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Run a batch of statements to move the txn out of the AutoRetry state,
-	// otherwise the INSERT below would be automatically retried.
-	if _, err := txn.Exec("SELECT 1"); err != nil {
-		t.Fatal(err)
-	}
+		_, err = txn.Exec("INSERT INTO db.t VALUES ('key', 'marker')")
+		expErr := "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)"
+		if !testutils.IsError(err, regexp.QuoteMeta(expErr)) {
+			t.Fatalf("expected %s, got: %v", expErr, err)
+		}
 
-	_, err = txn.Exec("INSERT INTO db.t VALUES ('key', 'marker')")
-	expErr := "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)"
-	if !testutils.IsError(err, regexp.QuoteMeta(expErr)) {
-		t.Fatalf("expected %s, got: %v", expErr, err)
-	}
+		var expRestart, expRollback, expCommit, expAbort int64
+		if retry {
+			if _, err := txn.Exec("ROLLBACK TO SAVEPOINT cockroach_restart"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := txn.Exec("RELEASE SAVEPOINT cockroach_restart"); err != nil {
+				t.Fatal(err)
+			}
+			if err = txn.Commit(); err != nil {
+				t.Fatal(err)
+			}
 
-	if err = txn.Rollback(); err != nil {
-		t.Fatal(err)
-	}
+			expRestart = 1
+			expCommit = 1
+		} else {
+			if err = txn.Rollback(); err != nil {
+				t.Fatal(err)
+			}
 
-	if _, err := checkCounterDelta(s, sql.MetaTxnAbort, accum.txnAbortCount, 1); err != nil {
-		t.Error(err)
-	}
-	if _, err := checkCounterDelta(s, sql.MetaTxnBeginStarted, accum.txnBeginCount, 1); err != nil {
-		t.Error(err)
-	}
-	if _, err := checkCounterDelta(s, sql.MetaTxnRollbackStarted, accum.txnRollbackCount, 0); err != nil {
-		t.Error(err)
-	}
-	if _, err := checkCounterDelta(s, sql.MetaTxnCommitStarted, accum.txnCommitCount, 0); err != nil {
-		t.Error(err)
-	}
-	if _, err := checkCounterDelta(s, sql.MetaInsertStarted, accum.insertCount, 1); err != nil {
-		t.Error(err)
-	}
+			expRollback = 1
+			expAbort = 1
+		}
+
+		if _, err := checkCounterDelta(s, sql.MetaTxnBeginStarted, accum.txnBeginCount, 1); err != nil {
+			t.Error(err)
+		}
+		if _, err := checkCounterDelta(s, sql.MetaInsertStarted, accum.insertCount, 1); err != nil {
+			t.Error(err)
+		}
+		if _, err := checkCounterDelta(s, sql.MetaRestartSavepointStarted, accum.restartSavepointCount, expRestart); err != nil {
+			t.Error(err)
+		}
+		if _, err := checkCounterDelta(s, sql.MetaRollbackToRestartSavepointStarted, accum.rollbackToRestartSavepointCount, expRestart); err != nil {
+			t.Error(err)
+		}
+		if _, err := checkCounterDelta(s, sql.MetaReleaseRestartSavepointStarted, accum.releaseRestartSavepointCount, expRestart); err != nil {
+			t.Error(err)
+		}
+		if _, err := checkCounterDelta(s, sql.MetaTxnRollbackStarted, accum.txnRollbackCount, expRollback); err != nil {
+			t.Error(err)
+		}
+		if _, err := checkCounterDelta(s, sql.MetaTxnCommitStarted, accum.txnCommitCount, expCommit); err != nil {
+			t.Error(err)
+		}
+		if _, err := checkCounterDelta(s, sql.MetaTxnAbort, accum.txnAbortCount, expAbort); err != nil {
+			t.Error(err)
+		}
+	})
 }
 
 // TestErrorDuringTransaction tests that the transaction abort count goes up when a query
@@ -319,6 +354,9 @@ func TestSavepointMetrics(t *testing.T) {
 	if _, err := checkCounterDelta(s, sql.MetaSavepointStarted, accum.savepointCount, 1); err != nil {
 		t.Error(err)
 	}
+	if _, err := checkCounterDelta(s, sql.MetaTxnRollbackStarted, accum.txnRollbackCount, 1); err != nil {
+		t.Error(err)
+	}
 
 	// Custom restart savepoint names are recognized.
 	txn, err = sqlDB.Begin()
@@ -335,6 +373,9 @@ func TestSavepointMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := checkCounterDelta(s, sql.MetaRestartSavepointStarted, accum.restartSavepointCount, 2); err != nil {
+		t.Error(err)
+	}
+	if _, err := checkCounterDelta(s, sql.MetaTxnRollbackStarted, accum.txnRollbackCount, 2); err != nil {
 		t.Error(err)
 	}
 }
