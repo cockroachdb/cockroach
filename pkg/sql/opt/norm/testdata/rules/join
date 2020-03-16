@@ -1,3 +1,6 @@
+import file=tpcc_schema
+----
+
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT NOT NULL, s STRING, j JSON)
 ----
@@ -1094,6 +1097,91 @@ inner-join (hash)
  │         └── xy.x:14 = 3 [outer=(14), constraints=(/14: [/3 - /3]; tight), fd=()-->(14)]
  └── filters
       └── d.x:11 = xy.x:14 [outer=(11,14), constraints=(/11: (/NULL - ]; /14: (/NULL - ]), fd=(11)==(14), (14)==(11)]
+
+# Regression test for #46151. Do not push down a filter with a correlated
+# subquery.
+norm expect-not=PushFilterIntoJoinLeftAndRight
+SELECT (SELECT i_name FROM item LIMIT 1)
+  FROM history INNER JOIN order_line ON h_data = ol_dist_info
+ WHERE (
+        EXISTS(
+            SELECT *
+              FROM history
+             WHERE h_data IS NOT NULL AND ol_dist_info IS NOT NULL
+        )
+       )
+    OR (SELECT ol_i_id FROM order_line LIMIT 1) IS NOT NULL;
+----
+project
+ ├── columns: i_name:47
+ ├── fd: ()-->(47)
+ ├── inner-join (hash)
+ │    ├── columns: h_data:9!null ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null ol_number:13!null ol_dist_info:19!null true_agg:40
+ │    ├── fd: (10-13)-->(19,40), (9)==(19), (19)==(9)
+ │    ├── scan history
+ │    │    └── columns: h_data:9
+ │    ├── select
+ │    │    ├── columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null ol_number:13!null ol_dist_info:19 true_agg:40
+ │    │    ├── key: (10-13)
+ │    │    ├── fd: (10-13)-->(19,40)
+ │    │    ├── group-by
+ │    │    │    ├── columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null ol_number:13!null ol_dist_info:19 true_agg:40
+ │    │    │    ├── grouping columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null ol_number:13!null
+ │    │    │    ├── key: (10-13)
+ │    │    │    ├── fd: (10-13)-->(19,40)
+ │    │    │    ├── left-join (cross)
+ │    │    │    │    ├── columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null ol_number:13!null ol_dist_info:19 true:39
+ │    │    │    │    ├── fd: (10-13)-->(19)
+ │    │    │    │    ├── scan order_line
+ │    │    │    │    │    ├── columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null ol_number:13!null ol_dist_info:19
+ │    │    │    │    │    ├── key: (10-13)
+ │    │    │    │    │    └── fd: (10-13)-->(19)
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── columns: true:39!null
+ │    │    │    │    │    ├── fd: ()-->(39)
+ │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── columns: h_data:28!null
+ │    │    │    │    │    │    ├── scan history
+ │    │    │    │    │    │    │    └── columns: h_data:28
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── h_data:28 IS NOT NULL [outer=(28), constraints=(/28: (/NULL - ]; tight)]
+ │    │    │    │    │    └── projections
+ │    │    │    │    │         └── true [as=true:39]
+ │    │    │    │    └── filters
+ │    │    │    │         └── ol_dist_info:19 IS NOT NULL [outer=(19), constraints=(/19: (/NULL - ]; tight)]
+ │    │    │    └── aggregations
+ │    │    │         ├── const-not-null-agg [as=true_agg:40, outer=(39)]
+ │    │    │         │    └── true:39
+ │    │    │         └── const-agg [as=ol_dist_info:19, outer=(19)]
+ │    │    │              └── ol_dist_info:19
+ │    │    └── filters
+ │    │         └── or [outer=(40), subquery]
+ │    │              ├── true_agg:40 IS NOT NULL
+ │    │              └── is-not
+ │    │                   ├── subquery
+ │    │                   │    └── limit
+ │    │                   │         ├── columns: ol_i_id:33!null
+ │    │                   │         ├── cardinality: [0 - 1]
+ │    │                   │         ├── key: ()
+ │    │                   │         ├── fd: ()-->(33)
+ │    │                   │         ├── scan order_line
+ │    │                   │         │    ├── columns: ol_i_id:33!null
+ │    │                   │         │    └── limit hint: 1.00
+ │    │                   │         └── 1
+ │    │                   └── NULL
+ │    └── filters
+ │         └── h_data:9 = ol_dist_info:19 [outer=(9,19), constraints=(/9: (/NULL - ]; /19: (/NULL - ]), fd=(9)==(19), (19)==(9)]
+ └── projections
+      └── subquery [as=i_name:47, subquery]
+           └── limit
+                ├── columns: item.i_name:44
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(44)
+                ├── scan item
+                │    ├── columns: item.i_name:44
+                │    └── limit hint: 1.00
+                └── 1
 
 # ---------------------------------
 # MapEqualityIntoJoinLeftAndRight
