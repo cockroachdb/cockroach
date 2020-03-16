@@ -256,15 +256,17 @@ func main() {
 			log.Fatal(err)
 		}
 		if len(pkgs) > 0 {
-			// 10 minutes total seems OK, but at least a minute per test.
-			duration := (10 * time.Minute) / time.Duration(len(pkgs))
-			if duration < time.Minute {
-				duration = time.Minute
-			}
-			// Use a timeout shorter than the duration so that hanging tests don't
-			// get a free pass.
-			timeout := (3 * duration) / 4
 			for name, pkg := range pkgs {
+				// 10 minutes total seems OK, but at least a minute per test.
+				duration := (10 * time.Minute) / time.Duration(len(pkgs))
+				minDuration := time.Minute * time.Duration(len(pkg.tests))
+				if duration < minDuration {
+					duration = minDuration
+				}
+				// Use a timeout shorter than the duration so that hanging tests don't
+				// get a free pass.
+				timeout := (3 * duration) / 4
+
 				tests := "-"
 				if len(pkg.tests) > 0 {
 					tests = "(" + strings.Join(pkg.tests, "$$|") + "$$)"
