@@ -176,7 +176,7 @@ func persistProgress(
 		if err := job.SetProgress(ctx, *progress); err != nil {
 			return err
 		}
-		log.Infof(ctx, "updated progress payload %+v", progress)
+		log.Infof(ctx, "updated progress payload: %+v", progress)
 		return nil
 	}); err != nil {
 		log.Warningf(ctx, "failed to update job's progress payload err: %+v", err)

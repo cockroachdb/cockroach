@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package gcjob
+package gcjob_test
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -38,10 +39,10 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 	defer func(oldAdoptInterval, oldGCInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldAdoptInterval
-		MaxSQLGCInterval = oldGCInterval
-	}(jobs.DefaultAdoptInterval, MaxSQLGCInterval)
+		gcjob.MaxSQLGCInterval = oldGCInterval
+	}(jobs.DefaultAdoptInterval, gcjob.MaxSQLGCInterval)
 	jobs.DefaultAdoptInterval = 100 * time.Millisecond
-	MaxSQLGCInterval = 100 * time.Millisecond
+	gcjob.MaxSQLGCInterval = 500 * time.Millisecond
 
 	type DropItem int
 	const (

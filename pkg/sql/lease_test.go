@@ -526,8 +526,9 @@ func TestCantLeaseDeletedTable(testingT *testing.T) {
 				defer mu.Unlock()
 				return clearSchemaChangers
 			},
-			// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
 		},
+		// Disable GC job.
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func() { select {} }},
 	}
 
 	t := newLeaseTest(testingT, params)
@@ -616,8 +617,9 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 				defer mu.Unlock()
 				return clearSchemaChangers
 			},
-			// TODO (lucy): Turn on knob to disable GC once the GC job is implemented.
 		},
+		// Disable GC job.
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func() { select {} }},
 	}
 	s, db, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
@@ -908,11 +910,6 @@ CREATE TABLE t.foo (v INT);
 func TestTxnObeysTableModificationTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// TODO (lucy): Un-skip this test when the GC job is implemented.
-		},
-	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
@@ -1090,7 +1087,6 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	tableSpan := tableDesc.TableSpan()
 	tests.CheckKeyCount(t, kvDB, tableSpan, 4)
 
-	t.Skip("skipping last portion of test until schema change GC job is implemented")
 	// Allow async schema change waiting for GC to complete (when dropping an
 	// index) and clear the index keys.
 	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
