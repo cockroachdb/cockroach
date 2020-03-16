@@ -714,7 +714,7 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 // is enabled and the TTL has passed. If this is an admin command or this range
 // contains data outside of the user keyspace, we return the true GC threshold.
 func (r *Replica) getImpliedGCThresholdRLocked(
-	now hlc.Timestamp, st *storagepb.LeaseStatus, isAdmin bool,
+	st *storagepb.LeaseStatus, isAdmin bool,
 ) hlc.Timestamp {
 	threshold := *r.mu.state.GCThreshold
 
@@ -733,11 +733,11 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 	// user experience win; it's always safe to allow reads to continue so long
 	// as they are after the GC threshold.
 	c := r.mu.cachedProtectedTS
-	if st == nil || c.readAt.Less(st.Lease.Start) {
+	if st.State != storagepb.LeaseState_VALID || c.readAt.Less(st.Lease.Start) {
 		return threshold
 	}
 
-	impliedThreshold := gc.CalculateThreshold(now, *r.mu.zone.GC)
+	impliedThreshold := gc.CalculateThreshold(st.Timestamp, *r.mu.zone.GC)
 	threshold.Forward(impliedThreshold)
 
 	// If we have a protected timestamp record which precedes the implied
@@ -1002,7 +1002,7 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader storage.Reader) 
 // they know that they will end up checking for a pending merge at some later
 // time.
 func (r *Replica) checkExecutionCanProceed(
-	ba *roachpb.BatchRequest, g *concurrency.Guard, now hlc.Timestamp, st *storagepb.LeaseStatus,
+	ba *roachpb.BatchRequest, g *concurrency.Guard, st *storagepb.LeaseStatus,
 ) error {
 	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
@@ -1014,7 +1014,7 @@ func (r *Replica) checkExecutionCanProceed(
 		return err
 	} else if err := r.checkSpanInRangeRLocked(rSpan); err != nil {
 		return err
-	} else if err := r.checkTSAboveGCThresholdRLocked(ba.Timestamp, now, st, ba.IsAdmin()); err != nil {
+	} else if err := r.checkTSAboveGCThresholdRLocked(ba.Timestamp, st, ba.IsAdmin()); err != nil {
 		return err
 	} else if g.HoldingLatches() && st != nil {
 		// Only check for a pending merge if latches are held and the Range
@@ -1030,13 +1030,15 @@ func (r *Replica) checkExecutionCanProceed(
 func (r *Replica) checkExecutionCanProceedForRangeFeed(
 	rSpan roachpb.RSpan, ts hlc.Timestamp,
 ) error {
+	now := r.Clock().Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	status := r.leaseStatus(*r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 	if _, err := r.isDestroyedRLocked(); err != nil {
 		return err
 	} else if err := r.checkSpanInRangeRLocked(rSpan); err != nil {
 		return err
-	} else if err := r.checkTSAboveGCThresholdRLocked(ts, r.Clock().Now(), nil, false /* isAdmin */); err != nil {
+	} else if err := r.checkTSAboveGCThresholdRLocked(ts, &status, false /* isAdmin */); err != nil {
 		return err
 	} else if r.requiresExpiringLeaseRLocked() {
 		// Ensure that the range does not require an expiration-based lease. If it
@@ -1062,9 +1064,9 @@ func (r *Replica) checkSpanInRangeRLocked(rspan roachpb.RSpan) error {
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified
 // by its MVCC timestamp) can be run on the replica.
 func (r *Replica) checkTSAboveGCThresholdRLocked(
-	ts, now hlc.Timestamp, st *storagepb.LeaseStatus, isAdmin bool,
+	ts hlc.Timestamp, st *storagepb.LeaseStatus, isAdmin bool,
 ) error {
-	threshold := r.getImpliedGCThresholdRLocked(now, st, isAdmin)
+	threshold := r.getImpliedGCThresholdRLocked(st, isAdmin)
 	if threshold.Less(ts) {
 		return nil
 	}
