@@ -113,6 +113,49 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	avroJSONRecords:        sql.KVStringOptRequireNoValue,
 }
 
+func allowOptions(opts ...string) map[string]struct{} {
+	res := make(map[string]struct{}, len(opts))
+	for _, opt := range opts {
+		res[opt] = struct{}{}
+	}
+	return res
+}
+
+// Options common to all formats.
+var allowedCommonOptions = allowOptions(
+	importOptionSSTSize, importOptionDecompress, importOptionOversample,
+	importOptionSaveRejected, importOptionDisableGlobMatch)
+
+// Format specific allowed options.
+var avroAllowedOptions = allowOptions(
+	avroStrict, avroBinRecords, avroJSONRecords,
+	avroRecordsSeparatedBy, avroSchema, avroSchemaURI, optMaxRowSize,
+)
+var csvAllowedOptions = allowOptions(
+	csvDelimiter, csvComment, csvNullIf, csvSkip, csvStrictQuotes,
+)
+var mysqlOutAllowedOptions = allowOptions(
+	mysqlOutfileRowSep, mysqlOutfileFieldSep, mysqlOutfileEnclose,
+	mysqlOutfileEscape, csvNullIf, csvSkip,
+)
+var mysqlDumpAllowedOptions = allowOptions(importOptionSkipFKs)
+var pgCopyAllowedOptions = allowOptions(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
+var pgDumpAllowedOptions = allowOptions(optMaxRowSize, importOptionSkipFKs)
+
+func validateFormatOptions(
+	format string, specified map[string]string, formatAllowed map[string]struct{},
+) error {
+	for opt := range specified {
+		if _, ok := formatAllowed[opt]; !ok {
+			if _, ok = allowedCommonOptions[opt]; !ok {
+				return errors.Errorf(
+					"invalid option %q specified for %s import format", opt, format)
+			}
+		}
+	}
+	return nil
+}
+
 func importJobDescription(
 	p sql.PlanHookState,
 	orig *tree.Import,
@@ -272,6 +315,9 @@ func importPlanHook(
 		format := roachpb.IOFileFormat{}
 		switch importStmt.FileFormat {
 		case "CSV":
+			if err = validateFormatOptions(importStmt.FileFormat, opts, csvAllowedOptions); err != nil {
+				return err
+			}
 			telemetry.Count("import.format.csv")
 			format.Format = roachpb.IOFileFormat_CSV
 			// Set the default CSV separator for the cases when it is not overwritten.
@@ -313,6 +359,9 @@ func importPlanHook(
 				format.SaveRejected = true
 			}
 		case "DELIMITED":
+			if err = validateFormatOptions(importStmt.FileFormat, opts, mysqlOutAllowedOptions); err != nil {
+				return err
+			}
 			telemetry.Count("import.format.mysqlout")
 			format.Format = roachpb.IOFileFormat_MysqlOutfile
 			format.MysqlOut = roachpb.MySQLOutfileOptions{
@@ -370,9 +419,15 @@ func importPlanHook(
 				format.SaveRejected = true
 			}
 		case "MYSQLDUMP":
+			if err = validateFormatOptions(importStmt.FileFormat, opts, mysqlDumpAllowedOptions); err != nil {
+				return err
+			}
 			telemetry.Count("import.format.mysqldump")
 			format.Format = roachpb.IOFileFormat_Mysqldump
 		case "PGCOPY":
+			if err = validateFormatOptions(importStmt.FileFormat, opts, pgCopyAllowedOptions); err != nil {
+				return err
+			}
 			telemetry.Count("import.format.pgcopy")
 			format.Format = roachpb.IOFileFormat_PgCopy
 			format.PgCopy = roachpb.PgCopyOptions{
@@ -402,6 +457,9 @@ func importPlanHook(
 			}
 			format.PgCopy.MaxRowSize = maxRowSize
 		case "PGDUMP":
+			if err = validateFormatOptions(importStmt.FileFormat, opts, pgDumpAllowedOptions); err != nil {
+				return err
+			}
 			telemetry.Count("import.format.pgdump")
 			format.Format = roachpb.IOFileFormat_PgDump
 			maxRowSize := int32(defaultScanBuffer)
@@ -417,6 +475,9 @@ func importPlanHook(
 			}
 			format.PgDump.MaxRowSize = maxRowSize
 		case "AVRO":
+			if err = validateFormatOptions(importStmt.FileFormat, opts, avroAllowedOptions); err != nil {
+				return err
+			}
 			err := parseAvroOptions(ctx, opts, p, &format)
 			if err != nil {
 				return err
