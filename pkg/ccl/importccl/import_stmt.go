@@ -657,6 +657,7 @@ func importPlanHook(
 			Details:     importDetails,
 			Progress:    jobspb.ImportProgress{},
 		}
+
 		var sj *jobs.StartableJob
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, resultsCh)
@@ -681,11 +682,7 @@ func importPlanHook(
 			}
 			return err
 		}
-		errCh, err := sj.Start(ctx)
-		if err != nil {
-			return err
-		}
-		return <-errCh
+		return sj.Run(ctx)
 	}
 	return fn, backupccl.RestoreHeader, nil, false, nil
 }

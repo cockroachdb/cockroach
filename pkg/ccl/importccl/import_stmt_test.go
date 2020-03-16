@@ -51,7 +51,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -3779,4 +3781,99 @@ func TestImportAvro(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestImportClientDisconnect ensures that an import job can complete even if
+// the client connection which started it closes. This test uses a helper
+// subprocess to force a closed client connection without needing to rely
+// on the driver to close a TCP connection. See TestImportClientDisconnectHelper
+// for the subprocess.
+func TestImportClientDisconnect(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	args := base.TestClusterArgs{}
+	tc := testcluster.StartTestCluster(t, 1, args)
+	defer tc.Stopper().Stop(ctx)
+
+	tc.WaitForNodeLiveness(t)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	conn := tc.ServerConn(0)
+	runner := sqlutils.MakeSQLRunner(conn)
+	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '100ms';")
+
+	// Make a server that will tell us when somebody has sent a request, wait to
+	// be signaled, and then serve a CSV row for our table.
+	allowResponse := make(chan struct{})
+	gotRequest := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			return
+		}
+		select {
+		case gotRequest <- struct{}{}:
+		default:
+		}
+		select {
+		case <-allowResponse:
+		case <-ctx.Done(): // Deal with test failures.
+		}
+		_, _ = w.Write([]byte("1,asdfasdfasdfasdf"))
+	}))
+	defer srv.Close()
+
+	// Make credentials for the new connection.
+	runner.Exec(t, `CREATE USER testuser`)
+	runner.Exec(t, `GRANT admin TO testuser`)
+	pgURL, cleanup := sqlutils.PGUrl(t, tc.Server(0).ServingSQLAddr(),
+		"TestImportClientDisconnect-testuser", url.User("testuser"))
+	defer cleanup()
+
+	// Kick off the import on a new connection which we're going to close.
+	done := make(chan struct{})
+	ctxToCancel, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		defer close(done)
+		connCfg, err := pgx.ParseConnectionString(pgURL.String())
+		assert.NoError(t, err)
+		db, err := pgx.Connect(connCfg)
+		assert.NoError(t, err)
+		defer func() { _ = db.Close() }()
+		_, err = db.ExecEx(ctxToCancel, `IMPORT TABLE foo (k INT PRIMARY KEY, v STRING) CSV DATA ($1)`,
+			nil /* options */, srv.URL)
+		assert.Equal(t, context.Canceled, err)
+	}()
+
+	// Wait for the import job to start.
+	var jobID string
+	testutils.SucceedsSoon(t, func() error {
+		row := conn.QueryRow("SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT' ORDER BY created DESC LIMIT 1")
+		return row.Scan(&jobID)
+	})
+
+	// Wait for it to actually start.
+	<-gotRequest
+
+	// Cancel the import context and wait for the goroutine to exit.
+	cancel()
+	<-done
+
+	// Allow the import to proceed.
+	close(allowResponse)
+
+	// Wait for the job to get marked as succeeded.
+	testutils.SucceedsSoon(t, func() error {
+		var status string
+		if err := conn.QueryRow("SELECT status FROM [SHOW JOB " + jobID + "]").Scan(&status); err != nil {
+			return err
+		}
+		const succeeded = "succeeded"
+		if status != succeeded {
+			return errors.Errorf("expected %s, got %v", succeeded, status)
+		}
+		return nil
+	})
 }

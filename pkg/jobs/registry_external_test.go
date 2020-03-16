@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -128,7 +129,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 		hookCallCount++
 		lock.Unlock()
 		return jobs.FakeResumer{
-			OnResume: func(ctx context.Context) error {
+			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -246,7 +247,7 @@ func TestRegistryResumeActiveLease(t *testing.T) {
 	defer jobs.ResetConstructors()()
 	jobs.RegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
-			OnResume: func(ctx context.Context) error {
+			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
