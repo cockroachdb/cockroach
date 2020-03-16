@@ -227,6 +227,17 @@ func (ag *aggregatorBase) Child(nth int, verbose bool) execinfra.OpNode {
 	panic(fmt.Sprintf("invalid index %d", nth))
 }
 
+const (
+	// hashAggregatorBucketsInitialLen is a guess on how many "items" the
+	// 'buckets' map of hashAggregator has the capacity for initially.
+	hashAggregatorBucketsInitialLen = 8
+	// hashAggregatorSizeOfBucketsItem is a guess on how much space (in bytes)
+	// each item added to 'buckets' map of hashAggregator takes up in the map
+	// (i.e. it is memory internal to the map, orthogonal to "key-value" pair
+	// that we're adding to the map).
+	hashAggregatorSizeOfBucketsItem = 64
+)
+
 // hashAggregator is a specialization of aggregatorBase that must keep track of
 // multiple grouping buckets at a time.
 type hashAggregator struct {
@@ -237,6 +248,14 @@ type hashAggregator struct {
 	// bucketsIter for iteration.
 	buckets     map[string]aggregateFuncs
 	bucketsIter []string
+	// bucketsLenGrowThreshold is the threshold which, when reached by the
+	// number of items in 'buckets', will trigger the update to memory
+	// accounting. It will start out at hashAggregatorBucketsInitialLen and
+	// then will be doubling in size.
+	bucketsLenGrowThreshold int
+	// alreadyAccountedFor tracks the number of items in 'buckets' memory for
+	// which we have already accounted for.
+	alreadyAccountedFor int
 }
 
 // orderedAggregator is a specialization of aggregatorBase that only needs to
@@ -292,7 +311,10 @@ func newAggregator(
 		return newOrderedAggregator(flowCtx, processorID, spec, input, post, output)
 	}
 
-	ag := &hashAggregator{buckets: make(map[string]aggregateFuncs)}
+	ag := &hashAggregator{
+		buckets:                 make(map[string]aggregateFuncs),
+		bucketsLenGrowThreshold: hashAggregatorBucketsInitialLen,
+	}
 
 	if err := ag.init(
 		ag,
@@ -439,7 +461,7 @@ func (ag *hashAggregator) accumulateRows() (
 				return aggStateUnknown, nil, nil
 			}
 			if !matched {
-				ag.lastOrdGroupCols = ag.rowAlloc.CopyRow(row)
+				copy(ag.lastOrdGroupCols, row)
 				break
 			}
 		}
@@ -460,6 +482,12 @@ func (ag *hashAggregator) accumulateRows() (
 		ag.buckets[""] = bucket
 	}
 
+	// Note that, for simplicity, we're ignoring the overhead of the slice of
+	// strings.
+	if err := ag.bucketsAcc.Grow(ag.Ctx, int64(len(ag.buckets))*sizeOfString); err != nil {
+		ag.MoveToDraining(err)
+		return aggStateUnknown, nil, nil
+	}
 	ag.bucketsIter = make([]string, 0, len(ag.buckets))
 	for bucket := range ag.buckets {
 		ag.bucketsIter = append(ag.bucketsIter, bucket)
@@ -502,7 +530,7 @@ func (ag *orderedAggregator) accumulateRows() (
 				return aggStateUnknown, nil, nil
 			}
 			if !matched {
-				ag.lastOrdGroupCols = ag.rowAlloc.CopyRow(row)
+				copy(ag.lastOrdGroupCols, row)
 				break
 			}
 		}
@@ -579,8 +607,16 @@ func (ag *hashAggregator) emitRow() (
 			ag.MoveToDraining(err)
 			return aggStateUnknown, nil, nil
 		}
+		// Before we create a new 'buckets' map below, we need to "release" the
+		// already accounted for memory of the current map.
+		ag.bucketsAcc.Shrink(ag.Ctx, int64(ag.alreadyAccountedFor)*hashAggregatorSizeOfBucketsItem)
+		// Note that, for simplicity, we're ignoring the overhead of the slice of
+		// strings.
+		ag.bucketsAcc.Shrink(ag.Ctx, int64(len(ag.buckets))*sizeOfString)
 		ag.bucketsIter = nil
 		ag.buckets = make(map[string]aggregateFuncs)
+		ag.bucketsLenGrowThreshold = hashAggregatorBucketsInitialLen
+		ag.alreadyAccountedFor = 0
 		for _, f := range ag.funcs {
 			if f.seen != nil {
 				f.seen = make(map[string]struct{})
@@ -705,6 +741,7 @@ func (ag *orderedAggregator) ConsumerClosed() {
 func (ag *aggregatorBase) accumulateRowIntoBucket(
 	row sqlbase.EncDatumRow, groupKey []byte, bucket aggregateFuncs,
 ) error {
+	var err error
 	// Feed the func holders for this bucket the non-grouping datums.
 	for i, a := range ag.aggregations {
 		if a.FilterColIdx != nil {
@@ -740,9 +777,12 @@ func (ag *aggregatorBase) accumulateRowIntoBucket(
 			otherArgs[j-1] = row[c].Datum
 		}
 
-		canAdd, err := ag.funcs[i].canAdd(ag.Ctx, groupKey, firstArg, otherArgs)
-		if err != nil {
-			return err
+		canAdd := true
+		if a.Distinct {
+			canAdd, err = ag.funcs[i].isDistinct(ag.Ctx, groupKey, firstArg, otherArgs)
+			if err != nil {
+				return err
+			}
 		}
 		if !canAdd {
 			continue
@@ -780,6 +820,14 @@ func (ag *hashAggregator) accumulateRow(row sqlbase.EncDatumRow) error {
 			return err
 		}
 		ag.buckets[s] = bucket
+		if len(ag.buckets) == ag.bucketsLenGrowThreshold {
+			toAccountFor := ag.bucketsLenGrowThreshold - ag.alreadyAccountedFor
+			if err := ag.bucketsAcc.Grow(ag.Ctx, int64(toAccountFor)*hashAggregatorSizeOfBucketsItem); err != nil {
+				return err
+			}
+			ag.alreadyAccountedFor = ag.bucketsLenGrowThreshold
+			ag.bucketsLenGrowThreshold *= 2
+		}
 	}
 
 	return ag.accumulateRowIntoBucket(row, encoded, bucket)
@@ -815,7 +863,11 @@ type aggregateFuncHolder struct {
 	arena *stringarena.Arena
 }
 
-const sizeOfAggregateFunc = int64(unsafe.Sizeof(tree.AggregateFunc(nil)))
+const (
+	sizeOfString         = int64(unsafe.Sizeof(""))
+	sizeOfAggregateFuncs = int64(unsafe.Sizeof(aggregateFuncs{}))
+	sizeOfAggregateFunc  = int64(unsafe.Sizeof(tree.AggregateFunc(nil)))
+)
 
 func (ag *aggregatorBase) newAggregateFuncHolder(
 	create func(*tree.EvalContext, tree.Datums) tree.AggregateFunc, arguments tree.Datums,
@@ -828,33 +880,35 @@ func (ag *aggregatorBase) newAggregateFuncHolder(
 	}
 }
 
-func (a *aggregateFuncHolder) canAdd(
+// isDistinct returns whether this aggregateFuncHolder has not already seen the
+// encoding of grouping columns and argument columns. It should be used *only*
+// when we have DISTINCT aggregation so that we can aggregate only the "first"
+// row in the group.
+func (a *aggregateFuncHolder) isDistinct(
 	ctx context.Context, encodingPrefix []byte, firstArg tree.Datum, otherArgs tree.Datums,
 ) (bool, error) {
-	if a.seen != nil {
-		encoded, err := sqlbase.EncodeDatumKeyAscending(encodingPrefix, firstArg)
+	encoded, err := sqlbase.EncodeDatumKeyAscending(encodingPrefix, firstArg)
+	if err != nil {
+		return false, err
+	}
+	// Encode additional arguments if necessary.
+	if otherArgs != nil {
+		encoded, err = sqlbase.EncodeDatumsKeyAscending(encoded, otherArgs)
 		if err != nil {
 			return false, err
 		}
-		// Encode additional arguments if necessary.
-		if otherArgs != nil {
-			encoded, err = sqlbase.EncodeDatumsKeyAscending(encoded, otherArgs)
-			if err != nil {
-				return false, err
-			}
-		}
-
-		if _, ok := a.seen[string(encoded)]; ok {
-			// skip
-			return false, nil
-		}
-		s, err := a.arena.AllocBytes(ctx, encoded)
-		if err != nil {
-			return false, err
-		}
-		a.seen[s] = struct{}{}
 	}
 
+	if _, ok := a.seen[string(encoded)]; ok {
+		// We have already seen a row with such combination of grouping and
+		// argument columns.
+		return false, nil
+	}
+	s, err := a.arena.AllocBytes(ctx, encoded)
+	if err != nil {
+		return false, err
+	}
+	a.seen[s] = struct{}{}
 	return true, nil
 }
 
@@ -874,7 +928,7 @@ func (ag *aggregatorBase) encode(
 }
 
 func (ag *aggregatorBase) createAggregateFuncs() (aggregateFuncs, error) {
-	if err := ag.bucketsAcc.Grow(ag.Ctx, sizeOfAggregateFunc*int64(len(ag.funcs))); err != nil {
+	if err := ag.bucketsAcc.Grow(ag.Ctx, sizeOfAggregateFuncs+sizeOfAggregateFunc*int64(len(ag.funcs))); err != nil {
 		return nil, err
 	}
 	bucket := make(aggregateFuncs, len(ag.funcs))
