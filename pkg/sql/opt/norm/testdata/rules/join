@@ -1,3 +1,6 @@
+import file=tpcc_schema
+----
+
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT NOT NULL, s STRING, j JSON)
 ----
@@ -1094,6 +1097,149 @@ inner-join (hash)
  │         └── xy.x:14 = 3 [outer=(14), constraints=(/14: [/3 - /3]; tight), fd=()-->(14)]
  └── filters
       └── d.x:11 = xy.x:14 [outer=(11,14), constraints=(/11: (/NULL - ]; /14: (/NULL - ]), fd=(11)==(14), (14)==(11)]
+
+# Regression test for #46151. Do not push down a filter with a correlated
+# subquery.
+norm expect-not=PushFilterIntoJoinLeftAndRight
+SELECT
+  subq_0.c0 AS c0,
+  subq_0.c0 AS c1,
+  subq_0.c0 AS c2,
+  subq_0.c0 AS c3,
+  CASE
+  WHEN subq_0.c1 IS NOT NULL THEN subq_0.c0
+  ELSE subq_0.c0
+  END
+    AS c4
+FROM
+  (
+    SELECT
+      ref_0.h_data AS c0,
+      (SELECT i_name FROM item LIMIT 1 OFFSET 6) AS c1
+    FROM
+      history AS ref_0
+      INNER JOIN order_line AS ref_1 ON
+          (ref_0.h_data = ref_1.ol_dist_info)
+    WHERE
+      (
+        EXISTS(
+          SELECT
+            ref_2.h_amount AS c0,
+            ref_2.h_c_w_id AS c1,
+            ref_2.h_c_d_id AS c2
+          FROM
+            history AS ref_2
+          WHERE
+            (ref_2.h_data IS NOT NULL)
+            AND (ref_1.ol_dist_info IS NOT NULL)
+        )
+      )
+      OR (
+          (SELECT ol_i_id FROM order_line LIMIT 1 OFFSET 6)
+          IS NOT NULL
+        )
+    LIMIT
+      2
+  )
+    AS subq_0
+WHERE
+  subq_0.c1 IS NULL
+LIMIT
+  6
+----
+project
+ ├── columns: c0:9!null c1:9!null c2:9!null c3:9!null c4:48!null
+ ├── cardinality: [0 - 2]
+ ├── fd: (9)-->(48)
+ ├── select
+ │    ├── columns: ref_0.h_data:9!null c1:47
+ │    ├── cardinality: [0 - 2]
+ │    ├── fd: ()-->(47)
+ │    ├── project
+ │    │    ├── columns: c1:47 ref_0.h_data:9!null
+ │    │    ├── cardinality: [0 - 2]
+ │    │    ├── fd: ()-->(47)
+ │    │    ├── limit
+ │    │    │    ├── columns: ref_0.h_data:9!null ref_1.ol_o_id:10!null ref_1.ol_d_id:11!null ref_1.ol_w_id:12!null ref_1.ol_number:13!null ref_1.ol_dist_info:19!null true_agg:40
+ │    │    │    ├── cardinality: [0 - 2]
+ │    │    │    ├── fd: (10-13)-->(19,40), (9)==(19), (19)==(9)
+ │    │    │    ├── inner-join (hash)
+ │    │    │    │    ├── columns: ref_0.h_data:9!null ref_1.ol_o_id:10!null ref_1.ol_d_id:11!null ref_1.ol_w_id:12!null ref_1.ol_number:13!null ref_1.ol_dist_info:19!null true_agg:40
+ │    │    │    │    ├── fd: (10-13)-->(19,40), (9)==(19), (19)==(9)
+ │    │    │    │    ├── limit hint: 2.00
+ │    │    │    │    ├── scan ref_0
+ │    │    │    │    │    └── columns: ref_0.h_data:9
+ │    │    │    │    ├── select
+ │    │    │    │    │    ├── columns: ref_1.ol_o_id:10!null ref_1.ol_d_id:11!null ref_1.ol_w_id:12!null ref_1.ol_number:13!null ref_1.ol_dist_info:19 true_agg:40
+ │    │    │    │    │    ├── key: (10-13)
+ │    │    │    │    │    ├── fd: (10-13)-->(19,40)
+ │    │    │    │    │    ├── group-by
+ │    │    │    │    │    │    ├── columns: ref_1.ol_o_id:10!null ref_1.ol_d_id:11!null ref_1.ol_w_id:12!null ref_1.ol_number:13!null ref_1.ol_dist_info:19 true_agg:40
+ │    │    │    │    │    │    ├── grouping columns: ref_1.ol_o_id:10!null ref_1.ol_d_id:11!null ref_1.ol_w_id:12!null ref_1.ol_number:13!null
+ │    │    │    │    │    │    ├── key: (10-13)
+ │    │    │    │    │    │    ├── fd: (10-13)-->(19,40)
+ │    │    │    │    │    │    ├── left-join (cross)
+ │    │    │    │    │    │    │    ├── columns: ref_1.ol_o_id:10!null ref_1.ol_d_id:11!null ref_1.ol_w_id:12!null ref_1.ol_number:13!null ref_1.ol_dist_info:19 true:39
+ │    │    │    │    │    │    │    ├── fd: (10-13)-->(19)
+ │    │    │    │    │    │    │    ├── scan ref_1
+ │    │    │    │    │    │    │    │    ├── columns: ref_1.ol_o_id:10!null ref_1.ol_d_id:11!null ref_1.ol_w_id:12!null ref_1.ol_number:13!null ref_1.ol_dist_info:19
+ │    │    │    │    │    │    │    │    ├── key: (10-13)
+ │    │    │    │    │    │    │    │    └── fd: (10-13)-->(19)
+ │    │    │    │    │    │    │    ├── project
+ │    │    │    │    │    │    │    │    ├── columns: true:39!null
+ │    │    │    │    │    │    │    │    ├── fd: ()-->(39)
+ │    │    │    │    │    │    │    │    ├── select
+ │    │    │    │    │    │    │    │    │    ├── columns: ref_2.h_data:28!null
+ │    │    │    │    │    │    │    │    │    ├── scan ref_2
+ │    │    │    │    │    │    │    │    │    │    └── columns: ref_2.h_data:28
+ │    │    │    │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │    │    │    │         └── ref_2.h_data:28 IS NOT NULL [outer=(28), constraints=(/28: (/NULL - ]; tight)]
+ │    │    │    │    │    │    │    │    └── projections
+ │    │    │    │    │    │    │    │         └── true [as=true:39]
+ │    │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │    │         └── ref_1.ol_dist_info:19 IS NOT NULL [outer=(19), constraints=(/19: (/NULL - ]; tight)]
+ │    │    │    │    │    │    └── aggregations
+ │    │    │    │    │    │         ├── const-not-null-agg [as=true_agg:40, outer=(39)]
+ │    │    │    │    │    │         │    └── true:39
+ │    │    │    │    │    │         └── const-agg [as=ref_1.ol_dist_info:19, outer=(19)]
+ │    │    │    │    │    │              └── ref_1.ol_dist_info:19
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── or [outer=(40), subquery]
+ │    │    │    │    │              ├── true_agg:40 IS NOT NULL
+ │    │    │    │    │              └── is-not
+ │    │    │    │    │                   ├── subquery
+ │    │    │    │    │                   │    └── offset
+ │    │    │    │    │                   │         ├── columns: order_line.ol_i_id:33!null
+ │    │    │    │    │                   │         ├── cardinality: [0 - 1]
+ │    │    │    │    │                   │         ├── limit
+ │    │    │    │    │                   │         │    ├── columns: order_line.ol_i_id:33!null
+ │    │    │    │    │                   │         │    ├── cardinality: [0 - 7]
+ │    │    │    │    │                   │         │    ├── scan order_line
+ │    │    │    │    │                   │         │    │    ├── columns: order_line.ol_i_id:33!null
+ │    │    │    │    │                   │         │    │    └── limit hint: 7.00
+ │    │    │    │    │                   │         │    └── 7
+ │    │    │    │    │                   │         └── 6
+ │    │    │    │    │                   └── NULL
+ │    │    │    │    └── filters
+ │    │    │    │         └── ref_0.h_data:9 = ref_1.ol_dist_info:19 [outer=(9,19), constraints=(/9: (/NULL - ]; /19: (/NULL - ]), fd=(9)==(19), (19)==(9)]
+ │    │    │    └── 2
+ │    │    └── projections
+ │    │         └── subquery [as=c1:47, subquery]
+ │    │              └── offset
+ │    │                   ├── columns: i_name:44
+ │    │                   ├── cardinality: [0 - 1]
+ │    │                   ├── limit
+ │    │                   │    ├── columns: i_name:44
+ │    │                   │    ├── cardinality: [0 - 7]
+ │    │                   │    ├── scan item
+ │    │                   │    │    ├── columns: i_name:44
+ │    │                   │    │    └── limit hint: 7.00
+ │    │                   │    └── 7
+ │    │                   └── 6
+ │    └── filters
+ │         └── c1:47 IS NULL [outer=(47), constraints=(/47: [/NULL - /NULL]; tight), fd=()-->(47)]
+ └── projections
+      └── CASE WHEN c1:47 IS NOT NULL THEN ref_0.h_data:9 ELSE ref_0.h_data:9 END [as=c4:48, outer=(9,47)]
 
 # ---------------------------------
 # MapEqualityIntoJoinLeftAndRight

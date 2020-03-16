@@ -1365,9 +1365,11 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 
 	case *SubqueryExpr, *ExistsExpr, *AnyExpr, *ArrayFlattenExpr:
 		shared.HasSubquery = true
-		shared.HasCorrelatedSubquery = !e.Child(0).(RelExpr).Relational().OuterCols.Empty()
-		if t.Op() == opt.AnyOp && !shared.HasCorrelatedSubquery {
-			shared.HasCorrelatedSubquery = hasOuterCols(e.Child(1))
+		if hasOuterCols(e.Child(0)) {
+			shared.HasCorrelatedSubquery = true
+		}
+		if t.Op() == opt.AnyOp && hasOuterCols(e.Child(1)) {
+			shared.HasCorrelatedSubquery = true
 		}
 
 	case *FunctionExpr:
