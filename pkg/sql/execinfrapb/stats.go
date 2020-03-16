@@ -12,6 +12,9 @@ package execinfrapb
 
 import "github.com/cockroachdb/cockroach/pkg/util/tracing"
 
+// FlowIDTagKey is the key used for flow id tags in tracing spans.
+const FlowIDTagKey = tracing.TagPrefix + "flowid"
+
 // StreamIDTagKey is the key used for stream id tags in tracing spans.
 const StreamIDTagKey = tracing.TagPrefix + "streamid"
 
