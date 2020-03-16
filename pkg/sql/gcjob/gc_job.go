@@ -31,36 +31,52 @@ var (
 	MaxSQLGCInterval = 5 * time.Minute
 )
 
+// SetSmallMaxGCIntervalForTest sets the MaxSQLGCInterval and then returns a closure
+// that resets it.
+// This is to be used in tests like:
+//    defer SetSmallMaxGCIntervalForTest()
+func SetSmallMaxGCIntervalForTest() func() {
+	oldInterval := MaxSQLGCInterval
+	MaxSQLGCInterval = 500 * time.Millisecond
+	return func() {
+		MaxSQLGCInterval = oldInterval
+	}
+}
+
 type schemaChangeGCResumer struct {
 	jobID int64
 }
 
+// performGC GCs any schema elements that are in the DELETING state and returns
+// a bool indicating if it GC'd any elements.
 func performGC(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	jobID int64,
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
-) error {
+) (bool, error) {
+	didGC := false
 	if details.Indexes != nil {
-		if err := gcIndexes(ctx, execCfg, details.ParentID, progress); err != nil {
-			return errors.Wrap(err, "attempting to GC indexes")
+		if didGCIndex, err := gcIndexes(ctx, execCfg, details.ParentID, progress); err != nil {
+			return false, errors.Wrap(err, "attempting to GC indexes")
+		} else if didGCIndex {
+			didGC = true
 		}
 	} else if details.Tables != nil {
-		if err := gcTables(ctx, execCfg, progress); err != nil {
-			return errors.Wrap(err, "attempting to GC tables")
+		if didGCTable, err := gcTables(ctx, execCfg, progress); err != nil {
+			return false, errors.Wrap(err, "attempting to GC tables")
+		} else if didGCTable {
+			didGC = true
 		}
 
 		// Drop database zone config when all the tables have been GCed.
 		if details.ParentID != sqlbase.InvalidID && isDoneGC(progress) {
 			if err := deleteDatabaseZoneConfig(ctx, execCfg.DB, details.ParentID); err != nil {
-				return errors.Wrap(err, "deleting database zone config")
+				return false, errors.Wrap(err, "deleting database zone config")
 			}
 		}
 	}
-
-	persistProgress(ctx, execCfg, jobID, progress)
-	return nil
+	return didGC, nil
 }
 
 // Resume is part of the jobs.Resumer interface.
@@ -70,6 +86,9 @@ func (r schemaChangeGCResumer) Resume(
 	p := phs.(sql.PlanHookState)
 	// TODO(pbardea): Wait for no versions.
 	execCfg := p.ExecCfg()
+	if fn := execCfg.GCJobTestingKnobs.RunBeforeResume; fn != nil {
+		fn()
+	}
 	details, progress, err := initDetailsAndProgress(ctx, execCfg, r.jobID)
 	if err != nil {
 		return err
@@ -79,7 +98,7 @@ func (r schemaChangeGCResumer) Resume(
 
 	allTables := getAllTablesWaitingForGC(details, progress)
 	expired, earliestDeadline := refreshTables(ctx, execCfg, allTables, tableDropTimes, indexDropTimes, r.jobID, progress)
-	timerDuration := time.Until(earliestDeadline)
+	timerDuration := timeutil.Until(earliestDeadline)
 	if expired {
 		timerDuration = 0
 	} else if timerDuration > MaxSQLGCInterval {
@@ -118,9 +137,12 @@ func (r schemaChangeGCResumer) Resume(
 			remainingTables := getAllTablesWaitingForGC(details, progress)
 			_, earliestDeadline = refreshTables(ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, progress)
 
-			if err := performGC(ctx, execCfg, r.jobID, details, progress); err != nil {
+			if didWork, err := performGC(ctx, execCfg, details, progress); err != nil {
 				return err
+			} else if didWork {
+				persistProgress(ctx, execCfg, r.jobID, progress)
 			}
+
 			if isDoneGC(progress) {
 				return nil
 			}
