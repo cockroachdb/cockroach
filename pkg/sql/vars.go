@@ -447,8 +447,8 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`experimental_optimizer_foreign_keys`: {
-		GetStringVal: makeBoolGetStringValFn(`experimental_optimizer_foreign_keys`),
+	`optimizer_foreign_keys`: {
+		GetStringVal: makeBoolGetStringValFn(`optimizer_foreign_keys`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			b, err := parsePostgresBool(s)
 			if err != nil {
