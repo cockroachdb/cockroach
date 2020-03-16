@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -315,6 +316,9 @@ type planTop struct {
 	avoidBuffering bool
 
 	instrumentation planInstrumentation
+
+	// If we are collecting query diagnostics, flow diagrams are saved here.
+	distSQLDiagrams []execinfrapb.FlowDiagram
 }
 
 // postquery is a query tree that is executed after the main one. It can only
