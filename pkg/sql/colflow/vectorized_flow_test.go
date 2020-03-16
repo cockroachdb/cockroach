@@ -210,11 +210,12 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	f := &flowinfra.FlowBase{FlowCtx: execinfra.FlowCtx{EvalCtx: &evalCtx, NodeID: roachpb.NodeID(1)}}
 	var wg sync.WaitGroup
-	vfc := newVectorizedFlowCreator(&vectorizedFlowCreatorHelper{f: f}, componentCreator, false, &wg, &execinfra.RowChannel{}, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, nil)
+	vfc := newVectorizedFlowCreator(&vectorizedFlowCreatorHelper{f: f}, componentCreator, false, &wg, &execinfra.RowChannel{}, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, nil, colexec.NewMonitorRegistry(&f.FlowCtx))
 
+	// TODO(azhng): come back and double check to see if we should use different api
 	_, err := vfc.setupFlow(ctx, &f.FlowCtx, procs, flowinfra.FuseNormally)
 	defer func() {
-		for _, memAcc := range vfc.streamingMemAccounts {
+		for _, memAcc := range vfc.monitorRegistry.StreamingMemAccounts {
 			memAcc.Close(ctx)
 		}
 	}()

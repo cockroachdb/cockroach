@@ -303,5 +303,6 @@ func createDiskBackedHashJoiner(
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions
 	result, err := NewColOperator(ctx, flowCtx, args)
-	return result.Op, result.BufferingOpMemAccounts, result.BufferingOpMemMonitors, err
+	// TODO(azhng): Use Merge
+	return result.Op, result.MonitorRegistry.BufferingMemAccounts, result.MonitorRegistry.BufferingMemMonitors, err
 }

@@ -348,5 +348,6 @@ func createDiskBackedSorter(
 	args.TestingKnobs.NumForcedRepartitions = maxNumberPartitions
 	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions
 	result, err := NewColOperator(ctx, flowCtx, args)
-	return result.Op, result.BufferingOpMemAccounts, result.BufferingOpMemMonitors, err
+	// TODO(azhng): use Merge()
+	return result.Op, result.MonitorRegistry.BufferingMemAccounts, result.MonitorRegistry.BufferingMemMonitors, err
 }
