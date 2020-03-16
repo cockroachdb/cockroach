@@ -1,6 +1,6 @@
 # The tests in this file target the legacy FK paths.
 statement ok
-SET experimental_optimizer_foreign_keys = false
+SET optimizer_foreign_keys = false
 
 # Disable automatic stats to avoid flakiness.
 statement ok

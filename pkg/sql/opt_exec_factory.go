@@ -1095,7 +1095,7 @@ FROM
 
 	for _, param := range []string{
 		"enable_zigzag_join",
-		"experimental_optimizer_foreign_keys",
+		"optimizer_foreign_keys",
 	} {
 		value, err := ef.environmentQuery(fmt.Sprintf("SHOW %s", param))
 		if err != nil {

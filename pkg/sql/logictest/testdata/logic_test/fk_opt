@@ -3,7 +3,7 @@
 # The tests in this file target the new optimizer-driven FK paths (with
 # fall back on the legacy paths for unsupported cases).
 statement ok
-SET experimental_optimizer_foreign_keys = true
+SET optimizer_foreign_keys = true
 
 # Randomize the use of insert fast path.
 # The let statement will also log the value.
