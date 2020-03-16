@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -123,7 +122,7 @@ func TestPurgeOldVersions(t *testing.T) {
 	serverParams := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLLeaseManager: &LeaseManagerTestingKnobs{
-				GossipUpdateEvent: func(cfg *config.SystemConfig) error {
+				TestingTableUpdateEvent: func(t *sqlbase.TableDescriptor) error {
 					gossipSem <- struct{}{}
 					<-gossipSem
 					return nil
