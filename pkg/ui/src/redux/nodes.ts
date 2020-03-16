@@ -14,7 +14,7 @@ import { createSelector } from "reselect";
 import * as protos from "src/js/protos";
 import { AdminUIState } from "./state";
 import { Pick } from "src/util/pick";
-import {NoConnection} from "src/views/reports/containers/network";
+import { NoConnection } from "src/views/reports/containers/network";
 import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
 import { nullOfReturnType } from "src/util/types";
 
