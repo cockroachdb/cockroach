@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -85,7 +86,6 @@ func NewManager(cfg Config) Manager {
 			maxLocks: cfg.MaxLockTableSize,
 		},
 		ltw: &lockTableWaiterImpl{
-			nodeID:            cfg.NodeDesc.NodeID,
 			st:                cfg.Settings,
 			stopper:           cfg.Stopper,
 			ir:                cfg.IntentResolver,
@@ -376,6 +376,38 @@ func (m *managerImpl) LockTableDebug() string {
 // TxnWaitQueue implements the MetricExporter interface.
 func (m *managerImpl) TxnWaitQueue() *txnwait.Queue {
 	return m.twq.(*txnwait.Queue)
+}
+
+func (r *Request) txnMeta() *enginepb.TxnMeta {
+	if r.Txn == nil {
+		return nil
+	}
+	return &r.Txn.TxnMeta
+}
+
+// readConflictTimestamp returns the maximum timestamp at which the request
+// conflicts with locks acquired by other transaction. The request must wait
+// for all locks acquired by other transactions at or below this timestamp
+// to be released. All locks acquired by other transactions above this
+// timestamp are ignored.
+func (r *Request) readConflictTimestamp() hlc.Timestamp {
+	ts := r.Timestamp
+	if r.Txn != nil {
+		ts = r.Txn.ReadTimestamp
+		ts.Forward(r.Txn.MaxTimestamp)
+	}
+	return ts
+}
+
+// writeConflictTimestamp returns the minimum timestamp at which the request
+// acquires locks when performing mutations. All writes performed by the
+// requests must take place at or above this timestamp.
+func (r *Request) writeConflictTimestamp() hlc.Timestamp {
+	ts := r.Timestamp
+	if r.Txn != nil {
+		ts = r.Txn.WriteTimestamp
+	}
+	return ts
 }
 
 func (r *Request) isSingle(m roachpb.Method) bool {
