@@ -218,11 +218,23 @@ func (s *Store) processRaftRequestWithReplica(
 		if req.Message.Type != raftpb.MsgHeartbeat {
 			log.Fatalf(ctx, "unexpected quiesce: %+v", req)
 		}
-		status := r.RaftStatus()
-		if status != nil && status.Term == req.Message.Term && status.Commit == req.Message.Commit {
-			if r.quiesce() {
-				return nil
-			}
+		// If another replica tells us to quiesce, we verify that according to
+		// it, we are fully caught up, and that we believe it to be the leader.
+		// If we didn't do this, this replica could only unquiesce by means of
+		// an election, which means that the request prompting the unquiesce
+		// would end up with latency on the order of an election timeout.
+		//
+		// There are additional checks in quiesceLocked() that prevent us from
+		// quiescing if there's outstanding work.
+		r.mu.Lock()
+		status := r.raftBasicStatusRLocked()
+		ok := status.Term == req.Message.Term &&
+			status.Commit == req.Message.Commit &&
+			status.Lead == req.Message.From &&
+			r.quiesceLocked()
+		r.mu.Unlock()
+		if ok {
+			return nil
 		}
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: local raft status is %+v, incoming quiesce message is %+v", status, req.Message)

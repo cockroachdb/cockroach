@@ -842,6 +842,13 @@ func (r *Replica) raftStatusRLocked() *raft.Status {
 	return nil
 }
 
+func (r *Replica) raftBasicStatusRLocked() raft.BasicStatus {
+	if rg := r.mu.internalRaftGroup; rg != nil {
+		return rg.BasicStatus()
+	}
+	return raft.BasicStatus{}
+}
+
 // State returns a copy of the internal state of the Replica, along with some
 // auxiliary information.
 func (r *Replica) State() storagepb.RangeInfo {

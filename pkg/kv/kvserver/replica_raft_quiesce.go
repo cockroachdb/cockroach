@@ -21,14 +21,6 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
-// mark the replica as quiesced. Returns true if the Replica is successfully
-// quiesced and false otherwise.
-func (r *Replica) quiesce() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.quiesceLocked()
-}
-
 func (r *Replica) quiesceLocked() bool {
 	ctx := r.AnnotateCtx(context.TODO())
 	if r.hasPendingProposalsRLocked() {
