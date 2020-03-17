@@ -10,7 +10,7 @@ query TTT
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
 ·          distributed  true
-·          vectorized   false
+·          vectorized   true
 union      ·            ·
  ├── scan  ·            ·
  │         table        uniontest@primary

@@ -504,7 +504,7 @@ query TTT
 EXPLAIN SELECT DISTINCT v FROM t
 ----
 ·          distributed  false
-·          vectorized   false
+·          vectorized   true
 distinct   ·            ·
  │         distinct on  v
  └── scan  ·            ·
@@ -515,7 +515,7 @@ query TTT
 SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1]
 ----
 ·                    distributed  false
-·                    vectorized   false
+·                    vectorized   true
 limit                ·            ·
  │                   offset       1
  └── limit           ·            ·
