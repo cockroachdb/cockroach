@@ -1,7 +1,7 @@
 # LogicTest: local
 
 statement ok
-SET experimental_optimizer_foreign_keys = true
+SET optimizer_foreign_keys = true
 
 # We will test the fast path later.
 statement ok
