@@ -137,6 +137,7 @@ requesting data for debug/reports/problemranges... writing: debug/reports/proble
 retrieving SQL data for crdb_internal.cluster_queries... writing: debug/crdb_internal.cluster_queries.txt
 retrieving SQL data for crdb_internal.cluster_sessions... writing: debug/crdb_internal.cluster_sessions.txt
 retrieving SQL data for crdb_internal.cluster_settings... writing: debug/crdb_internal.cluster_settings.txt
+retrieving SQL data for crdb_internal.cluster_transactions... writing: debug/crdb_internal.cluster_transactions.txt
 retrieving SQL data for crdb_internal.jobs... writing: debug/crdb_internal.jobs.txt
 retrieving SQL data for system.jobs... writing: debug/system.jobs.txt
 retrieving SQL data for system.descriptor... writing: debug/system.descriptor.txt
@@ -161,6 +162,7 @@ retrieving SQL data for crdb_internal.node_queries... writing: debug/nodes/1/crd
 retrieving SQL data for crdb_internal.node_runtime_info... writing: debug/nodes/1/crdb_internal.node_runtime_info.txt
 retrieving SQL data for crdb_internal.node_sessions... writing: debug/nodes/1/crdb_internal.node_sessions.txt
 retrieving SQL data for crdb_internal.node_statement_statistics... writing: debug/nodes/1/crdb_internal.node_statement_statistics.txt
+retrieving SQL data for crdb_internal.node_transactions... writing: debug/nodes/1/crdb_internal.node_transactions.txt
 retrieving SQL data for crdb_internal.node_txn_stats... writing: debug/nodes/1/crdb_internal.node_txn_stats.txt
 requesting data for debug/nodes/1/details... writing: debug/nodes/1/details.json
 requesting data for debug/nodes/1/gossip... writing: debug/nodes/1/gossip.json
@@ -427,6 +429,7 @@ requesting data for debug/reports/problemranges... writing: debug/reports/proble
 retrieving SQL data for crdb_internal.cluster_queries... writing: debug/crdb_internal.cluster_queries.txt
 retrieving SQL data for crdb_internal.cluster_sessions... writing: debug/crdb_internal.cluster_sessions.txt
 retrieving SQL data for crdb_internal.cluster_settings... writing: debug/crdb_internal.cluster_settings.txt
+retrieving SQL data for crdb_internal.cluster_transactions... writing: debug/crdb_internal.cluster_transactions.txt
 retrieving SQL data for crdb_internal.jobs... writing: debug/crdb_internal.jobs.txt
   ^- resulted in ...
 retrieving SQL data for system.jobs... writing: debug/system.jobs.txt
@@ -463,6 +466,7 @@ retrieving SQL data for crdb_internal.node_queries... writing: debug/nodes/1/crd
 retrieving SQL data for crdb_internal.node_runtime_info... writing: debug/nodes/1/crdb_internal.node_runtime_info.txt
 retrieving SQL data for crdb_internal.node_sessions... writing: debug/nodes/1/crdb_internal.node_sessions.txt
 retrieving SQL data for crdb_internal.node_statement_statistics... writing: debug/nodes/1/crdb_internal.node_statement_statistics.txt
+retrieving SQL data for crdb_internal.node_transactions... writing: debug/nodes/1/crdb_internal.node_transactions.txt
 retrieving SQL data for crdb_internal.node_txn_stats... writing: debug/nodes/1/crdb_internal.node_txn_stats.txt
 requesting data for debug/nodes/1/details... writing: debug/nodes/1/details.json
 requesting data for debug/nodes/1/gossip... writing: debug/nodes/1/gossip.json
@@ -545,6 +549,7 @@ requesting data for debug/reports/problemranges... writing: debug/reports/proble
 retrieving SQL data for crdb_internal.cluster_queries... writing: debug/crdb_internal.cluster_queries.txt
 retrieving SQL data for crdb_internal.cluster_sessions... writing: debug/crdb_internal.cluster_sessions.txt
 retrieving SQL data for crdb_internal.cluster_settings... writing: debug/crdb_internal.cluster_settings.txt
+retrieving SQL data for crdb_internal.cluster_transactions... writing: debug/crdb_internal.cluster_transactions.txt
 retrieving SQL data for crdb_internal.jobs... writing: debug/crdb_internal.jobs.txt
 retrieving SQL data for system.jobs... writing: debug/system.jobs.txt
 retrieving SQL data for system.descriptor... writing: debug/system.descriptor.txt
@@ -569,6 +574,7 @@ retrieving SQL data for crdb_internal.node_queries... writing: debug/nodes/1/crd
 retrieving SQL data for crdb_internal.node_runtime_info... writing: debug/nodes/1/crdb_internal.node_runtime_info.txt
 retrieving SQL data for crdb_internal.node_sessions... writing: debug/nodes/1/crdb_internal.node_sessions.txt
 retrieving SQL data for crdb_internal.node_statement_statistics... writing: debug/nodes/1/crdb_internal.node_statement_statistics.txt
+retrieving SQL data for crdb_internal.node_transactions... writing: debug/nodes/1/crdb_internal.node_transactions.txt
 retrieving SQL data for crdb_internal.node_txn_stats... writing: debug/nodes/1/crdb_internal.node_txn_stats.txt
 requesting data for debug/nodes/1/details... writing: debug/nodes/1/details.json
 requesting data for debug/nodes/1/gossip... writing: debug/nodes/1/gossip.json
@@ -638,6 +644,8 @@ retrieving SQL data for crdb_internal.node_sessions... writing: debug/nodes/2/cr
   ^- resulted in ...
 retrieving SQL data for crdb_internal.node_statement_statistics... writing: debug/nodes/2/crdb_internal.node_statement_statistics.txt
   ^- resulted in ...
+retrieving SQL data for crdb_internal.node_transactions... writing: debug/nodes/2/crdb_internal.node_transactions.txt
+  ^- resulted in ...
 retrieving SQL data for crdb_internal.node_txn_stats... writing: debug/nodes/2/crdb_internal.node_txn_stats.txt
   ^- resulted in ...
 requesting data for debug/nodes/2/details... writing: debug/nodes/2/details.json
@@ -674,6 +682,7 @@ retrieving SQL data for crdb_internal.node_queries... writing: debug/nodes/3/crd
 retrieving SQL data for crdb_internal.node_runtime_info... writing: debug/nodes/3/crdb_internal.node_runtime_info.txt
 retrieving SQL data for crdb_internal.node_sessions... writing: debug/nodes/3/crdb_internal.node_sessions.txt
 retrieving SQL data for crdb_internal.node_statement_statistics... writing: debug/nodes/3/crdb_internal.node_statement_statistics.txt
+retrieving SQL data for crdb_internal.node_transactions... writing: debug/nodes/3/crdb_internal.node_transactions.txt
 retrieving SQL data for crdb_internal.node_txn_stats... writing: debug/nodes/3/crdb_internal.node_txn_stats.txt
 requesting data for debug/nodes/3/details... writing: debug/nodes/3/details.json
 requesting data for debug/nodes/3/gossip... writing: debug/nodes/3/gossip.json

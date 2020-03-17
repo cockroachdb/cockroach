@@ -2257,10 +2257,16 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	defer ex.state.mu.RUnlock()
 
 	var kvTxnID *uuid.UUID
+	var activeTxnInfo *serverpb.TxnInfo
 	txn := ex.state.mu.txn
 	if txn != nil {
 		id := txn.ID()
 		kvTxnID = &id
+		activeTxnInfo = &serverpb.TxnInfo{
+			ID:             id,
+			Start:          ex.phaseTimes[transactionStart],
+			TxnDescription: txn.String(),
+		}
 	}
 
 	activeQueries := make([]serverpb.ActiveQuery, 0, len(ex.mu.ActiveQueries))
@@ -2286,6 +2292,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		sql := truncateSQL(query.getStatement())
 		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
+			TxnID:         query.txnID,
 			ID:            id.String(),
 			Start:         query.start.UTC(),
 			Sql:           sql,
@@ -2310,6 +2317,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		ApplicationName: ex.applicationName.Load().(string),
 		Start:           ex.phaseTimes[sessionInit].UTC(),
 		ActiveQueries:   activeQueries,
+		ActiveTxn:       activeTxnInfo,
 		KvTxnID:         kvTxnID,
 		LastActiveQuery: lastActiveQuery,
 		ID:              ex.sessionID.GetBytes(),

@@ -68,6 +68,7 @@ var crdbInternal = virtualSchema{
 		sqlbase.CrdbInternalBuildInfoTableID:            crdbInternalBuildInfoTable,
 		sqlbase.CrdbInternalBuiltinFunctionsTableID:     crdbInternalBuiltinFunctionsTable,
 		sqlbase.CrdbInternalClusterQueriesTableID:       crdbInternalClusterQueriesTable,
+		sqlbase.CrdbInternalClusterTransactionsTableID:  crdbInternalClusterTxnsTable,
 		sqlbase.CrdbInternalClusterSessionsTableID:      crdbInternalClusterSessionsTable,
 		sqlbase.CrdbInternalClusterSettingsTableID:      crdbInternalClusterSettingsTable,
 		sqlbase.CrdbInternalCreateStmtsTableID:          crdbInternalCreateStmtsTable,
@@ -83,6 +84,7 @@ var crdbInternal = virtualSchema{
 		sqlbase.CrdbInternalKVStoreStatusTableID:        crdbInternalKVStoreStatusTable,
 		sqlbase.CrdbInternalLeasesTableID:               crdbInternalLeasesTable,
 		sqlbase.CrdbInternalLocalQueriesTableID:         crdbInternalLocalQueriesTable,
+		sqlbase.CrdbInternalLocalTransactionsTableID:    crdbInternalLocalTxnsTable,
 		sqlbase.CrdbInternalLocalSessionsTableID:        crdbInternalLocalSessionsTable,
 		sqlbase.CrdbInternalLocalMetricsTableID:         crdbInternalLocalMetricsTable,
 		sqlbase.CrdbInternalPartitionsTableID:           crdbInternalPartitionsTable,
@@ -882,9 +884,90 @@ CREATE TABLE crdb_internal.session_variables (
 	},
 }
 
+const txnsSchemaPattern = `
+CREATE TABLE crdb_internal.%s (
+  id UUID,                 -- the unique ID of the transaction
+  node_id INT,             -- the ID of the node running the transaction
+  session_id STRING,       -- the ID of the session
+  start TIMESTAMP,         -- the start time of the transaction
+  txn_string STRING,       -- the string representation of the transcation
+  application_name STRING  -- the name of the application as per SET application_name
+)`
+
+var crdbInternalLocalTxnsTable = virtualSchemaTable{
+	comment: "running user transactions visible by the current user (RAM; local node only)",
+	schema:  fmt.Sprintf(txnsSchemaPattern, "node_transactions"),
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		if err := p.RequireAdminRole(ctx, "read crdb_internal.node_transactions"); err != nil {
+			return err
+		}
+		req := p.makeSessionsRequest(ctx)
+		response, err := p.extendedEvalCtx.StatusServer.ListLocalSessions(ctx, &req)
+		if err != nil {
+			return err
+		}
+		return populateTransactionsTable(ctx, addRow, response)
+	},
+}
+
+var crdbInternalClusterTxnsTable = virtualSchemaTable{
+	comment: "running user transactions visible by the current user (cluster RPC; expensive!)",
+	schema:  fmt.Sprintf(txnsSchemaPattern, "cluster_transactions"),
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		if err := p.RequireAdminRole(ctx, "read crdb_internal.cluster_transactions"); err != nil {
+			return err
+		}
+		req := p.makeSessionsRequest(ctx)
+		response, err := p.extendedEvalCtx.StatusServer.ListSessions(ctx, &req)
+		if err != nil {
+			return err
+		}
+		return populateTransactionsTable(ctx, addRow, response)
+	},
+}
+
+func populateTransactionsTable(
+	ctx context.Context, addRow func(...tree.Datum) error, response *serverpb.ListSessionsResponse,
+) error {
+	for _, session := range response.Sessions {
+		sessionID := getSessionID(session)
+		if txn := session.ActiveTxn; txn != nil {
+			if err := addRow(
+				tree.NewDUuid(tree.DUuid{UUID: txn.ID}),
+				tree.NewDInt(tree.DInt(session.NodeID)),
+				sessionID,
+				tree.MakeDTimestamp(txn.Start, time.Microsecond),
+				tree.NewDString(txn.TxnDescription),
+				tree.NewDString(session.ApplicationName),
+			); err != nil {
+				return err
+			}
+		}
+	}
+	for _, rpcErr := range response.Errors {
+		log.Warning(ctx, rpcErr.Message)
+		if rpcErr.NodeID != 0 {
+			// Add a row with this node ID, the error for the txn string,
+			// and nulls for all other columns.
+			if err := addRow(
+				tree.DNull,                             // txn ID
+				tree.NewDInt(tree.DInt(rpcErr.NodeID)), // node ID
+				tree.DNull,                             // session ID
+				tree.DNull,                             // start
+				tree.NewDString("-- "+rpcErr.Message),  // txn string
+				tree.DNull,                             // application name
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 const queriesSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
   query_id         STRING,         -- the cluster-unique ID of the query
+  txn_id           UUID,           -- the unique ID of the query's transaction 
   node_id          INT NOT NULL,   -- the node on which the query is running
   session_id       STRING,         -- the ID of the session
   user_name        STRING,         -- the user running the query
@@ -979,8 +1062,19 @@ func populateQueriesTable(
 				phase = fmt.Sprintf("%s (%.2f%%)", phase, query.Progress*100)
 			}
 
+			var txnID tree.Datum
+			// query.TxnID and query.TxnStart were only added in 20.1. In case this
+			// is a mixed cluster setting, report NULL if these values were not filled
+			// out by the remote session.
+			if query.ID == "" {
+				txnID = tree.DNull
+			} else {
+				txnID = tree.NewDUuid(tree.DUuid{UUID: query.TxnID})
+			}
+
 			if err := addRow(
 				tree.NewDString(query.ID),
+				txnID,
 				tree.NewDInt(tree.DInt(session.NodeID)),
 				sessionID,
 				tree.NewDString(session.Username),
@@ -1003,6 +1097,7 @@ func populateQueriesTable(
 			// nulls for all other columns.
 			if err := addRow(
 				tree.DNull,                             // query ID
+				tree.DNull,                             // txn ID
 				tree.NewDInt(tree.DInt(rpcErr.NodeID)), // node ID
 				tree.DNull,                             // session ID
 				tree.DNull,                             // username

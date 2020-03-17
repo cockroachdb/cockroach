@@ -38,6 +38,7 @@ test           crdb_internal       builtin_functions                  public   S
 test           crdb_internal       cluster_queries                    public   SELECT
 test           crdb_internal       cluster_sessions                   public   SELECT
 test           crdb_internal       cluster_settings                   public   SELECT
+test           crdb_internal       cluster_transactions               public   SELECT
 test           crdb_internal       create_statements                  public   SELECT
 test           crdb_internal       feature_usage                      public   SELECT
 test           crdb_internal       forward_dependencies               public   SELECT
@@ -56,6 +57,7 @@ test           crdb_internal       node_queries                       public   S
 test           crdb_internal       node_runtime_info                  public   SELECT
 test           crdb_internal       node_sessions                      public   SELECT
 test           crdb_internal       node_statement_statistics          public   SELECT
+test           crdb_internal       node_transactions                  public   SELECT
 test           crdb_internal       node_txn_stats                     public   SELECT
 test           crdb_internal       partitions                         public   SELECT
 test           crdb_internal       predefined_comments                public   SELECT

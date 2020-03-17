@@ -53,6 +53,7 @@ const (
 	CrdbInternalBuildInfoTableID
 	CrdbInternalBuiltinFunctionsTableID
 	CrdbInternalClusterQueriesTableID
+	CrdbInternalClusterTransactionsTableID
 	CrdbInternalClusterSessionsTableID
 	CrdbInternalClusterSettingsTableID
 	CrdbInternalCreateStmtsTableID
@@ -68,6 +69,7 @@ const (
 	CrdbInternalKVStoreStatusTableID
 	CrdbInternalLeasesTableID
 	CrdbInternalLocalQueriesTableID
+	CrdbInternalLocalTransactionsTableID
 	CrdbInternalLocalSessionsTableID
 	CrdbInternalLocalMetricsTableID
 	CrdbInternalPartitionsTableID

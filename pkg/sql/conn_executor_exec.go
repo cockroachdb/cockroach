@@ -1190,6 +1190,7 @@ func (ex *connExecutor) addActiveQuery(
 
 	_, hidden := stmt.AST.(tree.HiddenFromShowQueries)
 	qm := &queryMeta{
+		txnID:         ex.state.mu.txn.ID(),
 		start:         ex.phaseTimes[sessionQueryReceived],
 		rawStmt:       stmt.SQL,
 		phase:         preparing,

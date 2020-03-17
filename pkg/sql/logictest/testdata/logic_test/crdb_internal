@@ -15,6 +15,7 @@ builtin_functions
 cluster_queries
 cluster_sessions
 cluster_settings
+cluster_transactions
 create_statements
 feature_usage
 forward_dependencies
@@ -33,6 +34,7 @@ node_queries
 node_runtime_info
 node_sessions
 node_statement_statistics
+node_transactions
 node_txn_stats
 partitions
 predefined_comments
@@ -147,15 +149,25 @@ SELECT * FROM crdb_internal.session_variables WHERE variable = ''
 ----
 variable  value  hidden
 
-query TITTTTTTBT colnames
+query TTITTTTTTBT colnames
 SELECT * FROM crdb_internal.node_queries WHERE node_id < 0
 ----
-query_id  node_id  session_id user_name  start  query  client_address  application_name  distributed  phase
+query_id  txn_id  node_id  session_id user_name  start  query  client_address  application_name  distributed  phase
 
-query TITTTTTTBT colnames
+query TTITTTTTTBT colnames
 SELECT * FROM crdb_internal.cluster_queries WHERE node_id < 0
 ----
-query_id  node_id  session_id user_name  start  query  client_address  application_name  distributed  phase
+query_id  txn_id  node_id  session_id user_name  start  query  client_address  application_name  distributed  phase
+
+query TITTTT colnames
+SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
+----
+id  node_id  session_id  start  txn_string  application_name
+
+query TITTTT colnames
+SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
+----
+id  node_id  session_id  start  txn_string  application_name
 
 query ITTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.node_sessions WHERE node_id < 0
