@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
+	rpErrors "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ui"
 	clog "github.com/cockroachdb/cockroach/pkg/util/log"
@@ -79,6 +80,13 @@ type SyncedCluster struct {
 	// Used to stash debug information.
 	DebugDir string
 }
+
+type CmdKind int
+
+const (
+	CockroachCmd = 1
+	OtherCmd = 2
+)
 
 func (c *SyncedCluster) host(index int) string {
 	return c.VMs[index-1]
@@ -428,8 +436,20 @@ done
 	return ch
 }
 
-// Run TODO(peter): document
-func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd string) error {
+// Run a command on >= 1 node in the cluster.
+//
+// When running on just one node, the command output is streamed to stdout.
+// When running on multiple nodes, the commands run in parallel, their output
+// is cached and then emitted all together once all commands are completed.
+//
+// stdout: Where stdout messages are written
+// stderr: Where stderr messages are written
+// nodes: The cluster nodes where the command will be run.
+// cmdKind: Which type of command is being run? This allows refined error reporting.
+// title: A description of the command being run that is output to the logs.
+// cmd: The command to run.
+func (c *SyncedCluster) Run(
+	stdout, stderr io.Writer, nodes []int, cmdKind CmdKind, title, cmd string) error {
 	// Stream output if we're running the command on only 1 node.
 	stream := len(nodes) == 1
 	var display string
@@ -475,6 +495,16 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd st
 			sess.SetStdout(stdout)
 			sess.SetStderr(stderr)
 			errors[i] = sess.Run(nodeCmd)
+			if errors[i] != nil {
+				if cmdKind == CockroachCmd {
+					errors[i] = rpErrors.ClassifyCockroachError(errors[i])
+				} else {
+					errors[i] = rpErrors.ClassifyCmdError(errors[i])
+				}
+				if err, ok := errors[i].(rpErrors.BaseError); ok {
+					fmt.Fprintln(stdout, err.LogString())
+				}
+			}
 			return nil, nil
 		}
 
@@ -491,14 +521,26 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd st
 	if !stream {
 		for i, r := range results {
 			fmt.Fprintf(stdout, "  %2d: %s\n", nodes[i], r)
+			if errors[i] != nil {
+				if cmdKind == CockroachCmd {
+					errors[i] = rpErrors.ClassifyCockroachError(errors[i])
+				} else {
+					errors[i] = rpErrors.ClassifyCmdError(errors[i])
+				}
+				if err, ok := errors[i].(rpErrors.BaseError); ok {
+					fmt.Fprintln(stdout, err.LogString())
+				}
+			}
 		}
 	}
 
+	// TODO(jamesl): Choose the best error to return. SSH? cockroach? CMD? roachprod?
 	for _, err := range errors {
 		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
