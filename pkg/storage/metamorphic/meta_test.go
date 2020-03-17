@@ -174,6 +174,8 @@ func TestRocksPebbleEquivalence(t *testing.T) {
 				engineSequences: [][]engineImpl{
 					{engineImplRocksDB},
 					{engineImplPebble},
+					{engineImplPebbleManySSTs},
+					{engineImplPebbleVarOpts},
 				},
 			}
 			runMetaTest(run)
@@ -206,6 +208,7 @@ func TestRocksPebbleRestarts(t *testing.T) {
 					{engineImplRocksDB},
 					{engineImplPebble},
 					{engineImplRocksDB, engineImplPebble},
+					{engineImplRocksDB, engineImplPebbleManySSTs, engineImplPebbleVarOpts},
 				},
 			}
 			runMetaTest(run)

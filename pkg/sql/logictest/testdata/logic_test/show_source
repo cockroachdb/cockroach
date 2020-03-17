@@ -42,7 +42,6 @@ enable_insert_fast_path                   on
 enable_zigzag_join                        on
 experimental_enable_hash_sharded_indexes  off
 experimental_enable_temp_tables           off
-experimental_optimizer_foreign_keys       on
 experimental_serial_normalization         rowid
 extra_float_digits                        0
 force_savepoint_restart                   off
@@ -54,6 +53,7 @@ lock_timeout                              0
 max_identifier_length                     128
 max_index_keys                            32
 node_id                                   1
+optimizer_foreign_keys                    on
 reorder_joins_limit                       4
 require_explicit_primary_keys             off
 results_buffer_size                       16384

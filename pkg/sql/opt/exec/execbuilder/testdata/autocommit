@@ -616,7 +616,7 @@ statement ok
 CREATE TABLE fk_parent (p INT PRIMARY KEY, q INT, FAMILY f1 (p, q));
 INSERT INTO fk_parent VALUES (1, 10), (2, 20), (3, 30);
 CREATE TABLE fk_child (a INT, b INT REFERENCES fk_parent(p), FAMILY f1 (a, b));
-SET experimental_optimizer_foreign_keys = true
+SET optimizer_foreign_keys = true
 
 # Populate table descriptor cache.
 statement ok
