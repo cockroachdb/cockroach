@@ -772,16 +772,31 @@ func (r *testRunner) runTest(
 			cl.PrintfCtx(ctx, "all stacks:\n\n%s\n", allStacks())
 			t.l.PrintfCtx(ctx, "dumped stacks to %s", stacksFile)
 		}
+		// Now kill anything going on in this cluster while collecting stacks
+		// to the logs, to get the server side of the hang.
+		//
+		// TODO(tbg): send --sig=3 followed by a hard kill after we've fixed
+		// https://github.com/cockroachdb/cockroach/issues/45875.
+		// Signal 11 will dump stacks, but it might be confusing to folks
+		// who debug from the artifacts only.
+		//
+		// Don't use surrounding context, which are likely already canceled.
+		if nodes := c.All(); len(nodes) > 0 { // avoid tests
+			innerCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			_ = c.StopE(innerCtx, c.All(), stopArgs("--sig=11"))
+			cancel()
+		}
 
-		// We hit a timeout. We're going to mark the test as failed (which will also
-		// cancel its context). Then we'll wait up to 5 minutes in the hope
-		// that the test reacts either to the ctx cancelation or to the fact that it
-		// was marked as failed. If that happens, great - we return normally and so
-		// the cluster can be reused. It the test does not react to anything, then
-		// we return an error, which will cause the caller to stop everything and
-		// destroy this cluster (as well as all the others). The cluster
-		// cannot be reused since we have a runaway test goroutine that's presumably
-		// going to continue using the cluster.
+		// Mark the test as failed (which will also cancel its context). Then
+		// we'll wait up to 5 minutes in the hope that the test reacts either to
+		// the ctx cancelation or to the fact that it was marked as failed (and
+		// all processes nuked out from under it).
+		// If that happens, great - we return normally and so the cluster can be
+		// reused. It the test does not react to anything, then we return an
+		// error, which will cause the caller to stop everything and destroy
+		// this cluster (as well as all the others). The cluster cannot be
+		// reused since we have a runaway test goroutine that's presumably going
+		// to continue using the cluster.
 		t.printfAndFail(0 /* skip */, "test timed out (%s)", timeout)
 		select {
 		case <-done:
@@ -789,6 +804,9 @@ func (r *testRunner) runTest(
 				panic("expected success=false after a timeout")
 			}
 		case <-time.After(5 * time.Minute):
+			// We really shouldn't get here unless the test code somehow managed
+			// to deadlock without blocking on anything remote - since we killed
+			// everything.
 			msg := "test timed out and afterwards failed to respond to cancelation"
 			t.l.PrintfCtx(ctx, msg)
 			r.collectClusterLogs(ctx, c, t.l)
