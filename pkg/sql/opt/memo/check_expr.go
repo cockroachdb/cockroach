@@ -214,13 +214,15 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			right := e.Child(1).(RelExpr)
 			// The left side cannot depend on the right side columns.
 			if left.Relational().OuterCols.Intersects(right.Relational().OutputCols) {
-				panic(errors.AssertionFailedf("%s left side has outer cols in right side", e.Op()))
+				panic(errors.AssertionFailedf(
+					"%s left side has outer cols in right side", log.Safe(e.Op()),
+				))
 			}
 
 			// The reverse is allowed but only for apply variants.
 			if !opt.IsJoinApplyOp(e) {
 				if right.Relational().OuterCols.Intersects(left.Relational().OutputCols) {
-					panic(errors.AssertionFailedf("%s is correlated", e.Op()))
+					panic(errors.AssertionFailedf("%s is correlated", log.Safe(e.Op())))
 				}
 			}
 			checkFilters(*e.Child(2).(*FiltersExpr))
