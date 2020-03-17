@@ -154,6 +154,7 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 	mtc := &multiTestContext{}
 	cfg := kvserver.TestStoreConfig(nil)
 	cfg.TestingKnobs.DisableEagerReplicaRemoval = true
+	cfg.Clock = nil // manual clock
 	mtc.storeConfig = &cfg
 
 	defer mtc.Stop()

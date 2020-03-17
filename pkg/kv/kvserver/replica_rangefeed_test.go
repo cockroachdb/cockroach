@@ -80,6 +80,7 @@ func TestReplicaRangefeed(t *testing.T) {
 
 	ctx := context.Background()
 	sc := kvserver.TestStoreConfig(nil)
+	sc.Clock = nil // manual clock
 	kvserver.RangefeedEnabled.Override(&sc.Settings.SV, true)
 	mtc := &multiTestContext{
 		storeConfig: &sc,
@@ -102,9 +103,9 @@ func TestReplicaRangefeed(t *testing.T) {
 	rangeID := mtc.Store(0).LookupReplica(startKey).RangeID
 
 	// Insert a key before starting the rangefeeds.
-	initTime := mtc.clock.Now()
+	initTime := mtc.clock().Now()
 	mtc.manualClock.Increment(1)
-	ts1 := mtc.clock.Now()
+	ts1 := mtc.clock().Now()
 	incArgs := incrementArgs(roachpb.Key("b"), 9)
 	_, pErr := kv.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts1}, incArgs)
 	if pErr != nil {
@@ -177,7 +178,7 @@ func TestReplicaRangefeed(t *testing.T) {
 
 	// Insert a key non-transactionally.
 	mtc.manualClock.Increment(1)
-	ts2 := mtc.clock.Now()
+	ts2 := mtc.clock().Now()
 	pArgs := putArgs(roachpb.Key("c"), []byte("val2"))
 	_, pErr = kv.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts2}, pArgs)
 	if pErr != nil {
@@ -186,7 +187,7 @@ func TestReplicaRangefeed(t *testing.T) {
 
 	// Insert a second key transactionally.
 	mtc.manualClock.Increment(1)
-	ts3 := mtc.clock.Now()
+	ts3 := mtc.clock().Now()
 	if err := mtc.dbs[1].Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		txn.SetFixedTimestamp(ctx, ts3)
 		return txn.Put(ctx, roachpb.Key("m"), []byte("val3"))
@@ -200,7 +201,7 @@ func TestReplicaRangefeed(t *testing.T) {
 
 	// Update the originally incremented key non-transactionally.
 	mtc.manualClock.Increment(1)
-	ts4 := mtc.clock.Now()
+	ts4 := mtc.clock().Now()
 	_, pErr = kv.SendWrappedWith(ctx, db, roachpb.Header{Timestamp: ts4}, incArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -208,7 +209,7 @@ func TestReplicaRangefeed(t *testing.T) {
 
 	// Update the originally incremented key transactionally.
 	mtc.manualClock.Increment(1)
-	ts5 := mtc.clock.Now()
+	ts5 := mtc.clock().Now()
 	if err := mtc.dbs[1].Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		txn.SetFixedTimestamp(ctx, ts5)
 		_, err := txn.Inc(ctx, incArgs.Key, 7)

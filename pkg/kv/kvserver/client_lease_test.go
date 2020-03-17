@@ -95,6 +95,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableMergeQueue = true
 	sc.EnableEpochRangeLeases = true
+	sc.Clock = nil // manual clock
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 1)

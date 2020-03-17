@@ -254,7 +254,6 @@ type multiTestContext struct {
 	t           testing.TB
 	storeConfig *kvserver.StoreConfig
 	manualClock *hlc.ManualClock
-	clock       *hlc.Clock
 	rpcContext  *rpc.Context
 	// rpcTestingKnobs are optional configuration for the rpcContext.
 	rpcTestingKnobs rpc.ContextTestingKnobs
@@ -317,7 +316,6 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 		mCopy := *m
 		mCopy.storeConfig = nil
 		mCopy.clocks = nil
-		mCopy.clock = nil
 		mCopy.engines = nil
 		mCopy.engineStoppers = nil
 		mCopy.startWithSingleRange = false
@@ -343,18 +341,29 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	m.gossips = make([]*gossip.Gossip, numStores)
 	m.nodeLivenesses = make([]*kvserver.NodeLiveness, numStores)
 
-	if m.manualClock == nil {
-		m.manualClock = hlc.NewManualClock(123)
+	if m.storeConfig != nil && m.storeConfig.Clock != nil {
+		require.Nil(t, m.manualClock, "can't use manual clock; storeConfig.Clock is set")
+		require.Empty(t, m.clocks, "can't populate .clocks; storeConfig.Clock is set")
+		m.clocks = []*hlc.Clock{m.storeConfig.Clock}
+	} else if len(m.clocks) == 0 {
+		if m.manualClock == nil {
+			m.manualClock = hlc.NewManualClock(123)
+		}
+		m.clocks = []*hlc.Clock{hlc.NewClock(m.manualClock.UnixNano, time.Nanosecond)}
 	}
-	if m.clock == nil {
-		m.clock = hlc.NewClock(m.manualClock.UnixNano, time.Nanosecond)
+
+	if m.storeConfig != nil {
+		// Either they're equal, or the left is initially nil (see the golf
+		// above).
+		m.storeConfig.Clock = m.clocks[0]
 	}
+
 	if m.transportStopper == nil {
 		m.transportStopper = stop.NewStopper()
 	}
 	st := cluster.MakeTestingClusterSettings()
 	if m.rpcContext == nil {
-		m.rpcContext = rpc.NewContextWithTestingKnobs(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, m.clock,
+		m.rpcContext = rpc.NewContextWithTestingKnobs(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, m.clock(),
 			m.transportStopper, st, m.rpcTestingKnobs)
 		// Ensure that tests using this test context and restart/shut down
 		// their servers do not inadvertently start talking to servers from
@@ -393,9 +402,18 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	})
 }
 
+func (m *multiTestContext) clock() *hlc.Clock {
+	return m.clocks[0]
+}
+
 func (m *multiTestContext) Stop() {
 	done := make(chan struct{})
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				m.t.Errorf("mtc.Stop() panicked: %+v", r)
+			}
+		}()
 		m.mu.RLock()
 
 		// Quiesce everyone in parallel (before the transport stopper) to avoid
@@ -598,14 +616,18 @@ func (t *multiTestContextKVTransport) SendNext(
 			t.mtc.mu.RUnlock()
 			if leaseHolderStore == nil {
 				// The lease holder is known but down, so expire its lease.
-				t.mtc.advanceClock(ctx)
+				if t.mtc.manualClock != nil {
+					t.mtc.advanceClock(ctx)
+				}
 			}
 		} else {
 			// stores has the range, is *not* the lease holder, but the
 			// lease holder is not known; this can happen if the lease
 			// holder is removed from the group. Move the manual clock
 			// forward in an attempt to expire the lease.
-			t.mtc.advanceClock(ctx)
+			if t.mtc.manualClock != nil {
+				t.mtc.advanceClock(ctx)
+			}
 		}
 	}
 	t.setPending(rep.ReplicaID, false)
@@ -790,7 +812,7 @@ func (m *multiTestContext) addStore(idx int) {
 	if len(m.clocks) > idx {
 		clock = m.clocks[idx]
 	} else {
-		clock = m.clock
+		clock = m.storeConfig.Clock
 		m.clocks = append(m.clocks, clock)
 	}
 	var eng storage.Engine
@@ -1392,12 +1414,12 @@ func (m *multiTestContext) heartbeatLiveness(ctx context.Context, store int) err
 // the desired effect would be ambiguous.
 func (m *multiTestContext) advanceClock(ctx context.Context) {
 	for i, clock := range m.clocks {
-		if clock != m.clock {
+		if clock != m.clock() {
 			log.Fatalf(ctx, "clock at index %d is different from the shared clock", i)
 		}
 	}
 	m.manualClock.Increment(m.storeConfig.LeaseExpiration())
-	log.Infof(ctx, "test clock advanced to: %s", m.clock.Now())
+	log.Infof(ctx, "test clock advanced to: %s", m.clock().Now())
 }
 
 // getRaftLeader returns the replica that is the current raft leader for the
