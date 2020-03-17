@@ -129,8 +129,10 @@ SELECT * from pg_temp.view_on_temp
 2
 
 # A "permanent" view on a temporary table gets upgraded to temporary.
-statement ok
+query T noticetrace
 CREATE VIEW upgrade_temp_view AS SELECT a FROM temp_table
+----
+NOTICE: view "upgrade_temp_view" will be a temporary view
 
 query I
 SELECT * from pg_temp.upgrade_temp_view
