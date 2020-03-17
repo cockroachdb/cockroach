@@ -1177,6 +1177,89 @@ inner-join (merge)
                 │         └── const: 5 [type=int]
                 └── variable: k [type=int]
 
+# Regression test for #46151. Do not push down a filter with a correlated
+# subquery.
+norm expect-not=PushFilterIntoJoinLeftAndRight
+SELECT (SELECT i FROM a LIMIT 1)
+  FROM b INNER JOIN c ON b.y = c.y
+ WHERE (
+        EXISTS(
+            SELECT *
+              FROM b
+             WHERE b.y IS NOT NULL AND c.y IS NOT NULL
+        )
+       )
+    OR (SELECT c.z FROM c LIMIT 1) IS NOT NULL;
+----
+project
+ ├── columns: i:19(int)
+ ├── fd: ()-->(19)
+ ├── inner-join
+ │    ├── columns: b.y:2(int!null) c.x:3(int!null) c.y:4(int!null) true_agg:12(bool)
+ │    ├── fd: (3)-->(4,12), (2)==(4), (4)==(2)
+ │    ├── scan b
+ │    │    └── columns: b.y:2(int)
+ │    ├── select
+ │    │    ├── columns: c.x:3(int!null) c.y:4(int) true_agg:12(bool)
+ │    │    ├── key: (3)
+ │    │    ├── fd: (3)-->(4,12)
+ │    │    ├── group-by
+ │    │    │    ├── columns: c.x:3(int!null) c.y:4(int) true_agg:12(bool)
+ │    │    │    ├── grouping columns: c.x:3(int!null)
+ │    │    │    ├── key: (3)
+ │    │    │    ├── fd: (3)-->(4,12)
+ │    │    │    ├── left-join
+ │    │    │    │    ├── columns: c.x:3(int!null) c.y:4(int!null) true:11(bool)
+ │    │    │    │    ├── fd: (3)-->(4)
+ │    │    │    │    ├── scan c
+ │    │    │    │    │    ├── columns: c.x:3(int!null) c.y:4(int!null)
+ │    │    │    │    │    ├── key: (3)
+ │    │    │    │    │    └── fd: (3)-->(4)
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── columns: true:11(bool!null)
+ │    │    │    │    │    ├── fd: ()-->(11)
+ │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── columns: b.y:7(int!null)
+ │    │    │    │    │    │    ├── scan b
+ │    │    │    │    │    │    │    └── columns: b.y:7(int)
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── b.y IS NOT NULL [type=bool, outer=(7), constraints=(/7: (/NULL - ]; tight)]
+ │    │    │    │    │    └── projections
+ │    │    │    │    │         └── true [type=bool]
+ │    │    │    │    └── filters
+ │    │    │    │         └── c.y IS NOT NULL [type=bool, outer=(4), constraints=(/4: (/NULL - ]; tight)]
+ │    │    │    └── aggregations
+ │    │    │         ├── const-not-null-agg [type=bool, outer=(11)]
+ │    │    │         │    └── variable: true [type=bool]
+ │    │    │         └── const-agg [type=int, outer=(4)]
+ │    │    │              └── variable: c.y [type=int]
+ │    │    └── filters
+ │    │         └── or [type=bool, outer=(12), subquery]
+ │    │              ├── true_agg IS NOT NULL [type=bool]
+ │    │              └── is-not [type=bool]
+ │    │                   ├── subquery [type=int]
+ │    │                   │    └── limit
+ │    │                   │         ├── columns: z:10(int!null)
+ │    │                   │         ├── cardinality: [0 - 1]
+ │    │                   │         ├── key: ()
+ │    │                   │         ├── fd: ()-->(10)
+ │    │                   │         ├── scan c
+ │    │                   │         │    └── columns: z:10(int!null)
+ │    │                   │         └── const: 1 [type=int]
+ │    │                   └── null [type=unknown]
+ │    └── filters
+ │         └── b.y = c.y [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+ └── projections
+      └── subquery [type=int, subquery]
+           └── limit
+                ├── columns: a.i:15(int)
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(15)
+                ├── scan a
+                │    └── columns: a.i:15(int)
+                └── const: 1 [type=int]
+
 # --------------------------------------------------
 # PushFilterIntoJoinLeft + PushFilterIntoJoinRight
 # --------------------------------------------------
