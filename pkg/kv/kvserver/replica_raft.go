@@ -319,6 +319,9 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (index int64, pE
 	// Insert into the proposal buffer, which passes the command to Raft to be
 	// proposed. The proposal buffer assigns the command a maximum lease index
 	// when it sequences it.
+	//
+	// NB: we must not hold r.mu while using the proposal buffer, see comment
+	// on the field.
 	maxLeaseIndex, err := r.mu.proposalBuf.Insert(p, data)
 	if err != nil {
 		return 0, roachpb.NewError(err)
@@ -408,13 +411,27 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
 	err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
-		if err := r.mu.proposalBuf.FlushLockedWithRaftGroup(raftGroup); err != nil {
+		numFlushed, err := r.mu.proposalBuf.FlushLockedWithRaftGroup(raftGroup)
+		if err != nil {
 			return false, err
 		}
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
 		}
-		return hasReady /* unquiesceAndWakeLeader */, nil
+		// We unquiesce if we have a Ready (= there's work to do). We also have
+		// to unquiesce if we just flushed some proposals but there isn't a
+		// Ready, which can happen if the proposals got dropped (raft does this
+		// if it doesn't know who the leader is). And, for extra defense in depth,
+		// we also unquiesce if there are outstanding proposals.
+		//
+		// NB: if we had the invariant that the group can only be in quiesced
+		// state if it knows the leader (state.Lead) AND we knew that raft would
+		// never give us an empty ready here (i.e. the only reason to drop a
+		// proposal is not knowing the leader) then numFlushed would not be
+		// necessary. The latter is likely true but we don't want to rely on
+		// it. The former is maybe true, but there's no easy way to enforce it.
+		unquiesceAndWakeLeader := hasReady || numFlushed > 0 || len(r.mu.proposals) > 0
+		return unquiesceAndWakeLeader, nil
 	})
 	r.mu.Unlock()
 	if err == errRemoved {
@@ -1333,6 +1350,26 @@ func (r *Replica) withRaftGroupLocked(
 	unquiesce, err := func(rangeID roachpb.RangeID, raftGroup *raft.RawNode) (bool, error) {
 		return f(raftGroup)
 	}(r.RangeID, r.mu.internalRaftGroup)
+	if r.mu.internalRaftGroup.BasicStatus().Lead == 0 {
+		// If we don't know the leader, unquiesce unconditionally. As a
+		// follower, we can't wake up the leader if we don't know who that is,
+		// so we should find out now before someone needs us to unquiesce.
+		//
+		// This situation should occur rarely or never (ever since we got
+		// stricter about validating incoming Quiesce requests) but it's good
+		// defense-in-depth.
+		//
+		// Note that unquiesceAndWakeLeaderLocked won't manage to wake up the
+		// leader since it's unknown to this replica, and at the time of writing
+		// the heuristics for campaigning are defensive (won't campaign if there
+		// is a live leaseholder). But if we are trying to unquiesce because
+		// this follower was asked to propose something, then this means that a
+		// request is going to have to wait until the leader next contacts us,
+		// or, in the worst case, an election timeout. This is not ideal - if a
+		// node holds a live lease, we should direct the client to it
+		// immediately.
+		unquiesce = true
+	}
 	if unquiesce {
 		r.unquiesceAndWakeLeaderLocked()
 	}

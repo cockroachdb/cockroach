@@ -346,7 +346,8 @@ func (b *propBuf) flushRLocked() error {
 
 func (b *propBuf) flushLocked() error {
 	return b.p.withGroupLocked(func(raftGroup *raft.RawNode) error {
-		return b.FlushLockedWithRaftGroup(raftGroup)
+		_, err := b.FlushLockedWithRaftGroup(raftGroup)
+		return err
 	})
 }
 
@@ -356,7 +357,9 @@ func (b *propBuf) flushLocked() error {
 //
 // If raftGroup is non-nil (the common case) then the commands will also be
 // proposed to the RawNode. This initiates Raft replication of the commands.
-func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
+//
+// Returns the number of proposals handed to the RawNode.
+func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) (int, error) {
 	// Before returning, make sure to forward the lease index base to at least
 	// the proposer's currently applied lease index. This ensures that if the
 	// lease applied index advances outside of this proposer's control (i.e.
@@ -374,7 +377,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 	defer b.arr.adjustSize(used)
 	if used == 0 {
 		// The buffer is empty. Nothing to do.
-		return nil
+		return 0, nil
 	} else if used > b.arr.len() {
 		// The buffer is full and at least one writer has tried to allocate
 		// on top of the full buffer, so notify them to try again.
@@ -481,9 +484,9 @@ func (b *propBuf) FlushLockedWithRaftGroup(raftGroup *raft.RawNode) error {
 		}
 	}
 	if firstErr != nil {
-		return firstErr
+		return 0, firstErr
 	}
-	return proposeBatch(raftGroup, b.p.replicaID(), ents)
+	return used, proposeBatch(raftGroup, b.p.replicaID(), ents)
 }
 
 func (b *propBuf) forwardLeaseIndexBase(v uint64) {
@@ -521,7 +524,7 @@ func proposeBatch(raftGroup *raft.RawNode, replID roachpb.ReplicaID, ents []raft
 // The representative example of this is a caller that wants to flush the buffer
 // into the proposals map before canceling all proposals.
 func (b *propBuf) FlushLockedWithoutProposing() {
-	if err := b.FlushLockedWithRaftGroup(nil /* raftGroup */); err != nil {
+	if _, err := b.FlushLockedWithRaftGroup(nil /* raftGroup */); err != nil {
 		log.Fatalf(context.Background(), "unexpected error: %+v", err)
 	}
 }

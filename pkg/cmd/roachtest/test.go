@@ -196,7 +196,7 @@ func (t *test) GetStatus() string {
 	defer t.mu.Unlock()
 	status, ok := t.mu.status[t.runnerID]
 	if ok {
-		return fmt.Sprintf("%s (set %s ago)", status.msg, timeutil.Now().Sub(status.time))
+		return fmt.Sprintf("%s (set %s ago)", status.msg, timeutil.Now().Sub(status.time).Round(time.Second))
 	}
 	return "N/A"
 }
