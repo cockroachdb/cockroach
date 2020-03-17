@@ -856,6 +856,13 @@ func (tc *TxnCoordSender) SetDebugName(name string) {
 	tc.mu.txn.Name = name
 }
 
+// String is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) String() string {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.String()
+}
+
 // ReadTimestamp is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) ReadTimestamp() hlc.Timestamp {
 	tc.mu.Lock()

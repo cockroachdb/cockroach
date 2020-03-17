@@ -195,7 +195,7 @@ func (node *ShowDatabaseIndexes) Format(ctx *FmtCtx) {
 	}
 }
 
-// ShowQueries represents a SHOW QUERIES statement
+// ShowQueries represents a SHOW QUERIES statement.
 type ShowQueries struct {
 	All     bool
 	Cluster bool
