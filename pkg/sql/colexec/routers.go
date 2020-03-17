@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
@@ -144,8 +145,9 @@ func newRouterOutputOp(
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
+	diskAcc *mon.BoundAccount,
 ) *routerOutputOp {
-	return newRouterOutputOpWithBlockedThresholdAndBatchSize(unlimitedAllocator, types, unblockedEventsChan, memoryLimit, cfg, fdSemaphore, getDefaultRouterOutputBlockedThreshold(), coldata.BatchSize())
+	return newRouterOutputOpWithBlockedThresholdAndBatchSize(unlimitedAllocator, types, unblockedEventsChan, memoryLimit, cfg, fdSemaphore, getDefaultRouterOutputBlockedThreshold(), coldata.BatchSize(), diskAcc)
 }
 
 func newRouterOutputOpWithBlockedThresholdAndBatchSize(
@@ -157,6 +159,7 @@ func newRouterOutputOpWithBlockedThresholdAndBatchSize(
 	fdSemaphore semaphore.Semaphore,
 	blockedThreshold int,
 	outputBatchSize int,
+	diskAcc *mon.BoundAccount,
 ) *routerOutputOp {
 	o := &routerOutputOp{
 		types:               types,
@@ -166,7 +169,7 @@ func newRouterOutputOpWithBlockedThresholdAndBatchSize(
 	}
 	o.mu.unlimitedAllocator = unlimitedAllocator
 	o.mu.cond = sync.NewCond(&o.mu)
-	o.mu.data = newSpillingQueue(unlimitedAllocator, types, memoryLimit, cfg, fdSemaphore, outputBatchSize)
+	o.mu.data = newSpillingQueue(unlimitedAllocator, types, memoryLimit, cfg, fdSemaphore, outputBatchSize, diskAcc)
 
 	return o
 }
@@ -199,7 +202,7 @@ func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 		o.mu.pendingBatch = nil
 	} else {
 		var err error
-		b, err = o.mu.data.dequeue()
+		b, err = o.mu.data.dequeue(ctx)
 		if err != nil {
 			execerror.VectorizedInternalPanic(err)
 		}
@@ -219,7 +222,7 @@ func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 
 func (o *routerOutputOp) closeLocked(ctx context.Context) {
 	o.mu.done = true
-	if err := o.mu.data.close(); err != nil {
+	if err := o.mu.data.close(ctx); err != nil {
 		// This log message is Info instead of Warning because the flow will also
 		// attempt to clean up the parent directory, so this failure might not have
 		// any effect.
@@ -337,10 +340,10 @@ func (o *routerOutputOp) maybeUnblockLocked() {
 }
 
 // reset resets the routerOutputOp for a benchmark run.
-func (o *routerOutputOp) reset() {
+func (o *routerOutputOp) reset(ctx context.Context) {
 	o.mu.Lock()
 	o.mu.done = false
-	o.mu.data.reset()
+	o.mu.data.reset(ctx)
 	o.mu.numUnread = 0
 	o.mu.blocked = false
 	o.mu.Unlock()
@@ -392,6 +395,7 @@ func NewHashRouter(
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
+	diskAcc *mon.BoundAccount,
 ) (*HashRouter, []Operator) {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeDefault {
 		execerror.VectorizedInternalPanic(errors.Errorf("hash router instantiated with incompatible disk queue cache mode: %d", diskQueueCfg.CacheMode))
@@ -408,7 +412,7 @@ func NewHashRouter(
 	unblockEventsChan := make(chan struct{}, 2*len(unlimitedAllocators))
 	memoryLimitPerOutput := memoryLimit / int64(len(unlimitedAllocators))
 	for i := range unlimitedAllocators {
-		op := newRouterOutputOp(unlimitedAllocators[i], types, unblockEventsChan, memoryLimitPerOutput, diskQueueCfg, fdSemaphore)
+		op := newRouterOutputOp(unlimitedAllocators[i], types, unblockEventsChan, memoryLimitPerOutput, diskQueueCfg, fdSemaphore, diskAcc)
 		outputs[i] = op
 		outputsAsOps[i] = op
 	}
@@ -526,9 +530,9 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 }
 
 // reset resets the HashRouter for a benchmark run.
-func (r *HashRouter) reset() {
+func (r *HashRouter) reset(ctx context.Context) {
 	if i, ok := r.input.(resetter); ok {
-		i.reset()
+		i.reset(ctx)
 	}
 	r.numBlockedOutputs = 0
 	for moreToRead := true; moreToRead; {
@@ -539,7 +543,7 @@ func (r *HashRouter) reset() {
 		}
 	}
 	for _, o := range r.outputs {
-		o.(resetter).reset()
+		o.(resetter).reset(ctx)
 	}
 }
 

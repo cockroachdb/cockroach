@@ -101,7 +101,7 @@ func (c *sortChunksOp) Next(ctx context.Context) coldata.Batch {
 			// the full reset of the chunker because we're in the middle of
 			// processing of the input to sortChunksOp.
 			c.input.emptyBuffer()
-			c.sorter.reset()
+			c.sorter.reset(ctx)
 		} else {
 			return batch
 		}

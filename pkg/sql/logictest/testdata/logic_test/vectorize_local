@@ -91,3 +91,16 @@ SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN
 querying next range at /Table/56/1/0
 === SPAN START: kv.DistSender: sending partial batch ===
 querying next range at /Table/56/1/10
+
+# Regression test for #46123 (rowexec.TableReader not implementing
+# execinfra.OpNode interface).
+statement ok
+CREATE TABLE t46123(c0 INT)
+
+query T
+EXPLAIN (VEC) SELECT stddev(0) FROM t46123 WHERE ('' COLLATE en)::BOOL
+----
+│
+└ Node 1
+└ *rowexec.orderedAggregator
+  └ *rowexec.tableReader

@@ -50,7 +50,8 @@ func TestWindowFunctions(t *testing.T) {
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
-			Settings: st,
+			Settings:    st,
+			DiskMonitor: testDiskMonitor,
 		},
 	}
 	// All supported window function operators will use from 0 to 3 disk queues
@@ -62,16 +63,13 @@ func TestWindowFunctions(t *testing.T) {
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 
-	var (
-		memAccounts []*mon.BoundAccount
-		memMonitors []*mon.BytesMonitor
-	)
-
 	rowNumberFn := execinfrapb.WindowerSpec_ROW_NUMBER
 	rankFn := execinfrapb.WindowerSpec_RANK
 	denseRankFn := execinfrapb.WindowerSpec_DENSE_RANK
 	percentRankFn := execinfrapb.WindowerSpec_PERCENT_RANK
 	cumeDistFn := execinfrapb.WindowerSpec_CUME_DIST
+	accounts := make([]*mon.BoundAccount, 0)
+	monitors := make([]*mon.BytesMonitor, 0)
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 		for _, tc := range []windowFnTestCase{
@@ -297,8 +295,8 @@ func TestWindowFunctions(t *testing.T) {
 					args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 					args.TestingKnobs.NumForcedRepartitions = maxNumberFDs
 					result, err := NewColOperator(ctx, flowCtx, args)
-					memAccounts = append(memAccounts, result.BufferingOpMemAccounts...)
-					memMonitors = append(memMonitors, result.BufferingOpMemMonitors...)
+					accounts = append(accounts, result.OpAccounts...)
+					monitors = append(monitors, result.OpMonitors...)
 					return result.Op, err
 				})
 				for i, sem := range semsToCheck {
@@ -307,10 +305,12 @@ func TestWindowFunctions(t *testing.T) {
 			})
 		}
 	}
-	for _, account := range memAccounts {
-		account.Close(ctx)
+
+	for _, acc := range accounts {
+		acc.Close(ctx)
 	}
-	for _, monitor := range memMonitors {
-		monitor.Stop(ctx)
+
+	for _, m := range monitors {
+		m.Stop(ctx)
 	}
 }

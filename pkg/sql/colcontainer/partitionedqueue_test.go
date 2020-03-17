@@ -106,7 +106,7 @@ func TestPartitionedDiskQueue(t *testing.T) {
 	queueCfg.FS = countingFS
 
 	t.Run("ReopenReadPartition", func(t *testing.T) {
-		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyDefault)
+		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyDefault, testDiskAcc)
 
 		countingFS.assertOpenFDs(t, sem, 0, 0)
 		require.NoError(t, p.Enqueue(ctx, 0, batch))
@@ -133,7 +133,7 @@ func TestPartitionedDiskQueue(t *testing.T) {
 		// And the file descriptor should be automatically closed.
 		countingFS.assertOpenFDs(t, sem, 0, 0)
 
-		require.NoError(t, p.Close())
+		require.NoError(t, p.Close(ctx))
 		countingFS.assertOpenFDs(t, sem, 0, 0)
 	})
 
@@ -171,7 +171,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 		// new partition being written to when closedForWrites from maxPartitions
 		// and writing the merged result to a single new partition.
 		sem := colexec.NewTestingSemaphore(maxPartitions + 1)
-		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyCloseOnNewPartition)
+		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyCloseOnNewPartition, testDiskAcc)
 
 		// Define sortRepartition to be able to call this helper function
 		// recursively.
@@ -200,7 +200,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 			require.NoError(t, p.CloseAllOpenReadFileDescriptors())
 			countingFS.assertOpenFDs(t, sem, 1, 0)
 			// Closing all write descriptors will close all descriptors.
-			require.NoError(t, p.CloseAllOpenWriteFileDescriptors())
+			require.NoError(t, p.CloseAllOpenWriteFileDescriptors(ctx))
 			countingFS.assertOpenFDs(t, sem, 0, 0)
 
 			// Now, we simulate a repartition. Open all partitions for reads.
@@ -225,7 +225,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 			// next iteration (if any, otherwise p.Close should close it) of this loop.
 			countingFS.assertOpenFDs(t, sem, 1, 0)
 			// Call CloseInactiveReadPartitions to reclaim space.
-			require.NoError(t, p.CloseInactiveReadPartitions())
+			require.NoError(t, p.CloseInactiveReadPartitions(ctx))
 			// Try to enqueue to a partition that was just closed.
 			require.Error(t, p.Enqueue(ctx, firstPartitionIdx, batch))
 			countingFS.assertOpenFDs(t, sem, 1, 0)
@@ -235,7 +235,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 		}
 
 		sortRepartition(0, numRepartitions)
-		require.NoError(t, p.Close())
+		require.NoError(t, p.Close(ctx))
 		countingFS.assertOpenFDs(t, sem, 0, 0)
 	})
 
@@ -251,7 +251,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 		// number of partitions partitioned to and 2 represents the file descriptors
 		// for the left and right side in the case of a repartition.
 		sem := colexec.NewTestingSemaphore(maxPartitions + 2)
-		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyDefault)
+		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyDefault, testDiskAcc)
 
 		// joinRepartition will perform the partitioning that happens during a hash
 		// join. expectedRepartitionReadFDs are the read file descriptors that are
@@ -282,11 +282,11 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 			}
 
 			// The input has been partitioned. All file descriptors should be closed.
-			require.NoError(t, p.CloseAllOpenWriteFileDescriptors())
+			require.NoError(t, p.CloseAllOpenWriteFileDescriptors(ctx))
 			countingFS.assertOpenFDs(t, sem, 0, expectedRepartitionReadFDs)
 			require.NoError(t, p.CloseAllOpenReadFileDescriptors())
 			countingFS.assertOpenFDs(t, sem, 0, 0)
-			require.NoError(t, p.CloseInactiveReadPartitions())
+			require.NoError(t, p.CloseInactiveReadPartitions(ctx))
 			countingFS.assertOpenFDs(t, sem, 0, 0)
 			// Now that we closed (read: deleted) the partitions read to repartition,
 			// it should be illegal to enqueue to that index.

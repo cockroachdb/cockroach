@@ -570,14 +570,14 @@ func (hj *hashJoiner) resetOutput() {
 	}
 }
 
-func (hj *hashJoiner) reset() {
+func (hj *hashJoiner) reset(ctx context.Context) {
 	for _, input := range []Operator{hj.inputOne, hj.inputTwo} {
 		if r, ok := input.(resetter); ok {
-			r.reset()
+			r.reset(ctx)
 		}
 	}
 	hj.state = hjBuilding
-	hj.ht.reset()
+	hj.ht.reset(ctx)
 	copy(hj.probeState.buildIdx[:coldata.BatchSize()], zeroIntColumn)
 	copy(hj.probeState.probeIdx[:coldata.BatchSize()], zeroIntColumn)
 	if hj.spec.left.outer {

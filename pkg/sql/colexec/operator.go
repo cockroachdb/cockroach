@@ -153,13 +153,22 @@ type InternalMemoryOperator interface {
 // resetter is an interface that operators can implement if they can be reset
 // either for reusing (to keep the already allocated memory) or during tests.
 type resetter interface {
-	reset()
+	reset(ctx context.Context)
 }
 
 // resettableOperator is an Operator that can be reset.
 type resettableOperator interface {
 	Operator
 	resetter
+}
+
+type closer interface {
+	Close(ctx context.Context) error
+}
+
+type closableOperator interface {
+	Operator
+	closer
 }
 
 type noopOperator struct {
@@ -182,9 +191,9 @@ func (n *noopOperator) Next(ctx context.Context) coldata.Batch {
 	return n.input.Next(ctx)
 }
 
-func (n *noopOperator) reset() {
+func (n *noopOperator) reset(ctx context.Context) {
 	if r, ok := n.input.(resetter); ok {
-		r.reset()
+		r.reset(ctx)
 	}
 }
 

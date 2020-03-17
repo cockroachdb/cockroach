@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,7 +31,7 @@ type simpleProjectOp struct {
 	numBatchesLoggingThreshold int
 }
 
-var _ Operator = &simpleProjectOp{}
+var _ closableOperator = &simpleProjectOp{}
 
 // projectingBatch is a Batch that applies a simple projection to another,
 // underlying batch, discarding all columns but the ones in its projection
@@ -125,9 +124,9 @@ func (d *simpleProjectOp) Next(ctx context.Context) coldata.Batch {
 	return projBatch
 }
 
-func (d *simpleProjectOp) Close() error {
-	if c, ok := d.input.(io.Closer); ok {
-		return c.Close()
+func (d *simpleProjectOp) Close(ctx context.Context) error {
+	if c, ok := d.input.(closer); ok {
+		return c.Close(ctx)
 	}
 	return nil
 }
