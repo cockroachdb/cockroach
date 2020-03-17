@@ -28,7 +28,7 @@ import { LocalSetting } from "src/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { LongToMoment } from "src/util/convert";
 import { INodeStatus, MetricConstants } from "src/util/proto";
-import { ColumnsConfig, Table, Text, TextTypes, Tooltip } from "src/components";
+import { ColumnsConfig, columnSorterFactory, Table, Text, TextTypes, Tooltip } from "src/components";
 import { Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";
@@ -173,24 +173,14 @@ export class NodeList extends React.Component<LiveNodeListProps> {
           return <NodeLocalityColumn record={record} />;
         }
       },
-      sorter: (a, b) => {
-        if (!_.isUndefined(a.nodeId) && !_.isUndefined(b.nodeId)) { return 0; }
-        if (a.region < b.region) { return -1; }
-        if (a.region > b.region) { return 1; }
-        return 0;
-      },
+      sorter: columnSorterFactory<NodeStatusRow>("region"),
       className: "column--border-right",
       width: "20%",
     },
     {
       key: "nodesCount",
       title: "node count",
-      sorter: (a, b) => {
-        if (_.isUndefined(a.nodesCount) || _.isUndefined(b.nodesCount)) { return 0; }
-        if (a.nodesCount < b.nodesCount) { return -1; }
-        if (a.nodesCount > b.nodesCount) { return 1; }
-        return 0;
-      },
+      sorter: columnSorterFactory<NodeStatusRow>("nodesCount"),
       render: (_text, record) => record.nodesCount,
       sortDirections: ["ascend", "descend"],
       className: "column--align-right",
@@ -200,7 +190,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       key: "uptime",
       dataIndex: "uptime",
       title: "uptime",
-      sorter: true,
+      sorter: columnSorterFactory<NodeStatusRow>("uptime"),
       className: "column--align-right",
       width: "10%",
       ellipsis: true,
@@ -209,7 +199,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       key: "replicas",
       dataIndex: "replicas",
       title: "replicas",
-      sorter: true,
+      sorter: columnSorterFactory<NodeStatusRow>("replicas"),
       className: "column--align-right",
       width: "10%",
     },
@@ -217,8 +207,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       key: "capacityUse",
       title: "capacity use",
       render: (_text, record) => Percentage(record.usedCapacity, record.availableCapacity),
-      sorter: (a, b) =>
-        a.usedCapacity / a.availableCapacity - b.usedCapacity / b.availableCapacity,
+      sorter: columnSorterFactory<NodeStatusRow>(value => value.usedCapacity / value.availableCapacity),
       className: "column--align-right",
       width: "10%",
     },
@@ -226,8 +215,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       key: "memoryUse",
       title: "memory use",
       render: (_text, record) => Percentage(record.usedMemory, record.availableMemory),
-      sorter: (a, b) =>
-        a.usedMemory / a.availableMemory - b.usedMemory / b.availableMemory,
+      sorter: columnSorterFactory<NodeStatusRow>(value => value.usedMemory / value.availableMemory),
       className: "column--align-right",
       width: "10%",
     },
@@ -235,7 +223,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       key: "numCpus",
       title: "cpus",
       dataIndex: "numCpus",
-      sorter: true,
+      sorter: columnSorterFactory<NodeStatusRow>("numCpus"),
       className: "column--align-right",
       width: "8%",
     },
@@ -243,7 +231,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       key: "version",
       dataIndex: "version",
       title: "version",
-      sorter: true,
+      sorter: columnSorterFactory<NodeStatusRow>("version"),
       width: "8%",
       ellipsis: true,
     },
@@ -272,7 +260,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
         );
       },
       title: "status",
-      sorter: (a, b) => a.status - b.status,
+      sorter: columnSorterFactory<NodeStatusRow>("status"),
       width: "13%",
     },
     {

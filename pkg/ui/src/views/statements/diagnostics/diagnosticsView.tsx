@@ -23,6 +23,7 @@ import {
   Anchor,
   DownloadFile,
   DownloadFileRef,
+  columnSorterFactory,
 } from "src/components";
 import { AdminUIState } from "src/redux/state";
 import { getStatementDiagnostics } from "src/util/api";
@@ -40,7 +41,7 @@ import "./diagnosticsView.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequest;
-import { getDiagnosticsStatus, sortByCompletedField, sortByRequestedAtField } from "./diagnosticsUtils";
+import { getDiagnosticsStatus } from "./diagnosticsUtils";
 import { statementDiagnostics } from "src/util/docs";
 import { createStatementDiagnosticsAlertLocalSetting } from "oss/src/redux/alerts";
 
@@ -61,7 +62,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
     {
       key: "activatedOn",
       title: "Activated on",
-      sorter: sortByRequestedAtField,
+      sorter: columnSorterFactory<IStatementDiagnosticsReport>(value => value?.requested_at?.seconds?.toNumber()),
       defaultSortOrder: "descend",
       render: (_text, record) => {
         const timestamp = record.requested_at.seconds.toNumber() * 1000;
@@ -71,7 +72,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
     {
       key: "status",
       title: "status",
-      sorter: sortByCompletedField,
+      sorter: columnSorterFactory<IStatementDiagnosticsReport>(value => value?.completed ? 1 : -1),
       width: "160px",
       render: (_text, record) => {
         const status = getDiagnosticsStatus(record);
