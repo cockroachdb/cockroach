@@ -35,10 +35,10 @@ type alterRoleNode struct {
 	run alterRoleRun
 }
 
-// AlterUser is an alias for AlterRole.
+// AlterRole represents a ALTER ROLE statement.
 // Privileges: CREATEROLE privilege.
-func (p *planner) AlterUser(ctx context.Context, n *tree.AlterUser) (planNode, error) {
-	return p.AlterRoleNode(ctx, n.Name, n.IfExists, n.IsRole, "ALTER USER", n.KVOptions)
+func (p *planner) AlterRole(ctx context.Context, n *tree.AlterRole) (planNode, error) {
+	return p.AlterRoleNode(ctx, n.Name, n.IfExists, n.IsRole, "ALTER ROLE", n.KVOptions)
 }
 
 func (p *planner) AlterRoleNode(

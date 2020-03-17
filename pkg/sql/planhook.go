@@ -83,18 +83,6 @@ type PlanHookState interface {
 	AuthorizationAccessor
 	// The role create/drop call into OSS code to reuse plan nodes.
 	// TODO(mberhault): it would be easier to just pass a planner to plan hooks.
-	CreateRoleNode(
-		ctx context.Context, nameE tree.Expr, ifNotExists bool,
-		isRole bool, opName string, kvOptions tree.KVOptions,
-	) (*CreateRoleNode, error)
-	AlterRoleNode(
-		ctx context.Context, nameE tree.Expr, ifExists bool, isRole bool,
-		opName string, kvOptions tree.KVOptions,
-	) (*alterRoleNode, error)
-	DropRoleNode(
-		ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool,
-		opName string,
-	) (*DropRoleNode, error)
 	GetAllRoles(ctx context.Context) (map[string]bool, error)
 	BumpRoleMembershipTableVersion(ctx context.Context) error
 	EvalAsOfTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, error)
@@ -121,14 +109,6 @@ func AddPlanHook(f planHookFn) {
 // were registered.
 func ClearPlanHooks() {
 	planHooks = nil
-}
-
-// AddWrappedPlanHook adds a hook used to short-circuit creating a planNode from a
-// tree.Statement. If the returned plan is non-nil, it is used directly by the planner.
-//
-// See PlanHookState comments for information about why plan hooks are needed.
-func AddWrappedPlanHook(f wrappedPlanHookFn) {
-	wrappedPlanHooks = append(wrappedPlanHooks, f)
 }
 
 // hookFnNode is a planNode implemented in terms of a function. It begins the

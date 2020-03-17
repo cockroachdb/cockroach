@@ -635,7 +635,6 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> alter_view_stmt
 %type <tree.Statement> alter_sequence_stmt
 %type <tree.Statement> alter_database_stmt
-%type <tree.Statement> alter_user_stmt
 %type <tree.Statement> alter_range_stmt
 %type <tree.Statement> alter_partition_stmt
 %type <tree.Statement> alter_role_stmt
@@ -706,7 +705,6 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> create_schema_stmt
 %type <tree.Statement> create_table_stmt
 %type <tree.Statement> create_table_as_stmt
-%type <tree.Statement> create_user_stmt
 %type <tree.Statement> create_view_stmt
 %type <tree.Statement> create_sequence_stmt
 
@@ -725,7 +723,6 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> drop_index_stmt
 %type <tree.Statement> drop_role_stmt
 %type <tree.Statement> drop_table_stmt
-%type <tree.Statement> drop_user_stmt
 %type <tree.Statement> drop_view_stmt
 %type <tree.Statement> drop_sequence_stmt
 
@@ -1045,6 +1042,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <bool> opt_temp
 %type <bool> opt_temp_create_table
+%type <bool> role_or_group_or_user
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
@@ -1145,7 +1143,6 @@ stmt:
 alter_stmt:
   alter_ddl_stmt      // help texts in sub-rule
 | alter_role_stmt     // EXTEND WITH HELP: ALTER ROLE
-| alter_user_stmt     // EXTEND WITH HELP: ALTER USER
 | ALTER error         // SHOW HELP: ALTER
 
 alter_ddl_stmt:
@@ -2241,7 +2238,6 @@ comment_text:
 // CREATE ROLE
 create_stmt:
   create_role_stmt     // EXTEND WITH HELP: CREATE ROLE
-| create_user_stmt     // EXTEND WITH HELP: CREATE USER
 | create_ddl_stmt      // help texts in sub-rule
 | create_stats_stmt    // EXTEND WITH HELP: CREATE STATISTICS
 | create_unsupported   {}
@@ -2509,7 +2505,6 @@ discard_stmt:
 drop_stmt:
   drop_ddl_stmt      // help texts in sub-rule
 | drop_role_stmt     // EXTEND WITH HELP: DROP ROLE
-| drop_user_stmt     // EXTEND WITH HELP: DROP USER
 | drop_unsupported   {}
 | DROP error         // SHOW HELP: DROP
 
@@ -2611,35 +2606,20 @@ drop_database_stmt:
   }
 | DROP DATABASE error // SHOW HELP: DROP DATABASE
 
-// %Help: DROP USER - remove a user
-// %Category: Priv
-// %Text: DROP USER [IF EXISTS] <user> [, ...]
-// %SeeAlso: CREATE USER, SHOW USERS
-drop_user_stmt:
-  DROP USER string_or_placeholder_list
-  {
-    $$.val = &tree.DropUser{Names: $3.exprs(), IfExists: false}
-  }
-| DROP USER IF EXISTS string_or_placeholder_list
-  {
-    $$.val = &tree.DropUser{Names: $5.exprs(), IfExists: true}
-  }
-| DROP USER error // SHOW HELP: DROP USER
-
 // %Help: DROP ROLE - remove a user
 // %Category: Priv
 // %Text: DROP ROLE [IF EXISTS] <user> [, ...]
 // %SeeAlso: CREATE ROLE, SHOW ROLE
 drop_role_stmt:
-  DROP role_or_group string_or_placeholder_list
+  DROP role_or_group_or_user string_or_placeholder_list
   {
-    $$.val = &tree.DropRole{Names: $3.exprs(), IfExists: false, IsRole: true}
+    $$.val = &tree.DropRole{Names: $3.exprs(), IfExists: false, IsRole: $2.bool()}
   }
-| DROP role_or_group IF EXISTS string_or_placeholder_list
+| DROP role_or_group_or_user IF EXISTS string_or_placeholder_list
   {
-    $$.val = &tree.DropRole{Names: $5.exprs(), IfExists: true, IsRole: true}
+    $$.val = &tree.DropRole{Names: $5.exprs(), IfExists: true, IsRole: $2.bool()}
   }
-| DROP role_or_group error // SHOW HELP: DROP ROLE
+| DROP role_or_group_or_user error // SHOW HELP: DROP ROLE
 
 table_name_list:
   table_name
@@ -5127,71 +5107,52 @@ password_clause:
     $$.val = tree.KVOption{Key: tree.Name($1), Value: tree.DNull}
   }
 
-// %Help: CREATE USER - define a new user
-// %Category: Priv
-// %Text: CREATE USER [IF NOT EXISTS] <name> [ [WITH] <OPTIONS...> ]
-// %SeeAlso: DROP USER, SHOW USERS, WEBDOCS/create-user.html
-create_user_stmt:
-  CREATE USER string_or_placeholder opt_role_options
-  {
-    $$.val = &tree.CreateUser{Name: $3.expr(), KVOptions: $4.kvOptions()}
-  }
-| CREATE USER IF NOT EXISTS string_or_placeholder opt_role_options
-  {
-    $$.val = &tree.CreateUser{Name: $6.expr(), IfNotExists: true, KVOptions: $7.kvOptions()}
-  }
-| CREATE USER error // SHOW HELP: CREATE USER
-
 // %Help: CREATE ROLE - define a new role
 // %Category: Priv
 // %Text: CREATE ROLE [IF NOT EXISTS] <name> [ [WITH] <OPTIONS...> ]
 // %SeeAlso: ALTER ROLE, DROP ROLE, SHOW ROLES
 create_role_stmt:
-  CREATE role_or_group string_or_placeholder opt_role_options
+  CREATE role_or_group_or_user string_or_placeholder opt_role_options
   {
-    $$.val = &tree.CreateRole{Name: $3.expr(), KVOptions: $4.kvOptions(), IsRole: true}
+    $$.val = &tree.CreateRole{Name: $3.expr(), KVOptions: $4.kvOptions(), IsRole: $2.bool()}
   }
-| CREATE role_or_group IF NOT EXISTS string_or_placeholder opt_role_options
+| CREATE role_or_group_or_user IF NOT EXISTS string_or_placeholder opt_role_options
   {
-    $$.val = &tree.CreateRole{Name: $6.expr(), IfNotExists: true, KVOptions: $7.kvOptions(), IsRole: true}
+    $$.val = &tree.CreateRole{Name: $6.expr(), IfNotExists: true, KVOptions: $7.kvOptions(), IsRole: $2.bool()}
   }
-| CREATE role_or_group error // SHOW HELP: CREATE ROLE
-
-// %Help: ALTER USER - alter a user
-// %Category: Priv
-// %Text: ALTER USER <name> [WITH] <options...>
-// %SeeAlso: CREATE USER, DROP USER, SHOW USERS
-alter_user_stmt:
-  ALTER USER string_or_placeholder opt_role_options
-{
-  $$.val = &tree.AlterUser{Name: $3.expr(), KVOptions: $4.kvOptions()}
-}
-| ALTER USER IF EXISTS string_or_placeholder opt_role_options
-{
-  $$.val = &tree.AlterUser{Name: $5.expr(), IfExists: true, KVOptions: $6.kvOptions()}
-}
-| ALTER USER error // SHOW HELP: ALTER USER
+| CREATE role_or_group_or_user error // SHOW HELP: CREATE ROLE
 
 // %Help: ALTER ROLE - alter a role
 // %Category: Priv
 // %Text: ALTER ROLE <name> [WITH] <options...>
 // %SeeAlso: CREATE ROLE, DROP ROLE, SHOW ROLES
 alter_role_stmt:
-  ALTER role_or_group string_or_placeholder opt_role_options
+  ALTER role_or_group_or_user string_or_placeholder opt_role_options
 {
-  $$.val = &tree.AlterRole{Name: $3.expr(), KVOptions: $4.kvOptions(), IsRole: true}
+  $$.val = &tree.AlterRole{Name: $3.expr(), KVOptions: $4.kvOptions(), IsRole: $2.bool()}
 }
-| ALTER role_or_group IF EXISTS string_or_placeholder opt_role_options
+| ALTER role_or_group_or_user IF EXISTS string_or_placeholder opt_role_options
 {
-  $$.val = &tree.AlterRole{Name: $5.expr(), IfExists: true, KVOptions: $6.kvOptions(), IsRole: true}
+  $$.val = &tree.AlterRole{Name: $5.expr(), IfExists: true, KVOptions: $6.kvOptions(), IsRole: $2.bool()}
 }
-| ALTER role_or_group error // SHOW HELP: ALTER ROLE
+| ALTER role_or_group_or_user error // SHOW HELP: ALTER ROLE
 
 // "CREATE GROUP is now an alias for CREATE ROLE"
 // https://www.postgresql.org/docs/10/static/sql-creategroup.html
-role_or_group:
-  ROLE  { }
-| GROUP { /* SKIP DOC */ }
+role_or_group_or_user:
+  ROLE
+  {
+    $$.val = true
+  }
+| GROUP
+  {
+    /* SKIP DOC */
+    $$.val = true
+  }
+| USER
+  {
+    $$.val = false
+  }
 
 // %Help: CREATE VIEW - create a new view
 // %Category: DDL

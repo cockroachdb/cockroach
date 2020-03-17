@@ -472,7 +472,7 @@ func Example_demo() {
 	//   system
 	// (4 rows)
 	// demo --insecure=false -e CREATE USER test WITH PASSWORD 'testpass'
-	// CREATE USER 1
+	// CREATE ROLE 1
 	// demo -e CREATE USER test WITH PASSWORD 'testpass'
 	// ERROR: setting or updating a password is not supported in insecure mode
 	// SQLSTATE: 28P01

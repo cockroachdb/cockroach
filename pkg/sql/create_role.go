@@ -41,13 +41,13 @@ var userTableName = tree.NewTableName("system", "users")
 // RoleOptionsTableName represents system.role_options.
 var RoleOptionsTableName = tree.NewTableName("system", "role_options")
 
-// CreateUser is an alias for CreateRole.
+// CreateRole represents a CREATE ROLE statement.
 // Privileges: INSERT on system.users.
 //   notes: postgres allows the creation of users with an empty password. We do
 //          as well, but disallow password authentication for these users.
-func (p *planner) CreateUser(ctx context.Context, n *tree.CreateUser) (planNode, error) {
+func (p *planner) CreateRole(ctx context.Context, n *tree.CreateRole) (planNode, error) {
 	return p.CreateRoleNode(ctx, n.Name, n.IfNotExists, n.IsRole,
-		"CREATE USER", n.KVOptions)
+		"CREATE ROLE", n.KVOptions)
 }
 
 // CreateRoleNode creates a "create user" plan node.

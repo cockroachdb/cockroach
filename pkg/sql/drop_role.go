@@ -35,10 +35,10 @@ type DropRoleNode struct {
 	run dropRoleRun
 }
 
-// DropRole drops a list of users.
+// DropRole represents a DROP ROLE statement.
 // Privileges: CREATEROLE privilege.
-func (p *planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, error) {
-	return p.DropRoleNode(ctx, n.Names, n.IfExists, n.IsRole, "DROP USER")
+func (p *planner) DropRole(ctx context.Context, n *tree.DropRole) (planNode, error) {
+	return p.DropRoleNode(ctx, n.Names, n.IfExists, n.IsRole, "DROP ROLE")
 }
 
 // DropRoleNode creates a "drop user" plan node. This can be called from DROP USER or DROP ROLE.
