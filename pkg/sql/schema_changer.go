@@ -937,6 +937,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 							TableID:        sc.tableID,
 							MutationID:     mutationID,
 							ResumeSpanList: spanList,
+							FormatVersion:  jobspb.JobResumerFormatVersion,
 						},
 						Progress:      jobspb.SchemaChangeProgress{},
 						NonCancelable: true,
@@ -1255,6 +1256,7 @@ func (sc *SchemaChanger) updateJobForRollback(
 			TableID:        sc.tableID,
 			MutationID:     sc.mutationID,
 			ResumeSpanList: spanList,
+			FormatVersion:  jobspb.JobResumerFormatVersion,
 		},
 	); err != nil {
 		return err

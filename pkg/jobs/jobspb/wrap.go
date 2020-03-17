@@ -181,3 +181,10 @@ func WrapPayloadDetails(details Details) interface {
 
 // ChangefeedTargets is a set of id targets with metadata.
 type ChangefeedTargets map[sqlbase.ID]ChangefeedTarget
+
+type SchemaChangeDetailsFormatVersion uint32
+
+const (
+	BaseFormatVersion SchemaChangeDetailsFormatVersion = iota
+	JobResumerFormatVersion
+)

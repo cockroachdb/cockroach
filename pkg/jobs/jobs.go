@@ -387,6 +387,21 @@ func (j *Job) resumed(ctx context.Context) error {
 // StatusReverting.
 func (j *Job) cancelRequested(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+		// Don't allow 19.2-style schema change jobs to undergo changes in job state
+		// before they undergo a migration to make them properly runnable in 20.1 and
+		// later versions.
+		// TODO (lucy): Is this actually necessary? If we allow jobs to be canceled
+		// while waiting for a migration, then either we leave a canceled job for a
+		// 19.2 node to deal with, or we end up migrating a canceled job, both of
+		// which should be supported in theory. But disallowing cancellation means
+		// there's one fewer scenario we have to think about.
+		if schemaChangeDetails, ok := md.Payload.UnwrapDetails().(jobspb.SchemaChangeDetails); ok &&
+			schemaChangeDetails.FormatVersion < jobspb.JobResumerFormatVersion {
+			return errors.Newf(
+				"schema change job was created in earlier version, and cannot be " +
+					"canceled in this version until an internal migration is complete")
+		}
+
 		if md.Payload.Noncancelable {
 			return errors.Newf("job %d: not cancelable", *j.ID())
 		}
@@ -416,6 +431,21 @@ func (j *Job) cancelRequested(ctx context.Context, fn func(context.Context, *kv.
 // and will move it to state StatusPaused.
 func (j *Job) pauseRequested(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+		// Don't allow 19.2-style schema change jobs to undergo changes in job state
+		// before they undergo a migration to make them properly runnable in 20.1 and
+		// later versions.
+		//
+		// In particular, schema change jobs could not be paused in 19.2, so allowing
+		// pausing here could break backward compatibility during an upgrade by
+		// forcing 19.2 nodes to deal with a schema change job in a state that wasn't
+		// possible in 19.2.
+		if schemaChangeDetails, ok := md.Payload.UnwrapDetails().(jobspb.SchemaChangeDetails); ok &&
+			schemaChangeDetails.FormatVersion < jobspb.JobResumerFormatVersion {
+			return errors.Newf(
+				"schema change job was created in earlier version, and cannot be " +
+					"paused in this version until an internal migration is complete")
+		}
+
 		if md.Status == StatusPauseRequested || md.Status == StatusPaused {
 			return nil
 		}
