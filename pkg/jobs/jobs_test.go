@@ -2171,3 +2171,68 @@ func TestStartableJob(t *testing.T) {
 		require.NoError(t, <-runErr)
 	})
 }
+
+// TestUnmigratedSchemaChangeJobs tests that schema change jobs created in 19.2
+// that have not undergone a migration cannot be adopted, canceled, or paused.
+func TestUnmigratedSchemaChangeJobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer jobs.ResetConstructors()()
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 10 * time.Millisecond
+
+	ctx := context.TODO()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	// The default FormatVersion value in SchemaChangeDetails corresponds to a
+	// pre-20.1 job.
+	rec := jobs.Record{
+		DescriptorIDs: []sqlbase.ID{1},
+		Details:       jobspb.SchemaChangeDetails{},
+		Progress:      jobspb.SchemaChangeProgress{},
+	}
+
+	t.Run("job is not adopted", func(t *testing.T) {
+		resuming := make(chan struct{})
+		jobs.RegisterConstructor(jobspb.TypeSchemaChange, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+			return jobs.FakeResumer{
+				OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+					resuming <- struct{}{}
+					return nil
+				},
+			}
+		})
+		select {
+		case <-resuming:
+			t.Fatal("job was resumed")
+		case <-time.After(time.Second):
+			// With an adopt interval of 10 ms, within 1 s we can be reasonably sure
+			// that the job was not adopted.
+		}
+	})
+
+	t.Run("pause not supported", func(t *testing.T) {
+		job, err := registry.CreateJobWithTxn(ctx, rec, nil /* txn */)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.Exec("PAUSE JOB $1", *job.ID()); !testutils.IsError(err, "cannot be paused in this version") {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("cancel not supported", func(t *testing.T) {
+		job, err := registry.CreateJobWithTxn(ctx, rec, nil /* txn */)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.Exec("CANCEL JOB $1", *job.ID()); !testutils.IsError(err, "cannot be canceled in this version") {
+			t.Fatal(err)
+		}
+	})
+}
