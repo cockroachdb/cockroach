@@ -351,17 +351,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "alter_role_stmt",
-		inline: []string{"opt_role_options"},
-		replace: map[string]string{
-			"string_or_placeholder":             "name'",
-			"opt_role_options":                  "OPTIONS",
-			"string_or_placeholder  'PASSWORD'": "name 'PASSWORD'",
-			"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
-		unlink: []string{"name", "password"},
-	},
-	{
-		name:   "alter_user_stmt",
-		inline: []string{"opt_role_options"},
+		inline: []string{"role_or_group_or_user", "opt_role_options"},
 		replace: map[string]string{
 			"string_or_placeholder":             "name'",
 			"opt_role_options":                  "OPTIONS",
@@ -599,16 +589,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_role_stmt",
-		inline: []string{"opt_role_options"},
-		replace: map[string]string{
-			"string_or_placeholder":             "name",
-			"opt_role_options":                  "OPTIONS",
-			"string_or_placeholder  'PASSWORD'": "name 'PASSWORD'",
-			"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
-	},
-	{
-		name:   "create_user_stmt",
-		inline: []string{"opt_role_options"},
+		inline: []string{"role_or_group_or_user", "opt_role_options"},
 		replace: map[string]string{
 			"string_or_placeholder":             "name",
 			"opt_role_options":                  "OPTIONS",
@@ -686,10 +667,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "drop_role_stmt",
-		replace: map[string]string{"string_or_placeholder_list": "name"},
-	},
-	{
-		name:    "drop_user_stmt",
+		inline:  []string{"role_or_group_or_user"},
 		replace: map[string]string{"string_or_placeholder_list": "name"},
 	},
 	{
