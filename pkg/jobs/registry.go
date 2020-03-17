@@ -1014,6 +1014,14 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 				*id, status, payload.Lease)
 		}
 
+		// In version 20.1, the registry must not adopt 19.2-style schema change
+		// jobs until they've undergone a migration.
+		if schemaChangeDetails, ok := payload.UnwrapDetails().(jobspb.SchemaChangeDetails); ok &&
+			schemaChangeDetails.FormatVersion < jobspb.JobResumerFormatVersion {
+			log.VEventf(ctx, 2, "job %d: skipping adoption because schema change job has not been migrated", id)
+			continue
+		}
+
 		if payload.Lease == nil {
 			// If the lease is missing, it simply means the job does not yet support
 			// resumability.
