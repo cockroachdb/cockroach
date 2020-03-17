@@ -315,6 +315,10 @@ type Replica struct {
 		// evaluation and is consumed by the Raft processing thread. Once
 		// consumed, commands are proposed through Raft and moved to the
 		// proposals map.
+		//
+		// Access to proposalBuf must occur *without* holding the mutex.
+		// Instead, the buffer internally holds a reference to mu and will use
+		// it appropriately.
 		proposalBuf propBuf
 		// proposals stores the Raft in-flight commands which originated at
 		// this Replica, i.e. all commands for which propose has been called,
@@ -896,6 +900,13 @@ func (r *Replica) raftStatusRLocked() *raft.Status {
 		return &s
 	}
 	return nil
+}
+
+func (r *Replica) raftBasicStatusRLocked() raft.BasicStatus {
+	if rg := r.mu.internalRaftGroup; rg != nil {
+		return rg.BasicStatus()
+	}
+	return raft.BasicStatus{}
 }
 
 // State returns a copy of the internal state of the Replica, along with some
