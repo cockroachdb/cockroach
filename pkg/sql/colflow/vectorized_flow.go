@@ -95,10 +95,11 @@ type vectorizedFlow struct {
 	// the streaming components.
 	streamingMemAccounts []*mon.BoundAccount
 
-	// monitors are the memory monitors of the buffering components.
+	// monitors are the monitors (of both memory and disk usage) of the
+	// buffering components.
 	monitors []*mon.BytesMonitor
-	// acccounts are the memory accounts that are tracking the dynamic
-	// memory usage of the buffering components.
+	// accounts are the accounts that are tracking the dynamic memory and disk
+	// usage of the buffering components.
 	accounts []*mon.BoundAccount
 
 	tempStorage struct {
@@ -194,7 +195,7 @@ func (f *vectorizedFlow) Setup(
 		f.operatorConcurrency = creator.operatorConcurrency
 		f.streamingMemAccounts = append(f.streamingMemAccounts, creator.streamingMemAccounts...)
 		f.monitors = append(f.monitors, creator.monitors...)
-		f.accounts = append(f.accounts, creator.acccounts...)
+		f.accounts = append(f.accounts, creator.accounts...)
 		log.VEventf(ctx, 1, "vectorized flow setup succeeded")
 		return ctx, nil
 	}
@@ -204,7 +205,7 @@ func (f *vectorizedFlow) Setup(
 	for _, acc := range creator.streamingMemAccounts {
 		acc.Close(ctx)
 	}
-	for _, acc := range creator.acccounts {
+	for _, acc := range creator.accounts {
 		acc.Close(ctx)
 	}
 	for _, mon := range creator.monitors {
@@ -442,12 +443,12 @@ type vectorizedFlowCreator struct {
 	// streamingMemAccounts contains all memory accounts of the non-buffering
 	// components in the vectorized flow.
 	streamingMemAccounts []*mon.BoundAccount
-	// monitors contains all memory monitors of the buffering
-	// components in the vectorized flow.
+	// monitors contains all monitors (for both memory and disk usage) of the
+	// buffering components in the vectorized flow.
 	monitors []*mon.BytesMonitor
-	// acccounts contains all memory accounts of the buffering
-	// components in the vectorized flow.
-	acccounts []*mon.BoundAccount
+	// accounts contains all monitors (for both memory and disk usage) of the
+	// buffering components in the vectorized flow.
+	accounts []*mon.BoundAccount
 
 	diskQueueCfg colcontainer.DiskQueueCfg
 	fdSemaphore  semaphore.Semaphore
@@ -497,18 +498,22 @@ func (s *vectorizedFlowCreator) createBufferingUnlimitedMemMonitor(
 	return bufferingOpUnlimitedMemMonitor
 }
 
-// createDiskAccount instantiates an unlimited disk monitor and a disk account
+// createDiskAccounts instantiates an unlimited disk monitor and disk accounts
 // to be used for disk spilling infrastructure in vectorized engine.
-// TODO(azhng): consolidates all allocation monitors/account manage into one
+// TODO(azhng): consolidate all allocation monitors/account management into one
 // place after branch cut for 20.1.
-func (s *vectorizedFlowCreator) createDiskAccount(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
-) *mon.BoundAccount {
+func (s *vectorizedFlowCreator) createDiskAccounts(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name string, numAccounts int,
+) []*mon.BoundAccount {
 	diskMonitor := execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, name)
 	s.monitors = append(s.monitors, diskMonitor)
-	diskAccount := diskMonitor.MakeBoundAccount()
-	s.acccounts = append(s.acccounts, &diskAccount)
-	return &diskAccount
+	diskAccounts := make([]*mon.BoundAccount, numAccounts)
+	for i := range diskAccounts {
+		diskAcc := diskMonitor.MakeBoundAccount()
+		diskAccounts[i] = &diskAcc
+	}
+	s.accounts = append(s.accounts, diskAccounts...)
+	return diskAccounts
 }
 
 // newStreamingMemAccount creates a new memory account bound to the monitor in
@@ -591,15 +596,16 @@ func (s *vectorizedFlowCreator) setupRouter(
 	for i := range allocators {
 		acc := hashRouterMemMonitor.MakeBoundAccount()
 		allocators[i] = colexec.NewAllocator(ctx, &acc)
-		s.acccounts = append(s.acccounts, &acc)
+		s.accounts = append(s.accounts, &acc)
 	}
 	limit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
 	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
 		limit = 1
 	}
-	diskAccount := s.createDiskAccount(ctx, flowCtx, mmName)
+	diskAccounts := s.createDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
 	router, outputs := colexec.NewHashRouter(
-		allocators, input, outputTyps, output.HashColumns, limit, s.diskQueueCfg, s.fdSemaphore, diskAccount)
+		allocators, input, outputTyps, output.HashColumns, limit, s.diskQueueCfg, s.fdSemaphore, diskAccounts,
+	)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		logtags.AddTag(ctx, "hashRouterID", mmName)
 		router.Run(ctx)
@@ -923,7 +929,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		// monitor and account have been created, so we always want to accumulate
 		// them for a proper cleanup.
 		s.monitors = append(s.monitors, result.OpMonitors...)
-		s.acccounts = append(s.acccounts, result.OpAccounts...)
+		s.accounts = append(s.accounts, result.OpAccounts...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "unable to vectorize execution plan")
 		}
@@ -1177,7 +1183,7 @@ func SupportsVectorized(
 		for _, acc := range creator.streamingMemAccounts {
 			acc.Close(ctx)
 		}
-		for _, acc := range creator.acccounts {
+		for _, acc := range creator.accounts {
 			acc.Close(ctx)
 		}
 		for _, mon := range creator.monitors {
