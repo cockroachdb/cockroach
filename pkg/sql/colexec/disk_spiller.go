@@ -252,6 +252,11 @@ func (d *diskSpillerBase) reset() {
 	d.spilled = false
 }
 
+// Close closes the diskSpillerBase's input.
+// TODO(asubiotto): Remove this method. It only exists so that we can call Close
+//  from some runTests subtests when not draining the input fully. The test
+//  should pass in the testing.T object used so that the caller can decide to
+//  explicitly close the input after checking the test.
 func (d *diskSpillerBase) Close() error {
 	if c, ok := d.diskBackedOp.(io.Closer); ok {
 		return c.Close()

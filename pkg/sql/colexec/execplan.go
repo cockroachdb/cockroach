@@ -13,6 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"reflect"
 
@@ -70,6 +71,7 @@ func wrapRowSources(
 				&execinfrapb.PostProcessSpec{},
 				nil, /* output */
 				nil, /* metadataSourcesQueue */
+				nil, /* toClose */
 				nil, /* outputStatsToTrace */
 				nil, /* cancelFlow */
 			)
@@ -137,7 +139,13 @@ type NewColOperatorResult struct {
 	ColumnTypes      []types.T
 	InternalMemUsage int
 	MetadataSources  []execinfrapb.MetadataSource
-	IsStreaming      bool
+	// ToClose is a slice of components that need to be Closed. Close should be
+	// idempotent.
+	// TODO(asubiotto): 46062 will add an interface to swap io.Closer with. Maybe
+	//  we should replace that with an interface that specifies that Close may be
+	//  called multiple times.
+	ToClose     []io.Closer
+	IsStreaming bool
 	// CanRunInAutoMode returns whether the result can be run in auto mode if
 	// IsStreaming is false. This applies to operators that can spill to disk, but
 	// also operators such as the hash aggregator that buffer, but not
@@ -396,7 +404,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 			if args.TestingKnobs.NumForcedRepartitions != 0 {
 				maxNumberPartitions = args.TestingKnobs.NumForcedRepartitions
 			}
-			return newExternalSorter(
+			es := newExternalSorter(
 				ctx,
 				unlimitedAllocator,
 				standaloneMemAccount,
@@ -407,6 +415,8 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 				diskQueueCfg,
 				args.FDSemaphore,
 			)
+			r.ToClose = append(r.ToClose, es.(io.Closer))
+			return es
 		},
 		args.TestingKnobs.SpillingCallbackFn,
 	), nil
@@ -788,7 +798,7 @@ func NewColOperator(
 						diskQueueCfg := args.DiskQueueCfg
 						diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
 						diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
-						return newExternalHashJoiner(
+						ehj := newExternalHashJoiner(
 							unlimitedAllocator, hjSpec,
 							inputOne, inputTwo,
 							execinfra.GetWorkMemLimit(flowCtx.Cfg),
@@ -811,6 +821,8 @@ func NewColOperator(
 							args.TestingKnobs.NumForcedRepartitions,
 							args.TestingKnobs.DelegateFDAcquisitions,
 						)
+						result.ToClose = append(result.ToClose, ehj.(io.Closer))
+						return ehj
 					},
 					args.TestingKnobs.SpillingCallbackFn,
 				)
@@ -867,7 +879,7 @@ func NewColOperator(
 				ctx, result.createBufferingUnlimitedMemAccount(
 					ctx, flowCtx, "merge-joiner",
 				))
-			result.Op, err = newMergeJoinOp(
+			mj, err := newMergeJoinOp(
 				unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx.Cfg),
 				args.DiskQueueCfg, args.FDSemaphore,
 				joinType, inputs[0], inputs[1], leftPhysTypes, rightPhysTypes,
@@ -877,6 +889,8 @@ func NewColOperator(
 				return result, err
 			}
 
+			result.Op = mj
+			result.ToClose = append(result.ToClose, mj.(io.Closer))
 			result.ColumnTypes = append(leftLogTypes, rightLogTypes...)
 
 			if onExpr != nil {

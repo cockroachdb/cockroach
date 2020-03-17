@@ -64,14 +64,11 @@ func (c *limitOp) Next(ctx context.Context) coldata.Batch {
 	return bat
 }
 
-// Close is a temporary method to support the specific case in which an upstream
-// operator must be Closed (e.g. an external sorter) to assert a certain state
-// during tests.
-// TODO(asubiotto): This method only exists because an external sorter is
-//  wrapped with a limit op when doing a top K sort and some tests that don't
-//  exhaust the sorter (e.g. allNullsInjection) need to close the operator
-//  explicitly. This should be removed once we have a better way of closing
-//  operators even when they are not exhausted.
+// Close closes the limitOp's input.
+// TODO(asubiotto): Remove this method. It only exists so that we can call Close
+//  from some runTests subtests when not draining the input fully. The test
+//  should pass in the testing.T object used so that the caller can decide to
+//  explicitly close the input after checking the test.
 func (c *limitOp) Close() error {
 	if closer, ok := c.input.(io.Closer); ok {
 		return closer.Close()

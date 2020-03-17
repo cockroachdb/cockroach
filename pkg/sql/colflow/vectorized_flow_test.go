@@ -12,6 +12,7 @@ package colflow
 
 import (
 	"context"
+	"io"
 	"sync"
 	"testing"
 
@@ -41,6 +42,7 @@ func (c callbackRemoteComponentCreator) newOutbox(
 	input colexec.Operator,
 	typs []coltypes.T,
 	metadataSources []execinfrapb.MetadataSource,
+	toClose []io.Closer,
 ) (*colrpc.Outbox, error) {
 	return c.newOutboxFn(allocator, input, typs, metadataSources)
 }
@@ -195,7 +197,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			// expect from the input DAG.
 			require.Len(t, sources, 1)
 			require.Len(t, inboxToNumInputTypes[sources[0].(*colrpc.Inbox)], numInputTypesToOutbox)
-			return colrpc.NewOutbox(allocator, op, typs, sources)
+			return colrpc.NewOutbox(allocator, op, typs, sources, nil)
 		},
 		newInboxFn: func(allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
 			inbox, err := colrpc.NewInbox(allocator, typs, streamID)

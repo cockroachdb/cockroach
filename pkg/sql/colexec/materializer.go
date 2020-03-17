@@ -13,6 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Materializer converts an Operator input into a execinfra.RowSource.
@@ -53,6 +55,9 @@ type Materializer struct {
 	// ctxCancel in that it will cancel all components of the Materializer's flow,
 	// including those started asynchronously.
 	cancelFlow func() context.CancelFunc
+
+	// closers is a slice of Closers that should be Closed on termination.
+	closers []io.Closer
 }
 
 const materializerProcName = "materializer"
@@ -76,12 +81,16 @@ func NewMaterializer(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
+	// TODO(asubiotto): Change this to a colexec/execinfra interface once #46062
+	//  is in.
+	toClose []io.Closer,
 	outputStatsToTrace func(),
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
 	m := &Materializer{
-		input: input,
-		row:   make(sqlbase.EncDatumRow, len(typs)),
+		input:   input,
+		row:     make(sqlbase.EncDatumRow, len(typs)),
+		closers: toClose,
 	}
 
 	if err := m.ProcessorBase.Init(
@@ -186,6 +195,13 @@ func (m *Materializer) InternalClose() bool {
 	if m.ProcessorBase.InternalClose() {
 		if m.cancelFlow != nil {
 			m.cancelFlow()()
+		}
+		for _, closer := range m.closers {
+			if err := closer.Close(); err != nil {
+				if log.V(1) {
+					log.Infof(m.Ctx, "error closing Closer: %v", err)
+				}
+			}
 		}
 		return true
 	}

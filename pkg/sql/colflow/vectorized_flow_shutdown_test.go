@@ -13,6 +13,7 @@ package colflow_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"strconv"
 	"sync"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -49,6 +51,14 @@ var (
 	consumerClosed    = shutdownScenario{"ConsumerClosed"}
 	shutdownScenarios = []shutdownScenario{consumerDone, consumerClosed}
 )
+
+type callbackCloser struct {
+	closeCb func() error
+}
+
+func (c callbackCloser) Close() error {
+	return c.closeCb()
+}
 
 // TestVectorizedFlowShutdown tests that closing the materializer correctly
 // closes all the infrastructure corresponding to the flow ending in that
@@ -179,6 +189,12 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, typs, &wg)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
+				// idToClosed keeps track of whether Close was called for a given id.
+				idToClosed := struct {
+					syncutil.Mutex
+					mapping map[int]bool
+				}{}
+				idToClosed.mapping = make(map[int]bool)
 				runOutboxInbox := func(
 					ctx context.Context,
 					cancelFn context.CancelFunc,
@@ -188,18 +204,21 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					id int,
 					outboxMetadataSources []execinfrapb.MetadataSource,
 				) {
-					outbox, err := colrpc.NewOutbox(
-						colexec.NewAllocator(ctx, outboxMemAcc),
-						outboxInput,
-						typs,
-						append(outboxMetadataSources,
-							execinfrapb.CallbackMetadataSource{
-								DrainMetaCb: func(ctx context.Context) []execinfrapb.ProducerMetadata {
-									return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("%d", id)}}
-								},
+					idToClosed.Lock()
+					idToClosed.mapping[id] = false
+					idToClosed.Unlock()
+					outbox, err := colrpc.NewOutbox(colexec.NewAllocator(ctx, outboxMemAcc), outboxInput, typs, append(outboxMetadataSources,
+						execinfrapb.CallbackMetadataSource{
+							DrainMetaCb: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+								return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("%d", id)}}
 							},
-						),
-					)
+						},
+					), []io.Closer{callbackCloser{closeCb: func() error {
+						idToClosed.Lock()
+						idToClosed.mapping[id] = true
+						idToClosed.Unlock()
+						return nil
+					}}})
 					require.NoError(t, err)
 					wg.Add(1)
 					go func(id int) {
@@ -271,6 +290,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				}
 
 				ctxLocal, cancelLocal := context.WithCancel(ctxLocal)
+				materializerCalledClose := false
 				materializer, err := colexec.NewMaterializer(
 					flowCtx,
 					1, /* processorID */
@@ -279,6 +299,10 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					&execinfrapb.PostProcessSpec{},
 					nil, /* output */
 					materializerMetadataSources,
+					[]io.Closer{callbackCloser{closeCb: func() error {
+						materializerCalledClose = true
+						return nil
+					}}}, /* toClose */
 					nil, /* outputStatsToTrace */
 					func() context.CancelFunc { return cancelLocal },
 				)
@@ -329,6 +353,11 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					}
 				}
 				wg.Wait()
+				// Ensure all the outboxes called Close.
+				for id, closed := range idToClosed.mapping {
+					require.True(t, closed, "outbox with ID %d did not call Close on closers", id)
+				}
+				require.True(t, materializerCalledClose)
 			})
 		}
 	}
