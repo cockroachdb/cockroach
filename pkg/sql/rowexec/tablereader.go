@@ -60,6 +60,7 @@ var _ execinfra.Processor = &tableReader{}
 var _ execinfra.RowSource = &tableReader{}
 var _ execinfrapb.MetadataSource = &tableReader{}
 var _ execinfra.Releasable = &tableReader{}
+var _ execinfra.OpNode = &tableReader{}
 
 const tableReaderProcName = "table reader"
 
@@ -293,4 +294,14 @@ func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerM
 // DrainMeta is part of the MetadataSource interface.
 func (tr *tableReader) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	return tr.generateMeta(ctx)
+}
+
+// ChildCount is part of the execinfra.OpNode interface.
+func (tr *tableReader) ChildCount(bool) int {
+	return 0
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (tr *tableReader) Child(nth int, _ bool) execinfra.OpNode {
+	panic(fmt.Sprintf("invalid index %d", nth))
 }
