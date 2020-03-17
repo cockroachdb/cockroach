@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -35,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -420,6 +422,7 @@ type Manager struct {
 	sqlExecutor  *sql.InternalExecutor
 	testingKnobs MigrationManagerTestingKnobs
 	settings     *cluster.Settings
+	jobRegistry  *jobs.Registry
 }
 
 // NewManager initializes and returns a new Manager object.
@@ -431,6 +434,7 @@ func NewManager(
 	testingKnobs MigrationManagerTestingKnobs,
 	clientID string,
 	settings *cluster.Settings,
+	registry *jobs.Registry,
 ) *Manager {
 	opts := leasemanager.Options{
 		ClientID:      clientID,
@@ -443,6 +447,7 @@ func NewManager(
 		sqlExecutor:  executor,
 		testingKnobs: testingKnobs,
 		settings:     settings,
+		jobRegistry:  registry,
 	}
 }
 
@@ -620,6 +625,216 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 				migration.name)
 		}
 	}
+
+	return nil
+}
+
+func (m *Manager) StartPostFinalizationMigrations(ctx context.Context) error {
+	return m.stopper.RunAsyncTask(ctx, "run-post-finalization-migrations", func(ctx context.Context) {
+		log.Info(ctx, "starting wait for post-finalization migrations")
+		// First wait for the cluster to finalize the upgrade to 20.1.
+		retryOpts := retry.Options{
+			InitialBackoff: 5 * time.Second,
+			MaxBackoff:     10 * time.Second,
+			Multiplier:     2,
+			Closer:         m.stopper.ShouldQuiesce(),
+		}
+		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+			if m.settings.Version.IsActive(ctx, clusterversion.VersionSchemaChangeJob) {
+				break
+			}
+		}
+		select {
+		case <-m.stopper.ShouldQuiesce():
+			return
+		default:
+		}
+
+		log.Info(ctx, "starting post-finalization migrations")
+		// Now run the migration.
+		r := runner{
+			db:          m.db,
+			sqlExecutor: m.sqlExecutor,
+			settings:    m.settings,
+		}
+		if err := migrateSchemaChangeJobs(ctx, r, m.jobRegistry); err != nil {
+			log.Errorf(ctx, "error attempting running schema change job migration: %s", err.Error())
+		}
+		log.Info(ctx, "completed post-finalization migrations")
+	})
+}
+
+func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Registry) error {
+	migrateJobForTable := func(txn *kv.Txn, job *jobs.Job, tableDesc *sql.TableDescriptor) error {
+		// Check whether the job is for a mutation. There can be multiple mutations
+		// with the same ID that correspond to the same job, but we just need to
+		// look at one, since all the mutations with the same ID get state updates
+		// in the same transaction.
+		for i := range tableDesc.MutationJobs {
+			mutationJob := &tableDesc.MutationJobs[i]
+			if mutationJob.JobID == *job.ID() {
+				// Update the job details with the table and mutation IDs.
+				details := job.Details().(jobspb.SchemaChangeDetails)
+				details.TableID = tableDesc.ID
+				details.MutationID = mutationJob.MutationID
+				if err := job.WithTxn(txn).SetDetails(ctx, details); err != nil {
+					return err
+				}
+
+				// Update the job status.
+				if err := job.Update(ctx, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+					mutation := &tableDesc.Mutations[i]
+					// If the mutation exists on the table descriptor, then the schema
+					// change isn't actually in a terminal state, regardless of what the
+					// job status is. So we force the status to Reverting if there's any
+					// indication that it failed or was canceled, and otherwise force the
+					// state to Running.
+					shouldRevert := md.Status == jobs.StatusFailed || md.Status == jobs.StatusCanceled ||
+						md.Status == jobs.StatusReverting || md.Status == jobs.StatusCancelRequested
+					previousStatus := md.Status
+					if mutation.Rollback || shouldRevert {
+						md.Status = jobs.StatusReverting
+					} else {
+						md.Status = jobs.StatusRunning
+					}
+					log.Infof(ctx, "migrating job %d: status was %s, now %s", previousStatus, md.Status)
+					ju.UpdateStatus(md.Status)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}
+		}
+
+		// If not a mutation, check whether the job corresponds to a GCMutation.
+		// This indicates that the job must be in the "waiting for GC TTL" state.
+		// In that case, we mark the job as succeeded and create a new job for GC.
+		for i := range tableDesc.GCMutations {
+			gcMutation := &tableDesc.GCMutations[i]
+			// JobID and dropTime are populated only in 19.2 and earlier versions.
+			if gcMutation.JobID == *job.ID() {
+				if err := job.WithTxn(txn).Succeeded(ctx, nil); err != nil {
+					return err
+				}
+				// TODO (lucy): Maybe refactor this so it's created the way that GC jobs
+				// are normally created. For now, just write the job record directly.
+				gcJobRecord := jobs.Record{
+					Description:   fmt.Sprintf("GC for %s", job.Payload().Description),
+					Username:      job.Payload().Username,
+					DescriptorIDs: sqlbase.IDs{tableDesc.ID},
+					Details: jobspb.SchemaChangeGCDetails{
+						Indexes: []jobspb.SchemaChangeGCDetails_DroppedIndex{
+							{
+								IndexID:  gcMutation.IndexID,
+								DropTime: gcMutation.DropTime,
+							},
+						},
+						ParentID: tableDesc.GetID(),
+					},
+					Progress:      jobspb.SchemaChangeGCProgress{},
+					NonCancelable: true,
+				}
+				// The new job ID won't be written to GCMutations, which is fine because
+				// we don't read the job ID in 20.1 for anything except this migration.
+				_, err := registry.CreateJobWithTxn(ctx, gcJobRecord, txn)
+				if err != nil {
+					return err
+				}
+				return nil
+			}
+		}
+		return nil
+	}
+
+	// Get all jobs that aren't Succeeded and evaluate whether they need a
+	// migration.
+	rows, err := r.sqlExecutor.QueryEx(
+		ctx, "jobs-for-migration", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		"SELECT id, payload FROM system.jobs WHERE status != $1", jobs.StatusSucceeded,
+	)
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		jobID := int64(tree.MustBeDInt(row[0]))
+		log.VEventf(ctx, 2, "job %d: evaluating for schema change job migration", jobID)
+
+		payload, err := jobs.UnmarshalPayload(row[1])
+		if err != nil {
+			return err
+		}
+		details, ok := payload.UnwrapDetails().(jobspb.SchemaChangeDetails)
+		if !ok || details.FormatVersion > jobspb.BaseFormatVersion {
+			continue
+		}
+
+		log.Infof(ctx, "job %d: undergoing schema change job migration", jobID)
+
+		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// Read the job again inside the transaction. If the job was already
+			// upgraded, we don't have to do anything else.
+			job, err := registry.LoadJobWithTxn(ctx, jobID, txn)
+			if err != nil {
+				// The job could have been GC'ed in the meantime.
+				if jobs.HasJobNotFoundError(err) {
+					return nil
+				}
+				return err
+			}
+			details = job.Details().(jobspb.SchemaChangeDetails)
+			if details.FormatVersion > jobspb.BaseFormatVersion {
+				return nil
+			}
+
+			descIDs := job.Payload().DescriptorIDs
+			if len(descIDs) == 0 {
+				return errors.AssertionFailedf("schema change job %d has no associated descriptor IDs")
+			} else if len(descIDs) > 1 {
+				// TODO (lucy): !!! deal with jobs with multiple table descs (drop database/table)
+			} else {
+				descID := descIDs[0]
+				tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, descID)
+				if err != nil {
+					return nil
+				}
+				if err := migrateJobForTable(txn, job, tableDesc); err != nil {
+					return err
+				}
+			}
+			return nil
+
+		}); err != nil {
+			return err
+		}
+		log.Infof(ctx, "job %d: completed schema change job migration", jobID)
+	}
+
+	// var allDescs []sqlbase.DescriptorProto
+	// if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	// 	descs, err := sql.GetAllDescriptors(ctx, txn)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	allDescs = descs
+	// 	return nil
+	// }); err != nil {
+	// 	return err
+	// }
+	//
+	// for _, desc := range allDescs {
+	// 	switch desc := desc.(type) {
+	// 	case *sqlbase.TableDescriptor:
+	// 		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	// 			return nil
+	// 		}); err != nil {
+	// 			return err
+	// 		}
+	// 	case *sqlbase.DatabaseDescriptor:
+	// 		// Do nothing.
+	// 	}
+	// }
 
 	return nil
 }

@@ -937,6 +937,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 							TableID:        sc.tableID,
 							MutationID:     mutationID,
 							ResumeSpanList: spanList,
+							FormatVersion:  jobspb.JobResumerFormatVersion,
 						},
 						Progress:      jobspb.SchemaChangeProgress{},
 						NonCancelable: true,
@@ -1255,6 +1256,7 @@ func (sc *SchemaChanger) updateJobForRollback(
 			TableID:        sc.tableID,
 			MutationID:     sc.mutationID,
 			ResumeSpanList: spanList,
+			FormatVersion:  jobspb.JobResumerFormatVersion,
 		},
 	); err != nil {
 		return err
@@ -1530,6 +1532,21 @@ func (r schemaChangeResumer) Resume(
 ) error {
 	p := phs.(PlanHookState)
 	details := r.job.Details().(jobspb.SchemaChangeDetails)
+	// If the format version is too low, then the job must have been created in
+	// v19.2 or earlier, when schema change jobs did not have a resumer. In that
+	// case, we wait for the migration to run on the job before doing anything
+	// else with it.
+	// TODO (lucy): This may cause the job to be retried too often (and at
+	// unpredictable intervals), especially on a cluster with many nodes. Is there
+	// a better way to wait for the migration to finish on this job? We could poll
+	// for changes to the job details inside the resumer, but the resumer already
+	// has the details passed to it, so it seems like it would be a misuse of the
+	// API.
+	if details.FormatVersion < jobspb.JobResumerFormatVersion {
+		return jobs.NewRetryJobError(
+			"schema change job initiated in previous version is not yet migrated, retrying later")
+	}
+
 	if p.ExecCfg().SchemaChangerTestingKnobs.SchemaChangeJobNoOp != nil &&
 		p.ExecCfg().SchemaChangerTestingKnobs.SchemaChangeJobNoOp() {
 		return nil
