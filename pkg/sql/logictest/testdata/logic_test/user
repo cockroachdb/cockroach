@@ -1,22 +1,24 @@
 # LogicTest: local
 
-query T colnames
+query TTT colnames
 SHOW USERS
 ----
-user_name
-root
-testuser
+username  options     member_of
+admin     CREATEROLE  {}
+root      CREATEROLE  {admin}
+testuser  ·           {}
 
 statement ok
 CREATE USER user1
 
-query T colnames
+query TTT colnames
 SHOW USERS
 ----
-user_name
-root
-testuser
-user1
+username  options     member_of
+admin     CREATEROLE  {}
+root      CREATEROLE  {admin}
+testuser  ·           {}
+user1     ·           {}
 
 statement error pgcode 42710 a role/user named admin already exists
 CREATE USER admin
@@ -74,18 +76,19 @@ PREPARE chpw AS ALTER USER $1 WITH PASSWORD $2;
 statement error user blix does not exist
 EXECUTE chpw('blix', 'blah')
 
-query T colnames
+query TTT colnames
 SHOW USERS
 ----
-user_name
-foo
-foo-bar
-root
-testuser
-user1
-user2
-user3
-ομηρος
+username  options     member_of
+admin     CREATEROLE  {}
+foo       ·           {}
+foo-bar   ·           {}
+root      CREATEROLE  {admin}
+testuser  ·           {}
+user1     ·           {}
+user2     ·           {}
+user3     ·           {}
+ομηρος    ·           {}
 
 statement error no username specified
 CREATE USER ""
@@ -103,7 +106,7 @@ CREATE USER user4
 statement error pq: user testuser does not have INSERT privilege on relation users
 UPSERT INTO system.users VALUES (user1, 'newpassword', false)
 
-statement error pq: user testuser does not have SELECT privilege on relation users
+statement error pq: user testuser does not have SELECT privilege on relation user
 SHOW USERS
 
 query TTT

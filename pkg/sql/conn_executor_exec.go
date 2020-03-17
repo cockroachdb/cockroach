@@ -197,6 +197,11 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.AST = explainBundle.Statement
 		// TODO(radu): should we trim the "EXPLAIN BUNDLE" part from stmt.SQL?
 
+		// Clear any ExpectedTypes we set if we prepared this statement (they
+		// reflect the column types of the EXPLAIN itself and not those of the inner
+		// statement).
+		stmt.ExpectedTypes = nil
+
 		// EXPLAIN BUNDLE does not return the rows for the given query; instead it
 		// returns some text which includes a URL.
 		// TODO(radu): maybe capture some of the rows and include them in the
