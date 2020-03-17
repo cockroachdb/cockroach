@@ -443,15 +443,12 @@ func (sr *txnSpanRefresher) populateLeafFinalState(tfs *roachpb.LeafTxnFinalStat
 
 // importLeafFinalState is part of the txnInterceptor interface.
 func (sr *txnSpanRefresher) importLeafFinalState(tfs *roachpb.LeafTxnFinalState) {
-	// Do not modify existing span slices when copying.
 	if tfs.RefreshInvalid {
 		sr.refreshInvalid = true
 		sr.refreshSpans = nil
 	} else if !sr.refreshInvalid {
 		if tfs.RefreshSpans != nil {
-			sr.refreshSpans, _ = roachpb.MergeSpans(
-				append(append([]roachpb.Span(nil), sr.refreshSpans...), tfs.RefreshSpans...),
-			)
+			sr.refreshSpans, _ = roachpb.MergeSpans(append(sr.refreshSpans, tfs.RefreshSpans...))
 		}
 	}
 	// Recompute the size of the refreshes.
