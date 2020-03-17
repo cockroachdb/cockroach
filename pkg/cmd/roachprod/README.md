@@ -173,6 +173,26 @@ OK
 
 See `roachprod help <command>` for further details.
 
+## Return Codes
+
+`roachprod` uses return codes to provide information about the exit status.
+These are the codes and what they mean:
+
+- 0: everything ran as expected
+- 1: an unclassified roachprod error
+- 2: a problem running a non-cockroach command on a remote cluster server or on a local node
+- 3: a problem running a cockroach command on a remote cluster server or a local node
+- 5: a problem with an SSH connection to a server in the cluster
+
+Each of these codes has a corresponding easy-to-search-for string that is
+emitted to output when an error of that type occurs. The strings are emitted
+near the end of output and for each error that happens during an ssh
+connection to a remote cluster node. The strings for each error code are:
+
+- 1: `UNCLASSIFIED_PROBLEM`
+- 2: `COMMAND_PROBLEM`
+- 3: `DEAD_ROACH_PROBLEM`
+- 5: `SSH_PROBLEM`
 
 # Future improvements
 
