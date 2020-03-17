@@ -118,9 +118,9 @@ func (r *Replica) sendWithRangeID(
 }
 
 // batchExecutionFn is a method on Replica that is able to execute a
-// BatchRequest. It is called with the batch, along with the span bounds that
-// the batch will operate over and a guard for the latches protecting the span
-// bounds.
+// BatchRequest. It is called with the batch, along with the status of
+// the lease that the batch is operating under and a guard for the
+// latches protecting the request.
 //
 // The function will return either a batch response or an error. The function
 // also has the option to pass ownership of the concurrency guard back to the
@@ -138,7 +138,7 @@ func (r *Replica) sendWithRangeID(
 //    the replicated state machine. In all of these cases, responsibility
 //    for releasing the concurrency guard is handed to Raft.
 type batchExecutionFn func(
-	*Replica, context.Context, *roachpb.BatchRequest, *concurrency.Guard,
+	*Replica, context.Context, *roachpb.BatchRequest, storagepb.LeaseStatus, *concurrency.Guard,
 ) (*roachpb.BatchResponse, *concurrency.Guard, *roachpb.Error)
 
 var _ batchExecutionFn = (*Replica).executeWriteBatch
@@ -184,6 +184,27 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			return nil, roachpb.NewError(errors.Wrap(err, "aborted during Replica.Send"))
 		}
 
+		// Determine the lease under which to evaluate the request.
+		var status storagepb.LeaseStatus
+		if !ba.ReadConsistency.RequiresReadLease() {
+			// Get a clock reading for checkExecutionCanProceed.
+			status.Timestamp = r.Clock().Now()
+		} else if ba.IsSingleSkipLeaseCheckRequest() {
+			// For lease commands, use the provided previous lease for verification.
+			status.Lease = ba.GetPrevLeaseForLeaseRequest()
+			status.Timestamp = r.Clock().Now()
+		} else {
+			// If the request is a write or a consistent read, it requires the
+			// range lease or permission to serve via follower reads.
+			if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
+				if nErr := r.canServeFollowerRead(ctx, ba, pErr); nErr != nil {
+					return nil, nErr
+				}
+			}
+		}
+		// Limit the transaction's maximum timestamp using observed timestamps.
+		r.limitTxnMaxTimestamp(ctx, ba, status)
+
 		// Acquire latches to prevent overlapping requests from executing until
 		// this request completes. After latching, wait on any conflicting locks
 		// to ensure that the request has full isolation during evaluation. This
@@ -212,7 +233,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			}
 		}
 
-		br, g, pErr = fn(r, ctx, ba, g)
+		br, g, pErr = fn(r, ctx, ba, status, g)
 		switch t := pErr.GetDetail().(type) {
 		case nil:
 			// Success.
@@ -249,6 +270,23 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			// Then listen for the merge to complete.
 			if pErr = r.handleMergeInProgressError(ctx, ba, pErr, t); pErr != nil {
 				return nil, pErr
+			}
+			// Retry...
+		case *roachpb.NotLeaseHolderError:
+			// We tried to propose a write that was rejected because the lease
+			// it was evaluated and proposed under was no longer valid. If the
+			// request itself provided the lease (i.e. the request did not call
+			// redirectOnOrAcquireLease above) then propagate the error.
+			if status.State != storagepb.LeaseState_VALID {
+				return nil, pErr
+			}
+			// Otherwise, drop latches and lock wait-queues (if we still have
+			// ownership over them) and try again. If we truly are no longer the
+			// leaseholder, we'll return the NotLeaseHolderError up above from
+			// redirectOnOrAcquireLease.
+			if g != nil {
+				r.concMgr.FinishReq(g)
+				g = nil
 			}
 			// Retry...
 		default:
