@@ -54,11 +54,14 @@ func readCreateTableFromStore(
 	if err != nil {
 		return nil, err
 	}
-	stmt, err := parser.ParseOne(string(tableDefStr))
+	stmts, err := parser.Parse(string(tableDefStr))
 	if err != nil {
 		return nil, err
 	}
-	create, ok := stmt.AST.(*tree.CreateTable)
+	if len(stmts) != 1 {
+		return nil, errors.Errorf("expected 1 create table statement, found %d", len(stmts))
+	}
+	create, ok := stmts[0].AST.(*tree.CreateTable)
 	if !ok {
 		return nil, errors.New("expected CREATE TABLE statement in table file")
 	}
