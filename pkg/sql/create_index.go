@@ -279,11 +279,13 @@ func (n *createIndexNode) startExec(params runParams) error {
 		}
 	}
 
-	// Guard against creating a non-partitioned index on a partitioned table,
+	// Warn against creating a non-partitioned index on a partitioned table,
 	// which is undesirable in most cases.
-	if params.SessionData().SafeUpdates && n.n.PartitionBy == nil &&
-		n.tableDesc.PrimaryIndex.Partitioning.NumColumns > 0 {
-		return pgerror.DangerousStatementf("non-partitioned index on partitioned table")
+	if n.n.PartitionBy == nil && n.tableDesc.PrimaryIndex.Partitioning.NumColumns > 0 {
+		params.p.SendClientNotice(
+			params.ctx,
+			pgerror.Noticef("creating non-partitioned index on partitioned table may not be performant"),
+		)
 	}
 
 	indexDesc, err := MakeIndexDescriptor(params, n.n, n.tableDesc)
