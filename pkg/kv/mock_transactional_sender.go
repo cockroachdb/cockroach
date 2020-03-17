@@ -87,6 +87,11 @@ func (m *MockTransactionalSender) SetDebugName(name string) {
 	m.txn.Name = name
 }
 
+// String is part of the TxnSender interface.
+func (m *MockTransactionalSender) String() string {
+	return m.txn.String()
+}
+
 // ReadTimestamp is part of the TxnSender interface.
 func (m *MockTransactionalSender) ReadTimestamp() hlc.Timestamp {
 	return m.txn.ReadTimestamp

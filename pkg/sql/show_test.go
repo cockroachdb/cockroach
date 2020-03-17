@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -501,6 +502,81 @@ func TestShowCreateSequence(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestShowQueriesTxnData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.t (x INT);
+INSERT INTO t.t VALUES (1);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`BEGIN`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Look up the schema first so only the read txn is recorded in
+	// kv trace logs.
+	if _, err := sqlDB.Exec(`SELECT * FROM t.t`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(
+		`SET tracing=on,kv; SELECT * FROM t.t; SET TRACING=off`); err != nil {
+		t.Fatal(err)
+	}
+
+	// The log messages we are looking for are structured like
+	// [....,txn=<txnID>], so search for those and extract the id.
+	row := sqlDB.QueryRow(`
+SELECT 
+	string_to_array(regexp_extract(tag, 'txn=[a-zA-Z0-9]*'), '=')[2] 
+FROM 
+	[SHOW KV TRACE FOR SESSION] 
+WHERE
+  tag LIKE '%txn=%' LIMIT 1`)
+	var txnID string
+	if err := row.Scan(&txnID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now, run a SHOW QUERIES statement, in the same transaction.
+	// The txn_id we find there should be the same as the one we parsed,
+	// and the txn_start time should be before the start time of the statement.
+	row = sqlDB.QueryRow(`
+SELECT
+	txn_id, start
+FROM
+  [SHOW CLUSTER QUERIES]
+WHERE
+	query LIKE '%SHOW CLUSTER QUERIES%'`)
+
+	var (
+		foundTxnID string
+		txnStart   time.Time
+		queryStart time.Time
+	)
+	if err := row.Scan(&foundTxnID, &queryStart); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(foundTxnID, txnID) {
+		t.Errorf("expected to find txn id with prefix %s, but found %s", txnID, foundTxnID)
+	}
+
+	// Find the transaction start time and ensure that the query started after it.
+	row = sqlDB.QueryRow(`SELECT start FROM crdb_internal.node_transactions WHERE id = $1`, foundTxnID)
+	if err := row.Scan(&txnStart); err != nil {
+		t.Fatal(err)
+	}
+	if txnStart.After(queryStart) {
+		t.Error("expected txn to start before query")
 	}
 }
 

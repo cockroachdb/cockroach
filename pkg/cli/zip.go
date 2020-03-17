@@ -58,6 +58,7 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.cluster_queries",
 	"crdb_internal.cluster_sessions",
 	"crdb_internal.cluster_settings",
+	"crdb_internal.cluster_transactions",
 
 	"crdb_internal.jobs",
 	"system.jobs",       // get the raw, restorable jobs records too.
@@ -90,6 +91,7 @@ var debugZipTablesPerNode = []string{
 	"crdb_internal.node_runtime_info",
 	"crdb_internal.node_sessions",
 	"crdb_internal.node_statement_statistics",
+	"crdb_internal.node_transactions",
 	"crdb_internal.node_txn_stats",
 }
 

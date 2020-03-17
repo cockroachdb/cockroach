@@ -658,6 +658,7 @@ func (s *Server) newConnExecutor(
 	}
 	ex.extraTxnState.txnRewindPos = -1
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
+	ex.mu.ActiveTxns = make(map[uuid.UUID]*txnMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
 
 	ex.sessionTracing.ex = ex
@@ -1073,6 +1074,9 @@ type connExecutor struct {
 
 		// ActiveQueries contains all queries in flight.
 		ActiveQueries map[ClusterWideID]*queryMeta
+
+		// ActiveTxns contains all user txns in flight.
+		ActiveTxns map[uuid.UUID]*txnMeta
 
 		// LastActiveQuery contains a reference to the AST of the last
 		// query that ran on this session.
@@ -2286,6 +2290,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		sql := truncateSQL(query.getStatement())
 		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
+			TxnID:         query.txnID.String(),
 			ID:            id.String(),
 			Start:         query.start.UTC(),
 			Sql:           sql,
@@ -2304,12 +2309,22 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		remoteStr = ex.sessionData.RemoteAddr.String()
 	}
 
+	activeTxns := make([]serverpb.TxnInfo, 0, len(ex.mu.ActiveTxns))
+	for id, txn := range ex.mu.ActiveTxns {
+		activeTxns = append(activeTxns, serverpb.TxnInfo{
+			ID:        id.String(),
+			Start:     txn.txnStart.UTC(),
+			TxnString: txn.txnString,
+		})
+	}
+
 	return serverpb.Session{
 		Username:        ex.sessionData.User,
 		ClientAddress:   remoteStr,
 		ApplicationName: ex.applicationName.Load().(string),
 		Start:           ex.phaseTimes[sessionInit].UTC(),
 		ActiveQueries:   activeQueries,
+		ActiveTxns:      activeTxns,
 		KvTxnID:         kvTxnID,
 		LastActiveQuery: lastActiveQuery,
 		ID:              ex.sessionID.GetBytes(),
