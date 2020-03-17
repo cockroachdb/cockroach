@@ -2160,6 +2160,14 @@ may increase either contention or retry errors, or both.`,
 			_, err := tree.ExactCtx.Floor(&dd.Decimal, x)
 			return dd, err
 		}, "Calculates the largest integer not greater than `val`."),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDFloat(tree.DFloat(float64(*args[0].(*tree.DInt)))), nil
+			},
+			Info: "Calculates the largest integer not greater than `val`.",
+		},
 	),
 
 	"isnan": makeBuiltin(defProps(),
@@ -3873,7 +3881,7 @@ var uuidV4Impl = makeBuiltin(
 var ceilImpl = makeBuiltin(defProps(),
 	floatOverload1(func(x float64) (tree.Datum, error) {
 		return tree.NewDFloat(tree.DFloat(math.Ceil(x))), nil
-	}, "Calculates the smallest integer greater than `val`."),
+	}, "Calculates the smallest integer not smaller than `val`."),
 	decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
 		dd := &tree.DDecimal{}
 		_, err := tree.ExactCtx.Ceil(&dd.Decimal, x)
@@ -3881,7 +3889,15 @@ var ceilImpl = makeBuiltin(defProps(),
 			dd.Negative = false
 		}
 		return dd, err
-	}, "Calculates the smallest integer greater than `val`."),
+	}, "Calculates the smallest integer not smaller than `val`."),
+	tree.Overload{
+		Types:      tree.ArgTypes{{"val", types.Int}},
+		ReturnType: tree.FixedReturnType(types.Float),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(float64(*args[0].(*tree.DInt)))), nil
+		},
+		Info: "Calculates the smallest integer not smaller than `val`.",
+	},
 )
 
 const txnTSContextDoc = `
