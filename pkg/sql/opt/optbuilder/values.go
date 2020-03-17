@@ -40,8 +40,8 @@ func (b *Builder) buildValuesClause(
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 
 	// Ensure there are no special functions in the clause.
-	b.semaCtx.Properties.Require("VALUES", tree.RejectSpecial)
-	inScope.context = "VALUES"
+	b.semaCtx.Properties.Require(exprKindValues.String(), tree.RejectSpecial)
+	inScope.context = exprKindValues
 
 	// Typing a VALUES clause is not trivial; consider:
 	//   VALUES (NULL), (1)

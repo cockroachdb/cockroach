@@ -918,7 +918,13 @@ func (b *Builder) buildWhere(where *tree.Where, inScope *scope) {
 		return
 	}
 
-	filter := b.resolveAndBuildScalar(where.Expr, types.Bool, "WHERE", tree.RejectSpecial, inScope)
+	filter := b.resolveAndBuildScalar(
+		where.Expr,
+		types.Bool,
+		exprKindWhere,
+		tree.RejectGenerators|tree.RejectWindowApplications,
+		inScope,
+	)
 
 	// Wrap the filter in a FiltersOp.
 	inScope.expr = b.factory.ConstructSelect(
@@ -1017,6 +1023,7 @@ func (b *Builder) buildFromWithLateral(tables tree.TableExprs, inScope *scope) (
 		// have been built already.
 		if b.exprIsLateral(tables[i]) {
 			scope = outScope
+			scope.context = exprKindLateralJoin
 		}
 		tableScope := b.buildDataSource(tables[i], nil /* indexFlags */, scope)
 
