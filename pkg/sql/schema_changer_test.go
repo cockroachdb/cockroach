@@ -59,6 +59,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// setTestJobsAdoptInterval sets a short job adoption interval for a test
+// and returns a function to reset it after the test. The intention is that
+// the returned function should be deferred.
+func setTestJobsAdoptInterval() (reset func()) {
+	const testingJobsAdoptionInverval = 100 * time.Millisecond
+	old := jobs.DefaultAdoptInterval
+	jobs.DefaultAdoptInterval = testingJobsAdoptionInverval
+	return func() {
+		jobs.DefaultAdoptInterval = old
+	}
+}
+
 // TestSchemaChangeProcess adds mutations manually to a table descriptor and
 // ensures that RunStateMachineBeforeBackfill processes the mutation.
 // TODO (lucy): This is the only test that creates its own schema changer and
@@ -1177,11 +1189,9 @@ CREATE TABLE t.test (
 // a retry.
 func TestSchemaChangeRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	// Decrease the adopt loop interval so that retries happen quickly.
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+	defer setTestJobsAdoptInterval()()
 
 	params, _ := tests.CreateTestServerParams()
 
@@ -1257,11 +1267,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // the number of chunks operated on during a retry.
 func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	// Decrease the adopt loop interval so that retries happen quickly.
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+	defer setTestJobsAdoptInterval()()
 
 	params, _ := tests.CreateTestServerParams()
 	var upTableVersion func()
@@ -2144,6 +2152,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 // during the primary key change process.
 func TestVisibilityDuringPrimaryKeyChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	defer setTestJobsAdoptInterval()()
+
 	ctx := context.Background()
 	swapNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
@@ -2224,6 +2235,9 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 // successfully rewrites indexes that are being created while the primary key change starts.
 func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	defer setTestJobsAdoptInterval()()
+
 	ctx := context.Background()
 
 	var chunkSize int64 = 100
@@ -2860,8 +2874,8 @@ func TestPrimaryKeyIndexRewritesGetRemoved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	defer func(i time.Duration) { jobs.DefaultAdoptInterval = i }(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 10 * time.Millisecond
+	// Decrease the adopt loop interval so that retries happen quickly.
+	defer setTestJobsAdoptInterval()()
 
 	params, _ := tests.CreateTestServerParams()
 
@@ -2985,11 +2999,9 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 // occurs quickly.
 func TestMultiplePrimaryKeyChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	// Adopt the job to drop old indexes quickly.
-	defer func(oldInterval time.Duration) {
-		jobs.DefaultAdoptInterval = oldInterval
-	}(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+	defer setTestJobsAdoptInterval()()
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -3030,6 +3042,8 @@ INSERT INTO t.test VALUES (1, 1, 1, 1), (2, 2, 2, 2), (3, 3, 3, 3);
 // in the middle of a column backfill.
 func TestCRUDWhileColumnBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	defer setTestJobsAdoptInterval()()
 	backfillNotification := make(chan bool)
 
 	backfillCompleteNotification := make(chan bool)
@@ -3852,9 +3866,7 @@ func TestTruncateCompletion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const maxValue = 2000
 
-	defer func(i time.Duration) { jobs.DefaultAdoptInterval = i }(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 10 * time.Millisecond
-
+	defer setTestJobsAdoptInterval()()
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
 
 	params, _ := tests.CreateTestServerParams()
@@ -4158,6 +4170,9 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 99);
 // backfill has started, it will move past the error and complete.
 func TestIndexBackfillAfterGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// Decrease the adopt loop interval so that retries happen quickly.
+	defer setTestJobsAdoptInterval()()
 
 	var tc serverutils.TestClusterInterface
 	ctx := context.Background()
@@ -4706,6 +4721,8 @@ CANCEL SESSIONS (SELECT session_id FROM [SHOW SESSIONS] WHERE last_active_query 
 
 func TestSchemaChangeGRPCError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	defer setTestJobsAdoptInterval()()
 
 	const maxValue = 100
 	params, _ := tests.CreateTestServerParams()
@@ -5552,6 +5569,8 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 100);
 // are only added once. This is addressed by #38377.
 func TestFKReferencesAddedOnlyOnceOnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	defer setTestJobsAdoptInterval()()
 	params, _ := tests.CreateTestServerParams()
 	var runBeforeConstraintValidation func() error
 	errorReturned := false

@@ -169,8 +169,9 @@ func (ex *connExecutor) prepare(
 
 	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 	p := &ex.planner
-	ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */, stmt.NumAnnotations)
+	ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
 	p.stmt = &stmt
+	p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 	flags, err := ex.populatePrepared(ctx, txn, placeholderHints, p)
 	if err != nil {
 		txn.CleanupOnError(ctx, err)
