@@ -491,7 +491,7 @@ func (ht *hashTable) findNext(next []uint64, nToCheck uint64) {
 // vectors, and the capacities would stay the same until an actual new
 // allocation is needed, and at that time the allocator will update the memory
 // account accordingly.
-func (ht *hashTable) reset() {
+func (ht *hashTable) reset(_ context.Context) {
 	for n := 0; n < len(ht.buildScratch.first); n += copy(ht.buildScratch.first[n:], zeroUint64Column) {
 	}
 	ht.vals.ResetInternalBatch()
