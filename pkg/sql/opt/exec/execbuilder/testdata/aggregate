@@ -301,7 +301,7 @@ EXPLAIN (VERBOSE) SELECT a.v FROM kv a, kv b GROUP BY a.v, a.w, a.s
 ]
 ----
 ·                     distributed  false
-·                     vectorized   false
+·                     vectorized   true
 render                ·            ·
  │                    render 0     v
  └── distinct         ·            ·
