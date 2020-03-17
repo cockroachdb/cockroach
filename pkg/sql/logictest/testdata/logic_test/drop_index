@@ -314,3 +314,12 @@ fk1  CREATE TABLE fk1 (
      x INT8 NULL,
      FAMILY "primary" (x, rowid)
 )
+
+# test that notices are generated on index drops
+subtest notice_on_drop_index
+
+query T noticetrace
+CREATE TABLE drop_index_test(a int); CREATE INDEX drop_index_test_index ON drop_index_test(a); DROP INDEX drop_index_test_index
+----
+NOTICE: the data for dropped indexes is reclaimed asynchronously
+HINT: The reclamation delay can be customized in the zone configuration for the table.
