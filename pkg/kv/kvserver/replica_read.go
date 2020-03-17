@@ -31,29 +31,14 @@ import (
 // iterator to evaluate the batch and then updates the timestamp cache to
 // reflect the key spans that it read.
 func (r *Replica) executeReadOnlyBatch(
-	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context, ba *roachpb.BatchRequest, st storagepb.LeaseStatus, g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
-	// If the read is not inconsistent, the read requires the range lease or
-	// permission to serve via follower reads.
-	var status storagepb.LeaseStatus
-	if ba.ReadConsistency.RequiresReadLease() {
-		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
-			if nErr := r.canServeFollowerRead(ctx, ba, pErr); nErr != nil {
-				return nil, g, nErr
-			}
-			r.store.metrics.FollowerReadsCount.Inc(1)
-		}
-	} else {
-		status.Timestamp = r.Clock().Now() // get a clock reading for checkExecutionCanProceed
-	}
-	r.limitTxnMaxTimestamp(ctx, ba, status)
-
 	log.Event(ctx, "waiting for read lock")
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
 
 	// Verify that the batch can be executed.
-	if err := r.checkExecutionCanProceed(ba, g, &status); err != nil {
+	if err := r.checkExecutionCanProceed(ba, g, &st); err != nil {
 		return nil, g, roachpb.NewError(err)
 	}
 
