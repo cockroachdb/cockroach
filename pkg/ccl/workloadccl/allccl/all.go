@@ -28,6 +28,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/querylog"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/queue"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/rand"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/schemachange"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/sqlsmith"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpccchecks"
