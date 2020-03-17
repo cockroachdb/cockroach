@@ -159,12 +159,19 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 
 				// Create an allocator for each output.
 				allocators := make([]*colexec.Allocator, numHashRouterOutputs)
+				diskAccounts := make([]*mon.BoundAccount, numHashRouterOutputs)
 				for i := range allocators {
 					acc := testMemMonitor.MakeBoundAccount()
 					defer acc.Close(ctxRemote)
 					allocators[i] = colexec.NewAllocator(ctxRemote, &acc)
+					diskAcc := testDiskMonitor.MakeBoundAccount()
+					diskAccounts[i] = &diskAcc
+					defer diskAcc.Close(ctxRemote)
 				}
-				hashRouter, hashRouterOutputs := colexec.NewHashRouter(allocators, hashRouterInput, typs, []uint32{0}, 64<<20 /* 64 MiB */, queueCfg, &colexec.TestingSemaphore{}, testDiskAcc)
+				hashRouter, hashRouterOutputs := colexec.NewHashRouter(
+					allocators, hashRouterInput, typs, []uint32{0}, 64<<20, /* 64 MiB */
+					queueCfg, &colexec.TestingSemaphore{}, diskAccounts,
+				)
 				for i := 0; i < numInboxes; i++ {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxLocal)
