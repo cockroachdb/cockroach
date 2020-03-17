@@ -358,13 +358,46 @@ render                                       ·            ·
 query TTT
 EXPLAIN SHOW USERS
 ----
-·          distributed  false
-·          vectorized   true
-render     ·            ·
- └── scan  ·            ·
-·          table        users@primary
-·          spans        ALL
-·          filter       "isRole" = false
+·                                                                  distributed        false
+·                                                                  vectorized         false
+render                                                             ·                  ·
+ └── sort                                                          ·                  ·
+      │                                                            order              +username
+      └── render                                                   ·                  ·
+           └── group                                               ·                  ·
+                │                                                  aggregate 0        username
+                │                                                  aggregate 1        array_agg(role)
+                │                                                  aggregate 2        any_not_null(any_not_null)
+                │                                                  aggregate 3        any_not_null(role)
+                │                                                  group by           username
+                └── render                                         ·                  ·
+                     └── sort                                      ·                  ·
+                          │                                        order              +role
+                          └── hash-join                            ·                  ·
+                               │                                   type               left outer
+                               │                                   equality           (username) = (member)
+                               │                                   left cols are key  ·
+                               ├── group                           ·                  ·
+                               │    │                              aggregate 0        username
+                               │    │                              aggregate 1        any_not_null(string_agg)
+                               │    │                              group by           username
+                               │    └── render                     ·                  ·
+                               │         └── window                ·                  ·
+                               │              └── render           ·                  ·
+                               │                   └── merge-join  ·                  ·
+                               │                        │          type               left outer
+                               │                        │          equality           (username) = (username)
+                               │                        │          left cols are key  ·
+                               │                        │          mergeJoinOrder     +"(username=username)"
+                               │                        ├── scan   ·                  ·
+                               │                        │          table              users@primary
+                               │                        │          spans              ALL
+                               │                        └── scan   ·                  ·
+                               │                                   table              role_options@primary
+                               │                                   spans              ALL
+                               └── scan                            ·                  ·
+·                                                                  table              role_members@role_members_role_idx
+·                                                                  spans              ALL
 
 # EXPLAIN selecting from a sequence.
 statement ok

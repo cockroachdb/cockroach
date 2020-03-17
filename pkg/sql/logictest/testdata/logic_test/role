@@ -24,12 +24,14 @@ DROP ROLE admin, root
 statement ok
 CREATE ROLE myrole
 
-query T colnames
+query TTT colnames
 SHOW ROLES
 ----
-role_name
-admin
-myrole
+username  options     member_of
+admin     CREATEROLE  {}
+myrole    NOLOGIN     {}
+root      CREATEROLE  {admin}
+testuser  ·           {}
 
 statement error a role/user named myrole already exists
 CREATE ROLE myrole
@@ -52,21 +54,25 @@ CREATE USER IF NOT EXISTS myrole
 statement error pq: cannot drop roles/users admin, myrole: grants still exist on .*
 DROP ROLE admin, myrole
 
-query T colnames
+query TTT colnames
 SHOW ROLES
 ----
-role_name
-admin
-myrole
+username  options     member_of
+admin     CREATEROLE  {}
+myrole    NOLOGIN     {}
+root      CREATEROLE  {admin}
+testuser  ·           {}
 
 statement ok
 DROP ROLE myrole
 
-query T colnames
+query TTT colnames
 SHOW ROLES
 ----
-role_name
-admin
+username  options     member_of
+admin     CREATEROLE  {}
+root      CREATEROLE  {admin}
+testuser  ·           {}
 
 statement error pq: role/user myrole does not exist
 DROP ROLE myrole
@@ -95,11 +101,13 @@ DROP ROLE IF EXISTS rolec, roled, rolee
 statement ok
 DROP ROLE rolea, roleb
 
-query T colnames
+query TTT colnames
 SHOW ROLES
 ----
-role_name
-admin
+username  options     member_of
+admin     CREATEROLE  {}
+root      CREATEROLE  {admin}
+testuser  ·           {}
 
 statement ok
 CREATE USER testuser2
@@ -438,13 +446,16 @@ role   member    isAdmin
 admin  root      true
 roled  testuser false
 
-query T
+query TTT
 SHOW ROLES
 ----
-admin
-roleb
-roled
-rolee
+admin      CREATEROLE  {}
+roleb      NOLOGIN     {}
+roled      NOLOGIN     {}
+rolee      NOLOGIN     {}
+root       CREATEROLE  {admin}
+testuser   ·           {roled}
+testuser2  ·           {}
 
 statement ok
 DROP ROLE roleb

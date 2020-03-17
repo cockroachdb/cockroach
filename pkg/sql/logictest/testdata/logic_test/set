@@ -330,3 +330,14 @@ USE EXISTS ( TABLE error ) IS NULL
 
 statement error subqueries are not allowed in SET
 PREPARE a AS USE EXISTS ( TABLE error ) IS NULL
+
+# Ensure that we can set variables to on/off.
+statement ok
+SET enable_zigzag_join = 'on';
+SET enable_zigzag_join = 'off';
+SET enable_zigzag_join = 'true';
+SET enable_zigzag_join = 'false';
+SET enable_zigzag_join = on;
+SET enable_zigzag_join = off;
+SET enable_zigzag_join = true;
+SET enable_zigzag_join = false
