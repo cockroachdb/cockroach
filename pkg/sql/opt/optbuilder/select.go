@@ -283,7 +283,7 @@ func (b *Builder) buildView(
 		defer func() { b.trackViewDeps = true }()
 	}
 
-	outScope = b.buildSelect(sel, locking, nil /* desiredTypes */, &scope{builder: b})
+	outScope = b.buildSelect(sel, locking, nil /* desiredTypes */, inScope)
 
 	// Update data source name to be the name of the view. And if view columns
 	// are specified, then update names of output columns.
