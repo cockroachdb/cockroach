@@ -45,6 +45,10 @@ func registerTPCHVec(r *testRegistry) {
 		9:  "can cause OOM",
 		19: "can cause OOM",
 	}
+	vectorizeOptionByVersionPrefix := map[string]string{
+		"v19.2": "experimental_on",
+		"v20.1": "on",
+	}
 
 	TPCHTables := []string{
 		"nation", "region", "part", "supplier",
@@ -554,7 +558,15 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 				}
 				vectorizeSetting := "off"
 				if vectorize {
-					vectorizeSetting = "experimental_on"
+					for versionPrefix, vectorizeOption := range vectorizeOptionByVersionPrefix {
+						if strings.HasPrefix(version, versionPrefix) {
+							vectorizeSetting = vectorizeOption
+							break
+						}
+					}
+					if vectorizeSetting == "off" {
+						t.Fatal("unexpectedly didn't find the corresponding vectorize option for ON case")
+					}
 				}
 				cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
 					"--max-ops=%d --queries=%d --vectorize=%s {pgurl:1-%d}",

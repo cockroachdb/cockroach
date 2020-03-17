@@ -75,11 +75,15 @@ func (n *explainVecNode) startExec(params runParams) error {
 	flowCtx := makeFlowCtx(planCtx, plan, params)
 	flowCtx.Cfg.ClusterID = &distSQLPlanner.rpcCtx.ClusterID
 
-	// Temporarily set vectorize to on so that we can get the whole plan back even
-	// if we wouldn't support it due to lack of streaming.
-	origMode := flowCtx.EvalCtx.SessionData.VectorizeMode
-	flowCtx.EvalCtx.SessionData.VectorizeMode = sessiondata.VectorizeExperimentalOn
-	defer func() { flowCtx.EvalCtx.SessionData.VectorizeMode = origMode }()
+	// We want to get the vectorized plan which would be executed with the
+	// current 'vectorize' option. If 'vectorize' is set to 'off', then the
+	// vectorized engine is disabled, and we will return an error in such case.
+	// With all other options, we don't change the setting to the
+	// most-inclusive option as we used to because the plan can be different
+	// based on 'vectorize' setting.
+	if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeOff {
+		return errors.New("vectorize is set to 'off'")
+	}
 
 	sortedFlows := make([]flowWithNode, 0, len(flows))
 	for nodeID, flow := range flows {

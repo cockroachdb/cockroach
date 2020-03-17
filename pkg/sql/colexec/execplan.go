@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -139,10 +140,14 @@ type NewColOperatorResult struct {
 	MetadataSources  []execinfrapb.MetadataSource
 	IsStreaming      bool
 	// CanRunInAutoMode returns whether the result can be run in auto mode if
-	// IsStreaming is false. This applies to operators that can spill to disk, but
-	// also operators such as the hash aggregator that buffer, but not
-	// proportionally to the input size (in the hash aggregator's case, it is the
-	// number of distinct groups).
+	// IsStreaming is false. This applies to operators that can spill to disk,
+	// but also operators such as the hash aggregator that buffer, but not
+	// proportionally to the input size (in the hash aggregator's case, it is
+	// the number of distinct groups).
+	// NOTE: if you set this value to 'false' for some operator, make sure to
+	// make the corresponding adjustment to 'isSupported' check so that we can
+	// plan wrapped processor core in the vectorized flow rather than rejecting
+	// the vectorization entirely in 'auto' mode.
 	CanRunInAutoMode       bool
 	BufferingOpMemMonitors []*mon.BytesMonitor
 	BufferingOpMemAccounts []*mon.BoundAccount
@@ -185,8 +190,12 @@ const noFilterIdx = -1
 // isSupported checks whether we have a columnar operator equivalent to a
 // processor described by spec. Note that it doesn't perform any other checks
 // (like validity of the number of inputs).
-func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
+func isSupported(
+	mode sessiondata.VectorizeExecMode, spec *execinfrapb.ProcessorSpec,
+) (bool, error) {
 	core := spec.Core
+	isFullVectorization := mode == sessiondata.VectorizeOn ||
+		mode == sessiondata.VectorizeExperimentalAlways
 
 	switch {
 	case core.Noop != nil:
@@ -226,6 +235,11 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 		}
 		if core.Distinct.ErrorOnDup != "" {
 			return false, errors.Newf("distinct with error on duplicates not supported")
+		}
+		if !isFullVectorization {
+			if len(core.Distinct.OrderedColumns) < len(core.Distinct.DistinctColumns) {
+				return false, errors.Newf("unordered distinct can only run in vectorize 'on' mode")
+			}
 		}
 		return true, nil
 
@@ -268,6 +282,12 @@ func isSupported(spec *execinfrapb.ProcessorSpec) (bool, error) {
 
 			if _, supported := SupportedWindowFns[*wf.Func.WindowFunc]; !supported {
 				return false, errors.Newf("window function %s is not supported", wf.String())
+			}
+			if !isFullVectorization {
+				switch *wf.Func.WindowFunc {
+				case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
+					return false, errors.Newf("window function %s can only run in vectorize 'on' mode", wf.String())
+				}
 			}
 		}
 		return true, nil
@@ -519,7 +539,7 @@ func NewColOperator(
 	// before any specs are planned. Used if there is a need to backtrack.
 	resultPreSpecPlanningStateShallowCopy := result
 
-	supported, err := isSupported(spec)
+	supported, err := isSupported(flowCtx.EvalCtx.SessionData.VectorizeMode, spec)
 	if !supported {
 		// We refuse to wrap LocalPlanNode processor (which is a DistSQL wrapper
 		// around a planNode) because it creates complications, and a flow with

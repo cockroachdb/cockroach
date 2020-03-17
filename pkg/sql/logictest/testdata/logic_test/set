@@ -172,7 +172,7 @@ statement ok
 SET vectorize = auto
 
 statement ok
-SET vectorize = experimental_on
+SET vectorize = on
 
 statement ok
 SET vectorize = experimental_always
