@@ -173,6 +173,7 @@ import (
 //            if kvtrace(CPut,Del,prefix=/Table/54,prefix=/Table/55), the
 //            results will be filtered to contain messages starting with
 //            CPut /Table/54, CPut /Table/55, Del /Table/54, Del /Table/55.
+//      - noticetrace: runs the query and compares only the notices that appear.
 //
 //    The label is optional. If specified, the test runner stores a hash
 //    of the results of the query under the given label. If the label is
@@ -878,6 +879,9 @@ type logicQuery struct {
 	kvOpTypes        []string
 	keyPrefixFilters []string
 
+	// noticeTrace indicates we're comparing the output of a notice trace.
+	noticeTrace bool
+
 	// rawOpts are the query options, before parsing. Used to display in error
 	// messages.
 	rawOpts string
@@ -954,6 +958,9 @@ type logicTest struct {
 
 	// varMap remembers the variables set with "let".
 	varMap map[string]string
+
+	// noticeBuffer retains the notices from the past query.
+	noticeBuffer []string
 
 	rewriteResTestBuf bytes.Buffer
 
@@ -1063,10 +1070,23 @@ func (t *logicTest) setUser(user string) func() {
 	addr := t.cluster.Server(t.nodeIdx).ServingSQLAddr()
 	pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(user))
 	pgURL.Path = "test"
-	db, err := gosql.Open("postgres", pgURL.String())
+
+	base, err := pq.NewConnector(pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
+		t.noticeBuffer = append(t.noticeBuffer, "NOTICE: "+notice.Message)
+		if notice.Detail != "" {
+			t.noticeBuffer = append(t.noticeBuffer, "DETAIL: "+notice.Detail)
+		}
+		if notice.Hint != "" {
+			t.noticeBuffer = append(t.noticeBuffer, "HINT: "+notice.Hint)
+		}
+	})
+	db := gosql.OpenDB(connector)
+
 	// The default value for extra_float_digits assumed by tests is
 	// 0. However, lib/pq by default configures this to 2 during
 	// connection initialization, so we need to set it back to 0 before
@@ -1647,6 +1667,9 @@ func (t *logicTest) processSubtest(
 							query.kvOpTypes = nil
 							query.keyPrefixFilters = nil
 
+						case "noticetrace":
+							query.noticeTrace = true
+
 						default:
 							return errors.Errorf("%s: unknown sort mode: %s", query.pos, opt)
 						}
@@ -2087,6 +2110,8 @@ func (t *logicTest) hashResults(results []string) (string, error) {
 }
 
 func (t *logicTest) execQuery(query logicQuery) error {
+	t.noticeBuffer = []string{}
+
 	if *showSQL {
 		t.outf("%s;", query.sql)
 	}
@@ -2105,98 +2130,106 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	}
 	defer rows.Close()
 
-	cols, err := rows.Columns()
-	if err != nil {
-		return err
-	}
-	if len(query.colTypes) != len(cols) {
-		return fmt.Errorf("%s: expected %d columns, but found %d",
-			query.pos, len(query.colTypes), len(cols))
-	}
-	vals := make([]interface{}, len(cols))
-	for i := range vals {
-		vals[i] = new(interface{})
-	}
-
 	var actualResultsRaw []string
-	if query.colNames {
-		actualResultsRaw = append(actualResultsRaw, cols...)
-	}
-	for rows.Next() {
-		if err := rows.Scan(vals...); err != nil {
+	colLen := 0
+	if query.noticeTrace {
+		query.colTypes = "T"
+		colLen = 1
+		actualResultsRaw = t.noticeBuffer
+	} else {
+		cols, err := rows.Columns()
+		if err != nil {
 			return err
 		}
-		for i, v := range vals {
-			if val := *v.(*interface{}); val != nil {
-				valT := reflect.TypeOf(val).Kind()
-				colT := query.colTypes[i]
-				switch colT {
-				case 'T':
-					if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
-						return fmt.Errorf("%s: expected text value for column %d, but found %T: %#v",
-							query.pos, i, val, val,
-						)
-					}
-				case 'I':
-					if valT != reflect.Int64 {
-						if *flexTypes && (valT == reflect.Float64 || valT == reflect.Slice) {
-							t.signalIgnoredError(
-								fmt.Errorf("result type mismatch: expected I, got %T", val), query.pos, query.sql,
-							)
-							return nil
-						}
-						return fmt.Errorf("%s: expected int value for column %d, but found %T: %#v",
-							query.pos, i, val, val,
-						)
-					}
-				case 'R':
-					if valT != reflect.Float64 && valT != reflect.Slice {
-						if *flexTypes && (valT == reflect.Int64) {
-							t.signalIgnoredError(
-								fmt.Errorf("result type mismatch: expected R, got %T", val), query.pos, query.sql,
-							)
-							return nil
-						}
-						return fmt.Errorf("%s: expected float/decimal value for column %d, but found %T: %#v",
-							query.pos, i, val, val,
-						)
-					}
-				case 'B':
-					if valT != reflect.Bool {
-						return fmt.Errorf("%s: expected boolean value for column %d, but found %T: %#v",
-							query.pos, i, val, val,
-						)
-					}
-				case 'O':
-					if valT != reflect.Slice {
-						return fmt.Errorf("%s: expected oid value for column %d, but found %T: %#v",
-							query.pos, i, val, val,
-						)
-					}
-				default:
-					return fmt.Errorf("%s: unknown type in type string: %c in %s",
-						query.pos, colT, query.colTypes,
-					)
-				}
+		colLen = len(cols)
+		if len(query.colTypes) != len(cols) {
+			return fmt.Errorf("%s: expected %d columns, but found %d",
+				query.pos, len(query.colTypes), len(cols))
+		}
+		vals := make([]interface{}, len(cols))
+		for i := range vals {
+			vals[i] = new(interface{})
+		}
 
-				if byteArray, ok := val.([]byte); ok {
-					// The postgres wire protocol does not distinguish between
-					// strings and byte arrays, but our tests do. In order to do
-					// The Right Thing™, we replace byte arrays which are valid
-					// UTF-8 with strings. This allows byte arrays which are not
-					// valid UTF-8 to print as a list of bytes (e.g. `[124 107]`)
-					// while printing valid strings naturally.
-					if str := string(byteArray); utf8.ValidString(str) {
-						val = str
+		if query.colNames {
+			actualResultsRaw = append(actualResultsRaw, cols...)
+		}
+		for rows.Next() {
+			if err := rows.Scan(vals...); err != nil {
+				return err
+			}
+			for i, v := range vals {
+				if val := *v.(*interface{}); val != nil {
+					valT := reflect.TypeOf(val).Kind()
+					colT := query.colTypes[i]
+					switch colT {
+					case 'T':
+						if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
+							return fmt.Errorf("%s: expected text value for column %d, but found %T: %#v",
+								query.pos, i, val, val,
+							)
+						}
+					case 'I':
+						if valT != reflect.Int64 {
+							if *flexTypes && (valT == reflect.Float64 || valT == reflect.Slice) {
+								t.signalIgnoredError(
+									fmt.Errorf("result type mismatch: expected I, got %T", val), query.pos, query.sql,
+								)
+								return nil
+							}
+							return fmt.Errorf("%s: expected int value for column %d, but found %T: %#v",
+								query.pos, i, val, val,
+							)
+						}
+					case 'R':
+						if valT != reflect.Float64 && valT != reflect.Slice {
+							if *flexTypes && (valT == reflect.Int64) {
+								t.signalIgnoredError(
+									fmt.Errorf("result type mismatch: expected R, got %T", val), query.pos, query.sql,
+								)
+								return nil
+							}
+							return fmt.Errorf("%s: expected float/decimal value for column %d, but found %T: %#v",
+								query.pos, i, val, val,
+							)
+						}
+					case 'B':
+						if valT != reflect.Bool {
+							return fmt.Errorf("%s: expected boolean value for column %d, but found %T: %#v",
+								query.pos, i, val, val,
+							)
+						}
+					case 'O':
+						if valT != reflect.Slice {
+							return fmt.Errorf("%s: expected oid value for column %d, but found %T: %#v",
+								query.pos, i, val, val,
+							)
+						}
+					default:
+						return fmt.Errorf("%s: unknown type in type string: %c in %s",
+							query.pos, colT, query.colTypes,
+						)
 					}
+
+					if byteArray, ok := val.([]byte); ok {
+						// The postgres wire protocol does not distinguish between
+						// strings and byte arrays, but our tests do. In order to do
+						// The Right Thing™, we replace byte arrays which are valid
+						// UTF-8 with strings. This allows byte arrays which are not
+						// valid UTF-8 to print as a list of bytes (e.g. `[124 107]`)
+						// while printing valid strings naturally.
+						if str := string(byteArray); utf8.ValidString(str) {
+							val = str
+						}
+					}
+					// Empty strings are rendered as "·" (middle dot)
+					if val == "" {
+						val = "·"
+					}
+					actualResultsRaw = append(actualResultsRaw, fmt.Sprint(val))
+				} else {
+					actualResultsRaw = append(actualResultsRaw, "NULL")
 				}
-				// Empty strings are rendered as "·" (middle dot)
-				if val == "" {
-					val = "·"
-				}
-				actualResultsRaw = append(actualResultsRaw, fmt.Sprint(val))
-			} else {
-				actualResultsRaw = append(actualResultsRaw, "NULL")
 			}
 		}
 	}
@@ -2219,8 +2252,8 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	}
 
 	if query.sorter != nil {
-		query.sorter(len(cols), actualResults)
-		query.sorter(len(cols), query.expectedResults)
+		query.sorter(colLen, actualResults)
+		query.sorter(colLen, query.expectedResults)
 	}
 
 	hash, err := t.hashResults(actualResults)
