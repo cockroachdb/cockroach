@@ -43,6 +43,7 @@ func (b *Builder) buildJoin(
 		telemetry.Inc(sqltelemetry.LateralJoinUseCounter)
 		isLateral = true
 		inScopeRight = leftScope
+		inScopeRight.context = exprKindLateralJoin
 	}
 
 	rightScope := b.buildDataSource(join.Right, nil /* indexFlags */, locking, inScopeRight)
@@ -101,8 +102,10 @@ func (b *Builder) buildJoin(
 		var filters memo.FiltersExpr
 		if on, ok := cond.(*tree.OnJoinCond); ok {
 			// Do not allow special functions in the ON clause.
-			b.semaCtx.Properties.Require("ON", tree.RejectSpecial)
-			outScope.context = "ON"
+			b.semaCtx.Properties.Require(
+				exprKindOn.String(), tree.RejectGenerators|tree.RejectWindowApplications,
+			)
+			outScope.context = exprKindOn
 			filter := b.buildScalar(
 				outScope.resolveAndRequireType(on.Expr, types.Bool), outScope, nil, nil, nil,
 			)

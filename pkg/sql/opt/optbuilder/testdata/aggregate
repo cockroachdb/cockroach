@@ -549,7 +549,7 @@ error (42803): column "v" must appear in the GROUP BY clause or be used in an ag
 build
 SELECT k FROM kv WHERE avg(k) > 1
 ----
-error (42803): avg(): aggregate functions are not allowed in WHERE
+error (42803): aggregate functions are not allowed in WHERE
 
 build
 SELECT max(avg(k)) FROM kv
@@ -3651,3 +3651,151 @@ project
            │    └── column5:5
            └── sum [as=sum:8]
                 └── column7:7
+
+# Regression test for #44724.
+build
+SELECT *
+  FROM (SELECT 1 AS one, v FROM kv) AS kv
+  JOIN LATERAL (
+        SELECT b, sum(one) FROM abxy
+       ) AS abxy ON kv.v = abxy.b
+----
+error (42803): aggregate functions are not allowed in FROM clause of their own query level
+
+# Regression test for #45838. The aggregate should be allowed in the WHERE
+# clause since it's scoped at the outer level.
+build
+  SELECT sum(x)
+    FROM abxy AS t
+GROUP BY y
+  HAVING EXISTS(SELECT 1 FROM abxy AS t2 WHERE sum(t.x) = 1)
+----
+project
+ ├── columns: sum:5
+ └── select
+      ├── columns: t.y:4 sum:5
+      ├── group-by
+      │    ├── columns: t.y:4 sum:5
+      │    ├── grouping columns: t.y:4
+      │    ├── project
+      │    │    ├── columns: t.x:3 t.y:4
+      │    │    └── scan t
+      │    │         └── columns: t.a:1!null t.b:2!null t.x:3 t.y:4
+      │    └── aggregations
+      │         └── sum [as=sum:5]
+      │              └── t.x:3
+      └── filters
+           └── exists
+                └── project
+                     ├── columns: "?column?":11!null
+                     ├── select
+                     │    ├── columns: t2.a:6!null t2.b:7!null t2.x:8 t2.y:9
+                     │    ├── scan t2
+                     │    │    └── columns: t2.a:6!null t2.b:7!null t2.x:8 t2.y:9
+                     │    └── filters
+                     │         └── sum:5 = 1
+                     └── projections
+                          └── 1 [as="?column?":11]
+
+exec-ddl
+CREATE TABLE onek (
+        unique1         int,
+        unique2         int,
+        two                     int,
+        four            int,
+        ten                     int,
+        twenty          int,
+        hundred         int,
+        thousand        int,
+        twothousand     int,
+        fivethous       int,
+        tenthous        int,
+        odd                     int,
+        even            int,
+        stringu1        string,
+        stringu2        string,
+        string4         string
+)
+----
+
+# Regression tests for #30652.
+build
+  SELECT ten, sum(DISTINCT four)
+    FROM onek AS a
+GROUP BY ten
+  HAVING EXISTS(
+            SELECT 1 FROM onek AS b WHERE sum(DISTINCT a.four) = b.four
+         )
+----
+select
+ ├── columns: ten:5 sum:18
+ ├── group-by
+ │    ├── columns: a.ten:5 sum:18
+ │    ├── grouping columns: a.ten:5
+ │    ├── project
+ │    │    ├── columns: a.four:4 a.ten:5
+ │    │    └── scan a
+ │    │         └── columns: a.unique1:1 a.unique2:2 a.two:3 a.four:4 a.ten:5 a.twenty:6 a.hundred:7 a.thousand:8 a.twothousand:9 a.fivethous:10 a.tenthous:11 a.odd:12 a.even:13 a.stringu1:14 a.stringu2:15 a.string4:16 a.rowid:17!null
+ │    └── aggregations
+ │         └── agg-distinct [as=sum:18]
+ │              └── sum
+ │                   └── a.four:4
+ └── filters
+      └── exists
+           └── project
+                ├── columns: "?column?":37!null
+                ├── select
+                │    ├── columns: b.unique1:19 b.unique2:20 b.two:21 b.four:22!null b.ten:23 b.twenty:24 b.hundred:25 b.thousand:26 b.twothousand:27 b.fivethous:28 b.tenthous:29 b.odd:30 b.even:31 b.stringu1:32 b.stringu2:33 b.string4:34 b.rowid:35!null
+                │    ├── scan b
+                │    │    └── columns: b.unique1:19 b.unique2:20 b.two:21 b.four:22 b.ten:23 b.twenty:24 b.hundred:25 b.thousand:26 b.twothousand:27 b.fivethous:28 b.tenthous:29 b.odd:30 b.even:31 b.stringu1:32 b.stringu2:33 b.string4:34 b.rowid:35!null
+                │    └── filters
+                │         └── sum:18 = b.four:22
+                └── projections
+                     └── 1 [as="?column?":37]
+
+build
+  SELECT ten, sum(DISTINCT four)
+    FROM onek AS a
+GROUP BY ten
+  HAVING EXISTS(
+            SELECT 1
+              FROM onek AS b
+             WHERE sum(DISTINCT a.four + b.four) = b.four
+         )
+----
+error (42803): aggregate functions are not allowed in WHERE
+
+build
+SELECT (
+        SELECT t2.a
+          FROM abxy AS t2 JOIN abxy AS t3 ON sum(t1.x) = t3.x
+       )
+  FROM abxy AS t1
+----
+project
+ ├── columns: a:15
+ ├── scalar-group-by
+ │    ├── columns: sum:14
+ │    ├── project
+ │    │    ├── columns: x:13
+ │    │    ├── scan t1
+ │    │    │    └── columns: t1.a:1!null t1.b:2!null t1.x:3 t1.y:4
+ │    │    └── projections
+ │    │         └── t1.x:3 [as=x:13]
+ │    └── aggregations
+ │         └── sum [as=sum:14]
+ │              └── x:13
+ └── projections
+      └── subquery [as=a:15]
+           └── max1-row
+                ├── columns: t2.a:5!null
+                └── project
+                     ├── columns: t2.a:5!null
+                     └── inner-join (cross)
+                          ├── columns: t2.a:5!null t2.b:6!null t2.x:7 t2.y:8 t3.a:9!null t3.b:10!null t3.x:11!null t3.y:12
+                          ├── scan t2
+                          │    └── columns: t2.a:5!null t2.b:6!null t2.x:7 t2.y:8
+                          ├── scan t3
+                          │    └── columns: t3.a:9!null t3.b:10!null t3.x:11 t3.y:12
+                          └── filters
+                               └── sum:14 = t3.x:11
