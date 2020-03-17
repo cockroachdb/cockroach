@@ -37,9 +37,9 @@ const (
 
 // hashTableBuildBuffer stores the information related to the build table.
 type hashTableBuildBuffer struct {
-	// first stores the keyID of the first key that resides in each bucket. This
-	// keyID is used to determine the corresponding equality column key as well
-	// as output column values.
+	// first stores the first keyID of the key that resides in each bucket.
+	// This keyID is used to determine the corresponding equality column key as
+	// well as output column values.
 	first []uint64
 
 	// next is a densely-packed list that stores the keyID of the next key in the
@@ -50,9 +50,9 @@ type hashTableBuildBuffer struct {
 
 // hashTableProbeBuffer stores the information related to the probe table.
 type hashTableProbeBuffer struct {
-	// first stores the keyID of the first key that resides in each bucket. This
-	// keyID is used to determine the corresponding equality column key as well
-	// as output column values.
+	// first stores the first keyID of the key that resides in each bucket.
+	// This keyID is used to determine the corresponding equality column key as
+	// well as output column values.
 	first []uint64
 
 	// next is a densely-packed list that stores the keyID of the next key in the
@@ -246,6 +246,17 @@ func (ht *hashTable) build(ctx context.Context, input Operator) {
 			ht.computeBuckets(
 				ctx, ht.probeScratch.next[1:], ht.keyTypes, ht.probeScratch.keys, batch.Length(), batch.Selection())
 			copy(ht.probeScratch.hashBuffer, ht.probeScratch.next[1:])
+
+			// We should not zero out the entire `first` buffer here since the size of
+			// the `first` buffer same as the hash range (2^16) by default. The size
+			// of the hashBuffer is same as the batch size which is often a lot
+			// smaller than the hash range. Since we are only concerned with tuples
+			// inside the hashBuffer, we only need to zero out the corresponding
+			// entries in the `first` buffer that occurred in the hashBuffer.
+			for _, hash := range ht.probeScratch.hashBuffer[:batch.Length()] {
+				ht.probeScratch.first[hash] = 0
+			}
+
 			ht.buildNextChains(ctx, ht.probeScratch.first, ht.probeScratch.next, 1, batch.Length())
 
 			ht.removeDuplicates(batch, ht.probeScratch.keys, ht.probeScratch.first, ht.probeScratch.next, ht.checkProbeForDistinct)
@@ -393,13 +404,31 @@ func (ht *hashTable) computeBuckets(
 func (ht *hashTable) buildNextChains(
 	ctx context.Context, first, next []uint64, offset, batchSize int,
 ) {
-	for id := offset; id < offset+batchSize; id++ {
+	// The loop direction here is reversed to ensure that when we are building the
+	// next chain for the probe table, the keyID in each equality chain inside
+	// `next` is strictly in ascending order. This is crucial to ensure that when
+	// built in distinct mode, hash table will emit the first distinct tuple it
+	// encounters. When the next chain is built for build side, this invariant no
+	// longer holds for the equality chains inside `next`. This is ok however for
+	// the build side since all tuple that buffered on build side are already
+	// distinct, therefore we can be sure that when we emit a tuple, there cannot
+	// potentially be other tuples with the same key.
+	for id := offset + batchSize - 1; id >= offset; id-- {
 		ht.cancelChecker.check(ctx)
 		// keyID is stored into corresponding hash bucket at the front of the next
 		// chain.
 		hash := next[id]
-		next[id] = first[hash]
-		first[hash] = uint64(id)
+		firstKeyID := first[hash]
+		// This is to ensure that `first` always points to the tuple with smallest
+		// keyID in each equality chain. firstKeyID==0 means it is the first tuple
+		// that we have encountered with the given hash value.
+		if firstKeyID == 0 || uint64(id) < firstKeyID {
+			next[id] = first[hash]
+			first[hash] = uint64(id)
+		} else {
+			next[id] = next[firstKeyID]
+			next[firstKeyID] = uint64(id)
+		}
 	}
 }
 
