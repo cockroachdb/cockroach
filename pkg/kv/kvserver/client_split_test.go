@@ -1409,6 +1409,7 @@ func runSetupSplitSnapshotRace(
 	// Disable the split delay mechanism, or it'll spend 10s going in circles.
 	// (We can't set it to zero as otherwise the default overrides us).
 	sc.RaftDelaySplitToSuppressSnapshotTicks = -1
+	sc.Clock = nil // manual clock
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 6)

@@ -224,7 +224,7 @@ func TestNodeHeartbeatCallback(t *testing.T) {
 
 	// Verify that last update time has been set for all nodes.
 	verifyUptimes := func() error {
-		expected := mtc.clock.Now()
+		expected := mtc.clock().Now()
 		for i, s := range mtc.stores {
 			uptm, err := s.ReadLastUpTimestamp(context.Background())
 			if err != nil {
@@ -506,7 +506,7 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 
 	livenesses := mtc.nodeLivenesses[0].GetLivenesses()
 	actualLMapNodes := make(map[roachpb.NodeID]struct{})
-	originalExpiration := mtc.clock.PhysicalNow() + mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds()
+	originalExpiration := mtc.clock().PhysicalNow() + mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds()
 	for _, l := range livenesses {
 		if a, e := l.Epoch, int64(1); a != e {
 			t.Errorf("liveness record had epoch %d, wanted %d", a, e)
@@ -985,7 +985,7 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 	if err := mtc.dbs[0].CPut(ctx, keys.NodeLivenessKey(goneNodeID), &storagepb.Liveness{
 		NodeID:     goneNodeID,
 		Epoch:      1,
-		Expiration: hlc.LegacyTimestamp(mtc.clock.Now()),
+		Expiration: hlc.LegacyTimestamp(mtc.clock().Now()),
 	}, nil); err != nil {
 		t.Fatal(err)
 	}

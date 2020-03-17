@@ -234,6 +234,7 @@ func mergeWithData(t *testing.T, retries int64) {
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.Clock = nil // manual clock
 
 	// Maybe inject some retryable errors when the merge transaction commits.
 	var mtc *multiTestContext
@@ -438,7 +439,7 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 			if err != nil {
 				return err
 			}
-			if !rhsRepl.OwnsValidLease(mtc.clock.Now()) {
+			if !rhsRepl.OwnsValidLease(mtc.clock().Now()) {
 				return errors.New("rhs store does not own valid lease for rhs range")
 			}
 			return nil
@@ -453,7 +454,7 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 		t.Fatal(pErr)
 	}
 
-	readTS := mtc.clock.Now()
+	readTS := mtc.clock().Now()
 
 	// Simulate a read on the RHS from a node with a newer clock.
 	var ba roachpb.BatchRequest
@@ -476,7 +477,7 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 	pushee := roachpb.MakeTransaction("pushee", rhsKey, roachpb.MinUserPriority, readTS, 0)
 	pusher := roachpb.MakeTransaction("pusher", rhsKey, roachpb.MaxUserPriority, readTS, 0)
 	ba = roachpb.BatchRequest{}
-	ba.Timestamp = mtc.clock.Now()
+	ba.Timestamp = mtc.clock().Now()
 	ba.RangeID = rhsDesc.RangeID
 	ba.Add(pushTxnArgs(&pusher, &pushee, roachpb.PUSH_ABORT))
 	if br, pErr := rhsStore.Send(ctx, ba); pErr != nil {
@@ -509,7 +510,7 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 	// disjoint or not because disjoint leaseholders will lead to a loss of
 	// resolution in the timestamp cache. Either way though, the transaction
 	// should not be allowed to create its record.
-	hb, hbH := heartbeatArgs(&pushee, mtc.clock.Now())
+	hb, hbH := heartbeatArgs(&pushee, mtc.clock().Now())
 	ba = roachpb.BatchRequest{}
 	ba.Header = hbH
 	ba.RangeID = lhsDesc.RangeID
@@ -570,6 +571,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.Clock = nil // manual clock
 	mtc := &multiTestContext{storeConfig: &storeCfg}
 	var readTS hlc.Timestamp
 	rhsKey := roachpb.Key("c")
@@ -871,6 +873,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	ctx := context.Background()
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.Clock = nil // manual clock
 	mtc := &multiTestContext{storeConfig: &storeCfg}
 	mtc.Start(t, 1)
 	defer mtc.Stop()
@@ -1324,6 +1327,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.Clock = nil // manual clock
 
 	// The synchronization in this test is tricky. The merge transaction is
 	// controlled by the AdminMerge function and normally commits quite quickly,
@@ -1410,7 +1414,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	// the transaction being inadvertently aborted during its first attempt,
 	// which this test is not designed to handle. If the merge transaction did
 	// abort then the get requests could complete on r2 before the merge retried.
-	hb, hbH := heartbeatArgs(mergeTxn, mtc.clock.Now())
+	hb, hbH := heartbeatArgs(mergeTxn, mtc.clock().Now())
 	if _, pErr := kv.SendWrappedWith(ctx, mtc.stores[0].TestSender(), hbH, hb); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1509,6 +1513,7 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	storeCfg.Clock = nil // manual clock
 
 	var mtc *multiTestContext
 	storeCfg.TestingKnobs.TestingResponseFilter = func(
@@ -1984,7 +1989,7 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if !rhsRepl.OwnsValidLease(mtc.clock.Now()) {
+		if !rhsRepl.OwnsValidLease(mtc.clock().Now()) {
 			return errors.New("rhs store does not own valid lease for rhs range")
 		}
 		return nil
@@ -2204,7 +2209,7 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 		if err != nil {
 			return err
 		}
-		if !rhsRepl.OwnsValidLease(mtc.clock.Now()) {
+		if !rhsRepl.OwnsValidLease(mtc.clock().Now()) {
 			return errors.New("store2 does not own valid lease for rhs range")
 		}
 		return nil
@@ -3190,6 +3195,7 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	storeCfg.Clock = nil // manual clock
 
 	// Install a filter that triggers a shutdown when stop is non-zero and the
 	// rhsDesc requests a new lease.
@@ -3291,7 +3297,7 @@ func TestMergeQueue(t *testing.T) {
 
 	mtc.storeConfig = &storeCfg
 	// Inject clock for manipulation in tests.
-	mtc.clock = clock
+	mtc.storeConfig.Clock = clock
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 	mtc.initGossipNetwork() // needed for the non-collocated case's rebalancing to work
