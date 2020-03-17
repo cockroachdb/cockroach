@@ -1,4 +1,4 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -16,12 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
-func (d *delegator) delegateShowQueries(n *tree.ShowQueries) (tree.Statement, error) {
-	sqltelemetry.IncrementShowCounter(sqltelemetry.Queries)
-	const query = `SELECT query_id, txn_id, node_id, session_id, user_name, start, query, client_address, application_name, distributed, phase FROM crdb_internal.`
-	table := `node_queries`
+func (d *delegator) delegateShowTransactions(n *tree.ShowTransactions) (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Transactions)
+	const query = `SELECT id, node_id, session_id, start, application_name FROM crdb_internal.`
+	table := `node_transactions`
 	if n.Cluster {
-		table = `cluster_queries`
+		table = `cluster_transactions`
 	}
 	var filter string
 	if !n.All {

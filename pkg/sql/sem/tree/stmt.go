@@ -754,6 +754,12 @@ func (*ShowTableStats) StatementType() StatementType { return Rows }
 func (*ShowTableStats) StatementTag() string { return "SHOW STATISTICS" }
 
 // StatementType implements the Statement interface.
+func (*ShowTransactions) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowTransactions) StatementTag() string { return "SHOW TRANSACTIONS" }
+
+// StatementType implements the Statement interface.
 func (*ShowHistogram) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -985,6 +991,7 @@ func (n *ShowTableStats) String() string                 { return AsString(n) }
 func (n *ShowTables) String() string                     { return AsString(n) }
 func (n *ShowTraceForSession) String() string            { return AsString(n) }
 func (n *ShowTransactionStatus) String() string          { return AsString(n) }
+func (n *ShowTransactions) String() string               { return AsString(n) }
 func (n *ShowUsers) String() string                      { return AsString(n) }
 func (n *ShowVar) String() string                        { return AsString(n) }
 func (n *ShowZoneConfig) String() string                 { return AsString(n) }

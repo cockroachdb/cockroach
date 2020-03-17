@@ -1166,6 +1166,26 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 	return ex.sessionTracing.StartTracing(recordingType, traceKV, showResults)
 }
 
+func (ex *connExecutor) addActiveTxn(txn *kv.Txn) func() {
+	txnID := txn.ID()
+	ex.mu.Lock()
+	tm := &txnMeta{
+		txnStart: ex.phaseTimes[transactionStart],
+	}
+	ex.mu.ActiveUserTxns[txnID] = tm
+	ex.mu.Unlock()
+	return func() {
+		ex.mu.Lock()
+		_, ok := ex.mu.ActiveUserTxns[txnID]
+		if !ok {
+			ex.mu.Unlock()
+			panic(fmt.Sprintf("txn ID %s missing from ActiveTxns", txnID.String()))
+		}
+		delete(ex.mu.ActiveUserTxns, txnID)
+		ex.mu.Unlock()
+	}
+}
+
 // addActiveQuery adds a running query to the list of running queries.
 //
 // It returns a cleanup function that needs to be run when the query is no
@@ -1177,6 +1197,7 @@ func (ex *connExecutor) addActiveQuery(
 
 	_, hidden := stmt.AST.(tree.HiddenFromShowQueries)
 	qm := &queryMeta{
+		txnID:         ex.state.mu.txn.ID(),
 		start:         ex.phaseTimes[sessionQueryReceived],
 		rawStmt:       stmt.SQL,
 		phase:         preparing,
@@ -1265,7 +1286,11 @@ func (ex *connExecutor) recordTransactionStart() func(txnEvent) {
 	// transaction.
 	ex.phaseTimes[transactionStart] = timeutil.Now()
 	implicit := ex.implicitTxn()
-	return func(ev txnEvent) { ex.recordTransaction(ev, implicit) }
+	cleanup := ex.addActiveTxn(ex.state.mu.txn)
+	return func(ev txnEvent) {
+		cleanup()
+		ex.recordTransaction(ev, implicit)
+	}
 }
 
 func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool) {

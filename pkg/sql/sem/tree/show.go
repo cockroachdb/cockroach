@@ -195,7 +195,7 @@ func (node *ShowDatabaseIndexes) Format(ctx *FmtCtx) {
 	}
 }
 
-// ShowQueries represents a SHOW QUERIES statement
+// ShowQueries represents a SHOW QUERIES statement.
 type ShowQueries struct {
 	All     bool
 	Cluster bool
@@ -211,6 +211,25 @@ func (node *ShowQueries) Format(ctx *FmtCtx) {
 		ctx.WriteString("CLUSTER QUERIES")
 	} else {
 		ctx.WriteString("LOCAL QUERIES")
+	}
+}
+
+// ShowTransactions represents a SHOW TRANSACTIONS statement.
+type ShowTransactions struct {
+	All     bool
+	Cluster bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowTransactions) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW ")
+	if node.All {
+		ctx.WriteString("ALL ")
+	}
+	if node.Cluster {
+		ctx.WriteString("CLUSTER TRANSACTIONS")
+	} else {
+		ctx.WriteString("LOCAL TRANSACTIONS")
 	}
 }
 

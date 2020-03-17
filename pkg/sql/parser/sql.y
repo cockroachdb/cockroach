@@ -593,7 +593,8 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> SYMMETRIC SYNTAX SYSTEM SUBSCRIPTION
 
 %token <str> TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
-%token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE TRANSACTION TREAT TRIGGER TRIM TRUE
+%token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE TRANSACTION
+%token <str> TRANSACTIONS TREAT TRIGGER TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE
 %token <str> TRACING
 
@@ -785,6 +786,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_tables_stmt
 %type <tree.Statement> show_trace_stmt
 %type <tree.Statement> show_transaction_stmt
+%type <tree.Statement> show_transactions_stmt
 %type <tree.Statement> show_users_stmt
 %type <tree.Statement> show_zone_stmt
 
@@ -3365,6 +3367,7 @@ show_stmt:
 | show_tables_stmt          // EXTEND WITH HELP: SHOW TABLES
 | show_trace_stmt           // EXTEND WITH HELP: SHOW TRACE
 | show_transaction_stmt     // EXTEND WITH HELP: SHOW TRANSACTION
+| show_transactions_stmt    // EXTEND WITH HELP: SHOW TRANSACTIONS
 | show_users_stmt           // EXTEND WITH HELP: SHOW USERS
 | show_zone_stmt
 | SHOW error                // SHOW HELP: SHOW
@@ -3637,6 +3640,21 @@ show_queries_stmt:
     $$.val = &tree.ShowQueries{All: true, Cluster: $3.bool()}
   }
 | SHOW ALL opt_cluster QUERIES error // SHOW HELP: SHOW QUERIES
+
+// %Help: SHOW TRANSACTIONS - list open user transactions
+// %Category: Misc
+// %Text: SHOW [ALL] [CLUSTER | LOCAL] TRANSACTIONS
+show_transactions_stmt:
+  SHOW opt_cluster TRANSACTIONS
+  {
+    $$.val = &tree.ShowTransactions{All: false, Cluster: $2.bool()}
+  }
+| SHOW opt_cluster TRANSACTIONS error // SHOW HELP: SHOW TRANSACTIONS
+| SHOW ALL opt_cluster TRANSACTIONS
+  {
+    $$.val = &tree.ShowTransactions{All: true, Cluster: $3.bool()}
+  }
+| SHOW ALL opt_cluster TRANSACTIONS error // SHOW HELP: SHOW TRANSACTIONS
 
 opt_cluster:
   /* EMPTY */
@@ -9956,6 +9974,7 @@ unreserved_keyword:
 | TIES
 | TRACE
 | TRANSACTION
+| TRANSACTIONS
 | TRIGGER
 | TRUNCATE
 | TRUSTED

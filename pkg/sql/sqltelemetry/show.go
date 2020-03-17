@@ -44,20 +44,23 @@ const (
 	Roles
 	// Users represents the SHOW USERS command.
 	Users
+	// Transactions represents the SHOW TRANSACTIONS command.
+	Transactions
 )
 
 var showTelemetryNameMap = map[ShowTelemetryType]string{
-	Ranges:      "ranges",
-	Partitions:  "partitions",
-	Locality:    "locality",
-	Create:      "create",
-	RangeForRow: "rangeforrow",
-	Queries:     "queries",
-	Indexes:     "indexes",
-	Constraints: "constraints",
-	Jobs:        "jobs",
-	Roles:       "roles",
-	Users:       "users",
+	Ranges:       "ranges",
+	Partitions:   "partitions",
+	Locality:     "locality",
+	Create:       "create",
+	RangeForRow:  "rangeforrow",
+	Queries:      "queries",
+	Indexes:      "indexes",
+	Constraints:  "constraints",
+	Jobs:         "jobs",
+	Roles:        "roles",
+	Users:        "users",
+	Transactions: "transactions",
 }
 
 func (s ShowTelemetryType) String() string {

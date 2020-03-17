@@ -991,9 +991,19 @@ const (
 	executing queryPhase = 1
 )
 
+// txnMeta stores metadata about an active user txn. Stored as reference in
+// session.mu.ActiveUserTxns.
+type txnMeta struct {
+	// The start time of this transaction.
+	txnStart time.Time
+}
+
 // queryMeta stores metadata about a query. Stored as reference in
 // session.mu.ActiveQueries.
 type queryMeta struct {
+	// The ID of the transaction that this query is running within.
+	txnID uuid.UUID
+
 	// The timestamp when this query began execution.
 	start time.Time
 

@@ -96,6 +96,9 @@ func TryDelegate(
 	case *tree.ShowTables:
 		return d.delegateShowTables(t)
 
+	case *tree.ShowTransactions:
+		return d.delegateShowTransactions(t)
+
 	case *tree.ShowUsers:
 		return d.delegateShowUsers(t)
 
