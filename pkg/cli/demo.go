@@ -909,7 +909,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 
 	ctx := context.Background()
 
-	if err := checkTzDatabaseAvailability(ctx); err != nil {
+	if err := checkTzDatabaseAvailability(ctx, true /* onlyLog */); err != nil {
 		return err
 	}
 

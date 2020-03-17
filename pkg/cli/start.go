@@ -586,8 +586,11 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 
 	// Until/unless CockroachDB embeds its own tz database, we want
 	// an early sanity check. It's better to inform the user early
-	// than to get surprising errors during SQL queries.
-	if err := checkTzDatabaseAvailability(ctx); err != nil {
+	// than to get surprising errors during SQL queries. The env
+	// var is an escape hatch for informed users to accept this
+	// degraded experience.
+	onlyLogOnInconsistentTimeZones := envutil.EnvOrDefaultBool("COCKROACH_INCONSISTENT_TIME_ZONES", false)
+	if err := checkTzDatabaseAvailability(ctx, onlyLogOnInconsistentTimeZones); err != nil {
 		return errors.Wrap(err, "failed to initialize node")
 	}
 
@@ -1051,33 +1054,36 @@ func clientFlagsRPC() string {
 	return strings.Join(flags, " ")
 }
 
-func checkTzDatabaseAvailability(ctx context.Context) error {
-	if _, err := timeutil.LoadLocation("America/New_York"); err != nil {
-		log.Errorf(ctx, "timeutil.LoadLocation: %v", err)
-		reportedErr := errors.WithHint(
-			errors.WithIssueLink(
-				errors.New("unable to load named timezones"),
-				errors.IssueLink{IssueURL: unimplemented.MakeURL(36864)}),
-			"Check that the time zone database is installed on your system, or\n"+
-				"set the ZONEINFO environment variable to a Go time zone .zip archive.")
-
-		if envutil.EnvOrDefaultBool("COCKROACH_INCONSISTENT_TIME_ZONES", false) {
-			// The user tells us they really know what they want.
-			reportedErr := &formattedError{err: reportedErr}
-			log.Shout(ctx, log.Severity_WARNING, reportedErr.Error())
-		} else {
-			// Prevent a successful start.
-			//
-			// In the past, we were simply using log.Shout to emit an error,
-			// informing the user that startup could continue with degraded
-			// behavior.  However, usage demonstrated that users typically do
-			// not see the error and instead run into silently incorrect SQL
-			// results. To avoid this situation altogether, it's better to
-			// stop early.
-			return reportedErr
-		}
+// checkTzDatabaseAvailability will determine whether a named timezone can be
+// loaded. If onlyLog is true, the function will log about problems but will
+// return a nil error.
+func checkTzDatabaseAvailability(ctx context.Context, onlyLog bool) error {
+	_, err := timeutil.LoadLocation("America/New_York")
+	if err == nil {
+		return nil
 	}
-	return nil
+	log.Errorf(ctx, "timeutil.LoadLocation: %v", err)
+	reportedErr := errors.WithHint(
+		errors.WithIssueLink(
+			errors.New("unable to load named timezones"),
+			errors.IssueLink{IssueURL: unimplemented.MakeURL(36864)}),
+		"Check that the time zone database is installed on your system, or\n"+
+			"set the ZONEINFO environment variable to a Go time zone .zip archive.")
+	if onlyLog {
+		reportedErr = &formattedError{err: reportedErr}
+		log.Shout(ctx, log.Severity_WARNING, reportedErr.Error())
+		reportedErr = nil
+	}
+
+	// Prevent a successful start.
+	//
+	// In the past, we were simply using log.Shout to emit an error,
+	// informing the user that startup could continue with degraded
+	// behavior.  However, usage demonstrated that users typically do
+	// not see the error and instead run into silently incorrect SQL
+	// results. To avoid this situation altogether, it's better to
+	// stop early.
+	return reportedErr
 }
 
 func reportConfiguration(ctx context.Context) {
