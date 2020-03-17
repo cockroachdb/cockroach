@@ -445,7 +445,7 @@ $left
 #
 # TODO(andyk): Add other join types.
 [HoistJoinProjectRight, Normalize]
-(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply | SemiJoin
     $left:*
     $right:(Project $input:* $projections:[])
     $on:*
@@ -466,7 +466,7 @@ $left
 # HoistJoinProjectLeft is the same as HoistJoinProjectRight, but for the left
 # input of the join.
 [HoistJoinProjectLeft, Normalize]
-(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply | SemiJoin
     $left:(Project $input:* $projections:[])
     $right:*
     $on:*
@@ -532,6 +532,65 @@ $left
     $private
 )
 
+# ExtractProjectedTupleEqualityLeft detects joins which contain equalities between 
+# projected tuple variables and tuples, and splits these tuples out into multiple 
+# equalities on the underlying columns, and hoists the project above the join this 
+# can allow further simplification of project operators
+[ExtractProjectedTupleEqualityLeft, Normalize]
+(InnerJoin | LeftJoin | SemiJoin
+    $left: (Project  $input:* $projections:* $passthrough:*)
+    $right:*
+    $on:[
+        ...
+            (FiltersItem (Eq (Variable) (Tuple))) &
+            (CanExtractTupleEquality
+                $projections
+                $on
+            ) 
+        ...
+    ]
+    $private:*
+)
+=>
+(Project 
+    ((OpName)
+        $input
+        $right
+        (RewriteTupleEquality $on $projections)
+        $private
+    )
+    $projections 
+    (UnionCols $passthrough (OutputCols $right))
+)
+
+# ExtractProjectedTupleEqualityRight like ExtractProjectedTupleEqualityLeft, but for the right
+[ExtractProjectedTupleEqualityRight, Normalize]
+(InnerJoin | LeftJoin | SemiJoin
+    $left: *
+    $right:(Project $input:* $projections:* $passthrough:*)
+    $on:[
+        ...
+            (FiltersItem (Eq (Variable) (Tuple))) &
+            (CanExtractTupleEquality
+                $projections
+                $on
+            ) 
+        ...
+    ]
+    $private:*
+)
+=>
+(Project 
+    ((OpName)
+        $left
+        $input
+        (RewriteTupleEquality $on $projections)
+        $private
+    )
+    $projections 
+    (UnionCols $passthrough (OutputCols $left))
+)
+
 # ExtractJoinEqualities finds equality conditions such that one side only
 # depends on left columns and the other only on right columns and pushes the
 # expressions down into Project operators. The result is a join that has an
@@ -582,3 +641,5 @@ $left
     (SortFilters $on)
     $private
 )
+
+

@@ -798,3 +798,98 @@ func (c *CustomFuncs) ExtractJoinEquality(
 	// Project away the synthesized columns.
 	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr, leftCols.Union(rightCols))
 }
+
+/// CanExtractTupleEquality Checks if the given filters contain one or more
+/// equalities between projected variables and tuples, and that
+/// no other filters reference any of the projected columns
+func (c *CustomFuncs) CanExtractTupleEquality(
+	projections memo.ProjectionsExpr,
+	filters memo.FiltersExpr,
+) bool {
+	projectedTupleCols := map[opt.ColumnID]memo.ProjectionsItem{}
+	var projectedColsSet opt.ColSet
+
+	for _, p := range projections {
+		projectedColsSet.Add(p.Col)
+		if _, isTuple := p.Element.(*memo.TupleExpr); isTuple {
+			projectedTupleCols[p.Col] = p
+		}
+	}
+	hasProjectTupleEquality := false
+	for _, f := range filters {
+		//we're only interested in filters which reference a projected column
+		if !f.ScalarProps().OuterCols.Intersection(projectedColsSet).Empty() {
+			hasProjectTupleEquality = true
+			if !isValidTupleEqualityExpression(&f, projectedTupleCols) {
+				return false
+			}
+		}
+	}
+	return hasProjectTupleEquality
+
+}
+
+func isValidTupleEqualityExpression(f *memo.FiltersItem,
+	projectedCols map[opt.ColumnID]memo.ProjectionsItem,
+) bool {
+	if f.Condition.Op() != opt.EqOp {
+		return false
+	}
+	eq := f.Condition.(*memo.EqExpr)
+	if eq.Left.Op() == opt.VariableOp && eq.Right.Op() == opt.TupleOp {
+		variable := eq.Left.(*memo.VariableExpr)
+		if _, isTuple := projectedCols[variable.Col]; isTuple {
+			return true
+		}
+	}
+	return false
+}
+
+/// RewriteTupleEquality checks a list of filters for equalities between a projected
+/// variable and a tuple, and replaces it with multiple equalities between the
+/// underlying values
+func (c *CustomFuncs) RewriteTupleEquality(filters memo.FiltersExpr,
+	projections memo.ProjectionsExpr,
+) memo.FiltersExpr {
+	newFilters := make(memo.FiltersExpr, 0, len(filters))
+	projectedCols := map[opt.ColumnID]memo.ProjectionsItem{}
+	var projectedColsSet opt.ColSet
+
+	for _, p := range projections {
+		if _, isTuple := p.Element.(*memo.TupleExpr); isTuple {
+			projectedCols[p.Col] = p
+			projectedColsSet.Add(p.Col)
+		}
+	}
+
+	for _, f := range filters {
+
+		if !f.ScalarProps().OuterCols.Intersection(projectedColsSet).Empty() {
+			eq, ok := f.Condition.(*memo.EqExpr)
+			if ok {
+				if eq.Left.Op() == opt.VariableOp && eq.Right.Op() == opt.TupleOp {
+					leftVariable := eq.Left.(*memo.VariableExpr)
+					rightTuple := eq.Right.(*memo.TupleExpr)
+
+					if col, isTuple := projectedCols[leftVariable.Col]; isTuple {
+						projectedTuple := col.Element.(*memo.TupleExpr)
+						if len(projectedTuple.Elems) != len(rightTuple.Elems) {
+							panic(errors.AssertionFailedf("cannot compare tuples of unequal lengths"))
+						}
+
+						for i := range projectedTuple.Elems {
+							newFilters = append(newFilters, c.f.ConstructFiltersItem(
+								c.f.ConstructEq(projectedTuple.Elems[i], rightTuple.Elems[i]),
+							))
+						}
+					}
+				}
+			} else {
+				panic(errors.AssertionFailedf("cannot extract tuple equality from non-equality comparision"))
+			}
+		} else {
+			newFilters = append(newFilters, f)
+		}
+	}
+	return newFilters
+}
