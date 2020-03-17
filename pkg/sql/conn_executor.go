@@ -1783,7 +1783,7 @@ func (ex *connExecutor) execCopyIn(
 		ex.statsCollector = ex.newStatsCollector()
 		ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 		ex.initPlanner(ctx, p)
-		ex.resetPlanner(ctx, p, txn, stmtTS, 0 /* numAnnotations */)
+		ex.resetPlanner(ctx, p, txn, stmtTS)
 	}
 	if table := cmd.Stmt.Table; table.Table() == fileUploadTable && table.Schema() == crdbInternalName {
 		cm, err = newFileUploadMachine(cmd.Conn, cmd.Stmt, ex.server.cfg, resetPlanner)
@@ -2069,7 +2069,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 }
 
 func (ex *connExecutor) resetPlanner(
-	ctx context.Context, p *planner, txn *kv.Txn, stmtTS time.Time, numAnnotations tree.AnnotationIdx,
+	ctx context.Context, p *planner, txn *kv.Txn, stmtTS time.Time,
 ) {
 	p.txn = txn
 	p.stmt = nil
@@ -2080,13 +2080,15 @@ func (ex *connExecutor) resetPlanner(
 	p.semaCtx.Location = &ex.sessionData.DataConversion.Location
 	p.semaCtx.SearchPath = ex.sessionData.SearchPath
 	p.semaCtx.AsOfTimestamp = nil
-	p.semaCtx.Annotations = tree.MakeAnnotations(numAnnotations)
+	p.semaCtx.Annotations = nil
 
 	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
 
 	p.autoCommit = false
 	p.isPreparing = false
 	p.avoidCachedDescriptors = false
+	p.discardRows = false
+	p.collectBundle = false
 }
 
 // txnStateTransitionsApplyWrapper is a wrapper on top of Machine built with the
