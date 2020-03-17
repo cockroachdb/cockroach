@@ -179,7 +179,7 @@ func registerAlterPK(r *testRegistry) {
 		// workload driver node.
 		MinVersion: "v20.1.0",
 		// TODO (rohany): This should be bumped to cpu(16) if 500 warehouses are used.
-		Cluster: makeClusterSpec(4, cpu(16)),
+		Cluster: makeClusterSpec(4),
 		Run:     runAlterPKTPCC,
 	})
 }
