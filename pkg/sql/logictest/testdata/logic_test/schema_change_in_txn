@@ -1770,3 +1770,20 @@ ALTER TABLE t42508 ADD COLUMN y INT DEFAULT nextval('s42508')
 
 statement error pgcode XXA00 unimplemented: cannot evaluate scalar expressions containing sequence operations.*\nHINT.*\n.*42508
 COMMIT
+
+# Test that rolling back to a savepoint past a schema change does not result in
+# a deadlock. This is a regression test for #24885. Rolling back past a schema
+# change used to have a problem because leaving locks behind on descriptors or
+# namespace entries could block the schema resolution after the rollback (schema
+# resolution uses different transactions to do its reads). We've fixed it by having those
+# other transactions run at high priority, thus pushing the intents out of their way.
+subtest no_schemachange_deadlock_after_savepoint_rollback
+
+statement ok
+begin; savepoint s; create table t(x int); rollback to savepoint s;
+
+query error relation "t" does not exist
+select * from t;
+
+statement ok
+commit;
