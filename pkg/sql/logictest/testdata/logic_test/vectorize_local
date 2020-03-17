@@ -91,3 +91,17 @@ SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN
 querying next range at /Table/56/1/0
 === SPAN START: kv.DistSender: sending partial batch ===
 querying next range at /Table/56/1/10
+
+# Regression test for #46122 (checking that we gracefully fallback to row
+# execution on cross joins).
+statement ok
+CREATE TABLE t46122_0(c0 STRING); CREATE TABLE t46122_1(c0 STRING)
+
+query T
+EXPLAIN (VEC) SELECT t46122_0.c0 FROM t46122_0, t46122_1
+----
+│
+└ Node 1
+└ *rowexec.hashJoiner
+  ├ *colexec.colBatchScan
+  └ *colexec.colBatchScan

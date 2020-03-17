@@ -250,6 +250,14 @@ func isSupported(
 		if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type != sqlbase.InnerJoin {
 			return false, errors.Newf("can't plan vectorized non-inner hash joins with ON expressions")
 		}
+		if len(core.HashJoiner.LeftEqColumns) == 0 || len(core.HashJoiner.RightEqColumns) == 0 {
+			// Cross join is performed using hash join with empty equality
+			// columns, however, the hash join operators (both external and
+			// in-memory) have a built-in assumption of non-empty equality
+			// columns, so we will fallback to row execution in such cases.
+			// TODO(yuzefovich): implement specialized cross join operator.
+			return false, errors.Newf("can't plan vectorized hash joins with empty equality columns")
+		}
 		return true, nil
 
 	case core.MergeJoiner != nil:
