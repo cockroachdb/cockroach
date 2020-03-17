@@ -85,6 +85,7 @@ func registerTests(r *testRegistry) {
 	registerTypeORM(r)
 	registerLoadSplits(r)
 	registerUpgrade(r)
+	registerJobUpgrade(r)
 	registerVersion(r)
 	registerYCSB(r)
 	registerTPCHBench(r)
