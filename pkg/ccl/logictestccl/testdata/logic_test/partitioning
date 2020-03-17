@@ -925,19 +925,25 @@ scan ok12
 statement error null value in column "a" violates not-null constraint
 INSERT INTO ok12 (a, b, c) VALUES (NULL, 2, 3)
 
+query T noticetrace
+CREATE INDEX non_partitioned_idx ON ok1 (c)
+----
+NOTICE: creating non-partitioned index on partitioned table may not be performant
+HINT: Consider modifying the index such that it is also partitioned.
+
 statement ok
-SET sql_safe_updates = true
+DROP INDEX ok1@non_partitioned_idx
 
-statement error non-partitioned index on partitioned table
-CREATE INDEX ON ok1 (c)
-
-statement error non-partitioned index on partitioned table
+query T noticetrace
 CREATE TABLE t (a INT PRIMARY KEY, b INT, INDEX (b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (1)
 )
+----
+NOTICE: creating non-partitioned index on partitioned table may not be performant
+HINT: Consider modifying the index such that it is also partitioned.
 
 statement ok
-RESET sql_safe_updates
+DROP TABLE t
 
 # regression tests for #40450
 statement ok
