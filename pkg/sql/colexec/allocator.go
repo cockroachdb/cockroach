@@ -192,6 +192,11 @@ func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
 	after := getVecsMemoryFootprint(destVecs)
 
 	delta := after - before
+	if a.Used() == 0 {
+		// The allocator must have been Cleared, and we need to register the
+		// whole memory footprint with it.
+		delta = after
+	}
 	if delta >= 0 {
 		if err := a.acc.Grow(a.ctx, delta); err != nil {
 			execerror.VectorizedInternalPanic(err)
@@ -206,10 +211,16 @@ func (a *Allocator) Used() int64 {
 	return a.acc.Used()
 }
 
+// ReleaseMemory reduces the number of bytes currently allocated through this
+// allocator by (at most) size bytes.
+func (a *Allocator) ReleaseMemory(size int64) {
+	if size > a.acc.Used() {
+		size = a.acc.Used()
+	}
+	a.acc.Shrink(a.ctx, size)
+}
+
 // Clear clears up the memory account of the allocator.
-// WARNING: usage of this method is *not* compatible with using
-// PerformOperation. Use this only in combination with RetainBatch /
-// ReleaseBatch.
 func (a *Allocator) Clear() {
 	a.acc.Shrink(a.ctx, a.acc.Used())
 }

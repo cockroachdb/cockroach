@@ -105,7 +105,7 @@ const (
 	// - The 2 partitions that need to be sorted + merged will use an FD each: 2
 	//   FDs. Meanwhile, each sorter will use up to externalSorterMinPartitions to
 	//   sort and partition this input. At this stage 2 + 2 *
-	//   externalMinPartitions FDs are used.
+	//   externalSorterMinPartitions FDs are used.
 	// - Once the inputs (the hash joiner partitions) are finished, both FDs will
 	//   be released. The merge joiner will now be in use, which uses two
 	//   spillingQueues with 1 FD each for a total of 2. Since each sorter will
