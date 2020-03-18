@@ -1,4 +1,4 @@
-# LogicTest: 5node-dist
+# LogicTest: 5node
 
 # Ensure that cost-based-optimizer uses an index with zone constraints that most
 # closely matches the gateway's locality. Use "retry" option, since it can take

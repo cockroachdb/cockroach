@@ -1,4 +1,4 @@
-# LogicTest: 5node-dist 5node-dist-metadata
+# LogicTest: 5node-default-configs
 
 # Test that the distSQL MergeJoiner follows SQL NULL semantics for ON predicate
 # equivilance. The use of sorts here force the planning of merge join.

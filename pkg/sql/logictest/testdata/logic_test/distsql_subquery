@@ -1,6 +1,4 @@
-# LogicTest: 5node-dist
-
-# TODO(radu): re-add 5node-dist-opt when #32648 is fixed.
+# LogicTest: 5node-default-configs
 
 # Regression test for #32652: make sure subqueries that have extra columns for
 # stream merges don't crash when executed.

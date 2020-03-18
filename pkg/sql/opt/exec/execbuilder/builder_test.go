@@ -22,7 +22,7 @@ import (
 // queries.
 //
 // The test files should use combinations of the local, fakedist and
-// 5node-dist configs. For tests that only have EXPLAIN (PLAN) statements,
+// 5node configs. For tests that only have EXPLAIN (PLAN) statements,
 // it's sufficient to run on a single configuration.
 func TestExecBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)()

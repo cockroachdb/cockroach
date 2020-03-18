@@ -1,8 +1,3 @@
-# LogicTest: local-vec fakedist-vec-disk
-
-# Test that the exec HashJoiner follows SQL NULL semantics for ON predicate
-# equivalence.
-
 statement ok
 CREATE TABLE  t1 (k INT PRIMARY KEY, v INT)
 

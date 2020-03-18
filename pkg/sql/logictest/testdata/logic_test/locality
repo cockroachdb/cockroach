@@ -1,4 +1,4 @@
-# LogicTest: 5node-dist
+# LogicTest: 5node
 
 query T
 SELECT crdb_internal.locality_value('region')
