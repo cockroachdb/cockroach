@@ -604,7 +604,7 @@ func (tp *txnPipeliner) initializeLeaf(tis *roachpb.LeafTxnInputState) {
 func (tp *txnPipeliner) populateLeafFinalState(*roachpb.LeafTxnFinalState) {}
 
 // importLeafFinalState is part of the txnInterceptor interface.
-func (tp *txnPipeliner) importLeafFinalState(*roachpb.LeafTxnFinalState) {}
+func (tp *txnPipeliner) importLeafFinalState(context.Context, *roachpb.LeafTxnFinalState) {}
 
 // epochBumpedLocked implements the txnReqInterceptor interface.
 func (tp *txnPipeliner) epochBumpedLocked() {
