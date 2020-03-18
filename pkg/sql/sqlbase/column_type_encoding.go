@@ -224,6 +224,8 @@ func SkipTableKey(valType *types.T, key []byte, dir IndexDescriptor_Direction) (
 		} else {
 			rkey, _, err = encoding.DecodeBitArrayDescending(key)
 		}
+	case types.JsonFamily:
+		rkey, err = encoding.SkipJSONInvertedIndexKey(key)
 	default:
 		// Tuples and arrays aren't indexable types right now, so we don't have cases for them.
 		return key, errors.AssertionFailedf("unsupported type %+v", log.Safe(valType))
