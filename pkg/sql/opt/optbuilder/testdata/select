@@ -240,6 +240,26 @@ project
            └── variable: v [type=char]
 
 build
+SELECT (SELECT t.*) FROM (VALUES (1)) AS t(x)
+----
+project
+ ├── columns: "?column?":3(int)
+ ├── values
+ │    ├── columns: column1:1(int!null)
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 1 [type=int]
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: x:2(int)
+                └── project
+                     ├── columns: x:2(int)
+                     ├── values
+                     │    └── tuple [type=tuple]
+                     └── projections
+                          └── variable: column1 [type=int]
+
+build
 SELECT foo.* FROM kv
 ----
 error (42P01): no data source matches pattern: foo.*
