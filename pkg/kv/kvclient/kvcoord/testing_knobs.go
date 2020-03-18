@@ -23,6 +23,12 @@ type ClientTestingKnobs struct {
 	// spans for a single transactional batch.
 	// 0 means use a default. -1 means disable refresh.
 	MaxTxnRefreshAttempts int
+
+	// CondenseRefreshSpansFilter, if set, is called when the span refresher is
+	// considering condensing the refresh spans. If it returns false, condensing
+	// will not be attempted and the span refresher will behave as if condensing
+	// failed to save enough memory.
+	CondenseRefreshSpansFilter func() bool
 }
 
 var _ base.ModuleTestingKnobs = &ClientTestingKnobs{}
