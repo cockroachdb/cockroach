@@ -1,5 +1,3 @@
-# LogicTest: local local-vec fakedist fakedist-metadata fakedist-vec
-
 # Test for overflow handling in sum aggregate.
 
 statement ok
