@@ -482,7 +482,7 @@ func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64,
 			break
 		}
 	}
-	return count, ri.Error().GoError()
+	return count, ri.Error()
 }
 
 // getDescriptor looks up the range descriptor to use for a query of
@@ -1079,7 +1079,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	ri := NewRangeIterator(ds)
 	ri.Seek(ctx, seekKey, scanDir)
 	if !ri.Valid() {
-		return nil, ri.Error()
+		return nil, roachpb.NewError(ri.Error())
 	}
 	// Take the fast path if this batch fits within a single range.
 	if !ri.NeedAnother(rs) {
@@ -1292,7 +1292,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 
 	// We've exited early. Return the range iterator error.
 	responseCh := make(chan response, 1)
-	responseCh <- response{pErr: ri.Error()}
+	responseCh <- response{pErr: roachpb.NewError(ri.Error())}
 	responseChs = append(responseChs, responseCh)
 	return
 }
