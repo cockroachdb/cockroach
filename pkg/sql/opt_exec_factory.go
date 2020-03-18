@@ -17,9 +17,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/url"
-	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -1016,7 +1016,41 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 	if testingOverrideExplainEnvVersion != "" {
 		version = testingOverrideExplainEnvVersion
 	}
-	out.writef("Version: %s\n", version)
+	out.writef("-- Version: %s\n", version)
+
+	// Show the values of any non-default session variables that can impact
+	// planning decisions.
+	relevantSettings := []struct {
+		sessionSetting string
+		clusterSetting settings.WritableSetting
+	}{
+		{sessionSetting: "reorder_joins_limit", clusterSetting: ReorderJoinsLimitClusterValue},
+		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode},
+		{sessionSetting: "optimizer_foreign_keys", clusterSetting: optDrivenFKClusterMode},
+	}
+
+	for _, s := range relevantSettings {
+		value, err := ef.environmentQuery(fmt.Sprintf("SHOW %s", s.sessionSetting))
+		if err != nil {
+			return nil, err
+		}
+		// Get the default value for the cluster setting.
+		def := s.clusterSetting.EncodedDefault()
+		// Convert true/false to on/off to match what SHOW returns.
+		switch def {
+		case "true":
+			def = "on"
+		case "false":
+			def = "off"
+		}
+
+		if value == def {
+			out.writef("-- %s has the default value: %s", s.sessionSetting, value)
+		} else {
+			out.writef("SET %s = %s;  -- default value: %s", s.sessionSetting, value, def)
+		}
+	}
+	out.writef("")
 
 	// Show the definition of each referenced catalog object.
 	for _, tn := range envOpts.Sequences {
@@ -1080,31 +1114,6 @@ FROM
 		}
 
 		out.writef("%s;\n", createStatement)
-	}
-
-	// Show the values of any non-default session variables that can impact
-	// planning decisions.
-
-	value, err := ef.environmentQuery(fmt.Sprintf("SHOW reorder_joins_limit"))
-	if err != nil {
-		return nil, err
-	}
-	if value != strconv.FormatInt(opt.DefaultJoinOrderLimit, 10) {
-		out.writef("SET reorder_joins_limit = %s;\n", value)
-	}
-
-	for _, param := range []string{
-		"enable_zigzag_join",
-		"optimizer_foreign_keys",
-	} {
-		value, err := ef.environmentQuery(fmt.Sprintf("SHOW %s", param))
-		if err != nil {
-			return nil, err
-		}
-		defaultVal := varGen[param].GlobalDefault(&ef.planner.extendedEvalCtx.Settings.SV)
-		if value != defaultVal {
-			out.writef("SET %s = %s;\n", param, value)
-		}
 	}
 
 	// Show the query running. Note that this is the *entire* query, including
