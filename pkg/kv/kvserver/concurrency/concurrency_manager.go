@@ -244,18 +244,24 @@ func (m *managerImpl) FinishReq(g *Guard) {
 // HandleWriterIntentError implements the ContentionHandler interface.
 func (m *managerImpl) HandleWriterIntentError(
 	ctx context.Context, g *Guard, t *roachpb.WriteIntentError,
-) *Guard {
+) (*Guard, *Error) {
 	if g.ltg == nil {
 		log.Fatalf(ctx, "cannot handle WriteIntentError %v for request without "+
 			"lockTableGuard; were lock spans declared for this request?", t)
 	}
 
 	// Add a discovered lock to lock-table for each intent and enter each lock's
-	// wait-queue.
+	// wait-queue. If the lock-table is disabled and one or more of the intents
+	// are ignored then we immediately wait on all intents.
+	wait := false
 	for i := range t.Intents {
 		intent := &t.Intents[i]
-		if err := m.lt.AddDiscoveredLock(intent, g.ltg); err != nil {
+		added, err := m.lt.AddDiscoveredLock(intent, g.ltg)
+		if err != nil {
 			log.Fatal(ctx, errors.HandleAsAssertionFailure(err))
+		}
+		if !added {
+			wait = true
 		}
 	}
 
@@ -264,7 +270,21 @@ func (m *managerImpl) HandleWriterIntentError(
 	// then re-sequence the Request by calling SequenceReq with the un-latched
 	// Guard. This is analogous to iterating through the loop in SequenceReq.
 	m.lm.Release(g.moveLatchGuard())
-	return g
+
+	// If the lockTable was disabled then we need to immediately wait on the
+	// intents to ensure that they are resolved and moved out of the request's
+	// way.
+	if wait {
+		for i := range t.Intents {
+			intent := &t.Intents[i]
+			if err := m.ltw.WaitOnLock(ctx, g.Req, intent); err != nil {
+				m.FinishReq(g)
+				return nil, err
+			}
+		}
+	}
+
+	return g, nil
 }
 
 // HandleTransactionPushError implements the ContentionHandler interface.

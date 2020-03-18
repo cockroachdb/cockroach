@@ -15,6 +15,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -296,6 +297,26 @@ func (w *lockTableWaiterImpl) WaitOn(
 			return roachpb.NewError(&roachpb.NodeUnavailableError{})
 		}
 	}
+}
+
+// WaitOnLock implements the lockTableWaiter interface.
+func (w *lockTableWaiterImpl) WaitOnLock(
+	ctx context.Context, req Request, intent *roachpb.Intent,
+) *Error {
+	sa, _, err := findAccessInSpans(intent.Key, req.LockSpans)
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+	return w.pushLockTxn(ctx, req, waitingState{
+		stateKind:   waitFor,
+		txn:         &intent.Txn,
+		ts:          intent.Txn.WriteTimestamp,
+		dur:         lock.Replicated,
+		key:         intent.Key,
+		held:        true,
+		access:      spanset.SpanReadWrite,
+		guardAccess: sa,
+	})
 }
 
 // pushLockTxn pushes the holder of the provided lock.
