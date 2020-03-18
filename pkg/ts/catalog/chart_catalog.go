@@ -765,12 +765,20 @@ var charts = []sectionDescription{
 				Metrics: []string{"txn.aborts"},
 			},
 			{
-				Title:   "Auto Retries",
-				Metrics: []string{"txn.autoretries"},
+				Title:   "Successful refreshes",
+				Metrics: []string{"txn.refresh.success"},
 			},
 			{
-				Title:   "Refresh Span Bytes Exceeded",
-				Metrics: []string{"txn.refreshspanbytesexceeded"},
+				Title:   "Failed refreshes",
+				Metrics: []string{"txn.refresh.fail"},
+			},
+			{
+				Title:   "Failed refreshes with condensed spans",
+				Metrics: []string{"txn.refresh.fail_with_condensed_spans"},
+			},
+			{
+				Title:   "Transactions exceeding refresh spans memory limit",
+				Metrics: []string{"txn.refresh.memory_limit_exceeded"},
 			},
 			{
 				Title: "Commits",
