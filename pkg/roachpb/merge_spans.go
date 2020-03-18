@@ -34,7 +34,10 @@ func (s sortedSpans) Len() int {
 }
 
 // MergeSpans sorts the incoming spans and merges overlapping spans. Returns
-// true iff all of the spans are distinct.
+// true iff all of the spans are distinct. Note that even if it returns true,
+// adjacent spans might have been merged (i.e. [a, b) is distinct from [b,c),
+// but the two are still merged.
+//
 // The input spans are not safe for re-use.
 func MergeSpans(spans []Span) ([]Span, bool) {
 	if len(spans) == 0 {
