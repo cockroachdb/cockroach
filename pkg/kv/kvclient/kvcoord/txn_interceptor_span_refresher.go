@@ -442,7 +442,9 @@ func (sr *txnSpanRefresher) populateLeafFinalState(tfs *roachpb.LeafTxnFinalStat
 }
 
 // importLeafFinalState is part of the txnInterceptor interface.
-func (sr *txnSpanRefresher) importLeafFinalState(tfs *roachpb.LeafTxnFinalState) {
+func (sr *txnSpanRefresher) importLeafFinalState(
+	ctx context.Context, tfs *roachpb.LeafTxnFinalState,
+) {
 	if tfs.RefreshInvalid {
 		sr.refreshInvalid = true
 		sr.refreshSpans = nil
