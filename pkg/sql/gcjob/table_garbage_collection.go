@@ -122,7 +122,7 @@ func clearTableData(
 
 	for ri.Seek(ctx, tableSpan.Key, kvcoord.Ascending); ; ri.Next(ctx) {
 		if !ri.Valid() {
-			return ri.Error().GoError()
+			return ri.Error()
 		}
 
 		if n++; n >= batchSize || !ri.NeedAnother(tableSpan) {
