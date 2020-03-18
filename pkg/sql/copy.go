@@ -69,10 +69,6 @@ type copyMachine struct {
 	// conn is the pgwire connection from which data is to be read.
 	conn pgwirebase.Conn
 
-	// resetPlanner is a function to be used to prepare the planner for inserting
-	// data.
-	resetPlanner func(p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time)
-
 	// execInsertPlan is a function to be used to execute the plan (stored in the
 	// planner) which performs an INSERT.
 	execInsertPlan func(ctx context.Context, p *planner, res RestrictedCommandResult) error
@@ -98,7 +94,6 @@ func newCopyMachine(
 	n *tree.CopyFrom,
 	txnOpt copyTxnOpt,
 	execCfg *ExecutorConfig,
-	resetPlanner func(p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time),
 	execInsertPlan func(ctx context.Context, p *planner, res RestrictedCommandResult) error,
 ) (_ *copyMachine, retErr error) {
 	c := &copyMachine{
@@ -110,16 +105,16 @@ func newCopyMachine(
 		txnOpt:  txnOpt,
 		// The planner will be prepared before use.
 		p:              planner{execCfg: execCfg},
-		resetPlanner:   resetPlanner,
 		execInsertPlan: execInsertPlan,
 	}
-	c.resetPlanner(&c.p, nil /* txn */, time.Time{} /* txnTS */, time.Time{} /* stmtTS */)
-	c.parsingEvalCtx = c.p.EvalContext()
 
-	cleanup := c.preparePlanner(ctx)
+	// We need a planner to do the initial planning, in addition
+	// to those used for the main execution of the COPY afterwards.
+	cleanup := c.p.preparePlannerForCopy(ctx, txnOpt)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
 	}()
+	c.parsingEvalCtx = c.p.EvalContext()
 
 	tableDesc, err := ResolveExistingObject(ctx, &c.p, &n.Table, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc)
 	if err != nil {
@@ -154,6 +149,7 @@ type copyTxnOpt struct {
 	txn           *kv.Txn
 	txnTimestamp  time.Time
 	stmtTimestamp time.Time
+	resetPlanner  func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time)
 }
 
 // run consumes all the copy-in data from the network connection and inserts it
@@ -277,28 +273,33 @@ func (c *copyMachine) processCopyData(
 	return c.processRows(ctx)
 }
 
-// preparePlanner resets the planner so that it can be used for execution.
-// Depending on how the machine was configured, a new transaction might be
-// created.
+// preparePlannerForCopy resets the planner so that it can be used during
+// a COPY operation (either COPY to table, or COPY to file).
 //
-// It returns a cleanup function that needs to be called when we're done with
-// the planner (before preparePlanner is called again). The cleanup function
-// commits the txn (if it hasn't already been committed) or rolls it back
-// depending on whether it is passed an error. If an error is passed in to the
-// cleanup function, the same error is returned.
-func (c *copyMachine) preparePlanner(ctx context.Context) func(context.Context, error) error {
-	txn := c.txnOpt.txn
-	txnTs := c.txnOpt.txnTimestamp
-	stmtTs := c.txnOpt.stmtTimestamp
+// Depending on how the requesting COPY machine was configured, a new
+// transaction might be created.
+//
+// It returns a cleanup function that needs to be called when we're
+// done with the planner (before preparePlannerForCopy is called
+// again). The cleanup function commits the txn (if it hasn't already
+// been committed) or rolls it back depending on whether it is passed
+// an error. If an error is passed in to the cleanup function, the
+// same error is returned.
+func (p *planner) preparePlannerForCopy(
+	ctx context.Context, txnOpt copyTxnOpt,
+) func(context.Context, error) error {
+	txn := txnOpt.txn
+	txnTs := txnOpt.txnTimestamp
+	stmtTs := txnOpt.stmtTimestamp
 	autoCommit := false
 	if txn == nil {
-		txn = kv.NewTxnWithSteppingEnabled(ctx, c.p.execCfg.DB, c.p.execCfg.NodeID.Get())
-		txnTs = c.p.execCfg.Clock.PhysicalTime()
+		txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, p.execCfg.NodeID.Get())
+		txnTs = p.execCfg.Clock.PhysicalTime()
 		stmtTs = txnTs
 		autoCommit = true
 	}
-	c.resetPlanner(&c.p, txn, txnTs, stmtTs)
-	c.p.autoCommit = autoCommit
+	txnOpt.resetPlanner(ctx, p, txn, txnTs, stmtTs)
+	p.autoCommit = autoCommit
 
 	return func(ctx context.Context, err error) error {
 		if err == nil {
@@ -320,7 +321,7 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 	if len(c.rows) == 0 {
 		return nil
 	}
-	cleanup := c.preparePlanner(ctx)
+	cleanup := c.p.preparePlannerForCopy(ctx, c.txnOpt)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
 	}()
