@@ -172,7 +172,7 @@ type txnInterceptor interface {
 
 	// importLeafFinalState updates any internal state held inside the
 	// interceptor from the given LeafTxn final state.
-	importLeafFinalState(*roachpb.LeafTxnFinalState)
+	importLeafFinalState(context.Context, *roachpb.LeafTxnFinalState)
 
 	// epochBumpedLocked resets the interceptor in the case of a txn epoch
 	// increment.
@@ -1071,7 +1071,7 @@ func (tc *TxnCoordSender) UpdateRootWithLeafFinalState(
 
 	tc.mu.txn.Update(&tfs.Txn)
 	for _, reqInt := range tc.interceptorStack {
-		reqInt.importLeafFinalState(tfs)
+		reqInt.importLeafFinalState(ctx, tfs)
 	}
 }
 
