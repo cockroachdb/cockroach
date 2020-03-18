@@ -1,5 +1,3 @@
-# LogicTest: local local-vec
-
 statement ok
 CREATE TABLE t45837 AS SELECT 1.25::decimal AS d
 

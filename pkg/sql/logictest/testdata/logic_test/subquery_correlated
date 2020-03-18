@@ -1,5 +1,3 @@
-# LogicTest: local fakedist
-
 # ------------------------------------------------------------------------------
 # Create a simple schema that models customers and orders. Each customer has an
 # id (c_id), and has zero or more orders that are related via a foreign key of

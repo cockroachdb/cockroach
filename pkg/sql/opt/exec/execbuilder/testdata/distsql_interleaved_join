@@ -1,4 +1,4 @@
-# LogicTest: 5node-dist
+# LogicTest: 5node
 
 # The following tables form the interleaved hierarchy:
 #   name:             primary key:                # rows:   'a' = id mod X :
