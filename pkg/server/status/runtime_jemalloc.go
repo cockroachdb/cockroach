@@ -122,6 +122,6 @@ func getJemallocStats(ctx context.Context) (uint, uint, error) {
 
 // Used to force allocation in tests. 'import "C"' is not supported in tests.
 func allocateMemory() {
-	// Empirically, 8KiB is not enough, but 16KiB is.
-	C.malloc(16 << 10)
+	// Empirically, 8KiB is not enough, but 16KiB is except for ppc64le, where 256KiB is needed.
+	C.malloc(256 << 10)
 }
