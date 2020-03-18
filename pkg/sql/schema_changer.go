@@ -636,10 +636,10 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 
 func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) error {
 	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", *sc.job.ID(), err)
-	if errReverse := sc.reverseMutations(ctx, err); errReverse != nil {
+	if errReverse := sc.maybeReverseMutations(ctx, err); errReverse != nil {
 		// Although the backfill did hit an integrity constraint violation
 		// and made a decision to reverse the mutations,
-		// reverseMutations() failed. If exec() is called again the entire
+		// maybeReverseMutations() failed. If exec() is called again the entire
 		// schema change will be retried.
 
 		// Note: we capture the original error as "secondary" to ensure it
@@ -651,6 +651,12 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 		secondary := errors.Wrap(err, "original error when reversing mutations")
 		sqltelemetry.RecordError(ctx, secondary, &sc.settings.SV)
 		return errors.WithSecondaryError(errReverse, secondary)
+	}
+
+	if fn := sc.testingKnobs.RunAfterMutationReversal; fn != nil {
+		if err := fn(); err != nil {
+			return err
+		}
 	}
 
 	// After this point the schema change has been reversed and any retry
@@ -1051,13 +1057,14 @@ func (sc *SchemaChanger) refreshStats() {
 	sc.execCfg.StatsRefresher.NotifyMutation(sc.tableID, math.MaxInt32 /* rowsAffected */)
 }
 
-// reverseMutations reverses the direction of all the mutations with the
+// maybeReverseMutations reverses the direction of all the mutations with the
 // mutationID. This is called after hitting an irrecoverable error while
 // applying a schema change. If a column being added is reversed and dropped,
 // all new indexes referencing the column will also be dropped.
-func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError error) error {
+func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError error) error {
 	// Get the other tables whose foreign key backreferences need to be removed.
 	var fksByBackrefTable map[sqlbase.ID][]*sqlbase.ConstraintToUpdate
+	alreadyReversed := false
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		fksByBackrefTable = make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
 		var err error
@@ -1068,6 +1075,13 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 		for _, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				break
+			}
+			if mutation.Rollback {
+				// Mutation is already reversed, so we don't need to do any more work.
+				// This can happen if the mutations were already reversed, but before
+				// the rollback completed the job was adopted.
+				alreadyReversed = true
+				return nil
 			}
 			if constraint := mutation.GetConstraint(); constraint != nil &&
 				constraint.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY &&
@@ -1083,6 +1097,9 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 	})
 	if err != nil {
 		return err
+	}
+	if alreadyReversed {
+		return nil
 	}
 	tableIDsToUpdate := make([]sqlbase.ID, 0, len(fksByBackrefTable)+1)
 	tableIDsToUpdate = append(tableIDsToUpdate, sc.tableID)
@@ -1113,8 +1130,8 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 			}
 
 			if mutation.Rollback {
-				// Can actually never happen. This prevents a rollback of
-				// an already rolled back mutation.
+				// Can actually never happen. Since we should have checked for this case
+				// above.
 				return errors.AssertionFailedf("mutation already rolled back: %v", mutation)
 			}
 
@@ -1438,6 +1455,13 @@ type SchemaChangerTestingKnobs struct {
 	// after setting the job status to validating.
 	RunBeforeConstraintValidation func() error
 
+	// RunAfterMutationReversal runs in OnFailOrCancel after the mutations have
+	// been reversed.
+	RunAfterMutationReversal func() error
+
+	// RunAtStartOfOnFailOrCancel
+	RunBeforeOnFailOrCancel func()
+
 	// OldNamesDrainedNotification is called during a schema change,
 	// after all leases on the version of the descriptor with the old
 	// names are gone, and just before the mapping of the old names to the
@@ -1643,6 +1667,10 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, phs interface{}
 		ieFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
 			return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
 		},
+	}
+
+	if fn := sc.testingKnobs.RunBeforeOnFailOrCancel; fn != nil {
+		fn()
 	}
 
 	if r.job.Payload().FinalResumeError == nil {
