@@ -943,7 +943,7 @@ func (s *condensableSpanSet) maybeCondense(
 		ri.Seek(ctx, roachpb.RKey(sp.Key), Ascending)
 		if !ri.Valid() {
 			// We haven't modified s.s yet, so it is safe to return.
-			log.VEventf(ctx, 2, "failed to condense lock spans: %v", ri.Error())
+			log.Warningf(ctx, "failed to condense lock spans: %v", ri.Error())
 			return
 		}
 		rangeID := ri.Desc().RangeID
