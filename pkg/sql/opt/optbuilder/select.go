@@ -283,7 +283,15 @@ func (b *Builder) buildView(
 		defer func() { b.trackViewDeps = true }()
 	}
 
-	outScope = b.buildSelect(sel, locking, nil /* desiredTypes */, &scope{builder: b})
+	// We don't want the view to be able to refer to any outer scopes in the
+	// query. This shouldn't happen if the view is valid but there may be
+	// cornercases (e.g. renaming tables referenced by the view). To be safe, we
+	// build the view with an empty scope. But after that, we reattach the scope
+	// to the existing scope chain because we want the rest of the query to be
+	// able to refer to the higher scopes (see #46180).
+	emptyScope := b.allocScope()
+	outScope = b.buildSelect(sel, locking, nil /* desiredTypes */, emptyScope)
+	emptyScope.parent = inScope
 
 	// Update data source name to be the name of the view. And if view columns
 	// are specified, then update names of output columns.
