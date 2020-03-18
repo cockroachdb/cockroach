@@ -201,7 +201,7 @@ func newExternalSorter(
 		// zero-length batch, so make it at least 1.
 		memoryLimit = 1
 	}
-	inputPartitioner := newInputPartitioningOperator(ctx, input, standaloneMemAccount, memoryLimit)
+	inputPartitioner := newInputPartitioningOperator(input, standaloneMemAccount, memoryLimit)
 	inMemSorter, err := newSorter(
 		unlimitedAllocator, newAllSpooler(unlimitedAllocator, inputPartitioner, inputTypes),
 		inputTypes, ordering.Columns,
@@ -294,8 +294,14 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			continue
 		case externalSorterRepeatedMerging:
 			// We will merge all partitions in range [s.firstPartitionIdx,
-			// s.firstPartitionIdx+s.numPartitions) and will spill all the resulting
-			// batches into a new partition with the next available index.
+			// s.firstPartitionIdx+s.numPartitions) and will spill all the
+			// resulting batches into a new partition with the next available
+			// index.
+			//
+			// The merger will be using some amount of RAM, will register it
+			// with the unlimited allocator and will *not* release that memory
+			// from the allocator, so we have to do it ourselves.
+			before := s.unlimitedAllocator.Used()
 			merger := s.createMergerForPartitions(s.firstPartitionIdx, s.numPartitions)
 			merger.Init()
 			newPartitionIdx := s.firstPartitionIdx + s.numPartitions
@@ -304,6 +310,8 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 					execerror.VectorizedInternalPanic(err)
 				}
 			}
+			after := s.unlimitedAllocator.Used()
+			s.unlimitedAllocator.ReleaseMemory(after - before)
 			// Reclaim disk space by closing the inactive read partitions. Since the
 			// merger must have exhausted all inputs, this is all the partitions just
 			// read from.
@@ -363,17 +371,20 @@ func (s *externalSorter) Close(ctx context.Context) error {
 	if s.closed {
 		return nil
 	}
-	var err error
+	var lastErr error
 	if s.partitioner != nil {
-		err = s.partitioner.Close(ctx)
+		lastErr = s.partitioner.Close(ctx)
 		s.partitioner = nil
+	}
+	if err := s.inMemSorterInput.Close(ctx); err != nil {
+		lastErr = err
 	}
 	if !s.testingKnobs.delegateFDAcquisitions && s.fdState.fdSemaphore != nil && s.fdState.acquiredFDs > 0 {
 		s.fdState.fdSemaphore.Release(s.fdState.acquiredFDs)
 		s.fdState.acquiredFDs = 0
 	}
 	s.closed = true
-	return err
+	return lastErr
 }
 
 // createMergerForPartitions creates an ordered synchronizer that will merge
@@ -394,11 +405,10 @@ func (s *externalSorter) createMergerForPartitions(firstIdx, numPartitions int) 
 }
 
 func newInputPartitioningOperator(
-	ctx context.Context, input Operator, standaloneMemAccount *mon.BoundAccount, memoryLimit int64,
+	input Operator, standaloneMemAccount *mon.BoundAccount, memoryLimit int64,
 ) resettableOperator {
 	return &inputPartitioningOperator{
 		OneInputNode:         NewOneInputNode(input),
-		ctx:                  ctx,
 		standaloneMemAccount: standaloneMemAccount,
 		memoryLimit:          memoryLimit,
 	}
@@ -411,7 +421,6 @@ type inputPartitioningOperator struct {
 	OneInputNode
 	NonExplainable
 
-	ctx                  context.Context
 	standaloneMemAccount *mon.BoundAccount
 	memoryLimit          int64
 	// interceptReset determines whether the reset method will be called on
@@ -472,7 +481,7 @@ func (o *inputPartitioningOperator) Next(ctx context.Context) coldata.Batch {
 			batchMemSize += getVecMemoryFootprint(vec) * length / int64(vec.Capacity())
 		}
 	}
-	if err := o.standaloneMemAccount.Grow(o.ctx, batchMemSize); err != nil {
+	if err := o.standaloneMemAccount.Grow(ctx, batchMemSize); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
 	return b
@@ -485,5 +494,10 @@ func (o *inputPartitioningOperator) reset(ctx context.Context) {
 		}
 	}
 	o.interceptReset = false
-	o.standaloneMemAccount.Shrink(o.ctx, o.standaloneMemAccount.Used())
+	o.standaloneMemAccount.Shrink(ctx, o.standaloneMemAccount.Used())
+}
+
+func (o *inputPartitioningOperator) Close(ctx context.Context) error {
+	o.standaloneMemAccount.Clear(ctx)
+	return nil
 }

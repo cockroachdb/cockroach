@@ -124,16 +124,7 @@ func (a *Allocator) ReleaseBatch(b coldata.Batch) {
 	usesSel := b.Selection() != nil
 	b.SetSelection(true)
 	batchMemSize := selVectorSize(cap(b.Selection())) + getVecsMemoryFootprint(b.ColVecs())
-	if batchMemSize > a.acc.Used() {
-		// It appears to be possible that our estimation of the batch size when
-		// allocating a new batch is lower than our current estimate (maybe because
-		// we append to flat bytes), so reduce batchMemSize to clear out the
-		// account in such scenario.
-		// TODO(yuzefovich): I tried to debug to figure out why this happens to no
-		// success. See #45425.
-		batchMemSize = a.acc.Used()
-	}
-	a.acc.Shrink(a.ctx, batchMemSize)
+	a.ReleaseMemory(batchMemSize)
 	b.SetSelection(usesSel)
 }
 
@@ -197,7 +188,7 @@ func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
 			execerror.VectorizedInternalPanic(err)
 		}
 	} else {
-		a.acc.Shrink(a.ctx, -delta)
+		a.ReleaseMemory(-delta)
 	}
 }
 
@@ -206,12 +197,13 @@ func (a *Allocator) Used() int64 {
 	return a.acc.Used()
 }
 
-// Clear clears up the memory account of the allocator.
-// WARNING: usage of this method is *not* compatible with using
-// PerformOperation. Use this only in combination with RetainBatch /
-// ReleaseBatch.
-func (a *Allocator) Clear() {
-	a.acc.Shrink(a.ctx, a.acc.Used())
+// ReleaseMemory reduces the number of bytes currently allocated through this
+// allocator by (at most) size bytes.
+func (a *Allocator) ReleaseMemory(size int64) {
+	if size > a.acc.Used() {
+		size = a.acc.Used()
+	}
+	a.acc.Shrink(a.ctx, size)
 }
 
 const (
