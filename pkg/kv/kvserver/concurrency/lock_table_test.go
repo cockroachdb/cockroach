@@ -333,7 +333,7 @@ func TestLockTableBasic(t *testing.T) {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
 				intent := roachpb.MakeIntent(txnMeta, roachpb.Key(key))
-				if err := lt.AddDiscoveredLock(&intent, g); err != nil {
+				if _, err := lt.AddDiscoveredLock(&intent, g); err != nil {
 					return err.Error()
 				}
 				return lt.(*lockTableImpl).String()

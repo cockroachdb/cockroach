@@ -290,7 +290,7 @@ func (r *Replica) handleWriteIntentError(
 		return g, pErr
 	}
 	// g's latches will be dropped, but it retains its spot in lock wait-queues.
-	return r.concMgr.HandleWriterIntentError(ctx, g, t), nil
+	return r.concMgr.HandleWriterIntentError(ctx, g, t)
 }
 
 func (r *Replica) handleTransactionPushError(
