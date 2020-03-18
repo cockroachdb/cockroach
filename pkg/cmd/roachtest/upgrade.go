@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 )
@@ -645,8 +644,9 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 func registerJobUpgrade(r *testRegistry) {
 	runJobUpgrade := func(ctx context.Context, t *test, c *cluster, oldVersion string) {
 		const nodeUpgradeWaitDuration = time.Minute
-		const numWarehouses = 1000
+		const numWarehouses = 10
 		const tpccRamp = time.Minute * 5
+		const pauseRamp = time.Minute
 		const tpccDuration = time.Minute * 10
 
 		stop := func(node int) error {
@@ -687,24 +687,20 @@ func registerJobUpgrade(r *testRegistry) {
 		// time it or pause the schema change, so trying to do it now would probably
 		// just make the test too unpredictable. Adding the ability to pause schema
 		// changes in 20.1 will probably help.
-		addAndDropFK := func(ctx context.Context, db *gosql.DB) error {
-			t.WorkerStatus("adding foreign key")
-			addStartTime := timeutil.Now()
-			if _, err := db.ExecContext(ctx,
-				`ALTER TABLE tpcc.district ADD CONSTRAINT fk FOREIGN KEY (d_w_id) REFERENCES tpcc.warehouse (w_id)`,
-			); err != nil {
+		jobCommand := func(ctx context.Context, cmd string, db *gosql.DB) error {
+			t.WorkerStatus("pausing all jobs")
+			row := db.QueryRowContext(ctx, ` SELECT COUNT(*) FROM [SHOW JOBS] WHERE finished is NULL;`)
+			var n int64
+			if err := row.Scan(&n); err != nil {
 				return err
 			}
-			t.l.Printf("added foreign key in %s", timeutil.Since(addStartTime))
-
-			t.WorkerStatus("dropping foreign key")
-			dropStartTime := timeutil.Now()
-			if _, err := db.ExecContext(ctx,
-				`ALTER TABLE tpcc.district DROP CONSTRAINT fk`,
-			); err != nil {
+			t.l.Printf("pausing %d jobs", n)
+			_, err := db.ExecContext(ctx,
+				cmd + ` JOBS (SELECT job_id FROM [SHOW JOBS] WHERE finished is NULL);`,
+			)
+			if err != nil {
 				return err
 			}
-			t.l.Printf("dropped foreign key in %s", timeutil.Since(dropStartTime))
 			t.WorkerStatus("")
 			return nil
 		}
@@ -778,15 +774,7 @@ func registerJobUpgrade(r *testRegistry) {
 			if err := sleep(tpccRamp); err != nil {
 				t.Fatal(err)
 			}
-
-			// Drop existing foreign key so it can be added later during the test.
-			if _, err := dbConn.ExecContext(ctx,
-				`ALTER TABLE tpcc.district DROP CONSTRAINT fk_d_w_id_ref_warehouse`,
-			); err != nil {
-				t.Fatal(err)
-			}
-
-			if err := addAndDropFK(ctx, dbConn); err != nil {
+			if err := jobCommand(ctx, "PAUSE", dbConn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -798,16 +786,22 @@ func registerJobUpgrade(r *testRegistry) {
 			}
 			m.ResetDeaths()
 
-			// Add and drop a foreign key with one of the non-upgraded nodes as the
+			// Resume all jobs with one of the non-upgraded nodes as the
 			// gateway.
-			if err := addAndDropFK(ctx, dbConn); err != nil {
+			if err := jobCommand(ctx, "RESUME", dbConn); err != nil {
+				t.Fatal(err)
+			}
+			if err := sleep(pauseRamp); err != nil {
+				t.Fatal(err)
+			}
+			if err := jobCommand(ctx, "PAUSE", dbConn); err != nil {
 				t.Fatal(err)
 			}
 
 			// Next, do the same thing with one of the upgraded nodes as the gateway.
 			dbConnUpgradedNode := c.Conn(ctx, numCrdbNodes)
 			defer dbConnUpgradedNode.Close()
-			if err := addAndDropFK(ctx, dbConnUpgradedNode); err != nil {
+			if err := jobCommand(ctx, "RESUME", dbConnUpgradedNode); err != nil {
 				t.Fatal(err)
 			}
 
@@ -840,7 +834,7 @@ func registerJobUpgrade(r *testRegistry) {
 				t.Fatal(err)
 			}
 
-			if err := addAndDropFK(ctx, dbConn); err != nil {
+			if err := jobCommand(ctx, "PAUSE", dbConn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -857,6 +851,7 @@ func registerJobUpgrade(r *testRegistry) {
 			}
 
 			for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
+				t.l.Printf("retrying resetting cluster setting")
 				if upgraded, err := checkUpgraded(); err != nil {
 					t.Fatal(err)
 				} else if upgraded {
@@ -865,7 +860,7 @@ func registerJobUpgrade(r *testRegistry) {
 				}
 			}
 
-			if err := addAndDropFK(ctx, dbConn); err != nil {
+			if err := jobCommand(ctx, "RESUME", dbConn); err != nil {
 				t.Fatal(err)
 			}
 			return nil
