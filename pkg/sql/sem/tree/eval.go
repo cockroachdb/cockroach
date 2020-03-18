@@ -1763,6 +1763,16 @@ func cmpOpFixups(cmpOps map[ComparisonOperator]cmpOpOverload) map[ComparisonOper
 			RightType: types.MakeArray(t),
 			Fn:        cmpOpScalarEQFn,
 		})
+		cmpOps[LE] = append(cmpOps[LE], &CmpOp{
+			LeftType:  types.MakeArray(t),
+			RightType: types.MakeArray(t),
+			Fn:        cmpOpScalarLEFn,
+		})
+		cmpOps[LT] = append(cmpOps[LT], &CmpOp{
+			LeftType:  types.MakeArray(t),
+			RightType: types.MakeArray(t),
+			Fn:        cmpOpScalarLTFn,
+		})
 
 		cmpOps[IsNotDistinctFrom] = append(cmpOps[IsNotDistinctFrom], &CmpOp{
 			LeftType:     types.MakeArray(t),
