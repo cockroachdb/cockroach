@@ -181,15 +181,11 @@ func TestSkipTableKey(t *testing.T) {
 	properties := gopter.NewProperties(parameters)
 	properties.Property("correctness", prop.ForAll(
 		func(d tree.Datum, dir encoding.Direction) string {
-			descDir := IndexDescriptor_ASC
-			if dir == encoding.Descending {
-				descDir = IndexDescriptor_DESC
-			}
 			b, err := EncodeTableKey(nil, d, dir)
 			if err != nil {
 				return "error: " + err.Error()
 			}
-			res, err := SkipTableKey(d.ResolvedType(), b, descDir)
+			res, err := SkipTableKey(b)
 			if err != nil {
 				return "error: " + err.Error()
 			}
