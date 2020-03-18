@@ -1141,6 +1141,7 @@ func TestImportCSVStmt(t *testing.T) {
 		t.Fatal(err)
 	}
 	empty := []string{"'nodelocal://0/empty.csv'"}
+	emptySchema := []interface{}{"nodelocal://0/empty.schema"}
 
 	// Support subtests by keeping track of the number of jobs that are executed.
 	testNum := -1
@@ -1340,6 +1341,14 @@ func TestImportCSVStmt(t *testing.T) {
 			testFiles.files,
 			``,
 			"invalid option",
+		},
+		{
+			"empty-schema-in-file",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
+			emptySchema,
+			testFiles.files,
+			``,
+			"expected 1 create table statement",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

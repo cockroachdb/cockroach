@@ -538,3 +538,37 @@ func Next(d BitArray) BitArray {
 	copy(res.words, d.words)
 	return res
 }
+
+// GetBitAtIndex extract bit at given index in the BitArray.
+func (d BitArray) GetBitAtIndex(index int) (int, error) {
+	// Check whether index asked is inside BitArray.
+	if index < 0 || uint(index) >= d.BitLen() {
+		err := fmt.Errorf("GetBitAtIndex: bit index %d out of valid range (0..%d)", index, int(d.BitLen())-1)
+		return 0, pgerror.WithCandidateCode(err, pgcode.ArraySubscript)
+	}
+	// To extract bit at the given index, we have to determine the
+	// position within words array, i.e. index/numBitsPerWord after
+	// that checked the bit at residual index.
+	if d.words[index/numBitsPerWord]&(word(1)<<(numBitsPerWord-1-uint(index)%numBitsPerWord)) != 0 {
+		return 1, nil
+	}
+	return 0, nil
+}
+
+// SetBitAtIndex returns the BitArray with an updated bit at a given index.
+func (d BitArray) SetBitAtIndex(index, toSet int) (BitArray, error) {
+	res := d.Clone()
+	// Check whether index asked is inside BitArray.
+	if index < 0 || uint(index) >= res.BitLen() {
+		err := fmt.Errorf("SetBitAtIndex: bit index %d out of valid range (0..%d)", index, int(res.BitLen())-1)
+		return BitArray{}, pgerror.WithCandidateCode(err, pgcode.ArraySubscript)
+	}
+	// To update bit at the given index, we have to determine the
+	// position within words array, i.e. index/numBitsPerWord after
+	// that updated the bit at residual index.
+	// Forcefully making bit at the index to 0.
+	res.words[index/numBitsPerWord] &= ^(word(1) << (numBitsPerWord - 1 - uint(index)%numBitsPerWord))
+	// Updating value at the index to toSet.
+	res.words[index/numBitsPerWord] |= word(toSet) << (numBitsPerWord - 1 - uint(index)%numBitsPerWord)
+	return res, nil
+}

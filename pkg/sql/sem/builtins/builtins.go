@@ -321,6 +321,51 @@ var builtins = map[string]builtinDefinition{
 				"Supports encodings 'UTF8' and 'LATIN1'.",
 		}),
 
+	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
+	"get_bit": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"bit_string", types.VarBit}, {"index", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				bitString := tree.MustBeDBitArray(args[0])
+				index := int(tree.MustBeDInt(args[1]))
+				bit, err := bitString.GetBitAtIndex(index)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(bit)), nil
+			},
+			Info: "Extracts a bit at given index in the bit array",
+		}),
+
+	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
+	"set_bit": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"bit_string", types.VarBit},
+				{"index", types.Int},
+				{"to_set", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.VarBit),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				bitString := tree.MustBeDBitArray(args[0])
+				index := int(tree.MustBeDInt(args[1]))
+				toSet := int(tree.MustBeDInt(args[2]))
+
+				// Value of bit can only be set to 1 or 0.
+				if toSet != 0 && toSet != 1 {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"new bit must be 0 or 1.")
+				}
+				updatedBitString, err := bitString.SetBitAtIndex(index, toSet)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DBitArray{BitArray: updatedBitString}, nil
+			},
+			Info: "Updates a bit at given index in the bit array",
+		}),
+
 	"gen_random_uuid": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categoryIDGeneration,

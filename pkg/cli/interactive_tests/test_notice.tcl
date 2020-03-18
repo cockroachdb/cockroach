@@ -26,25 +26,5 @@ eexpect "NOTICE: world"
 eexpect root@
 end_test
 
-start_test "Test creating a view without TEMP set on a TEMP TABLE notifies it will become a TEMP VIEW."
-send "SET experimental_enable_temp_tables = true; CREATE TEMP TABLE temp_view_test_tbl(a int); CREATE VIEW temp_view_test AS SELECT a FROM temp_view_test_tbl;\r"
-eexpect "NOTICE: view \"temp_view_test\" will be a temporary view"
-eexpect root@
-end_test
-
-start_test "Check dropping an index prints a message about GC TTL."
-send "CREATE TABLE drop_index_test(a int); CREATE INDEX drop_index_test_index ON drop_index_test(a); DROP INDEX drop_index_test_index;\r"
-eexpect "NOTICE: the data for dropped indexes is reclaimed asynchronously"
-eexpect "HINT: The reclamation delay can be customized in the zone configuration for the table."
-eexpect root@
-end_test
-
-start_test "Check that altering the primary key of a table prints a message about async jobs."
-send "CREATE TABLE alterpk (x INT NOT NULL); ALTER TABLE alterpk ALTER PRIMARY KEY USING COLUMNS (x);\r"
-
-eexpect "NOTICE: primary key changes are finalized asynchronously; further schema changes on this table may be restricted"
-eexpect root@
-end_test
-
 send "\\q\r"
 eexpect eof
