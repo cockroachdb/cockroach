@@ -905,6 +905,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.temporaryObjectCleaner = sql.NewTemporaryObjectCleaner(
 		s.st,
 		s.db,
+		s.registry,
 		s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
 		s.status,
 		s.node.stores.IsMeta1Leaseholder,
