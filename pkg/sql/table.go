@@ -858,6 +858,7 @@ func (p *planner) createDropDatabaseJob(
 		Details: jobspb.SchemaChangeDetails{
 			DroppedTables:     droppedDetails,
 			DroppedDatabaseID: databaseID,
+			FormatVersion:     jobspb.JobResumerFormatVersion,
 		},
 		Progress: jobspb.SchemaChangeProgress{},
 	}
@@ -924,6 +925,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 				TableID:        tableDesc.ID,
 				MutationID:     mutationID,
 				ResumeSpanList: spanList,
+				FormatVersion:  jobspb.JobResumerFormatVersion,
 			},
 			Progress: jobspb.SchemaChangeProgress{},
 		}
@@ -946,6 +948,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 			TableID:        tableDesc.ID,
 			MutationID:     oldDetails.MutationID,
 			ResumeSpanList: spanList,
+			FormatVersion:  jobspb.JobResumerFormatVersion,
 		}
 		if oldDetails.MutationID != sqlbase.InvalidMutationID {
 			// The previous queued schema change job was associated with a mutation,

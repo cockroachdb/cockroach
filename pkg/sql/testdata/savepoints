@@ -242,41 +242,6 @@ ROLLBACK TO SAVEPOINT foo
 
 subtest end
 
-subtest cockroach_restart_cant_be_nested
-
-sql
-BEGIN
-SAVEPOINT foo
-SAVEPOINT cockroach_restart
-ROLLBACK
-----
-1: BEGIN -- 0 rows
--- NoTxn       -> Open        #...  (none)
-2: SAVEPOINT foo -- 0 rows
--- Open        -> Open        ##..  foo
-3: SAVEPOINT cockroach_restart -- pq: SAVEPOINT "cockroach_restart" cannot be nested
--- Open        -> Aborted     XXXX  foo
-4: ROLLBACK -- 0 rows
--- Aborted     -> NoTxn       #...  (none)
-
-# Check the behavior of issuing "SAVEPOINT cockroach_restart". Multiple times.
-# That is allowed (to facilitate SAVEPOINT cr; ROLLBACK TO cr; SAVEPOINT cr),
-# but we're not actually creating multiple savepoints with the same name because
-# the special release semantics don't allow us.
-sql
-BEGIN; SAVEPOINT cockroach_restart; SAVEPOINT cockroach_restart
-RELEASE SAVEPOINT cockroach_restart
-ROLLBACK TO SAVEPOINT cockroach_restart
-----
-1: BEGIN; SAVEPOINT cockroach_restart; SAVEPOINT cockroach_restart -- 0 rows
--- NoTxn       -> Open        #..  cockroach_restart(r)
-2: RELEASE SAVEPOINT cockroach_restart -- 0 rows
--- Open        -> CommitWait  XXX  (none)
-3: ROLLBACK TO SAVEPOINT cockroach_restart -- pq: current transaction is committed, commands ignored until end of transaction block
--- CommitWait  -> CommitWait  XXX  (none)
-
-subtest end
-
 subtest invalid_uses
 
 sql
@@ -544,11 +509,60 @@ SET force_savepoint_restart = false
 
 subtest end
 
+subtest restart/cockroach_restart_cant_be_nested
+
+sql
+BEGIN
+SAVEPOINT foo
+SAVEPOINT cockroach_restart
+ROLLBACK
+----
+1: BEGIN -- 0 rows
+-- NoTxn       -> Open        #...  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##..  foo
+3: SAVEPOINT cockroach_restart -- pq: SAVEPOINT "cockroach_restart" cannot be nested
+-- Open        -> Aborted     XXXX  foo
+4: ROLLBACK -- 0 rows
+-- Aborted     -> NoTxn       #...  (none)
+
+# Check the behavior of issuing "SAVEPOINT cockroach_restart". Multiple times.
+# That is allowed (to facilitate SAVEPOINT cr; ROLLBACK TO cr; SAVEPOINT cr),
+# but we're not actually creating multiple savepoints with the same name because
+# the special release semantics don't allow us.
+sql
+BEGIN; SAVEPOINT cockroach_restart; SAVEPOINT cockroach_restart
+RELEASE SAVEPOINT cockroach_restart
+ROLLBACK TO SAVEPOINT cockroach_restart
+----
+1: BEGIN; SAVEPOINT cockroach_restart; SAVEPOINT cockroach_restart -- 0 rows
+-- NoTxn       -> Open        #..  cockroach_restart(r)
+2: RELEASE SAVEPOINT cockroach_restart -- 0 rows
+-- Open        -> CommitWait  XXX  (none)
+3: ROLLBACK TO SAVEPOINT cockroach_restart -- pq: current transaction is committed, commands ignored until end of transaction block
+-- CommitWait  -> CommitWait  XXX  (none)
+
+# Test that cockroach_restart doesn't nest in the same way that regular
+# savepoints do. We allow the savepoint cockroach_restart to be redeclared after
+# a rollback to cockroach_restart (or even immediately after declaring it the
+# first time), and this redeclaration doesn't introduce a new savepoint.
+sql
+BEGIN; SAVEPOINT cockroach_restart; SAVEPOINT cockroach_restart;
+ROLLBACK TO cockroach_restart; SAVEPOINT cockroach_restart;
+COMMIT;
+----
+1: BEGIN; SAVEPOINT cockroach_restart; SAVEPOINT cockroach_restart; -- 0 rows
+-- NoTxn       -> Open        #..  cockroach_restart(r)
+2: ROLLBACK TO cockroach_restart; SAVEPOINT cockroach_restart; -- 0 rows
+-- Open        -> Open        #..  cockroach_restart(r)
+3: COMMIT; -- 0 rows
+-- Open        -> NoTxn       #.#  (none)
+
 subtest end
 
 # Test that the rewinding we do when performing an automatic retry restores the
 # savepoint stack properly.
-subtest rewind_on_automatic_restarts
+subtest restart/rewind_on_automatic_restarts
 
 # We're going to generate a retriable error that will rewind us back to the
 # SELECT statement (not to the original SAVEPOINT statement since that one is
@@ -563,21 +577,41 @@ BEGIN; SAVEPOINT a; SELECT 42; RELEASE a; SELECT crdb_internal.force_retry('10ms
 
 subtest end
 
-# Test that cockroach_restart doesn't nest in the same way that regular
-# savepoints do. We allow the savepoint cockroach_restart to be redeclared after
-# a rollback to cockroach_restart (or even immediately after declaring it the
-# first time), and this redeclaration doesn't introduce a new savepoint.
-subtest cockroach_restart_nesting
+subtest restart/txn_done_after_release_restart
+
 sql
-BEGIN; SAVEPOINT cockroach_restart; SAVEPOINT cockroach_restart;
-ROLLBACK TO cockroach_restart; SAVEPOINT cockroach_restart;
-COMMIT;
+BEGIN; SAVEPOINT cockroach_restart
+SELECT 1
+RELEASE SAVEPOINT cockroach_restart
+SELECT 2
 ----
-1: BEGIN; SAVEPOINT cockroach_restart; SAVEPOINT cockroach_restart; -- 0 rows
--- NoTxn       -> Open        #..  cockroach_restart(r)
-2: ROLLBACK TO cockroach_restart; SAVEPOINT cockroach_restart; -- 0 rows
--- Open        -> Open        #..  cockroach_restart(r)
-3: COMMIT; -- 0 rows
--- Open        -> NoTxn       #.#  (none)
+1: BEGIN; SAVEPOINT cockroach_restart -- 0 rows
+-- NoTxn       -> Open        #...  cockroach_restart(r)
+2: SELECT 1 -- 1 row
+-- Open        -> Open        ##..  cockroach_restart(r)
+3: RELEASE SAVEPOINT cockroach_restart -- 0 rows
+-- Open        -> CommitWait  XXXX  (none)
+4: SELECT 2 -- pq: current transaction is committed, commands ignored until end of transaction block
+-- CommitWait  -> CommitWait  XXXX  (none)
+
+# In contrast, it's OK to continue work after a RELEASE of a
+# non-restart savepoint.
+sql
+BEGIN; SAVEPOINT some_other_restart
+SELECT 1
+RELEASE SAVEPOINT some_other_restart
+SELECT 2
+----
+1: BEGIN; SAVEPOINT some_other_restart -- 0 rows
+-- NoTxn       -> Open        #...  some_other_restart(r)
+2: SELECT 1 -- 1 row
+-- Open        -> Open        ##..  some_other_restart(r)
+3: RELEASE SAVEPOINT some_other_restart -- 0 rows
+-- Open        -> Open        ###.  (none)
+4: SELECT 2 -- 1 row
+-- Open        -> Open        ####  (none)
+
+
+subtest end
 
 subtest end

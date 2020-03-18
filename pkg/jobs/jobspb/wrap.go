@@ -181,3 +181,23 @@ func WrapPayloadDetails(details Details) interface {
 
 // ChangefeedTargets is a set of id targets with metadata.
 type ChangefeedTargets map[sqlbase.ID]ChangefeedTarget
+
+// SchemaChangeDetailsFormatVersion is the format version for
+// SchemaChangeDetails.
+type SchemaChangeDetailsFormatVersion uint32
+
+const (
+	// BaseFormatVersion corresponds to the initial version of
+	// SchemaChangeDetails, intended for the original version of schema change
+	// jobs which were meant to be updated by a SchemaChanger instead of being run
+	// as jobs by the job registry.
+	BaseFormatVersion SchemaChangeDetailsFormatVersion = iota
+	// JobResumerFormatVersion corresponds to the introduction of the schema
+	// change job resumer. This version introduces the TableID and MutationID
+	// fields, and, more generally, flags the job as being suitable for the job
+	// registry to adopt.
+	JobResumerFormatVersion
+
+	// Silence unused warning.
+	_ = BaseFormatVersion
+)
