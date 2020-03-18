@@ -886,16 +886,16 @@ func (s *condensableSpanSet) insert(sp roachpb.Span) {
 // spans and combine overlapping spans.
 //
 // The method has the side effect of sorting the stable write set.
-func (s *condensableSpanSet) mergeAndSort() (distinct bool) {
-	s.s, distinct = roachpb.MergeSpans(s.s)
-	if !distinct {
-		// Recompute the size.
+func (s *condensableSpanSet) mergeAndSort() {
+	oldLen := len(s.s)
+	s.s, _ = roachpb.MergeSpans(s.s)
+	// Recompute the size if anything has changed.
+	if oldLen != len(s.s) {
 		s.bytes = 0
 		for _, sp := range s.s {
 			s.bytes += spanSize(sp)
 		}
 	}
-	return distinct
 }
 
 // maybeCondense is similar in spirit to mergeAndSort, but it only adjusts the

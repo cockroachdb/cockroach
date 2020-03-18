@@ -1376,3 +1376,14 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 	tp.rollbackToSavepointLocked(ctx, initialSavepoint)
 	require.Empty(t, tp.ifWrites.len())
 }
+
+// Test that the size of the condensableSpanSet is properly maintained when
+// contiguous spans are merged.
+func TestCondensableSpanSetMergeContiguousSpans(t *testing.T) {
+	s := condensableSpanSet{}
+	s.insert(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")})
+	s.insert(roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")})
+	require.Equal(t, int64(4), s.bytes)
+	s.mergeAndSort()
+	require.Equal(t, int64(2), s.bytes)
+}
