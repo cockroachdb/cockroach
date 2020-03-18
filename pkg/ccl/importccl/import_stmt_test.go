@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1331,6 +1332,14 @@ func TestImportCSVStmt(t *testing.T) {
 			testFiles.files,
 			` WITH decompress = 'gzip'`,
 			"gzip: invalid header",
+		},
+		{
+			"csv-with-invalid-delimited-option",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH fields_delimited_by = '|'`,
+			schema,
+			testFiles.files,
+			``,
+			"invalid option",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -3875,4 +3884,84 @@ func TestImportClientDisconnect(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestDisallowsInvalidFormatOptions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	allOpts := make(map[string]struct{})
+	addOpts := func(opts map[string]struct{}) {
+		for opt := range opts {
+			allOpts[opt] = struct{}{}
+		}
+	}
+	addOpts(allowedCommonOptions)
+	addOpts(avroAllowedOptions)
+	addOpts(csvAllowedOptions)
+	addOpts(mysqlDumpAllowedOptions)
+	addOpts(mysqlOutAllowedOptions)
+	addOpts(pgDumpAllowedOptions)
+	addOpts(pgCopyAllowedOptions)
+
+	// Helper to pick num options from the set of allowed and the set
+	// of all other options.  Returns generated options plus a flag indicating
+	// if the generated options contain disallowed ones.
+	pickOpts := func(num int, allowed map[string]struct{}) (map[string]string, bool) {
+		opts := make(map[string]string, num)
+		haveDisallowed := false
+		var picks []string
+		if rand.Intn(10) > 5 {
+			for opt := range allOpts {
+				picks = append(picks, opt)
+			}
+		} else {
+			for opt := range allowed {
+				picks = append(picks, opt)
+			}
+		}
+		require.NotNil(t, picks)
+
+		for i := 0; i < num; i++ {
+			pick := picks[rand.Intn(len(picks))]
+			_, allowed := allowed[pick]
+			if !allowed {
+				_, allowed = allowedCommonOptions[pick]
+			}
+			if allowed {
+				opts[pick] = "ok"
+			} else {
+				opts[pick] = "bad"
+				haveDisallowed = true
+			}
+		}
+
+		return opts, haveDisallowed
+	}
+
+	tests := []struct {
+		format  string
+		allowed map[string]struct{}
+	}{
+		{"avro", avroAllowedOptions},
+		{"csv", csvAllowedOptions},
+		{"mysqouout", mysqlOutAllowedOptions},
+		{"mysqldump", mysqlDumpAllowedOptions},
+		{"pgdump", pgDumpAllowedOptions},
+		{"pgcopy", pgCopyAllowedOptions},
+	}
+
+	for _, tc := range tests {
+		for i := 0; i < 5; i++ {
+			opts, haveBadOptions := pickOpts(i, tc.allowed)
+			t.Run(fmt.Sprintf("validate-%s-%d/badOpts=%t", tc.format, i, haveBadOptions),
+				func(t *testing.T) {
+					err := validateFormatOptions(tc.format, opts, tc.allowed)
+					if haveBadOptions {
+						require.Error(t, err, opts)
+					} else {
+						require.NoError(t, err, opts)
+					}
+				})
+		}
+	}
 }
