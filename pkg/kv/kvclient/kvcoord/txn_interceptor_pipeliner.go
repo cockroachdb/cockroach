@@ -177,10 +177,8 @@ var trackedWritesMaxSize = settings.RegisterPublicIntSetting(
 // attached to any end transaction request that is passed through the pipeliner
 // to ensure that they the locks within them are released.
 type txnPipeliner struct {
-	st *cluster.Settings
-	// Optional; used to condense lock spans, if provided. If not provided, a
-	// transaction's lock footprint may grow without bound.
-	riGen    RangeIteratorGen
+	st       *cluster.Settings
+	riGen    rangeIteratorFactory //used to condense lock spans, if provided
 	wrapped  lockedSender
 	disabled bool
 
@@ -204,6 +202,36 @@ type txnPipeliner struct {
 	// contains all keys spans that the transaction will need to eventually
 	// clean up upon its completion.
 	lockFootprint condensableSpanSet
+}
+
+// condensableSpanSetRangeIterator describes the interface of RangeIterator
+// needed by the condensableSpanSetRangeIterator. Useful for mocking an
+// interator in tests.
+type condensableSpanSetRangeIterator interface {
+	Valid() bool
+	Seek(ctx context.Context, key roachpb.RKey, scanDir ScanDirection)
+	Error() error
+	Desc() *roachpb.RangeDescriptor
+}
+
+// rangeIteratorFactory is used to create a condensableSpanSetRangeIterator
+// lazily. It's used to avoid allocating an iterator when it's not needed. The
+// factory can be configured either with a callback, used for mocking in tests,
+// or with a DistSender. Can also not be configured with anything, in which
+type rangeIteratorFactory struct {
+	factory func() condensableSpanSetRangeIterator
+	ds      *DistSender
+}
+
+// newRangeIterator creates a range iterator. If no factory was configured, it panics.
+func (f rangeIteratorFactory) newRangeIterator() condensableSpanSetRangeIterator {
+	if f.factory != nil {
+		return f.factory()
+	}
+	if f.ds != nil {
+		return NewRangeIterator(f.ds)
+	}
+	panic("no iterator factory configured")
 }
 
 // SendLocked implements the lockedSender interface.
@@ -872,6 +900,14 @@ func (a *inFlightWriteAlloc) clear() {
 type condensableSpanSet struct {
 	s     []roachpb.Span
 	bytes int64
+
+	// condensed is set if we ever condensed anything spans. Meaning, if the set
+	// of spans currently tracked has lost fidelity compared to the spans
+	// inserted.
+	// Note that we might have otherwise mucked with the inserted spans to save
+	// memory without losing fidelity, in which case this flag would not be set
+	// (e.g. merging overlapping or adjacent spans).
+	condensed bool
 }
 
 // insert adds a new span to the condensable span set. No attempt to condense
@@ -879,6 +915,13 @@ type condensableSpanSet struct {
 func (s *condensableSpanSet) insert(sp roachpb.Span) {
 	s.s = append(s.s, sp)
 	s.bytes += spanSize(sp)
+}
+
+func (s *condensableSpanSet) insertMultiple(spans []roachpb.Span) {
+	s.s = append(s.s, spans...)
+	for _, sp := range spans {
+		s.bytes += spanSize(sp)
+	}
 }
 
 // mergeAndSort merges all overlapping spans. Calling this method will not
@@ -904,11 +947,13 @@ func (s *condensableSpanSet) mergeAndSort() (distinct bool) {
 // exceeded, the method is more aggressive in its attempt to reduce the memory
 // footprint of the span set. Not only will it merge overlapping spans, but
 // spans within the same range boundaries are also condensed.
+//
+// Returns true if condensing was necessary.
 func (s *condensableSpanSet) maybeCondense(
-	ctx context.Context, riGen RangeIteratorGen, maxBytes int64,
-) {
+	ctx context.Context, riGen rangeIteratorFactory, maxBytes int64,
+) bool {
 	if s.bytes < maxBytes {
-		return
+		return false
 	}
 
 	// Start by attempting to simply merge the spans within the set. This alone
@@ -917,14 +962,10 @@ func (s *condensableSpanSet) maybeCondense(
 	// lower in this method.
 	s.mergeAndSort()
 	if s.bytes < maxBytes {
-		return
+		return false
 	}
 
-	if riGen == nil {
-		// If we were not given a RangeIteratorGen, we cannot condense the spans.
-		return
-	}
-	ri := riGen()
+	ri := riGen.newRangeIterator()
 
 	// Divide spans by range boundaries and condense. Iterate over spans
 	// using a range iterator and add each to a bucket keyed by range
@@ -945,7 +986,7 @@ func (s *condensableSpanSet) maybeCondense(
 		if !ri.Valid() {
 			// We haven't modified s.s yet, so it is safe to return.
 			log.Warningf(ctx, "failed to condense lock spans: %v", ri.Error())
-			return
+			return false
 		}
 		rangeID := ri.Desc().RangeID
 		if l := len(buckets); l > 0 && buckets[l-1].rangeID == rangeID {
@@ -987,6 +1028,8 @@ func (s *condensableSpanSet) maybeCondense(
 		s.bytes += spanSize(cs)
 		s.s = append(s.s, cs)
 	}
+	s.condensed = true
+	return true
 }
 
 // asSlice returns the set as a slice of spans.
@@ -998,6 +1041,11 @@ func (s *condensableSpanSet) asSlice() []roachpb.Span {
 // empty returns whether the set is empty or whether it contains spans.
 func (s *condensableSpanSet) empty() bool {
 	return len(s.s) == 0
+}
+
+func (s *condensableSpanSet) clear() {
+	s.s = nil
+	s.bytes = 0
 }
 
 func spanSize(sp roachpb.Span) int64 {

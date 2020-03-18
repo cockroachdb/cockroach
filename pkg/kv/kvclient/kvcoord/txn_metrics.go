@@ -73,8 +73,9 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRefreshSpanBytesExceeded = metric.Metadata{
-		Name:        "txn.refreshspanbytesexceeded",
-		Help:        "Number of transaction retries which fail to refresh due to the refresh span bytes",
+		Name: "txn.refreshspanbytesexceeded",
+		Help: "Number of transaction retries which fail to refresh after having exceeded to the " +
+			"refresh span bytes limit",
 		Measurement: "Retries",
 		Unit:        metric.Unit_COUNT,
 	}

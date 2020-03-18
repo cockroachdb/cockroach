@@ -217,9 +217,9 @@ func newRootTxnCoordSender(
 	// txnLockGatekeeper at the bottom of the stack to connect it with the
 	// TxnCoordSender's wrapped sender. First, each of the interceptor objects
 	// is initialized.
-	var riGen RangeIteratorGen
+	var riGen rangeIteratorFactory
 	if ds, ok := tcf.wrapped.(*DistSender); ok {
-		riGen = ds.rangeIteratorGen
+		riGen.ds = ds
 	}
 	tcs.interceptorAlloc.txnHeartbeater.init(
 		tcf.AmbientContext,
@@ -279,7 +279,7 @@ func newRootTxnCoordSender(
 }
 
 func (tc *TxnCoordSender) initCommonInterceptors(
-	tcf *TxnCoordSenderFactory, txn *roachpb.Transaction, typ kv.TxnType, riGen RangeIteratorGen,
+	tcf *TxnCoordSenderFactory, txn *roachpb.Transaction, typ kv.TxnType, riGen rangeIteratorFactory,
 ) {
 	tc.interceptorAlloc.txnPipeliner = txnPipeliner{
 		st:    tcf.st,
@@ -348,9 +348,9 @@ func newLeafTxnCoordSender(
 	// txnLockGatekeeper at the bottom of the stack to connect it with the
 	// TxnCoordSender's wrapped sender. First, each of the interceptor objects
 	// is initialized.
-	var riGen RangeIteratorGen
+	var riGen rangeIteratorFactory
 	if ds, ok := tcf.wrapped.(*DistSender); ok {
-		riGen = ds.rangeIteratorGen
+		riGen.ds = ds
 	}
 	tcs.initCommonInterceptors(tcf, txn, kv.LeafTxn, riGen)
 

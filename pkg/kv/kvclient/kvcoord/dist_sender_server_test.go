@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1673,100 +1672,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			// No retries, 1pc commit.
-		},
-		{
-			// If we've exhausted the limit for tracking refresh spans but we
-			// already refreshed, keep running the txn.
-			name: "forwarded timestamp with too many refreshes, read only",
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "a", "value")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				// Make the batch large enough such that when we accounted for
-				// all of its spans then we exceed the limit on refresh spans.
-				// This is not an issue because we refresh before tracking their
-				// spans.
-				keybase := strings.Repeat("a", 1024)
-				maxRefreshBytes := kvcoord.MaxTxnRefreshSpansBytes.Get(&s.ClusterSettings().SV)
-				scanToExceed := int(maxRefreshBytes) / len(keybase)
-				b := txn.NewBatch()
-				// Hit the uncertainty error at the beginning of the batch.
-				b.Get("a")
-				for i := 0; i < scanToExceed; i++ {
-					key := roachpb.Key(fmt.Sprintf("%s%10d", keybase, i))
-					b.Scan(key, key.Next())
-				}
-				return txn.Run(ctx, b)
-			},
-			filter: newUncertaintyFilter(roachpb.Key([]byte("a"))),
-			// Expect a transaction coord retry, which should succeed.
-			txnCoordRetry: true,
-		},
-		{
-			// Even if accounting for the refresh spans would have exhausted the
-			// limit for tracking refresh spans and our transaction's timestamp
-			// has been pushed, if we successfully commit then we won't hit an
-			// error.
-			name: "forwarded timestamp with too many refreshes in batch commit",
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				_, err := db.Get(ctx, "a") // set ts cache
-				return err
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				// Advance timestamp.
-				if err := txn.Put(ctx, "a", "put"); err != nil {
-					return err
-				}
-				// Make the final batch large enough such that if we accounted
-				// for all of its spans then we would exceed the limit on
-				// refresh spans. This is not an issue because we never need to
-				// account for them. The txn has no refresh spans, so it can
-				// forward its timestamp while committing.
-				keybase := strings.Repeat("a", 1024)
-				maxRefreshBytes := kvcoord.MaxTxnRefreshSpansBytes.Get(&s.ClusterSettings().SV)
-				scanToExceed := int(maxRefreshBytes) / len(keybase)
-				b := txn.NewBatch()
-				for i := 0; i < scanToExceed; i++ {
-					key := roachpb.Key(fmt.Sprintf("%s%10d", keybase, i))
-					b.Scan(key, key.Next())
-				}
-				return txn.CommitInBatch(ctx, b)
-			},
-			txnCoordRetry: false,
-		},
-		{
-			// Even if accounting for the refresh spans would have exhausted the
-			// limit for tracking refresh spans and our transaction's timestamp
-			// has been pushed, if we successfully commit then we won't hit an
-			// error. This is the case even if the final batch itself causes a
-			// refresh.
-			name: "forwarded timestamp with too many refreshes in batch commit triggering refresh",
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				_, err := db.Get(ctx, "a") // set ts cache
-				return err
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				// Advance timestamp. This also creates a refresh span which
-				// will prevent the txn from committing without a refresh.
-				if err := txn.DelRange(ctx, "a", "b"); err != nil {
-					return err
-				}
-				// Make the final batch large enough such that if we accounted
-				// for all of its spans then we would exceed the limit on
-				// refresh spans. This is not an issue because we never need to
-				// account for them until the final batch, at which time we
-				// perform a span refresh and successfully commit.
-				keybase := strings.Repeat("a", 1024)
-				maxRefreshBytes := kvcoord.MaxTxnRefreshSpansBytes.Get(&s.ClusterSettings().SV)
-				scanToExceed := int(maxRefreshBytes) / len(keybase)
-				b := txn.NewBatch()
-				for i := 0; i < scanToExceed; i++ {
-					key := roachpb.Key(fmt.Sprintf("%s%10d", keybase, i))
-					b.Scan(key, key.Next())
-				}
-				return txn.CommitInBatch(ctx, b)
-			},
-			txnCoordRetry: true,
 		},
 		{
 			name: "write too old with put",

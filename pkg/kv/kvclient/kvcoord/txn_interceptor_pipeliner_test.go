@@ -560,9 +560,10 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 	ctx := context.Background()
 	tp, mockSender := makeMockTxnPipeliner()
 
-	// Disable maxInFlightSize and maxBatchSize limits/
+	// Disable maxInFlightSize, maxBatchSize and max_intents_bytes limits.
 	pipelinedWritesMaxInFlightSize.Override(&tp.st.SV, math.MaxInt64)
 	pipelinedWritesMaxBatchSize.Override(&tp.st.SV, 0)
+	trackedWritesMaxSize.Override(&tp.st.SV, math.MaxInt64)
 
 	const writes = 2048
 	keyBuf := roachpb.Key(strings.Repeat("a", writes+1))
