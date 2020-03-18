@@ -162,13 +162,15 @@ type resettableOperator interface {
 	resetter
 }
 
-type closer interface {
-	Close(ctx context.Context) error
+// IdempotentCloser is an object that releases resource on the first call to
+// IdempotentClose but does nothing for any subsequent call.
+type IdempotentCloser interface {
+	IdempotentClose(ctx context.Context) error
 }
 
 type closableOperator interface {
 	Operator
-	closer
+	IdempotentCloser
 }
 
 type noopOperator struct {

@@ -94,6 +94,7 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 				&execinfrapb.PostProcessSpec{},
 				output,
 				nil, /* metadataSourcesQueue */
+				nil, /* toClose */
 				nil, /* outputStatsToTrace */
 				nil, /* cancelFlow */
 			)

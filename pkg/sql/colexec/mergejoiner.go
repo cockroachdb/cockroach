@@ -395,7 +395,7 @@ type mergeJoinBase struct {
 }
 
 var _ resetter = &mergeJoinBase{}
-var _ closer = &mergeJoinBase{}
+var _ IdempotentCloser = &mergeJoinBase{}
 
 func (o *mergeJoinBase) reset(ctx context.Context) {
 	if r, ok := o.left.source.(resetter); ok {
@@ -692,11 +692,11 @@ func (o *mergeJoinBase) finishProbe(ctx context.Context) {
 	)
 }
 
-func (o *mergeJoinBase) Close(ctx context.Context) error {
+func (o *mergeJoinBase) IdempotentClose(ctx context.Context) error {
 	var lastErr error
 	for _, op := range []Operator{o.left.source, o.right.source} {
-		if c, ok := op.(closer); ok {
-			if err := c.Close(ctx); err != nil {
+		if c, ok := op.(IdempotentCloser); ok {
+			if err := c.IdempotentClose(ctx); err != nil {
 				lastErr = err
 			}
 		}

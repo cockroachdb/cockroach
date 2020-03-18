@@ -585,7 +585,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(ctx); err != nil {
+			if err := r.IdempotentClose(ctx); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			return coldata.ZeroBatch
@@ -598,7 +598,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (r *_RELATIVE_RANK_STRINGOp) Close(ctx context.Context) error {
+func (r *_RELATIVE_RANK_STRINGOp) IdempotentClose(ctx context.Context) error {
 	if r.closed {
 		return nil
 	}

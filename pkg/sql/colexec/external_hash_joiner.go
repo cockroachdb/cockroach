@@ -689,7 +689,7 @@ StateChanged:
 			return b
 
 		case externalHJFinished:
-			if err := hj.Close(ctx); err != nil {
+			if err := hj.IdempotentClose(ctx); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			return coldata.ZeroBatch
@@ -699,7 +699,7 @@ StateChanged:
 	}
 }
 
-func (hj *externalHashJoiner) Close(ctx context.Context) error {
+func (hj *externalHashJoiner) IdempotentClose(ctx context.Context) error {
 	if hj.closed {
 		return nil
 	}
@@ -710,8 +710,8 @@ func (hj *externalHashJoiner) Close(ctx context.Context) error {
 	if err := hj.rightPartitioner.Close(ctx); err != nil && retErr == nil {
 		retErr = err
 	}
-	if c, ok := hj.diskBackedSortMerge.(closer); ok {
-		if err := c.Close(ctx); err != nil && retErr == nil {
+	if c, ok := hj.diskBackedSortMerge.(IdempotentCloser); ok {
+		if err := c.IdempotentClose(ctx); err != nil && retErr == nil {
 			retErr = err
 		}
 	}

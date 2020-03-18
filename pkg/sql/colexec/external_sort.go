@@ -336,7 +336,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			}
 			return b
 		case externalSorterFinished:
-			if err := s.Close(ctx); err != nil {
+			if err := s.IdempotentClose(ctx); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			return coldata.ZeroBatch
@@ -351,7 +351,7 @@ func (s *externalSorter) reset(ctx context.Context) {
 		r.reset(ctx)
 	}
 	s.state = externalSorterNewPartition
-	if err := s.Close(ctx); err != nil {
+	if err := s.IdempotentClose(ctx); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
 	s.closed = false
@@ -359,7 +359,7 @@ func (s *externalSorter) reset(ctx context.Context) {
 	s.numPartitions = 0
 }
 
-func (s *externalSorter) Close(ctx context.Context) error {
+func (s *externalSorter) IdempotentClose(ctx context.Context) error {
 	if s.closed {
 		return nil
 	}
