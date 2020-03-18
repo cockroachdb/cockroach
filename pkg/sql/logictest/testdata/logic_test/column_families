@@ -1,5 +1,8 @@
 # LogicTest: local local-vec
 
+# TODO(rohany): enable all of the configs below.
+# LogicTest: local local-vec-off local-vec fakedist fakedist-vec-off fakedist-vec fakedist-metadata
+
 # Test that different operations still succeed when the primary key is not in column family 0.
 
 statement ok

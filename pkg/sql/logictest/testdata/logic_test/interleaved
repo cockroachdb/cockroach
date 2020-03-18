@@ -1,5 +1,3 @@
-# LogicTest: local local-vec fakedist fakedist-metadata
-
 # Grandparent table
 statement ok
 CREATE TABLE p2 (i INT PRIMARY KEY, s STRING)
