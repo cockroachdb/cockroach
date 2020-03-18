@@ -140,7 +140,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 		for _, mtc := range memoryTestCases {
 			t.Run(fmt.Sprintf("%s/memoryLimit=%s", tc.name, humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
 				// Clear the testAllocator for use.
-				testAllocator.Clear()
+				testAllocator.ReleaseMemory(testAllocator.Used())
 				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, []coltypes.T{coltypes.Int64}, unblockEventsChan, mtc.bytes, queueCfg, NewTestingSemaphore(2), tc.blockedThreshold, tc.outputBatchSize, testDiskAcc)
 				in := newOpTestInput(tc.inputBatchSize, data, nil /* typs */)
 				out := newOpTestOutput(o, data[:len(tc.selection)])
@@ -708,7 +708,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 	for _, mtc := range memoryTestCases {
 		t.Run(fmt.Sprintf("memoryLimit=%s", humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
 			// Clear the testAllocator for use.
-			testAllocator.Clear()
+			testAllocator.ReleaseMemory(testAllocator.Used())
 			diskAcc := testDiskMonitor.MakeBoundAccount()
 			defer diskAcc.Close(ctx)
 			r, routerOutputs := NewHashRouter(

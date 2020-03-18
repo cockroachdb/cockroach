@@ -2599,9 +2599,6 @@ DROP TABLE person, pet
 # Temporary tables can not create FK references to persistent tables, and
 # persistent tables can not create FK references to temporary tables.
 
-statement error unimplemented: temporary tables are unsupported
-CREATE TEMP TABLE a_temp(a INT PRIMARY KEY)
-
 statement ok
 SET experimental_enable_temp_tables = true
 
