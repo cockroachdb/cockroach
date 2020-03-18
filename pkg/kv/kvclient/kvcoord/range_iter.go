@@ -34,9 +34,6 @@ type RangeIterator struct {
 	err     error
 }
 
-// RangeIteratorGen is a generator of RangeIterators.
-type RangeIteratorGen func() *RangeIterator
-
 // NewRangeIterator creates a new RangeIterator.
 func NewRangeIterator(ds *DistSender) *RangeIterator {
 	return &RangeIterator{

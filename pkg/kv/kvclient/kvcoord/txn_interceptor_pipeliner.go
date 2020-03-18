@@ -176,10 +176,8 @@ var trackedWritesMaxSize = settings.RegisterPublicIntSetting(
 // attached to any end transaction request that is passed through the pipeliner
 // to ensure that they the locks within them are released.
 type txnPipeliner struct {
-	st *cluster.Settings
-	// Optional; used to condense lock spans, if provided. If not provided, a
-	// transaction's lock footprint may grow without bound.
-	riGen    RangeIteratorGen
+	st       *cluster.Settings
+	riGen    rangeIteratorFactory // used to condense lock spans, if provided
 	wrapped  lockedSender
 	disabled bool
 
@@ -203,6 +201,37 @@ type txnPipeliner struct {
 	// contains all keys spans that the transaction will need to eventually
 	// clean up upon its completion.
 	lockFootprint condensableSpanSet
+}
+
+// condensableSpanSetRangeIterator describes the interface of RangeIterator
+// needed by the condensableSpanSetRangeIterator. Useful for mocking an
+// iterator in tests.
+type condensableSpanSetRangeIterator interface {
+	Valid() bool
+	Seek(ctx context.Context, key roachpb.RKey, scanDir ScanDirection)
+	Error() error
+	Desc() *roachpb.RangeDescriptor
+}
+
+// rangeIteratorFactory is used to create a condensableSpanSetRangeIterator
+// lazily. It's used to avoid allocating an iterator when it's not needed. The
+// factory can be configured either with a callback, used for mocking in tests,
+// or with a DistSender. Can also be left empty for unittests that don't push
+// memory limits in their span sets (and thus don't need collapsing).
+type rangeIteratorFactory struct {
+	factory func() condensableSpanSetRangeIterator
+	ds      *DistSender
+}
+
+// newRangeIterator creates a range iterator. If no factory was configured, it panics.
+func (f rangeIteratorFactory) newRangeIterator() condensableSpanSetRangeIterator {
+	if f.factory != nil {
+		return f.factory()
+	}
+	if f.ds != nil {
+		return NewRangeIterator(f.ds)
+	}
+	panic("no iterator factory configured")
 }
 
 // SendLocked implements the lockedSender interface.
