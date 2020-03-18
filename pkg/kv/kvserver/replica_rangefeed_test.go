@@ -310,6 +310,7 @@ func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	sc := kvserver.TestStoreConfig(nil)
+	sc.Clock = nil // manual clock
 	kvserver.RangefeedEnabled.Override(&sc.Settings.SV, true)
 	mtc := &multiTestContext{
 		storeConfig: &sc,
@@ -349,6 +350,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 	setup := func(subT *testing.T) (*multiTestContext, roachpb.RangeID) {
 		subT.Helper()
 		sc := kvserver.TestStoreConfig(nil)
+		sc.Clock = nil // manual clock
 		kvserver.RangefeedEnabled.Override(&sc.Settings.SV, true)
 		mtc := &multiTestContext{
 			storeConfig: &sc,
