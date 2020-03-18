@@ -1,11 +1,7 @@
-# LogicTest: local-vec
+# LogicTest: local local-vec fakedist fakedist-vec-disk fakedist-disk
 
 statement ok
 CREATE TABLE bools (a INT, b BOOL)
-
-# Ensure vectorize engine is used
-statement ok
-SET vectorize=experimental_always
 
 query BB
 SELECT bool_and(b), bool_or(b) FROM bools
@@ -15,9 +11,6 @@ NULL NULL
 query BB
 SELECT bool_and(b), bool_or(b) FROM bools GROUP BY a
 ----
-
-statement ok
-RESET vectorize
 
 statement OK
 INSERT INTO bools VALUES
