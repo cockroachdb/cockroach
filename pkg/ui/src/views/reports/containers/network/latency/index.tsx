@@ -232,7 +232,7 @@ const getLatencyCell = ({ latency, identityB, identityA }: { latency: number; id
                 <p className="Chip--tooltip__nodes--item-description">{identityA.locality}</p>
               </div>
             </div>
-            <p className={`color--${type}`}>{`${latency.toFixed(2)}ms`}</p>
+            <p className={`color--${type}`}>{`${latency.toFixed(2)}ms roundtrip`}</p>
           </div>
         )}>
           <div>
