@@ -67,9 +67,17 @@ type AuthorizationAccessor interface {
 var _ AuthorizationAccessor = &planner{}
 
 // CheckPrivilege implements the AuthorizationAccessor interface.
+// Requires a valid transaction to be open.
 func (p *planner) CheckPrivilege(
 	ctx context.Context, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 ) error {
+	// Verify that the txn is valid in any case, so that
+	// we don't get the risk to say "OK" to root requests
+	// with an invalid API usage.
+	if p.txn == nil || !p.txn.IsOpen() {
+		return errors.AssertionFailedf("cannot use CheckPrivilege without a txn")
+	}
+
 	// Test whether the object is being audited, and if so, record an
 	// audit event. We place this check here to increase the likelihood
 	// it will not be forgotten if features are added that access
@@ -109,7 +117,15 @@ func (p *planner) CheckPrivilege(
 }
 
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.
+// Requires a valid transaction to be open.
 func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.DescriptorProto) error {
+	// Verify that the txn is valid in any case, so that
+	// we don't get the risk to say "OK" to root requests
+	// with an invalid API usage.
+	if p.txn == nil || !p.txn.IsOpen() {
+		return errors.AssertionFailedf("cannot use CheckAnyPrivilege without a txn")
+	}
+
 	user := p.SessionData().User
 	privs := descriptor.GetPrivileges()
 
@@ -142,13 +158,22 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.Desc
 }
 
 // HasAdminRole implements the AuthorizationAccessor interface.
+// Requires a valid transaction to be open.
 func (p *planner) HasAdminRole(ctx context.Context) (bool, error) {
 	user := p.SessionData().User
 	if user == "" {
 		return false, errors.AssertionFailedf("empty user")
 	}
+	// Verify that the txn is valid in any case, so that
+	// we don't get the risk to say "OK" to root requests
+	// with an invalid API usage.
+	if p.txn == nil || !p.txn.IsOpen() {
+		return false, errors.AssertionFailedf("cannot use HasAdminRole without a txn")
+	}
 
 	// Check if user is 'root' or 'node'.
+	// TODO(knz): planner HasAdminRole has no business authorizing
+	// the "node" principal - node should not be issuing SQL queries.
 	if user == security.RootUser || user == security.NodeUser {
 		return true, nil
 	}
@@ -168,6 +193,7 @@ func (p *planner) HasAdminRole(ctx context.Context) (bool, error) {
 }
 
 // RequireAdminRole implements the AuthorizationAccessor interface.
+// Requires a valid transaction to be open.
 func (p *planner) RequireAdminRole(ctx context.Context, action string) error {
 	ok, err := p.HasAdminRole(ctx)
 
@@ -185,9 +211,14 @@ func (p *planner) RequireAdminRole(ctx context.Context, action string) error {
 // MemberOfWithAdminOption looks up all the roles 'member' belongs to (direct and indirect) and
 // returns a map of "role" -> "isAdmin".
 // The "isAdmin" flag applies to both direct and indirect members.
+// Requires a valid transaction to be open.
 func (p *planner) MemberOfWithAdminOption(
 	ctx context.Context, member string,
 ) (map[string]bool, error) {
+	if p.txn == nil || !p.txn.IsOpen() {
+		return nil, errors.AssertionFailedf("cannot use MemberOfWithAdminoption without a txn")
+	}
+
 	roleMembersCache := p.execCfg.RoleMemberCache
 
 	// Lookup table version.
@@ -288,10 +319,17 @@ func (p *planner) resolveMemberOfWithAdminOption(
 // HasRoleOption converts the roleoption to it's SQL column name and
 // checks if the user belongs to a role where the roleprivilege has value true.
 // Only works on checking the "positive version" of the privilege.
+// Requires a valid transaction to be open.
 // Example: CREATEROLE instead of NOCREATEROLE.
 func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Option) error {
-	user := p.SessionData().User
+	// Verify that the txn is valid in any case, so that
+	// we don't get the risk to say "OK" to root requests
+	// with an invalid API usage.
+	if p.txn == nil || !p.txn.IsOpen() {
+		return errors.AssertionFailedf("cannot use HasRoleOption without a txn")
+	}
 
+	user := p.SessionData().User
 	if user == security.RootUser || user == security.NodeUser {
 		return nil
 	}
