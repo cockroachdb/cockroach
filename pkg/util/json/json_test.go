@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
+	"github.com/stretchr/testify/require"
 )
 
 func eachPair(a, b JSON, f func(a, b JSON)) {
@@ -138,6 +139,56 @@ func TestJSONOrdering(t *testing.T) {
 					t.Errorf("expected %s > %s", a, b)
 				}
 			})
+		}
+	}
+}
+
+// TestSkipJSONInvertedIndexKey should be in encoding, but
+// we cannot import the json package there to encode and decode
+// json objects. Therefore, we add tests here.
+func TestSkipJSONInvertedIndexKey(t *testing.T) {
+	// Ensure that we get an error when trying to skip a non-json key.
+	b := encoding.EncodeBytesAscending(nil, []byte("hello"))
+	_, err := encoding.SkipJSONInvertedIndexKey(b)
+	expected := "expected to find json inverted index key"
+	if err == nil || err.Error() != expected {
+		t.Fatalf("expected to find error %q but found %+v", expected, err)
+	}
+
+	tests := []string{
+		`null`,
+		`true`,
+		`false`,
+		`1`,
+		`2`,
+		`"hello"`,
+		`[1, 2, 3]`,
+		`{}`,
+		`{"a": 1}`,
+		`{"a": [1, 2]}`,
+		`{"a": {"b": {"c": "d"}}}`,
+	}
+
+	for _, js := range tests {
+		j, err := ParseJSON(js)
+		if err != nil {
+			t.Fatal(err)
+		}
+		keys, err := EncodeInvertedIndexKeys(nil, j)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, key := range keys {
+			skipped, err := encoding.SkipJSONInvertedIndexKey(key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			skipLen, err := encoding.PeekLength(key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Require that we correctly skip keys like PeekLength.
+			require.Equal(t, key[skipLen:], skipped)
 		}
 	}
 }

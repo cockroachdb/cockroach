@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -1362,6 +1362,24 @@ func getMultiNonsortingVarintLen(b []byte, num int) (int, error) {
 		p += len
 	}
 	return p, nil
+}
+
+// SkipJSONInvertedIndexKey can be used to skip an encoded inverted
+// index key in an encoded key. It will throw an assertion error
+// if the next data value in the key is not an inverted index key.
+func SkipJSONInvertedIndexKey(b []byte) ([]byte, error) {
+	if len(b) == 0 {
+		return nil, errors.Errorf("empty slice")
+	}
+	m := b[0]
+	if m != jsonInvertedIndex {
+		return nil, errors.AssertionFailedf("expected to find json inverted index key")
+	}
+	length, err := getJSONInvertedIndexKeyLength(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[length:], nil
 }
 
 // PeekLength returns the length of the encoded value at the start of b.  Note:
