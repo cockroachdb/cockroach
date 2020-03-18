@@ -1006,6 +1006,37 @@ func runBenchmarkWideTable(b *testing.B, db *sqlutils.SQLRunner, count int, bigC
 	b.StopTimer()
 }
 
+// BenchmarkVecSkipScan benchmarks the vectorized engine's performance
+// when skipping unneeded key values in the decoding process.
+func BenchmarkVecSkipScan(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		create := `
+CREATE TABLE bench.scan(
+	x INT, y INT, z INT, 
+	a INT, w INT, v INT, 
+	PRIMARY KEY (x, y, z, a, w, v)
+)
+`
+		db.Exec(b, create)
+		const count = 1000
+		for i := 0; i < count; i++ {
+			db.Exec(
+				b,
+				fmt.Sprintf(
+					"INSERT INTO bench.scan VALUES (%d, %d, %d, %d, %d, %d)",
+					i, i, i, i, i, i,
+				),
+			)
+		}
+		b.ResetTimer()
+		b.Run("Bench scan with skip", func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				db.Exec(b, `SET vectorize=on; SELECT y FROM bench.scan`)
+			}
+		})
+	})
+}
+
 func BenchmarkWideTable(b *testing.B) {
 	if testing.Short() {
 		b.Skip("short flag")
