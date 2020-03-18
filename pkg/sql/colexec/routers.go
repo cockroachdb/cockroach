@@ -386,7 +386,8 @@ type HashRouter struct {
 // by comparing memory use in the allocator with the memoryLimit argument. Each
 // Operator must have an independent allocator (this means that each allocator
 // should be linked to an independent mem account) as Operator.Next will usually
-// be called concurrently between different outputs.
+// be called concurrently between different outputs. Similarly, each output
+// needs to have a separate disk account.
 func NewHashRouter(
 	unlimitedAllocators []*Allocator,
 	input Operator,
@@ -395,7 +396,7 @@ func NewHashRouter(
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	diskAcc *mon.BoundAccount,
+	diskAccounts []*mon.BoundAccount,
 ) (*HashRouter, []Operator) {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeDefault {
 		execerror.VectorizedInternalPanic(errors.Errorf("hash router instantiated with incompatible disk queue cache mode: %d", diskQueueCfg.CacheMode))
@@ -412,7 +413,7 @@ func NewHashRouter(
 	unblockEventsChan := make(chan struct{}, 2*len(unlimitedAllocators))
 	memoryLimitPerOutput := memoryLimit / int64(len(unlimitedAllocators))
 	for i := range unlimitedAllocators {
-		op := newRouterOutputOp(unlimitedAllocators[i], types, unblockEventsChan, memoryLimitPerOutput, diskQueueCfg, fdSemaphore, diskAcc)
+		op := newRouterOutputOp(unlimitedAllocators[i], types, unblockEventsChan, memoryLimitPerOutput, diskQueueCfg, fdSemaphore, diskAccounts[i])
 		outputs[i] = op
 		outputsAsOps[i] = op
 	}

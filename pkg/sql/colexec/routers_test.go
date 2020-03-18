@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -708,7 +709,13 @@ func TestHashRouterOneOutput(t *testing.T) {
 		t.Run(fmt.Sprintf("memoryLimit=%s", humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
 			// Clear the testAllocator for use.
 			testAllocator.Clear()
-			r, routerOutputs := NewHashRouter([]*Allocator{testAllocator}, newOpFixedSelTestInput(sel, len(sel), data), typs, []uint32{0}, mtc.bytes, queueCfg, NewTestingSemaphore(2), testDiskAcc)
+			diskAcc := testDiskMonitor.MakeBoundAccount()
+			defer diskAcc.Close(ctx)
+			r, routerOutputs := NewHashRouter(
+				[]*Allocator{testAllocator}, newOpFixedSelTestInput(sel, len(sel), data),
+				typs, []uint32{0}, mtc.bytes, queueCfg, NewTestingSemaphore(2),
+				[]*mon.BoundAccount{&diskAcc},
+			)
 
 			if len(routerOutputs) != 1 {
 				t.Fatalf("expected 1 router output but got %d", len(routerOutputs))
@@ -809,12 +816,15 @@ func TestHashRouterRandom(t *testing.T) {
 				outputsAsOps := make([]Operator, numOutputs)
 				memoryLimitPerOutput := mtc.bytes / int64(len(outputs))
 				for i := range outputs {
+					// Create separate monitoring infrastructure as well as
+					// an allocator for each output as router outputs run
+					// concurrently.
 					acc := testMemMonitor.MakeBoundAccount()
 					defer acc.Close(ctx)
-					// Create a separate allocator for each output as a single allocator
-					// may not be used concurrently.
+					diskAcc := testDiskMonitor.MakeBoundAccount()
+					defer diskAcc.Close(ctx)
 					allocator := NewAllocator(ctx, &acc)
-					op := newRouterOutputOpWithBlockedThresholdAndBatchSize(allocator, typs, unblockEventsChan, memoryLimitPerOutput, queueCfg, NewTestingSemaphore(len(outputs)*2), blockedThreshold, outputSize, testDiskAcc)
+					op := newRouterOutputOpWithBlockedThresholdAndBatchSize(allocator, typs, unblockEventsChan, memoryLimitPerOutput, queueCfg, NewTestingSemaphore(len(outputs)*2), blockedThreshold, outputSize, &diskAcc)
 					outputs[i] = op
 					outputsAsOps[i] = op
 				}
@@ -912,12 +922,16 @@ func BenchmarkHashRouter(b *testing.B) {
 		for _, numInputBatches := range []int{2, 4, 8, 16} {
 			b.Run(fmt.Sprintf("numOutputs=%d/numInputBatches=%d", numOutputs, numInputBatches), func(b *testing.B) {
 				allocators := make([]*Allocator, numOutputs)
+				diskAccounts := make([]*mon.BoundAccount, numOutputs)
 				for i := range allocators {
 					acc := testMemMonitor.MakeBoundAccount()
 					allocators[i] = NewAllocator(ctx, &acc)
 					defer acc.Close(ctx)
+					diskAcc := testDiskMonitor.MakeBoundAccount()
+					diskAccounts[i] = &diskAcc
+					defer diskAcc.Close(ctx)
 				}
-				r, outputs := NewHashRouter(allocators, input, types, []uint32{0}, 64<<20, queueCfg, &TestingSemaphore{}, testDiskAcc)
+				r, outputs := NewHashRouter(allocators, input, types, []uint32{0}, 64<<20, queueCfg, &TestingSemaphore{}, diskAccounts)
 				b.SetBytes(8 * int64(coldata.BatchSize()) * int64(numInputBatches))
 				// We expect distribution to not change. This is a sanity check that
 				// we're resetting properly.
