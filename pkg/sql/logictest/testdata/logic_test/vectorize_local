@@ -104,3 +104,17 @@ EXPLAIN (VEC) SELECT stddev(0) FROM t46123 WHERE ('' COLLATE en)::BOOL
 └ Node 1
 └ *rowexec.orderedAggregator
   └ *rowexec.tableReader
+
+# Regression test for #46122 (checking that we gracefully fallback to row
+# execution on cross joins).
+statement ok
+CREATE TABLE t46122_0(c0 STRING); CREATE TABLE t46122_1(c0 STRING)
+
+query T
+EXPLAIN (VEC) SELECT t46122_0.c0 FROM t46122_0, t46122_1
+----
+│
+└ Node 1
+└ *rowexec.hashJoiner
+  ├ *colexec.colBatchScan
+  └ *colexec.colBatchScan

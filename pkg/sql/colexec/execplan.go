@@ -250,6 +250,15 @@ func isSupported(
 		if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type != sqlbase.InnerJoin {
 			return false, errors.Newf("can't plan vectorized non-inner hash joins with ON expressions")
 		}
+		leftInput, rightInput := spec.Input[0], spec.Input[1]
+		if len(leftInput.ColumnTypes) == 0 || len(rightInput.ColumnTypes) == 0 {
+			// We have a cross join of two inputs, and at least one of them has
+			// zero-length schema. However, the hash join operators (both
+			// external and in-memory) have a built-in assumption of non-empty
+			// inputs, so we will fallback to row execution in such cases.
+			// TODO(yuzefovich): implement specialized cross join operator.
+			return false, errors.Newf("can't plan vectorized hash joins with an empty input schema")
+		}
 		return true, nil
 
 	case core.MergeJoiner != nil:
