@@ -1431,21 +1431,21 @@ query error pq: cos\(\): cannot use "\*" in this context
 SELECT cos(*) FROM system.namespace
 
 # Don't panic with invalid names (#8045)
-query error cannot use "nonexistent.\*" without a FROM clause
+query error no data source matches pattern: nonexistent.\*
 SELECT TRIM(TRAILING nonexistent.*[1])
 
 query error rtrim\(\): cannot subscript type tuple
 SELECT TRIM(TRAILING foo.*[1]) FROM (VALUES (1)) AS foo(x)
 
 # Don't panic with invalid names (#8044)
-query error cannot use "nonexistent.\*" without a FROM clause
+query error no data source matches pattern: nonexistent.\*
 SELECT OVERLAY(nonexistent.* PLACING 'string' FROM 'string')
 
 query error unknown signature
 SELECT OVERLAY(foo.* PLACING 'string' FROM 'string') FROM (VALUES (1)) AS foo(x)
 
 # Don't panic with invalid names (#8023)
-query error cannot use "nonexistent.\*" without a FROM clause
+query error no data source matches pattern: nonexistent.\*
 SELECT nonexistent.* IS NOT TRUE
 
 query error unsupported comparison operator: <tuple{int AS x}> IS DISTINCT FROM <bool>

@@ -218,6 +218,25 @@ project
       └── ((k:1, v:2) AS k, v) [as=r:3]
 
 build
+SELECT (SELECT t.*) FROM (VALUES (1)) AS t(x)
+----
+project
+ ├── columns: "?column?":3
+ ├── values
+ │    ├── columns: column1:1!null
+ │    └── (1,)
+ └── projections
+      └── subquery [as="?column?":3]
+           └── max1-row
+                ├── columns: x:2
+                └── project
+                     ├── columns: x:2
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── column1:1 [as=x:2]
+
+build
 SELECT foo.* FROM kv
 ----
 error (42P01): no data source matches pattern: foo.*
