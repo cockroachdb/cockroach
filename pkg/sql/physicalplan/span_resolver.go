@@ -191,8 +191,7 @@ func (it *spanResolverIterator) Error() error {
 	if it.err != nil {
 		return it.err
 	}
-	// TODO(andrei): make the DistSender iterator return error, not pErr
-	return it.it.Error().GoError()
+	return it.it.Error()
 }
 
 // Seek is part of the SpanResolverIterator interface.
