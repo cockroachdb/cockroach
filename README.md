@@ -74,6 +74,8 @@ CockroachDB supports the PostgreSQL wire protocol, so you can use any available 
   Learn how to troubleshoot common errors, cluster and node setup, and SQL query behavior,
   and how to use debug and error logs.
 
+- #[CockroachDB Community Slack](https://cockroa.ch/slack)
+
 - [CockroachDB Forum](https://forum.cockroachlabs.com/) and
   [Stack Overflow](https://stackoverflow.com/questions/tagged/cockroachdb) - Ask questions,
   find answers, and help other users.
