@@ -141,7 +141,7 @@ func DecodeKeyValsToCols(
 		i := indexColIdx[j]
 		if i == -1 {
 			// Don't need the coldata - skip it.
-			key, err = sqlbase.SkipTableKey(&types[j], key, enc)
+			key, err = sqlbase.SkipTableKey(key)
 		} else {
 			if unseen != nil {
 				unseen.Remove(i)

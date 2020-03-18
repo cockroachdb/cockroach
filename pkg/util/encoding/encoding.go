@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -1293,7 +1293,7 @@ func getMultiNonsortingVarintLen(b []byte, num int) (int, error) {
 
 // PeekLength returns the length of the encoded value at the start of b.  Note:
 // if this function succeeds, it's not a guarantee that decoding the value will
-// succeed.
+// succeed. PeekLength is meant to be used on key encoded data only.
 func PeekLength(b []byte) (int, error) {
 	if len(b) == 0 {
 		return 0, errors.Errorf("empty slice")
