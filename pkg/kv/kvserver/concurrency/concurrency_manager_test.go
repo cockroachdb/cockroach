@@ -221,7 +221,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 			case "handle-write-intent-error":
 				var reqName string
 				d.ScanArgs(t, "req", &reqName)
-				guard, ok := c.guardsByReqName[reqName]
+				prev, ok := c.guardsByReqName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
@@ -237,12 +237,22 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				d.ScanArgs(t, "key", &key)
 
 				opName := fmt.Sprintf("handle write intent error %s", reqName)
-				mon.runSync(opName, func(ctx context.Context) {
-					err := &roachpb.WriteIntentError{Intents: []roachpb.Intent{
+				mon.runAsync(opName, func(ctx context.Context) {
+					wiErr := &roachpb.WriteIntentError{Intents: []roachpb.Intent{
 						roachpb.MakeIntent(&txn.TxnMeta, roachpb.Key(key)),
 					}}
-					log.Eventf(ctx, "handling %v", err)
-					guard = m.HandleWriterIntentError(ctx, guard, err)
+					guard, err := m.HandleWriterIntentError(ctx, prev, wiErr)
+					if err != nil {
+						log.Eventf(ctx, "handled %v, returned error: %v", wiErr, err)
+						c.mu.Lock()
+						delete(c.guardsByReqName, reqName)
+						c.mu.Unlock()
+					} else {
+						log.Eventf(ctx, "handled %v, released latches", wiErr)
+						c.mu.Lock()
+						c.guardsByReqName[reqName] = guard
+						c.mu.Unlock()
+					}
 				})
 				return c.waitAndCollect(t, mon)
 
