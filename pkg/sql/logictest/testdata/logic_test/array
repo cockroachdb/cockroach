@@ -1321,3 +1321,25 @@ CREATE TABLE defvals2 (
 
 statement ok
 INSERT INTO defvals2(id) VALUES (1)
+
+subtest array_compare
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT[], y INT[], z STRING[])
+
+statement error pq: unsupported comparison operator: <int\[\]> < <string\[\]>
+SELECT * FROM t WHERE y < z
+
+statement ok
+INSERT INTO t VALUES (ARRAY[1], ARRAY[1, 2], NULL), (ARRAY[1, 1, 1, 1], ARRAY[2], NULL)
+
+query TT rowsort
+SELECT x, y FROM t WHERE x < y
+----
+{1}        {1,2}
+{1,1,1,1}  {2}
+
+query TT
+SELECT x, y FROM t WHERE x > y
+----
