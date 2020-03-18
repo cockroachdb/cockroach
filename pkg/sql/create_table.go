@@ -128,8 +128,19 @@ func getTableCreateParams(
 		params.ExecCfg().Settings, dbID, tableName)
 	if isTemporary {
 		if !params.SessionData().TempTablesEnabled {
-			return nil, 0, unimplemented.NewWithIssuef(5807,
-				"temporary tables are unsupported")
+			return nil, 0, errors.WithTelemetry(
+				pgerror.WithCandidateCode(
+					errors.WithHint(
+						errors.WithIssueLink(
+							errors.Newf("temporary tables are only supported experimentally"),
+							errors.IssueLink{IssueURL: unimplemented.MakeURL(46260)},
+						),
+						"You can enable temporary tables by running `SET experimental_enable_temp_tables = 'on'`.",
+					),
+					pgcode.FeatureNotSupported,
+				),
+				"sql.schema.temp_tables_disabled",
+			)
 		}
 
 		tempSchemaName := params.p.TemporarySchemaName()
