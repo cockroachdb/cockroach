@@ -55,7 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -5717,4 +5717,91 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 		}
 		return nil
 	})
+}
+
+// TestMultipleRevert starts a schema change then cancels it. After the canceled
+// job, after reversing the mutations the job is set up to throw an error so
+// that mutations are attempted to be reverted again. The mutation shouldn't be
+// attempted to be reversed twice.
+func TestMultipleRevert(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
+	shouldBlockBackfill := true
+	ranCancelCommand := false
+	shouldRetryAfterReversingMutations := true
+
+	params, _ := tests.CreateTestServerParams()
+	var db *gosql.DB
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeBackfill: func() error {
+				if !shouldBlockBackfill {
+					return nil
+				}
+				if !ranCancelCommand {
+					// Cancel the job the first time it tried to backfill.
+					if _, err := db.Exec(`CANCEL JOB (
+					SELECT job_id FROM [SHOW JOBS]
+					WHERE
+						job_type = 'SCHEMA CHANGE' AND
+						status = $1 AND
+						description NOT LIKE 'ROLL BACK%'
+				)`, jobs.StatusRunning); err != nil {
+						t.Error(err)
+					}
+					ranCancelCommand = true
+				}
+				// Keep returning a retryable error until the job was actually canceled.
+				return jobs.NewRetryJobError("retry until cancel")
+			},
+			RunBeforeOnFailOrCancel: func() {
+				// Allow the backfill to proceed normally once the job was actually
+				// canceled.
+				shouldBlockBackfill = false
+			},
+			RunAfterMutationReversal: func() error {
+				// Throw one retryable error right after mutations were reversed so that
+				// the mutation gets attempted to be reversed again.
+				if !shouldRetryAfterReversingMutations {
+					return nil
+				}
+				shouldRetryAfterReversingMutations = false
+				// After cancelation, the job should get one more retryable error.
+				return jobs.NewRetryJobError("retry once after cancel")
+			},
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	db = sqlDB
+	defer s.Stopper().Stop(context.TODO())
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with addImmediateGCZoneConfig.
+	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+
+	// Create a k-v table and kick off a schema change that should get rolled
+	// back.
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
+INSERT INTO t.test VALUES (1, 2);
+ALTER TABLE t.public.test DROP COLUMN v;
+`); err == nil {
+		t.Fatal("expected job to be canceled")
+	} else if !strings.Contains(err.Error(), "job canceled by user") {
+		t.Fatal(err)
+	}
+
+	// Ensure that the schema change was rolled back.
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	rows := runner.QueryStr(t, "SELECT * FROM t.test")
+	require.Equal(t, [][]string{
+		{"1", "2"},
+	}, rows)
 }
