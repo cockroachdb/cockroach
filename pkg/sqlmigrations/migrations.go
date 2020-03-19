@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,13 +31,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -420,6 +423,7 @@ type Manager struct {
 	sqlExecutor  *sql.InternalExecutor
 	testingKnobs MigrationManagerTestingKnobs
 	settings     *cluster.Settings
+	jobRegistry  *jobs.Registry
 }
 
 // NewManager initializes and returns a new Manager object.
@@ -431,6 +435,7 @@ func NewManager(
 	testingKnobs MigrationManagerTestingKnobs,
 	clientID string,
 	settings *cluster.Settings,
+	registry *jobs.Registry,
 ) *Manager {
 	opts := leasemanager.Options{
 		ClientID:      clientID,
@@ -443,6 +448,7 @@ func NewManager(
 		sqlExecutor:  executor,
 		testingKnobs: testingKnobs,
 		settings:     settings,
+		jobRegistry:  registry,
 	}
 }
 
@@ -618,6 +624,467 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 		if err := m.db.Put(ctx, key, startTime); err != nil {
 			return errors.Wrapf(err, "failed to persist record of completing migration %q",
 				migration.name)
+		}
+	}
+
+	return nil
+}
+
+var (
+	schemaChangeJobMigrationName = "upgrade schema change job format"
+	schemaChangeJobMigrationKey  = append(keys.MigrationPrefix, roachpb.RKey(schemaChangeJobMigrationName)...)
+)
+
+func (m *Manager) StartSchemaChangeJobMigration(ctx context.Context) error {
+	return m.stopper.RunAsyncTask(ctx, "run-schema-change-job-migration", func(ctx context.Context) {
+		log.Info(ctx, "starting wait for upgrade finalization before schema change job migration")
+		// First wait for the cluster to finalize the upgrade to 20.1.
+		waitRetryOpts := retry.Options{
+			InitialBackoff: 5 * time.Second,
+			MaxBackoff:     10 * time.Second,
+			Multiplier:     2,
+			Closer:         m.stopper.ShouldQuiesce(),
+		}
+		for retry := retry.StartWithCtx(ctx, waitRetryOpts); retry.Next(); {
+			if m.settings.Version.IsActive(ctx, clusterversion.VersionSchemaChangeJob) {
+				break
+			}
+		}
+		select {
+		case <-m.stopper.ShouldQuiesce():
+			return
+		default:
+		}
+		log.VEventf(ctx, 2, "detected upgrade finalization")
+
+		// Check whether this migration has already been completed.
+		if kv, err := m.db.Get(ctx, schemaChangeJobMigrationKey); err != nil {
+			log.Infof(ctx, "error getting record of schema change job migration: %s", err.Error())
+		} else if kv.Exists() {
+			log.Infof(ctx, "schema change job migration already complete")
+			return
+		}
+
+		// Now run the migration. This is retried indefinitely until it finishes.
+		log.Infof(ctx, "starting schema change job migration")
+		r := runner{
+			db:          m.db,
+			sqlExecutor: m.sqlExecutor,
+			settings:    m.settings,
+		}
+		migrationRetryOpts := retry.Options{
+			InitialBackoff: 1 * time.Minute,
+			MaxBackoff:     10 * time.Minute,
+			Closer:         m.stopper.ShouldQuiesce(),
+		}
+		startTime := timeutil.Now().String()
+		for retry := retry.StartWithCtx(ctx, migrationRetryOpts); retry.Next(); {
+			if err := migrateSchemaChangeJobs(ctx, r, m.jobRegistry); err != nil {
+				log.Errorf(ctx, "error attempting running schema change job migration, will retry: %s", err.Error())
+				continue
+			}
+			log.Infof(ctx, "schema change job migration completed")
+			if err := m.db.Put(ctx, schemaChangeJobMigrationKey, startTime); err != nil {
+				log.Warningf(ctx, "error persisting record of schema change job migration, will retry: %s", err.Error())
+			}
+			break
+		}
+	})
+}
+
+func schemaChangeMigrationKeyForTable(tableID sqlbase.ID) roachpb.Key {
+	// TODO (lucy): There is probably a better way to do this.
+	key := append(schemaChangeJobMigrationKey, '/')
+	return encoding.EncodeUint32Ascending(key, uint32(tableID))
+}
+
+func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Registry) error {
+	migrateMutationJobForTable := func(txn *kv.Txn, job *jobs.Job, tableDesc *sql.TableDescriptor) error {
+		log.VEventf(ctx, 2, "job %d: undergoing migration as mutation job for table %d", *job.ID(), tableDesc.ID)
+
+		// Check whether the job is for a mutation. There can be multiple mutations
+		// with the same ID that correspond to the same job, but we just need to
+		// look at one, since all the mutations with the same ID get state updates
+		// in the same transaction.
+		for i := range tableDesc.MutationJobs {
+			mutationJob := &tableDesc.MutationJobs[i]
+			if mutationJob.JobID == *job.ID() {
+				log.VEventf(
+					ctx, 2, "job %d: found corresponding mutation %d on table %d",
+					*job.ID(), mutationJob.MutationID, tableDesc.ID,
+				)
+
+				// Update the job details and status based on the table descriptor
+				// state.
+				if err := job.WithTxn(txn).Update(ctx, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+					// Update the job details with the table and mutation IDs.
+					details := md.Payload.UnwrapDetails().(jobspb.SchemaChangeDetails)
+					details.TableID = tableDesc.ID
+					details.MutationID = mutationJob.MutationID
+					details.FormatVersion = jobspb.JobResumerFormatVersion
+					md.Payload.Details = jobspb.WrapPayloadDetails(details)
+
+					log.VEventf(ctx, 2, "job %d: updating details to %+v", *job.ID(), details)
+
+					// Also give the job a non-nil expired lease to indicate that the job
+					// is adoptable.
+					md.Payload.Lease = &jobspb.Lease{}
+					ju.UpdatePayload(md.Payload)
+
+					mutation := &tableDesc.Mutations[i]
+					// If the mutation exists on the table descriptor, then the schema
+					// change isn't actually in a terminal state, regardless of what the
+					// job status is. So we force the status to Reverting if there's any
+					// indication that it failed or was canceled, and otherwise force the
+					// state to Running.
+					shouldRevert := md.Status == jobs.StatusFailed || md.Status == jobs.StatusCanceled ||
+						md.Status == jobs.StatusReverting || md.Status == jobs.StatusCancelRequested
+					previousStatus := md.Status
+					if mutation.Rollback || shouldRevert {
+						md.Status = jobs.StatusReverting
+					} else {
+						md.Status = jobs.StatusRunning
+					}
+					log.VEventf(ctx, 2, "job %d: updating status from %s to %s", *job.ID(), previousStatus, md.Status)
+					ju.UpdateStatus(md.Status)
+					return nil
+				}); err != nil {
+					return err
+				}
+				log.Infof(
+					ctx, "job %d: successfully migrated for table %d, mutation %d",
+					*job.ID(), tableDesc.ID, mutationJob.MutationID,
+				)
+				return nil
+			}
+		}
+
+		// If not a mutation, check whether the job corresponds to a GCMutation.
+		// This indicates that the job must be in the "waiting for GC TTL" state.
+		// In that case, we mark the job as succeeded and create a new job for GC.
+		for i := range tableDesc.GCMutations {
+			gcMutation := &tableDesc.GCMutations[i]
+			// JobID and dropTime are populated only in 19.2 and earlier versions.
+			if gcMutation.JobID == *job.ID() {
+				log.VEventf(
+					ctx, 2, "job %d: found corresponding index GC mutation for index %d on table %d",
+					*job.ID(), gcMutation.IndexID, tableDesc.ID,
+				)
+				if err := job.WithTxn(txn).Succeeded(ctx, nil); err != nil {
+					return err
+				}
+				log.VEventf(ctx, 2, "job %d: marked as succeeded", *job.ID())
+
+				// TODO (lucy): Maybe refactor this so it's created the way that GC jobs
+				// are normally created. For now, just write the job record directly.
+				indexGCJobRecord := jobs.Record{
+					Description:   fmt.Sprintf("GC for %s", job.Payload().Description),
+					Username:      job.Payload().Username,
+					DescriptorIDs: sqlbase.IDs{tableDesc.ID},
+					Details: jobspb.SchemaChangeGCDetails{
+						Indexes: []jobspb.SchemaChangeGCDetails_DroppedIndex{
+							{
+								IndexID:  gcMutation.IndexID,
+								DropTime: gcMutation.DropTime,
+							},
+						},
+						ParentID: tableDesc.GetID(),
+					},
+					Progress:      jobspb.SchemaChangeGCProgress{},
+					NonCancelable: true,
+				}
+				// The new job ID won't be written to GCMutations, which is fine because
+				// we don't read the job ID in 20.1 for anything except this migration.
+				newJob, err := registry.CreateJobWithTxn(ctx, indexGCJobRecord, txn)
+				if err != nil {
+					return err
+				}
+				log.Infof(ctx,
+					"migration marked drop table job %d as successful, created GC job %d",
+					*job.ID(), *newJob.ID(),
+				)
+				return nil
+			}
+		}
+
+		// If the job isn't in MutationJobs or GCMutations, it's likely just a
+		// failed or canceled job that was successfully cleaned up. Check for this,
+		// and return an error if this is not the case.
+		status, err := job.CurrentStatus(ctx)
+		if err != nil {
+			return err
+		}
+		if status == jobs.StatusCanceled || status == jobs.StatusFailed {
+			return nil
+		}
+		return errors.Newf(
+			"job %d: no corresponding mutation found on table %d during migration", *job.ID(), tableDesc.ID)
+	}
+
+	migrateDropTablesOrDatabaseJob := func(txn *kv.Txn, job *jobs.Job) error {
+		details := job.Details().(jobspb.SchemaChangeDetails)
+		log.VEventf(ctx, 2,
+			"job %d: undergoing migration as drop table/database job for tables %+v",
+			*job.ID(), details.DroppedTables,
+		)
+
+		if job.Progress().RunningStatus == string(sql.RunningStatusDrainingNames) {
+			// If the job is draining names, the schema change job resumer will handle
+			// it. Just update the job details.
+			if err := job.WithTxn(txn).Update(ctx, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+				details := md.Payload.UnwrapDetails().(jobspb.SchemaChangeDetails)
+				if len(details.DroppedTables) == 1 {
+					details.TableID = details.DroppedTables[0].ID
+				}
+				details.FormatVersion = jobspb.JobResumerFormatVersion
+				md.Payload.Details = jobspb.WrapPayloadDetails(details)
+
+				log.VEventf(ctx, 2, "job %d: updating details to %+v", *job.ID(), details)
+
+				// Also give the job a non-nil expired lease to indicate that the job
+				// is adoptable.
+				md.Payload.Lease = &jobspb.Lease{}
+				ju.UpdatePayload(md.Payload)
+				return nil
+			}); err != nil {
+				return err
+			}
+			log.Info(ctx, "job %d: successfully migrated in draining names state", *job.ID())
+			return nil
+		}
+
+		// Otherwise, the job is in the "waiting for GC TTL" phase. In this case, we
+		// mark the present job as Succeeded and create a new GC job.
+
+		// TODO (lucy/paul): In the case of multiple tables, is it a problem if some
+		// of the tables have already been GC'ed at this point? In 19.2, each table
+		// advances separately through the stages of being dropped, so it should be
+		// possible for some tables to still be draining names while others have
+		// already undergone GC.
+
+		if err := job.WithTxn(txn).Succeeded(ctx, nil); err != nil {
+			return err
+		}
+		log.VEventf(ctx, 2, "job %d: marked as succeeded", *job.ID())
+
+		// TODO (lucy): Maybe refactor this so it's created the way that GC jobs
+		// are normally created. For now, just write the job record directly.
+		tablesToDrop := make([]jobspb.SchemaChangeGCDetails_DroppedID, len(details.DroppedTables))
+		for i := range details.DroppedTables {
+			tableID := details.DroppedTables[i].ID
+			tablesToDrop[i].ID = details.DroppedTables[i].ID
+			desc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+			if err != nil {
+				return nil
+			}
+			tablesToDrop[i].DropTime = desc.DropTime
+		}
+		gcJobRecord := jobs.Record{
+			Description:   fmt.Sprintf("GC for %s", job.Payload().Description),
+			Username:      job.Payload().Username,
+			DescriptorIDs: job.Payload().DescriptorIDs,
+			Details: jobspb.SchemaChangeGCDetails{
+				Tables:   tablesToDrop,
+				ParentID: details.DroppedDatabaseID,
+			},
+			Progress:      jobspb.SchemaChangeGCProgress{},
+			NonCancelable: true,
+		}
+		// The new job ID won't be written to DropJobID on the table descriptor(s),
+		// which is fine because we don't read the job ID in 20.1 for anything
+		// except this migration.
+		// TODO (lucy): The above is true except for the cleanup loop for orphaned
+		// jobs in the registry, which should be fixed.
+		newJob, err := registry.CreateJobWithTxn(ctx, gcJobRecord, txn)
+		if err != nil {
+			return err
+		}
+		log.Infof(ctx,
+			"migration marked drop database/table job %d as successful, created GC job %d",
+			*job.ID(), *newJob.ID(),
+		)
+		return err
+	}
+
+	// Get all jobs that aren't Succeeded and evaluate whether they need a
+	// migration.
+	rows, err := r.sqlExecutor.QueryEx(
+		ctx, "jobs-for-migration", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		"SELECT id, payload FROM system.jobs WHERE status != $1", jobs.StatusSucceeded,
+	)
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		jobID := int64(tree.MustBeDInt(row[0]))
+		log.VEventf(ctx, 2, "job %d: evaluating for schema change job migration", jobID)
+
+		payload, err := jobs.UnmarshalPayload(row[1])
+		if err != nil {
+			return err
+		}
+		details, ok := payload.UnwrapDetails().(jobspb.SchemaChangeDetails)
+		if !ok || details.FormatVersion > jobspb.BaseFormatVersion {
+			continue
+		}
+
+		log.Infof(ctx, "job %d: undergoing schema change job migration", jobID)
+
+		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// Read the job again inside the transaction. If the job was already
+			// upgraded, we don't have to do anything else.
+			job, err := registry.LoadJobWithTxn(ctx, jobID, txn)
+			if err != nil {
+				// The job could have been GC'ed in the meantime.
+				if jobs.HasJobNotFoundError(err) {
+					return nil
+				}
+				return err
+			}
+			details = job.Details().(jobspb.SchemaChangeDetails)
+			if details.FormatVersion > jobspb.BaseFormatVersion {
+				return nil
+			}
+
+			// Determine whether the job is for dropping a database/table. Note that
+			// DroppedTables is always populated in 19.2 for all jobs that drop
+			// tables.
+			if len(details.DroppedTables) > 0 {
+				return migrateDropTablesOrDatabaseJob(txn, job)
+			}
+
+			descIDs := job.Payload().DescriptorIDs
+			// All other jobs have exactly 1 associated descriptor ID (for a table),
+			// and correspond to a schema change with a mutation.
+			if len(descIDs) != 1 {
+				return errors.AssertionFailedf(
+					"job %d: could not be migrated due to unexpected descriptor IDs %v", descIDs)
+			}
+			descID := descIDs[0]
+			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, descID)
+			if err != nil {
+				return nil
+			}
+			return migrateMutationJobForTable(txn, job, tableDesc)
+		}); err != nil {
+			return err
+		}
+		log.Infof(ctx, "job %d: completed schema change job migration", jobID)
+	}
+
+	// Finally, iterate through all table descriptors and jobs, and create jobs
+	// for any tables being added or that have draining names that don't already
+	// have jobs.
+	var allDescs []sqlbase.DescriptorProto
+	jobsForDesc := make(map[sqlbase.ID][]int64)
+	if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		descs, err := sql.GetAllDescriptors(ctx, txn)
+		if err != nil {
+			return err
+		}
+		allDescs = descs
+
+		// Get all running schema change jobs.
+		rows, err := r.sqlExecutor.QueryEx(
+			ctx, "preexisting-jobs", nil, /* txn */
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			"SELECT id, payload FROM system.jobs WHERE status = $1", jobs.StatusRunning,
+		)
+		if err != nil {
+			return err
+		}
+		for _, row := range rows {
+			jobID := int64(tree.MustBeDInt(row[0]))
+			payload, err := jobs.UnmarshalPayload(row[1])
+			if err != nil {
+				return err
+			}
+			details, ok := payload.UnwrapDetails().(jobspb.SchemaChangeDetails)
+			if !ok || details.FormatVersion < jobspb.JobResumerFormatVersion {
+				continue
+			}
+			if details.TableID != sqlbase.InvalidID {
+				jobsForDesc[details.TableID] = append(jobsForDesc[details.TableID], jobID)
+			} else {
+				for _, t := range details.DroppedTables {
+					jobsForDesc[t.ID] = append(jobsForDesc[t.ID], jobID)
+				}
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	log.Infof(ctx, "evaluating tables for creating jobs")
+	for _, desc := range allDescs {
+		switch desc := desc.(type) {
+		case *sqlbase.TableDescriptor:
+			if len(jobsForDesc[desc.ID]) > 0 {
+				log.VEventf(ctx, 3, "table %d has running jobs, skipping", desc.ID)
+				continue
+			}
+			if !desc.Adding() && !desc.HasDrainingNames() {
+				log.VEventf(ctx, 3,
+					"table %d is not being added and does not have draining names, skipping",
+					desc.ID,
+				)
+				continue
+			}
+
+			if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				key := schemaChangeMigrationKeyForTable(desc.ID)
+				startTime := timeutil.Now().String()
+				if kv, err := txn.Get(ctx, key); err != nil {
+					return err
+				} else if kv.Exists() {
+					log.VEventf(ctx, 3, "table %d already processed in migration", desc.ID)
+					return nil
+				}
+
+				var description string
+				if desc.Adding() {
+					description = fmt.Sprintf("adding table %d", desc.ID)
+				} else if desc.HasDrainingNames() {
+					description = fmt.Sprintf("draining names for table %d", desc.ID)
+				} else {
+					// This shouldn't be possible, but if it happens, it would be
+					// appropriate to do nothing without returning an error.
+					log.Warningf(
+						ctx,
+						"tried to process table %d which is neither being added nor has draining names",
+						desc.ID,
+					)
+					return nil
+				}
+				// TODO (lucy): Is using the root user a good idea?
+				record := jobs.Record{
+					Description:   description,
+					Username:      security.RootUser,
+					DescriptorIDs: sqlbase.IDs{desc.ID},
+					Details: jobspb.SchemaChangeDetails{
+						TableID:       desc.ID,
+						FormatVersion: jobspb.JobResumerFormatVersion,
+					},
+					Progress:      jobspb.SchemaChangeProgress{},
+					NonCancelable: true,
+				}
+				job, err := registry.CreateJobWithTxn(ctx, record, txn)
+				if err != nil {
+					return err
+				}
+				log.Infof(ctx, "migration created new job %d: %s", *job.ID(), description)
+
+				if err := txn.Put(ctx, key, startTime); err != nil {
+					return err
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+		case *sqlbase.DatabaseDescriptor:
+			// Do nothing.
 		}
 	}
 

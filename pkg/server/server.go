@@ -1706,6 +1706,7 @@ func (s *Server) Start(ctx context.Context) error {
 		mmKnobs,
 		s.NodeID().String(),
 		s.ClusterSettings(),
+		s.jobRegistry,
 	)
 
 	// Start garbage collecting system events.
@@ -1788,6 +1789,10 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Start serving SQL clients.
 	if err := s.startServeSQL(ctx, workersCtx, connManager, pgL); err != nil {
+		return err
+	}
+
+	if err := migMgr.StartSchemaChangeJobMigration(ctx); err != nil {
 		return err
 	}
 
