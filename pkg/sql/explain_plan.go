@@ -214,7 +214,7 @@ func populateExplain(
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 	isDistSQL, _ = willDistributePlan(distSQLPlanner, plan, params)
 	outerSubqueries := params.p.curPlan.subqueryPlans
-	planCtx := makeExplainVecPlanningCtx(distSQLPlanner, params, stmtType, subqueryPlans, isDistSQL)
+	planCtx := makeExplainVecPlanningCtx(distSQLPlanner, params, stmtType, isDistSQL)
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()

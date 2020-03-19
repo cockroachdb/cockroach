@@ -32,9 +32,14 @@ type ExprContext interface {
 	// IsLocal returns true if the current plan is local.
 	IsLocal() bool
 
-	// EvaluateSubqueries returns true if subqueries should be evaluated before
-	// creating the execinfrapb.Expression.
-	EvaluateSubqueries() bool
+	// MustEvaluateSubqueries returns true if subqueries should be evaluated
+	// before creating the execinfrapb.Expression.
+	MustEvaluateSubqueries() bool
+
+	// MustReplaceSubqueriesWithNull returns true if subqueries should be replaced
+	// with null before creating the execinfrapb.Expression. This is useful for
+	// some explain variants.
+	MustReplaceSubqueriesWithNull() bool
 }
 
 // fakeExprContext is a fake implementation of ExprContext that always behaves
@@ -51,8 +56,12 @@ func (fakeExprContext) IsLocal() bool {
 	return false
 }
 
-func (fakeExprContext) EvaluateSubqueries() bool {
+func (fakeExprContext) MustEvaluateSubqueries() bool {
 	return true
+}
+
+func (fakeExprContext) MustReplaceSubqueriesWithNull() bool {
+	return false
 }
 
 // MakeExpression creates a execinfrapb.Expression.
@@ -84,17 +93,8 @@ func MakeExpression(
 	}
 
 	evalCtx := ctx.EvalContext()
-	subqueryVisitor := &evalAndReplaceSubqueryVisitor{
-		evalCtx: evalCtx,
-	}
 
 	outExpr := expr.(tree.Expr)
-	if ctx.EvaluateSubqueries() {
-		outExpr, _ = tree.WalkExpr(subqueryVisitor, expr)
-		if subqueryVisitor.err != nil {
-			return execinfrapb.Expression{}, subqueryVisitor.err
-		}
-	}
 	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
 	fmtCtx := execinfrapb.ExprFmtCtxBase(evalCtx)
 	if indexVarMap != nil {
@@ -106,39 +106,41 @@ func MakeExpression(
 			ctx.Printf("@%d", remappedIdx+1)
 		})
 	}
+	if ctx.MustEvaluateSubqueries() {
+		var fmtErr error
+		if ctx.MustReplaceSubqueriesWithNull() {
+			fmtCtx.SetSubqueriesFormat(func(ctx *tree.FmtCtx, subquery *tree.Subquery) {
+				family := subquery.ResolvedType().Family()
+				var expr tree.Expr = tree.DNull
+				if family != types.UnknownFamily && family != types.TupleFamily {
+					expr = &tree.CastExpr{
+						Expr: expr,
+						Type: subquery.ResolvedType(),
+					}
+				}
+				ctx.FormatNode(expr)
+			})
+		} else {
+			fmtCtx.SetSubqueriesFormat(func(ctx *tree.FmtCtx, subquery *tree.Subquery) {
+				var val tree.Datum
+				val, fmtErr = evalCtx.Planner.EvalSubquery(subquery)
+				if fmtErr != nil {
+					return
+				}
+				var newExpr tree.Expr = val
+				if _, isTuple := val.(*tree.DTuple); !isTuple && subquery.ResolvedType().Family() != types.UnknownFamily {
+					newExpr = &tree.CastExpr{
+						Expr: val,
+						Type: subquery.ResolvedType(),
+					}
+				}
+				ctx.FormatNode(newExpr)
+			})
+		}
+	}
 	fmtCtx.FormatNode(outExpr)
 	if log.V(1) {
 		log.Infof(evalCtx.Ctx(), "Expr %s:\n%s", fmtCtx.String(), tree.ExprDebugString(outExpr))
 	}
 	return execinfrapb.Expression{Expr: fmtCtx.CloseAndGetString()}, nil
 }
-
-type evalAndReplaceSubqueryVisitor struct {
-	evalCtx *tree.EvalContext
-	err     error
-}
-
-var _ tree.Visitor = &evalAndReplaceSubqueryVisitor{}
-
-func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
-	switch expr := expr.(type) {
-	case *tree.Subquery:
-		val, err := e.evalCtx.Planner.EvalSubquery(expr)
-		if err != nil {
-			e.err = err
-			return false, expr
-		}
-		var newExpr tree.Expr = val
-		if _, isTuple := val.(*tree.DTuple); !isTuple && expr.ResolvedType().Family() != types.UnknownFamily {
-			newExpr = &tree.CastExpr{
-				Expr: val,
-				Type: expr.ResolvedType(),
-			}
-		}
-		return false, newExpr
-	default:
-		return true, expr
-	}
-}
-
-func (evalAndReplaceSubqueryVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
