@@ -825,6 +825,7 @@ func (d *DFloat) Next(_ *EvalContext) (Datum, bool) {
 	return NewDFloat(DFloat(math.Nextafter(f, math.Inf(+1)))), true
 }
 
+var dZeroFloat = NewDFloat(0.0)
 var dPosInfFloat = NewDFloat(DFloat(math.Inf(+1)))
 var dNegInfFloat = NewDFloat(DFloat(math.Inf(-1)))
 var dNaNFloat = NewDFloat(DFloat(math.NaN()))
@@ -990,6 +991,7 @@ func (d *DDecimal) Next(_ *EvalContext) (Datum, bool) {
 	return nil, false
 }
 
+var dZeroDecimal = &DDecimal{Decimal: apd.Decimal{}}
 var dPosInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: false}}
 var dNaNDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.NaN}}
 
@@ -1778,10 +1780,12 @@ func (d *DDate) Compare(ctx *EvalContext, other Datum) int {
 }
 
 var (
-	dMaxDate  = NewDDate(pgdate.PosInfDate)
-	dMinDate  = NewDDate(pgdate.NegInfDate)
-	dLowDate  = NewDDate(pgdate.LowDate)
-	dHighDate = NewDDate(pgdate.HighDate)
+	epochDate, _ = pgdate.MakeDateFromPGEpoch(0)
+	dEpochDate   = NewDDate(epochDate)
+	dMaxDate     = NewDDate(pgdate.PosInfDate)
+	dMinDate     = NewDDate(pgdate.NegInfDate)
+	dLowDate     = NewDDate(pgdate.LowDate)
+	dHighDate    = NewDDate(pgdate.HighDate)
 )
 
 // Prev implements the Datum interface.
@@ -1970,6 +1974,7 @@ type DTimeTZ struct {
 }
 
 var (
+	dZeroTimeTZ = NewDTimeTZFromOffset(timeofday.Min, 0)
 	// DMinTimeTZ is the min TimeTZ.
 	DMinTimeTZ = NewDTimeTZFromOffset(timeofday.Min, timetz.MinTimeTZOffsetSecs)
 	// DMaxTimeTZ is the max TimeTZ.
@@ -2092,6 +2097,8 @@ type DTimestamp struct {
 func MakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
 	return &DTimestamp{Time: t.Round(precision)}
 }
+
+var dMinTimestamp = &DTimestamp{}
 
 // time.Time formats.
 const (
@@ -2327,6 +2334,8 @@ func ParseDTimestampTZ(
 	// Always normalize time to the current location.
 	return MakeDTimestampTZ(t, precision), nil
 }
+
+var dMinTimestampTZ = &DTimestampTZ{}
 
 // AsDTimestampTZ attempts to retrieve a DTimestampTZ from an Expr, returning a
 // DTimestampTZ and a flag signifying whether the assertion was successful. The
@@ -2578,8 +2587,9 @@ func (d *DInterval) IsMin(_ *EvalContext) bool {
 }
 
 var (
-	dMaxInterval = &DInterval{duration.MakeDuration(math.MaxInt64, math.MaxInt64, math.MaxInt64)}
-	dMinInterval = &DInterval{duration.MakeDuration(math.MinInt64, math.MinInt64, math.MinInt64)}
+	dZeroInterval = &DInterval{}
+	dMaxInterval  = &DInterval{duration.MakeDuration(math.MaxInt64, math.MaxInt64, math.MaxInt64)}
+	dMinInterval  = &DInterval{duration.MakeDuration(math.MinInt64, math.MinInt64, math.MinInt64)}
 )
 
 // Max implements the Datum interface.
@@ -2650,6 +2660,8 @@ func MakeDJSON(d interface{}) (Datum, error) {
 	}
 	return &DJSON{j}, nil
 }
+
+var dNullJSON = NewDJSON(json.NullJSONValue)
 
 // AsDJSON attempts to retrieve a *DJSON from an Expr, returning a *DJSON and
 // a flag signifying whether the assertion was successful. The function should
@@ -3828,6 +3840,66 @@ func NewDOidVectorFromDArray(d *DArray) Datum {
 	*ret = *d
 	ret.customOid = oid.T_oidvector
 	return ret
+}
+
+// NewDefaultDatum returns a default non-NULL datum value for the given type.
+// This is used when updating non-NULL columns that are being added or dropped
+// from a table, and there is no user-defined DEFAULT value available.
+func NewDefaultDatum(evalCtx *EvalContext, t *types.T) (d Datum, err error) {
+	switch t.Family() {
+	case types.BoolFamily:
+		return DBoolFalse, nil
+	case types.IntFamily:
+		return DZero, nil
+	case types.FloatFamily:
+		return dZeroFloat, nil
+	case types.DecimalFamily:
+		return dZeroDecimal, nil
+	case types.DateFamily:
+		return dEpochDate, nil
+	case types.TimestampFamily:
+		return dMinTimestamp, nil
+	case types.IntervalFamily:
+		return dZeroInterval, nil
+	case types.StringFamily:
+		return dEmptyString, nil
+	case types.BytesFamily:
+		return dEmptyBytes, nil
+	case types.TimestampTZFamily:
+		return dMinTimestampTZ, nil
+	case types.CollatedStringFamily:
+		return NewDCollatedString("", t.Locale(), &evalCtx.CollationEnv)
+	case types.OidFamily:
+		return NewDOidWithName(DInt(t.Oid()), t, t.SQLStandardName()), nil
+	case types.UnknownFamily:
+		return DNull, nil
+	case types.UuidFamily:
+		return DMinUUID, nil
+	case types.ArrayFamily:
+		return NewDArray(t.ArrayContents()), nil
+	case types.INetFamily:
+		return DMinIPAddr, nil
+	case types.TimeFamily:
+		return dTimeMin, nil
+	case types.JsonFamily:
+		return dNullJSON, nil
+	case types.TimeTZFamily:
+		return dZeroTimeTZ, nil
+	case types.TupleFamily:
+		contents := t.TupleContents()
+		datums := make([]Datum, len(contents))
+		for i, subT := range contents {
+			datums[i], err = NewDefaultDatum(evalCtx, &subT)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return NewDTuple(t, datums...), nil
+	case types.BitFamily:
+		return bitArrayZero, nil
+	default:
+		return nil, errors.AssertionFailedf("unhandled type %v", t.SQLString())
+	}
 }
 
 // DatumTypeSize returns a lower bound on the total size of a Datum
