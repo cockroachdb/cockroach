@@ -470,7 +470,7 @@ func TestRaceWithBackfill(t *testing.T) {
 			BackfillChunkSize: chunkSize,
 		},
 		// Disable GC job.
-		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func() { select {} }},
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { select {} }},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				notifyBackfill()
@@ -636,7 +636,7 @@ func TestDropWhileBackfill(t *testing.T) {
 			BackfillChunkSize: chunkSize,
 		},
 		// Disable GC job.
-		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func() { select {} }},
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { select {} }},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				if partialBackfillDone.Load().(bool) {
@@ -750,7 +750,7 @@ func TestBackfillErrors(t *testing.T) {
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
 		},
-		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func() { <-blockGC }},
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { <-blockGC; return nil }},
 	}
 
 	tc := serverutils.StartTestCluster(t, numNodes,
@@ -1537,7 +1537,7 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 			WriteCheckpointInterval: time.Nanosecond,
 		},
 		// Disable GC job.
-		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func() { <-blockGC }},
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { <-blockGC; return nil }},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				attempts++
@@ -2085,7 +2085,7 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 			WriteCheckpointInterval: time.Nanosecond,
 		},
 		// Disable GC job.
-		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func() { select {} }},
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { select {} }},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				attempts++
@@ -3761,7 +3761,7 @@ func TestTruncateInternals(t *testing.T) {
 	// Disable schema changes.
 	blockGC := make(chan struct{})
 	params.Knobs = base.TestingKnobs{
-		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func() { <-blockGC }},
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { <-blockGC; return nil }},
 	}
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -5753,12 +5753,13 @@ func TestMultipleRevert(t *testing.T) {
 				// Keep returning a retryable error until the job was actually canceled.
 				return jobs.NewRetryJobError("retry until cancel")
 			},
-			RunBeforeOnFailOrCancel: func() {
+			RunBeforeOnFailOrCancel: func(_ int64) error {
 				// Allow the backfill to proceed normally once the job was actually
 				// canceled.
 				shouldBlockBackfill = false
+				return nil
 			},
-			RunAfterMutationReversal: func() error {
+			RunAfterMutationReversal: func(_ int64) error {
 				// Throw one retryable error right after mutations were reversed so that
 				// the mutation gets attempted to be reversed again.
 				if !shouldRetryAfterReversingMutations {

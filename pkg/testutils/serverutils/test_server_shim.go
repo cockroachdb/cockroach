@@ -104,6 +104,9 @@ type TestServerInterface interface {
 	// JobRegistry returns the *jobs.Registry as an interface{}.
 	JobRegistry() interface{}
 
+	// MigrationManager returns the *jobs.Registry as an interface{}.
+	MigrationManager() interface{}
+
 	// SetDistSQLSpanResolver changes the SpanResolver used for DistSQL inside the
 	// server's executor. The argument must be a physicalplan.SpanResolver
 	// instance.
