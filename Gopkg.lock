@@ -1110,11 +1110,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:2f28c15a5368f5921a0fc1c9c4ae140512644c871e751b236222b646b454ac6f"
+  digest = "1:8a27abe89bed098b9819afb8d6724dc1bfbdc5279d08b913cfa6d2b17da8c348"
   name = "github.com/knz/strtime"
   packages = ["."]
   pruneopts = "UT"
-  revision = "af2256ee352c7e3efc0cdeb388c71e302c1946c8"
+  revision = "be999391ffa90a7880271a65d53f760fc1cf0151"
 
 [[projects]]
   digest = "1:0a69a1c0db3591fcefb47f115b224592c8dfa4368b7ba9fae509d5e16cdc95c8"
