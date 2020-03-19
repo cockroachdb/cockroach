@@ -10035,6 +10035,29 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				return
 			},
 		},
+		// Regression test for #43273. When locking scans run into write too old
+		// errors, the refreshed timestamp should not be below the txn's
+		// existing write timestamp.
+		{
+			name: "serverside-refresh with write too old errors during locking scan",
+			setupFn: func() (hlc.Timestamp, error) {
+				return put("lscan", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				// Txn with (read_ts, write_ts) = (1, 4) finds a value with
+				// `ts = 2`. Final timestamp should be `ts = 4`.
+				ba.Txn = newTxn("lscan", ts.Prev())
+				ba.Txn.WriteTimestamp = ts.Next().Next()
+				ba.CanForwardReadTimestamp = true
+
+				expTS = ba.Txn.WriteTimestamp
+
+				scan := scanArgs(roachpb.Key("lscan"), roachpb.Key("lscan\x00"))
+				scan.KeyLocking = lock.Upgrade
+				ba.Add(scan)
+				return
+			},
+		},
 		// Serializable transaction will commit with WriteTooOld flag if no refresh spans.
 		{
 			name: "serializable commit with write-too-old flag",

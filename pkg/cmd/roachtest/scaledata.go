@@ -97,7 +97,7 @@ func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur 
 	}
 	m.Go(func(ctx context.Context) error {
 		t.Status("installing schema")
-		err = c.RunE(ctx, appNode, fmt.Sprintf("./%s --install_schema "+
+		err := c.RunE(ctx, appNode, fmt.Sprintf("./%s --install_schema "+
 			"--cockroach_ip_addresses_csv='%s' %s", app, addrStr, flags))
 		if err != nil {
 			return err
