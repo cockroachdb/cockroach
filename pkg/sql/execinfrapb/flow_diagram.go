@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/types"
-	"github.com/pkg/errors"
 )
 
 type diagramCellType interface {
@@ -533,6 +533,8 @@ type diagramData struct {
 	NodeNames  []string           `json:"nodeNames"`
 	Processors []diagramProcessor `json:"processors"`
 	Edges      []diagramEdge      `json:"edges"`
+
+	flowID FlowID
 }
 
 var _ FlowDiagram = &diagramData{}
@@ -548,7 +550,7 @@ func (d diagramData) ToURL() (string, url.URL, error) {
 
 // AddSpans implements the FlowDiagram interface.
 func (d *diagramData) AddSpans(spans []tracing.RecordedSpan) {
-	processorStats, streamStats := extractStatsFromSpans(spans)
+	processorStats, streamStats := extractStatsFromSpans(d.flowID, spans)
 	for i := range d.Processors {
 		if statDetails, ok := processorStats[int(d.Processors[i].processorID)]; ok {
 			d.Processors[i].Core.Details = append(d.Processors[i].Core.Details, statDetails...)
@@ -565,6 +567,14 @@ func generateDiagramData(
 	d := &diagramData{
 		SQL:       sql,
 		NodeNames: nodeNames,
+	}
+	if len(flows) > 0 {
+		d.flowID = flows[0].FlowID
+		for i := 1; i < len(flows); i++ {
+			if flows[i].FlowID != d.flowID {
+				return nil, errors.AssertionFailedf("flow ID mismatch within a diagram")
+			}
+		}
 	}
 
 	// inPorts maps streams to their "destination" attachment point. Only DestProc
@@ -746,11 +756,17 @@ func encodeJSONToURL(json bytes.Buffer) (string, url.URL, error) {
 // and returns a map from that processor id to a slice of stat descriptions
 // that can be added to a plan.
 func extractStatsFromSpans(
-	spans []tracing.RecordedSpan,
+	flowID FlowID, spans []tracing.RecordedSpan,
 ) (processorStats, streamStats map[int][]string) {
 	processorStats = make(map[int][]string)
 	streamStats = make(map[int][]string)
 	for _, span := range spans {
+		// The trace can contain spans from multiple flows; make sure we select the
+		// right ones.
+		if fid, ok := span.Tags[FlowIDTagKey]; !ok || fid != flowID.String() {
+			continue
+		}
+
 		var id string
 		var stats map[int][]string
 

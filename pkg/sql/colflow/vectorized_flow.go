@@ -323,6 +323,7 @@ func wrapWithVectorizedStatsCollector(
 // outputs their stats to the trace contained in the ctx's span.
 func finishVectorizedStatsCollectors(
 	ctx context.Context,
+	flowID execinfrapb.FlowID,
 	deterministicStats bool,
 	vectorizedStatsCollectors []*colexec.VectorizedStatsCollector,
 	procIDs []int32,
@@ -336,6 +337,7 @@ func finishVectorizedStatsCollectors(
 		// away which is not the way they are supposed to be used, so this
 		// should be fixed.
 		_, spansByProcID[pid] = tracing.ChildSpan(ctx, fmt.Sprintf("operator for processor %d", pid))
+		spansByProcID[pid].SetTag(execinfrapb.FlowIDTagKey, flowID.String())
 		spansByProcID[pid].SetTag(execinfrapb.ProcessorIDTagKey, pid)
 	}
 	for _, vsc := range vectorizedStatsCollectors {
@@ -805,7 +807,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 						// Start a separate recording so that GetRecording will return
 						// the recordings for only the child spans containing stats.
 						ctx, span := tracing.ChildSpanSeparateRecording(ctx, "")
-						finishVectorizedStatsCollectors(ctx, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscs, s.procIDs)
+						finishVectorizedStatsCollectors(ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscs, s.procIDs)
 						return []execinfrapb.ProducerMetadata{{TraceData: tracing.GetRecording(span)}}
 					},
 				},
@@ -834,7 +836,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			vscq := append([]*colexec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
 			outputStatsToTrace = func() {
 				finishVectorizedStatsCollectors(
-					ctx, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscq, s.procIDs,
+					ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscq, s.procIDs,
 				)
 			}
 		}

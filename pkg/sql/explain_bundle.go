@@ -99,16 +99,19 @@ func setExplainBundleResult(
 //
 // Returns the bundle ID, which is the key for the row added in
 // statement_diagnostics.
-func buildStatementBundle(plan *planTop, trace string) (*bytes.Buffer, error) {
+func buildStatementBundle(
+	plan *planTop, trace tracing.Recording, traceJSONStr string,
+) (*bytes.Buffer, error) {
 	if plan == nil {
 		return nil, errors.AssertionFailedf("execution terminated early")
 	}
-	b := makeStmtBundleBuilder(plan, trace)
+	b := makeStmtBundleBuilder(plan)
 
 	b.addStatement()
 	b.addOptPlans()
 	b.addExecPlan()
-	b.addTrace()
+	b.addDistSQLDiagrams(trace)
+	b.addTrace(traceJSONStr)
 
 	return b.finalize()
 }
@@ -117,14 +120,11 @@ func buildStatementBundle(plan *planTop, trace string) (*bytes.Buffer, error) {
 type stmtBundleBuilder struct {
 	plan *planTop
 
-	// trace is the recorded trace (formatted as JSON).
-	trace string
-
 	z memZipper
 }
 
-func makeStmtBundleBuilder(plan *planTop, trace string) stmtBundleBuilder {
-	b := stmtBundleBuilder{plan: plan, trace: trace}
+func makeStmtBundleBuilder(plan *planTop) stmtBundleBuilder {
+	b := stmtBundleBuilder{plan: plan}
 	b.z.Init()
 	return b
 }
@@ -164,9 +164,33 @@ func (b *stmtBundleBuilder) addExecPlan() {
 	}
 }
 
-func (b *stmtBundleBuilder) addTrace() {
-	if b.trace != "" {
-		b.z.AddFile("trace.json", b.trace)
+func (b *stmtBundleBuilder) addDistSQLDiagrams(trace tracing.Recording) {
+	for i, d := range b.plan.distSQLDiagrams {
+		d.AddSpans(trace)
+		_, url, err := d.ToURL()
+
+		var contents string
+		if err != nil {
+			contents = err.Error()
+		} else {
+			contents = fmt.Sprintf(`<meta http-equiv="Refresh" content="0; url=%s">`, url.String())
+		}
+
+		var filename string
+		if len(b.plan.distSQLDiagrams) == 1 {
+			filename = "distsql.html"
+		} else {
+			// TODO(radu): it would be great if we could distinguish between
+			// subqueries/main query/postqueries here.
+			filename = fmt.Sprintf("distsql-%d.html", i+1)
+		}
+		b.z.AddFile(filename, contents)
+	}
+}
+
+func (b *stmtBundleBuilder) addTrace(traceJSONStr string) {
+	if traceJSONStr != "" {
+		b.z.AddFile("trace.json", traceJSONStr)
 	}
 }
 
