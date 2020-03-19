@@ -172,3 +172,43 @@ query T
 SELECT * FROM tt
 ----
 foo
+
+# Tests for comments getting moved during truncate.
+subtest comments
+
+statement ok
+CREATE TABLE t (
+  x INT,
+  y INT,
+  z INT
+);
+COMMENT ON COLUMN t.x IS '''hi''); DROP TABLE t;';
+COMMENT ON COLUMN t.z IS 'comm"en"t2';
+TRUNCATE t
+
+query TT
+SELECT column_name, comment FROM [SHOW COLUMNS FROM t WITH COMMENT] ORDER BY column_name
+----
+rowid  NULL
+x      'hi'); DROP TABLE t;
+y      NULL
+z      comm"en"t2
+
+# Ensure that truncate comment reasignment works when index and column IDs
+# don't all start from 1.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x INT, y INT, z INT);
+ALTER TABLE t DROP COLUMN y;
+ALTER TABLE t ADD COLUMN y INT;
+ALTER TABLE t DROP COLUMN y;
+ALTER TABLE t ADD COLUMN y INT;
+COMMENT ON COLUMN t.y IS 'hello1';
+
+query TT rowsort
+SELECT column_name, comment FROM [SHOW COLUMNS FROM t WITH COMMENT]
+----
+rowid  NULL
+x      NULL
+y      hello1
+z      NULL
