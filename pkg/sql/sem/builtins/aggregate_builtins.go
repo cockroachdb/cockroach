@@ -292,14 +292,9 @@ var aggregates = map[string]builtinDefinition{
 			"Calculates the variance of the selected values."),
 	),
 
-	"stddev": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntStdDevAggregate,
-			"Calculates the standard deviation of the selected values."),
-		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalStdDevAggregate,
-			"Calculates the standard deviation of the selected values."),
-		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatStdDevAggregate,
-			"Calculates the standard deviation of the selected values."),
-	),
+	// stddev is a historical alias for stddev_samp.
+	"stddev":      makeStdDevBuiltin(),
+	"stddev_samp": makeStdDevBuiltin(),
 
 	"xor_agg": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Bytes}, types.Bytes, newBytesXorAggregate,
@@ -407,6 +402,17 @@ func makeAggOverloadWithReturnType(
 		},
 		Info: info,
 	}
+}
+
+func makeStdDevBuiltin() builtinDefinition {
+	return makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntStdDevAggregate,
+			"Calculates the standard deviation of the selected values."),
+		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalStdDevAggregate,
+			"Calculates the standard deviation of the selected values."),
+		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatStdDevAggregate,
+			"Calculates the standard deviation of the selected values."),
+	)
 }
 
 var _ tree.AggregateFunc = &arrayAggregate{}
