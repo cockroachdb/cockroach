@@ -528,7 +528,7 @@ func TestCantLeaseDeletedTable(testingT *testing.T) {
 			},
 		},
 		// Disable GC job.
-		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func() { select {} }},
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { select {} }},
 	}
 
 	t := newLeaseTest(testingT, params)
@@ -619,7 +619,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 			},
 		},
 		// Disable GC job.
-		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func() { select {} }},
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { select {} }},
 	}
 	s, db, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
