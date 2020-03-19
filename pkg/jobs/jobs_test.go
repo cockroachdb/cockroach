@@ -864,7 +864,7 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := woodyJob.Succeeded(ctx, nil); err != nil {
+		if err := woodyJob.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if err := woodyExp.verify(woodyJob.ID(), jobs.StatusSucceeded); err != nil {
@@ -910,7 +910,7 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := buzzJob.Failed(ctx, errors.New("Buzz Lightyear can't fly"), nil); err != nil {
+		if err := buzzJob.Failed(ctx, errors.New("Buzz Lightyear can't fly")); err != nil {
 			t.Fatal(err)
 		}
 		if err := buzzExp.verify(buzzJob.ID(), jobs.StatusFailed); err != nil {
@@ -935,7 +935,7 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := sidJob.Failed(ctx, errors.New("Sid is a total failure"), nil); err != nil {
+		if err := sidJob.Failed(ctx, errors.New("Sid is a total failure")); err != nil {
 			t.Fatal(err)
 		}
 		sidExp.Error = "Sid is a total failure"
@@ -959,7 +959,7 @@ func TestJobLifecycle(t *testing.T) {
 			if err := job.Started(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if err := job.Succeeded(ctx, nil); err != nil {
+			if err := job.Succeeded(ctx); err != nil {
 				t.Fatal(err)
 			}
 			if err := exp.verify(job.ID(), jobs.StatusSucceeded); err != nil {
@@ -970,7 +970,7 @@ func TestJobLifecycle(t *testing.T) {
 		t.Run("non-nil error marks job as failed", func(t *testing.T) {
 			job, exp := createDefaultJob()
 			exp.Error = "boom"
-			if err := job.Failed(ctx, errors.New(exp.Error), nil); err != nil {
+			if err := job.Failed(ctx, errors.New(exp.Error)); err != nil {
 				t.Fatal(err)
 			}
 			if err := exp.verify(job.ID(), jobs.StatusFailed); err != nil {
@@ -985,7 +985,7 @@ func TestJobLifecycle(t *testing.T) {
 			); err != nil {
 				t.Fatal(err)
 			}
-			if err := job.Succeeded(ctx, nil); !testutils.IsError(err, "wrong wireType") {
+			if err := job.Succeeded(ctx); !testutils.IsError(err, "wrong wireType") {
 				t.Fatalf("unexpected: %v", err)
 			}
 		})
@@ -997,7 +997,7 @@ func TestJobLifecycle(t *testing.T) {
 			); err != nil {
 				t.Fatal(err)
 			}
-			if err := job.Failed(ctx, errors.New("boom"), nil); !testutils.IsError(err, "wrong wireType") {
+			if err := job.Failed(ctx, errors.New("boom")); !testutils.IsError(err, "wrong wireType") {
 				t.Fatalf("unexpected: %v", err)
 			}
 		})
@@ -1009,7 +1009,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := registry.PauseRequested(ctx, nil, *job.ID()); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Paused(ctx, nil); err != nil {
+		if err := job.Paused(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if err := exp.verify(job.ID(), jobs.StatusPaused); err != nil {
@@ -1018,6 +1018,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := registry.Resume(ctx, nil, *job.ID()); err != nil {
 			t.Fatal(err)
 		}
+		// Resume the job again to ensure that the resumption is idempotent.
 		if err := registry.Resume(ctx, nil, *job.ID()); err != nil {
 			t.Fatal(err)
 		}
@@ -1026,7 +1027,7 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		// PauseRequested fails after job is successful.
-		if err := job.Succeeded(ctx, nil); err != nil {
+		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if err := registry.PauseRequested(ctx, nil, *job.ID()); !testutils.IsError(err, "cannot be requested to be paused") {
@@ -1063,7 +1064,7 @@ func TestJobLifecycle(t *testing.T) {
 			if err := registry.PauseRequested(ctx, nil, *job.ID()); err != nil {
 				t.Fatal(err)
 			}
-			if err := job.Paused(ctx, nil); err != nil {
+			if err := job.Paused(ctx); err != nil {
 				t.Fatal(err)
 			}
 			if err := registry.CancelRequested(ctx, nil, *job.ID()); err != nil {
@@ -1076,7 +1077,7 @@ func TestJobLifecycle(t *testing.T) {
 
 		{
 			job, _ := startLeasedJob(t, defaultRecord)
-			if err := job.Succeeded(ctx, nil); err != nil {
+			if err := job.Succeeded(ctx); err != nil {
 				t.Fatal(err)
 			}
 			expectedErr := "job with status succeeded cannot be requested to be canceled"
@@ -1099,7 +1100,7 @@ func TestJobLifecycle(t *testing.T) {
 
 		{
 			job, _ := startLeasedJob(t, defaultRecord)
-			if err := job.Succeeded(ctx, nil); err != nil {
+			if err := job.Succeeded(ctx); err != nil {
 				t.Fatal(err)
 			}
 			expectedErr := fmt.Sprintf("job with status %s cannot be resumed", jobs.StatusSucceeded)
@@ -1140,10 +1141,10 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Succeeded(ctx, nil); err != nil {
+		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Succeeded(ctx, nil); err != nil {
+		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -1209,7 +1210,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Succeeded(ctx, nil); err != nil {
+		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.FractionProgressed(ctx, jobs.FractionUpdater(0.5)); !testutils.IsError(
@@ -1251,7 +1252,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.FractionProgressed(ctx, jobs.FractionUpdater(0.2)); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Succeeded(ctx, nil); err != nil {
+		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
 		exp.FractionCompleted = 1.0

@@ -56,17 +56,16 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 			Description: "testing",
 			Statement:   "SELECT 1",
 			Username:    "root",
-			Details: jobspb.ImportDetails{
-				Tables: []jobspb.ImportDetails_Table{
+			Details: jobspb.SchemaChangeGCDetails{
+				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
 					{
-						Desc: &sqlbase.TableDescriptor{
-							ID: 1,
-						},
+						ID:       42,
+						DropTime: s0.Clock().PhysicalNow(),
 					},
 				},
 			},
-			Progress:      jobspb.ImportProgress{},
-			DescriptorIDs: []sqlbase.ID{1},
+			Progress:      jobspb.SchemaChangeGCProgress{},
+			DescriptorIDs: []sqlbase.ID{42},
 		}
 	}
 	mkJobAndRecord := func() (j *jobs.Job, rec *ptpb.Record) {
@@ -81,12 +80,12 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 		return j, rec
 	}
 	jMovedToFailed, recMovedToFailed := mkJobAndRecord()
-	require.NoError(t, jMovedToFailed.Failed(ctx, io.ErrUnexpectedEOF, func(ctx context.Context, txn *kv.Txn) error {
-		return nil
+	require.NoError(t, s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return jr.Failed(ctx, txn, *jMovedToFailed.ID(), io.ErrUnexpectedEOF)
 	}))
 	jFinished, recFinished := mkJobAndRecord()
-	require.NoError(t, jFinished.Succeeded(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return nil
+	require.NoError(t, s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return jr.Succeeded(ctx, txn, *jFinished.ID())
 	}))
 	_, recRemains := mkJobAndRecord()
 	ensureNotExists := func(ctx context.Context, txn *kv.Txn, ptsID uuid.UUID) (err error) {

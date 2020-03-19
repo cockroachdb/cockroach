@@ -678,6 +678,24 @@ func (r *Registry) PauseRequested(ctx context.Context, txn *kv.Txn, id int64) er
 	return job.WithTxn(txn).pauseRequested(ctx, nil)
 }
 
+// succeeded marks the job with id as succeeded.
+func (r *Registry) Succeeded(ctx context.Context, txn *kv.Txn, id int64) error {
+	job, _, err := r.getJobFn(ctx, txn, id)
+	if err != nil {
+		return err
+	}
+	return job.WithTxn(txn).succeeded(ctx, nil)
+}
+
+// Failed marks the job with id as failed.
+func (r *Registry) Failed(ctx context.Context, txn *kv.Txn, id int64, causingError error) error {
+	job, _, err := r.getJobFn(ctx, txn, id)
+	if err != nil {
+		return err
+	}
+	return job.WithTxn(txn).failed(ctx, causingError, nil)
+}
+
 // Resume resumes the paused job with id using the specified txn (may be nil).
 func (r *Registry) Resume(ctx context.Context, txn *kv.Txn, id int64) error {
 	job, _, err := r.getJobFn(ctx, txn, id)
@@ -811,7 +829,7 @@ func (r *Registry) stepThroughStateMachine(
 			errorMsg := fmt.Sprintf("job %d: successful bu unexpected error provided", *job.ID())
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr, errorMsg)
 		}
-		if err := job.Succeeded(ctx, nil); err != nil {
+		if err := job.succeeded(ctx, nil); err != nil {
 			// If it didn't succeed, we consider the job as failed and need to go
 			// through reverting state first.
 			// TODO(spaskob): this is silly, we should remove the OnSuccess hooks and
@@ -821,7 +839,7 @@ func (r *Registry) stepThroughStateMachine(
 		}
 		return nil
 	case StatusReverting:
-		if err := job.Reverted(ctx, jobErr, nil); err != nil {
+		if err := job.reverted(ctx, jobErr, nil); err != nil {
 			// If we can't transactionally mark the job as reverting then it will be
 			// restarted during the next adopt loop and it will be retried.
 			return errors.Wrapf(err, "job %d: could not mark as reverting: %s", *job.ID(), jobErr)
@@ -858,7 +876,7 @@ func (r *Registry) stepThroughStateMachine(
 			errorMsg := fmt.Sprintf("job %d: has StatusFailed but no error was provided", *job.ID())
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr, errorMsg)
 		}
-		if err := job.Failed(ctx, jobErr, nil); err != nil {
+		if err := job.failed(ctx, jobErr, nil); err != nil {
 			// If we can't transactionally mark the job as failed then it will be
 			// restarted during the next adopt loop and reverting will be retried.
 			return errors.Wrapf(err, "job %d: could not mark as failed: %s", *job.ID(), jobErr)
@@ -1090,7 +1108,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		resumeCtx, cancel := r.makeCtx()
 
 		if pauseRequested := status == StatusPauseRequested; pauseRequested {
-			if err := job.Paused(ctx, func(context.Context, *kv.Txn) error {
+			if err := job.paused(ctx, func(context.Context, *kv.Txn) error {
 				r.unregister(*id)
 				return nil
 			}); err != nil {
@@ -1102,7 +1120,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		}
 
 		if cancelRequested := status == StatusCancelRequested; cancelRequested {
-			if err := job.Reverted(ctx, errJobCanceled, func(context.Context, *kv.Txn) error {
+			if err := job.reverted(ctx, errJobCanceled, func(context.Context, *kv.Txn) error {
 				// Unregister the job in case it is running on the node.
 				// Unregister is a no-op for jobs that are not running.
 				r.unregister(*id)
