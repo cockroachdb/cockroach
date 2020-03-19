@@ -981,6 +981,10 @@ type logicTest struct {
 
 	curPath   string
 	curLineNo int
+
+	// overridingVectorizeBatchSize indicates whether or not the
+	// logic test is going to be run with batch size set to 1.
+	overridingVectorizeBatchSize bool
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1258,7 +1262,13 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		); err != nil {
 			t.Fatal(err)
 		}
-
+	}
+	if t.overridingVectorizeBatchSize {
+		if _, err := t.cluster.ServerConn(0).Exec(
+			"SET CLUSTER SETTING sql.testing.vectorize.batch_size to 1",
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if cfg.overrideAutoStats != "" {
@@ -2478,6 +2488,15 @@ func RunLogicTest(t *testing.T, globs ...string) {
 		}
 	}
 
+	// Determining whether or not to override batch size for the entire logic
+	// test to 1.
+	rng, _ := randutil.NewPseudoRand()
+	overrideVectorizeBatchSize := false
+	if rng.Float64() < 0.5 {
+		overrideVectorizeBatchSize = true
+		t.Log("override batchSize to 1\n")
+	}
+
 	// The tests below are likely to run concurrently; `log` is shared
 	// between all the goroutines and thus all tests, so it doesn't make
 	// sense to try to use separate `log.Scope` instances for each test.
@@ -2520,10 +2539,11 @@ func RunLogicTest(t *testing.T, globs ...string) {
 					}
 					rng, _ := randutil.NewPseudoRand()
 					lt := logicTest{
-						rootT:           t,
-						verbose:         verbose,
-						perErrorSummary: make(map[string][]string),
-						rng:             rng,
+						rootT:                        t,
+						verbose:                      verbose,
+						perErrorSummary:              make(map[string][]string),
+						rng:                          rng,
+						overridingVectorizeBatchSize: overrideVectorizeBatchSize,
 					}
 					if *printErrorSummary {
 						defer lt.printErrorSummary()

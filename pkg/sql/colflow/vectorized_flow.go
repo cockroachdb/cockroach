@@ -403,6 +403,7 @@ func finishVectorizedStatsCollectors(
 			vsc.VectorizedStats.Time = 0
 			vsc.MaxAllocatedMem = 0
 			vsc.MaxAllocatedDisk = 0
+			vsc.NumBatches = 0
 		}
 		if vsc.ID < 0 {
 			// Ignore stats collectors not associated with a processor.
