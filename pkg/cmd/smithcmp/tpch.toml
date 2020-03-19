@@ -524,7 +524,7 @@ set vectorize=auto;
 addr = "postgresql://root@localhost:26257/tpch?sslmode=disable"
 allowmutations = true
 initsql = """
-set vectorize=experimental_on;
+set vectorize=on;
 """
 
 [databases.postgres]

@@ -32,5 +32,5 @@ set vectorize=off;
 addr = "postgresql://root@localhost:26257?sslmode=disable"
 allowmutations = true
 initsql = """
-set vectorize=experimental_on;
+set vectorize=on;
 """
