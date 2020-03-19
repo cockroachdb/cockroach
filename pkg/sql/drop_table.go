@@ -407,12 +407,7 @@ func (p *planner) initiateDropTable(
 		}
 	}
 	for jobID := range jobIDs {
-		job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
-		if err != nil {
-			return err
-		}
-
-		if err := job.WithTxn(p.txn).Succeeded(ctx, nil); err != nil {
+		if err := p.ExecCfg().JobRegistry.Succeeded(ctx, p.txn, jobID); err != nil {
 			return errors.Wrapf(err,
 				"failed to mark job %d as as successful", errors.Safe(jobID))
 		}

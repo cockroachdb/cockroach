@@ -1193,8 +1193,11 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 
 		// Mark other reversed mutation jobs as failed.
 		for m := range droppedMutations {
-			_, err := markJobFailed(ctx, txn, tableDesc, m, sc.jobRegistry, causingError)
+			jobID, err := getJobIDForMutationWithDescriptor(ctx, tableDesc, m)
 			if err != nil {
+				return err
+			}
+			if err := sc.jobRegistry.Failed(ctx, txn, jobID, causingError); err != nil {
 				return err
 			}
 		}
@@ -1228,28 +1231,6 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 	}
 
 	return nil
-}
-
-// Mark the job associated with the mutation as failed.
-func markJobFailed(
-	ctx context.Context,
-	txn *kv.Txn,
-	tableDesc *sqlbase.TableDescriptor,
-	mutationID sqlbase.MutationID,
-	jobRegistry *jobs.Registry,
-	causingError error,
-) (*jobs.Job, error) {
-	// Mark job as failed.
-	jobID, err := getJobIDForMutationWithDescriptor(ctx, tableDesc, mutationID)
-	if err != nil {
-		return nil, err
-	}
-	job, err := jobRegistry.LoadJobWithTxn(ctx, jobID, txn)
-	if err != nil {
-		return nil, err
-	}
-	err = job.WithTxn(txn).Failed(ctx, causingError, nil)
-	return job, err
 }
 
 // updateJobForRollback updates the schema change job in the case of a rollback.
