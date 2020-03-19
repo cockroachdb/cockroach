@@ -30,7 +30,9 @@ import (
 	"text/template"
 	"time"
 
+	crdberrors "github.com/cockroachdb/errors"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
+	rperrors "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ui"
 	clog "github.com/cockroachdb/cockroach/pkg/util/log"
@@ -78,6 +80,21 @@ type SyncedCluster struct {
 
 	// Used to stash debug information.
 	DebugDir string
+}
+
+type CmdKind int
+
+const (
+	CockroachCmd CmdKind = iota
+	OtherCmd
+)
+
+func (ck CmdKind) classifyError(err error) rperrors.Error {
+	if ck == CockroachCmd {
+		return rperrors.ClassifyCockroachError(err)
+	}
+
+	return rperrors.ClassifyCmdError(err)
 }
 
 func (c *SyncedCluster) host(index int) string {
@@ -428,8 +445,20 @@ done
 	return ch
 }
 
-// Run TODO(peter): document
-func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd string) error {
+// Run a command on >= 1 node in the cluster.
+//
+// When running on just one node, the command output is streamed to stdout.
+// When running on multiple nodes, the commands run in parallel, their output
+// is cached and then emitted all together once all commands are completed.
+//
+// stdout: Where stdout messages are written
+// stderr: Where stderr messages are written
+// nodes: The cluster nodes where the command will be run.
+// cmdKind: Which type of command is being run? This allows refined error reporting.
+// title: A description of the command being run that is output to the logs.
+// cmd: The command to run.
+func (c *SyncedCluster) Run(
+	stdout, stderr io.Writer, nodes []int, cmdKind CmdKind, title, cmd string) error {
 	// Stream output if we're running the command on only 1 node.
 	stream := len(nodes) == 1
 	var display string
@@ -475,12 +504,21 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd st
 			sess.SetStdout(stdout)
 			sess.SetStderr(stderr)
 			errors[i] = sess.Run(nodeCmd)
+			if errors[i] != nil {
+				var err error = cmdKind.classifyError(errors[i])
+				detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", nodes[i], cmd)
+				err = crdberrors.WithDetail(err, detailMsg)
+				errors[i] = err
+			}
 			return nil, nil
 		}
 
 		out, err := sess.CombinedOutput(nodeCmd)
 		msg := strings.TrimSpace(string(out))
 		if err != nil {
+			err = cmdKind.classifyError(err)
+			detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", nodes[i], cmd)
+			err = crdberrors.WithDetail(err, detailMsg)
 			errors[i] = err
 			msg += fmt.Sprintf("\n%v", err)
 		}
@@ -494,13 +532,10 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd st
 		}
 	}
 
-	for _, err := range errors {
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return rperrors.SelectPriorityError(errors)
 }
+
+
 
 // Wait TODO(peter): document
 func (c *SyncedCluster) Wait() error {
