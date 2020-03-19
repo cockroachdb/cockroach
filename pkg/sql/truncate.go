@@ -12,6 +12,8 @@ package sql
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -413,107 +415,90 @@ func reassignComment(
 		}
 	}
 
-	for i := range oldTableDesc.Columns {
-		id := oldTableDesc.Columns[i].ID
-		err = reassignColumnComment(ctx, p, oldTableDesc.ID, newTableDesc.ID, id)
-		if err != nil {
-			return err
-		}
+	if err := reassignAllColumnComments(ctx, p, oldTableDesc.ID, newTableDesc.ID, oldTableDesc.Columns); err != nil {
+		return err
 	}
 
-	for _, indexDesc := range oldTableDesc.Indexes {
-		err = reassignIndexComment(ctx, p, oldTableDesc.ID, newTableDesc.ID, indexDesc.ID)
-		if err != nil {
-			return err
-		}
+	if err := reassignAllIndexComments(ctx, p, oldTableDesc.ID, newTableDesc.ID, oldTableDesc.Indexes); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-// reassignColumnComment reassign comment on column.
-func reassignColumnComment(
-	ctx context.Context, p *planner, oldID sqlbase.ID, newID sqlbase.ID, columnID sqlbase.ColumnID,
+// reassignAllColumnComments moves all column comments from oldID to newID.
+func reassignAllColumnComments(
+	ctx context.Context,
+	p *planner,
+	oldID sqlbase.ID,
+	newID sqlbase.ID,
+	columns []sqlbase.ColumnDescriptor,
 ) error {
-	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+	if len(columns) == 0 {
+		return nil
+	}
+	var in strings.Builder
+	in.WriteString("(")
+	for i := range columns {
+		if i > 0 {
+			in.WriteString(", ")
+		}
+		in.WriteString(fmt.Sprintf("%d", columns[i].ID))
+	}
+	in.WriteString(")")
+	inString := in.String()
+
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
-		"select-column-comment",
+		"update-column-comments",
 		p.txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-		`SELECT comment FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3`,
-		keys.ColumnCommentType,
+		fmt.Sprintf(
+			`UPDATE system.comments SET object_id=$1 WHERE object_id=$2 AND type=$3 AND sub_id IN %s`,
+			inString,
+		),
+		newID,
 		oldID,
-		columnID)
-	if err != nil {
-		return err
-	}
-
-	if comment != nil {
-		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-			ctx,
-			"set-column-comment",
-			p.txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-			"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
-			keys.ColumnCommentType,
-			newID,
-			columnID,
-			comment[0])
-		if err != nil {
-			return err
-		}
-
-		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-			ctx,
-			"delete-column-comment",
-			p.txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
-			keys.ColumnCommentType,
-			oldID,
-			columnID)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+		keys.ColumnCommentType,
+	)
+	return err
 }
 
-// reassignIndexComment reassigns a comment on an index.
-func reassignIndexComment(
-	ctx context.Context, p *planner, oldTableID, newTableID sqlbase.ID, indexID sqlbase.IndexID,
+// reassignAllIndexComments moves all comments from oldTableID to newTableID.
+func reassignAllIndexComments(
+	ctx context.Context,
+	p *planner,
+	oldTableID, newTableID sqlbase.ID,
+	indexes []sqlbase.IndexDescriptor,
 ) error {
-	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+	if len(indexes) == 0 {
+		return nil
+	}
+	var in strings.Builder
+	in.WriteString("(")
+	for i := range indexes {
+		if i > 0 {
+			in.WriteString(", ")
+		}
+		in.WriteString(fmt.Sprintf("%d", indexes[i].ID))
+	}
+	in.WriteString(")")
+	inString := in.String()
+
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
-		"select-index-comment",
+		"update-index-comments",
 		p.txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-		`SELECT comment FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3`,
-		keys.IndexCommentType,
+		fmt.Sprintf(
+			`UPDATE system.comments SET object_id=$1 WHERE object_id=$2 AND type=$3 AND sub_id IN %s`,
+			inString,
+		),
+		newTableID,
 		oldTableID,
-		indexID)
-	if err != nil {
-		return err
-	}
-
-	if comment != nil {
-		err = p.upsertIndexComment(
-			ctx,
-			newTableID,
-			indexID,
-			string(tree.MustBeDString(comment[0])))
-		if err != nil {
-			return err
-		}
-
-		err = p.removeIndexComment(ctx, oldTableID, indexID)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+		keys.IndexCommentType,
+	)
+	return err
 }
 
 // ClearTableDataInChunks truncates the data of a table in chunks. It deletes a
