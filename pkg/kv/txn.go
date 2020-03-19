@@ -191,9 +191,15 @@ func (txn *Txn) status() roachpb.TransactionStatus {
 	return txn.mu.sender.TxnStatus()
 }
 
-// IsCommitted returns true if the transaction has the committed status.
+// IsCommitted returns true iff the transaction has the committed status.
 func (txn *Txn) IsCommitted() bool {
 	return txn.status() == roachpb.COMMITTED
+}
+
+// IsOpen returns true iff the transaction is in the open state where
+// it can accept further commands.
+func (txn *Txn) IsOpen() bool {
+	return txn.status() == roachpb.PENDING
 }
 
 // SetUserPriority sets the transaction's user priority. Transactions default to
