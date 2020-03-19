@@ -204,6 +204,7 @@ type Server struct {
 	// shared between the sql.Server and the statusServer.
 	sessionRegistry        *sql.SessionRegistry
 	jobRegistry            *jobs.Registry
+	migMgr                 *sqlmigrations.Manager
 	statsRefresher         *stats.Refresher
 	replicationReporter    *reports.Reporter
 	temporaryObjectCleaner *sql.TemporaryObjectCleaner
@@ -1716,6 +1717,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.ClusterSettings(),
 		s.jobRegistry,
 	)
+	s.migMgr = migMgr
 
 	// Start garbage collecting system events.
 	s.startSystemLogsGC(ctx)
