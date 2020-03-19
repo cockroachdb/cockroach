@@ -72,6 +72,10 @@ func newFileUploadMachine(
 	}()
 	c.parsingEvalCtx = c.p.EvalContext()
 
+	if err := c.p.RequireAdminRole(ctx, "upload to nodelocal"); err != nil {
+		return nil, err
+	}
+
 	optsFn, err := f.c.p.TypeAsStringOpts(n.Options, copyFileOptionExpectValues)
 	if err != nil {
 		return nil, err
