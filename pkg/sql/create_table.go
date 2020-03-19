@@ -187,13 +187,19 @@ func (n *createTableNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.CreateTempTableCounter)
 	}
 
-	// Guard against creating non-partitioned indexes on a partitioned table,
+	// Warn against creating non-partitioned indexes on a partitioned table,
 	// which is undesirable in most cases.
-	if params.SessionData().SafeUpdates && n.n.PartitionBy != nil {
+	if n.n.PartitionBy != nil {
 		for _, def := range n.n.Defs {
 			if d, ok := def.(*tree.IndexTableDef); ok {
 				if d.PartitionBy == nil {
-					return pgerror.DangerousStatementf("non-partitioned index on partitioned table")
+					params.p.SendClientNotice(
+						params.ctx,
+						errors.WithHint(
+							pgerror.Noticef("creating non-partitioned index on partitioned table may not be performant"),
+							"Consider modifying the index such that it is also partitioned.",
+						),
+					)
 				}
 			}
 		}
