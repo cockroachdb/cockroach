@@ -319,3 +319,14 @@ SET DATESTYLE = ISO;
   SET lock_timeout = 0;
   SET idle_in_transaction_session_timeout = 0;
   SET row_security = off;
+
+# Ensure that we can set variables to on/off.
+statement ok
+SET enable_zigzag_join = 'on';
+SET enable_zigzag_join = 'off';
+SET enable_zigzag_join = 'true';
+SET enable_zigzag_join = 'false';
+SET enable_zigzag_join = on;
+SET enable_zigzag_join = off;
+SET enable_zigzag_join = true;
+SET enable_zigzag_join = false

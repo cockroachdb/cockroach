@@ -291,7 +291,7 @@ var varGen = map[string]sessionVar{
 	},
 	// See https://www.postgresql.org/docs/9.3/static/runtime-config-client.html#GUC-DEFAULT-TRANSACTION-READ-ONLY
 	`default_transaction_read_only`: {
-		GetStringVal: makeBoolGetStringValFn("default_transaction_read_only"),
+		GetStringVal: makePostgresBoolGetStringValFn("default_transaction_read_only"),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			b, err := parsePostgresBool(s)
 			if err != nil {
@@ -326,7 +326,7 @@ var varGen = map[string]sessionVar{
 
 	// CockroachDB extension.
 	`experimental_force_split_at`: {
-		GetStringVal: makeBoolGetStringValFn(`experimental_force_split_at`),
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_force_split_at`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			b, err := parsePostgresBool(s)
 			if err != nil {
@@ -343,7 +343,7 @@ var varGen = map[string]sessionVar{
 
 	// CockroachDB extension.
 	`enable_zigzag_join`: {
-		GetStringVal: makeBoolGetStringValFn(`enable_zigzag_join`),
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_zigzag_join`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			b, err := parsePostgresBool(s)
 			if err != nil {
@@ -445,7 +445,7 @@ var varGen = map[string]sessionVar{
 
 	// CockroachDB extension.
 	`experimental_optimizer_foreign_keys`: {
-		GetStringVal: makeBoolGetStringValFn(`experimental_optimizer_foreign_keys`),
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_optimizer_foreign_keys`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			b, err := parsePostgresBool(s)
 			if err != nil {
@@ -513,7 +513,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) string {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData.ForceSavepointRestart)
 		},
-		GetStringVal: makeBoolGetStringValFn("force_savepoint_restart"),
+		GetStringVal: makePostgresBoolGetStringValFn("force_savepoint_restart"),
 		Set: func(_ context.Context, m *sessionDataMutator, val string) error {
 			b, err := parsePostgresBool(val)
 			if err != nil {
@@ -577,7 +577,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) string {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData.SafeUpdates)
 		},
-		GetStringVal: makeBoolGetStringValFn("sql_safe_updates"),
+		GetStringVal: makePostgresBoolGetStringValFn("sql_safe_updates"),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			b, err := parsePostgresBool(s)
 			if err != nil {
@@ -750,7 +750,7 @@ var varGen = map[string]sessionVar{
 
 	// See https://www.postgresql.org/docs/10/static/hot-standby.html#HOT-STANDBY-USERS
 	`transaction_read_only`: {
-		GetStringVal: makeBoolGetStringValFn("transaction_read_only"),
+		GetStringVal: makePostgresBoolGetStringValFn("transaction_read_only"),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			b, err := parsePostgresBool(s)
 			if err != nil {
@@ -824,11 +824,23 @@ func init() {
 	}
 }
 
-func makeBoolGetStringValFn(varName string) getStringValFn {
+// makePostgresBoolGetStringValFn returns a function that evaluates and returns
+// a string representation of the first argument value.
+func makePostgresBoolGetStringValFn(varName string) getStringValFn {
 	return func(
 		ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr,
 	) (string, error) {
-		s, err := getSingleBool(varName, evalCtx, values)
+		if len(values) != 1 {
+			return "", newSingleArgVarError(varName)
+		}
+		val, err := values[0].Eval(&evalCtx.EvalContext)
+		if err != nil {
+			return "", err
+		}
+		if s, ok := val.(*tree.DString); ok {
+			return string(*s), nil
+		}
+		s, err := getSingleBool(varName, val)
 		if err != nil {
 			return "", err
 		}
@@ -937,22 +949,15 @@ var varNames = func() []string {
 	return res
 }()
 
-func getSingleBool(
-	name string, evalCtx *extendedEvalContext, values []tree.TypedExpr,
-) (*tree.DBool, error) {
-	if len(values) != 1 {
-		return nil, newSingleArgVarError(name)
-	}
-	val, err := values[0].Eval(&evalCtx.EvalContext)
-	if err != nil {
-		return nil, err
-	}
+// getSingleBool returns the boolean if the input Datum is a DBool,
+// and returns a detailed error message if not.
+func getSingleBool(name string, val tree.Datum) (*tree.DBool, error) {
 	b, ok := val.(*tree.DBool)
 	if !ok {
-		err = pgerror.Newf(pgcode.InvalidParameterValue,
+		err := pgerror.Newf(pgcode.InvalidParameterValue,
 			"parameter %q requires a Boolean value", name)
 		err = errors.WithDetailf(err,
-			"%s is a %s", values[0], errors.Safe(val.ResolvedType()))
+			"%s is a %s", val, errors.Safe(val.ResolvedType()))
 		return nil, err
 	}
 	return b, nil
