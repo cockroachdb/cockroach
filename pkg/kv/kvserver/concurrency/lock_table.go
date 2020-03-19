@@ -1663,17 +1663,12 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 	if guard == nil {
 		g = newLockTableGuardImpl()
 		g.seqNum = atomic.AddUint64(&t.seqNum, 1)
+		g.txn = req.txnMeta()
 		g.spans = req.LockSpans
-		g.readTS = req.Timestamp
-		g.writeTS = req.Timestamp
+		g.readTS = req.readConflictTimestamp()
+		g.writeTS = req.writeConflictTimestamp()
 		g.sa = spanset.NumSpanAccess - 1
 		g.index = -1
-		if req.Txn != nil {
-			g.txn = &req.Txn.TxnMeta
-			g.readTS = req.Txn.ReadTimestamp
-			g.readTS.Forward(req.Txn.MaxTimestamp)
-			g.writeTS = req.Txn.WriteTimestamp
-		}
 	} else {
 		g = guard.(*lockTableGuardImpl)
 		g.key = nil
@@ -1734,22 +1729,20 @@ func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 }
 
 // AddDiscoveredLock implements the lockTable interface.
-func (t *lockTableImpl) AddDiscoveredLock(intent *roachpb.Intent, guard lockTableGuard) error {
+func (t *lockTableImpl) AddDiscoveredLock(
+	intent *roachpb.Intent, guard lockTableGuard,
+) (added bool, _ error) {
 	t.enabledMu.RLock()
 	defer t.enabledMu.RUnlock()
 	if !t.enabled {
 		// If not enabled, don't track any locks.
-		return nil
+		return false, nil
 	}
 	g := guard.(*lockTableGuardImpl)
 	key := intent.Key
-	ss := spanset.SpanGlobal
-	if keys.IsLocal(key) {
-		ss = spanset.SpanLocal
-	}
-	sa, err := findAccessInSpans(key, ss, g.spans)
+	sa, ss, err := findAccessInSpans(key, g.spans)
 	if err != nil {
-		return err
+		return false, err
 	}
 	var l *lockState
 	tree := &t.locks[ss]
@@ -1768,7 +1761,7 @@ func (t *lockTableImpl) AddDiscoveredLock(intent *roachpb.Intent, guard lockTabl
 	} else {
 		l = iter.Cur()
 	}
-	return l.discoveredLock(&intent.Txn, intent.Txn.WriteTimestamp, g, sa)
+	return true, l.discoveredLock(&intent.Txn, intent.Txn.WriteTimestamp, g, sa)
 }
 
 // AcquireLock implements the lockTable interface.
@@ -1861,11 +1854,15 @@ func (t *lockTableImpl) tryClearLocks(force bool) {
 	}
 }
 
-// Given the key with scope ss must be in spans, returns the strongest access
-// specified in the spans.
+// Given the key must be in spans, returns the strongest access
+// specified in the spans, along with the scope of the key.
 func findAccessInSpans(
-	key roachpb.Key, ss spanset.SpanScope, spans *spanset.SpanSet,
-) (spanset.SpanAccess, error) {
+	key roachpb.Key, spans *spanset.SpanSet,
+) (spanset.SpanAccess, spanset.SpanScope, error) {
+	ss := spanset.SpanGlobal
+	if keys.IsLocal(key) {
+		ss = spanset.SpanLocal
+	}
 	for sa := spanset.NumSpanAccess - 1; sa >= 0; sa-- {
 		s := spans.GetSpans(sa, ss)
 		// First span that starts after key
@@ -1874,10 +1871,10 @@ func findAccessInSpans(
 		})
 		if i > 0 &&
 			((len(s[i-1].EndKey) > 0 && key.Compare(s[i-1].EndKey) < 0) || key.Equal(s[i-1].Key)) {
-			return sa, nil
+			return sa, ss, nil
 		}
 	}
-	return spanset.NumSpanAccess, errors.Errorf("caller violated contract")
+	return 0, 0, errors.Errorf("caller violated contract")
 }
 
 // Tries to GC locks that were previously known to have become empty.

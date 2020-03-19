@@ -994,6 +994,9 @@ const (
 // queryMeta stores metadata about a query. Stored as reference in
 // session.mu.ActiveQueries.
 type queryMeta struct {
+	// The ID of the transaction that this query is running within.
+	txnID uuid.UUID
+
 	// The timestamp when this query began execution.
 	start time.Time
 

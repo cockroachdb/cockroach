@@ -425,10 +425,34 @@ message RaftDebugResponse {
   repeated RaftRangeError errors = 2 [ (gogoproto.nullable) = false ];
 }
 
+// TxnInfo represents an in flight user transaction on some Session.
+message TxnInfo {
+  bytes id = 1 [
+    (gogoproto.customname) = "ID",
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) =
+      "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+  // The start timestamp of the transaction.
+  google.protobuf.Timestamp start = 2
+    [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+
+  // txn_description is a text description of the underlying kv.Txn, intended
+  // for troubleshooting purposes.
+  string txn_description = 3;
+}
+
 // ActiveQuery represents a query in flight on some Session.
 message ActiveQuery {
   // ID of the query (uint128 presented as a hexadecimal string).
   string id = 1 [ (gogoproto.customname) = "ID" ];
+  // The UUID of the transaction this query is running in.
+  bytes txn_id = 7 [
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) =
+      "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
   // SQL query string specified by the user.
   string sql = 2;
   // Start timestamp of this query.
@@ -480,6 +504,9 @@ message Session {
     (gogoproto.customtype) =
         "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
+  // Information about the txn in progress on this session. Nil if the
+  // session doesn't currently have a transaction.
+  TxnInfo active_txn = 12;
   // SQL string of the last query executed on this session.
   string last_active_query = 8;
   // ID of the session (uint128 represented as raw bytes).

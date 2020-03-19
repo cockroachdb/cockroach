@@ -15,12 +15,14 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -78,7 +80,6 @@ var LockTableDeadlockDetectionPushDelay = settings.RegisterDurationSetting(
 
 // lockTableWaiterImpl is an implementation of lockTableWaiter.
 type lockTableWaiterImpl struct {
-	nodeID  roachpb.NodeID
 	st      *cluster.Settings
 	stopper *stop.Stopper
 	ir      IntentResolver
@@ -298,6 +299,26 @@ func (w *lockTableWaiterImpl) WaitOn(
 	}
 }
 
+// WaitOnLock implements the lockTableWaiter interface.
+func (w *lockTableWaiterImpl) WaitOnLock(
+	ctx context.Context, req Request, intent *roachpb.Intent,
+) *Error {
+	sa, _, err := findAccessInSpans(intent.Key, req.LockSpans)
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+	return w.pushLockTxn(ctx, req, waitingState{
+		stateKind:   waitFor,
+		txn:         &intent.Txn,
+		ts:          intent.Txn.WriteTimestamp,
+		dur:         lock.Replicated,
+		key:         intent.Key,
+		held:        true,
+		access:      spanset.SpanReadWrite,
+		guardAccess: sa,
+	})
+}
+
 // pushLockTxn pushes the holder of the provided lock.
 //
 // The method blocks until the lock holder transaction experiences a state
@@ -319,15 +340,17 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// under the lock. For write-write conflicts, try to abort the lock holder
 	// entirely so the write request can revoke and replace the lock with its
 	// own lock.
+	h := w.pushHeader(req)
 	var pushType roachpb.PushTxnType
 	switch ws.guardAccess {
 	case spanset.SpanReadOnly:
 		pushType = roachpb.PUSH_TIMESTAMP
+		log.VEventf(ctx, 3, "pushing timestamp of txn %s above %s", ws.txn.ID.Short(), h.Timestamp)
 	case spanset.SpanReadWrite:
 		pushType = roachpb.PUSH_ABORT
+		log.VEventf(ctx, 3, "pushing txn %s to abort", ws.txn.ID.Short())
 	}
 
-	h := w.pushHeader(req)
 	pusheeTxn, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
 	if err != nil {
 		return err
@@ -397,9 +420,10 @@ func (w *lockTableWaiterImpl) pushRequestTxn(
 	// because it wants to block until either a) the pushee or the pusher is
 	// aborted due to a deadlock or b) the request exits the lock wait-queue and
 	// the caller of this function cancels the push.
-	pushType := roachpb.PUSH_ABORT
-
 	h := w.pushHeader(req)
+	pushType := roachpb.PUSH_ABORT
+	log.VEventf(ctx, 3, "pushing txn %s to detect request deadlock", ws.txn.ID.Short())
+
 	_, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
 	// Even if the push succeeded and aborted the other transaction to break a
 	// deadlock, there's nothing for the pusher to clean up. The conflicting
@@ -413,26 +437,15 @@ func (w *lockTableWaiterImpl) pushRequestTxn(
 
 func (w *lockTableWaiterImpl) pushHeader(req Request) roachpb.Header {
 	h := roachpb.Header{
-		Timestamp:    req.Timestamp,
+		Timestamp:    req.readConflictTimestamp(),
 		UserPriority: req.Priority,
 	}
 	if req.Txn != nil {
-		// We are going to hand the header (and thus the transaction proto)
-		// to the RPC framework, after which it must not be changed (since
-		// that could race). Since the subsequent execution of the original
-		// request might mutate the transaction, make a copy here.
-		//
-		// See #9130.
+		// We are going to hand the header (and thus the transaction proto) to
+		// the RPC framework, after which it must not be changed (since that
+		// could race). Since the subsequent execution of the original request
+		// might mutate the transaction, make a copy here. See #9130.
 		h.Txn = req.Txn.Clone()
-
-		// We must push at least to h.Timestamp, but in fact we want to
-		// go all the way up to a timestamp which was taken off the HLC
-		// after our operation started. This allows us to not have to
-		// restart for uncertainty as we come back and read.
-		obsTS, ok := h.Txn.GetObservedTimestamp(w.nodeID)
-		if ok {
-			h.Timestamp.Forward(obsTS)
-		}
 	}
 	return h
 }

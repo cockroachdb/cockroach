@@ -704,8 +704,8 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 		t.Fatal("replica was not marked as destroyed")
 	}
 
-	now := repl1.Clock().Now()
-	if err = repl1.checkExecutionCanProceed(&roachpb.BatchRequest{}, nil /* g */, now, nil /* st */); err != expErr {
+	st := &storagepb.LeaseStatus{Timestamp: repl1.Clock().Now()}
+	if err = repl1.checkExecutionCanProceed(&roachpb.BatchRequest{}, nil /* g */, st); err != expErr {
 		t.Fatalf("expected error %s, but got %v", expErr, err)
 	}
 }
@@ -1499,7 +1499,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	manual := hlc.NewManualClock(123)
-	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, 1000*time.Nanosecond))
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			pr, ok := filterArgs.Req.(*roachpb.PushTxnRequest)

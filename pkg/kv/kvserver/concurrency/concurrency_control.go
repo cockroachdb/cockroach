@@ -196,6 +196,8 @@ type ContentionHandler interface {
 	// error in the lock's wait-queue (but does not wait) and releases the
 	// guard's latches. It returns an updated guard reflecting this change.
 	// After the method returns, the original guard should no longer be used.
+	// If an error is returned then the provided guard will be released and no
+	// guard will be returned.
 	//
 	// Example usage: Txn A scans the lock table and does not see an intent on
 	// key K from txn B because the intent is not being tracked in the lock
@@ -204,7 +206,7 @@ type ContentionHandler interface {
 	// method before txn A retries its scan. During the retry, txn A scans the
 	// lock table and observes the lock on key K, so it enters the lock's
 	// wait-queue and waits for it to be resolved.
-	HandleWriterIntentError(context.Context, *Guard, *roachpb.WriteIntentError) *Guard
+	HandleWriterIntentError(context.Context, *Guard, *roachpb.WriteIntentError) (*Guard, *Error)
 
 	// HandleTransactionPushError consumes a TransactionPushError thrown by a
 	// PushTxnRequest by informing the concurrency manager about a transaction
@@ -474,7 +476,11 @@ type lockTable interface {
 	//
 	// A latch consistent with the access desired by the guard must be held on
 	// the span containing the discovered lock's key.
-	AddDiscoveredLock(*roachpb.Intent, lockTableGuard) error
+	//
+	// The method returns a boolean indicating whether the discovered lock was
+	// added to the lockTable (true) or whether it was ignored because the
+	// lockTable is currently disabled (false).
+	AddDiscoveredLock(*roachpb.Intent, lockTableGuard) (bool, error)
 
 	// AcquireLock informs the lockTable that a new lock was acquired or an
 	// existing lock was updated.
@@ -610,6 +616,22 @@ type lockTableWaiter interface {
 	// wait-queues and it is safe to re-acquire latches and scan the lockTable
 	// again.
 	WaitOn(context.Context, Request, lockTableGuard) *Error
+
+	// WaitOnLock waits on the transaction responsible for the specified lock
+	// and then ensures that the lock is cleared out of the request's way.
+	//
+	// The method should be called after dropping any latches that a request has
+	// acquired. It returns when the lock has been resolved.
+	//
+	// NOTE: this method is used when the lockTable is disabled (e.g. on a
+	// follower replica) and a lock is discovered that must be waited on (e.g.
+	// during a follower read). If/when lockTables are maintained on follower
+	// replicas by propagating lockTable state transitions through the Raft log
+	// in the ReplicatedEvalResult instead of through the (leaseholder-only)
+	// LocalResult, we should be able to remove the lockTable "disabled" state
+	// and, in turn, remove this method. This will likely fall out of pulling
+	// all replicated locks into the lockTable.
+	WaitOnLock(context.Context, Request, *roachpb.Intent) *Error
 }
 
 // txnWaitQueue holds a collection of wait-queues for transaction records.

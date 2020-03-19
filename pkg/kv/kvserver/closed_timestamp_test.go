@@ -15,11 +15,14 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -169,6 +172,79 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 	}
 	if err := g.Wait(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestClosedTimestampCanServeWithConflictingIntent validates that a read served
+// from a follower replica will wait on conflicting intents and ensure that they
+// are cleaned up if necessary to allow the read to proceed.
+func TestClosedTimestampCanServeWithConflictingIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc, _, desc, repls := setupTestClusterForClosedTimestampTesting(ctx, t, testingTargetDuration)
+	defer tc.Stopper().Stop(ctx)
+	ds := tc.Server(0).DistSenderI().(*kvcoord.DistSender)
+
+	// Write N different intents for the same transaction, where N is the number
+	// of replicas in the testing range. Each intent will be read and eventually
+	// resolved by a read on a different replica.
+	txnKey := desc.StartKey.AsRawKey()
+	txnKey = txnKey[:len(txnKey):len(txnKey)] // avoid aliasing
+	txn := roachpb.MakeTransaction("txn", txnKey, 0, tc.Server(0).Clock().Now(), 0)
+	var keys []roachpb.Key
+	for i := range repls {
+		key := append(txnKey, []byte(strconv.Itoa(i))...)
+		keys = append(keys, key)
+		put := putArgs(key, []byte("val"))
+		resp, err := kv.SendWrappedWith(ctx, ds, roachpb.Header{Txn: &txn}, put)
+		if err != nil {
+			t.Fatal(err)
+		}
+		txn.Update(resp.Header().Txn)
+	}
+
+	// Read a different intent on each replica. All should begin waiting on the
+	// intents by pushing the transaction that wrote them. None should complete.
+	ts := txn.WriteTimestamp
+	respCh := make(chan struct{}, len(keys))
+	for i, key := range keys {
+		go func(repl *kvserver.Replica, key roachpb.Key) {
+			var baRead roachpb.BatchRequest
+			r := &roachpb.ScanRequest{}
+			r.Key = key
+			r.EndKey = key.Next()
+			baRead.Add(r)
+			baRead.Timestamp = ts
+			baRead.RangeID = desc.RangeID
+
+			testutils.SucceedsSoon(t, func() error {
+				// Expect 0 rows, because the intents will be aborted.
+				_, err := expectRows(0)(repl.Send(ctx, baRead))
+				return err
+			})
+			respCh <- struct{}{}
+		}(repls[i], key)
+	}
+
+	select {
+	case <-respCh:
+		t.Fatal("request unexpectedly succeeded, should block")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	// Abort the transaction. All pushes should succeed and all intents should
+	// be resolved, allowing all reads (on the leaseholder and on followers) to
+	// proceed and finish.
+	endTxn := &roachpb.EndTxnRequest{
+		RequestHeader: roachpb.RequestHeader{Key: txn.Key},
+		Commit:        false,
+	}
+	if _, err := kv.SendWrappedWith(ctx, ds, roachpb.Header{Txn: &txn}, endTxn); err != nil {
+		t.Fatal(err)
+	}
+	for range keys {
+		<-respCh
 	}
 }
 

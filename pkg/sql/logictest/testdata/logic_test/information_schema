@@ -218,6 +218,7 @@ crdb_internal       builtin_functions
 crdb_internal       cluster_queries
 crdb_internal       cluster_sessions
 crdb_internal       cluster_settings
+crdb_internal       cluster_transactions
 crdb_internal       create_statements
 crdb_internal       feature_usage
 crdb_internal       forward_dependencies
@@ -236,6 +237,7 @@ crdb_internal       node_queries
 crdb_internal       node_runtime_info
 crdb_internal       node_sessions
 crdb_internal       node_statement_statistics
+crdb_internal       node_transactions
 crdb_internal       node_txn_stats
 crdb_internal       partitions
 crdb_internal       predefined_comments
@@ -358,6 +360,7 @@ builtin_functions
 cluster_queries
 cluster_sessions
 cluster_settings
+cluster_transactions
 create_statements
 feature_usage
 forward_dependencies
@@ -376,6 +379,7 @@ node_queries
 node_runtime_info
 node_sessions
 node_statement_statistics
+node_transactions
 node_txn_stats
 partitions
 predefined_comments
@@ -412,8 +416,8 @@ views
 pg_am
 pg_attrdef
 pg_attribute
-pg_authid
 pg_auth_members
+pg_authid
 pg_available_extensions
 pg_cast
 pg_class
@@ -505,6 +509,7 @@ system         crdb_internal       builtin_functions                  SYSTEM VIE
 system         crdb_internal       cluster_queries                    SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_sessions                   SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_settings                   SYSTEM VIEW  NO                  1
+system         crdb_internal       cluster_transactions               SYSTEM VIEW  NO                  1
 system         crdb_internal       create_statements                  SYSTEM VIEW  NO                  1
 system         crdb_internal       feature_usage                      SYSTEM VIEW  NO                  1
 system         crdb_internal       forward_dependencies               SYSTEM VIEW  NO                  1
@@ -523,6 +528,7 @@ system         crdb_internal       node_queries                       SYSTEM VIE
 system         crdb_internal       node_runtime_info                  SYSTEM VIEW  NO                  1
 system         crdb_internal       node_sessions                      SYSTEM VIEW  NO                  1
 system         crdb_internal       node_statement_statistics          SYSTEM VIEW  NO                  1
+system         crdb_internal       node_transactions                  SYSTEM VIEW  NO                  1
 system         crdb_internal       node_txn_stats                     SYSTEM VIEW  NO                  1
 system         crdb_internal       partitions                         SYSTEM VIEW  NO                  1
 system         crdb_internal       predefined_comments                SYSTEM VIEW  NO                  1
@@ -1499,6 +1505,7 @@ NULL     public   system         crdb_internal       builtin_functions          
 NULL     public   system         crdb_internal       cluster_queries                    SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_sessions                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_settings                   SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_transactions               SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_statements                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       feature_usage                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       forward_dependencies               SELECT          NULL          YES
@@ -1517,6 +1524,7 @@ NULL     public   system         crdb_internal       node_queries               
 NULL     public   system         crdb_internal       node_runtime_info                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_sessions                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_statement_statistics          SELECT          NULL          YES
+NULL     public   system         crdb_internal       node_transactions                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_txn_stats                     SELECT          NULL          YES
 NULL     public   system         crdb_internal       partitions                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       predefined_comments                SELECT          NULL          YES
@@ -1840,6 +1848,7 @@ NULL     public   system         crdb_internal       builtin_functions          
 NULL     public   system         crdb_internal       cluster_queries                    SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_sessions                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_settings                   SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_transactions               SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_statements                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       feature_usage                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       forward_dependencies               SELECT          NULL          YES
@@ -1858,6 +1867,7 @@ NULL     public   system         crdb_internal       node_queries               
 NULL     public   system         crdb_internal       node_runtime_info                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_sessions                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_statement_statistics          SELECT          NULL          YES
+NULL     public   system         crdb_internal       node_transactions                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_txn_stats                     SELECT          NULL          YES
 NULL     public   system         crdb_internal       partitions                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       predefined_comments                SELECT          NULL          YES

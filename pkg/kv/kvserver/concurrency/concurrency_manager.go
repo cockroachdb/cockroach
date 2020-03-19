@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -85,7 +86,6 @@ func NewManager(cfg Config) Manager {
 			maxLocks: cfg.MaxLockTableSize,
 		},
 		ltw: &lockTableWaiterImpl{
-			nodeID:            cfg.NodeDesc.NodeID,
 			st:                cfg.Settings,
 			stopper:           cfg.Stopper,
 			ir:                cfg.IntentResolver,
@@ -244,18 +244,24 @@ func (m *managerImpl) FinishReq(g *Guard) {
 // HandleWriterIntentError implements the ContentionHandler interface.
 func (m *managerImpl) HandleWriterIntentError(
 	ctx context.Context, g *Guard, t *roachpb.WriteIntentError,
-) *Guard {
+) (*Guard, *Error) {
 	if g.ltg == nil {
 		log.Fatalf(ctx, "cannot handle WriteIntentError %v for request without "+
 			"lockTableGuard; were lock spans declared for this request?", t)
 	}
 
 	// Add a discovered lock to lock-table for each intent and enter each lock's
-	// wait-queue.
+	// wait-queue. If the lock-table is disabled and one or more of the intents
+	// are ignored then we immediately wait on all intents.
+	wait := false
 	for i := range t.Intents {
 		intent := &t.Intents[i]
-		if err := m.lt.AddDiscoveredLock(intent, g.ltg); err != nil {
+		added, err := m.lt.AddDiscoveredLock(intent, g.ltg)
+		if err != nil {
 			log.Fatal(ctx, errors.HandleAsAssertionFailure(err))
+		}
+		if !added {
+			wait = true
 		}
 	}
 
@@ -264,7 +270,21 @@ func (m *managerImpl) HandleWriterIntentError(
 	// then re-sequence the Request by calling SequenceReq with the un-latched
 	// Guard. This is analogous to iterating through the loop in SequenceReq.
 	m.lm.Release(g.moveLatchGuard())
-	return g
+
+	// If the lockTable was disabled then we need to immediately wait on the
+	// intents to ensure that they are resolved and moved out of the request's
+	// way.
+	if wait {
+		for i := range t.Intents {
+			intent := &t.Intents[i]
+			if err := m.ltw.WaitOnLock(ctx, g.Req, intent); err != nil {
+				m.FinishReq(g)
+				return nil, err
+			}
+		}
+	}
+
+	return g, nil
 }
 
 // HandleTransactionPushError implements the ContentionHandler interface.
@@ -376,6 +396,38 @@ func (m *managerImpl) LockTableDebug() string {
 // TxnWaitQueue implements the MetricExporter interface.
 func (m *managerImpl) TxnWaitQueue() *txnwait.Queue {
 	return m.twq.(*txnwait.Queue)
+}
+
+func (r *Request) txnMeta() *enginepb.TxnMeta {
+	if r.Txn == nil {
+		return nil
+	}
+	return &r.Txn.TxnMeta
+}
+
+// readConflictTimestamp returns the maximum timestamp at which the request
+// conflicts with locks acquired by other transaction. The request must wait
+// for all locks acquired by other transactions at or below this timestamp
+// to be released. All locks acquired by other transactions above this
+// timestamp are ignored.
+func (r *Request) readConflictTimestamp() hlc.Timestamp {
+	ts := r.Timestamp
+	if r.Txn != nil {
+		ts = r.Txn.ReadTimestamp
+		ts.Forward(r.Txn.MaxTimestamp)
+	}
+	return ts
+}
+
+// writeConflictTimestamp returns the minimum timestamp at which the request
+// acquires locks when performing mutations. All writes performed by the
+// requests must take place at or above this timestamp.
+func (r *Request) writeConflictTimestamp() hlc.Timestamp {
+	ts := r.Timestamp
+	if r.Txn != nil {
+		ts = r.Txn.WriteTimestamp
+	}
+	return ts
 }
 
 func (r *Request) isSingle(m roachpb.Method) bool {

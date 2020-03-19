@@ -63,34 +63,22 @@ import (
 // as this method makes the assumption that it operates on a shallow copy (see
 // call to applyTimestampCache).
 func (r *Replica) executeWriteBatch(
-	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context, ba *roachpb.BatchRequest, st storagepb.LeaseStatus, g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
 	startTime := timeutil.Now()
 
-	// Determine the lease under which to evaluate the write.
-	var now hlc.Timestamp
-	var lease roachpb.Lease
-	var status storagepb.LeaseStatus
-	// For lease commands, use the provided previous lease for verification.
-	if ba.IsSingleSkipLeaseCheckRequest() {
-		lease = ba.GetPrevLeaseForLeaseRequest()
-		now = r.Clock().Now()
-	} else {
-		// Other write commands require that this replica has the range
-		// lease.
-		if status, now, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
-			return nil, g, pErr
-		}
-		lease = status.Lease
-	}
-	r.limitTxnMaxTimestamp(ctx, ba, status)
+	// TODO(nvanbenschoten): unlike on the read-path (executeReadOnlyBatch), we
+	// don't synchronize with r.readOnlyCmdMu here. Is that ok? What if the
+	// replica is destroyed concurrently with a write? We won't be able to
+	// successfully propose as the lease will presumably have changed, but what
+	// if we hit an error during evaluation (e.g. a ConditionFailedError)?
 
 	// Verify that the batch can be executed.
 	// NB: we only need to check that the request is in the Range's key bounds
 	// at proposal time, not at application time, because the spanlatch manager
 	// will synchronize all requests (notably EndTxn with SplitTrigger) that may
 	// cause this condition to change.
-	if err := r.checkExecutionCanProceed(ba, g, now, &status); err != nil {
+	if err := r.checkExecutionCanProceed(ba, g, &st); err != nil {
 		return nil, g, roachpb.NewError(err)
 	}
 
@@ -126,10 +114,23 @@ func (r *Replica) executeWriteBatch(
 		return nil, g, roachpb.NewError(errors.Wrap(err, "aborted before proposing"))
 	}
 
+	// Check that the lease is still valid before proposing to avoid discovering
+	// this after replication and potentially missing out on the chance to retry
+	// if the request is using AsyncConsensus. This is best-effort, but can help
+	// in cases where the request waited arbitrarily long for locks acquired by
+	// other transactions to be released while sequencing in the concurrency
+	// manager.
+	if curLease, _ := r.GetLease(); curLease.Sequence > st.Lease.Sequence {
+		curLeaseCpy := curLease // avoid letting curLease escape
+		err := newNotLeaseHolderError(&curLeaseCpy, r.store.StoreID(), r.Desc())
+		log.VEventf(ctx, 2, "%s before proposing: %s", err, ba.Summary())
+		return nil, g, roachpb.NewError(err)
+	}
+
 	// If the command is proposed to Raft, ownership of and responsibility for
 	// the concurrency guard will be assumed by Raft, so provide the guard to
 	// evalAndPropose.
-	ch, abandon, maxLeaseIndex, g, pErr := r.evalAndPropose(ctx, ba, g, &lease)
+	ch, abandon, maxLeaseIndex, g, pErr := r.evalAndPropose(ctx, ba, g, &st.Lease)
 	if pErr != nil {
 		if maxLeaseIndex != 0 {
 			log.Fatalf(
@@ -144,7 +145,7 @@ func (r *Replica) executeWriteBatch(
 	// cannot communicate under the lease's epoch. Instead the code calls EmitMLAI explicitly
 	// as a side effect of stepping up as leaseholder.
 	if maxLeaseIndex != 0 {
-		untrack(ctx, ctpb.Epoch(lease.Epoch), r.RangeID, ctpb.LAI(maxLeaseIndex))
+		untrack(ctx, ctpb.Epoch(st.Lease.Epoch), r.RangeID, ctpb.LAI(maxLeaseIndex))
 	}
 
 	// If the command was accepted by raft, wait for the range to apply it.

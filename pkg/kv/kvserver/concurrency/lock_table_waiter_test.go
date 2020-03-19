@@ -66,7 +66,6 @@ func setupLockTableWaiterTest() (*lockTableWaiterImpl, *mockIntentResolver, *moc
 	LockTableLivenessPushDelay.Override(&st.SV, 0)
 	LockTableDeadlockDetectionPushDelay.Override(&st.SV, 0)
 	w := &lockTableWaiterImpl{
-		nodeID:  2,
 		st:      st,
 		stopper: stop.NewStopper(),
 		ir:      ir,
@@ -87,10 +86,10 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	observedTS := hlc.Timestamp{WallTime: 15}
+	maxTS := hlc.Timestamp{WallTime: 15}
 	makeReq := func() Request {
 		txn := makeTxnProto("request")
-		txn.UpdateObservedTimestamp(2, observedTS)
+		txn.MaxTimestamp = maxTS
 		return Request{
 			Txn:       &txn,
 			Timestamp: txn.ReadTimestamp,
@@ -99,15 +98,15 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 
 	t.Run("state", func(t *testing.T) {
 		t.Run("waitFor", func(t *testing.T) {
-			testWaitPush(t, waitFor, makeReq, observedTS)
+			testWaitPush(t, waitFor, makeReq, maxTS)
 		})
 
 		t.Run("waitForDistinguished", func(t *testing.T) {
-			testWaitPush(t, waitForDistinguished, makeReq, observedTS)
+			testWaitPush(t, waitForDistinguished, makeReq, maxTS)
 		})
 
 		t.Run("waitElsewhere", func(t *testing.T) {
-			testWaitPush(t, waitElsewhere, makeReq, observedTS)
+			testWaitPush(t, waitElsewhere, makeReq, maxTS)
 		})
 
 		t.Run("waitSelf", func(t *testing.T) {

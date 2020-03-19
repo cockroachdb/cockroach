@@ -129,6 +129,9 @@ type TxnSender interface {
 	// SetDebugName sets the txn's debug name.
 	SetDebugName(name string)
 
+	// String returns a string representation of the txn.
+	String() string
+
 	// TxnStatus exports the txn's status.
 	TxnStatus() roachpb.TransactionStatus
 
