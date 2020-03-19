@@ -87,7 +87,9 @@ func (r schemaChangeGCResumer) Resume(
 	// TODO(pbardea): Wait for no versions.
 	execCfg := p.ExecCfg()
 	if fn := execCfg.GCJobTestingKnobs.RunBeforeResume; fn != nil {
-		fn()
+		if err := fn(r.jobID); err != nil {
+			return err
+		}
 	}
 	details, progress, err := initDetailsAndProgress(ctx, execCfg, r.jobID)
 	if err != nil {
@@ -121,6 +123,12 @@ func (r schemaChangeGCResumer) Resume(
 			// that this job is responsible for, and computing the earliest deadline
 			// from our set of cached TTL values.
 			remainingTables := getAllTablesWaitingForGC(details, progress)
+			// TODO (lucy): This is a quick workaround for the fact that
+			// getAllTablesWaitingForGC can return an empty list if all the tables
+			// have already been marked as DELETING/DELETED. Remove when that's fixed.
+			if len(remainingTables) == 0 {
+				continue
+			}
 			expired, earliestDeadline = refreshTables(ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, progress)
 			timerDuration := time.Until(earliestDeadline)
 			if expired {
