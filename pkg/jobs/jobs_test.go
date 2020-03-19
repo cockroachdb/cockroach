@@ -1981,7 +1981,6 @@ func TestStartableJob(t *testing.T) {
 		return nil
 	})
 	setResumeFunc := func(f func(ctx context.Context, _ chan<- tree.Datums) error) (cleanup func()) {
-		fmt.Println("hi")
 		prev := resumeFunc.Load()
 		resumeFunc.Store(f)
 		return func() { resumeFunc.Store(prev) }
@@ -1989,7 +1988,6 @@ func TestStartableJob(t *testing.T) {
 	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
 			OnResume: func(ctx context.Context, resultsCh chan<- tree.Datums) error {
-				fmt.Println("hey")
 				return resumeFunc.Load().(func(ctx context.Context, _ chan<- tree.Datums) error)(ctx, resultsCh)
 			},
 		}
