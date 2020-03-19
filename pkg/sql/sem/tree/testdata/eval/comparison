@@ -841,3 +841,84 @@ eval
 NULL <= NULL
 ----
 NULL
+
+eval
+NULL < ARRAY[1]
+----
+NULL
+
+eval
+NULL <= ARRAY[1]
+----
+NULL
+
+eval
+ARRAY[1] < NULL
+----
+NULL
+
+eval
+ARRAY[1] <= NULL
+----
+NULL
+
+eval
+ARRAY[1] < ARRAY[2]
+----
+true
+
+eval
+ARRAY[2] < ARRAY[2, 3]
+----
+true
+
+eval
+ARRAY[2] <= ARRAY[2]
+----
+true
+
+eval
+ARRAY[]:::INT[] < ARRAY[1]
+----
+true
+
+eval
+ARRAY[1, 2, 3] < ARRAY[1, 2]
+----
+false
+
+eval
+ARRAY[1, 2, 3] < ARRAY[1, 1]
+----
+false
+
+eval
+ARRAY[2, 2, 2, 4] < ARRAY[2, 2, 2, 5]
+----
+true
+
+eval
+ARRAY[1, 2, 3] = ARRAY[1, 2, 3]
+----
+true
+
+eval
+ARRAY[NULL]:::INT[] <= ARRAY[NULL]:::INT[]
+----
+true
+
+eval
+ARRAY[NULL, 1] >= ARRAY[NULL, 1]
+----
+true
+
+eval
+ARRAY[NULL, 1, NULL] > ARRAY[NULL, 2, NULL]
+----
+false
+
+# This differs from postgres -- crdb nulls come first.
+eval
+ARRAY[NULL, NULL]:::INT[] < ARRAY[NULL, 1]
+----
+true
