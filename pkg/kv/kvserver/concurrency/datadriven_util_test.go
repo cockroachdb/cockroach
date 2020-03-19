@@ -29,9 +29,13 @@ func nextUUID(counter *uint32) uuid.UUID {
 }
 
 func scanTimestamp(t *testing.T, d *datadriven.TestData) hlc.Timestamp {
+	return scanTimestampWithName(t, d, "ts")
+}
+
+func scanTimestampWithName(t *testing.T, d *datadriven.TestData, name string) hlc.Timestamp {
 	var ts hlc.Timestamp
 	var tsS string
-	d.ScanArgs(t, "ts", &tsS)
+	d.ScanArgs(t, name, &tsS)
 	parts := strings.Split(tsS, ",")
 
 	// Find the wall time part.

@@ -270,6 +270,13 @@ func (txn *Txn) debugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
 }
 
+// String returns a string version of this transaction.
+func (txn *Txn) String() string {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.String()
+}
+
 // ReadTimestamp returns the transaction's current read timestamp.
 // Note a transaction can be internally pushed forward in time before
 // committing so this is not guaranteed to be the commit timestamp.
