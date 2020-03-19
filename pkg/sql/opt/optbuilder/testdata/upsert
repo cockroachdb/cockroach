@@ -886,12 +886,13 @@ upsert mutation
  │    └── column9:9 => p:4
  ├── update-mapping:
  │    ├── upsert_m:17 => m:1
- │    └── upsert_p:20 => p:4
- ├── check columns: check1:21
+ │    ├── column8:8 => o:3
+ │    └── upsert_p:19 => p:4
+ ├── check columns: check1:20
  └── project
-      ├── columns: check1:21 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 column15:15 column16:16 upsert_m:17 upsert_n:18 upsert_o:19 upsert_p:20
+      ├── columns: check1:20 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 column15:15 column16:16 upsert_m:17 upsert_n:18 upsert_p:19
       ├── project
-      │    ├── columns: upsert_m:17 upsert_n:18 upsert_o:19 upsert_p:20 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 column15:15 column16:16
+      │    ├── columns: upsert_m:17 upsert_n:18 upsert_p:19 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 column15:15 column16:16
       │    ├── project
       │    │    ├── columns: column16:16 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 column15:15
       │    │    ├── project
@@ -928,14 +929,13 @@ upsert mutation
       │    │    │    └── projections
       │    │    │         └── m:10 + 1 [as=column15:15]
       │    │    └── projections
-      │    │         └── o:12 + n:11 [as=column16:16]
+      │    │         └── column8:8 + n:11 [as=column16:16]
       │    └── projections
       │         ├── CASE WHEN m:10 IS NULL THEN column1:6 ELSE column15:15 END [as=upsert_m:17]
       │         ├── CASE WHEN m:10 IS NULL THEN column2:7 ELSE n:11 END [as=upsert_n:18]
-      │         ├── CASE WHEN m:10 IS NULL THEN column8:8 ELSE o:12 END [as=upsert_o:19]
-      │         └── CASE WHEN m:10 IS NULL THEN column9:9 ELSE column16:16 END [as=upsert_p:20]
+      │         └── CASE WHEN m:10 IS NULL THEN column9:9 ELSE column16:16 END [as=upsert_p:19]
       └── projections
-           └── upsert_m:17 > 0 [as=check1:21]
+           └── upsert_m:17 > 0 [as=check1:20]
 
 # ------------------------------------------------------------------------------
 # Test UPSERT.
@@ -1172,8 +1172,8 @@ upsert checks
            ├── column2:6 < column8:8 [as=check1:14]
            └── upsert_a:13 > 0 [as=check2:15]
 
-# Don't directly update mutation columns. However, computed columns do need to
-# be updated. Use explicit target columns.
+# Ensure that mutation columns are set by the insert and update. Use explicit
+# target columns.
 build
 UPSERT INTO mutation (m, n) VALUES (1, 2)
 ----
@@ -1188,51 +1188,46 @@ upsert mutation
  │    └── column9:9 => p:4
  ├── update-mapping:
  │    ├── column2:7 => n:2
- │    └── upsert_p:18 => p:4
- ├── check columns: check1:19
+ │    ├── column8:8 => o:3
+ │    └── column9:9 => p:4
+ ├── check columns: check1:16
  └── project
-      ├── columns: check1:19 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 column15:15 upsert_m:16 upsert_o:17 upsert_p:18
+      ├── columns: check1:16 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 upsert_m:15
       ├── project
-      │    ├── columns: upsert_m:16 upsert_o:17 upsert_p:18 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 column15:15
-      │    ├── project
-      │    │    ├── columns: column15:15 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
-      │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
-      │    │    │    ├── upsert-distinct-on
-      │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null
-      │    │    │    │    ├── grouping columns: column1:6!null
+      │    ├── columns: upsert_m:15 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
+      │    │    ├── upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null
+      │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column8:8!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column8:8!null
-      │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column8:8!null column1:6!null column2:7!null
-      │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
-      │    │    │    │    │    │    │    └── (1, 2)
-      │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── 10 [as=column8:8]
+      │    │    │    │    │    ├── columns: column8:8!null column1:6!null column2:7!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
+      │    │    │    │    │    │    └── (1, 2)
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── column8:8 + column2:7 [as=column9:9]
-      │    │    │    │    └── aggregations
-      │    │    │    │         ├── first-agg [as=column2:7]
-      │    │    │    │         │    └── column2:7
-      │    │    │    │         ├── first-agg [as=column8:8]
-      │    │    │    │         │    └── column8:8
-      │    │    │    │         └── first-agg [as=column9:9]
-      │    │    │    │              └── column9:9
-      │    │    │    ├── scan mutation
-      │    │    │    │    ├── columns: m:10!null n:11 o:12 p:13 q:14
-      │    │    │    │    └── check constraint expressions
-      │    │    │    │         └── m:10 > 0
-      │    │    │    └── filters
-      │    │    │         └── column1:6 = m:10
-      │    │    └── projections
-      │    │         └── o:12 + column2:7 [as=column15:15]
+      │    │    │    │    │         └── 10 [as=column8:8]
+      │    │    │    │    └── projections
+      │    │    │    │         └── column8:8 + column2:7 [as=column9:9]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:7]
+      │    │    │         │    └── column2:7
+      │    │    │         ├── first-agg [as=column8:8]
+      │    │    │         │    └── column8:8
+      │    │    │         └── first-agg [as=column9:9]
+      │    │    │              └── column9:9
+      │    │    ├── scan mutation
+      │    │    │    ├── columns: m:10!null n:11 o:12 p:13 q:14
+      │    │    │    └── check constraint expressions
+      │    │    │         └── m:10 > 0
+      │    │    └── filters
+      │    │         └── column1:6 = m:10
       │    └── projections
-      │         ├── CASE WHEN m:10 IS NULL THEN column1:6 ELSE m:10 END [as=upsert_m:16]
-      │         ├── CASE WHEN m:10 IS NULL THEN column8:8 ELSE o:12 END [as=upsert_o:17]
-      │         └── CASE WHEN m:10 IS NULL THEN column9:9 ELSE column15:15 END [as=upsert_p:18]
+      │         └── CASE WHEN m:10 IS NULL THEN column1:6 ELSE m:10 END [as=upsert_m:15]
       └── projections
-           └── upsert_m:16 > 0 [as=check1:19]
+           └── upsert_m:15 > 0 [as=check1:16]
 
 # Don't directly update mutation columns. However, computed columns do need to
 # be updated. Use implicit target columns.
@@ -1250,51 +1245,46 @@ upsert mutation
  │    └── column9:9 => p:4
  ├── update-mapping:
  │    ├── column2:7 => n:2
- │    └── upsert_p:18 => p:4
- ├── check columns: check1:19
+ │    ├── column8:8 => o:3
+ │    └── column9:9 => p:4
+ ├── check columns: check1:16
  └── project
-      ├── columns: check1:19 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 column15:15 upsert_m:16 upsert_o:17 upsert_p:18
+      ├── columns: check1:16 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 upsert_m:15
       ├── project
-      │    ├── columns: upsert_m:16 upsert_o:17 upsert_p:18 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14 column15:15
-      │    ├── project
-      │    │    ├── columns: column15:15 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
-      │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
-      │    │    │    ├── upsert-distinct-on
-      │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null
-      │    │    │    │    ├── grouping columns: column1:6!null
+      │    ├── columns: upsert_m:15 column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null m:10 n:11 o:12 p:13 q:14
+      │    │    ├── upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null column8:8!null column9:9!null
+      │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column8:8!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column8:8!null
-      │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column8:8!null column1:6!null column2:7!null
-      │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
-      │    │    │    │    │    │    │    └── (1, 2)
-      │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── 10 [as=column8:8]
+      │    │    │    │    │    ├── columns: column8:8!null column1:6!null column2:7!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
+      │    │    │    │    │    │    └── (1, 2)
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── column8:8 + column2:7 [as=column9:9]
-      │    │    │    │    └── aggregations
-      │    │    │    │         ├── first-agg [as=column2:7]
-      │    │    │    │         │    └── column2:7
-      │    │    │    │         ├── first-agg [as=column8:8]
-      │    │    │    │         │    └── column8:8
-      │    │    │    │         └── first-agg [as=column9:9]
-      │    │    │    │              └── column9:9
-      │    │    │    ├── scan mutation
-      │    │    │    │    ├── columns: m:10!null n:11 o:12 p:13 q:14
-      │    │    │    │    └── check constraint expressions
-      │    │    │    │         └── m:10 > 0
-      │    │    │    └── filters
-      │    │    │         └── column1:6 = m:10
-      │    │    └── projections
-      │    │         └── o:12 + column2:7 [as=column15:15]
+      │    │    │    │    │         └── 10 [as=column8:8]
+      │    │    │    │    └── projections
+      │    │    │    │         └── column8:8 + column2:7 [as=column9:9]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:7]
+      │    │    │         │    └── column2:7
+      │    │    │         ├── first-agg [as=column8:8]
+      │    │    │         │    └── column8:8
+      │    │    │         └── first-agg [as=column9:9]
+      │    │    │              └── column9:9
+      │    │    ├── scan mutation
+      │    │    │    ├── columns: m:10!null n:11 o:12 p:13 q:14
+      │    │    │    └── check constraint expressions
+      │    │    │         └── m:10 > 0
+      │    │    └── filters
+      │    │         └── column1:6 = m:10
       │    └── projections
-      │         ├── CASE WHEN m:10 IS NULL THEN column1:6 ELSE m:10 END [as=upsert_m:16]
-      │         ├── CASE WHEN m:10 IS NULL THEN column8:8 ELSE o:12 END [as=upsert_o:17]
-      │         └── CASE WHEN m:10 IS NULL THEN column9:9 ELSE column15:15 END [as=upsert_p:18]
+      │         └── CASE WHEN m:10 IS NULL THEN column1:6 ELSE m:10 END [as=upsert_m:15]
       └── projections
-           └── upsert_m:16 > 0 [as=check1:19]
+           └── upsert_m:15 > 0 [as=check1:16]
 
 # Use unknown name in upsert column list.
 build
@@ -1650,17 +1640,17 @@ upsert decimals
  ├── fetch columns: decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
  ├── insert-mapping:
  │    ├── a:8 => decimals.a:1
- │    ├── b:9 => decimals.b:2
+ │    ├── b:17 => decimals.b:2
  │    ├── c:10 => decimals.c:3
  │    └── d:12 => decimals.d:4
  ├── update-mapping:
- │    ├── b:9 => decimals.b:2
- │    └── upsert_d:21 => decimals.d:4
- ├── check columns: check1:22 check2:23
+ │    ├── b:17 => decimals.b:2
+ │    └── upsert_d:22 => decimals.d:4
+ ├── check columns: check1:23 check2:24
  └── project
-      ├── columns: check1:22 check2:23 a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16 upsert_d:21
+      ├── columns: check1:23 check2:24 a:8 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16 b:17 upsert_d:22
       ├── project
-      │    ├── columns: upsert_a:19 upsert_d:21 a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
+      │    ├── columns: upsert_a:20 upsert_d:22 b:17 a:8 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
       │    ├── left-join (lookup decimals)
       │    │    ├── columns: a:8 b:9 c:10 d:12 decimals.a:13 decimals.b:14 decimals.c:15 decimals.d:16
       │    │    ├── key columns: [8] = [13]
@@ -1684,11 +1674,12 @@ upsert decimals
       │    │    │              └── d:12
       │    │    └── filters (true)
       │    └── projections
-      │         ├── CASE WHEN decimals.a:13 IS NULL THEN a:8 ELSE decimals.a:13 END [as=upsert_a:19]
-      │         └── CASE WHEN decimals.a:13 IS NULL THEN d:12 ELSE crdb_internal.round_decimal_values(decimals.a:13 + decimals.c:15, 1) END [as=upsert_d:21]
+      │         ├── CASE WHEN decimals.a:13 IS NULL THEN a:8 ELSE decimals.a:13 END [as=upsert_a:20]
+      │         ├── CASE WHEN decimals.a:13 IS NULL THEN d:12 ELSE crdb_internal.round_decimal_values(decimals.a:13 + decimals.c:15, 1) END [as=upsert_d:22]
+      │         └── crdb_internal.round_decimal_values(b:9, 1) [as=b:17]
       └── projections
-           ├── upsert_a:19 = round(upsert_a:19) [as=check1:22]
-           └── b:9[0] > 1 [as=check2:23]
+           ├── upsert_a:20 = round(upsert_a:20) [as=check1:23]
+           └── b:17[0] > 1 [as=check2:24]
 
 # Regular UPSERT case.
 opt

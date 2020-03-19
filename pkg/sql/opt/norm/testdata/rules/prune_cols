@@ -2170,7 +2170,8 @@ upsert mutation
  │    ├── column3:8 => c:3
  │    └── column9:9 => d:4
  ├── update-mapping:
- │    └── upsert_b:17 => b:2
+ │    ├── upsert_b:17 => b:2
+ │    └── column9:9 => d:4
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project

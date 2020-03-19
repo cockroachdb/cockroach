@@ -103,10 +103,6 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	// Build each of the SET expressions.
 	mb.addUpdateCols(upd.Exprs)
 
-	// Add additional columns for computed expressions that may depend on the
-	// updated columns.
-	mb.addComputedColsForUpdate()
-
 	// Build the final update statement, including any returned expressions.
 	if resultsNeeded(upd.Returning) {
 		mb.buildUpdate(*upd.Returning.(*tree.ReturningExprs))
@@ -274,20 +270,15 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 	mb.outScope = projectionsScope
 
-	// Possibly round DECIMAL-related columns that were updated. Do this
-	// before evaluating computed expressions, since those may depend on the
-	// inserted columns.
-	mb.roundDecimalValues(mb.updateOrds, false /* roundComputedCols */)
-
-	// Add additional columns for computed expressions that may depend on any
+	// Add additional columns for computed expressions that may depend on the
 	// updated columns.
-	mb.addComputedColsForUpdate()
+	mb.addSynthesizedColsForUpdate()
 }
 
 // addComputedColsForUpdate wraps an Update input expression with a Project
 // operator containing any computed columns that need to be updated. This
 // includes write-only mutation columns that are computed.
-func (mb *mutationBuilder) addComputedColsForUpdate() {
+func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	// Allow mutation columns to be referenced by other computed mutation
 	// columns (otherwise the scope will raise an error if a mutation column
 	// is referenced). These do not need to be set back to true again because
@@ -296,13 +287,30 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 		mb.outScope.cols[i].mutation = false
 	}
 
+	// Add non-computed columns that are being dropped or added (mutated) to the
+	// table. These are not visible to queries, and will always be updated to
+	// their default values. This is necessary because they may not yet have been
+	// set by the backfiller.
+	mb.addSynthesizedCols(
+		mb.updateOrds,
+		func(colOrd int) bool {
+			return !mb.tab.Column(colOrd).IsComputed() && cat.IsMutationColumn(mb.tab, colOrd)
+		},
+	)
+
+	// Possibly round DECIMAL-related columns containing update values. Do
+	// this before evaluating computed expressions, since those may depend on
+	// the inserted columns.
+	mb.roundDecimalValues(mb.updateOrds, false /* roundComputedCols */)
+
 	// Disambiguate names so that references in the computed expression refer to
 	// the correct columns.
 	mb.disambiguateColumns()
 
+	// Add all computed columns in case their values have changed.
 	mb.addSynthesizedCols(
 		mb.updateOrds,
-		func(tabCol cat.Column) bool { return tabCol.IsComputed() },
+		func(colOrd int) bool { return mb.tab.Column(colOrd).IsComputed() },
 	)
 
 	// Possibly round DECIMAL-related computed columns.

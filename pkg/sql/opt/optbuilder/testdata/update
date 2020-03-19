@@ -1326,7 +1326,7 @@ with &1 (a)
 # Tests with mutations.
 # ------------------------------------------------------------------------------
 
-# Test update that doesn't require mutation column to be recalculated.
+# Mutation columns should be updated.
 build
 UPDATE mutation SET m=1
 ----
@@ -1335,26 +1335,31 @@ update mutation
  ├── fetch columns: m:6 n:7 o:8 p:9 q:10
  ├── update-mapping:
  │    ├── column11:11 => m:1
- │    └── column12:12 => p:4
- ├── check columns: check1:13
+ │    ├── column12:12 => o:3
+ │    └── column13:13 => p:4
+ ├── check columns: check1:14
  └── project
-      ├── columns: check1:13!null m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12
+      ├── columns: check1:14!null m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null column13:13
       ├── project
-      │    ├── columns: column12:12 m:6!null n:7 o:8 p:9 q:10 column11:11!null
+      │    ├── columns: column13:13 m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null
       │    ├── project
-      │    │    ├── columns: column11:11!null m:6!null n:7 o:8 p:9 q:10
-      │    │    ├── scan mutation
-      │    │    │    ├── columns: m:6!null n:7 o:8 p:9 q:10
-      │    │    │    └── check constraint expressions
-      │    │    │         └── m:6 > 0
+      │    │    ├── columns: column12:12!null m:6!null n:7 o:8 p:9 q:10 column11:11!null
+      │    │    ├── project
+      │    │    │    ├── columns: column11:11!null m:6!null n:7 o:8 p:9 q:10
+      │    │    │    ├── scan mutation
+      │    │    │    │    ├── columns: m:6!null n:7 o:8 p:9 q:10
+      │    │    │    │    └── check constraint expressions
+      │    │    │    │         └── m:6 > 0
+      │    │    │    └── projections
+      │    │    │         └── 1 [as=column11:11]
       │    │    └── projections
-      │    │         └── 1 [as=column11:11]
+      │    │         └── 10 [as=column12:12]
       │    └── projections
-      │         └── o:8 + n:7 [as=column12:12]
+      │         └── column12:12 + n:7 [as=column13:13]
       └── projections
-           └── column11:11 > 0 [as=check1:13]
+           └── column11:11 > 0 [as=check1:14]
 
-# Test update that requires computed mutation column to be recalculated.
+# Update column that mutation column depends upon.
 build
 UPDATE mutation SET m=1, n=2
 ----
@@ -1364,25 +1369,30 @@ update mutation
  ├── update-mapping:
  │    ├── column11:11 => m:1
  │    ├── column12:12 => n:2
- │    └── column13:13 => p:4
- ├── check columns: check1:14
+ │    ├── column13:13 => o:3
+ │    └── column14:14 => p:4
+ ├── check columns: check1:15
  └── project
-      ├── columns: check1:14!null m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null column13:13
+      ├── columns: check1:15!null m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null column13:13!null column14:14!null
       ├── project
-      │    ├── columns: column13:13 m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null
+      │    ├── columns: column14:14!null m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null column13:13!null
       │    ├── project
-      │    │    ├── columns: column11:11!null column12:12!null m:6!null n:7 o:8 p:9 q:10
-      │    │    ├── scan mutation
-      │    │    │    ├── columns: m:6!null n:7 o:8 p:9 q:10
-      │    │    │    └── check constraint expressions
-      │    │    │         └── m:6 > 0
+      │    │    ├── columns: column13:13!null m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null
+      │    │    ├── project
+      │    │    │    ├── columns: column11:11!null column12:12!null m:6!null n:7 o:8 p:9 q:10
+      │    │    │    ├── scan mutation
+      │    │    │    │    ├── columns: m:6!null n:7 o:8 p:9 q:10
+      │    │    │    │    └── check constraint expressions
+      │    │    │    │         └── m:6 > 0
+      │    │    │    └── projections
+      │    │    │         ├── 1 [as=column11:11]
+      │    │    │         └── 2 [as=column12:12]
       │    │    └── projections
-      │    │         ├── 1 [as=column11:11]
-      │    │         └── 2 [as=column12:12]
+      │    │         └── 10 [as=column13:13]
       │    └── projections
-      │         └── o:8 + column12:12 [as=column13:13]
+      │         └── column13:13 + column12:12 [as=column14:14]
       └── projections
-           └── column11:11 > 0 [as=check1:14]
+           └── column11:11 > 0 [as=check1:15]
 
 # Ensure that ORDER BY wildcard does not select mutation columns.
 build
@@ -1393,33 +1403,38 @@ update mutation
  ├── fetch columns: m:6 n:7 o:8 p:9 q:10
  ├── update-mapping:
  │    ├── column11:11 => m:1
- │    └── column12:12 => p:4
- ├── check columns: check1:13
+ │    ├── column12:12 => o:3
+ │    └── column13:13 => p:4
+ ├── check columns: check1:14
  └── project
-      ├── columns: check1:13!null m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12
+      ├── columns: check1:14!null m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null column13:13
       ├── project
-      │    ├── columns: column12:12 m:6!null n:7 o:8 p:9 q:10 column11:11!null
+      │    ├── columns: column13:13 m:6!null n:7 o:8 p:9 q:10 column11:11!null column12:12!null
       │    ├── project
-      │    │    ├── columns: column11:11!null m:6!null n:7 o:8 p:9 q:10
-      │    │    ├── limit
-      │    │    │    ├── columns: m:6!null n:7 o:8 p:9 q:10
-      │    │    │    ├── internal-ordering: +6,+7
-      │    │    │    ├── sort (segmented)
+      │    │    ├── columns: column12:12!null m:6!null n:7 o:8 p:9 q:10 column11:11!null
+      │    │    ├── project
+      │    │    │    ├── columns: column11:11!null m:6!null n:7 o:8 p:9 q:10
+      │    │    │    ├── limit
       │    │    │    │    ├── columns: m:6!null n:7 o:8 p:9 q:10
-      │    │    │    │    ├── ordering: +6,+7
-      │    │    │    │    ├── limit hint: 10.00
-      │    │    │    │    └── scan mutation
-      │    │    │    │         ├── columns: m:6!null n:7 o:8 p:9 q:10
-      │    │    │    │         ├── check constraint expressions
-      │    │    │    │         │    └── m:6 > 0
-      │    │    │    │         └── ordering: +6
-      │    │    │    └── 10
+      │    │    │    │    ├── internal-ordering: +6,+7
+      │    │    │    │    ├── sort (segmented)
+      │    │    │    │    │    ├── columns: m:6!null n:7 o:8 p:9 q:10
+      │    │    │    │    │    ├── ordering: +6,+7
+      │    │    │    │    │    ├── limit hint: 10.00
+      │    │    │    │    │    └── scan mutation
+      │    │    │    │    │         ├── columns: m:6!null n:7 o:8 p:9 q:10
+      │    │    │    │    │         ├── check constraint expressions
+      │    │    │    │    │         │    └── m:6 > 0
+      │    │    │    │    │         └── ordering: +6
+      │    │    │    │    └── 10
+      │    │    │    └── projections
+      │    │    │         └── 1 [as=column11:11]
       │    │    └── projections
-      │    │         └── 1 [as=column11:11]
+      │    │         └── 10 [as=column12:12]
       │    └── projections
-      │         └── o:8 + n:7 [as=column12:12]
+      │         └── column12:12 + n:7 [as=column13:13]
       └── projections
-           └── column11:11 > 0 [as=check1:13]
+           └── column11:11 > 0 [as=check1:14]
 
 # Try to return a mutation column.
 build
@@ -1619,10 +1634,10 @@ update decimals
  ├── update-mapping:
  │    ├── a:11 => decimals.a:1
  │    ├── b:12 => decimals.b:2
- │    └── d:15 => decimals.d:4
- ├── check columns: check1:16 check2:17
+ │    └── d:14 => decimals.d:4
+ ├── check columns: check1:15 check2:16
  └── project
-      ├── columns: check1:16 check2:17 d:15 decimals.a:5!null decimals.b:6 c:7 decimals.d:8 a:11 b:12
+      ├── columns: check1:15 check2:16 d:14 decimals.a:5!null decimals.b:6 c:7 decimals.d:8 a:11 b:12
       ├── project
       │    ├── columns: a:11 b:12 decimals.a:5!null decimals.b:6 c:7 decimals.d:8
       │    ├── scan decimals
@@ -1637,6 +1652,6 @@ update decimals
       │         ├── crdb_internal.round_decimal_values(1.1, 0) [as=a:11]
       │         └── crdb_internal.round_decimal_values(ARRAY[0.95,NULL,15], 1) [as=b:12]
       └── projections
-           ├── a:11 = round(a:11) [as=check1:16]
-           ├── b:12[0] > 1 [as=check2:17]
-           └── crdb_internal.round_decimal_values(crdb_internal.round_decimal_values(a:11 + c:7, 1), 1) [as=d:15]
+           ├── a:11 = round(a:11) [as=check1:15]
+           ├── b:12[0] > 1 [as=check2:16]
+           └── crdb_internal.round_decimal_values(a:11 + c:7, 1) [as=d:14]
