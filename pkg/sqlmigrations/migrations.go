@@ -54,6 +54,10 @@ type MigrationManagerTestingKnobs struct {
 	// TODO(mberhault): we could skip only backfill migrations and dependencies
 	// if we had some concept of migration dependencies.
 	DisableBackfillMigrations bool
+	AfterJobMigration         func()
+	// AlwaysRunJobMigration controls whether to always run the schema change job
+	// migration regardless of whether it has been marked as complete.
+	AlwaysRunJobMigration bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -667,12 +671,14 @@ func (m *Manager) StartSchemaChangeJobMigration(ctx context.Context) error {
 		}
 		log.VEventf(ctx, 2, "detected upgrade finalization")
 
-		// Check whether this migration has already been completed.
-		if kv, err := m.db.Get(ctx, schemaChangeJobMigrationKey); err != nil {
-			log.Infof(ctx, "error getting record of schema change job migration: %s", err.Error())
-		} else if kv.Exists() {
-			log.Infof(ctx, "schema change job migration already complete")
-			return
+		if !m.testingKnobs.AlwaysRunJobMigration {
+			// Check whether this migration has already been completed.
+			if kv, err := m.db.Get(ctx, schemaChangeJobMigrationKey); err != nil {
+				log.Infof(ctx, "error getting record of schema change job migration: %s", err.Error())
+			} else if kv.Exists() {
+				log.Infof(ctx, "schema change job migration already complete")
+				return
+			}
 		}
 
 		// Now run the migration. This is retried indefinitely until it finishes.
@@ -700,6 +706,9 @@ func (m *Manager) StartSchemaChangeJobMigration(ctx context.Context) error {
 				log.Warningf(ctx, "error persisting record of schema change job migration, will retry: %s", err.Error())
 			}
 			break
+		}
+		if fn := m.testingKnobs.AfterJobMigration; fn != nil {
+			fn()
 		}
 	})
 }
@@ -1076,7 +1085,6 @@ func migrateDropTablesOrDatabaseJob(
 		// If the job is draining names, the schema change job resumer will handle
 		// it. Just update the job details.
 		if err := job.WithTxn(txn).Update(ctx, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			details := md.Payload.GetSchemaChange()
 			if len(details.DroppedTables) == 1 {
 				details.TableID = details.DroppedTables[0].ID
 			}

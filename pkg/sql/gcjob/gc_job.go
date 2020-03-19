@@ -87,7 +87,9 @@ func (r schemaChangeGCResumer) Resume(
 	// TODO(pbardea): Wait for no versions.
 	execCfg := p.ExecCfg()
 	if fn := execCfg.GCJobTestingKnobs.RunBeforeResume; fn != nil {
-		fn()
+		if err := fn(r.jobID); err != nil {
+			return err
+		}
 	}
 	details, progress, err := initDetailsAndProgress(ctx, execCfg, r.jobID)
 	if err != nil {
