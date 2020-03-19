@@ -231,7 +231,7 @@ func tryBumpBatchTimestamp(
 		ts, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
 	ba.Txn = ba.Txn.Clone()
 	ba.Txn.ReadTimestamp = ts
-	ba.Txn.WriteTimestamp = ba.Timestamp
+	ba.Txn.WriteTimestamp = ts
 	ba.Txn.WriteTooOld = false
 	return true
 }
