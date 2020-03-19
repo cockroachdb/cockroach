@@ -43,8 +43,7 @@ func Example_nodelocal() {
 	// nodelocal upload test.csv /test/file1.csv
 	// ERROR: destination file already exists for /test/file1.csv
 	// nodelocal upload test.csv /test/../../file1.csv
-	// ERROR: current transaction is aborted, commands ignored until end of transaction block
-	// SQLSTATE: 25P02
+	// ERROR: local file access to paths outside of external-io-dir is not allowed: /test/../../file1.csv
 	// nodelocal upload notexist.csv /test/file1.csv
 	// ERROR: open notexist.csv: no such file or directory
 }
@@ -64,11 +63,9 @@ func Example_nodelocal_disabled() {
 
 	// Output:
 	// nodelocal upload empty.csv /test/file1.csv
-	// ERROR: current transaction is aborted, commands ignored until end of transaction block
-	// SQLSTATE: 25P02
+	// ERROR: local file access is disabled
 	// nodelocal upload test.csv /test/file1.csv
-	// ERROR: current transaction is aborted, commands ignored until end of transaction block
-	// SQLSTATE: 25P02
+	// ERROR: local file access is disabled
 }
 
 func TestNodeLocalFileUpload(t *testing.T) {

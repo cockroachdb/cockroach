@@ -69,33 +69,49 @@ func openSourceFile(source string) (io.ReadCloser, error) {
 }
 
 func uploadFile(conn *sqlConn, reader io.Reader, destination string) error {
-	err := conn.ExecTxn(func(cn *sqlConn) error {
-		stmt, err := cn.conn.Prepare(sql.CopyInFileStmt(destination, "crdb_internal", "file_upload"))
-		if err != nil {
-			return err
-		}
-		defer func() {
-			_ = stmt.Close()
-		}()
-		send := make([]byte, chunkSize)
-		for {
-			n, err := reader.Read(send)
-			if n > 0 {
-				_, err = stmt.Exec([]driver.Value{string(send[:n])})
-				if err != nil {
-					return err
-				}
-			} else if err == io.EOF {
-				break
-			} else if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	if err := conn.ensureConn(); err != nil {
+		return err
+	}
+
+	if _, err := conn.conn.Exec(`BEGIN`, nil); err != nil {
+		return err
+	}
+
+	stmt, err := conn.conn.Prepare(sql.CopyInFileStmt(destination, "crdb_internal", "file_upload"))
 	if err != nil {
 		return err
 	}
+
+	defer func() {
+		if stmt != nil {
+			_ = stmt.Close()
+			_, _ = conn.conn.Exec(`ROLLBACK`, nil)
+		}
+	}()
+
+	send := make([]byte, chunkSize)
+	for {
+		n, err := reader.Read(send)
+		if n > 0 {
+			_, err = stmt.Exec([]driver.Value{string(send[:n])})
+			if err != nil {
+				return err
+			}
+		} else if err == io.EOF {
+			break
+		} else if err != nil {
+			return err
+		}
+	}
+	if err := stmt.Close(); err != nil {
+		return err
+	}
+	stmt = nil
+
+	if _, err := conn.conn.Exec(`COMMIT`, nil); err != nil {
+		return err
+	}
+
 	nodeID, _, _, err := conn.getServerMetadata()
 	if err != nil {
 		return errors.Wrap(err, "unable to get node id")
