@@ -12,6 +12,8 @@ package sql
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -413,65 +415,93 @@ func reassignComment(
 		}
 	}
 
-	for i := range oldTableDesc.Columns {
-		id := oldTableDesc.Columns[i].ID
-		err = reassignColumnComment(ctx, p, oldTableDesc.ID, newTableDesc.ID, id)
-		if err != nil {
-			return err
-		}
+	if err := reassignAllColumnComments(ctx, p, oldTableDesc.ID, newTableDesc.ID, oldTableDesc.Columns); err != nil {
+		return err
 	}
 
-	for _, indexDesc := range oldTableDesc.Indexes {
-		err = reassignIndexComment(ctx, p, oldTableDesc.ID, newTableDesc.ID, indexDesc.ID)
-		if err != nil {
-			return err
-		}
+	if err := reassignAllIndexComments(ctx, p, oldTableDesc.ID, newTableDesc.ID, oldTableDesc.Indexes); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-// reassignColumnComment reassign comment on column.
-func reassignColumnComment(
-	ctx context.Context, p *planner, oldID sqlbase.ID, newID sqlbase.ID, columnID sqlbase.ColumnID,
+// reassignAllColumnComments moves all column comments from oldID to newID.
+func reassignAllColumnComments(
+	ctx context.Context,
+	p *planner,
+	oldID sqlbase.ID,
+	newID sqlbase.ID,
+	columns []sqlbase.ColumnDescriptor,
 ) error {
-	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+	if len(columns) == 0 {
+		return nil
+	}
+	var in strings.Builder
+	in.WriteString("(")
+	for i := range columns {
+		if i > 0 {
+			in.WriteString(", ")
+		}
+		in.WriteString(fmt.Sprintf("%d", columns[i].ID))
+	}
+	in.WriteString(")")
+	inString := in.String()
+
+	comments, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
 		ctx,
-		"select-column-comment",
+		"select-column-comments",
 		p.txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-		`SELECT comment FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3`,
+		fmt.Sprintf(
+			`SELECT sub_id, comment FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id IN %s`,
+			inString,
+		),
 		keys.ColumnCommentType,
 		oldID,
-		columnID)
+	)
 	if err != nil {
 		return err
 	}
+	columnToComment := make(map[sqlbase.ColumnID]tree.Datum)
+	for _, row := range comments {
+		colID := sqlbase.ColumnID(tree.MustBeDInt(row[0]))
+		columnToComment[colID] = row[1]
+	}
 
-	if comment != nil {
+	if len(columnToComment) > 0 {
+		var newVals strings.Builder
+		comma := ""
+		for colID, comment := range columnToComment {
+			newVals.WriteString(comma)
+			newVals.WriteString(fmt.Sprintf("(%d, %d, %d, %s)", keys.ColumnCommentType, newID, colID, comment))
+			comma = ", "
+		}
 		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 			ctx,
-			"set-column-comment",
+			"set-column-comments",
 			p.txn,
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-			"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
-			keys.ColumnCommentType,
-			newID,
-			columnID,
-			comment[0])
+			fmt.Sprintf(
+				`UPSERT INTO system.comments VALUES %s`,
+				newVals.String(),
+			),
+		)
 		if err != nil {
 			return err
 		}
-
 		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 			ctx,
-			"delete-column-comment",
+			"delete-column-comments",
 			p.txn,
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
+			fmt.Sprintf(
+				`DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id IN %s`,
+				inString,
+			),
 			keys.ColumnCommentType,
 			oldID,
-			columnID)
+		)
 		if err != nil {
 			return err
 		}
@@ -480,39 +510,86 @@ func reassignColumnComment(
 	return nil
 }
 
-// reassignIndexComment reassigns a comment on an index.
-func reassignIndexComment(
-	ctx context.Context, p *planner, oldTableID, newTableID sqlbase.ID, indexID sqlbase.IndexID,
+// reassignAllIndexComments moves all comments from oldTableID to newTableID.
+func reassignAllIndexComments(
+	ctx context.Context,
+	p *planner,
+	oldTableID, newTableID sqlbase.ID,
+	indexes []sqlbase.IndexDescriptor,
 ) error {
-	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+	if len(indexes) == 0 {
+		return nil
+	}
+	var in strings.Builder
+	in.WriteString("(")
+	for i := range indexes {
+		if i > 0 {
+			in.WriteString(", ")
+		}
+		in.WriteString(fmt.Sprintf("%d", indexes[i].ID))
+	}
+	in.WriteString(")")
+	inString := in.String()
+	comments, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
 		ctx,
-		"select-index-comment",
+		"select-index-comments",
 		p.txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-		`SELECT comment FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3`,
+		fmt.Sprintf(
+			`SELECT sub_id, comment FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id IN %s`,
+			inString,
+		),
 		keys.IndexCommentType,
 		oldTableID,
-		indexID)
+	)
 	if err != nil {
 		return err
 	}
 
-	if comment != nil {
-		err = p.upsertIndexComment(
+	indexToComment := make(map[sqlbase.ColumnID]tree.Datum)
+	for _, row := range comments {
+		colID := sqlbase.ColumnID(tree.MustBeDInt(row[0]))
+		indexToComment[colID] = row[1]
+	}
+
+	if len(indexToComment) > 0 {
+		var newVals strings.Builder
+		comma := ""
+		for idxID, comment := range indexToComment {
+			newVals.WriteString(comma)
+			newVals.WriteString(fmt.Sprintf("(%d, %d, %d, %s)", keys.IndexCommentType, newTableID, idxID, comment))
+			comma = ", "
+		}
+		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 			ctx,
-			newTableID,
-			indexID,
-			string(tree.MustBeDString(comment[0])))
+			"set-index-comments",
+			p.txn,
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			fmt.Sprintf(
+				`UPSERT INTO system.comments VALUES %s`,
+				newVals.String(),
+			),
+		)
 		if err != nil {
 			return err
 		}
 
-		err = p.removeIndexComment(ctx, oldTableID, indexID)
+		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+			ctx,
+			"delete-index-comments",
+			p.txn,
+			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			fmt.Sprintf(
+				`DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id IN %s`,
+				inString,
+			),
+			keys.IndexCommentType,
+			oldTableID,
+		)
 		if err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 

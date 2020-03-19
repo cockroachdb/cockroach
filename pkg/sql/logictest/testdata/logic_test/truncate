@@ -184,3 +184,37 @@ query T
 SELECT * FROM tt
 ----
 foo
+
+# Tests for comments getting moved during truncate.
+subtest comments
+
+statement ok
+CREATE TABLE t (
+  x INT,
+  y INT,
+  z INT,
+  INDEX i1 (x),
+  INDEX i2 (y),
+  INDEX i3 (z)
+);
+COMMENT ON COLUMN t.x IS 'comment1';
+COMMENT ON COLUMN t.z IS 'comm"en"t2';
+COMMENT ON INDEX t@i2 IS 'comm''ent3';
+TRUNCATE t
+
+query TT rowsort
+SELECT column_name, comment FROM [SHOW COLUMNS FROM t WITH COMMENT]
+----
+x      comment1
+y      NULL
+z      comm"en"t2
+rowid  NULL
+
+
+query TT rowsort
+SELECT distinct(index_name), comment FROM [SHOW INDEXES FROM t WITH COMMENT]
+----
+primary  NULL
+i1       NULL
+i2       comm'ent3
+i3       NULL
