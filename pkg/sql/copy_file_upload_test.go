@@ -13,17 +13,20 @@ package sql
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 const filename = "/test/test_file_upload.csv"
@@ -39,15 +42,12 @@ func writeFile(t *testing.T, testSendFile string, fileContent []byte) {
 	}
 }
 
-func runCopyFile(t *testing.T, serverParams base.TestServerArgs, testSendFile string) error {
+func runCopyFile(t *testing.T, db *gosql.DB, testSendFile string) error {
 	// Make sure we can open this file first
 	reader, err := os.Open(testSendFile)
 	if err != nil {
 		return err
 	}
-
-	s, db, _ := serverutils.StartServer(t, serverParams)
-	defer s.Stopper().Stop(context.TODO())
 
 	txn, err := db.Begin()
 	if err != nil {
@@ -94,13 +94,16 @@ func TestFileUpload(t *testing.T) {
 	defer cleanup()
 	params.ExternalIODir = localExternalDir
 
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
 	testFileDir, cleanup2 := testutils.TempDir(t)
 	defer cleanup2()
 	testSendFile := filepath.Join(testFileDir, filename)
 	fileContent := []byte("hello \n blah 1@#% some data hello \n @#%^&&*")
 	writeFile(t, testSendFile, fileContent)
 
-	err := runCopyFile(t, params, testSendFile)
+	err := runCopyFile(t, db, testSendFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,6 +124,8 @@ func TestUploadEmptyFile(t *testing.T) {
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	params.ExternalIODir = localExternalDir
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
 
 	testFileDir, cleanup2 := testutils.TempDir(t)
 	defer cleanup2()
@@ -128,7 +133,7 @@ func TestUploadEmptyFile(t *testing.T) {
 	fileContent := []byte("")
 	writeFile(t, testSendFile, fileContent)
 
-	err := runCopyFile(t, params, testSendFile)
+	err := runCopyFile(t, db, testSendFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,8 +154,10 @@ func TestFileNotExist(t *testing.T) {
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	params.ExternalIODir = localExternalDir
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
 
-	err := runCopyFile(t, params, filepath.Join(localExternalDir, filename))
+	err := runCopyFile(t, db, filepath.Join(localExternalDir, filename))
 	expectedErr := "no such file"
 	if !testutils.IsError(err, expectedErr) {
 		t.Fatalf(`expected error: %s, got: %s`, expectedErr, err)
@@ -164,11 +171,50 @@ func TestFileExist(t *testing.T) {
 	localExternalDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	params.ExternalIODir = localExternalDir
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
 	destination := filepath.Join(localExternalDir, filename)
 	writeFile(t, destination, []byte("file exists"))
 
-	err := runCopyFile(t, params, destination)
+	err := runCopyFile(t, db, destination)
 	expectedErr := "file already exists"
+	if !testutils.IsError(err, expectedErr) {
+		t.Fatalf(`expected error: %s, got: %s`, expectedErr, err)
+	}
+}
+
+func TestNotAdmin(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := tests.CreateTestServerParams()
+	localExternalDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	params.ExternalIODir = localExternalDir
+	params.Insecure = true
+	s, rootDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	_, err := rootDB.Exec("CREATE USER jsmith")
+	require.NoError(t, err)
+
+	pgURL, cleanupGoDB := sqlutils.PGUrlWithOptionalClientCerts(
+		t, s.ServingSQLAddr(), "notAdmin", url.User("jsmith"), false, /* withCerts */
+	)
+	defer cleanupGoDB()
+	pgURL.RawQuery = "sslmode=disable"
+	userDB, err := gosql.Open("postgres", pgURL.String())
+	require.NoError(t, err)
+	defer userDB.Close()
+
+	testFileDir, cleanup2 := testutils.TempDir(t)
+	defer cleanup2()
+	testSendFile := filepath.Join(testFileDir, filename)
+	fileContent := []byte("hello \n blah 1@#% some data hello \n @#%^&&*")
+	writeFile(t, testSendFile, fileContent)
+
+	err = runCopyFile(t, userDB, testSendFile)
+	expectedErr := "only users with the admin role are allowed to upload"
 	if !testutils.IsError(err, expectedErr) {
 		t.Fatalf(`expected error: %s, got: %s`, expectedErr, err)
 	}
