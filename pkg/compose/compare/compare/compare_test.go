@@ -20,7 +20,6 @@ import (
 	"flag"
 	"io/ioutil"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -144,14 +143,6 @@ func TestCompare(t *testing.T) {
 				default:
 				}
 				query := smither.Generate()
-				// #44029
-				if strings.Contains(query, "FULL JOIN") {
-					continue
-				}
-				// #44079
-				if strings.Contains(query, "|| NULL::") {
-					continue
-				}
 				query, _ = mutations.ApplyString(rng, query, mutations.PostgresMutator)
 				if err := cmpconn.CompareConns(ctx, time.Second*30, conns, "" /* prep */, query); err != nil {
 					path := filepath.Join(*flagArtifacts, confName+".log")
