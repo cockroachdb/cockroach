@@ -306,6 +306,14 @@ func (ts *TestServer) JobRegistry() interface{} {
 	return nil
 }
 
+// MigrationManager returns the *sqlmigrations.Manager as an interface{}.
+func (ts *TestServer) MigrationManager() interface{} {
+	if ts != nil {
+		return ts.migMgr
+	}
+	return nil
+}
+
 // RPCContext returns the rpc context used by the TestServer.
 func (ts *TestServer) RPCContext() *rpc.Context {
 	if ts != nil {
