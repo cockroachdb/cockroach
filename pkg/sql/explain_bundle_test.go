@@ -37,16 +37,20 @@ func TestExplainBundle(t *testing.T) {
 	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer srv.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(godb)
+	r.Exec(t, "CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE)")
 
-	// Expected list of files for a successful statement.
-	expSuccess := "statement.txt opt.txt opt-v.txt opt-vv.txt plan.txt trace.json"
-	// Expected list of files for a statement that fails during planning.
-	expPlanFail := "statement.txt trace.json"
+	base := "statement.txt trace.json"
+	plans := "opt.txt opt-v.txt opt-vv.txt plan.txt"
 
 	t.Run("basic", func(t *testing.T) {
-		r.Exec(t, "CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE)")
 		rows := r.QueryStr(t, "EXPLAIN BUNDLE SELECT * FROM abc WHERE c=1")
-		checkBundle(t, fmt.Sprint(rows), expSuccess)
+		checkBundle(t, fmt.Sprint(rows), base, plans, "distsql.html")
+	})
+
+	// Check that we get separate diagrams for subqueries.
+	t.Run("subqueries", func(t *testing.T) {
+		rows := r.QueryStr(t, "EXPLAIN BUNDLE SELECT EXISTS (SELECT * FROM abc WHERE c=1)")
+		checkBundle(t, fmt.Sprint(rows), base, plans, "distsql-1.html distsql-2.html")
 	})
 
 	// Even on query errors we should still get a bundle.
@@ -56,7 +60,7 @@ func TestExplainBundle(t *testing.T) {
 			t.Fatalf("unexpected error %v\n", err)
 		}
 		// The bundle url is inside the error detail.
-		checkBundle(t, fmt.Sprintf("%+v", err.(*pq.Error).Detail), expPlanFail)
+		checkBundle(t, fmt.Sprintf("%+v", err.(*pq.Error).Detail), base)
 	})
 
 	// Verify that we can issue the statement with prepare (which can happen
@@ -80,13 +84,15 @@ func TestExplainBundle(t *testing.T) {
 			rowsBuf.WriteString(row)
 			rowsBuf.WriteByte('\n')
 		}
-		checkBundle(t, rowsBuf.String(), expSuccess)
+		checkBundle(t, rowsBuf.String(), base, plans, "distsql.html")
 	})
 }
 
 // checkBundle searches text strings for a bundle URL and then verifies that the
-// bundle contains the expected files.
-func checkBundle(t *testing.T, text string, expectedFiles string) {
+// bundle contains the expected files. The expected files are passed as an
+// arbitrary number of strings; each string contains one or more filenames
+// separated by a space.
+func checkBundle(t *testing.T, text string, expectedFiles ...string) {
 	t.Helper()
 	reg := regexp.MustCompile("http://.*/_admin/v1/stmtbundle/[0-9]*")
 	url := reg.FindString(text)
@@ -116,10 +122,14 @@ func checkBundle(t *testing.T, text string, expectedFiles string) {
 		}
 		files = append(files, f.Name)
 	}
-	expList := strings.Split(expectedFiles, " ")
+
+	var expList []string
+	for _, s := range expectedFiles {
+		expList = append(expList, strings.Split(s, " ")...)
+	}
 	sort.Strings(files)
 	sort.Strings(expList)
 	if fmt.Sprint(files) != fmt.Sprint(expList) {
-		t.Errorf("unexpected list of files %v", files)
+		t.Errorf("unexpected list of files:\n  %v\nexpected:\n  %v", files, expList)
 	}
 }

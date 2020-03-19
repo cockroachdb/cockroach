@@ -536,6 +536,13 @@ type PlanningCtx struct {
 	// noEvalSubqueries indicates that the plan expects any subqueries to not
 	// be replaced by evaluation. Should only be set by EXPLAIN.
 	noEvalSubqueries bool
+
+	// If set, a diagram for the plan will be generated and passed to this
+	// function.
+	saveDiagram func(execinfrapb.FlowDiagram)
+	// If set, the diagram passed to saveDiagram will show the types of each
+	// stream.
+	saveDiagramShowInputTypes bool
 }
 
 var _ physicalplan.ExprContext = &PlanningCtx{}

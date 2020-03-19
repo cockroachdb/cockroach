@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -836,6 +837,11 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	planCtx.isLocal = !distribute
 	planCtx.planner = planner
 	planCtx.stmtType = recv.stmtType
+	if planner.collectBundle {
+		planCtx.saveDiagram = func(diagram execinfrapb.FlowDiagram) {
+			planner.curPlan.distSQLDiagrams = append(planner.curPlan.distSQLDiagrams, diagram)
+		}
+	}
 
 	var evalCtxFactory func() *extendedEvalContext
 	if len(planner.curPlan.subqueryPlans) != 0 || len(planner.curPlan.postqueryPlans) != 0 {
