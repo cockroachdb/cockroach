@@ -1,0 +1,31 @@
+@startuml
+participant SQL
+participant "RootTxn\n+TxnCoordSender" as RootTxn
+participant "LeafTxn\n+TxnCoordSender" as LeafTxn
+
+create RootTxn
+SQL -> RootTxn : NewTxn()
+RootTxn -> RootTxn : init txn object (epoch = 1)
+activate RootTxn
+SQL -> RootTxn : GetMeta()
+RootTxn --> SQL : leafmeta
+create LeafTxn
+SQL -> LeafTxn : NewTxn(leafmeta)
+LeafTxn -> LeafTxn : init txn object (epoch = 1)
+activate LeafTxn
+...
+SQL -> RootTxn : Send(BatchRequest)
+RootTxn -> cluster : Send(BatchRequest)
+cluster -[#red]-> RootTxn : recoverable error!
+deactivate RootTxn
+RootTxn -> RootTxn : new txn object (epoch = 2)
+activate RootTxn
+...
+SQL -> LeafTxn : Send(BatchRequest)
+LeafTxn -> cluster : Send(BatchRequest)
+cluster -[#red]-> LeafTxn : recoverable error!
+deactivate LeafTxn
+LeafTxn --> SQL : leafmeta + error
+SQL -> RootTxn : Augment(leafmeta)
+RootTxn -> RootTxn : woops? (leafmeta.epoch = 1 vs txn epoch = 2)
+@enduml
