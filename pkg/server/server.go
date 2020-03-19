@@ -204,6 +204,7 @@ type Server struct {
 	// shared between the sql.Server and the statusServer.
 	sessionRegistry        *sql.SessionRegistry
 	jobRegistry            *jobs.Registry
+	migMgr                 *sqlmigrations.Manager
 	statsRefresher         *stats.Refresher
 	replicationReporter    *reports.Reporter
 	temporaryObjectCleaner *sql.TemporaryObjectCleaner
@@ -1715,6 +1716,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.ClusterSettings(),
 		s.jobRegistry,
 	)
+	s.migMgr = migMgr
 
 	// Start garbage collecting system events.
 	s.startSystemLogsGC(ctx)
@@ -1801,7 +1803,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Start the async migration to upgrade 19.2-style jobs so they can be run by
 	// the job registry in 20.1.
-	if err := migMgr.StartSchemaChangeJobMigration(ctx); err != nil {
+	if err := migMgr.StartSchemaChangeJobMigration(ctx, false); err != nil {
 		return err
 	}
 

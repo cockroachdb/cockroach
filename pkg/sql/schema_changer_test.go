@@ -5756,12 +5756,13 @@ func TestMultipleRevert(t *testing.T) {
 				// Keep returning a retryable error until the job was actually canceled.
 				return jobs.NewRetryJobError("retry until cancel")
 			},
-			RunBeforeOnFailOrCancel: func() {
+			RunBeforeOnFailOrCancel: func(_ int64) error {
 				// Allow the backfill to proceed normally once the job was actually
 				// canceled.
 				shouldBlockBackfill = false
+				return nil
 			},
-			RunAfterMutationReversal: func() error {
+			RunAfterMutationReversal: func(_ int64) error {
 				// Throw one retryable error right after mutations were reversed so that
 				// the mutation gets attempted to be reversed again.
 				if !shouldRetryAfterReversingMutations {

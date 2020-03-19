@@ -53,6 +53,7 @@ type MigrationManagerTestingKnobs struct {
 	// TODO(mberhault): we could skip only backfill migrations and dependencies
 	// if we had some concept of migration dependencies.
 	DisableBackfillMigrations bool
+	AfterJobMigration         func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -642,7 +643,7 @@ var (
 // adopted by the job registry. The task first waits until the upgrade to 20.1
 // is finalized before running the migration. The migration is retried until
 // it succeeds (on any node).
-func (m *Manager) StartSchemaChangeJobMigration(ctx context.Context) error {
+func (m *Manager) StartSchemaChangeJobMigration(ctx context.Context, ignoreKV bool) error {
 	return m.stopper.RunAsyncTask(ctx, "run-schema-change-job-migration", func(ctx context.Context) {
 		log.Info(ctx, "starting wait for upgrade finalization before schema change job migration")
 		// First wait for the cluster to finalize the upgrade to 20.1.
@@ -664,12 +665,14 @@ func (m *Manager) StartSchemaChangeJobMigration(ctx context.Context) error {
 		}
 		log.VEventf(ctx, 2, "detected upgrade finalization")
 
-		// Check whether this migration has already been completed.
-		if kv, err := m.db.Get(ctx, schemaChangeJobMigrationKey); err != nil {
-			log.Infof(ctx, "error getting record of schema change job migration: %s", err.Error())
-		} else if kv.Exists() {
-			log.Infof(ctx, "schema change job migration already complete")
-			return
+		if !ignoreKV {
+			// Check whether this migration has already been completed.
+			if kv, err := m.db.Get(ctx, schemaChangeJobMigrationKey); err != nil {
+				log.Infof(ctx, "error getting record of schema change job migration: %s", err.Error())
+			} else if kv.Exists() {
+				log.Infof(ctx, "schema change job migration already complete")
+				return
+			}
 		}
 
 		// Now run the migration. This is retried indefinitely until it finishes.
@@ -685,9 +688,9 @@ func (m *Manager) StartSchemaChangeJobMigration(ctx context.Context) error {
 			Closer:         m.stopper.ShouldQuiesce(),
 		}
 		startTime := timeutil.Now().String()
-		for retry := retry.StartWithCtx(ctx, migrationRetryOpts); retry.Next(); {
-			if err := migrateSchemaChangeJobs(ctx, r, m.jobRegistry); err != nil {
-				log.Errorf(ctx, "error attempting running schema change job migration, will retry: %s", err.Error())
+		for migRetry := retry.Start(migrationRetryOpts); migRetry.Next(); {
+			if err := migrateSchemaChangeJobs(context.Background(), r, m.jobRegistry); err != nil {
+				log.Errorf(ctx, "error attempting running schema change job migration, will retry: %s %s", err.Error(), startTime)
 				continue
 			}
 			log.Infof(ctx, "schema change job migration completed")
@@ -695,6 +698,9 @@ func (m *Manager) StartSchemaChangeJobMigration(ctx context.Context) error {
 				log.Warningf(ctx, "error persisting record of schema change job migration, will retry: %s", err.Error())
 			}
 			break
+		}
+		if fn := m.testingKnobs.AfterJobMigration; fn != nil {
+			fn()
 		}
 	})
 }
