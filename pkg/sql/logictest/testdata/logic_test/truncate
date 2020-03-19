@@ -184,3 +184,68 @@ query T
 SELECT * FROM tt
 ----
 foo
+
+# Tests for comments getting moved during truncate.
+subtest comments
+
+statement ok
+CREATE TABLE t (
+  x INT,
+  y INT,
+  z INT,
+  INDEX i1 (x),
+  INDEX i2 (y),
+  INDEX i3 (z)
+);
+COMMENT ON COLUMN t.x IS '''hi''); DROP TABLE t;';
+COMMENT ON COLUMN t.z IS 'comm"en"t2';
+COMMENT ON INDEX t@i2 IS 'comm''ent3';
+TRUNCATE t
+
+query TT
+SELECT column_name, comment FROM [SHOW COLUMNS FROM t WITH COMMENT] ORDER BY column_name
+----
+rowid  NULL
+x      'hi'); DROP TABLE t;
+y      NULL
+z      comm"en"t2
+
+
+query TT rowsort
+SELECT distinct(index_name), comment FROM [SHOW INDEXES FROM t WITH COMMENT]
+----
+primary  NULL
+i1       NULL
+i2       comm'ent3
+i3       NULL
+
+# Ensure that truncate comment reasignment works when index and column IDs
+# don't all start from 1.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x INT, y INT, z INT);
+ALTER TABLE t DROP COLUMN y;
+ALTER TABLE t ADD COLUMN y INT;
+ALTER TABLE t DROP COLUMN y;
+ALTER TABLE t ADD COLUMN y INT;
+CREATE INDEX i ON t (x);
+DROP INDEX t@i;
+CREATE INDEX i ON t (x);
+DROP INDEX t@i;
+CREATE INDEX i ON t (x);
+COMMENT ON COLUMN t.y IS 'hello1';
+COMMENT ON INDEX t@i IS 'hello2'
+
+query TT rowsort
+SELECT column_name, comment FROM [SHOW COLUMNS FROM t WITH COMMENT]
+----
+rowid  NULL
+x      NULL
+y      hello1
+z      NULL
+
+query TT rowsort
+SELECT distinct(index_name), comment FROM [SHOW INDEXES FROM t WITH COMMENT]
+----
+primary  NULL
+i        hello2
