@@ -548,7 +548,13 @@ func canDoServersideRetry(
 	if pErr != nil {
 		switch tErr := pErr.GetDetail().(type) {
 		case *roachpb.WriteTooOldError:
+			// Locking scans hit WriteTooOld errors if they encounter values at
+			// timestamps higher than their read timestamps. When determining
+			// what the new timestamp for the txn should be, we need to bump it
+			// to max(ts encountered + 1, txn's current write ts) so as to not
+			// regress our current txn's write timestamp.
 			newTimestamp = tErr.ActualTimestamp
+			newTimestamp.Forward(pErr.GetTxn().WriteTimestamp)
 		case *roachpb.TransactionRetryError:
 			if ba.Txn == nil {
 				// TODO(andrei): I don't know if TransactionRetryError is possible for
