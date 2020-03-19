@@ -435,11 +435,15 @@ func (j *Job) cancelRequested(ctx context.Context, fn func(context.Context, *kv.
 	})
 }
 
+// onPauseRequestFunc is a function used to perform action on behalf of a job
+// implementation when a pause is requested.
+type onPauseRequestFunc func(ctx context.Context, execCfg interface{}, txn *kv.Txn, progress *jobspb.Progress) error
+
 // pauseRequested sets the status of the tracked job to pause-requested. It does
 // not directly pause the job; it expects the node that runs the job will
 // actively cancel it when it notices that it is in state StatusPauseRequested
 // and will move it to state StatusPaused.
-func (j *Job) pauseRequested(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
+func (j *Job) pauseRequested(ctx context.Context, fn onPauseRequestFunc) error {
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		// Don't allow 19.2-style schema change jobs to undergo changes in job state
 		// before they undergo a migration to make them properly runnable in 20.1 and
@@ -464,9 +468,12 @@ func (j *Job) pauseRequested(ctx context.Context, fn func(context.Context, *kv.T
 			return fmt.Errorf("job with status %s cannot be requested to be paused", md.Status)
 		}
 		if fn != nil {
-			if err := fn(ctx, txn); err != nil {
+			phs, cleanup := j.registry.planFn("pause request", j.Payload().Username)
+			defer cleanup()
+			if err := fn(ctx, phs, txn, md.Progress); err != nil {
 				return err
 			}
+			ju.UpdateProgress(md.Progress)
 		}
 		ju.UpdateStatus(StatusPauseRequested)
 		return nil

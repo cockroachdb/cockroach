@@ -671,14 +671,18 @@ func (r *Registry) CancelRequested(ctx context.Context, txn *kv.Txn, id int64) e
 
 // PauseRequested marks the job with id as paused-requested using the specified txn (may be nil).
 func (r *Registry) PauseRequested(ctx context.Context, txn *kv.Txn, id int64) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
+	job, resumer, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		return err
 	}
-	return job.WithTxn(txn).pauseRequested(ctx, nil)
+	var onPauseRequested onPauseRequestFunc
+	if pr, ok := resumer.(PauseRequester); ok {
+		onPauseRequested = pr.OnPauseRequest
+	}
+	return job.WithTxn(txn).pauseRequested(ctx, onPauseRequested)
 }
 
-// succeeded marks the job with id as succeeded.
+// Succeeded marks the job with id as succeeded.
 func (r *Registry) Succeeded(ctx context.Context, txn *kv.Txn, id int64) error {
 	job, _, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
@@ -725,6 +729,17 @@ type Resumer interface {
 	// cannot assume that any other methods have been called on this Resumer
 	// object.
 	OnFailOrCancel(ctx context.Context, phs interface{}) error
+}
+
+// PauseRequester is an extension of Resumer which allows job implementers to inject
+// logic during the transaction which moves a job to PauseRequested.
+type PauseRequester interface {
+	Resumer
+
+	// OnPauseRequest is called in the transaction that moves a job to PauseRequested.
+	// If an error is returned, the pause request will fail. phs is a
+	// sql.PlanHookState.
+	OnPauseRequest(ctx context.Context, phs interface{}, txn *kv.Txn, details *jobspb.Progress) error
 }
 
 // Constructor creates a resumable job of a certain type. The Resumer is
@@ -794,6 +809,9 @@ func (r *Registry) stepThroughStateMachine(
 		if resumeCtx.Err() != nil {
 			// The context was canceled. Tell the user, but don't attempt to
 			// mark the job as failed because it can be resumed by another node.
+			//
+			// TODO(ajwerner): We'll also end up here if the job was canceled or
+			// paused. We should make this error clearer.
 			return errors.Errorf("job %d: node liveness error: restarting in background", *job.ID())
 		}
 		// TODO(spaskob): enforce a limit on retries.

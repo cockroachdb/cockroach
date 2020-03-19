@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1962,6 +1963,161 @@ func TestJobInTxn(t *testing.T) {
 		// failure.
 		require.Error(t, txn.Commit())
 		require.True(t, timeutil.Since(start) < jobs.DefaultAdoptInterval, "job should have been adopted immediately")
+	})
+}
+
+// TestOnPauseRequest tests that job Resumers which implement PauseRequester
+// work correctly.
+func TestOnPauseRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer jobs.ResetConstructors()()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	s := tc.Server(0)
+	db := s.DB()
+	require.NoError(t, tc.WaitForFullReplication())
+	tc.WaitForNodeLiveness(t)
+
+	jr := s.JobRegistry().(*jobs.Registry)
+	var pauseRequested atomic.Value
+
+	pauseRequested.Store(func(context.Context, interface{}, *kv.Txn, *jobspb.Progress) error {
+		return nil
+	})
+	setPauseRequested := func(f func(context.Context, interface{}, *kv.Txn, *jobspb.Progress) error) (cleanup func()) {
+		prev := pauseRequested.Load()
+		pauseRequested.Store(f)
+		return func() { pauseRequested.Store(prev) }
+	}
+	var resumeFunc atomic.Value
+	resumeFunc.Store(func(ctx context.Context, _ chan<- tree.Datums) error {
+		return nil
+	})
+	setResumeFunc := func(f func(ctx context.Context, _ chan<- tree.Datums) error) (cleanup func()) {
+		prev := resumeFunc.Load()
+		resumeFunc.Store(f)
+		return func() { resumeFunc.Store(prev) }
+	}
+	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{
+			PauseRequest: func(ctx context.Context, phs interface{}, txn *kv.Txn, details *jobspb.Progress) error {
+				return pauseRequested.Load().(func(ctx context.Context, phs interface{}, txn *kv.Txn, details *jobspb.Progress) error)(ctx, phs, txn, details)
+			},
+			OnResume: func(ctx context.Context, resultsCh chan<- tree.Datums) error {
+				return resumeFunc.Load().(func(ctx context.Context, _ chan<- tree.Datums) error)(ctx, resultsCh)
+			},
+		}
+	})
+	rec := jobs.Record{
+		Description:   "There's a snake in my boot!",
+		Username:      "Woody Pride",
+		DescriptorIDs: []sqlbase.ID{1, 2, 3},
+		Details:       jobspb.RestoreDetails{},
+		Progress:      jobspb.RestoreProgress{},
+	}
+	createStartableJob := func(t *testing.T) (sj *jobs.StartableJob) {
+		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			sj, err = jr.CreateStartableJobWithTxn(ctx, rec, txn, nil)
+			return err
+		}))
+		return sj
+	}
+	waitForStatus := func(t *testing.T, sj *jobs.StartableJob, exp jobs.Status) {
+		testutils.SucceedsSoon(t, func() error {
+			status, err := sj.CurrentStatus(ctx)
+			require.NoError(t, err)
+			if status != exp {
+				return fmt.Errorf("expected status %v, got %v", exp, status)
+			}
+			return nil
+		})
+	}
+	// This test ensures that the pause requested function is called.
+	t.Run("positive case", func(t *testing.T) {
+		tc.WaitForNodeLiveness(t)
+		sj := createStartableJob(t)
+		startedCh := make(chan struct{})
+		setResumeFunc(func(ctx context.Context, _ chan<- tree.Datums) error {
+			startedCh <- struct{}{}
+			<-ctx.Done()
+			return ctx.Err()
+		})
+		pauseRequestedCalledCh := make(chan struct{})
+		madeUpHighWater := []byte("foo")
+		setPauseRequested(func(ctx context.Context, phs interface{}, txn *kv.Txn, details *jobspb.Progress) error {
+			details.GetRestore().HighWater = madeUpHighWater
+			pauseRequestedCalledCh <- struct{}{}
+			return nil
+		})
+		runErrCh := make(chan error)
+		// Start the job and make sure that it fails due to being paused later.
+		go func() { runErrCh <- sj.Run(ctx) }()
+
+		// Make sure the job starts.
+		<-startedCh
+
+		// Request that the job is paused.
+		pauseErrCh := make(chan error)
+		go func() {
+			pauseErrCh <- db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				return jr.PauseRequested(ctx, txn, *sj.ID())
+			})
+		}()
+
+		// Ensure that our function got called.
+		<-pauseRequestedCalledCh
+
+		// Ensure that the pause went off without a problem.
+		require.NoError(t, <-pauseErrCh)
+
+		// Now we need to tickle the adoption loop by calling Registry.Run to ensure
+		// that the job moves from pause requested to paused.
+		ctxToCancel, cancel := context.WithCancel(ctx)
+		defer cancel()
+		go func() {
+			_ = jr.Run(ctxToCancel, s.InternalExecutor().(*sql.InternalExecutor), []int64{*sj.ID()})
+		}()
+		require.NotNil(t, <-runErrCh)
+		waitForStatus(t, sj, jobs.StatusPaused)
+		{
+			j, err := jr.LoadJob(ctx, *sj.ID())
+			require.NoError(t, err)
+			progress := j.Progress()
+			require.Equal(t, madeUpHighWater, progress.GetRestore().HighWater)
+		}
+	})
+	// This test ensures that the pause requested function is called.
+	t.Run("error from OnPauseRequest fails the pause request", func(t *testing.T) {
+		tc.WaitForNodeLiveness(t)
+		sj := createStartableJob(t)
+		startedCh := make(chan chan struct{})
+		setResumeFunc(func(ctx context.Context, _ chan<- tree.Datums) error {
+			unblock := make(chan struct{})
+			startedCh <- unblock
+			<-unblock
+			return nil
+		})
+		setPauseRequested(func(ctx context.Context, _ interface{}, txn *kv.Txn, details *jobspb.Progress) error {
+			return errors.New("boom")
+		})
+		runErrCh := make(chan error)
+		// Start the job and make sure that it fails due to being paused later.
+		go func() { runErrCh <- sj.Run(ctx) }()
+
+		// Make sure the job starts.
+		unblock := <-startedCh
+
+		// Request that the job pause is requested and fails.
+		require.Regexp(t, "boom", db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return jr.PauseRequested(ctx, txn, *sj.ID())
+		}))
+
+		// Unblock the job and make sure that it moves to succeeded.
+		close(unblock)
+		require.NoError(t, <-runErrCh)
+		waitForStatus(t, sj, jobs.StatusSucceeded)
 	})
 }
 

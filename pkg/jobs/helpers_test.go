@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -29,8 +30,11 @@ func ResetConstructors() func() {
 type FakeResumer struct {
 	OnResume     func(context.Context, chan<- tree.Datums) error
 	FailOrCancel func(context.Context) error
+	PauseRequest func(_ context.Context, phs interface{}, _ *kv.Txn, _ *jobspb.Progress) error
 	Success      func() error
 }
+
+var _ Resumer = FakeResumer{}
 
 func (d FakeResumer) Resume(
 	ctx context.Context, _ interface{}, resultsCh chan<- tree.Datums,
@@ -53,7 +57,16 @@ func (d FakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}) error {
 	return nil
 }
 
-var _ Resumer = FakeResumer{}
+var _ PauseRequester = FakeResumer{}
+
+func (d FakeResumer) OnPauseRequest(
+	ctx context.Context, phs interface{}, txn *kv.Txn, details *jobspb.Progress,
+) error {
+	if d.PauseRequest == nil {
+		return nil
+	}
+	return d.PauseRequest(ctx, phs, txn, details)
+}
 
 // Started is a wrapper around the internal function that moves a job to the
 // started state.
