@@ -29,6 +29,7 @@ import (
 
 	cld "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
+	rperrors "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ui"
@@ -260,12 +261,21 @@ func verifyClusterName(clusterName string) (string, error) {
 		clusterName, suggestions)
 }
 
+// Provide `cobra.Command` functions with a standard return code handler.
+// Exit codes come from rperrors.Error.ExitCode().
 func wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) {
 	return func(cmd *cobra.Command, args []string) {
 		err := f(cmd, args)
 		if err != nil {
-			cmd.Println("Error: ", err.Error())
-			os.Exit(1)
+			roachprodError, ok := rperrors.AsError(err)
+			if !ok {
+				roachprodError = rperrors.Unclassified{err}
+				err = roachprodError
+			}
+
+			cmd.Println("Error:", err.Error())
+
+			os.Exit(roachprodError.ExitCode())
 		}
 	}
 }
@@ -1182,7 +1192,7 @@ the 'zfs rollback' command:
 			return fmt.Errorf("unknown filesystem %q", fs)
 		}
 
-		err = c.Run(os.Stdout, os.Stderr, c.Nodes, "reformatting", fmt.Sprintf(`
+		err = c.Run(os.Stdout, os.Stderr, c.Nodes, install.OtherCmd, "reformatting", fmt.Sprintf(`
 set -euo pipefail
 if sudo zpool list -Ho name 2>/dev/null | grep ^data1$; then
   sudo zpool destroy -f data1
@@ -1224,7 +1234,7 @@ var runCmd = &cobra.Command{
 		if len(title) > 30 {
 			title = title[:27] + "..."
 		}
-		return c.Run(os.Stdout, os.Stderr, c.Nodes, title, cmd)
+		return c.Run(os.Stdout, os.Stderr, c.Nodes, install.CockroachCmd, title, cmd)
 	}),
 }
 
