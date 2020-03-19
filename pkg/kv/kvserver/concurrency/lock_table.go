@@ -1230,7 +1230,9 @@ func (l *lockState) discoveredLock(
 
 	if l.holder.locked {
 		if !l.isLockedBy(txn.ID) {
-			panic("bug in caller or lockTable")
+			meta, ts, d := l.getLockerInfo()
+			msg := fmt.Sprintf("bug: meta=%v, ts=%v, d=%v", meta, ts, d)
+			panic(msg)
 		}
 	} else {
 		l.holder.locked = true
