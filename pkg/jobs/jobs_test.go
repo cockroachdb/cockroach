@@ -162,9 +162,16 @@ type registryTestSuite struct {
 	failOrCancelCh      chan error
 	resumeCheckCh       chan struct{}
 	failOrCancelCheckCh chan struct{}
+	onPauseRequest      jobs.OnPauseRequestFunc
 	// Instead of a ch for success, use a variable because it can retry since it
 	// is in a transaction.
 	successErr error
+}
+
+func noopPauseRequestFunc(
+	ctx context.Context, planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress,
+) error {
+	return nil
 }
 
 func (rts *registryTestSuite) setUp(t *testing.T) {
@@ -182,6 +189,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 	rts.failOrCancelCh = make(chan error)
 	rts.resumeCheckCh = make(chan struct{})
 	rts.failOrCancelCheckCh = make(chan struct{})
+	rts.onPauseRequest = noopPauseRequestFunc
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
@@ -214,7 +222,6 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 					}
 				}
 			},
-
 			FailOrCancel: func(ctx context.Context) error {
 				t.Log("Starting FailOrCancel")
 				rts.mu.Lock()
@@ -247,6 +254,9 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 				}()
 				rts.mu.a.Success = true
 				return rts.successErr
+			},
+			PauseRequest: func(ctx context.Context, execCfg interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
+				return rts.onPauseRequest(ctx, execCfg, txn, progress)
 			},
 		}
 	})
@@ -741,6 +751,74 @@ func TestRegistryLifecycle(t *testing.T) {
 			return nil
 		})
 		rts.check(t, jobs.StatusFailed)
+	})
+
+	t.Run("OnPauseRequest", func(t *testing.T) {
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+		madeUpSpans := []roachpb.Span{
+			{Key: roachpb.Key("foo")},
+		}
+		rts.onPauseRequest = func(ctx context.Context, planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
+			progress.GetImport().SpanProgress = madeUpSpans
+			return nil
+		}
+
+		job, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		require.NoError(t, err)
+		rts.job = job
+
+		rts.resumeCheckCh <- struct{}{}
+		rts.mu.e.ResumeStart = true
+		rts.check(t, jobs.StatusRunning)
+
+		// Request that the job is paused.
+		pauseErrCh := make(chan error)
+		go func() {
+			_, err := rts.outerDB.Exec("PAUSE JOB $1", *job.ID())
+			pauseErrCh <- err
+		}()
+
+		// Ensure that the pause went off without a problem.
+		require.NoError(t, <-pauseErrCh)
+		rts.check(t, jobs.StatusPaused)
+		{
+			// Make sure the side-effects of our pause function occurred.
+			j, err := rts.registry.LoadJob(rts.ctx, *job.ID())
+			require.NoError(t, err)
+			progress := j.Progress()
+			require.Equal(t, madeUpSpans, progress.GetImport().SpanProgress)
+		}
+	})
+	t.Run("OnPauseRequest failure does not pause", func(t *testing.T) {
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+
+		rts.onPauseRequest = func(ctx context.Context, planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
+			return errors.New("boom")
+		}
+
+		job, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		require.NoError(t, err)
+		rts.job = job
+
+		// Allow the job to start.
+		rts.resumeCheckCh <- struct{}{}
+		rts.mu.e.ResumeStart = true
+		rts.check(t, jobs.StatusRunning)
+
+		// Request that the job is paused and ensure that the pause hit the error
+		// and failed to pause.
+		_, err = rts.outerDB.Exec("PAUSE JOB $1", *job.ID())
+		require.Regexp(t, "boom", err)
+
+		// Allow the job to complete.
+		rts.resumeCh <- nil
+		rts.mu.e.Success = true
+		rts.mu.e.ResumeExit++
+		rts.check(t, jobs.StatusSucceeded)
 	})
 }
 
@@ -1296,6 +1374,7 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+
 }
 
 // TestShowJobs manually inserts a row into system.jobs and checks that the
