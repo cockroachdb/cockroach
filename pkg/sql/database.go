@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -191,6 +192,14 @@ func (dc *databaseCache) getDatabaseDesc(
 	}
 	if desc == nil {
 		if err := txnRunner(ctx, func(ctx context.Context, txn *client.Txn) error {
+			// Run the descriptor read as high-priority, thereby pushing any intents out
+			// of its way. We don't want schema changes to prevent database lookup;
+			// we'd rather force them to refresh. Also this prevents deadlocks in cases
+			// where the name resolution is triggered by the transaction doing the
+			// schema change itself.
+			if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
+				return err
+			}
 			a := UncachedPhysicalAccessor{}
 			desc, err = a.GetDatabaseDesc(ctx, txn, name,
 				tree.DatabaseLookupFlags{Required: required})
@@ -235,6 +244,14 @@ func (dc *databaseCache) getDatabaseID(
 	}
 	if dbID == sqlbase.InvalidID {
 		if err := txnRunner(ctx, func(ctx context.Context, txn *client.Txn) error {
+			// Run the namespace read as high-priority, thereby pushing any intents out
+			// of its way. We don't want schema changes to prevent database acquisitions;
+			// we'd rather force them to refresh. Also this prevents deadlocks in cases
+			// where the name resolution is triggered by the transaction doing the
+			// schema change itself.
+			if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
+				return err
+			}
 			var err error
 			dbID, err = getDatabaseID(ctx, txn, name, required)
 			return err
