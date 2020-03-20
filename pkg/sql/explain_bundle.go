@@ -18,7 +18,9 @@ import (
 	"io"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -38,12 +40,13 @@ func setExplainBundleResult(
 	ast tree.Statement,
 	trace tracing.Recording,
 	plan *planTop,
+	ie *InternalExecutor,
 	execCfg *ExecutorConfig,
 ) error {
 	res.ResetStmtType(&tree.ExplainBundle{})
 	res.SetColumns(ctx, sqlbase.ExplainBundleColumns)
 
-	traceJSON, bundle, err := getTraceAndBundle(trace, plan)
+	traceJSON, bundle, err := getTraceAndBundle(ctx, execCfg.DB, ie, trace, plan)
 	if err != nil {
 		res.SetError(err)
 		return nil
@@ -95,10 +98,10 @@ func setExplainBundleResult(
 // bundle. It tries to return as much information as possible even in error
 // case.
 func getTraceAndBundle(
-	trace tracing.Recording, plan *planTop,
+	ctx context.Context, db *kv.DB, ie *InternalExecutor, trace tracing.Recording, plan *planTop,
 ) (traceJSON tree.Datum, bundle *bytes.Buffer, _ error) {
 	traceJSON, traceStr, err := traceToJSON(trace)
-	bundle, bundleErr := buildStatementBundle(plan, trace, traceStr)
+	bundle, bundleErr := buildStatementBundle(ctx, db, ie, plan, trace, traceStr)
 	if bundleErr != nil {
 		if err == nil {
 			err = bundleErr
@@ -156,31 +159,40 @@ func normalizeSpan(s tracing.RecordedSpan, trace tracing.Recording) tracing.Norm
 // Returns the bundle ID, which is the key for the row added in
 // statement_diagnostics.
 func buildStatementBundle(
-	plan *planTop, trace tracing.Recording, traceJSONStr string,
+	ctx context.Context,
+	db *kv.DB,
+	ie *InternalExecutor,
+	plan *planTop,
+	trace tracing.Recording,
+	traceJSONStr string,
 ) (*bytes.Buffer, error) {
 	if plan == nil {
 		return nil, errors.AssertionFailedf("execution terminated early")
 	}
-	b := makeStmtBundleBuilder(plan)
+	b := makeStmtBundleBuilder(db, ie, plan)
 
 	b.addStatement()
 	b.addOptPlans()
 	b.addExecPlan()
 	b.addDistSQLDiagrams(trace)
 	b.addTrace(traceJSONStr)
+	b.addEnv(ctx)
 
 	return b.finalize()
 }
 
 // stmtBundleBuilder is a helper for building a statement bundle.
 type stmtBundleBuilder struct {
+	db *kv.DB
+	ie *InternalExecutor
+
 	plan *planTop
 
 	z memZipper
 }
 
-func makeStmtBundleBuilder(plan *planTop) stmtBundleBuilder {
-	b := stmtBundleBuilder{plan: plan}
+func makeStmtBundleBuilder(db *kv.DB, ie *InternalExecutor, plan *planTop) stmtBundleBuilder {
+	b := stmtBundleBuilder{db: db, ie: ie, plan: plan}
 	b.z.Init()
 	return b
 }
@@ -247,6 +259,83 @@ func (b *stmtBundleBuilder) addDistSQLDiagrams(trace tracing.Recording) {
 func (b *stmtBundleBuilder) addTrace(traceJSONStr string) {
 	if traceJSONStr != "" {
 		b.z.AddFile("trace.json", traceJSONStr)
+	}
+}
+
+func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
+	c := makeStmtEnvCollector(ctx, b.ie)
+
+	var buf bytes.Buffer
+	if err := c.PrintVersion(&buf); err != nil {
+		fmt.Fprintf(&buf, "-- error getting version: %v\n", err)
+	}
+	fmt.Fprintf(&buf, "\n")
+
+	// Show the values of any non-default session variables that can impact
+	// planning decisions.
+	if err := c.PrintSettings(&buf); err != nil {
+		fmt.Fprintf(&buf, "-- error getting settings: %v\n", err)
+	}
+	b.z.AddFile("env.sql", buf.String())
+
+	mem := b.plan.mem
+	if mem == nil {
+		// No optimizer plans; an error must have occurred during planning.
+		return
+	}
+	buf.Reset()
+
+	var tables, sequences, views []tree.TableName
+	err := b.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var err error
+		tables, sequences, views, err = mem.Metadata().AllDataSourceNames(
+			func(ds cat.DataSource) (cat.DataSourceName, error) {
+				return b.plan.catalog.fullyQualifiedNameWithTxn(ctx, ds, txn)
+			},
+		)
+		return err
+	})
+	if err != nil {
+		b.z.AddFile("schema.sql", fmt.Sprintf("-- error getting data source names: %v\n", err))
+		return
+	}
+
+	if len(tables) == 0 && len(sequences) == 0 && len(views) == 0 {
+		return
+	}
+
+	first := true
+	blank := func() {
+		if !first {
+			buf.WriteByte('\n')
+		}
+		first = false
+	}
+	for i := range sequences {
+		blank()
+		if err := c.PrintCreateSequence(&buf, &sequences[i]); err != nil {
+			fmt.Fprintf(&buf, "-- error getting schema for sequence %s: %v\n", sequences[i].String(), err)
+		}
+	}
+	for i := range tables {
+		blank()
+		if err := c.PrintCreateTable(&buf, &tables[i]); err != nil {
+			fmt.Fprintf(&buf, "-- error getting schema for table %s: %v\n", tables[i].String(), err)
+		}
+	}
+	for i := range views {
+		blank()
+		if err := c.PrintCreateView(&buf, &views[i]); err != nil {
+			fmt.Fprintf(&buf, "-- error getting schema for view %s: %v\n", views[i].String(), err)
+		}
+	}
+	b.z.AddFile("schema.sql", buf.String())
+	for i := range tables {
+		buf.Reset()
+		if err := c.PrintTableStats(&buf, &tables[i], false /* hideHistograms */); err != nil {
+			fmt.Fprintf(&buf, "-- error getting statistics for table %s: %v\n", tables[i].String(), err)
+		}
+		b.z.AddFile(fmt.Sprintf("stats-%s.sql", tables[i].String()), buf.String())
 	}
 }
 
@@ -452,6 +541,8 @@ func (c *stmtEnvCollector) PrintTableStats(
 	if err != nil {
 		return err
 	}
+
+	stats = strings.Replace(stats, "'", "''", -1)
 	fmt.Fprintf(w, "ALTER TABLE %s INJECT STATISTICS '%s';\n", tn.String(), stats)
 	return nil
 }

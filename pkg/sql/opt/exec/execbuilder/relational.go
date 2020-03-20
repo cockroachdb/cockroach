@@ -2026,28 +2026,14 @@ func (b *Builder) applyPresentation(input execPlan, p *physical.Required) (execP
 // EXPLAIN (opt, env).
 func (b *Builder) getEnvData() exec.ExplainEnvData {
 	envOpts := exec.ExplainEnvData{ShowEnv: true}
-	// Catalog objects can show up multiple times in these lists, so
-	// deduplicate them.
-	seen := make(map[tree.TableName]bool)
-	addDS := func(list []tree.TableName, ds cat.DataSource) []tree.TableName {
-		tn, err := b.catalog.FullyQualifiedName(context.TODO(), ds)
-		if err != nil {
-			panic(err)
-		}
-		if !seen[tn] {
-			seen[tn] = true
-			list = append(list, tn)
-		}
-		return list
-	}
-	for _, t := range b.mem.Metadata().AllTables() {
-		envOpts.Tables = addDS(envOpts.Tables, t.Table)
-	}
-	for _, s := range b.mem.Metadata().AllSequences() {
-		envOpts.Sequences = addDS(envOpts.Sequences, s)
-	}
-	for _, v := range b.mem.Metadata().AllViews() {
-		envOpts.Views = addDS(envOpts.Views, v)
+	var err error
+	envOpts.Tables, envOpts.Sequences, envOpts.Views, err = b.mem.Metadata().AllDataSourceNames(
+		func(ds cat.DataSource) (cat.DataSourceName, error) {
+			return b.catalog.FullyQualifiedName(context.TODO(), ds)
+		},
+	)
+	if err != nil {
+		panic(err)
 	}
 
 	return envOpts
