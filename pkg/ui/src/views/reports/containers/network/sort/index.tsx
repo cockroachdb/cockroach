@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { Checkbox, Divider } from "antd";
-import Dropdown, { DropdownOption } from "oss/src/views/shared/components/dropdown";
+import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import React from "react";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 

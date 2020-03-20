@@ -10,7 +10,7 @@
 
 import React from "react";
 import {cockroach} from "src/js/protos";
-import {HighwaterTimestamp} from "oss/src/views/jobs/highwaterTimestamp";
+import {HighwaterTimestamp} from "src/views/jobs/highwaterTimestamp";
 import {JobStatus} from "./jobStatus";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 

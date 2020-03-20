@@ -23,7 +23,7 @@ import { Bytes, DATE_FORMAT, Percentage } from "src/util/format";
 import { INodeStatus, MetricConstants, StatusMetrics } from "src/util/proto";
 import { getMatchParamByName } from "src/util/query";
 import { SummaryBar, SummaryLabel, SummaryValue } from "src/views/shared/components/summaryBar";
-import { Button, BackIcon } from "oss/src/components/button";
+import { Button, BackIcon } from "src/components/button";
 import "./nodeOverview.styl";
 
 /**

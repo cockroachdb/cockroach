@@ -14,7 +14,7 @@ import { Moment } from "moment";
 import React from "react";
 import { createSelector } from "reselect";
 import { ExpandableConfig, SortableColumn, SortableTable, SortSetting } from "src/views/shared/components/sortabletable";
-import { IEmptyProps } from "oss/src/components/empty";
+import { IEmptyProps } from "src/components/empty";
 
 export interface ISortedTablePagination {
   current: number;

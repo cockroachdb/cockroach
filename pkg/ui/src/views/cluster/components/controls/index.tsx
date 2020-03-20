@@ -12,7 +12,7 @@ import { Button, Tooltip } from "antd";
 import CaretLeft from "assets/caret-left.svg";
 import CaretRight from "assets/caret-right.svg";
 import _ from "lodash";
-import { ArrowDirection } from "oss/src/views/shared/components/dropdown";
+import { ArrowDirection } from "src/views/shared/components/dropdown";
 import React from "react";
 import "./controls.styl";
 
