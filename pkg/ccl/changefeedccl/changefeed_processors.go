@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -848,13 +847,10 @@ func (cf *changeFrontier) maybeProtectTimestamp(
 	if cf.isSinkless() || !cf.schemaChangeBoundaryReached() || !cf.shouldProtectBoundaries() {
 		return nil
 	}
-	progress.ProtectedTimestampRecord = uuid.MakeV4()
-	log.VEventf(ctx, 2, "creating protected timestamp %v at %v",
-		progress.ProtectedTimestampRecord, resolved)
-	spansToProtect := makeSpansToProtect(cf.spec.Feed.Targets)
-	rec := jobsprotectedts.MakeRecord(
-		progress.ProtectedTimestampRecord, cf.spec.JobID, resolved, spansToProtect)
-	return pts.Protect(ctx, txn, rec)
+
+	jobID := cf.spec.JobID
+	targets := cf.spec.Feed.Targets
+	return createProtectedTimestampRecord(ctx, pts, txn, jobID, targets, resolved, progress)
 }
 
 func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
