@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execpb"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -38,6 +39,9 @@ type VectorizedStatsCollector struct {
 	// wrapped Operator is feeding into. It must be started right before
 	// returning a batch when Nexted. It is used by the "output" Operator.
 	outputWatch *timeutil.StopWatch
+
+	memMonitors  []*mon.BytesMonitor
+	diskMonitors []*mon.BytesMonitor
 }
 
 var _ Operator = &VectorizedStatsCollector{}
@@ -47,7 +51,12 @@ var _ Operator = &VectorizedStatsCollector{}
 // indicates whether stall or execution time is being measured. inputWatch must
 // be non-nil.
 func NewVectorizedStatsCollector(
-	op Operator, id int32, isStall bool, inputWatch *timeutil.StopWatch,
+	op Operator,
+	id int32,
+	isStall bool,
+	inputWatch *timeutil.StopWatch,
+	memMonitors []*mon.BytesMonitor,
+	diskMonitors []*mon.BytesMonitor,
 ) *VectorizedStatsCollector {
 	if inputWatch == nil {
 		execerror.VectorizedInternalPanic("input watch for VectorizedStatsCollector is nil")
@@ -56,6 +65,8 @@ func NewVectorizedStatsCollector(
 		Operator:        op,
 		VectorizedStats: execpb.VectorizedStats{ID: id, Stall: isStall},
 		inputWatch:      inputWatch,
+		memMonitors:     memMonitors,
+		diskMonitors:    diskMonitors,
 	}
 }
 
@@ -100,4 +111,13 @@ func (vsc *VectorizedStatsCollector) Next(ctx context.Context) coldata.Batch {
 // FinalizeStats records the time measured by the stop watch into the stats.
 func (vsc *VectorizedStatsCollector) FinalizeStats() {
 	vsc.Time = vsc.inputWatch.Elapsed()
+
+	for _, memMon := range vsc.memMonitors {
+		vsc.MaxAllocatedMem += memMon.MaximumBytes()
+	}
+
+	for _, diskMon := range vsc.diskMonitors {
+		vsc.MaxAllocatedDisk += diskMon.MaximumBytes()
+	}
+
 }

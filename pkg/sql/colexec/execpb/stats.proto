@@ -24,4 +24,6 @@ message VectorizedStats {
                                   (gogoproto.stdduration) = true];
   // stall indicates whether stall time or execution time is being tracked.
   bool stall = 5;
+  int64 max_allocated_mem = 6;
+  int64 max_allocated_disk = 7;
 }
