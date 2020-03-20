@@ -15,7 +15,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -26,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -369,6 +373,27 @@ func emitResolvedTimestamp(
 		log.Infof(ctx, `resolved %s`, resolved)
 	}
 	return nil
+}
+
+// createProtectedTimestampRecord will create a record to protect the spans for
+// this changefeed at the resolved timestamp. The progress struct will be
+// updated to refer to this new protected timestamp record.
+func createProtectedTimestampRecord(
+	ctx context.Context,
+	pts protectedts.Storage,
+	txn *kv.Txn,
+	jobID int64,
+	targets jobspb.ChangefeedTargets,
+	resolved hlc.Timestamp,
+	progress *jobspb.ChangefeedProgress,
+) error {
+	progress.ProtectedTimestampRecord = uuid.MakeV4()
+	log.VEventf(ctx, 2, "creating protected timestamp %v at %v",
+		progress.ProtectedTimestampRecord, resolved)
+	spansToProtect := makeSpansToProtect(targets)
+	rec := jobsprotectedts.MakeRecord(
+		progress.ProtectedTimestampRecord, jobID, resolved, spansToProtect)
+	return pts.Protect(ctx, txn, rec)
 }
 
 func makeSpansToProtect(targets jobspb.ChangefeedTargets) []roachpb.Span {
