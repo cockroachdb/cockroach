@@ -423,13 +423,17 @@ func colsToColList(cols []scopeColumn) opt.ColList {
 
 // resolveAndBuildScalar is used to build a scalar with a required type.
 func (b *Builder) resolveAndBuildScalar(
-	expr tree.Expr, requiredType *types.T, context string, flags tree.SemaRejectFlags, inScope *scope,
+	expr tree.Expr,
+	requiredType *types.T,
+	context exprKind,
+	flags tree.SemaRejectFlags,
+	inScope *scope,
 ) opt.ScalarExpr {
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
 	// context.
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
-	b.semaCtx.Properties.Require(context, flags)
+	b.semaCtx.Properties.Require(context.String(), flags)
 
 	inScope.context = context
 	texpr := inScope.resolveAndRequireType(expr, requiredType)

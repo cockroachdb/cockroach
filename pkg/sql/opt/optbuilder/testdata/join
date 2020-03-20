@@ -2380,7 +2380,7 @@ error (0A000): generate_series(): generator functions are not allowed in ON
 build
 SELECT * FROM foo JOIN bar ON max(foo.c) < 2
 ----
-error (42803): max(): aggregate functions are not allowed in ON
+error (42803): aggregate functions are not allowed in JOIN conditions
 
 # Verify join hints get populated.
 build
