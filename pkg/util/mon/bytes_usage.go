@@ -17,6 +17,7 @@ import (
 	"math/bits"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -239,6 +240,17 @@ var maxAllocatedButUnusedBlocks = envutil.EnvOrDefaultInt("COCKROACH_MAX_ALLOCAT
 // to reserve and release bytes to a pool.
 var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt64("COCKROACH_ALLOCATION_CHUNK_SIZE", 10*1024)
 
+// MonitorType specify the type of resource this monitor is tracking.
+type MonitorType int
+
+const (
+	// DiskMonitorType is the type of monitor that tracks the disk usage.
+	DiskMonitorType MonitorType = iota
+
+	// MemoryMonitorType is the type of monitor that tracks the memory usage.
+	MemoryMonitorType
+)
+
 // MakeMonitor creates a new monitor.
 // Arguments:
 // - name is used to annotate log messages, can be used to distinguish
@@ -437,6 +449,20 @@ func (mm *BytesMonitor) AllocBytes() int64 {
 func (mm *BytesMonitor) SetMetrics(curCount *metric.Gauge, maxHist *metric.Histogram) {
 	mm.curBytesCount = curCount
 	mm.maxBytesHist = maxHist
+}
+
+// MonitorType returns the type of the resource of the monitor.
+func (mm *BytesMonitor) MonitorType() MonitorType {
+	var typ MonitorType
+	if _, ok := mm.resource.(memoryResource); ok {
+		typ = MemoryMonitorType
+	} else if _, ok := mm.resource.(diskResource); ok {
+		typ = DiskMonitorType
+	} else {
+		execerror.VectorizedInternalPanic(
+			fmt.Sprintf("unexpected monitor resource type: %v", mm.resource))
+	}
+	return typ
 }
 
 // BoundAccount tracks the cumulated allocations for one client of a pool or

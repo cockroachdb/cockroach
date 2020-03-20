@@ -30,7 +30,8 @@ func TestNumBatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	nBatches := 10
 	noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize()))
-	vsc := NewVectorizedStatsCollector(noop, 0 /* id */, true /* isStall */, timeutil.NewStopWatch())
+	vsc := NewVectorizedStatsCollector(noop, 0 /* id */, true /* isStall */, timeutil.NewStopWatch(),
+		nil, nil)
 	vsc.Init()
 	for {
 		b := vsc.Next(context.Background())
@@ -47,7 +48,8 @@ func TestNumTuples(t *testing.T) {
 	nBatches := 10
 	for _, batchSize := range []int{1, 16, 1024} {
 		noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, batchSize))
-		vsc := NewVectorizedStatsCollector(noop, 0 /* id */, true /* isStall */, timeutil.NewStopWatch())
+		vsc := NewVectorizedStatsCollector(noop, 0 /* id */, true /* isStall */, timeutil.NewStopWatch(),
+			nil, nil)
 		vsc.Init()
 		for {
 			b := vsc.Next(context.Background())
@@ -75,14 +77,15 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
 			timeSource:   timeSource,
 		}
-		leftInput := NewVectorizedStatsCollector(leftSource, 0 /* id */, true /* isStall */, timeutil.NewTestStopWatch(timeSource.Now))
+		leftInput := NewVectorizedStatsCollector(leftSource, 0 /* id */, true /* isStall */, timeutil.NewTestStopWatch(timeSource.Now),
+			nil, nil)
 		leftInput.SetOutputWatch(mjInputWatch)
 
 		rightSource := &timeAdvancingOperator{
 			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
 			timeSource:   timeSource,
 		}
-		rightInput := NewVectorizedStatsCollector(rightSource, 1 /* id */, true /* isStall */, timeutil.NewTestStopWatch(timeSource.Now))
+		rightInput := NewVectorizedStatsCollector(rightSource, 1 /* id */, true /* isStall */, timeutil.NewTestStopWatch(timeSource.Now), nil, nil)
 		rightInput.SetOutputWatch(mjInputWatch)
 
 		mergeJoiner, err := newMergeJoinOp(
@@ -100,7 +103,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			OneInputNode: NewOneInputNode(mergeJoiner),
 			timeSource:   timeSource,
 		}
-		mjStatsCollector := NewVectorizedStatsCollector(timeAdvancingMergeJoiner, 2 /* id */, false /* isStall */, mjInputWatch)
+		mjStatsCollector := NewVectorizedStatsCollector(timeAdvancingMergeJoiner, 2 /* id */, false /* isStall */, mjInputWatch, nil, nil)
 
 		// The inputs are identical, so the merge joiner should output nBatches
 		// batches with each having coldata.BatchSize() tuples.
