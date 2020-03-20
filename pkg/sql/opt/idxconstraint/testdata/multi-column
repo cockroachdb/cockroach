@@ -121,3 +121,11 @@ index-constraints vars=(int, int, int) index=(@1, @2, @3)
 ----
 [/1 - /1]
 Remaining filter: (@3 > 0) OR (@3 < 10)
+
+index-constraints vars=(string, int) index=(@1, @2)
+(((@1,) > ('us-east1',)) AND ((@1,) < ('us-west1',))) OR ((((@1,) > ('europe-west2',)) AND ((@1,) < ('us-east1',))) OR (((@1,) > ('us-west1',)) OR ((@1,) < ('europe-west2',))))
+----
+(/NULL - /'europe-west2')
+[/e'europe-west2\x00' - /'us-east1')
+[/e'us-east1\x00' - /'us-west1')
+[/e'us-west1\x00' - ]

@@ -1335,7 +1335,6 @@ render           ·            ·
       └── scan   ·            ·
 ·                table        a@p
 ·                spans        /5.000000000000001-/9.999999999999998/PrefixEnd /20.000000000000004-/39.99999999999999/PrefixEnd
-·                filter       (price < 10.0) OR (price > 20.0)
 
 statement ok
 SET CLUSTER SETTING sql.parallel_scans.enabled = false
