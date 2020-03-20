@@ -166,6 +166,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
   onChangePage = (current: number) => {
     const { pagination } = this.state;
     this.setState({ pagination: { ...pagination, current } });
+    this.trackPaginate(current);
   }
   onSubmitSearchField = (search: string) => {
     this.setState({ pagination: { ...this.state.pagination, current: 1 }, search });
@@ -188,18 +189,22 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
   }
 
   trackSearch = (searchTerm: string, numberOfResults: number) => {
-    const pagePath = window.location.pathname + window.location.hash;
-
-    const payload = {
+    analytics.track({
       event: "Search",
       properties: {
         searchTerm,
         numberOfResults,
-        pagePath,
       },
-    };
+    });
+  }
 
-    analytics.track(payload);
+  trackPaginate = (page: number) => {
+    analytics.track({
+      event: "Paginate",
+      properties: {
+        selectedPage: page,
+      },
+    });
   }
 
   renderPage = (_page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next", originalElement: React.ReactNode) => {
