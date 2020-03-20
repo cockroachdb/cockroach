@@ -50,6 +50,9 @@ type txnState struct {
 		syncutil.RWMutex
 
 		txn *kv.Txn
+
+		// txnStart records the time that txn started.
+		txnStart time.Time
 	}
 
 	// connCtx is the connection's context. This is the parent of Ctx.
@@ -201,6 +204,8 @@ func (ts *txnState) resetForNewSQLTxn(
 	} else {
 		ts.mu.txn = txn
 	}
+	// Reset the start time.
+	ts.mu.txnStart = time.Time{}
 	ts.mu.Unlock()
 	if historicalTimestamp != nil {
 		ts.setHistoricalTimestamp(ts.Ctx, *historicalTimestamp)

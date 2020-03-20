@@ -2264,7 +2264,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		kvTxnID = &id
 		activeTxnInfo = &serverpb.TxnInfo{
 			ID:             id,
-			Start:          ex.phaseTimes[transactionStart],
+			Start:          ex.state.mu.txnStart,
 			TxnDescription: txn.String(),
 		}
 	}
