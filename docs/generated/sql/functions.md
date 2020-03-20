@@ -873,6 +873,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="get_bit"></a><code>get_bit(bit_string: varbit, index: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts a bit at given index in the bit array</p>
 </span></td></tr>
+<tr><td><a name="get_bit"></a><code>get_bit(byte_string: <a href="bytes.html">bytes</a>, index: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts a bit at given index in the byte array</p>
+</span></td></tr>
 <tr><td><a name="initcap"></a><code>initcap(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Capitalizes the first letter of <code>val</code>.</p>
 </span></td></tr>
 <tr><td><a name="left"></a><code>left(input: <a href="bytes.html">bytes</a>, return_set: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the first <code>return_set</code> bytes from <code>input</code>.</p>
@@ -1016,6 +1018,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="rtrim"></a><code>rtrim(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes all spaces from the end (right-hand side) of <code>val</code>.</p>
 </span></td></tr>
 <tr><td><a name="set_bit"></a><code>set_bit(bit_string: varbit, index: <a href="int.html">int</a>, to_set: <a href="int.html">int</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Updates a bit at given index in the bit array</p>
+</span></td></tr>
+<tr><td><a name="set_bit"></a><code>set_bit(byte_string: <a href="bytes.html">bytes</a>, index: <a href="int.html">int</a>, to_set: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Updates a bit at given index in the byte array</p>
 </span></td></tr>
 <tr><td><a name="sha1"></a><code>sha1(<a href="bytes.html">bytes</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Calculates the SHA1 hash value of a set of values.</p>
 </span></td></tr>
