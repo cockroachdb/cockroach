@@ -47,7 +47,7 @@ import classNames from "classnames";
 import {
   selectDiagnosticsReportsCountByStatementFingerprint,
 } from "src/redux/statements/statementsSelectors";
-import { Button, BackIcon } from "oss/src/components/button";
+import { Button, BackIcon } from "src/components/button";
 import { trackSubnavSelection } from "src/util/analytics";
 
 const { TabPane } = Tabs;

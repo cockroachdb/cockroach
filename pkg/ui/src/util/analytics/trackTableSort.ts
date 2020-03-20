@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 import { analytics } from "src/redux/analytics";
-import { SortableColumn, SortSetting } from "oss/src/views/shared/components/sortabletable";
+import { SortableColumn, SortSetting } from "src/views/shared/components/sortabletable";
 
 export const track = (fn: Function) => (
   name?: String,

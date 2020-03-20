@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 import { Divider, Icon, Tooltip } from "antd";
-import { Chip } from "oss/src/views/app/components/chip";
-import Modal from "oss/src/views/app/components/modal";
+import { Chip } from "src/views/app/components/chip";
+import Modal from "src/views/app/components/modal";
 import { getDisplayName } from "src/redux/nodes";
 import React from "react";
 import { NoConnection } from "..";

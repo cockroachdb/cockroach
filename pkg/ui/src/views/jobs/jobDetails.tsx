@@ -10,7 +10,7 @@
 
 import { Col, Row } from "antd";
 import _ from "lodash";
-import { TimestampToMoment } from "oss/src/util/convert";
+import { TimestampToMoment } from "src/util/convert";
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";

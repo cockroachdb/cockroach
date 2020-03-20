@@ -11,7 +11,7 @@
 import React from "react";
 import { shallow } from "enzyme";
 import { assert } from "chai";
-import {JobTable, JobTableProps} from "oss/src/views/jobs/jobTable";
+import {JobTable, JobTableProps} from "src/views/jobs/jobTable";
 
 import "src/enzymeInit";
 
