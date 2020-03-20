@@ -607,9 +607,7 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 		case 1:
 			return c.makeSpansForExpr(offset, (*t)[0].Condition, out)
 		default:
-			// We don't have enough information to know if the spans are "tight".
-			c.makeSpansForAnd(offset, t, out)
-			return false
+			return c.makeSpansForAnd(offset, t, out)
 		}
 
 	case *memo.FiltersItem:
@@ -617,9 +615,7 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 		return c.makeSpansForExpr(offset, t.Condition, out)
 
 	case *memo.AndExpr:
-		// We don't have enough information to know if the spans are "tight".
-		c.makeSpansForAnd(offset, t, out)
-		return false
+		return c.makeSpansForAnd(offset, t, out)
 
 	case *memo.OrExpr:
 		return c.makeSpansForOr(offset, t, out)
@@ -685,17 +681,23 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 }
 
 // makeSpansForAnd calculates spans for an AndOp or FiltersOp.
-func (c *indexConstraintCtx) makeSpansForAnd(offset int, e opt.Expr, out *constraint.Constraint) {
+func (c *indexConstraintCtx) makeSpansForAnd(
+	offset int, e opt.Expr, out *constraint.Constraint,
+) (tight bool) {
 	// TODO(radu): sorting the expressions by the variable index, or pre-building
 	// a map could help here.
-	c.makeSpansForExpr(offset, e.Child(0), out)
+	tight = c.makeSpansForExpr(offset, e.Child(0), out)
 	var exprConstraint constraint.Constraint
 	for i, n := 1, e.ChildCount(); i < n; i++ {
-		c.makeSpansForExpr(offset, e.Child(i), &exprConstraint)
+		childTight := c.makeSpansForExpr(offset, e.Child(i), &exprConstraint)
+		tight = tight && childTight
 		out.IntersectWith(c.evalCtx, &exprConstraint)
 	}
 	if out.IsUnconstrained() {
-		return
+		return tight
+	}
+	if tight {
+		return true
 	}
 
 	// Now we try to refine the result with constraints on suffixes of the index
@@ -707,7 +709,7 @@ func (c *indexConstraintCtx) makeSpansForAnd(offset int, e opt.Expr, out *constr
 		// In each iteration, we try to extend keys with constraints for the offset
 		// that corresponds to where the key ends. We can skip offsets at which no
 		// keys end.
-		// To calculate this, we get the minimum length of any key that doesn't ends
+		// To calculate this, we get the minimum length of any key that doesn't end
 		// at or after the current offset.
 		minLen := len(c.columns)
 		for j := 0; j < out.Spans.Count(); j++ {
@@ -733,6 +735,9 @@ func (c *indexConstraintCtx) makeSpansForAnd(offset int, e opt.Expr, out *constr
 		}
 		out.Combine(c.evalCtx, &ofsC)
 	}
+
+	// We're not sure if the refinement process above "consumed" all conjuncts.
+	return false
 }
 
 // makeSpansForOr calculates spans for an OrOp.
@@ -1061,23 +1066,15 @@ func (c *indexConstraintCtx) getMaxSimplifyPrefix(idxConstraint *constraint.Cons
 //    by getMaxSimplifyPrefix). So `[/1/2 - /1/2]` is contained in the
 //    expression span and we can simplify `@2 = 2` to `true`.
 //
-//    An example where this doesn't work well is with disjunctions:
-//    `@1 <= 1 OR @1 >= 4` has spans `[ - /1], [/1 - ]` but in separation neither
-//    sub-expression is always true inside these spans.
 func (c *indexConstraintCtx) simplifyFilter(
 	scalar opt.ScalarExpr, final *constraint.Constraint, maxSimplifyPrefix int,
 ) opt.ScalarExpr {
-	// Special handling for And, Or, and Range.
+	// Special handling for And, Range.
 	switch t := scalar.(type) {
 	case *memo.AndExpr:
 		left := c.simplifyFilter(t.Left, final, maxSimplifyPrefix)
 		right := c.simplifyFilter(t.Right, final, maxSimplifyPrefix)
 		return c.factory.ConstructAnd(left, right)
-
-	case *memo.OrExpr:
-		left := c.simplifyFilter(t.Left, final, maxSimplifyPrefix)
-		right := c.simplifyFilter(t.Right, final, maxSimplifyPrefix)
-		return c.factory.ConstructOr(left, right)
 
 	case *memo.RangeExpr:
 		return c.factory.ConstructRange(c.simplifyFilter(t.And, final, maxSimplifyPrefix))
@@ -1121,6 +1118,14 @@ func (c *indexConstraintCtx) simplifyFilter(
 		// is no need for a remaining filter for this condition.
 		return memo.TrueSingleton
 	}
+
+	// Special handling for Or.
+	switch t := scalar.(type) {
+	case *memo.OrExpr:
+		left := c.simplifyFilter(t.Left, final, maxSimplifyPrefix)
+		right := c.simplifyFilter(t.Right, final, maxSimplifyPrefix)
+		return c.factory.ConstructOr(left, right)
+	}
 	return scalar
 }
 
@@ -1133,7 +1138,7 @@ func (c *indexConstraintCtx) simplifyFilter(
 //     ..
 //   }
 //   spans, ok := ic.Spans()
-//   remFilterGroup := ic.RemainingFilter()
+//   remFilterGroup := ic.RemainingFilters()
 //   remFilter := o.Optimize(remFilterGroup, &opt.PhysicalProps{})
 type Instance struct {
 	indexConstraintCtx
