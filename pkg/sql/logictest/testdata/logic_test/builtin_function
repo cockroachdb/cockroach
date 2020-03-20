@@ -2584,6 +2584,34 @@ SELECT get_bit(B'10110', 10)
 query error get_bit\(\): GetBitAtIndex: bit index 0 out of valid range \(0..-1\)
 SELECT get_bit(B'', 0);
 
+# Binary representation of 'l' is 01101100
+# Binary representation of \o145 is 01100101
+# Binary representation of \x61\x62\x6C are 01100001 01100010 01101100
+
+query I rowsort
+SELECT get_bit(b'\145\x6C\l', 0) UNION SELECT get_bit(b'\145\x6C\l', 13)
+----
+0
+1
+
+query I rowsort
+SELECT get_bit(b'\145', 7) UNION SELECT get_bit(b'\145', 0)
+----
+1
+0
+
+query I rowsort
+SELECT get_bit('\x6162'::bytea, 7) UNION SELECT get_bit('\x6162'::bytea, 12)
+----
+1
+0
+
+query error get_bit\(\): bit index 8 out of valid range \(0..7\)
+SELECT get_bit(b'\x61', 8)
+
+query error get_bit\(\): bit index 0 out of valid range \(0..-1\)
+SELECT get_bit(b'', 0)
+
 subtest set_bit
 
 query T rowsort
@@ -2606,3 +2634,28 @@ SELECT set_bit(B'1001010', 0, 2)
 
 query error set_bit\(\): SetBitAtIndex: bit index 0 out of valid range \(0..-1\)
 SELECT set_bit(B'', 0, 1)
+
+# Binary representation of 'a' 'b' 'c' 'f' 'l'  are 01100001 01100010 01100011 01100110 01101100
+# Binary representation of \o145 is 1100101
+# Binary representation of \x61\x62\x66\x6C are 01100001 01100010 01100110 01101100
+
+query T rowsort
+SELECT set_bit(b'ab', 6, 1) UNION SELECT set_bit(b'\x61\x66', 15, 0)
+----
+cb
+af
+
+query T rowsort
+SELECT set_bit('a'::bytea, 5, 0) UNION SELECT set_bit('\x6162'::bytea, 13, 1)
+----
+a
+af
+
+query error set_bit\(\): bit index 16 out of valid range \(0..15\)
+SELECT set_bit(b'ac', 16, 0)
+
+query error set_bit\(\): bit index 0 out of valid range \(0..-1\)
+SELECT set_bit(b'', 0, 1)
+
+query error set_bit\(\): new bit must be 0 or 1.
+SELECT set_bit(b'\145\x6C\l', 0, 2)
