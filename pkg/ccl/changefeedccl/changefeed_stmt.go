@@ -627,3 +627,39 @@ func (b *changefeedResumer) maybeCleanUpProtectedTimestamp(
 		log.Warningf(ctx, "failed to remove protected timestamp record %v: %v", ptsID, err)
 	}
 }
+
+var _ jobs.PauseRequester = (*changefeedResumer)(nil)
+
+// OnPauseRequest implements jobs.PauseRequester. If this changefeed is being
+// paused, we want to install a protected timestamp at the most recent high
+// watermark if there isn't already one.
+func (b *changefeedResumer) OnPauseRequest(
+	ctx context.Context, planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress,
+) error {
+	details := b.job.Details().(jobspb.ChangefeedDetails)
+	if _, shouldPause := details.Opts[changefeedbase.OptProtectDataFromGCOnPause]; !shouldPause {
+		return nil
+	}
+
+	cp := progress.GetChangefeed()
+
+	// If we already have a protected timestamp record, keep it where it is.
+	if cp.ProtectedTimestampRecord != uuid.Nil {
+		return nil
+	}
+
+	resolved := progress.GetHighWater()
+	if resolved == nil {
+		// This should only happen if the job was created in a version that did not
+		// use protected timestamps but has yet to checkpoint its high water.
+		// Changefeeds from older versions didn't get protected timestamps so it's
+		// fine to not protect this one. In newer versions changefeeds which perform
+		// an initial scan at the statement time (and don't have an initial high
+		// water) will have a protected timestamp.
+		return nil
+	}
+
+	pts := planHookState.(sql.PlanHookState).ExecCfg().ProtectedTimestampProvider
+	return createProtectedTimestampRecord(ctx, pts, txn, *b.job.ID(),
+		details.Targets, *resolved, cp)
+}
