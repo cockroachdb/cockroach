@@ -178,8 +178,8 @@ func (b *Builder) analyzeDistinctOnArgs(
 	// semaCtx in case we are recursively called within a subquery
 	// context.
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
-	b.semaCtx.Properties.Require("DISTINCT ON", tree.RejectGenerators)
-	inScope.context = "DISTINCT ON"
+	b.semaCtx.Properties.Require(exprKindDistinctOn.String(), tree.RejectGenerators)
+	inScope.context = exprKindDistinctOn
 
 	for i := range distinctOn {
 		b.analyzeExtraArgument(distinctOn[i], inScope, projectionsScope, distinctOnScope)

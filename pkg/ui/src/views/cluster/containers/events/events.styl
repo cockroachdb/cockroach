@@ -11,38 +11,38 @@
 @require "~styl/base/palette.styl"
 @require "~src/components/core/index.styl"
 
+$event-message-line-height = 22px
+
 .events
   font-family Lato-Regular
   table
     width 100%
     border-collapse collapse
     tr
-      height 60px
       border-bottom 1px solid $table-border-color
       &:last-child
         border 0
-    td
-      padding-left 0
+      td
+        padding 10px 0 8px
+    tr:first-child > td
+      padding 0 0 8px
+
 
 .events__message
-  font-family $font-family--base
-  font-size 14px
-  line-height 22px
+  font-size $font-size--medium
   color $colors--neutral-8
   text-overflow ellipsis
   display block
-  white-space nowrap
   overflow hidden
-  width 169px
-  margin-bottom 18px
+  line-height $event-message-line-height
+  width 240px
+  max-height $event-message-line-height * 2
 
 .events__timestamp
-  font-family $font-family--base
-  font-size 12px
-  line-height 20px
+  font-size $font-size--small
   color $colors--neutral-6
-  margin-left 20px
-  width 65px
+  letter-spacing 0.3px
+  line-height $line-height--small
 
 .events__more-link
   text-align center

@@ -10,7 +10,7 @@
 
 import React from "react";
 import { assert } from "chai";
-import { shallow } from "enzyme";
+import { mount, shallow } from "enzyme";
 import _ from "lodash";
 import Long from "long";
 import * as sinon from "sinon";
@@ -20,6 +20,7 @@ import * as protos from  "src/js/protos";
 import { EventBoxUnconnected as EventBox, EventRow, getEventInfo } from "src/views/cluster/containers/events";
 import { refreshEvents } from "src/redux/apiReducers";
 import { allEvents } from "src/util/eventTypes";
+import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 type Event = protos.cockroach.server.serverpb.EventsResponse.Event;
 
@@ -37,7 +38,7 @@ function makeEventBox(
 }
 
 function makeEvent(event: Event) {
-  return shallow(<EventRow event={event}></EventRow>);
+  return mount(<EventRow event={event}></EventRow>);
 }
 
 describe("<EventBox>", function() {
@@ -91,9 +92,8 @@ describe("<EventRow>", function () {
       });
 
       const provider = makeEvent(e);
-      assert.lengthOf(provider.first().children(), 2);
-      const tooltip = provider.first().childAt(0).childAt(0).childAt(0).childAt(0).childAt(0);
-      assert(_.includes(tooltip.text(), "created database"));
+      assert.isTrue(provider.find("div.events__message > span").text().includes("created database"));
+      assert.isTrue(provider.find(ToolTipWrapper).exists());
     });
 
     it("correctly renders an unknown event", function () {
@@ -101,11 +101,10 @@ describe("<EventRow>", function () {
         target_id: Long.fromNumber(1),
         event_type: "unknown",
       });
-
       const provider = makeEvent(e);
-      assert.lengthOf(provider.first().children(), 2);
-      const tooltip = provider.first().childAt(0).childAt(0).childAt(0).childAt(0).childAt(0);
-      assert(_.includes(tooltip.text(), "Unknown Event Type"));
+
+      assert.isTrue(provider.find("div.events__message > span").text().includes("unknown"));
+      assert.isTrue(provider.find(ToolTipWrapper).exists());
     });
   });
 });

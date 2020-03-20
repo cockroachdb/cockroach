@@ -77,8 +77,8 @@ func (b *Builder) analyzeProjectionList(
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 	defer func(replaceSRFs bool) { inScope.replaceSRFs = replaceSRFs }(inScope.replaceSRFs)
 
-	b.semaCtx.Properties.Require("SELECT", tree.RejectNestedGenerators)
-	inScope.context = "SELECT"
+	b.semaCtx.Properties.Require(exprKindSelect.String(), tree.RejectNestedGenerators)
+	inScope.context = exprKindSelect
 	inScope.replaceSRFs = true
 
 	b.analyzeSelectList(selects, desiredTypes, inScope, outScope)
@@ -96,8 +96,8 @@ func (b *Builder) analyzeReturningList(
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 
 	// Ensure there are no special functions in the RETURNING clause.
-	b.semaCtx.Properties.Require("RETURNING", tree.RejectSpecial)
-	inScope.context = "RETURNING"
+	b.semaCtx.Properties.Require(exprKindReturning.String(), tree.RejectSpecial)
+	inScope.context = exprKindReturning
 
 	b.analyzeSelectList(tree.SelectExprs(returning), desiredTypes, inScope, outScope)
 }

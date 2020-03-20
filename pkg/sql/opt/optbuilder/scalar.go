@@ -572,7 +572,7 @@ func (b *Builder) checkSubqueryOuterCols(
 		aggCols := inScope.groupby.aggregateResultCols()
 		for i := range aggCols {
 			if subqueryOuterCols.Contains(aggCols[i].id) {
-				panic(tree.NewInvalidFunctionUsageError(tree.AggregateClass, inScope.context))
+				panic(tree.NewInvalidFunctionUsageError(tree.AggregateClass, inScope.context.String()))
 			}
 		}
 	}

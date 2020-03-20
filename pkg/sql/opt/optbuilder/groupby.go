@@ -434,8 +434,10 @@ func (b *Builder) analyzeHaving(having *tree.Where, fromScope *scope) tree.Typed
 	// We need to save and restore the previous value of the field in semaCtx
 	// in case we are recursively called within a subquery context.
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
-	b.semaCtx.Properties.Require("HAVING", tree.RejectWindowApplications|tree.RejectGenerators)
-	fromScope.context = "HAVING"
+	b.semaCtx.Properties.Require(
+		exprKindHaving.String(), tree.RejectWindowApplications|tree.RejectGenerators,
+	)
+	fromScope.context = exprKindHaving
 	return fromScope.resolveAndRequireType(having.Expr, types.Bool)
 }
 
@@ -589,8 +591,8 @@ func (b *Builder) buildGrouping(
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 
 	// Make sure the GROUP BY columns have no special functions.
-	b.semaCtx.Properties.Require("GROUP BY", tree.RejectSpecial)
-	fromScope.context = "GROUP BY"
+	b.semaCtx.Properties.Require(exprKindGroupBy.String(), tree.RejectSpecial)
+	fromScope.context = exprKindGroupBy
 
 	// Resolve types, expand stars, and flatten tuples.
 	exprs := b.expandStarAndResolveType(groupBy, fromScope)
