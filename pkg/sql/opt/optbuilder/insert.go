@@ -264,18 +264,9 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	}
 
 	// Add default columns that were not explicitly specified by name or
-	// implicitly targeted by input columns. This includes columns undergoing
-	// write mutations, if they have a default value.
-	mb.addDefaultColsForInsert()
-
-	// Possibly round DECIMAL-related columns containing insertion values. Do
-	// this before evaluating computed expressions, since those may depend on
-	// the inserted columns.
-	mb.roundDecimalValues(mb.insertOrds, false /* roundComputedCols */)
-
-	// Add any computed columns. This includes columns undergoing write mutations,
-	// if they have a computed value.
-	mb.addComputedColsForInsert()
+	// implicitly targeted by input columns. Also add any computed columns. In
+	// both cases, include columns undergoing mutations in the write-only state.
+	mb.addSynthesizedColsForInsert()
 
 	var returning tree.ReturningExprs
 	if resultsNeeded(ins.Returning) {
@@ -315,8 +306,8 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 			mb.buildInputForUpsert(inScope, primaryOrds, nil /* whereClause */)
 
 			// Add additional columns for computed expressions that may depend on any
-			// updated columns.
-			mb.addComputedColsForUpdate()
+			// updated columns, as well as mutation columns with default values.
+			mb.addSynthesizedColsForUpdate()
 		}
 
 		// Build the final upsert statement, including any returned expressions.
@@ -606,27 +597,28 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 	}
 }
 
-// addDefaultColsForInsert wraps an Insert input expression with a Project
-// operator containing any default (or nullable) columns that are not yet part
-// of the target column list. This includes mutation columns, since they must
-// always have default or computed values.
-func (mb *mutationBuilder) addDefaultColsForInsert() {
+// addSynthesizedColsForInsert wraps an Insert input expression with a Project
+// operator containing any default (or nullable) columns and any computed
+// columns that are not yet part of the target column list. This includes all
+// write-only mutation columns, since they must always have default or computed
+// values.
+func (mb *mutationBuilder) addSynthesizedColsForInsert() {
+	// Start by adding non-computed columns that have not already been explicitly
+	// specified in the query. Do this before adding computed columns, since those
+	// may depend on non-computed columns.
 	mb.addSynthesizedCols(
 		mb.insertOrds,
-		func(tabCol cat.Column) bool { return !tabCol.IsComputed() },
+		func(colOrd int) bool { return !mb.tab.Column(colOrd).IsComputed() },
 	)
-}
 
-// addComputedColsForInsert wraps an Insert input expression with a Project
-// operator containing computed columns that are not yet part of the target
-// column list. This includes mutation columns, since they must always have
-// default or computed values. This must be done after calling
-// addDefaultColsForInsert, because computed columns can depend on default
-// columns.
-func (mb *mutationBuilder) addComputedColsForInsert() {
+	// Possibly round DECIMAL-related columns containing insertion values (whether
+	// synthesized or not).
+	mb.roundDecimalValues(mb.insertOrds, false /* roundComputedCols */)
+
+	// Now add all computed columns.
 	mb.addSynthesizedCols(
 		mb.insertOrds,
-		func(tabCol cat.Column) bool { return tabCol.IsComputed() },
+		func(colOrd int) bool { return mb.tab.Column(colOrd).IsComputed() },
 	)
 
 	// Possibly round DECIMAL-related computed columns.
@@ -796,9 +788,12 @@ func (mb *mutationBuilder) buildInputForUpsert(
 		mb.outScope.cols[i].table = excludedTableName
 	}
 
-	// Build the right side of the left outer join. Include mutation columns
-	// because they can be used by computed update expressions. Use a different
-	// instance of table metadata so that col IDs do not overlap.
+	// Build the right side of the left outer join. Use a different instance of
+	// table metadata so that col IDs do not overlap.
+	//
+	// NOTE: Include mutation columns, but be careful to never use them for any
+	//       reason other than as "fetch columns". See buildScan comment.
+	// TODO(andyk): Why does execution engine need mutation columns for Insert?
 	fetchScope := mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		nil, /* ordinals */
