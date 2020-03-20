@@ -239,7 +239,6 @@ export class SortableTable extends React.Component<TableProps> {
   }
 
   trackTableSort = (name?: String, col?: SortableColumn, sortSetting?: SortSetting) => {
-    const path = window.location.pathname + window.location.hash;
     const tableName = name || "";
     const columnName = col.title || "";
     const sortDirection = (sortSetting.ascending) ? "asc" : "desc";
@@ -247,7 +246,6 @@ export class SortableTable extends React.Component<TableProps> {
     const payload = {
       event: "Table Sort",
       properties: {
-        pagePath: path,
         tableName,
         columnName,
         sortDirection,

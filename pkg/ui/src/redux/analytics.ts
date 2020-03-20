@@ -189,8 +189,27 @@ export class AnalyticsSync {
     /** Analytics Track for Segment: https://segment.com/docs/connections/spec/track/ */
     track(msg: TrackMessage) {
       const cluster = this.getCluster();
-      const clusterId = cluster ? cluster.cluster_id : "null";
-      const message = { userId: clusterId, ...msg };
+      if (cluster === null) {
+        return;
+      }
+
+      // get cluster_id to id the event
+      const { cluster_id } = cluster;
+      const pagePath = this.redact(history.location.pathname);
+
+      // break down properties from message
+      const { properties, ...rest } = msg;
+      const props = {
+        pagePath,
+        ...properties,
+      }
+
+      const message = { 
+        userId: cluster_id,
+        properties: { ...props },
+        ...rest,
+      };
+
       this.analyticsService.track(message);
     }
 
