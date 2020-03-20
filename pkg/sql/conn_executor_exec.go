@@ -1279,20 +1279,15 @@ func payloadHasError(payload fsm.EventPayload) bool {
 // recordTransactionStart records the start of the transaction and returns a
 // closure to be called once the transaction finishes.
 func (ex *connExecutor) recordTransactionStart() func(txnEvent) {
-	// We don't need to write down the transaction start time into
-	// ex.statsCollector.phaseTimes because it will be overwritten in
-	// ex.statsCollector.reset() before executing the statements of the
-	// transaction.
-	ex.phaseTimes[transactionStart] = timeutil.Now()
+	ex.state.mu.RLock()
+	txnStart := ex.state.mu.txnStart
+	ex.state.mu.RUnlock()
 	implicit := ex.implicitTxn()
-	return func(ev txnEvent) { ex.recordTransaction(ev, implicit) }
+	return func(ev txnEvent) { ex.recordTransaction(ev, implicit, txnStart) }
 }
 
-func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool) {
-	phaseTimes := &ex.statsCollector.phaseTimes
-	phaseTimes[transactionEnd] = timeutil.Now()
-	txnStart := phaseTimes[transactionStart]
-	txnEnd := phaseTimes[transactionEnd]
+func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart time.Time) {
+	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
 	ex.statsCollector.recordTransaction(
