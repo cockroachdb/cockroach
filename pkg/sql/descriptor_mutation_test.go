@@ -336,15 +336,9 @@ CREATE INDEX allidx ON t.test (k, v);
 						afterDefaultInsert = [][]string{{"a", "z", "q"}, {"default", "NULL", "i"}}
 						// The default value of "i" for column "i" is written.
 						afterInsert = [][]string{{"a", "z", "q"}, {"c", "x", "i"}}
-						if useUpsert {
-							// Update is not a noop for column "i".
-							afterUpdate = [][]string{{"a", "u", "q"}, {"c", "x", "i"}}
-							afterPKUpdate = [][]string{{"a", "u", "q"}, {"d", "x", "i"}}
-						} else {
-							// Update is a noop for column "i".
-							afterUpdate = [][]string{{"a", "u", "q"}, {"c", "x", "i"}}
-							afterPKUpdate = [][]string{{"a", "u", "q"}, {"d", "x", "i"}}
-						}
+						// Upsert/update sets column "i" to default value of "i".
+						afterUpdate = [][]string{{"a", "u", "i"}, {"c", "x", "i"}}
+						afterPKUpdate = [][]string{{"a", "u", "i"}, {"d", "x", "i"}}
 						// Delete also deletes column "i".
 						afterDelete = [][]string{{"d", "x", "i"}}
 						afterDeleteKeys = 4
@@ -768,14 +762,20 @@ CREATE INDEX allidx ON t.test (k, v);
 				// Make column "i" and index "foo" live.
 				mTest.makeMutationsActive()
 
-				// The update to column "v" is seen; there is no effect on column "i".
-				mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "u", "q"}, {"b", "y", "r"}, {"c", "x", "NULL"}})
+				if state == sqlbase.DescriptorMutation_DELETE_ONLY {
+					// Mutation column "i" is not updated.
+					mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "u", "q"}, {"b", "y", "r"}, {"c", "x", "NULL"}})
+				} else {
+					// Mutation column "i" is set to its default value (NULL).
+					mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "u", "NULL"}, {"b", "y", "r"}, {"c", "x", "NULL"}})
+				}
+
 				if idxState == sqlbase.DescriptorMutation_DELETE_ONLY {
 					// Index entry for row "a" is deleted.
 					mTest.CheckQueryResults(t, indexQuery, [][]string{{"r"}})
 				} else {
-					// No change in index "foo"
-					mTest.CheckQueryResults(t, indexQuery, [][]string{{"NULL"}, {"q"}, {"r"}})
+					// Index "foo" has NULL "i" value for row "a".
+					mTest.CheckQueryResults(t, indexQuery, [][]string{{"NULL"}, {"NULL"}, {"r"}})
 				}
 
 				// Add index "foo" as a mutation.
@@ -788,19 +788,34 @@ CREATE INDEX allidx ON t.test (k, v);
 				// Make column "i" and index "foo" live.
 				mTest.makeMutationsActive()
 				// Row "b" is deleted.
-				mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "u", "q"}, {"c", "x", "NULL"}})
+				if state == sqlbase.DescriptorMutation_DELETE_ONLY {
+					mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "u", "q"}, {"c", "x", "NULL"}})
+				} else {
+					mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "u", "NULL"}, {"c", "x", "NULL"}})
+				}
+
 				// numKVs is the number of expected key-values. We start with the number
 				// of non-NULL values above.
-				numKVs := 7
+				numKVs := 6
+				if state == sqlbase.DescriptorMutation_DELETE_ONLY {
+					// In DELETE_ONLY case, the "q" value is not set to NULL above.
+					numKVs++
+				}
+
 				if idxState == sqlbase.DescriptorMutation_DELETE_ONLY {
-					// Index entry for row "b" is deleted.
+					// Index entry for row "a" is deleted.
 					mTest.CheckQueryResults(t, indexQuery, [][]string{})
 				} else {
-					// Index entry for row "b" is deleted.
-					mTest.CheckQueryResults(t, indexQuery, [][]string{{"NULL"}, {"q"}})
+					// Index entry for row "a" is deleted.
+					if state == sqlbase.DescriptorMutation_DELETE_ONLY {
+						mTest.CheckQueryResults(t, indexQuery, [][]string{{"NULL"}, {"q"}})
+					} else {
+						mTest.CheckQueryResults(t, indexQuery, [][]string{{"NULL"}, {"NULL"}})
+					}
 					// We have two index values.
 					numKVs += 2
 				}
+
 				// Check that there are no hidden KV values for row "b", and column
 				// "i" for row "b" was deleted. Also check that the index values are
 				// all accounted for.

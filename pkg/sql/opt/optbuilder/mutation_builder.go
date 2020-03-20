@@ -224,8 +224,8 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	//
 	//   UPDATE abc SET a=b
 	//
-
-	// FROM
+	// NOTE: Include mutation columns, but be careful to never use them for any
+	//       reason other than as "fetch columns". See buildScan comment.
 	mb.outScope = mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		nil, /* ordinals */
@@ -330,6 +330,9 @@ func (mb *mutationBuilder) buildInputForDelete(
 	//
 	//   DELETE FROM abc WHERE a=b
 	//
+	// NOTE: Include mutation columns, but be careful to never use them for any
+	//       reason other than as "fetch columns". See buildScan comment.
+	// TODO(andyk): Why does execution engine need mutation columns for Delete?
 	mb.outScope = mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		nil, /* ordinals */
@@ -494,13 +497,23 @@ func (mb *mutationBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tr
 	return inRows
 }
 
-// addSynthesizedCols is a helper method for addDefaultAndComputedColsForInsert
-// and addComputedColsForUpdate that scans the list of table columns, looking
+// addSynthesizedCols is a helper method for addSynthesizedColsForInsert
+// and addSynthesizedColsForUpdate that scans the list of table columns, looking
 // for any that do not yet have values provided by the input expression. New
 // columns are synthesized for any missing columns, as long as the addCol
 // callback function returns true for that column.
+//
+// Values are synthesized for columns based on checking these rules, in order:
+//   1. If column is computed, evaluate that expression as its value.
+//   2. If column has a default value specified for it, use that as its value.
+//   3. If column is nullable, use NULL as its value.
+//   4. If column is currently being added or dropped (i.e. a mutation column),
+//      use a default value (0 for INT column, "" for STRING column, etc). Note
+//      that the existing "fetched" value returned by the scan cannot be used,
+//      since it may not have been initialized yet by the backfiller.
+//
 func (mb *mutationBuilder) addSynthesizedCols(
-	scopeOrds []scopeOrdinal, addCol func(tabCol cat.Column) bool,
+	scopeOrds []scopeOrdinal, addCol func(colOrd int) bool,
 ) {
 	var projectionsScope *scope
 
@@ -513,8 +526,7 @@ func (mb *mutationBuilder) addSynthesizedCols(
 		}
 
 		// Invoke addCol to determine whether column should be added.
-		tabCol := mb.tab.Column(i)
-		if !addCol(tabCol) {
+		if !addCol(i) {
 			continue
 		}
 
@@ -525,6 +537,7 @@ func (mb *mutationBuilder) addSynthesizedCols(
 			projectionsScope.appendColumnsFromScope(mb.outScope)
 		}
 		tabColID := mb.tabID.ColumnID(i)
+		tabCol := mb.tab.Column(i)
 		expr := mb.parseDefaultOrComputedExpr(tabColID)
 		texpr := mb.outScope.resolveAndRequireType(expr, tabCol.DatumType())
 		scopeCol := mb.b.addColumn(projectionsScope, "" /* alias */, texpr)
@@ -862,7 +875,19 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 		exprStr = tabCol.ComputedExprStr()
 	case tabCol.HasDefault():
 		exprStr = tabCol.DefaultExprStr()
+	case tabCol.IsNullable():
+		return tree.DNull
 	default:
+		// Synthesize default value for NOT NULL mutation column so that it can be
+		// set when in the write-only state. This is only used when no other value
+		// is possible (no default value available, NULL not allowed).
+		if cat.IsMutationColumn(mb.tab, ord) {
+			datum, err := tree.NewDefaultDatum(mb.b.evalCtx, tabCol.DatumType())
+			if err != nil {
+				panic(err)
+			}
+			return datum
+		}
 		return tree.DNull
 	}
 

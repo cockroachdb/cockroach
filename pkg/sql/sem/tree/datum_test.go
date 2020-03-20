@@ -864,3 +864,64 @@ func TestAllTypesAsJSON(t *testing.T) {
 		}
 	}
 }
+
+// Test default values of many different datum types.
+func TestNewDefaultDatum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(context.Background())
+
+	testCases := []struct {
+		t        *types.T
+		expected string
+	}{
+		{t: types.Bool, expected: "false"},
+		{t: types.Int, expected: "0:::INT8"},
+		{t: types.Int2, expected: "0:::INT8"},
+		{t: types.Int4, expected: "0:::INT8"},
+		{t: types.Float, expected: "0.0:::FLOAT8"},
+		{t: types.Float4, expected: "0.0:::FLOAT8"},
+		{t: types.Decimal, expected: "0:::DECIMAL"},
+		{t: types.MakeDecimal(10, 5), expected: "0:::DECIMAL"},
+		{t: types.Date, expected: "'2000-01-01':::DATE"},
+		{t: types.Timestamp, expected: "'0001-01-01 00:00:00+00:00':::TIMESTAMP"},
+		{t: types.Interval, expected: "'00:00:00':::INTERVAL"},
+		{t: types.String, expected: "'':::STRING"},
+		{t: types.MakeChar(3), expected: "'':::STRING"},
+		{t: types.Bytes, expected: "'\\x':::BYTES"},
+		{t: types.TimestampTZ, expected: "'0001-01-01 00:00:00+00:00':::TIMESTAMPTZ"},
+		{t: types.MakeCollatedString(types.MakeVarChar(10), "de"), expected: "'' COLLATE de"},
+		{t: types.MakeCollatedString(types.VarChar, "en_US"), expected: "'' COLLATE en_US"},
+		{t: types.Oid, expected: "26:::OID"},
+		{t: types.RegClass, expected: "crdb_internal.create_regclass(2205,'regclass'):::REGCLASS"},
+		{t: types.Unknown, expected: "NULL"},
+		{t: types.Uuid, expected: "'00000000-0000-0000-0000-000000000000':::UUID"},
+		{t: types.MakeArray(types.Int), expected: "ARRAY[]:::INT8[]"},
+		{t: types.MakeArray(types.MakeArray(types.String)), expected: "ARRAY[]:::STRING[][]"},
+		{t: types.OidVector, expected: "ARRAY[]:::OID[]"},
+		{t: types.INet, expected: "'0.0.0.0/0':::INET"},
+		{t: types.Time, expected: "'00:00:00':::TIME"},
+		{t: types.Jsonb, expected: "'null':::JSONB"},
+		{t: types.TimeTZ, expected: "'00:00:00+00:00:00':::TIMETZ"},
+		{t: types.MakeTuple([]types.T{}), expected: "()"},
+		{t: types.MakeTuple([]types.T{*types.Int, *types.MakeChar(1)}), expected: "(0:::INT8, '':::STRING)"},
+		{t: types.MakeTuple([]types.T{*types.OidVector, *types.MakeTuple([]types.T{*types.Float})}), expected: "(ARRAY[]:::OID[], (0.0:::FLOAT8,))"},
+		{t: types.VarBit, expected: "B''"},
+		{t: types.MakeBit(5), expected: "B''"},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("#%d %s", i, tc.t.SQLString()), func(t *testing.T) {
+			datum, err := tree.NewDefaultDatum(evalCtx, tc.t)
+			if err != nil {
+				t.Errorf("unexpected error: %s", err)
+			}
+
+			actual := tree.AsStringWithFlags(datum, tree.FmtCheckEquivalence)
+			if actual != tc.expected {
+				t.Errorf("expected %s, got %s", tc.expected, actual)
+			}
+		})
+	}
+}
