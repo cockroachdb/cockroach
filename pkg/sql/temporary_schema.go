@@ -387,11 +387,14 @@ func (m *temporaryObjectCleanerMetrics) MetricStruct() {}
 func NewTemporaryObjectCleaner(
 	settings *cluster.Settings,
 	db *kv.DB,
+	registry *metric.Registry,
 	makeSessionBoundInternalExecutor sqlutil.SessionBoundInternalExecutorFactory,
 	statusServer serverpb.StatusServer,
 	isMeta1LeaseholderFunc isMeta1LeaseholderFunc,
 	testingKnobs ExecutorTestingKnobs,
 ) *TemporaryObjectCleaner {
+	metrics := makeTemporaryObjectCleanerMetrics()
+	registry.AddMetricStruct(metrics)
 	return &TemporaryObjectCleaner{
 		settings:                         settings,
 		db:                               db,
@@ -399,7 +402,7 @@ func NewTemporaryObjectCleaner(
 		statusServer:                     statusServer,
 		isMeta1LeaseholderFunc:           isMeta1LeaseholderFunc,
 		testingKnobs:                     testingKnobs,
-		metrics:                          makeTemporaryObjectCleanerMetrics(),
+		metrics:                          metrics,
 	}
 }
 
