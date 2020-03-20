@@ -1071,6 +1071,9 @@ type connExecutor struct {
 	mu struct {
 		syncutil.RWMutex
 
+		// ActiveTxnInfo records information about the current active txn.
+		ActiveTxnInfo *serverpb.TxnInfo
+
 		// ActiveQueries contains all queries in flight.
 		ActiveQueries map[ClusterWideID]*queryMeta
 
@@ -2257,15 +2260,21 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	defer ex.state.mu.RUnlock()
 
 	var kvTxnID *uuid.UUID
-	var activeTxnInfo *serverpb.TxnInfo
 	txn := ex.state.mu.txn
 	if txn != nil {
 		id := txn.ID()
 		kvTxnID = &id
+	}
+
+	// It is possible that a sessions() request has been made after
+	// txn has been created but before it has been recorded to start.
+	var activeTxnInfo *serverpb.TxnInfo
+	if ex.mu.ActiveTxnInfo != nil {
+		// We can't use protoutil.Clone because ID is a UUID (custom proto type).
 		activeTxnInfo = &serverpb.TxnInfo{
-			ID:             id,
-			Start:          ex.phaseTimes[transactionStart],
-			TxnDescription: txn.String(),
+			ID:             ex.mu.ActiveTxnInfo.ID,
+			Start:          ex.mu.ActiveTxnInfo.Start,
+			TxnDescription: ex.mu.ActiveTxnInfo.TxnDescription,
 		}
 	}
 

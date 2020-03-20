@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -1285,7 +1286,25 @@ func (ex *connExecutor) recordTransactionStart() func(txnEvent) {
 	// transaction.
 	ex.phaseTimes[transactionStart] = timeutil.Now()
 	implicit := ex.implicitTxn()
-	return func(ev txnEvent) { ex.recordTransaction(ev, implicit) }
+
+	// Stores information about the active transaction in a place
+	// where concurrent threads can access it if needed.
+	txnID := ex.state.mu.txn.ID()
+	txnDesc := ex.state.mu.txn.String()
+	ex.mu.Lock()
+	ex.mu.ActiveTxnInfo = &serverpb.TxnInfo{
+		ID:             txnID,
+		Start:          ex.phaseTimes[transactionStart],
+		TxnDescription: txnDesc,
+	}
+	ex.mu.Unlock()
+
+	return func(ev txnEvent) {
+		ex.mu.Lock()
+		ex.mu.ActiveTxnInfo = nil
+		ex.mu.Unlock()
+		ex.recordTransaction(ev, implicit)
+	}
 }
 
 func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool) {
