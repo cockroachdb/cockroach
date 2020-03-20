@@ -439,6 +439,11 @@ func (mm *BytesMonitor) SetMetrics(curCount *metric.Gauge, maxHist *metric.Histo
 	mm.maxBytesHist = maxHist
 }
 
+// Name returns the name of the monitor.
+func (mm *BytesMonitor) Name() string {
+	return mm.name
+}
+
 // BoundAccount tracks the cumulated allocations for one client of a pool or
 // monitor. BytesMonitor has an account to its pool; BytesMonitor clients have
 // an account to the monitor. This allows each client to release all the bytes

@@ -1315,7 +1315,7 @@ func (r *NewColOperatorResult) createStandaloneMemAccount(
 func (r *NewColOperatorResult) createDiskAccount(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
 ) *mon.BoundAccount {
-	opDiskMonitor := execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, name)
+	opDiskMonitor := execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, name+"-disk")
 	r.OpMonitors = append(r.OpMonitors, opDiskMonitor)
 	opDiskAccount := opDiskMonitor.MakeBoundAccount()
 	r.OpAccounts = append(r.OpAccounts, &opDiskAccount)
