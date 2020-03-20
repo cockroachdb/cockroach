@@ -786,13 +786,16 @@ func (c *cliState) refreshDatabaseName() string {
 // endsWithIncompleteTxn returns true if and only if its
 // argument ends with an incomplete transaction prefix (BEGIN without
 // ROLLBACK/COMMIT).
+// TODO(knz): Remove this in 20.2, see
+// https://github.com/cockroachdb/cockroach/issues/46074
 func endsWithIncompleteTxn(stmts []string) bool {
 	txnStarted := false
 	for _, stmt := range stmts {
 		if strings.HasPrefix(stmt, "BEGIN TRANSACTION") {
 			txnStarted = true
 		} else if strings.HasPrefix(stmt, "COMMIT TRANSACTION") ||
-			strings.HasPrefix(stmt, "ROLLBACK TRANSACTION") {
+			(strings.HasPrefix(stmt, "ROLLBACK TRANSACTION") &&
+				!strings.HasPrefix(stmt, "ROLLBACK TRANSACTION TO SAVEPOINT")) {
 			txnStarted = false
 		}
 	}
