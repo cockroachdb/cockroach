@@ -335,7 +335,28 @@ var builtins = map[string]builtinDefinition{
 				}
 				return tree.NewDInt(tree.DInt(bit)), nil
 			},
-			Info: "Extracts a bit at given index in the bit array",
+			Info: "Extracts a bit at given index in the bit array.",
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"byte_string", types.Bytes}, {"index", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				byteString := []byte(*args[0].(*tree.DBytes))
+				index := int(tree.MustBeDInt(args[1]))
+				// Check whether index asked is inside ByteArray.
+				if index < 0 || index >= 8*len(byteString) {
+					return nil, pgerror.Newf(pgcode.ArraySubscript,
+						"bit index %d out of valid range (0..%d)", index, 8*len(byteString)-1)
+				}
+				// To extract a bit at the given index, we have to determine the
+				// position within byte array, i.e. index/8 after that checked
+				// the bit at residual index.
+				if byteString[index/8]&(byte(1)<<(8-1-byte(index)%8)) != 0 {
+					return tree.NewDInt(tree.DInt(1)), nil
+				}
+				return tree.NewDInt(tree.DInt(0)), nil
+			},
+			Info: "Extracts a bit at given index in the byte array.",
 		}),
 
 	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
@@ -363,7 +384,39 @@ var builtins = map[string]builtinDefinition{
 				}
 				return &tree.DBitArray{BitArray: updatedBitString}, nil
 			},
-			Info: "Updates a bit at given index in the bit array",
+			Info: "Updates a bit at given index in the bit array.",
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"byte_string", types.Bytes},
+				{"index", types.Int},
+				{"to_set", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				byteString := []byte(*args[0].(*tree.DBytes))
+				index := int(tree.MustBeDInt(args[1]))
+				toSet := int(tree.MustBeDInt(args[2]))
+				// Value of bit can only be set to 1 or 0.
+				if toSet != 0 && toSet != 1 {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"new bit must be 0 or 1.")
+				}
+				// Check whether index asked is inside ByteArray.
+				if index < 0 || index >= 8*len(byteString) {
+					return nil, pgerror.Newf(pgcode.ArraySubscript,
+						"bit index %d out of valid range (0..%d)", index, 8*len(byteString)-1)
+				}
+				// To update a bit at the given index, we have to determine the
+				// position within byte array, i.e. index/8 after that checked
+				// the bit at residual index.
+				// Forcefully making bit at the index to 0.
+				byteString[index/8] &= ^(byte(1) << (8 - 1 - byte(index)%8))
+				// Updating value at the index to toSet.
+				byteString[index/8] |= byte(toSet) << (8 - 1 - byte(index)%8)
+				return tree.NewDBytes(tree.DBytes(byteString)), nil
+			},
+			Info: "Updates a bit at given index in the byte array.",
 		}),
 
 	"gen_random_uuid": makeBuiltin(
