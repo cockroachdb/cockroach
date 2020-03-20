@@ -74,6 +74,15 @@ eexpect "1 row"
 eexpect "root@"
 end_test
 
+start_test "Test that BEGIN .. without COMMIT begins a multi-line stmt even when ROLLBACK TO SAVEPOINT is present."
+send "begin; select 1; savepoint foo; rollback to savepoint foo;\r"
+eexpect " ->"
+
+send "commit;\r"
+eexpect "1 row"
+eexpect "root@"
+end_test
+
 start_test "Test that BEGIN .. without COMMIT does not begin a multi-line statement with smart_prompt disabled."
 send "\\unset smart_prompt\r"
 send "begin;\r"
