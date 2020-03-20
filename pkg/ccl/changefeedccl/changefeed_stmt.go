@@ -565,6 +565,9 @@ func (b *changefeedResumer) Resume(
 			return nil
 		}
 		if !IsRetryableError(err) {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %+v`, jobID, err)
 			return err
 		}
@@ -577,6 +580,9 @@ func (b *changefeedResumer) Resume(
 		// been updated by the changeFrontier processor since the flow started.
 		reloadedJob, reloadErr := execCfg.JobRegistry.LoadJob(ctx, jobID)
 		if reloadErr != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			log.Warningf(ctx, `CHANGEFEED job %d could not reload job progress; `+
 				`continuing from last known high-water of %s: %v`,
 				jobID, progress.GetHighWater(), reloadErr)
