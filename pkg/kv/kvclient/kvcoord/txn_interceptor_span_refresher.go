@@ -282,11 +282,6 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 		return nil, pErr
 	}
 
-	// If a prefix of the batch was executed, collect refresh spans for
-	// that executed portion, and retry the remainder. The canonical
-	// case is a batch split between everything up to but not including
-	// the EndTxn. Requests up to the EndTxn succeed, but the EndTxn
-	// fails with a retryable error. We want to retry only the EndTxn.
 	ba.UpdateTxn(retryTxn)
 	log.VEventf(ctx, 2, "retrying %s at refreshed timestamp %s because of %s",
 		ba, retryTxn.ReadTimestamp, pErr)
