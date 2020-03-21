@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -81,15 +82,28 @@ func scanSingleRequest(
 		}
 		return v
 	}
+	maybeGetSeq := func() enginepb.TxnSeq {
+		s, ok := fields["seq"]
+		if !ok {
+			return 0
+		}
+		n, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			d.Fatalf(t, "could not parse seq num: %v", err)
+		}
+		return enginepb.TxnSeq(n)
+	}
 
 	switch cmd {
 	case "get":
 		var r roachpb.GetRequest
+		r.Sequence = maybeGetSeq()
 		r.Key = roachpb.Key(mustGetField("key"))
 		return &r
 
 	case "scan":
 		var r roachpb.ScanRequest
+		r.Sequence = maybeGetSeq()
 		r.Key = roachpb.Key(mustGetField("key"))
 		if v, ok := fields["endkey"]; ok {
 			r.EndKey = roachpb.Key(v)
@@ -98,6 +112,7 @@ func scanSingleRequest(
 
 	case "put":
 		var r roachpb.PutRequest
+		r.Sequence = maybeGetSeq()
 		r.Key = roachpb.Key(mustGetField("key"))
 		r.Value.SetString(mustGetField("value"))
 		return &r
