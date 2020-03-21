@@ -53,17 +53,17 @@ sequence req=req3w
 [3] sequence req3w: scanning lock table for conflicting locks
 [3] sequence req3w: sequencing complete, returned guard
 
-on-lock-acquired txn=txn1 key=a
+on-lock-acquired req=req1w key=a
 ----
-[-] acquire lock: txn1 @ a
+[-] acquire lock: txn 00000001 @ a
 
-on-lock-acquired txn=txn2 key=b
+on-lock-acquired req=req2w key=b
 ----
-[-] acquire lock: txn2 @ b
+[-] acquire lock: txn 00000002 @ b
 
-on-lock-acquired txn=txn3 key=c
+on-lock-acquired req=req3w key=c
 ----
-[-] acquire lock: txn3 @ c
+[-] acquire lock: txn 00000003 @ c
 
 finish req=req1w
 ----
@@ -250,17 +250,17 @@ sequence req=req3w
 [3] sequence req3w: scanning lock table for conflicting locks
 [3] sequence req3w: sequencing complete, returned guard
 
-on-lock-acquired txn=txn1 key=a
+on-lock-acquired req=req1w key=a
 ----
-[-] acquire lock: txn1 @ a
+[-] acquire lock: txn 00000001 @ a
 
-on-lock-acquired txn=txn2 key=b
+on-lock-acquired req=req2w key=b
 ----
-[-] acquire lock: txn2 @ b
+[-] acquire lock: txn 00000002 @ b
 
-on-lock-acquired txn=txn3 key=c
+on-lock-acquired req=req3w key=c
 ----
-[-] acquire lock: txn3 @ c
+[-] acquire lock: txn 00000003 @ c
 
 finish req=req1w
 ----
@@ -474,17 +474,17 @@ sequence req=req3w
 [3] sequence req3w: scanning lock table for conflicting locks
 [3] sequence req3w: sequencing complete, returned guard
 
-on-lock-acquired txn=txn1 key=a
+on-lock-acquired req=req1w key=a
 ----
-[-] acquire lock: txn1 @ a
+[-] acquire lock: txn 00000001 @ a
 
-on-lock-acquired txn=txn2 key=b
+on-lock-acquired req=req2w key=b
 ----
-[-] acquire lock: txn2 @ b
+[-] acquire lock: txn 00000002 @ b
 
-on-lock-acquired txn=txn3 key=c
+on-lock-acquired req=req3w key=c
 ----
-[-] acquire lock: txn3 @ c
+[-] acquire lock: txn 00000003 @ c
 
 finish req=req1w
 ----
@@ -694,17 +694,17 @@ sequence req=req3w
 [3] sequence req3w: scanning lock table for conflicting locks
 [3] sequence req3w: sequencing complete, returned guard
 
-on-lock-acquired txn=txn1 key=a
+on-lock-acquired req=req1w key=a
 ----
-[-] acquire lock: txn1 @ a
+[-] acquire lock: txn 00000001 @ a
 
-on-lock-acquired txn=txn2 key=b
+on-lock-acquired req=req2w key=b
 ----
-[-] acquire lock: txn2 @ b
+[-] acquire lock: txn 00000002 @ b
 
-on-lock-acquired txn=txn3 key=c
+on-lock-acquired req=req3w key=c
 ----
-[-] acquire lock: txn3 @ c
+[-] acquire lock: txn 00000003 @ c
 
 finish req=req1w
 ----
@@ -921,17 +921,17 @@ sequence req=req3w
 [3] sequence req3w: scanning lock table for conflicting locks
 [3] sequence req3w: sequencing complete, returned guard
 
-on-lock-acquired txn=txn1 key=a
+on-lock-acquired req=req1w key=a
 ----
-[-] acquire lock: txn1 @ a
+[-] acquire lock: txn 00000001 @ a
 
-on-lock-acquired txn=txn2 key=b
+on-lock-acquired req=req2w key=b
 ----
-[-] acquire lock: txn2 @ b
+[-] acquire lock: txn 00000002 @ b
 
-on-lock-acquired txn=txn3 key=c
+on-lock-acquired req=req3w key=c
 ----
-[-] acquire lock: txn3 @ c
+[-] acquire lock: txn 00000003 @ c
 
 finish req=req1w
 ----
