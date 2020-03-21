@@ -2888,6 +2888,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
+	storeCfg.Clock = nil // manual clock
 	storeCfg.TestingKnobs.BeforeSnapshotSSTIngestion = func(
 		inSnap kvserver.IncomingSnapshot,
 		snapType kvserver.SnapshotRequest_Type,
