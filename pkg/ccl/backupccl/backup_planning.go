@@ -67,7 +67,7 @@ var fullClusterSystemTables = []string{
 var useTBI = settings.RegisterBoolSetting(
 	"kv.bulk_io_write.experimental_incremental_export_enabled",
 	"use experimental time-bound file filter when exporting in BACKUP",
-	false,
+	true,
 )
 
 var backupOptionExpectValues = map[string]sql.KVStringOptValidate{
