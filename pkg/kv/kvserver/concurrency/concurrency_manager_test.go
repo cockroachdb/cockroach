@@ -60,7 +60,7 @@ import (
 // handle-write-intent-error  req=<req-name> txn=<txn-name> key=<key>
 // handle-txn-push-error      req=<req-name> txn=<txn-name> key=<key>  TODO(nvanbenschoten): implement this
 //
-// on-lock-acquired  req=<req-name> key=<key>
+// on-lock-acquired  req=<req-name> key=<key> [seq=<seq>]
 // on-lock-updated   req=<req-name> txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts=<int>[,<int>]]
 // on-txn-updated    txn=<txn-name> status=[committed|aborted|pending] [ts=<int>[,<int>]]
 //
@@ -270,13 +270,20 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				var key string
 				d.ScanArgs(t, "key", &key)
 
+				var seq int
+				if d.HasArg("seq") {
+					d.ScanArgs(t, "seq", &seq)
+				}
+				seqNum := enginepb.TxnSeq(seq)
+
 				// Confirm that the request has a corresponding write request.
 				found := false
 				for _, ru := range guard.Req.Requests {
 					req := ru.GetInner()
 					keySpan := roachpb.Span{Key: roachpb.Key(key)}
 					if roachpb.IsLocking(req) &&
-						req.Header().Span().Contains(keySpan) {
+						req.Header().Span().Contains(keySpan) &&
+						req.Header().Sequence == seqNum {
 						found = true
 						break
 					}
@@ -285,10 +292,13 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					d.Fatalf(t, "missing corresponding write request")
 				}
 
+				txnAcquire := txn.Clone()
+				txnAcquire.Sequence = seqNum
+
 				mon.runSync("acquire lock", func(ctx context.Context) {
 					log.Eventf(ctx, "txn %s @ %s", txn.ID.Short(), key)
 					span := roachpb.Span{Key: roachpb.Key(key)}
-					up := roachpb.MakeLockUpdateWithDur(txn, span, lock.Unreplicated)
+					up := roachpb.MakeLockUpdateWithDur(txnAcquire, span, lock.Unreplicated)
 					m.OnLockAcquired(ctx, &up)
 				})
 				return c.waitAndCollect(t, mon)
