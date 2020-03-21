@@ -128,7 +128,7 @@ func initCLIDefaults() {
 
 	quitCtx.serverDecommission = false
 	quitCtx.onlyDrain = false
-	quitCtx.drainWait = time.Minute
+	quitCtx.drainWait = 10 * time.Minute
 
 	nodeCtx.nodeDecommissionWait = nodeDecommissionWaitAll
 	nodeCtx.statusShowRanges = false

@@ -139,7 +139,7 @@ var raftLeadershipTransferWait = func() *settings.DurationSetting {
 	s := settings.RegisterValidatedDurationSetting(
 		raftLeadershipTransferWaitKey,
 		"the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process",
-		5*time.Second,
+		5*time.Minute,
 		func(v time.Duration) error {
 			if v < 0 {
 				return errors.Errorf("cannot set %s to a negative duration: %s",
