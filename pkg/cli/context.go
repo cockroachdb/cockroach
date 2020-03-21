@@ -129,7 +129,7 @@ func initCLIDefaults() {
 	startCtx.inBackground = false
 
 	quitCtx.serverDecommission = false
-	quitCtx.drainWait = time.Minute
+	quitCtx.drainWait = 10 * time.Minute
 
 	nodeCtx.nodeDecommissionWait = nodeDecommissionWaitAll
 	nodeCtx.statusShowRanges = false
