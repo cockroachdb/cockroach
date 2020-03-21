@@ -282,7 +282,6 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 		return nil, pErr
 	}
 
-	ba.UpdateTxn(retryTxn)
 	log.VEventf(ctx, 2, "retrying %s at refreshed timestamp %s because of %s",
 		ba, retryTxn.ReadTimestamp, pErr)
 
@@ -293,6 +292,7 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 
 	// We've refreshed all of the read spans successfully and bumped
 	// ba.Txn's timestamps. Attempt the request again.
+	ba.UpdateTxn(retryTxn)
 	retryBr, retryErr := sr.sendLockedWithRefreshAttempts(
 		ctx, ba, maxRefreshAttempts-1,
 	)
