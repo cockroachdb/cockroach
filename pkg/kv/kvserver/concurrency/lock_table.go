@@ -1140,11 +1140,11 @@ func (l *lockState) acquireLock(
 		if txn.ID != beforeTxn.ID {
 			return errors.Errorf("caller violated contract: existing lock cannot be acquired by different transaction")
 		}
+		seqs := l.holder.holder[durability].seqs
 		if l.holder.holder[durability].txn != nil && l.holder.holder[durability].txn.Epoch < txn.Epoch {
 			// Clear the sequences for the older epoch.
-			l.holder.holder[durability].seqs = l.holder.holder[durability].seqs[:0]
+			seqs = seqs[:0]
 		}
-		seqs := l.holder.holder[durability].seqs
 		if len(seqs) > 0 && seqs[len(seqs)-1] >= txn.Sequence {
 			// Idempotent lock acquisition. In this case, we simply ignore the lock
 			// acquisition as long as it corresponds to an existing sequence number.
@@ -1164,11 +1164,12 @@ func (l *lockState) acquireLock(
 			return nil
 		}
 		l.holder.holder[durability].txn = txn
-		l.holder.holder[durability].ts = ts
-		l.holder.holder[durability].seqs = append(l.holder.holder[durability].seqs, txn.Sequence)
+		l.holder.holder[durability].ts.Forward(ts)
+		l.holder.holder[durability].seqs = append(seqs, txn.Sequence)
+
 		_, afterTs, _ := l.getLockerInfo()
 		if afterTs.Less(beforeTs) {
-			return errors.Errorf("caller violated contract: lock timestamp regression")
+			panic("lockTable bug - lock timestamp regression")
 		} else if beforeTs.Less(afterTs) {
 			l.increasedLockTs(afterTs)
 		}
