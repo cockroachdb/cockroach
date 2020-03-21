@@ -57,7 +57,9 @@ func scanTimestampWithName(t *testing.T, d *datadriven.TestData, name string) hl
 	return ts
 }
 
-func scanSingleRequest(t *testing.T, d *datadriven.TestData, line string) roachpb.Request {
+func scanSingleRequest(
+	t *testing.T, d *datadriven.TestData, line string, txns map[string]*roachpb.Transaction,
+) roachpb.Request {
 	cmd, cmdArgs, err := datadriven.ParseLine(line)
 	if err != nil {
 		d.Fatalf(t, "error parsing single request: %v", err)
@@ -100,6 +102,13 @@ func scanSingleRequest(t *testing.T, d *datadriven.TestData, line string) roachp
 		r.Value.SetString(mustGetField("value"))
 		return &r
 
+	case "resolve-intent":
+		var r roachpb.ResolveIntentRequest
+		r.IntentTxn = txns[mustGetField("txn")].TxnMeta
+		r.Key = roachpb.Key(mustGetField("key"))
+		r.Status = parseTxnStatus(t, d, mustGetField("status"))
+		return &r
+
 	case "request-lease":
 		var r roachpb.RequestLeaseRequest
 		return &r
@@ -113,15 +122,31 @@ func scanSingleRequest(t *testing.T, d *datadriven.TestData, line string) roachp
 func scanTxnStatus(t *testing.T, d *datadriven.TestData) (roachpb.TransactionStatus, string) {
 	var statusStr string
 	d.ScanArgs(t, "status", &statusStr)
-	switch statusStr {
-	case "committed":
-		return roachpb.COMMITTED, "committing"
-	case "aborted":
-		return roachpb.ABORTED, "aborting"
-	case "pending":
-		return roachpb.PENDING, "increasing timestamp of"
+	status := parseTxnStatus(t, d, statusStr)
+	var verb string
+	switch status {
+	case roachpb.COMMITTED:
+		verb = "committing"
+	case roachpb.ABORTED:
+		verb = "aborting"
+	case roachpb.PENDING:
+		verb = "increasing timestamp of"
 	default:
-		d.Fatalf(t, "unknown txn statusStr: %s", statusStr)
-		return 0, ""
+		d.Fatalf(t, "unknown txn status: %s", status)
+	}
+	return status, verb
+}
+
+func parseTxnStatus(t *testing.T, d *datadriven.TestData, s string) roachpb.TransactionStatus {
+	switch s {
+	case "committed":
+		return roachpb.COMMITTED
+	case "aborted":
+		return roachpb.ABORTED
+	case "pending":
+		return roachpb.PENDING
+	default:
+		d.Fatalf(t, "unknown txn status: %s", s)
+		return 0
 	}
 }
