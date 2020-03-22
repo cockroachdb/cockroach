@@ -593,7 +593,7 @@ func (s *Server) newConnExecutor(
 		ctxHolder:                 ctxHolder{connCtx: ctx},
 		executorType:              executorTypeExec,
 		hasCreatedTemporarySchema: false,
-		stmtInfoRegistry:          s.cfg.StmtInfoRequestRegistry,
+		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
 	}
 
 	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
@@ -1075,9 +1075,9 @@ type connExecutor struct {
 	// temporary schema, which requires special cleanup on close.
 	hasCreatedTemporarySchema bool
 
-	// StmtInfoRequestRegistry is used to track which queries need to have
+	// stmtDiagnosticsRecorder is used to track which queries need to have
 	// information collected.
-	stmtInfoRegistry *stmtDiagnosticsRequestRegistry
+	stmtDiagnosticsRecorder StmtDiagnosticsRecorder
 }
 
 // ctxHolder contains a connection's context and, while session tracing is

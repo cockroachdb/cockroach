@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package stmtdiagnostics_test
 
 import (
 	"context"
@@ -17,6 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -32,8 +34,8 @@ func TestDiagnosticsRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	// Ask to trace a particular query.
-	registry := s.ExecutorConfig().(ExecutorConfig).StmtInfoRequestRegistry
-	reqID, err := registry.insertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
+	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder.(*stmtdiagnostics.Registry)
+	reqID, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
 	require.NoError(t, err)
 	reqRow := db.QueryRow(
 		"SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1", reqID)
@@ -48,7 +50,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check that the row from statement_diagnostics_request was marked as completed.
-	checkCompleted := func(reqID stmtDiagRequestID) {
+	checkCompleted := func(reqID int64) {
 		traceRow := db.QueryRow(
 			"SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1", reqID)
 		require.NoError(t, traceRow.Scan(&completed, &traceID))
@@ -66,11 +68,11 @@ func TestDiagnosticsRequest(t *testing.T) {
 	require.Contains(t, json, "statement execution committed the txn")
 
 	// Verify that we can handle multiple requests at the same time.
-	id1, err := registry.insertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
+	id1, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
 	require.NoError(t, err)
-	id2, err := registry.insertRequestInternal(ctx, "SELECT x FROM test")
+	id2, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test")
 	require.NoError(t, err)
-	id3, err := registry.insertRequestInternal(ctx, "SELECT x FROM test WHERE x > _")
+	id3, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test WHERE x > _")
 	require.NoError(t, err)
 
 	// Run the queries in a different order.
@@ -99,8 +101,8 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Ask to trace a particular query using node 0.
-	registry := tc.Server(0).ExecutorConfig().(ExecutorConfig).StmtInfoRequestRegistry
-	reqID, err := registry.insertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
+	registry := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder.(*stmtdiagnostics.Registry)
+	reqID, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
 	require.NoError(t, err)
 	reqRow := db0.QueryRow(
 		`SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests
@@ -112,7 +114,7 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	require.False(t, traceID.Valid) // traceID should be NULL
 
 	// Repeatedly run the query through node 1 until we get a trace.
-	runUntilTraced := func(query string, reqID stmtDiagRequestID) {
+	runUntilTraced := func(query string, reqID int64) {
 		testutils.SucceedsSoon(t, func() error {
 			// Run the query using node 1.
 			_, err = db1.Exec(query)
@@ -142,11 +144,11 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	runUntilTraced("INSERT INTO test VALUES (1)", reqID)
 
 	// Verify that we can handle multiple requests at the same time.
-	id1, err := registry.insertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
+	id1, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
 	require.NoError(t, err)
-	id2, err := registry.insertRequestInternal(ctx, "SELECT x FROM test")
+	id2, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test")
 	require.NoError(t, err)
-	id3, err := registry.insertRequestInternal(ctx, "SELECT x FROM test WHERE x > _")
+	id3, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test WHERE x > _")
 	require.NoError(t, err)
 
 	// Run the queries in a different order.
