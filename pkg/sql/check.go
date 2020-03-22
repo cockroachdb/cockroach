@@ -337,7 +337,7 @@ type checkSet = util.FastIntSet
 func checkMutationInput(
 	tabDesc *sqlbase.ImmutableTableDescriptor, checkOrds checkSet, checkVals tree.Datums,
 ) error {
-	if len(checkVals) != checkOrds.Len() {
+	if len(checkVals) < checkOrds.Len() {
 		return errors.AssertionFailedf(
 			"mismatched check constraint columns: expected %d, got %d", checkOrds.Len(), len(checkVals))
 	}
