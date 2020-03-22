@@ -143,8 +143,19 @@ type statusServer struct {
 	stopper                  *stop.Stopper
 	sessionRegistry          *sql.SessionRegistry
 	si                       systemInfoOnce
-	stmtDiagnosticsRequester sql.StmtDiagnosticsRequester
+	stmtDiagnosticsRequester StmtDiagnosticsRequester
 	internalExecutor         *sql.InternalExecutor
+}
+
+// StmtDiagnosticsRequester is the interface into *stmtdiagnostics.Registry
+// used by AdminUI endpoints.
+type StmtDiagnosticsRequester interface {
+
+	// InsertRequest adds an entry to system.statement_diagnostics_requests for
+	// tracing a query with the given fingerprint. Once this returns, calling
+	// shouldCollectDiagnostics() on the current node will return true for the given
+	// fingerprint.
+	InsertRequest(ctx context.Context, fprint string) error
 }
 
 // newStatusServer allocates and returns a statusServer.

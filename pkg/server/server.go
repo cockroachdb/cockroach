@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -210,9 +211,10 @@ type Server struct {
 	internalMemMetrics     sql.MemoryMetrics
 	adminMemMetrics        sql.MemoryMetrics
 	// sqlMemMetrics are used to track memory usage of sql sessions.
-	sqlMemMetrics         sql.MemoryMetrics
-	protectedtsProvider   protectedts.Provider
-	protectedtsReconciler *ptreconcile.Reconciler
+	sqlMemMetrics           sql.MemoryMetrics
+	protectedtsProvider     protectedts.Provider
+	protectedtsReconciler   *ptreconcile.Reconciler
+	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
 }
 
 // NewServer creates a Server from a server.Config.
@@ -890,9 +892,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	s.internalExecutor = internalExecutor
 	execCfg.InternalExecutor = internalExecutor
-	// TODO(ajwerner): Do we definitely know our node ID yet? Should we take a
-	// node id container instead?
-	execCfg.StmtInfoRequestRegistry = sql.NewStmtDiagnosticsRequestRegistry(internalExecutor, s.db, s.gossip, s.NodeID())
+	s.stmtDiagnosticsRegistry = stmtdiagnostics.NewRegistry(internalExecutor, s.db, s.gossip)
+	execCfg.StmtDiagnosticsRecorder = s.stmtDiagnosticsRegistry
 	s.execCfg = &execCfg
 
 	s.leaseMgr.SetInternalExecutor(execCfg.InternalExecutor)
@@ -1671,7 +1672,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if err := s.statsRefresher.Start(ctx, s.stopper, stats.DefaultRefreshInterval); err != nil {
 		return err
 	}
-	s.execCfg.StmtInfoRequestRegistry.Start(ctx, s.stopper)
+	s.stmtDiagnosticsRegistry.Start(ctx, s.stopper)
 
 	// Start the protected timestamp subsystem.
 	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {

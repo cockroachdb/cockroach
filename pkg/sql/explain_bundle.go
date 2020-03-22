@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/jsonpb"
 )
 
 // setExplainBundleResult creates the diagnostics and returns the bundle
@@ -49,16 +50,12 @@ func setExplainBundleResult(
 	fingerprint := tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 	stmtStr := tree.AsString(ast)
 
-	diagID, err := insertStatementDiagnostics(
+	diagID, err := execCfg.StmtDiagnosticsRecorder.InsertStatementDiagnostics(
 		ctx,
-		execCfg.DB,
-		execCfg.InternalExecutor,
-		0, /* requestID */
 		fingerprint,
 		stmtStr,
 		traceJSON,
 		bundle,
-		nil, /* collectionErr */
 	)
 	if err != nil {
 		res.SetError(err)
@@ -90,6 +87,63 @@ func setExplainBundleResult(
 		}
 	}
 	return nil
+}
+
+// getTraceAndBundle converts the trace to a JSON datum and creates a statement
+// bundle. It tries to return as much information as possible even in error
+// case.
+func getTraceAndBundle(
+	trace tracing.Recording, plan *planTop,
+) (traceJSON tree.Datum, bundle *bytes.Buffer, _ error) {
+	traceJSON, traceStr, err := traceToJSON(trace)
+	bundle, bundleErr := buildStatementBundle(plan, trace, traceStr)
+	if bundleErr != nil {
+		if err == nil {
+			err = bundleErr
+		} else {
+			err = errors.WithMessage(bundleErr, err.Error())
+		}
+	}
+	return traceJSON, bundle, err
+}
+
+// traceToJSON converts a trace to a JSON datum suitable for the
+// system.statement_diagnostics.trace column. In case of error, the returned
+// datum is DNull. Also returns the string representation of the trace.
+//
+// traceToJSON assumes that the first span in the recording contains all the
+// other spans.
+func traceToJSON(trace tracing.Recording) (tree.Datum, string, error) {
+	root := normalizeSpan(trace[0], trace)
+	marshaller := jsonpb.Marshaler{
+		Indent: "  ",
+	}
+	str, err := marshaller.MarshalToString(&root)
+	if err != nil {
+		return tree.DNull, "", err
+	}
+	d, err := tree.ParseDJSON(str)
+	if err != nil {
+		return tree.DNull, "", err
+	}
+	return d, str, nil
+}
+
+func normalizeSpan(s tracing.RecordedSpan, trace tracing.Recording) tracing.NormalizedSpan {
+	var n tracing.NormalizedSpan
+	n.Operation = s.Operation
+	n.StartTime = s.StartTime
+	n.Duration = s.Duration
+	n.Tags = s.Tags
+	n.Logs = s.Logs
+
+	for _, ss := range trace {
+		if ss.ParentSpanID != s.SpanID {
+			continue
+		}
+		n.Children = append(n.Children, normalizeSpan(ss, trace))
+	}
+	return n
 }
 
 // buildStatementBundle collects metadata related the planning and execution of
