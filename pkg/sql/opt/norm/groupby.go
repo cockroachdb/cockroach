@@ -28,6 +28,12 @@ func (c *CustomFuncs) NullsAreDistinct(distinctOp opt.Operator) bool {
 	return distinctOp == opt.UpsertDistinctOnOp
 }
 
+// RaiseErrorOnDup returns true if an UpsertDistinct operator raises an error
+// when duplicate values are detected.
+func (c *CustomFuncs) RaiseErrorOnDup(private *memo.GroupingPrivate) bool {
+	return private.ErrorOnDup
+}
+
 // RemoveGroupingCols returns a new grouping private struct with the given
 // columns removed from the grouping column set.
 func (c *CustomFuncs) RemoveGroupingCols(
