@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -24,22 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 )
-
-// StmtDiagnosticsRequester is the interface into stmtDiagnosticsRequestRegistry
-// used by AdminUI endpoints.
-type StmtDiagnosticsRequester interface {
-	// InsertRequest adds an entry to system.statement_diagnostics_requests for
-	// tracing a query with the given fingerprint. Once this returns, calling
-	// shouldCollectDiagnostics() on the current node will return true for the given
-	// fingerprint.
-	InsertRequest(ctx context.Context, fprint string) error
-}
 
 // stmtDiagnosticsRequestRegistry maintains a view on the statement fingerprints
 // on which data is to be collected (i.e. system.statement_diagnostics_requests)
@@ -60,26 +52,68 @@ type stmtDiagnosticsRequestRegistry struct {
 		// between, then the table contents might be stale.
 		epoch int
 	}
-	ie     *InternalExecutor
-	db     *kv.DB
-	gossip *gossip.Gossip
-	nodeID roachpb.NodeID
+	ie               *InternalExecutor
+	db               *kv.DB
+	gossip           *gossip.Gossip
+	nodeID           roachpb.NodeID
+	gossipUpdateChan chan stmtDiagRequestID
 }
 
-func newStmtDiagnosticsRequestRegistry(
+func NewStmtDiagnosticsRequestRegistry(
 	ie *InternalExecutor, db *kv.DB, g *gossip.Gossip, nodeID roachpb.NodeID,
 ) *stmtDiagnosticsRequestRegistry {
 	r := &stmtDiagnosticsRequestRegistry{
-		ie:     ie,
-		db:     db,
-		gossip: g,
-		nodeID: nodeID,
+		ie:               ie,
+		db:               db,
+		gossip:           g,
+		nodeID:           nodeID,
+		gossipUpdateChan: make(chan stmtDiagRequestID, 1),
 	}
 	// Some tests pass a nil gossip.
 	if g != nil {
 		g.RegisterCallback(gossip.KeyGossipStatementDiagnosticsRequest, r.gossipNotification)
 	}
 	return r
+}
+
+func (r *stmtDiagnosticsRequestRegistry) Start(ctx context.Context, stopper *stop.Stopper) {
+	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
+	// NB: The only error that should occur here would be if the server were
+	// shutting down so let's swallow it.
+	_ = stopper.RunAsyncTask(ctx, "stmt-diag-poll", r.run)
+}
+
+func (r *stmtDiagnosticsRequestRegistry) run(ctx context.Context) {
+	var timer timeutil.Timer
+	// TODO(ajwerner): Make this polling interval a cluster setting.
+	const pollingInterval = 10 * time.Second
+	var lastPoll time.Time
+	var deadline time.Time
+	for {
+		newDeadline := lastPoll.Add(pollingInterval)
+		if deadline.IsZero() || !deadline.Equal(newDeadline) {
+			deadline = newDeadline
+			timer.Reset(timeutil.Until(deadline))
+		}
+		select {
+		case reqID := <-r.gossipUpdateChan:
+			if r.findRequest(reqID) {
+				continue // request already exists, don't do anything
+			}
+			// Poll the data.
+		case <-timer.C:
+			timer.Read = true
+		case <-ctx.Done():
+			return
+		}
+		if err := r.pollRequests(ctx); err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			log.Warningf(ctx, "error polling for statement diagnostics requests: %s", err)
+		}
+		lastPoll = timeutil.Now()
+	}
 }
 
 // stmtDiagRequestID is the ID of a diagnostics request, corresponding to the id
@@ -104,6 +138,12 @@ func (r *stmtDiagnosticsRequestRegistry) addRequestInternalLocked(
 		r.mu.requestFingerprints = make(map[stmtDiagRequestID]string)
 	}
 	r.mu.requestFingerprints[id] = queryFingerprint
+}
+
+func (r *stmtDiagnosticsRequestRegistry) findRequest(requestID stmtDiagRequestID) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.findRequestLocked(requestID)
 }
 
 func (r *stmtDiagnosticsRequestRegistry) findRequestLocked(requestID stmtDiagRequestID) bool {
@@ -432,15 +472,10 @@ func (r *stmtDiagnosticsRequestRegistry) gossipNotification(s string, value roac
 		// added other keys with the same prefix.
 		return
 	}
-	requestID := stmtDiagRequestID(binary.LittleEndian.Uint64(value.RawBytes))
-	r.mu.Lock()
-	if r.findRequestLocked(requestID) {
-		r.mu.Unlock()
-		return
-	}
-	r.mu.Unlock()
-	if err := r.pollRequests(context.TODO()); err != nil {
-		log.Warningf(context.TODO(), "failed to poll for diagnostics requests: %s", err)
+	select {
+	case r.gossipUpdateChan <- stmtDiagRequestID(binary.LittleEndian.Uint64(value.RawBytes)):
+	default:
+		// Don't pile up on these requests and don't block gossip.
 	}
 }
 

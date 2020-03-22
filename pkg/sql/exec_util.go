@@ -588,7 +588,8 @@ type ExecutorConfig struct {
 	// ProtectedTimestampProvider encapsulates the protected timestamp subsystem.
 	ProtectedTimestampProvider protectedts.Provider
 
-	stmtInfoRequestRegistry *stmtDiagnosticsRequestRegistry
+	// StmtInfoRequestRegistry
+	StmtInfoRequestRegistry *stmtDiagnosticsRequestRegistry
 }
 
 // Organization returns the value of cluster.organization.
@@ -596,15 +597,14 @@ func (cfg *ExecutorConfig) Organization() string {
 	return ClusterOrganization.Get(&cfg.Settings.SV)
 }
 
-// NewStmtDiagnosticsRequestRegistry initializes cfg.stmtInfoRequestRegistry and
-// returns it as the publicly-accessible StmtDiagnosticsRequester.
-func (cfg *ExecutorConfig) NewStmtDiagnosticsRequestRegistry() StmtDiagnosticsRequester {
-	if cfg.InternalExecutor == nil {
-		panic("cfg.InternalExecutor not initialized")
-	}
-	cfg.stmtInfoRequestRegistry = newStmtDiagnosticsRequestRegistry(
-		cfg.InternalExecutor, cfg.DB, cfg.Gossip, cfg.NodeID.Get())
-	return cfg.stmtInfoRequestRegistry
+// StmtDiagnosticsRequester is the interface into stmtDiagnosticsRequestRegistry
+// used by AdminUI endpoints.
+type StmtDiagnosticsRequester interface {
+	// InsertRequest adds an entry to system.statement_diagnostics_requests for
+	// tracing a query with the given fingerprint. Once this returns, calling
+	// shouldCollectDiagnostics() on the current node will return true for the given
+	// fingerprint.
+	InsertRequest(ctx context.Context, fprint string) error
 }
 
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}

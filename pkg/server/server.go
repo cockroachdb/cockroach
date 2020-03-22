@@ -890,7 +890,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	s.internalExecutor = internalExecutor
 	execCfg.InternalExecutor = internalExecutor
-	s.status.stmtDiagnosticsRequester = execCfg.NewStmtDiagnosticsRequestRegistry()
+	// TODO(ajwerner): Do we definitely know our node ID yet? Should we take a
+	// node id container instead?
+	execCfg.StmtInfoRequestRegistry = sql.NewStmtDiagnosticsRequestRegistry(internalExecutor, s.db, s.gossip, s.NodeID())
 	s.execCfg = &execCfg
 
 	s.leaseMgr.SetInternalExecutor(execCfg.InternalExecutor)
@@ -1669,6 +1671,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if err := s.statsRefresher.Start(ctx, s.stopper, stats.DefaultRefreshInterval); err != nil {
 		return err
 	}
+	s.execCfg.StmtInfoRequestRegistry.Start(ctx, s.stopper)
 
 	// Start the protected timestamp subsystem.
 	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {

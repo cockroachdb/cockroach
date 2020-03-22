@@ -32,7 +32,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	// Ask to trace a particular query.
-	registry := s.ExecutorConfig().(ExecutorConfig).stmtInfoRequestRegistry
+	registry := s.ExecutorConfig().(ExecutorConfig).StmtInfoRequestRegistry
 	reqID, err := registry.insertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
 	require.NoError(t, err)
 	reqRow := db.QueryRow(
@@ -99,7 +99,7 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Ask to trace a particular query using node 0.
-	registry := tc.Server(0).ExecutorConfig().(ExecutorConfig).stmtInfoRequestRegistry
+	registry := tc.Server(0).ExecutorConfig().(ExecutorConfig).StmtInfoRequestRegistry
 	reqID, err := registry.insertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
 	require.NoError(t, err)
 	reqRow := db0.QueryRow(
