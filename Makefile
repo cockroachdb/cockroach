@@ -193,7 +193,7 @@ help: ## Print help for targets with comments.
 		"make testccllogic" "Run all CCL SQL logic tests." \
 		"make testoptlogic" "Run all opt exec builder SQL logic tests." \
 		"make testbaselogic" "Run all the baseSQL SQL logic tests." \
-		"make testlogic FILES='prepare fk'" "Run the logic tests in the files named prepare and fk." \
+		"make testlogic FILES='collatedstring_index1|collatedstring_index2'" "Run the logic tests in the files named collatedstring_index1 and collatedstring_index2 (the full path is not required)." \
 		"make testlogic FILES=fk SUBTESTS='20042|20045'" "Run the logic tests within subtests 20042 and 20045 in the file named fk." \
 		"make testlogic TESTCONFIG=local" "Run the logic tests for the cluster configuration 'local'." \
 		"make fuzz" "Run all fuzz tests for 12m each (or whatever the default TESTTIMEOUT is)." \
