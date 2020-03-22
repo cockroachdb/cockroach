@@ -1055,10 +1055,10 @@ project
                 └── column10:10
 
 # --------------------------------------------------
-# EliminateDistinctOnNoColumns
+# EliminateDistinctNoColumns
 # --------------------------------------------------
 
-norm expect=EliminateDistinctOnNoColumns
+norm expect=EliminateDistinctNoColumns
 SELECT DISTINCT ON (a) a, b FROM abc WHERE a = 1
 ----
 limit
@@ -1077,7 +1077,7 @@ limit
  │         └── a:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
  └── 1
 
-norm expect=EliminateDistinctOnNoColumns
+norm expect=EliminateDistinctNoColumns
 SELECT DISTINCT ON (b) b, c FROM abc WHERE b = 1 ORDER BY b, c
 ----
 limit
@@ -1100,10 +1100,72 @@ limit
  │              └── b:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
  └── 1
 
+norm expect=EliminateDistinctNoColumns
+INSERT INTO a (k, i, s) SELECT 1, i, 'foo' FROM a WHERE i = 1
+ON CONFLICT (s, i) DO NOTHING
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── "?column?":11 => k:1
+ │    ├── i:7 => i:2
+ │    ├── column13:13 => f:3
+ │    ├── "?column?":12 => s:4
+ │    └── column14:14 => j:5
+ ├── cardinality: [0 - 0]
+ ├── side-effects, mutations
+ └── project
+      ├── columns: i:7!null "?column?":11!null "?column?":12!null column13:13 column14:14
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(7,11-14)
+      └── limit
+           ├── columns: i:7!null "?column?":11!null "?column?":12!null column13:13 column14:14 i:16 s:18
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           ├── fd: ()-->(7,11-14,16,18)
+           ├── select
+           │    ├── columns: i:7!null "?column?":11!null "?column?":12!null column13:13 column14:14 i:16 s:18
+           │    ├── fd: ()-->(7,11-14,18)
+           │    ├── limit hint: 1.00
+           │    ├── left-join (hash)
+           │    │    ├── columns: i:7!null "?column?":11!null "?column?":12!null column13:13 column14:14 i:16 s:18
+           │    │    ├── fd: ()-->(7,11-14)
+           │    │    ├── limit hint: 1.00
+           │    │    ├── project
+           │    │    │    ├── columns: column13:13 column14:14 "?column?":11!null "?column?":12!null i:7!null
+           │    │    │    ├── fd: ()-->(7,11-14)
+           │    │    │    ├── select
+           │    │    │    │    ├── columns: i:7!null
+           │    │    │    │    ├── fd: ()-->(7)
+           │    │    │    │    ├── scan a
+           │    │    │    │    │    └── columns: i:7!null
+           │    │    │    │    └── filters
+           │    │    │    │         └── i:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           │    │    │    └── projections
+           │    │    │         ├── CAST(NULL AS FLOAT8) [as=column13:13]
+           │    │    │         ├── CAST(NULL AS JSONB) [as=column14:14]
+           │    │    │         ├── 1 [as="?column?":11]
+           │    │    │         └── 'foo' [as="?column?":12]
+           │    │    ├── select
+           │    │    │    ├── columns: i:16!null s:18!null
+           │    │    │    ├── key: (16)
+           │    │    │    ├── fd: ()-->(18)
+           │    │    │    ├── scan a
+           │    │    │    │    ├── columns: i:16!null s:18!null
+           │    │    │    │    └── key: (16,18)
+           │    │    │    └── filters
+           │    │    │         └── s:18 = 'foo' [outer=(18), constraints=(/18: [/'foo' - /'foo']; tight), fd=()-->(18)]
+           │    │    └── filters
+           │    │         └── i:7 = i:16 [outer=(7,16), constraints=(/7: (/NULL - ]; /16: (/NULL - ]), fd=(7)==(16), (16)==(7)]
+           │    └── filters
+           │         └── s:18 IS NULL [outer=(18), constraints=(/18: [/NULL - /NULL]; tight), fd=()-->(18)]
+           └── 1
+
 # --------------------------------------------------
-# EliminateUpsertDistinctOnNoColumns
+# EliminateErrorDistinctNoColumns
 # --------------------------------------------------
-norm expect=EliminateUpsertDistinctOnNoColumns
+norm expect=EliminateErrorDistinctNoColumns
 INSERT INTO a (k, i, s) SELECT 1, i, 'foo' FROM a WHERE i = 1
 ON CONFLICT (s, i) DO UPDATE SET f=1.1
 ----
