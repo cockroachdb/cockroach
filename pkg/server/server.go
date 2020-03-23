@@ -892,7 +892,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	s.internalExecutor = internalExecutor
 	execCfg.InternalExecutor = internalExecutor
-	s.stmtDiagnosticsRegistry = stmtdiagnostics.NewRegistry(internalExecutor, s.db, s.gossip)
+	s.stmtDiagnosticsRegistry = stmtdiagnostics.NewRegistry(
+		internalExecutor, s.db, s.gossip, st)
 	s.status.setStmtDiagnosticsRequester(s.stmtDiagnosticsRegistry)
 	execCfg.StmtDiagnosticsRecorder = s.stmtDiagnosticsRegistry
 	s.execCfg = &execCfg

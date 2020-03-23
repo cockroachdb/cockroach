@@ -284,7 +284,7 @@ func startConnExecutor(
 		),
 		QueryCache:              querycache.New(0),
 		TestingKnobs:            ExecutorTestingKnobs{},
-		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, nil, nil),
+		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, nil, nil, st),
 	}
 	pool := mon.MakeUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,
