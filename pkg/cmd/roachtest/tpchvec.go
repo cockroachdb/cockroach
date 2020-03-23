@@ -31,7 +31,7 @@ func registerTPCHVec(r *testRegistry) {
 		// if vec ON is slower that vec OFF, meaning that if
 		// vec_on_time > vecOnSlowerFailFactor * vec_off_time, the test is failed.
 		// This will help catch any regressions.
-		vecOnSlowerFailFactor = 1.5
+		vecOnSlowerFailFactor = 1.15
 	)
 
 	// queriesToSkipByVersionPrefix is a map from version prefix to another map
