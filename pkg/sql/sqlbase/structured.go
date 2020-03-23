@@ -1826,6 +1826,11 @@ func (desc *TableDescriptor) ValidateTable() error {
 				return errors.AssertionFailedf(
 					"primary key swap mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
 			}
+		case *DescriptorMutation_ComputedColumnSwap:
+			if m.Direction == DescriptorMutation_NONE {
+				return errors.AssertionFailedf(
+					"computed column swap mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
+			}
 		default:
 			return errors.AssertionFailedf(
 				"mutation in state %s, direction %s, and no column/index descriptor",
@@ -2441,7 +2446,48 @@ func (desc *MutableTableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
 	}
 }
 
-// RenameColumnDescriptor updates all references to a column name in
+func (desc *MutableTableDescriptor) swapColumnIDs(
+	colA *ColumnDescriptor, colB *ColumnDescriptor) {
+
+	swapColumnIDValues := func (columnIDs []ColumnID) {
+		temp := columnIDs[colA.ID]
+		columnIDs[colA.ID] = columnIDs[colB.ID]
+		columnIDs[colB.ID] = temp
+	}
+
+
+	for i := range desc.Families {
+		swapColumnIDValues(desc.Families[i].ColumnIDs)
+		//temp := desc.Families[i].ColumnIDs[colA.ID]
+		//desc.Families[i].ColumnIDs[colA.ID] = desc.Families[i].ColumnIDs[colB.ID]
+		//desc.Families[i].ColumnIDs[colA.ID] = temp
+	}
+
+	swapColumnIDValues(desc.PrimaryIndex.ColumnIDs)
+
+	//temp := desc.PrimaryIndex.ColumnIDs[colA.ID]
+	//desc.PrimaryIndex.ColumnIDs[colA.ID] = desc.PrimaryIndex.ColumnIDs[colB.ID]
+	//desc.PrimaryIndex.ColumnIDs[colA.ID] = temp
+
+	for i := range desc.Indexes {
+		swapColumnIDValues(desc.Indexes[i].ColumnIDs)
+
+		//temp := desc.Indexes[i].ColumnIDs[colA.ID]
+		//desc.Indexes[i].ColumnIDs[colA.ID] = desc.Indexes[i].ColumnIDs[colB.ID]
+		//desc.Indexes[i].ColumnIDs[colB.ID] = temp
+	}
+
+	for _, m := range desc.Mutations {
+		if idx := m.GetIndex(); idx != nil {
+			swapColumnIDValues(idx.ColumnIDs)
+			//temp := desc.Indexes[i].ColumnIDs[colA.ID]
+			//desc.Indexes[i].ColumnIDs[colA.ID] = desc.Indexes[i].ColumnIDs[colB.ID]
+			//desc.Indexes[i].ColumnIDs[colB.ID] = temp		}
+		}
+	}
+
+}
+	// RenameColumnDescriptor updates all references to a column name in
 // a table descriptor including indexes and families.
 func (desc *MutableTableDescriptor) RenameColumnDescriptor(
 	column *ColumnDescriptor, newColName string,
@@ -3091,6 +3137,53 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 					return err
 				}
 			}
+		case *DescriptorMutation_ComputedColumnSwap:
+			// Change new col to not computed
+			// Swap, change old Col to computed
+			// Change Name
+			args := t.ComputedColumnSwap
+
+			oldCol, err := desc.FindColumnByID(args.OldColumnId)
+			if err != nil {
+				return err
+			}
+			newCol, err := desc.FindColumnByID(args.NewColumnId)
+			if err != nil {
+				return err
+			}
+
+			newCol.Hidden = false
+
+			// Swap Column Descriptor IDs.
+			//desc.swapColumnIDs(newCol, oldCol)
+
+			newCol.ComputeExpr = nil
+			// Has to be newCol's value casted to old Col.
+			//oldCol.ComputeExpr =
+
+			// Swap column names.
+			temp := oldCol.Name
+			desc.RenameColumnDescriptor(oldCol, newCol.Name)
+			desc.RenameColumnDescriptor(newCol, temp)
+
+
+			// Enqueue drop.
+			found := false
+			for i := range desc.Columns {
+				if desc.Columns[i].ID == oldCol.ID {
+					desc.AddColumnMutation(oldCol, DescriptorMutation_DROP)
+					// Use [:i:i] to prevent reuse of existing slice, or outstanding refs
+					// to ColumnDescriptors may unexpectedly change.
+					desc.Columns = append(desc.Columns[:i:i], desc.Columns[i+1:]...)
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"error dropping old column: %q", oldCol)
+			}
 		}
 
 	case DescriptorMutation_DROP:
@@ -3236,6 +3329,12 @@ func (desc *MutableTableDescriptor) AddIndexMutation(
 // AddPrimaryKeySwapMutation adds a PrimaryKeySwap mutation to the table descriptor.
 func (desc *MutableTableDescriptor) AddPrimaryKeySwapMutation(swap *PrimaryKeySwap) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_PrimaryKeySwap{PrimaryKeySwap: swap}, Direction: DescriptorMutation_ADD}
+	desc.addMutation(m)
+}
+
+// AddComputedColumnSwapMutation adds a ComputedColumnSwap mutation to the table descriptor.
+func (desc *MutableTableDescriptor) AddComputedColumnSwapMutation(swap *ComputedColumnSwap) {
+	m := DescriptorMutation{Descriptor_: &DescriptorMutation_ComputedColumnSwap{ComputedColumnSwap: swap}, Direction: DescriptorMutation_ADD}
 	desc.addMutation(m)
 }
 

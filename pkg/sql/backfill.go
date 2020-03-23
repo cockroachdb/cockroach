@@ -204,6 +204,8 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 				}
 			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
 				// The backfiller doesn't need to do anything here.
+			case *sqlbase.DescriptorMutation_ComputedColumnSwap:
+				// The backfiller doesn't need to do anything here.
 			default:
 				return errors.AssertionFailedf(
 					"unsupported mutation: %+v", m)

@@ -15,7 +15,6 @@ import (
 	"context"
 	gojson "encoding/json"
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -906,10 +905,133 @@ func applyColumnMutation(
 				col.Type.SQLString(), typ.SQLString())
 		case schemachange.ColumnConversionTrivial:
 			col.Type = *typ
-		default:
-			return unimplemented.NewWithIssueDetail(9851,
-				fmt.Sprintf("%s->%s", col.Type.SQLString(), typ.SQLString()),
-				"type conversion not yet implemented")
+
+		default: // try conversion
+			//1. Create a new computed column c' using c::t'
+			// Computed off old column, need to update ComputeExpr
+			// Make shadow column for now
+
+			// Ensure that other schema changes on this table are not currently
+			// executing, and that other schema changes have not been performed
+			// in the current transaction.
+			currentMutationID := tableDesc.ClusterVersion.NextMutationID
+			for i := range tableDesc.Mutations {
+				mut := &tableDesc.Mutations[i]
+				if mut.MutationID == currentMutationID {
+					return unimplemented.NewWithIssuef(
+						45510, "cannot perform a primary key change on %s "+
+							"with other schema changes on %s in the same transaction", tableDesc.Name, tableDesc.Name)
+				}
+				if mut.MutationID < currentMutationID {
+					// We can handle indexes being deleted concurrently. We do this
+					// in order to not be blocked on index drops created by a previous
+					// primary key change. If we errored out when seeing a previous
+					// index drop, then users would see a confusing message that a
+					// schema change is in progress when it doesn't seem like one is.
+					// TODO (rohany): This feels like such a hack until (#45150) is fixed.
+					if mut.GetIndex() != nil && mut.Direction == sqlbase.DescriptorMutation_DROP {
+						continue
+					}
+					return unimplemented.NewWithIssuef(
+						45510, "table %s is currently undergoing a schema change", tableDesc.Name)
+				}
+			}
+
+			nameExists := func(name string) bool {
+				_, _, err := tableDesc.FindColumnByName(tree.Name(name))
+				return err == nil
+			}
+
+			name := sqlbase.GenerateUniqueConstraintName(
+				col.Name,
+				nameExists,
+			)
+
+			////TODO(richardjcai): Rename newCol to d? for consistency
+
+			var newColComputeExpr = proto.String(
+				fmt.Sprintf("%s::%s", col.Name, t.ToType.String()))
+			hasDefault := col.HasDefault()
+			var newColDefaultExpr *string
+			if hasDefault {
+				// TODO(richardjcai) Handle NULL
+				newColDefaultExpr = proto.String(
+					fmt.Sprintf("%s::%s", col.DefaultExprStr(), t.ToType.String()))
+			}
+
+			id := tableDesc.NextColumnID
+			tableDesc.NextColumnID++
+
+			newCol := sqlbase.ColumnDescriptor{
+				Name: name,
+				ID: id,
+				Type:*t.ToType,
+				Nullable: col.Nullable,
+				DefaultExpr: newColDefaultExpr,
+				Hidden: true,
+				UsesSequenceIds: col.UsesSequenceIds,
+				OwnsSequenceIds: col.OwnsSequenceIds,
+				ComputeExpr: newColComputeExpr,
+			}
+
+			tableDesc.AddColumnMutation(&newCol, sqlbase.DescriptorMutation_ADD)
+
+			swapArgs := &sqlbase.ComputedColumnSwap{
+				OldColumnId: col.ID,
+				NewColumnId: newCol.ID,
+			}
+
+			tableDesc.AddComputedColumnSwapMutation(swapArgs)
+
+			//// TODO(richardjcai): Copied from drop column can unduplicate code.
+			//// If the dropped column uses a sequence, remove references to it from that sequence.
+			//if len(col.UsesSequenceIds) > 0 {
+			//	if err := params.p.removeSequenceDependencies(params.ctx, tableDesc, col); err != nil {
+			//		return err
+			//	}
+			//}
+			//
+			//// You can't remove a column that owns a sequence that is depended on
+			//// by another column
+			//if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, tableDesc, col, tree.DropDefault); err != nil {
+			//	return err
+			//}
+			//
+			//if err := params.p.dropSequencesOwnedByCol(params.ctx, col); err != nil {
+			//	return err
+			//}
+			//
+			//found := false
+			//for i := range tableDesc.Columns {
+			//	if tableDesc.Columns[i].ID == col.ID {
+			//		tableDesc.AddColumnMutation(col, sqlbase.DescriptorMutation_DROP)
+			//		// Use [:i:i] to prevent reuse of existing slice, or outstanding refs
+			//		// to ColumnDescriptors may unexpectedly change.
+			//		tableDesc.Columns = append(tableDesc.Columns[:i:i], tableDesc.Columns[i+1:]...)
+			//		found = true
+			//		break
+			//	}
+			//}
+			//if !found {
+			//	return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			//		"column %q in the middle of being added, try again later", t.Column)
+			//}
+
+
+			//2. For all indexes i that contain c, create a new i' that indexes all columns in c, but replaces c for c'
+			// iterate through table desc indexes
+			//3. Enqueue an "index swap" mutation containing all indexes that need to be rewritten.
+
+			// Question, when is migration done, when is c' column used? Should be after indexes
+			// are swapped.
+
+			// Worry about FK later.
+
+			//return unimplemented.NewWithIssueDetail(9851,
+			//	fmt.Sprintf("%s->%s", col.Type.SQLString(), typ.SQLString()),
+			//	"type conversion not yet implemented")
+
+			// This whole process must be able to be rolled back.
 		}
 
 	case *tree.AlterTableSetDefault:

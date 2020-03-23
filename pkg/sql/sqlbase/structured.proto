@@ -498,6 +498,7 @@ message DescriptorMutation {
     IndexDescriptor index = 2;
     ConstraintToUpdate constraint = 8;
     PrimaryKeySwap primaryKeySwap = 9;
+    ComputedColumnSwap  computedColumnSwap = 10;
   }
   // A descriptor within a mutation is unavailable for reads, writes
   // and deletes. It is only available for implicit (internal to
@@ -972,3 +973,19 @@ message Descriptor {
     DatabaseDescriptor database = 2;
   }
 }
+
+// ComputedColumnSwap is a mutation corresponding to the atomic swap phase
+// where Column a' that is computed using Column a is swapped to replace
+// Column a while Column a becomes computed using a'.
+message ComputedColumnSwap {
+  option (gogoproto.equal) = true;
+  // old_column_index_id is the ID of the old column (column a).
+  optional uint32 old_column_id = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
+  // new_column_index_id is the ID of the new column (column a').
+  optional uint32 new_column_id = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
+//  // old_indexes and new_indexes are lists of IndexID's where the i'th index in old_indexes will be
+//  // swapped out with the i'th index in new_indexes.
+//  repeated uint32 old_indexes = 2 [(gogoproto.casttype) = "IndexID"];
+//  repeated uint32 new_indexes = 3 [(gogoproto.casttype) = "IndexID"];
+}
+
