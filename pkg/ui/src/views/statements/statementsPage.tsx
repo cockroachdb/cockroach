@@ -116,15 +116,6 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
     this.setState({ pagination: { ...pagination, current }});
   }
 
-  getStatementsData = () => {
-    const { pagination: { current, pageSize } } = this.state;
-    const currentDefault = current - 1;
-    const start = (currentDefault * pageSize);
-    const end = (currentDefault * pageSize + pageSize);
-    const data = this.filteredStatementsData().slice(start, end);
-    return data;
-  }
-
   onSubmitSearchField = (search: string) => this.setState({ pagination: { ...this.state.pagination, current: 1 }, search });
 
   onClearSearchField = () => this.setState({ search: "" });
@@ -193,7 +184,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
     const selectedApp = appAttrValue || "";
     const appOptions = [{ value: "", label: "All" }];
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
-    const data = this.getStatementsData();
+    const data = this.filteredStatementsData();
     return (
       <div>
         <PageConfig>
@@ -244,6 +235,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
                 sortSetting={this.state.sortSetting}
                 onChangeSortSetting={this.changeSortSetting}
                 renderNoResult={this.noStatementResult()}
+                pagination={pagination}
               />
             </div>
           )}
@@ -253,7 +245,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
           itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
           pageSize={pagination.pageSize}
           current={pagination.current}
-          total={this.filteredStatementsData().length}
+          total={data.length}
           onChange={this.onChangePage}
           hideOnSinglePage={data.length === 0}
         />
