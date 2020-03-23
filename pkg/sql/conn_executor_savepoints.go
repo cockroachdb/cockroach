@@ -12,8 +12,10 @@ package sql
 
 import (
 	"context"
+	"errors"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -22,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // commitOnReleaseSavepointName is the name of the savepoint with special
@@ -91,6 +94,14 @@ func (ex *connExecutor) execSavepointInOpenState(
 			ev, payload := ex.makeErrEvent(err, s)
 			return ev, payload, nil
 		}
+	}
+
+	// We don't support savepoints in mixed-version clusters.
+	// TODO(knz): Remove this check in v20.2.
+	if !ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.VersionSavepoints) && !commitOnRelease {
+		err := errors.New("savepoints cannot be used until the version upgrade is finalized")
+		ev, payload := ex.makeErrEvent(err, s)
+		return ev, payload, nil
 	}
 
 	token, err := ex.state.mu.txn.CreateSavepoint(ctx)
@@ -188,9 +199,21 @@ func (ex *connExecutor) execRollbackToSavepointInOpenState(
 		return ev, payload
 	}
 
-	if err := ex.state.mu.txn.RollbackToSavepoint(ctx, entry.kvToken); err != nil {
-		ev, payload := ex.makeErrEvent(err, s)
-		return ev, payload
+	// Special case for mixed-cluster versions, where regular savepoints
+	// are not yet enabled but we still support cockroach_restart. In
+	// that case, we can't process ROLLBACK TO SAVEPOINT
+	// cockroach_restart using ignored seqnum lists so we need to
+	// restart the txn the "old way".
+	// TODO(knz): Remove this check in v20.2 and only keep the 'else'
+	// clause, which is the generic rollback code.
+	if entry.kvToken.Initial() && !ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.VersionSavepoints) {
+		// Bump the epoch but keep the kv txn.
+		ex.state.mu.txn.ManualRestart(ctx, hlc.Timestamp{})
+	} else {
+		if err := ex.state.mu.txn.RollbackToSavepoint(ctx, entry.kvToken); err != nil {
+			ev, payload := ex.makeErrEvent(err, s)
+			return ev, payload
+		}
 	}
 
 	ex.extraTxnState.savepoints.popToIdx(idx)
