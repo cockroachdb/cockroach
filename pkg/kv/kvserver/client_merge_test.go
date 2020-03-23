@@ -2877,7 +2877,6 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 // range.
 func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#46192")
 
 	// We will be testing the SSTs written on store2's engine.
 	var receivingEng storage.Engine
