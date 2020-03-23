@@ -276,34 +276,34 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     {
       key: "status",
       render: (_text, record) => {
-        let status: string;
+        let badgeText: string;
         let tooltipText: string;
-        const badgeStatus = getBadgeTypeByNodeStatus(record.status);
+        const badgeType = getBadgeTypeByNodeStatus(record.status);
 
         switch (record.status) {
           case AggregatedNodeStatus.DEAD:
-            status = "warning";
+            badgeText = "warning";
             break;
           case AggregatedNodeStatus.LIVE:
           case AggregatedNodeStatus.WARNING:
-            status = AggregatedNodeStatus[record.status];
+            badgeText = AggregatedNodeStatus[record.status];
             break;
           case LivenessStatus.UNKNOWN:
           case LivenessStatus.UNAVAILABLE:
-            status = "suspect";
+            badgeText = "suspect";
             tooltipText = getStatusDescription(record.status);
             break;
           default:
-            status = LivenessStatus[record.status];
+            badgeText = LivenessStatus[record.status];
             tooltipText = getStatusDescription(record.status);
             break;
         }
         return (
           <Badge
-            status={badgeStatus}
+            status={badgeType}
             text={
               <Tooltip title={tooltipText}>
-                {status}
+                {badgeText}
               </Tooltip>
             }
           />
