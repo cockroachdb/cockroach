@@ -23,6 +23,7 @@ export interface TableProps<T> {
   noDataMessage?: string;
   tableLayout?: "fixed" | "auto";
   pageSize?: number;
+  className?: string;
 }
 
 const customizeRenderEmpty = (text: string) => () => (
@@ -34,14 +35,15 @@ const customizeRenderEmpty = (text: string) => () => (
 Table.defaultProps = {
   noDataMessage: "No data to display",
   tableLayout: "auto",
+  className: "",
 };
 
 export function Table<T>(props: TableProps<T>) {
-  const { columns, dataSource, noDataMessage, tableLayout, pageSize } = props;
+  const { columns, dataSource, noDataMessage, tableLayout, pageSize, className } = props;
   return (
     <ConfigProvider renderEmpty={customizeRenderEmpty(noDataMessage)}>
     <AntTable<T>
-      className="crl-table-wrapper"
+      className={`crl-table-wrapper ${className}`}
       columns={columns}
       dataSource={dataSource}
       expandRowByClick
