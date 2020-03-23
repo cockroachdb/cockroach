@@ -465,22 +465,7 @@ func (o *inputPartitioningOperator) Next(ctx context.Context) coldata.Batch {
 	// it's ok if we have some deviation. This numbers matter only to understand
 	// when to start a new partition, and the memory will be actually accounted
 	// for correctly.)
-	length := int64(b.Length())
-	usesSel := b.Selection() != nil
-	b.SetSelection(true)
-	selCapacity := cap(b.Selection())
-	b.SetSelection(usesSel)
-	batchMemSize := int64(0)
-	if selCapacity > 0 {
-		batchMemSize = selVectorSize(selCapacity) * length / int64(selCapacity)
-	}
-	for _, vec := range b.ColVecs() {
-		if vec.Type() == coltypes.Bytes {
-			batchMemSize += int64(vec.Bytes().ProportionalSize(length))
-		} else {
-			batchMemSize += getVecMemoryFootprint(vec) * length / int64(vec.Capacity())
-		}
-	}
+	batchMemSize := getProportionalBatchMemSize(b, int64(b.Length()))
 	if err := o.standaloneMemAccount.Grow(ctx, batchMemSize); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
