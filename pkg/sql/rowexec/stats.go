@@ -43,7 +43,10 @@ func newInputStatCollector(input execinfra.RowSource) *inputStatCollector {
 
 // ChildCount is part of the OpNode interface.
 func (isc *inputStatCollector) ChildCount(verbose bool) int {
-	return 1
+	if _, ok := isc.RowSource.(execinfra.OpNode); ok {
+		return 1
+	}
+	return 0
 }
 
 // Child is part of the OpNode interface.
