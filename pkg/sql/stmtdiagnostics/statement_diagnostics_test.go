@@ -15,13 +15,20 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -155,4 +162,69 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	runUntilTraced("SELECT x FROM test", id2)
 	runUntilTraced("SELECT x FROM test WHERE x > 1", id3)
 	runUntilTraced("INSERT INTO test VALUES (2)", id1)
+}
+
+// TestChangePollInterval ensures that changing the polling interval takes effect.
+func TestChangePollInterval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// We'll inject a request filter to detect scans due to the polling.
+	tableStart := roachpb.Key(keys.MakeTablePrefix(keys.StatementDiagnosticsRequestsTableID))
+	tableSpan := roachpb.Span{
+		Key:    tableStart,
+		EndKey: tableStart.PrefixEnd(),
+	}
+	var scanState = struct {
+		syncutil.Mutex
+		m map[uuid.UUID]struct{}
+	}{
+		m: map[uuid.UUID]struct{}{},
+	}
+	recordScan := func(id uuid.UUID) {
+		scanState.Lock()
+		defer scanState.Unlock()
+		scanState.m[id] = struct{}{}
+	}
+	numScans := func() int {
+		scanState.Lock()
+		defer scanState.Unlock()
+		return len(scanState.m)
+	}
+	waitForScans := func(atLeast int) (seen int) {
+		testutils.SucceedsSoon(t, func() error {
+			if seen = numScans(); seen < atLeast {
+				return errors.Errorf("expected at least %d scans, saw %d", atLeast, seen)
+			}
+			return nil
+		})
+		return seen
+	}
+	args := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+					if request.Txn == nil {
+						return nil
+					}
+					for _, req := range request.Requests {
+						if scan := req.GetScan(); scan != nil && scan.Span().Overlaps(tableSpan) {
+							recordScan(request.Txn.ID)
+							return nil
+						}
+					}
+					return nil
+				},
+			},
+		},
+	}
+	s, db, _ := serverutils.StartServer(t, args)
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	require.Equal(t, 1, waitForScans(1))
+	time.Sleep(time.Millisecond) // ensure no unexpected scan occur
+	require.Equal(t, 1, waitForScans(1))
+	_, err := db.Exec("SET CLUSTER SETTING sql.stmt_diagnostics.poll_interval = '200us'")
+	require.NoError(t, err)
+	waitForScans(10) // ensure several scans occur
 }
