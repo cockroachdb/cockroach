@@ -10,10 +10,10 @@ CREATE TABLE kv (
 )
 
 # Aggregate functions return NULL if there are no rows.
-query IIIIRRRRBBTII
-SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), variance(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1) FROM kv
+query IIIIRRRRRBBTII
+SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), stddev_samp(1), variance(1), bool_and(true), bool_and(false), xor_agg(b'\x01'), bit_and(1), bit_or(1) FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL NULL
 
 # Regression test for #29695
 query T
@@ -64,7 +64,7 @@ NULL
 
 # Aggregate functions triggers aggregation and computation when there is no source.
 query IIIIRRRRBBT
-SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
+SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev_samp(1), variance(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
 ----
 1 1 1 1 1 1 NULL NULL true true 01
 
@@ -789,7 +789,7 @@ SELECT variance(x) FROM xyz WHERE x = 1
 NULL
 
 query RRR
-SELECT stddev(x), stddev(y::decimal), round(stddev(z), 14) FROM xyz
+SELECT stddev_samp(x), stddev(y::decimal), round(stddev_samp(z), 14) FROM xyz
 ----
 3  2.1213203435596425732  2.51661147842358
 
@@ -834,7 +834,7 @@ SELECT round(variance(n), 2), round(variance(n), 2), round(variance(p)) FROM mno
 
 
 query RRR
-SELECT round(stddev(n), 2), round(stddev(n), 2), round(stddev(p)) FROM mnop
+SELECT round(stddev_samp(n), 2), round(stddev(n), 2), round(stddev_samp(p)) FROM mnop
 ----
 0.29 0.29 3
 
@@ -859,7 +859,7 @@ SELECT variance(1::int), variance(1::float), variance(1::decimal)
 NULL NULL NULL
 
 query RRR
-SELECT stddev(1::int), stddev(1::float), stddev(1::decimal)
+SELECT stddev(1::int), stddev_samp(1::float), stddev(1::decimal)
 ----
 NULL NULL NULL
 
