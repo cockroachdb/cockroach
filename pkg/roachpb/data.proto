@@ -447,7 +447,7 @@ message Transaction {
   // on a copy of the slice.
   repeated ObservedTimestamp observed_timestamps = 8 [(gogoproto.nullable) = false];
   // If set, a write performed by the transaction could not be performed at the
-  // transaction's write timestamp because a newer value was present. Had our
+  // transaction's read timestamp because a newer value was present. Had our
   // write been performed, it would have overwritten the other value even though
   // that value might not have been read by a previous read in the transaction
   // (i.e. lost update anomaly). The write is still performed, but this flag is
