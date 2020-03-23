@@ -18,3 +18,6 @@ func (r *Registry) InsertRequestInternal(ctx context.Context, fprint string) (in
 	id, err := r.insertRequestInternal(ctx, fprint)
 	return int64(id), err
 }
+
+// PollInterval exposes the polling interval cluster setting for testing.
+var PollInterval = stmtDiagnosticsPollingInterval

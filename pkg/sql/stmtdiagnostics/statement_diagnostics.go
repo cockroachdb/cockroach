@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -31,6 +33,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
+
+var stmtDiagnosticsPollingInterval = settings.RegisterDurationSetting(
+	"sql.stmt_diagnostics.poll_interval",
+	"rate at which the stmtdiagnostics.Registry polls for requests, set to non-positive to disable",
+	10*time.Second)
 
 // Registry maintains a view on the statement fingerprints
 // on which data is to be collected (i.e. system.statement_diagnostics_requests)
@@ -51,6 +58,7 @@ type Registry struct {
 		// between, then the table contents might be stale.
 		epoch int
 	}
+	st     *cluster.Settings
 	ie     sqlutil.InternalExecutor
 	db     *kv.DB
 	gossip *gossip.Gossip
@@ -62,12 +70,15 @@ type Registry struct {
 }
 
 // NewRegistry constructs a new Registry.
-func NewRegistry(ie sqlutil.InternalExecutor, db *kv.DB, g *gossip.Gossip) *Registry {
+func NewRegistry(
+	ie sqlutil.InternalExecutor, db *kv.DB, g *gossip.Gossip, st *cluster.Settings,
+) *Registry {
 	r := &Registry{
 		ie:               ie,
 		db:               db,
 		gossip:           g,
 		gossipUpdateChan: make(chan requestID, 1),
+		st:               st,
 	}
 	// Some tests pass a nil gossip.
 	if g != nil {
@@ -85,18 +96,44 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) {
 }
 
 func (r *Registry) poll(ctx context.Context) {
-	var timer timeutil.Timer
-	// TODO(ajwerner): Make this polling interval a cluster setting.
-	const pollingInterval = 10 * time.Second
-	var lastPoll time.Time
-	var deadline time.Time
-	for {
-		newDeadline := lastPoll.Add(pollingInterval)
-		if deadline.IsZero() || !deadline.Equal(newDeadline) {
-			deadline = newDeadline
-			timer.Reset(timeutil.Until(deadline))
+	var (
+		timer               timeutil.Timer
+		lastPoll            time.Time
+		deadline            time.Time
+		pollIntervalChanged = make(chan struct{}, 1)
+		maybeResetTimer     = func() {
+			if interval := stmtDiagnosticsPollingInterval.Get(&r.st.SV); interval <= 0 {
+				// Setting the interval to a non-positive value stops the polling.
+				timer.Stop()
+			} else {
+				newDeadline := lastPoll.Add(interval)
+				if deadline.IsZero() || !deadline.Equal(newDeadline) {
+					deadline = newDeadline
+					timer.Reset(timeutil.Until(deadline))
+				}
+			}
 		}
+		poll = func() {
+			if err := r.pollRequests(ctx); err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				log.Warningf(ctx, "error polling for statement diagnostics requests: %s", err)
+			}
+			lastPoll = timeutil.Now()
+		}
+	)
+	stmtDiagnosticsPollingInterval.SetOnChange(&r.st.SV, func() {
 		select {
+		case pollIntervalChanged <- struct{}{}:
+		default:
+		}
+	})
+	for {
+		maybeResetTimer()
+		select {
+		case <-pollIntervalChanged:
+			continue // go back around and maybe reset the timer
 		case reqID := <-r.gossipUpdateChan:
 			if r.findRequest(reqID) {
 				continue // request already exists, don't do anything
@@ -107,13 +144,7 @@ func (r *Registry) poll(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		}
-		if err := r.pollRequests(ctx); err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			log.Warningf(ctx, "error polling for statement diagnostics requests: %s", err)
-		}
-		lastPoll = timeutil.Now()
+		poll()
 	}
 }
 
