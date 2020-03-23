@@ -143,8 +143,19 @@ type statusServer struct {
 	stopper                  *stop.Stopper
 	sessionRegistry          *sql.SessionRegistry
 	si                       systemInfoOnce
-	stmtDiagnosticsRequester sql.StmtDiagnosticsRequester
+	stmtDiagnosticsRequester StmtDiagnosticsRequester
 	internalExecutor         *sql.InternalExecutor
+}
+
+// StmtDiagnosticsRequester is the interface into *stmtdiagnostics.Registry
+// used by AdminUI endpoints.
+type StmtDiagnosticsRequester interface {
+
+	// InsertRequest adds an entry to system.statement_diagnostics_requests for
+	// tracing a query with the given fingerprint. Once this returns, calling
+	// shouldCollectDiagnostics() on the current node will return true for the given
+	// fingerprint.
+	InsertRequest(ctx context.Context, fprint string) error
 }
 
 // newStatusServer allocates and returns a statusServer.
@@ -183,6 +194,14 @@ func newStatusServer(
 	}
 
 	return server
+}
+
+// setStmtDiagnosticsRequester is used to provide a StmtDiagnosticsRequester to
+// the status server. This cannot be done at construction time because the
+// implementation of StmtDiagnosticsRequester depends on an executor which in
+// turn depends on the statusServer.
+func (s *statusServer) setStmtDiagnosticsRequester(sr StmtDiagnosticsRequester) {
+	s.stmtDiagnosticsRequester = sr
 }
 
 // RegisterService registers the GRPC service.

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -283,7 +284,7 @@ func startConnExecutor(
 		),
 		QueryCache:              querycache.New(0),
 		TestingKnobs:            ExecutorTestingKnobs{},
-		stmtInfoRequestRegistry: newStmtDiagnosticsRequestRegistry(nil, nil, nil, 0),
+		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, nil, nil, st),
 	}
 	pool := mon.MakeUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,

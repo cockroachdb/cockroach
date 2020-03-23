@@ -189,7 +189,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.noticeSender = res
 
 	var shouldCollectDiagnostics bool
-	var diagHelper *stmtDiagnosticsHelper
+	var finishCollectionDiagnostics StmtDiagnosticsTraceFinishFunc
 
 	if explainBundle, ok := stmt.AST.(*tree.ExplainBundle); ok {
 		// Always collect diagnostics for EXPLAIN BUNDLE.
@@ -209,7 +209,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// bundle.
 		p.discardRows = true
 	} else {
-		shouldCollectDiagnostics, diagHelper = ex.stmtInfoRegistry.shouldCollectDiagnostics(ctx, stmt.AST)
+		shouldCollectDiagnostics, finishCollectionDiagnostics = ex.stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, stmt.AST)
 	}
 
 	if shouldCollectDiagnostics {
@@ -225,9 +225,9 @@ func (ex *connExecutor) execStmtInOpenState(
 			// Note that in case of implicit transactions, the trace contains the auto-commit too.
 			sp.Finish()
 			trace := tracing.GetRecording(sp)
-
-			if diagHelper != nil {
-				diagHelper.Finish(origCtx, trace, &p.curPlan)
+			traceJSON, bundle, collectionErr := getTraceAndBundle(trace, &p.curPlan)
+			if finishCollectionDiagnostics != nil {
+				finishCollectionDiagnostics(origCtx, traceJSON, bundle, collectionErr)
 			} else {
 				// Handle EXPLAIN BUNDLE.
 				// If there was a communication error, no point in setting any results.

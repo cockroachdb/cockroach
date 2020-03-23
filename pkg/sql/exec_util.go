@@ -588,7 +588,8 @@ type ExecutorConfig struct {
 	// ProtectedTimestampProvider encapsulates the protected timestamp subsystem.
 	ProtectedTimestampProvider protectedts.Provider
 
-	stmtInfoRequestRegistry *stmtDiagnosticsRequestRegistry
+	// StmtDiagnosticsRecorder deals with recording statement diagnostics.
+	StmtDiagnosticsRecorder StmtDiagnosticsRecorder
 }
 
 // Organization returns the value of cluster.organization.
@@ -596,16 +597,39 @@ func (cfg *ExecutorConfig) Organization() string {
 	return ClusterOrganization.Get(&cfg.Settings.SV)
 }
 
-// NewStmtDiagnosticsRequestRegistry initializes cfg.stmtInfoRequestRegistry and
-// returns it as the publicly-accessible StmtDiagnosticsRequester.
-func (cfg *ExecutorConfig) NewStmtDiagnosticsRequestRegistry() StmtDiagnosticsRequester {
-	if cfg.InternalExecutor == nil {
-		panic("cfg.InternalExecutor not initialized")
-	}
-	cfg.stmtInfoRequestRegistry = newStmtDiagnosticsRequestRegistry(
-		cfg.InternalExecutor, cfg.DB, cfg.Gossip, cfg.NodeID.Get())
-	return cfg.stmtInfoRequestRegistry
+// StmtDiagnosticsRecorder is the interface into *stmtdiagnostics.Registry to
+// record statement diagnostics.
+type StmtDiagnosticsRecorder interface {
+
+	// ShouldCollectDiagnostics checks whether any data should be collected for the
+	// given query, which is the case if the registry has a request for this
+	// statement's fingerprint; in this case ShouldCollectDiagnostics will not
+	// return true again on this note for the same diagnostics request.
+	//
+	// If data is to be collected, the returned finish() function must always be
+	// called once the data was collected. If collection fails, it can be called
+	// with a collectionErr.
+	ShouldCollectDiagnostics(ctx context.Context, ast tree.Statement) (
+		shouldCollect bool,
+		finish StmtDiagnosticsTraceFinishFunc,
+	)
+
+	// InsertStatementDiagnostics inserts a trace into system.statement_diagnostics.
+	//
+	// traceJSON is either DNull (when collectionErr should not be nil) or a *DJSON.
+	InsertStatementDiagnostics(ctx context.Context,
+		stmtFingerprint string,
+		stmt string,
+		traceJSON tree.Datum,
+		bundle *bytes.Buffer,
+	) (id int64, err error)
 }
+
+// StmtDiagnosticsTraceFinishFunc is the type of function returned from
+// ShouldCollectDiagnostics to report the outcome of a trace.
+type StmtDiagnosticsTraceFinishFunc = func(
+	ctx context.Context, traceJSON tree.Datum, bundle *bytes.Buffer, collectionErr error,
+)
 
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}
 
