@@ -140,19 +140,19 @@
     $groupingPrivate
 )
 
-# EliminateDistinctOnNoColumns eliminates a DistinctOn with no grouping columns,
-# replacing it with a projection and a LIMIT 1. For example:
+# EliminateDistinctNoColumns eliminates a distinct operator with no grouping
+# columns, replacing it with a projection and a LIMIT 1. For example:
 #   SELECT DISTINCT ON (a) a, b FROM ab WHERE a=1
 # is equivalent to:
 #   SELECT a, b FROM ab WHERE a=1 LIMIT 1
 #
-# Note that this rule does not apply to UpsertDistinctOn, since that will raise
-# an error if there are duplicate rows.
-[EliminateDistinctOnNoColumns, Normalize]
-(DistinctOn
+# Note that this rule does not apply to UpsertDistinctOn with ErrorOnDup = true,
+# since that will raise an error if there are duplicate rows.
+[EliminateDistinctNoColumns, Normalize]
+(DistinctOn | UpsertDistinctOn
     $input:*
     $aggregations:*
-    $groupingPrivate:* & (HasNoGroupingCols $groupingPrivate)
+    $groupingPrivate:* & (HasNoGroupingCols $groupingPrivate) & ^(RaisesErrorOnDup $groupingPrivate)
 )
 =>
 (ConstructProjectionFromDistinctOn
@@ -161,16 +161,16 @@
     $aggregations
 )
 
-# EliminateUpsertDistinctOnNoColumns is similar to EliminateDistinctOnNoColumns,
-# except that it will raise an error if there are no grouping columns and the
-# input has more than one row. No grouping columns means there is at most one
-# group. And the Max1Row operator is needed to raise an error if that group has
-# more than one row, which is a requirement of the Upsert operator.
-[EliminateUpsertDistinctOnNoColumns, Normalize]
+# EliminateErrorDistinctNoColumns is similar to EliminateDistinctNoColumns,
+# except that Max1Row will raise an error if there are no grouping columns and
+# the input has more than one row. No grouping columns means there is at most
+# one group. And the Max1Row operator is needed to raise an error if that group
+# has more than one row, which is a requirement of the Upsert operator.
+[EliminateErrorDistinctNoColumns, Normalize]
 (UpsertDistinctOn
     $input:*
     $aggregations:*
-    $groupingPrivate:* & (HasNoGroupingCols $groupingPrivate)
+    $groupingPrivate:* & (HasNoGroupingCols $groupingPrivate) & (RaisesErrorOnDup $groupingPrivate)
 )
 =>
 (ConstructProjectionFromDistinctOn

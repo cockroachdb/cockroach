@@ -1454,6 +1454,7 @@ func TestRangeInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.Clock = nil // manual clock
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
 		// This test was written before the multiTestContext started creating many
