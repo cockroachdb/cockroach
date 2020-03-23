@@ -1,5 +1,7 @@
-# tests a scenario where a put operation of an
-# older timestamp comes after a put operation of a newer timestamp.
+# Tests a scenario where a put operation of an older timestamp comes
+# after a put operation of a newer timestamp. The timestamp of the
+# resulting intent remains equal to the higher timestamp - it does not
+# regress.
 
 run ok
 with t=A
