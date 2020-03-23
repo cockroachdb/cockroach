@@ -34,6 +34,7 @@ type tpcds struct {
 	queriesToOmitRaw string
 	queryTimeLimit   time.Duration
 	selectedQueries  []int
+	vectorize        string
 }
 
 func init() {
@@ -51,6 +52,7 @@ var tpcdsMeta = workload.Meta{
 			`queries-to-omit`:  {RuntimeOnly: true},
 			`queries-to-run`:   {RuntimeOnly: true},
 			`query-time-limit`: {RuntimeOnly: true},
+			`vectorize`:        {RuntimeOnly: true},
 		}
 
 		// NOTE: we're skipping queries 27, 36, 70, and 86 by default at the moment
@@ -64,6 +66,8 @@ var tpcdsMeta = workload.Meta{
 				`Note that --queries-to-omit flag has a higher precedence`)
 		g.flags.DurationVar(&g.queryTimeLimit, `query-time-limit`, 5*time.Minute,
 			`Time limit for a single run of a query`)
+		g.flags.StringVar(&g.vectorize, `vectorize`, `auto`,
+			`Set vectorize session variable`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -79,8 +83,8 @@ func (w *tpcds) Flags() workload.Flags { return w.flags }
 func (w *tpcds) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
-			if w.queryTimeLimit < 0 {
-				return errors.Errorf("negative query time limit was set %d", w.queryTimeLimit)
+			if w.queryTimeLimit <= 0 {
+				return errors.Errorf("non-positive query time limit was set: %s", w.queryTimeLimit)
 			}
 			skipQuery := make([]bool, numQueries+1)
 			for _, queryName := range strings.Split(w.queriesToOmitRaw, `,`) {
@@ -259,12 +263,6 @@ func (w *tpcds) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad,
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-	if w.queryTimeLimit > 0 {
-		stmtTimeout := fmt.Sprintf(`&statement_timeout=%s`, w.queryTimeLimit)
-		for i := 0; i < len(urls); i++ {
-			urls[i] = urls[i] + stmtTimeout
-		}
-	}
 	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -294,17 +292,35 @@ func (w *worker) run(ctx context.Context) error {
 	queryNum := w.config.selectedQueries[w.ops%len(w.config.selectedQueries)]
 	w.ops++
 
+	prep := fmt.Sprintf("SET statement_timeout='%s'; SET vectorize=%s;",
+		w.config.queryTimeLimit, w.config.vectorize)
+	_, err := w.db.Exec(prep)
+	if err != nil {
+		return err
+	}
 	query := queriesByNumber[queryNum]
 
 	var rows *gosql.Rows
-	var err error
 	start := timeutil.Now()
-	rows, err = w.db.Query(query)
+	err = func() error {
+		done := make(chan error, 1)
+		go func(context.Context) {
+			var err error
+			rows, err = w.db.Query(query)
+			done <- err
+		}(ctx)
+		select {
+		case <-time.After(w.config.queryTimeLimit * 2):
+			return errors.Errorf("[q%d] timed out, but did not cancel execution", queryNum)
+		case err := <-done:
+			return err
+		}
+	}()
 	if rows != nil {
 		defer rows.Close()
 	}
 	if err != nil {
-		log.Infof(ctx, "[Q%d] error: %s", queryNum, err)
+		log.Infof(ctx, "[q%d] error: %s", queryNum, err)
 		return err
 	}
 	var numRows int
@@ -312,14 +328,14 @@ func (w *worker) run(ctx context.Context) error {
 		numRows++
 	}
 	if err := rows.Err(); err != nil {
-		log.Infof(ctx, "[Q%d] error: %s", queryNum, err)
+		log.Infof(ctx, "[q%d] error: %s", queryNum, err)
 		return err
 	}
 	elapsed := timeutil.Since(start)
 	// TODO(yuzefovich): at the moment, we're not printing out the histograms
 	// since that would just be too much noise; however, having the percentiles
 	// in the output would also be useful.
-	log.Infof(ctx, "[Q%d] return %d rows after %4.2f seconds",
+	log.Infof(ctx, "[q%d] returned %d rows after %.2f seconds",
 		queryNum, numRows, elapsed.Seconds())
 	return nil
 }

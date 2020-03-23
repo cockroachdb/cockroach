@@ -776,7 +776,7 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructSqrDiff(args[0])
 	case "variance":
 		return b.factory.ConstructVariance(args[0])
-	case "stddev":
+	case "stddev", "stddev_samp":
 		return b.factory.ConstructStdDev(args[0])
 	case "xor_agg":
 		return b.factory.ConstructXorAgg(args[0])
