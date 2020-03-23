@@ -33,6 +33,7 @@ import { Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";
 import { LocalityTier } from "src/redux/localities";
+import { switchExhaustiveCheck } from "src/util/switchExhaustiveCheck";
 
 import TableSection from "./tableSection";
 import "./nodes.styl";
@@ -146,7 +147,7 @@ const getBadgeTypeByNodeStatus = (status: LivenessStatus | AggregatedNodeStatus)
     case AggregatedNodeStatus.DEAD:
       return "danger";
     default:
-      return undefined;
+      return switchExhaustiveCheck(status);
   }
 };
 
