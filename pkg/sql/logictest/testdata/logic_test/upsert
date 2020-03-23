@@ -1001,6 +1001,18 @@ statement ok
 DROP TABLE t44466
 
 # ------------------------------------------------------------------------------
+# Regression for #46395.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE t46395(c0 INT UNIQUE DEFAULT 0, c1 INT);
+
+statement ok
+INSERT INTO t46395(c1) VALUES (0), (1) ON CONFLICT (c0) DO NOTHING;
+
+statement ok
+DROP TABLE t46395
+
+# ------------------------------------------------------------------------------
 # Duplicate primary key inputs.
 # ------------------------------------------------------------------------------
 # Start with no secondary index present.
@@ -1180,6 +1192,21 @@ SELECT * FROM target
 5  1     NULL
 6  NULL  NULL
 7  NULL  NULL
+
+statement ok
+INSERT INTO target SELECT 8, y, z FROM (VALUES (2, 2), (2, 3)) s(y, z)
+ON CONFLICT (x) DO NOTHING
+
+query III rowsort
+SELECT * FROM target
+----
+1  1     2
+2  3     3
+4  1     NULL
+5  1     NULL
+6  NULL  NULL
+7  NULL  NULL
+8  2     2
 
 statement ok
 DROP TABLE source
