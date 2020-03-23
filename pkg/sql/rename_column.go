@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -122,91 +121,11 @@ func (p *planner) renameColumn(
 		return false, fmt.Errorf("column name %q already exists", tree.ErrString(newName))
 	}
 
-	preFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		if vBase, ok := expr.(tree.VarName); ok {
-			v, err := vBase.NormalizeVarName()
-			if err != nil {
-				return false, nil, err
-			}
-			if c, ok := v.(*tree.ColumnItem); ok {
-				if string(c.ColumnName) == string(*oldName) {
-					c.ColumnName = *newName
-				}
-			}
-			return false, v, nil
-		}
-		return true, expr, nil
+	if err := tableDesc.RenameColumn(tableDesc, col, string(*oldName), string(*newName)); err != nil {
+		return false, err
 	}
 
-	renameIn := func(expression string) (string, error) {
-		parsed, err := parser.ParseExpr(expression)
-		if err != nil {
-			return "", err
-		}
-
-		renamed, err := tree.SimpleVisit(parsed, preFn)
-		if err != nil {
-			return "", err
-		}
-
-		return renamed.String(), nil
-	}
-
-	// Rename the column in CHECK constraints.
-	// Renaming columns that are being referenced by checks that are being added is not allowed.
-	for i := range tableDesc.Checks {
-		var err error
-		tableDesc.Checks[i].Expr, err = renameIn(tableDesc.Checks[i].Expr)
-		if err != nil {
-			return false, err
-		}
-	}
-
-	// Rename the column in computed columns.
-	for i := range tableDesc.Columns {
-		if otherCol := &tableDesc.Columns[i]; otherCol.IsComputed() {
-			newExpr, err := renameIn(*otherCol.ComputeExpr)
-			if err != nil {
-				return false, err
-			}
-			otherCol.ComputeExpr = &newExpr
-		}
-	}
-
-	// Rename the column in hash-sharded index descriptors. Potentially rename the
-	// shard column too if we haven't already done it.
 	shardColumnsToRename := make(map[tree.Name]tree.Name) // map[oldShardColName]newShardColName
-	maybeUpdateShardedDesc := func(shardedDesc *sqlbase.ShardedDescriptor) {
-		if !shardedDesc.IsSharded {
-			return
-		}
-		oldShardColName := tree.Name(sqlbase.GetShardColumnName(
-			shardedDesc.ColumnNames, shardedDesc.ShardBuckets))
-		var changed bool
-		for i, c := range shardedDesc.ColumnNames {
-			if c == string(*oldName) {
-				changed = true
-				shardedDesc.ColumnNames[i] = string(*newName)
-			}
-		}
-		if !changed {
-			return
-		}
-		newName, alreadyRenamed := shardColumnsToRename[oldShardColName]
-		if !alreadyRenamed {
-			newName = tree.Name(sqlbase.GetShardColumnName(
-				shardedDesc.ColumnNames, shardedDesc.ShardBuckets))
-			shardColumnsToRename[oldShardColName] = newName
-		}
-		// Keep the shardedDesc name in sync with the column name.
-		shardedDesc.Name = string(newName)
-	}
-	for _, idx := range tableDesc.AllNonDropIndexes() {
-		maybeUpdateShardedDesc(&idx.Sharded)
-	}
-
-	// Rename the column in the indexes.
-	tableDesc.RenameColumnDescriptor(col, string(*newName))
 
 	// Rename any shard columns which need to be renamed because their name was
 	// based on this column.

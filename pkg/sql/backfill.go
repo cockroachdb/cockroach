@@ -202,7 +202,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 					constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, *t.Constraint)
 					constraintsToValidate = append(constraintsToValidate, *t.Constraint)
 				}
-			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
+			case *sqlbase.DescriptorMutation_PrimaryKeySwap, *sqlbase.DescriptorMutation_ComputedColumnSwap:
 				// The backfiller doesn't need to do anything here.
 			default:
 				return errors.AssertionFailedf(
@@ -1333,7 +1333,7 @@ func runSchemaChangesInTxn(
 		switch m.Direction {
 		case sqlbase.DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
-			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
+			case *sqlbase.DescriptorMutation_PrimaryKeySwap, *sqlbase.DescriptorMutation_ComputedColumnSwap:
 				// Don't need to do anything here, as the call to MakeMutationComplete
 				// will perform the steps for this operation.
 			case *sqlbase.DescriptorMutation_Column:

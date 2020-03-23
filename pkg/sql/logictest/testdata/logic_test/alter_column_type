@@ -161,3 +161,86 @@ ALTER TABLE t ALTER s TYPE STRING
 
 statement ok
 DROP TABLE t
+
+# Test cases for ALTER COLUMN TYPE requiring a cast
+
+# Failed alter
+statement ok
+CREATE TABLE t1 (date string)
+
+statement ok
+INSERT INTO t1 VALUES ('hello')
+
+statement error pq: parsing as type timestamp: could not parse "hello"
+ALTER TABLE t1 ALTER COLUMN date TYPE timestamp
+
+subtest ColumnNotPartOfIndex
+
+statement ok
+CREATE TABLE t2 (id int)
+
+statement ok
+INSERT INTO t2 VALUES (1), (2), (3), (4)
+
+statement ok
+ALTER TABLE t2 ALTER COLUMN id TYPE string
+
+query TTBTTTB
+SHOW COLUMNS FROM t2
+----
+id     STRING  true   NULL            ·  {}         false
+rowid  INT8    false  unique_rowid()  ·  {primary}  true
+
+statement ok
+INSERT INTO t2 VALUES ('5')
+
+statement error pq: value type int doesn't match type string of column "id"
+INSERT INTO t2 VALUES (6)
+
+statement ok
+CREATE TABLE t3 (id int, id2 int, id3 int)
+
+statement ok
+INSERT INTO t3 VALUES (1,1,1), (2,2,2), (3,3,3)
+
+statement ok
+ALTER TABLE t3 ALTER COLUMN id2 TYPE string
+
+query TTBTTTB
+SHOW COLUMNS FROM t3
+----
+id     INT8    true   NULL            ·  {}         false
+id2    STRING  true   NULL            ·  {}         false
+id3    INT8    true   NULL            ·  {}         false
+rowid  INT8    false  unique_rowid()  ·  {primary}  true
+
+statement ok
+INSERT INTO t3 VALUES (4,'4',4)
+
+query ITI
+SELECT * FROM t3 ORDER BY id
+----
+1  1  1
+2  2  2
+3  3  3
+4  4  4
+
+statement ok
+CREATE DATABASE d
+
+statement ok
+CREATE TABLE d.t1 (x INT, y INT, z INT)
+
+statement ok
+INSERT INTO d.t1 VALUES (1, 2, 3)
+
+statement ok
+ALTER TABLE d.t1 ALTER COLUMN y TYPE STRING
+
+query TTBTTTB
+SHOW COLUMNS FROM d.t1
+----
+x      INT8    true   NULL            ·  {}         false
+y      STRING  true   NULL            ·  {}         false
+z      INT8    true   NULL            ·  {}         false
+rowid  INT8    false  unique_rowid()  ·  {primary}  true
