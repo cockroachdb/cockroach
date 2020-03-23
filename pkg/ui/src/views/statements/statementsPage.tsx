@@ -255,7 +255,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
           current={pagination.current}
           total={this.filteredStatementsData().length}
           onChange={this.onChangePage}
-          hideOnSinglePage={data.length === 0}
+          hideOnSinglePage
         />
       </div>
     );
