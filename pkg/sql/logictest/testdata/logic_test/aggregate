@@ -2223,3 +2223,12 @@ query B
 SELECT every (x) FROM t_every
 ----
 NULL
+
+# Regression test for #46423: this query should return no rows.
+statement ok
+CREATE TABLE t46423(c0 INT);
+INSERT INTO t46423(c0) VALUES(0)
+
+query T
+SELECT c0 FROM t46423 GROUP BY c0 HAVING NOT (variance(0) IS NULL);
+----
