@@ -300,6 +300,26 @@ ABORT
 4: ABORT -- 0 rows
 -- Aborted     -> NoTxn       #...  (none)
 
+# Same error in the aborted state.
+sql
+BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
+INSERT INTO t(x) VALUES (1), (2)
+SELECT undefined
+ROLLBACK TO SAVEPOINT cockroach_restart
+ABORT
+----
+1: BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
+-- NoTxn       -> Open        #....  cockroach_restart(r)
+2: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
+-- Open        -> Open        ##...  cockroach_restart(r)
+3: SELECT undefined -- pq: column "undefined" does not exist
+-- Open        -> Aborted     XXXXX  cockroach_restart(r)
+4: ROLLBACK TO SAVEPOINT cockroach_restart -- pq: unimplemented: cannot use ROLLBACK TO SAVEPOINT in a HIGH PRIORITY transaction containing DDL
+-- Aborted     -> Aborted     XXXXX  cockroach_restart(r)
+5: ABORT -- 0 rows
+-- Aborted     -> NoTxn       #....  (none)
+
+
 # However it's fine if there's just a release.
 
 sql
@@ -347,6 +367,26 @@ ROLLBACK TO SAVEPOINT foo
 -- Open        -> Open        ###.  foo
 4: ROLLBACK TO SAVEPOINT foo -- pq: unimplemented: ROLLBACK TO SAVEPOINT not yet supported after DDL statements
 -- Open        -> Aborted     XXXX  foo
+
+# Ditto in aborted state.
+sql
+BEGIN; CREATE TABLE unused(x INT)
+SAVEPOINT foo
+CREATE TABLE t(x INT)
+SELECT undefined
+ROLLBACK TO SAVEPOINT foo
+----
+1: BEGIN; CREATE TABLE unused(x INT) -- 0 rows
+-- NoTxn       -> Open        #....  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##...  foo
+3: CREATE TABLE t(x INT) -- 0 rows
+-- Open        -> Open        ###..  foo
+4: SELECT undefined -- pq: column "undefined" does not exist
+-- Open        -> Aborted     XXXXX  foo
+5: ROLLBACK TO SAVEPOINT foo -- pq: unimplemented: ROLLBACK TO SAVEPOINT not yet supported after DDL statements
+-- Aborted     -> Aborted     XXXXX  foo
+
 
 subtest end
 
