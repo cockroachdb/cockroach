@@ -53,15 +53,15 @@ import (
 //
 // new-txn      name=<txn-name> ts=<int>[,<int>] epoch=<int> [maxts=<int>[,<int>]]
 // new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [consistency]
-//   <proto-name> [<field-name>=<field-value>...]
+//   <proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
 // sequence     req=<req-name>
 // finish       req=<req-name>
 //
 // handle-write-intent-error  req=<req-name> txn=<txn-name> key=<key>
 // handle-txn-push-error      req=<req-name> txn=<txn-name> key=<key>  TODO(nvanbenschoten): implement this
 //
-// on-lock-acquired  txn=<txn-name> key=<key>
-// on-lock-updated   txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts=<int>[,<int>]]
+// on-lock-acquired  req=<req-name> key=<key> [seq=<seq>]
+// on-lock-updated   req=<req-name> txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts=<int>[,<int>]]
 // on-txn-updated    txn=<txn-name> status=[committed|aborted|pending] [ts=<int>[,<int>]]
 //
 // on-lease-updated  leaseholder=<bool>
@@ -136,8 +136,10 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 
 				ts := scanTimestamp(t, d)
-				if txn != nil && txn.ReadTimestamp != ts {
-					d.Fatalf(t, "txn read timestamp != timestamp")
+				if txn != nil {
+					txn = txn.Clone()
+					txn.ReadTimestamp = ts
+					txn.WriteTimestamp = ts
 				}
 
 				readConsistency := roachpb.CONSISTENT
@@ -149,7 +151,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				var reqs []roachpb.Request
 				singleReqLines := strings.Split(d.Input, "\n")
 				for _, line := range singleReqLines {
-					req := scanSingleRequest(t, d, line)
+					req := scanSingleRequest(t, d, line, c.txnsByName)
 					reqs = append(reqs, req)
 				}
 				reqUnions := make([]roachpb.RequestUnion, len(reqs))
@@ -257,25 +259,58 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return c.waitAndCollect(t, mon)
 
 			case "on-lock-acquired":
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
-				txn, ok := c.txnsByName[txnName]
+				var reqName string
+				d.ScanArgs(t, "req", &reqName)
+				guard, ok := c.guardsByReqName[reqName]
 				if !ok {
-					d.Fatalf(t, "unknown txn %s", txnName)
+					d.Fatalf(t, "unknown request: %s", reqName)
 				}
+				txn := guard.Req.Txn
 
 				var key string
 				d.ScanArgs(t, "key", &key)
 
+				var seq int
+				if d.HasArg("seq") {
+					d.ScanArgs(t, "seq", &seq)
+				}
+				seqNum := enginepb.TxnSeq(seq)
+
+				// Confirm that the request has a corresponding write request.
+				found := false
+				for _, ru := range guard.Req.Requests {
+					req := ru.GetInner()
+					keySpan := roachpb.Span{Key: roachpb.Key(key)}
+					if roachpb.IsLocking(req) &&
+						req.Header().Span().Contains(keySpan) &&
+						req.Header().Sequence == seqNum {
+						found = true
+						break
+					}
+				}
+				if !found {
+					d.Fatalf(t, "missing corresponding write request")
+				}
+
+				txnAcquire := txn.Clone()
+				txnAcquire.Sequence = seqNum
+
 				mon.runSync("acquire lock", func(ctx context.Context) {
-					log.Eventf(ctx, "%s @ %s", txnName, key)
+					log.Eventf(ctx, "txn %s @ %s", txn.ID.Short(), key)
 					span := roachpb.Span{Key: roachpb.Key(key)}
-					up := roachpb.MakeLockUpdateWithDur(txn, span, lock.Unreplicated)
+					up := roachpb.MakeLockUpdateWithDur(txnAcquire, span, lock.Unreplicated)
 					m.OnLockAcquired(ctx, &up)
 				})
 				return c.waitAndCollect(t, mon)
 
 			case "on-lock-updated":
+				var reqName string
+				d.ScanArgs(t, "req", &reqName)
+				guard, ok := c.guardsByReqName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+
 				var txnName string
 				d.ScanArgs(t, "txn", &txnName)
 				txn, ok := c.txnsByName[txnName]
@@ -292,12 +327,27 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					ts = scanTimestamp(t, d)
 				}
 
+				// Confirm that the request has a corresponding ResolveIntent.
+				found := false
+				for _, ru := range guard.Req.Requests {
+					if riReq := ru.GetResolveIntent(); riReq != nil &&
+						riReq.IntentTxn.ID == txn.ID &&
+						riReq.Key.Equal(roachpb.Key(key)) &&
+						riReq.Status == status {
+						found = true
+						break
+					}
+				}
+				if !found {
+					d.Fatalf(t, "missing corresponding resolve intent request")
+				}
+
 				txnUpdate := txn.Clone()
 				txnUpdate.Status = status
 				txnUpdate.WriteTimestamp.Forward(ts)
 
 				mon.runSync("update lock", func(ctx context.Context) {
-					log.Eventf(ctx, "%s %s @ %s", verb, txnName, key)
+					log.Eventf(ctx, "%s txn %s @ %s", verb, txn.ID.Short(), key)
 					span := roachpb.Span{Key: roachpb.Key(key)}
 					up := roachpb.MakeLockUpdate(txnUpdate, span)
 					m.OnLockUpdated(ctx, &up)

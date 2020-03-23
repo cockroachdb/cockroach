@@ -191,6 +191,8 @@ subtest end
 
 subtest rollback_after_ddl
 
+subtest rollback_after_ddl/release_normal_savepoint
+
 # DDL under savepoints is fine as long as there is no rollback.
 # Note: we do two DDL; the first one is there just to anchor
 # the txn on the config range. The second DDL is the one
@@ -214,15 +216,141 @@ COMMIT
 -- Open        -> NoTxn       #####  (none)
 
 sql
-DROP TABLE unused
+DROP TABLE unused; DROP TABLE t
+----
+1: DROP TABLE unused; DROP TABLE t -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
+
+# Also fine at high priority.
+
+sql
+BEGIN TRANSACTION PRIORITY HIGH; CREATE TABLE unused(x INT)
+SAVEPOINT foo
+CREATE TABLE t(x INT)
+RELEASE SAVEPOINT foo
+COMMIT
+----
+1: BEGIN TRANSACTION PRIORITY HIGH; CREATE TABLE unused(x INT) -- 0 rows
+-- NoTxn       -> Open        #....  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##...  foo
+3: CREATE TABLE t(x INT) -- 0 rows
+-- Open        -> Open        ###..  foo
+4: RELEASE SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ####.  (none)
+5: COMMIT -- 0 rows
+-- Open        -> NoTxn       #####  (none)
+
+sql
+DROP TABLE unused; DROP TABLE t
+----
+1: DROP TABLE unused; DROP TABLE t -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
+
+subtest end
+
+subtest rollback_after_ddl/restart_savepoint
+
+# DDL under a cockroach_restart savepoint can
+# be rolled back.
+sql
+BEGIN; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
+INSERT INTO t(x) VALUES (1), (2)
+ROLLBACK TO SAVEPOINT cockroach_restart
+CREATE TABLE t(x INT)
+INSERT INTO t(x) VALUES (3)
+COMMIT
+SELECT * FROM t
+----
+1: BEGIN; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
+-- NoTxn       -> Open        #......  cockroach_restart(r)
+2: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
+-- Open        -> Open        ##.....  cockroach_restart(r)
+3: ROLLBACK TO SAVEPOINT cockroach_restart -- 0 rows
+-- Open        -> Open        #......  cockroach_restart(r)
+4: CREATE TABLE t(x INT) -- 0 rows
+-- Open        -> Open        #..#...  cockroach_restart(r)
+5: INSERT INTO t(x) VALUES (3) -- 1 row
+-- Open        -> Open        #..##..  cockroach_restart(r)
+6: COMMIT -- 0 rows
+-- Open        -> NoTxn       #..###.  (none)
+7: SELECT * FROM t -- 1 row
+-- NoTxn       -> NoTxn       #..####  (none)
+
+sql
 DROP TABLE t
 ----
-1: DROP TABLE unused -- 0 rows
--- NoTxn       -> NoTxn       #.  (none)
-2: DROP TABLE t -- 0 rows
--- NoTxn       -> NoTxn       ##  (none)
+1: DROP TABLE t -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
 
-# Rollback is unsupported after DDL for now.
+# DDL under a cockroach_restart savepoint cannot
+# be rolled back at high priority, because of #46414.
+sql
+BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
+INSERT INTO t(x) VALUES (1), (2)
+ROLLBACK TO SAVEPOINT cockroach_restart
+ABORT
+----
+1: BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
+-- NoTxn       -> Open        #...  cockroach_restart(r)
+2: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
+-- Open        -> Open        ##..  cockroach_restart(r)
+3: ROLLBACK TO SAVEPOINT cockroach_restart -- pq: unimplemented: cannot use ROLLBACK TO SAVEPOINT in a HIGH PRIORITY transaction containing DDL
+-- Open        -> Aborted     XXXX  cockroach_restart(r)
+4: ABORT -- 0 rows
+-- Aborted     -> NoTxn       #...  (none)
+
+# Same error in the aborted state.
+sql
+BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
+INSERT INTO t(x) VALUES (1), (2)
+SELECT undefined
+ROLLBACK TO SAVEPOINT cockroach_restart
+ABORT
+----
+1: BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
+-- NoTxn       -> Open        #....  cockroach_restart(r)
+2: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
+-- Open        -> Open        ##...  cockroach_restart(r)
+3: SELECT undefined -- pq: column "undefined" does not exist
+-- Open        -> Aborted     XXXXX  cockroach_restart(r)
+4: ROLLBACK TO SAVEPOINT cockroach_restart -- pq: unimplemented: cannot use ROLLBACK TO SAVEPOINT in a HIGH PRIORITY transaction containing DDL
+-- Aborted     -> Aborted     XXXXX  cockroach_restart(r)
+5: ABORT -- 0 rows
+-- Aborted     -> NoTxn       #....  (none)
+
+
+# However it's fine if there's just a release.
+
+sql
+BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT)
+INSERT INTO t(x) VALUES (1), (2)
+RELEASE SAVEPOINT cockroach_restart
+COMMIT
+SELECT * FROM t
+----
+1: BEGIN TRANSACTION PRIORITY HIGH; SAVEPOINT cockroach_restart; CREATE TABLE t(x INT) -- 0 rows
+-- NoTxn       -> Open        #....  cockroach_restart(r)
+2: INSERT INTO t(x) VALUES (1), (2) -- 2 rows
+-- Open        -> Open        ##...  cockroach_restart(r)
+3: RELEASE SAVEPOINT cockroach_restart -- 0 rows
+-- Open        -> CommitWait  XXXXX  (none)
+4: COMMIT -- 0 rows
+-- CommitWait  -> NoTxn       ###..  (none)
+5: SELECT * FROM t -- 2 rows
+-- NoTxn       -> NoTxn       ###.#  (none)
+
+sql
+DROP TABLE t
+----
+1: DROP TABLE t -- 0 rows
+-- NoTxn       -> NoTxn       #  (none)
+
+subtest end
+
+subtest rollback_after_ddl/regular_savepoint
+
+# Rollback of regular savepoint is unsupported after DDL for now.
 # TODO(knz): Lift this limitation.
 
 sql
@@ -239,6 +367,28 @@ ROLLBACK TO SAVEPOINT foo
 -- Open        -> Open        ###.  foo
 4: ROLLBACK TO SAVEPOINT foo -- pq: unimplemented: ROLLBACK TO SAVEPOINT not yet supported after DDL statements
 -- Open        -> Aborted     XXXX  foo
+
+# Ditto in aborted state.
+sql
+BEGIN; CREATE TABLE unused(x INT)
+SAVEPOINT foo
+CREATE TABLE t(x INT)
+SELECT undefined
+ROLLBACK TO SAVEPOINT foo
+----
+1: BEGIN; CREATE TABLE unused(x INT) -- 0 rows
+-- NoTxn       -> Open        #....  (none)
+2: SAVEPOINT foo -- 0 rows
+-- Open        -> Open        ##...  foo
+3: CREATE TABLE t(x INT) -- 0 rows
+-- Open        -> Open        ###..  foo
+4: SELECT undefined -- pq: column "undefined" does not exist
+-- Open        -> Aborted     XXXXX  foo
+5: ROLLBACK TO SAVEPOINT foo -- pq: unimplemented: ROLLBACK TO SAVEPOINT not yet supported after DDL statements
+-- Aborted     -> Aborted     XXXXX  foo
+
+
+subtest end
 
 subtest end
 

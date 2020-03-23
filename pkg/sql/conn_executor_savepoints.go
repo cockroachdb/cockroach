@@ -12,9 +12,12 @@ package sql
 
 import (
 	"context"
+	"errors"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -22,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // commitOnReleaseSavepointName is the name of the savepoint with special
@@ -91,6 +95,13 @@ func (ex *connExecutor) execSavepointInOpenState(
 			ev, payload := ex.makeErrEvent(err, s)
 			return ev, payload, nil
 		}
+	}
+
+	// We don't support savepoints in mixed-version clusters.
+	if !ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.VersionSavepoints) && !commitOnRelease {
+		err := errors.New("savepoints cannot be used until the version upgrade is finalized")
+		ev, payload := ex.makeErrEvent(err, s)
+		return ev, payload, nil
 	}
 
 	token, err := ex.state.mu.txn.CreateSavepoint(ctx)
@@ -178,19 +189,26 @@ func (ex *connExecutor) execRollbackToSavepointInOpenState(
 		return ev, payload
 	}
 
-	// We don't yet support rolling back over DDL. Instead of creating an
-	// inconsistent txn or schema state, prefer to tell the users we don't know
-	// how to proceed yet. Initial savepoints are a special case - we can always
-	// rollback to them because we can reset all the schema change state.
-	if !entry.kvToken.Initial() && ex.extraTxnState.numDDL > entry.numDDL {
-		ev, payload := ex.makeErrEvent(unimplemented.NewWithIssueDetail(10735, "rollback-after-ddl",
-			"ROLLBACK TO SAVEPOINT not yet supported after DDL statements"), s)
+	if ev, payload, ok := ex.checkRollbackValidity(ctx, s, entry); !ok {
 		return ev, payload
 	}
 
-	if err := ex.state.mu.txn.RollbackToSavepoint(ctx, entry.kvToken); err != nil {
-		ev, payload := ex.makeErrEvent(err, s)
-		return ev, payload
+	// Special case for mixed-cluster versions, where regular savepoints
+	// are not yet enabled but we still support cockroach_restart. In
+	// that case, we can't process ROLLBACK TO SAVEPOINT
+	// cockroach_restart using ignored seqnum lists so we need to
+	// restart the txn the "old way".
+	// TODO(knz): Remove this check in v20.2 and only keep the 'else'
+	// clause, which is the generic rollback code.
+	if entry.kvToken.Initial() &&
+		!ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.VersionSavepoints) {
+		// Bump the epoch manually.
+		ex.state.mu.txn.ManualRestart(ctx, hlc.Timestamp{})
+	} else {
+		if err := ex.state.mu.txn.RollbackToSavepoint(ctx, entry.kvToken); err != nil {
+			ev, payload := ex.makeErrEvent(err, s)
+			return ev, payload
+		}
 	}
 
 	ex.extraTxnState.savepoints.popToIdx(idx)
@@ -200,6 +218,50 @@ func (ex *connExecutor) execRollbackToSavepointInOpenState(
 	}
 	// No event is necessary; there's nothing for the state machine to do.
 	return nil, nil
+}
+
+// checkRollbackValidity verifies that a ROLLBACK TO SAVEPOINT
+// statement should be allowed in the current txn state.
+// It returns ok == false if the operation should be prevented
+// from proceeding, in which case it also populates the event
+// and payload with a suitable user error.
+func (ex *connExecutor) checkRollbackValidity(
+	ctx context.Context, s *tree.RollbackToSavepoint, entry *savepoint,
+) (ev fsm.Event, payload fsm.EventPayload, ok bool) {
+	if ex.extraTxnState.numDDL <= entry.numDDL {
+		// No DDL; all the checks below only care about txns containing
+		// DDL, so we don't have anything else to do here.
+		return ev, payload, true
+	}
+
+	if !entry.kvToken.Initial() {
+		// We don't yet support rolling back a regular savepoint over
+		// DDL. Instead of creating an inconsistent txn or schema state,
+		// prefer to tell the users we don't know how to proceed
+		// yet. Initial savepoints are a special case - we can always
+		// rollback to them because we can reset all the schema change
+		// state.
+		ev, payload = ex.makeErrEvent(unimplemented.NewWithIssueDetail(10735, "rollback-after-ddl",
+			"ROLLBACK TO SAVEPOINT not yet supported after DDL statements"), s)
+		return ev, payload, false
+	}
+
+	if ex.state.mu.txn.UserPriority() == roachpb.MaxUserPriority {
+		// Because we use the same priority (MaxUserPriority) for SET
+		// TRANSACTION PRIORITY HIGH and lease acquisitions, we'd get a
+		// deadlock if we let DDL proceed at high priority.
+		// See https://github.com/cockroachdb/cockroach/issues/46414
+		// for details.
+		//
+		// Note: this check must remain even when regular savepoints are
+		// taught to roll back over DDL (that's the other check in
+		// execSavepointInOpenState), until #46414 gets solved.
+		ev, payload = ex.makeErrEvent(unimplemented.NewWithIssue(46414,
+			"cannot use ROLLBACK TO SAVEPOINT in a HIGH PRIORITY transaction containing DDL"), s)
+		return ev, payload, false
+	}
+
+	return ev, payload, true
 }
 
 func (ex *connExecutor) execRollbackToSavepointInAbortedState(
@@ -219,10 +281,29 @@ func (ex *connExecutor) execRollbackToSavepointInAbortedState(
 			"savepoint \"%s\" does not exist", tree.ErrString(&s.Savepoint)))
 	}
 
-	ex.extraTxnState.savepoints.popToIdx(idx)
-	if err := ex.state.mu.txn.RollbackToSavepoint(ctx, entry.kvToken); err != nil {
-		return ex.makeErrEvent(err, s)
+	if ev, payload, ok := ex.checkRollbackValidity(ctx, s, entry); !ok {
+		return ev, payload
 	}
+
+	ex.extraTxnState.savepoints.popToIdx(idx)
+
+	// Special case for mixed-cluster versions, where regular savepoints
+	// are not yet enabled but we still support cockroach_restart. In
+	// that case, we can't process ROLLBACK TO SAVEPOINT
+	// cockroach_restart using ignored seqnum lists so we need to
+	// restart the txn the "old way".
+	// TODO(knz): Remove this check in v20.2 and only keep the 'else'
+	// clause, which is the generic rollback code.
+	if entry.kvToken.Initial() &&
+		!ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.VersionSavepoints) {
+		// Bump the epoch manually.
+		ex.state.mu.txn.ManualRestart(ctx, hlc.Timestamp{})
+	} else {
+		if err := ex.state.mu.txn.RollbackToSavepoint(ctx, entry.kvToken); err != nil {
+			return ex.makeErrEvent(err, s)
+		}
+	}
+
 	if entry.kvToken.Initial() {
 		return eventTxnRestart{}, nil
 	}

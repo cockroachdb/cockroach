@@ -61,13 +61,13 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-on-lock-acquired txn=txn1 key=k
+on-lock-acquired req=req1 key=k
 ----
-[-] acquire lock: txn1 @ k
+[-] acquire lock: txn 00000001 @ k
 
-on-lock-acquired txn=txn1 key=k2
+on-lock-acquired req=req1 key=k2
 ----
-[-] acquire lock: txn1 @ k2
+[-] acquire lock: txn 00000001 @ k2
 
 finish req=req1
 ----
@@ -160,9 +160,9 @@ sequence req=req2
 [6] sequence req2: scanning lock table for conflicting locks
 [6] sequence req2: sequencing complete, returned guard
 
-on-lock-acquired txn=txn2 key=k
+on-lock-acquired req=req2 key=k
 ----
-[-] acquire lock: txn2 @ k
+[-] acquire lock: txn 00000002 @ k
 
 debug-lock-table
 ----
@@ -221,10 +221,25 @@ global: num=1
    distinguished req: 3
 local: num=0
 
-on-lock-updated txn=txn2 key=k status=committed
+new-request name=reqRes2 txn=none ts=10,1
+  resolve-intent txn=txn2 key=k status=committed
 ----
-[-] update lock: committing txn2 @ k
+
+sequence req=reqRes2
+----
+[10] sequence reqRes2: sequencing request
+[10] sequence reqRes2: acquiring latches
+[10] sequence reqRes2: sequencing complete, returned guard
+
+on-lock-updated req=reqRes2 txn=txn2 key=k status=committed
+----
+[-] update lock: committing txn 00000002 @ k
 [9] sequence req3: acquiring latches
+[9] sequence req3: blocked on select in spanlatch.(*Manager).waitForSignal
+
+finish req=reqRes2
+----
+[-] finish reqRes2: finishing request
 [9] sequence req3: scanning lock table for conflicting locks
 [9] sequence req3: sequencing complete, returned guard
 
@@ -235,9 +250,9 @@ global: num=1
   res: req: 3, txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000010,1, seq: 0
 local: num=0
 
-on-lock-acquired txn=txn3 key=k
+on-lock-acquired req=req3 key=k
 ----
-[-] acquire lock: txn3 @ k
+[-] acquire lock: txn 00000003 @ k
 
 debug-lock-table
 ----
@@ -293,9 +308,9 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-on-lock-acquired txn=txn1 key=k
+on-lock-acquired req=req1 key=k
 ----
-[-] acquire lock: txn1 @ k
+[-] acquire lock: txn 00000001 @ k
 
 finish req=req1
 ----
@@ -363,10 +378,25 @@ sequence req=req2
 [4] sequence req2: waiting in lock wait-queues
 [4] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
-on-lock-updated txn=txn1 key=k status=committed
+new-request name=reqRes1 txn=none ts=10,1
+  resolve-intent txn=txn1 key=k status=committed
 ----
-[-] update lock: committing txn1 @ k
+
+sequence req=reqRes1
+----
+[5] sequence reqRes1: sequencing request
+[5] sequence reqRes1: acquiring latches
+[5] sequence reqRes1: sequencing complete, returned guard
+
+on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
+----
+[-] update lock: committing txn 00000001 @ k
 [4] sequence req2: acquiring latches
+[4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
+
+finish req=reqRes1
+----
+[-] finish reqRes1: finishing request
 [4] sequence req2: scanning lock table for conflicting locks
 [4] sequence req2: sequencing complete, returned guard
 
@@ -377,9 +407,9 @@ global: num=1
   res: req: 5, txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, seq: 0
 local: num=0
 
-on-lock-acquired txn=txn2 key=k
+on-lock-acquired req=req2 key=k
 ----
-[-] acquire lock: txn2 @ k
+[-] acquire lock: txn 00000002 @ k
 
 debug-lock-table
 ----
@@ -439,13 +469,13 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-on-lock-acquired txn=txn1 key=k
+on-lock-acquired req=req1 key=k
 ----
-[-] acquire lock: txn1 @ k
+[-] acquire lock: txn 00000001 @ k
 
-on-lock-acquired txn=txn1 key=k2
+on-lock-acquired req=req1 key=k2
 ----
-[-] acquire lock: txn1 @ k2
+[-] acquire lock: txn 00000001 @ k2
 
 finish req=req1
 ----
@@ -537,9 +567,9 @@ sequence req=req2
 [6] sequence req2: scanning lock table for conflicting locks
 [6] sequence req2: sequencing complete, returned guard
 
-on-lock-acquired txn=txn2 key=k
+on-lock-acquired req=req2 key=k
 ----
-[-] acquire lock: txn2 @ k
+[-] acquire lock: txn 00000002 @ k
 
 debug-lock-table
 ----
@@ -593,9 +623,9 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-on-lock-acquired txn=txn1 key=k
+on-lock-acquired req=req1 key=k
 ----
-[-] acquire lock: txn1 @ k
+[-] acquire lock: txn 00000001 @ k
 
 finish req=req1
 ----
@@ -663,10 +693,25 @@ sequence req=req2
 [4] sequence req2: waiting in lock wait-queues
 [4] sequence req2: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
-on-lock-updated txn=txn1 key=k status=committed
+new-request name=reqRes1 txn=none ts=10,1
+  resolve-intent txn=txn1 key=k status=committed
 ----
-[-] update lock: committing txn1 @ k
+
+sequence req=reqRes1
+----
+[5] sequence reqRes1: sequencing request
+[5] sequence reqRes1: acquiring latches
+[5] sequence reqRes1: sequencing complete, returned guard
+
+on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
+----
+[-] update lock: committing txn 00000001 @ k
 [4] sequence req2: acquiring latches
+[4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
+
+finish req=reqRes1
+----
+[-] finish reqRes1: finishing request
 [4] sequence req2: scanning lock table for conflicting locks
 [4] sequence req2: sequencing complete, returned guard
 
@@ -677,9 +722,9 @@ global: num=1
   res: req: 9, txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000010,1, seq: 0
 local: num=0
 
-on-lock-acquired txn=txn2 key=k
+on-lock-acquired req=req2 key=k
 ----
-[-] acquire lock: txn2 @ k
+[-] acquire lock: txn 00000002 @ k
 
 debug-lock-table
 ----

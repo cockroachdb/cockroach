@@ -56,6 +56,7 @@ const (
 	VersionCreateRolePrivilege
 	VersionStatementDiagnosticsSystemTables
 	VersionSchemaChangeJob
+	VersionSavepoints
 
 	// Add new versions here (step one of two).
 )
@@ -435,6 +436,13 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// scheduled by the SchemaChangeManager.
 		Key:     VersionSchemaChangeJob,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 15},
+	},
+	{
+		// VersionSavepoints enables the use of SQL savepoints, whereby
+		// the ignored seqnum list can become populated in transaction
+		// records.
+		Key:     VersionSavepoints,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 16},
 	},
 	// Add new versions here (step two of two).
 
