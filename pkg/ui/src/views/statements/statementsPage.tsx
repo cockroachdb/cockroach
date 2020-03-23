@@ -108,7 +108,9 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
   }
 
   selectApp = (app: DropdownOption) => {
-    this.props.history.push(`/statements/${app.value}`);
+    const { history } = this.props;
+    history.location.pathname = `/statements/${app.value}`;
+    history.replace(history.location);
   }
 
   componentWillMount() {
