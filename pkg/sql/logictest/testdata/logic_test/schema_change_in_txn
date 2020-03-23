@@ -1777,13 +1777,24 @@ COMMIT
 # namespace entries could block the schema resolution after the rollback (schema
 # resolution uses different transactions to do its reads). We've fixed it by having those
 # other transactions run at high priority, thus pushing the intents out of their way.
-subtest no_schemachange_deadlock_after_savepoint_rollback
+subtest no_table_schemachange_deadlock_after_savepoint_rollback
 
 statement ok
 begin; savepoint s; create table t(x int); rollback to savepoint s;
 
 query error relation "t" does not exist
 select * from t;
+
+statement ok
+commit;
+
+subtest no_database_schemachange_deadlock_after_savepoint_rollback
+
+statement ok
+begin; savepoint s; create database d46224; rollback to savepoint s;
+
+query error  relation "d46224.t" does not exist
+select * from d46224.t;
 
 statement ok
 commit;
