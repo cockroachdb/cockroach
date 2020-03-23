@@ -151,7 +151,14 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
     history.replace(history.location);
   }
 
-  onClearSearchField = () => this.setState({ search: "" });
+  onClearSearchField = () => {
+    const { history } = this.props;
+    this.setState({ search: "" });
+    const searchParams = new URLSearchParams(history.location.search);
+    searchParams.delete("q");
+    history.location.search = searchParams.toString();
+    history.replace(history.location);
+  }
 
   filteredStatementsData = () => {
     const { search } = this.state;
