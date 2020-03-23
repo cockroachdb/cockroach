@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -188,14 +189,33 @@ func (ex *connExecutor) execRollbackToSavepointInOpenState(
 		return ev, payload
 	}
 
-	// We don't yet support rolling back over DDL. Instead of creating an
-	// inconsistent txn or schema state, prefer to tell the users we don't know
-	// how to proceed yet. Initial savepoints are a special case - we can always
-	// rollback to them because we can reset all the schema change state.
-	if !entry.kvToken.Initial() && ex.extraTxnState.numDDL > entry.numDDL {
-		ev, payload := ex.makeErrEvent(unimplemented.NewWithIssueDetail(10735, "rollback-after-ddl",
-			"ROLLBACK TO SAVEPOINT not yet supported after DDL statements"), s)
-		return ev, payload
+	if ex.extraTxnState.numDDL > entry.numDDL {
+		if !entry.kvToken.Initial() {
+			// We don't yet support rolling back a regular savepoint over
+			// DDL. Instead of creating an inconsistent txn or schema state,
+			// prefer to tell the users we don't know how to proceed
+			// yet. Initial savepoints are a special case - we can always
+			// rollback to them because we can reset all the schema change
+			// state.
+			ev, payload := ex.makeErrEvent(unimplemented.NewWithIssueDetail(10735, "rollback-after-ddl",
+				"ROLLBACK TO SAVEPOINT not yet supported after DDL statements"), s)
+			return ev, payload
+		}
+
+		if ex.state.mu.txn.UserPriority() == roachpb.MaxUserPriority {
+			// Because we use the same priority (MaxUserPriority) for SET
+			// TRANSACTION PRIORITY HIGH and lease acquisitions, we'd get a
+			// deadlock if we let DDL proceed at high priority.
+			// See https://github.com/cockroachdb/cockroach/issues/46414
+			// for details.
+			//
+			// Note: this check must remain even when regular savepoints
+			// are taught to roll back over DDL (that's the check below),
+			// until #46414 gets solved.
+			ev, payload := ex.makeErrEvent(unimplemented.NewWithIssue(46414,
+				"cannot use ROLLBACK TO SAVEPOINT in a HIGH PRIORITY transaction containing DDL"), s)
+			return ev, payload
+		}
 	}
 
 	// Special case for mixed-cluster versions, where regular savepoints
