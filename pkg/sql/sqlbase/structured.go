@@ -1857,6 +1857,11 @@ func (desc *TableDescriptor) ValidateTable() error {
 				return errors.AssertionFailedf(
 					"primary key swap mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
 			}
+		case *DescriptorMutation_ComputedColumnSwap:
+			if m.Direction == DescriptorMutation_NONE {
+				return errors.AssertionFailedf(
+					"computed column swap mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
+			}
 		default:
 			return errors.AssertionFailedf(
 				"mutation in state %s, direction %s, and no column/index descriptor",
@@ -2470,6 +2475,68 @@ func (desc *MutableTableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
 			}
 		}
 	}
+}
+
+// RenameColumn finds all references to a column and changes the name
+// to newColName.
+func (desc *MutableTableDescriptor) RenameColumn(
+	col *ColumnDescriptor, oldName, newName string,
+) error {
+	// This function renames a column and validates the name.
+	preVisitFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if vBase, ok := expr.(tree.VarName); ok {
+			v, err := vBase.NormalizeVarName()
+			if err != nil {
+				return false, nil, err
+			}
+			if c, ok := v.(*tree.ColumnItem); ok {
+				if string(c.ColumnName) == oldName {
+					c.ColumnName = tree.Name(newName)
+				}
+			}
+			return false, v, nil
+		}
+		return true, expr, nil
+	}
+
+	recursiveRename := func(expression string) (string, error) {
+		parsed, err := parser.ParseExpr(expression)
+		if err != nil {
+			return "", err
+		}
+
+		renamed, err := tree.SimpleVisit(parsed, preVisitFn)
+		if err != nil {
+			return "", err
+		}
+
+		return renamed.String(), nil
+	}
+
+	// Rename the column in CHECK constraints.
+	// Renaming columns that are being referenced by checks that are being added is not allowed.
+	for i := range desc.Checks {
+		var err error
+		desc.Checks[i].Expr, err = recursiveRename(desc.Checks[i].Expr)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Rename the column in computed columns.
+	for i := range desc.Columns {
+		if desc.Columns[i].IsComputed() {
+			newExpr, err := recursiveRename(*desc.Columns[i].ComputeExpr)
+			if err != nil {
+				return err
+			}
+			desc.Columns[i].ComputeExpr = &newExpr
+		}
+	}
+
+	// Rename the column in the indexes.
+	desc.RenameColumnDescriptor(col, newName)
+	return nil
 }
 
 // RenameColumnDescriptor updates all references to a column name in
@@ -3122,6 +3189,84 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 					return err
 				}
 			}
+		case *DescriptorMutation_ComputedColumnSwap:
+			args := t.ComputedColumnSwap
+
+			oldCol, err := desc.FindColumnByID(args.OldColumnId)
+			if err != nil {
+				return err
+			}
+			newCol, err := desc.FindColumnByID(args.NewColumnId)
+			if err != nil {
+				return err
+			}
+
+			newCol.ComputeExpr = nil
+
+			unresolvedName := func(name string) *tree.UnresolvedName {
+				return &tree.UnresolvedName{
+					NumParts: 1,
+					Parts:    tree.NameParts{name},
+				}
+			}
+
+			// oldCol should still have new values written to newCol in case
+			// it has a read from previous version.
+
+			oldColComputeExpr := tree.CastExpr{Expr: unresolvedName(oldCol.Name), Type: oldCol.DatumType(), SyntaxMode: tree.CastShort}
+			s := tree.Serialize(&oldColComputeExpr)
+			oldCol.ComputeExpr = &s
+
+			//Rename newCol to oldCol.Name.
+			//Generate unique name for old column.
+			nameExists := func(name string) bool {
+				_, _, err := desc.FindColumnByName(tree.Name(name))
+				return err == nil
+			}
+
+			uniqueName := GenerateUniqueConstraintName(
+				newCol.Name,
+				nameExists,
+			)
+
+			oldColName := oldCol.Name
+			desc.RenameColumnDescriptor(oldCol, uniqueName)
+			desc.RenameColumnDescriptor(newCol, oldColName)
+
+			// Swap Column Family references.
+			// This preserves the ordering of column families when querying for it.
+			for i := range desc.Families {
+				for j := range desc.Families[i].ColumnIDs {
+					if desc.Families[i].ColumnIDs[j] == oldCol.ID {
+						desc.Families[i].ColumnIDs[j] = newCol.ID
+						desc.Families[i].ColumnNames[j] = newCol.Name
+					} else if desc.Families[i].ColumnIDs[j] == newCol.ID {
+						desc.Families[i].ColumnIDs[j] = oldCol.ID
+						desc.Families[i].ColumnNames[j] = oldCol.Name
+					}
+				}
+			}
+
+			// Swap Column Orders.
+			*newCol, *oldCol = *oldCol, *newCol
+
+			// After the swap, newCol points to the oldCol and vice versa.
+			newCol, oldCol = oldCol, newCol
+			newCol.LogicalColumnID = oldCol.LogicalColumnID
+			oldCol.LogicalColumnID = 0
+
+			oldCol.AlterColumnTypeDropColumn = true
+
+			//Drop old column.
+			for i := range desc.Columns {
+				if desc.Columns[i].ID == oldCol.ID {
+					desc.AddColumnMutation(oldCol, DescriptorMutation_DROP)
+					// Use [:i:i] to prevent reuse of existing slice, or outstanding refs
+					// to ColumnDescriptors may unexpectedly change.
+					desc.Columns = append(desc.Columns[:i:i], desc.Columns[i+1:]...)
+					break
+				}
+			}
 		}
 
 	case DescriptorMutation_DROP:
@@ -3267,6 +3412,12 @@ func (desc *MutableTableDescriptor) AddIndexMutation(
 // AddPrimaryKeySwapMutation adds a PrimaryKeySwap mutation to the table descriptor.
 func (desc *MutableTableDescriptor) AddPrimaryKeySwapMutation(swap *PrimaryKeySwap) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_PrimaryKeySwap{PrimaryKeySwap: swap}, Direction: DescriptorMutation_ADD}
+	desc.addMutation(m)
+}
+
+// AddComputedColumnSwapMutation adds a ComputedColumnSwap mutation to the table descriptor.
+func (desc *MutableTableDescriptor) AddComputedColumnSwapMutation(swap *ComputedColumnSwap) {
+	m := DescriptorMutation{Descriptor_: &DescriptorMutation_ComputedColumnSwap{ComputedColumnSwap: swap}, Direction: DescriptorMutation_ADD}
 	desc.addMutation(m)
 }
 

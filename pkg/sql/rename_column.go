@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -111,59 +110,9 @@ func (p *planner) renameColumn(
 		return false, fmt.Errorf("column name %q already exists", tree.ErrString(newName))
 	}
 
-	preFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		if vBase, ok := expr.(tree.VarName); ok {
-			v, err := vBase.NormalizeVarName()
-			if err != nil {
-				return false, nil, err
-			}
-			if c, ok := v.(*tree.ColumnItem); ok {
-				if string(c.ColumnName) == string(*oldName) {
-					c.ColumnName = *newName
-				}
-			}
-			return false, v, nil
-		}
-		return true, expr, nil
+	if err := tableDesc.RenameColumn(col, oldName.String(), newName.String()); err != nil {
+		return false, err
 	}
-
-	renameIn := func(expression string) (string, error) {
-		parsed, err := parser.ParseExpr(expression)
-		if err != nil {
-			return "", err
-		}
-
-		renamed, err := tree.SimpleVisit(parsed, preFn)
-		if err != nil {
-			return "", err
-		}
-
-		return renamed.String(), nil
-	}
-
-	// Rename the column in CHECK constraints.
-	// Renaming columns that are being referenced by checks that are being added is not allowed.
-	for i := range tableDesc.Checks {
-		var err error
-		tableDesc.Checks[i].Expr, err = renameIn(tableDesc.Checks[i].Expr)
-		if err != nil {
-			return false, err
-		}
-	}
-
-	// Rename the column in computed columns.
-	for i := range tableDesc.Columns {
-		if tableDesc.Columns[i].IsComputed() {
-			newExpr, err := renameIn(*tableDesc.Columns[i].ComputeExpr)
-			if err != nil {
-				return false, err
-			}
-			tableDesc.Columns[i].ComputeExpr = &newExpr
-		}
-	}
-
-	// Rename the column in the indexes.
-	tableDesc.RenameColumnDescriptor(col, string(*newName))
 
 	return true, nil
 }

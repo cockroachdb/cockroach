@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -282,6 +283,14 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 			var err error
 			inputRow[col], err = typedExpr.Eval(params.EvalContext())
 			if err != nil {
+				// Intercept parse error due to ALTER COLUMN TYPE schema change.
+				if n.run.insertRun.insertCols[col].AlterColumnTypeDropColumn {
+					code := pgerror.GetPGCode(err)
+					if code == "22P02" {
+						return false, errors.Wrapf(err,
+							"Column is under ALTER COLUMN TYPE schema change, this insert may not be supported until the schema change is finished (the original column must be dropped)")
+					}
+				}
 				return false, err
 			}
 		}
