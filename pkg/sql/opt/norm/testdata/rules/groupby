@@ -820,9 +820,9 @@ norm expect=EliminateAggDistinctForKeys
 SELECT sum(DISTINCT u), stddev(DISTINCT w), avg(DISTINCT z) FROM uvwz GROUP BY v
 ----
 project
- ├── columns: sum:6!null stddev:7!null avg:8!null
+ ├── columns: sum:6!null stddev:7 avg:8!null
  └── group-by
-      ├── columns: v:2!null sum:6!null stddev:7!null avg:8!null
+      ├── columns: v:2!null sum:6!null stddev:7 avg:8!null
       ├── grouping columns: v:2!null
       ├── key: (2)
       ├── fd: (2)-->(6-8)
