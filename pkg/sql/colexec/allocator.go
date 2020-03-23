@@ -52,6 +52,28 @@ func getVecsMemoryFootprint(vecs []coldata.Vec) int64 {
 	return size
 }
 
+// getProportionalBatchMemSize returns the memory size of the batch that is
+// proportional to given 'length'. This method returns the estimated memory
+// footprint *only* of the first 'length' tuples in 'b'.
+func getProportionalBatchMemSize(b coldata.Batch, length int64) int64 {
+	usesSel := b.Selection() != nil
+	b.SetSelection(true)
+	selCapacity := cap(b.Selection())
+	b.SetSelection(usesSel)
+	proportionalBatchMemSize := int64(0)
+	if selCapacity > 0 {
+		proportionalBatchMemSize = selVectorSize(selCapacity) * length / int64(selCapacity)
+	}
+	for _, vec := range b.ColVecs() {
+		if vec.Type() == coltypes.Bytes {
+			proportionalBatchMemSize += int64(vec.Bytes().ProportionalSize(length))
+		} else {
+			proportionalBatchMemSize += getVecMemoryFootprint(vec) * length / int64(vec.Capacity())
+		}
+	}
+	return proportionalBatchMemSize
+}
+
 // NewAllocator constructs a new Allocator instance.
 func NewAllocator(ctx context.Context, acc *mon.BoundAccount) *Allocator {
 	return &Allocator{ctx: ctx, acc: acc}
