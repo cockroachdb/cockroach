@@ -74,6 +74,10 @@ interface SortedTableProps<T> {
   drawer?: boolean;
   firstCellBordered?: boolean;
   renderNoResult?: React.ReactNode;
+  pagination?: {
+    current: number;
+    pageSize: number;
+  };
 }
 
 interface SortedTableState {
@@ -115,13 +119,13 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
     (props: SortedTableProps<T>) => props.columns,
     (data: T[], sortSetting: SortSetting, columns: ColumnDescriptor<T>[]): T[] => {
       if (!sortSetting) {
-        return data;
+        return this.paginatedData();
       }
       const sortColumn = columns[sortSetting.sortKey];
       if (!sortColumn || !sortColumn.sort) {
-        return data;
+        return this.paginatedData();
       }
-      return _.orderBy(data, sortColumn.sort, sortSetting.ascending ? "asc" : "desc");
+      return this.paginatedData(_.orderBy(data, sortColumn.sort, sortSetting.ascending ? "asc" : "desc"));
     },
   );
 
@@ -192,6 +196,17 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
     return this.props.expandableConfig.expandedContent(item);
   }
 
+  paginatedData = (sortData?: T[]) => {
+    const { pagination, data } = this.props;
+    if (!pagination) {
+      return data;
+    }
+    const currentDefault = pagination.current - 1;
+    const start = (currentDefault * pagination.pageSize);
+    const end = (currentDefault * pagination.pageSize + pagination.pageSize);
+    return sortData ? sortData.slice(start, end) : data.slice(start, end);
+  }
+
   render() {
     const { data, sortSetting, onChangeSortSetting, firstCellBordered, renderNoResult } = this.props;
     let expandableConfig: ExpandableConfig = null;
@@ -202,11 +217,10 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
         onChangeExpansion: this.onChangeExpansion,
       };
     }
-
     if (data) {
       return (
         <SortableTable
-          count={data.length}
+          count={this.paginatedData().length}
           sortSetting={sortSetting}
           onChangeSortSetting={onChangeSortSetting}
           columns={this.columns(this.props)}
