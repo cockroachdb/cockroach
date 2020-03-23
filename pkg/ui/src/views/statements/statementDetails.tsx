@@ -466,31 +466,43 @@ function fractionMatching(stats: ExecutionStatistics[], predicate: (stmt: Execut
   return { numerator, denominator };
 }
 
-function filterByRouterParamsPredicate(match: Match<any>): (stat: ExecutionStatistics) => boolean {
+function filterByRouterParamsPredicate(match: Match<any>, internalAppNamePrefix: string): (stat: ExecutionStatistics) => boolean {
   const statement = getMatchParamByName(match, statementAttr);
   const implicitTxn = (getMatchParamByName(match, implicitTxnAttr) === "true");
   let app = getMatchParamByName(match, appAttr);
 
+  const filterByStatementAndImplicitTxn = (stmt: ExecutionStatistics) =>
+    stmt.statement === statement && stmt.implicit_txn === implicitTxn;
+
   if (!app) {
-    return (stmt: ExecutionStatistics) => stmt.statement === statement && stmt.implicit_txn === implicitTxn;
+    return filterByStatementAndImplicitTxn;
   }
 
   if (app === "(unset)") {
     app = "";
   }
-  return (stmt: ExecutionStatistics) => stmt.statement === statement && stmt.implicit_txn === implicitTxn && stmt.app === app;
+
+  if (app === "(internal)") {
+    return (stmt: ExecutionStatistics) =>
+      filterByStatementAndImplicitTxn(stmt) && stmt.app.startsWith(internalAppNamePrefix);
+  }
+
+  return (stmt: ExecutionStatistics) =>
+    filterByStatementAndImplicitTxn(stmt) && stmt.app === app;
 }
 
 export const selectStatement = createSelector(
-  (state: StatementsState) => state.cachedData.statements.data && state.cachedData.statements.data.statements,
+  (state: StatementsState) => state.cachedData.statements,
   (_state: StatementsState, props: RouteComponentProps) => props,
-  (statements, props) => {
+  (statementsState, props) => {
+    const statements = statementsState.data?.statements;
     if (!statements) {
       return null;
     }
 
+    const internalAppNamePrefix = statementsState.data?.internal_app_name_prefix;
     const flattened = flattenStatementStats(statements);
-    const results = _.filter(flattened, filterByRouterParamsPredicate(props.match));
+    const results = _.filter(flattened, filterByRouterParamsPredicate(props.match, internalAppNamePrefix));
     const statement = getMatchParamByName(props.match, statementAttr);
     return {
       statement,
