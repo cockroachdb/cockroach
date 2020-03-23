@@ -369,16 +369,17 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
       key: "status",
       title: "status",
       render: (_text, record) => {
-        const status = _.capitalize(LivenessStatus[record.status]);
+        const badgeText = _.capitalize(LivenessStatus[record.status]);
         const tooltipText = getStatusDescription(record.status);
         return (
-          <Text
-            className={`status-column status-column--color-${status.toLowerCase()}`}
-            textType={TextTypes.Body}>
-            <Tooltip title={tooltipText}>
-              {status}
-            </Tooltip>
-          </Text>
+          <Badge
+            status="default"
+            text={
+              <Tooltip title={tooltipText}>
+                {badgeText}
+              </Tooltip>
+            }
+          />
         );
       },
     },
