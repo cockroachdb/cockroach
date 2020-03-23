@@ -477,8 +477,6 @@ func TestSplitTriggerRaftSnapshotRace(t *testing.T) {
 	ctx := context.Background()
 	const numNodes = 3
 	var args base.TestClusterArgs
-	// TODO(benesch): remove this while closing #32784.
-	args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{DisableMergeQueue: true}
 	// NB: the merge queue is enabled for additional "chaos". Note that the test
 	// uses three nodes and so there is no replica movement, which would other-
 	// wise tickle Raft snapshots for unrelated reasons.
