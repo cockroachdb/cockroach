@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
@@ -23,17 +22,14 @@ import (
 // should be planned between other Operators in tests.
 type invariantsChecker struct {
 	OneInputNode
-
-	expectedBatchWidth int
 }
 
 var _ Operator = invariantsChecker{}
 
 // NewInvariantsChecker creates a new invariantsChecker.
-func NewInvariantsChecker(input Operator, expectedBatchWidth int) Operator {
+func NewInvariantsChecker(input Operator) Operator {
 	return &invariantsChecker{
-		OneInputNode:       OneInputNode{input: input},
-		expectedBatchWidth: expectedBatchWidth,
+		OneInputNode: OneInputNode{input: input},
 	}
 }
 
@@ -46,12 +42,6 @@ func (i invariantsChecker) Next(ctx context.Context) coldata.Batch {
 	n := b.Length()
 	if n == 0 {
 		return b
-	}
-	if i.expectedBatchWidth != b.Width() {
-		panic(
-			fmt.Sprintf("unexpected batch width: expected %d, got %d",
-				i.expectedBatchWidth, b.Width(),
-			))
 	}
 	for colIdx := 0; colIdx < b.Width(); colIdx++ {
 		v := b.ColVec(colIdx)

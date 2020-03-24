@@ -74,11 +74,12 @@ func (b *Builder) buildScalar(
 			// of a larger grouping expression would have been detected by the
 			// groupStrs checking code above.
 			// Normally this would be a "column must appear in the GROUP BY clause"
-			// error. The only case where we allow this (for compatibility with
-			// Postgres) is when this column is part of a table and we are already
+			// error. The only cases where we allow this (for compatibility with
+			// Postgres) is when this column is an outer column (and therefore
+			// effectively constant) or it is part of a table and we are already
 			// grouping on the entire PK of that table.
 			g := inScope.groupby
-			if !b.allowImplicitGroupingColumn(t.id, g) {
+			if !inScope.isOuterColumn(t.id) && !b.allowImplicitGroupingColumn(t.id, g) {
 				panic(newGroupingError(&t.name))
 			}
 
