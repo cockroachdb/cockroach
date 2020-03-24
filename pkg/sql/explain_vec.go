@@ -93,7 +93,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	sort.Slice(sortedFlows, func(i, j int) bool { return sortedFlows[i].nodeID < sortedFlows[j].nodeID })
 	tp := treeprinter.NewWithIndent(false /* leftPad */, true /* rightPad */, 0 /* edgeLength */)
 	root := tp.Child("")
-	verbose := n.options.Flags.Contains(tree.ExplainFlagVerbose)
+	verbose := n.options.Flags[tree.ExplainFlagVerbose]
 	thisNodeID := distSQLPlanner.nodeDesc.NodeID
 	for _, flow := range sortedFlows {
 		node := root.Childf("Node %d", flow.nodeID)

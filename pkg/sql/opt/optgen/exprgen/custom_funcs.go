@@ -94,13 +94,11 @@ func (c *customFuncs) MakePhysProps(
 // ExplainOptions creates a tree.ExplainOptions from a comma-separated list of
 // options.
 func (c *customFuncs) ExplainOptions(opts string) tree.ExplainOptions {
-	strs := strings.Split(opts, ",")
-	explain := tree.Explain{Options: strs}
-	options, err := explain.ParseOptions()
+	explain, err := tree.MakeExplain(strings.Split(opts, ","), &tree.Select{})
 	if err != nil {
 		panic(exprGenErr{err})
 	}
-	return options
+	return explain.(*tree.Explain).ExplainOptions
 }
 
 // Var creates a VariableOp for the given column. It allows (Var "name") as a
