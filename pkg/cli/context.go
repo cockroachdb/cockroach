@@ -119,6 +119,7 @@ func initCLIDefaults() {
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
 	startCtx.serverCertPrincipalMap = nil
 	startCtx.serverListenAddr = ""
+	startCtx.unencryptedLocalhostHTTP = false
 	startCtx.tempDir = ""
 	startCtx.externalIODir = ""
 	startCtx.listeningURLFile = ""
@@ -296,6 +297,10 @@ var startCtx struct {
 	serverSSLCertsDir      string
 	serverCertPrincipalMap []string
 	serverListenAddr       string
+
+	// if specified, this forces the HTTP listen addr to localhost
+	// and disables TLS on the HTTP listener.
+	unencryptedLocalhostHTTP bool
 
 	// temporary directory to use to spill computation results to disk.
 	tempDir string

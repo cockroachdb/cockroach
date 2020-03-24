@@ -50,6 +50,8 @@ type TestServerArgs struct {
 	SQLAddr string
 	// HTTPAddr (if nonempty) is the HTTP address to use for the test server.
 	HTTPAddr string
+	// DisableTLSForHTTP if set, disables TLS for the HTTP interface.
+	DisableTLSForHTTP bool
 
 	// JoinAddr is the address of a node we are joining.
 	//

@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -323,6 +324,7 @@ func init() {
 		// TODO(knz): remove in 20.2.
 		StringFlag(f, &serverCfg.SocketFile, cliflags.Socket, serverCfg.SocketFile)
 		_ = f.MarkDeprecated(cliflags.Socket.Name, "use the --socket-dir and --listen-addr flags instead")
+		BoolFlag(f, &startCtx.unencryptedLocalhostHTTP, cliflags.UnencryptedLocalhostHTTP, startCtx.unencryptedLocalhostHTTP)
 
 		// Backward-compatibility flags.
 
@@ -783,6 +785,15 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	// Fill in the defaults for --http-addr.
 	if serverHTTPAddr == "" {
 		serverHTTPAddr = startCtx.serverListenAddr
+	}
+	if startCtx.unencryptedLocalhostHTTP {
+		// If --unencrypted-localhost-http was specified, we override
+		// whatever was specified or derived from other flags for
+		// the host part of --http-addr.
+		serverHTTPAddr = "localhost"
+		// We then also tell the server to disable TLS for the HTTP
+		// listener.
+		serverCfg.DisableTLSForHTTP = true
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
 
