@@ -259,9 +259,7 @@ func PushTxn(
 	recoverOnFailedPush := cArgs.EvalCtx.EvalKnobs().RecoverIndeterminateCommitsOnFailedPushes
 	if reply.PusheeTxn.Status == roachpb.STAGING && (pusherWins || recoverOnFailedPush) {
 		err := roachpb.NewIndeterminateCommitError(reply.PusheeTxn)
-		if log.V(1) {
-			log.Infof(ctx, "%v", err)
-		}
+		log.VEventf(ctx, 1, "%v", err)
 		return result.Result{}, err
 	}
 

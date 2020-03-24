@@ -13,6 +13,7 @@ package tracing
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -344,6 +345,21 @@ func (r Recording) String() string {
 		last = entry.Timestamp
 	}
 	return buf.String()
+}
+
+// FindLogMessage returns the first log message in the recording that matches
+// the given regexp. If no such messages exist, returns "".
+func (r Recording) FindLogMessage(pattern string) string {
+	re := regexp.MustCompile(pattern)
+	for _, sp := range r {
+		for _, l := range sp.Logs {
+			msg := l.Msg()
+			if re.MatchString(msg) {
+				return msg
+			}
+		}
+	}
+	return ""
 }
 
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given span;
