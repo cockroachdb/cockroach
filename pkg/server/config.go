@@ -120,7 +120,8 @@ type Config struct {
 	// LeaseManagerConfig holds configuration values specific to the LeaseManager.
 	LeaseManagerConfig *base.LeaseManagerConfig
 
-	// Unix socket: for postgres only.
+	// SocketFile, if non-empty, sets up a TLS-free local listener using
+	// a unix datagram socket at the specified path.
 	SocketFile string
 
 	// Stores is specified to enable durable key-value storage.

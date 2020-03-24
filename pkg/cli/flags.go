@@ -712,7 +712,16 @@ func registerEnvVarDefault(f *pflag.FlagSet, flagInfo cliflags.FlagInfo) {
 	}
 }
 
+// extraServerFlagInit configures the server.Config based on the command-line flags.
+// It is only called when the command being ran is one of the start commands.
 func extraServerFlagInit(cmd *cobra.Command) error {
+	if err := security.SetCertPrincipalMap(startCtx.serverCertPrincipalMap); err != nil {
+		return err
+	}
+	serverCfg.User = security.NodeUser
+	serverCfg.Insecure = startCtx.serverInsecure
+	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
+
 	// Construct the main RPC listen address.
 	serverCfg.Addr = net.JoinHostPort(startCtx.serverListenAddr, serverListenPort)
 
