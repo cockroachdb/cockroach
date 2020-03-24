@@ -13,16 +13,17 @@ import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sorte
 import { cockroach } from "src/js/protos";
 import { TimestampToMoment } from "src/util/convert";
 import { DATE_FORMAT } from "src/util/format";
-import { JobStatusCell } from "oss/src/views/jobs/jobStatusCell";
-import { Icon, Pagination } from "antd";
+import { JobStatusCell } from "src/views/jobs/jobStatusCell";
+import { Icon } from "antd";
 import Empty from "src/views/app/components/empty";
-import { SortSetting } from "oss/src/views/shared/components/sortabletable";
-import { CachedDataReducerState } from "oss/src/redux/cachedDataReducer";
+import { SortSetting } from "src/views/shared/components/sortabletable";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { isEmpty, isEqual, map } from "lodash";
-import { JobDescriptionCell } from "oss/src/views/jobs/jobDescriptionCell";
+import { JobDescriptionCell } from "src/views/jobs/jobDescriptionCell";
 import { trackDocsLink } from "src/util/analytics";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
+import { Pagination } from "src/components/pagination";
 
 class JobsSortedTable extends SortedTable<Job> {}
 

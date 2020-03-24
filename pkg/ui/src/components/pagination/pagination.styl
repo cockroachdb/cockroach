@@ -1,0 +1,47 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+@require '~styl/base/palette.styl'
+
+.ant-pagination
+  display flex
+  justify-content center
+  align-items flex-end
+  margin 40px 0
+  &.mini
+    .ant-pagination-item, .ant-pagination-prev, .ant-pagination-next
+      margin 0 5px
+  .ant-pagination-item
+    a
+      color $body-color
+      font-size 14px
+      font-family Lato-Medium
+      &:hover
+        color $link-color
+  .ant-pagination-item-active
+    background transparent
+    border-radius 2px
+    border 1px solid $link-color
+    a
+      color $link-color
+  .ant-pagination-next, .ant-pagination-prev
+    .ant-pagination-item-link
+      font-size 12px
+      color $body-color
+    &:hover
+      .ant-pagination-item-link
+        color $link-color
+    &.ant-pagination-disabled
+      .ant-pagination-item-link
+        color #b8bbbc
+      &:hover
+        .ant-pagination-item-link
+          color #b8bbbc

@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Checkbox, Select } from "antd";
-import Dropdown from "oss/src/views/shared/components/dropdown";
+import { Select } from "antd";
+import Dropdown from "src/views/shared/components/dropdown";
 import React from "react";
 import { NetworkFilter, NetworkSort } from "..";
 import "./filter.styl";
+import { Checkbox } from "oss/src/components/checkbox";
 
 interface IFilterProps {
   onChangeFilter: (key: string, value: string) => void;

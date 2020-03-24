@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Col, Row, Tabs } from "antd";
+import { Col, Row } from "antd";
 import _ from "lodash";
 import React, { ReactNode } from "react";
 import { Helmet } from "react-helmet";
@@ -47,10 +47,11 @@ import classNames from "classnames";
 import {
   selectDiagnosticsReportsCountByStatementFingerprint,
 } from "src/redux/statements/statementsSelectors";
-import { Button, BackIcon } from "oss/src/components/button";
 import { trackSubnavSelection } from "src/util/analytics";
 
-const { TabPane } = Tabs;
+import { Button, BackIcon } from "src/components/button";
+import { Tabs, TabPane } from "src/components/tabs";
+import { PageHeader } from "src/components";
 
 interface Fraction {
   numerator: number;
@@ -183,7 +184,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
     return (
       <div>
         <Helmet title={`Details | ${(app ? `${app} App |` : "")} Statements`} />
-        <div className="section page--header">
+        <PageHeader>
           <Button
             onClick={this.prevPage}
             type="flat"
@@ -194,8 +195,8 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
           >
             Statements
           </Button>
-          <h1 className="base-heading page--header__title">Statement Details</h1>
-        </div>
+        </PageHeader>
+        <h1 className="base-heading page--header__title">Statement Details</h1>
         <section className="section section--container">
           <Loading
             loading={_.isNil(this.props.statement)}

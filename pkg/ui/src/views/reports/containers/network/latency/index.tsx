@@ -8,17 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Divider, Tooltip } from "antd";
 import classNames from "classnames";
 import _ from "lodash";
-import { NanoToMilli } from "oss/src/util/convert";
-import { FixLong } from "oss/src/util/fixLong";
-import { Chip } from "oss/src/views/app/components/chip";
-import Empty from "oss/src/views/app/components/empty";
+import { NanoToMilli } from "src/util/convert";
+import { FixLong } from "src/util/fixLong";
+import { Chip } from "src/views/app/components/chip";
+import Empty from "src/views/app/components/empty";
 import React from "react";
 import { Link } from "react-router-dom";
 import { getValueFromString, Identity } from "..";
 import "./latency.styl";
+import { Divider } from "src/components/divider";
+import { Tooltip } from "oss/src/components";
 interface StdDev {
   stddev: number;
   stddevMinus2: number;

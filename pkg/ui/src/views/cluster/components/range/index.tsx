@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Button, TimePicker, notification, Calendar, Icon } from "antd";
+import { Button, notification, Icon } from "antd";
 import moment, { Moment } from "moment";
 import { TimeWindow } from "oss/src/redux/timewindow";
 import { trackTimeScaleSelected } from "src/util/analytics";
 import React from "react";
 import "./range.styl";
+import { TimePicker, Calendar } from "src/components/picker";
 
 export enum DateTypes {
   DATE_FROM,

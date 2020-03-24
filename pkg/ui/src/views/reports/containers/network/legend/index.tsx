@@ -8,12 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Divider, Icon, Tooltip } from "antd";
-import { Chip } from "oss/src/views/app/components/chip";
-import Modal from "oss/src/views/app/components/modal";
+import { Icon } from "antd";
+import { Chip } from "src/views/app/components/chip";
+import Modal from "src/views/app/components/modal";
 import React from "react";
 import { NoConnection } from "..";
 import "./legend.styl";
+import { Divider } from "src/components/divider";
+import { Tooltip } from "src/components";
 
 interface ILegendProps {
   stddevMinus2: number;

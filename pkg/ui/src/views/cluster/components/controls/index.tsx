@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Button, Tooltip } from "antd";
+import { Button } from "antd";
 import CaretLeft from "assets/caret-left.svg";
 import CaretRight from "assets/caret-right.svg";
 import _ from "lodash";
 import { ArrowDirection } from "oss/src/views/shared/components/dropdown";
 import React from "react";
 import "./controls.styl";
+import { Tooltip } from "src/components/tooltip";
 
 // tslint:disable-next-line: variable-name
 const ButtonGroup = Button.Group;

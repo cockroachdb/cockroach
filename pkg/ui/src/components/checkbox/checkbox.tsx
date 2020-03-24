@@ -8,11 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-@require nib
+import { Checkbox as AntdCheckbox } from "antd";
+import { CheckboxProps } from "antd/lib/checkbox";
+import * as React from "react";
+import "./checkbox.styl";
 
-@require 'base/layout-vars.styl'
-@require 'base/palette.styl'
-@require 'base/typography.styl'
-@require 'base/reset.styl'
-
-@require 'pages/reports.styl'
+export const Checkbox = (props: CheckboxProps) => {
+  return (
+    <AntdCheckbox {...props} />
+  );
+};

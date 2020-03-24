@@ -26,6 +26,7 @@ import {
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 import Visualization from "src/views/cluster/components/visualization";
 import { NanoToMilli } from "src/util/convert";
+import "./linegraph.styl";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
