@@ -125,7 +125,7 @@ func eventInternal(ctx context.Context, isErr, withTags bool, format string, arg
 		if sp != nil {
 			// TODO(radu): pass tags directly to sp.LogKV when LightStep supports
 			// that.
-			sp.LogFields(otlog.String("event", msg))
+			sp.LogFields(otlog.String(tracing.LogMessageField, msg))
 			// if isErr {
 			// 	// TODO(radu): figure out a way to signal that this is an error. We
 			// 	// could use a different "error" key (provided it shows up in
