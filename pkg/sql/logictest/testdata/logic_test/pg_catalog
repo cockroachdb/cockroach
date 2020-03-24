@@ -2124,3 +2124,16 @@ SELECT  pg_catalog.set_config('woo', 'woo', false)
 
 query error configuration setting.*not supported
 SELECT  pg_catalog.set_config('vacuum_cost_delay', '0', false)
+
+subtest regression_46450
+
+statement ok
+CREATE TABLE regression_46450 (id UUID PRIMARY KEY, json JSONB)
+
+statement ok
+CREATE INDEX regression_46450_idx ON regression_46450 USING gin(json)
+
+query TTTTTT
+select * from pg_indexes where indexname = 'regression_46450_idx'
+----
+3047862654  public  regression_46450  regression_46450_idx  NULL  CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)

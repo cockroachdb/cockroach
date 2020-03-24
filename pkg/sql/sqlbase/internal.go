@@ -24,3 +24,7 @@ type InternalExecutorSessionDataOverride struct {
 	// SearchPath represents the namespaces to search in.
 	SearchPath *sessiondata.SearchPath
 }
+
+// NoSessionDataOverride is the empty InternalExecutorSessionDataOverride which
+// does not override any session data.
+var NoSessionDataOverride = InternalExecutorSessionDataOverride{}

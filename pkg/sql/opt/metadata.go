@@ -460,12 +460,6 @@ func (md *Metadata) Sequence(seqID SequenceID) cat.Sequence {
 	return md.sequences[seqID.index()]
 }
 
-// AllSequences returns the metadata for all sequences. The result must not be
-// modified.
-func (md *Metadata) AllSequences() []cat.Sequence {
-	return md.sequences
-}
-
 // UniqueID should be used to disambiguate multiple uses of an expression
 // within the scope of a query. For example, a UniqueID field should be
 // added to an expression type if two instances of that type might otherwise
@@ -490,6 +484,52 @@ func (md *Metadata) AddView(v cat.View) {
 // modified.
 func (md *Metadata) AllViews() []cat.View {
 	return md.views
+}
+
+// AllDataSourceNames returns the fully qualified names of all datasources
+// referenced by the metadata.
+func (md *Metadata) AllDataSourceNames(
+	fullyQualifiedName func(ds cat.DataSource) (cat.DataSourceName, error),
+) (tables, sequences, views []tree.TableName, _ error) {
+	// Catalog objects can show up multiple times in our lists, so deduplicate
+	// them.
+	seen := make(map[tree.TableName]struct{})
+
+	getNames := func(count int, get func(int) cat.DataSource) ([]tree.TableName, error) {
+		result := make([]tree.TableName, 0, count)
+		for i := 0; i < count; i++ {
+			ds := get(i)
+			tn, err := fullyQualifiedName(ds)
+			if err != nil {
+				return nil, err
+			}
+			if _, ok := seen[tn]; !ok {
+				seen[tn] = struct{}{}
+				result = append(result, tn)
+			}
+		}
+		return result, nil
+	}
+	var err error
+	tables, err = getNames(len(md.tables), func(i int) cat.DataSource {
+		return md.tables[i].Table
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	sequences, err = getNames(len(md.sequences), func(i int) cat.DataSource {
+		return md.sequences[i]
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	views, err = getNames(len(md.views), func(i int) cat.DataSource {
+		return md.views[i]
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return tables, sequences, views, nil
 }
 
 // WithID uniquely identifies a With expression within the scope of a query.
