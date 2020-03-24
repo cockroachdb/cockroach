@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -1197,17 +1198,70 @@ func (s *adminServer) Cluster(
 }
 
 // Health returns liveness for the node target of the request.
+//
+// See the docstring for HealthRequest for more details about
+// what this function precisely reports.
+//
+// Note: Health is non-privileged and non-authenticated and thus
+// must not report privileged information.
 func (s *adminServer) Health(
 	ctx context.Context, req *serverpb.HealthRequest,
 ) (*serverpb.HealthResponse, error) {
-	isLive, err := s.server.nodeLiveness.IsLive(s.server.NodeID())
+	telemetry.Inc(telemetryHealthCheck)
+
+	resp := &serverpb.HealthResponse{}
+	// If Ready is not set, the client doesn't want to know whether this node is
+	// ready to receive client traffic.
+	if !req.Ready {
+		return resp, nil
+	}
+
+	if err := s.checkReadinessForHealthCheck(); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (s *adminServer) checkReadinessForHealthCheck() error {
+	serveMode := s.server.grpc.mode.get()
+	switch serveMode {
+	case modeInitializing:
+		return status.Error(codes.Unavailable, "node is waiting for cluster initialization")
+	case modeDraining:
+		// grpc.mode is set to modeDraining when the Drain(DrainMode_CLIENT) has
+		// been called (client connections are to be drained).
+		return status.Errorf(codes.Unavailable, "node is shutting down")
+	case modeOperational:
+		break
+	default:
+		return s.serverError(errors.Newf("unknown mode: %v", serveMode))
+	}
+
+	// TODO(knz): update this code when progress is made on
+	// https://github.com/cockroachdb/cockroach/issues/45123
+	l, err := s.server.nodeLiveness.GetLiveness(s.server.NodeID())
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return s.serverError(err)
 	}
-	if !isLive {
-		return nil, status.Errorf(codes.Unavailable, "node is not live")
+	clock := s.server.clock
+	ls := l.LivenessStatus(
+		clock.PhysicalTime(),
+		0, /* threshold */
+		clock.MaxOffset(),
+	)
+	if isHealthy := ls == storagepb.NodeLivenessStatus_LIVE; !isHealthy {
+		return status.Errorf(codes.Unavailable, "node is not healthy")
 	}
-	return &serverpb.HealthResponse{}, nil
+	if l.Draining {
+		// l.Draining indicates that the node is draining leases.
+		// This is set when Drain(DrainMode_LEASES) is called.
+		// It's possible that l.Draining is set without
+		// grpc.mode being modeDraining, if a RPC client
+		// has requested DrainMode_LEASES but not DrainMode_CLIENT.
+		return status.Errorf(codes.Unavailable, "node is shutting down")
+	}
+
+	return nil
 }
 
 // Liveness returns the liveness state of all nodes on the cluster

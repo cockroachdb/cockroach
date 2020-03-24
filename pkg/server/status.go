@@ -637,7 +637,6 @@ func (s *statusServer) Details(
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
-	telemetry.Inc(telemetryHealthCheck)
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
@@ -657,25 +656,6 @@ func (s *statusServer) Details(
 	}
 	if addr, err := s.gossip.GetNodeIDSQLAddress(remoteNodeID); err == nil {
 		resp.SQLAddress = *addr
-	}
-
-	// If Ready is not set, the client doesn't want to know whether this node is
-	// ready to receive client traffic.
-	if !req.Ready {
-		return resp, nil
-	}
-
-	serveMode := s.admin.server.grpc.mode.get()
-	if serveMode != modeOperational {
-		return nil, grpcstatus.Error(codes.Unavailable, "node is not ready")
-	}
-
-	isHealthy, err := s.nodeLiveness.IsHealthy(nodeID)
-	if err != nil {
-		return nil, grpcstatus.Error(codes.Internal, err.Error())
-	}
-	if !isHealthy {
-		return nil, grpcstatus.Error(codes.Unavailable, "node is not ready")
 	}
 
 	return resp, nil
