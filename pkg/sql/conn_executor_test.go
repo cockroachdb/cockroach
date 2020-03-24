@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/jackc/pgx"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -557,4 +559,191 @@ func TestQueryProgress(t *testing.T) {
 	// non-deterministic so we could see 47% done or 53% done, etc. To avoid being
 	// flaky, we just make sure we see one of 4x% or 5x%
 	require.Regexp(t, `executing \([45]\d\.`, progress)
+}
+
+// This test ensures that when in an explicit transaction, statement preparation
+// uses the user's transaction and thus properly interacts with deadlock
+// detection.
+func TestPrepareInExplicitTransactionDoesNotDeadlock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	testDB := sqlutils.MakeSQLRunner(sqlDB)
+	testDB.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+	testDB.Exec(t, "CREATE TABLE bar (i INT PRIMARY KEY)")
+
+	tx1, err := sqlDB.Begin()
+	require.NoError(t, err)
+
+	tx2, err := sqlDB.Begin()
+	require.NoError(t, err)
+
+	// So now I really want to try to have a deadlock.
+
+	_, err = tx1.Exec("ALTER TABLE foo ADD COLUMN j INT NOT NULL")
+	require.NoError(t, err)
+
+	_, err = tx2.Exec("ALTER TABLE bar ADD COLUMN j INT NOT NULL")
+	require.NoError(t, err)
+
+	// Now we want tx2 to get blocked on tx1 and stay blocked, then we want to
+	// push tx1 above tx2 and have it get blocked in planning.
+	errCh := make(chan error)
+	go func() {
+		_, err := tx2.Exec("ALTER TABLE foo ADD COLUMN k INT NOT NULL")
+		errCh <- err
+	}()
+	select {
+	case <-time.After(time.Millisecond):
+	case err := <-errCh:
+		t.Fatalf("expected the transaction to block, got %v", err)
+	default:
+	}
+
+	// Read from foo so that we can push tx1 above tx2.
+	testDB.Exec(t, "SELECT count(*) FROM foo")
+
+	// Write into foo to push tx1
+	_, err = tx1.Exec("INSERT INTO foo VALUES (1)")
+	require.NoError(t, err)
+
+	// Plan a query which will resolve bar during planning time, this would block
+	// and deadlock if it were run on a new transaction.
+	_, err = tx1.Prepare("SELECT NULL FROM [SHOW COLUMNS FROM bar] LIMIT 1")
+	require.NoError(t, err)
+
+	// Try to commit tx1. Either it should get a RETRY_SERIALIZABLE error or
+	// tx2 should. Ensure that either one or both of them does.
+	if tx1Err := tx1.Commit(); tx1Err == nil {
+		// tx1 committed successfully, ensure tx2 failed.
+		tx2ExecErr := <-errCh
+		require.Regexp(t, "RETRY_SERIALIZABLE", tx2ExecErr)
+		_ = tx2.Rollback()
+	} else {
+		require.Regexp(t, "RETRY_SERIALIZABLE", tx1Err)
+		tx2ExecErr := <-errCh
+		require.NoError(t, tx2ExecErr)
+		if tx2CommitErr := tx2.Commit(); tx2CommitErr != nil {
+			require.Regexp(t, "RETRY_SERIALIZABLE", tx2CommitErr)
+		}
+	}
+}
+
+// This test ensures that when in an explicit transaction and statement
+// preparation uses the user's transaction, errors during those planning queries
+// are handled correctly.
+func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	filter := newDynamicRequestFilter()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: filter.filter,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	testDB := sqlutils.MakeSQLRunner(sqlDB)
+	testDB.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+	testDB.Exec(t, "CREATE TABLE bar (i INT PRIMARY KEY)")
+
+	// This test will create an explicit transaction that encounters an error on
+	// a latter statement during planning of SHOW COLUMNS. The planning for this
+	// SHOW COLUMNS will be run in the user's transaction. The test will inject
+	// errors into the execution of that planning query and ensure that the user's
+	// transaction state evolves appropriately.
+
+	// Use pgx so that we can introspect error codes returned from cockroach.
+	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "", url.User("root"))
+	defer cleanup()
+	conf, err := pgx.ParseConnectionString(pgURL.String())
+	require.NoError(t, err)
+	conn, err := pgx.Connect(conf)
+	require.NoError(t, err)
+
+	tx, err := conn.Begin()
+	require.NoError(t, err)
+
+	_, err = tx.Exec("SAVEPOINT cockroach_restart")
+	require.NoError(t, err)
+
+	// Do something with the user's transaction so that we'll use the user
+	// transaction in the planning of the below `SHOW COLUMNS`.
+	_, err = tx.Exec("INSERT INTO foo VALUES (1)")
+	require.NoError(t, err)
+
+	// Inject an error that will happen during planning.
+	filter.setFilter(func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		if ba.Txn == nil {
+			return nil
+		}
+		if req, ok := ba.GetArg(roachpb.Get); ok {
+			get := req.(*roachpb.GetRequest)
+			_, tableID, err := keys.DecodeTablePrefix(get.Key)
+			if err != nil || tableID != keys.NamespaceTableID {
+				err = nil
+				return nil
+			}
+			return roachpb.NewError(roachpb.NewTransactionRetryWithProtoRefreshError(
+				"boom", ba.Txn.ID, *ba.Txn))
+		}
+		return nil
+	})
+
+	// Plan a query will get a restart error during planning.
+	_, err = tx.Prepare("show_columns", "SELECT NULL FROM [SHOW COLUMNS FROM bar] LIMIT 1")
+	require.Regexp(t,
+		"restart transaction: TransactionRetryWithProtoRefreshError: boom", err)
+	pgErr, ok := err.(pgx.PgError)
+	require.True(t, ok)
+	require.Equal(t, pgcode.SerializationFailure, pgErr.Code)
+
+	// Clear the error producing filter, restart the transaction, and run it to
+	// completion.
+	filter.setFilter(nil)
+
+	_, err = tx.Exec("ROLLBACK TO SAVEPOINT cockroach_restart")
+	require.NoError(t, err)
+
+	_, err = tx.Exec("INSERT INTO foo VALUES (1)")
+	require.NoError(t, err)
+	_, err = tx.Prepare("show_columns", "SELECT NULL FROM [SHOW COLUMNS FROM bar] LIMIT 1")
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
+}
+
+// dynamicRequestFilter exposes a filter method which is a
+// storagebase.ReplicaRequestFilter but can be set dynamically.
+type dynamicRequestFilter struct {
+	v atomic.Value
+}
+
+func newDynamicRequestFilter() *dynamicRequestFilter {
+	f := &dynamicRequestFilter{}
+	f.v.Store(storagebase.ReplicaRequestFilter(noopRequestFilter))
+	return f
+}
+
+func (f *dynamicRequestFilter) setFilter(filter storagebase.ReplicaRequestFilter) {
+	if filter == nil {
+		f.v.Store(storagebase.ReplicaRequestFilter(noopRequestFilter))
+	} else {
+		f.v.Store(filter)
+	}
+}
+
+// noopRequestFilter is a storagebase.ReplicaRequestFilter.
+func (f *dynamicRequestFilter) filter(
+	ctx context.Context, request roachpb.BatchRequest,
+) *roachpb.Error {
+	return f.v.Load().(storagebase.ReplicaRequestFilter)(ctx, request)
+}
+
+// noopRequestFilter is a storagebase.ReplicaRequestFilter that does nothing.
+func noopRequestFilter(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+	return nil
 }
