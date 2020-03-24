@@ -627,7 +627,7 @@ func init() {
 	BoolFlag(demoFlags, &demoCtx.geoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas, false)
 	VarFlag(demoFlags, demoNodeSQLMemSizeValue, cliflags.DemoNodeSQLMemSize)
 	VarFlag(demoFlags, demoNodeCacheSizeValue, cliflags.DemoNodeCacheSize)
-	BoolFlag(demoFlags, &demoCtx.insecure, cliflags.ServerInsecure, true)
+	BoolFlag(demoFlags, &demoCtx.insecure, cliflags.ServerInsecure, false)
 	BoolFlag(demoFlags, &demoCtx.disableLicenseAcquisition, cliflags.DemoNoLicense, false)
 	// Mark the --global flag as hidden until we investigate it more.
 	BoolFlag(demoFlags, &demoCtx.simulateLatency, cliflags.Global, false)
