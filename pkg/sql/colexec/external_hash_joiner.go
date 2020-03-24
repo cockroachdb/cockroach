@@ -293,7 +293,6 @@ func newExternalHashJoiner(
 	rightJoinerInput := newPartitionerToOperator(
 		unlimitedAllocator, spec.right.sourceTypes, rightPartitioner, 0, /* partitionIdx */
 	)
-	diskQueuesTotalMemLimit := int(float64(memoryLimit) * externalHJDiskQueuesMemFraction)
 	// With the default limit of 256 file descriptors, this results in 16
 	// partitions. This is a hard maximum of partitions that will be used by the
 	// external hash joiner. Below we check whether we have enough RAM to support
@@ -301,6 +300,7 @@ func newExternalHashJoiner(
 	// TODO(yuzefovich): this number should be tuned.
 	maxNumberActivePartitions := fdSemaphore.GetLimit() / 16
 	if diskQueueCfg.BufferSizeBytes > 0 {
+		diskQueuesTotalMemLimit := int(float64(memoryLimit) * externalHJDiskQueuesMemFraction)
 		numDiskQueuesThatFit := diskQueuesTotalMemLimit / diskQueueCfg.BufferSizeBytes
 		if numDiskQueuesThatFit < maxNumberActivePartitions {
 			maxNumberActivePartitions = numDiskQueuesThatFit
@@ -309,6 +309,7 @@ func newExternalHashJoiner(
 	if maxNumberActivePartitions < externalHJMinPartitions {
 		maxNumberActivePartitions = externalHJMinPartitions
 	}
+	diskQueuesMemUsed := maxNumberActivePartitions * diskQueueCfg.BufferSizeBytes
 	makeOrderingCols := func(eqCols []uint32) []execinfrapb.Ordering_Column {
 		res := make([]execinfrapb.Ordering_Column, len(eqCols))
 		for i, colIdx := range eqCols {
@@ -380,7 +381,7 @@ func newExternalHashJoiner(
 	// single batch from the left partition will be read at a time as well as an
 	// output batch will be used, but that shouldn't matter in the grand scheme
 	// of things.
-	ehj.memState.maxRightPartitionSizeToJoin = memoryLimit - int64(diskQueuesTotalMemLimit)
+	ehj.memState.maxRightPartitionSizeToJoin = memoryLimit - int64(diskQueuesMemUsed)
 	ehj.scratch.leftBatch = unlimitedAllocator.NewMemBatch(spec.left.sourceTypes)
 	ehj.recursiveScratch.leftBatch = unlimitedAllocator.NewMemBatchNoCols(spec.left.sourceTypes, 0 /* size */)
 	sameSourcesSchema := len(spec.left.sourceTypes) == len(spec.right.sourceTypes)
@@ -464,12 +465,10 @@ func (hj *externalHashJoiner) partitionBatch(
 			}
 			if side == rightSide {
 				partitionInfo.rightParentMemSize = parentMemSize
-				// We cannot use allocator's methods directly because those look at the
-				// capacities of the vectors, and in our case only first len(sel)
-				// tuples belong to the "current" batch. Also, there is no selection
-				// vector on the enqueued batch, so we don't need to worry about that.
-				curBatchMemSize := getVecsMemoryFootprint(colVecs) / int64(batchLen) * int64(len(sel))
-				partitionInfo.rightMemSize += curBatchMemSize
+				// We cannot use allocator's methods directly because those
+				// look at the capacities of the vectors, and in our case only
+				// first len(sel) tuples belong to the "current" batch.
+				partitionInfo.rightMemSize += getProportionalBatchMemSize(scratchBatch, int64(len(sel)))
 			}
 		}
 	}

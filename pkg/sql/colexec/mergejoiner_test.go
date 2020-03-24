@@ -1647,6 +1647,102 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 	}
 }
 
+// TestMergeJoinCrossProduct verifies that the merge joiner produces the same
+// output as the hash joiner. The test aims at stressing randomly the building
+// of cross product (from the buffered groups) in the merge joiner and does it
+// by creating input sources such that they contain very big groups (each group
+// is about coldata.BatchSize() in size) which will force the merge joiner to
+// mostly build from the buffered groups. Join of such input sources results in
+// an output quadratic in size, so the test is skipped unless coldata.BatchSize
+// is set to relatively small number, but it is ok since we randomize this
+// value.
+func TestMergeJoinCrossProduct(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if coldata.BatchSize() > 200 {
+		t.Skipf("this test is too slow with relatively big batch size")
+	}
+	ctx := context.Background()
+	nTuples := 2*coldata.BatchSize() + 1
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
+	rng, _ := randutil.NewPseudoRand()
+	for _, outBatchSize := range []int{1, 17, coldata.BatchSize() - 1, coldata.BatchSize(), coldata.BatchSize() + 1} {
+		t.Run(fmt.Sprintf("outBatchSize=%d", outBatchSize),
+			func(t *testing.T) {
+				typs := []coltypes.T{coltypes.Int64, coltypes.Bytes, coltypes.Decimal}
+				colsLeft := make([]coldata.Vec, len(typs))
+				colsRight := make([]coldata.Vec, len(typs))
+				for i, typ := range typs {
+					colsLeft[i] = testAllocator.NewMemColumn(typ, nTuples)
+					colsRight[i] = testAllocator.NewMemColumn(typ, nTuples)
+				}
+				groupsLeft := colsLeft[0].Int64()
+				groupsRight := colsRight[0].Int64()
+				leftGroupIdx, rightGroupIdx := 0, 0
+				for i := range groupsLeft {
+					if rng.Float64() < 1.0/float64(coldata.BatchSize()) {
+						leftGroupIdx++
+					}
+					if rng.Float64() < 1.0/float64(coldata.BatchSize()) {
+						rightGroupIdx++
+					}
+					groupsLeft[i] = int64(leftGroupIdx)
+					groupsRight[i] = int64(rightGroupIdx)
+				}
+				for i, typ := range typs[1:] {
+					coldata.RandomVec(rng, typ, 0 /* bytesFixedLength */, colsLeft[i+1], nTuples, nullProbability)
+					coldata.RandomVec(rng, typ, 0 /* bytesFixedLength */, colsRight[i+1], nTuples, nullProbability)
+				}
+				leftMJSource := newChunkingBatchSource(typs, colsLeft, nTuples)
+				rightMJSource := newChunkingBatchSource(typs, colsRight, nTuples)
+				leftHJSource := newChunkingBatchSource(typs, colsLeft, nTuples)
+				rightHJSource := newChunkingBatchSource(typs, colsRight, nTuples)
+				mj, err := newMergeJoinOp(
+					testAllocator, defaultMemoryLimit, queueCfg,
+					NewTestingSemaphore(mjFDLimit), sqlbase.InnerJoin,
+					leftMJSource, rightMJSource, typs, typs,
+					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+					testDiskAcc,
+				)
+				if err != nil {
+					t.Fatal("error in merge join op constructor", err)
+				}
+				mj.(*mergeJoinInnerOp).initWithOutputBatchSize(outBatchSize)
+				hj := newHashJoiner(
+					testAllocator, hashJoinerSpec{
+						joinType: sqlbase.InnerJoin,
+						left: hashJoinerSourceSpec{
+							eqCols: []uint32{0}, sourceTypes: typs,
+						},
+						right: hashJoinerSourceSpec{
+							eqCols: []uint32{0}, sourceTypes: typs,
+						},
+					}, leftHJSource, rightHJSource)
+				hj.Init()
+
+				var mjOutputTuples, hjOutputTuples tuples
+				for b := mj.Next(ctx); b.Length() != 0; b = mj.Next(ctx) {
+					for i := 0; i < b.Length(); i++ {
+						mjOutputTuples = append(mjOutputTuples, getTupleFromBatch(b, i))
+					}
+				}
+				for b := hj.Next(ctx); b.Length() != 0; b = hj.Next(ctx) {
+					for i := 0; i < b.Length(); i++ {
+						hjOutputTuples = append(hjOutputTuples, getTupleFromBatch(b, i))
+					}
+				}
+				err = assertTuplesSetsEqual(hjOutputTuples, mjOutputTuples)
+				// Note that the error message can be extremely verbose (it
+				// might contain all output tuples), so we manually check that
+				// comparing err to nil returns true (if we were to use
+				// require.NoError, then the error message would be output).
+				require.True(t, err == nil)
+			})
+
+	}
+}
+
 // TestMergeJoinerMultiBatch creates one long input of a 1:1 join, and keeps
 // track of the expected output to make sure the join output is batched
 // correctly.

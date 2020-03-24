@@ -112,10 +112,6 @@ type Vec interface {
 	// behavior).
 	Window(colType coltypes.T, start int, end int) Vec
 
-	// PrettyValueAt returns a "pretty"value for the idx'th value in this Vec.
-	// It uses the reflect package and is not suitable for calling in hot paths.
-	PrettyValueAt(idx int, colType coltypes.T) string
-
 	// MaybeHasNulls returns true if the column possibly has any null values, and
 	// returns false if the column definitely has no null values.
 	MaybeHasNulls() bool

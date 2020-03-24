@@ -189,22 +189,6 @@ func (m *memColumn) Window(colType coltypes.T, start int, end int) Vec {
 	}
 }
 
-func (m *memColumn) PrettyValueAt(colIdx int, colType coltypes.T) string {
-	if m.nulls.NullAt(colIdx) {
-		return "NULL"
-	}
-	switch colType {
-	// {{range .}}
-	case _TYPES_T:
-		col := m._TemplateType()
-		v := execgen.UNSAFEGET(col, colIdx)
-		return fmt.Sprintf("%v", v)
-	// {{end}}
-	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
-	}
-}
-
 // SetValueAt is an inefficient helper to set the value in a Vec when the type
 // is unknown.
 func SetValueAt(v Vec, elem interface{}, rowIdx int, colType coltypes.T) {
