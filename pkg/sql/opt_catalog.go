@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -275,6 +276,12 @@ func (oc *optCatalog) RequireAdminRole(ctx context.Context, action string) error
 func (oc *optCatalog) FullyQualifiedName(
 	ctx context.Context, ds cat.DataSource,
 ) (cat.DataSourceName, error) {
+	return oc.fullyQualifiedNameWithTxn(ctx, ds, oc.planner.Txn())
+}
+
+func (oc *optCatalog) fullyQualifiedNameWithTxn(
+	ctx context.Context, ds cat.DataSource, txn *kv.Txn,
+) (cat.DataSourceName, error) {
 	if vt, ok := ds.(*optVirtualTable); ok {
 		// Virtual tables require special handling, because they can have multiple
 		// effective instances that utilize the same descriptor.
@@ -287,7 +294,7 @@ func (oc *optCatalog) FullyQualifiedName(
 	}
 
 	dbID := desc.ParentID
-	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, oc.planner.Txn(), dbID)
+	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, txn, dbID)
 	if err != nil {
 		return cat.DataSourceName{}, err
 	}

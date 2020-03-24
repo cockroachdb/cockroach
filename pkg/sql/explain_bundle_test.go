@@ -39,18 +39,24 @@ func TestExplainBundle(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(godb)
 	r.Exec(t, "CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE)")
 
-	base := "statement.txt trace.json"
-	plans := "opt.txt opt-v.txt opt-vv.txt plan.txt"
+	base := "statement.txt trace.json env.sql"
+	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"
 
 	t.Run("basic", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN BUNDLE SELECT * FROM abc WHERE c=1")
-		checkBundle(t, fmt.Sprint(rows), base, plans, "distsql.html")
+		checkBundle(
+			t, fmt.Sprint(rows),
+			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html",
+		)
 	})
 
 	// Check that we get separate diagrams for subqueries.
 	t.Run("subqueries", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN BUNDLE SELECT EXISTS (SELECT * FROM abc WHERE c=1)")
-		checkBundle(t, fmt.Sprint(rows), base, plans, "distsql-1.html distsql-2.html")
+		checkBundle(
+			t, fmt.Sprint(rows),
+			base, plans, "stats-defaultdb.public.abc.sql", "distsql-1.html distsql-2.html",
+		)
 	})
 
 	// Even on query errors we should still get a bundle.
@@ -84,7 +90,10 @@ func TestExplainBundle(t *testing.T) {
 			rowsBuf.WriteString(row)
 			rowsBuf.WriteByte('\n')
 		}
-		checkBundle(t, rowsBuf.String(), base, plans, "distsql.html")
+		checkBundle(
+			t, rowsBuf.String(),
+			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html",
+		)
 	})
 }
 
