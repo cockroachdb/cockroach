@@ -494,8 +494,15 @@ func (h *hasher) HashJoinFlags(val JoinFlags) {
 }
 
 func (h *hasher) HashExplainOptions(val tree.ExplainOptions) {
-	h.HashFastIntSet(val.Flags)
 	h.HashUint64(uint64(val.Mode))
+	hash := h.hash
+	for i, val := range val.Flags {
+		if val {
+			hash ^= internHash(uint64(i))
+			hash *= prime64
+		}
+	}
+	h.hash = hash
 }
 
 func (h *hasher) HashStatementType(val tree.StatementType) {
@@ -835,7 +842,7 @@ func (h *hasher) IsJoinFlagsEqual(l, r JoinFlags) bool {
 }
 
 func (h *hasher) IsExplainOptionsEqual(l, r tree.ExplainOptions) bool {
-	return l.Mode == r.Mode && l.Flags.Equals(r.Flags)
+	return l == r
 }
 
 func (h *hasher) IsStatementTypeEqual(l, r tree.StatementType) bool {

@@ -2010,16 +2010,21 @@ func (node *Export) doc(p *PrettyCfg) pretty.Doc {
 
 func (node *Explain) doc(p *PrettyCfg) pretty.Doc {
 	d := pretty.Keyword("EXPLAIN")
-	if len(node.Options) > 0 {
-		var opts []pretty.Doc
-		for _, opt := range node.Options {
-			upperCaseOpt := strings.ToUpper(opt)
-			if upperCaseOpt == "ANALYZE" {
-				d = pretty.ConcatSpace(d, pretty.Keyword("ANALYZE"))
-			} else {
-				opts = append(opts, pretty.Keyword(upperCaseOpt))
-			}
+	// ANALYZE is a special case because it is a statement implemented as an
+	// option to EXPLAIN.
+	if node.Flags[ExplainFlagAnalyze] {
+		d = pretty.ConcatSpace(d, pretty.Keyword("ANALYZE"))
+	}
+	var opts []pretty.Doc
+	if node.Mode != ExplainPlan {
+		opts = append(opts, pretty.Keyword(node.Mode.String()))
+	}
+	for f := ExplainFlag(1); f < numExplainFlags; f++ {
+		if f != ExplainFlagAnalyze && node.Flags[f] {
+			opts = append(opts, pretty.Keyword(f.String()))
 		}
+	}
+	if len(opts) > 0 {
 		d = pretty.ConcatSpace(
 			d,
 			p.bracket("(", p.commaSeparated(opts...), ")"),

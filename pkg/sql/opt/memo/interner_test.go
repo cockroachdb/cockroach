@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"golang.org/x/tools/container/intsets"
@@ -80,9 +79,16 @@ func TestInterner(t *testing.T) {
 	tz3 := tree.MakeDTimestampTZ(time.Date(2018, 10, 6, 11, 49, 30, 124, time.UTC), 0)
 	tz4 := tree.MakeDTimestampTZ(time.Date(2018, 10, 6, 11, 49, 30, 124, time.FixedZone("PDT", -7)), 0)
 
-	explain1 := tree.ExplainOptions{Mode: tree.ExplainPlan, Flags: util.MakeFastIntSet(1, 2)}
-	explain2 := tree.ExplainOptions{Mode: tree.ExplainOpt, Flags: util.MakeFastIntSet(1, 2)}
-	explain3 := tree.ExplainOptions{Mode: tree.ExplainOpt, Flags: util.MakeFastIntSet(1, 2, 3)}
+	explain1 := tree.ExplainOptions{Mode: tree.ExplainPlan}
+	explain1.Flags[1] = true
+	explain1.Flags[2] = true
+	explain2 := tree.ExplainOptions{Mode: tree.ExplainOpt}
+	explain2.Flags[1] = true
+	explain2.Flags[2] = true
+	explain3 := tree.ExplainOptions{Mode: tree.ExplainOpt}
+	explain3.Flags[1] = true
+	explain3.Flags[2] = true
+	explain3.Flags[3] = true
 
 	scanNode := &ScanExpr{}
 	andExpr := &AndExpr{}

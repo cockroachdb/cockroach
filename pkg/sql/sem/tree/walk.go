@@ -808,7 +808,6 @@ func (stmt *Delete) walkStmt(v Visitor) Statement {
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Explain) copyNode() *Explain {
 	stmtCopy := *stmt
-	stmtCopy.Options = append([]string(nil), stmt.Options...)
 	return &stmtCopy
 }
 

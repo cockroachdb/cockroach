@@ -66,13 +66,13 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 	stmtType tree.StatementType,
 ) (planNode, error) {
 	flags := explainFlags{
-		symbolicVars: opts.Flags.Contains(tree.ExplainFlagSymVars),
+		symbolicVars: opts.Flags[tree.ExplainFlagSymVars],
 	}
-	if opts.Flags.Contains(tree.ExplainFlagVerbose) {
+	if opts.Flags[tree.ExplainFlagVerbose] {
 		flags.showMetadata = true
 		flags.qualifyNames = true
 	}
-	if opts.Flags.Contains(tree.ExplainFlagTypes) {
+	if opts.Flags[tree.ExplainFlagTypes] {
 		flags.showMetadata = true
 		flags.showTypes = true
 	}
