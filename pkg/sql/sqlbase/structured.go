@@ -13,6 +13,7 @@ package sqlbase
 import (
 	"context"
 	"fmt"
+	"github.com/gogo/protobuf/proto"
 	"sort"
 	"strconv"
 	"strings"
@@ -2446,47 +2447,65 @@ func (desc *MutableTableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
 	}
 }
 
-func (desc *MutableTableDescriptor) swapColumnIDs(
-	colA *ColumnDescriptor, colB *ColumnDescriptor) {
-
-	swapColumnIDValues := func (columnIDs []ColumnID) {
-		temp := columnIDs[colA.ID]
-		columnIDs[colA.ID] = columnIDs[colB.ID]
-		columnIDs[colB.ID] = temp
+func (desc *MutableTableDescriptor) RenameColumn(
+	col *ColumnDescriptor, newColName string,
+) error {
+	preFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if vBase, ok := expr.(tree.VarName); ok {
+			v, err := vBase.NormalizeVarName()
+			if err != nil {
+				return false, nil, err
+			}
+			if c, ok := v.(*tree.ColumnItem); ok {
+				if string(c.ColumnName) == newColName {
+					c.ColumnName = tree.Name(newColName)
+				}
+			}
+			return false, v, nil
+		}
+		return true, expr, nil
 	}
 
+	renameIn := func(expression string) (string, error) {
+		parsed, err := parser.ParseExpr(expression)
+		if err != nil {
+			return "", err
+		}
 
-	for i := range desc.Families {
-		swapColumnIDValues(desc.Families[i].ColumnIDs)
-		//temp := desc.Families[i].ColumnIDs[colA.ID]
-		//desc.Families[i].ColumnIDs[colA.ID] = desc.Families[i].ColumnIDs[colB.ID]
-		//desc.Families[i].ColumnIDs[colA.ID] = temp
+		renamed, err := tree.SimpleVisit(parsed, preFn)
+		if err != nil {
+			return "", err
+		}
+
+		return renamed.String(), nil
 	}
 
-	swapColumnIDValues(desc.PrimaryIndex.ColumnIDs)
-
-	//temp := desc.PrimaryIndex.ColumnIDs[colA.ID]
-	//desc.PrimaryIndex.ColumnIDs[colA.ID] = desc.PrimaryIndex.ColumnIDs[colB.ID]
-	//desc.PrimaryIndex.ColumnIDs[colA.ID] = temp
-
-	for i := range desc.Indexes {
-		swapColumnIDValues(desc.Indexes[i].ColumnIDs)
-
-		//temp := desc.Indexes[i].ColumnIDs[colA.ID]
-		//desc.Indexes[i].ColumnIDs[colA.ID] = desc.Indexes[i].ColumnIDs[colB.ID]
-		//desc.Indexes[i].ColumnIDs[colB.ID] = temp
-	}
-
-	for _, m := range desc.Mutations {
-		if idx := m.GetIndex(); idx != nil {
-			swapColumnIDValues(idx.ColumnIDs)
-			//temp := desc.Indexes[i].ColumnIDs[colA.ID]
-			//desc.Indexes[i].ColumnIDs[colA.ID] = desc.Indexes[i].ColumnIDs[colB.ID]
-			//desc.Indexes[i].ColumnIDs[colB.ID] = temp		}
+	// Rename the column in CHECK constraints.
+	// Renaming columns that are being referenced by checks that are being added is not allowed.
+	for i := range desc.Checks {
+		var err error
+		desc.Checks[i].Expr, err = renameIn(desc.Checks[i].Expr)
+		if err != nil {
+			return err
 		}
 	}
 
+	// Rename the column in computed columns.
+	for i := range desc.Columns {
+		if desc.Columns[i].IsComputed() {
+			newExpr, err := renameIn(*desc.Columns[i].ComputeExpr)
+			if err != nil {
+				return err
+			}
+			desc.Columns[i].ComputeExpr = &newExpr
+		}
+	}
+
+	// Rename the column in the indexes.
+	desc.RenameColumnDescriptor(col, newColName)
+	return nil
 }
+
 	// RenameColumnDescriptor updates all references to a column name in
 // a table descriptor including indexes and families.
 func (desc *MutableTableDescriptor) RenameColumnDescriptor(
@@ -3138,9 +3157,6 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 				}
 			}
 		case *DescriptorMutation_ComputedColumnSwap:
-			// Change new col to not computed
-			// Swap, change old Col to computed
-			// Change Name
 			args := t.ComputedColumnSwap
 
 			oldCol, err := desc.FindColumnByID(args.OldColumnId)
@@ -3153,37 +3169,75 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 			}
 
 			newCol.Hidden = false
-
-			// Swap Column Descriptor IDs.
-			//desc.swapColumnIDs(newCol, oldCol)
+			//oldCol.Hidden = true
 
 			newCol.ComputeExpr = nil
-			// Has to be newCol's value casted to old Col.
-			//oldCol.ComputeExpr =
-
-			// Swap column names.
-			temp := oldCol.Name
-			desc.RenameColumnDescriptor(oldCol, newCol.Name)
-			desc.RenameColumnDescriptor(newCol, temp)
+			// oldCol should still have new values written to newCol in case
+			// it has a read from previous version.
+			oldCol.ComputeExpr = proto.String(
+				fmt.Sprintf("%s::%s", oldCol.Name, oldCol.Type.String()))
 
 
-			// Enqueue drop.
-			found := false
-			for i := range desc.Columns {
-				if desc.Columns[i].ID == oldCol.ID {
-					desc.AddColumnMutation(oldCol, DescriptorMutation_DROP)
-					// Use [:i:i] to prevent reuse of existing slice, or outstanding refs
-					// to ColumnDescriptors may unexpectedly change.
-					desc.Columns = append(desc.Columns[:i:i], desc.Columns[i+1:]...)
-					found = true
-					break
+			//Rename newCol to oldCol.Name.
+			//Generate unique name for old column.
+			nameExists := func(name string) bool {
+				_, _, err := desc.FindColumnByName(tree.Name(name))
+				return err == nil
+			}
+
+			uniqueName := GenerateUniqueConstraintName(
+				newCol.Name,
+				nameExists,
+			)
+
+			oldColName := oldCol.Name
+			//newColName := newCol.Name
+			desc.RenameColumn(oldCol, uniqueName)
+			desc.RenameColumn(newCol, oldColName)
+			//desc.RenameColumn(oldCol, newColName)
+
+			// Handle indexes as well.
+
+			// Swap Column IDs.
+			tempId := newCol.ID
+			newCol.ID = oldCol.ID
+			oldCol.ID = tempId
+
+			for i := range desc.Families {
+				for j := range desc.Families[i].ColumnIDs {
+					if desc.Families[i].ColumnIDs[j] == newCol.ID {
+						desc.Families[i].ColumnNames[j] = newCol.Name
+					} else if desc.Families[i].ColumnIDs[j] == oldCol.ID {
+						desc.Families[i].ColumnNames[j] = oldCol.Name
+					}
 				}
 			}
 
-			if !found {
-				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					"error dropping old column: %q", oldCol)
-			}
+			//// Swap Column Orders.
+			//// oldCol is seen first.
+			// use protoutil.clone
+			tempCol := *oldCol
+			println(oldCol.Name, newCol.Name)
+			for i := range desc.Columns {
+				println(desc.Columns[i].Name)
+				if desc.Columns[i].ID == newCol.ID {
+					desc.Columns[i] = tempCol
+				} else if desc.Columns[i].ID == oldCol.ID {
+					desc.Columns[i] = *newCol
+				}
+				println(desc.Columns[i].Name)
+
+
+			//Drop old column.
+			//for i := range desc.Columns {
+			//	if desc.Columns[i].ID == oldCol.ID {
+			//		desc.AddColumnMutation(oldCol, DescriptorMutation_DROP)
+			//		// Use [:i:i] to prevent reuse of existing slice, or outstanding refs
+			//		// to ColumnDescriptors may unexpectedly change.
+			//		desc.Columns = append(desc.Columns[:i:i], desc.Columns[i+1:]...)
+			//		break
+			//	}
+			//}
 		}
 
 	case DescriptorMutation_DROP:
