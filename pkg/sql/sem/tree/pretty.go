@@ -2033,8 +2033,14 @@ func (node *Explain) doc(p *PrettyCfg) pretty.Doc {
 	return p.nestUnder(d, p.Doc(node.Statement))
 }
 
-func (node *ExplainBundle) doc(p *PrettyCfg) pretty.Doc {
-	d := pretty.Keyword("EXPLAIN BUNDLE")
+func (node *ExplainAnalyzeDebug) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.ConcatSpace(
+		pretty.ConcatSpace(
+			pretty.Keyword("EXPLAIN"),
+			pretty.Keyword("ANALYZE"),
+		),
+		p.bracket("(", pretty.Keyword("DEBUG"), ")"),
+	)
 	return p.nestUnder(d, p.Doc(node.Statement))
 }
 

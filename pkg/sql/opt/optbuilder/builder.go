@@ -303,7 +303,7 @@ func (b *Builder) buildStmt(
 	case *tree.Export:
 		return b.buildExport(stmt, inScope)
 
-	case *tree.ExplainBundle:
+	case *tree.ExplainAnalyzeDebug:
 		// This statement should have been handled by the executor.
 		panic(errors.Errorf("%s can only be used as a top-level statement", stmt.StatementTag()))
 

@@ -191,20 +191,21 @@ func (ex *connExecutor) execStmtInOpenState(
 	var shouldCollectDiagnostics bool
 	var finishCollectionDiagnostics StmtDiagnosticsTraceFinishFunc
 
-	if explainBundle, ok := stmt.AST.(*tree.ExplainBundle); ok {
-		// Always collect diagnostics for EXPLAIN BUNDLE.
+	if explainBundle, ok := stmt.AST.(*tree.ExplainAnalyzeDebug); ok {
+		// Always collect diagnostics for EXPLAIN ANALYZE (DEBUG).
 		shouldCollectDiagnostics = true
-		// Strip off EXPLAIN BUNDLE to execute the inner statement.
+		// Strip off the explain node to execute the inner statement.
 		stmt.AST = explainBundle.Statement
-		// TODO(radu): should we trim the "EXPLAIN BUNDLE" part from stmt.SQL?
+		// TODO(radu): should we trim the "EXPLAIN ANALYZE (DEBUG)" part from
+		// stmt.SQL?
 
 		// Clear any ExpectedTypes we set if we prepared this statement (they
 		// reflect the column types of the EXPLAIN itself and not those of the inner
 		// statement).
 		stmt.ExpectedTypes = nil
 
-		// EXPLAIN BUNDLE does not return the rows for the given query; instead it
-		// returns some text which includes a URL.
+		// EXPLAIN ANALYZE (DEBUG) does not return the rows for the given query;
+		// instead it returns some text which includes a URL.
 		// TODO(radu): maybe capture some of the rows and include them in the
 		// bundle.
 		p.discardRows = true
@@ -232,7 +233,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				)
 				finishCollectionDiagnostics(origCtx, traceJSON, bundle, collectionErr)
 			} else {
-				// Handle EXPLAIN BUNDLE.
+				// Handle EXPLAIN ANALYZE (DEBUG).
 				// If there was a communication error, no point in setting any results.
 				if retErr == nil {
 					retErr = setExplainBundleResult(
