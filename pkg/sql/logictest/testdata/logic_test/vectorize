@@ -1175,3 +1175,16 @@ SELECT * FROM mixed_type_a AS a JOIN mixed_type_b AS b ON a.a = b.a AND a.b < (n
 
 statement ok
 RESET vectorize
+
+# Regression for 46140.
+statement ok
+DROP TABLE IF EXISTS t0, t1;
+CREATE TABLE t0(c0 INT);
+CREATE TABLE t1(c0 BOOL) INTERLEAVE IN PARENT t0(rowid);
+INSERT INTO t0(c0) VALUES (0);
+INSERT INTO t1(rowid, c0) VALUES(0, TRUE)
+
+query I
+SELECT max(t1.rowid) FROM t1 WHERE t1.c0
+----
+0
