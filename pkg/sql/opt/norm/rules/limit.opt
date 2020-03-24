@@ -14,6 +14,19 @@
 =>
 $input
 
+# EliminateLimitInExists discards a Limit operator with a positive limit inside
+# an Exist operator.
+[EliminateLimitInExists, Normalize]
+(Exists
+    (Limit
+        $input:*
+        (Const $limit:*) & (IsPositiveLimit $limit)
+    )
+    $subqueryPrivate:*
+)
+=>
+(Exists $input $subqueryPrivate)
+
 # EliminateOffset discards an Offset operator if its offset value is zero.
 [EliminateOffset, Normalize]
 (Offset

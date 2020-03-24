@@ -110,6 +110,61 @@ limit
  └── -1
 
 # --------------------------------------------------
+# EliminateLimitInExists
+# --------------------------------------------------
+norm expect=EliminateLimitInExists
+SELECT * FROM a WHERE EXISTS (SELECT * FROM b where b.y = a.k LIMIT 1)
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan b
+ │    └── columns: y:7
+ └── filters
+      └── y:7 = k:1 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+norm expect=EliminateLimitInExists
+SELECT * FROM a WHERE NOT EXISTS (SELECT * FROM b where b.y = a.k LIMIT 1)
+----
+anti-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan b
+ │    └── columns: y:7
+ └── filters
+      └── y:7 = k:1 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+# Don't eliminate a non-positive limit.
+norm
+SELECT * FROM a WHERE EXISTS (SELECT * FROM b where b.y = a.k LIMIT 0)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── exists [subquery]
+           └── values
+                ├── columns: x:6!null y:7!null
+                ├── cardinality: [0 - 0]
+                ├── key: ()
+                └── fd: ()-->(6,7)
+
+# --------------------------------------------------
 # EliminateOffset
 # --------------------------------------------------
 norm expect=EliminateOffset
