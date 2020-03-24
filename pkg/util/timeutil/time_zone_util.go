@@ -41,10 +41,11 @@ type TimeZoneStringToLocationStandard uint32
 
 const (
 	// TimeZoneStringToLocationISO8601Standard parses UTC offsets as *east* of
-	// the GMT line, e.g. UTC-5 would be 'America/New_York' without daylight savings.
+	// the GMT line, e.g. `-5` would be 'America/New_York' without daylight savings.
+	// Note if UTC/GMT is prepended, the time zone is always POSIX standard.
 	TimeZoneStringToLocationISO8601Standard TimeZoneStringToLocationStandard = iota
 	// TimeZoneStringToLocationPOSIXStandard parses UTC offsets as *west* of the
-	// GMT line, e.g. UTC+5 would be 'America/New_York' without daylight savings.
+	// GMT line, e.g. `+5` would be 'America/New_York' without daylight savings.
 	TimeZoneStringToLocationPOSIXStandard
 )
 
@@ -79,11 +80,8 @@ func TimeZoneStringToLocation(
 		}
 	}
 
-	tzOffset, ok := timeZoneOffsetStringConversion(locStr)
+	tzOffset, ok := timeZoneOffsetStringConversion(locStr, std)
 	if ok {
-		if std == TimeZoneStringToLocationPOSIXStandard {
-			tzOffset *= -1
-		}
 		return FixedOffsetTimeZoneToLocation(int(tzOffset), locStr), nil
 	}
 	return nil, errors.Newf("could not parse %q as time zone", locStr)
@@ -123,11 +121,14 @@ func ParseFixedOffsetTimeZone(location string) (offset int, origRepr string, suc
 // timeZoneOffsetStringConversion converts a time string to offset seconds.
 // Supported time zone strings: GMT/UTC±[00:00:00 - 169:59:00].
 // Seconds/minutes omittable and is case insensitive.
-func timeZoneOffsetStringConversion(s string) (offset int64, ok bool) {
+func timeZoneOffsetStringConversion(
+	s string, standard TimeZoneStringToLocationStandard,
+) (offset int64, ok bool) {
 	submatch := timezoneOffsetRegex.FindStringSubmatch(strings.ReplaceAll(s, " ", ""))
 	if len(submatch) == 0 {
 		return 0, false
 	}
+	hasUTCPrefix := submatch[1] != ""
 	prefix := submatch[2]
 	timeString := submatch[3]
 
@@ -151,6 +152,9 @@ func timeZoneOffsetStringConversion(s string) (offset int64, ok bool) {
 	seconds, _ := strconv.ParseInt(secondsString, 10, 64)
 	offset = (hours * 60 * 60) + (minutes * 60) + seconds
 
+	if hasUTCPrefix || standard == TimeZoneStringToLocationPOSIXStandard {
+		offset *= -1
+	}
 	if prefix == "-" {
 		offset *= -1
 	}
