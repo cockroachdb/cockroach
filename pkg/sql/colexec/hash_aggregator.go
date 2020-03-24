@@ -89,7 +89,18 @@ type hashAggregator struct {
 	scratch struct {
 		coldata.Batch
 
-		// sels stores the intermediate selection vector for each hash code.
+		// sels stores the intermediate selection vector for each hash code. It
+		// is maintained in such a way that when for a particular hashCode
+		// there are no tuples in the batch, the corresponding int slice is of
+		// length 0. Also, onlineAgg() method will reset all modified slices to
+		// have zero length once it is done processing all tuples in the batch,
+		// this allows us to not reset the slices for all possible hash codes.
+		// TODO(yuzefovich): instead of having a map from hashCode to []int
+		// (which could result in having many int slices), we could use
+		// constant number of such slices (probably batchTupleLimit of them)
+		// and have a map from hashCode to an index in [][]int that would do
+		// the "translation." The key insight here is that we will have at most
+		// batchTupleLimit different hashCodes at once.
 		sels map[uint64][]int
 
 		// group is a boolean vector where "true" represent the beginning of a group
@@ -393,10 +404,9 @@ func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context) {
 		finalizeHash(hashBuffer, nKeys, op.testingKnobs.numOfHashBuckets)
 	}
 
-	// Resets the selection vectors to reuse the memory allocated.
-	for hashCode := range op.scratch.sels {
-		op.scratch.sels[hashCode] = op.scratch.sels[hashCode][:0]
-	}
+	// Note: we don't need to reset any of the slices in op.scratch.sels since
+	// they all are of zero length here (see the comment for op.scratch.sels
+	// for context).
 
 	// We can use selIdx to index into op.scratch since op.scratch never has a
 	// a selection vector.
@@ -416,12 +426,14 @@ func (op *hashAggregator) onlineAgg() {
 	keyMappingVecs := op.keyMapping.ColVecs()
 	scratchBufferVecs := op.scratch.ColVecs()
 
-	for hashCode, sel := range op.scratch.sels {
-		if len(sel) == 0 {
+	for _, hashCode := range op.hashBuffer {
+		remaining := op.scratch.sels[hashCode]
+		if len(remaining) == 0 {
+			// It is possible that multiple tuples have the same hashCode, and
+			// we process all such tuples when we encounter the first of these
+			// tuples.
 			continue
 		}
-
-		remaining := sel
 
 		var anyMatched bool
 
@@ -495,6 +507,10 @@ func (op *hashAggregator) onlineAgg() {
 			aggFunc.compute(op.scratch, op.aggCols)
 			op.scratch.group[groupStartIdx] = false
 		}
+
+		// We have processed all tuples with this hashCode, so we should reset
+		// the length of the corresponding slice.
+		op.scratch.sels[hashCode] = op.scratch.sels[hashCode][:0]
 	}
 }
 
