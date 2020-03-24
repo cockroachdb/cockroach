@@ -214,6 +214,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anySQL, []string{"--url=postgresql://a@b:c"}, []string{"--user=a", "--host=b", "--port=c"}, ""},
 		{anyNonSQL, []string{"--url=postgresql://b:c"}, []string{"--host=b", "--port=c"}, ""},
 
+		{anyCmd, []string{"--url=postgresql://foo?application_name=abc"}, []string{"--host=foo", "--insecure"}, ""},
 		{anyCmd, []string{"--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, ""},
 		{anySQL, []string{"--url=postgresql://foo?sslmode=require"}, []string{"--host=foo", "--insecure=false"}, ""},
 		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=require"}, nil, "command .* only supports sslmode=disable or sslmode=verify-full"},
