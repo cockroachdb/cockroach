@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -2567,6 +2568,150 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			}
 		})
 	}
+}
+
+// checkImplicitCommit checks whether the txn is implicitly committed.
+func checkImplicitCommit(ctx context.Context, db *kv.DB, txn roachpb.Transaction) (bool, error) {
+	pushReq := roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txn.Key,
+		},
+		PusheeTxn: txn.TxnMeta,
+		PushTo:    hlc.Timestamp{},
+		PushType:  roachpb.PUSH_ABORT,
+		// We're going to Force the push in order to not wait for the pushee to
+		// expire.
+		Force: true,
+	}
+	ba := roachpb.BatchRequest{}
+	ba.Add(&pushReq)
+
+	recCtx, collectRec, cancel := tracing.ContextWithRecordingSpan(ctx, "test trace")
+	defer cancel()
+
+	resp, pErr := db.NonTransactionalSender().Send(recCtx, ba)
+	if pErr != nil {
+		return false, pErr.GoError()
+	}
+
+	// Verify that we're not fooling ourselves and that checking for the implicit
+	// commit actually caused the txn recovery procedure to run.
+	recording := collectRec()
+	if "" == recording.FindLogMessage(
+		fmt.Sprintf("recovered txn %s", txn.ID.Short())) {
+		return false, errors.Errorf("recovery didn't run as expected. recording: %s", recording)
+	}
+
+	pusheeStatus := resp.Responses[0].GetPushTxn().PusheeTxn.Status
+	switch pusheeStatus {
+	case roachpb.ABORTED:
+		return false, nil
+	case roachpb.COMMITTED:
+		return true, nil
+	default:
+		return false, errors.Errorf("unexpected txn status: %s", pusheeStatus)
+	}
+}
+
+// Test that, even though at the kvserver level requests are not idempotent
+// across an EndTxn, a TxnCoordSender retry after a refresh still works fine. We
+// check that a transaction is not considered implicitly committed through a
+// combination of a STAGING txn record written by an original attempt of the
+// EndTxn batch, plus writes from a subsequent attempt.
+// Namely, the scenario is as follows:
+//
+// 1. client sends CPut(a) + Put(b) + EndTxn. The CPut(a) is split by the
+//    DistSender from the rest. Note that the parallel commit mechanism is in
+//    effect here.
+// 2. CPut(a) gets a WriteTooOldError, but Put(b), EndTxn(STAGING) is succeeds.
+// 		The client needs to refresh.
+// 3. The refresh succeeds.
+// 4. The client resends the whole batch (note that we don't keep track of the
+//    previous partial success).
+// 5. The batch is split again. The EndTxn part fails, the CPut(a) succeeds.
+//
+// The point of this test is to check that the txn is not considered to be
+// implicitly committed at this point. All the intents are in place for the txn
+// to be considered committed, but we rely on the fact that the intent on "a"
+// has a timestamp that's too high (it gets the timestamp from the 2nd attempt,
+// after a refresh, but the STAGING txn record has an older timestamp). If the
+// txn were to be considered implicitly committed, it'd be bad as we are
+// returning an error to the client telling it that the EndTxn failed.
+func TestTxnCoordSenderRetriesAcrossEndTxn_EndTxnSucceedsEarly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var filterFn atomic.Value
+	var storeKnobs kvserver.StoreTestingKnobs
+	storeKnobs.EvalKnobs.TestingEvalFilter =
+		func(fArgs storagebase.FilterArgs) *roachpb.Error {
+			fnVal := filterFn.Load()
+			if fn, ok := fnVal.(func(storagebase.FilterArgs) *roachpb.Error); ok && fn != nil {
+				return fn(fArgs)
+			}
+			return nil
+		}
+
+	s, _, db := serverutils.StartServer(t,
+		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	keyA, keyA1, keyB, keyB1 := roachpb.Key("a"), roachpb.Key("a1"), roachpb.Key("b"), roachpb.Key("b1")
+	require.NoError(t, setupMultipleRanges(ctx, db, string(keyB)))
+
+	origVal := roachpb.MakeValueFromString("init")
+	require.NoError(t, db.Put(ctx, keyA, &origVal))
+
+	txn := db.NewTxn(ctx, "test txn")
+
+	// Do a write to anchor the txn on b's range.
+	require.NoError(t, txn.Put(ctx, keyB1, "b1"))
+
+	// Take a snapshot of the txn early. We'll use it when verifying if the txn is
+	// implicitly committed. If we didn't use this early snapshot and, instead,
+	// used the transaction with a bumped timestamp, then the push code would
+	// infer that the txn is not implicitly committed without actually running the
+	// recovery procedure. Using this snapshot mimics a pusher that ran into an
+	// old intent.
+	origTxn := txn.TestingCloneTxn()
+
+	// Do a read to prevent the txn for performing server-side refreshes.
+	_, err := txn.Get(ctx, keyA1)
+	require.NoError(t, err)
+
+	// After the txn started, do a conflicting write. This will cause the txn's
+	// upcoming left half to return a WriteTooOldError on the first attempt,
+	// causing in turn a refresh and a retry. Note that the upcoming write is a
+	// CPut, so it can't return the WriteTooOld flag instead of a
+	// WriteTooOldError.
+	_, err = db.Get(ctx, keyA)
+
+	b := txn.NewBatch()
+	b.CPut(keyA, "a", &origVal)
+	b.Put(keyB, "b")
+
+	var count int32
+	filterFn.Store(func(args storagebase.FilterArgs) *roachpb.Error {
+		put, ok := args.Req.(*roachpb.PutRequest)
+		if !ok {
+			return nil
+		}
+		if !put.Key.Equal(keyB) {
+			return nil
+		}
+		count++
+		// Reject the right request on the 2nd attempt.
+		if count == 2 {
+			return roachpb.NewErrorf("injected")
+		}
+		return nil
+	})
+
+	require.Error(t, txn.CommitInBatch(ctx, b), "injected")
+	committed, err := checkImplicitCommit(ctx, db, *origTxn)
+
+	require.NoError(t, err)
+	require.False(t, committed)
 }
 
 // Test that we're being smart about the timestamp ranges that need to be
