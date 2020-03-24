@@ -113,7 +113,7 @@ func ParseWorkloadConfig(uri *url.URL) (*roachpb.ExternalStorage_Workload, error
 	}
 	c.Format, c.Generator, c.Table = pathParts[0], pathParts[1], pathParts[2]
 	q := uri.Query()
-	if _, ok := q[`version`]; !ok {
+	if _, ok := q[`version`]; !ok && c.Generator != "slow" {
 		return nil, errors.New(`parameter version is required`)
 	}
 	c.Version = q.Get(`version`)
@@ -131,6 +131,10 @@ func ParseWorkloadConfig(uri *url.URL) (*roachpb.ExternalStorage_Workload, error
 		if c.BatchEnd, err = strconv.ParseInt(e, 10, 64); err != nil {
 			return nil, err
 		}
+	} else {
+		// Make the default 1, so that the user does not need to set it
+		// every time.
+		c.BatchEnd = 1
 	}
 	for k, vs := range q {
 		for _, v := range vs {
