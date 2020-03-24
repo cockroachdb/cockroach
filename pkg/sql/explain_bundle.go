@@ -15,8 +15,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -291,4 +293,165 @@ func (z *memZipper) Finalize() (*bytes.Buffer, error) {
 	buf := z.buf
 	*z = memZipper{}
 	return buf, nil
+}
+
+// stmtEnvCollector helps with gathering information about the "environment" in
+// which a statement was planned or run: version, relevant session settings,
+// schema, table statistics.
+type stmtEnvCollector struct {
+	ctx context.Context
+	ie  *InternalExecutor
+}
+
+func makeStmtEnvCollector(ctx context.Context, ie *InternalExecutor) stmtEnvCollector {
+	return stmtEnvCollector{ctx: ctx, ie: ie}
+}
+
+// environmentQuery is a helper to run a query that returns a single string
+// value.
+func (c *stmtEnvCollector) query(query string) (string, error) {
+	var row tree.Datums
+	row, err := c.ie.QueryRowEx(
+		c.ctx,
+		"stmtEnvCollector",
+		nil, /* txn */
+		sqlbase.NoSessionDataOverride,
+		query,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	if len(row) != 1 {
+		return "", errors.AssertionFailedf(
+			"expected env query %q to return a single column, returned %d",
+			query, len(row),
+		)
+	}
+
+	s, ok := row[0].(*tree.DString)
+	if !ok {
+		return "", errors.AssertionFailedf(
+			"expected env query %q to return a DString, returned %T",
+			query, row[0],
+		)
+	}
+
+	return string(*s), nil
+}
+
+var testingOverrideExplainEnvVersion string
+
+// TestingOverrideExplainEnvVersion overrides the version reported by
+// EXPLAIN (OPT, ENV). Used for testing.
+func TestingOverrideExplainEnvVersion(ver string) func() {
+	prev := testingOverrideExplainEnvVersion
+	testingOverrideExplainEnvVersion = ver
+	return func() { testingOverrideExplainEnvVersion = prev }
+}
+
+// PrintVersion appends a row of the form:
+//  -- Version: CockroachDB CCL v20.1.0 ...
+func (c *stmtEnvCollector) PrintVersion(w io.Writer) error {
+	version, err := c.query("SELECT version()")
+	if err != nil {
+		return err
+	}
+	if testingOverrideExplainEnvVersion != "" {
+		version = testingOverrideExplainEnvVersion
+	}
+	fmt.Fprintf(w, "-- Version: %s\n", version)
+	return err
+}
+
+// PrintSettings appends information about session settings that can impact
+// planning decisions.
+func (c *stmtEnvCollector) PrintSettings(w io.Writer) error {
+	relevantSettings := []struct {
+		sessionSetting string
+		clusterSetting settings.WritableSetting
+	}{
+		{sessionSetting: "reorder_joins_limit", clusterSetting: ReorderJoinsLimitClusterValue},
+		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode},
+		{sessionSetting: "optimizer_foreign_keys", clusterSetting: optDrivenFKClusterMode},
+	}
+
+	for _, s := range relevantSettings {
+		value, err := c.query(fmt.Sprintf("SHOW %s", s.sessionSetting))
+		if err != nil {
+			return err
+		}
+		// Get the default value for the cluster setting.
+		def := s.clusterSetting.EncodedDefault()
+		// Convert true/false to on/off to match what SHOW returns.
+		switch def {
+		case "true":
+			def = "on"
+		case "false":
+			def = "off"
+		}
+
+		if value == def {
+			fmt.Fprintf(w, "-- %s has the default value: %s\n", s.sessionSetting, value)
+		} else {
+			fmt.Fprintf(w, "SET %s = %s;  -- default value: %s\n", s.sessionSetting, value, def)
+		}
+	}
+	return nil
+}
+
+func (c *stmtEnvCollector) PrintCreateTable(w io.Writer, tn *tree.TableName) error {
+	createStatement, err := c.query(
+		fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s]", tn.String()),
+	)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "%s;\n", createStatement)
+	return nil
+}
+
+func (c *stmtEnvCollector) PrintCreateSequence(w io.Writer, tn *tree.TableName) error {
+	createStatement, err := c.query(fmt.Sprintf(
+		"SELECT create_statement FROM [SHOW CREATE SEQUENCE %s]", tn.String(),
+	))
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "%s;\n", createStatement)
+	return nil
+}
+
+func (c *stmtEnvCollector) PrintCreateView(w io.Writer, tn *tree.TableName) error {
+	createStatement, err := c.query(fmt.Sprintf(
+		"SELECT create_statement FROM [SHOW CREATE VIEW %s]", tn.String(),
+	))
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "%s;\n", createStatement)
+	return nil
+}
+
+func (c *stmtEnvCollector) PrintTableStats(
+	w io.Writer, tn *tree.TableName, hideHistograms bool,
+) error {
+	var maybeRemoveHistoBuckets string
+	if hideHistograms {
+		maybeRemoveHistoBuckets = " - 'histo_buckets'"
+	}
+
+	stats, err := c.query(fmt.Sprintf(
+		`SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+		 FROM (
+			 SELECT json_array_elements(statistics)%s AS stat
+			 FROM [SHOW STATISTICS USING JSON FOR TABLE %s]
+		 )`,
+		maybeRemoveHistoBuckets, tn.String(),
+	))
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "ALTER TABLE %s INJECT STATISTICS '%s';\n", tn.String(), stats)
+	return nil
 }
