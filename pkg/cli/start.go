@@ -524,10 +524,6 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 		return err
 	}
 
-	serverCfg.GoroutineDumpDirName = logOutputDirectory()
-
-	heapProfileDir := filepath.Join(logOutputDirectory(), base.HeapProfileDir)
-	serverCfg.HeapProfileDirName = heapProfileDir
 	// We don't care about GRPCs fairly verbose logs in most client commands,
 	// but when actually starting a server, we enable them.
 	grpcutil.SetSeverity(log.Severity_WARNING)
@@ -1201,11 +1197,15 @@ func setupAndInitializeLoggingAndProfiling(
 		}()
 	}
 
+	// We want to be careful to still produce useful debug dumps if the
+	// server configuration has disabled logging to files.
 	outputDirectory := "."
 	if p := logOutputDirectory(); p != "" {
 		outputDirectory = p
 	}
 	startCtx.backtraceOutputDir = outputDirectory
+	serverCfg.GoroutineDumpDirName = filepath.Join(outputDirectory, base.GoroutineDumpDir)
+	serverCfg.HeapProfileDirName = filepath.Join(outputDirectory, base.HeapProfileDir)
 
 	if ambiguousLogDirs {
 		// Note that we can't report this message earlier, because the log directory
