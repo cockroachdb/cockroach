@@ -654,7 +654,7 @@ project
 opt
 SELECT * FROM (SELECT * FROM xysd LIMIT 10) WHERE EXISTS(SELECT * FROM uv WHERE x=u LIMIT 5)
 ----
-semi-join-apply
+semi-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── cardinality: [0 - 10]
  ├── key: (1)
@@ -668,26 +668,13 @@ semi-join-apply
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
- ├── limit
- │    ├── columns: u:5(int!null)
- │    ├── outer: (1)
- │    ├── cardinality: [0 - 5]
- │    ├── fd: ()-->(5)
- │    ├── select
- │    │    ├── columns: u:5(int!null)
- │    │    ├── outer: (1)
- │    │    ├── fd: ()-->(5)
- │    │    ├── limit hint: 5.00
- │    │    ├── scan uv
- │    │    │    ├── columns: u:5(int)
- │    │    │    ├── limit hint: 5.05
- │    │    │    └── prune: (5)
- │    │    └── filters
- │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
- │    │              ├── variable: x:1 [type=int]
- │    │              └── variable: u:5 [type=int]
- │    └── const: 5 [type=int]
- └── filters (true)
+ ├── scan uv
+ │    ├── columns: u:5(int)
+ │    └── prune: (5)
+ └── filters
+      └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           ├── variable: x:1 [type=int]
+           └── variable: u:5 [type=int]
 
 # Calculate anti-join cardinality when left side has non-zero cardinality.
 opt
@@ -716,7 +703,7 @@ anti-join (hash)
 opt
 SELECT * FROM (SELECT * FROM xysd LIMIT 10) WHERE NOT EXISTS(SELECT * FROM uv WHERE x=u LIMIT 5)
 ----
-anti-join-apply
+anti-join (hash)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  ├── cardinality: [0 - 10]
  ├── key: (1)
@@ -730,26 +717,13 @@ anti-join-apply
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
- ├── limit
- │    ├── columns: u:5(int!null)
- │    ├── outer: (1)
- │    ├── cardinality: [0 - 5]
- │    ├── fd: ()-->(5)
- │    ├── select
- │    │    ├── columns: u:5(int!null)
- │    │    ├── outer: (1)
- │    │    ├── fd: ()-->(5)
- │    │    ├── limit hint: 5.00
- │    │    ├── scan uv
- │    │    │    ├── columns: u:5(int)
- │    │    │    ├── limit hint: 5.05
- │    │    │    └── prune: (5)
- │    │    └── filters
- │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
- │    │              ├── variable: x:1 [type=int]
- │    │              └── variable: u:5 [type=int]
- │    └── const: 5 [type=int]
- └── filters (true)
+ ├── scan uv
+ │    ├── columns: u:5(int)
+ │    └── prune: (5)
+ └── filters
+      └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           ├── variable: x:1 [type=int]
+           └── variable: u:5 [type=int]
 
 # Calculate inner-join cardinality.
 build
