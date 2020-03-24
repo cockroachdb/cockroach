@@ -1713,6 +1713,7 @@ func (s *Server) Start(ctx context.Context) error {
 		mmKnobs,
 		s.NodeID().String(),
 		s.ClusterSettings(),
+		s.jobRegistry,
 	)
 
 	// Start garbage collecting system events.
@@ -1795,6 +1796,12 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Start serving SQL clients.
 	if err := s.startServeSQL(ctx, workersCtx, connManager, pgL); err != nil {
+		return err
+	}
+
+	// Start the async migration to upgrade 19.2-style jobs so they can be run by
+	// the job registry in 20.1.
+	if err := migMgr.StartSchemaChangeJobMigration(ctx); err != nil {
 		return err
 	}
 

@@ -44,6 +44,10 @@ import (
 )
 
 const (
+	// RunningStatusDrainingNames used to indicate that the job was draining names
+	// for dropped descriptors. This constant is now deprecated and only exists
+	// to be used for migrating old jobs.
+	RunningStatusDrainingNames jobs.RunningStatus = "draining names"
 	// RunningStatusWaitingGC is for jobs that are currently in progress and
 	// are waiting for the GC interval to expire
 	RunningStatusWaitingGC jobs.RunningStatus = "waiting for GC TTL"
@@ -1615,7 +1619,11 @@ func (r schemaChangeResumer) Resume(
 
 	// If a database is being dropped, handle this separately by draining names
 	// for all the tables.
-	if details.DroppedDatabaseID != sqlbase.InvalidID {
+	//
+	// This also covers other cases where we have a leftover 19.2 job that drops
+	// multiple tables in a single job (e.g., TRUNCATE on multiple tables), so
+	// it's possible for DroppedDatabaseID to be unset.
+	if details.DroppedDatabaseID != sqlbase.InvalidID || len(details.DroppedTables) > 1 {
 		for i := range details.DroppedTables {
 			droppedTable := &details.DroppedTables[i]
 			if err := execSchemaChange(droppedTable.ID, sqlbase.InvalidMutationID, details.DroppedDatabaseID); err != nil {
@@ -1627,14 +1635,14 @@ func (r schemaChangeResumer) Resume(
 		for i, table := range details.DroppedTables {
 			tablesToGC[i] = jobspb.SchemaChangeGCDetails_DroppedID{ID: table.ID, DropTime: dropTime}
 		}
-		databaseGCDetails := jobspb.SchemaChangeGCDetails{
+		multiTableGCDetails := jobspb.SchemaChangeGCDetails{
 			Tables:   tablesToGC,
 			ParentID: details.DroppedDatabaseID,
 		}
-		return startGCJob(ctx, p.ExecCfg().DB, p.ExecCfg().JobRegistry, r.job.Payload().Username, r.job.Payload().Description, databaseGCDetails)
+		return startGCJob(ctx, p.ExecCfg().DB, p.ExecCfg().JobRegistry, r.job.Payload().Username, r.job.Payload().Description, multiTableGCDetails)
 	}
 	if details.TableID == sqlbase.InvalidID {
-		return errors.AssertionFailedf("job has no database ID or table ID")
+		return errors.AssertionFailedf("schema change has no specified database or table(s)")
 	}
 	return execSchemaChange(details.TableID, details.MutationID, details.DroppedDatabaseID)
 }
