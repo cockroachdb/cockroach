@@ -91,7 +91,7 @@ func (m *manager) ResolveIndeterminateCommit(
 
 	// Launch a single-flight task to recover the transaction. This may be
 	// coalesced with other recovery attempts for the same transaction.
-	log.Eventf(ctx, "recovering txn %s from indeterminate commit", txn.ID.Short())
+	log.VEventf(ctx, 2, "recovering txn %s from indeterminate commit", txn.ID.Short())
 	resC, _ := m.txns.DoChan(txn.ID.String(), func() (interface{}, error) {
 		return m.resolveIndeterminateCommitForTxn(txn)
 	})
@@ -100,9 +100,12 @@ func (m *manager) ResolveIndeterminateCommit(
 	select {
 	case res := <-resC:
 		if res.Err != nil {
+			log.VEventf(ctx, 2, "recovery error: %v", res.Err)
 			return nil, res.Err
 		}
-		return res.Val.(*roachpb.Transaction), nil
+		txn := res.Val.(*roachpb.Transaction)
+		log.VEventf(ctx, 2, "recovered txn %s with status: %s", txn.ID.Short(), txn.Status)
+		return txn, nil
 	case <-ctx.Done():
 		return nil, errors.Wrap(ctx.Err(), "abandoned indeterminate commit recovery")
 	}
