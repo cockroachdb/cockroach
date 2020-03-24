@@ -544,9 +544,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		// ExplainPlan is the default, don't show it.
 		m := ""
 		if t.Options.Mode != tree.ExplainPlan {
-			m, _ = tree.ExplainModeName(t.Options.Mode)
+			m = strings.ToLower(t.Options.Mode.String())
 		}
-		if t.Options.Flags.Contains(tree.ExplainFlagVerbose) {
+		if t.Options.Flags[tree.ExplainFlagVerbose] {
 			if m != "" {
 				m += ", "
 			}

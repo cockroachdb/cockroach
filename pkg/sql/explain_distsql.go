@@ -181,7 +181,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		planCtx.saveDiagram = func(d execinfrapb.FlowDiagram) {
 			diagram = d
 		}
-		planCtx.saveDiagramShowInputTypes = n.options.Flags.Contains(tree.ExplainFlagTypes)
+		planCtx.saveDiagramShowInputTypes = n.options.Flags[tree.ExplainFlagTypes]
 
 		distSQLPlanner.Run(
 			planCtx, newParams.p.txn, &plan, recv, newParams.extendedEvalCtx, nil, /* finishedSetupFn */
@@ -198,7 +198,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		diagram.AddSpans(spans)
 	} else {
 		flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
-		showInputTypes := n.options.Flags.Contains(tree.ExplainFlagTypes)
+		showInputTypes := n.options.Flags[tree.ExplainFlagTypes]
 		diagram, err = execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows, showInputTypes)
 		if err != nil {
 			return err

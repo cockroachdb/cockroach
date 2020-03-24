@@ -21,11 +21,6 @@ import (
 )
 
 func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope *scope) {
-	opts, err := explain.ParseOptions()
-	if err != nil {
-		panic(err)
-	}
-
 	b.pushWithFrame()
 
 	// We don't allow the statement under Explain to reference outer columns, so we
@@ -36,17 +31,17 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 	outScope = inScope.push()
 
 	var cols sqlbase.ResultColumns
-	switch opts.Mode {
+	switch explain.Mode {
 	case tree.ExplainPlan:
 		telemetry.Inc(sqltelemetry.ExplainPlanUseCounter)
-		if opts.Flags.Contains(tree.ExplainFlagVerbose) || opts.Flags.Contains(tree.ExplainFlagTypes) {
+		if explain.Flags[tree.ExplainFlagVerbose] || explain.Flags[tree.ExplainFlagTypes] {
 			cols = sqlbase.ExplainPlanVerboseColumns
 		} else {
 			cols = sqlbase.ExplainPlanColumns
 		}
 
 	case tree.ExplainDistSQL:
-		analyze := opts.Flags.Contains(tree.ExplainFlagAnalyze)
+		analyze := explain.Flags[tree.ExplainFlagAnalyze]
 		if analyze {
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeUseCounter)
 		} else {
@@ -59,7 +54,7 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		cols = sqlbase.ExplainDistSQLColumns
 
 	case tree.ExplainOpt:
-		if opts.Flags.Contains(tree.ExplainFlagVerbose) {
+		if explain.Flags[tree.ExplainFlagVerbose] {
 			telemetry.Inc(sqltelemetry.ExplainOptVerboseUseCounter)
 		} else {
 			telemetry.Inc(sqltelemetry.ExplainOptUseCounter)
@@ -78,7 +73,7 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 
 	input := stmtScope.expr.(memo.RelExpr)
 	private := memo.ExplainPrivate{
-		Options:  opts,
+		Options:  explain.ExplainOptions,
 		ColList:  colsToColList(outScope.cols),
 		Props:    stmtScope.makePhysicalProps(),
 		StmtType: explain.Statement.StatementType(),
