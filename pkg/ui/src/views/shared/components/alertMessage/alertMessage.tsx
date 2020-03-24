@@ -17,6 +17,7 @@ import "./alertMessage.styl";
 
 interface AlertMessageProps extends AlertInfo {
   autoClose: boolean;
+  autoCloseTimeout: number;
   closable: boolean;
   dismiss(): void;
 }
@@ -56,14 +57,15 @@ const getIconType = (alertLevel: AlertLevel): string => {
 export class AlertMessage extends React.Component<AlertMessageProps> {
   static defaultProps = {
     closable: true,
+    autoCloseTimeout: 6000,
   };
 
   timeoutHandler: number;
 
   componentDidMount() {
-    const { autoClose, dismiss } = this.props;
+    const { autoClose, dismiss, autoCloseTimeout } = this.props;
     if (autoClose) {
-      this.timeoutHandler = setTimeout(dismiss, 6000);
+      this.timeoutHandler = setTimeout(dismiss, autoCloseTimeout);
     }
   }
 

@@ -18,6 +18,7 @@ import { clusterIdSelector } from "src/redux/nodes";
 import { LocalSetting } from "src/redux/localsettings";
 
 import "./emailSubscription.styl";
+import { emailSubscriptionAlertLocalSetting } from "oss/src/redux/alerts";
 
 type EmailSubscriptionProps = MapDispatchToProps & MapStateToProps;
 
@@ -27,7 +28,12 @@ class EmailSubscription extends React.Component<EmailSubscriptionProps> {
   }
 
   handlePanelHide = () => {
+    this.props.dismissAlertMessage();
     this.props.hidePanel();
+  }
+
+  componentWillUnmount() {
+    this.props.dismissAlertMessage();
   }
 
   render() {
@@ -68,11 +74,13 @@ const hidePanelLocalSetting = new LocalSetting<AdminUIState, boolean>(
 interface MapDispatchToProps {
   signUpForEmailSubscription: (clusterId: string, email: string) => void;
   hidePanel: () => void;
+  dismissAlertMessage: () => void;
 }
 
 const mapDispatchToProps = {
   signUpForEmailSubscription,
   hidePanel: () => hidePanelLocalSetting.set(true),
+  dismissAlertMessage: () => emailSubscriptionAlertLocalSetting.set(false),
 };
 
 interface MapStateToProps {
