@@ -152,11 +152,13 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 		return err
 	}
 
-	// Run the CHECK constraints, if any. CheckHelper will either evaluate the
-	// constraints itself, or else inspect boolean columns from the input that
+	// Verify the CHECK constraints by inspecting boolean columns from the input that
 	// contain the results of evaluation.
 	if !n.run.checkOrds.Empty() {
-		ord := len(rowVals) - n.run.checkOrds.Len()
+		ord := len(n.run.insertCols) + len(n.run.tw.fetchCols) + len(n.run.tw.updateCols)
+		if n.run.tw.canaryOrdinal != -1 {
+			ord++
+		}
 		checkVals := rowVals[ord:]
 		if err := checkMutationInput(n.run.tw.tableDesc(), n.run.checkOrds, checkVals); err != nil {
 			return err
