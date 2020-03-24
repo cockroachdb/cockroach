@@ -27,7 +27,7 @@ import (
 )
 
 // setExplainBundleResult creates the diagnostics and returns the bundle
-// information for an EXPLAIN BUNDLE statement.
+// information for an EXPLAIN ANALYZE (DEBUG) statement.
 //
 // Returns an error if information rows couldn't be added to the result.
 func setExplainBundleResult(
@@ -38,8 +38,8 @@ func setExplainBundleResult(
 	plan *planTop,
 	execCfg *ExecutorConfig,
 ) error {
-	res.ResetStmtType(&tree.ExplainBundle{})
-	res.SetColumns(ctx, sqlbase.ExplainBundleColumns)
+	res.ResetStmtType(&tree.ExplainAnalyzeDebug{})
+	res.SetColumns(ctx, sqlbase.ExplainAnalyzeDebugColumns)
 
 	traceJSON, bundle, err := getTraceAndBundle(trace, plan)
 	if err != nil {

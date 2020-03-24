@@ -150,9 +150,45 @@ func (node *Explain) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Statement)
 }
 
+// ExplainAnalyzeDebug represents an EXPLAIN ANALYZE (DEBUG) statement. It is a
+// different node type than Explain to allow easier special treatment in the SQL
+// layer.
+type ExplainAnalyzeDebug struct {
+	Statement Statement
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ExplainAnalyzeDebug) Format(ctx *FmtCtx) {
+	ctx.WriteString("EXPLAIN ANALYZE (DEBUG) ")
+	ctx.FormatNode(node.Statement)
+}
+
 // MakeExplain parses the EXPLAIN option strings and generates an explain
 // statement.
 func MakeExplain(options []string, stmt Statement) (Statement, error) {
+	for i := range options {
+		options[i] = strings.ToUpper(options[i])
+	}
+	find := func(o string) bool {
+		for i := range options {
+			if options[i] == o {
+				return true
+			}
+		}
+		return false
+	}
+
+	if find("DEBUG") {
+		if !find("ANALYZE") {
+			return nil, pgerror.Newf(pgcode.Syntax, "DEBUG flag can only be used with EXPLAIN ANALYZE")
+		}
+		if len(options) != 2 {
+			return nil, pgerror.Newf(
+				pgcode.Syntax, "EXPLAIN ANALYZE (DEBUG) cannot be used in conjunction with other flags")
+		}
+		return &ExplainAnalyzeDebug{Statement: stmt}, nil
+	}
+
 	var opts ExplainOptions
 	for _, opt := range options {
 		opt = strings.ToUpper(opt)
@@ -177,16 +213,4 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 		ExplainOptions: opts,
 		Statement:      stmt,
 	}, nil
-}
-
-// ExplainBundle represents an EXPLAIN BUNDLE statement. It is a different node
-// type than Explain to allow easier special treatment in the SQL layer.
-type ExplainBundle struct {
-	Statement Statement
-}
-
-// Format implements the NodeFormatter interface.
-func (node *ExplainBundle) Format(ctx *FmtCtx) {
-	ctx.WriteString("EXPLAIN BUNDLE ")
-	ctx.FormatNode(node.Statement)
 }

@@ -2699,10 +2699,6 @@ explain_stmt:
       return setErr(sqllex, err)
     }
   }
-| EXPLAIN BUNDLE preparable_stmt
-  {
-    $$.val = &tree.ExplainBundle{Statement: $3.stmt()}
-  }
 // This second error rule is necessary, because otherwise
 // preparable_stmt also provides "selectclause := '(' error ..." and
 // cause a help text for the select clause, which will be confusing in
