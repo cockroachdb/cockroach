@@ -19,7 +19,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -959,161 +958,61 @@ func (e *urlOutputter) finish() (url.URL, error) {
 	}, nil
 }
 
-// environmentQuery is a helper to run a query to build up the output of
-// showEnv. It expects a query that returns a single string column.
-func (ef *execFactory) environmentQuery(query string) (string, error) {
-	r, err := ef.planner.extendedEvalCtx.InternalExecutor.(*InternalExecutor).QueryRowEx(
-		ef.planner.EvalContext().Context,
-		"EXPLAIN (env)",
-		ef.planner.Txn(),
-		sqlbase.InternalExecutorSessionDataOverride{},
-		query,
-	)
-	if err != nil {
-		return "", err
-	}
-
-	if len(r) != 1 {
-		return "", errors.AssertionFailedf(
-			"expected env query %q to return a single column, returned %d",
-			query,
-			len(r),
-		)
-	}
-
-	s, ok := r[0].(*tree.DString)
-	if !ok {
-		return "", errors.AssertionFailedf(
-			"expected env query %q to return a DString, returned %T",
-			query,
-			r[0],
-		)
-	}
-
-	return string(*s), nil
-}
-
-var testingOverrideExplainEnvVersion string
-
-// TestingOverrideExplainEnvVersion overrides the version reported by
-// EXPLAIN (OPT, ENV). Used for testing.
-func TestingOverrideExplainEnvVersion(ver string) func() {
-	prev := testingOverrideExplainEnvVersion
-	testingOverrideExplainEnvVersion = ver
-	return func() { testingOverrideExplainEnvVersion = prev }
-}
-
 // showEnv implements EXPLAIN (opt, env). It returns a node which displays
 // the environment a query was run in.
 func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.Node, error) {
 	var out urlOutputter
 
+	c := makeStmtEnvCollector(
+		ef.planner.EvalContext().Context,
+		ef.planner.extendedEvalCtx.InternalExecutor.(*InternalExecutor),
+	)
+
 	// Show the version of Cockroach running.
-	version, err := ef.environmentQuery("SELECT version()")
-	if err != nil {
+	if err := c.PrintVersion(&out.buf); err != nil {
 		return nil, err
 	}
-	if testingOverrideExplainEnvVersion != "" {
-		version = testingOverrideExplainEnvVersion
-	}
-	out.writef("-- Version: %s\n", version)
-
+	out.writef("")
 	// Show the values of any non-default session variables that can impact
 	// planning decisions.
-	relevantSettings := []struct {
-		sessionSetting string
-		clusterSetting settings.WritableSetting
-	}{
-		{sessionSetting: "reorder_joins_limit", clusterSetting: ReorderJoinsLimitClusterValue},
-		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode},
-		{sessionSetting: "optimizer_foreign_keys", clusterSetting: optDrivenFKClusterMode},
+	if err := c.PrintSettings(&out.buf); err != nil {
+		return nil, err
 	}
-
-	for _, s := range relevantSettings {
-		value, err := ef.environmentQuery(fmt.Sprintf("SHOW %s", s.sessionSetting))
-		if err != nil {
-			return nil, err
-		}
-		// Get the default value for the cluster setting.
-		def := s.clusterSetting.EncodedDefault()
-		// Convert true/false to on/off to match what SHOW returns.
-		switch def {
-		case "true":
-			def = "on"
-		case "false":
-			def = "off"
-		}
-
-		if value == def {
-			out.writef("-- %s has the default value: %s", s.sessionSetting, value)
-		} else {
-			out.writef("SET %s = %s;  -- default value: %s", s.sessionSetting, value, def)
-		}
-	}
-	out.writef("")
 
 	// Show the definition of each referenced catalog object.
-	for _, tn := range envOpts.Sequences {
-		createStatement, err := ef.environmentQuery(
-			fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE SEQUENCE %s]", tn.String()),
-		)
-		if err != nil {
+	for i := range envOpts.Sequences {
+		out.writef("")
+		if err := c.PrintCreateSequence(&out.buf, &envOpts.Sequences[i]); err != nil {
 			return nil, err
 		}
-
-		out.writef("%s;\n", createStatement)
 	}
 
 	// TODO(justin): it might also be relevant in some cases to print the create
 	// statements for tables referenced via FKs in these tables.
-	for _, tn := range envOpts.Tables {
-		createStatement, err := ef.environmentQuery(
-			fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s]", tn.String()),
-		)
-		if err != nil {
+	for i := range envOpts.Tables {
+		out.writef("")
+		if err := c.PrintCreateTable(&out.buf, &envOpts.Tables[i]); err != nil {
 			return nil, err
 		}
-
-		out.writef("%s;\n", createStatement)
+		out.writef("")
 
 		// In addition to the schema, it's important to know what the table
 		// statistics on each table are.
 
-		// NOTE: The histogram buckets take up a ton of vertical space and we
-		// don't use them in planning, so don't include them.
-		// TODO(justin): Revisit this once we use histograms in planning.
-		stats, err := ef.environmentQuery(
-			fmt.Sprintf(
-				`
-SELECT
-	jsonb_pretty(COALESCE(json_agg(stat), '[]'))
-FROM
-	(
-		SELECT
-			json_array_elements(statistics) - 'histo_buckets' AS stat
-		FROM
-			[SHOW STATISTICS USING JSON FOR TABLE %s]
-	)
-`,
-				tn.String(),
-			),
-		)
+		// NOTE: We don't include the histograms because they take up a ton of
+		// vertical space. Unfortunately this means that in some cases we won't be
+		// able to reproduce a particular plan.
+		err := c.PrintTableStats(&out.buf, &envOpts.Tables[i], true /* hideHistograms */)
 		if err != nil {
 			return nil, err
 		}
-
-		out.writef("ALTER TABLE %s INJECT STATISTICS '%s';\n", tn.String(), stats)
 	}
 
-	for _, tn := range envOpts.Views {
-		createStatement, err := ef.environmentQuery(
-			fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE VIEW %s]", tn.String()),
-		)
-		if err != nil {
+	for i := range envOpts.Views {
+		out.writef("")
+		if err := c.PrintCreateView(&out.buf, &envOpts.Views[i]); err != nil {
 			return nil, err
 		}
-
-		out.writef("%s;\n", createStatement)
 	}
 
 	// Show the query running. Note that this is the *entire* query, including

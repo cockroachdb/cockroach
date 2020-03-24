@@ -225,15 +225,18 @@ func (ex *connExecutor) execStmtInOpenState(
 			// Note that in case of implicit transactions, the trace contains the auto-commit too.
 			sp.Finish()
 			trace := tracing.GetRecording(sp)
-			traceJSON, bundle, collectionErr := getTraceAndBundle(trace, &p.curPlan)
+			ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
 			if finishCollectionDiagnostics != nil {
+				traceJSON, bundle, collectionErr := getTraceAndBundle(
+					origCtx, ex.server.cfg.DB, ie, trace, &p.curPlan,
+				)
 				finishCollectionDiagnostics(origCtx, traceJSON, bundle, collectionErr)
 			} else {
 				// Handle EXPLAIN BUNDLE.
 				// If there was a communication error, no point in setting any results.
 				if retErr == nil {
 					retErr = setExplainBundleResult(
-						origCtx, res, stmt.AST, trace, &p.curPlan, ex.server.cfg,
+						origCtx, res, stmt.AST, trace, &p.curPlan, ie, ex.server.cfg,
 					)
 				}
 			}
