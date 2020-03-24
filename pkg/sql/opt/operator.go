@@ -15,6 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // Operator describes the type of operation that a memo expression performs.
@@ -270,26 +272,66 @@ func BoolOperatorRequiresNotNullArgs(op Operator) bool {
 // {foo,NULL,bar}.
 func AggregateIgnoresNulls(op Operator) bool {
 	switch op {
-	case AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp, CorrOp, CountOp, MaxOp, MinOp,
-		SumIntOp, SumOp, SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstNotNullAggOp,
-		AnyNotNullAggOp, StringAggOp:
+
+	case AnyNotNullAggOp, AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp,
+		ConstNotNullAggOp, CorrOp, CountOp, MaxOp, MinOp, SqrDiffOp, StdDevOp,
+		StringAggOp, SumOp, SumIntOp, VarianceOp, XorAggOp:
 		return true
+
+	case ArrayAggOp, ConcatAggOp, ConstAggOp, CountRowsOp, FirstAggOp, JsonAggOp,
+		JsonbAggOp:
+		return false
+
+	default:
+		panic(errors.AssertionFailedf("unhandled op %s", log.Safe(op)))
 	}
-	return false
 }
 
 // AggregateIsNullOnEmpty returns true if the given aggregate operator returns
-// NULL when the input set contains no values. This group of aggregates overlaps
-// considerably with the AggregateIgnoresNulls group, with the notable exception
-// of COUNT, which returns zero instead of NULL when its input is empty.
+// NULL when the input set contains no values. This group of aggregates turns
+// out to be the inverse of AggregateIsNeverNull in practice.
 func AggregateIsNullOnEmpty(op Operator) bool {
 	switch op {
-	case AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp, CorrOp, MaxOp, MinOp, SumIntOp,
-		SumOp, SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstAggOp, ConstNotNullAggOp, ArrayAggOp,
-		ConcatAggOp, JsonAggOp, JsonbAggOp, AnyNotNullAggOp, StringAggOp:
+
+	case AnyNotNullAggOp, ArrayAggOp, AvgOp, BitAndAggOp,
+		BitOrAggOp, BoolAndOp, BoolOrOp, ConcatAggOp, ConstAggOp,
+		ConstNotNullAggOp, CorrOp, FirstAggOp, JsonAggOp, JsonbAggOp,
+		MaxOp, MinOp, SqrDiffOp, StdDevOp, StringAggOp, SumOp, SumIntOp,
+		VarianceOp, XorAggOp:
 		return true
+
+	case CountOp, CountRowsOp:
+		return false
+
+	default:
+		panic(errors.AssertionFailedf("unhandled op %s", log.Safe(op)))
 	}
-	return false
+}
+
+// AggregateIsNeverNullOnNonNullInput returns true if the given aggregate
+// operator never returns NULL when the input set contains at least one non-NULL
+// value. This is true of most aggregates.
+//
+// For multi-input aggregations, returns true if the aggregate is never NULL
+// when all inputs have at least a non-NULL value (though not necessarily on the
+// same input row).
+func AggregateIsNeverNullOnNonNullInput(op Operator) bool {
+	switch op {
+
+	case AnyNotNullAggOp, ArrayAggOp, AvgOp, BitAndAggOp,
+		BitOrAggOp, BoolAndOp, BoolOrOp, ConcatAggOp, ConstAggOp,
+		ConstNotNullAggOp, CountOp, CountRowsOp, FirstAggOp,
+		JsonAggOp, JsonbAggOp, MaxOp, MinOp, SqrDiffOp,
+		StringAggOp, SumOp, SumIntOp, XorAggOp:
+		return true
+
+	case VarianceOp, StdDevOp, CorrOp:
+		// These aggregations return NULL if they are given a single not-NULL input.
+		return false
+
+	default:
+		panic(errors.AssertionFailedf("unhandled op %s", log.Safe(op)))
+	}
 }
 
 // AggregateIsNeverNull returns true if the given aggregate operator never

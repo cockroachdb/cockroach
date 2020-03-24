@@ -566,4 +566,4 @@ count                               ·                      ·                  
                           └── scan  ·                      ·                                      (x, y, z)                        +y,+z
 ·                                   table                  source@source_y_z_idx                  ·                                ·
 ·                                   spans                  /NULL-/!NULL /1-                       ·                                ·
-·                                   filter                 ((y IS NULL) OR (y > 0)) AND (x != 1)  ·                                ·
+·                                   filter                 x != 1                                 ·                                ·

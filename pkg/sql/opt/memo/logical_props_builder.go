@@ -486,11 +486,13 @@ func (b *logicalPropsBuilder) buildGroupingExprProps(groupExpr RelExpr, rel *pro
 			continue
 		}
 
-		// All PG aggregate functions return a non-NULL result if they have at
-		// least one input row, and if all argument values are non-NULL.
-		inputCols := ExtractAggInputColumns(agg)
-		if inputCols.SubsetOf(inputProps.NotNullCols) {
-			rel.NotNullCols.Add(item.Col)
+		// Most aggregate functions return a non-NULL result if they have at least
+		// one input row with non-NULL argument value, and if all argument values are non-NULL.
+		if opt.AggregateIsNeverNullOnNonNullInput(agg.Op()) {
+			inputCols := ExtractAggInputColumns(agg)
+			if inputCols.SubsetOf(inputProps.NotNullCols) {
+				rel.NotNullCols.Add(item.Col)
+			}
 		}
 	}
 
