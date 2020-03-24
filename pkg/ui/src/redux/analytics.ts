@@ -202,9 +202,9 @@ export class AnalyticsSync {
       const props = {
         pagePath,
         ...properties,
-      }
+      };
 
-      const message = { 
+      const message = {
         userId: cluster_id,
         properties: { ...props },
         ...rest,
