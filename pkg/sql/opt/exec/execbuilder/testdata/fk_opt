@@ -853,3 +853,27 @@ count                  ·            ·
 ·                      auto commit  ·
 ·                      FK check     nonunique_idx_parent@nonunique_idx_parent_k2_idx
 ·                      size         3 columns, 1 row
+
+# Regression test for #46397: upserter was looking at the incorrect ordinal for
+# the check because of an extra input column used by the FK check.
+statement ok
+CREATE TABLE t46397_parent(p INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE t46397_child (
+  c INT PRIMARY KEY,
+  p INT DEFAULT 0 REFERENCES t46397_parent (p),
+  CONSTRAINT foo CHECK (c != 1)
+)
+
+statement error failed to satisfy CHECK constraint
+UPSERT INTO t46397_child(c) VALUES (1)
+
+statement error upsert on table "t46397_child" violates foreign key constraint "fk_p_ref_t46397_parent"
+UPSERT INTO t46397_child(c) VALUES (2)
+
+statement ok
+INSERT INTO t46397_parent VALUES (0)
+
+statement ok
+UPSERT INTO t46397_child(c) VALUES (2)
