@@ -425,8 +425,12 @@ func TestStatusGetFiles(t *testing.T) {
 	t.Run("goroutines", func(t *testing.T) {
 		const testFilesNo = 3
 		for i := 0; i < testFilesNo; i++ {
-			testFile := filepath.Join(storeSpec.Path, "logs", goroutinesDir, fmt.Sprintf("goroutine_dump%d.txt.gz", i))
-			if err := ioutil.WriteFile(testFile, []byte(fmt.Sprintf("Goroutine dump %d", i)), 0644); err != nil {
+			testGoroutineDir := filepath.Join(storeSpec.Path, "logs", base.GoroutineDumpDir)
+			testGoroutineFile := filepath.Join(testGoroutineDir, fmt.Sprintf("goroutine_dump%d.txt.gz", i))
+			if err := os.MkdirAll(testGoroutineDir, os.ModePerm); err != nil {
+				t.Fatal(err)
+			}
+			if err := ioutil.WriteFile(testGoroutineFile, []byte(fmt.Sprintf("Goroutine dump %d", i)), 0644); err != nil {
 				t.Fatal(err)
 			}
 		}
