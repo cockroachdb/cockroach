@@ -92,10 +92,6 @@ const (
 	// omittedKeyStr is the string returned in place of a key when keys aren't
 	// permitted in responses.
 	omittedKeyStr = "omitted (due to the 'server.remote_debugging.mode' setting)"
-
-	// goroutineDir is the directory name where the goroutinedumper stores
-	// goroutine dumps.
-	goroutinesDir = "goroutine_dump"
 )
 
 var (
@@ -718,11 +714,14 @@ func (s *statusServer) GetFiles(
 	//TODO(ridwanmsharif): Serve logfiles so debug-zip can fetch them
 	// intead of reading indididual entries.
 	case serverpb.FileType_HEAP: // Requesting for saved Heap Profiles.
-		dir = filepath.Join(s.admin.server.cfg.HeapProfileDirName, base.HeapProfileDir)
+		dir = s.admin.server.cfg.HeapProfileDirName
 	case serverpb.FileType_GOROUTINES: // Requesting for saved Goroutine dumps.
-		dir = filepath.Join(s.admin.server.cfg.GoroutineDumpDirName, goroutinesDir)
+		dir = s.admin.server.cfg.GoroutineDumpDirName
 	default:
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "unknown file type: %s", req.Type)
+	}
+	if dir == "" {
+		return nil, grpcstatus.Errorf(codes.Unimplemented, "dump directory not configured: %s", req.Type)
 	}
 	var resp serverpb.GetFilesResponse
 	for _, pattern := range req.Patterns {
