@@ -15,7 +15,16 @@ import moment from "moment";
 import { Action, Dispatch } from "redux";
 import Long from "long";
 
-import { Button, ColumnsConfig, DownloadFile, DownloadFileRef, Table, Text, TextTypes } from "src/components";
+import {
+  Button,
+  ColumnsConfig,
+  columnSorterFactory,
+  DownloadFile,
+  DownloadFileRef,
+  Table,
+  Text,
+  TextTypes,
+} from "src/components";
 import HeaderSection from "src/views/shared/components/headerSection";
 import { AdminUIState } from "src/redux/state";
 import { getStatementDiagnostics } from "src/util/api";
@@ -33,12 +42,7 @@ import "./statementDiagnosticsHistoryView.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequest;
-import {
-  getDiagnosticsStatus,
-  sortByCompletedField,
-  sortByRequestedAtField,
-  sortByStatementFingerprintField,
-} from "src/views/statements/diagnostics";
+import { getDiagnosticsStatus } from "src/views/statements/diagnostics";
 
 type StatementDiagnosticsHistoryViewProps = MapStateToProps & MapDispatchToProps;
 
@@ -47,7 +51,7 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
     {
       key: "activatedOn",
       title: "Activated on",
-      sorter: sortByRequestedAtField,
+      sorter: columnSorterFactory<IStatementDiagnosticsReport>(value => value?.requested_at?.seconds?.toNumber()),
       defaultSortOrder: "descend",
       width: "240px",
       render: (_text, record) => {
@@ -58,7 +62,7 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
     {
       key: "statement",
       title: "statement",
-      sorter: sortByStatementFingerprintField,
+      sorter: columnSorterFactory<IStatementDiagnosticsReport>("statement_fingerprint"),
       render: (_text, record) => (
         <Text textType={TextTypes.Code}>{record.statement_fingerprint}</Text>
       ),
@@ -66,7 +70,7 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
     {
       key: "status",
       title: "status",
-      sorter: sortByCompletedField,
+      sorter: columnSorterFactory<IStatementDiagnosticsReport>(value => value?.completed ? 1 : -1),
       width: "160px",
       render: (_text, record) => (
         <Text>

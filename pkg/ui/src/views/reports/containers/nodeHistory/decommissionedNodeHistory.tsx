@@ -27,7 +27,7 @@ import { SortSetting } from "src/views/shared/components/sortabletable";
 import { LocalSetting } from "src/redux/localsettings";
 
 import "./decommissionedNodeHistory.styl";
-import { ColumnsConfig, Table, Text } from "src/components";
+import { ColumnsConfig, columnSorterFactory, Table, Text } from "src/components";
 import { createSelector } from "reselect";
 
 const decommissionedNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
@@ -47,24 +47,12 @@ export interface DecommissionedNodeHistoryProps {
   dataSource: DecommissionedNodeStatusRow[];
 }
 
-const sortByNodeId = (a: DecommissionedNodeStatusRow, b: DecommissionedNodeStatusRow) => {
-  if (a.nodeId < b.nodeId) { return -1; }
-  if (a.nodeId > b.nodeId) { return 1; }
-  return 0;
-};
-
-const sortByDecommissioningDate = (a: DecommissionedNodeStatusRow, b: DecommissionedNodeStatusRow) => {
-  if (a.decommissionedDate.isBefore(b.decommissionedDate)) { return -1; }
-  if (a.decommissionedDate.isAfter(b.decommissionedDate)) { return 1; }
-  return 0;
-};
-
 export class DecommissionedNodeHistory extends React.Component<DecommissionedNodeHistoryProps> {
   columns: ColumnsConfig<DecommissionedNodeStatusRow> = [
     {
       key: "id",
       title: "ID",
-      sorter: sortByNodeId,
+      sorter: columnSorterFactory<DecommissionedNodeStatusRow>("nodeId"),
       render: (_text, record) => (
         <Text>{`n${record.nodeId}`}</Text>
       ),
@@ -72,7 +60,7 @@ export class DecommissionedNodeHistory extends React.Component<DecommissionedNod
     {
       key: "address",
       title: "Address",
-      sorter: true,
+      sorter: columnSorterFactory<DecommissionedNodeStatusRow>("address"),
       render: (_text, record) => (
         <Link to={`/node/${record.nodeId}`}>
           <Text>{record.address}</Text>
@@ -81,7 +69,7 @@ export class DecommissionedNodeHistory extends React.Component<DecommissionedNod
     {
       key: "decommissionedOn",
       title: "Decommissioned On",
-      sorter: sortByDecommissioningDate,
+      sorter: columnSorterFactory<DecommissionedNodeStatusRow>(value => value?.decommissionedDate?.toDate().getTime()),
       render: (_text, record) => {
         return record.decommissionedDate.format("LL[ at ]h:mm a");
       },
