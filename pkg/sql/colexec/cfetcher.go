@@ -714,19 +714,10 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				prefixLen := len(rf.machine.lastRowPrefix)
 				remainingBytes := rf.machine.nextKV.Key[prefixLen:]
 				origRemainingBytesLen := len(remainingBytes)
-				for _, colID := range rf.table.index.ExtraColumnIDs {
-					colIdx, ok := rf.table.colIdxMap.get(colID)
-					if !ok {
-						return nil, errors.Errorf("column id %d was in index.ExtraColumnIDs but not in colIdxMap", colID)
-					}
+				for range rf.table.index.ExtraColumnIDs {
 					var err error
 					// Slice off an extra encoded column from remainingBytes.
-					remainingBytes, err = sqlbase.SkipTableKey(
-						&rf.table.cols[colIdx].Type,
-						remainingBytes,
-						// Extra columns are always stored in ascending order.
-						sqlbase.IndexDescriptor_ASC,
-					)
+					remainingBytes, err = sqlbase.SkipTableKey(remainingBytes)
 					if err != nil {
 						return nil, err
 					}

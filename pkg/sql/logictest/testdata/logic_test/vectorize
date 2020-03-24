@@ -1188,3 +1188,13 @@ query I
 SELECT max(t1.rowid) FROM t1 WHERE t1.c0
 ----
 0
+
+# Regression for #46183.
+statement ok
+CREATE TABLE t46183 (x INT PRIMARY KEY, y JSONB, INVERTED INDEX (y));
+INSERT INTO t46183 VALUES (1, '{"y": "hello"}')
+
+query I
+SELECT count(*) FROM t46183 WHERE y->'y' = to_jsonb('hello')
+----
+1

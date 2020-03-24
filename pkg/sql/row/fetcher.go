@@ -690,16 +690,10 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 		// is that the extra columns are not always there, and are used to unique-ify
 		// the index key, rather than provide the primary key column values.
 		if foundNull && rf.currentTable.isSecondaryIndex && rf.currentTable.index.Unique && len(rf.currentTable.desc.Families) != 1 {
-			for _, colID := range rf.currentTable.index.ExtraColumnIDs {
-				colIdx := rf.currentTable.colIdxMap[colID]
+			for range rf.currentTable.index.ExtraColumnIDs {
 				var err error
 				// Slice off an extra encoded column from rf.keyRemainingBytes.
-				rf.keyRemainingBytes, err = sqlbase.SkipTableKey(
-					&rf.currentTable.cols[colIdx].Type,
-					rf.keyRemainingBytes,
-					// Extra columns are always stored in ascending order.
-					sqlbase.IndexDescriptor_ASC,
-				)
+				rf.keyRemainingBytes, err = sqlbase.SkipTableKey(rf.keyRemainingBytes)
 				if err != nil {
 					return false, err
 				}
