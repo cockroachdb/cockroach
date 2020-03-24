@@ -459,3 +459,48 @@ func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 		require.Equal(t, expReason, pErr.GetDetail().(*roachpb.TransactionRetryError).Reason)
 	})
 }
+
+// Test that parallel commits are inhibited on retries (i.e. after a successful
+// refresh caused by a parallel-commit batch). See comments in the interceptor
+// about why this is necessary.
+func TestTxnCommitterNoParallelCommitsOnRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	tc, mockSender := makeMockTxnCommitter()
+	defer tc.stopper.Stop(ctx)
+
+	txn := makeTxnProto()
+	keyA := roachpb.Key("a")
+
+	var ba roachpb.BatchRequest
+	ba.Header = roachpb.Header{Txn: &txn}
+	putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
+	etArgs := roachpb.EndTxnRequest{Commit: true}
+	putArgs.Sequence = 1
+	etArgs.Sequence = 2
+	etArgs.InFlightWrites = []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}
+
+	// Pretend that this is a retry of the request (after a successful refresh). Having the key
+	// assigned is how the interceptor distinguishes retries.
+	etArgs.Key = keyA
+
+	ba.Add(&putArgs, &etArgs)
+
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Len(t, ba.Requests, 2)
+		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+
+		et := ba.Requests[1].GetInner().(*roachpb.EndTxnRequest)
+		require.True(t, et.Commit)
+		require.Len(t, et.InFlightWrites, 0, "expected parallel commit to be inhibited")
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Txn.Status = roachpb.COMMITTED
+		return br, nil
+	})
+
+	_, pErr := tc.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+}
