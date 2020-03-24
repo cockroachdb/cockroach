@@ -537,16 +537,8 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 
 	// Now perform additional configuration tweaks specific to the start
 	// command.
-	//
-	// This includes propagating server flags dependent on the
-	// flags specified for the command.
-	if err := security.SetCertPrincipalMap(startCtx.serverCertPrincipalMap); err != nil {
-		return err
-	}
-	serverCfg.Insecure = startCtx.serverInsecure
-	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
-	serverCfg.User = security.NodeUser
-	// As well as derived temporary/auxiliary directory specifications.
+
+	// Derive temporary/auxiliary directory specifications.
 	if serverCfg.Settings.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
 		return err
 	}
@@ -554,8 +546,12 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	// this store directory in a past run. If this check fails for any reason,
 	// use RocksDB as the default engine type.
 	serverCfg.StorageEngine = resolveStorageEngineType(serverCfg.StorageEngine, serverCfg.Stores.Specs[0].Path)
-	// Find a StoreSpec that has encryption at rest turned on. If can't find
-	// one, use the first StoreSpec in the list.
+
+	// Next we initialize the target directory for temporary storage.
+	// If encryption at rest is enabled in any fashion, we'll want temp
+	// storage to be encrypted too. To achieve this, we use
+	// the first encrypted store as temp dir target, if any.
+	// If we can't find one, we use the first StoreSpec in the list.
 	var specIdx = 0
 	for i := range serverCfg.Stores.Specs {
 		if serverCfg.Stores.Specs[i].ExtraOptions != nil {
