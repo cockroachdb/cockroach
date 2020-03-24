@@ -2211,13 +2211,10 @@ func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb
 func (s *Server) startSampleEnvironment(ctx context.Context, frequency time.Duration) {
 	// Immediately record summaries once on server startup.
 	ctx = s.AnnotateCtx(ctx)
-	goroutineDumper, err := goroutinedumper.NewGoroutineDumper(s.cfg.GoroutineDumpDirName)
-	if err != nil {
-		log.Infof(ctx, "Could not start goroutine dumper worker due to: %s", err)
-	}
 
-	// We're not going to take heap profiles if running with in-memory stores.
-	// This helps some tests that can't write any files.
+	// We're not going to take heap profiles or goroutine dumps if
+	// running only with in-memory stores.  This helps some tests that
+	// can't write any files.
 	allStoresInMem := true
 	for _, storeSpec := range s.cfg.Stores.Specs {
 		if !storeSpec.InMemory {
@@ -2226,15 +2223,29 @@ func (s *Server) startSampleEnvironment(ctx context.Context, frequency time.Dura
 		}
 	}
 
+	var goroutineDumper *goroutinedumper.GoroutineDumper
 	var heapProfiler *heapprofiler.HeapProfiler
-	if s.cfg.HeapProfileDirName != "" && !allStoresInMem {
-		if err := os.MkdirAll(s.cfg.HeapProfileDirName, 0755); err != nil {
-			log.Fatalf(ctx, "Could not create heap profiles dir: %s", err)
+
+	if !allStoresInMem {
+		var err error
+		if s.cfg.GoroutineDumpDirName != "" {
+			if err := os.MkdirAll(s.cfg.GoroutineDumpDirName, 0755); err != nil {
+				log.Fatalf(ctx, "could not create goroutine dump dir: %v", err)
+			}
+			goroutineDumper, err = goroutinedumper.NewGoroutineDumper(s.cfg.GoroutineDumpDirName)
+			if err != nil {
+				log.Infof(ctx, "could not start goroutine dumper worker: %v", err)
+			}
 		}
-		heapProfiler, err = heapprofiler.NewHeapProfiler(
-			s.cfg.HeapProfileDirName, s.ClusterSettings())
-		if err != nil {
-			log.Fatalf(ctx, "Could not start heap profiler worker due to: %s", err)
+
+		if s.cfg.HeapProfileDirName != "" {
+			if err := os.MkdirAll(s.cfg.HeapProfileDirName, 0755); err != nil {
+				log.Fatalf(ctx, "could not create heap profiles dir: %v", err)
+			}
+			heapProfiler, err = heapprofiler.NewHeapProfiler(s.cfg.HeapProfileDirName, s.ClusterSettings())
+			if err != nil {
+				log.Fatalf(ctx, "could not start heap profiler worker: %v", err)
+			}
 		}
 	}
 
