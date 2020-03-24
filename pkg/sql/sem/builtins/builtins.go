@@ -160,9 +160,9 @@ func newEncodeError(c rune, enc string) error {
 // For use in other packages, see AllBuiltinNames and GetBuiltinProperties().
 var builtins = map[string]builtinDefinition{
 	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
-	"length":           lengthImpls,
-	"char_length":      lengthImpls,
-	"character_length": lengthImpls,
+	"length":           lengthImpls(true /* includeBitOverload */),
+	"char_length":      lengthImpls(false /* includeBitOverload */),
+	"character_length": lengthImpls(false /* includeBitOverload */),
 
 	"bit_length": makeBuiltin(tree.FunctionProperties{Category: categoryString},
 		stringOverload1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
@@ -170,7 +170,10 @@ var builtins = map[string]builtinDefinition{
 		}, types.Int, "Calculates the number of bits used to represent `val`."),
 		bytesOverload1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
 			return tree.NewDInt(tree.DInt(len(s) * 8)), nil
-		}, types.Int, "Calculates the number of bits in `val`."),
+		}, types.Int, "Calculates the number of bits used to represent `val`."),
+		bitsOverload1(func(_ *tree.EvalContext, s *tree.DBitArray) (tree.Datum, error) {
+			return tree.NewDInt(tree.DInt(s.BitArray.BitLen())), nil
+		}, types.Int, "Calculates the number of bits used to represent `val`."),
 	),
 
 	"octet_length": makeBuiltin(tree.FunctionProperties{Category: categoryString},
@@ -179,7 +182,10 @@ var builtins = map[string]builtinDefinition{
 		}, types.Int, "Calculates the number of bytes used to represent `val`."),
 		bytesOverload1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
 			return tree.NewDInt(tree.DInt(len(s))), nil
-		}, types.Int, "Calculates the number of bytes in `val`."),
+		}, types.Int, "Calculates the number of bytes used to represent `val`."),
+		bitsOverload1(func(_ *tree.EvalContext, s *tree.DBitArray) (tree.Datum, error) {
+			return tree.NewDInt(tree.DInt((s.BitArray.BitLen() + 7) / 8)), nil
+		}, types.Int, "Calculates the number of bits used to represent `val`."),
 	),
 
 	// TODO(pmattis): What string functions should also support types.Bytes?
@@ -3859,14 +3865,25 @@ may increase either contention or retry errors, or both.`,
 	),
 }
 
-var lengthImpls = makeBuiltin(tree.FunctionProperties{Category: categoryString},
-	stringOverload1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-		return tree.NewDInt(tree.DInt(utf8.RuneCountInString(s))), nil
-	}, types.Int, "Calculates the number of characters in `val`."),
-	bytesOverload1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-		return tree.NewDInt(tree.DInt(len(s))), nil
-	}, types.Int, "Calculates the number of bytes in `val`."),
-)
+var lengthImpls = func(incBitOverload bool) builtinDefinition {
+	b := makeBuiltin(tree.FunctionProperties{Category: categoryString},
+		stringOverload1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			return tree.NewDInt(tree.DInt(utf8.RuneCountInString(s))), nil
+		}, types.Int, "Calculates the number of characters in `val`."),
+		bytesOverload1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			return tree.NewDInt(tree.DInt(len(s))), nil
+		}, types.Int, "Calculates the number of bytes in `val`."),
+	)
+	if incBitOverload {
+		b.overloads = append(
+			b.overloads,
+			bitsOverload1(func(_ *tree.EvalContext, s *tree.DBitArray) (tree.Datum, error) {
+				return tree.NewDInt(tree.DInt(s.BitArray.BitLen())), nil
+			}, types.Int, "Calculates the number of bits in `val`."),
+		)
+	}
+	return b
+}
 
 var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryString},
 	tree.Overload{
@@ -4713,6 +4730,19 @@ func bytesOverload1(
 		ReturnType: tree.FixedReturnType(returnType),
 		Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			return f(evalCtx, string(*args[0].(*tree.DBytes)))
+		},
+		Info: info,
+	}
+}
+
+func bitsOverload1(
+	f func(*tree.EvalContext, *tree.DBitArray) (tree.Datum, error), returnType *types.T, info string,
+) tree.Overload {
+	return tree.Overload{
+		Types:      tree.ArgTypes{{"val", types.VarBit}},
+		ReturnType: tree.FixedReturnType(returnType),
+		Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			return f(evalCtx, args[0].(*tree.DBitArray))
 		},
 		Info: info,
 	}
