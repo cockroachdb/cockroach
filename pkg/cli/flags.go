@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -323,6 +324,7 @@ func init() {
 		// TODO(knz): remove in 20.2.
 		StringFlag(f, &serverCfg.SocketFile, cliflags.Socket, serverCfg.SocketFile)
 		_ = f.MarkDeprecated(cliflags.Socket.Name, "use the --socket-dir and --listen-addr flags instead")
+		BoolFlag(f, &startCtx.unencryptedLocalhostHTTP, cliflags.UnencryptedLocalhostHTTP, startCtx.unencryptedLocalhostHTTP)
 
 		// Backward-compatibility flags.
 
@@ -625,7 +627,7 @@ func init() {
 	BoolFlag(demoFlags, &demoCtx.geoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas, false)
 	VarFlag(demoFlags, demoNodeSQLMemSizeValue, cliflags.DemoNodeSQLMemSize)
 	VarFlag(demoFlags, demoNodeCacheSizeValue, cliflags.DemoNodeCacheSize)
-	BoolFlag(demoFlags, &demoCtx.insecure, cliflags.ServerInsecure, true)
+	BoolFlag(demoFlags, &demoCtx.insecure, cliflags.ServerInsecure, false)
 	BoolFlag(demoFlags, &demoCtx.disableLicenseAcquisition, cliflags.DemoNoLicense, false)
 	// Mark the --global flag as hidden until we investigate it more.
 	BoolFlag(demoFlags, &demoCtx.simulateLatency, cliflags.Global, false)
@@ -712,7 +714,16 @@ func registerEnvVarDefault(f *pflag.FlagSet, flagInfo cliflags.FlagInfo) {
 	}
 }
 
+// extraServerFlagInit configures the server.Config based on the command-line flags.
+// It is only called when the command being ran is one of the start commands.
 func extraServerFlagInit(cmd *cobra.Command) error {
+	if err := security.SetCertPrincipalMap(startCtx.serverCertPrincipalMap); err != nil {
+		return err
+	}
+	serverCfg.User = security.NodeUser
+	serverCfg.Insecure = startCtx.serverInsecure
+	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
+
 	// Construct the main RPC listen address.
 	serverCfg.Addr = net.JoinHostPort(startCtx.serverListenAddr, serverListenPort)
 
@@ -774,6 +785,29 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	// Fill in the defaults for --http-addr.
 	if serverHTTPAddr == "" {
 		serverHTTPAddr = startCtx.serverListenAddr
+	}
+	if startCtx.unencryptedLocalhostHTTP {
+		// If --unencrypted-localhost-http was specified, we want to
+		// override whatever was specified or derived from other flags for
+		// the host part of --http-addr.
+		//
+		// Before we do so, we'll check whether the user explicitly
+		// specified something contradictory, and tell them that's no
+		// good.
+		if (fs.Lookup(cliflags.ListenHTTPAddr.Name).Changed ||
+			fs.Lookup(cliflags.ListenHTTPAddrAlias.Name).Changed) &&
+			(serverHTTPAddr != "" && serverHTTPAddr != "localhost") {
+			return errors.WithHintf(
+				errors.Newf("--unencrypted-localhost-http is incompatible with --http-addr=%s:%s",
+					serverHTTPAddr, serverHTTPPort),
+				`When --unencrypted-localhost-http is specified, use --http-addr=:%s or omit --http-addr entirely.`, serverHTTPPort)
+		}
+
+		// Now do the override proper.
+		serverHTTPAddr = "localhost"
+		// We then also tell the server to disable TLS for the HTTP
+		// listener.
+		serverCfg.DisableTLSForHTTP = true
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
 

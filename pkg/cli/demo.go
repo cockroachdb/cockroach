@@ -298,6 +298,7 @@ func testServerArgsForTransientCluster(nodeID roachpb.NodeID, joinAddr string) b
 			fmt.Sprintf("%s/demo-node%d", startCtx.backtraceOutputDir, nodeID),
 		),
 		JoinAddr:          joinAddr,
+		DisableTLSForHTTP: true,
 		StoreSpecs:        []base.StoreSpec{storeSpec},
 		SQLMemoryPoolSize: demoCtx.sqlPoolMemorySize,
 		CacheSize:         demoCtx.cacheSize,

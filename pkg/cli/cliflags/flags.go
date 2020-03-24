@@ -506,6 +506,15 @@ An IPv6 address can also be specified with the notation [...], for
 example [::1]:8080 or [fe80::f6f2:::]:8080.`,
 	}
 
+	UnencryptedLocalhostHTTP = FlagInfo{
+		Name: "unencrypted-localhost-http",
+		Description: `
+When specified, restricts HTTP connections to localhost-only and disables
+TLS for the HTTP interface. The hostname part of --http-addr, if specified,
+is then ignored. This flag is intended for use to facilitate
+local testing without requiring certificate setups in web browsers.`,
+	}
+
 	LocalityAdvertiseAddr = FlagInfo{
 		Name: "locality-advertise-addr",
 		Description: `
