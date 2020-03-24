@@ -73,13 +73,13 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		// descriptors and such).
 		return opc.flags, nil
 
-	case *tree.ExplainBundle:
+	case *tree.ExplainAnalyzeDebug:
 		// This statement returns result columns but does not support placeholders,
 		// and we don't want to do anything during prepare.
 		if len(p.semaCtx.Placeholders.Types) != 0 {
 			return 0, errors.Errorf("%s does not support placeholders", stmt.AST.StatementTag())
 		}
-		stmt.Prepared.Columns = sqlbase.ExplainBundleColumns
+		stmt.Prepared.Columns = sqlbase.ExplainAnalyzeDebugColumns
 		return opc.flags, nil
 	}
 
