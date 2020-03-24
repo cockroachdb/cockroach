@@ -1499,21 +1499,6 @@ func (st *SessionTracing) TraceExecEnd(ctx context.Context, err error, count int
 	}
 }
 
-// extractMsgFromRecord extracts the message of the event, which is either in an
-// "event" or "error" field.
-func extractMsgFromRecord(rec tracing.LogRecord) string {
-	for _, f := range rec.Fields {
-		key := f.Key
-		if key == "event" {
-			return f.Value
-		}
-		if key == "error" {
-			return fmt.Sprint("error:", f.Value)
-		}
-	}
-	return "<event missing in trace message>"
-}
-
 const (
 	// span_idx    INT NOT NULL,        -- The span's index.
 	traceSpanIdxCol = iota
@@ -1765,7 +1750,7 @@ func getMessagesForSubtrace(
 			allLogs = append(allLogs,
 				logRecordRow{
 					timestamp: logTime,
-					msg:       extractMsgFromRecord(span.Logs[i]),
+					msg:       span.Logs[i].Msg(),
 					span:      span,
 					// Add 1 to the index to account for the first dummy message in a
 					// span.

@@ -490,7 +490,7 @@ func (s *span) LogFields(fields ...otlog.Field) {
 		// TODO(radu): when LightStep supports arbitrary fields, we should make
 		// the formatting of the message consistent with that. Until then we treat
 		// legacy events that just have an "event" key specially.
-		if len(fields) == 1 && fields[0].Key() == "event" {
+		if len(fields) == 1 && fields[0].Key() == LogMessageField {
 			s.netTr.LazyPrintf("%s", fields[0].Value())
 		} else {
 			var buf bytes.Buffer
@@ -565,12 +565,12 @@ func (s *span) Tracer() opentracing.Tracer {
 
 // LogEvent is part of the opentracing.Span interface. Deprecated.
 func (s *span) LogEvent(event string) {
-	s.LogFields(otlog.String("event", event))
+	s.LogFields(otlog.String(LogMessageField, event))
 }
 
 // LogEventWithPayload is part of the opentracing.Span interface. Deprecated.
 func (s *span) LogEventWithPayload(event string, payload interface{}) {
-	s.LogFields(otlog.String("event", event), otlog.Object("payload", payload))
+	s.LogFields(otlog.String(LogMessageField, event), otlog.Object("payload", payload))
 }
 
 // Log is part of the opentracing.Span interface. Deprecated.
