@@ -1,0 +1,30 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+@require '~styl/base/palette.styl'
+
+.crl-tabs
+  .ant-tabs-bar
+    border-bottom 1px solid $grey2
+  .ant-tabs-tab
+    font-family SourceSansPro-Regular
+    font-size 16px
+    line-height 1.5
+    letter-spacing normal
+    color $placeholder
+    &:hover
+      color $adminui-grey-1 
+  .ant-tabs-tab-active
+    color $adminui-grey-1 
+  .ant-tabs-ink-bar
+    height 3px
+    border-radius 40px
+    background-color $blue

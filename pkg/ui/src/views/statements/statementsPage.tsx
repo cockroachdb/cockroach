@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Icon, Pagination } from "antd";
+import { Icon } from "antd";
 import _ from "lodash";
 import moment from "moment";
 import { DATE_FORMAT } from "src/util/format";
@@ -42,6 +42,7 @@ import {
 } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
+import { Pagination } from "src/components/pagination";
 
 import "./statements.styl";
 

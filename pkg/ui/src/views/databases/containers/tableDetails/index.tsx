@@ -8,11 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Col, Row, Tabs } from "antd";
-import { Highlight } from "oss/src/views/shared/components/sql/highlight";
-import { SummaryCard } from "oss/src/views/shared/components/summaryCard";
-import { selectStatements } from "oss/src/views/statements/statementsPage";
-import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "oss/src/views/statements/statementsTable";
+import { Col, Row } from "antd";
+import { Highlight } from "src/views/shared/components/sql/highlight";
+import { SummaryCard } from "src/views/shared/components/summaryCard";
+import { selectStatements } from "src/views/statements/statementsPage";
+import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "src/views/statements/statementsTable";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
@@ -27,10 +27,11 @@ import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import "./styles.styl";
-const { TabPane } = Tabs;
 import { getMatchParamByName } from "src/util/query";
 import { databaseDetails } from "../databaseSummary";
-import { Button, BackIcon } from "oss/src/components/button";
+import { Button, BackIcon } from "src/components/button";
+import { Tabs, TabPane } from "src/components/tabs";
+import { PageHeader } from "oss/src/components";
 
 class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.IGrant> {}
 
@@ -113,7 +114,7 @@ export class TableMain extends React.Component<TableMainProps, {}> {
       return (
         <div>
           <Helmet title={`${title} Table | Databases`} />
-          <div className="page--header">
+          <PageHeader>
             <Button
               onClick={this.prevPage}
               type="flat"
@@ -124,12 +125,12 @@ export class TableMain extends React.Component<TableMainProps, {}> {
             >
               Databases
             </Button>
-            <div className="database-summary-title">
-              <h2 className="base-heading">{ title }</h2>
-            </div>
+          </PageHeader>
+          <div className="database-summary-title">
+            <h2 className="base-heading">{ title }</h2>
           </div>
           <section className="section section--container table-details">
-            <Tabs defaultActiveKey="1" className="cockroach--tabs">
+            <Tabs defaultActiveKey="1">
               <TabPane tab="Overview" key="1">
                 <Row gutter={16}>
                   <Col className="gutter-row" span={16}>

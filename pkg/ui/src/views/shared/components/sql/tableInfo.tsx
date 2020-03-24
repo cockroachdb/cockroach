@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Tooltip } from "antd";
 import React from "react";
 import { connect } from "react-redux";
 import { Link } from "react-router-dom";
@@ -20,6 +19,7 @@ import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import { selectTableInfo } from "src/views/databases/containers/tableDetails";
 import { TableInfo } from "src/views/databases/data/tableInfo";
 import { Highlight } from "./highlight";
+import { Tooltip } from "src/components";
 
 interface TableInfoComponentProps {
   title: any;

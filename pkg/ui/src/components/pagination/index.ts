@@ -8,11 +8,4 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-@require nib
-
-@require 'base/layout-vars.styl'
-@require 'base/palette.styl'
-@require 'base/typography.styl'
-@require 'base/reset.styl'
-
-@require 'pages/reports.styl'
+export * from "./pagination";

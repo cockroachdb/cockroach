@@ -10,7 +10,7 @@
 
 import _ from "lodash";
 import moment from "moment";
-import { queryByName, queryToObj, queryToString } from "oss/src/util/query";
+import { queryByName, queryToObj, queryToString } from "src/util/query";
 import React from "react";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -24,7 +24,7 @@ import Dropdown, { ArrowDirection, DropdownOption } from "src/views/shared/compo
 import TimeFrameControls from "../../components/controls";
 import RangeSelect, { DateTypes } from "../../components/range";
 import "./timescale.styl";
-import { Divider } from "antd";
+import { Divider } from "src/components/divider";
 
 // Tracks whether the default timescale been set once in the app. Tracked across
 // the entire app so that changing pages doesn't cause it to reset.

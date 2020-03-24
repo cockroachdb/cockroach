@@ -8,8 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Checkbox, Divider } from "antd";
-import Dropdown, { DropdownOption } from "oss/src/views/shared/components/dropdown";
+import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import React from "react";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
@@ -17,6 +16,8 @@ import { getMatchParamByName } from "src/util/query";
 import { NetworkFilter, NetworkSort } from "..";
 import { Filter } from "../filter";
 import "./sort.styl";
+import { Divider } from "src/components/divider";
+import { Checkbox } from "src/components/checkbox";
 
 interface ISortProps {
   onChangeFilter: (key: string, value: string) => void;

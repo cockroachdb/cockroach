@@ -8,11 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-@require nib
+import { Divider as AntdDivider } from "antd";
+import { DividerProps } from "antd/lib/divider";
+import * as React from "react";
+import "./divider.styl";
 
-@require 'base/layout-vars.styl'
-@require 'base/palette.styl'
-@require 'base/typography.styl'
-@require 'base/reset.styl'
-
-@require 'pages/reports.styl'
+export const Divider = (props: DividerProps) => {
+  return (
+    <AntdDivider {...props} />
+  );
+};

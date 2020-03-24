@@ -8,11 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-@require nib
+import { Pagination as AntdPagination } from "antd";
+import { PaginationProps } from "antd/lib/pagination";
+import * as React from "react";
+import "./pagination.styl";
 
-@require 'base/layout-vars.styl'
-@require 'base/palette.styl'
-@require 'base/typography.styl'
-@require 'base/reset.styl'
-
-@require 'pages/reports.styl'
+export const Pagination = (props: PaginationProps) => {
+  return (
+    <AntdPagination {...props} />
+  );
+};

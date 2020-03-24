@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-@require nib
+@require '~src/components/core/index.styl'
+@require '~styl/base/palette.styl'
 
-@require 'base/layout-vars.styl'
-@require 'base/palette.styl'
-@require 'base/typography.styl'
-@require 'base/reset.styl'
-
-@require 'pages/reports.styl'
+.ant-divider
+  background $button-border-color
+  margin-left 0
+  margin-right 22px
+  &.ant-divider-vertical
+    height auto

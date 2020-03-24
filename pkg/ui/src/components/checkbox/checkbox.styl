@@ -1,0 +1,34 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+@require '~styl/base/palette.styl'
+
+.ant-checkbox-wrapper
+  &:hover
+    .ant-checkbox-inner
+      border solid 1px $checkbox-border-hover
+      background $popover-border-color
+  .ant-checkbox-inner
+    border solid 1px $checkbox-border
+    border-radius 3px
+  .ant-checkbox-checked
+    &:hover
+      .ant-checkbox-inner
+        border solid 1px $link
+        background $link
+    .ant-checkbox-inner
+      background-color $link
+  span
+    font-family SourceSansPro-SemiBold
+    font-size 14px
+    line-height 1.71
+    letter-spacing 0.1px
+    color $popover-color

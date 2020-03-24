@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Drawer, Button, Divider } from "antd";
+import { Drawer, Button } from "antd";
 import { Link } from "react-router-dom";
+import { Divider } from "src/components/divider";
 
 interface IDrawerProps {
   visible: boolean;

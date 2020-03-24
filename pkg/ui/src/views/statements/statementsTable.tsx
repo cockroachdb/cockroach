@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Tooltip } from "antd";
 import getHighlightedText from "oss/src/util/highlightedText";
 import React from "react";
 import { Link } from "react-router-dom";
@@ -18,7 +17,7 @@ import { FixLong } from "src/util/fixLong";
 import { StatementSummary, summarize } from "src/util/sql/summarize";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { countBarChart, latencyBarChart, retryBarChart, rowsBarChart } from "./barCharts";
-import { Anchor } from "src/components";
+import { Anchor, Tooltip } from "src/components";
 import "./statements.styl";
 import { DiagnosticStatusBadge } from "oss/src/views/statements/diagnostics/diagnosticStatusBadge";
 import { cockroach } from "src/js/protos";

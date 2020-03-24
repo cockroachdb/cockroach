@@ -30,6 +30,7 @@ import JobsResponse = cockroach.server.serverpb.JobsResponse;
 import { Button, BackIcon } from "src/components/button";
 import { DATE_FORMAT } from "src/util/format";
 import { JobStatusCell } from "./jobStatusCell";
+import { PageHeader } from "src/components";
 
 interface JobsTableProps extends RouteComponentProps {
   status: string;
@@ -93,7 +94,7 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
     return (
       <div className="job-details">
         <Helmet title={ "Details | Job" } />
-        <div className="section page--header">
+        <PageHeader>
           <Button
             onClick={this.prevPage}
             type="flat"
@@ -104,8 +105,8 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
           >
             Jobs
           </Button>
-          <h1 className="page--header__title">{`Job ID: ${String(getMatchParamByName(match, "id"))}`}</h1>
-        </div>
+        </PageHeader>
+        <h1 className="page--header__title">{`Job ID: ${String(getMatchParamByName(match, "id"))}`}</h1>
         <section className="section section--container">
           <Loading
             loading={_.isNil(job)}

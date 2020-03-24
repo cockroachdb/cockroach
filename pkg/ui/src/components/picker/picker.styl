@@ -1,0 +1,114 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+@require '~styl/base/palette.styl'
+
+body, .crl-picker-container
+  .ant-time-picker
+    width 100%
+  .ant-input, .ant-time-picker-input
+    height 40px
+    padding 0px 11px
+    border-radius 3px
+    border solid 1px $button-border-color
+    &:focus
+      border solid 1px $link-color
+      box-shadow none
+    &:hover
+      border-color $link-color
+
+  .ant-time-picker-panel-combobox
+    display flex
+
+  .ant-calendar-picker:hover .ant-calendar-picker-input:not(.ant-input-disabled)
+    border-color $link-color
+
+  .ant-fullcalendar-header
+    padding: 10px 4px
+    text-align: center
+
+  .ant-fullcalendar
+    font-size 12px
+    font-family Lato-Regular
+
+  .ant-fullcalendar-selected-day
+    .ant-fullcalendar-date
+      background #eff5fe
+      color #3a7ce1
+      &:hover
+        background #e0efff
+        color $blue-color
+
+  .ant-fullcalendar-today 
+    &.ant-fullcalendar-date
+      color #3a7ce1
+      border-color #3a7ce1
+      &:hover
+        background #eff5fd
+    &.ant-fullcalendar-selected-day
+      .ant-fullcalendar-date
+        background #eff5fd
+        &:hover
+          background $grey4
+          font-weight bold
+    &.ant-fullcalendar-disabled-cell
+      .ant-fullcalendar-date
+        background #E7ECF3
+        &:hover
+          background #E7ECF3
+
+  .ant-fullcalendar-date, .ant-time-picker-panel li
+    color #5F6C87
+    font-family Lato-Regular
+    font-size 12px
+    &.ant-time-picker-panel-addon-option-disabled
+      color #a3a5af
+    &:hover
+      background #f6f6f6
+    &:focus
+      color $link-color
+
+  .ant-time-picker-panel li
+    display flex
+    align-items center
+
+  .ant-fullcalendar-disabled-cell .ant-fullcalendar-date
+    background #E7ECF3
+
+  .ant-fullcalendar-disabled-cell.ant-fullcalendar-today .ant-fullcalendar-date
+    color #a3a5af
+    font-weight bold
+    border-color transparent
+    &:before
+      border 1px solid #a3a5af
+
+  .ant-btn-default, .ant-calendar-today-btn 
+    width 100%
+    font-family Lato-Bold
+    color $link-color
+    text-align center
+    font-size 14px
+    margin 0
+    padding 0
+    text-transform none
+    border: 0;
+    span
+      line-height 1.71
+      letter-spacing 0.1px
+
+  .ant-btn:focus
+    color: $link-color
+
+  .ant-btn:after
+    display: none !important;
+
+  .ant-btn-background-ghost
+    box-shadow: none
