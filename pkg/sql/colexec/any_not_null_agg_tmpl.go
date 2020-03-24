@@ -206,7 +206,8 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 		// underlying memory overwritten) on the next batches.
 		a.curAgg = append(a.curAgg[:0], execgen.UNSAFEGET(col, i)...)
 		// {{ else }}
-		a.curAgg = execgen.UNSAFEGET(col, i)
+		val := execgen.UNSAFEGET(col, i)
+		execgen.COPYVAL(a.curAgg, val)
 		// {{ end }}
 		a.foundNonNullForCurrentGroup = true
 	}
