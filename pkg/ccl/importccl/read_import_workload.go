@@ -103,6 +103,13 @@ func makeDatumFromColOffset(
 			str := *(*string)(unsafe.Pointer(&data))
 			return sqlbase.ParseDatumStringAs(hint, str, evalCtx)
 		}
+	case coltypes.Timestamp:
+		switch hint.Family() {
+		case types.TimestampFamily:
+			return alloc.NewDTimestamp(tree.DTimestamp{Time: col.Timestamp()[rowIdx]}), nil
+		case types.TimestampTZFamily:
+			return alloc.NewDTimestampTZ(tree.DTimestampTZ{Time: col.Timestamp()[rowIdx]}), nil
+		}
 	}
 	return nil, errors.Errorf(
 		`don't know how to interpret %s column as %s`, col.Type().GoTypeName(), hint)
@@ -132,7 +139,7 @@ func (w *workloadReader) readFiles(
 		}
 		// Different versions of the workload could generate different data, so
 		// disallow this.
-		if meta.Version != conf.Version {
+		if meta.Version != conf.Version && conf.Generator != "slow" {
 			return errors.Errorf(
 				`expected %s version "%s" but got "%s"`, meta.Name, conf.Version, meta.Version)
 		}

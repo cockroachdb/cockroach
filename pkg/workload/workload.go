@@ -289,6 +289,12 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 					datums[rowIdx*numCols+colIdx] = datum
 				}
 			}
+		case coltypes.Timestamp:
+			for rowIdx, datum := range col.Timestamp()[:numRows] {
+				if !nulls.NullAt(rowIdx) {
+					datums[rowIdx*numCols+colIdx] = datum
+				}
+			}
 		case coltypes.Bytes:
 			// HACK: workload's Table schemas are SQL schemas, but the initial data is
 			// returned as a coldata.Batch, which has a more limited set of coltypes.
