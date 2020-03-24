@@ -474,8 +474,10 @@ requesting data for debug/nodes/1/enginestats... writing: debug/nodes/1/enginest
 requesting stacks for node 1... writing: debug/nodes/1/stacks.txt
 requesting threads for node 1... writing: debug/nodes/1/threads.txt
 requesting heap profile for node 1... writing: debug/nodes/1/heap.pprof
-requesting heap files for node 1... 0 found
-requesting goroutine files for node 1... 0 found
+requesting heap files for node 1... writing: debug/nodes/1/heapprof
+  ^- resulted in ...
+requesting goroutine files for node 1... writing: debug/nodes/1/goroutines
+  ^- resulted in ...
 requesting log file ...
 requesting list of SQL databases... writing: debug/schema
   ^- resulted in ...
@@ -582,8 +584,10 @@ requesting data for debug/nodes/1/enginestats... writing: debug/nodes/1/enginest
 requesting stacks for node 1... writing: debug/nodes/1/stacks.txt
 requesting threads for node 1... writing: debug/nodes/1/threads.txt
 requesting heap profile for node 1... writing: debug/nodes/1/heap.pprof
-requesting heap files for node 1... 0 found
-requesting goroutine files for node 1... 0 found
+requesting heap files for node 1... writing: debug/nodes/1/heapprof
+  ^- resulted in ...
+requesting goroutine files for node 1... writing: debug/nodes/1/goroutines
+  ^- resulted in ...
 requesting log file ...
 requesting ranges... 32 found
 writing: debug/nodes/1/ranges/1.json
@@ -690,8 +694,10 @@ requesting data for debug/nodes/3/enginestats... writing: debug/nodes/3/enginest
 requesting stacks for node 3... writing: debug/nodes/3/stacks.txt
 requesting threads for node 3... writing: debug/nodes/3/threads.txt
 requesting heap profile for node 3... writing: debug/nodes/3/heap.pprof
-requesting heap files for node 3... 0 found
-requesting goroutine files for node 3... 0 found
+requesting heap files for node 3... writing: debug/nodes/3/heapprof
+  ^- resulted in ...
+requesting goroutine files for node 3... writing: debug/nodes/3/goroutines
+  ^- resulted in ...
 requesting log file ...
 requesting ranges... 32 found
 writing: debug/nodes/3/ranges/1.json
