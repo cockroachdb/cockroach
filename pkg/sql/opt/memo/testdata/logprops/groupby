@@ -308,3 +308,41 @@ group-by
       │    └── variable: z:3 [type=float]
       └── const-agg [as=x:1, type=int, outer=(1)]
            └── variable: x:1 [type=int]
+
+
+# Even with non-NULL input, some aggregates can still be NULL.
+build
+SELECT variance(x), stddev(x), corr(x, y)
+FROM xyzs
+GROUP BY x, y
+----
+project
+ ├── columns: variance:5(decimal) stddev:6(decimal) corr:7(float)
+ ├── prune: (5-7)
+ └── group-by
+      ├── columns: x:1(int!null) y:2(int) variance:5(decimal) stddev:6(decimal) corr:7(float)
+      ├── grouping columns: x:1(int!null) y:2(int)
+      ├── key: (1)
+      ├── fd: (1)-->(2,5-7)
+      ├── prune: (5-7)
+      ├── interesting orderings: (+1)
+      ├── project
+      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── prune: (1,2)
+      │    ├── interesting orderings: (+1)
+      │    └── scan xyzs
+      │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+      │         ├── key: (1)
+      │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │         ├── prune: (1-4)
+      │         └── interesting orderings: (+1) (-4,+3,+1)
+      └── aggregations
+           ├── variance [as=variance:5, type=decimal, outer=(1)]
+           │    └── variable: x:1 [type=int]
+           ├── std-dev [as=stddev:6, type=decimal, outer=(1)]
+           │    └── variable: x:1 [type=int]
+           └── corr [as=corr:7, type=float, outer=(1,2)]
+                ├── variable: x:1 [type=int]
+                └── variable: y:2 [type=int]

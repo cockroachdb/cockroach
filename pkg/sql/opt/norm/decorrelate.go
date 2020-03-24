@@ -482,7 +482,11 @@ func (c *CustomFuncs) AggsCanBeDecorrelated(aggs memo.AggregationsExpr) bool {
 	for i := range aggs {
 		agg := aggs[i].Agg
 		op := agg.Op()
-		if op != opt.CountRowsOp && !opt.AggregateIgnoresNulls(op) && !opt.AggregateIsNullOnEmpty(op) {
+		if op == opt.AggFilterOp || op == opt.AggDistinctOp {
+			// TODO(radu): investigate if we can do better here
+			return false
+		}
+		if !(op == opt.CountRowsOp || opt.AggregateIgnoresNulls(op) || opt.AggregateIsNullOnEmpty(op)) {
 			return false
 		}
 	}
