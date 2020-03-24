@@ -28,11 +28,12 @@ import { LocalSetting } from "src/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { LongToMoment } from "src/util/convert";
 import { INodeStatus, MetricConstants } from "src/util/proto";
-import { ColumnsConfig, Table, Text, TextTypes, Tooltip } from "src/components";
+import { ColumnsConfig, Table, Text, TextTypes, Tooltip, Badge, BadgeProps } from "src/components";
 import { Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";
 import { LocalityTier } from "src/redux/localities";
+import { switchExhaustiveCheck } from "src/util/switchExhaustiveCheck";
 
 import TableSection from "./tableSection";
 import "./nodes.styl";
@@ -50,6 +51,7 @@ const decommissionedNodesSortSetting = new LocalSetting<AdminUIState, SortSettin
 enum AggregatedNodeStatus {
   LIVE = 6,
   WARNING = 7,
+  DEAD = 8,
 }
 
 // Represents the aggregated dataset with possibly nested items
@@ -121,6 +123,31 @@ const getStatusDescription = (status: LivenessStatus) => {
     default:
       return "This node has not recently reported as being live. " +
         "It may not be functioning correctly, but no automatic action has yet been taken.";
+  }
+};
+
+const getBadgeTypeByNodeStatus = (status: LivenessStatus | AggregatedNodeStatus): BadgeProps["status"] => {
+  switch (status) {
+    case LivenessStatus.UNKNOWN:
+      return "warning";
+    case LivenessStatus.DEAD:
+      return "danger";
+    case LivenessStatus.UNAVAILABLE:
+      return "warning";
+    case LivenessStatus.LIVE:
+      return "default";
+    case LivenessStatus.DECOMMISSIONING:
+      return "warning";
+    case LivenessStatus.DECOMMISSIONED:
+      return "default";
+    case AggregatedNodeStatus.LIVE:
+      return "default";
+    case AggregatedNodeStatus.WARNING:
+      return "warning";
+    case AggregatedNodeStatus.DEAD:
+      return "danger";
+    default:
+      return switchExhaustiveCheck(status);
   }
 };
 
@@ -250,25 +277,37 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     {
       key: "status",
       render: (_text, record) => {
-        let status: string;
+        let badgeText: string;
         let tooltipText: string;
+        const badgeType = getBadgeTypeByNodeStatus(record.status);
 
         switch (record.status) {
+          case AggregatedNodeStatus.DEAD:
+            badgeText = "warning";
+            break;
           case AggregatedNodeStatus.LIVE:
           case AggregatedNodeStatus.WARNING:
-            status = _.capitalize(AggregatedNodeStatus[record.status]);
+            badgeText = AggregatedNodeStatus[record.status];
+            break;
+          case LivenessStatus.UNKNOWN:
+          case LivenessStatus.UNAVAILABLE:
+            badgeText = "suspect";
+            tooltipText = getStatusDescription(record.status);
             break;
           default:
-            status = _.capitalize(LivenessStatus[record.status]);
+            badgeText = LivenessStatus[record.status];
             tooltipText = getStatusDescription(record.status);
             break;
         }
         return (
-          <Text
-            className={`status-column status-column--color-${status.toLowerCase()}`}
-            textType={TextTypes.BodyStrong}>
-            { tooltipText ? (<Tooltip title={tooltipText}>{status}</Tooltip>) : status }
-          </Text>
+          <Badge
+            status={badgeType}
+            text={
+              <Tooltip title={tooltipText}>
+                {badgeText}
+              </Tooltip>
+            }
+          />
         );
       },
       title: "status",
@@ -330,16 +369,17 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
       key: "status",
       title: "status",
       render: (_text, record) => {
-        const status = _.capitalize(LivenessStatus[record.status]);
+        const badgeText = _.capitalize(LivenessStatus[record.status]);
         const tooltipText = getStatusDescription(record.status);
         return (
-          <Text
-            className={`status-column status-column--color-${status.toLowerCase()}`}
-            textType={TextTypes.Body}>
-            <Tooltip title={tooltipText}>
-              {status}
-            </Tooltip>
-          </Text>
+          <Badge
+            status="default"
+            text={
+              <Tooltip title={tooltipText}>
+                {badgeText}
+              </Tooltip>
+            }
+          />
         );
       },
     },
@@ -413,6 +453,24 @@ export const liveNodesTableDataSelector = createSelector(
         const tiers = getNodeLocalityTiers(firstNodeInGroup);
         const lastTier = _.last(tiers);
 
+        const getLocalityStatus = () => {
+          const nodesByStatus = _.groupBy(nestedRows, (row: NodeStatusRow) => row.status);
+
+          // Return DEAD status if at least one node is dead;
+          if (!_.isEmpty(nodesByStatus[LivenessStatus.DEAD])) {
+            return AggregatedNodeStatus.DEAD;
+          }
+
+          // Return WARNING status if at least one node is decommissioning or suspected;
+          if (!_.isEmpty(nodesByStatus[LivenessStatus.DECOMMISSIONING])
+            || !_.isEmpty(nodesByStatus[LivenessStatus.UNKNOWN])
+            || !_.isEmpty(nodesByStatus[LivenessStatus.UNAVAILABLE])) {
+            return AggregatedNodeStatus.WARNING;
+          }
+
+          return AggregatedNodeStatus.LIVE;
+        };
+
         return {
           key: `${regionKey}`,
           region: lastTier?.value,
@@ -424,8 +482,7 @@ export const liveNodesTableDataSelector = createSelector(
           usedMemory: _.sum(nestedRows.map(nr => nr.usedMemory)),
           availableMemory: _.sum(nestedRows.map(nr => nr.availableMemory)),
           numCpus: _.sum(nestedRows.map(nr => nr.numCpus)),
-          status: nestedRows.every(nestedRow => nestedRow.status === LivenessStatus.LIVE) ?
-            AggregatedNodeStatus.LIVE : AggregatedNodeStatus.WARNING,
+          status: getLocalityStatus(),
           children: nestedRows,
         };
       })

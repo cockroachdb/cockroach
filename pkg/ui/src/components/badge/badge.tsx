@@ -16,7 +16,7 @@ import "./badge.styl";
 export type BadgeStatus = "success" | "danger" | "default" | "info" | "warning";
 
 export interface BadgeProps {
-  text: string;
+  text: React.ReactNode;
   size?: "small" | "medium" | "large";
   status?: BadgeStatus;
   tag?: boolean; // TODO (koorosh): Tag behavior isn't implemented yet.
