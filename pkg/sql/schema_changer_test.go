@@ -2962,11 +2962,8 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 		t.Fatal(err)
 	}
 
-	// Run a primary key change in a background thread.
-	go func() {
-		// This will fail, so we don't want to check the error.
-		_, _ = sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
-	}()
+	// This will fail, so we don't want to check the error.
+	_, _ = sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
 
 	// Ensure that the mutations corresponding to the primary key change are cleaned up and
 	// that the job did not succeed even though it was canceled.
