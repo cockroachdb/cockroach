@@ -3799,3 +3799,43 @@ project
                           │    └── columns: t3.a:9!null t3.b:10!null t3.x:11 t3.y:12
                           └── filters
                                └── sum:14 = t3.x:11
+
+# Regression test for #45631.
+build
+SELECT
+  (SELECT (max(b), unnest) FROM ab WHERE a = unnest)
+FROM
+  ROWS FROM (unnest(ARRAY[1, 2]))
+----
+project
+ ├── columns: "?column?":7
+ ├── project-set
+ │    ├── columns: unnest:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── unnest(ARRAY[1,2])
+ └── projections
+      └── subquery [as="?column?":7]
+           └── max1-row
+                ├── columns: "?column?":6
+                └── project
+                     ├── columns: "?column?":6
+                     ├── group-by
+                     │    ├── columns: max:4 unnest:5
+                     │    ├── grouping columns: unnest:5
+                     │    ├── project
+                     │    │    ├── columns: unnest:5 b:3
+                     │    │    ├── select
+                     │    │    │    ├── columns: a:2!null b:3
+                     │    │    │    ├── scan ab
+                     │    │    │    │    └── columns: a:2!null b:3
+                     │    │    │    └── filters
+                     │    │    │         └── a:2 = unnest:1
+                     │    │    └── projections
+                     │    │         └── unnest:1 [as=unnest:5]
+                     │    └── aggregations
+                     │         └── max [as=max:4]
+                     │              └── b:3
+                     └── projections
+                          └── (max:4, unnest:1) [as="?column?":6]
