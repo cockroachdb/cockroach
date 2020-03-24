@@ -1586,11 +1586,12 @@ func indexDefFromDescriptor(
 	tableLookup tableLookupFn,
 ) (string, error) {
 	indexDef := tree.CreateIndex{
-		Name:    tree.Name(index.Name),
-		Table:   tree.MakeTableName(tree.Name(db.Name), tree.Name(table.Name)),
-		Unique:  index.Unique,
-		Columns: make(tree.IndexElemList, len(index.ColumnNames)),
-		Storing: make(tree.NameList, len(index.StoreColumnNames)),
+		Name:     tree.Name(index.Name),
+		Table:    tree.MakeTableName(tree.Name(db.Name), tree.Name(table.Name)),
+		Unique:   index.Unique,
+		Columns:  make(tree.IndexElemList, len(index.ColumnNames)),
+		Storing:  make(tree.NameList, len(index.StoreColumnNames)),
+		Inverted: index.Type == sqlbase.IndexDescriptor_INVERTED,
 	}
 	for i, name := range index.ColumnNames {
 		elem := tree.IndexElem{
