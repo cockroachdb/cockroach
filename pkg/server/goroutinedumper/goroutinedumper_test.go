@@ -174,19 +174,6 @@ func TestNewGoroutineDumper(t *testing.T) {
 		assert.EqualError(t, err, "directory to store dumps could not be determined")
 	})
 
-	t.Run("fails because goroutine_dump already exists as a file", func(t *testing.T) {
-		tempDir, dirCleanupFn := testutils.TempDir(t)
-		defer dirCleanupFn()
-		path := filepath.Join(tempDir, "goroutine_dump")
-		emptyFile, err := os.Create(path)
-		assert.NoError(t, err, "failed to create goroutine_dump file")
-		err = emptyFile.Close()
-		assert.NoError(t, err, "failed to close goroutine_dump file")
-
-		_, err = NewGoroutineDumper(tempDir)
-		assert.IsType(t, &os.PathError{}, err)
-	})
-
 	t.Run("succeeds", func(t *testing.T) {
 		tempDir, dirCleanupFn := testutils.TempDir(t)
 		defer dirCleanupFn()
@@ -194,7 +181,7 @@ func TestNewGoroutineDumper(t *testing.T) {
 		assert.NoError(t, err, "unexpected error in NewGoroutineDumper")
 		assert.Equal(t, int64(0), gd.goroutinesThreshold)
 		assert.Equal(t, int64(0), gd.maxGoroutinesDumped)
-		assert.Equal(t, filepath.Join(tempDir, "goroutine_dump"), gd.dir)
+		assert.Equal(t, tempDir, gd.dir)
 	})
 }
 
