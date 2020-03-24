@@ -877,23 +877,40 @@ func TestHttpHostFlagValue(t *testing.T) {
 
 	f := startCmd.Flags()
 	testData := []struct {
-		args     []string
-		expected string
+		args       []string
+		expected   string
+		tlsEnabled bool
 	}{
-		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "127.0.0.1"}, "127.0.0.1:" + base.DefaultHTTPPort},
-		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "192.168.0.111"}, "192.168.0.111:" + base.DefaultHTTPPort},
+		{[]string{"start", "--http-addr", "127.0.0.1"}, "127.0.0.1:" + base.DefaultHTTPPort, true},
+		{[]string{"start", "--http-addr", "192.168.0.111"}, "192.168.0.111:" + base.DefaultHTTPPort, true},
 		// confirm --http-host still works
-		{[]string{"start", "--" + cliflags.ListenHTTPAddrAlias.Name, "127.0.0.1"}, "127.0.0.1:" + base.DefaultHTTPPort},
-		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, ":12345", "--" + cliflags.ListenHTTPAddrAlias.Name, "192.168.0.111"}, "192.168.0.111:12345"},
+		{[]string{"start", "--http-host", "127.0.0.1"}, "127.0.0.1:" + base.DefaultHTTPPort, true},
+		{[]string{"start", "--http-addr", ":12345", "--http-host", "192.168.0.111"}, "192.168.0.111:12345", true},
 		// confirm --http-port still works
-		{[]string{"start", "--" + cliflags.ListenHTTPPort.Name, "12345"}, ":12345"},
-		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "192.168.0.111", "--" + cliflags.ListenHTTPPort.Name, "12345"}, "192.168.0.111:12345"},
+		{[]string{"start", "--http-port", "12345"}, ":12345", true},
+		{[]string{"start", "--http-addr", "192.168.0.111", "--" + cliflags.ListenHTTPPort.Name, "12345"}, "192.168.0.111:12345", true},
 		// confirm hostnames will work
-		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "my.host.name"}, "my.host.name:" + base.DefaultHTTPPort},
-		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "myhostname"}, "myhostname:" + base.DefaultHTTPPort},
+		{[]string{"start", "--http-addr", "my.host.name"}, "my.host.name:" + base.DefaultHTTPPort, true},
+		{[]string{"start", "--http-addr", "myhostname"}, "myhostname:" + base.DefaultHTTPPort, true},
 		// confirm IPv6 works too
-		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "[::1]"}, "[::1]:" + base.DefaultHTTPPort},
-		{[]string{"start", "--" + cliflags.ListenHTTPAddr.Name, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]"}, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultHTTPPort},
+		{[]string{"start", "--http-addr", "[::1]"}, "[::1]:" + base.DefaultHTTPPort, true},
+		{[]string{"start", "--http-addr", "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]"},
+			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultHTTPPort, true},
+		// Confirm that the host part is derived from --listen-addr if not specified.
+		{[]string{"start", "--listen-addr=blah:1111"}, "blah:" + base.DefaultHTTPPort, true},
+		{[]string{"start", "--listen-addr=blah:1111", "--http-addr=:1234"}, "blah:1234", true},
+		{[]string{"start", "--listen-addr=blah", "--http-addr=:1234"}, "blah:1234", true},
+		// Confirm that --insecure implies no TLS.
+		{[]string{"start", "--http-addr=127.0.0.1", "--insecure"}, "127.0.0.1:" + base.DefaultHTTPPort, false},
+		// Confirm that --unencrypted-localhost-http overrides the hostname part (and disables TLS).
+		{[]string{"start", "--http-addr=:1234", "--unencrypted-localhost-http"}, "localhost:1234", false},
+		{[]string{"start", "--listen-addr=localhost:1111", "--unencrypted-localhost-http"}, "localhost:" + base.DefaultHTTPPort, false},
+		{[]string{"start", "--http-addr=127.0.0.1", "--unencrypted-localhost-http"},
+			"ERROR: --unencrypted-localhost-http is incompatible with --http-addr=127.0.0.1:8080", false},
+		{[]string{"start", "--http-addr=incompatible", "--unencrypted-localhost-http"},
+			"ERROR: --unencrypted-localhost-http is incompatible with --http-addr=incompatible:8080", false},
+		{[]string{"start", "--http-addr=incompatible:1111", "--unencrypted-localhost-http"},
+			"ERROR: --unencrypted-localhost-http is incompatible with --http-addr=incompatible:1111", false},
 	}
 
 	for i, td := range testData {
@@ -903,11 +920,31 @@ func TestHttpHostFlagValue(t *testing.T) {
 			t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
 		}
 
-		if err := extraServerFlagInit(startCmd); err != nil {
-			t.Fatal(err)
+		err := extraServerFlagInit(startCmd)
+
+		expectErr := strings.HasPrefix(td.expected, "ERROR:")
+		expectedErr := strings.TrimPrefix(td.expected, "ERROR: ")
+		if err != nil {
+			if !expectErr {
+				t.Fatalf("%d. error: %v", i, err)
+			}
+			if !testutils.IsError(err, expectedErr) {
+				t.Fatalf("%d. expected error %q, got: %v", i, expectedErr, err)
+			}
+			continue
+		}
+		if err == nil && expectErr {
+			t.Fatalf("%d expected error %q, got none", i, expectedErr)
+		}
+		exp := "http"
+		if td.tlsEnabled {
+			exp = "https"
 		}
 		if td.expected != serverCfg.HTTPAddr {
 			t.Errorf("%d. serverCfg.HTTPAddr expected '%s', but got '%s'. td.args was '%#v'.", i, td.expected, serverCfg.HTTPAddr, td.args)
+		}
+		if exp != serverCfg.HTTPRequestScheme() {
+			t.Errorf("%d. TLS config expected %s, got %s. td.args was '%#v'.", i, exp, serverCfg.HTTPRequestScheme(), td.args)
 		}
 	}
 }

@@ -2005,7 +2005,7 @@ func (s *Server) startServeUI(
 	}
 
 	// Serve the HTTP endpoint. This will be the original httpLn
-	// listening on --http-listen-addr without TLS if uiTLSConfig was
+	// listening on --http-addr without TLS if uiTLSConfig was
 	// nil, or overridden above if uiTLSConfig was not nil to come from
 	// the TLS negotiation over the HTTP port.
 	s.stopper.RunWorker(workersCtx, func(context.Context) {
