@@ -792,6 +792,10 @@ func localityMatchScore(zone cat.Zone, locality roachpb.Locality) float64 {
 // lookupJoinInputLimitHint calculates an appropriate limit hint for the input
 // to a lookup join.
 func lookupJoinInputLimitHint(inputRowCount, outputRowCount, outputLimitHint float64) float64 {
+	if outputRowCount == 0 {
+		return 0
+	}
+
 	// Estimate the number of lookups needed to output LimitHint rows.
 	expectedLookupCount := outputLimitHint * inputRowCount / outputRowCount
 
