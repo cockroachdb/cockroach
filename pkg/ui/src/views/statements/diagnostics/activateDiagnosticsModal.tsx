@@ -17,18 +17,29 @@ import { createStatementDiagnosticsReportAction } from "src/redux/statements";
 import { AdminUIState } from "src/redux/state";
 import { invalidateStatementDiagnosticsRequests, refreshStatementDiagnosticsRequests } from "src/redux/apiReducers";
 import { statementDiagnostics } from "src/util/docs";
+import { AggregateStatistics } from "../statementsTable";
+import { analytics } from "src/redux/analytics";
 
 export type ActivateDiagnosticsModalProps = MapDispatchToProps;
 
+function trackActivateDiagnostics (statement: AggregateStatistics) {
+  analytics.track({
+    event: "Diagnostics Activation",
+    properties: {
+      fingerprint: statement.label,
+    },
+  });
+}
+
 export interface ActivateDiagnosticsModalRef {
-  showModalFor: (statement: string) => void;
+  showModalFor: (statement: AggregateStatistics) => void;
 }
 
 // tslint:disable-next-line:variable-name
 const ActivateDiagnosticsModal = (props: ActivateDiagnosticsModalProps, ref: React.RefObject<ActivateDiagnosticsModalRef>) => {
   const {activate} = props;
   const [visible, setVisible] = useState(false);
-  const [statement, setStatement] = useState();
+  const [statement, setStatement] = useState<string>();
 
   const onOkHandler = useCallback(
     () => {
@@ -42,8 +53,9 @@ const ActivateDiagnosticsModal = (props: ActivateDiagnosticsModalProps, ref: Rea
 
   useImperativeHandle(ref, () => {
     return {
-      showModalFor: (forwardStatement: string) => {
-        setStatement(forwardStatement);
+      showModalFor: (forwardStatement: AggregateStatistics) => {
+        setStatement(forwardStatement.label);
+        trackActivateDiagnostics(forwardStatement);
         setVisible(true);
       },
     };
