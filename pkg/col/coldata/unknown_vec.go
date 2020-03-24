@@ -87,10 +87,6 @@ func (u unknown) Window(colType coltypes.T, start int, end int) Vec {
 	panic("Vec is of unknown type and should not be accessed")
 }
 
-func (u unknown) PrettyValueAt(idx int, colType coltypes.T) string {
-	panic("Vec is of unknown type and should not be accessed")
-}
-
 func (u unknown) MaybeHasNulls() bool {
 	panic("Vec is of unknown type and should not be accessed")
 }

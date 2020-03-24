@@ -410,6 +410,8 @@ func (o *mergeJoinBase) reset(ctx context.Context) {
 	o.proberState.rBatch = nil
 	o.proberState.lBufferedGroup.reset(ctx)
 	o.proberState.rBufferedGroup.reset(ctx)
+	o.proberState.lBufferedGroupNeedToReset = false
+	o.proberState.rBufferedGroupNeedToReset = false
 	o.resetBuilderCrossProductState()
 }
 
