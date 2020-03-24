@@ -16,7 +16,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

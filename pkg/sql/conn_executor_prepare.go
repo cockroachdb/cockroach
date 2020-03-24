@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -31,7 +32,7 @@ func (ex *connExecutor) execPrepare(
 ) (fsm.Event, fsm.EventPayload) {
 
 	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
-		return eventNonRetriableErr{IsCommit: fsm.False}, eventNonRetriableErrPayload{err: err}
+		return ex.makeErrEvent(err, parseCmd.AST)
 	}
 
 	// The anonymous statement can be overwritten.
@@ -145,12 +146,19 @@ func (ex *connExecutor) prepare(
 	if err := tree.ProcessPlaceholderAnnotations(stmt.AST, placeholderHints); err != nil {
 		return nil, err
 	}
+
 	// Preparing needs a transaction because it needs to retrieve db/table
-	// descriptors for type checking.
-	// TODO(andrei): Needing a transaction for preparing seems non-sensical, as
-	// the prepared statement outlives the txn. I hope that it's not used for
-	// anything other than getting a timestamp.
-	txn := client.NewTxn(ctx, ex.server.cfg.DB, ex.server.cfg.NodeID.Get(), client.RootTxn)
+	// descriptors for type checking. If we already have an open transaction for
+	// this planner, use it. Using the user's transaction here is critical for
+	// proper deadlock detection. At the time of writing it is the case that any
+	// data read on behalf of this transaction is not cached for use in other
+	// transactions. It's critical that this fact remain true but nothing really
+	// enforces it. If we create a new transaction (newTxn is true), we'll need to
+	// finish it before we return.
+	newTxn, txn := false, ex.state.mu.txn
+	if txn == nil || txn.Serialize().Status != roachpb.PENDING {
+		newTxn, txn = true, client.NewTxn(ctx, ex.server.cfg.DB, ex.server.cfg.NodeID.Get(), client.RootTxn)
+	}
 
 	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 	p := &ex.planner
@@ -158,11 +166,19 @@ func (ex *connExecutor) prepare(
 	p.stmt = &stmt
 	flags, err := ex.populatePrepared(ctx, txn, placeholderHints, p)
 	if err != nil {
-		txn.CleanupOnError(ctx, err)
+		// NB: if this is not a new transaction then let the connExecutor state
+		// machine decide whether we should clean up intents; we may be restarting
+		// and want to leave them in place.
+		if newTxn {
+			txn.CleanupOnError(ctx, err)
+		}
 		return nil, err
 	}
-	if err := txn.CommitOrCleanup(ctx); err != nil {
-		return nil, err
+	if newTxn {
+		// Clean up the newly created transaction if we made one.
+		if err := txn.CommitOrCleanup(ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	// Account for the memory used by this prepared statement.
