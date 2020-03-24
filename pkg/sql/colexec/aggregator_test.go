@@ -444,6 +444,31 @@ func TestAggregatorMultiFunc(t *testing.T) {
 			},
 			name: "BoolAndOrBatch",
 		},
+		{
+			aggFns: []execinfrapb.AggregatorSpec_Func{
+				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+				execinfrapb.AggregatorSpec_MIN,
+				execinfrapb.AggregatorSpec_SUM_INT,
+			},
+			input: tuples{
+				{2, 1.0, "1.0", 2.0},
+				{2, 1.0, "1.0", 4.0},
+				{2, 2.0, "2.0", 6.0},
+			},
+			expected: tuples{
+				{2, 1.0, "1.0", 2.0, 6.0},
+				{2, 2.0, "2.0", 6.0, 6.0},
+			},
+			batchSize: 1,
+			colTypes:  []coltypes.T{coltypes.Int64, coltypes.Decimal, coltypes.Bytes, coltypes.Decimal},
+			name:      "MultiGroupColsWithPointerTypes",
+			groupCols: []uint32{0, 1, 2},
+			aggCols: [][]uint32{
+				{0}, {1}, {2}, {3}, {3},
+			},
+		},
 	}
 
 	for _, agg := range aggTypes {
@@ -452,7 +477,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				if err := tc.init(); err != nil {
 					t.Fatal(err)
 				}
-				runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier,
+				runTestsWithTyps(t, []tuples{tc.input}, [][]coltypes.T{tc.colTypes}, tc.expected, unorderedVerifier,
 					func(input []Operator) (Operator, error) {
 						return agg.new(testAllocator, input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
 					})

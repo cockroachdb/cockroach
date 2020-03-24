@@ -231,14 +231,15 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 	// {{ end }}
 	if !isNull {
 		if !a.foundNonNullForCurrentGroup {
-			a.curAgg = execgen.UNSAFEGET(col, i)
+			val := execgen.UNSAFEGET(col, i)
+			execgen.COPYVAL(a.curAgg, val)
 			a.foundNonNullForCurrentGroup = true
 		} else {
 			var cmp bool
 			candidate := execgen.UNSAFEGET(col, i)
 			_ASSIGN_CMP(cmp, candidate, a.curAgg)
 			if cmp {
-				a.curAgg = candidate
+				execgen.COPYVAL(a.curAgg, candidate)
 			}
 		}
 	}
