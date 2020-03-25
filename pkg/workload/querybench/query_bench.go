@@ -33,7 +33,7 @@ type queryBench struct {
 	vectorize       string
 	verbose         bool
 
-	queries []string
+	queryGroups [][]string
 }
 
 func init() {
@@ -54,7 +54,8 @@ var queryBenchMeta = workload.Meta{
 			`vectorize`:  {RuntimeOnly: true},
 			`num-runs`:   {RuntimeOnly: true},
 		}
-		g.flags.StringVar(&g.queryFile, `query-file`, ``, `File of newline separated queries to run`)
+		g.flags.StringVar(&g.queryFile, `query-file`, ``, `File of newline separated queries to run. `+
+			`Note that multiple queries can be appear on the same line but need to be separated with a semicolon`)
 		g.flags.IntVar(&g.numRunsPerQuery, `num-runs`, 0, `Specifies the number of times each query in the query file to be run `+
 			`(note that --duration and --max-ops take precedence, so if duration or max-ops is reached, querybench will exit without honoring --num-runs)`)
 		g.flags.StringVar(&g.vectorize, `vectorize`, "", `Set vectorize session variable`)
@@ -83,14 +84,14 @@ func (g *queryBench) Hooks() workload.Hooks {
 			if g.queryFile == "" {
 				return errors.Errorf("Missing required argument '--query-file'")
 			}
-			queries, err := GetQueries(g.queryFile)
+			gueryGroups, err := GetQueryGroups(g.queryFile)
 			if err != nil {
 				return err
 			}
-			if len(queries) < 1 {
+			if len(gueryGroups) < 1 {
 				return errors.New("no queries found in file")
 			}
-			g.queries = queries
+			g.queryGroups = gueryGroups
 			if g.numRunsPerQuery < 0 {
 				return errors.New("negative --num-runs specified")
 			}
@@ -132,23 +133,31 @@ func (g *queryBench) Ops(urls []string, reg *histogram.Registry) (workload.Query
 		}
 	}
 
-	stmts := make([]namedStmt, len(g.queries))
-	for i, query := range g.queries {
-		stmt, err := db.Prepare(query)
-		if err != nil {
-			return workload.QueryLoad{}, errors.Wrapf(err, "failed to prepare query %q", query)
+	queryGroups := make([]namedQueryGroup, len(g.queryGroups))
+	for i, queryGroup := range g.queryGroups {
+		queryGroups[i] = namedQueryGroup{
+			// TODO(solon): Allow specifying names in the query file rather
+			// than using the entire query group as the name.
+			name: fmt.Sprintf("%2d: %s", i+1, strings.Join(queryGroup, "; ")),
 		}
-		stmts[i] = namedStmt{
-			// TODO(solon): Allow specifying names in the query file rather than using
-			// the entire query as the name.
-			name: fmt.Sprintf("%2d: %s", i+1, query),
-			stmt: stmt,
+		prepareFailed := false
+		for _, query := range queryGroup {
+			stmt, err := db.Prepare(query)
+			if err != nil {
+				prepareFailed = true
+				queryGroups[i].preparedStmts = queryGroups[i].preparedStmts[:0]
+				break
+			}
+			queryGroups[i].preparedStmts = append(queryGroups[i].preparedStmts, stmt)
+		}
+		if prepareFailed {
+			queryGroups[i].queries = queryGroup
 		}
 	}
 
 	maxNumStmts := 0
 	if g.numRunsPerQuery > 0 {
-		maxNumStmts = g.numRunsPerQuery * len(g.queries)
+		maxNumStmts = g.numRunsPerQuery * len(g.queryGroups)
 	}
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
@@ -156,7 +165,7 @@ func (g *queryBench) Ops(urls []string, reg *histogram.Registry) (workload.Query
 		op := queryBenchWorker{
 			hists:       reg.GetHandle(),
 			db:          db,
-			stmts:       stmts,
+			queryGroups: queryGroups,
 			verbose:     g.verbose,
 			maxNumStmts: maxNumStmts,
 		}
@@ -165,9 +174,10 @@ func (g *queryBench) Ops(urls []string, reg *histogram.Registry) (workload.Query
 	return ql, nil
 }
 
-// GetQueries returns the lines of a file as a string slice. Ignores lines
-// beginning with '#' or '--'.
-func GetQueries(path string) ([]string, error) {
+// GetQueryGroups returns the lines of a file as "grouped" string slices.
+// Multiple queries can be placed on a single line separated by ';'. Ignores
+// lines beginning with '#' or '--'.
+func GetQueryGroups(path string) ([][]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -177,31 +187,38 @@ func GetQueries(path string) ([]string, error) {
 	scanner := bufio.NewScanner(file)
 	// Read lines up to 1 MB in size.
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
-	var lines []string
+	var queryGroups [][]string
 	for scanner.Scan() {
 		line := scanner.Text()
 		if len(line) > 0 && line[0] != '#' && !strings.HasPrefix(line, "--") {
-			lines = append(lines, line)
+			queriesInLine := strings.Split(line, ";")
+			for i := range queriesInLine {
+				queriesInLine[i] = strings.TrimSpace(queriesInLine[i])
+			}
+			queryGroups = append(queryGroups, queriesInLine)
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
-	return lines, nil
+	return queryGroups, nil
 }
 
-type namedStmt struct {
+type namedQueryGroup struct {
 	name string
-	stmt *gosql.Stmt
+	// If all queries in the group can be prepared, then they will be stored
+	// in preparedStmts, otherwise "raw" queries will be stored in queries.
+	preparedStmts []*gosql.Stmt
+	queries       []string
 }
 
 type queryBenchWorker struct {
-	hists *histogram.Histograms
-	db    *gosql.DB
-	stmts []namedStmt
+	hists       *histogram.Histograms
+	db          *gosql.DB
+	queryGroups []namedQueryGroup
 
-	stmtIdx int
-	verbose bool
+	queryGroupIdx int
+	verbose       bool
 
 	// maxNumStmts indicates the maximum number of statements for the worker to
 	// execute. It is non-zero only when --num-runs flag is specified for the
@@ -211,29 +228,49 @@ type queryBenchWorker struct {
 
 func (o *queryBenchWorker) run(ctx context.Context) error {
 	if o.maxNumStmts > 0 {
-		if o.stmtIdx >= o.maxNumStmts {
+		if o.queryGroupIdx >= o.maxNumStmts {
 			// This worker has already reached the maximum number of statements to
 			// execute.
 			return nil
 		}
 	}
 	start := timeutil.Now()
-	stmt := o.stmts[o.stmtIdx%len(o.stmts)]
-	o.stmtIdx++
+	queryGroup := o.queryGroups[o.queryGroupIdx%len(o.queryGroups)]
+	o.queryGroupIdx++
 
-	rows, err := stmt.stmt.Query()
-	if err != nil {
-		return err
+	exhaustRows := func(execFn func() (*gosql.Rows, error)) error {
+		rows, err := execFn()
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		return nil
 	}
-	defer rows.Close()
-	for rows.Next() {
-	}
-	if err := rows.Err(); err != nil {
-		return err
+	if len(queryGroup.preparedStmts) > 0 {
+		for _, preparedStmt := range queryGroup.preparedStmts {
+			if err := exhaustRows(func() (*gosql.Rows, error) {
+				return preparedStmt.Query()
+			}); err != nil {
+				return err
+			}
+		}
+	} else {
+		for _, query := range queryGroup.queries {
+			if err := exhaustRows(func() (*gosql.Rows, error) {
+				return o.db.Query(query)
+			}); err != nil {
+				return err
+			}
+		}
 	}
 	elapsed := timeutil.Since(start)
 	if o.verbose {
-		o.hists.Get(stmt.name).Record(elapsed)
+		o.hists.Get(queryGroup.name).Record(elapsed)
 	} else {
 		o.hists.Get("").Record(elapsed)
 	}
