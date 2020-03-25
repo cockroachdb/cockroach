@@ -43,6 +43,7 @@ const ActivateDiagnosticsModal = (props: ActivateDiagnosticsModalProps, ref: Rea
   const onOkHandler = useCallback(
     () => {
       activate(statement);
+      trackActivateDiagnostics(statement);
       setVisible(false);
     },
     [statement],
@@ -54,7 +55,6 @@ const ActivateDiagnosticsModal = (props: ActivateDiagnosticsModalProps, ref: Rea
     return {
       showModalFor: (forwardStatement: string) => {
         setStatement(forwardStatement);
-        trackActivateDiagnostics(forwardStatement);
         setVisible(true);
       },
     };
