@@ -145,6 +145,7 @@ func PushTxn(
 	if err != nil {
 		return result.Result{}, err
 	} else if !ok {
+		log.VEventf(ctx, 2, "pushee txn record not found")
 		// There are three cases in which there is no transaction record:
 		//
 		// * the pushee is still active but its transaction record has not
