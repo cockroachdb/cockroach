@@ -1023,3 +1023,24 @@ eval
 ARRAY['hello','world']::char(2)[]
 ----
 ARRAY['he','wo']
+
+# regression for #45850
+eval
+cast(B'11011' || B'00' as bit varying(8))
+----
+B'1101100'
+
+eval
+cast(B'11011' || B'00' as bit varying(6))
+----
+B'110110'
+
+eval
+cast(B'11011' || B'00' as bit(8))
+----
+B'11011000'
+
+eval
+cast(B'11011' || B'00' as bit(6))
+----
+B'110110'
