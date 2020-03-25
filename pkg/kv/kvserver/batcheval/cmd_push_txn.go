@@ -138,7 +138,10 @@ func PushTxn(
 
 	// Fetch existing transaction; if missing, we're allowed to abort.
 	var existTxn roachpb.Transaction
-	ok, err := storage.MVCCGetProto(ctx, readWriter, key, hlc.Timestamp{}, &existTxn, storage.MVCCGetOptions{})
+	ok, err := storage.MVCCGetProto(
+		ctx, readWriter, key,
+		hlc.Timestamp{}, // the txn record is an "inline value", not MVCC
+		&existTxn, storage.MVCCGetOptions{})
 	if err != nil {
 		return result.Result{}, err
 	} else if !ok {
