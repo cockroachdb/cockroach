@@ -398,7 +398,8 @@ SELECT * FROM a WHERE
   NOT('[1, 2]' @> j) AND NOT(j <@ '[3, 4]') AND
   NOT(j ? 'foo') AND
   NOT(j ?| ARRAY['foo']) AND
-  NOT(j ?& ARRAY['foo'])
+  NOT(j ?& ARRAY['foo']) AND
+  NOT(ARRAY[i] && ARRAY[1])
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -413,7 +414,8 @@ select
       ├── NOT ('[3, 4]' @> j) [type=bool, outer=(5)]
       ├── NOT (j ? 'foo') [type=bool, outer=(5)]
       ├── NOT (j ?| ARRAY['foo']) [type=bool, outer=(5)]
-      └── NOT (j ?& ARRAY['foo']) [type=bool, outer=(5)]
+      ├── NOT (j ?& ARRAY['foo']) [type=bool, outer=(5)]
+      └── NOT (ARRAY[i] && ARRAY[1]) [type=bool, outer=(2)]
 
 # --------------------------------------------------
 # EliminateNot
