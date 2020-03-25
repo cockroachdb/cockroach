@@ -1,0 +1,48 @@
+# LogicTest: 5node-vec
+
+# Regression test for #39317.
+
+statement ok
+CREATE TABLE l (a INT PRIMARY KEY, b INT, FAMILY (a, b))
+
+statement ok
+CREATE TABLE r (a INT PRIMARY KEY, b INT, FAMILY (a, b))
+
+statement ok
+INSERT INTO l VALUES (1, 10), (2, 20), (3, 30)
+
+statement ok
+INSERT INTO r VALUES (2, 200), (3, 300), (4, 400)
+
+statement ok
+ALTER TABLE l SPLIT AT VALUES (2), (3)
+
+statement ok
+ALTER TABLE r SPLIT AT VALUES (2), (3)
+
+statement ok
+ALTER TABLE l EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 2), (ARRAY[3], 3)
+
+statement ok
+ALTER TABLE r EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 2), (ARRAY[2], 3), (ARRAY[3], 1)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE l] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+NULL       /2       {1}       1
+/2         /3       {2}       2
+/3         NULL     {3}       3
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder from [SHOW EXPERIMENTAL_RANGES FROM TABLE r] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+/2         /3       {1}       1
+/3         NULL     {2}       2
+NULL       /2       {3}       3
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk9GPk0AQxt_9KzbjS6t7gaX4ssklGOWUSw9O4KLJhYe9MrYkHIu7S2LT9H83wCUV5Gobjb6xu_P7Zub7wg70txI4JP7Sf5eSRpXkKo5uyL3_5Xb5NgjJ7H2QpMmn5Zw8lbzqC0qy9K9Sch0FIVHkLgnCD2Qm5uTzRz_2iSCXxMmAQiVzDMUjauD3wICCAxmFWskVai1Ve73rioL8O3CbQlHVjWmvMworqRD4DkxhSgQOqXgoMUaRo7JarRyNKMpOulbFo1BbTwGFpBaV5sRyLizHegnZnoJszJPsQe1hSzZCb4Y6HoNsn1HQRqwRuLOnz4x30GkqqXJUmA-Uspb8XcnEjjeo1ngtiwqVtRjOlm5r5L3t0V3qx535QKHEr2bmsdfzS1WsN_0nUIgaw4nHqOdQzx25cNhw8QcbTowfygtZW-7YisnW7qA1Oz17ezr78u9mz54d719k7_zX7CeGi1HXstJ4UrR2ux7ma-zt0rJRK7xVctW16Y9Rx3XO5qhN_-r2h6Dqnrrf73SYHYfZGLZ_hp0BzMawcxR-M4DtMbw4Y-dfOh-H2XHYPWvnbP_iRwAAAP__W2L0nA==

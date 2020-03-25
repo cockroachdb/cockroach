@@ -512,39 +512,42 @@ var logicTestConfigs = []testClusterConfig{
 		skipShort:           true,
 	},
 	{
-		name:                "5node-local",
-		numNodes:            5,
-		overrideDistSQLMode: "off",
-		overrideAutoStats:   "false",
-	},
-	{
-		name:                "5node-dist",
+		name:                "5node",
 		numNodes:            5,
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
 	},
 	{
-		name:                "5node-dist-vec",
+		name:                "5node-vec",
 		numNodes:            5,
 		overrideDistSQLMode: "on",
+		overrideAutoStats:   "false",
 		overrideVectorize:   "on",
-		overrideAutoStats:   "false",
 	},
 	{
-		name:                       "5node-dist-metadata",
-		numNodes:                   5,
-		overrideDistSQLMode:        "on",
-		distSQLMetadataTestEnabled: true,
-		skipShort:                  true,
-		overrideAutoStats:          "false",
-	},
-	{
-		name:                "5node-dist-disk",
+		name:                "5node-vec-disk",
 		numNodes:            5,
 		overrideDistSQLMode: "on",
+		overrideAutoStats:   "false",
+		overrideVectorize:   "on",
 		sqlExecUseDisk:      true,
 		skipShort:           true,
+	},
+	{
+		name:                       "5node-metadata",
+		numNodes:                   5,
+		overrideDistSQLMode:        "on",
+		overrideAutoStats:          "false",
+		distSQLMetadataTestEnabled: true,
+		skipShort:                  true,
+	},
+	{
+		name:                "5node-disk",
+		numNodes:            5,
+		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
+		sqlExecUseDisk:      true,
+		skipShort:           true,
 	},
 }
 
@@ -572,7 +575,17 @@ var (
 		"fakedist-metadata",
 		"fakedist-disk",
 	}
-	defaultConfig = parseTestConfig(defaultConfigNames)
+	// fiveNodeDefaultConfigName is a special alias for all 5 node configs.
+	fiveNodeDefaultConfigName  = "5node-default-configs"
+	fiveNodeDefaultConfigNames = []string{
+		"5node",
+		"5node-vec",
+		"5node-vec-disk",
+		"5node-metadata",
+		"5node-disk",
+	}
+	defaultConfig         = parseTestConfig(defaultConfigNames)
+	fiveNodeDefaultConfig = parseTestConfig(fiveNodeDefaultConfigNames)
 )
 
 // An index in the above slice.
@@ -1335,9 +1348,13 @@ func readTestFileConfigs(t *testing.T, path string) []logicTestConfigIdx {
 			for _, configName := range fields[2:] {
 				idx, ok := findLogicTestConfig(configName)
 				if !ok {
-					t.Fatalf("%s: unknown config name %s", path, configName)
+					if configName != fiveNodeDefaultConfigName {
+						t.Fatalf("%s: unknown config name %s", path, configName)
+					}
+					configs = append(configs, fiveNodeDefaultConfig...)
+				} else {
+					configs = append(configs, idx)
 				}
-				configs = append(configs, idx)
 			}
 			return configs
 		}
