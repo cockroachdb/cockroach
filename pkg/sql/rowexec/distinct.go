@@ -357,10 +357,14 @@ func (ds *DistinctStats) Stats() map[string]string {
 
 // StatsForQueryPlan implements the DistSQLSpanStats interface.
 func (ds *DistinctStats) StatsForQueryPlan() []string {
-	return append(
-		ds.InputStats.StatsForQueryPlan(""),
-		fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ds.MaxAllocatedMem)),
-	)
+	stats := ds.InputStats.StatsForQueryPlan("")
+
+	if ds.MaxAllocatedMem != 0 {
+		stats = append(stats,
+			fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ds.MaxAllocatedMem)))
+	}
+
+	return stats
 }
 
 // outputStatsToTrace outputs the collected distinct stats to the trace. Will
