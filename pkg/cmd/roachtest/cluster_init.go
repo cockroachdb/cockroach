@@ -162,7 +162,7 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 							// The actual contents of the cookie don't matter; the presence of
 							// a valid encoded cookie is enough to trigger the authentication
 							// code paths.
-						})
+						}, false /* forHTTPSOnly - cluster is insecure */)
 						if err != nil {
 							t.Fatal(err)
 						}

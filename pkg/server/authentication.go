@@ -135,7 +135,7 @@ func (s *authenticationServer) UserLogin(
 		ID:     id,
 		Secret: secret,
 	}
-	cookie, err := EncodeSessionCookie(cookieValue)
+	cookie, err := EncodeSessionCookie(cookieValue, !s.server.cfg.DisableTLSForHTTP)
 	if err != nil {
 		return nil, apiInternalError(ctx, err)
 	}
@@ -184,7 +184,7 @@ func (s *authenticationServer) UserLogout(
 
 	// Send back a header which will cause the browser to destroy the cookie.
 	// See https://tools.ietf.org/search/rfc6265, page 7.
-	cookie := makeCookieWithValue("")
+	cookie := makeCookieWithValue("", false /* forHTTPSOnly */)
 	cookie.MaxAge = -1
 
 	// Set the cookie header on the outgoing response.
@@ -404,22 +404,28 @@ func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request)
 }
 
 // EncodeSessionCookie encodes a SessionCookie proto into an http.Cookie.
-func EncodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, error) {
+// The flag forHTTPSOnly, if set, produces the "Secure" flag on the
+// resulting HTTP cookie, which means the cookie should only be
+// transmitted over HTTPS channels. Note that a cookie without
+// the "Secure" flag can be transmitted over either HTTP or HTTPS channels.
+func EncodeSessionCookie(
+	sessionCookie *serverpb.SessionCookie, forHTTPSOnly bool,
+) (*http.Cookie, error) {
 	cookieValueBytes, err := protoutil.Marshal(sessionCookie)
 	if err != nil {
 		return nil, errors.Wrap(err, "session cookie could not be encoded")
 	}
 	value := base64.StdEncoding.EncodeToString(cookieValueBytes)
-	return makeCookieWithValue(value), nil
+	return makeCookieWithValue(value, forHTTPSOnly), nil
 }
 
-func makeCookieWithValue(value string) *http.Cookie {
+func makeCookieWithValue(value string, forHTTPSOnly bool) *http.Cookie {
 	return &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    value,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   forHTTPSOnly,
 	}
 }
 

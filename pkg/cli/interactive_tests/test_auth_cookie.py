@@ -11,7 +11,7 @@ ctx.check_hostname = False
 ctx.verify_mode = ssl.CERT_NONE
 
 # Load the cookie.
-cookie = file('cookie.txt').read().strip()
+cookie = file(cookiefile).read().strip()
 
 # Perform the HTTP request.
 httpReq = urllib2.Request(url, "", {"Cookie": cookie})
