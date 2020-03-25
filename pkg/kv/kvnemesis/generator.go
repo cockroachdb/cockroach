@@ -183,6 +183,9 @@ func NewDefaultConfig() GeneratorConfig {
 	// TODO(dan): Make this `config.Ops.Batch.Ops.PutExisting = 0` once #46081 is
 	// fixed.
 	config.Ops.Batch = BatchOperationConfig{}
+	// TODO(dan): Remove when #45586 is addressed.
+	config.Ops.ClosureTxn.CommitBatchOps.GetExisting = 0
+	config.Ops.ClosureTxn.CommitBatchOps.GetMissing = 0
 	return config
 }
 

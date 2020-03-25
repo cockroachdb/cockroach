@@ -37,7 +37,7 @@ func TestOperationsFormat(t *testing.T) {
 		{
 			step: step(closureTxn(ClosureTxnType_Commit, batch(get(`d`), get(`e`)), put(`f`, `g`))),
 			expected: `
-			db0.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			  {
 			    b := &Batch{}
 			    b.Get(ctx, "d")
