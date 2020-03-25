@@ -779,14 +779,21 @@ func (hjs *HashJoinerStats) Stats() map[string]string {
 
 // StatsForQueryPlan implements the DistSQLSpanStats interface.
 func (hjs *HashJoinerStats) StatsForQueryPlan() []string {
-	leftInputStats := hjs.LeftInputStats.StatsForQueryPlan("left ")
-	leftInputStats = append(leftInputStats, hjs.RightInputStats.StatsForQueryPlan("right ")...)
-	return append(
-		leftInputStats,
-		fmt.Sprintf("stored side: %s", hjs.StoredSide),
-		fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(hjs.MaxAllocatedMem)),
-		fmt.Sprintf("%s: %s", MaxDiskQueryPlanSuffix, humanizeutil.IBytes(hjs.MaxAllocatedDisk)),
-	)
+	stats := hjs.LeftInputStats.StatsForQueryPlan("left ")
+	stats = append(stats, hjs.RightInputStats.StatsForQueryPlan("right ")...)
+	stats = append(stats, fmt.Sprintf("stored side: %s", hjs.StoredSide))
+
+	if hjs.MaxAllocatedMem != 0 {
+		stats = append(stats,
+			fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(hjs.MaxAllocatedMem)))
+	}
+
+	if hjs.MaxAllocatedDisk != 0 {
+		stats = append(stats,
+			fmt.Sprintf("%s: %s", MaxDiskQueryPlanSuffix, humanizeutil.IBytes(hjs.MaxAllocatedDisk)))
+	}
+
+	return stats
 }
 
 // outputStatsToTrace outputs the collected hashJoiner stats to the trace. Will
