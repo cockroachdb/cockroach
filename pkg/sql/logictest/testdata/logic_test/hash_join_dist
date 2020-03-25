@@ -1,4 +1,4 @@
-# LogicTest: 5node-dist-vec
+# LogicTest: 5node-default-configs
 
 statement ok
 CREATE TABLE t (k INT, v INT)

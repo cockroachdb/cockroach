@@ -263,14 +263,13 @@ statement count 1
 INSERT INTO xyz VALUES (111, 222, 333)
 
 
-# TODO(jordan): re-enable post #28716
-# statement count 1
-# UPDATE xyz SET (z, y) = (SELECT 666, 777), x = (SELECT 2)
-# 
-# query III
-# SELECT * from xyz
-# ----
-# 2 777 666
+statement count 1
+UPDATE xyz SET (z, y) = (SELECT 666, 777), x = (SELECT 2)
+
+query III
+SELECT * from xyz
+----
+2 777 666
 
 statement ok
 CREATE TABLE lots (

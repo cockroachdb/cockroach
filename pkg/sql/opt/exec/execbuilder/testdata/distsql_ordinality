@@ -1,4 +1,4 @@
-# LogicTest: 5node-dist
+# LogicTest: 5node
 
 statement ok
 CREATE TABLE xyz (
