@@ -69,11 +69,11 @@ func runLogin(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(stderr, `#
 # Example uses:
 #
-#     curl [-k] --cookie '%s' https://...
+#     curl [-k] --cookie '%[1]s' https://...
 #
-#     wget [--no-check-certificate] --header='Cookie: %s' https://...
+#     wget [--no-check-certificate] --header='Cookie: %[1]s' https://...
 #
-`, hC, hC)
+`, hC)
 		}
 	}
 
@@ -132,7 +132,7 @@ RETURNING id
 
 	// Spell out the cookie.
 	sCookie := &serverpb.SessionCookie{ID: id, Secret: secret}
-	httpCookie, err = server.EncodeSessionCookie(sCookie)
+	httpCookie, err = server.EncodeSessionCookie(sCookie, false /* forHTTPSOnly */)
 	return id, httpCookie, err
 }
 
