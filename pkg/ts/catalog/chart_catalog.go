@@ -1834,6 +1834,19 @@ var charts = []sectionDescription{
 				Title:   "Pending Compaction",
 				Metrics: []string{"rocksdb.estimated-pending-compaction"},
 			},
+			{
+				Title:   "Ingestion",
+				Metrics: []string{"rocksdb.ingested-bytes"},
+			},
+			{
+				Title: "Flush & Compaction",
+				Metrics: []string{
+					"rocksdb.compaction.bytes-read",
+					"rocksdb.compaction.bytes-written",
+					"rocksdb.flushed-bytes",
+				},
+				AxisLabel: "Bytes",
+			},
 		},
 	},
 	{
