@@ -15,6 +15,9 @@ import "os"
 // drainSignals are the signals that will cause the server to drain and exit.
 var drainSignals = []os.Signal{os.Interrupt}
 
+// quitSignal is the signal to recognize to dump Go stacks.
+var quitSignal os.Signal = -1
+
 func handleSignalDuringShutdown(os.Signal) {
 	// Windows doesn't indicate whether a process exited due to a signal in the
 	// exit code, so we don't need to do anything but exit with a failing code.
