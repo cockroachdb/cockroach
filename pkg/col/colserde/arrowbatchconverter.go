@@ -263,7 +263,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 	// Reset reuses the passed-in Batch when possible, saving allocations but
 	// overwriting it. If the passed-in Batch is not suitable for use, a new one
 	// is allocated.
-	b.Reset(c.typs, n)
+	b.ResetNoTruncation(c.typs, n)
 	b.SetLength(n)
 	// Reset the batch, this resets the selection vector as well.
 	b.ResetInternalBatch()

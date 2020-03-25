@@ -1044,7 +1044,7 @@ func NewColOperator(
 				if tempColOffset > 0 {
 					// We want to project out temporary columns (which have indices in the
 					// range [wf.OutputColIdx, wf.OutputColIdx+tempColOffset)).
-					projection := make([]uint32, 0, wf.OutputColIdx+tempColOffset)
+					projection := make([]uint32, 0, wf.OutputColIdx+1)
 					for i := uint32(0); i < wf.OutputColIdx; i++ {
 						projection = append(projection, i)
 					}

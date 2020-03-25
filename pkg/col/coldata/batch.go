@@ -53,6 +53,12 @@ type Batch interface {
 	// engine consider either allocating a new Batch explicitly via
 	// colexec.Allocator or calling ResetInternalBatch.
 	Reset(types []coltypes.T, length int)
+	// ResetNoTruncation is the same as Reset, but if the batch has enough
+	// capacity for length and has more columns than the given coltypes, yet
+	// the prefix of already present columns matches the desired type schema,
+	// the batch will be reused (meaning this method does *not* truncate the
+	// type schema).
+	ResetNoTruncation(types []coltypes.T, length int)
 	// ResetInternalBatch resets a batch and its underlying Vecs for reuse. It's
 	// important for callers to call ResetInternalBatch if they own internal
 	// batches that they reuse as not doing this could result in correctness
@@ -162,6 +168,10 @@ func (b *zeroBatch) Reset([]coltypes.T, int) {
 	panic("zero batch should not be reset")
 }
 
+func (b *zeroBatch) ResetNoTruncation([]coltypes.T, int) {
+	panic("zero batch should not be reset")
+}
+
 // MemBatch is an in-memory implementation of Batch.
 type MemBatch struct {
 	// length of batch or sel in tuples
@@ -229,6 +239,12 @@ func (m *MemBatch) ReplaceCol(col Vec, colIdx int) {
 
 // Reset implements the Batch interface.
 func (m *MemBatch) Reset(types []coltypes.T, length int) {
+	m.ResetNoTruncation(types, length)
+	m.b = m.b[:len(types)]
+}
+
+// ResetNoTruncation implements the Batch interface.
+func (m *MemBatch) ResetNoTruncation(types []coltypes.T, length int) {
 	// The columns are always sized the same as the selection vector, so use it as
 	// a shortcut for the capacity (like a go slice, the batch's `Length` could be
 	// shorter than the capacity). We could be more defensive and type switch
@@ -251,7 +267,6 @@ func (m *MemBatch) Reset(types []coltypes.T, length int) {
 	m.SetLength(length)
 	m.SetSelection(false)
 	m.sel = m.sel[:length]
-	m.b = m.b[:len(types)]
 	for _, col := range m.ColVecs() {
 		col.Nulls().UnsetNulls()
 		if col.Type() == coltypes.Bytes {
