@@ -66,6 +66,10 @@ func SanitizeUrls(gen Generator, dbOverride string, urls []string) (string, erro
 		}
 		parsed.Path = dbName
 
+		q := parsed.Query()
+		q.Set("application_name", gen.Meta().Name)
+		parsed.RawQuery = q.Encode()
+
 		switch parsed.Scheme {
 		case "postgres", "postgresql":
 			urls[i] = parsed.String()

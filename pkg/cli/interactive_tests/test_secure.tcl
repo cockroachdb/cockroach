@@ -22,9 +22,9 @@ eexpect $prompt
 end_test
 
 
-proc start_secure_server {argv certs_dir} {
+proc start_secure_server {argv certs_dir extra} {
     report "BEGIN START SECURE SERVER"
-    system "$argv start-single-node --host=localhost --certs-dir=$certs_dir --pid-file=server_pid -s=path=logs/db --background >>expect-cmd.log 2>&1;
+    system "$argv start-single-node --host=localhost --certs-dir=$certs_dir --pid-file=server_pid -s=path=logs/db --background $extra >>expect-cmd.log 2>&1;
             $argv sql --certs-dir=$certs_dir -e 'select 1'"
     report "END START SECURE SERVER"
 }
@@ -35,7 +35,7 @@ proc stop_secure_server {argv certs_dir} {
     report "END STOP SECURE SERVER"
 }
 
-start_secure_server $argv $certs_dir
+start_secure_server $argv $certs_dir ""
 
 start_test "Check 'node ls' works with certificates."
 send "$argv node ls --certs-dir=$certs_dir\r"
@@ -113,7 +113,11 @@ end_test
 start_test "Check that the auth cookie can be emitted standalone."
 send "$argv auth-session login eisen --certs-dir=$certs_dir --only-cookie >cookie.txt\r"
 eexpect $prompt
+# we'll also need a root cookie for another test below.
+send "$argv auth-session login root --certs-dir=$certs_dir --only-cookie >cookie_root.txt\r"
+eexpect $prompt
 system "grep HttpOnly cookie.txt"
+system "grep HttpOnly cookie_root.txt"
 end_test
 
 start_test "Check that the session is visible in the output of list."
@@ -121,7 +125,8 @@ send "$argv auth-session list --certs-dir=$certs_dir\r"
 eexpect username
 eexpect eisen
 eexpect eisen
-eexpect "2 rows"
+eexpect root
+eexpect "3 rows"
 eexpect $prompt
 end_test
 
@@ -148,13 +153,21 @@ eexpect $prompt
 end_test
 
 start_test "Check that a root cookie works."
-send "$argv auth-session login root --certs-dir=$certs_dir --only-cookie >cookie.txt\r"
-eexpect $prompt
-send "$python $pyfile cookie.txt 'https://localhost:8080/_admin/v1/settings'\r"
+send "$python $pyfile cookie_root.txt 'https://localhost:8080/_admin/v1/settings'\r"
 eexpect "cluster.organization"
 eexpect $prompt
 end_test
 
+# Now test the cookies with non-TLS http.
+stop_secure_server $argv $certs_dir
+
+start_secure_server $argv $certs_dir --unencrypted-localhost-http
+
+start_test "Check that a root cookie works with non-TLS."
+send "$python $pyfile cookie_root.txt 'http://localhost:8080/_admin/v1/settings'\r"
+eexpect "cluster.organization"
+eexpect $prompt
+end_test
 
 send "exit 0\r"
 eexpect eof
