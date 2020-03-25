@@ -581,7 +581,7 @@ func TestLogout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	encodedCookie, err := EncodeSessionCookie(cookie)
+	encodedCookie, err := EncodeSessionCookie(cookie, false /* forHTTPSOnly */)
 	if err != nil {
 		t.Fatal(err)
 	}
