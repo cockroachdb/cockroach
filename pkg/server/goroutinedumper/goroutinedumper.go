@@ -113,10 +113,6 @@ func NewGoroutineDumper(dir string) (*GoroutineDumper, error) {
 	if dir == "" {
 		return nil, errors.New("directory to store dumps could not be determined")
 	}
-	dir = filepath.Join(dir, "goroutine_dump")
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, err
-	}
 	gd := &GoroutineDumper{
 		heuristics: []heuristic{
 			doubleSinceLastDumpHeuristic,
