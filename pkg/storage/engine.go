@@ -462,7 +462,9 @@ type Batch interface {
 	Repr() []byte
 }
 
-// Stats is a set of RocksDB stats. These are all described in RocksDB
+// Stats is a set of Engine stats. Most are described in RocksDB.
+// Some stats (eg, `CompactionBytesIngested` are only exposed
+// by Pebble).
 //
 // Currently, we collect stats from the following sources:
 // 1. RocksDB's internal "tickers" (i.e. counters). They're defined in
@@ -481,7 +483,11 @@ type Stats struct {
 	BloomFilterPrefixUseful        int64
 	MemtableTotalSize              int64
 	Flushes                        int64
+	FlushBytes                     int64
 	Compactions                    int64
+	CompactionBytesIngested        int64 // (Pebble only)
+	CompactionBytesRead            int64
+	CompactionBytesWritten         int64
 	TableReadersMemEstimate        int64
 	PendingCompactionBytesEstimate int64
 	L0FileCount                    int64

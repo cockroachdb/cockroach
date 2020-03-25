@@ -746,6 +746,23 @@ func (p *Pebble) Flush() error {
 // GetStats implements the Engine interface.
 func (p *Pebble) GetStats() (*Stats, error) {
 	m := p.db.Metrics()
+
+	// Aggregate compaction stats across levels.
+	// Writes to level zero are exclusively flushes and
+	// are counted under the `FlushBytes` statistic.
+	var (
+		compactionBytesIngested int64
+		compactionBytesRead     int64
+		compactionBytesWritten  int64
+	)
+	for _, lm := range m.Levels {
+		compactionBytesIngested += int64(lm.BytesIngested)
+		compactionBytesRead += int64(lm.BytesRead)
+		compactionBytesWritten += int64(lm.BytesWritten)
+		// tktk: adapt compaction bytes written to exlude flush bytes
+		// once we have a separate statistic exposed from Pebble
+	}
+
 	return &Stats{
 		BlockCacheHits:                 m.BlockCache.Hits,
 		BlockCacheMisses:               m.BlockCache.Misses,
@@ -755,7 +772,11 @@ func (p *Pebble) GetStats() (*Stats, error) {
 		BloomFilterPrefixUseful:        m.Filter.Hits,
 		MemtableTotalSize:              int64(m.MemTable.Size),
 		Flushes:                        m.Flush.Count,
+		FlushBytes:                     0, // tktk: fill in
 		Compactions:                    m.Compact.Count,
+		CompactionBytesIngested:        compactionBytesIngested,
+		CompactionBytesRead:            compactionBytesRead,
+		CompactionBytesWritten:         compactionBytesWritten,
 		TableReadersMemEstimate:        m.TableCache.Size,
 		PendingCompactionBytesEstimate: int64(m.Compact.EstimatedDebt),
 		L0FileCount:                    m.Levels[0].NumFiles,

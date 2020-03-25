@@ -1220,7 +1220,11 @@ func (r *RocksDB) GetStats() (*Stats, error) {
 		BloomFilterPrefixUseful:        int64(s.bloom_filter_prefix_useful),
 		MemtableTotalSize:              int64(s.memtable_total_size),
 		Flushes:                        int64(s.flushes),
+		FlushBytes:                     int64(s.flush_bytes),
 		Compactions:                    int64(s.compactions),
+		CompactionBytesIngested:        0, // Not exposed by RocksDB.
+		CompactionBytesRead:            int64(s.compaction_bytes_read),
+		CompactionBytesWritten:         int64(s.compaction_bytes_written),
 		TableReadersMemEstimate:        int64(s.table_readers_mem_estimate),
 		PendingCompactionBytesEstimate: int64(s.pending_compaction_bytes_estimate),
 		L0FileCount:                    int64(s.l0_file_count),
