@@ -520,9 +520,26 @@ func setColVal(vec coldata.Vec, idx int, val interface{}) {
 			bytesVal = []byte(val.(string))
 		}
 		vec.Bytes().Set(idx, bytesVal)
-		return
+	} else if vec.Type() == coltypes.Decimal {
+		// setColVal is used in multiple places, therefore val can be either a float
+		// or apd.Decimal.
+		if decimalVal, ok := val.(apd.Decimal); ok {
+			vec.Decimal()[idx].Set(&decimalVal)
+		} else {
+			floatVal := val.(float64)
+			decimalVal, _, err := apd.NewFromString(fmt.Sprintf("%f", floatVal))
+			if err != nil {
+				execerror.VectorizedInternalPanic(
+					fmt.Sprintf("unable to set decimal %f: %v", floatVal, err))
+			}
+			// .Set is used here instead of assignment to ensure the pointer address
+			// of the underlying storage for apd.Decimal remains the same. This can
+			// cause the code that does not properly use execgen package to fail.
+			vec.Decimal()[idx].Set(decimalVal)
+		}
+	} else {
+		reflect.ValueOf(vec.Col()).Index(idx).Set(reflect.ValueOf(val).Convert(reflect.TypeOf(vec.Col()).Elem()))
 	}
-	reflect.ValueOf(vec.Col()).Index(idx).Set(reflect.ValueOf(val).Convert(reflect.TypeOf(vec.Col()).Elem()))
 }
 
 // opTestInput is an Operator that columnarizes test input in the form of tuples
@@ -967,6 +984,16 @@ func tupleEquals(expected tuple, actual tuple) bool {
 						continue
 					} else if !math.IsNaN(f1) && !math.IsNaN(f2) && math.Abs(f1-f2) < 1e-6 {
 						continue
+					}
+				}
+			}
+			if d1, ok := actual[i].(apd.Decimal); ok {
+				if f2, ok := expected[i].(float64); ok {
+					d2, _, err := apd.NewFromString(fmt.Sprintf("%f", f2))
+					if err == nil && d1.Cmp(d2) == 0 {
+						continue
+					} else {
+						return false
 					}
 				}
 			}
