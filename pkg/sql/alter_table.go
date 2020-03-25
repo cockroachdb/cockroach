@@ -947,7 +947,7 @@ func applyColumnMutation(
 				nameExists,
 			)
 
-			////TODO(richardjcai): Rename newCol to d? for consistency
+			//TODO(richardjcai): Rename newCol to d? for consistency
 
 			var newColComputeExpr = proto.String(
 				fmt.Sprintf("%s::%s", col.Name, t.ToType.String()))
@@ -981,11 +981,21 @@ func applyColumnMutation(
 				NewColumnId: newCol.ID,
 			}
 
-			tableDesc.AddComputedColumnSwapMutation(swapArgs)
+			//colToDrop := protoutil.Clone(col).(*sqlbase.ColumnDescriptor)
 
-			//// TODO(richardjcai): Copied from drop column can unduplicate code.
-			//// If the dropped column uses a sequence, remove references to it from that sequence.
+			//2. For all indexes i that contain c, create a new i' that indexes all columns in c, but replaces c for c'
+			//  iterate through table desc indexes
+
+			//3. Enqueue an "index swap" mutation containing all indexes that need to be rewritten.
+			//
+			//Worry about FK later.
+
+			tableDesc.AddComputedColumnSwapMutation(swapArgs)
+			//// Enqueue drop.
+			//// TODO(richardjcai): Copied from drop column can deduplicate code.
+			// If the dropped column uses a sequence, remove references to it from that sequence.
 			//if len(col.UsesSequenceIds) > 0 {
+			//
 			//	if err := params.p.removeSequenceDependencies(params.ctx, tableDesc, col); err != nil {
 			//		return err
 			//	}
@@ -1001,10 +1011,12 @@ func applyColumnMutation(
 			//	return err
 			//}
 			//
+			//println(colToDrop.ID)
+			//
 			//found := false
 			//for i := range tableDesc.Columns {
-			//	if tableDesc.Columns[i].ID == col.ID {
-			//		tableDesc.AddColumnMutation(col, sqlbase.DescriptorMutation_DROP)
+			//	if tableDesc.Columns[i].ID == colToDrop.ID {
+			//		tableDesc.AddColumnMutation(colToDrop, sqlbase.DescriptorMutation_DROP)
 			//		// Use [:i:i] to prevent reuse of existing slice, or outstanding refs
 			//		// to ColumnDescriptors may unexpectedly change.
 			//		tableDesc.Columns = append(tableDesc.Columns[:i:i], tableDesc.Columns[i+1:]...)
@@ -1014,25 +1026,10 @@ func applyColumnMutation(
 			//}
 			//if !found {
 			//	return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			//		"column %q in the middle of being added, try again later", t.Column)
+			//		"error dropping old column: %q", col)
 			//}
 
-
-			//2. For all indexes i that contain c, create a new i' that indexes all columns in c, but replaces c for c'
-			// iterate through table desc indexes
-			//3. Enqueue an "index swap" mutation containing all indexes that need to be rewritten.
-
-			// Question, when is migration done, when is c' column used? Should be after indexes
-			// are swapped.
-
-			// Worry about FK later.
-
-			//return unimplemented.NewWithIssueDetail(9851,
-			//	fmt.Sprintf("%s->%s", col.Type.SQLString(), typ.SQLString()),
-			//	"type conversion not yet implemented")
-
-			// This whole process must be able to be rolled back.
-		}
+	}
 
 	case *tree.AlterTableSetDefault:
 		if len(col.UsesSequenceIds) > 0 {

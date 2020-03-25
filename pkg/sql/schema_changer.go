@@ -958,6 +958,53 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 					})
 				}
 			}
+
+			//** Computed Col Swap **//
+			if computedColumnSwap := mutation.GetComputedColumnSwap(); computedColumnSwap != nil {
+				if fn := sc.testingKnobs.RunBeforeComputedColumnSwap; fn != nil {
+					fn()
+				}
+
+				// If we performed MakeMutationComplete on a PrimaryKeySwap mutation, then we need to start
+				// a job for the index deletion mutations that the primary key swap mutation added, if any.
+				mutationID := scDesc.ClusterVersion.NextMutationID
+				span := scDesc.PrimaryIndexSpan()
+				var spanList []jobspb.ResumeSpanList
+				for j := len(scDesc.ClusterVersion.Mutations); j < len(scDesc.Mutations); j++ {
+					spanList = append(spanList,
+						jobspb.ResumeSpanList{
+							ResumeSpans: roachpb.Spans{span},
+						},
+					)
+				}
+				// Only start a job if spanList has any spans. If len(spanList) == 0, then
+				// no mutations were enqueued by the primary key change.
+				if len(spanList) > 0 {
+					jobRecord := jobs.Record{
+						Description:   fmt.Sprintf("CLEANUP JOB for '%s'", sc.job.Payload().Description),
+						Username:      sc.job.Payload().Username,
+						DescriptorIDs: sqlbase.IDs{scDesc.GetID()},
+						Details: jobspb.SchemaChangeDetails{
+							TableID:        sc.tableID,
+							MutationID:     mutationID,
+							ResumeSpanList: spanList,
+							FormatVersion:  jobspb.JobResumerFormatVersion,
+						},
+						Progress:      jobspb.SchemaChangeProgress{},
+						NonCancelable: true,
+					}
+					job, err := sc.jobRegistry.CreateJobWithTxn(ctx, jobRecord, txn)
+					if err != nil {
+						return err
+					}
+					scDesc.MutationJobs = append(scDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
+						MutationID: mutationID,
+						JobID:      *job.ID(),
+					})
+				}
+			}
+			//** Computed Col Swap END **//
+
 			i++
 		}
 		if i == 0 {
@@ -1429,6 +1476,9 @@ type SchemaChangerTestingKnobs struct {
 
 	// RunBeforePrimaryKeySwap is called just before the primary key swap is committed.
 	RunBeforePrimaryKeySwap func()
+
+	// RunBeforeComputedColumnSwap is called just before the compted column swap is committed.
+	RunBeforeComputedColumnSwap func()
 
 	// RunBeforeIndexValidation is called just before starting the index validation,
 	// after setting the job status to validating.

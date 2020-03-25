@@ -3169,7 +3169,7 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 			}
 
 			newCol.Hidden = false
-			//oldCol.Hidden = true
+			oldCol.Hidden = true
 
 			newCol.ComputeExpr = nil
 			// oldCol should still have new values written to newCol in case
@@ -3198,46 +3198,45 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 
 			// Handle indexes as well.
 
-			// Swap Column IDs.
-			tempId := newCol.ID
-			newCol.ID = oldCol.ID
-			oldCol.ID = tempId
+			// Update Column Families, new Col is not in a family.
+			//for i := range desc.Families {
+			//	for j := range desc.Families[i].ColumnIDs {
+			//		if desc.Families[i].ColumnIDs[j] == newCol.ID {
+			//			desc.Families[i].ColumnNames[j] = newCol.Name
+			//		} else if desc.Families[i].ColumnIDs[j] == oldCol.ID {
+			//			desc.Families[i].ColumnNames[j] = oldCol.Name
+			//		}
+			//	}
+			//}
 
-			for i := range desc.Families {
-				for j := range desc.Families[i].ColumnIDs {
-					if desc.Families[i].ColumnIDs[j] == newCol.ID {
-						desc.Families[i].ColumnNames[j] = newCol.Name
-					} else if desc.Families[i].ColumnIDs[j] == oldCol.ID {
-						desc.Families[i].ColumnNames[j] = oldCol.Name
-					}
-				}
-			}
+			// Swap Column Orders.
+			// oldCol is seen first.
+			// This logic is kind of hard to follow - try to clean up.
+			oldColCopy := protoutil.Clone(oldCol).(*ColumnDescriptor)
 
-			//// Swap Column Orders.
-			//// oldCol is seen first.
-			// use protoutil.clone
-			tempCol := *oldCol
-			println(oldCol.Name, newCol.Name)
 			for i := range desc.Columns {
 				println(desc.Columns[i].Name)
 				if desc.Columns[i].ID == newCol.ID {
-					desc.Columns[i] = tempCol
+					desc.Columns[i] = *oldColCopy
 				} else if desc.Columns[i].ID == oldCol.ID {
 					desc.Columns[i] = *newCol
 				}
 				println(desc.Columns[i].Name)
-
+			}
 
 			//Drop old column.
-			//for i := range desc.Columns {
-			//	if desc.Columns[i].ID == oldCol.ID {
-			//		desc.AddColumnMutation(oldCol, DescriptorMutation_DROP)
-			//		// Use [:i:i] to prevent reuse of existing slice, or outstanding refs
-			//		// to ColumnDescriptors may unexpectedly change.
-			//		desc.Columns = append(desc.Columns[:i:i], desc.Columns[i+1:]...)
-			//		break
-			//	}
-			//}
+			for i := range desc.Columns {
+				if desc.Columns[i].ID == oldColCopy.ID {
+					desc.AddColumnMutation(oldColCopy, DescriptorMutation_DROP)
+					// Use [:i:i] to prevent reuse of existing slice, or outstanding refs
+					// to ColumnDescriptors may unexpectedly change.
+					desc.Columns = append(desc.Columns[:i:i], desc.Columns[i+1:]...)
+					break
+				}
+			}
+
+			// After drop table.
+			// ERROR: internal error: job not found for table id 59, mutation 2
 		}
 
 	case DescriptorMutation_DROP:
