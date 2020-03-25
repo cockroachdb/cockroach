@@ -990,6 +990,17 @@ func (o *StorageParams) Format(ctx *FmtCtx) {
 	}
 }
 
+// CreateTableOnCommitSetting represents the CREATE TABLE ... ON COMMIT <action>
+// parameters.
+type CreateTableOnCommitSetting uint32
+
+const (
+	// CreateTableOnCommitUnset indicates that ON COMMIT was unset.
+	CreateTableOnCommitUnset CreateTableOnCommitSetting = iota
+	// CreateTableOnCommitPreserveRows indicates that ON COMMIT PRESERVE ROWS was set.
+	CreateTableOnCommitPreserveRows
+)
+
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
 	IfNotExists   bool
@@ -998,6 +1009,7 @@ type CreateTable struct {
 	PartitionBy   *PartitionBy
 	Temporary     bool
 	StorageParams StorageParams
+	OnCommit      CreateTableOnCommitSetting
 	// In CREATE...AS queries, Defs represents a list of ColumnTableDefs, one for
 	// each column, and a ConstraintTableDef for each constraint on a subset of
 	// these columns.
