@@ -187,6 +187,14 @@ func (n *createTableNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.CreateTempTableCounter)
 	}
 
+	// TODO(#46556): support ON COMMIT DROP | DELETE ROWS
+	if !isTemporary && n.n.OnCommit != tree.CreateTableOnCommitUnset {
+		return pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"ON COMMIT can only be used on temporary tables",
+		)
+	}
+
 	// Warn against creating non-partitioned indexes on a partitioned table,
 	// which is undesirable in most cases.
 	if n.n.PartitionBy != nil {

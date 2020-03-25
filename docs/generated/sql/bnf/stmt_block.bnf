@@ -771,6 +771,7 @@ unreserved_keyword ::=
 	| 'PLANS'
 	| 'PRECEDING'
 	| 'PREPARE'
+	| 'PRESERVE'
 	| 'PRIORITY'
 	| 'PUBLIC'
 	| 'PUBLICATION'
@@ -1025,12 +1026,12 @@ create_schema_stmt ::=
 	| 'CREATE' 'SCHEMA' 'IF' 'NOT' 'EXISTS' schema_name
 
 create_table_stmt ::=
-	'CREATE' opt_temp_create_table 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
-	| 'CREATE' opt_temp_create_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
+	'CREATE' opt_temp_create_table 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_create_table_on_commit
+	| 'CREATE' opt_temp_create_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_create_table_on_commit
 
 create_table_as_stmt ::=
-	'CREATE' opt_temp_create_table 'TABLE' table_name create_as_opt_col_list 'AS' select_stmt
-	| 'CREATE' opt_temp_create_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name create_as_opt_col_list 'AS' select_stmt
+	'CREATE' opt_temp_create_table 'TABLE' table_name create_as_opt_col_list 'AS' select_stmt opt_create_table_on_commit
+	| 'CREATE' opt_temp_create_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name create_as_opt_col_list 'AS' select_stmt opt_create_table_on_commit
 
 create_view_stmt ::=
 	'CREATE' opt_temp 'VIEW' view_name opt_column_list 'AS' select_stmt
@@ -1432,6 +1433,9 @@ opt_temp_create_table ::=
 opt_table_elem_list ::=
 	table_elem_list
 	| 
+
+opt_create_table_on_commit ::=
+	'ON' 'COMMIT' 'PRESERVE' 'ROWS'
 
 create_as_opt_col_list ::=
 	'(' create_as_table_defs ')'
