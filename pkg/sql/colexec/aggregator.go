@@ -211,8 +211,13 @@ func NewOrderedAggregator(
 		isScalar:  isScalar,
 	}
 
-	a.aggregateFuncs, a.outputTypes, err = makeAggregateFuncs(a.allocator, aggTypes, aggFns)
-
+	a.aggregateFuncs, err = makeAggregateFuncs(a.allocator, aggTypes, aggFns)
+	if err != nil {
+		return nil, errors.AssertionFailedf(
+			"this error should have been checked in isAggregateSupported\n%+v", err,
+		)
+	}
+	a.outputTypes, err = makeAggregateFuncsOutputTypes(aggTypes, aggFns)
 	if err != nil {
 		return nil, errors.AssertionFailedf(
 			"this error should have been checked in isAggregateSupported\n%+v", err,
@@ -224,9 +229,8 @@ func NewOrderedAggregator(
 
 func makeAggregateFuncs(
 	allocator *Allocator, aggTyps [][]coltypes.T, aggFns []execinfrapb.AggregatorSpec_Func,
-) ([]aggregateFunc, []coltypes.T, error) {
+) ([]aggregateFunc, error) {
 	funcs := make([]aggregateFunc, len(aggFns))
-	outTyps := make([]coltypes.T, len(aggFns))
 
 	for i := range aggFns {
 		var err error
@@ -250,26 +254,46 @@ func makeAggregateFuncs(
 		case execinfrapb.AggregatorSpec_BOOL_OR:
 			funcs[i] = newBoolOrAgg()
 		default:
-			return nil, nil, errors.Errorf("unsupported columnar aggregate function %s", aggFns[i].String())
+			return nil, errors.Errorf("unsupported columnar aggregate function %s", aggFns[i].String())
 		}
 
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return funcs, nil
+}
+
+func makeAggregateFuncsOutputTypes(
+	aggTyps [][]coltypes.T, aggFns []execinfrapb.AggregatorSpec_Func,
+) ([]coltypes.T, error) {
+	outTyps := make([]coltypes.T, len(aggFns))
+
+	for i := range aggFns {
 		// Set the output type of the aggregate.
 		switch aggFns[i] {
 		case execinfrapb.AggregatorSpec_COUNT_ROWS, execinfrapb.AggregatorSpec_COUNT:
 			// TODO(jordan): this is a somewhat of a hack. The aggregate functions
 			// should come with their own output types, somehow.
 			outTyps[i] = coltypes.Int64
-		default:
+		case
+			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+			execinfrapb.AggregatorSpec_AVG,
+			execinfrapb.AggregatorSpec_SUM,
+			execinfrapb.AggregatorSpec_SUM_INT,
+			execinfrapb.AggregatorSpec_MIN,
+			execinfrapb.AggregatorSpec_MAX,
+			execinfrapb.AggregatorSpec_BOOL_AND,
+			execinfrapb.AggregatorSpec_BOOL_OR:
 			// Output types are the input types for now.
 			outTyps[i] = aggTyps[i][0]
-		}
-
-		if err != nil {
-			return nil, nil, err
+		default:
+			return nil, errors.Errorf("unsupported columnar aggregate function %s", aggFns[i].String())
 		}
 	}
 
-	return funcs, outTyps, nil
+	return outTyps, nil
 }
 
 func (a *orderedAggregator) initWithOutputBatchSize(outputSize int) {
@@ -470,8 +494,15 @@ func isAggregateSupported(
 			return false, errors.Newf("sum_int is only supported on Int64 through vectorized")
 		}
 	}
-	_, outputTypes, err := makeAggregateFuncs(
+	_, err = makeAggregateFuncs(
 		nil, /* allocator */
+		[][]coltypes.T{aggTypes},
+		[]execinfrapb.AggregatorSpec_Func{aggFn},
+	)
+	if err != nil {
+		return false, err
+	}
+	outputTypes, err := makeAggregateFuncsOutputTypes(
 		[][]coltypes.T{aggTypes},
 		[]execinfrapb.AggregatorSpec_Func{aggFn},
 	)
