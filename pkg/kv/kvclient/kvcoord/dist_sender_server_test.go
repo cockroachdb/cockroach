@@ -2570,8 +2570,22 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 	}
 }
 
+type pushExpectation int
+
+const (
+	// expectPusheeTxnRecovery means we're expecting transaction recovery to be
+	// performed (after finding a STAGING txn record).
+	expectPusheeTxnRecovery pushExpectation = iota
+	// expectPusheeTxnRecordNotFound means we're expecting the push to not find the
+	// pushee txn record.
+	expectPusheeTxnRecordNotFound
+	dontExpectNothing
+)
+
 // checkImplicitCommit checks whether the txn is implicitly committed.
-func checkImplicitCommit(ctx context.Context, db *kv.DB, txn roachpb.Transaction) (bool, error) {
+func checkImplicitCommit(
+	ctx context.Context, db *kv.DB, txn roachpb.Transaction, pushExpectation pushExpectation,
+) (bool, error) {
 	pushReq := roachpb.PushTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
@@ -2597,9 +2611,22 @@ func checkImplicitCommit(ctx context.Context, db *kv.DB, txn roachpb.Transaction
 	// Verify that we're not fooling ourselves and that checking for the implicit
 	// commit actually caused the txn recovery procedure to run.
 	recording := collectRec()
-	if "" == recording.FindLogMessage(
-		fmt.Sprintf("recovered txn %s", txn.ID.Short())) {
-		return false, errors.Errorf("recovery didn't run as expected. recording: %s", recording)
+	switch pushExpectation {
+	case expectPusheeTxnRecovery:
+		expMsg := fmt.Sprintf("recovered txn %s", txn.ID.Short())
+		if recording.FindLogMessage(expMsg) == "" {
+			return false, errors.Errorf(
+				"recovery didn't run as expected (missing \"%s\"). recording: %s",
+				expMsg, recording)
+		}
+	case expectPusheeTxnRecordNotFound:
+		expMsg := "pushee txn record not found"
+		if recording.FindLogMessage(expMsg) == "" {
+			return false, errors.Errorf(
+				"push didn't run as expected (missing \"%s\"). recording: %s",
+				expMsg, recording)
+		}
+	case dontExpectNothing:
 	}
 
 	pusheeStatus := resp.Responses[0].GetPushTxn().PusheeTxn.Status
@@ -2611,6 +2638,102 @@ func checkImplicitCommit(ctx context.Context, db *kv.DB, txn roachpb.Transaction
 	default:
 		return false, errors.Errorf("unexpected txn status: %s", pusheeStatus)
 	}
+}
+
+// Test that, even though at the kvserver level requests are not idempotent
+// across an EndTxn, a TxnCoordSender retry after a refresh still works fine. We
+// check that a transaction is not considered implicitly committed through a
+// combination of writes from a previous attempt of the EndTxn batch and a
+// STAGING txn record written by a newer attempt of that batch.
+// Namely, the scenario is as follows:
+//
+// 1. client sends Put(a) + Put(b) + EndTxn. The Put(a) is split by the
+//    DistSender from the rest. Note that the parallel commit mechanism is in
+//    effect here.
+// 2. Put(a) succeeds, but Put(b) is pushed. The client needs to refresh.
+// 3. The refresh succeeds.
+// 4. The client resends the whole batch (note that we don't keep track of the
+//    previous partial success).
+// 5. The batch is split again. b's sub-batch executed first. Say a's batch is
+// 	  delayed.
+//
+// The point of this test is to check that the txn is not considered to be
+// implicitly committed at this point. Handling this scenario requires special
+// care. If we wouldn't do anything, then we'd end up with a STAGING txn record
+// (from the second attempt of the request) and an intent on "a" from the first
+// attempt. That intent would have a lower timestamp than the txn record and so
+// the txn would be considered explicitly committed. If the txn were to be
+// considered implicitly committed, and the intent on "a" was resolved, then
+// write on a (when it eventually evaluates) might return wrong results, or be
+// pushed, or generally get very confused about how its own transaction got
+// committed already.
+//
+// We handle this scenario by disabling the parallel commit on the request's 2nd
+// attempt. Thus, the EndTxn will be split from all the other requests, and the
+// txn record is never written if anything fails.
+func TestTxnCoordSenderRetriesAcrossEndTxn_EndTxnSucceedsLate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var filterFn atomic.Value
+	var storeKnobs kvserver.StoreTestingKnobs
+	storeKnobs.EvalKnobs.TestingEvalFilter =
+		func(fArgs storagebase.FilterArgs) *roachpb.Error {
+			fnVal := filterFn.Load()
+			if fn, ok := fnVal.(func(storagebase.FilterArgs) *roachpb.Error); ok && fn != nil {
+				return fn(fArgs)
+			}
+			return nil
+		}
+
+	s, _, db := serverutils.StartServer(t,
+		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	keyA, keyA1, keyB, keyB1 := roachpb.Key("a"), roachpb.Key("a1"), roachpb.Key("b"), roachpb.Key("b1")
+	require.NoError(t, setupMultipleRanges(ctx, db, string(keyB)))
+
+	txn := db.NewTxn(ctx, "test txn")
+	// Do a write to anchor the txn on b's range.
+	require.NoError(t, txn.Put(ctx, keyB1, "b1"))
+
+	// Do a read to prevent the txn for performing server-side refreshes.
+	_, err := txn.Get(ctx, keyA1)
+	require.NoError(t, err)
+
+	// After the txn started, perform another read on keyB. This will cause the
+	// txn's upcoming write to be pushed. Because the write on keyB is sent
+	// together with the EndTxn, this means that the write too old condition
+	// can't be deferred and the respective sub-batch will return a
+	// WriteTooOldError.
+	_, err = db.Get(ctx, keyB)
+	require.NoError(t, err)
+
+	b := txn.NewBatch()
+	b.Put(keyA, "a")
+	b.Put(keyB, "b")
+
+	var count int32
+	filterFn.Store(func(args storagebase.FilterArgs) *roachpb.Error {
+		put, ok := args.Req.(*roachpb.PutRequest)
+		if !ok {
+			return nil
+		}
+		if !put.Key.Equal(keyA) {
+			return nil
+		}
+		count++
+		// Reject the left request on the 2nd attempt.
+		if count == 2 {
+			return roachpb.NewErrorf("injected")
+		}
+		return nil
+	})
+
+	require.Error(t, txn.CommitInBatch(ctx, b), "injected")
+	committed, err := checkImplicitCommit(ctx, db, *txn.TestingCloneTxn(), expectPusheeTxnRecordNotFound)
+	require.NoError(t, err)
+	require.False(t, committed)
 }
 
 // Test that, even though at the kvserver level requests are not idempotent
@@ -2708,7 +2831,7 @@ func TestTxnCoordSenderRetriesAcrossEndTxn_EndTxnSucceedsEarly(t *testing.T) {
 	})
 
 	require.Error(t, txn.CommitInBatch(ctx, b), "injected")
-	committed, err := checkImplicitCommit(ctx, db, *origTxn)
+	committed, err := checkImplicitCommit(ctx, db, *origTxn, expectPusheeTxnRecovery)
 
 	require.NoError(t, err)
 	require.False(t, committed)
