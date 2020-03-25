@@ -356,3 +356,10 @@ quoted_coll  CREATE TABLE quoted_coll (
   e STRING COLLATE en_us NULL AS (a COLLATE en_us) STORED,
   FAMILY "primary" (a, b, c, d, e, rowid)
 )
+
+# Regression for #46570.
+statement ok
+CREATE TABLE t46570(c0 BOOL, c1 STRING COLLATE en);
+CREATE INDEX ON t46570(rowid, c1 DESC);
+INSERT INTO t46570(c1, rowid) VALUES('' COLLATE en, 0);
+UPSERT INTO t46570(rowid) VALUES (0), (1)
