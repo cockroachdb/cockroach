@@ -1437,6 +1437,8 @@ func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 // */}}
 
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
+	o.mu.Lock()
+	defer o.mu.Unlock()
 	o.output.ResetInternalBatch()
 	for {
 		switch o.state {
