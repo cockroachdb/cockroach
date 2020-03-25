@@ -24,13 +24,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func checkFrom(expr tree.Expr, inScope *scope) {
-	if len(inScope.cols) == 0 {
-		panic(pgerror.Newf(pgcode.InvalidName,
-			"cannot use %q without a FROM clause", tree.ErrString(expr)))
-	}
-}
-
 // windowAggregateFrame() returns a frame that any aggregate built as a window
 // can use.
 func windowAggregateFrame() memo.WindowFrame {
@@ -99,15 +92,15 @@ func (b *Builder) expandStar(
 		}
 
 	case *tree.AllColumnsSelector:
-		checkFrom(expr, inScope)
-		src, _, err := t.Resolve(b.ctx, inScope)
+		src, srcMeta, err := t.Resolve(b.ctx, inScope)
 		if err != nil {
 			panic(err)
 		}
-		exprs = make([]tree.TypedExpr, 0, len(inScope.cols))
-		aliases = make([]string, 0, len(inScope.cols))
-		for i := range inScope.cols {
-			col := &inScope.cols[i]
+		refScope := srcMeta.(*scope)
+		exprs = make([]tree.TypedExpr, 0, len(refScope.cols))
+		aliases = make([]string, 0, len(refScope.cols))
+		for i := range refScope.cols {
+			col := &refScope.cols[i]
 			if col.table == *src && !col.hidden {
 				exprs = append(exprs, col)
 				aliases = append(aliases, string(col.name))
@@ -115,7 +108,10 @@ func (b *Builder) expandStar(
 		}
 
 	case tree.UnqualifiedStar:
-		checkFrom(expr, inScope)
+		if len(inScope.cols) == 0 {
+			panic(pgerror.Newf(pgcode.InvalidName,
+				"cannot use %q without a FROM clause", tree.ErrString(expr)))
+		}
 		exprs = make([]tree.TypedExpr, 0, len(inScope.cols))
 		aliases = make([]string, 0, len(inScope.cols))
 		for i := range inScope.cols {
