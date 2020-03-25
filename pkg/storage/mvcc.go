@@ -739,6 +739,9 @@ func (opts *MVCCGetOptions) validate() error {
 // Note that transactional gets must be consistent. Put another way, only
 // non-transactional gets may be inconsistent.
 //
+// If the timestamp is specified as hlc.Timestamp{}, the value is expected to be
+// "inlined". See MVCCPut().
+//
 // When reading in "fail on more recent" mode, a WriteTooOldError will be
 // returned if the read observes a version with a timestamp above the read
 // timestamp. Similarly, a WriteIntentError will be returned if the read
