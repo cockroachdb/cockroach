@@ -707,6 +707,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if !ok {
 				return errors.AssertionFailedf("missing stats data")
 			}
+			if !params.p.EvalContext().TxnImplicit {
+				return errors.New("cannot inject statistics in an explicit transaction")
+			}
 			if err := injectTableStats(params, n.tableDesc.TableDesc(), sd); err != nil {
 				return err
 			}
