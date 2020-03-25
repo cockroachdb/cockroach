@@ -17,22 +17,21 @@ import { createStatementDiagnosticsReportAction } from "src/redux/statements";
 import { AdminUIState } from "src/redux/state";
 import { invalidateStatementDiagnosticsRequests, refreshStatementDiagnosticsRequests } from "src/redux/apiReducers";
 import { statementDiagnostics } from "src/util/docs";
-import { AggregateStatistics } from "../statementsTable";
 import { analytics } from "src/redux/analytics";
 
 export type ActivateDiagnosticsModalProps = MapDispatchToProps;
 
-function trackActivateDiagnostics (statement: AggregateStatistics) {
+function trackActivateDiagnostics (statement: string) {
   analytics.track({
     event: "Diagnostics Activation",
     properties: {
-      fingerprint: statement.label,
+      fingerprint: statement,
     },
   });
 }
 
 export interface ActivateDiagnosticsModalRef {
-  showModalFor: (statement: AggregateStatistics) => void;
+  showModalFor: (statement: string) => void;
 }
 
 // tslint:disable-next-line:variable-name
@@ -53,8 +52,8 @@ const ActivateDiagnosticsModal = (props: ActivateDiagnosticsModalProps, ref: Rea
 
   useImperativeHandle(ref, () => {
     return {
-      showModalFor: (forwardStatement: AggregateStatistics) => {
-        setStatement(forwardStatement.label);
+      showModalFor: (forwardStatement: string) => {
+        setStatement(forwardStatement);
         trackActivateDiagnostics(forwardStatement);
         setVisible(true);
       },
