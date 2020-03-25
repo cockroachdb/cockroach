@@ -381,7 +381,10 @@ typedef struct {
   int64_t bloom_filter_prefix_useful;
   int64_t memtable_total_size;
   int64_t flushes;
+  int64_t flush_bytes;
   int64_t compactions;
+  int64_t compact_read_bytes;
+  int64_t compact_write_bytes;
   int64_t table_readers_mem_estimate;
   int64_t pending_compaction_bytes_estimate;
   int64_t l0_file_count;
