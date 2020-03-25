@@ -1107,3 +1107,16 @@ sql.schema.new_column.qualification.default_expr
 
 statement ok
 DROP TABLE telemetry_test
+
+# Disable stats injection in explicit transactions.
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE inject_stats (k CHAR PRIMARY KEY, v TIMESTAMPTZ)
+
+statement error pq: cannot inject statistics in an explicit transaction
+ALTER TABLE inject_stats INJECT STATISTICS '[]'
+
+statement ok
+ROLLBACK
