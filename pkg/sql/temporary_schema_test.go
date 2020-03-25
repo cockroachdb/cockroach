@@ -213,3 +213,56 @@ func TestTemporaryObjectCleaner(t *testing.T) {
 	require.Equal(t, 1, tRowCount)
 	require.NoError(t, db.Close())
 }
+
+// TestTemporarySchemaDropDatabase tests having a temporary schema on one session
+// whilst dropping a database on another session will have the database drop
+// succeed.
+func TestTemporarySchemaDropDatabase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	numNodes := 3
+	tc := serverutils.StartTestCluster(
+		t,
+		numNodes,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "defaultdb",
+			},
+		},
+	)
+	defer tc.Stopper().Stop(context.TODO())
+
+	// Create a database to drop that has a temporary table inside.
+	{
+		db := tc.ServerConn(0)
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE DATABASE drop_me`)
+		sqlDB.Exec(t, `USE drop_me`)
+		sqlDB.Exec(t, `SET experimental_enable_temp_tables=true`)
+		sqlDB.Exec(t, `CREATE TEMP TABLE t (x INT)`)
+	}
+
+	// On another session, only leave the schema behind.
+	{
+		db := tc.ServerConn(1)
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `USE drop_me`)
+		sqlDB.Exec(t, `SET experimental_enable_temp_tables=true`)
+		sqlDB.Exec(t, `CREATE TEMP TABLE t2 (x INT)`)
+		sqlDB.Exec(t, `DROP TABLE t2`)
+	}
+
+	// On another session, drop the database.
+	{
+		db := tc.ServerConn(2)
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `DROP DATABASE drop_me CASCADE`)
+
+		var tempObjectCount int
+		sqlDB.QueryRow(
+			t,
+			`SELECT count(1) FROM system.namespace WHERE name LIKE 'pg_temp%' OR name IN ('t', 't2')`,
+		).Scan(&tempObjectCount)
+		assert.Equal(t, 0, tempObjectCount)
+	}
+}
