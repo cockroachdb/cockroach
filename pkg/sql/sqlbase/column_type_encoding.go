@@ -242,7 +242,11 @@ func DecodeTableKey(
 		return a.NewDString(tree.DString(r)), rkey, err
 	case types.CollatedStringFamily:
 		var r string
-		rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
+		if dir == encoding.Ascending {
+			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
+		} else {
+			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
+		}
 		if err != nil {
 			return nil, nil, err
 		}
