@@ -83,7 +83,9 @@ func applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 		// TODO(dan): Save returned desc?
 		o.Result = resultError(ctx, err)
 	case *ClosureTxnOperation:
+		var savedTxn *kv.Txn
 		txnErr := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			savedTxn = txn
 			for i := range o.Ops {
 				op := &o.Ops[i]
 				applyClientOp(ctx, txn, op)
@@ -110,6 +112,9 @@ func applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 			}
 		})
 		o.Result = resultError(ctx, txnErr)
+		if txnErr == nil {
+			o.Txn = savedTxn.Sender().TestingCloneTxn()
+		}
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, o, o))
 	}
@@ -130,11 +135,7 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation) {
 		} else {
 			o.Result.Type = ResultType_Value
 			if result.Value != nil {
-				if value, err := result.Value.GetBytes(); err != nil {
-					panic(errors.Wrapf(err, "decoding %x", result.Value.RawBytes))
-				} else {
-					o.Result.Value = value
-				}
+				o.Result.Value = result.Value.RawBytes
 			}
 		}
 	case *PutOperation:
@@ -172,11 +173,7 @@ func applyBatchOp(
 				subO.Result.Type = ResultType_Value
 				result := b.Results[i].Rows[0]
 				if result.Value != nil {
-					if value, err := result.Value.GetBytes(); err != nil {
-						panic(errors.Wrapf(err, "decoding %x", result.Value.RawBytes))
-					} else {
-						subO.Result.Value = value
-					}
+					subO.Result.Value = result.Value.RawBytes
 				}
 			}
 		case *PutOperation:

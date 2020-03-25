@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEngine(t *testing.T) {
@@ -37,7 +38,9 @@ func TestEngine(t *testing.T) {
 		return hlc.Timestamp{WallTime: int64(i)}
 	}
 
-	e := MakeEngine()
+	e, err := MakeEngine()
+	require.NoError(t, err)
+	defer e.Close()
 	assert.Equal(t, missing, e.Get(roachpb.Key(`a`), ts(1)))
 	e.Put(k(`a`, ts(1)), roachpb.MakeValueFromString(`a-1`).RawBytes)
 	e.Put(k(`a`, ts(2)), roachpb.MakeValueFromString(`a-2`).RawBytes)

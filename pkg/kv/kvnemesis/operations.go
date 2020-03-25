@@ -120,7 +120,7 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 		newFctx.indent = fctx.indent + `  `
 		newFctx.receiver = txnName
 		w.WriteString(fctx.receiver)
-		fmt.Fprintf(w, `.Txn(ctx, func(ctx context.Context, %s *client.Txn) error {`, txnName)
+		fmt.Fprintf(w, `.Txn(ctx, func(ctx context.Context, %s *kv.Txn) error {`, txnName)
 		formatOps(w, newFctx, o.Ops)
 		if o.CommitInBatch != nil {
 			newFctx.receiver = `b`
@@ -146,6 +146,9 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 		w.WriteString(fctx.indent)
 		w.WriteString(`})`)
 		o.Result.format(w)
+		if o.Txn != nil {
+			fmt.Fprintf(w, ` txnpb:(%s)`, o.Txn)
+		}
 	default:
 		fmt.Fprintf(w, "%v", op.GetValue())
 	}
@@ -160,7 +163,12 @@ func (op GetOperation) format(w *strings.Builder, fctx formatCtx) {
 	case ResultType_Value:
 		v := `nil`
 		if len(op.Result.Value) > 0 {
-			v = `"` + string(op.Result.Value) + `"`
+			value, err := roachpb.Value{RawBytes: op.Result.Value}.GetBytes()
+			if err != nil {
+				v = fmt.Sprintf(`<err:%s>`, err.Error())
+			} else {
+				v = `"` + string(value) + `"`
+			}
 		}
 		fmt.Fprintf(w, ` // (%s, nil)`, v)
 	}
@@ -195,10 +203,10 @@ func (op ChangeReplicasOperation) format(w *strings.Builder, fctx formatCtx) {
 
 func (r Result) format(w *strings.Builder) {
 	switch r.Type {
+	case ResultType_NoError:
+		fmt.Fprintf(w, ` // nil`)
 	case ResultType_Error:
 		err := errors.DecodeError(context.TODO(), *r.Err)
 		fmt.Fprintf(w, ` // %s`, err.Error())
-	case ResultType_NoError:
-		fmt.Fprintf(w, ` // nil`)
 	}
 }

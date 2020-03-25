@@ -221,7 +221,16 @@ SET TIME ZONE 'GMT+1'
 query T
 SELECT '2001-01-01 00:00:00'::TIMESTAMP::TIMESTAMPTZ
 ----
-2001-01-01 00:00:00 +0100 +0100
+2001-01-01 00:00:00 -0100 -0100
+
+statement ok
+SET TIME ZONE '+1:00'
+
+query T
+SELECT '2001-01-01 00:00:00'::TIMESTAMP::TIMESTAMPTZ
+----
+2001-01-01 00:00:00 -0100 -0100
+
 
 # test that current_timestamp is correct in different timezones.
 subtest current_timestamp_correct_in_timezone
