@@ -771,6 +771,7 @@ unreserved_keyword ::=
 	| 'PLANS'
 	| 'PRECEDING'
 	| 'PREPARE'
+	| 'PRESERVE'
 	| 'PRIORITY'
 	| 'PUBLIC'
 	| 'PUBLICATION'

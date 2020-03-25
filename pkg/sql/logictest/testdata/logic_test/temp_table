@@ -7,7 +7,7 @@ SET experimental_enable_temp_tables=true
 subtest test_meta_tables
 
 statement ok
-CREATE TEMP TABLE temp_table_test (a timetz PRIMARY KEY)
+CREATE TEMP TABLE temp_table_test (a timetz PRIMARY KEY) ON COMMIT PRESERVE ROWS
 
 statement ok
 CREATE TEMP TABLE temp_table_ref (a timetz PRIMARY KEY)
@@ -204,3 +204,8 @@ DROP SEQUENCE pg_temp.temp_seq; DROP SEQUENCE pg_temp.ref_temp_table_a_seq; DROP
 
 statement ok
 SET experimental_serial_normalization='rowid'
+
+subtest table_with_on_commit
+
+statement error ON COMMIT can only be used on temporary tables
+CREATE TABLE a (a int) ON COMMIT PRESERVE ROWS
