@@ -365,7 +365,7 @@ func registerTPCC(r *testRegistry) {
 		LoadConfig:   multiLoadgen,
 
 		LoadWarehouses: 5000,
-		EstimatedMax:   2200,
+		EstimatedMax:   3000,
 
 		MinVersion: "v19.1.0",
 	})
