@@ -19,7 +19,6 @@ import (
 	"math/rand"
 	"reflect"
 	"strings"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -262,10 +261,6 @@ AND    i.indisprimary`, relid)
 
 	buf.WriteString(dmlSuffix.String())
 
-	if testing.Verbose() {
-		fmt.Println(buf.String())
-	}
-
 	writeStmt, err := db.Prepare(buf.String())
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -344,6 +339,8 @@ func DatumToGoSQL(d tree.Datum) (interface{}, error) {
 		return d.UUID, nil
 	case *tree.DIPAddr:
 		return d.IPAddr.String(), nil
+	case *tree.DJSON:
+		return d.JSON.String(), nil
 	}
 	return nil, errors.Errorf("unhandled datum type: %s", reflect.TypeOf(d))
 }
