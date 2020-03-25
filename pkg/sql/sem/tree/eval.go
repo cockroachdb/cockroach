@@ -3261,7 +3261,16 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				return d, nil
 			}
 			var a DBitArray
-			a.BitArray = v.BitArray.ToWidth(uint(t.Width()))
+			switch t.Oid() {
+			case oid.T_varbit:
+				// VARBITs do not have padding attached.
+				a.BitArray = v.BitArray.Clone()
+				if uint(t.Width()) < a.BitArray.BitLen() {
+					a.BitArray = a.BitArray.ToWidth(uint(t.Width()))
+				}
+			default:
+				a.BitArray = v.BitArray.Clone().ToWidth(uint(t.Width()))
+			}
 			return &a, nil
 		case *DInt:
 			return NewDBitArrayFromInt(int64(*v), uint(t.Width()))

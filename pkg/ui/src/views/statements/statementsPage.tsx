@@ -238,7 +238,7 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
                     statements,
                     selectedApp,
                     search,
-                    this.activateDiagnosticsRef.current?.showModalFor,
+                    this.activateDiagnosticsRef,
                   )
                 }
                 sortSetting={this.state.sortSetting}
