@@ -51,7 +51,8 @@ func NewConnFlags(genFlags *Flags) *ConnFlags {
 // SQL database set, rewriting them in place if necessary. This database name is
 // returned.
 func SanitizeUrls(gen Generator, dbOverride string, urls []string) (string, error) {
-	dbName := gen.Meta().Name
+	genName := gen.Meta().Name
+	dbName := genName
 	if dbOverride != `` {
 		dbName = dbOverride
 	}
@@ -60,11 +61,12 @@ func SanitizeUrls(gen Generator, dbOverride string, urls []string) (string, erro
 		if err != nil {
 			return "", err
 		}
-		if d := strings.TrimPrefix(parsed.Path, `/`); d != `` && d != dbName {
-			return "", fmt.Errorf(`%s specifies database %q, but database %q is expected`,
-				urls[i], d, dbName)
+		if err := setDBName(parsed, dbName); err != nil {
+			return "", err
 		}
-		parsed.Path = dbName
+		if err := setAppName(parsed, genName); err != nil {
+			return "", err
+		}
 
 		switch parsed.Scheme {
 		case "postgres", "postgresql":
@@ -74,4 +76,28 @@ func SanitizeUrls(gen Generator, dbOverride string, urls []string) (string, erro
 		}
 	}
 	return dbName, nil
+}
+
+func setDBName(url *url.URL, dbName string) error {
+	if d := strings.TrimPrefix(url.Path, `/`); d != `` && d != dbName {
+		return fmt.Errorf(`%s specifies database %q, but database %q is expected`,
+			url, d, dbName)
+	}
+	url.Path = dbName
+	return nil
+}
+
+func setAppName(url *url.URL, genName string) error {
+	const appNameKey = `application_name`
+	const appNamePrefix = `workload_`
+	appName := appNamePrefix + genName
+
+	q := url.Query()
+	if n := q.Get(appNameKey); n != `` && n != appName {
+		return fmt.Errorf(`%s specifies application_name %q, but application_name %q is expected`,
+			url, n, appName)
+	}
+	q.Set(appNameKey, appName)
+	url.RawQuery = q.Encode()
+	return nil
 }
