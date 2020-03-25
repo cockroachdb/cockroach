@@ -212,7 +212,12 @@ DBStatus DBImpl::GetStats(DBStatsResult* stats) {
       (int64_t)s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_USEFUL);
   stats->memtable_total_size = memtable_total_size;
   stats->flushes = (int64_t)event_listener->GetFlushes();
+  stats->flush_bytes = (int64_t)s->getTickerCount(rocksdb::FLUSH_WRITE_BYTES);
   stats->compactions = (int64_t)event_listener->GetCompactions();
+  stats->compact_read_bytes =
+      (int64_t)s->getTickerCount(rocksdb::COMPACT_READ_BYTES);
+  stats->compact_write_bytes =
+      (int64_t)s->getTickerCount(rocksdb::COMPACT_WRITE_BYTES);
   stats->table_readers_mem_estimate = table_readers_mem_estimate;
   stats->pending_compaction_bytes_estimate = pending_compaction_bytes_estimate;
   stats->l0_file_count = std::atoi(l0_file_count_str.c_str());

@@ -338,11 +338,35 @@ var (
 		Measurement: "Flushes",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRdbFlushedBytes = metric.Metadata{
+		Name:        "rocksdb.flushed-bytes",
+		Help:        "Bytes written during flush",
+		Measurement: "Bytes Written",
+		Unit:        metric.Unit_BYTES,
+	}
 	metaRdbCompactions = metric.Metadata{
 		Name:        "rocksdb.compactions",
 		Help:        "Number of table compactions",
 		Measurement: "Compactions",
 		Unit:        metric.Unit_COUNT,
+	}
+	metaRdbIngestedBytes = metric.Metadata{
+		Name:        "rocksdb.ingested-bytes",
+		Help:        "Bytes ingested",
+		Measurement: "Bytes Ingested",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRdbCompactedBytesRead = metric.Metadata{
+		Name:        "rocksdb.compacted-bytes-read",
+		Help:        "Bytes read during compaction",
+		Measurement: "Bytes Read",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRdbCompactedBytesWritten = metric.Metadata{
+		Name:        "rocksdb.compacted-bytes-written",
+		Help:        "Bytes written during compaction",
+		Measurement: "Bytes Written",
+		Unit:        metric.Unit_BYTES,
 	}
 	metaRdbTableReadersMemEstimate = metric.Metadata{
 		Name:        "rocksdb.table-readers-mem-estimate",
@@ -1042,7 +1066,11 @@ type StoreMetrics struct {
 	RdbBloomFilterPrefixUseful  *metric.Gauge
 	RdbMemtableTotalSize        *metric.Gauge
 	RdbFlushes                  *metric.Gauge
+	RdbFlushedBytes             *metric.Gauge
 	RdbCompactions              *metric.Gauge
+	RdbIngestedBytes            *metric.Gauge
+	RdbCompactedBytesRead       *metric.Gauge
+	RdbCompactedBytesWritten    *metric.Gauge
 	RdbTableReadersMemEstimate  *metric.Gauge
 	RdbReadAmplification        *metric.Gauge
 	RdbNumSSTables              *metric.Gauge
@@ -1253,7 +1281,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbBloomFilterPrefixUseful:  metric.NewGauge(metaRdbBloomFilterPrefixUseful),
 		RdbMemtableTotalSize:        metric.NewGauge(metaRdbMemtableTotalSize),
 		RdbFlushes:                  metric.NewGauge(metaRdbFlushes),
+		RdbFlushedBytes:             metric.NewGauge(metaRdbFlushedBytes),
 		RdbCompactions:              metric.NewGauge(metaRdbCompactions),
+		RdbIngestedBytes:            metric.NewGauge(metaRdbIngestedBytes),
+		RdbCompactedBytesRead:       metric.NewGauge(metaRdbCompactedBytesRead),
+		RdbCompactedBytesWritten:    metric.NewGauge(metaRdbCompactedBytesWritten),
 		RdbTableReadersMemEstimate:  metric.NewGauge(metaRdbTableReadersMemEstimate),
 		RdbReadAmplification:        metric.NewGauge(metaRdbReadAmplification),
 		RdbNumSSTables:              metric.NewGauge(metaRdbNumSSTables),
@@ -1447,7 +1479,11 @@ func (sm *StoreMetrics) updateRocksDBStats(stats storage.Stats) {
 	sm.RdbBloomFilterPrefixChecked.Update(stats.BloomFilterPrefixChecked)
 	sm.RdbMemtableTotalSize.Update(stats.MemtableTotalSize)
 	sm.RdbFlushes.Update(stats.Flushes)
+	sm.RdbFlushedBytes.Update(stats.FlushedBytes)
 	sm.RdbCompactions.Update(stats.Compactions)
+	sm.RdbIngestedBytes.Update(stats.IngestedBytes)
+	sm.RdbCompactedBytesRead.Update(stats.CompactedBytesRead)
+	sm.RdbCompactedBytesWritten.Update(stats.CompactedBytesWritten)
 	sm.RdbTableReadersMemEstimate.Update(stats.TableReadersMemEstimate)
 }
 
