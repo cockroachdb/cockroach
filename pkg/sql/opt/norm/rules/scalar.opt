@@ -104,7 +104,7 @@
 [EliminateExistsGroupBy, Normalize]
 (Exists (GroupBy | DistinctOn $input:*) $subqueryPrivate:*) => (Exists $input $subqueryPrivate)
 
-# ExistsLimit inserts a LIMIT 1 "under" Exists so as to save resources
+# IntroduceExistsLimit inserts a LIMIT 1 "under" Exists so as to save resources
 # to make the EXISTS determination.
 #
 # This rule uses and sets a boolean "WasLimited" on the Exists
@@ -119,7 +119,7 @@
 # pushing down a LIMIT 1 to limit the amount of work done on every row.)
 [IntroduceExistsLimit, Normalize]
 (Exists
-    $input:^(Project | GroupBy | DistinctOn) & ^(HasOuterCols $input) & ^(HasZeroOrOneRow $input)
+    $input:* & ^(HasOuterCols $input) & ^(HasZeroOrOneRow $input)
     $subqueryPrivate:* & ^(IsLimited $subqueryPrivate)
 )
 =>
