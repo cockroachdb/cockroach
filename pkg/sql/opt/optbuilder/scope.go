@@ -99,8 +99,10 @@ type scope struct {
 	ctes map[string]*cteSource
 
 	// context is the current context in the SQL query (e.g., "SELECT" or
-	// "HAVING"). It is used for error messages.
-	context string
+	// "HAVING"). It is used for error messages and to identify scoping errors
+	// (e.g., aggregates are not allowed in the FROM clause of their own query
+	// level).
+	context exprKind
 }
 
 // cteSource represents a CTE in the given query.
@@ -110,6 +112,57 @@ type cteSource struct {
 	originalExpr tree.Statement
 	expr         memo.RelExpr
 	id           opt.WithID
+}
+
+// exprKind is used to represent the kind of the current expression in the
+// SQL query.
+type exprKind int8
+
+const (
+	exprKindNone exprKind = iota
+	exprKindAlterTableSplitAt
+	exprKindDistinctOn
+	exprKindFrom
+	exprKindGroupBy
+	exprKindHaving
+	exprKindLateralJoin
+	exprKindLimit
+	exprKindOffset
+	exprKindOn
+	exprKindOrderBy
+	exprKindReturning
+	exprKindSelect
+	exprKindValues
+	exprKindWhere
+	exprKindWindowFrameStart
+	exprKindWindowFrameEnd
+)
+
+var exprKindName = [...]string{
+	exprKindNone:              "",
+	exprKindAlterTableSplitAt: "ALTER TABLE SPLIT AT",
+	exprKindDistinctOn:        "DISTINCT ON",
+	exprKindFrom:              "FROM",
+	exprKindGroupBy:           "GROUP BY",
+	exprKindHaving:            "HAVING",
+	exprKindLateralJoin:       "LATERAL JOIN",
+	exprKindLimit:             "LIMIT",
+	exprKindOffset:            "OFFSET",
+	exprKindOn:                "ON",
+	exprKindOrderBy:           "ORDER BY",
+	exprKindReturning:         "RETURNING",
+	exprKindSelect:            "SELECT",
+	exprKindValues:            "VALUES",
+	exprKindWhere:             "WHERE",
+	exprKindWindowFrameStart:  "WINDOW FRAME START",
+	exprKindWindowFrameEnd:    "WINDOW FRAME END",
+}
+
+func (k exprKind) String() string {
+	if k < 0 || k > exprKind(len(exprKindName)-1) {
+		return fmt.Sprintf("exprKind(%d)", k)
+	}
+	return exprKindName[k]
 }
 
 // initGrouping initializes the groupby information for this scope.
@@ -329,7 +382,7 @@ func (s *scope) resolveType(expr tree.Expr, desired *types.T) tree.TypedExpr {
 // desired type.
 func (s *scope) resolveAndRequireType(expr tree.Expr, desired *types.T) tree.TypedExpr {
 	expr = s.walkExprTree(expr)
-	texpr, err := tree.TypeCheckAndRequire(expr, s.builder.semaCtx, desired, s.context)
+	texpr, err := tree.TypeCheckAndRequire(expr, s.builder.semaCtx, desired, s.context.String())
 	if err != nil {
 		panic(err)
 	}
@@ -510,6 +563,7 @@ func (s *scope) endAggFunc(cols opt.ColSet) (g *groupby) {
 
 	for curr := s; curr != nil; curr = curr.parent {
 		if cols.Len() == 0 || cols.Intersects(curr.colSet()) {
+			curr.verifyAggregateContext()
 			if curr.groupby == nil {
 				curr.initGrouping()
 			}
@@ -518,6 +572,25 @@ func (s *scope) endAggFunc(cols opt.ColSet) (g *groupby) {
 	}
 
 	panic(errors.AssertionFailedf("aggregate function is not allowed in this context"))
+}
+
+// verifyAggregateContext checks that the current scope is allowed to contain
+// aggregate functions.
+func (s *scope) verifyAggregateContext() {
+	switch s.context {
+	case exprKindLateralJoin:
+		panic(pgerror.Newf(pgcode.Grouping,
+			"aggregate functions are not allowed in FROM clause of their own query level",
+		))
+
+	case exprKindOn:
+		panic(pgerror.Newf(pgcode.Grouping,
+			"aggregate functions are not allowed in JOIN conditions",
+		))
+
+	case exprKindWhere:
+		panic(tree.NewInvalidFunctionUsageError(tree.AggregateClass, s.context.String()))
+	}
 }
 
 // scope implements the tree.Visitor interface so that it can walk through
@@ -858,7 +931,7 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 	// context.
 	defer s.builder.semaCtx.Properties.Restore(s.builder.semaCtx.Properties)
 
-	s.builder.semaCtx.Properties.Require(s.context,
+	s.builder.semaCtx.Properties.Require(s.context.String(),
 		tree.RejectAggregates|tree.RejectWindowApplications|tree.RejectNestedGenerators)
 
 	expr := f.Walk(s)
@@ -1104,13 +1177,13 @@ func analyzeWindowFrame(s *scope, windowDef *tree.WindowDef) error {
 	}
 	if startBound != nil && startBound.OffsetExpr != nil {
 		oldContext := s.context
-		s.context = "WINDOW FRAME START"
+		s.context = exprKindWindowFrameStart
 		startBound.OffsetExpr = s.resolveAndRequireType(startBound.OffsetExpr, requiredType)
 		s.context = oldContext
 	}
 	if endBound != nil && endBound.OffsetExpr != nil {
 		oldContext := s.context
-		s.context = "WINDOW FRAME END"
+		s.context = exprKindWindowFrameEnd
 		endBound.OffsetExpr = s.resolveAndRequireType(endBound.OffsetExpr, requiredType)
 		s.context = oldContext
 	}

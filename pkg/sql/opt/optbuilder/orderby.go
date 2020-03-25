@@ -36,8 +36,8 @@ func (b *Builder) analyzeOrderBy(
 	// semaCtx in case we are recursively called within a subquery
 	// context.
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
-	b.semaCtx.Properties.Require("ORDER BY", tree.RejectGenerators)
-	inScope.context = "ORDER BY"
+	b.semaCtx.Properties.Require(exprKindOrderBy.String(), tree.RejectGenerators)
+	inScope.context = exprKindOrderBy
 
 	for i := range orderBy {
 		b.analyzeOrderByArg(orderBy[i], inScope, projectionsScope, orderByScope)
@@ -231,12 +231,12 @@ func (b *Builder) analyzeExtraArgument(
 	//    e.g. SELECT a, b FROM t ORDER by a+b
 
 	// First, deal with projection aliases.
-	idx := colIdxByProjectionAlias(expr, inScope.context, projectionsScope)
+	idx := colIdxByProjectionAlias(expr, inScope.context.String(), projectionsScope)
 
 	// If the expression does not refer to an alias, deal with
 	// column ordinals.
 	if idx == -1 {
-		idx = colIndex(len(projectionsScope.cols), expr, inScope.context)
+		idx = colIndex(len(projectionsScope.cols), expr, inScope.context.String())
 	}
 
 	var exprs tree.TypedExprs

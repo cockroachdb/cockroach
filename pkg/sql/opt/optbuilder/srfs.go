@@ -75,9 +75,9 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 	// semaCtx in case we are recursively called within a subquery
 	// context.
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
-	b.semaCtx.Properties.Require("FROM",
+	b.semaCtx.Properties.Require(exprKindFrom.String(),
 		tree.RejectAggregates|tree.RejectWindowApplications|tree.RejectNestedGenerators)
-	inScope.context = "FROM"
+	inScope.context = exprKindFrom
 
 	// Build each of the provided expressions.
 	zip := make(memo.ZipExpr, len(exprs))

@@ -90,8 +90,10 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 		var filters memo.FiltersExpr
 		if on, ok := cond.(*tree.OnJoinCond); ok {
 			// Do not allow special functions in the ON clause.
-			b.semaCtx.Properties.Require("ON", tree.RejectSpecial)
-			outScope.context = "ON"
+			b.semaCtx.Properties.Require(
+				exprKindOn.String(), tree.RejectGenerators|tree.RejectWindowApplications,
+			)
+			outScope.context = exprKindOn
 			filter := b.buildScalar(
 				outScope.resolveAndRequireType(on.Expr, types.Bool), outScope, nil, nil, nil,
 			)
