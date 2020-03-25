@@ -186,10 +186,12 @@ var insertFastPathClusterMode = settings.RegisterBoolSetting(
 	true,
 )
 
+const VectorizeClusterSettingName = "sql.defaults.vectorize"
+
 // VectorizeClusterMode controls the cluster default for when automatic
 // vectorization is enabled.
 var VectorizeClusterMode = settings.RegisterEnumSetting(
-	"sql.defaults.vectorize",
+	VectorizeClusterSettingName,
 	"default vectorize mode",
 	"auto",
 	map[int64]string{

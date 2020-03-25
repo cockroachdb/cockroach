@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -178,6 +179,16 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 				break
 			}
 			sqltelemetry.ReportJoinReorderLimit(int(val))
+		case VectorizeClusterSettingName:
+			val, err := strconv.Atoi(expectedEncodedValue)
+			if err != nil {
+				break
+			}
+			validatedExecMode, isValid := sessiondata.VectorizeExecModeFromString(sessiondata.VectorizeExecMode(val).String())
+			if !isValid {
+				break
+			}
+			telemetry.Inc(sqltelemetry.VecModeCounter(validatedExecMode.String()))
 		}
 
 		return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
