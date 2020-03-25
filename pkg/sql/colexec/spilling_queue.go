@@ -48,6 +48,7 @@ type spillingQueue struct {
 	curTailIdx       int
 	numInMemoryItems int
 	numOnDiskItems   int
+	closed           bool
 
 	diskQueueCfg   colcontainer.DiskQueueCfg
 	diskQueue      colcontainer.Queue
@@ -235,12 +236,19 @@ func (q *spillingQueue) maybeSpillToDisk(ctx context.Context) error {
 		}
 	}
 	log.VEvent(ctx, 1, "spilled to disk")
+	var diskQueue colcontainer.Queue
 	if q.rewindable {
-		q.diskQueue, err = colcontainer.NewRewindableDiskQueue(ctx, q.typs, q.diskQueueCfg, q.diskAcc)
+		diskQueue, err = colcontainer.NewRewindableDiskQueue(ctx, q.typs, q.diskQueueCfg, q.diskAcc)
 	} else {
-		q.diskQueue, err = colcontainer.NewDiskQueue(ctx, q.typs, q.diskQueueCfg, q.diskAcc)
+		diskQueue, err = colcontainer.NewDiskQueue(ctx, q.typs, q.diskQueueCfg, q.diskAcc)
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	// Only assign q.diskQueue if there was no error, otherwise the returned value
+	// may be non-nil but invalid.
+	q.diskQueue = diskQueue
+	return nil
 }
 
 // empty returns whether there are currently no items to be dequeued.
@@ -256,11 +264,18 @@ func (q *spillingQueue) spilled() bool {
 }
 
 func (q *spillingQueue) close(ctx context.Context) error {
+	if q.closed {
+		return nil
+	}
 	if q.diskQueue != nil {
+		if err := q.diskQueue.Close(ctx); err != nil {
+			return err
+		}
 		if q.fdSemaphore != nil {
 			q.fdSemaphore.Release(q.numFDsOpenAtAnyGivenTime())
 		}
-		return q.diskQueue.Close(ctx)
+		q.closed = true
+		return nil
 	}
 	return nil
 }
@@ -284,6 +299,7 @@ func (q *spillingQueue) reset(ctx context.Context) {
 		execerror.VectorizedInternalPanic(err)
 	}
 	q.diskQueue = nil
+	q.closed = false
 	q.numInMemoryItems = 0
 	q.numOnDiskItems = 0
 	q.curHeadIdx = 0
