@@ -126,8 +126,9 @@ var ExplainVecColumns = ResultColumns{
 	{Name: "text", Typ: types.String},
 }
 
-// ExplainBundleColumns are the result columns of an EXPLAIN BUNDLE statement.
-var ExplainBundleColumns = ResultColumns{
+// ExplainAnalyzeDebugColumns are the result columns of an
+// EXPLAIN ANALYZE (DEBUG) statement.
+var ExplainAnalyzeDebugColumns = ResultColumns{
 	{Name: "text", Typ: types.String},
 }
 

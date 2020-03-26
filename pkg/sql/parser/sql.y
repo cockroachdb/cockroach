@@ -2656,32 +2656,52 @@ table_name_list:
 explain_stmt:
   EXPLAIN preparable_stmt
   {
-    $$.val = &tree.Explain{Statement: $2.stmt()}
+    var err error
+    $$.val, err = tree.MakeExplain(nil /* options */, $2.stmt())
+    if err != nil {
+      return setErr(sqllex, err)
+    }
   }
 | EXPLAIN error // SHOW HELP: EXPLAIN
 | EXPLAIN '(' explain_option_list ')' preparable_stmt
   {
-    $$.val = &tree.Explain{Options: $3.strs(), Statement: $5.stmt()}
+    var err error
+    $$.val, err = tree.MakeExplain($3.strs(), $5.stmt())
+    if err != nil {
+      return setErr(sqllex, err)
+    }
   }
 | EXPLAIN ANALYZE preparable_stmt
   {
-    $$.val = &tree.Explain{Options: []string{"DISTSQL", "ANALYZE"}, Statement: $3.stmt()}
+    var err error
+    $$.val, err = tree.MakeExplain([]string{"DISTSQL", "ANALYZE"}, $3.stmt())
+    if err != nil {
+      return setErr(sqllex, err)
+    }
   }
 | EXPLAIN ANALYSE preparable_stmt
   {
-    $$.val = &tree.Explain{Options: []string{"DISTSQL", "ANALYZE"}, Statement: $3.stmt()}
+    var err error
+    $$.val, err = tree.MakeExplain([]string{"DISTSQL", "ANALYZE"}, $3.stmt())
+    if err != nil {
+      return setErr(sqllex, err)
+    }
   }
 | EXPLAIN ANALYZE '(' explain_option_list ')' preparable_stmt
   {
-    $$.val = &tree.Explain{Options: append($4.strs(), "ANALYZE"), Statement: $6.stmt()}
+    var err error
+    $$.val, err = tree.MakeExplain(append($4.strs(), "ANALYZE"), $6.stmt())
+    if err != nil {
+      return setErr(sqllex, err)
+    }
   }
 | EXPLAIN ANALYSE '(' explain_option_list ')' preparable_stmt
   {
-    $$.val = &tree.Explain{Options: append($4.strs(), "ANALYZE"), Statement: $6.stmt()}
-  }
-| EXPLAIN BUNDLE preparable_stmt
-  {
-    $$.val = &tree.ExplainBundle{Statement: $3.stmt()}
+    var err error
+    $$.val, err = tree.MakeExplain(append($4.strs(), "ANALYZE"), $6.stmt())
+    if err != nil {
+      return setErr(sqllex, err)
+    }
   }
 // This second error rule is necessary, because otherwise
 // preparable_stmt also provides "selectclause := '(' error ..." and
