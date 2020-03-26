@@ -411,79 +411,10 @@ func getFilteredBucket(
 		panic(errors.AssertionFailedf("span must be fully contained in the bucket"))
 	}
 
-	var rangeBefore, rangeAfter float64
-	isDiscrete := false
-	ok := true
-	// TODO(rytaft): handle more types here.
-	// Note: the calculations below assume that bucketLowerBound is inclusive and
-	// Span.PreferInclusive() has been called on the span.
-	switch spanLowerBound.ResolvedType().Family() {
-	case types.IntFamily:
-		rangeBefore = float64(*b.UpperBound.(*tree.DInt)) - float64(*bucketLowerBound.(*tree.DInt))
-		rangeAfter = float64(*spanUpperBound.(*tree.DInt)) - float64(*spanLowerBound.(*tree.DInt))
-		isDiscrete = true
-
-	case types.DateFamily:
-		lowerBefore := bucketLowerBound.(*tree.DDate)
-		upperBefore := b.UpperBound.(*tree.DDate)
-		lowerAfter := spanLowerBound.(*tree.DDate)
-		upperAfter := spanUpperBound.(*tree.DDate)
-		if lowerBefore.IsFinite() && upperBefore.IsFinite() &&
-			lowerAfter.IsFinite() && upperAfter.IsFinite() {
-			rangeBefore = float64(upperBefore.PGEpochDays()) - float64(lowerBefore.PGEpochDays())
-			rangeAfter = float64(upperAfter.PGEpochDays()) - float64(lowerAfter.PGEpochDays())
-			isDiscrete = true
-		} else {
-			ok = false
-		}
-
-	case types.DecimalFamily:
-		lowerBefore, err := bucketLowerBound.(*tree.DDecimal).Float64()
-		if err != nil {
-			ok = false
-			break
-		}
-		upperBefore, err := b.UpperBound.(*tree.DDecimal).Float64()
-		if err != nil {
-			ok = false
-			break
-		}
-		lowerAfter, err := spanLowerBound.(*tree.DDecimal).Float64()
-		if err != nil {
-			ok = false
-			break
-		}
-		upperAfter, err := spanUpperBound.(*tree.DDecimal).Float64()
-		if err != nil {
-			ok = false
-			break
-		}
-		rangeBefore = upperBefore - lowerBefore
-		rangeAfter = upperAfter - lowerAfter
-
-	case types.FloatFamily:
-		rangeBefore = float64(*b.UpperBound.(*tree.DFloat)) - float64(*bucketLowerBound.(*tree.DFloat))
-		rangeAfter = float64(*spanUpperBound.(*tree.DFloat)) - float64(*spanLowerBound.(*tree.DFloat))
-
-	case types.TimestampFamily:
-		lowerBefore := bucketLowerBound.(*tree.DTimestamp).Time
-		upperBefore := b.UpperBound.(*tree.DTimestamp).Time
-		lowerAfter := spanLowerBound.(*tree.DTimestamp).Time
-		upperAfter := spanUpperBound.(*tree.DTimestamp).Time
-		rangeBefore = float64(upperBefore.Sub(lowerBefore))
-		rangeAfter = float64(upperAfter.Sub(lowerAfter))
-
-	case types.TimestampTZFamily:
-		lowerBefore := bucketLowerBound.(*tree.DTimestampTZ).Time
-		upperBefore := b.UpperBound.(*tree.DTimestampTZ).Time
-		lowerAfter := spanLowerBound.(*tree.DTimestampTZ).Time
-		upperAfter := spanUpperBound.(*tree.DTimestampTZ).Time
-		rangeBefore = float64(upperBefore.Sub(lowerBefore))
-		rangeAfter = float64(upperAfter.Sub(lowerAfter))
-
-	default:
-		ok = false
-	}
+	// Extract the range sizes before and after filtering.
+	rangeBefore, rangeAfter, ok := getRangesBeforeAndAfter(
+		bucketLowerBound, b.UpperBound, spanLowerBound, spanUpperBound,
+	)
 
 	var numEq float64
 	isSpanEndBoundaryInclusive := filteredSpan.EndBoundary() == constraint.IncludeBoundary
@@ -494,7 +425,7 @@ func getFilteredBucket(
 
 	var numRange float64
 	if ok && rangeBefore > 0 {
-		if isDiscrete && !includesOriginalUpperBound {
+		if isDiscrete(bucketLowerBound.ResolvedType()) && !includesOriginalUpperBound {
 			// The data type is discrete (e.g., integer or date) and the new upper
 			// bound falls within the original range, so we can assign some of the
 			// old NumRange to the new NumEq.
@@ -521,6 +452,91 @@ func getFilteredBucket(
 		DistinctRange: distinctCountRange,
 		UpperBound:    spanUpperBound,
 	}
+}
+
+// getRangesBeforeAndAfter returns the size of the ranges before and after the
+// given bucket is filtered by the given span. Returns ok=true if these range
+// sizes are calculated successfully, and false otherwise.
+func getRangesBeforeAndAfter(
+	bucketLowerBound, bucketUpperBound, spanLowerBound, spanUpperBound tree.Datum,
+) (rangeBefore, rangeAfter float64, ok bool) {
+	// If the data types don't match, don't bother trying to calculate the range
+	// sizes. This should almost never happen, but we want to avoid type
+	// assertion errors below.
+	typesMatch :=
+		bucketLowerBound.ResolvedType().Equivalent(bucketUpperBound.ResolvedType()) &&
+			bucketUpperBound.ResolvedType().Equivalent(spanLowerBound.ResolvedType()) &&
+			spanLowerBound.ResolvedType().Equivalent(spanUpperBound.ResolvedType())
+	if !typesMatch {
+		return 0, 0, false
+	}
+
+	// TODO(rytaft): handle more types here.
+	// Note: the calculations below assume that bucketLowerBound is inclusive and
+	// Span.PreferInclusive() has been called on the span.
+
+	getRange := func(lowerBound, upperBound tree.Datum) (rng float64, ok bool) {
+		switch lowerBound.ResolvedType().Family() {
+		case types.IntFamily:
+			rng = float64(*upperBound.(*tree.DInt)) - float64(*lowerBound.(*tree.DInt))
+			return rng, true
+
+		case types.DateFamily:
+			lower := lowerBound.(*tree.DDate)
+			upper := upperBound.(*tree.DDate)
+			if lower.IsFinite() && upper.IsFinite() {
+				rng = float64(upper.PGEpochDays()) - float64(lower.PGEpochDays())
+				return rng, true
+			}
+			return 0, false
+
+		case types.DecimalFamily:
+			lower, err := lowerBound.(*tree.DDecimal).Float64()
+			if err != nil {
+				return 0, false
+			}
+			upper, err := upperBound.(*tree.DDecimal).Float64()
+			if err != nil {
+				return 0, false
+			}
+			rng = upper - lower
+			return rng, true
+
+		case types.FloatFamily:
+			rng = float64(*upperBound.(*tree.DFloat)) - float64(*lowerBound.(*tree.DFloat))
+			return rng, true
+
+		case types.TimestampFamily:
+			lower := lowerBound.(*tree.DTimestamp).Time
+			upper := upperBound.(*tree.DTimestamp).Time
+			rng = float64(upper.Sub(lower))
+			return rng, true
+
+		case types.TimestampTZFamily:
+			lower := lowerBound.(*tree.DTimestampTZ).Time
+			upper := upperBound.(*tree.DTimestampTZ).Time
+			rng = float64(upper.Sub(lower))
+			return rng, true
+
+		default:
+			return 0, false
+		}
+	}
+
+	rangeBefore, okBefore := getRange(bucketLowerBound, bucketUpperBound)
+	rangeAfter, okAfter := getRange(spanLowerBound, spanUpperBound)
+	ok = okBefore && okAfter
+
+	return rangeBefore, rangeAfter, ok
+}
+
+// isDiscrete returns true if the given data type is discrete.
+func isDiscrete(typ *types.T) bool {
+	switch typ.Family() {
+	case types.IntFamily, types.DateFamily:
+		return true
+	}
+	return false
 }
 
 // histogramWriter prints histograms with the following formatting:
