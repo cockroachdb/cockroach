@@ -208,6 +208,8 @@ func (tc *txnCommitter) SendLocked(
 	// could be a combination of protos from responses, all merged by
 	// DistSender.
 	if pErr := needTxnRetryAfterStaging(br); pErr != nil {
+		log.VEventf(ctx, 2, "parallel commit failed since some writes were pushed. "+
+			"Synthesized err: %s", pErr)
 		return nil, pErr
 	}
 
