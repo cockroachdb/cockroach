@@ -1193,3 +1193,42 @@ query O
 EXECUTE rcc('t')
 ----
 53
+
+user root
+
+# Regression test for #46217. Histogram type doesn't match column type.
+statement ok
+CREATE TABLE ts (d DATE PRIMARY KEY, x INT);
+
+statement ok
+ALTER TABLE ts INJECT STATISTICS '[
+  {
+    "columns": ["d"],
+    "created_at": "2020-03-24 15:34:22.863634+00:00",
+    "distinct_count": 1000,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "2020-03-24 15:16:12.117516+00:00"
+      },
+      {
+        "distinct_range": 501.60499999999996,
+        "num_eq": 10,
+        "num_range": 9999,
+        "upper_bound": "2020-03-25 00:05:28.117516+00:00"
+      }
+    ],
+    "histo_col_type": "TIMESTAMP",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 100000
+  }
+]';
+
+statement ok
+PREPARE q AS DELETE FROM ts WHERE ts.d <= $1
+
+statement ok
+EXECUTE q ('2020-03-25')
