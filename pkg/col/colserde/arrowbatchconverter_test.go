@@ -209,7 +209,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 			data, err := c.BatchToArrow(batch)
 			require.NoError(b, err)
 			testPrefix := fmt.Sprintf("%s/nullFraction=%0.2f", typ.String(), nullFraction)
-			result := coldata.NewMemBatch(typs)
+			result := coldata.NewMemBatch([]coltypes.T{typ})
 			b.Run(testPrefix+"/ArrowToBatch", func(b *testing.B) {
 				b.SetBytes(numBytes[typIdx])
 				for i := 0; i < b.N; i++ {

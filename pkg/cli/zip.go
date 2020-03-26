@@ -151,7 +151,7 @@ func (z *zipper) createJSON(name string, m interface{}) error {
 }
 
 func (z *zipper) createError(name string, e error) error {
-	w, err := z.create(name, time.Time{})
+	w, err := z.create(name+".err.txt", time.Time{})
 	if err != nil {
 		return err
 	}
