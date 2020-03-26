@@ -65,8 +65,7 @@ func NewWithIssueDetail(issue int, detail, msg string) error {
 	return unimplementedInternal(1 /*depth*/, issue, detail, false /*format*/, msg)
 }
 
-// NewWithIssueDetailf is like UnimplementedWithIssueDetail
-// but the message is formatted.
+// NewWithIssueDetailf is like NewWithIssueDetail but the message is formatted.
 func NewWithIssueDetailf(issue int, detail, format string, args ...interface{}) error {
 	return unimplementedInternal(1 /*depth*/, issue, detail, true /*format*/, format, args...)
 }
