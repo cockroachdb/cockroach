@@ -50,13 +50,15 @@ var backpressureRangeSizeMultiplier = settings.RegisterValidatedFloatSetting(
 // is reduced by roughly exactly the multiplier then we'd potentially have
 // lots of ranges in this state.
 //
-// TODO(ajwerner): We could mitigate this situation further in two ways:
+// We additionally mitigate this situation further by:
 //
 //  1) We store in-memory on each replica the largest zone configuration range
 //     size (largestPreviousMaxRangeBytes) we've seen and we do not backpressure
 //     if the current range size is less than that. That value is cleared when
 //     a range splits or runs GC such that the range size becomes smaller than
 //     the current max range size.
+//
+// TODO(ajwerner): We could mitigate this even further by:
 //
 //  2) We assign a higher priority in the snapshot queue to ranges which are
 //     currently backpressuring than ranges which are larger but are not
