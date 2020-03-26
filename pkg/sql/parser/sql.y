@@ -415,6 +415,9 @@ func (u *sqlSymUnion) interleave() *tree.InterleaveDef {
 func (u *sqlSymUnion) partitionBy() *tree.PartitionBy {
     return u.val.(*tree.PartitionBy)
 }
+func (u *sqlSymUnion) createTableOnCommitSetting() tree.CreateTableOnCommitSetting {
+    return u.val.(tree.CreateTableOnCommitSetting)
+}
 func (u *sqlSymUnion) listPartition() tree.ListPartition {
     return u.val.(tree.ListPartition)
 }
@@ -573,7 +576,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OPERATOR
 
 %token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PHYSICAL PLACING
-%token <str> PLAN PLANS POSITION PRECEDING PRECISION PREPARE PRIMARY PRIORITY
+%token <str> PLAN PLANS POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY
 %token <str> PROCEDURAL PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY
@@ -857,6 +860,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.UserPriority> user_priority
 
 %type <tree.TableDefs> opt_table_elem_list table_elem_list create_as_opt_col_list create_as_table_defs
+%type <tree.CreateTableOnCommitSetting> opt_create_table_on_commit
 %type <*tree.InterleaveDef> opt_interleave
 %type <*tree.PartitionBy> opt_partition_by partition_by
 %type <str> partition opt_partition
@@ -4238,8 +4242,8 @@ create_schema_stmt:
 // %Help: CREATE TABLE - create a new table
 // %Category: DDL
 // %Text:
-// CREATE [[GLOBAL | LOCAL] {TEMPORARY | TEMP}] TABLE [IF NOT EXISTS] <tablename> ( <elements...> ) [<interleave>]
-// CREATE [[GLOBAL | LOCAL] {TEMPORARY | TEMP}] TABLE [IF NOT EXISTS] <tablename> [( <colnames...> )] AS <source>
+// CREATE [[GLOBAL | LOCAL] {TEMPORARY | TEMP}] TABLE [IF NOT EXISTS] <tablename> ( <elements...> ) [<interleave>] [<on_commit>]
+// CREATE [[GLOBAL | LOCAL] {TEMPORARY | TEMP}] TABLE [IF NOT EXISTS] <tablename> [( <colnames...> )] AS <source> [<interleave>] [<on commit>]
 //
 // Table elements:
 //    <name> <type> [<qualifiers...>]
@@ -4264,11 +4268,14 @@ create_schema_stmt:
 // Interleave clause:
 //    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
 //
+// On commit clause:
+//    ON COMMIT {PRESERVE ROWS | DROP | DELETE ROWS}
+//
 // %SeeAlso: SHOW TABLES, CREATE VIEW, SHOW CREATE,
 // WEBDOCS/create-table.html
 // WEBDOCS/create-table-as.html
 create_table_stmt:
-  CREATE opt_temp_create_table TABLE table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
+  CREATE opt_temp_create_table TABLE table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -4280,9 +4287,10 @@ create_table_stmt:
       PartitionBy: $9.partitionBy(),
       Temporary: $2.persistenceType(),
       StorageParams: $10.storageParams(),
+      OnCommit: $11.createTableOnCommitSetting(),
     }
   }
-| CREATE opt_temp_create_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
+| CREATE opt_temp_create_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -4294,6 +4302,7 @@ create_table_stmt:
       PartitionBy: $12.partitionBy(),
       Temporary: $2.persistenceType(),
       StorageParams: $13.storageParams(),
+      OnCommit: $14.createTableOnCommitSetting(),
     }
   }
 
@@ -4318,6 +4327,27 @@ opt_table_with:
     return unimplemented(sqllex, "create table with oids")
   }
 
+opt_create_table_on_commit:
+  /* EMPTY */
+  {
+    $$.val = tree.CreateTableOnCommitUnset
+  }
+| ON COMMIT PRESERVE ROWS
+  {
+    /* SKIP DOC */
+    $$.val = tree.CreateTableOnCommitPreserveRows
+  }
+| ON COMMIT DELETE ROWS error
+  {
+    /* SKIP DOC */
+    return unimplementedWithIssueDetail(sqllex, 46556, "delete rows")
+  }
+| ON COMMIT DROP error
+  {
+    /* SKIP DOC */
+    return unimplementedWithIssueDetail(sqllex, 46556, "drop")
+  }
+
 storage_parameter:
   name '=' d_expr
   {
@@ -4339,7 +4369,7 @@ storage_parameter_list:
   }
 
 create_table_as_stmt:
-  CREATE opt_temp_create_table TABLE table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data
+  CREATE opt_temp_create_table TABLE table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data opt_create_table_on_commit
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -4349,9 +4379,10 @@ create_table_as_stmt:
       Defs: $5.tblDefs(),
       AsSource: $8.slct(),
       StorageParams: $6.storageParams(),
+      OnCommit: $10.createTableOnCommitSetting(),
     }
   }
-| CREATE opt_temp_create_table TABLE IF NOT EXISTS table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data
+| CREATE opt_temp_create_table TABLE IF NOT EXISTS table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data opt_create_table_on_commit
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -4361,6 +4392,7 @@ create_table_as_stmt:
       Defs: $8.tblDefs(),
       AsSource: $11.slct(),
       StorageParams: $9.storageParams(),
+      OnCommit: $13.createTableOnCommitSetting(),
     }
   }
 
@@ -9877,6 +9909,7 @@ unreserved_keyword:
 | PLANS
 | PRECEDING
 | PREPARE
+| PRESERVE
 | PRIORITY
 | PUBLIC
 | PUBLICATION
