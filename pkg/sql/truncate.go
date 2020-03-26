@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -276,8 +275,8 @@ func (p *planner) truncateTable(
 		return err
 	}
 
-	// Reassign comment.
-	if err := reassignComment(ctx, p, tableDesc, newID); err != nil {
+	// Reassign comments on the table, columns and indexes.
+	if err := reassignComments(ctx, p, tableDesc, newTableDesc); err != nil {
 		return err
 	}
 
@@ -383,101 +382,19 @@ func reassignReferencedTables(
 	return changed, nil
 }
 
-// reassignComment reassign comment on table
-func reassignComment(
-	ctx context.Context, p *planner, oldTableDesc *sqlbase.MutableTableDescriptor, newID sqlbase.ID,
+// reassignComments reassign all comments on the table, indexes and columns.
+func reassignComments(
+	ctx context.Context, p *planner, oldTableDesc, newTableDesc *sqlbase.MutableTableDescriptor,
 ) error {
-	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
 		ctx,
-		"select-table-comment",
+		"update-table-comments",
 		p.txn,
-		`SELECT comment FROM system.comments WHERE type=$1 AND object_id=$2`,
-		keys.TableCommentType,
-		oldTableDesc.ID)
-	if err != nil {
-		return err
-	}
-
-	if comment != nil {
-		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
-			ctx,
-			"set-table-comment",
-			p.txn,
-			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
-			keys.TableCommentType,
-			newID,
-			comment[0])
-		if err != nil {
-			return err
-		}
-
-		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
-			ctx,
-			"delete-comment",
-			p.txn,
-			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
-			keys.TableCommentType,
-			oldTableDesc.ID)
-		if err != nil {
-			return err
-		}
-	}
-
-	for i := range oldTableDesc.Columns {
-		id := oldTableDesc.Columns[i].ID
-		err = reassignColumnComment(ctx, p, oldTableDesc.ID, newID, id)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// reassignComment reassign comment on column
-func reassignColumnComment(
-	ctx context.Context, p *planner, oldID sqlbase.ID, newID sqlbase.ID, columnID sqlbase.ColumnID,
-) error {
-	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
-		ctx,
-		"select-column-comment",
-		p.txn,
-		`SELECT comment FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3`,
-		keys.ColumnCommentType,
-		oldID,
-		columnID)
-	if err != nil {
-		return err
-	}
-
-	if comment != nil {
-		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
-			ctx,
-			"set-column-comment",
-			p.txn,
-			"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
-			keys.ColumnCommentType,
-			newID,
-			columnID,
-			comment[0])
-		if err != nil {
-			return err
-		}
-
-		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
-			ctx,
-			"delete-column-comment",
-			p.txn,
-			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
-			keys.ColumnCommentType,
-			oldID,
-			columnID)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+		`UPDATE system.comments SET object_id=$1 WHERE object_id=$2`,
+		newTableDesc.ID,
+		oldTableDesc.ID,
+	)
+	return err
 }
 
 // truncateTableInChunks truncates the data of a table in chunks. It deletes a
