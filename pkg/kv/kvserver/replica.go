@@ -469,6 +469,15 @@ type Replica struct {
 		// will see the effect of a protected timestamp record, they need to verify
 		// the request. See the comment on the struct for more details.
 		cachedProtectedTS cachedProtectedTimestampState
+
+		// largestPreviousMaxRangeSizeBytes tracks a previous zone.RangeMaxBytes
+		// which exceeded the current zone.RangeMaxBytes to help defeat the range
+		// backpressure mechanism in cases where a user reduces the configured range
+		// size. It is set when the zone config changes to a smaller value and the
+		// current range size exceeds the new value. It is cleared after the range's
+		// size drops below its current zone.MaxRangeBytes or if the
+		// zone.MaxRangeBytes increases to surpass the current value.
+		largestPreviousMaxRangeSizeBytes int64
 	}
 
 	rangefeedMu struct {
@@ -589,6 +598,33 @@ func (r *Replica) GetMaxBytes() int64 {
 func (r *Replica) SetZoneConfig(zone *zonepb.ZoneConfig) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	if r.isInitializedRLocked() &&
+		r.mu.zone != nil &&
+		zone != nil {
+		total := r.mu.state.Stats.Total()
+
+		// Set largestPreviousMaxRangeSizeBytes if the current range size is above
+		// the new limit and we don't already have a larger value. Reset it if
+		// the new limit is larger than the current largest we're aware of.
+		if total > *zone.RangeMaxBytes &&
+			*zone.RangeMaxBytes < *r.mu.zone.RangeMaxBytes &&
+			r.mu.largestPreviousMaxRangeSizeBytes < *r.mu.zone.RangeMaxBytes &&
+			// Check to make sure that we're replacing a real zone config. Otherwise
+			// the default value would prevent backpressure until the range was
+			// larger than the default value. When the store starts up it sets the
+			// zone for the replica to this default value; later on it overwrites it
+			// with a new instance even if the value is the same as the default.
+			r.mu.zone != r.store.cfg.DefaultZoneConfig &&
+			r.mu.zone != r.store.cfg.DefaultSystemZoneConfig {
+
+			r.mu.largestPreviousMaxRangeSizeBytes = *r.mu.zone.RangeMaxBytes
+		} else if r.mu.largestPreviousMaxRangeSizeBytes > 0 &&
+			r.mu.largestPreviousMaxRangeSizeBytes < *zone.RangeMaxBytes {
+
+			r.mu.largestPreviousMaxRangeSizeBytes = 0
+		}
+	}
 	r.mu.zone = zone
 }
 
