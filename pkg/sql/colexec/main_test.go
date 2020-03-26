@@ -67,6 +67,15 @@ func TestMain(m *testing.M) {
 	}())
 }
 
+const (
+	// MinBatchSize is the minimum acceptable size of batches for tests in this
+	// package.
+	MinBatchSize = 3
+	// MaxBatchSize is the maximum acceptable size of batches for tests in this
+	// package.
+	MaxBatchSize = 4096
+)
+
 func generateBatchSize() int {
 	randomizeBatchSize := envutil.EnvOrDefaultBool("COCKROACH_RANDOMIZE_BATCH_SIZE", true)
 	if randomizeBatchSize {

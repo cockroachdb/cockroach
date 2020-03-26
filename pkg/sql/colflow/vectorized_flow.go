@@ -20,8 +20,10 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -136,6 +138,12 @@ func NewVectorizedFlow(base *flowinfra.FlowBase) flowinfra.Flow {
 	return vf
 }
 
+var VectorizeTestingBatchSize = settings.RegisterNonNegativeIntSetting(
+	"sql.testing.vectorize.batch_size",
+	"the size of a batch of rows in the vectorized engine. 0 uses the default batch size",
+	0,
+)
+
 // Setup is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, opt flowinfra.FuseOpt,
@@ -151,6 +159,11 @@ func (f *vectorizedFlow) Setup(
 		recordingStats = true
 	}
 	helper := &vectorizedFlowCreatorHelper{f: f.FlowBase}
+
+	if testingBatchSize := VectorizeTestingBatchSize.Get(&f.FlowCtx.Cfg.Settings.SV); testingBatchSize != 0 {
+		coldata.SetBatchSizeForTests(int(testingBatchSize))
+	}
+
 	// Create a name for this flow's temporary directory. Note that this directory
 	// is lazily created when necessary and cleaned up in Cleanup(). The directory
 	// name is the flow's ID in most cases apart from when the flow's ID is unset

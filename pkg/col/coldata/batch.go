@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
@@ -64,37 +65,18 @@ type Batch interface {
 
 var _ Batch = &MemBatch{}
 
-const (
-	// MinBatchSize is the minimum acceptable size of batches.
-	MinBatchSize = 3
-	// MaxBatchSize is the maximum acceptable size of batches.
-	MaxBatchSize = 4096
-)
-
 // TODO(jordan): tune.
-var batchSize = 1024
+var batchSize int64 = 1024
 
 // BatchSize is the maximum number of tuples that fit in a column batch.
 func BatchSize() int {
-	return batchSize
+	return int(atomic.LoadInt64(&batchSize))
 }
 
 // SetBatchSizeForTests modifies batchSize variable. It should only be used in
-// tests.
+// tests. No verification is made of the input.
 func SetBatchSizeForTests(newBatchSize int) {
-	if newBatchSize > MaxBatchSize {
-		panic(
-			fmt.Sprintf("requested batch size %d is greater than MaxBatchSize %d",
-				newBatchSize, MaxBatchSize),
-		)
-	}
-	if newBatchSize < MinBatchSize {
-		panic(
-			fmt.Sprintf("requested batch size %d is smaller than MinBatchSize %d",
-				newBatchSize, MinBatchSize),
-		)
-	}
-	batchSize = newBatchSize
+	atomic.SwapInt64(&batchSize, int64(newBatchSize))
 }
 
 // NewMemBatch allocates a new in-memory Batch. A coltypes.Unknown type
