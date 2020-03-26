@@ -848,9 +848,10 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 	}
 
 	// Return NULL if at least one overload is possible, no overload accepts
-	// NULL arguments, the function isn't a generator builtin, and NULL is given
-	// as an argument.
-	if !def.NullableArgs && def.FunctionProperties.Class != GeneratorClass {
+	// NULL arguments, the function isn't a generator or aggregate builtin, and
+	// NULL is given as an argument.
+	if !def.NullableArgs && def.FunctionProperties.Class != GeneratorClass &&
+		def.FunctionProperties.Class != AggregateClass {
 		for _, expr := range typedSubExprs {
 			if expr.ResolvedType().Family() == types.UnknownFamily {
 				return DNull, nil

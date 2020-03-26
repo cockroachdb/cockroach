@@ -3839,3 +3839,26 @@ project
                      │              └── b:3
                      └── projections
                           └── (max:4, unnest:1) [as="?column?":6]
+
+# Regression test for #46196.
+build
+SELECT MAX(t0.c0) FROM (VALUES (NULL), (NULL)) t0(c0);
+----
+error (42725): ambiguous call: max(unknown), candidates are:
+max(int) -> int
+max(float) -> float
+max(decimal) -> decimal
+max(date) -> date
+max(timestamp) -> timestamp
+max(interval) -> interval
+max(string) -> string
+max(bytes) -> bytes
+max(timestamptz) -> timestamptz
+max(oid) -> oid
+max(uuid) -> uuid
+max(inet) -> inet
+max(time) -> time
+max(timetz) -> timetz
+max(jsonb) -> jsonb
+max(varbit) -> varbit
+max(bool) -> bool
