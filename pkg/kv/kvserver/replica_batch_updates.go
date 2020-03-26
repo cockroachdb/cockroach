@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -175,7 +176,9 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 // Note that this, like all the server-side bumping of the read timestamp, only
 // works for batches that exclusively contain writes; reads cannot be bumped
 // like this because they've already acquired timestamp-aware latches.
-func maybeBumpReadTimestampToWriteTimestamp(ctx context.Context, ba *roachpb.BatchRequest) bool {
+func maybeBumpReadTimestampToWriteTimestamp(
+	ctx context.Context, ba *roachpb.BatchRequest, latchSpans *spanset.SpanSet,
+) bool {
 	if ba.Txn == nil {
 		return false
 	}
@@ -189,20 +192,36 @@ func maybeBumpReadTimestampToWriteTimestamp(ctx context.Context, ba *roachpb.Bat
 	etArg := arg.(*roachpb.EndTxnRequest)
 	if batcheval.CanForwardCommitTimestampWithoutRefresh(ba.Txn, etArg) &&
 		!batcheval.IsEndTxnExceedingDeadline(ba.Txn.WriteTimestamp, etArg) {
-		bumpBatchTimestamp(ctx, ba, ba.Txn.WriteTimestamp)
-		return true
+		return tryBumpBatchTimestamp(ctx, ba, ba.Txn.WriteTimestamp, latchSpans)
 	}
 	return false
 }
 
-// bumpBatchTimestamp bumps ba's read and write timestamps to ts.
-func bumpBatchTimestamp(ctx context.Context, ba *roachpb.BatchRequest, ts hlc.Timestamp) {
+// tryBumpBatchTimestamp attempts to bump ba's read and write timestamps to ts.
+//
+// Returns true if the timestamp was bumped. Returns false if the timestamp could
+// not be bumped.
+func tryBumpBatchTimestamp(
+	ctx context.Context, ba *roachpb.BatchRequest, ts hlc.Timestamp, latchSpans *spanset.SpanSet,
+) bool {
+	if latchSpans.MaxProtectedTimestamp().Less(ts) {
+		// If the batch acquired any read latches with bounded (MVCC) timestamps
+		// below this new timestamp then we can not trivially bump the batch's
+		// timestamp without dropping and re-acquiring those latches. Doing so
+		// could allow the request to read at an unprotected timestamp.
+		//
+		// NOTE: we could consider adding a retry-loop above the latch
+		// acquisition to allow this to be retried, but given that we try not to
+		// mix read-only and read-write requests, doing so doesn't seem worth
+		// it.
+		return false
+	}
 	if ts.Less(ba.Timestamp) {
 		log.Fatalf(ctx, "trying to bump to %s <= ba.Timestamp: %s", ts, ba.Timestamp)
 	}
 	ba.Timestamp = ts
 	if txn := ba.Txn; txn == nil {
-		return
+		return true
 	}
 	if ts.Less(ba.Txn.ReadTimestamp) || ts.Less(ba.Txn.WriteTimestamp) {
 		log.Fatalf(ctx, "trying to bump to %s inconsistent with ba.Txn.ReadTimestamp: %s, "+
@@ -214,4 +233,5 @@ func bumpBatchTimestamp(ctx context.Context, ba *roachpb.BatchRequest, ts hlc.Ti
 	ba.Txn.ReadTimestamp = ts
 	ba.Txn.WriteTimestamp = ba.Timestamp
 	ba.Txn.WriteTooOld = false
+	return true
 }

@@ -1671,6 +1671,42 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// No retries, 1pc commit.
 		},
 		{
+			name: "forwarded timestamp with get in batch commit",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				_, err := db.Get(ctx, "a") // set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				// Advance timestamp.
+				if err := txn.Put(ctx, "a", "put"); err != nil {
+					return err
+				}
+				b := txn.NewBatch()
+				b.Get("a2")
+				return txn.CommitInBatch(ctx, b)
+			},
+			// Read-only request (Get) prevents server-side refresh.
+			txnCoordRetry: true,
+		},
+		{
+			name: "forwarded timestamp with scan in batch commit",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				_, err := db.Get(ctx, "a") // set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				// Advance timestamp.
+				if err := txn.Put(ctx, "a", "put"); err != nil {
+					return err
+				}
+				b := txn.NewBatch()
+				b.Scan("a2", "a3")
+				return txn.CommitInBatch(ctx, b)
+			},
+			// Read-only request (Scan) prevents server-side refresh.
+			txnCoordRetry: true,
+		},
+		{
 			// If we've exhausted the limit for tracking refresh spans but we
 			// already refreshed, keep running the txn.
 			name: "forwarded timestamp with too many refreshes, read only",
@@ -1702,8 +1738,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// Even if accounting for the refresh spans would have exhausted the
 			// limit for tracking refresh spans and our transaction's timestamp
 			// has been pushed, if we successfully commit then we won't hit an
-			// error.
-			name: "forwarded timestamp with too many refreshes in batch commit",
+			// error. This is the case even if the final batch itself causes a
+			// no-op refresh because the txn has no refresh spans.
+			name: "forwarded timestamp with too many refreshes in batch commit with no-op refresh",
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				_, err := db.Get(ctx, "a") // set ts cache
 				return err
@@ -1728,15 +1765,15 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				return txn.CommitInBatch(ctx, b)
 			},
-			txnCoordRetry: false,
+			txnCoordRetry: true,
 		},
 		{
 			// Even if accounting for the refresh spans would have exhausted the
 			// limit for tracking refresh spans and our transaction's timestamp
 			// has been pushed, if we successfully commit then we won't hit an
 			// error. This is the case even if the final batch itself causes a
-			// refresh.
-			name: "forwarded timestamp with too many refreshes in batch commit triggering refresh",
+			// real refresh.
+			name: "forwarded timestamp with too many refreshes in batch commit with refresh",
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				_, err := db.Get(ctx, "a") // set ts cache
 				return err
