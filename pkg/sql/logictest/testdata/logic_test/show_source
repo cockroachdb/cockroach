@@ -454,3 +454,47 @@ query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.jobs' AND usage_count > 0
 ----
 sql.show.jobs
+
+# Tests identically named indexes do not show up twice with SHOW INDEXES.
+subtest regression_46333
+
+statement ok
+CREATE TABLE t (
+  x INT,
+  y INT,
+  z INT,
+  INDEX i1 (x),
+  INDEX i2 (y),
+  INDEX i3 (z)
+); CREATE TABLE t2 (
+  x INT,
+  y INT,
+  z INT,
+  INDEX i1 (x),
+  INDEX i2 (y),
+  INDEX i3 (z)
+); COMMENT ON COLUMN t.x IS 'comment1';
+COMMENT ON COLUMN t.z IS 'comm"en"t2';
+COMMENT ON INDEX t@i2 IS 'comm''ent3'
+
+query TTBITTBBT
+SHOW INDEXES FROM t WITH COMMENT
+----
+t  primary  false  1  rowid  ASC  false  false  NULL
+t  i1       true   1  x      ASC  false  false  NULL
+t  i1       true   2  rowid  ASC  false  true   NULL
+t  i2       true   1  y      ASC  false  false  comm'ent3
+t  i2       true   2  rowid  ASC  false  true   comm'ent3
+t  i3       true   1  z      ASC  false  false  NULL
+t  i3       true   2  rowid  ASC  false  true   NULL
+
+query TTBITTBBT
+SHOW INDEXES FROM t2 WITH COMMENT
+----
+t2  primary  false  1  rowid  ASC  false  false  NULL
+t2  i1       true   1  x      ASC  false  false  NULL
+t2  i1       true   2  rowid  ASC  false  true   NULL
+t2  i2       true   1  y      ASC  false  false  NULL
+t2  i2       true   2  rowid  ASC  false  true   NULL
+t2  i3       true   1  z      ASC  false  false  NULL
+t2  i3       true   2  rowid  ASC  false  true   NULL
