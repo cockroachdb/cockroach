@@ -36,13 +36,21 @@ echo 'export COCKROACH_BUILDER_CCACHE=1' >> ~/.bashrc_bootstrap
 echo '. ~/.bashrc_bootstrap' >> ~/.bashrc
 . ~/.bashrc_bootstrap
 
+# Upgrade cmake.
+trap 'rm -f /tmp/cmake.tgz' EXIT
+curl https://github.com/Kitware/CMake/releases/download/v3.17.0/cmake-3.17.0-Linux-x86_64.tar.gz > /tmp/cmake.tgz
+sha256sum -c - <<EOF
+b44685227b9f9be103e305efa2075a8ccf2415807fbcf1fc192da4d36aacc9f5  /tmp/cmake.tgz
+EOF
+sudo tar -C /usr -zxf /tmp/cmake.tgz && rm /tmp/cmake.tgz
+
 # Install Go.
 trap 'rm -f /tmp/go.tgz' EXIT
-curl https://dl.google.com/go/go1.13.5.linux-amd64.tar.gz > /tmp/go.tgz
+curl https://dl.google.com/go/go1.13.9.linux-amd64.tar.gz > /tmp/go.tgz
 sha256sum -c - <<EOF
-512103d7ad296467814a6e3f635631bd35574cab3369a97a323c9a585ccaa569  /tmp/go.tgz
+34bb19d806e0bc4ad8f508ae24bade5e9fedfa53d09be63b488a9314d2d4f31d  /tmp/go.tgz
 EOF
-sudo tar -C /usr/local -zxf /tmp/go.tgz
+sudo tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
 
 # Clone CockroachDB.
 git clone https://github.com/cockroachdb/cockroach "$(go env GOPATH)/src/github.com/cockroachdb/cockroach"
