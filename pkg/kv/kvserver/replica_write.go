@@ -271,7 +271,7 @@ support contract. Otherwise, please open an issue at:
 // canAttempt1PCEvaluation looks at the batch and decides whether it can be
 // executed as 1PC.
 func (r *Replica) canAttempt1PCEvaluation(
-	ctx context.Context, ba *roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest, latchSpans *spanset.SpanSet,
 ) (bool, *roachpb.Error) {
 	if !isOnePhaseCommit(ba) {
 		return false, nil
@@ -294,7 +294,7 @@ func (r *Replica) canAttempt1PCEvaluation(
 		ba.Txn.WriteTimestamp = minCommitTS
 		// We can only evaluate at the new timestamp if we manage to bump the read
 		// timestamp.
-		return maybeBumpReadTimestampToWriteTimestamp(ctx, ba), nil
+		return maybeBumpReadTimestampToWriteTimestamp(ctx, ba, latchSpans), nil
 	}
 	return true, nil
 }
@@ -309,22 +309,25 @@ func (r *Replica) canAttempt1PCEvaluation(
 // in full. This allows it to lay down intents and return an appropriate
 // retryable error.
 func (r *Replica) evaluateWriteBatch(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
+	ctx context.Context,
+	idKey storagebase.CmdIDKey,
+	ba *roachpb.BatchRequest,
+	latchSpans *spanset.SpanSet,
 ) (storage.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
 
 	// If the transaction has been pushed but it can commit at the higher
 	// timestamp, let's evaluate the batch at the bumped timestamp. This will
 	// allow it commit, and also it'll allow us to attempt the 1PC code path.
-	maybeBumpReadTimestampToWriteTimestamp(ctx, ba)
+	maybeBumpReadTimestampToWriteTimestamp(ctx, ba, latchSpans)
 
 	// Attempt 1PC execution, if applicable. If not transactional or there are
 	// indications that the batch's txn will require retry, execute as normal.
-	ok, pErr := r.canAttempt1PCEvaluation(ctx, ba)
+	ok, pErr := r.canAttempt1PCEvaluation(ctx, ba, latchSpans)
 	if pErr != nil {
 		return nil, enginepb.MVCCStats{}, nil, result.Result{}, pErr
 	}
 	if ok {
-		res := r.evaluate1PC(ctx, idKey, ba, spans)
+		res := r.evaluate1PC(ctx, idKey, ba, latchSpans)
 		switch res.success {
 		case onePCSucceeded:
 			return res.batch, res.stats, res.br, res.res, nil
@@ -338,9 +341,9 @@ func (r *Replica) evaluateWriteBatch(
 	}
 
 	ms := new(enginepb.MVCCStats)
-	rec := NewReplicaEvalContext(r, spans)
+	rec := NewReplicaEvalContext(r, latchSpans)
 	batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
-		ctx, idKey, rec, ms, ba, spans, nil /* deadline */)
+		ctx, idKey, rec, ms, ba, latchSpans, nil /* deadline */)
 	return batch, *ms, br, res, pErr
 }
 
@@ -378,7 +381,10 @@ type onePCResult struct {
 // efficient - we're avoiding writing the transaction record and writing and the
 // immediately deleting intents.
 func (r *Replica) evaluate1PC(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
+	ctx context.Context,
+	idKey storagebase.CmdIDKey,
+	ba *roachpb.BatchRequest,
+	latchSpans *spanset.SpanSet,
 ) (onePCRes onePCResult) {
 	log.VEventf(ctx, 2, "attempting 1PC execution")
 
@@ -396,7 +402,7 @@ func (r *Replica) evaluate1PC(
 	strippedBa.Txn = nil
 	strippedBa.Requests = ba.Requests[:len(ba.Requests)-1] // strip end txn req
 
-	rec := NewReplicaEvalContext(r, spans)
+	rec := NewReplicaEvalContext(r, latchSpans)
 	var br *roachpb.BatchResponse
 	var res result.Result
 	var pErr *roachpb.Error
@@ -409,10 +415,10 @@ func (r *Replica) evaluate1PC(
 	ms := new(enginepb.MVCCStats)
 	if canFwdTimestamp {
 		batch, br, res, pErr = r.evaluateWriteBatchWithServersideRefreshes(
-			ctx, idKey, rec, ms, &strippedBa, spans, etArg.Deadline)
+			ctx, idKey, rec, ms, &strippedBa, latchSpans, etArg.Deadline)
 	} else {
 		batch, br, res, pErr = r.evaluateWriteBatchWrapper(
-			ctx, idKey, rec, ms, &strippedBa, spans)
+			ctx, idKey, rec, ms, &strippedBa, latchSpans)
 	}
 
 	if pErr != nil || (!canFwdTimestamp && ba.Timestamp != br.Timestamp) {
@@ -499,7 +505,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
-	spans *spanset.SpanSet,
+	latchSpans *spanset.SpanSet,
 	deadline *hlc.Timestamp,
 ) (batch storage.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	goldenMS := *ms
@@ -513,7 +519,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 			batch.Close()
 		}
 
-		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, spans)
+		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, latchSpans)
 
 		var success bool
 		if pErr == nil {
@@ -526,7 +532,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only; a non-txn batch containing overlapping
 		// spans will always experience WriteTooOldError.
-		if success || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, spans, deadline) {
+		if success || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, latchSpans, deadline) {
 			break
 		}
 	}
@@ -541,9 +547,9 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
-	spans *spanset.SpanSet,
+	latchSpans *spanset.SpanSet,
 ) (storage.Batch, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
-	batch, opLogger := r.newBatchedEngine(spans)
+	batch, opLogger := r.newBatchedEngine(latchSpans)
 	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, false /* readOnly */)
 	if pErr == nil {
 		if opLogger != nil {

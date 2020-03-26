@@ -702,7 +702,10 @@ type proposalResult struct {
 //
 // Replica.mu must not be held.
 func (r *Replica) evaluateProposal(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
+	ctx context.Context,
+	idKey storagebase.CmdIDKey,
+	ba *roachpb.BatchRequest,
+	latchSpans *spanset.SpanSet,
 ) (*result.Result, bool, *roachpb.Error) {
 	if ba.Timestamp == (hlc.Timestamp{}) {
 		return nil, false, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
@@ -713,7 +716,7 @@ func (r *Replica) evaluateProposal(
 	// important since evaluating a proposal is expensive.
 	// TODO(tschottdorf): absorb all returned values in `res` below this point
 	// in the call stack as well.
-	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, spans)
+	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, latchSpans)
 
 	// Note: reusing the proposer's batch when applying the command on the
 	// proposer was explored as an optimization but resulted in no performance
@@ -826,10 +829,16 @@ func (r *Replica) evaluateProposal(
 // evaluating it. The returned ProposalData is partially valid even
 // on a non-nil *roachpb.Error and should be proposed through Raft
 // if ProposalData.command is non-nil.
+//
+// TODO(nvanbenschoten): combine idKey, ba, and latchSpans into a
+// `serializedRequest` struct.
 func (r *Replica) requestToProposal(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
+	ctx context.Context,
+	idKey storagebase.CmdIDKey,
+	ba *roachpb.BatchRequest,
+	latchSpans *spanset.SpanSet,
 ) (*ProposalData, *roachpb.Error) {
-	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, spans)
+	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, latchSpans)
 
 	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal := &ProposalData{
