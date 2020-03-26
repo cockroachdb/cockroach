@@ -42,7 +42,7 @@ var backpressureRangeSizeMultiplier = settings.RegisterValidatedFloatSetting(
 // backpressureByteTolerance exists to deal with the fact that lowering the
 // range size by anything larger than the backpressureRangeSizeMultiplier would
 // immediately mean that all ranges require backpressure. To mitigate this
-// unwanted backpressure we say that any range which is large than the
+// unwanted backpressure we say that any range which is larger than the
 // size where backpressure would kick in by more than this quantity will
 // immediately avoid backpressure. This approach is a bit risky because a
 // command larger than this value would effectively disable backpressure
@@ -50,13 +50,17 @@ var backpressureRangeSizeMultiplier = settings.RegisterValidatedFloatSetting(
 // is reduced by roughly exactly the multiplier then we'd potentially have
 // lots of ranges in this state.
 //
-// TODO(ajwerner): We could mitigate this situation further in two ways:
+// We additionally mitigate this situation further by:
 //
 //  1) We store in-memory on each replica the largest zone configuration range
 //     size (largestPreviousMaxRangeBytes) we've seen and we do not backpressure
 //     if the current range size is less than that. That value is cleared when
 //     a range splits or runs GC such that the range size becomes smaller than
-//     the current max range size.
+//     the current max range size. This mitigation alone is insufficient because
+//     a node may restart before the splitting has concluded, leaving the
+//     cluster in a state of backpressure.
+//
+// TODO(ajwerner): We could mitigate this even further by:
 //
 //  2) We assign a higher priority in the snapshot queue to ranges which are
 //     currently backpressuring than ranges which are larger but are not
