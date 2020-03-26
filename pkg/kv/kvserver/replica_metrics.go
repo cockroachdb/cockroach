@@ -249,9 +249,15 @@ func (r *Replica) needsMergeBySizeRLocked() bool {
 
 // exceedsMultipleOfSplitSizeRLocked returns whether the current size of the
 // range exceeds the max size times mult. If so, the bytes overage is also
-// returned.
+// returned. Note that the max size is determined by either the current maximum
+// size as dictated by the zone config or a previous max size indicating that
+// the max size has changed relatively recently and thus we should not
+// backpressure for being over.
 func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) (exceeded bool, bytesOver int64) {
 	maxBytes := *r.mu.zone.RangeMaxBytes
+	if r.mu.largestPreviousMaxRangeSizeBytes > maxBytes {
+		maxBytes = r.mu.largestPreviousMaxRangeSizeBytes
+	}
 	size := r.mu.state.Stats.Total()
 	maxSize := int64(float64(maxBytes)*mult) + 1
 	if maxBytes <= 0 || size <= maxSize {
