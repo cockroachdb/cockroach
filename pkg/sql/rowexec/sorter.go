@@ -155,11 +155,19 @@ func (ss *SorterStats) Stats() map[string]string {
 
 // StatsForQueryPlan implements the DistSQLSpanStats interface.
 func (ss *SorterStats) StatsForQueryPlan() []string {
-	return append(
-		ss.InputStats.StatsForQueryPlan("" /* prefix */),
-		fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedMem)),
-		fmt.Sprintf("%s: %s", MaxDiskQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedDisk)),
-	)
+	stats := ss.InputStats.StatsForQueryPlan("" /* prefix */)
+
+	if ss.MaxAllocatedMem != 0 {
+		stats = append(stats,
+			fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedMem)))
+	}
+
+	if ss.MaxAllocatedDisk != 0 {
+		stats = append(stats,
+			fmt.Sprintf("%s: %s", MaxDiskQueryPlanSuffix, humanizeutil.IBytes(ss.MaxAllocatedDisk)))
+	}
+
+	return stats
 }
 
 // outputStatsToTrace outputs the collected sorter stats to the trace. Will fail

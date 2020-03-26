@@ -315,10 +315,22 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 // corresponding to operators in inputs (the latter must have already been
 // wrapped).
 func wrapWithVectorizedStatsCollector(
-	op colexec.Operator, inputs []colexec.Operator, pspec *execinfrapb.ProcessorSpec,
+	op colexec.Operator,
+	inputs []colexec.Operator,
+	pspec *execinfrapb.ProcessorSpec,
+	monitors []*mon.BytesMonitor,
 ) (*colexec.VectorizedStatsCollector, error) {
 	inputWatch := timeutil.NewStopWatch()
-	vsc := colexec.NewVectorizedStatsCollector(op, pspec.ProcessorID, len(inputs) == 0, inputWatch)
+	var memMonitors, diskMonitors []*mon.BytesMonitor
+	for _, m := range monitors {
+		if m.Resource() == mon.DiskResource {
+			diskMonitors = append(diskMonitors, m)
+		} else {
+			memMonitors = append(memMonitors, m)
+		}
+	}
+	vsc :=
+		colexec.NewVectorizedStatsCollector(op, pspec.ProcessorID, len(inputs) == 0, inputWatch, memMonitors, diskMonitors)
 	for _, input := range inputs {
 		sc, ok := input.(*colexec.VectorizedStatsCollector)
 		if !ok {
@@ -357,6 +369,8 @@ func finishVectorizedStatsCollectors(
 		vsc.FinalizeStats()
 		if deterministicStats {
 			vsc.VectorizedStats.Time = 0
+			vsc.MaxAllocatedMem = 0
+			vsc.MaxAllocatedDisk = 0
 		}
 		if vsc.ID < 0 {
 			// Ignore stats collectors not associated with a processor.
@@ -516,7 +530,7 @@ func (s *vectorizedFlowCreator) createBufferingUnlimitedMemMonitor(
 // place after branch cut for 20.1.
 func (s *vectorizedFlowCreator) createDiskAccounts(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, name string, numAccounts int,
-) []*mon.BoundAccount {
+) (*mon.BytesMonitor, []*mon.BoundAccount) {
 	diskMonitor := execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, name)
 	s.monitors = append(s.monitors, diskMonitor)
 	diskAccounts := make([]*mon.BoundAccount, numAccounts)
@@ -525,7 +539,7 @@ func (s *vectorizedFlowCreator) createDiskAccounts(
 		diskAccounts[i] = &diskAcc
 	}
 	s.accounts = append(s.accounts, diskAccounts...)
-	return diskAccounts
+	return diskMonitor, diskAccounts
 }
 
 // newStreamingMemAccount creates a new memory account bound to the monitor in
@@ -614,7 +628,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
 		limit = 1
 	}
-	diskAccounts := s.createDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
+	diskMon, diskAccounts := s.createDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
 	router, outputs := colexec.NewHashRouter(
 		allocators, input, outputTyps, output.HashColumns, limit, s.diskQueueCfg, s.fdSemaphore, diskAccounts,
 	)
@@ -642,12 +656,13 @@ func (s *vectorizedFlowCreator) setupRouter(
 		case execinfrapb.StreamEndpointSpec_LOCAL:
 			foundLocalOutput = true
 			if s.recordingStats {
+				mons := []*mon.BytesMonitor{hashRouterMemMonitor, diskMon}
 				// Wrap local outputs with vectorized stats collectors when recording
 				// stats. This is mostly for compatibility but will provide some useful
 				// information (e.g. output stall time).
 				var err error
 				op, err = wrapWithVectorizedStatsCollector(
-					op, nil /* inputs */, &execinfrapb.ProcessorSpec{ProcessorID: -1},
+					op, nil /* inputs */, &execinfrapb.ProcessorSpec{ProcessorID: -1}, mons,
 				)
 				if err != nil {
 					return err
@@ -718,6 +733,7 @@ func (s *vectorizedFlowCreator) setupInput(
 					&execinfrapb.ProcessorSpec{
 						ProcessorID: -1,
 					},
+					nil, /* monitors */
 				)
 				if err != nil {
 					return nil, nil, err
@@ -756,7 +772,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			// TODO(asubiotto): Once we have IDs for synchronizers, plumb them into
 			// this stats collector to display stats.
 			var err error
-			op, err = wrapWithVectorizedStatsCollector(op, statsInputs, &execinfrapb.ProcessorSpec{ProcessorID: -1})
+			op, err = wrapWithVectorizedStatsCollector(op, statsInputs, &execinfrapb.ProcessorSpec{ProcessorID: -1}, nil /* monitors */)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -966,7 +982,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 
 		op := result.Op
 		if s.recordingStats {
-			vsc, err := wrapWithVectorizedStatsCollector(op, inputs, pspec)
+			vsc, err := wrapWithVectorizedStatsCollector(op, inputs, pspec, result.OpMonitors)
 			if err != nil {
 				return nil, err
 			}
