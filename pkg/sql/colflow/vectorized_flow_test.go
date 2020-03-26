@@ -12,9 +12,11 @@ package colflow
 
 import (
 	"context"
+	"path/filepath"
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -27,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -235,11 +238,13 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
 
-	const baseDirName = "base"
-
-	ngn := storage.NewDefaultInMem()
+	// We use an on-disk engine for this test since we're testing FS interactions
+	// and want to get the same behavior as a non-testing environment.
+	tempPath, dirCleanup := testutils.TempDir(t)
+	ngn, err := storage.NewDefaultEngine(0 /* cacheSize */, base.StorageConfig{Dir: tempPath})
+	require.NoError(t, err)
 	defer ngn.Close()
-	require.NoError(t, ngn.CreateDir(baseDirName))
+	defer dirCleanup()
 
 	newVectorizedFlow := func() *vectorizedFlow {
 		return NewVectorizedFlow(
@@ -247,7 +252,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 				FlowCtx: execinfra.FlowCtx{
 					Cfg: &execinfra.ServerConfig{
 						TempFS:          ngn,
-						TempStoragePath: baseDirName,
+						TempStoragePath: tempPath,
 						VecFDSemaphore:  &colexec.TestingSemaphore{},
 						Metrics:         &execinfra.DistSQLMetrics{},
 					},
@@ -258,11 +263,15 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 		).(*vectorizedFlow)
 	}
 
-	checkDirs := func(t *testing.T, numDirs int) {
+	dirs, err := ngn.ListDir(tempPath)
+	require.NoError(t, err)
+	numDirsTheTestStartedWith := len(dirs)
+	checkDirs := func(t *testing.T, numExtraDirs int) {
 		t.Helper()
-		dirs, err := ngn.ListDir(baseDirName)
+		dirs, err := ngn.ListDir(tempPath)
 		require.NoError(t, err)
-		require.Equal(t, numDirs, len(dirs), "expected %d directories but found %d: %s", numDirs, len(dirs), dirs)
+		expectedNumDirs := numDirsTheTestStartedWith + numExtraDirs
+		require.Equal(t, expectedNumDirs, len(dirs), "expected %d directories but found %d: %s", expectedNumDirs, len(dirs), dirs)
 	}
 
 	// LazilyCreated asserts that a directory is not created during flow Setup
@@ -339,6 +348,31 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 		vf1.Cleanup(ctx)
 		checkDirs(t, 1)
 		vf2.Cleanup(ctx)
+		checkDirs(t, 0)
+	})
+
+	t.Run("DirCreationRace", func(t *testing.T) {
+		vf := newVectorizedFlow()
+		var creator *vectorizedFlowCreator
+		vf.testingKnobs.onSetupFlow = func(c *vectorizedFlowCreator) {
+			creator = c
+		}
+
+		_, err := vf.Setup(ctx, &execinfrapb.FlowSpec{}, flowinfra.FuseNormally)
+		require.NoError(t, err)
+
+		createTempDir := creator.diskQueueCfg.OnNewDiskQueueCb
+		errCh := make(chan error)
+		go func() {
+			createTempDir()
+			errCh <- ngn.CreateDir(filepath.Join(vf.tempStorage.path, "async"))
+		}()
+		createTempDir()
+		// Both goroutines should be able to create their subdirectories within the
+		// flow's temporary directory.
+		require.NoError(t, ngn.CreateDir(filepath.Join(vf.tempStorage.path, "main_goroutine")))
+		require.NoError(t, <-errCh)
+		vf.Cleanup(ctx)
 		checkDirs(t, 0)
 	})
 }
