@@ -13,7 +13,6 @@ package batcheval
 import (
 	"bytes"
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -115,13 +114,13 @@ func Subsume(
 	_, intent, err := storage.MVCCGet(ctx, readWriter, descKey, cArgs.Header.Timestamp,
 		storage.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
-		return result.Result{}, fmt.Errorf("fetching local range descriptor: %s", err)
+		return result.Result{}, errors.Errorf("fetching local range descriptor: %s", err)
 	} else if intent == nil {
 		return result.Result{}, errors.New("range missing intent on its local descriptor")
 	}
 	val, _, err := storage.MVCCGetAsTxn(ctx, readWriter, descKey, cArgs.Header.Timestamp, intent.Txn)
 	if err != nil {
-		return result.Result{}, fmt.Errorf("fetching local range descriptor as txn: %s", err)
+		return result.Result{}, errors.Errorf("fetching local range descriptor as txn: %s", err)
 	} else if val != nil {
 		return result.Result{}, errors.New("non-deletion intent on local range descriptor")
 	}
