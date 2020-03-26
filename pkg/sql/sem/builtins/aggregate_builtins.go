@@ -76,6 +76,13 @@ func aggPropsNullableArgs() tree.FunctionProperties {
 	return f
 }
 
+// allMaxMinAggregateTypes contains extra types that aren't in
+// types.Scalar that the max/min aggregate functions are defined on.
+var allMaxMinAggregateTypes = append(
+	[]*types.T{types.AnyCollatedString},
+	types.Scalar...,
+)
+
 // aggregates are a special class of builtin functions that are wrapped
 // at execution in a bucketing layer to combine (aggregate) the result
 // of the function being run over many rows.
@@ -197,13 +204,13 @@ var aggregates = map[string]builtinDefinition{
 			"Calculates the boolean value of `AND`ing all selected values."),
 	),
 
-	"max": collectOverloads(aggProps(), types.Scalar,
+	"max": collectOverloads(aggProps(), allMaxMinAggregateTypes,
 		func(t *types.T) tree.Overload {
 			return makeAggOverload([]*types.T{t}, t, newMaxAggregate,
 				"Identifies the maximum selected value.")
 		}),
 
-	"min": collectOverloads(aggProps(), types.Scalar,
+	"min": collectOverloads(aggProps(), allMaxMinAggregateTypes,
 		func(t *types.T) tree.Overload {
 			return makeAggOverload([]*types.T{t}, t, newMinAggregate,
 				"Identifies the minimum selected value.")
