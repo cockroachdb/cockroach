@@ -59,6 +59,8 @@ type Outbox struct {
 	// draining is an atomic that represents whether the Outbox is draining.
 	draining        uint32
 	metadataSources []execinfrapb.MetadataSource
+	// closers is a slice of Closers that need to be Closed on termination.
+	closers []colexec.IdempotentCloser
 
 	scratch struct {
 		buf *bytes.Buffer
@@ -76,6 +78,7 @@ func NewOutbox(
 	input colexec.Operator,
 	typs []coltypes.T,
 	metadataSources []execinfrapb.MetadataSource,
+	toClose []colexec.IdempotentCloser,
 ) (*Outbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
@@ -93,6 +96,7 @@ func NewOutbox(
 		converter:       c,
 		serializer:      s,
 		metadataSources: metadataSources,
+		closers:         toClose,
 	}
 	o.scratch.buf = &bytes.Buffer{}
 	o.scratch.msg = &execinfrapb.ProducerMessage{}
@@ -316,6 +320,14 @@ func (o *Outbox) runWithStream(
 			// returned.
 			if err := stream.CloseSend(); err != nil {
 				o.handleStreamErr(ctx, "CloseSend", err, cancelFn)
+			}
+		}
+	}
+
+	for _, closer := range o.closers {
+		if err := closer.IdempotentClose(ctx); err != nil {
+			if log.V(1) {
+				log.Infof(ctx, "error closing Closer: %v", err)
 			}
 		}
 	}
