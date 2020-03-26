@@ -844,12 +844,21 @@ func (ws *WindowerStats) Stats() map[string]string {
 
 // StatsForQueryPlan implements the DistSQLSpanStats interface.
 func (ws *WindowerStats) StatsForQueryPlan() []string {
-	return append(
-		ws.InputStats.StatsForQueryPlan("" /* prefix */),
-		fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ws.MaxAllocatedMem)),
-		fmt.Sprintf("%s: %s", MaxDiskQueryPlanSuffix, humanizeutil.IBytes(ws.MaxAllocatedDisk)),
-	)
+	stats := ws.InputStats.StatsForQueryPlan("" /* prefix */)
+
+	if ws.MaxAllocatedMem != 0 {
+		stats = append(stats,
+			fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(ws.MaxAllocatedMem)))
+	}
+
+	if ws.MaxAllocatedDisk != 0 {
+		stats = append(stats,
+			fmt.Sprintf("%s: %s", MaxDiskQueryPlanSuffix, humanizeutil.IBytes(ws.MaxAllocatedDisk)))
+	}
+
+	return stats
 }
+
 func (w *windower) outputStatsToTrace() {
 	is, ok := getInputStats(w.FlowCtx, w.input)
 	if !ok {

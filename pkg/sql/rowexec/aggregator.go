@@ -189,10 +189,14 @@ func (as *AggregatorStats) Stats() map[string]string {
 
 // StatsForQueryPlan implements the DistSQLSpanStats interface.
 func (as *AggregatorStats) StatsForQueryPlan() []string {
-	return append(
-		as.InputStats.StatsForQueryPlan("" /* prefix */),
-		fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(as.MaxAllocatedMem)),
-	)
+	stats := as.InputStats.StatsForQueryPlan("" /* prefix */)
+
+	if as.MaxAllocatedMem != 0 {
+		stats = append(stats,
+			fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(as.MaxAllocatedMem)))
+	}
+
+	return stats
 }
 
 func (ag *aggregatorBase) outputStatsToTrace() {

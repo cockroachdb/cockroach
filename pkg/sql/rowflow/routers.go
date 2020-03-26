@@ -710,9 +710,19 @@ func (ros *RouterOutputStats) Stats() map[string]string {
 
 // StatsForQueryPlan implements the DistSQLSpanStats interface.
 func (ros *RouterOutputStats) StatsForQueryPlan() []string {
-	return []string{
+	stats := []string{
 		fmt.Sprintf("rows routed: %d", ros.NumRows),
-		fmt.Sprintf("%s: %d", rowexec.MaxMemoryQueryPlanSuffix, ros.MaxAllocatedMem),
-		fmt.Sprintf("%s: %d", rowexec.MaxDiskQueryPlanSuffix, ros.MaxAllocatedDisk),
 	}
+
+	if ros.MaxAllocatedMem != 0 {
+		stats = append(stats,
+			fmt.Sprintf("%s: %d", rowexec.MaxMemoryQueryPlanSuffix, ros.MaxAllocatedMem))
+	}
+
+	if ros.MaxAllocatedDisk != 0 {
+		stats = append(stats,
+			fmt.Sprintf("%s: %d", rowexec.MaxDiskQueryPlanSuffix, ros.MaxAllocatedDisk))
+	}
+
+	return stats
 }

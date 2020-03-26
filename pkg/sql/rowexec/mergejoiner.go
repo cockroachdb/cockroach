@@ -275,7 +275,11 @@ func (mjs *MergeJoinerStats) StatsForQueryPlan() []string {
 		mjs.LeftInputStats.StatsForQueryPlan("left "),
 		mjs.RightInputStats.StatsForQueryPlan("right ")...,
 	)
-	return append(stats, fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(mjs.MaxAllocatedMem)))
+	if mjs.MaxAllocatedMem != 0 {
+		stats =
+			append(stats, fmt.Sprintf("%s: %s", MaxMemoryQueryPlanSuffix, humanizeutil.IBytes(mjs.MaxAllocatedMem)))
+	}
+	return stats
 }
 
 // outputStatsToTrace outputs the collected mergeJoiner stats to the trace. Will

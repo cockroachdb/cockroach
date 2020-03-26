@@ -439,6 +439,11 @@ func (mm *BytesMonitor) SetMetrics(curCount *metric.Gauge, maxHist *metric.Histo
 	mm.maxBytesHist = maxHist
 }
 
+// Resource returns the type of the resource the monitor is tracking.
+func (mm *BytesMonitor) Resource() Resource {
+	return mm.resource
+}
+
 // BoundAccount tracks the cumulated allocations for one client of a pool or
 // monitor. BytesMonitor has an account to its pool; BytesMonitor clients have
 // an account to the monitor. This allows each client to release all the bytes
