@@ -75,16 +75,25 @@ func (b *Builder) buildCTE(
 	}
 	cteScope.ctes = map[string]*cteSource{cte.Name.Alias.String(): cteSrc}
 
-	initial, recursive, ok := b.splitRecursiveCTE(cte.Stmt)
-	if !ok {
+	initial, recursive, isUnionAll, ok := b.splitRecursiveCTE(cte.Stmt)
+	// We don't currently support the UNION form (only UNION ALL).
+	if !ok || !isUnionAll {
 		// Build this as a non-recursive CTE, but throw a proper error message if it
 		// does have a recursive reference.
 		cteSrc.onRef = func() {
-			panic(pgerror.Newf(
-				pgcode.Syntax,
-				"recursive query %q does not have the form non-recursive-term UNION ALL recursive-term",
-				cte.Name.Alias,
-			))
+			if !ok {
+				panic(pgerror.Newf(
+					pgcode.Syntax,
+					"recursive query %q does not have the form non-recursive-term UNION ALL recursive-term",
+					cte.Name.Alias,
+				))
+			} else {
+				panic(unimplementedWithIssueDetailf(
+					46642, "",
+					"recursive query %q uses UNION which is not implemented (only UNION ALL is supported)",
+					cte.Name.Alias,
+				))
+			}
 		}
 		return b.buildCTE(cte, cteScope, false /* recursive */)
 	}
@@ -228,16 +237,16 @@ func (b *Builder) getCTECols(cteScope *scope, name tree.AliasClause) physical.Pr
 // returns ok=false.
 func (b *Builder) splitRecursiveCTE(
 	stmt tree.Statement,
-) (initial, recursive *tree.Select, ok bool) {
+) (initial, recursive *tree.Select, isUnionAll bool, ok bool) {
 	sel, ok := stmt.(*tree.Select)
 	// The form above doesn't allow for "outer" WITH, ORDER BY, or LIMIT
 	// clauses.
 	if !ok || sel.With != nil || sel.OrderBy != nil || sel.Limit != nil {
-		return nil, nil, false
+		return nil, nil, false, false
 	}
 	union, ok := sel.Select.(*tree.UnionClause)
-	if !ok || union.Type != tree.UnionOp || !union.All {
-		return nil, nil, false
+	if !ok || union.Type != tree.UnionOp {
+		return nil, nil, false, false
 	}
-	return union.Left, union.Right, true
+	return union.Left, union.Right, union.All, true
 }
