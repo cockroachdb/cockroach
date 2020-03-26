@@ -13,10 +13,6 @@ package sqlbase
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strconv"
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -35,6 +31,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"math/rand"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 )
 
 // ID, ColumnID, FamilyID, and IndexID are all uint32, but are each given a
@@ -1212,11 +1213,14 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 
 	desc.initIDs()
 	columnNames := map[string]ColumnID{}
-	for i := range desc.Columns {
+
+	r := rand.New(rand.NewSource(time.Now().Unix()))
+	for _, i := range r.Perm(len(desc.Columns)) {
 		desc.MaybeFillColumnID(&desc.Columns[i], columnNames)
 	}
-	for _, m := range desc.Mutations {
-		if c := m.GetColumn(); c != nil {
+
+	for _, i := range r.Perm(len(desc.Mutations)) {
+		if c := desc.Mutations[i].GetColumn(); c != nil {
 			desc.MaybeFillColumnID(c, columnNames)
 		}
 	}
