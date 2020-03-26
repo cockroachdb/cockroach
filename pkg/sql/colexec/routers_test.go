@@ -402,9 +402,15 @@ func TestRouterOutputRandom(t *testing.T) {
 
 				expected := make(tuples, 0, len(data))
 
+				// canceled is a boolean that specifies whether the output was canceled.
+				// If this is the case, the output should not be verified.
+				canceled := false
+
 				// Producer.
 				errCh := make(chan error)
+				wg.Add(1)
 				go func() {
+					defer wg.Done()
 					lastBlockedState := false
 					for {
 						b := inputs[0].Next(ctx)
@@ -432,6 +438,13 @@ func TestRouterOutputRandom(t *testing.T) {
 								}
 							}
 							lastBlockedState = true
+						}
+
+						if rng.Float64() < 0.1 {
+							o.cancel(ctx)
+							canceled = true
+							errCh <- nil
+							return
 						}
 
 						// Read any state changes.
@@ -480,6 +493,10 @@ func TestRouterOutputRandom(t *testing.T) {
 				}
 
 				wg.Wait()
+
+				if canceled {
+					return
+				}
 
 				if err := newOpTestOutput(actual, expected).Verify(); err != nil {
 					t.Fatal(err)

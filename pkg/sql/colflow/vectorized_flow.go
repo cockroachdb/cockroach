@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -104,10 +105,13 @@ type vectorizedFlow struct {
 
 	tempStorage struct {
 		// path is the path to this flow's temporary storage directory.
-		path string
-		// created is an atomic that is set to 1 when the flow's temporary storage
-		// directory has been created.
-		created int32
+		path           string
+		createdStateMu struct {
+			syncutil.Mutex
+			// created is a protected boolean that is true when the flow's temporary
+			// storage directory has been created.
+			created bool
+		}
 	}
 
 	testingKnobs struct {
@@ -162,14 +166,17 @@ func (f *vectorizedFlow) Setup(
 		FS:   f.Cfg.TempFS,
 		Path: f.tempStorage.path,
 		OnNewDiskQueueCb: func() {
-			if !atomic.CompareAndSwapInt32(&f.tempStorage.created, 0, 1) {
+			f.tempStorage.createdStateMu.Lock()
+			defer f.tempStorage.createdStateMu.Unlock()
+			if f.tempStorage.createdStateMu.created {
 				// The temporary storage directory has already been created.
 				return
 			}
-			log.VEventf(ctx, 2, "flow %s spilled to disk, stack trace: %s", f.ID, util.GetSmallTrace(2))
+			log.VEventf(ctx, 1, "flow %s spilled to disk, stack trace: %s", f.ID, util.GetSmallTrace(2))
 			if err := f.Cfg.TempFS.CreateDir(f.tempStorage.path); err != nil {
 				execerror.VectorizedInternalPanic(errors.Errorf("unable to create temporary storage directory: %v", err))
 			}
+			f.tempStorage.createdStateMu.created = true
 		},
 	}
 	if err := diskQueueCfg.EnsureDefaults(); err != nil {
@@ -279,7 +286,10 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 		mon.Stop(ctx)
 	}
 
-	if atomic.LoadInt32(&f.tempStorage.created) == 1 {
+	f.tempStorage.createdStateMu.Lock()
+	created := f.tempStorage.createdStateMu.created
+	f.tempStorage.createdStateMu.Unlock()
+	if created {
 		if err := f.tryRemoveAll(f.tempStorage.path); err != nil {
 			// Log error as a Warning but keep on going to close the memory
 			// infrastructure.
