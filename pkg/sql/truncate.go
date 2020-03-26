@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -265,8 +264,8 @@ func (p *planner) truncateTable(
 		return err
 	}
 
-	// Reassign comment.
-	if err := reassignComment(ctx, p, tableDesc, newTableDesc); err != nil {
+	// Reassign comments on the table, columns and indexes.
+	if err := reassignComments(ctx, p, tableDesc, newTableDesc); err != nil {
 		return err
 	}
 
@@ -370,150 +369,20 @@ func reassignReferencedTables(
 	return changed, nil
 }
 
-// reassignComment reassign comment on table.
-func reassignComment(
+// reassignComments reassign all comments on the table, indexes and columns.
+func reassignComments(
 	ctx context.Context, p *planner, oldTableDesc, newTableDesc *sqlbase.MutableTableDescriptor,
 ) error {
-	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
-		"select-table-comment",
+		"update-table-comments",
 		p.txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-		`SELECT comment FROM system.comments WHERE type=$1 AND object_id=$2`,
-		keys.TableCommentType,
-		oldTableDesc.ID)
-	if err != nil {
-		return err
-	}
-
-	if comment != nil {
-		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-			ctx,
-			"set-table-comment",
-			p.txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
-			keys.TableCommentType,
-			newTableDesc.ID,
-			comment[0])
-		if err != nil {
-			return err
-		}
-
-		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-			ctx,
-			"delete-comment",
-			p.txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
-			keys.TableCommentType,
-			oldTableDesc.ID)
-		if err != nil {
-			return err
-		}
-	}
-
-	for i := range oldTableDesc.Columns {
-		id := oldTableDesc.Columns[i].ID
-		err = reassignColumnComment(ctx, p, oldTableDesc.ID, newTableDesc.ID, id)
-		if err != nil {
-			return err
-		}
-	}
-
-	for _, indexDesc := range oldTableDesc.Indexes {
-		err = reassignIndexComment(ctx, p, oldTableDesc.ID, newTableDesc.ID, indexDesc.ID)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// reassignColumnComment reassign comment on column.
-func reassignColumnComment(
-	ctx context.Context, p *planner, oldID sqlbase.ID, newID sqlbase.ID, columnID sqlbase.ColumnID,
-) error {
-	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
-		ctx,
-		"select-column-comment",
-		p.txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-		`SELECT comment FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3`,
-		keys.ColumnCommentType,
-		oldID,
-		columnID)
-	if err != nil {
-		return err
-	}
-
-	if comment != nil {
-		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-			ctx,
-			"set-column-comment",
-			p.txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-			"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
-			keys.ColumnCommentType,
-			newID,
-			columnID,
-			comment[0])
-		if err != nil {
-			return err
-		}
-
-		_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-			ctx,
-			"delete-column-comment",
-			p.txn,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
-			keys.ColumnCommentType,
-			oldID,
-			columnID)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// reassignIndexComment reassigns a comment on an index.
-func reassignIndexComment(
-	ctx context.Context, p *planner, oldTableID, newTableID sqlbase.ID, indexID sqlbase.IndexID,
-) error {
-	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
-		ctx,
-		"select-index-comment",
-		p.txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-		`SELECT comment FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3`,
-		keys.IndexCommentType,
-		oldTableID,
-		indexID)
-	if err != nil {
-		return err
-	}
-
-	if comment != nil {
-		err = p.upsertIndexComment(
-			ctx,
-			newTableID,
-			indexID,
-			string(tree.MustBeDString(comment[0])))
-		if err != nil {
-			return err
-		}
-
-		err = p.removeIndexComment(ctx, oldTableID, indexID)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+		`UPDATE system.comments SET object_id=$1 WHERE object_id=$2`,
+		newTableDesc.ID,
+		oldTableDesc.ID,
+	)
+	return err
 }
 
 // ClearTableDataInChunks truncates the data of a table in chunks. It deletes a
