@@ -271,7 +271,7 @@ support contract. Otherwise, please open an issue at:
 // canAttempt1PCEvaluation looks at the batch and decides whether it can be
 // executed as 1PC.
 func (r *Replica) canAttempt1PCEvaluation(
-	ctx context.Context, ba *roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
 ) (bool, *roachpb.Error) {
 	if !isOnePhaseCommit(ba) {
 		return false, nil
@@ -294,7 +294,7 @@ func (r *Replica) canAttempt1PCEvaluation(
 		ba.Txn.WriteTimestamp = minCommitTS
 		// We can only evaluate at the new timestamp if we manage to bump the read
 		// timestamp.
-		return maybeBumpReadTimestampToWriteTimestamp(ctx, ba), nil
+		return maybeBumpReadTimestampToWriteTimestamp(ctx, ba, spans), nil
 	}
 	return true, nil
 }
@@ -315,11 +315,11 @@ func (r *Replica) evaluateWriteBatch(
 	// If the transaction has been pushed but it can commit at the higher
 	// timestamp, let's evaluate the batch at the bumped timestamp. This will
 	// allow it commit, and also it'll allow us to attempt the 1PC code path.
-	maybeBumpReadTimestampToWriteTimestamp(ctx, ba)
+	maybeBumpReadTimestampToWriteTimestamp(ctx, ba, spans)
 
 	// Attempt 1PC execution, if applicable. If not transactional or there are
 	// indications that the batch's txn will require retry, execute as normal.
-	ok, pErr := r.canAttempt1PCEvaluation(ctx, ba)
+	ok, pErr := r.canAttempt1PCEvaluation(ctx, ba, spans)
 	if pErr != nil {
 		return nil, enginepb.MVCCStats{}, nil, result.Result{}, pErr
 	}
