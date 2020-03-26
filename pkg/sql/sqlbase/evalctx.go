@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -163,4 +164,4 @@ type DummyClientNoticeSender struct{}
 var _ tree.ClientNoticeSender = &DummyClientNoticeSender{}
 
 // SendClientNotice is part of the tree.ClientNoticeSender interface.
-func (c *DummyClientNoticeSender) SendClientNotice(_ context.Context, _ error) {}
+func (c *DummyClientNoticeSender) SendClientNotice(context.Context, pgnotice.Severity, error) {}

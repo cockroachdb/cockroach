@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -610,10 +611,12 @@ func (c *conn) bufferParamStatus(param, value string) error {
 	return c.msgBuilder.finishMsg(&c.writerState.buf)
 }
 
-func (c *conn) bufferNotice(ctx context.Context, noticeErr error) error {
+func (c *conn) bufferNotice(
+	ctx context.Context, severity pgnotice.Severity, noticeErr error,
+) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgNoticeResponse)
 	c.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverity)
-	c.msgBuilder.writeTerminatedString("NOTICE")
+	c.msgBuilder.writeTerminatedString(severity.WireString())
 	return writeErrFields(ctx, c.sv, noticeErr, &c.msgBuilder, &c.writerState.buf)
 }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -284,8 +285,9 @@ func (n *createIndexNode) startExec(params runParams) error {
 	if n.n.PartitionBy == nil && n.tableDesc.PrimaryIndex.Partitioning.NumColumns > 0 {
 		params.p.SendClientNotice(
 			params.ctx,
+			pgnotice.SeverityNotice,
 			errors.WithHint(
-				pgerror.Noticef("creating non-partitioned index on partitioned table may not be performant"),
+				pgnotice.Newf("creating non-partitioned index on partitioned table may not be performant"),
 				"Consider modifying the index such that it is also partitioned.",
 			),
 		)

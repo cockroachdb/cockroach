@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -687,7 +688,7 @@ type RestrictedCommandResult interface {
 
 	// AppendNotice appends a notice to the result.
 	// This gets flushed only when the CommandResult is closed.
-	AppendNotice(noticeErr error)
+	AppendNotice(severity pgnotice.Severity, noticeErr error)
 
 	// SetColumns informs the client about the schema of the result. The columns
 	// can be nil.
@@ -877,7 +878,7 @@ func (r *bufferedCommandResult) AppendParamStatusUpdate(key string, val string) 
 }
 
 // AppendNotice is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) AppendNotice(noticeErr error) {
+func (r *bufferedCommandResult) AppendNotice(severity pgnotice.Severity, noticeErr error) {
 	panic("unimplemented")
 }
 

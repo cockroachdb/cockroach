@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -195,8 +196,9 @@ func (n *createTableNode) startExec(params runParams) error {
 				if d.PartitionBy == nil {
 					params.p.SendClientNotice(
 						params.ctx,
+						pgnotice.SeverityNotice,
 						errors.WithHint(
-							pgerror.Noticef("creating non-partitioned index on partitioned table may not be performant"),
+							pgnotice.Newf("creating non-partitioned index on partitioned table may not be performant"),
 							"Consider modifying the index such that it is also partitioned.",
 						),
 					)

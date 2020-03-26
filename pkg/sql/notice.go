@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -28,19 +29,22 @@ var NoticesEnabled = settings.RegisterPublicBoolSetting(
 // noticeSender is a subset of RestrictedCommandResult which allows
 // sending notices.
 type noticeSender interface {
-	AppendNotice(error)
+	AppendNotice(pgnotice.Severity, error)
 }
 
 // SendClientNotice implements the tree.ClientNoticeSender interface.
-func (p *planner) SendClientNotice(ctx context.Context, err error) {
+func (p *planner) SendClientNotice(ctx context.Context, severity pgnotice.Severity, err error) {
 	if log.V(2) {
-		log.Infof(ctx, "out-of-band notice: %+v", err)
+		log.Infof(ctx, "out-of-band notice: %s: %+v", severity.String(), err)
 	}
 	if p.noticeSender == nil ||
+		severity > p.SessionData().NoticeSeverity ||
 		!NoticesEnabled.Get(&p.execCfg.Settings.SV) {
-		// Notice cannot flow to the client - either because there is no
-		// client, or the notice protocol was disabled.
+		// Notice cannot flow to the client - because of one of these conditions:
+		// * there is no client
+		// * the session's NoticeSeverity is higher than the severity of the notice.
+		// * the notice protocol was disabled
 		return
 	}
-	p.noticeSender.AppendNotice(err)
+	p.noticeSender.AppendNotice(severity, err)
 }

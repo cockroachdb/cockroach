@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -203,10 +204,12 @@ func (r *commandResult) AppendParamStatusUpdate(param string, val string) {
 }
 
 // AppendNotice is part of the CommandResult interface.
-func (r *commandResult) AppendNotice(noticeErr error) {
+func (r *commandResult) AppendNotice(severity pgnotice.Severity, noticeErr error) {
 	r.flushBeforeCloseFuncs = append(
 		r.flushBeforeCloseFuncs,
-		func(ctx context.Context) error { return r.conn.bufferNotice(ctx, noticeErr) },
+		func(ctx context.Context) error {
+			return r.conn.bufferNotice(ctx, severity, noticeErr)
+		},
 	)
 }
 

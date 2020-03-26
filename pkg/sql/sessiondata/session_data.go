@@ -15,6 +15,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 )
 
 // SessionData contains session parameters. They are all user-configurable.
@@ -99,6 +101,9 @@ type SessionData struct {
 	// InsertFastPath is true if the fast path for insert (with VALUES input) may
 	// be used.
 	InsertFastPath bool
+	// NoticeSeverity indicates the level of Severity to send notices for the given
+	// session.
+	NoticeSeverity pgnotice.Severity
 }
 
 // DataConversionConfig contains the parameters that influence

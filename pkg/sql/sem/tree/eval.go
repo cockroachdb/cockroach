@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -2648,7 +2649,7 @@ type EvalSessionAccessor interface {
 // distributed processors).
 type ClientNoticeSender interface {
 	// SendClientNotice sends a notice out-of-band to the client.
-	SendClientNotice(ctx context.Context, notice error)
+	SendClientNotice(ctx context.Context, severity pgnotice.Severity, notice error)
 }
 
 // InternalExecutor is a subset of sqlutil.InternalExecutor (which, in turn, is
