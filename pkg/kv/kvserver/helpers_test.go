@@ -380,6 +380,14 @@ func (r *Replica) SideloadedRaftMuLocked() SideloadStorage {
 	return r.raftMu.sideloaded
 }
 
+// LargestPreviousMaxRangeSizeBytes returns the in-memory value used to mitigate
+// backpressure when the zone.RangeMaxSize is decreased.
+func (r *Replica) LargestPreviousMaxRangeSizeBytes() int64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.largestPreviousMaxRangeSizeBytes
+}
+
 func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, storage.MVCCKeyValue) {
 	sstFile := &storage.MemFile{}
 	sst := storage.MakeIngestionSSTWriter(sstFile)
