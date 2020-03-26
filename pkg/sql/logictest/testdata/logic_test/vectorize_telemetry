@@ -1,0 +1,60 @@
+# LogicTest: local
+
+# Run this test only in local mode since we don't get any new information in
+# other configs.
+
+statement ok
+SET CLUSTER SETTING sql.defaults.vectorize='on'
+
+statement ok
+SET CLUSTER SETTING sql.defaults.vectorize='auto'
+
+statement ok
+SET CLUSTER SETTING sql.defaults.vectorize='off'
+
+# Test that telemetry is gathered when setting the vectorized cluster setting.
+statement ok
+CREATE VIEW cur_telemetry as SELECT feature_name, usage_count FROM crdb_internal.feature_usage WHERE feature_name LIKE '%vectorized-setting%'
+
+query T rowsort
+SELECT feature_name FROM cur_telemetry
+----
+sql.exec.vectorized-setting.auto
+sql.exec.vectorized-setting.off
+sql.exec.vectorized-setting.on
+
+# Save the usage counts.
+statement ok
+CREATE TABLE telemetry_test AS SELECT * FROM cur_telemetry
+
+statement error invalid string value
+SET CLUSTER SETTING sql.defaults.vectorize='invalid'
+
+# This query should return no results because the invalid setting above should
+# not be tracked.
+query T
+SELECT feature_name FROM cur_telemetry WHERE feature_name NOT IN (SELECT feature_name FROM telemetry_test)
+----
+
+# This view gets the feature name where the usage count is one more than what
+# was stored in telemetry_test.
+statement ok
+CREATE VIEW incremented_feature_names AS SELECT current.feature_name FROM cur_telemetry AS current, telemetry_test AS previous WHERE current.feature_name = previous.feature_name AND current.usage_count=previous.usage_count+1
+
+statement ok
+SET CLUSTER SETTING sql.defaults.vectorize='off'
+
+query T
+SELECT * FROM incremented_feature_names
+----
+sql.exec.vectorized-setting.off
+
+statement ok
+SET CLUSTER SETTING sql.defaults.vectorize='on'
+
+# On should now be in incremented_feature_names.
+query T rowsort
+SELECT * FROM incremented_feature_names
+----
+sql.exec.vectorized-setting.on
+sql.exec.vectorized-setting.off
