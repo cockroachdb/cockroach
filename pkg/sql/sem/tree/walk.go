@@ -808,7 +808,6 @@ func (stmt *Delete) walkStmt(v Visitor) Statement {
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Explain) copyNode() *Explain {
 	stmtCopy := *stmt
-	stmtCopy.Options = append([]string(nil), stmt.Options...)
 	return &stmtCopy
 }
 
@@ -823,13 +822,13 @@ func (stmt *Explain) walkStmt(v Visitor) Statement {
 }
 
 // copyNode makes a copy of this Statement without recursing in any child Statements.
-func (stmt *ExplainBundle) copyNode() *ExplainBundle {
+func (stmt *ExplainAnalyzeDebug) copyNode() *ExplainAnalyzeDebug {
 	stmtCopy := *stmt
 	return &stmtCopy
 }
 
 // walkStmt is part of the walkableStmt interface.
-func (stmt *ExplainBundle) walkStmt(v Visitor) Statement {
+func (stmt *ExplainAnalyzeDebug) walkStmt(v Visitor) Statement {
 	s, changed := walkStmt(v, stmt.Statement)
 	if changed {
 		stmt = stmt.copyNode()

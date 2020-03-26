@@ -77,11 +77,11 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 	if explain.Options.Mode == tree.ExplainOpt {
 		fmtFlags := memo.ExprFmtHideAll
 		switch {
-		case explain.Options.Flags.Contains(tree.ExplainFlagVerbose):
+		case explain.Options.Flags[tree.ExplainFlagVerbose]:
 			fmtFlags = memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars |
 				memo.ExprFmtHideTypes | memo.ExprFmtHideNotNull
 
-		case explain.Options.Flags.Contains(tree.ExplainFlagTypes):
+		case explain.Options.Flags[tree.ExplainFlagTypes]:
 			fmtFlags = memo.ExprFmtHideQualifications
 		}
 
@@ -89,7 +89,7 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 
 		// If catalog option was passed, show catalog object details for all tables.
 		var planText bytes.Buffer
-		if explain.Options.Flags.Contains(tree.ExplainFlagCatalog) {
+		if explain.Options.Flags[tree.ExplainFlagCatalog] {
 			for _, t := range b.mem.Metadata().AllTables() {
 				tp := treeprinter.New()
 				cat.FormatTable(b.catalog, t.Table, tp)
@@ -106,7 +106,7 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 		// need to run to get that information, and we can't run them from here, so
 		// tell the exec factory what information it needs to fetch.
 		var envOpts exec.ExplainEnvData
-		if explain.Options.Flags.Contains(tree.ExplainFlagEnv) {
+		if explain.Options.Flags[tree.ExplainFlagEnv] {
 			envOpts = b.getEnvData()
 		}
 

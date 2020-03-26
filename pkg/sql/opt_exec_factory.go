@@ -1059,9 +1059,9 @@ func (ef *execFactory) ConstructExplain(
 ) (exec.Node, error) {
 	p := plan.(*planTop)
 
-	analyzeSet := options.Flags.Contains(tree.ExplainFlagAnalyze)
+	analyzeSet := options.Flags[tree.ExplainFlagAnalyze]
 
-	if options.Flags.Contains(tree.ExplainFlagEnv) {
+	if options.Flags[tree.ExplainFlagEnv] {
 		return nil, errors.New("ENV only supported with (OPT) option")
 	}
 

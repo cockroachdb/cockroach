@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
@@ -412,15 +411,6 @@ func (h *hasher) HashColumnID(val opt.ColumnID) {
 	h.HashUint64(uint64(val))
 }
 
-func (h *hasher) HashFastIntSet(val util.FastIntSet) {
-	hash := h.hash
-	for c, ok := val.Next(0); ok; c, ok = val.Next(c + 1) {
-		hash ^= internHash(c)
-		hash *= prime64
-	}
-	h.hash = hash
-}
-
 func (h *hasher) HashColSet(val opt.ColSet) {
 	hash := h.hash
 	for c, ok := val.Next(0); ok; c, ok = val.Next(c + 1) {
@@ -494,8 +484,15 @@ func (h *hasher) HashJoinFlags(val JoinFlags) {
 }
 
 func (h *hasher) HashExplainOptions(val tree.ExplainOptions) {
-	h.HashFastIntSet(val.Flags)
 	h.HashUint64(uint64(val.Mode))
+	hash := h.hash
+	for i, val := range val.Flags {
+		if val {
+			hash ^= internHash(uint64(i))
+			hash *= prime64
+		}
+	}
+	h.hash = hash
 }
 
 func (h *hasher) HashStatementType(val tree.StatementType) {
@@ -835,7 +832,7 @@ func (h *hasher) IsJoinFlagsEqual(l, r JoinFlags) bool {
 }
 
 func (h *hasher) IsExplainOptionsEqual(l, r tree.ExplainOptions) bool {
-	return l.Mode == r.Mode && l.Flags.Equals(r.Flags)
+	return l == r
 }
 
 func (h *hasher) IsStatementTypeEqual(l, r tree.StatementType) bool {
