@@ -3191,10 +3191,10 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 			)
 
 			oldColName := oldCol.Name
-			//newColName := newCol.Name
+			newColName := newCol.Name
 			desc.RenameColumn(oldCol, uniqueName)
 			desc.RenameColumn(newCol, oldColName)
-			//desc.RenameColumn(oldCol, newColName)
+			desc.RenameColumn(oldCol, newColName)
 
 			// Handle indexes as well.
 
@@ -3234,9 +3234,6 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 					break
 				}
 			}
-
-			// After drop table.
-			// ERROR: internal error: job not found for table id 59, mutation 2
 		}
 
 	case DescriptorMutation_DROP:

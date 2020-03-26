@@ -917,21 +917,7 @@ func applyColumnMutation(
 			currentMutationID := tableDesc.ClusterVersion.NextMutationID
 			for i := range tableDesc.Mutations {
 				mut := &tableDesc.Mutations[i]
-				if mut.MutationID == currentMutationID {
-					return unimplemented.NewWithIssuef(
-						45510, "cannot perform a primary key change on %s "+
-							"with other schema changes on %s in the same transaction", tableDesc.Name, tableDesc.Name)
-				}
 				if mut.MutationID < currentMutationID {
-					// We can handle indexes being deleted concurrently. We do this
-					// in order to not be blocked on index drops created by a previous
-					// primary key change. If we errored out when seeing a previous
-					// index drop, then users would see a confusing message that a
-					// schema change is in progress when it doesn't seem like one is.
-					// TODO (rohany): This feels like such a hack until (#45150) is fixed.
-					if mut.GetIndex() != nil && mut.Direction == sqlbase.DescriptorMutation_DROP {
-						continue
-					}
 					return unimplemented.NewWithIssuef(
 						45510, "table %s is currently undergoing a schema change", tableDesc.Name)
 				}

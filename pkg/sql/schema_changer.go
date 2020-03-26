@@ -835,7 +835,9 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 		if !ok {
 			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 		}
+
 		for _, mutation := range scDesc.Mutations {
+			fmt.Sprintf("mut: %s", mutation.MutationID)
 			if mutation.MutationID != sc.mutationID {
 				// Mutations are applied in a FIFO order. Only apply the first set of
 				// mutations if they have the mutation ID we're looking for.
@@ -934,6 +936,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				}
 				// Only start a job if spanList has any spans. If len(spanList) == 0, then
 				// no mutations were enqueued by the primary key change.
+				println(len(spanList))
 				if len(spanList) > 0 {
 					jobRecord := jobs.Record{
 						Description:   fmt.Sprintf("CLEANUP JOB for '%s'", sc.job.Payload().Description),
@@ -965,18 +968,20 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 					fn()
 				}
 
-				// If we performed MakeMutationComplete on a PrimaryKeySwap mutation, then we need to start
-				// a job for the index deletion mutations that the primary key swap mutation added, if any.
+				println("done computed")
+
+				// Create jobs for dropped columns / indexes to be deleted.
+				var spanList []jobspb.ResumeSpanList
 				mutationID := scDesc.ClusterVersion.NextMutationID
 				span := scDesc.PrimaryIndexSpan()
-				var spanList []jobspb.ResumeSpanList
-				for j := len(scDesc.ClusterVersion.Mutations); j < len(scDesc.Mutations); j++ {
+				for i := len(scDesc.ClusterVersion.Mutations) + len(spanList); i < len(scDesc.Mutations); i++ {
 					spanList = append(spanList,
 						jobspb.ResumeSpanList{
-							ResumeSpans: roachpb.Spans{span},
+							ResumeSpans: []roachpb.Span{span},
 						},
 					)
 				}
+
 				// Only start a job if spanList has any spans. If len(spanList) == 0, then
 				// no mutations were enqueued by the primary key change.
 				if len(spanList) > 0 {
@@ -1002,6 +1007,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 						JobID:      *job.ID(),
 					})
 				}
+
 			}
 			//** Computed Col Swap END **//
 
