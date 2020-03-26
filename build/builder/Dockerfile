@@ -189,6 +189,13 @@ RUN git clone git://git.sv.gnu.org/sed \
  && cd .. \
  && rm -rf sed
 
+# xenial installs cmake 3.5.1. We need a newer version. Run this step
+# after the llvm/cross-compile step which is exceedingly slow.
+RUN curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.17.0/cmake-3.17.0-Linux-x86_64.tar.gz -o cmake.tar.gz \
+ && echo 'b44685227b9f9be103e305efa2075a8ccf2415807fbcf1fc192da4d36aacc9f5 cmake.tar.gz' | sha256sum -c - \
+ && tar --strip-components=1 -C /usr -xzf cmake.tar.gz \
+ && rm cmake.tar.gz
+
 # Compile Go from source so that CC defaults to clang instead of gcc. This
 # requires a Go toolchain to bootstrap.
 #
@@ -196,8 +203,8 @@ RUN git clone git://git.sv.gnu.org/sed \
 # releases of Go will no longer be run in CI once it is changed. Consider
 # bumping the minimum allowed version of Go in /build/go-version-chech.sh.
 RUN apt-get install -y --no-install-recommends golang \
- && curl -fsSL https://storage.googleapis.com/golang/go1.13.5.src.tar.gz -o golang.tar.gz \
- && echo '27d356e2a0b30d9983b60a788cf225da5f914066b37a6b4f69d457ba55a626ff golang.tar.gz' | sha256sum -c - \
+ && curl -fsSL https://storage.googleapis.com/golang/go1.13.9.src.tar.gz -o golang.tar.gz \
+ && echo '34bb19d806e0bc4ad8f508ae24bade5e9fedfa53d09be63b488a9314d2d4f31d golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \
