@@ -109,3 +109,6 @@
     - The CORR aggregate function has been added which will not be recognized
       by older nodes. However, new nodes can process plans from older nodes,
       so MinAcceptedVersion is unchanged.
+- Version: 29 (MinAcceptedVersion: 29)
+    - The Max and Min aggregate functions have been extended to support collated
+      strings. Old nodes won't have this ability, so we bump the version.
