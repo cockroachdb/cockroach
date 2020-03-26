@@ -54,29 +54,23 @@ which may or may not work (and are not officially supported).
 
 # Upgrading / extending the Docker image
 
-Process:
+## Basic Process
 
-- edit `build/Dockerfile` as desired
-- run `build/builder.sh init` to test -- this will build the image locally. Beware this can take a lot of time. The result of `init` is a docker image version which you can subsequently stick into the `version` variable inside the `builder.sh` script for testing locally.
+- Edit `build/Dockerfile` as desired
+- Run `build/builder.sh init` to test -- this will build the image locally. Beware this can take a lot of time. The result of `init` is a docker image version which you can subsequently stick into the `version` variable inside the `builder.sh` script for testing locally.
 - Once you are happy with the result, run `build/builder.sh push` which pushes your image towards Docker hub, so that it becomes available to others. The result is again a version number, which you then *must* copy back into `builder.sh`. Then commit the change to both Dockerfile and `builder.sh` and submit a PR.
 - Finally, use this version number to update the `builder.dockerImage` configuration parameter in TeamCity under the [`Cockroach`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Cockroach&tab=projectParams) and [`Internal`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Internal&tab=projectParams) projects.
 
-#  Dependencies
-
-A snapshot of CockroachDB's dependencies is maintained at
-https://github.com/cockroachdb/vendored and checked out as a submodule at
-`./vendor`.
-
 ## Updating the golang version
 
-Please copy this checklist into the relevant commit message, with a link
-back to this document:
+Please copy this checklist (based on [Basic Process](#basic-process)) into the relevant commit message, with a link
+back to this document and perform these steps:
 
 * [ ] Adjust version in Docker image ([source](./builder/Dockerfile#L199-L200)).
-* [ ] Rebuild the Docker image and bump the version in builder.sh accordingly ([source](./builder.sh#L6)).
-* [ ] Bump the version in go-version-check.sh ([source](./go-version-check.sh)), unless bumping to a new patch release.
-* [ ] Bump the default installed version of Go in bootstrap-debian.sh ([source](./bootstrap/bootstrap-debian.sh#L40-42)).
-* [ ] Update the `builder.dockerImage` parameter in the TeamCity `Cockroach` project.
+* [ ] Rebuild the Docker image and bump the `version` in `builder.sh` accordingly ([source](./builder.sh#L6)).
+* [ ] Bump the version in `go-version-check.sh` ([source](./go-version-check.sh)), unless bumping to a new patch release.
+* [ ] Bump the default installed version of Go in `bootstrap-debian.sh` ([source](./bootstrap/bootstrap-debian.sh#L40-42)).
+* [ ] Update the `builder.dockerImage` parameter in the TeamCity [`Cockroach`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Cockroach&tab=projectParams) and [`Internal`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Internal&tab=projectParams) projects.
 
 You can test the new builder image in TeamCity by using the custom parameters
 UI (the "..." icon next to the "Run" button) to verify the image before
@@ -85,6 +79,12 @@ committing the change.
 ## Updating the nodejs version
 
 Please follow the instructions above on updating the golang version, omitting the go-version-check.sh step.
+
+#  Dependencies
+
+A snapshot of CockroachDB's dependencies is maintained at
+https://github.com/cockroachdb/vendored and checked out as a submodule at
+`./vendor`.
 
 ## Updating Dependencies
 
