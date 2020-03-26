@@ -44,11 +44,8 @@ module.exports = function(config) {
 
     // list of files / patterns to load in the browser
     files: [
-      "dist/protos.ccl.dll.js",
-      "dist/vendor.oss.dll.js",
       "src/polyfills.ts",
-      "src/**/*.spec.*",
-      "ccl/src/**/*.spec.*",
+      "tests-loader.js",
     ],
 
     // frameworks to use
@@ -70,14 +67,14 @@ module.exports = function(config) {
     // preprocess matching files before serving them to the browser
     // available preprocessors: https://npmjs.org/browse/keyword/karma-preprocessor
     preprocessors: {
-      "ccl/src/**": ["webpack"],
-      "src/**": ["webpack"],
+      "src/polyfills.ts": ["webpack"],
+      "tests-loader.js": ["webpack", "sourcemap"],
     },
 
     // test results reporter to use
     // possible values: "dots", "progress"
     // available reporters: https://npmjs.org/browse/keyword/karma-reporter
-    reporters: ["mocha", "progress"],
+    reporters: ["mocha"],
 
     // Continuous Integration mode
     // if true, Karma captures browsers, runs the tests and exits
@@ -85,8 +82,8 @@ module.exports = function(config) {
 
     // https://github.com/airbnb/enzyme/blob/master/docs/guides/webpack.md
     webpack: {
-      devtool: "eval",
-      mode: "none",
+      devtool: "eval-cheap-source-map",
+      mode: "development",
       module: webpackConfig.module,
       resolve: webpackConfig.resolve,
     },
