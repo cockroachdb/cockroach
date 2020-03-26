@@ -47,8 +47,8 @@ func (d *delegator) delegateShowIndexes(n *tree.ShowIndexes) (tree.Statement, er
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Indexes)
 	getIndexesQuery := `
 SELECT
-	table_name,
-	index_name,
+	s.table_name,
+	s.index_name,
 	non_unique::BOOL,
 	seq_in_index,
 	column_name,
@@ -58,17 +58,19 @@ SELECT
 
 	if n.WithComment {
 		getIndexesQuery += `,
-	obj_description(pg_class.oid) AS comment`
+	obj_description(pg_indexes.crdb_oid) AS comment`
 	}
 
 	getIndexesQuery += `
 FROM
-	%[4]s.information_schema.statistics`
+	%[4]s.information_schema.statistics AS s`
 
 	if n.WithComment {
 		getIndexesQuery += `
-	LEFT JOIN pg_class ON
-		statistics.index_name = pg_class.relname`
+	LEFT JOIN pg_indexes ON
+		pg_indexes.tablename = s.table_name AND
+		pg_indexes.indexname = s.index_name
+	`
 	}
 
 	getIndexesQuery += `
