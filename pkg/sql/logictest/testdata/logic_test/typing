@@ -221,3 +221,10 @@ query I
 SELECT IF(true, NULL, 1) + IF(false, 1, NULL)
 ----
 NULL
+
+# Regression test for #46196.
+query error ambiguous call: max\(unknown\)
+SELECT MAX(t0.c0) FROM (VALUES (NULL), (NULL)) t0(c0)
+
+query error ambiguous call: max\(unknown\)
+SELECT MAX(NULL) FROM (VALUES (NULL), (NULL)) t0(c0)
