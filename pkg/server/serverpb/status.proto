@@ -822,8 +822,16 @@ message StatementDiagnosticsRequest {
   int64 statement_diagnostics_id = 1;
 }
 
+message StatementDiagnosticsByFingerprintRequest {
+  string statement_fingerprint = 1;
+}
+
 message StatementDiagnosticsResponse {
   StatementDiagnostics diagnostics = 2;
+}
+
+message StatementDiagnosticsListResponse {
+  repeated StatementDiagnostics diagnostics = 1 [ (gogoproto.nullable) = false ];
 }
 
 message JobRegistryStatusRequest {
@@ -1013,6 +1021,12 @@ service Status {
   rpc StatementDiagnostics(StatementDiagnosticsRequest) returns (StatementDiagnosticsResponse) {
     option (google.api.http) = {
       get: "/_status/stmtdiag/{statement_diagnostics_id}"
+    };
+  }
+  rpc StatementDiagnosticsByFingerprint(StatementDiagnosticsByFingerprintRequest) returns (StatementDiagnosticsListResponse) {
+    option (google.api.http) = {
+      post: "/_status/stmtdiag"
+      body: "*"
     };
   }
   rpc JobRegistryStatus(JobRegistryStatusRequest) returns (JobRegistryStatusResponse) {

@@ -1583,6 +1583,52 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 	}
 }
 
+func TestStatementDiagnosticsByFingerprint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	_, err := db.Exec("CREATE TABLE test (x int PRIMARY KEY)")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fingerprint := "INSERT INTO test VALUES (_)"
+
+	req := &serverpb.CreateStatementDiagnosticsReportRequest{
+		StatementFingerprint: fingerprint,
+	}
+	var resp serverpb.CreateStatementDiagnosticsReportResponse
+	if err := postStatusJSONProto(s, "stmtdiagreports", req, &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = db.Exec("INSERT INTO test VALUES (1)")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reqByFingerprint := &serverpb.StatementDiagnosticsByFingerprintRequest{
+		StatementFingerprint: fingerprint,
+	}
+	var respPost serverpb.StatementDiagnosticsListResponse
+	if err := postStatusJSONProto(s, "stmtdiag", reqByFingerprint, &respPost); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(respPost.Diagnostics) != 1 {
+		t.Fatal("list of diagnostics does not contain the one we expect")
+	}
+	if respPost.Diagnostics[0].StatementFingerprint != fingerprint {
+		t.Errorf("expected fingerprint %s and got %s",
+			fingerprint, respPost.Diagnostics[0].StatementFingerprint)
+	}
+	if respPost.Diagnostics[0].CollectedAt.IsZero() {
+		t.Fatal("collection time of diagnostic is zero, we expect it to be collected")
+	}
+}
+
 func TestJobStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := startServer(t)

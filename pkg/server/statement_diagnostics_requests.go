@@ -181,6 +181,7 @@ func (s *statusServer) StatementDiagnostics(
 	if err != nil {
 		return nil, err
 	}
+
 	if row == nil {
 		return nil, errors.Newf(
 			"requested a statement diagnostic (%d) that does not exist",
@@ -191,10 +192,24 @@ func (s *statusServer) StatementDiagnostics(
 	diagnostics := stmtDiagnostics{
 		ID: int(req.StatementDiagnosticsId),
 	}
-
-	if statementFingerprint, ok := row[1].(*tree.DString); ok {
-		diagnostics.StatementFingerprint = statementFingerprint.String()
+	err = deserializeStatementDiagnosticsRow(row, &diagnostics)
+	if err != nil {
+		return nil, err
 	}
+
+	diagnosticsProto := diagnostics.toProto()
+	response := &serverpb.StatementDiagnosticsResponse{
+		Diagnostics: &diagnosticsProto,
+	}
+
+	return response, nil
+}
+
+func deserializeStatementDiagnosticsRow(
+	row tree.Datums,
+	diagnostics *stmtDiagnostics,
+) error {
+	diagnostics.StatementFingerprint = string(*row[1].(*tree.DString))
 
 	if collectedAt, ok := row[2].(*tree.DTimestampTZ); ok {
 		diagnostics.CollectedAt = collectedAt.Time
@@ -203,15 +218,58 @@ func (s *statusServer) StatementDiagnostics(
 	if traceJSON, ok := row[3].(*tree.DJSON); ok {
 		traceJSONString, err := traceJSON.AsText()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		diagnostics.Trace = *traceJSONString
 	}
+	return nil
+}
 
-	diagnosticsProto := diagnostics.toProto()
-	response := &serverpb.StatementDiagnosticsResponse{
-		Diagnostics: &diagnosticsProto,
+func (s *statusServer) StatementDiagnosticsByFingerprint(
+	ctx context.Context, req *serverpb.StatementDiagnosticsByFingerprintRequest,
+) (*serverpb.StatementDiagnosticsListResponse, error) {
+	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+		return nil, err
 	}
 
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	var err error
+	rows, err := s.internalExecutor.QueryEx(ctx, "stmt-diag-get-one", nil, /* txn */
+		sqlbase.InternalExecutorSessionDataOverride{
+			User: security.RootUser,
+		},
+		`SELECT
+			id,
+			statement_fingerprint,
+			collected_at,
+			trace
+		FROM
+			system.statement_diagnostics
+		WHERE
+			statement_fingerprint = $1`, req.StatementFingerprint)
+	if err != nil {
+		return nil, err
+	}
+
+	diagnosticsList := make([]stmtDiagnostics, len(rows))
+	for i, row := range rows {
+		id := int(*row[0].(*tree.DInt))
+
+		diagnostics := stmtDiagnostics{
+			ID: id,
+		}
+		err = deserializeStatementDiagnosticsRow(row, &diagnostics)
+		diagnosticsList[i] = diagnostics
+	}
+
+	response := &serverpb.StatementDiagnosticsListResponse{
+		Diagnostics: make([]serverpb.StatementDiagnostics, len(rows)),
+	}
+
+	for i, diagnostics := range diagnosticsList {
+		response.Diagnostics[i] = diagnostics.toProto()
+	}
 	return response, nil
 }
