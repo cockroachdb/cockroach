@@ -374,10 +374,12 @@ func (d *distinct) outputStatsToTrace() {
 	if !ok {
 		return
 	}
+	stats := &DistinctStats{InputStats: is, MaxAllocatedMem: d.MemMonitor.MaximumBytes()}
+	if d.FlowCtx.TestingKnobs().DeterministicStats {
+		stats.MaxAllocatedMem = 0
+	}
 	if sp := opentracing.SpanFromContext(d.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp, &DistinctStats{InputStats: is, MaxAllocatedMem: d.MemMonitor.MaximumBytes()},
-		)
+		tracing.SetSpanStats(sp, stats)
 	}
 }
 

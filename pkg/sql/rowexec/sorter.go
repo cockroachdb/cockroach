@@ -177,15 +177,17 @@ func (s *sorterBase) outputStatsToTrace() {
 	if !ok {
 		return
 	}
+	stats := &SorterStats{
+		InputStats:       is,
+		MaxAllocatedMem:  s.MemMonitor.MaximumBytes(),
+		MaxAllocatedDisk: s.diskMonitor.MaximumBytes(),
+	}
+	if s.FlowCtx.TestingKnobs().DeterministicStats {
+		stats.MaxAllocatedMem = 0
+		stats.MaxAllocatedDisk = 0
+	}
 	if sp := opentracing.SpanFromContext(s.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp,
-			&SorterStats{
-				InputStats:       is,
-				MaxAllocatedMem:  s.MemMonitor.MaximumBytes(),
-				MaxAllocatedDisk: s.diskMonitor.MaximumBytes(),
-			},
-		)
+		tracing.SetSpanStats(sp, stats)
 	}
 }
 

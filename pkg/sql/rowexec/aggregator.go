@@ -204,14 +204,15 @@ func (ag *aggregatorBase) outputStatsToTrace() {
 	if !ok {
 		return
 	}
+	aggStats := &AggregatorStats{
+		InputStats:      is,
+		MaxAllocatedMem: ag.MemMonitor.MaximumBytes(),
+	}
+	if ag.FlowCtx.TestingKnobs().DeterministicStats {
+		aggStats.MaxAllocatedMem = 0
+	}
 	if sp := opentracing.SpanFromContext(ag.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp,
-			&AggregatorStats{
-				InputStats:      is,
-				MaxAllocatedMem: ag.MemMonitor.MaximumBytes(),
-			},
-		)
+		tracing.SetSpanStats(sp, aggStats)
 	}
 }
 

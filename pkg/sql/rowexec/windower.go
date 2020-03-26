@@ -864,15 +864,17 @@ func (w *windower) outputStatsToTrace() {
 	if !ok {
 		return
 	}
+	stats := &WindowerStats{
+		InputStats:       is,
+		MaxAllocatedMem:  w.MemMonitor.MaximumBytes(),
+		MaxAllocatedDisk: w.diskMonitor.MaximumBytes(),
+	}
+	if w.FlowCtx.TestingKnobs().DeterministicStats {
+		stats.MaxAllocatedMem = 0
+		stats.MaxAllocatedDisk = 0
+	}
 	if sp := opentracing.SpanFromContext(w.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp,
-			&WindowerStats{
-				InputStats:       is,
-				MaxAllocatedMem:  w.MemMonitor.MaximumBytes(),
-				MaxAllocatedDisk: w.diskMonitor.MaximumBytes(),
-			},
-		)
+		tracing.SetSpanStats(sp, stats)
 	}
 }
 

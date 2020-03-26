@@ -807,17 +807,19 @@ func (h *hashJoiner) outputStatsToTrace() {
 	if !ok {
 		return
 	}
+	hjStats := &HashJoinerStats{
+		LeftInputStats:   lis,
+		RightInputStats:  ris,
+		StoredSide:       h.storedSide.String(),
+		MaxAllocatedMem:  h.MemMonitor.MaximumBytes(),
+		MaxAllocatedDisk: h.diskMonitor.MaximumBytes(),
+	}
+	if h.FlowCtx.TestingKnobs().DeterministicStats {
+		hjStats.MaxAllocatedMem = 0
+		hjStats.MaxAllocatedDisk = 0
+	}
 	if sp := opentracing.SpanFromContext(h.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp,
-			&HashJoinerStats{
-				LeftInputStats:   lis,
-				RightInputStats:  ris,
-				StoredSide:       h.storedSide.String(),
-				MaxAllocatedMem:  h.MemMonitor.MaximumBytes(),
-				MaxAllocatedDisk: h.diskMonitor.MaximumBytes(),
-			},
-		)
+		tracing.SetSpanStats(sp, hjStats)
 	}
 }
 

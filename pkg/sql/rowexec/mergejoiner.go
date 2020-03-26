@@ -293,15 +293,16 @@ func (m *mergeJoiner) outputStatsToTrace() {
 	if !ok {
 		return
 	}
+	mjStats := &MergeJoinerStats{
+		LeftInputStats:  lis,
+		RightInputStats: ris,
+		MaxAllocatedMem: m.MemMonitor.MaximumBytes(),
+	}
+	if m.FlowCtx.TestingKnobs().DeterministicStats {
+		mjStats.MaxAllocatedMem = 0
+	}
 	if sp := opentracing.SpanFromContext(m.Ctx); sp != nil {
-		tracing.SetSpanStats(
-			sp,
-			&MergeJoinerStats{
-				LeftInputStats:  lis,
-				RightInputStats: ris,
-				MaxAllocatedMem: m.MemMonitor.MaximumBytes(),
-			},
-		)
+		tracing.SetSpanStats(sp, mjStats)
 	}
 }
 
