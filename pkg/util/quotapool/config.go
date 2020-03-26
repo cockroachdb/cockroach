@@ -29,6 +29,14 @@ type AcquisitionFunc func(
 	ctx context.Context, poolName string, r Request, start time.Time,
 )
 
+// QueueLIFO configures the quotapool to use LIFO queueing instead of the
+// default FIFO.
+func QueueLIFO() Option {
+	return optionFunc(func(o *config) {
+		o.queueLifo = true
+	})
+}
+
 // OnAcquisition creates an Option to configure a callback upon acquisition.
 // It is often useful for recording metrics.
 func OnAcquisition(f AcquisitionFunc) Option {
@@ -90,6 +98,7 @@ type config struct {
 	slowAcquisitionThreshold time.Duration
 	timeSource               timeutil.TimeSource
 	closer                   <-chan struct{}
+	queueLifo                bool
 }
 
 var defaultConfig = config{

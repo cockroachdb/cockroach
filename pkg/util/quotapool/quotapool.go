@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // TODO(ajwerner): provide option to limit the maximum queue size.
@@ -114,10 +115,14 @@ type QuotaPool struct {
 		// channel buffer.
 		q notifyQueue
 
-		// numCanceled is the number of members of q which have been canceled.
-		// It is used to determine the current number of active waiters in the queue
-		// which is q.len() less this value.
-		numCanceled int
+		// notifyee tracks the waiter who was at the head of the queue the last time
+		// a head was selected.
+		notifyee *notifyee
+
+		// numFinished is the number of members of q which have finished or been
+		// canceled. It is used to determine the current number of active waiters in
+		// the queue which is q.len() less this value.
+		numFinished int
 
 		// closed is set to true when the quota pool is closed (see
 		// QuotaPool.Close).
@@ -156,7 +161,7 @@ func (qp *QuotaPool) ApproximateQuota(f func(Resource)) {
 func (qp *QuotaPool) Len() int {
 	qp.mu.Lock()
 	defer qp.mu.Unlock()
-	return int(qp.mu.q.len) - qp.mu.numCanceled
+	return int(qp.mu.q.len) - qp.mu.numFinished
 }
 
 // Close signals to all ongoing and subsequent acquisitions that they are
@@ -192,10 +197,19 @@ func (qp *QuotaPool) addLocked(val interface{}) {
 	if shouldNotify := qp.mu.quota.Merge(val); !shouldNotify {
 		return
 	}
+	if n := qp.mu.notifyee; n != nil {
+		select {
+		case n.c <- struct{}{}:
+			qp.mu.notifyee = n
+		default:
+		}
+		return
+	}
 	// Notify the head of the queue if there is one waiting.
 	if n := qp.mu.q.peek(); n != nil && n.c != nil {
 		select {
 		case n.c <- struct{}{}:
+			qp.mu.notifyee = n
 		default:
 		}
 	}
@@ -327,7 +341,8 @@ func (qp *QuotaPool) acquireFastPath(
 	if qp.mu.closed {
 		return false, nil, 0, qp.closeErr
 	}
-	if qp.mu.q.len == 0 {
+	isHead := qp.mu.q.len == 0
+	if isHead {
 		if fulfilled, tryAgainAfter = r.Acquire(ctx, qp.mu.quota); fulfilled {
 			return true, nil, tryAgainAfter, nil
 		}
@@ -335,8 +350,17 @@ func (qp *QuotaPool) acquireFastPath(
 	if !r.ShouldWait() {
 		return false, nil, 0, ErrNotEnoughQuota
 	}
+
 	c := chanSyncPool.Get().(chan struct{})
-	return false, qp.mu.q.enqueue(c), tryAgainAfter, nil
+	pushFunc := qp.mu.q.pushBack // queueFifo
+	if qp.queueLifo {
+		pushFunc = qp.mu.q.pushFront
+	}
+	n := pushFunc(c)
+	if isHead {
+		qp.mu.notifyee = n
+	}
+	return false, n, tryAgainAfter, nil
 }
 
 func (qp *QuotaPool) tryAcquireOnNotify(
@@ -353,13 +377,20 @@ func (qp *QuotaPool) tryAcquireOnNotify(
 
 	qp.mu.Lock()
 	defer qp.mu.Unlock()
-	// Make sure nobody already notified us again between the last receive and grabbing
-	// the mutex.
+	if qp.mu.notifyee != n {
+		panic(errors.AssertionFailedf(
+			"only the current notifyee should be attempting to acquire"))
+	}
+
+	// Make sure nobody already notified us again between the last receive and
+	// grabbing the mutex.
 	if len(n.c) > 0 {
 		<-n.c
 	}
 	if fulfilled, tryAgainAfter = r.Acquire(ctx, qp.mu.quota); fulfilled {
 		n.c = nil
+		qp.mu.numFinished++
+		qp.mu.notifyee = nil
 		qp.notifyNextLocked()
 	}
 	return fulfilled, tryAgainAfter
@@ -369,32 +400,34 @@ func (qp *QuotaPool) cleanupOnCancel(n *notifyee) {
 	// No matter what, we're going to want to put our notify channel back in to
 	// the sync pool. Note that this defer call evaluates n.c here and is not
 	// affected by later code that sets n.c to nil.
-	defer chanSyncPool.Put(n.c)
+	c := n.c
+	defer chanSyncPool.Put(c)
 
 	qp.mu.Lock()
 	defer qp.mu.Unlock()
 
-	// It we're not the head, prevent ourselves from being notified and move
-	// along.
-	if n != qp.mu.q.peek() {
-		n.c = nil
-		qp.mu.numCanceled++
-		return
-	}
-
-	// If we're the head, make sure nobody already notified us before we notify the
-	// next waiting notifyee.
+	// It is possible that a notification due to a release was sent to use before
+	// we grabbed the mutex, if so, clear the channel so that it's safe to release
+	// back into the pool.
 	if len(n.c) > 0 {
 		<-n.c
 	}
-	qp.notifyNextLocked()
+	n.c = nil // mark the notifyee as finished
+	qp.mu.numFinished++
+	if qp.mu.notifyee == n || (qp.mu.notifyee == nil && qp.mu.q.peek() == n) {
+		qp.mu.notifyee = nil
+		qp.notifyNextLocked()
+	}
 }
 
 // notifyNextLocked notifies the waiting acquisition goroutine next in line (if
 // any). It requires that qp.mu.Mutex is held.
 func (qp *QuotaPool) notifyNextLocked() {
-	// Pop ourselves off the front of the queue.
-	qp.mu.q.dequeue()
+	if qp.mu.notifyee != nil {
+		panic(errors.AssertionFailedf(
+			"notifyNextLocked should only be called if there is no current notifyee"))
+	}
+
 	// We traverse until we find a goroutine waiting to be notified, notify the
 	// goroutine and truncate our queue to ensure the said goroutine is at the
 	// head of the queue. Normally the next lined up waiter is the one waiting for
@@ -406,10 +439,11 @@ func (qp *QuotaPool) notifyNextLocked() {
 	// queue to reflect this.
 	for n := qp.mu.q.peek(); n != nil; n = qp.mu.q.peek() {
 		if n.c == nil {
-			qp.mu.numCanceled--
-			qp.mu.q.dequeue()
+			qp.mu.numFinished--
+			qp.mu.q.popFront()
 			continue
 		}
+		qp.mu.notifyee = n
 		n.c <- struct{}{}
 		break
 	}
