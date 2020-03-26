@@ -3215,13 +3215,11 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 			oldColCopy := protoutil.Clone(oldCol).(*ColumnDescriptor)
 
 			for i := range desc.Columns {
-				println(desc.Columns[i].Name)
 				if desc.Columns[i].ID == newCol.ID {
 					desc.Columns[i] = *oldColCopy
 				} else if desc.Columns[i].ID == oldCol.ID {
 					desc.Columns[i] = *newCol
 				}
-				println(desc.Columns[i].Name)
 			}
 
 			//Drop old column.

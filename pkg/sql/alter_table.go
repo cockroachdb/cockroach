@@ -911,9 +911,7 @@ func applyColumnMutation(
 			// Computed off old column, need to update ComputeExpr
 			// Make shadow column for now
 
-			// Ensure that other schema changes on this table are not currently
-			// executing, and that other schema changes have not been performed
-			// in the current transaction.
+			// Can concurrent schema changes be happening?
 			currentMutationID := tableDesc.ClusterVersion.NextMutationID
 			for i := range tableDesc.Mutations {
 				mut := &tableDesc.Mutations[i]
@@ -962,59 +960,18 @@ func applyColumnMutation(
 
 			tableDesc.AddColumnMutation(&newCol, sqlbase.DescriptorMutation_ADD)
 
+			//2. For all indexes i that contain c, create a new i' that indexes all columns in c, but replaces c for c'
+			//  iterate through table desc indexes
+			// 2.5 Foreign key?
+
+			//3. Enqueue an "index swap" mutation containing all indexes that need to be rewritten.
+
 			swapArgs := &sqlbase.ComputedColumnSwap{
 				OldColumnId: col.ID,
 				NewColumnId: newCol.ID,
 			}
 
-			//colToDrop := protoutil.Clone(col).(*sqlbase.ColumnDescriptor)
-
-			//2. For all indexes i that contain c, create a new i' that indexes all columns in c, but replaces c for c'
-			//  iterate through table desc indexes
-
-			//3. Enqueue an "index swap" mutation containing all indexes that need to be rewritten.
-			//
-			//Worry about FK later.
-
 			tableDesc.AddComputedColumnSwapMutation(swapArgs)
-			//// Enqueue drop.
-			//// TODO(richardjcai): Copied from drop column can deduplicate code.
-			// If the dropped column uses a sequence, remove references to it from that sequence.
-			//if len(col.UsesSequenceIds) > 0 {
-			//
-			//	if err := params.p.removeSequenceDependencies(params.ctx, tableDesc, col); err != nil {
-			//		return err
-			//	}
-			//}
-			//
-			//// You can't remove a column that owns a sequence that is depended on
-			//// by another column
-			//if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, tableDesc, col, tree.DropDefault); err != nil {
-			//	return err
-			//}
-			//
-			//if err := params.p.dropSequencesOwnedByCol(params.ctx, col); err != nil {
-			//	return err
-			//}
-			//
-			//println(colToDrop.ID)
-			//
-			//found := false
-			//for i := range tableDesc.Columns {
-			//	if tableDesc.Columns[i].ID == colToDrop.ID {
-			//		tableDesc.AddColumnMutation(colToDrop, sqlbase.DescriptorMutation_DROP)
-			//		// Use [:i:i] to prevent reuse of existing slice, or outstanding refs
-			//		// to ColumnDescriptors may unexpectedly change.
-			//		tableDesc.Columns = append(tableDesc.Columns[:i:i], tableDesc.Columns[i+1:]...)
-			//		found = true
-			//		break
-			//	}
-			//}
-			//if !found {
-			//	return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			//		"error dropping old column: %q", col)
-			//}
-
 	}
 
 	case *tree.AlterTableSetDefault:
