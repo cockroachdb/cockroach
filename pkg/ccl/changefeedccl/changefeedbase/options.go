@@ -26,17 +26,18 @@ type SchemaChangePolicy string
 
 // Constants for the options.
 const (
-	OptConfluentSchemaRegistry = `confluent_schema_registry`
-	OptCursor                  = `cursor`
-	OptEnvelope                = `envelope`
-	OptFormat                  = `format`
-	OptKeyInValue              = `key_in_value`
-	OptResolvedTimestamps      = `resolved`
-	OptUpdatedTimestamps       = `updated`
-	OptDiff                    = `diff`
-	OptCompression             = `compression`
-	OptSchemaChangeEvents      = `schema_change_events`
-	OptSchemaChangePolicy      = `schema_change_policy`
+	OptConfluentSchemaRegistry  = `confluent_schema_registry`
+	OptCursor                   = `cursor`
+	OptEnvelope                 = `envelope`
+	OptFormat                   = `format`
+	OptKeyInValue               = `key_in_value`
+	OptResolvedTimestamps       = `resolved`
+	OptUpdatedTimestamps        = `updated`
+	OptDiff                     = `diff`
+	OptCompression              = `compression`
+	OptSchemaChangeEvents       = `schema_change_events`
+	OptSchemaChangePolicy       = `schema_change_policy`
+	OptProtectDataFromGCOnPause = `protect_data_from_gc_on_pause`
 
 	// OptSchemaChangeEventClassColumnChange corresponds to all schema change
 	// events which add or remove any column.
@@ -94,17 +95,18 @@ const (
 // ChangefeedOptionExpectValues is used to parse changefeed options using
 // PlanHookState.TypeAsStringOpts().
 var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
-	OptConfluentSchemaRegistry: sql.KVStringOptRequireValue,
-	OptCursor:                  sql.KVStringOptRequireValue,
-	OptEnvelope:                sql.KVStringOptRequireValue,
-	OptFormat:                  sql.KVStringOptRequireValue,
-	OptKeyInValue:              sql.KVStringOptRequireNoValue,
-	OptResolvedTimestamps:      sql.KVStringOptAny,
-	OptUpdatedTimestamps:       sql.KVStringOptRequireNoValue,
-	OptDiff:                    sql.KVStringOptRequireNoValue,
-	OptCompression:             sql.KVStringOptRequireValue,
-	OptSchemaChangeEvents:      sql.KVStringOptRequireValue,
-	OptSchemaChangePolicy:      sql.KVStringOptRequireValue,
-	OptInitialScan:             sql.KVStringOptRequireNoValue,
-	OptNoInitialScan:           sql.KVStringOptRequireNoValue,
+	OptConfluentSchemaRegistry:  sql.KVStringOptRequireValue,
+	OptCursor:                   sql.KVStringOptRequireValue,
+	OptEnvelope:                 sql.KVStringOptRequireValue,
+	OptFormat:                   sql.KVStringOptRequireValue,
+	OptKeyInValue:               sql.KVStringOptRequireNoValue,
+	OptResolvedTimestamps:       sql.KVStringOptAny,
+	OptUpdatedTimestamps:        sql.KVStringOptRequireNoValue,
+	OptDiff:                     sql.KVStringOptRequireNoValue,
+	OptCompression:              sql.KVStringOptRequireValue,
+	OptSchemaChangeEvents:       sql.KVStringOptRequireValue,
+	OptSchemaChangePolicy:       sql.KVStringOptRequireValue,
+	OptInitialScan:              sql.KVStringOptRequireNoValue,
+	OptNoInitialScan:            sql.KVStringOptRequireNoValue,
+	OptProtectDataFromGCOnPause: sql.KVStringOptRequireNoValue,
 }
