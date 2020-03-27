@@ -14,58 +14,58 @@ CREATE TABLE pg_catalog.t (x INT)
 query error database "pg_catalog" does not exist
 DROP DATABASE pg_catalog
 
-query T
+query TTT
 SHOW TABLES FROM pg_catalog
 ----
-pg_am
-pg_attrdef
-pg_attribute
-pg_auth_members
-pg_authid
-pg_available_extensions
-pg_cast
-pg_class
-pg_collation
-pg_constraint
-pg_conversion
-pg_database
-pg_default_acl
-pg_depend
-pg_description
-pg_enum
-pg_extension
-pg_foreign_data_wrapper
-pg_foreign_server
-pg_foreign_table
-pg_index
-pg_indexes
-pg_inherits
-pg_language
-pg_locks
-pg_matviews
-pg_namespace
-pg_operator
-pg_prepared_statements
-pg_prepared_xacts
-pg_proc
-pg_range
-pg_rewrite
-pg_roles
-pg_seclabel
-pg_seclabels
-pg_sequence
-pg_settings
-pg_shdepend
-pg_shdescription
-pg_shseclabel
-pg_stat_activity
-pg_tables
-pg_tablespace
-pg_trigger
-pg_type
-pg_user
-pg_user_mapping
-pg_views
+pg_catalog  pg_am                    table
+pg_catalog  pg_attrdef               table
+pg_catalog  pg_attribute             table
+pg_catalog  pg_auth_members          table
+pg_catalog  pg_authid                table
+pg_catalog  pg_available_extensions  table
+pg_catalog  pg_cast                  table
+pg_catalog  pg_class                 table
+pg_catalog  pg_collation             table
+pg_catalog  pg_constraint            table
+pg_catalog  pg_conversion            table
+pg_catalog  pg_database              table
+pg_catalog  pg_default_acl           table
+pg_catalog  pg_depend                table
+pg_catalog  pg_description           table
+pg_catalog  pg_enum                  table
+pg_catalog  pg_extension             table
+pg_catalog  pg_foreign_data_wrapper  table
+pg_catalog  pg_foreign_server        table
+pg_catalog  pg_foreign_table         table
+pg_catalog  pg_index                 table
+pg_catalog  pg_indexes               table
+pg_catalog  pg_inherits              table
+pg_catalog  pg_language              table
+pg_catalog  pg_locks                 table
+pg_catalog  pg_matviews              table
+pg_catalog  pg_namespace             table
+pg_catalog  pg_operator              table
+pg_catalog  pg_prepared_statements   table
+pg_catalog  pg_prepared_xacts        table
+pg_catalog  pg_proc                  table
+pg_catalog  pg_range                 table
+pg_catalog  pg_rewrite               table
+pg_catalog  pg_roles                 table
+pg_catalog  pg_seclabel              table
+pg_catalog  pg_seclabels             table
+pg_catalog  pg_sequence              table
+pg_catalog  pg_settings              table
+pg_catalog  pg_shdepend              table
+pg_catalog  pg_shdescription         table
+pg_catalog  pg_shseclabel            table
+pg_catalog  pg_stat_activity         table
+pg_catalog  pg_tables                table
+pg_catalog  pg_tablespace            table
+pg_catalog  pg_trigger               table
+pg_catalog  pg_type                  table
+pg_catalog  pg_user                  table
+pg_catalog  pg_user_mapping          table
+pg_catalog  pg_views                 table
 
 # Verify "pg_catalog" is a regular db name
 
@@ -89,58 +89,58 @@ SELECT * FROM pg_catalog.pg_class c WHERE nonexistent_function()
 
 # Verify pg_catalog handles reflection correctly.
 
-query T
+query TTT
 SHOW TABLES FROM test.pg_catalog
 ----
-pg_am
-pg_attrdef
-pg_attribute
-pg_auth_members
-pg_authid
-pg_available_extensions
-pg_cast
-pg_class
-pg_collation
-pg_constraint
-pg_conversion
-pg_database
-pg_default_acl
-pg_depend
-pg_description
-pg_enum
-pg_extension
-pg_foreign_data_wrapper
-pg_foreign_server
-pg_foreign_table
-pg_index
-pg_indexes
-pg_inherits
-pg_language
-pg_locks
-pg_matviews
-pg_namespace
-pg_operator
-pg_prepared_statements
-pg_prepared_xacts
-pg_proc
-pg_range
-pg_rewrite
-pg_roles
-pg_seclabel
-pg_seclabels
-pg_sequence
-pg_settings
-pg_shdepend
-pg_shdescription
-pg_shseclabel
-pg_stat_activity
-pg_tables
-pg_tablespace
-pg_trigger
-pg_type
-pg_user
-pg_user_mapping
-pg_views
+pg_catalog  pg_am                    table
+pg_catalog  pg_attrdef               table
+pg_catalog  pg_attribute             table
+pg_catalog  pg_auth_members          table
+pg_catalog  pg_authid                table
+pg_catalog  pg_available_extensions  table
+pg_catalog  pg_cast                  table
+pg_catalog  pg_class                 table
+pg_catalog  pg_collation             table
+pg_catalog  pg_constraint            table
+pg_catalog  pg_conversion            table
+pg_catalog  pg_database              table
+pg_catalog  pg_default_acl           table
+pg_catalog  pg_depend                table
+pg_catalog  pg_description           table
+pg_catalog  pg_enum                  table
+pg_catalog  pg_extension             table
+pg_catalog  pg_foreign_data_wrapper  table
+pg_catalog  pg_foreign_server        table
+pg_catalog  pg_foreign_table         table
+pg_catalog  pg_index                 table
+pg_catalog  pg_indexes               table
+pg_catalog  pg_inherits              table
+pg_catalog  pg_language              table
+pg_catalog  pg_locks                 table
+pg_catalog  pg_matviews              table
+pg_catalog  pg_namespace             table
+pg_catalog  pg_operator              table
+pg_catalog  pg_prepared_statements   table
+pg_catalog  pg_prepared_xacts        table
+pg_catalog  pg_proc                  table
+pg_catalog  pg_range                 table
+pg_catalog  pg_rewrite               table
+pg_catalog  pg_roles                 table
+pg_catalog  pg_seclabel              table
+pg_catalog  pg_seclabels             table
+pg_catalog  pg_sequence              table
+pg_catalog  pg_settings              table
+pg_catalog  pg_shdepend              table
+pg_catalog  pg_shdescription         table
+pg_catalog  pg_shseclabel            table
+pg_catalog  pg_stat_activity         table
+pg_catalog  pg_tables                table
+pg_catalog  pg_tablespace            table
+pg_catalog  pg_trigger               table
+pg_catalog  pg_type                  table
+pg_catalog  pg_user                  table
+pg_catalog  pg_user_mapping          table
+pg_catalog  pg_views                 table
 
 query TT colnames
 SHOW CREATE TABLE pg_catalog.pg_namespace

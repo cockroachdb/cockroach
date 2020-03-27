@@ -119,10 +119,10 @@ user root
 statement ok
 CREATE VIEW t.v AS SELECT k,v FROM u.kv
 
-query T
+query TTT
 SHOW TABLES FROM u
 ----
-kv
+public  kv  table
 
 statement error cannot rename database because relation "t.public.v" depends on relation "u.public.kv"
 ALTER DATABASE u RENAME TO v
