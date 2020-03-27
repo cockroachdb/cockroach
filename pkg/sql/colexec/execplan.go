@@ -71,6 +71,7 @@ func wrapRowSources(
 				&execinfrapb.PostProcessSpec{},
 				nil, /* output */
 				nil, /* metadataSourcesQueue */
+				nil, /* toClose */
 				nil, /* outputStatsToTrace */
 				nil, /* cancelFlow */
 			)
@@ -138,7 +139,10 @@ type NewColOperatorResult struct {
 	ColumnTypes      []types.T
 	InternalMemUsage int
 	MetadataSources  []execinfrapb.MetadataSource
-	IsStreaming      bool
+	// ToClose is a slice of components that need to be Closed. Close should be
+	// idempotent.
+	ToClose     []IdempotentCloser
+	IsStreaming bool
 	// CanRunInAutoMode returns whether the result can be run in auto mode if
 	// IsStreaming is false. This applies to operators that can spill to disk,
 	// but also operators such as the hash aggregator that buffer, but not
@@ -426,7 +430,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 			if args.TestingKnobs.NumForcedRepartitions != 0 {
 				maxNumberPartitions = args.TestingKnobs.NumForcedRepartitions
 			}
-			return newExternalSorter(
+			es := newExternalSorter(
 				ctx,
 				unlimitedAllocator,
 				standaloneMemAccount,
@@ -438,6 +442,8 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 				args.FDSemaphore,
 				diskAccount,
 			)
+			r.ToClose = append(r.ToClose, es.(IdempotentCloser))
+			return es
 		},
 		args.TestingKnobs.SpillingCallbackFn,
 	), nil
@@ -820,7 +826,7 @@ func NewColOperator(
 						diskQueueCfg := args.DiskQueueCfg
 						diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
 						diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
-						return newExternalHashJoiner(
+						ehj := newExternalHashJoiner(
 							unlimitedAllocator, hjSpec,
 							inputOne, inputTwo,
 							execinfra.GetWorkMemLimit(flowCtx.Cfg),
@@ -844,6 +850,8 @@ func NewColOperator(
 							args.TestingKnobs.DelegateFDAcquisitions,
 							diskAccount,
 						)
+						result.ToClose = append(result.ToClose, ehj.(IdempotentCloser))
+						return ehj
 					},
 					args.TestingKnobs.SpillingCallbackFn,
 				)
@@ -902,7 +910,7 @@ func NewColOperator(
 					ctx, flowCtx, monitorName,
 				))
 			diskAccount := result.createDiskAccount(ctx, flowCtx, monitorName)
-			result.Op, err = newMergeJoinOp(
+			mj, err := newMergeJoinOp(
 				unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx.Cfg),
 				args.DiskQueueCfg, args.FDSemaphore,
 				joinType, inputs[0], inputs[1], leftPhysTypes, rightPhysTypes,
@@ -913,6 +921,8 @@ func NewColOperator(
 				return result, err
 			}
 
+			result.Op = mj
+			result.ToClose = append(result.ToClose, mj.(IdempotentCloser))
 			result.ColumnTypes = append(leftLogTypes, rightLogTypes...)
 
 			if onExpr != nil {
@@ -1034,6 +1044,12 @@ func NewColOperator(
 						args.FDSemaphore, input, typs, windowFn, wf.Ordering.Columns,
 						int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx, diskAcc,
 					)
+					// NewRelativeRankOperator sometimes returns a constOp when there
+					// are no ordering columns, so we check that the returned operator
+					// is an IdempotentCloser.
+					if c, ok := result.Op.(IdempotentCloser); ok {
+						result.ToClose = append(result.ToClose, c)
+					}
 					// Relative rank operators are buffering operators, and we
 					// are not comfortable running them with `auto` mode.
 					canRunInAutoMode = false

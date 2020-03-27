@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
@@ -109,8 +110,14 @@ const externalSorterMinPartitions = 3
 type externalSorter struct {
 	OneInputNode
 	NonExplainable
+	closerHelper
 
-	closed             bool
+	// mu is used to protect against concurrent IdempotentClose and Next calls,
+	// which are currently allowed.
+	// TODO(asubiotto): Explore calling IdempotentClose from the same goroutine as
+	//  Next, which will simplify this model.
+	mu syncutil.Mutex
+
 	unlimitedAllocator *Allocator
 	state              externalSorterState
 	inputTypes         []coltypes.T
@@ -239,6 +246,8 @@ func (s *externalSorter) Init() {
 }
 
 func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for {
 		switch s.state {
 		case externalSorterNewPartition:
@@ -344,7 +353,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			}
 			return b
 		case externalSorterFinished:
-			if err := s.Close(ctx); err != nil {
+			if err := s.internalCloseLocked(ctx); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			return coldata.ZeroBatch
@@ -359,18 +368,16 @@ func (s *externalSorter) reset(ctx context.Context) {
 		r.reset(ctx)
 	}
 	s.state = externalSorterNewPartition
-	if err := s.Close(ctx); err != nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.internalCloseLocked(ctx); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
-	s.closed = false
 	s.firstPartitionIdx = 0
 	s.numPartitions = 0
 }
 
-func (s *externalSorter) Close(ctx context.Context) error {
-	if s.closed {
-		return nil
-	}
+func (s *externalSorter) internalCloseLocked(ctx context.Context) error {
 	var lastErr error
 	if s.partitioner != nil {
 		lastErr = s.partitioner.Close(ctx)
@@ -383,8 +390,16 @@ func (s *externalSorter) Close(ctx context.Context) error {
 		s.fdState.fdSemaphore.Release(s.fdState.acquiredFDs)
 		s.fdState.acquiredFDs = 0
 	}
-	s.closed = true
 	return lastErr
+}
+
+func (s *externalSorter) IdempotentClose(ctx context.Context) error {
+	if !s.close() {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.internalCloseLocked(ctx)
 }
 
 // createMergerForPartitions creates an ordered synchronizer that will merge
