@@ -671,11 +671,33 @@ func (r *Registry) CancelRequested(ctx context.Context, txn *kv.Txn, id int64) e
 
 // PauseRequested marks the job with id as paused-requested using the specified txn (may be nil).
 func (r *Registry) PauseRequested(ctx context.Context, txn *kv.Txn, id int64) error {
+	job, resumer, err := r.getJobFn(ctx, txn, id)
+	if err != nil {
+		return err
+	}
+	var onPauseRequested onPauseRequestFunc
+	if pr, ok := resumer.(PauseRequester); ok {
+		onPauseRequested = pr.OnPauseRequest
+	}
+	return job.WithTxn(txn).pauseRequested(ctx, onPauseRequested)
+}
+
+// Succeeded marks the job with id as succeeded.
+func (r *Registry) Succeeded(ctx context.Context, txn *kv.Txn, id int64) error {
 	job, _, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		return err
 	}
-	return job.WithTxn(txn).pauseRequested(ctx, nil)
+	return job.WithTxn(txn).succeeded(ctx, nil)
+}
+
+// Failed marks the job with id as failed.
+func (r *Registry) Failed(ctx context.Context, txn *kv.Txn, id int64, causingError error) error {
+	job, _, err := r.getJobFn(ctx, txn, id)
+	if err != nil {
+		return err
+	}
+	return job.WithTxn(txn).failed(ctx, causingError, nil)
 }
 
 // Resume resumes the paused job with id using the specified txn (may be nil).
@@ -707,6 +729,17 @@ type Resumer interface {
 	// cannot assume that any other methods have been called on this Resumer
 	// object.
 	OnFailOrCancel(ctx context.Context, phs interface{}) error
+}
+
+// PauseRequester is an extension of Resumer which allows job implementers to inject
+// logic during the transaction which moves a job to PauseRequested.
+type PauseRequester interface {
+	Resumer
+
+	// OnPauseRequest is called in the transaction that moves a job to PauseRequested.
+	// If an error is returned, the pause request will fail. phs is a
+	// sql.PlanHookState.
+	OnPauseRequest(ctx context.Context, phs interface{}, txn *kv.Txn, details *jobspb.Progress) error
 }
 
 // Constructor creates a resumable job of a certain type. The Resumer is
@@ -776,6 +809,9 @@ func (r *Registry) stepThroughStateMachine(
 		if resumeCtx.Err() != nil {
 			// The context was canceled. Tell the user, but don't attempt to
 			// mark the job as failed because it can be resumed by another node.
+			//
+			// TODO(ajwerner): We'll also end up here if the job was canceled or
+			// paused. We should make this error clearer.
 			return errors.Errorf("job %d: node liveness error: restarting in background", *job.ID())
 		}
 		// TODO(spaskob): enforce a limit on retries.
@@ -811,7 +847,7 @@ func (r *Registry) stepThroughStateMachine(
 			errorMsg := fmt.Sprintf("job %d: successful bu unexpected error provided", *job.ID())
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr, errorMsg)
 		}
-		if err := job.Succeeded(ctx, nil); err != nil {
+		if err := job.succeeded(ctx, nil); err != nil {
 			// If it didn't succeed, we consider the job as failed and need to go
 			// through reverting state first.
 			// TODO(spaskob): this is silly, we should remove the OnSuccess hooks and
@@ -821,7 +857,7 @@ func (r *Registry) stepThroughStateMachine(
 		}
 		return nil
 	case StatusReverting:
-		if err := job.Reverted(ctx, jobErr, nil); err != nil {
+		if err := job.reverted(ctx, jobErr, nil); err != nil {
 			// If we can't transactionally mark the job as reverting then it will be
 			// restarted during the next adopt loop and it will be retried.
 			return errors.Wrapf(err, "job %d: could not mark as reverting: %s", *job.ID(), jobErr)
@@ -858,7 +894,7 @@ func (r *Registry) stepThroughStateMachine(
 			errorMsg := fmt.Sprintf("job %d: has StatusFailed but no error was provided", *job.ID())
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr, errorMsg)
 		}
-		if err := job.Failed(ctx, jobErr, nil); err != nil {
+		if err := job.failed(ctx, jobErr, nil); err != nil {
 			// If we can't transactionally mark the job as failed then it will be
 			// restarted during the next adopt loop and reverting will be retried.
 			return errors.Wrapf(err, "job %d: could not mark as failed: %s", *job.ID(), jobErr)
@@ -1090,7 +1126,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		resumeCtx, cancel := r.makeCtx()
 
 		if pauseRequested := status == StatusPauseRequested; pauseRequested {
-			if err := job.Paused(ctx, func(context.Context, *kv.Txn) error {
+			if err := job.paused(ctx, func(context.Context, *kv.Txn) error {
 				r.unregister(*id)
 				return nil
 			}); err != nil {
@@ -1102,7 +1138,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		}
 
 		if cancelRequested := status == StatusCancelRequested; cancelRequested {
-			if err := job.Reverted(ctx, errJobCanceled, func(context.Context, *kv.Txn) error {
+			if err := job.reverted(ctx, errJobCanceled, func(context.Context, *kv.Txn) error {
 				// Unregister the job in case it is running on the node.
 				// Unregister is a no-op for jobs that are not running.
 				r.unregister(*id)

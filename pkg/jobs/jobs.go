@@ -183,7 +183,7 @@ func (j *Job) ID() *int64 {
 // Created records the creation of a new job in the system.jobs table and
 // remembers the assigned ID of the job in the Job. The job information is read
 // from the Record field at the time Created is called.
-func (j *Job) Created(ctx context.Context) error {
+func (j *Job) created(ctx context.Context) error {
 	if j.ID() != nil {
 		return errors.Errorf("job already created with ID %v", *j.ID())
 	}
@@ -191,7 +191,7 @@ func (j *Job) Created(ctx context.Context) error {
 }
 
 // Started marks the tracked job as started.
-func (j *Job) Started(ctx context.Context) error {
+func (j *Job) started(ctx context.Context) error {
 	return j.Update(ctx, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status != StatusPending && md.Status != StatusRunning {
 			return errors.Errorf("job with status %s cannot be marked started", md.Status)
@@ -341,10 +341,10 @@ func (j *Job) HighWaterProgressed(ctx context.Context, progressedFn HighWaterPro
 	})
 }
 
-// Paused sets the status of the tracked job to paused. It does not directly
-// pause the job; instead, it expects the job to call job.Progressed soon,
-// observe a "job is paused" error, and abort further work.
-func (j *Job) Paused(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
+// paused sets the status of the tracked job to paused. It is called by the
+// registry adoption loop by the node currently running a job to move it from
+// pauseRequested to paused.
+func (j *Job) paused(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusPaused {
 			// Already paused - do nothing.
@@ -363,7 +363,7 @@ func (j *Job) Paused(ctx context.Context, fn func(context.Context, *kv.Txn) erro
 	})
 }
 
-// Resumed sets the status of the tracked job to running or reverting iff the
+// resumed sets the status of the tracked job to running or reverting iff the
 // job is currently paused. It does not directly resume the job; rather, it
 // expires the job's lease so that a Registry adoption loop detects it and
 // resumes it.
@@ -435,11 +435,17 @@ func (j *Job) cancelRequested(ctx context.Context, fn func(context.Context, *kv.
 	})
 }
 
+// onPauseRequestFunc is a function used to perform action on behalf of a job
+// implementation when a pause is requested.
+type onPauseRequestFunc func(
+	ctx context.Context, planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress,
+) error
+
 // pauseRequested sets the status of the tracked job to pause-requested. It does
 // not directly pause the job; it expects the node that runs the job will
 // actively cancel it when it notices that it is in state StatusPauseRequested
 // and will move it to state StatusPaused.
-func (j *Job) pauseRequested(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
+func (j *Job) pauseRequested(ctx context.Context, fn onPauseRequestFunc) error {
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		// Don't allow 19.2-style schema change jobs to undergo changes in job state
 		// before they undergo a migration to make them properly runnable in 20.1 and
@@ -464,17 +470,20 @@ func (j *Job) pauseRequested(ctx context.Context, fn func(context.Context, *kv.T
 			return fmt.Errorf("job with status %s cannot be requested to be paused", md.Status)
 		}
 		if fn != nil {
-			if err := fn(ctx, txn); err != nil {
+			phs, cleanup := j.registry.planFn("pause request", j.Payload().Username)
+			defer cleanup()
+			if err := fn(ctx, phs, txn, md.Progress); err != nil {
 				return err
 			}
+			ju.UpdateProgress(md.Progress)
 		}
 		ju.UpdateStatus(StatusPauseRequested)
 		return nil
 	})
 }
 
-// Reverted sets the status of the tracked job to reverted.
-func (j *Job) Reverted(
+// reverted sets the status of the tracked job to reverted.
+func (j *Job) reverted(
 	ctx context.Context, err error, fn func(context.Context, *kv.Txn) error,
 ) error {
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
@@ -527,7 +536,7 @@ func (j *Job) canceled(ctx context.Context, fn func(context.Context, *kv.Txn) er
 }
 
 // Failed marks the tracked job as having failed with the given error.
-func (j *Job) Failed(
+func (j *Job) failed(
 	ctx context.Context, err error, fn func(context.Context, *kv.Txn) error,
 ) error {
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
@@ -549,9 +558,9 @@ func (j *Job) Failed(
 	})
 }
 
-// Succeeded marks the tracked job as having succeeded and sets its fraction
+// succeeded marks the tracked job as having succeeded and sets its fraction
 // completed to 1.0.
-func (j *Job) Succeeded(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
+func (j *Job) succeeded(ctx context.Context, fn func(context.Context, *kv.Txn) error) error {
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusSucceeded {
 			return nil
@@ -817,7 +826,7 @@ func (sj *StartableJob) Start(ctx context.Context) (errCh <-chan error, err erro
 	if !sj.txn.IsCommitted() {
 		return nil, fmt.Errorf("cannot resume %T job which is not committed", sj.resumer)
 	}
-	if err := sj.Started(ctx); err != nil {
+	if err := sj.started(ctx); err != nil {
 		return nil, err
 	}
 	errCh, err = sj.registry.resume(sj.resumerCtx, sj.resumer, sj.resultsCh, sj.Job)
