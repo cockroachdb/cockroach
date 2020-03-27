@@ -62,6 +62,13 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	md := scan.Memo().Metadata()
 	hardLimit := scan.HardLimit.RowCount()
 
+	// Side Effects
+	// ------------
+	// A Locking option is a side-effect (we don't want to elide this scan).
+	if scan.Locking != nil {
+		rel.CanHaveSideEffects = true
+	}
+
 	// Output Columns
 	// --------------
 	// Scan output columns are stored in the definition.
