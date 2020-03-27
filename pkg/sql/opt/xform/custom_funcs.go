@@ -277,7 +277,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		indexColumns := tabMeta.IndexKeyColumns(iter.indexOrdinal)
 		firstIndexCol := scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)
 		if !filterColumns.Contains(firstIndexCol) && indexColumns.Intersects(filterColumns) {
-			// Calculate any partition filters if appropriate (see below.
+			// Calculate any partition filters if appropriate (see below).
 			partitionFilters, inBetweenFilters = c.partitionValuesFilters(scanPrivate.Table, iter.index)
 		}
 
@@ -307,7 +307,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 			constraint.UnionWith(c.e.evalCtx, inBetweenConstraint)
 
-			// Even though the partitioned constrains and the inBetween constraints
+			// Even though the partitioned constraints and the inBetween constraints
 			// were consolidated, we must make sure their Union is as well.
 			constraint.ConsolidateSpans(c.e.evalCtx)
 
