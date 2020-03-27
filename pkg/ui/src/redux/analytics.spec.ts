@@ -16,6 +16,7 @@ import { Location, createLocation, createHashHistory } from "history";
 import _ from "lodash";
 import { Store } from "redux";
 
+import { history } from "src/redux/state";
 import { AnalyticsSync, defaultRedactions } from "./analytics";
 import { clusterReducerObj, nodesReducerObj } from "./apiReducers";
 import { AdminUIState, createAdminUIStore } from "./state";
@@ -26,6 +27,16 @@ const sandbox = sinon.createSandbox();
 
 describe("analytics listener", function() {
   const clusterID = "a49f0ced-7ada-4135-af37-8acf6b548df0";
+  const setClusterData = (store: Store<AdminUIState>, enabled = true, enterprise = true) => {
+    store.dispatch(clusterReducerObj.receiveData(
+      new protos.cockroach.server.serverpb.ClusterResponse({
+        cluster_id: clusterID,
+        reporting_enabled: enabled,
+        enterprise_enabled: enterprise,
+      }),
+    ));
+  };
+
   describe("page method", function () {
     let store: Store<AdminUIState>;
     let analytics: Analytics;
@@ -46,15 +57,6 @@ describe("analytics listener", function() {
       sandbox.reset();
     });
 
-    const setClusterData = function (enabled = true) {
-      store.dispatch(clusterReducerObj.receiveData(
-        new protos.cockroach.server.serverpb.ClusterResponse({
-          cluster_id: clusterID,
-          reporting_enabled: enabled,
-        }),
-      ));
-    };
-
     it("does nothing if cluster info is not available", function () {
       const sync = new AnalyticsSync(analytics, store, []);
 
@@ -67,7 +69,7 @@ describe("analytics listener", function() {
 
     it("does nothing if reporting is not explicitly enabled", function () {
       const sync = new AnalyticsSync(analytics, store, []);
-      setClusterData(false);
+      setClusterData(store, false);
 
       sync.page({
         pathname: "/test/path",
@@ -78,7 +80,7 @@ describe("analytics listener", function() {
 
     it("correctly calls segment on a page call", function () {
       const sync = new AnalyticsSync(analytics, store, []);
-      setClusterData();
+      setClusterData(store);
 
       sync.page({
         pathname: "/test/path",
@@ -102,7 +104,7 @@ describe("analytics listener", function() {
         pathname: "/test/path",
       } as Location);
 
-      setClusterData();
+      setClusterData(store);
       assert.isTrue(pageSpy.notCalled);
 
       sync.page({
@@ -129,7 +131,7 @@ describe("analytics listener", function() {
     });
 
     it("correctly applies redaction to matched paths", function () {
-      setClusterData();
+      setClusterData(store);
       const sync = new AnalyticsSync(analytics, store, [
         {
           match: RegExp("/test/.*/path"),
@@ -194,7 +196,7 @@ describe("analytics listener", function() {
       ),
     ]).map(function ({ title, input, expected }) {
       it(`applies a redaction for ${title}`, function () {
-        setClusterData();
+        setClusterData(store);
         const sync = new AnalyticsSync(analytics, store, defaultRedactions);
         const expectedLocation = createLocation(expected);
 
@@ -233,16 +235,6 @@ describe("analytics listener", function() {
       sandbox.reset();
     });
 
-    const setClusterData = function (enabled = true, enterprise = true) {
-      store.dispatch(clusterReducerObj.receiveData(
-        new protos.cockroach.server.serverpb.ClusterResponse({
-          cluster_id: clusterID,
-          reporting_enabled: enabled,
-          enterprise_enabled: enterprise,
-        }),
-      ));
-    };
-
     const setVersionData = function () {
       store.dispatch(nodesReducerObj.receiveData([
         {
@@ -264,7 +256,7 @@ describe("analytics listener", function() {
 
     it("does nothing if version info is not available", function () {
       const sync = new AnalyticsSync(analytics, store, []);
-      setClusterData(true, true);
+      setClusterData(store, true, true);
 
       sync.identify();
 
@@ -273,7 +265,7 @@ describe("analytics listener", function() {
 
     it("does nothing if reporting is not explicitly enabled", function () {
       const sync = new AnalyticsSync(analytics, store, []);
-      setClusterData(false, true);
+      setClusterData(store, false, true);
       setVersionData();
 
       sync.identify();
@@ -286,7 +278,7 @@ describe("analytics listener", function() {
 
       _.each([false, true], (enterpriseSetting) => {
         sandbox.reset();
-        setClusterData(true, enterpriseSetting);
+        setClusterData(store, true, enterpriseSetting);
         const sync = new AnalyticsSync(analytics, store, []);
         sync.identify();
 
@@ -304,13 +296,92 @@ describe("analytics listener", function() {
 
     it("only reports once", function () {
       const sync = new AnalyticsSync(analytics, store, []);
-      setClusterData(true, true);
+      setClusterData(store, true, true);
       setVersionData();
 
       sync.identify();
       sync.identify();
 
       assert.isTrue(identifySpy.calledOnce);
+    });
+  });
+
+  describe("track method", function () {
+    const store: Store<AdminUIState> = createAdminUIStore(createHashHistory());
+    let analytics: Analytics;
+    let trackSpy: sinon.SinonSpy;
+
+    beforeEach(() => {
+      trackSpy = sandbox.spy();
+
+      // Analytics is a completely fake object, we don't want to call
+      // segment if an unexpected method is called.
+      analytics = {
+        track: trackSpy,
+      } as any;
+    });
+
+    afterEach(() => {
+      sandbox.reset();
+    });
+
+    it("does nothing if cluster info is not available", () => {
+      const sync = new AnalyticsSync(analytics, store, []);
+
+      sync.track({
+        event: "test",
+      });
+
+      assert.isTrue(trackSpy.notCalled);
+    });
+
+    it("add userId to track calls using the cluster_id", () => {
+      setClusterData(store);
+      const sync = new AnalyticsSync(analytics, store, []);
+
+      sync.track({
+        event: "test",
+      });
+
+      const expected = {
+        userId: clusterID,
+        properties: {
+          pagePath: "/",
+        },
+        event: "test",
+      };
+      const message = trackSpy.args[0][0];
+
+      assert.isTrue(trackSpy.calledOnce);
+      assert.deepEqual(message, expected);
+    });
+
+    it("add the page path to properties", () => {
+      setClusterData(store);
+      const sync = new AnalyticsSync(analytics, store, []);
+      const testPagePath = "/test/page/path";
+
+      history.push(testPagePath);
+
+      sync.track({
+        event: "test",
+        properties: {
+          testProp: "test",
+        },
+      });
+
+      const expected = {
+        userId: clusterID,
+        properties: {
+          pagePath: testPagePath,
+          testProp: "test",
+        },
+        event: "test",
+      };
+      const message = trackSpy.args[0][0];
+
+      assert.isTrue(trackSpy.calledOnce);
+      assert.deepEqual(message, expected);
     });
   });
 });
