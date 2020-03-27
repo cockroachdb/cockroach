@@ -1431,7 +1431,8 @@ func (c *CustomFuncs) CanMapOnSetOp(src *memo.FiltersItem) bool {
 func (c *CustomFuncs) MapSetOpFilterLeft(
 	filter *memo.FiltersItem, set *memo.SetPrivate,
 ) opt.ScalarExpr {
-	return c.mapSetOpFilter(filter, set.OutCols, set.LeftCols)
+	colMap := makeMapFromColLists(set.OutCols, set.LeftCols)
+	return c.MapFiltersItemCols(filter, colMap)
 }
 
 // MapSetOpFilterRight maps the filter onto the right expression by replacing
@@ -1441,34 +1442,32 @@ func (c *CustomFuncs) MapSetOpFilterLeft(
 func (c *CustomFuncs) MapSetOpFilterRight(
 	filter *memo.FiltersItem, set *memo.SetPrivate,
 ) opt.ScalarExpr {
-	return c.mapSetOpFilter(filter, set.OutCols, set.RightCols)
+	colMap := makeMapFromColLists(set.OutCols, set.RightCols)
+	return c.MapFiltersItemCols(filter, colMap)
 }
 
-// mapSetOpFilter maps filter expressions to dst by replacing occurrences of
-// columns in src with corresponding columns in dst (the two lists must be of
-// equal length).
-//
-// For each column in src that is not an outer column, SetMap replaces it with
-// the corresponding column in dst.
-//
-// For example, consider this query:
-//
-//   SELECT * FROM (SELECT x FROM a UNION SELECT y FROM b) WHERE x < 5
-//
-// If mapSetOpFilter is called on the left subtree of the Union, the filter
-// x < 5 propagates to that side after mapping the column IDs appropriately.
-// WLOG, If setMap is called on the right subtree, the filter x < 5 will be
-// mapped similarly to y < 5 on the right side.
-func (c *CustomFuncs) mapSetOpFilter(
-	filter *memo.FiltersItem, src opt.ColList, dst opt.ColList,
-) opt.ScalarExpr {
-	// Map each column in src to one column in dst to map the
-	// filters appropriately.
+// makeMapFromColLists maps each column ID in src to a column ID in dst. The
+// columns IDs are mapped based on their relative positions in the column lists,
+// e.g. the third item in src maps to the third item in dst. The lists must be
+// of equal length.
+func makeMapFromColLists(src opt.ColList, dst opt.ColList) util.FastIntMap {
+	if len(src) != len(dst) {
+		panic(errors.AssertionFailedf("src and dst must have the same length, src: %v, dst: %v", src, dst))
+	}
+
 	var colMap util.FastIntMap
 	for colIndex, outColID := range src {
 		colMap.Set(int(outColID), int(dst[colIndex]))
 	}
+	return colMap
+}
 
+// MapFiltersItemCols maps filter expressions by replacing occurrences of
+// the keys of colMap with the corresponding values. Outer columns are not
+// replaced.
+func (c *CustomFuncs) MapFiltersItemCols(
+	filter *memo.FiltersItem, colMap util.FastIntMap,
+) opt.ScalarExpr {
 	// Recursively walk the scalar sub-tree looking for references to columns
 	// that need to be replaced and then replace them appropriately.
 	var replace ReplaceFunc

@@ -300,3 +300,14 @@ scan  ·            ·
 ·     table        abcd@primary
 ·     spans        FULL SCAN
 ·     filter       c = 10
+
+# Does not split disjunction into union when forcing an index.
+query TTT
+EXPLAIN SELECT * FROM abcd@primary WHERE a = 1 OR b = 2
+----
+·     distributed  false
+·     vectorized   true
+scan  ·            ·
+·     table        abcd@primary
+·     spans        FULL SCAN
+·     filter       (a = 1) OR (b = 2)
