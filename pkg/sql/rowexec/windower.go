@@ -259,6 +259,9 @@ func newWindower(
 	}
 
 	w.acc = w.MemMonitor.MakeBoundAccount()
+	// If we have aggregate builtins that aggregate a single datum, we want
+	// them to reuse the same shared memory account with the windower.
+	evalCtx.SingleDatumAggMemAccount = &w.acc
 
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		w.input = execinfra.NewInputStatCollector(w.input)
