@@ -604,6 +604,9 @@ merge-join  ·                   ·
 # Unlike with FROM subqueries, row-level locking clauses do not apply to WITH
 # queries referenced by the primary query. To achieve row locking within a WITH
 # query, a locking clause should be specified within the WITH query.
+#
+# Note that scans with locking are considered to be side-effecting; CTEs that
+# contain locking clauses are not inlined.
 # ------------------------------------------------------------------------------
 
 query TTT
@@ -629,24 +632,63 @@ render     ·            ·
 query TTT
 EXPLAIN SELECT * FROM [SELECT a FROM t FOR UPDATE]
 ----
-·          distributed       false
-·          vectorized        true
-render     ·                 ·
- └── scan  ·                 ·
-·          table             t@primary
-·          spans             ALL
-·          locking strength  for update
+·                      distributed       false
+·                      vectorized        false
+root                   ·                 ·
+ ├── scan buffer node  ·                 ·
+ │                     label             buffer 1
+ └── subquery          ·                 ·
+      │                id                @S1
+      │                original sql      SELECT a FROM t FOR UPDATE
+      │                exec mode         all rows
+      └── buffer node  ·                 ·
+           │           label             buffer 1
+           └── scan    ·                 ·
+·                      table             t@primary
+·                      spans             ALL
+·                      locking strength  for update
 
 query TTT
 EXPLAIN WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
 ----
-·          distributed       false
-·          vectorized        true
-render     ·                 ·
- └── scan  ·                 ·
-·          table             t@primary
-·          spans             ALL
-·          locking strength  for update
+·                      distributed       false
+·                      vectorized        false
+root                   ·                 ·
+ ├── scan buffer node  ·                 ·
+ │                     label             buffer 1 (cte)
+ └── subquery          ·                 ·
+      │                id                @S1
+      │                original sql      SELECT a FROM t FOR UPDATE
+      │                exec mode         all rows
+      └── buffer node  ·                 ·
+           │           label             buffer 1 (cte)
+           └── scan    ·                 ·
+·                      table             t@primary
+·                      spans             ALL
+·                      locking strength  for update
+
+# Verify that the unused CTE doesn't get eliminated.
+# TODO(radu): we should at least not buffer the rows in this case.
+query TTT
+EXPLAIN WITH sfu AS (SELECT a FROM t FOR UPDATE)
+SELECT c FROM u
+----
+·                      distributed       false
+·                      vectorized        true
+root                   ·                 ·
+ ├── scan              ·                 ·
+ │                     table             u@primary
+ │                     spans             ALL
+ └── subquery          ·                 ·
+      │                id                @S1
+      │                original sql      SELECT a FROM t FOR UPDATE
+      │                exec mode         all rows
+      └── buffer node  ·                 ·
+           │           label             buffer 1 (sfu)
+           └── scan    ·                 ·
+·                      table             t@primary
+·                      spans             ALL
+·                      locking strength  for update
 
 # ------------------------------------------------------------------------------
 # Tests with joins.

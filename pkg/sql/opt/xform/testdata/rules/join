@@ -1985,14 +1985,17 @@ SELECT q,r FROM pqr WHERE q = 1 AND r = 2 FOR UPDATE
 ----
 select
  ├── columns: q:2!null r:3!null
+ ├── side-effects
  ├── fd: ()-->(2,3)
  ├── index-join pqr
  │    ├── columns: q:2 r:3
+ │    ├── side-effects
  │    ├── fd: ()-->(2)
  │    └── scan pqr@q
  │         ├── columns: p:1!null q:2!null
  │         ├── constraint: /2/1: [/1 - /1]
  │         ├── locking: for-update
+ │         ├── side-effects
  │         ├── key: (1)
  │         └── fd: ()-->(2)
  └── filters
@@ -2599,16 +2602,19 @@ SELECT b,a FROM t5 WHERE b @> '{"a":1, "c":2}' FOR UPDATE
 ----
 select
  ├── columns: b:2 a:1!null
+ ├── side-effects
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t5
  │    ├── columns: a:1!null b:2
+ │    ├── side-effects
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── scan t5@b_idx
  │         ├── columns: a:1!null
  │         ├── constraint: /2/1: [/'{"a": 1}' - /'{"a": 1}']
  │         ├── locking: for-update
+ │         ├── side-effects
  │         └── key: (1)
  └── filters
       └── b:2 @> '{"a": 1, "c": 2}' [outer=(2)]
