@@ -702,6 +702,7 @@ func BenchmarkAggregator(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
+	const bytesFixedLength = 8
 	for _, aggFn := range []execinfrapb.AggregatorSpec_Func{
 		execinfrapb.AggregatorSpec_ANY_NOT_NULL,
 		execinfrapb.AggregatorSpec_AVG,
@@ -716,12 +717,18 @@ func BenchmarkAggregator(b *testing.B) {
 		fName := execinfrapb.AggregatorSpec_Func_name[int32(aggFn)]
 		b.Run(fName, func(b *testing.B) {
 			for _, agg := range aggTypes {
-				for _, typ := range []coltypes.T{coltypes.Int64, coltypes.Decimal} {
+				for typIdx, typ := range []coltypes.T{coltypes.Int64, coltypes.Decimal, coltypes.Bytes} {
 					for _, groupSize := range []int{1, 2, coldata.BatchSize() / 2, coldata.BatchSize()} {
 						for _, hasNulls := range []bool{false, true} {
 							for _, numInputBatches := range []int{64} {
 								if aggFn == execinfrapb.AggregatorSpec_BOOL_AND || aggFn == execinfrapb.AggregatorSpec_BOOL_OR {
 									typ = coltypes.Bool
+									if typIdx > 0 {
+										// We don't need to run the benchmark of bool_and and
+										// bool_or multiple times, so we skip all runs except
+										// for the first one.
+										continue
+									}
 								}
 								b.Run(fmt.Sprintf("%s/%s/groupSize=%d/hasNulls=%t/numInputBatches=%d", agg.name, typ.String(),
 									groupSize, hasNulls, numInputBatches),
@@ -740,29 +747,18 @@ func BenchmarkAggregator(b *testing.B) {
 											}
 											groups[i] = int64(curGroup)
 										}
+										nullProb := 0.0
 										if hasNulls {
-											nulls := cols[1].Nulls()
-											for i := 0; i < nTuples; i++ {
-												if rng.Float64() < nullProbability {
-													nulls.SetNull(i)
-												}
-											}
+											nullProb = nullProbability
 										}
-										switch typ {
-										case coltypes.Int64:
+										coldata.RandomVec(rng, typ, bytesFixedLength, cols[1], nTuples, nullProb)
+										if typ == coltypes.Int64 && aggFn == execinfrapb.AggregatorSpec_SUM {
+											// Summation of random Int64 values can lead to
+											// overflow, and we will panic. To go around it, we
+											// restrict the range of values.
 											vals := cols[1].Int64()
 											for i := range vals {
-												vals[i] = rng.Int63() % 1024
-											}
-										case coltypes.Decimal:
-											vals := cols[1].Decimal()
-											for i := range vals {
-												vals[i].SetInt64(rng.Int63() % 1024)
-											}
-										case coltypes.Bool:
-											vals := cols[1].Bool()
-											for i := range vals {
-												vals[i] = rng.Float64() < 0.5
+												vals[i] = vals[i] % 1024
 											}
 										}
 										source := newChunkingBatchSource(colTypes, cols, nTuples)
