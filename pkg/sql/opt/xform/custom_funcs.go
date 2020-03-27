@@ -2268,6 +2268,100 @@ func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
 	return oc
 }
 
+// DuplicateScan constructs a new ScanPrivate that is identical to the input,
+// but has new table and column IDs.
+//
+// DuplicateScan assumes it is being called on a canonical scan. Non-canonical
+// scan properties like constraints are not copied to the new ScanPrivate.
+func (c *CustomFuncs) DuplicateScan(sp *memo.ScanPrivate) *memo.ScanPrivate {
+	md := c.e.mem.Metadata()
+	tabMD := md.TableMeta(sp.Table)
+	dupTabID := md.AddTable(tabMD.Table, &tabMD.Alias)
+
+	var dupTabColIDs opt.ColSet
+	cols := sp.Cols
+	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
+		ord := tabMD.MetaID.ColumnOrdinal(i)
+		dupColID := dupTabID.ColumnID(ord)
+		dupTabColIDs.Add(dupColID)
+	}
+
+	return &memo.ScanPrivate{
+		Table: dupTabID,
+		Cols:  dupTabColIDs,
+	}
+}
+
+// MapFilterCols returns a new FiltersExpr with all the src column IDs in the input
+// expression replaced with column IDs in dst.
+func (c *CustomFuncs) MapFilterCols(
+	filters memo.FiltersExpr, src, dst *memo.ScanPrivate,
+) memo.FiltersExpr {
+	srcCols := opt.ColSetToList(src.Cols)
+	dstCols := opt.ColSetToList(dst.Cols)
+
+	// Map each column in src to a column in dst.
+	var colMap util.FastIntMap
+	for i, srcCol := range srcCols {
+		colMap.Set(int(srcCol), int(dstCols[i]))
+	}
+
+	// Map the columns of each filter in the FilterExpr.
+	newFilters := make([]memo.FiltersItem, 0, len(filters))
+	for _, f := range filters {
+		expr := c.mapFiltersItemCols(f, colMap)
+		newFilters = append(newFilters, c.e.f.ConstructFiltersItem(expr))
+	}
+
+	return newFilters
+}
+
+// mapFiltersItemCols replaces the column ID of each VariableExpr in the input
+// expression with new column IDs. The function recursively traverses the
+// children of the expression tree looking for columns that need to be replaced.
+// Each occurrence of the keys in colMap will be replaced with their
+// corresponding values in colMap.
+func (c *CustomFuncs) mapFiltersItemCols(
+	filter memo.FiltersItem, colMap util.FastIntMap,
+) opt.ScalarExpr {
+	var replace norm.ReplaceFunc
+	replace = func(nd opt.Expr) opt.Expr {
+		switch t := nd.(type) {
+		case *memo.VariableExpr:
+			dstCol, ok := colMap.Get(int(t.Col))
+			if !ok {
+				// TODO: Is this case even possible?
+				return nd
+			}
+			return c.e.f.ConstructVariable(opt.ColumnID(dstCol))
+		}
+		return c.e.f.Replace(nd, replace)
+	}
+
+	return replace(filter.Condition).(opt.ScalarExpr)
+}
+
+// ExprOuterCols returns the outer columns of the given expression.
+//
+// Note that ExprOuterCols traverses the Expr tree rather than returning the
+// ColSet from cached shared properties. This is because shared properties are
+// not cached for all Expr types.
+func (c *CustomFuncs) ExprOuterCols(expr opt.Expr) opt.ColSet {
+	var p props.Shared
+	memo.BuildSharedProps(expr, &p)
+	return p.OuterCols
+}
+
+// ConstructSetPrivate constructs a new SetPrivate with column sets from the
+// left, right, and output of the operation.
+func (c *CustomFuncs) ConstructSetPrivate(left, right, out *memo.ScanPrivate) *memo.SetPrivate {
+	return &memo.SetPrivate{
+		LeftCols:  opt.ColSetToList(left.Cols),
+		RightCols: opt.ColSetToList(right.Cols),
+		OutCols:   opt.ColSetToList(out.Cols),
+	}
+}
+
 // scanIndexIter is a helper struct that supports iteration over the indexes
 // of a Scan operator table. For example:
 //
