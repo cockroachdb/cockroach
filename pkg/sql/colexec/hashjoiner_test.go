@@ -973,24 +973,26 @@ func TestHashJoiner(t *testing.T) {
 		}
 		for _, tcs := range [][]joinTestCase{hjTestCases, mjTestCases} {
 			for _, tc := range tcs {
-				runHashJoinTestCase(t, tc, func(sources []Operator) (Operator, error) {
-					spec := createSpecForHashJoiner(tc)
-					args := NewColOperatorArgs{
-						Spec:                spec,
-						Inputs:              sources,
-						StreamingMemAccount: testMemAcc,
-					}
-					args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-					args.TestingKnobs.DiskSpillingDisabled = true
-					result, err := NewColOperator(ctx, flowCtx, args)
-					if err != nil {
-						return nil, err
-					}
-					if hj, ok := result.Op.(*hashJoiner); ok {
-						hj.outputBatchSize = outputBatchSize
-					}
-					return result.Op, nil
-				})
+				for _, tc := range tc.mutateTypes() {
+					runHashJoinTestCase(t, tc, func(sources []Operator) (Operator, error) {
+						spec := createSpecForHashJoiner(tc)
+						args := NewColOperatorArgs{
+							Spec:                spec,
+							Inputs:              sources,
+							StreamingMemAccount: testMemAcc,
+						}
+						args.TestingKnobs.UseStreamingMemAccountForBuffering = true
+						args.TestingKnobs.DiskSpillingDisabled = true
+						result, err := NewColOperator(ctx, flowCtx, args)
+						if err != nil {
+							return nil, err
+						}
+						if hj, ok := result.Op.(*hashJoiner); ok {
+							hj.outputBatchSize = outputBatchSize
+						}
+						return result.Op, nil
+					})
+				}
 			}
 		}
 	}
