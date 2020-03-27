@@ -2546,6 +2546,9 @@ func (desc *TableDescriptor) ColumnIdxMapWithMutations(mutations bool) map[Colum
 			}
 		}
 	}
+	if desc.Name == "t1" {
+		println("hello")
+	}
 	return colIdxMap
 }
 

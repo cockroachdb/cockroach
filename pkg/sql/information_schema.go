@@ -377,7 +377,9 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
 			dbNameStr := tree.NewDString(db.Name)
 			scNameStr := tree.NewDString(scName)
+			ordinalPos := 0
 			return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
+				ordinalPos++
 				collationCatalog := tree.DNull
 				collationSchema := tree.DNull
 				collationName := tree.DNull
@@ -391,7 +393,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					scNameStr,                                            // table_schema
 					tree.NewDString(table.Name),                          // table_name
 					tree.NewDString(column.Name),                         // column_name
-					tree.NewDInt(tree.DInt(column.ID)),                   // ordinal_position
+					tree.NewDInt(tree.DInt(ordinalPos)),                   // ordinal_position
 					dStringPtrOrNull(column.DefaultExpr),                 // column_default
 					yesOrNoDatum(column.Nullable),                        // is_nullable
 					tree.NewDString(column.Type.InformationSchemaName()), // data_type
