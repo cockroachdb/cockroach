@@ -12,8 +12,8 @@
 # and examples.
 [GenerateConstrainedScans, Explore]
 (Select
-  (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
-  $filters:*
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+    $filters:*
 )
 =>
 (GenerateConstrainedScans $scanPrivate $filters)
@@ -22,8 +22,34 @@
 # be serviced by an inverted index.
 [GenerateInvertedIndexScans, Explore]
 (Select
-  (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate) & (HasInvertedIndexes $scanPrivate))
-  $filters:*
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate) & (HasInvertedIndexes $scanPrivate))
+    $filters:*
 )
 =>
 (GenerateInvertedIndexScans $scanPrivate $filters)
+
+# GenerateUnionSelects splits disjunctions (Or expressions) into a Union of two
+# Select expressions, the first containing the left sub-expression of the Or
+# expression and the second containing the right sub-expression. All other
+# filter items in the original expression are preserved in the new Select
+# expressions.
+#
+# This can produce better query plans in cases where indexes cover both sides of
+# the Or expression. The execution plan can use both indexes to satisfy
+# both sides of the disjunction and union the results together.
+[GenerateUnionSelects, Explore]
+(Select
+    $input:*
+    $filters:[ ... $item:(FiltersItem (Or $left:* $right:*)) ... ]
+)
+=>
+(Union
+    (Select
+        $input
+        (ReplaceFiltersItem $filters $item $left)
+    )
+    (Select
+        $input
+        (ReplaceFiltersItem $filters $item $right)
+    )
+)
