@@ -294,12 +294,13 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 	}
 
 	return &tree.CreateIndex{
-		Name:     s.name("idx"),
-		Table:    *tableRef.TableName,
-		Unique:   unique,
-		Columns:  cols,
-		Storing:  storing,
-		Inverted: inverted,
+		Name:         s.name("idx"),
+		Table:        *tableRef.TableName,
+		Unique:       unique,
+		Columns:      cols,
+		Storing:      storing,
+		Inverted:     inverted,
+		Concurrently: s.coin(),
 	}, true
 }
 
@@ -308,6 +309,7 @@ func makeDropIndex(s *Smither) (tree.Statement, bool) {
 	return &tree.DropIndex{
 		IndexList:    tree.TableIndexNames{tin},
 		DropBehavior: s.randDropBehavior(),
+		Concurrently: s.coin(),
 	}, ok
 }
 

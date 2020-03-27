@@ -64,11 +64,15 @@ type DropIndex struct {
 	IndexList    TableIndexNames
 	IfExists     bool
 	DropBehavior DropBehavior
+	Concurrently bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *DropIndex) Format(ctx *FmtCtx) {
 	ctx.WriteString("DROP INDEX ")
+	if node.Concurrently {
+		ctx.WriteString("CONCURRENTLY ")
+	}
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}

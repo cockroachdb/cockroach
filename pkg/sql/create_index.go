@@ -279,6 +279,13 @@ func (n *createIndexNode) startExec(params runParams) error {
 		}
 	}
 
+	if n.n.Concurrently {
+		params.p.SendClientNotice(
+			params.ctx,
+			pgerror.Noticef("CONCURRENTLY is not required as all indexes are created concurrently"),
+		)
+	}
+
 	// Warn against creating a non-partitioned index on a partitioned table,
 	// which is undesirable in most cases.
 	if n.n.PartitionBy == nil && n.tableDesc.PrimaryIndex.Partitioning.NumColumns > 0 {
