@@ -172,67 +172,67 @@ SELECT * FROM [SHOW SEQUENCES FROM system]
 ----
 sequence_name
 
-query T colnames,rowsort
+query TTT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system]
 ----
-table_name
-namespace_deprecated
-descriptor
-users
-zones
-settings
-lease
-eventlog
-rangelog
-ui
-jobs
-web_sessions
-table_statistics
-locations
-role_members
-comments
-replication_constraint_stats
-replication_critical_localities
-replication_stats
-reports_meta
-namespace
-protected_ts_meta
-protected_ts_records
-statement_bundle_chunks
-statement_diagnostics_requests
-statement_diagnostics
-role_options
+schema_name  table_name                       type
+public       namespace_deprecated             table
+public       descriptor                       table
+public       users                            table
+public       zones                            table
+public       settings                         table
+public       lease                            table
+public       eventlog                         table
+public       rangelog                         table
+public       ui                               table
+public       jobs                             table
+public       web_sessions                     table
+public       table_statistics                 table
+public       locations                        table
+public       role_members                     table
+public       comments                         table
+public       replication_constraint_stats     table
+public       replication_critical_localities  table
+public       replication_stats                table
+public       reports_meta                     table
+public       namespace                        table
+public       protected_ts_meta                table
+public       protected_ts_records             table
+public       role_options                     table
+public       statement_bundle_chunks          table
+public       statement_diagnostics_requests   table
+public       statement_diagnostics            table
 
-query TT colnames,rowsort
+query TTTT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
-table_name                       comment
-namespace_deprecated             ·
-descriptor                       ·
-users                            ·
-zones                            ·
-settings                         ·
-lease                            ·
-eventlog                         ·
-rangelog                         ·
-ui                               ·
-jobs                             ·
-web_sessions                     ·
-table_statistics                 ·
-locations                        ·
-role_members                     ·
-comments                         ·
-replication_constraint_stats     ·
-replication_critical_localities  ·
-replication_stats                ·
-reports_meta                     ·
-namespace                        ·
-protected_ts_meta                ·
-protected_ts_records             ·
-statement_bundle_chunks          ·
-statement_diagnostics_requests   ·
-statement_diagnostics            ·
-role_options                     ·
+schema_name  table_name                       type   comment
+public       namespace_deprecated             table  ·
+public       descriptor                       table  ·
+public       users                            table  ·
+public       zones                            table  ·
+public       settings                         table  ·
+public       lease                            table  ·
+public       eventlog                         table  ·
+public       rangelog                         table  ·
+public       ui                               table  ·
+public       jobs                             table  ·
+public       web_sessions                     table  ·
+public       table_statistics                 table  ·
+public       locations                        table  ·
+public       role_members                     table  ·
+public       comments                         table  ·
+public       replication_constraint_stats     table  ·
+public       replication_critical_localities  table  ·
+public       replication_stats                table  ·
+public       reports_meta                     table  ·
+public       namespace                        table  ·
+public       protected_ts_meta                table  ·
+public       protected_ts_records             table  ·
+public       role_options                     table  ·
+public       statement_bundle_chunks          table  ·
+public       statement_diagnostics_requests   table  ·
+public       statement_diagnostics            table  ·
 
 query ITTT colnames
 SELECT node_id, user_name, application_name, active_queries
@@ -258,11 +258,11 @@ information_schema
 pg_catalog
 public
 
-query T colnames
+query TTT colnames
 CREATE TABLE foo(x INT); SELECT * FROM [SHOW TABLES]
 ----
-table_name
-foo
+schema_name  table_name  type
+public       foo         table
 
 
 query T colnames

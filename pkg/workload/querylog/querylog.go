@@ -494,7 +494,7 @@ func (w *worker) generatePlaceholders(
 // getTableNames fetches the names of all the tables in db and stores them in
 // w.state.
 func (w *querylog) getTableNames(db *gosql.DB) error {
-	rows, err := db.Query(`SHOW TABLES`)
+	rows, err := db.Query(`SELECT table_name FROM [SHOW TABLES] ORDER BY table_name`)
 	if err != nil {
 		return err
 	}

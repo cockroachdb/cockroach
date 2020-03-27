@@ -828,26 +828,26 @@ statement ok
 DROP INDEX refers@another_idx
 
 # refers is not visible because it is in the ADD state.
-query T
+query TTT
 SHOW TABLES FROM test
 ----
-bar
-child
-customers
-delivery
-domain_modules
-domains
-foo
-grandchild
-modules
-pairs
-referee
-refpairs
-refpairs_c_between
-refpairs_wrong_order
-tx
-tx_leg
-unindexed
+public  bar                   table
+public  child                 table
+public  customers             table
+public  delivery              table
+public  domain_modules        table
+public  domains               table
+public  foo                   table
+public  grandchild            table
+public  modules               table
+public  pairs                 table
+public  referee               table
+public  refpairs              table
+public  refpairs_c_between    table
+public  refpairs_wrong_order  table
+public  tx                    table
+public  tx_leg                table
+public  unindexed             table
 
 statement ok
 COMMIT

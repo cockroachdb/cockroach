@@ -1316,7 +1316,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 		// still present. Also ensure that the table that was being restored (bank)
 		// is not.
 		sqlDB.Exec(t, `USE data;`)
-		sqlDB.CheckQueryResults(t, `SHOW TABLES;`, [][]string{{"new_table"}})
+		sqlDB.CheckQueryResults(t, `SHOW TABLES;`, [][]string{{"public", "new_table", "table"}})
 	})
 
 	t.Run("cancel", func(t *testing.T) {

@@ -318,14 +318,19 @@ func (s *adminServer) DatabaseDetails(
 
 	// Marshal table names.
 	{
-		const nameCol = "table_name"
 		scanner := makeResultScanner(cols)
-		if a, e := len(cols), 1; a != e {
+		if a, e := len(cols), 3; a != e {
 			return nil, s.serverErrorf("show tables columns mismatch: %d != expected %d", a, e)
 		}
 		for _, row := range rows {
-			var tableName string
-			if err := scanner.Scan(row, nameCol, &tableName); err != nil {
+			var schemaName, tableName string
+			if err := scanner.Scan(row, "schema_name", &schemaName); err != nil {
+				return nil, err
+			}
+			if schemaName != "public" {
+				continue
+			}
+			if err := scanner.Scan(row, "table_name", &tableName); err != nil {
 				return nil, err
 			}
 			resp.TableNames = append(resp.TableNames, tableName)

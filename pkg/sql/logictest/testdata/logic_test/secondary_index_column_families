@@ -117,4 +117,3 @@ query II
 SELECT y, z FROM t42992@i
 ----
 NULL 2
-
