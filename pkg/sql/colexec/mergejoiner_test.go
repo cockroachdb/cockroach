@@ -1500,62 +1500,66 @@ func TestMergeJoiner(t *testing.T) {
 		monitors []*mon.BytesMonitor
 	)
 	for _, tc := range mjTestCases {
-		tc.init()
+		for _, tc := range tc.mutateTypes() {
+			tc.init()
 
-		// We use a custom verifier function so that we can get the merge join op
-		// to use a custom output batch size per test, to exercise more cases.
-		var mergeJoinVerifier verifierFn = func(output *opTestOutput) error {
-			if mj, ok := output.input.(variableOutputBatchSizeInitializer); ok {
-				mj.initWithOutputBatchSize(tc.outputBatchSize)
+			// We use a custom verifier function so that we can get the merge join op
+			// to use a custom output batch size per test, to exercise more cases.
+			var mergeJoinVerifier verifierFn = func(output *opTestOutput) error {
+				if mj, ok := output.input.(variableOutputBatchSizeInitializer); ok {
+					mj.initWithOutputBatchSize(tc.outputBatchSize)
+				} else {
+					// When we have an inner join with ON expression, a filter operator
+					// will be put on top of the merge join, so to make life easier, we'll
+					// just ignore the requested output batch size.
+					output.input.Init()
+				}
+				verify := output.Verify
+				if _, isFullOuter := output.input.(*mergeJoinFullOuterOp); isFullOuter {
+					// FULL OUTER JOIN doesn't guarantee any ordering on its output (since
+					// it is ambiguous), so we're comparing the outputs as sets.
+					verify = output.VerifyAnyOrder
+				}
+
+				return verify()
+			}
+
+			var runner testRunner
+			if tc.skipAllNullsInjection {
+				// We're omitting all nulls injection test. See comments for each such
+				// test case.
+				runner = runTestsWithoutAllNullsInjection
 			} else {
-				// When we have an inner join with ON expression, a filter operator
-				// will be put on top of the merge join, so to make life easier, we'll
-				// just ignore the requested output batch size.
-				output.input.Init()
+				runner = runTestsWithTyps
 			}
-			verify := output.Verify
-			if _, isFullOuter := output.input.(*mergeJoinFullOuterOp); isFullOuter {
-				// FULL OUTER JOIN doesn't guarantee any ordering on its output (since
-				// it is ambiguous), so we're comparing the outputs as sets.
-				verify = output.VerifyAnyOrder
+			// We test all cases with the default memory limit (regular scenario) and a
+			// limit of 1 byte (to force the buffered groups to spill to disk).
+			for _, memoryLimit := range []int64{1, defaultMemoryLimit} {
+				t.Run(fmt.Sprintf("MemoryLimit=%s/%s", humanizeutil.IBytes(memoryLimit), tc.description), func(t *testing.T) {
+					runner(t, []tuples{tc.leftTuples, tc.rightTuples},
+						[][]coltypes.T{tc.leftTypes, tc.rightTypes},
+						tc.expected, mergeJoinVerifier,
+						func(input []Operator) (Operator, error) {
+							spec := createSpecForMergeJoiner(tc)
+							args := NewColOperatorArgs{
+								Spec:                spec,
+								Inputs:              input,
+								StreamingMemAccount: testMemAcc,
+								DiskQueueCfg:        queueCfg,
+								FDSemaphore:         NewTestingSemaphore(mjFDLimit),
+							}
+							args.TestingKnobs.UseStreamingMemAccountForBuffering = true
+							flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
+							result, err := NewColOperator(ctx, flowCtx, args)
+							if err != nil {
+								return nil, err
+							}
+							accounts = append(accounts, result.OpAccounts...)
+							monitors = append(monitors, result.OpMonitors...)
+							return result.Op, nil
+						})
+				})
 			}
-
-			return verify()
-		}
-
-		var runner testRunner
-		if tc.skipAllNullsInjection {
-			// We're omitting all nulls injection test. See comments for each such
-			// test case.
-			runner = runTestsWithoutAllNullsInjection
-		} else {
-			runner = runTestsWithTyps
-		}
-		// We test all cases with the default memory limit (regular scenario) and a
-		// limit of 1 byte (to force the buffered groups to spill to disk).
-		for _, memoryLimit := range []int64{1, defaultMemoryLimit} {
-			t.Run(fmt.Sprintf("MemoryLimit=%s/%s", humanizeutil.IBytes(memoryLimit), tc.description), func(t *testing.T) {
-				runner(t, []tuples{tc.leftTuples, tc.rightTuples}, nil /* typs */, tc.expected, mergeJoinVerifier,
-					func(input []Operator) (Operator, error) {
-						spec := createSpecForMergeJoiner(tc)
-						args := NewColOperatorArgs{
-							Spec:                spec,
-							Inputs:              input,
-							StreamingMemAccount: testMemAcc,
-							DiskQueueCfg:        queueCfg,
-							FDSemaphore:         NewTestingSemaphore(mjFDLimit),
-						}
-						args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
-						result, err := NewColOperator(ctx, flowCtx, args)
-						if err != nil {
-							return nil, err
-						}
-						accounts = append(accounts, result.OpAccounts...)
-						monitors = append(monitors, result.OpMonitors...)
-						return result.Op, nil
-					})
-			})
 		}
 	}
 	for _, acc := range accounts {
