@@ -6,35 +6,35 @@ postgres
 system
 test
 
-query T
+query TTT
 SHOW TABLES FROM system
 ----
-comments
-descriptor
-eventlog
-jobs
-lease
-locations
-namespace
-namespace_deprecated
-protected_ts_meta
-protected_ts_records
-rangelog
-replication_constraint_stats
-replication_critical_localities
-replication_stats
-reports_meta
-role_members
-role_options
-settings
-statement_bundle_chunks
-statement_diagnostics
-statement_diagnostics_requests
-table_statistics
-ui
-users
-web_sessions
-zones
+public  comments                         table
+public  descriptor                       table
+public  eventlog                         table
+public  jobs                             table
+public  lease                            table
+public  locations                        table
+public  namespace                        table
+public  namespace_deprecated             table
+public  protected_ts_meta                table
+public  protected_ts_records             table
+public  rangelog                         table
+public  replication_constraint_stats     table
+public  replication_critical_localities  table
+public  replication_stats                table
+public  reports_meta                     table
+public  role_members                     table
+public  role_options                     table
+public  settings                         table
+public  statement_bundle_chunks          table
+public  statement_diagnostics            table
+public  statement_diagnostics_requests   table
+public  table_statistics                 table
+public  ui                               table
+public  users                            table
+public  web_sessions                     table
+public  zones                            table
 
 query I rowsort
 SELECT id FROM system.descriptor

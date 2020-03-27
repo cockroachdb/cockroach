@@ -40,11 +40,11 @@ CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 statement ok
 COMMENT ON TABLE a IS 'a_comment'
 
-query T colnames
+query TTT colnames
 SHOW TABLES FROM test
 ----
-table_name
-a
+schema_name  table_name  type
+public       a           table
 
 statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
@@ -133,15 +133,15 @@ a            INT8       false        NULL            ·                      {pr
 b            INT8       false        NULL            ·                      {primary}  false
 c            INT8       false        NULL            ·                      {primary}  false
 
-query TT
+query TTTT
 SHOW TABLES FROM test WITH COMMENT
 ----
-a  a_comment
-b  ·
-c  ·
-d  ·
-e  ·
-f  ·
+public  a  table  a_comment
+public  b  table  ·
+public  c  table  ·
+public  d  table  ·
+public  e  table  ·
+public  f  table  ·
 
 statement ok
 SET DATABASE = ""

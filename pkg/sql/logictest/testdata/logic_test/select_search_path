@@ -1,7 +1,7 @@
 # Test that pg_catalog tables are accessible without qualifying table/view
 # names.
 
-query T
+query TTT
 SHOW TABLES
 ----
 
