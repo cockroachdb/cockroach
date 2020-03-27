@@ -3831,9 +3831,8 @@ func (desc *ColumnDescriptor) ComputedExprStr() string {
 // CheckCanBeFKRef returns whether the given column is computed.
 func (desc *ColumnDescriptor) CheckCanBeFKRef() error {
 	if desc.IsComputed() {
-		return pgerror.Newf(
-			pgcode.InvalidTableDefinition,
-			"computed column %q cannot be a foreign key reference",
+		return unimplemented.NewWithIssuef(
+			46672, "computed column %q cannot be a foreign key reference",
 			desc.Name,
 		)
 	}
