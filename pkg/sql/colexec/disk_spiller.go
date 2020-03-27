@@ -179,6 +179,8 @@ func newTwoInputDiskSpiller(
 type diskSpillerBase struct {
 	NonExplainable
 
+	closerHelper
+
 	inputs  []Operator
 	spilled bool
 
@@ -251,9 +253,17 @@ func (d *diskSpillerBase) reset(ctx context.Context) {
 	d.spilled = false
 }
 
-func (d *diskSpillerBase) Close(ctx context.Context) error {
-	if c, ok := d.diskBackedOp.(closer); ok {
-		return c.Close(ctx)
+// Close closes the diskSpillerBase's input.
+// TODO(asubiotto): Remove this method. It only exists so that we can call Close
+//  from some runTests subtests when not draining the input fully. The test
+//  should pass in the testing.T object used so that the caller can decide to
+//  explicitly close the input after checking the test.
+func (d *diskSpillerBase) IdempotentClose(ctx context.Context) error {
+	if !d.close() {
+		return nil
+	}
+	if c, ok := d.diskBackedOp.(IdempotentCloser); ok {
+		return c.IdempotentClose(ctx)
 	}
 	return nil
 }

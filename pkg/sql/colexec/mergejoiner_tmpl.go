@@ -106,7 +106,7 @@ const _MJ_OVERLOAD = 0
 // */}}
 
 type mergeJoin_JOIN_TYPE_STRINGOp struct {
-	mergeJoinBase
+	*mergeJoinBase
 }
 
 var _ InternalMemoryOperator = &mergeJoin_JOIN_TYPE_STRINGOp{}
@@ -1437,6 +1437,8 @@ func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 // */}}
 
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
+	o.mu.Lock()
+	defer o.mu.Unlock()
 	o.output.ResetInternalBatch()
 	for {
 		switch o.state {

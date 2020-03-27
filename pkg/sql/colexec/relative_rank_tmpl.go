@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
@@ -204,8 +205,8 @@ func _COMPUTE_PEER_GROUPS_SIZES() { // */}}
 
 type relativeRankInitFields struct {
 	rankInitFields
+	closerHelper
 
-	closed       bool
 	state        relativeRankState
 	memoryLimit  int64
 	diskQueueCfg colcontainer.DiskQueueCfg
@@ -239,6 +240,12 @@ const relativeRankUtilityQueueMemLimitFraction = 0.1
 
 type _RELATIVE_RANK_STRINGOp struct {
 	relativeRankInitFields
+
+	// mu is used to protect against concurrent IdempotentClose and Next calls,
+	// which are currently allowed.
+	// TODO(asubiotto): Explore calling IdempotentClose from the same goroutine as
+	//  Next, which will simplify this model.
+	mu syncutil.Mutex
 
 	// {{if .IsPercentRank}}
 	// rank indicates which rank should be assigned to the next tuple.
@@ -308,6 +315,8 @@ func (r *_RELATIVE_RANK_STRINGOp) Init() {
 }
 
 func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	var err error
 	for {
 		switch r.state {
@@ -591,7 +600,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(ctx); err != nil {
+			if err := r.idempotentCloseLocked(ctx); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			return coldata.ZeroBatch
@@ -604,8 +613,14 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (r *_RELATIVE_RANK_STRINGOp) Close(ctx context.Context) error {
-	if r.closed {
+func (r *_RELATIVE_RANK_STRINGOp) IdempotentClose(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.idempotentCloseLocked(ctx)
+}
+
+func (r *_RELATIVE_RANK_STRINGOp) idempotentCloseLocked(ctx context.Context) error {
+	if !r.close() {
 		return nil
 	}
 	var lastErr error
@@ -622,7 +637,6 @@ func (r *_RELATIVE_RANK_STRINGOp) Close(ctx context.Context) error {
 		lastErr = err
 	}
 	// {{end}}
-	r.closed = true
 	return lastErr
 }
 

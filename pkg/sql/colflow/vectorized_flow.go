@@ -404,10 +404,12 @@ type flowCreatorHelper interface {
 }
 
 // opDAGWithMetaSources is a helper struct that stores an operator DAG as well
-// as the metadataSources in this DAG that need to be drained.
+// as the metadataSources and closers in this DAG that need to be drained and
+// closed.
 type opDAGWithMetaSources struct {
 	rootOperator    colexec.Operator
 	metadataSources []execinfrapb.MetadataSource
+	toClose         []colexec.IdempotentCloser
 }
 
 // remoteComponentCreator is an interface that abstracts the constructors for
@@ -418,6 +420,7 @@ type remoteComponentCreator interface {
 		input colexec.Operator,
 		typs []coltypes.T,
 		metadataSources []execinfrapb.MetadataSource,
+		toClose []colexec.IdempotentCloser,
 	) (*colrpc.Outbox, error)
 	newInbox(allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
@@ -429,8 +432,9 @@ func (vectorizedRemoteComponentCreator) newOutbox(
 	input colexec.Operator,
 	typs []coltypes.T,
 	metadataSources []execinfrapb.MetadataSource,
+	toClose []colexec.IdempotentCloser,
 ) (*colrpc.Outbox, error) {
-	return colrpc.NewOutbox(allocator, input, typs, metadataSources)
+	return colrpc.NewOutbox(allocator, input, typs, metadataSources, toClose)
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
@@ -562,10 +566,11 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	outputTyps []coltypes.T,
 	stream *execinfrapb.StreamEndpointSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
+	toClose []colexec.IdempotentCloser,
 ) (execinfra.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(
 		colexec.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
-		op, outputTyps, metadataSourcesQueue,
+		op, outputTyps, metadataSourcesQueue, toClose,
 	)
 	if err != nil {
 		return nil, err
@@ -605,6 +610,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	outputTyps []coltypes.T,
 	output *execinfrapb.OutputRouterSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
+	toClose []colexec.IdempotentCloser,
 ) error {
 	if output.Type != execinfrapb.OutputRouterSpec_BY_HASH {
 		return errors.Errorf("vectorized output router type %s unsupported", output.Type)
@@ -649,7 +655,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 			return errors.Errorf("unexpected sync response output when setting up router")
 		case execinfrapb.StreamEndpointSpec_REMOTE:
 			if _, err := s.setupRemoteOutputStream(
-				ctx, flowCtx, op, outputTyps, stream, metadataSourcesQueue,
+				ctx, flowCtx, op, outputTyps, stream, metadataSourcesQueue, toClose,
 			); err != nil {
 				return err
 			}
@@ -668,7 +674,9 @@ func (s *vectorizedFlowCreator) setupRouter(
 					return err
 				}
 			}
-			s.streamIDToInputOp[stream.StreamID] = opDAGWithMetaSources{rootOperator: op, metadataSources: metadataSourcesQueue}
+			s.streamIDToInputOp[stream.StreamID] = opDAGWithMetaSources{
+				rootOperator: op, metadataSources: metadataSourcesQueue, toClose: toClose,
+			}
 		}
 		// Either the metadataSourcesQueue will be drained by an outbox or we
 		// created an opDAGWithMetaSources to pass along these metadataSources. We don't need to
@@ -794,6 +802,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 	op colexec.Operator,
 	opOutputTypes []coltypes.T,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
+	toClose []colexec.IdempotentCloser,
 ) error {
 	output := &pspec.Output[0]
 	if output.Type != execinfrapb.OutputRouterSpec_PASS_THROUGH {
@@ -806,6 +815,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			// Pass in a copy of the queue to reset metadataSourcesQueue for
 			// further appends without overwriting.
 			metadataSourcesQueue,
+			toClose,
 		)
 	}
 
@@ -815,7 +825,9 @@ func (s *vectorizedFlowCreator) setupOutput(
 	outputStream := &output.Streams[0]
 	switch outputStream.Type {
 	case execinfrapb.StreamEndpointSpec_LOCAL:
-		s.streamIDToInputOp[outputStream.StreamID] = opDAGWithMetaSources{rootOperator: op, metadataSources: metadataSourcesQueue}
+		s.streamIDToInputOp[outputStream.StreamID] = opDAGWithMetaSources{
+			rootOperator: op, metadataSources: metadataSourcesQueue, toClose: toClose,
+		}
 	case execinfrapb.StreamEndpointSpec_REMOTE:
 		// Set up an Outbox. Note that we pass in a copy of metadataSourcesQueue
 		// so that we can reset it below and keep on writing to it.
@@ -839,7 +851,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				},
 			)
 		}
-		outbox, err := s.setupRemoteOutputStream(ctx, flowCtx, op, opOutputTypes, outputStream, metadataSourcesQueue)
+		outbox, err := s.setupRemoteOutputStream(ctx, flowCtx, op, opOutputTypes, outputStream, metadataSourcesQueue, toClose)
 		if err != nil {
 			return err
 		}
@@ -874,6 +886,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			&execinfrapb.PostProcessSpec{},
 			s.syncFlowConsumer,
 			metadataSourcesQueue,
+			toClose,
 			outputStatsToTrace,
 			s.getCancelFlowFn,
 		)
@@ -934,6 +947,10 @@ func (s *vectorizedFlowCreator) setupFlow(
 		// added as part of one of the last unconnected inputDAGs in
 		// streamIDToInputOp. This is to avoid cycles.
 		metadataSourcesQueue := make([]execinfrapb.MetadataSource, 0, 1)
+		// toClose is similar to metadataSourcesQueue with the difference that these
+		// components do not produce metadata and should be Closed even during
+		// non-graceful termination.
+		toClose := make([]colexec.IdempotentCloser, 0, 1)
 		inputs = inputs[:0]
 		for i := range pspec.Input {
 			input, metadataSources, err := s.setupInput(ctx, flowCtx, pspec.Input[i], opt)
@@ -979,6 +996,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			return nil, errors.Wrapf(err, "not enough memory to setup vectorized plan")
 		}
 		metadataSourcesQueue = append(metadataSourcesQueue, result.MetadataSources...)
+		toClose = append(toClose, result.ToClose...)
 
 		op := result.Op
 		if s.recordingStats {
@@ -1003,7 +1021,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			return nil, err
 		}
 		if err = s.setupOutput(
-			ctx, flowCtx, pspec, op, opOutputTypes, metadataSourcesQueue,
+			ctx, flowCtx, pspec, op, opOutputTypes, metadataSourcesQueue, toClose,
 		); err != nil {
 			return nil, err
 		}
