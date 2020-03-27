@@ -916,8 +916,9 @@ func applyColumnMutation(
 			for i := range tableDesc.Mutations {
 				mut := &tableDesc.Mutations[i]
 				if mut.MutationID < currentMutationID {
-					return unimplemented.NewWithIssuef(
-						45510, "table %s is currently undergoing a schema change", tableDesc.Name)
+					return unimplemented.Newf(
+						"column type change while undergoing schema change",
+						"table %s is currently undergoing a schema change", tableDesc.Name)
 				}
 			}
 
@@ -930,8 +931,6 @@ func applyColumnMutation(
 				col.Name,
 				nameExists,
 			)
-
-			//TODO(richardjcai): Rename newCol to d? for consistency
 
 			var newColComputeExpr = proto.String(
 				fmt.Sprintf("%s::%s", col.Name, t.ToType.String()))
