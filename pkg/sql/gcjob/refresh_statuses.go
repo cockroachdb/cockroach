@@ -15,7 +15,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -265,80 +264,14 @@ func isProtected(
 	return protected
 }
 
-// getUpdatedTables returns any tables who's TTL may have changed based on
-// gossip changes. The zoneCfgFilter watches for changes in the zone config
-// table and the descTableFilter watches for changes in the descriptor table.
-func getUpdatedTables(
-	ctx context.Context,
-	cfg *config.SystemConfig,
-	zoneCfgFilter gossip.SystemConfigDeltaFilter,
-	descTableFilter gossip.SystemConfigDeltaFilter,
-	details *jobspb.SchemaChangeGCDetails,
-	progress *jobspb.SchemaChangeGCProgress,
-) []sqlbase.ID {
-	tablesToGC := make(map[sqlbase.ID]*jobspb.SchemaChangeGCProgress_TableProgress)
-	for _, table := range progress.Tables {
-		tablesToGC[table.ID] = &table
-	}
-
-	// Check to see if the zone cfg or any of the descriptors have been modified.
-	var tablesToCheck []sqlbase.ID
-	zoneCfgModified := false
-	zoneCfgFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
-		zoneCfgModified = true
-	})
-	if zoneCfgModified {
-		// If any zone config was modified, check all the remaining tables.
-		return getAllTablesWaitingForGC(details, progress)
-	}
-
-	descTableFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
-		// Attempt to unmarshal config into a table/database descriptor.
-		var descriptor sqlbase.Descriptor
-		if err := kv.Value.GetProto(&descriptor); err != nil {
-			log.Warningf(ctx, "%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
-			return
-		}
-		switch union := descriptor.Union.(type) {
-		case *sqlbase.Descriptor_Table:
-			table := union.Table
-			if err := table.MaybeFillInDescriptor(ctx, nil); err != nil {
-				log.Errorf(ctx, "%s: failed to fill in table descriptor %v", kv.Key, table)
-				return
-			}
-			if err := table.ValidateTable(); err != nil {
-				log.Errorf(ctx, "%s: received invalid table descriptor: %s. Desc: %v",
-					kv.Key, err, table,
-				)
-				return
-			}
-			// Check the expiration again for this descriptor if it is waiting for GC.
-			if table, ok := tablesToGC[table.ID]; ok {
-				if table.Status == jobspb.SchemaChangeGCProgress_WAITING_FOR_GC {
-					tablesToCheck = append(tablesToCheck, table.ID)
-				}
-			}
-
-		case *sqlbase.Descriptor_Database:
-			// We don't care if the database descriptor changes as it doesn't have any
-			// effect on the TTL of it's tables.
-		}
-	})
-
-	return tablesToCheck
-}
-
-// setupConfigWatchers returns a filter to watch zone config changes, a filter
-// to watch descriptor changes and a channel that is notified when there are
-// changes.
-func setupConfigWatchers(
+// setupConfigWatcher returns a filter to watch zone config changes and a
+// channel that is notified when there are changes.
+func setupConfigWatcher(
 	execCfg *sql.ExecutorConfig,
-) (gossip.SystemConfigDeltaFilter, gossip.SystemConfigDeltaFilter, <-chan struct{}) {
+) (gossip.SystemConfigDeltaFilter, <-chan struct{}) {
 	k := keys.MakeTablePrefix(uint32(keys.ZonesTableID))
 	k = encoding.EncodeUvarintAscending(k, uint64(keys.ZonesTablePrimaryIndexID))
 	zoneCfgFilter := gossip.MakeSystemConfigDeltaFilter(k)
-	descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
-	descTableFilter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
 	gossipUpdateC := execCfg.Gossip.RegisterSystemConfigChannel()
-	return zoneCfgFilter, descTableFilter, gossipUpdateC
+	return zoneCfgFilter, gossipUpdateC
 }
