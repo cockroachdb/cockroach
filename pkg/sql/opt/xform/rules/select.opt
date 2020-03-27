@@ -12,8 +12,8 @@
 # and examples.
 [GenerateConstrainedScans, Explore]
 (Select
-  (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
-  $filters:*
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+    $filters:*
 )
 =>
 (GenerateConstrainedScans $scanPrivate $filters)
@@ -22,8 +22,45 @@
 # be serviced by an inverted index.
 [GenerateInvertedIndexScans, Explore]
 (Select
-  (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate) & (HasInvertedIndexes $scanPrivate))
-  $filters:*
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate) & (HasInvertedIndexes $scanPrivate))
+    $filters:*
 )
 =>
 (GenerateInvertedIndexScans $scanPrivate $filters)
+
+# GenerateUnionSelects splits disjunctions (Or expressions) into a Union of two
+# Select expressions, the first containing the left sub-expression of the Or
+# expression and the second containing the right sub-expression. All other
+# filter items in the original expression are preserved in the new Select
+# expressions.
+#
+# This can produce better query plans in cases where indexes cover both sides of
+# the Or expression. The execution plan can use both indexes to satisfy both
+# sides of the disjunction and union the results together.
+#
+# Note that this rule only matches Selects with canonical scans. Therefore scan
+# constraints do not need to be duplicated in the left and right scans of the
+# union.
+#
+# Also note that this rule only matches Selects that have strict keys. Without
+# a strict key, the Union expression would deduplicate rows with equal values
+# but differing keys, leading to incorrect results.
+[GenerateUnionSelects, Explore]
+(Select
+    $input:(Scan
+        $scanPrivate:* & (IsCanonicalScan $scanPrivate)
+    ) & (HasStrictKey $input)
+    $filters:[ ... $item:(FiltersItem (Or $left:* $right:*)) ... ]
+)
+=>
+(Union
+    (Select
+        (Scan $leftScan:(DuplicateScan $scanPrivate))
+        (MapFilterCols (ReplaceFiltersItem $filters $item $left) $scanPrivate $leftScan)
+    )
+    (Select
+        (Scan $rightScan:(DuplicateScan $scanPrivate))
+        (MapFilterCols (ReplaceFiltersItem $filters $item $right) $scanPrivate $rightScan)
+    )
+    (ConstructSetPrivate $leftScan $rightScan $scanPrivate)
+)
