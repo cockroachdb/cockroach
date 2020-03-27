@@ -130,6 +130,7 @@ scan a
  ├── columns: k:1!null i:2 f:3 s:4 j:5
  ├── limit: 1
  ├── locking: for-update
+ ├── side-effects
  ├── key: ()
  └── fd: ()-->(1-5)
 
@@ -142,6 +143,7 @@ scan a@s_idx
  ├── constraint: /4/1: [/'foo' - /'foo']
  ├── limit: 1
  ├── locking: for-update
+ ├── side-effects
  ├── key: ()
  └── fd: ()-->(4)
 
@@ -538,6 +540,7 @@ SELECT * FROM kuv ORDER BY u LIMIT 5 FOR UPDATE
 index-join kuv
  ├── columns: k:1!null u:2 v:3
  ├── cardinality: [0 - 5]
+ ├── side-effects
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── ordering: +2
@@ -545,6 +548,7 @@ index-join kuv
       ├── columns: k:1!null u:2
       ├── limit: 5
       ├── locking: for-update
+      ├── side-effects
       ├── key: (1)
       ├── fd: (1)-->(2)
       └── ordering: +2
