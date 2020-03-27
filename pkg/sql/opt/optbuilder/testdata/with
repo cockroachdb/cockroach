@@ -1143,6 +1143,40 @@ with &2 (cte)
            ├──  "?column?":7 => a:9
            └──  "?column?":8 => b:10
 
+# Allow non-recursive CTE even when it has UNION.
+build
+WITH RECURSIVE cte(a, b) AS (
+    SELECT 1, 2
+  UNION
+    SELECT 3, 4
+) SELECT * FROM cte;
+----
+with &2 (cte)
+ ├── columns: a:7!null b:8!null
+ ├── union
+ │    ├── columns: "?column?":5!null "?column?":6!null
+ │    ├── left columns: "?column?":1 "?column?":2
+ │    ├── right columns: "?column?":3 "?column?":4
+ │    ├── project
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         ├── 1 [as="?column?":1]
+ │    │         └── 2 [as="?column?":2]
+ │    └── project
+ │         ├── columns: "?column?":3!null "?column?":4!null
+ │         ├── values
+ │         │    └── ()
+ │         └── projections
+ │              ├── 3 [as="?column?":3]
+ │              └── 4 [as="?column?":4]
+ └── with-scan &2 (cte)
+      ├── columns: a:7!null b:8!null
+      └── mapping:
+           ├──  "?column?":5 => a:7
+           └──  "?column?":6 => b:8
+
 # Error cases.
 build
 WITH RECURSIVE cte(a, b) AS (
@@ -1158,7 +1192,7 @@ WITH RECURSIVE cte(a, b) AS (
     SELECT 1+a, 1+b FROM cte
 ) SELECT * FROM cte;
 ----
-error (42601): recursive query "cte" does not have the form non-recursive-term UNION ALL recursive-term
+error (0A000): unimplemented: recursive query "cte" uses UNION which is not implemented (only UNION ALL is supported)
 
 build
 WITH RECURSIVE cte(a, b) AS (
