@@ -305,9 +305,9 @@ func TestRouterOutputNext(t *testing.T) {
 				// If a full batch is smaller than our small batch size, reduce it, since
 				// this test relies on multiple batches returned from the input.
 				smallBatchSize = 2
-				if smallBatchSize >= coldata.MinBatchSize {
+				if smallBatchSize >= minBatchSize {
 					// Sanity check.
-					t.Fatalf("smallBatchSize=%d still too large (must be less than MinBatchSize=%d)", smallBatchSize, coldata.MinBatchSize)
+					t.Fatalf("smallBatchSize=%d still too large (must be less than minBatchSize=%d)", smallBatchSize, minBatchSize)
 				}
 				blockThreshold = 1
 			}
@@ -538,8 +538,8 @@ func TestHashRouterComputesDestination(t *testing.T) {
 	const expectedBatchSize = 1024
 	batchSize := coldata.BatchSize()
 	if batchSize != expectedBatchSize {
-		coldata.SetBatchSizeForTests(expectedBatchSize)
-		defer func(batchSize int) { coldata.SetBatchSizeForTests(batchSize) }(batchSize)
+		require.NoError(t, coldata.SetBatchSizeForTests(expectedBatchSize))
+		defer func(batchSize int) { require.NoError(t, coldata.SetBatchSizeForTests(batchSize)) }(batchSize)
 		batchSize = expectedBatchSize
 	}
 	data := make(tuples, batchSize)
