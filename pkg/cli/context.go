@@ -127,7 +127,6 @@ func initCLIDefaults() {
 	startCtx.listeningURLFile = ""
 	startCtx.pidFile = ""
 	startCtx.inBackground = false
-	startCtx.backtraceOutputDir = ""
 
 	quitCtx.serverDecommission = false
 
@@ -325,9 +324,6 @@ var startCtx struct {
 
 	// logging settings specific to file logging.
 	logDir log.DirName
-
-	// directory to use for logging backtrace outputs.
-	backtraceOutputDir string
 }
 
 // quitCtx captures the command-line parameters of the `quit` command.

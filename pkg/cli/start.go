@@ -1199,7 +1199,6 @@ func setupAndInitializeLoggingAndProfiling(
 	if p := logOutputDirectory(); p != "" {
 		outputDirectory = p
 	}
-	startCtx.backtraceOutputDir = outputDirectory
 	serverCfg.GoroutineDumpDirName = filepath.Join(outputDirectory, base.GoroutineDumpDir)
 	serverCfg.HeapProfileDirName = filepath.Join(outputDirectory, base.HeapProfileDir)
 
@@ -1250,7 +1249,7 @@ func setupAndInitializeLoggingAndProfiling(
 	// Disable Stopper task tracking as performing that call site tracking is
 	// moderately expensive (certainly outweighing the infrequent benefit it
 	// provides).
-	stopper = initBacktrace(outputDirectory)
+	stopper = stop.NewStopper()
 	log.Event(ctx, "initialized profiles")
 
 	return stopper, nil
