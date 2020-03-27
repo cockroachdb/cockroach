@@ -2852,6 +2852,16 @@ type EvalContext struct {
 	TestingKnobs EvalContextTestingKnobs
 
 	Mon *mon.BytesMonitor
+
+	// SingleDatumAggMemAccount is a memory account that all aggregate builtins
+	// that store a single datum will share to account for the memory needed to
+	// perform the aggregation (i.e. memory not reported by AggregateFunc.Size
+	// method). This memory account exists so that such aggregate functions
+	// could "batch" their reservations - otherwise, we end up a situation
+	// where each aggregate function struct grows its own memory account by
+	// tiny amount, yet the account reserves a lot more resulting in
+	// significantly overestimating the memory usage.
+	SingleDatumAggMemAccount *mon.BoundAccount
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.

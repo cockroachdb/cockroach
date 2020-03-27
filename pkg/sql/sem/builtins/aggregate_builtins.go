@@ -486,8 +486,9 @@ const sizeOfBitOrAggregate = int64(unsafe.Sizeof(bitOrAggregate{}))
 
 // See NewAnyNotNullAggregate.
 type anyNotNullAggregate struct {
-	val tree.Datum
-	acc mon.BoundAccount
+	val       tree.Datum
+	acc       *mon.BoundAccount
+	datumSize int64
 }
 
 // NewAnyNotNullAggregate returns an aggregate function that returns an
@@ -509,9 +510,7 @@ type anyNotNullAggregate struct {
 func NewAnyNotNullAggregate(evalCtx *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return &anyNotNullAggregate{
 		val: tree.DNull,
-		// TODO(yuzefovich): refactor this to share a single account among all
-		// anyNotNullAggregate structs.
-		acc: evalCtx.Mon.MakeBoundAccount(),
+		acc: evalCtx.SingleDatumAggMemAccount,
 	}
 }
 
@@ -525,7 +524,11 @@ func newAnyNotNullAggregate(
 func (a *anyNotNullAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datum) error {
 	if a.val == tree.DNull && datum != tree.DNull {
 		a.val = datum
-		if err := a.acc.Grow(ctx, int64(datum.Size())); err != nil {
+		if a.acc == nil {
+			return errors.Errorf("unexpectedly EvalContext contained nil SingleDatumAggMemAccount")
+		}
+		a.datumSize = int64(datum.Size())
+		if err := a.acc.Grow(ctx, a.datumSize); err != nil {
 			return err
 		}
 	}
@@ -540,12 +543,18 @@ func (a *anyNotNullAggregate) Result() (tree.Datum, error) {
 // Reset implements tree.AggregateFunc interface.
 func (a *anyNotNullAggregate) Reset(ctx context.Context) {
 	a.val = tree.DNull
-	a.acc.Empty(ctx)
+	if a.acc != nil && a.datumSize != 0 {
+		a.acc.Shrink(ctx, a.datumSize)
+		a.datumSize = 0
+	}
 }
 
 // Close is no-op in aggregates using constant space.
 func (a *anyNotNullAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
+	if a.acc != nil && a.datumSize != 0 {
+		a.acc.Shrink(ctx, a.datumSize)
+		a.datumSize = 0
+	}
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -1161,7 +1170,8 @@ type maxAggregate struct {
 	max     tree.Datum
 	evalCtx *tree.EvalContext
 
-	acc               mon.BoundAccount
+	acc               *mon.BoundAccount
+	datumSize         int64
 	variableDatumSize bool
 }
 
@@ -1174,10 +1184,8 @@ func newMaxAggregate(
 	// it has a fixed size, the memory account will be updated only on the
 	// first non-null datum.
 	return &maxAggregate{
-		evalCtx: evalCtx,
-		// TODO(yuzefovich): refactor this to share a single account among all
-		// maxAggregate structs.
-		acc:               evalCtx.Mon.MakeBoundAccount(),
+		evalCtx:           evalCtx,
+		acc:               evalCtx.SingleDatumAggMemAccount,
 		variableDatumSize: variable,
 	}
 }
@@ -1188,7 +1196,11 @@ func (a *maxAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datu
 		return nil
 	}
 	if a.max == nil {
-		if err := a.acc.ResizeTo(ctx, int64(datum.Size())); err != nil {
+		if a.acc == nil {
+			return errors.Errorf("unexpectedly EvalContext contained nil SingleDatumAggMemAccount")
+		}
+		a.datumSize = int64(datum.Size())
+		if err := a.acc.Grow(ctx, a.datumSize); err != nil {
 			return err
 		}
 		a.max = datum
@@ -1198,7 +1210,9 @@ func (a *maxAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datu
 	if c < 0 {
 		a.max = datum
 		if a.variableDatumSize {
-			if err := a.acc.ResizeTo(ctx, int64(datum.Size())); err != nil {
+			oldDatumSize := a.datumSize
+			a.datumSize = int64(datum.Size())
+			if err := a.acc.Grow(ctx, a.datumSize-oldDatumSize); err != nil {
 				return err
 			}
 		}
@@ -1217,12 +1231,18 @@ func (a *maxAggregate) Result() (tree.Datum, error) {
 // Reset implements tree.AggregateFunc interface.
 func (a *maxAggregate) Reset(ctx context.Context) {
 	a.max = nil
-	a.acc.Empty(ctx)
+	if a.acc != nil && a.datumSize != 0 {
+		a.acc.Shrink(ctx, a.datumSize)
+		a.datumSize = 0
+	}
 }
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *maxAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
+	if a.acc != nil && a.datumSize != 0 {
+		a.acc.Shrink(ctx, a.datumSize)
+		a.datumSize = 0
+	}
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -1235,7 +1255,8 @@ type minAggregate struct {
 	min     tree.Datum
 	evalCtx *tree.EvalContext
 
-	acc               mon.BoundAccount
+	acc               *mon.BoundAccount
+	datumSize         int64
 	variableDatumSize bool
 }
 
@@ -1248,10 +1269,8 @@ func newMinAggregate(
 	// it has a fixed size, the memory account will be updated only on the
 	// first non-null datum.
 	return &minAggregate{
-		evalCtx: evalCtx,
-		// TODO(yuzefovich): refactor this to share a single account among all
-		// minAggregate structs.
-		acc:               evalCtx.Mon.MakeBoundAccount(),
+		evalCtx:           evalCtx,
+		acc:               evalCtx.SingleDatumAggMemAccount,
 		variableDatumSize: variable,
 	}
 }
@@ -1262,7 +1281,11 @@ func (a *minAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datu
 		return nil
 	}
 	if a.min == nil {
-		if err := a.acc.ResizeTo(ctx, int64(datum.Size())); err != nil {
+		if a.acc == nil {
+			return errors.Errorf("unexpectedly EvalContext contained nil SingleDatumAggMemAccount")
+		}
+		a.datumSize = int64(datum.Size())
+		if err := a.acc.Grow(ctx, a.datumSize); err != nil {
 			return err
 		}
 		a.min = datum
@@ -1272,7 +1295,9 @@ func (a *minAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datu
 	if c > 0 {
 		a.min = datum
 		if a.variableDatumSize {
-			if err := a.acc.ResizeTo(ctx, int64(datum.Size())); err != nil {
+			oldDatumSize := a.datumSize
+			a.datumSize = int64(datum.Size())
+			if err := a.acc.Grow(ctx, a.datumSize-oldDatumSize); err != nil {
 				return err
 			}
 		}
@@ -1291,12 +1316,18 @@ func (a *minAggregate) Result() (tree.Datum, error) {
 // Reset implements tree.AggregateFunc interface.
 func (a *minAggregate) Reset(ctx context.Context) {
 	a.min = nil
-	a.acc.Empty(ctx)
+	if a.acc != nil && a.datumSize != 0 {
+		a.acc.Shrink(ctx, a.datumSize)
+		a.datumSize = 0
+	}
 }
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *minAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
+	if a.acc != nil && a.datumSize != 0 {
+		a.acc.Shrink(ctx, a.datumSize)
+		a.datumSize = 0
+	}
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -1359,13 +1390,12 @@ type intSumAggregate struct {
 	tmpDec      apd.Decimal
 	large       bool
 	seenNonNull bool
-	acc         mon.BoundAccount
+	acc         *mon.BoundAccount
+	decSumSize  int64
 }
 
 func newIntSumAggregate(_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
-	// TODO(yuzefovich): refactor this to share a single account among all
-	// intSumAggregate structs.
-	return &intSumAggregate{acc: evalCtx.Mon.MakeBoundAccount()}
+	return &intSumAggregate{acc: evalCtx.SingleDatumAggMemAccount}
 }
 
 // Add adds the value of the passed datum to the sum.
@@ -1398,7 +1428,12 @@ func (a *intSumAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.D
 			if err != nil {
 				return err
 			}
-			if err := a.acc.ResizeTo(ctx, int64(tree.SizeOfDecimal(a.decSum))); err != nil {
+			if a.acc == nil {
+				return errors.Errorf("unexpectedly EvalContext contained nil SingleDatumAggMemAccount")
+			}
+			oldDecSumSize := a.decSumSize
+			a.decSumSize = int64(tree.SizeOfDecimal(a.decSum))
+			if err := a.acc.Grow(ctx, a.decSumSize-oldDecSumSize); err != nil {
 				return err
 			}
 		}
@@ -1425,7 +1460,7 @@ func (a *intSumAggregate) Result() (tree.Datum, error) {
 func (a *intSumAggregate) Reset(context.Context) {
 	// We choose not to reset apd.Decimal's since they will be set to
 	// appropriate values when overflow occurs - we simply force the aggregate
-	// to use Go types (at least, at first). That's why we also not empty the
+	// to use Go types (at least, at first). That's why we also not shrink the
 	// memory account.
 	a.seenNonNull = false
 	a.intSum = 0
@@ -1434,7 +1469,10 @@ func (a *intSumAggregate) Reset(context.Context) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *intSumAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
+	if a.acc != nil && a.decSumSize != 0 {
+		a.acc.Shrink(ctx, a.decSumSize)
+		a.decSumSize = 0
+	}
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -1445,15 +1483,14 @@ func (a *intSumAggregate) Size() int64 {
 type decimalSumAggregate struct {
 	sum        apd.Decimal
 	sawNonNull bool
-	acc        mon.BoundAccount
+	acc        *mon.BoundAccount
+	sumSize    int64
 }
 
 func newDecimalSumAggregate(
 	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
-	// TODO(yuzefovich): refactor this to share a single account among all
-	// decimalSumAggregate structs.
-	return &decimalSumAggregate{acc: evalCtx.Mon.MakeBoundAccount()}
+	return &decimalSumAggregate{acc: evalCtx.SingleDatumAggMemAccount}
 }
 
 // Add adds the value of the passed datum to the sum.
@@ -1467,7 +1504,12 @@ func (a *decimalSumAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tr
 		return err
 	}
 
-	if err := a.acc.ResizeTo(ctx, int64(tree.SizeOfDecimal(a.sum))); err != nil {
+	if a.acc == nil {
+		return errors.Errorf("unexpectedly EvalContext contained nil SingleDatumAggMemAccount")
+	}
+	oldSumSize := a.sumSize
+	a.sumSize = int64(tree.SizeOfDecimal(a.sum))
+	if err := a.acc.Grow(ctx, a.sumSize-oldSumSize); err != nil {
 		return err
 	}
 
@@ -1489,12 +1531,18 @@ func (a *decimalSumAggregate) Result() (tree.Datum, error) {
 func (a *decimalSumAggregate) Reset(ctx context.Context) {
 	a.sum.SetFinite(0, 0)
 	a.sawNonNull = false
-	a.acc.Empty(ctx)
+	if a.acc != nil && a.sumSize != 0 {
+		a.acc.Shrink(ctx, a.sumSize)
+		a.sumSize = 0
+	}
 }
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *decimalSumAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
+	if a.acc != nil && a.sumSize != 0 {
+		a.acc.Shrink(ctx, a.sumSize)
+		a.sumSize = 0
+	}
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -1721,16 +1769,15 @@ type decimalSqrDiffAggregate struct {
 	delta apd.Decimal
 	tmp   apd.Decimal
 
-	acc mon.BoundAccount
+	acc              *mon.BoundAccount
+	accountedForSize int64
 }
 
 func newDecimalSqrDiff(evalCtx *tree.EvalContext) decimalSqrDiff {
 	ed := apd.MakeErrDecimal(tree.IntermediateCtx)
 	return &decimalSqrDiffAggregate{
-		ed: &ed,
-		// TODO(yuzefovich): refactor this to share a single account among all
-		// decimalSqrDiff structs.
-		acc: evalCtx.Mon.MakeBoundAccount(),
+		ed:  &ed,
+		acc: evalCtx.SingleDatumAggMemAccount,
 	}
 }
 
@@ -1769,12 +1816,16 @@ func (a *decimalSqrDiffAggregate) Add(
 	a.ed.Sub(&a.tmp, d, &a.mean)
 	a.ed.Add(&a.sqrDiff, &a.sqrDiff, a.ed.Mul(&a.delta, &a.delta, &a.tmp))
 
-	size := tree.SizeOfDecimal(a.count) +
+	if a.acc == nil {
+		return errors.Errorf("unexpectedly EvalContext contained nil SingleDatumAggMemAccount")
+	}
+	oldAccountedForSize := a.accountedForSize
+	a.accountedForSize = int64(tree.SizeOfDecimal(a.count) +
 		tree.SizeOfDecimal(a.mean) +
 		tree.SizeOfDecimal(a.sqrDiff) +
 		tree.SizeOfDecimal(a.delta) +
-		tree.SizeOfDecimal(a.tmp)
-	if err := a.acc.ResizeTo(ctx, int64(size)); err != nil {
+		tree.SizeOfDecimal(a.tmp))
+	if err := a.acc.Grow(ctx, a.accountedForSize-oldAccountedForSize); err != nil {
 		return err
 	}
 
@@ -1798,12 +1849,18 @@ func (a *decimalSqrDiffAggregate) Reset(ctx context.Context) {
 	a.count.SetFinite(0, 0)
 	a.mean.SetFinite(0, 0)
 	a.sqrDiff.SetFinite(0, 0)
-	a.acc.Empty(ctx)
+	if a.acc != nil && a.accountedForSize != 0 {
+		a.acc.Shrink(ctx, a.accountedForSize)
+		a.accountedForSize = 0
+	}
 }
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *decimalSqrDiffAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
+	if a.acc != nil && a.accountedForSize != 0 {
+		a.acc.Shrink(ctx, a.accountedForSize)
+		a.accountedForSize = 0
+	}
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -1901,16 +1958,15 @@ type decimalSumSqrDiffsAggregate struct {
 	delta    apd.Decimal
 	tmp      apd.Decimal
 
-	acc mon.BoundAccount
+	acc              *mon.BoundAccount
+	accountedForSize int64
 }
 
 func newDecimalSumSqrDiffs(evalCtx *tree.EvalContext) decimalSqrDiff {
 	ed := apd.MakeErrDecimal(tree.IntermediateCtx)
 	return &decimalSumSqrDiffsAggregate{
-		ed: &ed,
-		// TODO(yuzefovich): refactor this to share a single account among all
-		// decimalSumSqrDiffs structs.
-		acc: evalCtx.Mon.MakeBoundAccount(),
+		ed:  &ed,
+		acc: evalCtx.SingleDatumAggMemAccount,
 	}
 }
 
@@ -1969,14 +2025,18 @@ func (a *decimalSumSqrDiffsAggregate) Add(
 	// Update running mean.
 	a.ed.Add(&a.mean, &a.mean, &a.tmp)
 
-	size := tree.SizeOfDecimal(a.count) +
+	if a.acc == nil {
+		return errors.Errorf("unexpectedly EvalContext contained nil SingleDatumAggMemAccount")
+	}
+	oldAccountedForSize := a.accountedForSize
+	a.accountedForSize = int64(tree.SizeOfDecimal(a.count) +
 		tree.SizeOfDecimal(a.mean) +
 		tree.SizeOfDecimal(a.sqrDiff) +
 		tree.SizeOfDecimal(a.tmpCount) +
 		tree.SizeOfDecimal(a.tmpMean) +
 		tree.SizeOfDecimal(a.delta) +
-		tree.SizeOfDecimal(a.tmp)
-	if err := a.acc.ResizeTo(ctx, int64(size)); err != nil {
+		tree.SizeOfDecimal(a.tmp))
+	if err := a.acc.ResizeTo(ctx, a.accountedForSize-oldAccountedForSize); err != nil {
 		return err
 	}
 
@@ -1996,12 +2056,18 @@ func (a *decimalSumSqrDiffsAggregate) Reset(ctx context.Context) {
 	a.count.SetFinite(0, 0)
 	a.mean.SetFinite(0, 0)
 	a.sqrDiff.SetFinite(0, 0)
-	a.acc.Empty(ctx)
+	if a.acc != nil && a.accountedForSize != 0 {
+		a.acc.Shrink(ctx, a.accountedForSize)
+		a.accountedForSize = 0
+	}
 }
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *decimalSumSqrDiffsAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
+	if a.acc != nil && a.accountedForSize != 0 {
+		a.acc.Shrink(ctx, a.accountedForSize)
+		a.accountedForSize = 0
+	}
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -2277,15 +2343,13 @@ func (a *decimalStdDevAggregate) Size() int64 {
 type bytesXorAggregate struct {
 	sum        []byte
 	sawNonNull bool
-	acc        mon.BoundAccount
+	acc        *mon.BoundAccount
 }
 
 func newBytesXorAggregate(
 	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
-	// TODO(yuzefovich): refactor this to share a single account among all
-	// bytesXorAggregate structs.
-	return &bytesXorAggregate{acc: evalCtx.Mon.MakeBoundAccount()}
+	return &bytesXorAggregate{acc: evalCtx.SingleDatumAggMemAccount}
 }
 
 // Add inserts one value into the running xor.
@@ -2295,6 +2359,9 @@ func (a *bytesXorAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree
 	}
 	t := []byte(*datum.(*tree.DBytes))
 	if !a.sawNonNull {
+		if a.acc == nil {
+			return errors.Errorf("unexpectedly EvalContext contained nil SingleDatumAggMemAccount")
+		}
 		if err := a.acc.Grow(ctx, int64(len(t))); err != nil {
 			return err
 		}
@@ -2322,14 +2389,18 @@ func (a *bytesXorAggregate) Result() (tree.Datum, error) {
 
 // Reset implements tree.AggregateFunc interface.
 func (a *bytesXorAggregate) Reset(ctx context.Context) {
+	if a.acc != nil && len(a.sum) > 0 {
+		a.acc.Shrink(ctx, int64(len(a.sum)))
+	}
 	a.sum = nil
 	a.sawNonNull = false
-	a.acc.Empty(ctx)
 }
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *bytesXorAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
+	if a.acc != nil && len(a.sum) > 0 {
+		a.acc.Shrink(ctx, int64(len(a.sum)))
+	}
 }
 
 // Size is part of the tree.AggregateFunc interface.
