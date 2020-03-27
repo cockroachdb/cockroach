@@ -20,8 +20,10 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -30,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -136,6 +140,18 @@ func NewVectorizedFlow(base *flowinfra.FlowBase) flowinfra.Flow {
 	return vf
 }
 
+var VectorizeTestingBatchSize = settings.RegisterValidatedIntSetting(
+	"sql.testing.vectorize.batch_size",
+	fmt.Sprintf("the size of a batch of rows in the vectorized engine. 0 uses the default batch size. Must be a value less than or equal to %d", coldata.MaxBatchSize),
+	0,
+	func(newBatchSize int64) error {
+		if newBatchSize > coldata.MaxBatchSize {
+			return pgerror.Newf(pgcode.InvalidParameterValue, "batch size %d may not be larger than %d", newBatchSize, coldata.MaxBatchSize)
+		}
+		return nil
+	},
+)
+
 // Setup is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, opt flowinfra.FuseOpt,
@@ -151,6 +167,15 @@ func (f *vectorizedFlow) Setup(
 		recordingStats = true
 	}
 	helper := &vectorizedFlowCreatorHelper{f: f.FlowBase}
+
+	if testingBatchSize := VectorizeTestingBatchSize.Get(&f.FlowCtx.Cfg.Settings.SV); testingBatchSize != 0 {
+		if err := coldata.SetBatchSizeForTests(int(testingBatchSize)); err != nil {
+			return ctx, err
+		}
+	} else {
+		coldata.ResetBatchSizeForTests()
+	}
+
 	// Create a name for this flow's temporary directory. Note that this directory
 	// is lazily created when necessary and cleaned up in Cleanup(). The directory
 	// name is the flow's ID in most cases apart from when the flow's ID is unset

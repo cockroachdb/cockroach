@@ -58,21 +58,27 @@ func TestMain(m *testing.M) {
 		testDiskAcc = &diskAcc
 		defer testDiskAcc.Close(ctx)
 
-		// Pick a random batch size in [coldata.MinBatchSize, coldata.MaxBatchSize]
+		// Pick a random batch size in [minBatchSize, coldata.MaxBatchSize]
 		// range. The randomization can be disabled using COCKROACH_RANDOMIZE_BATCH_SIZE=false.
 		randomBatchSize := generateBatchSize()
 		fmt.Printf("coldata.BatchSize() is set to %d\n", randomBatchSize)
-		coldata.SetBatchSizeForTests(randomBatchSize)
+		if err := coldata.SetBatchSizeForTests(randomBatchSize); err != nil {
+			panic(err)
+		}
 		return m.Run()
 	}())
 }
+
+// minBatchSize is the minimum acceptable size of batches for tests in this
+// package.
+const minBatchSize = 3
 
 func generateBatchSize() int {
 	randomizeBatchSize := envutil.EnvOrDefaultBool("COCKROACH_RANDOMIZE_BATCH_SIZE", true)
 	if randomizeBatchSize {
 		rng, _ := randutil.NewPseudoRand()
-		batchSize := coldata.MinBatchSize +
-			rng.Intn(coldata.MaxBatchSize-coldata.MinBatchSize)
+		batchSize := minBatchSize +
+			rng.Intn(coldata.MaxBatchSize-minBatchSize)
 		return batchSize
 	}
 	return coldata.BatchSize()
