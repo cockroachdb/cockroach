@@ -295,14 +295,6 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:9163b457fd33634a890c83fba9f0fd20b8991101b55490fa705b1074a7bd2cdb"
-  name = "github.com/backtrace-labs/go-bcd"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "5d8e01b2f0438922289238fd3ba043761daf1102"
-
-[[projects]]
-  branch = "master"
   digest = "1:927f2f9632311e72cc76586aebff836c12c0132150afc2fe251f616e41522595"
   name = "github.com/benesch/cgosymbolizer"
   packages = ["."]
@@ -2023,7 +2015,6 @@
     "github.com/aws/aws-sdk-go/service/s3",
     "github.com/aws/aws-sdk-go/service/s3/s3manager",
     "github.com/axiomhq/hyperloglog",
-    "github.com/backtrace-labs/go-bcd",
     "github.com/benesch/cgosymbolizer",
     "github.com/biogo/store/llrb",
     "github.com/cenkalti/backoff",

@@ -126,12 +126,6 @@ if test -e "${alternates_file}"; then
   vols="${vols} --volume=${alternates_path}:${alternates_path}${cached_volume_mode}"
 fi
 
-backtrace_dir=${cockroach_toplevel}/../../cockroachlabs/backtrace
-if test -d "${backtrace_dir}"; then
-  vols="${vols} --volume=${backtrace_dir}:/opt/backtrace${cached_volume_mode}"
-  vols="${vols} --volume=${backtrace_dir}/cockroach.cf:${container_home}/.coroner.cf${cached_volume_mode}"
-fi
-
 if [ "${BUILDER_HIDE_GOPATH_SRC:-}" != "1" ]; then
   vols="${vols} --volume=${gopath0}/src:/go/src${cached_volume_mode}"
 fi
