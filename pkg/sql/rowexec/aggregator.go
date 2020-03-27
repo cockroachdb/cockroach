@@ -60,7 +60,8 @@ type aggregatorBase struct {
 	datumAlloc   sqlbase.DatumAlloc
 	rowAlloc     sqlbase.EncDatumRowAlloc
 
-	bucketsAcc mon.BoundAccount
+	bucketsAcc  mon.BoundAccount
+	aggFuncsAcc mon.BoundAccount
 
 	// isScalar can only be set if there are no groupCols, and it means that we
 	// will generate a result row even if there are no input rows. Used for
@@ -108,6 +109,7 @@ func (ag *aggregatorBase) init(
 	ag.row = make(sqlbase.EncDatumRow, len(spec.Aggregations))
 	ag.bucketsAcc = memMonitor.MakeBoundAccount()
 	ag.arena = stringarena.Make(&ag.bucketsAcc)
+	ag.aggFuncsAcc = memMonitor.MakeBoundAccount()
 
 	// Loop over the select expressions and extract any aggregate functions --
 	// non-aggregation functions are replaced with parser.NewIdentAggregate,
@@ -336,6 +338,10 @@ func newAggregator(
 		return nil, err
 	}
 
+	// A new tree.EvalCtx was created during initializing aggregatorBase above
+	// and will be used only by this aggregator, so it is ok to update EvalCtx
+	// directly.
+	ag.EvalCtx.SingleDatumAggMemAccount = &ag.aggFuncsAcc
 	return ag, nil
 }
 
@@ -365,6 +371,10 @@ func newOrderedAggregator(
 		return nil, err
 	}
 
+	// A new tree.EvalCtx was created during initializing aggregatorBase above
+	// and will be used only by this aggregator, so it is ok to update EvalCtx
+	// directly.
+	ag.EvalCtx.SingleDatumAggMemAccount = &ag.aggFuncsAcc
 	return ag, nil
 }
 
@@ -390,6 +400,7 @@ func (ag *hashAggregator) close() {
 	if ag.InternalClose() {
 		log.VEventf(ag.Ctx, 2, "exiting aggregator")
 		ag.bucketsAcc.Close(ag.Ctx)
+		ag.aggFuncsAcc.Close(ag.Ctx)
 		// If we have started emitting rows, bucketsIter will represent which
 		// buckets are still open, since buckets are closed once their results are
 		// emitted.
@@ -410,6 +421,7 @@ func (ag *orderedAggregator) close() {
 	if ag.InternalClose() {
 		log.VEventf(ag.Ctx, 2, "exiting aggregator")
 		ag.bucketsAcc.Close(ag.Ctx)
+		ag.aggFuncsAcc.Close(ag.Ctx)
 		if ag.bucket != nil {
 			ag.bucket.close(ag.Ctx)
 		}
@@ -423,7 +435,7 @@ func (ag *orderedAggregator) close() {
 func (ag *aggregatorBase) matchLastOrdGroupCols(row sqlbase.EncDatumRow) (bool, error) {
 	for _, colIdx := range ag.orderedGroupCols {
 		res, err := ag.lastOrdGroupCols[colIdx].Compare(
-			&ag.inputTypes[colIdx], &ag.datumAlloc, ag.FlowCtx.EvalCtx, &row[colIdx],
+			&ag.inputTypes[colIdx], &ag.datumAlloc, ag.EvalCtx, &row[colIdx],
 		)
 		if res != 0 || err != nil {
 			return false, err
@@ -937,7 +949,7 @@ func (ag *aggregatorBase) createAggregateFuncs() (aggregateFuncs, error) {
 	}
 	bucket := make(aggregateFuncs, len(ag.funcs))
 	for i, f := range ag.funcs {
-		agg := f.create(ag.FlowCtx.EvalCtx, f.arguments)
+		agg := f.create(ag.EvalCtx, f.arguments)
 		if err := ag.bucketsAcc.Grow(ag.Ctx, agg.Size()); err != nil {
 			return nil, err
 		}
