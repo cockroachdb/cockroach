@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
@@ -152,8 +153,14 @@ const (
 type externalHashJoiner struct {
 	twoInputNode
 	NonExplainable
+	closerHelper
 
-	closed             bool
+	// mu is used to protect against concurrent IdempotentClose and Next calls,
+	// which are currently allowed.
+	// TODO(asubiotto): Explore calling IdempotentClose from the same goroutine as
+	//  Next, which will simplify this model.
+	mu syncutil.Mutex
+
 	state              externalHashJoinerState
 	unlimitedAllocator *Allocator
 	spec               hashJoinerSpec
@@ -475,6 +482,8 @@ func (hj *externalHashJoiner) partitionBatch(
 }
 
 func (hj *externalHashJoiner) Next(ctx context.Context) coldata.Batch {
+	hj.mu.Lock()
+	defer hj.mu.Unlock()
 StateChanged:
 	for {
 		switch hj.state {
@@ -688,7 +697,7 @@ StateChanged:
 			return b
 
 		case externalHJFinished:
-			if err := hj.Close(ctx); err != nil {
+			if err := hj.idempotentCloseLocked(ctx); err != nil {
 				execerror.VectorizedInternalPanic(err)
 			}
 			return coldata.ZeroBatch
@@ -698,8 +707,14 @@ StateChanged:
 	}
 }
 
-func (hj *externalHashJoiner) Close(ctx context.Context) error {
-	if hj.closed {
+func (hj *externalHashJoiner) IdempotentClose(ctx context.Context) error {
+	hj.mu.Lock()
+	defer hj.mu.Unlock()
+	return hj.idempotentCloseLocked(ctx)
+}
+
+func (hj *externalHashJoiner) idempotentCloseLocked(ctx context.Context) error {
+	if !hj.close() {
 		return nil
 	}
 	var retErr error
@@ -709,8 +724,8 @@ func (hj *externalHashJoiner) Close(ctx context.Context) error {
 	if err := hj.rightPartitioner.Close(ctx); err != nil && retErr == nil {
 		retErr = err
 	}
-	if c, ok := hj.diskBackedSortMerge.(closer); ok {
-		if err := c.Close(ctx); err != nil && retErr == nil {
+	if c, ok := hj.diskBackedSortMerge.(IdempotentCloser); ok {
+		if err := c.IdempotentClose(ctx); err != nil && retErr == nil {
 			retErr = err
 		}
 	}
@@ -718,6 +733,5 @@ func (hj *externalHashJoiner) Close(ctx context.Context) error {
 		hj.fdState.fdSemaphore.Release(hj.fdState.acquiredFDs)
 		hj.fdState.acquiredFDs = 0
 	}
-	hj.closed = true
 	return retErr
 }

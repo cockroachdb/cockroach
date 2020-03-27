@@ -249,6 +249,7 @@ func TestEval(t *testing.T) {
 				&execinfrapb.PostProcessSpec{},
 				nil, /* output */
 				nil, /* metadataSourcesQueue */
+				nil, /* toClose */
 				nil, /* outputStatsToTrace */
 				nil, /* cancelFlow */
 			)

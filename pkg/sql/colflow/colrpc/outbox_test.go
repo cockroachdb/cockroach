@@ -34,7 +34,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 		typs     = []coltypes.T{coltypes.Int64}
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
-	outbox, err := NewOutbox(testAllocator, input, typs, nil)
+	outbox, err := NewOutbox(testAllocator, input, typs, nil /* metadataSources */, nil /* toClose */)
 	require.NoError(t, err)
 
 	// This test relies on the fact that BatchBuffer panics when there are no
@@ -88,19 +88,14 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 	// uint32 that is set atomically when the outbox drains a metadata source.
 	newOutboxWithMetaSources := func(allocator *colexec.Allocator) (*Outbox, *uint32, error) {
 		var sourceDrained uint32
-		outbox, err := NewOutbox(
-			allocator,
-			input,
-			typs,
-			[]execinfrapb.MetadataSource{
-				execinfrapb.CallbackMetadataSource{
-					DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
-						atomic.StoreUint32(&sourceDrained, 1)
-						return nil
-					},
+		outbox, err := NewOutbox(allocator, input, typs, []execinfrapb.MetadataSource{
+			execinfrapb.CallbackMetadataSource{
+				DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
+					atomic.StoreUint32(&sourceDrained, 1)
+					return nil
 				},
 			},
-		)
+		}, nil /* toClose */)
 		if err != nil {
 			return nil, nil, err
 		}
