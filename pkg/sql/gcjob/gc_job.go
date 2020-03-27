@@ -93,7 +93,7 @@ func (r schemaChangeGCResumer) Resume(
 	if err != nil {
 		return err
 	}
-	zoneCfgFilter, descTableFilter, gossipUpdateC := setupConfigWatchers(execCfg)
+	_, gossipUpdateC := setupConfigWatcher(execCfg)
 	tableDropTimes, indexDropTimes := getDropTimes(details)
 
 	allTables := getAllTablesWaitingForGC(details, progress)
@@ -115,11 +115,13 @@ func (r schemaChangeGCResumer) Resume(
 			if log.V(2) {
 				log.Info(ctx, "received a new system config")
 			}
-			updatedTables := getUpdatedTables(ctx, execCfg.Gossip.GetSystemConfig(), zoneCfgFilter, descTableFilter, details, progress)
-			if log.V(2) {
-				log.Infof(ctx, "updating status for tables %+v", updatedTables)
-			}
-			expired, earliestDeadline = refreshTables(ctx, execCfg, updatedTables, tableDropTimes, indexDropTimes, r.jobID, progress)
+			// TODO (lucy): Currently we're calling refreshTables on every zone config
+			// update to any table. We should really be only updating a cached
+			// TTL whenever we get an update on one of the tables/indexes (or the db)
+			// that this job is responsible for, and computing the earliest deadline
+			// from our set of cached TTL values.
+			remainingTables := getAllTablesWaitingForGC(details, progress)
+			expired, earliestDeadline = refreshTables(ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, progress)
 			timerDuration := time.Until(earliestDeadline)
 			if expired {
 				timerDuration = 0

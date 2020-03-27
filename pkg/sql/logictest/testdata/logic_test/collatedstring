@@ -363,13 +363,3 @@ CREATE TABLE t46570(c0 BOOL, c1 STRING COLLATE en);
 CREATE INDEX ON t46570(rowid, c1 DESC);
 INSERT INTO t46570(c1, rowid) VALUES('' COLLATE en, 0);
 UPSERT INTO t46570(rowid) VALUES (0), (1)
-
-query T
-SELECT max(x) FROM (VALUES ('foo' COLLATE en), ('bar' COLLATE en)) t(x)
-----
-foo
-
-query T
-SELECT min(x) FROM (VALUES ('foo' COLLATE en), ('bar' COLLATE en)) t(x)
-----
-bar
