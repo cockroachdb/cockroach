@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/marusama/semaphore"
 )
 
@@ -296,7 +297,7 @@ func newMergeJoinBase(
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
-) (mergeJoinBase, error) {
+) (*mergeJoinBase, error) {
 	lEqCols := make([]uint32, len(leftOrdering))
 	lDirections := make([]execinfrapb.Ordering_Column_Direction, len(leftOrdering))
 	for i, c := range leftOrdering {
@@ -313,7 +314,7 @@ func newMergeJoinBase(
 
 	diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
 	diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
-	base := mergeJoinBase{
+	base := &mergeJoinBase{
 		twoInputNode:       newTwoInputNode(left, right),
 		unlimitedAllocator: unlimitedAllocator,
 		memoryLimit:        memoryLimit,
@@ -354,6 +355,13 @@ func newMergeJoinBase(
 // mergeJoinBase extracts the common logic between all merge join operators.
 type mergeJoinBase struct {
 	twoInputNode
+	closerHelper
+
+	// mu is used to protect against concurrent IdempotentClose and Next calls,
+	// which are currently allowed.
+	// TODO(asubiotto): Explore calling IdempotentClose from the same goroutine as
+	//  Next, which will simplify this model.
+	mu syncutil.Mutex
 
 	unlimitedAllocator *Allocator
 	memoryLimit        int64
@@ -395,7 +403,7 @@ type mergeJoinBase struct {
 }
 
 var _ resetter = &mergeJoinBase{}
-var _ closer = &mergeJoinBase{}
+var _ IdempotentCloser = &mergeJoinBase{}
 
 func (o *mergeJoinBase) reset(ctx context.Context) {
 	if r, ok := o.left.source.(resetter); ok {
@@ -694,11 +702,16 @@ func (o *mergeJoinBase) finishProbe(ctx context.Context) {
 	)
 }
 
-func (o *mergeJoinBase) Close(ctx context.Context) error {
+func (o *mergeJoinBase) IdempotentClose(ctx context.Context) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if !o.close() {
+		return nil
+	}
 	var lastErr error
 	for _, op := range []Operator{o.left.source, o.right.source} {
-		if c, ok := op.(closer); ok {
-			if err := c.Close(ctx); err != nil {
+		if c, ok := op.(IdempotentCloser); ok {
+			if err := c.IdempotentClose(ctx); err != nil {
 				lastErr = err
 			}
 		}

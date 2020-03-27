@@ -220,9 +220,7 @@ func TestOutboxInbox(t *testing.T) {
 
 		outboxMemAcc := testMemMonitor.MakeBoundAccount()
 		defer outboxMemAcc.Close(ctx)
-		outbox, err := NewOutbox(
-			colexec.NewAllocator(ctx, &outboxMemAcc), input, typs, nil,
-		)
+		outbox, err := NewOutbox(colexec.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSource */, nil /* toClose */)
 		require.NoError(t, err)
 
 		inboxMemAcc := testMemMonitor.MakeBoundAccount()
@@ -460,18 +458,13 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 
 			outboxMemAcc := testMemMonitor.MakeBoundAccount()
 			defer outboxMemAcc.Close(ctx)
-			outbox, err := NewOutbox(
-				colexec.NewAllocator(ctx, &outboxMemAcc),
-				input,
-				typs,
-				[]execinfrapb.MetadataSource{
-					execinfrapb.CallbackMetadataSource{
-						DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
-							return []execinfrapb.ProducerMetadata{{Err: errors.New(expectedMeta)}}
-						},
+			outbox, err := NewOutbox(colexec.NewAllocator(ctx, &outboxMemAcc), input, typs, []execinfrapb.MetadataSource{
+				execinfrapb.CallbackMetadataSource{
+					DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
+						return []execinfrapb.ProducerMetadata{{Err: errors.New(expectedMeta)}}
 					},
 				},
-			)
+			}, nil /* toClose */)
 			require.NoError(t, err)
 
 			inboxMemAcc := testMemMonitor.MakeBoundAccount()
@@ -539,10 +532,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
-	outbox, err := NewOutbox(
-		colexec.NewAllocator(ctx, &outboxMemAcc),
-		input, typs, nil, /* metadataSources */
-	)
+	outbox, err := NewOutbox(colexec.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSources */, nil /* toClose */)
 	require.NoError(b, err)
 
 	inboxMemAcc := testMemMonitor.MakeBoundAccount()
@@ -606,9 +596,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
-	outbox, err := NewOutbox(
-		colexec.NewAllocator(ctx, &outboxMemAcc), input, typs, nil,
-	)
+	outbox, err := NewOutbox(colexec.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSources */, nil /* toClose */)
 	require.NoError(t, err)
 
 	outboxDone := make(chan struct{})
