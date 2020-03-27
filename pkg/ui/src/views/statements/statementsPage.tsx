@@ -73,38 +73,65 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
 
   constructor(props: StatementsPageProps & RouteComponentProps<any>) {
     super(props);
-    const { history } = props;
-    const searchParams = new URLSearchParams(history.location.search);
-    const sortKey = searchParams.get("sortKey");
-    const ascending = searchParams.get("ascending");
-    const searchQuery = searchParams.get("q");
-
-    this.state = {
+    const defaultState = {
       sortSetting: {
-        sortKey: sortKey || 6,  // Latency column is default for sorting
-        ascending: Boolean(ascending) || false,
+        sortKey: 6, // Latency column is default for sorting
+        ascending: false,
       },
       pagination: {
         pageSize: 20,
         current: 1,
       },
-      search: searchQuery || "",
+      search: "",
     };
+
+    const stateFromHistory = this.getStateFromHistory();
+    this.state = _.merge(defaultState, stateFromHistory);
     this.activateDiagnosticsRef = React.createRef();
   }
 
-  changeSortSetting = (ss: SortSetting) => {
+  getStateFromHistory = (): Partial<StatementsPageState> => {
     const { history } = this.props;
+    const searchParams = new URLSearchParams(history.location.search);
+    const sortKey = searchParams.get("sortKey") || undefined;
+    const ascending = searchParams.get("ascending") || undefined;
+    const searchQuery = searchParams.get("q") || undefined;
 
+    return {
+      sortSetting: {
+        sortKey,
+        ascending: Boolean(ascending),
+      },
+      search: searchQuery,
+    };
+  }
+
+  syncHistory = (params: Record<string, string | undefined>) => {
+    const { history } = this.props;
+    const currentSearchParams = new URLSearchParams(history.location.search);
+    // const nextSearchParams = new URLSearchParams(params);
+
+    _.forIn(params, (value, key) => {
+      if (!value) {
+        currentSearchParams.delete(key);
+      } else {
+        currentSearchParams.set(key, value);
+      }
+    });
+
+    history.location.search = currentSearchParams.toString();
+    history.replace(history.location);
+  }
+
+  changeSortSetting = (ss: SortSetting) => {
     this.setState({
       sortSetting: ss,
     });
 
-    const searchParams = new URLSearchParams(history.location.search);
-    searchParams.set("sortKey", ss.sortKey);
-    searchParams.set("ascending", Boolean(ss.ascending).toString());
-    history.location.search = searchParams.toString();
-    history.replace(history.location);
+    this.syncHistory({
+      "sortKey": ss.sortKey,
+      "ascending": Boolean(ss.ascending).toString(),
+    });
   }
 
   selectApp = (app: DropdownOption) => {
@@ -142,22 +169,17 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
   }
 
   onSubmitSearchField = (search: string) => {
-    const { history } = this.props;
     this.setState({ pagination: { ...this.state.pagination, current: 1 }, search });
-
-    const searchParams = new URLSearchParams(history.location.search);
-    searchParams.set("q", search);
-    history.location.search = searchParams.toString();
-    history.replace(history.location);
+    this.syncHistory({
+      "q": search,
+    });
   }
 
   onClearSearchField = () => {
-    const { history } = this.props;
     this.setState({ search: "" });
-    const searchParams = new URLSearchParams(history.location.search);
-    searchParams.delete("q");
-    history.location.search = searchParams.toString();
-    history.replace(history.location);
+    this.syncHistory({
+      "q": undefined,
+    });
   }
 
   filteredStatementsData = () => {
