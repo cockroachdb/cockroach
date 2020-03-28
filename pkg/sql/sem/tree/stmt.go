@@ -882,6 +882,9 @@ func (*ValuesClause) StatementType() StatementType { return Rows }
 // StatementTag returns a short string identifying the type of statement.
 func (*ValuesClause) StatementTag() string { return "VALUES" }
 
+func (*With) StatementType() StatementType { return Rows }
+func (*With) StatementTag() string         { return "WITH" }
+
 func (n *AlterIndex) String() string                     { return AsString(n) }
 func (n *AlterTable) String() string                     { return AsString(n) }
 func (n *AlterTableCmds) String() string                 { return AsString(n) }
@@ -995,3 +998,4 @@ func (n *Truncate) String() string                       { return AsString(n) }
 func (n *UnionClause) String() string                    { return AsString(n) }
 func (n *Update) String() string                         { return AsString(n) }
 func (n *ValuesClause) String() string                   { return AsString(n) }
+func (n *With) String() string                           { return AsString(n) }

@@ -247,6 +247,37 @@ func (*RowsFromExpr) tableExpr()     {}
 func (*Subquery) tableExpr()         {}
 func (*StatementSource) tableExpr()  {}
 
+// TODO (rohany): See if we need to perform copying of t.
+func WalkTableExpr(t TableExpr, v Visitor) TableExpr {
+	switch stmt := t.(type) {
+	case *AliasedTableExpr:
+		stmt.Expr = WalkTableExpr(stmt.Expr, v)
+		return stmt
+	case *ParenTableExpr:
+		stmt.Expr = WalkTableExpr(stmt.Expr, v)
+		return stmt
+	case *JoinTableExpr:
+		stmt.Left = WalkTableExpr(stmt.Left, v)
+		stmt.Right = WalkTableExpr(stmt.Right, v)
+		return stmt
+	case *RowsFromExpr:
+		stmt.Items, _ = walkExprSlice(v, stmt.Items)
+		return stmt
+	case *Subquery:
+		// TODO (rohany): Not sure what to do in this case -- depending
+		//  on the visitor, we might not get a TableExpr back. What to
+		//  return then?
+		// 	Also, because Subquery.Walk is already defined but returns
+		//  expr, we can't make TableExpr implement walk...
+		return stmt.Walk(v).(TableExpr)
+	case *StatementSource:
+		stmt.Statement, _ = walkStmt(v, stmt.Statement)
+		return stmt
+	default:
+		return stmt
+	}
+}
+
 // StatementSource encapsulates one of the other statements as a data source.
 type StatementSource struct {
 	Statement Statement
