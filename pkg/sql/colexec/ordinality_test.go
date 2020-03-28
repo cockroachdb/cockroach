@@ -16,52 +16,105 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 func TestOrdinality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
 	tcs := []struct {
-		tuples   []tuple
-		expected []tuple
+		tuples     []tuple
+		expected   []tuple
+		inputTypes []types.T
 	}{
 		{
-			tuples:   tuples{{1}},
-			expected: tuples{{1, 1}},
+			tuples:     tuples{{1}},
+			expected:   tuples{{1, 1}},
+			inputTypes: []types.T{*types.Int},
 		},
 		{
-			tuples:   tuples{{}, {}, {}, {}, {}},
-			expected: tuples{{1}, {2}, {3}, {4}, {5}},
+			tuples:     tuples{{}, {}, {}, {}, {}},
+			expected:   tuples{{1}, {2}, {3}, {4}, {5}},
+			inputTypes: []types.T{},
 		},
 		{
-			tuples:   tuples{{5}, {6}, {7}, {8}},
-			expected: tuples{{5, 1}, {6, 2}, {7, 3}, {8, 4}},
+			tuples:     tuples{{5}, {6}, {7}, {8}},
+			expected:   tuples{{5, 1}, {6, 2}, {7, 3}, {8, 4}},
+			inputTypes: []types.T{*types.Int},
 		},
 		{
-			tuples:   tuples{{5, 'a'}, {6, 'b'}, {7, 'c'}, {8, 'd'}},
-			expected: tuples{{5, 'a', 1}, {6, 'b', 2}, {7, 'c', 3}, {8, 'd', 4}},
+			tuples:     tuples{{5, 'a'}, {6, 'b'}, {7, 'c'}, {8, 'd'}},
+			expected:   tuples{{5, 'a', 1}, {6, 'b', 2}, {7, 'c', 3}, {8, 'd', 4}},
+			inputTypes: []types.T{*types.Int, *types.String},
 		},
 	}
 
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
 			func(input []Operator) (Operator, error) {
-				return NewOrdinalityOp(testAllocator, input[0], len(tc.tuples[0])), nil
+				return createTestOrdinalityOperator(ctx, flowCtx, input[0], tc.inputTypes)
 			})
 	}
 }
 
 func BenchmarkOrdinality(b *testing.B) {
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
 
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
 	batch.SetLength(coldata.BatchSize())
 	source := NewRepeatableBatchSource(testAllocator, batch)
-	ordinality := NewOrdinalityOp(testAllocator, source, batch.Width())
+	ordinality, err := createTestOrdinalityOperator(ctx, flowCtx, source, []types.T{*types.Int, *types.Int, *types.Int})
+	require.NoError(b, err)
 	ordinality.Init()
 
 	b.SetBytes(int64(8 * coldata.BatchSize()))
 	for i := 0; i < b.N; i++ {
 		ordinality.Next(ctx)
 	}
+}
+
+func createTestOrdinalityOperator(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, input Operator, inputTypes []types.T,
+) (Operator, error) {
+	spec := &execinfrapb.ProcessorSpec{
+		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+		Core: execinfrapb.ProcessorCoreUnion{
+			Ordinality: &execinfrapb.OrdinalitySpec{},
+		},
+	}
+	args := NewColOperatorArgs{
+		Spec:                spec,
+		Inputs:              []Operator{input},
+		StreamingMemAccount: testMemAcc,
+	}
+	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
+	result, err := NewColOperator(ctx, flowCtx, args)
+	if err != nil {
+		return nil, err
+	}
+	return result.Op, nil
 }

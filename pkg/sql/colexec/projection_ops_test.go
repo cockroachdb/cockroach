@@ -21,67 +21,92 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
 	runTests(t, []tuples{{{1}, {2}, {nil}}}, tuples{{1, 2}, {2, 3}, {nil, nil}}, orderedVerifier,
 		func(input []Operator) (Operator, error) {
-			return &projPlusInt64Int64ConstOp{
-				projConstOpBase: projConstOpBase{
-					OneInputNode: NewOneInputNode(input[0]),
-					allocator:    testAllocator,
-					colIdx:       0,
-					outputIdx:    1,
-				},
-				constArg: 1,
-			}, nil
+			return createTestProjectingOperator(
+				ctx, flowCtx, input[0], []types.T{*types.Int},
+				"@1 + 1" /* projectingExpr */, false, /* canFallbackToRowexec */
+			)
 		})
 }
 
 func TestProjPlusInt64Int64Op(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
 	runTests(t, []tuples{{{1, 2}, {3, 4}, {5, nil}}}, tuples{{1, 2, 3}, {3, 4, 7}, {5, nil, nil}},
 		orderedVerifier,
 		func(input []Operator) (Operator, error) {
-			return &projPlusInt64Int64Op{
-				projOpBase: projOpBase{
-					OneInputNode: NewOneInputNode(input[0]),
-					allocator:    testAllocator,
-					col1Idx:      0,
-					col2Idx:      1,
-					outputIdx:    2,
-				},
-			}, nil
+			return createTestProjectingOperator(
+				ctx, flowCtx, input[0], []types.T{*types.Int, *types.Int},
+				"@1 + @2" /* projectingExpr */, false, /* canFallbackToRowexec */
+			)
 		})
 }
 
 func TestProjDivFloat64Float64Op(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
 	runTests(t, []tuples{{{1.0, 2.0}, {3.0, 4.0}, {5.0, nil}}}, tuples{{1.0, 2.0, 0.5}, {3.0, 4.0, 0.75}, {5.0, nil, nil}},
 		orderedVerifier,
 		func(input []Operator) (Operator, error) {
-			return &projDivFloat64Float64Op{
-				projOpBase: projOpBase{
-					OneInputNode: NewOneInputNode(input[0]),
-					allocator:    testAllocator,
-					col1Idx:      0,
-					col2Idx:      1,
-					outputIdx:    2,
-				},
-			}, nil
+			return createTestProjectingOperator(
+				ctx, flowCtx, input[0], []types.T{*types.Float, *types.Float},
+				"@1 / @2" /* projectingExpr */, false, /* canFallbackToRowexec */
+			)
 		})
 }
 
 func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
-
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64})
 	col := batch.ColVec(0).Int64()
 	for i := 0; i < coldata.BatchSize(); i++ {
@@ -103,17 +128,11 @@ func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, h
 		}
 	}
 	source := NewRepeatableBatchSource(testAllocator, batch)
-	source.Init()
-
-	plusOp := &projPlusInt64Int64ConstOp{
-		projConstOpBase: projConstOpBase{
-			OneInputNode: NewOneInputNode(source),
-			allocator:    testAllocator,
-			colIdx:       0,
-			outputIdx:    1,
-		},
-		constArg: 1,
-	}
+	plusOp, err := createTestProjectingOperator(
+		ctx, flowCtx, source, []types.T{*types.Int},
+		"@1 + 1" /* projectingExpr */, false, /* canFallbackToRowexec */
+	)
+	require.NoError(b, err)
 	plusOp.Init()
 
 	b.SetBytes(int64(8 * coldata.BatchSize()))
@@ -140,13 +159,16 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	constVal := 31.37
 	constArg := tree.NewDFloat(tree.DFloat(constVal))
 	outputIdx := 5
-	op, err := GetProjectionRConstOperator(testAllocator, types.Float, types.Float, binOp, input, colIdx, constArg, outputIdx)
+	op, err := GetProjectionRConstOperator(
+		testAllocator, types.Float, types.Float, coltypes.Float64,
+		binOp, input, colIdx, constArg, outputIdx,
+	)
 	if err != nil {
 		t.Error(err)
 	}
 	expected := &projMultFloat64Float64ConstOp{
 		projConstOpBase: projConstOpBase{
-			OneInputNode: NewOneInputNode(input),
+			OneInputNode: NewOneInputNode(op.(*projMultFloat64Float64ConstOp).input),
 			allocator:    testAllocator,
 			colIdx:       colIdx,
 			outputIdx:    outputIdx,
@@ -154,7 +176,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 		constArg: constVal,
 	}
 	if !reflect.DeepEqual(op, expected) {
-		t.Errorf("got %+v, expected %+v", op, expected)
+		t.Errorf("got %+v,\nexpected %+v", op, expected)
 	}
 }
 
@@ -166,13 +188,16 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	constVal := int16(31)
 	constArg := tree.NewDInt(tree.DInt(constVal))
 	outputIdx := 5
-	op, err := GetProjectionRConstOperator(testAllocator, types.Int, types.Int2, binOp, input, colIdx, constArg, outputIdx)
+	op, err := GetProjectionRConstOperator(
+		testAllocator, types.Int, types.Int2, coltypes.Int64,
+		binOp, input, colIdx, constArg, outputIdx,
+	)
 	if err != nil {
 		t.Error(err)
 	}
 	expected := &projGEInt64Int16ConstOp{
 		projConstOpBase: projConstOpBase{
-			OneInputNode: NewOneInputNode(input),
+			OneInputNode: NewOneInputNode(op.(*projGEInt64Int16ConstOp).input),
 			allocator:    testAllocator,
 			colIdx:       colIdx,
 			outputIdx:    outputIdx,
@@ -180,7 +205,7 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 		constArg: constVal,
 	}
 	if !reflect.DeepEqual(op, expected) {
-		t.Errorf("got %+v, expected %+v", op, expected)
+		t.Errorf("got %+v,\nexpected %+v", op, expected)
 	}
 }
 
@@ -189,11 +214,18 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 // that the result of Datum.Compare matches the result of the exec projection.
 func TestRandomComparisons(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
 	const numTuples = 2048
 	rng, _ := randutil.NewPseudoRand()
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-	ctx := evalCtx.Ctx()
-	defer evalCtx.Stop(ctx)
 
 	expected := make([]bool, numTuples)
 	var da sqlbase.DatumAlloc
@@ -225,7 +257,7 @@ func TestRandomComparisons(t *testing.T) {
 		}
 		for _, cmpOp := range []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
 			for i := range lDatums {
-				cmp := lDatums[i].Compare(evalCtx, rDatums[i])
+				cmp := lDatums[i].Compare(&evalCtx, rDatums[i])
 				var b bool
 				switch cmpOp {
 				case tree.EQ:
@@ -244,7 +276,11 @@ func TestRandomComparisons(t *testing.T) {
 				expected[i] = b
 			}
 			input := newChunkingBatchSource(typs, []coldata.Vec{lVec, rVec, ret}, numTuples)
-			op, err := GetProjectionOperator(testAllocator, ct, ct, cmpOp, input, 0, 1, 2)
+			op, err := createTestProjectingOperator(
+				ctx, flowCtx, input, []types.T{*ct, *ct},
+				fmt.Sprintf("@1 %s @2", cmpOp), false, /* canFallbackToRowexec */
+			)
+			require.NoError(t, err)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -271,13 +307,16 @@ func TestGetProjectionOperator(t *testing.T) {
 	col1Idx := 5
 	col2Idx := 7
 	outputIdx := 9
-	op, err := GetProjectionOperator(testAllocator, ct, ct, binOp, input, col1Idx, col2Idx, outputIdx)
+	op, err := GetProjectionOperator(
+		testAllocator, ct, ct, coltypes.Int16,
+		binOp, input, col1Idx, col2Idx, outputIdx,
+	)
 	if err != nil {
 		t.Error(err)
 	}
 	expected := &projMultInt16Int16Op{
 		projOpBase: projOpBase{
-			OneInputNode: NewOneInputNode(input),
+			OneInputNode: NewOneInputNode(op.(*projMultInt16Int16Op).input),
 			allocator:    testAllocator,
 			col1Idx:      col1Idx,
 			col2Idx:      col2Idx,
@@ -285,21 +324,20 @@ func TestGetProjectionOperator(t *testing.T) {
 		},
 	}
 	if !reflect.DeepEqual(op, expected) {
-		t.Errorf("got %+v, expected %+v", op, expected)
+		t.Errorf("got %+v,\nexpected %+v", op, expected)
 	}
 }
 
 func benchmarkProjOp(
 	b *testing.B,
-	makeProjOp func(source *RepeatableBatchSource, intType coltypes.T) Operator,
+	makeProjOp func(source *RepeatableBatchSource, intType coltypes.T) (Operator, error),
 	useSelectionVector bool,
 	hasNulls bool,
 	intType coltypes.T,
-	outputType coltypes.T,
 ) {
 	ctx := context.Background()
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{intType, intType, outputType})
+	batch := testAllocator.NewMemBatch([]coltypes.T{intType, intType})
 	switch intType {
 	case coltypes.Int64:
 		col1 := batch.ColVec(0).Int64()
@@ -337,9 +375,8 @@ func benchmarkProjOp(
 		}
 	}
 	source := NewRepeatableBatchSource(testAllocator, batch)
-	source.Init()
-
-	op := makeProjOp(source, intType)
+	op, err := makeProjOp(source, intType)
+	require.NoError(b, err)
 	op.Init()
 
 	b.SetBytes(int64(8 * coldata.BatchSize() * 2))
@@ -349,94 +386,51 @@ func benchmarkProjOp(
 }
 
 func BenchmarkProjOp(b *testing.B) {
-	projOpMap := map[string]func(*RepeatableBatchSource, coltypes.T) Operator{
-		"projPlusIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
-			base := projOpBase{
-				OneInputNode: NewOneInputNode(source),
-				allocator:    testAllocator,
-				col1Idx:      0,
-				col2Idx:      1,
-				outputIdx:    2,
-			}
-			switch intType {
-			case coltypes.Int64:
-				return &projPlusInt64Int64Op{
-					projOpBase: base,
-				}
-			case coltypes.Int32:
-				return &projPlusInt32Int32Op{
-					projOpBase: base,
-				}
-			default:
-				b.Fatalf("unsupported type: %s", intType)
-				return nil
-			}
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
 		},
-		"projMinusIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
-			base := projOpBase{
-				OneInputNode: NewOneInputNode(source),
-				allocator:    testAllocator,
-				col1Idx:      0,
-				col2Idx:      1,
-				outputIdx:    2,
-			}
-			switch intType {
-			case coltypes.Int64:
-				return &projMinusInt64Int64Op{
-					projOpBase: base,
-				}
-			case coltypes.Int32:
-				return &projMinusInt32Int32Op{
-					projOpBase: base,
-				}
-			default:
-				b.Fatalf("unsupported type: %s", intType)
-				return nil
-			}
+	}
+	getInputTypesForColtype := func(intType coltypes.T) []types.T {
+		switch intType {
+		case coltypes.Int64:
+			return []types.T{*types.Int, *types.Int}
+		case coltypes.Int32:
+			return []types.T{*types.Int4, *types.Int4}
+		default:
+			b.Fatalf("unsupported type: %s", intType)
+			return nil
+		}
+	}
+	projOpMap := map[string]func(*RepeatableBatchSource, coltypes.T) (Operator, error){
+		"projPlusIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) (Operator, error) {
+			return createTestProjectingOperator(
+				ctx, flowCtx, source, getInputTypesForColtype(intType),
+				"@1 + @2" /* projectingExpr */, false, /* canFallbackToRowexec */
+			)
 		},
-		"projMultIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
-			base := projOpBase{
-				OneInputNode: NewOneInputNode(source),
-				allocator:    testAllocator,
-				col1Idx:      0,
-				col2Idx:      1,
-				outputIdx:    2,
-			}
-			switch intType {
-			case coltypes.Int64:
-				return &projMultInt64Int64Op{
-					projOpBase: base,
-				}
-			case coltypes.Int32:
-				return &projMultInt32Int32Op{
-					projOpBase: base,
-				}
-			default:
-				b.Fatalf("unsupported type: %s", intType)
-				return nil
-			}
+		"projMinusIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) (Operator, error) {
+			return createTestProjectingOperator(
+				ctx, flowCtx, source, getInputTypesForColtype(intType),
+				"@1 - @2" /* projectingExpr */, false, /* canFallbackToRowexec */
+			)
 		},
-		"projDivIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) Operator {
-			base := projOpBase{
-				OneInputNode: NewOneInputNode(source),
-				allocator:    testAllocator,
-				col1Idx:      0,
-				col2Idx:      1,
-				outputIdx:    2,
-			}
-			switch intType {
-			case coltypes.Int64:
-				return &projDivInt64Int64Op{
-					projOpBase: base,
-				}
-			case coltypes.Int32:
-				return &projDivInt32Int32Op{
-					projOpBase: base,
-				}
-			default:
-				b.Fatalf("unsupported type: %s", intType)
-				return nil
-			}
+		"projMultIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) (Operator, error) {
+			return createTestProjectingOperator(
+				ctx, flowCtx, source, getInputTypesForColtype(intType),
+				"@1 * @2" /* projectingExpr */, false, /* canFallbackToRowexec */
+			)
+		},
+		"projDivIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) (Operator, error) {
+			return createTestProjectingOperator(
+				ctx, flowCtx, source, getInputTypesForColtype(intType),
+				"@1 / @2" /* projectingExpr */, false, /* canFallbackToRowexec */
+			)
 		},
 	}
 
@@ -446,11 +440,7 @@ func BenchmarkProjOp(b *testing.B) {
 				for _, hasNulls := range []bool{true, false} {
 					b.Run(fmt.Sprintf("op=%s/type=%s/useSel=%t/hasNulls=%t",
 						projOp, intType, useSel, hasNulls), func(b *testing.B) {
-						outputType := intType
-						if projOp == "projDivIntIntOp" {
-							outputType = coltypes.Decimal
-						}
-						benchmarkProjOp(b, makeProjOp, useSel, hasNulls, intType, outputType)
+						benchmarkProjOp(b, makeProjOp, useSel, hasNulls, intType)
 					})
 				}
 			}

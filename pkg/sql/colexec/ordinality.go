@@ -34,6 +34,7 @@ var _ Operator = &ordinalityOp{}
 
 // NewOrdinalityOp returns a new WITH ORDINALITY operator.
 func NewOrdinalityOp(allocator *Allocator, input Operator, outputIdx int) Operator {
+	input = newVectorTypeEnforcer(allocator, input, coltypes.Int64, outputIdx)
 	c := &ordinalityOp{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
@@ -52,7 +53,6 @@ func (c *ordinalityOp) Next(ctx context.Context) coldata.Batch {
 	if bat.Length() == 0 {
 		return coldata.ZeroBatch
 	}
-	c.allocator.MaybeAddColumn(bat, coltypes.Int64, c.outputIdx)
 
 	vec := bat.ColVec(c.outputIdx).Int64()
 	sel := bat.Selection()

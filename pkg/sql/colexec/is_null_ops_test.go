@@ -87,29 +87,10 @@ func TestIsNullProjOp(t *testing.T) {
 				if c.negate {
 					projExpr = "IS NOT NULL"
 				}
-				spec := &execinfrapb.ProcessorSpec{
-					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: []types.T{*types.Int}}},
-					Core: execinfrapb.ProcessorCoreUnion{
-						Noop: &execinfrapb.NoopCoreSpec{},
-					},
-					Post: execinfrapb.PostProcessSpec{
-						RenderExprs: []execinfrapb.Expression{
-							{Expr: "@1"},
-							{Expr: fmt.Sprintf("@1 %s", projExpr)},
-						},
-					},
-				}
-				args := NewColOperatorArgs{
-					Spec:                spec,
-					Inputs:              input,
-					StreamingMemAccount: testMemAcc,
-				}
-				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-				result, err := NewColOperator(ctx, flowCtx, args)
-				if err != nil {
-					return nil, err
-				}
-				return result.Op, nil
+				return createTestProjectingOperator(
+					ctx, flowCtx, input[0], []types.T{*types.Int},
+					fmt.Sprintf("@1 %s", projExpr), false, /* canFallbackToRowexec */
+				)
 			}
 			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, opConstructor)
 		})

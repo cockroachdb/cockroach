@@ -145,19 +145,20 @@ func GetCastOperator(
 	fromType *semtypes.T,
 	toType *semtypes.T,
 ) (Operator, error) {
+	to := typeconv.FromColumnType(toType)
+	input = newVectorTypeEnforcer(allocator, input, to, resultIdx)
 	if fromType.Family() == semtypes.UnknownFamily {
 		return &castOpNullAny{
 			OneInputNode: NewOneInputNode(input),
 			allocator:    allocator,
 			colIdx:       colIdx,
 			outputIdx:    resultIdx,
-			toType:       typeconv.FromColumnType(toType),
 		}, nil
 	}
 	switch from := typeconv.FromColumnType(fromType); from {
 	// {{ range $typ, $overloads := . }}
 	case coltypes._ALLTYPES:
-		switch to := typeconv.FromColumnType(toType); to {
+		switch to {
 		// {{ range $overloads }}
 		// {{ if isCastFuncSet . }}
 		case coltypes._TOTYPE:
@@ -185,7 +186,6 @@ type castOpNullAny struct {
 	allocator *Allocator
 	colIdx    int
 	outputIdx int
-	toType    coltypes.T
 }
 
 var _ Operator = &castOpNullAny{}
@@ -200,7 +200,6 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	c.allocator.MaybeAddColumn(batch, c.toType, c.outputIdx)
 	vec := batch.ColVec(c.colIdx)
 	projVec := batch.ColVec(c.outputIdx)
 	vecNulls := vec.Nulls()
@@ -247,7 +246,6 @@ func (c *castOp) Next(ctx context.Context) coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	c.allocator.MaybeAddColumn(batch, c.toType, c.outputIdx)
 	vec := batch.ColVec(c.colIdx)
 	projVec := batch.ColVec(c.outputIdx)
 	c.allocator.PerformOperation(

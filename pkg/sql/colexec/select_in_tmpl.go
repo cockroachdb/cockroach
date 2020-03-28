@@ -86,6 +86,7 @@ func GetInProjectionOperator(
 	datumTuple *tree.DTuple,
 	negate bool,
 ) (Operator, error) {
+	input = newVectorTypeEnforcer(allocator, input, coltypes.Bool, resultIdx)
 	var err error
 	switch t := typeconv.FromColumnType(ct); t {
 	// {{range .}}
@@ -271,7 +272,6 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 	if batch.Length() == 0 {
 		return coldata.ZeroBatch
 	}
-	pi.allocator.MaybeAddColumn(batch, coltypes.Bool, pi.outputIdx)
 
 	vec := batch.ColVec(pi.colIdx)
 	col := vec._TemplateType()

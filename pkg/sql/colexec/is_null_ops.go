@@ -31,6 +31,7 @@ type isNullProjOp struct {
 func newIsNullProjOp(
 	allocator *Allocator, input Operator, colIdx, outputIdx int, negate bool,
 ) Operator {
+	input = newVectorTypeEnforcer(allocator, input, coltypes.Bool, outputIdx)
 	return &isNullProjOp{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
@@ -52,7 +53,6 @@ func (o *isNullProjOp) Next(ctx context.Context) coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	o.allocator.MaybeAddColumn(batch, coltypes.Bool, o.outputIdx)
 	vec := batch.ColVec(o.colIdx)
 	nulls := vec.Nulls()
 	projCol := batch.ColVec(o.outputIdx).Bool()
