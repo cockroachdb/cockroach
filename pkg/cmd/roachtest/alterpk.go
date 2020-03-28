@@ -90,9 +90,7 @@ func registerAlterPK(r *testRegistry) {
 	// runAlterPKTPCC runs a primary key change while the TPCC workload runs.
 	runAlterPKTPCC := func(ctx context.Context, t *test, c *cluster) {
 		const warehouses = 500
-		// TODO (rohany): This should be bumped up to 20-30 minutes if
-		//  500 warehouses are used.
-		const duration = 1 * time.Minute
+		const duration = 10 * time.Minute
 
 		roachNodes, loadNode := setupTest(ctx, t, c)
 
@@ -124,16 +122,15 @@ func registerAlterPK(r *testRegistry) {
 
 			// Pick a random table to change the primary key of.
 			alterStmts := []string{
-				// TODO (rohany): reenable these options once #45812 is fixed.
-				//`ALTER TABLE warehouse ALTER PRIMARY KEY USING COLUMNS (w_id)`,
-				//`ALTER TABLE district ALTER PRIMARY KEY USING COLUMNS (d_w_id, d_id)`,
-				//`ALTER TABLE history ALTER PRIMARY KEY USING COLUMNS (h_w_id, rowid)`,
+				`ALTER TABLE warehouse ALTER PRIMARY KEY USING COLUMNS (w_id)`,
+				`ALTER TABLE district ALTER PRIMARY KEY USING COLUMNS (d_w_id, d_id)`,
+				`ALTER TABLE history ALTER PRIMARY KEY USING COLUMNS (h_w_id, rowid)`,
 				`ALTER TABLE customer ALTER PRIMARY KEY USING COLUMNS (c_w_id, c_d_id, c_id)`,
-				//`ALTER TABLE "order" ALTER PRIMARY KEY USING COLUMNS (o_w_id, o_d_id, o_id DESC)`,
-				//`ALTER TABLE new_order ALTER PRIMARY KEY USING COLUMNS (no_w_id, no_d_id, no_o_id)`,
-				//`ALTER TABLE item ALTER PRIMARY KEY USING COLUMNS (i_id)`,
-				//`ALTER TABLE stock ALTER PRIMARY KEY USING COLUMNS (s_w_id, s_i_id)`,
-				//`ALTER TABLE order_line ALTER PRIMARY KEY USING COLUMNS (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)`,
+				`ALTER TABLE "order" ALTER PRIMARY KEY USING COLUMNS (o_w_id, o_d_id, o_id DESC)`,
+				`ALTER TABLE new_order ALTER PRIMARY KEY USING COLUMNS (no_w_id, no_d_id, no_o_id)`,
+				`ALTER TABLE item ALTER PRIMARY KEY USING COLUMNS (i_id)`,
+				`ALTER TABLE stock ALTER PRIMARY KEY USING COLUMNS (s_w_id, s_i_id)`,
+				`ALTER TABLE order_line ALTER PRIMARY KEY USING COLUMNS (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)`,
 			}
 
 			rand, _ := randutil.NewPseudoRand()
@@ -178,8 +175,7 @@ func registerAlterPK(r *testRegistry) {
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
 		MinVersion: "v20.1.0",
-		// TODO (rohany): This should be bumped to cpu(16) if 500 warehouses are used.
-		Cluster: makeClusterSpec(4),
-		Run:     runAlterPKTPCC,
+		Cluster:    makeClusterSpec(4, cpu(16)),
+		Run:        runAlterPKTPCC,
 	})
 }
