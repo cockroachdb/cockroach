@@ -210,3 +210,17 @@ query I
 SELECT COUNT (*) FROM (SELECT DISTINCT (array[x]) FROM t)
 ----
 1
+
+# Regression for #46709.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (i INT, x INT, y INT, z STRING);
+INSERT INTO t VALUES
+  (1, 1, 2, 'hello'),
+  (2, 1, 2, 'hello'),
+  (3, 1, 2, 'hello there')
+
+query IT
+SELECT x, jsonb_agg(DISTINCT jsonb_build_object('y', y, 'z', z)) FROM (SELECT * FROM t ORDER BY i) GROUP BY x
+----
+1 [{"y": 2, "z": "hello"}, {"y": 2, "z": "hello there"}]
