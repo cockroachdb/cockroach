@@ -61,7 +61,7 @@ render     ·            ·          (r)  ·
  │         render 0     3          ·    ·
  └── scan  ·            ·          ()   ·
 ·          table        t@primary  ·    ·
-·          spans        ALL        ·    ·
+·          spans        FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a + 2 AS r FROM t
@@ -72,7 +72,7 @@ render     ·            ·          (r)  ·
  │         render 0     a + 2      ·    ·
  └── scan  ·            ·          (a)  ·
 ·          table        t@primary  ·    ·
-·          spans        ALL        ·    ·
+·          spans        FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a >= 5 AND b <= 10 AND c < 4 AS r FROM t
@@ -83,7 +83,7 @@ render     ·            ·                                     (r)        ·
  │         render 0     ((a >= 5) AND (b <= 10)) AND (c < 4)  ·          ·
  └── scan  ·            ·                                     (a, b, c)  ·
 ·          table        t@primary                             ·          ·
-·          spans        ALL                                   ·          ·
+·          spans        FULL SCAN                             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a >= 5 OR b <= 10 OR c < 4 AS r FROM t
@@ -94,7 +94,7 @@ render     ·            ·                                   (r)        ·
  │         render 0     ((a >= 5) OR (b <= 10)) OR (c < 4)  ·          ·
  └── scan  ·            ·                                   (a, b, c)  ·
 ·          table        t@primary                           ·          ·
-·          spans        ALL                                 ·          ·
+·          spans        FULL SCAN                           ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT NOT (a = 5) AS r FROM t
@@ -105,7 +105,7 @@ render     ·            ·          (r)  ·
  │         render 0     a != 5     ·    ·
  └── scan  ·            ·          (a)  ·
 ·          table        t@primary  ·    ·
-·          spans        ALL        ·    ·
+·          spans        FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT NOT (a > 5 AND b >= 10) AS r FROM t
@@ -116,7 +116,7 @@ render     ·            ·                     (r)     ·
  │         render 0     (a <= 5) OR (b < 10)  ·       ·
  └── scan  ·            ·                     (a, b)  ·
 ·          table        t@primary             ·       ·
-·          spans        ALL                   ·       ·
+·          spans        FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (a >= 5 AND b <= 10) OR (a <= 10 AND c > 5) AS r FROM t
@@ -127,7 +127,7 @@ render     ·            ·                                                    (
  │         render 0     ((a >= 5) AND (b <= 10)) OR ((a <= 10) AND (c > 5))  ·          ·
  └── scan  ·            ·                                                    (a, b, c)  ·
 ·          table        t@primary                                            ·          ·
-·          spans        ALL                                                  ·          ·
+·          spans        FULL SCAN                                            ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT NOT (a >= 5 OR b <= 10) AND NOT (c >= 10) AS r FROM t
@@ -138,7 +138,7 @@ render     ·            ·                                    (r)        ·
  │         render 0     ((a < 5) AND (b > 10)) AND (c < 10)  ·          ·
  └── scan  ·            ·                                    (a, b, c)  ·
 ·          table        t@primary                            ·          ·
-·          spans        ALL                                  ·          ·
+·          spans        FULL SCAN                            ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, b) = (1, 2)  AS r FROM t
@@ -149,7 +149,7 @@ render     ·            ·                    (r)     ·
  │         render 0     (a = 1) AND (b = 2)  ·       ·
  └── scan  ·            ·                    (a, b)  ·
 ·          table        t@primary            ·       ·
-·          spans        ALL                  ·       ·
+·          spans        FULL SCAN            ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IN (1, 2) AS r FROM t
@@ -160,7 +160,7 @@ render     ·            ·            (r)  ·
  │         render 0     a IN (1, 2)  ·    ·
  └── scan  ·            ·            (a)  ·
 ·          table        t@primary    ·    ·
-·          spans        ALL          ·    ·
+·          spans        FULL SCAN    ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, b) IN ((1, 2), (3, 4)) AS r FROM t
@@ -171,7 +171,7 @@ render     ·            ·                           (r)     ·
  │         render 0     (a, b) IN ((1, 2), (3, 4))  ·       ·
  └── scan  ·            ·                           (a, b)  ·
 ·          table        t@primary                   ·       ·
-·          spans        ALL                         ·       ·
+·          spans        FULL SCAN                   ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, b + c, 5 + d * 2) = (b+c, 8, a - c)  AS r FROM t
@@ -182,7 +182,7 @@ render     ·            ·                                                     
  │         render 0     ((a = (b + c)) AND ((b + c) = 8)) AND (((d * 2) + 5) = (a - c))  ·             ·
  └── scan  ·            ·                                                                (a, b, c, d)  ·
 ·          table        t@primary                                                        ·             ·
-·          spans        ALL                                                              ·             ·
+·          spans        FULL SCAN                                                        ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ((a, b), (c, d)) = ((1, 2), (3, 4))  AS r FROM t
@@ -193,7 +193,7 @@ render     ·            ·                                                (r)  
  │         render 0     (((a = 1) AND (b = 2)) AND (c = 3)) AND (d = 4)  ·             ·
  └── scan  ·            ·                                                (a, b, c, d)  ·
 ·          table        t@primary                                        ·             ·
-·          spans        ALL                                              ·             ·
+·          spans        FULL SCAN                                        ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT (a, (b, 'a'), (c, 'b', 5)) = (9, (a+c, s), (5, s, a)) AS r FROM t
@@ -204,7 +204,7 @@ render     ·            ·                                                     
  │         render 0     (((((a = 9) AND (b = (a + c))) AND (s = 'a')) AND (c = 5)) AND (s = 'b')) AND (a = 5)  ·             ·
  └── scan  ·            ·                                                                                      (a, b, c, s)  ·
 ·          table        t@primary                                                                              ·             ·
-·          spans        ALL                                                                                    ·             ·
+·          spans        FULL SCAN                                                                              ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NULL AS r FROM t
@@ -215,7 +215,7 @@ render     ·            ·          (r)  ·
  │         render 0     a IS NULL  ·    ·
  └── scan  ·            ·          (a)  ·
 ·          table        t@primary  ·    ·
-·          spans        ALL        ·    ·
+·          spans        FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NOT DISTINCT FROM NULL AS r FROM t
@@ -226,7 +226,7 @@ render     ·            ·          (r)  ·
  │         render 0     a IS NULL  ·    ·
  └── scan  ·            ·          (a)  ·
 ·          table        t@primary  ·    ·
-·          spans        ALL        ·    ·
+·          spans        FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NOT DISTINCT FROM b AS r FROM t
@@ -237,7 +237,7 @@ render     ·            ·                         (r)     ·
  │         render 0     a IS NOT DISTINCT FROM b  ·       ·
  └── scan  ·            ·                         (a, b)  ·
 ·          table        t@primary                 ·       ·
-·          spans        ALL                       ·       ·
+·          spans        FULL SCAN                 ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NOT NULL AS r FROM t
@@ -248,7 +248,7 @@ render     ·            ·              (r)  ·
  │         render 0     a IS NOT NULL  ·    ·
  └── scan  ·            ·              (a)  ·
 ·          table        t@primary      ·    ·
-·          spans        ALL            ·    ·
+·          spans        FULL SCAN      ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS DISTINCT FROM NULL AS r FROM t
@@ -259,7 +259,7 @@ render     ·            ·              (r)  ·
  │         render 0     a IS NOT NULL  ·    ·
  └── scan  ·            ·              (a)  ·
 ·          table        t@primary      ·    ·
-·          spans        ALL            ·    ·
+·          spans        FULL SCAN      ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS DISTINCT FROM b AS r FROM t
@@ -270,7 +270,7 @@ render     ·            ·                     (r)     ·
  │         render 0     a IS DISTINCT FROM b  ·       ·
  └── scan  ·            ·                     (a, b)  ·
 ·          table        t@primary             ·       ·
-·          spans        ALL                   ·       ·
+·          spans        FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT +a + (-b) AS r FROM t
@@ -281,7 +281,7 @@ render     ·            ·          (r)     ·
  │         render 0     a + (-b)   ·       ·
  └── scan  ·            ·          (a, b)  ·
 ·          table        t@primary  ·       ·
-·          spans        ALL        ·       ·
+·          spans        FULL SCAN  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END AS r FROM t
@@ -292,7 +292,7 @@ render     ·            ·                                              (r)  ·
  │         render 0     CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END  ·    ·
  └── scan  ·            ·                                              (a)  ·
 ·          table        t@primary                                      ·    ·
-·          spans        ALL                                            ·    ·
+·          spans        FULL SCAN                                      ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE WHEN a = 2 THEN 1 ELSE 2 END AS r FROM t
@@ -303,7 +303,7 @@ render     ·            ·                                  (r)  ·
  │         render 0     CASE WHEN a = 2 THEN 1 ELSE 2 END  ·    ·
  └── scan  ·            ·                                  (a)  ·
 ·          table        t@primary                          ·    ·
-·          spans        ALL                                ·    ·
+·          spans        FULL SCAN                          ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE a + 3 WHEN 5 * b THEN 1 % b WHEN 6 THEN 2 ELSE -1 END AS r FROM t
@@ -314,7 +314,7 @@ render     ·            ·                                                     
  │         render 0     CASE a + 3 WHEN b * 5 THEN 1 % b WHEN 6 THEN 2 ELSE -1 END  ·       ·
  └── scan  ·            ·                                                           (a, b)  ·
 ·          table        t@primary                                                   ·       ·
-·          spans        ALL                                                         ·       ·
+·          spans        FULL SCAN                                                   ·       ·
 
 # Tests for CASE with no ELSE statement
 query TTTTT
@@ -326,7 +326,7 @@ render     ·            ·                           (r)  ·
  │         render 0     CASE WHEN a = 2 THEN 1 END  ·    ·
  └── scan  ·            ·                           (a)  ·
 ·          table        t@primary                   ·    ·
-·          spans        ALL                         ·    ·
+·          spans        FULL SCAN                   ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CASE a WHEN 2 THEN 1 END AS r FROM t
@@ -337,7 +337,7 @@ render     ·            ·                         (r)  ·
  │         render 0     CASE a WHEN 2 THEN 1 END  ·    ·
  └── scan  ·            ·                         (a)  ·
 ·          table        t@primary                 ·    ·
-·          spans        ALL                       ·    ·
+·          spans        FULL SCAN                 ·    ·
 
 # TODO(radu): IS OF not supported yet.
 #query TTTTT
@@ -358,7 +358,7 @@ render     ·            ·          (length)  ·
  │         render 0     length(s)  ·         ·
  └── scan  ·            ·          (s)       ·
 ·          table        t@primary  ·         ·
-·          spans        ALL        ·         ·
+·          spans        FULL SCAN  ·         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j @> '{"a": 1}' AS r FROM t
@@ -369,7 +369,7 @@ render     ·            ·                (r)  ·
  │         render 0     j @> '{"a": 1}'  ·    ·
  └── scan  ·            ·                (j)  ·
 ·          table        t@primary        ·    ·
-·          spans        ALL              ·    ·
+·          spans        FULL SCAN        ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT '{"a": 1}' <@ j AS r FROM t
@@ -380,7 +380,7 @@ render     ·            ·                (r)  ·
  │         render 0     j @> '{"a": 1}'  ·    ·
  └── scan  ·            ·                (j)  ·
 ·          table        t@primary        ·    ·
-·          spans        ALL              ·    ·
+·          spans        FULL SCAN        ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j->>'a' AS r FROM t
@@ -391,7 +391,7 @@ render     ·            ·          (r)  ·
  │         render 0     j->>'a'    ·    ·
  └── scan  ·            ·          (j)  ·
 ·          table        t@primary  ·    ·
-·          spans        ALL        ·    ·
+·          spans        FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j->'a' AS r FROM t
@@ -402,7 +402,7 @@ render     ·            ·          (r)  ·
  │         render 0     j->'a'     ·    ·
  └── scan  ·            ·          (j)  ·
 ·          table        t@primary  ·    ·
-·          spans        ALL        ·    ·
+·          spans        FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j ? 'a' AS r FROM t
@@ -413,7 +413,7 @@ render     ·            ·          (r)  ·
  │         render 0     j ? 'a'    ·    ·
  └── scan  ·            ·          (j)  ·
 ·          table        t@primary  ·    ·
-·          spans        ALL        ·    ·
+·          spans        FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j ?| ARRAY['a', 'b', 'c'] AS r FROM t
@@ -424,7 +424,7 @@ render     ·            ·                        (r)  ·
  │         render 0     j ?| ARRAY['a','b','c']  ·    ·
  └── scan  ·            ·                        (j)  ·
 ·          table        t@primary                ·    ·
-·          spans        ALL                      ·    ·
+·          spans        FULL SCAN                ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j ?& ARRAY['a', 'b', 'c'] AS r FROM t
@@ -435,7 +435,7 @@ render     ·            ·                        (r)  ·
  │         render 0     j ?& ARRAY['a','b','c']  ·    ·
  └── scan  ·            ·                        (j)  ·
 ·          table        t@primary                ·    ·
-·          spans        ALL                      ·    ·
+·          spans        FULL SCAN                ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j#>ARRAY['a'] AS r FROM t
@@ -446,7 +446,7 @@ render     ·            ·              (r)  ·
  │         render 0     j#>ARRAY['a']  ·    ·
  └── scan  ·            ·              (j)  ·
 ·          table        t@primary      ·    ·
-·          spans        ALL            ·    ·
+·          spans        FULL SCAN      ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT j#>>ARRAY['a'] AS r FROM t
@@ -457,7 +457,7 @@ render     ·            ·               (r)  ·
  │         render 0     j#>>ARRAY['a']  ·    ·
  └── scan  ·            ·               (j)  ·
 ·          table        t@primary       ·    ·
-·          spans        ALL             ·    ·
+·          spans        FULL SCAN       ·    ·
 
 
 query TTTTT
@@ -470,7 +470,7 @@ render     ·            ·          (a, b)  ·
  │         render 1     b::FLOAT8  ·       ·
  └── scan  ·            ·          (a, b)  ·
 ·          table        t@primary  ·       ·
-·          spans        ALL        ·       ·
+·          spans        FULL SCAN  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CAST(a + b + c AS string) FROM t
@@ -481,7 +481,7 @@ render     ·            ·                      (text)     ·
  │         render 0     (c + (a + b))::STRING  ·          ·
  └── scan  ·            ·                      (a, b, c)  ·
 ·          table        t@primary              ·          ·
-·          spans        ALL                    ·          ·
+·          spans        FULL SCAN              ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT s::VARCHAR(2) FROM t
@@ -492,7 +492,7 @@ render     ·            ·              (s)  ·
  │         render 0     s::VARCHAR(2)  ·    ·
  └── scan  ·            ·              (s)  ·
 ·          table        t@primary      ·    ·
-·          spans        ALL            ·    ·
+·          spans        FULL SCAN      ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)
@@ -543,7 +543,7 @@ render     ·            ·                      (a)        ·
  │         render 0     a                      ·          ·
  └── scan  ·            ·                      (a, b, d)  ·
 ·          table        t@primary              ·          ·
-·          spans        ALL                    ·          ·
+·          spans        FULL SCAN              ·          ·
 ·          filter       (a >= b) AND (a <= d)  ·          ·
 
 query TTTTT
@@ -555,7 +555,7 @@ render     ·            ·                   (a)        ·
  │         render 0     a                   ·          ·
  └── scan  ·            ·                   (a, b, d)  ·
 ·          table        t@primary           ·          ·
-·          spans        ALL                 ·          ·
+·          spans        FULL SCAN           ·          ·
 ·          filter       (a < b) OR (a > d)  ·          ·
 
 query TTTTT
@@ -567,7 +567,7 @@ render     ·            ·                                                   (r
  │         render 0     ((a >= b) AND (a <= d)) OR ((a >= d) AND (a <= b))  ·          ·
  └── scan  ·            ·                                                   (a, b, d)  ·
 ·          table        t@primary                                           ·          ·
-·          spans        ALL                                                 ·          ·
+·          spans        FULL SCAN                                           ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a NOT BETWEEN SYMMETRIC b AND d AS r FROM t
@@ -578,7 +578,7 @@ render     ·            ·                                              (r)    
  │         render 0     ((a < b) OR (a > d)) AND ((a < d) OR (a > b))  ·          ·
  └── scan  ·            ·                                              (a, b, d)  ·
 ·          table        t@primary                                      ·          ·
-·          spans        ALL                                            ·          ·
+·          spans        FULL SCAN                                      ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY[]:::int[] FROM t
@@ -589,7 +589,7 @@ render     ·            ·          ("array")  ·
  │         render 0     ARRAY[]    ·          ·
  └── scan  ·            ·          ()         ·
 ·          table        t@primary  ·          ·
-·          spans        ALL        ·          ·
+·          spans        FULL SCAN  ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY[1, 2, 3] FROM t
@@ -600,7 +600,7 @@ render     ·            ·             ("array")  ·
  │         render 0     ARRAY[1,2,3]  ·          ·
  └── scan  ·            ·             ()         ·
 ·          table        t@primary     ·          ·
-·          spans        ALL           ·          ·
+·          spans        FULL SCAN     ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY[a + 1, 2, 3] FROM t
@@ -611,7 +611,7 @@ render     ·            ·                   ("array")  ·
  │         render 0     ARRAY[a + 1, 2, 3]  ·          ·
  └── scan  ·            ·                   (a)        ·
 ·          table        t@primary           ·          ·
-·          spans        ALL                 ·          ·
+·          spans        FULL SCAN           ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 > ANY ARRAY[a + 1, 2, 3] FROM t
@@ -622,7 +622,7 @@ render     ·            ·                           ("?column?")  ·
  │         render 0     1 > ANY ARRAY[a + 1, 2, 3]  ·             ·
  └── scan  ·            ·                           (a)           ·
 ·          table        t@primary                   ·             ·
-·          spans        ALL                         ·             ·
+·          spans        FULL SCAN                   ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 = ANY (1, 2, 3) FROM t
@@ -633,7 +633,7 @@ render     ·            ·          ("?column?")  ·
  │         render 0     true       ·             ·
  └── scan  ·            ·          ()            ·
 ·          table        t@primary  ·             ·
-·          spans        ALL        ·             ·
+·          spans        FULL SCAN  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 = ANY () FROM t
@@ -644,7 +644,7 @@ render     ·            ·          ("?column?")  ·
  │         render 0     false      ·             ·
  └── scan  ·            ·          ()            ·
 ·          table        t@primary  ·             ·
-·          spans        ALL        ·             ·
+·          spans        FULL SCAN  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT least(NULL, greatest(NULL, least(1, NULL), 2, 3), greatest(5, 6), a) FROM t
@@ -655,7 +655,7 @@ render     ·            ·                     ("least")  ·
  │         render 0     least(NULL, 3, 6, a)  ·          ·
  └── scan  ·            ·                     (a)        ·
 ·          table        t@primary             ·          ·
-·          spans        ALL                   ·          ·
+·          spans        FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pg_attribute WHERE attrelid='t'::regclass
@@ -710,7 +710,7 @@ render     ·            ·                                                 (r1,
  │         render 1     length(upper(concat('a', 'b', s)))::FLOAT8 + 1.0  ·         ·
  └── scan  ·            ·                                                 (s)       ·
 ·          table        t@primary                                         ·         ·
-·          spans        ALL                                               ·         ·
+·          spans        FULL SCAN                                         ·         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT generate_series(1,10) ORDER BY 1 DESC)
@@ -750,4 +750,4 @@ root                      ·              ·                             ("array
                 │         order          +b                            ·          ·
                 └── scan  ·              ·                             (a, b)     ·
 ·                         table          t@primary                     ·          ·
-·                         spans          ALL                           ·          ·
+·                         spans          FULL SCAN                     ·          ·

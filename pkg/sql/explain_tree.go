@@ -69,7 +69,7 @@ func planToTree(ctx context.Context, top *planTop) *roachpb.ExplainTreePlanNode 
 				Value: tree.AsStringWithFlags(expr, sampledLogicalPlanFmtFlags),
 			})
 		},
-		spans: func(nodeName, fieldName string, index *sqlbase.IndexDescriptor, spans []roachpb.Span) {
+		spans: func(nodeName, fieldName string, index *sqlbase.IndexDescriptor, spans []roachpb.Span, hardLimitSet bool) {
 			// TODO(jordan): it's expensive to serialize long span
 			// strings. It's unfortunate that we're still calling
 			// PrettySpans, just to check to see whether the output is - or
@@ -78,7 +78,7 @@ func planToTree(ctx context.Context, top *planTop) *roachpb.ExplainTreePlanNode 
 			spanss := sqlbase.PrettySpans(index, spans, 2)
 			if spanss != "" {
 				if spanss == "-" {
-					spanss = "ALL"
+					spanss = getAttrForSpansAll(hardLimitSet)
 				} else {
 					// Spans contain literal values from the query and thus
 					// cannot be spelled out in the collected plan.

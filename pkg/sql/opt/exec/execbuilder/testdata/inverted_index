@@ -229,7 +229,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b @> '[]';
 ·     vectorized   false      ·       ·
 scan  ·            ·          (a, b)  ·
 ·     table        d@primary  ·       ·
-·     spans        ALL        ·       ·
+·     spans        FULL SCAN  ·       ·
 ·     filter       b @> '[]'  ·       ·
 
 
@@ -240,7 +240,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b @> '{}';
 ·     vectorized   false      ·       ·
 scan  ·            ·          (a, b)  ·
 ·     table        d@primary  ·       ·
-·     spans        ALL        ·       ·
+·     spans        FULL SCAN  ·       ·
 ·     filter       b @> '{}'  ·       ·
 
 
@@ -295,7 +295,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b IS NULL
 ·     vectorized   false      ·       ·
 scan  ·            ·          (a, b)  ·
 ·     table        d@primary  ·       ·
-·     spans        ALL        ·       ·
+·     spans        FULL SCAN  ·       ·
 ·     filter       b IS NULL  ·       ·
 
 query TTT
@@ -305,7 +305,7 @@ EXPLAIN SELECT * from d where b @> '{"a": []}' ORDER BY a;
 ·     vectorized   false
 scan  ·            ·
 ·     table        d@primary
-·     spans        ALL
+·     spans        FULL SCAN
 ·     filter       b @> '{"a": []}'
 
 query TTT
@@ -315,7 +315,7 @@ EXPLAIN SELECT * from d where b @> '{"a": {}}' ORDER BY a;
 ·     vectorized   false
 scan  ·            ·
 ·     table        d@primary
-·     spans        ALL
+·     spans        FULL SCAN
 ·     filter       b @> '{"a": {}}'
 
 # Multi-path contains queries. Should create zigzag joins.
@@ -470,7 +470,7 @@ EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": {}}'
 ·     vectorized   false                      ·       ·
 scan  ·            ·                          (a, b)  ·
 ·     table        d@primary                  ·       ·
-·     spans        ALL                        ·       ·
+·     spans        FULL SCAN                  ·       ·
 ·     filter       b @> '{"a": {}, "b": {}}'  ·       ·
 
 subtest array
@@ -495,7 +495,7 @@ EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[]::INT[]
 ·     vectorized   false         ·       ·
 scan  ·            ·             (a, b)  ·
 ·     table        e@primary     ·       ·
-·     spans        ALL           ·       ·
+·     spans        FULL SCAN     ·       ·
 ·     filter       b @> ARRAY[]  ·       ·
 
 # Test that searching for a NULL element using the inverted index.
@@ -523,7 +523,7 @@ EXPLAIN (VERBOSE) SELECT * from e where b IS NULL
 ·     vectorized   false      ·       ·
 scan  ·            ·          (a, b)  ·
 ·     table        e@primary  ·       ·
-·     spans        ALL        ·       ·
+·     spans        FULL SCAN  ·       ·
 ·     filter       b IS NULL  ·       ·
 
 query TTTTT

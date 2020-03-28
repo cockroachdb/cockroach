@@ -15,7 +15,7 @@ EXECUTE change_index
 ·     vectorized   true
 scan  ·            ·
 ·     table        ab@primary
-·     spans        ALL
+·     spans        FULL SCAN
 ·     filter       b = 10
 
 statement ok
@@ -40,7 +40,7 @@ EXECUTE change_index
 ·     vectorized   true
 scan  ·            ·
 ·     table        ab@primary
-·     spans        ALL
+·     spans        FULL SCAN
 ·     filter       b = 10
 
 ## Statistics change: Create statistics and ensure that the plan is recalculated.
@@ -63,10 +63,10 @@ merge-join  ·                   ·
  │          mergeJoinOrder      +"(a=c)"
  ├── scan   ·                   ·
  │          table               ab@primary
- │          spans               ALL
+ │          spans               FULL SCAN
  └── scan   ·                   ·
 ·           table               cd@primary
-·           spans               ALL
+·           spans               FULL SCAN
 
 statement ok
 CREATE STATISTICS s FROM ab
@@ -87,4 +87,4 @@ lookup-join  ·                      ·
  │           parallel               ·
  └── scan    ·                      ·
 ·            table                  ab@primary
-·            spans                  ALL
+·            spans                  FULL SCAN

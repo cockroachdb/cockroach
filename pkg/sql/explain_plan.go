@@ -455,14 +455,24 @@ func planToString(
 	return buf.String()
 }
 
+func getAttrForSpansAll(hardLimitSet bool) string {
+	if hardLimitSet {
+		return "LIMITED SCAN"
+	}
+	return "FULL SCAN"
+}
+
 // spans implements the planObserver interface.
 func (e *explainer) spans(
-	nodeName, fieldName string, index *sqlbase.IndexDescriptor, spans []roachpb.Span,
+	nodeName, fieldName string,
+	index *sqlbase.IndexDescriptor,
+	spans []roachpb.Span,
+	hardLimitSet bool,
 ) {
 	spanss := sqlbase.PrettySpans(index, spans, 2)
 	if spanss != "" {
 		if spanss == "-" {
-			spanss = "ALL"
+			spanss = getAttrForSpansAll(hardLimitSet)
 		}
 		e.attr(nodeName, fieldName, spanss)
 	}

@@ -25,7 +25,7 @@ group      ·            ·
  │         scalar       ·
  └── scan  ·            ·
 ·          table        small@primary
-·          spans        ALL
+·          spans        FULL SCAN
 
 statement ok
 SET vectorize_row_count_threshold = 0
@@ -42,7 +42,7 @@ group      ·            ·
  │         scalar       ·
  └── scan  ·            ·
 ·          table        small@primary
-·          spans        ALL
+·          spans        FULL SCAN
 
 statement ok
 SET vectorize_row_count_threshold = 1000
@@ -68,7 +68,7 @@ group      ·            ·
  │         scalar       ·
  └── scan  ·            ·
 ·          table        small@primary
-·          spans        ALL
+·          spans        FULL SCAN
 
 statement ok
 SET vectorize_row_count_threshold = 1
@@ -85,7 +85,7 @@ group      ·            ·
  │         scalar       ·
  └── scan  ·            ·
 ·          table        small@primary
-·          spans        ALL
+·          spans        FULL SCAN
 
 statement ok
 SET vectorize_row_count_threshold = 1000
@@ -114,7 +114,7 @@ group      ·            ·
  │         scalar       ·
  └── scan  ·            ·
 ·          table        large@primary
-·          spans        ALL
+·          spans        FULL SCAN
 
 statement ok
 SET vectorize_row_count_threshold = 1000000
@@ -131,4 +131,4 @@ group      ·            ·
  │         scalar       ·
  └── scan  ·            ·
 ·          table        large@primary
-·          spans        ALL
+·          spans        FULL SCAN
