@@ -100,7 +100,6 @@ func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	p.allocator.MaybeAddColumn(batch, coltypes._RET_TYP, p.outputIdx)
 	vec := batch.ColVec(p.colIdx)
 	// {{if _IS_CONST_LEFT}}
 	col := vec._R_TYP()
@@ -204,12 +203,14 @@ func GetProjection_CONST_SIDEConstOperator(
 	allocator *Allocator,
 	leftColType *types.T,
 	rightColType *types.T,
+	outputPhysType coltypes.T,
 	op tree.Operator,
 	input Operator,
 	colIdx int,
 	constArg tree.Datum,
 	outputIdx int,
 ) (Operator, error) {
+	input = newVectorTypeEnforcer(allocator, input, outputPhysType, outputIdx)
 	projConstOpBase := projConstOpBase{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,

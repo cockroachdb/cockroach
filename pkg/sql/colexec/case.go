@@ -113,7 +113,6 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 	if origLen == 0 {
 		return coldata.ZeroBatch
 	}
-	c.allocator.MaybeAddColumn(c.buffer.batch, c.typ, c.outputIdx)
 	var origHasSel bool
 	if sel := c.buffer.batch.Selection(); sel != nil {
 		origHasSel = true
