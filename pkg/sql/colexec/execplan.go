@@ -758,7 +758,10 @@ func NewColOperator(
 				return result, err
 			}
 			outputIdx := len(spec.Input[0].ColumnTypes)
-			result.Op, result.IsStreaming = NewOrdinalityOp(NewAllocator(ctx, streamingMemAccount), inputs[0], outputIdx), true
+			result.Op = NewOrdinalityOp(
+				NewAllocator(ctx, streamingMemAccount), inputs[0], outputIdx,
+			)
+			result.IsStreaming = true
 			result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
 
 		case core.HashJoiner != nil:
@@ -1019,15 +1022,16 @@ func NewColOperator(
 					typs = append(typs, coltypes.Bool)
 				}
 
+				outputIdx := int(wf.OutputColIdx + tempColOffset)
 				switch windowFn {
 				case execinfrapb.WindowerSpec_ROW_NUMBER:
 					result.Op = NewRowNumberOperator(
-						NewAllocator(ctx, streamingMemAccount), input, int(wf.OutputColIdx+tempColOffset), partitionColIdx,
+						NewAllocator(ctx, streamingMemAccount), input, outputIdx, partitionColIdx,
 					)
 				case execinfrapb.WindowerSpec_RANK, execinfrapb.WindowerSpec_DENSE_RANK:
 					result.Op, err = NewRankOperator(
-						NewAllocator(ctx, streamingMemAccount), input, windowFn, wf.Ordering.Columns,
-						int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx,
+						NewAllocator(ctx, streamingMemAccount), input, windowFn,
+						wf.Ordering.Columns, outputIdx, partitionColIdx, peersColIdx,
 					)
 				case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
 					// We are using an unlimited memory monitor here because
@@ -1042,7 +1046,7 @@ func NewColOperator(
 					result.Op, err = NewRelativeRankOperator(
 						unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx.Cfg), args.DiskQueueCfg,
 						args.FDSemaphore, input, typs, windowFn, wf.Ordering.Columns,
-						int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx, diskAcc,
+						outputIdx, partitionColIdx, peersColIdx, diskAcc,
 					)
 					// NewRelativeRankOperator sometimes returns a constOp when there
 					// are no ordering columns, so we check that the returned operator
@@ -1538,6 +1542,8 @@ func planTypedMaybeNullProjectionOperators(
 func checkCastSupported(fromType, toType *types.T) error {
 	switch toType.Family() {
 	case types.DecimalFamily:
+		// TODO(yuzefovich): do we want to prohibit casts to decimals *only*
+		// from decimals (i.e. allow casts from ints or floats, for example)?
 		if !fromType.Equal(*toType) {
 			return errors.New("decimal casts with rounding unsupported")
 		}
@@ -1626,7 +1632,9 @@ func planProjectionOperators(
 		funcOutputType := t.ResolvedType()
 		resultIdx = len(ct)
 		ct = append(ct, *funcOutputType)
-		op, err = NewBuiltinFunctionOperator(NewAllocator(ctx, acc), evalCtx, t, ct, inputCols, resultIdx, op)
+		op, err = NewBuiltinFunctionOperator(
+			NewAllocator(ctx, acc), evalCtx, t, ct, inputCols, resultIdx, op,
+		)
 		return op, resultIdx, ct, internalMemUsed, err
 	case tree.Datum:
 		datumType := t.ResolvedType()
@@ -1651,7 +1659,11 @@ func planProjectionOperators(
 			return nil, resultIdx, ct, internalMemUsed, errors.New("CASE <expr> WHEN expressions unsupported")
 		}
 
-		buffer := NewBufferOp(input)
+		allocator := NewAllocator(ctx, acc)
+		// We don't know the schema yet and will update it below, right before
+		// instantiating caseOp.
+		schemaEnforcer := newBatchSchemaPrefixEnforcer(allocator, input, nil /* typs */)
+		buffer := NewBufferOp(schemaEnforcer)
 		caseOps := make([]Operator, len(t.Whens))
 		caseOutputType := typeconv.FromColumnType(t.ResolvedType())
 		switch caseOutputType {
@@ -1749,7 +1761,9 @@ func planProjectionOperators(
 			}
 		}
 
-		op := NewCaseOp(NewAllocator(ctx, acc), buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
+		physTypes, err := typeconv.FromColumnTypes(ct)
+		schemaEnforcer.typs = physTypes
+		op := NewCaseOp(allocator, buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
 		internalMemUsed += op.(InternalMemoryOperator).InternalMemoryUsage()
 		return op, caseOutputIdx, ct, internalMemUsed, err
 	case *tree.AndExpr, *tree.OrExpr:
@@ -1800,6 +1814,7 @@ func planProjectionExpr(
 		return nil, resultIdx, ct, internalMemUsed, err
 	}
 	resultIdx = -1
+	outputPhysType := typeconv.FromColumnType(outputType)
 	// There are 3 cases. Either the left is constant, the right is constant,
 	// or neither are constant.
 	if lConstArg, lConst := left.(tree.Datum); lConst {
@@ -1819,8 +1834,8 @@ func planProjectionExpr(
 		// The projection result will be outputted to a new column which is appended
 		// to the input batch.
 		op, err = GetProjectionLConstOperator(
-			NewAllocator(ctx, acc), left.ResolvedType(), &ct[rightIdx], binOp,
-			rightOp, rightIdx, lConstArg, resultIdx,
+			NewAllocator(ctx, acc), left.ResolvedType(), &ct[rightIdx], outputPhysType,
+			binOp, rightOp, rightIdx, lConstArg, resultIdx,
 		)
 		ct = append(ct, *outputType)
 		if sMem, ok := op.(InternalMemoryOperator); ok {
@@ -1868,8 +1883,8 @@ func planProjectionExpr(
 			op = newIsNullProjOp(NewAllocator(ctx, acc), leftOp, leftIdx, resultIdx, negate)
 		} else {
 			op, err = GetProjectionRConstOperator(
-				NewAllocator(ctx, acc), &ct[leftIdx], right.ResolvedType(), binOp,
-				leftOp, leftIdx, rConstArg, resultIdx,
+				NewAllocator(ctx, acc), &ct[leftIdx], right.ResolvedType(), outputPhysType,
+				binOp, leftOp, leftIdx, rConstArg, resultIdx,
 			)
 		}
 		ct = append(ct, *outputType)
@@ -1888,8 +1903,8 @@ func planProjectionExpr(
 	internalMemUsed += internalMemUsedRight
 	resultIdx = len(ct)
 	op, err = GetProjectionOperator(
-		NewAllocator(ctx, acc), &ct[leftIdx], &ct[rightIdx], binOp, rightOp,
-		leftIdx, rightIdx, resultIdx,
+		NewAllocator(ctx, acc), &ct[leftIdx], &ct[rightIdx], outputPhysType,
+		binOp, rightOp, leftIdx, rightIdx, resultIdx,
 	)
 	ct = append(ct, *outputType)
 	if sMem, ok := op.(InternalMemoryOperator); ok {
@@ -1940,17 +1955,23 @@ func planLogicalProjectionOp(
 	if err != nil {
 		return nil, resultIdx, ct, internalMemUsed, err
 	}
+	physTypes, err := typeconv.FromColumnTypes(ct)
+	if err != nil {
+		return nil, resultIdx, ct, internalMemUsed, err
+	}
+	allocator := NewAllocator(ctx, acc)
+	input = newBatchSchemaPrefixEnforcer(allocator, input, physTypes)
 	switch expr.(type) {
 	case *tree.AndExpr:
 		outputOp = NewAndProjOp(
-			NewAllocator(ctx, acc),
+			allocator,
 			input, leftProjOpChain, rightProjOpChain,
 			&leftFeedOp, &rightFeedOp,
 			leftIdx, rightIdx, resultIdx,
 		)
 	case *tree.OrExpr:
 		outputOp = NewOrProjOp(
-			NewAllocator(ctx, acc),
+			allocator,
 			input, leftProjOpChain, rightProjOpChain,
 			&leftFeedOp, &rightFeedOp,
 			leftIdx, rightIdx, resultIdx,

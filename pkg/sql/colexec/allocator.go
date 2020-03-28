@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
 
 // Allocator is a memory management tool for vectorized components. It provides
@@ -159,7 +160,7 @@ func (a *Allocator) NewMemColumn(t coltypes.T, n int) coldata.Vec {
 	return coldata.NewMemColumn(t, n)
 }
 
-// MaybeAddColumn might add a newly allocated coldata.Vec of the given type to
+// maybeAddColumn might add a newly allocated coldata.Vec of the given type to
 // b at position colIdx. It will do so if either
 // 1. the width of the batch is not greater than colIdx, or
 // 2. there is already an "unknown" vector in position colIdx in the batch.
@@ -167,15 +168,29 @@ func (a *Allocator) NewMemColumn(t coltypes.T, n int) coldata.Vec {
 // be appended to the batch before appending the requested column.
 // If the second condition is true, then the "unknown" column is replaced with
 // the newly created typed column.
+// If there is already typed vector in position colIdx with type different from
+// the provided, it will panic.
 // NOTE: b must be non-zero length batch.
-func (a *Allocator) MaybeAddColumn(b coldata.Batch, t coltypes.T, colIdx int) {
+func (a *Allocator) maybeAddColumn(b coldata.Batch, t coltypes.T, colIdx int) {
 	if b.Length() == 0 {
 		execerror.VectorizedInternalPanic("trying to add a column to zero length batch")
 	}
-	if b.Width() > colIdx && b.ColVec(colIdx).Type() != coltypes.Unhandled {
-		// Neither of the two conditions mentioned in the comment above are true,
-		// so there is nothing to do.
-		return
+	if b.Width() > colIdx {
+		switch presentType := b.ColVec(colIdx).Type(); presentType {
+		case t:
+			// We already have the vector of the desired type in place.
+			return
+		case coltypes.Unhandled:
+			// We have an "unknown" vector, so the second condition from the
+			// comment is true.
+			break
+		default:
+			// We have typed vector with an unexpected type, so we panic.
+			execerror.VectorizedInternalPanic(errors.Errorf(
+				"trying to add a column of %s type at index %d but %s vector already present",
+				t, colIdx, presentType,
+			))
+		}
 	}
 	for b.Width() < colIdx {
 		b.AppendCol(a.NewMemColumn(coltypes.Unhandled, 0))

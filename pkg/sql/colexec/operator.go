@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 )
@@ -285,3 +286,102 @@ func (o *feedOperator) Next(context.Context) coldata.Batch {
 }
 
 var _ Operator = &feedOperator{}
+
+// vectorTypeEnforcer is a utility Operator that on every call to Next
+// enforces that non-zero length batch from the input has a vector of the
+// desired type in the desired position. If the width of the batch is less than
+// the desired position, than new vector will be appended; if the batch has
+// well-typed vector of undesired type in the desired position, an error will
+// occur.
+//
+// This Operator is designed to be planned as a wrapper on the input to a
+// "projecting" Operator (such Operator that has a single column as its output
+// and does not touch other columns by simply passing them along). The type
+// schema passed in into vectorTypeEnforcer *must* include the output
+// type of the Operator that the enforcer will be the input to.
+//
+// The intended diagram is as follows:
+//
+//       original input                (with schema [t1, ..., tN])
+//       --------------
+//             |
+//             ↓
+//     vectorTypeEnforcer              (will enforce that tN+1 = outputType)
+//     ------------------
+//             |
+//             ↓
+//   "projecting" operator             (projects its output of type outputType
+//   ---------------------              in column at position of N+1)
+//
+type vectorTypeEnforcer struct {
+	OneInputNode
+	NonExplainable
+
+	allocator *Allocator
+	typ       coltypes.T
+	idx       int
+}
+
+var _ Operator = &vectorTypeEnforcer{}
+
+func newVectorTypeEnforcer(allocator *Allocator, input Operator, typ coltypes.T, idx int) Operator {
+	return &vectorTypeEnforcer{
+		OneInputNode: NewOneInputNode(input),
+		allocator:    allocator,
+		typ:          typ,
+		idx:          idx,
+	}
+}
+
+func (e *vectorTypeEnforcer) Init() {
+	e.input.Init()
+}
+
+func (e *vectorTypeEnforcer) Next(ctx context.Context) coldata.Batch {
+	b := e.input.Next(ctx)
+	if b.Length() == 0 {
+		return b
+	}
+	e.allocator.maybeAddColumn(b, e.typ, e.idx)
+	return b
+}
+
+// batchSchemaPrefixEnforcer is similar to vectorTypeEnforcer in its purpose,
+// but it enforces that the prefix of the columns of the non-zero length batch
+// satisfies the desired schema. It needs to wrap the input to a "projecting"
+// that internally uses other "projecting" operators (for example, caseOp and
+// logical projection operators).
+type batchSchemaPrefixEnforcer struct {
+	OneInputNode
+	NonExplainable
+
+	allocator *Allocator
+	typs      []coltypes.T
+}
+
+var _ Operator = &batchSchemaPrefixEnforcer{}
+
+func newBatchSchemaPrefixEnforcer(
+	allocator *Allocator, input Operator, typs []coltypes.T,
+) *batchSchemaPrefixEnforcer {
+	return &batchSchemaPrefixEnforcer{
+		OneInputNode: NewOneInputNode(input),
+		allocator:    allocator,
+		typs:         typs,
+	}
+}
+
+func (e *batchSchemaPrefixEnforcer) Init() {
+	e.input.Init()
+}
+
+func (e *batchSchemaPrefixEnforcer) Next(ctx context.Context) coldata.Batch {
+	b := e.input.Next(ctx)
+	if b.Length() == 0 {
+		return b
+	}
+	for i, typ := range e.typs {
+		e.allocator.maybeAddColumn(b, typ, i)
+	}
+	return b
+}

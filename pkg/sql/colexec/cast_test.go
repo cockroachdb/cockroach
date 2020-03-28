@@ -19,6 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -29,6 +33,16 @@ import (
 
 func TestRandomizedCast(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
 
 	datumAsBool := func(d tree.Datum) interface{} {
 		return bool(tree.MustBeDBool(d))
@@ -70,7 +84,6 @@ func TestRandomizedCast(t *testing.T) {
 		{types.Float, datumAsFloat, types.Decimal, datumAsDecimal, false},
 	}
 
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	rng, _ := randutil.NewPseudoRand()
 
 	for _, c := range tc {
@@ -87,12 +100,12 @@ func TestRandomizedCast(t *testing.T) {
 					toDatum tree.Datum
 					err     error
 				)
-				toDatum, err = tree.PerformCast(evalCtx, fromDatum, c.toTyp)
+				toDatum, err = tree.PerformCast(&evalCtx, fromDatum, c.toTyp)
 				if c.retryGeneration {
 					for err != nil {
 						// If we are allowed to retry, make a new datum and cast it on error.
 						fromDatum = sqlbase.RandDatum(rng, c.fromTyp, false)
-						toDatum, err = tree.PerformCast(evalCtx, fromDatum, c.toTyp)
+						toDatum, err = tree.PerformCast(&evalCtx, fromDatum, c.toTyp)
 					}
 				} else {
 					if err != nil {
@@ -104,7 +117,7 @@ func TestRandomizedCast(t *testing.T) {
 			}
 			runTests(t, []tuples{input}, output, orderedVerifier,
 				func(input []Operator) (Operator, error) {
-					return GetCastOperator(testAllocator, input[0], 0 /* inputIdx*/, 1 /* resultIdx */, c.fromTyp, c.toTyp)
+					return createTestCastOperator(ctx, flowCtx, input[0], c.fromTyp, c.toTyp)
 				})
 		})
 	}
@@ -112,6 +125,15 @@ func TestRandomizedCast(t *testing.T) {
 
 func BenchmarkCastOp(b *testing.B) {
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
 	rng, _ := randutil.NewPseudoRand()
 	for _, typePair := range [][]types.T{
 		{*types.Int, *types.Float},
@@ -138,7 +160,7 @@ func BenchmarkCastOp(b *testing.B) {
 							coldata.BatchSize(), nullProbability, selectivity,
 						)
 						source := NewRepeatableBatchSource(testAllocator, batch)
-						op, err := GetCastOperator(testAllocator, source, 0, 1, &typePair[0], &typePair[1])
+						op, err := createTestCastOperator(ctx, flowCtx, source, &typePair[0], &typePair[1])
 						require.NoError(b, err)
 						b.SetBytes(int64(8 * coldata.BatchSize()))
 						b.ResetTimer()
@@ -150,4 +172,47 @@ func BenchmarkCastOp(b *testing.B) {
 			}
 		}
 	}
+}
+
+func createTestCastOperator(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, input Operator, fromTyp *types.T, toTyp *types.T,
+) (Operator, error) {
+	expr, err := parser.ParseExpr(fmt.Sprintf("@1::%s", toTyp.Name()))
+	if err != nil {
+		return nil, err
+	}
+	p := &mockTypeContext{typs: []types.T{*fromTyp}}
+	typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarContainer: p}, types.Any)
+	if err != nil {
+		return nil, err
+	}
+	spec := &execinfrapb.ProcessorSpec{
+		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: []types.T{*fromTyp}}},
+		Core: execinfrapb.ProcessorCoreUnion{
+			Noop: &execinfrapb.NoopCoreSpec{},
+		},
+		Post: execinfrapb.PostProcessSpec{
+			RenderExprs: []execinfrapb.Expression{
+				{Expr: "@1"},
+				{LocalExpr: typedExpr},
+			},
+		},
+	}
+	args := NewColOperatorArgs{
+		Spec:                spec,
+		Inputs:              []Operator{input},
+		StreamingMemAccount: testMemAcc,
+		// We currently don't support casting to decimal type (other than when
+		// casting from decimal with the same precision), so we will fallback
+		// to row-by-row engine.
+		// TODO(yuzefovich): reuse createTestProjectingOperator once we don't
+		// need to provide the processor constructor.
+		ProcessorConstructor: rowexec.NewProcessor,
+	}
+	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
+	result, err := NewColOperator(ctx, flowCtx, args)
+	if err != nil {
+		return nil, err
+	}
+	return result.Op, nil
 }
