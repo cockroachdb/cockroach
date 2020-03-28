@@ -224,6 +224,86 @@ SELECT substring('f(oabaroob' from '\(o(.)b' for '+')
 query error unknown signature: substring\(\)
 SELECT substring()
 
+# Adding testcases for substring against bit array.
+
+query TTT
+SELECT substring(B'11110000', 0), substring(B'11110000', -1), substring(B'11110000', 5)
+----
+11110000 11110000 0000
+
+query TTT
+SELECT substring(B'11110000', 8), substring(B'11110000', 10), substring(B'', 0)
+----
+0  ·  ·
+
+query TTT
+SELECT substring('11100011'::bit(8), 4), substring('11100011'::bit(6), 4), substring(B'', 0, 1)
+----
+00011 000  ·
+
+query TTT
+SELECT substring(B'11110000', 0, 4), substring(B'11110000', -1, 4), substring(B'11110000', 5, 10)
+----
+111 11 0000
+
+query TTT
+SELECT substring(B'11110000', 8, 1), substring(B'11110000', 8, 0), substring(B'11110000', 10, 5)
+----
+0  ·  ·
+
+query TT
+SELECT substring('11100011'::bit(10), 4, 10), substring('11100011'::bit(8), 1, 8)
+----
+0001100 11100011
+
+query TTT
+SELECT substring(B'10001000' FOR 4 FROM 0), substring(B'10001000' FROM 0 FOR 4), substring(B'10001000' FOR 4)
+----
+100 100 1000
+
+query error substring\(\): negative bit subarray length -1 not allowed
+SELECT substring('11100011'::bit(10), 4, -1)
+
+# Adding testcases for substring against byte array.
+
+query TT
+SELECT substring(b'abc', 0), substring(b'\x61\x62\x63', -1)
+----
+abc abc
+
+query TT
+SELECT substring(b'abc', 3), substring(b'abc', 5)
+----
+c  ·
+
+query T
+SELECT substring('abc'::bytea, 0)
+----
+abc
+
+query TT
+SELECT substring(b'\x61\x62\x63', 0, 4), substring(b'abc', -1, 4)
+----
+abc ab
+
+query TTT
+SELECT substring(b'abc', 3, 1), substring(b'abc', 3, 0), substring(b'abc', 4, 3)
+----
+c  ·  ·
+
+query T
+SELECT substring('abc'::bytea, 0, 4)
+----
+abc
+
+query TTT
+SELECT substring(b'abc' FOR 3 FROM 1), substring(b'abc' FROM 1 FOR 3), substring(b'abc' FOR 3)
+----
+abc abc abc
+
+query error substring\(\): negative byte subarray length -1 not allowed
+SELECT substring('11100011'::bytea, 4, -1)
+
 query error unknown signature: concat_ws\(\)
 SELECT concat_ws()
 

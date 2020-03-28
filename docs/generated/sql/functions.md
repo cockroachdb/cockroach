@@ -1045,6 +1045,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="strpos"></a><code>strpos(input: <a href="string.html">string</a>, find: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the position where the string <code>find</code> begins in <code>input</code>.</p>
 <p>For example, <code>strpos('doggie', 'gie')</code> returns <code>4</code>.</p>
 </span></td></tr>
+<tr><td><a name="substr"></a><code>substr(input: <a href="bytes.html">bytes</a>, start_pos: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns a byte subarray of <code>input</code> starting at <code>start_pos</code> (count starts at 1).</p>
+</span></td></tr>
+<tr><td><a name="substr"></a><code>substr(input: <a href="bytes.html">bytes</a>, start_pos: <a href="int.html">int</a>, length: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns a byte subarray of <code>input</code> starting at <code>start_pos</code> (count starts at 1) and including up to <code>length</code> characters.</p>
+</span></td></tr>
 <tr><td><a name="substr"></a><code>substr(input: <a href="string.html">string</a>, regex: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns a substring of <code>input</code> that matches the regular expression <code>regex</code>.</p>
 </span></td></tr>
 <tr><td><a name="substr"></a><code>substr(input: <a href="string.html">string</a>, regex: <a href="string.html">string</a>, escape_char: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns a substring of <code>input</code> that matches the regular expression <code>regex</code> using <code>escape_char</code> as your escape character instead of <code>\</code>.</p>
@@ -1053,6 +1057,14 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="substr"></a><code>substr(input: <a href="string.html">string</a>, start_pos: <a href="int.html">int</a>, length: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns a substring of <code>input</code> starting at <code>start_pos</code> (count starts at 1) and including up to <code>length</code> characters.</p>
 </span></td></tr>
+<tr><td><a name="substr"></a><code>substr(input: varbit, start_pos: <a href="int.html">int</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Returns a bit subarray of <code>input</code> starting at <code>start_pos</code> (count starts at 1).</p>
+</span></td></tr>
+<tr><td><a name="substr"></a><code>substr(input: varbit, start_pos: <a href="int.html">int</a>, length: <a href="int.html">int</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Returns a bit subarray of <code>input</code> starting at <code>start_pos</code> (count starts at 1) and including up to <code>length</code> characters.</p>
+</span></td></tr>
+<tr><td><a name="substring"></a><code>substring(input: <a href="bytes.html">bytes</a>, start_pos: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns a byte subarray of <code>input</code> starting at <code>start_pos</code> (count starts at 1).</p>
+</span></td></tr>
+<tr><td><a name="substring"></a><code>substring(input: <a href="bytes.html">bytes</a>, start_pos: <a href="int.html">int</a>, length: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns a byte subarray of <code>input</code> starting at <code>start_pos</code> (count starts at 1) and including up to <code>length</code> characters.</p>
+</span></td></tr>
 <tr><td><a name="substring"></a><code>substring(input: <a href="string.html">string</a>, regex: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns a substring of <code>input</code> that matches the regular expression <code>regex</code>.</p>
 </span></td></tr>
 <tr><td><a name="substring"></a><code>substring(input: <a href="string.html">string</a>, regex: <a href="string.html">string</a>, escape_char: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns a substring of <code>input</code> that matches the regular expression <code>regex</code> using <code>escape_char</code> as your escape character instead of <code>\</code>.</p>
@@ -1060,6 +1072,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="substring"></a><code>substring(input: <a href="string.html">string</a>, start_pos: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns a substring of <code>input</code> starting at <code>start_pos</code> (count starts at 1).</p>
 </span></td></tr>
 <tr><td><a name="substring"></a><code>substring(input: <a href="string.html">string</a>, start_pos: <a href="int.html">int</a>, length: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns a substring of <code>input</code> starting at <code>start_pos</code> (count starts at 1) and including up to <code>length</code> characters.</p>
+</span></td></tr>
+<tr><td><a name="substring"></a><code>substring(input: varbit, start_pos: <a href="int.html">int</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Returns a bit subarray of <code>input</code> starting at <code>start_pos</code> (count starts at 1).</p>
+</span></td></tr>
+<tr><td><a name="substring"></a><code>substring(input: varbit, start_pos: <a href="int.html">int</a>, length: <a href="int.html">int</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Returns a bit subarray of <code>input</code> starting at <code>start_pos</code> (count starts at 1) and including up to <code>length</code> characters.</p>
 </span></td></tr>
 <tr><td><a name="to_english"></a><code>to_english(val: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function enunciates the value of its argument using English cardinals.</p>
 </span></td></tr>
