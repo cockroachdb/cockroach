@@ -10,6 +10,7 @@ package importccl
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"math"
 	"sort"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -1235,7 +1237,7 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 func (r *importResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
 	cfg := phs.(sql.PlanHookState).ExecCfg()
 	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := r.dropTables(ctx, txn); err != nil {
+		if err := r.dropTables(ctx, txn, cfg.JobRegistry); err != nil {
 			return err
 		}
 		return r.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
@@ -1262,7 +1264,7 @@ func (r *importResumer) releaseProtectedTimestamp(
 }
 
 // dropTables implements the OnFailOrCancel logic.
-func (r *importResumer) dropTables(ctx context.Context, txn *kv.Txn) error {
+func (r *importResumer) dropTables(ctx context.Context, txn *kv.Txn, jr *jobs.Registry) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 
 	// Needed to trigger the schema change manager.
@@ -1316,8 +1318,27 @@ func (r *importResumer) dropTables(ctx context.Context, txn *kv.Txn) error {
 			// possible. This is safe since the table data was never visible to users,
 			// and so we don't need to preserve MVCC semantics.
 			tableDesc.DropTime = 1
-			err := sqlbase.RemovePublicTableNamespaceEntry(ctx, txn, tableDesc.ParentID, tableDesc.Name)
-			if err != nil {
+			if err := sqlbase.RemovePublicTableNamespaceEntry(ctx, txn, tableDesc.ParentID, tableDesc.Name); err != nil {
+				return err
+			}
+
+			gcDetails := jobspb.SchemaChangeGCDetails{
+				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
+					{
+						ID:       tableDesc.ID,
+						DropTime: tableDesc.DropTime,
+					},
+				},
+			}
+			jobRecord := jobs.Record{
+				Description:   fmt.Sprintf("GC for %s", r.job.Payload().Description),
+				Username:      security.RootUser,
+				DescriptorIDs: []sqlbase.ID{tableDesc.ID},
+				Details:       gcDetails,
+				Progress:      jobspb.SchemaChangeGCProgress{},
+				NonCancelable: true,
+			}
+			if _, _, err := jr.CreateAndStartJob(ctx, nil, jobRecord); err != nil {
 				return err
 			}
 		} else {
