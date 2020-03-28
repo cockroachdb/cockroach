@@ -27,11 +27,10 @@ package colexec
 
 import (
 	"bytes"
-  "context"
+	"context"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 )
 
 {{range .}}

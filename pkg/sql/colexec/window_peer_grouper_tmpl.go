@@ -57,6 +57,7 @@ func NewWindowPeerGrouper(
 			return nil, err
 		}
 	}
+	input = newVectorTypeEnforcer(allocator, input, coltypes.Bool, outputColIdx)
 	initFields := windowPeerGrouperInitFields{
 		OneInputNode:    NewOneInputNode(input),
 		allocator:       allocator,
@@ -117,7 +118,6 @@ func (p *_PEER_GROUPER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	if n == 0 {
 		return b
 	}
-	p.allocator.MaybeAddColumn(b, coltypes.Bool, p.outputColIdx)
 	// {{if .HasPartition}}
 	partitionCol := b.ColVec(p.partitionColIdx).Bool()
 	// {{end}}
