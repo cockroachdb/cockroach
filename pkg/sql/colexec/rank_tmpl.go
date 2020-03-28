@@ -49,6 +49,7 @@ func NewRankOperator(
 	if len(orderingCols) == 0 {
 		return NewConstOp(allocator, input, coltypes.Int64, int64(1), outputColIdx)
 	}
+	input = newVectorTypeEnforcer(allocator, input, coltypes.Int64, outputColIdx)
 	initFields := rankInitFields{
 		OneInputNode:    NewOneInputNode(input),
 		allocator:       allocator,
@@ -126,7 +127,6 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	r.allocator.MaybeAddColumn(batch, coltypes.Int64, r.outputColIdx)
 	// {{if .HasPartition}}
 	partitionCol := batch.ColVec(r.partitionColIdx).Bool()
 	// {{end}}

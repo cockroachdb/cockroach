@@ -51,7 +51,6 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	b.allocator.MaybeAddColumn(batch, b.outputPhysType, b.outputIdx)
 
 	sel := batch.Selection()
 	output := batch.ColVec(b.outputIdx)
@@ -115,9 +114,9 @@ func NewBuiltinFunctionOperator(
 	outputIdx int,
 	input Operator,
 ) (Operator, error) {
-
 	switch funcExpr.ResolvedOverload().SpecializedVecBuiltin {
 	case tree.SubstringStringIntInt:
+		input = newVectorTypeEnforcer(allocator, input, coltypes.Bytes, outputIdx)
 		return newSubstringOperator(
 			allocator, columnTypes, argumentCols, outputIdx, input,
 		), nil
@@ -130,6 +129,7 @@ func NewBuiltinFunctionOperator(
 				outputType.String(), funcExpr.String(),
 			)
 		}
+		input = newVectorTypeEnforcer(allocator, input, outputPhysType, outputIdx)
 		return &defaultBuiltinFuncOperator{
 			OneInputNode:   NewOneInputNode(input),
 			allocator:      allocator,
