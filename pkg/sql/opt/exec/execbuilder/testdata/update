@@ -112,7 +112,7 @@ count                ·                 ·
       └── render     ·                 ·
            └── scan  ·                 ·
 ·                    table             xyz@primary
-·                    spans             ALL
+·                    spans             FULL SCAN
 ·                    locking strength  for update
 
 query TTTTT
@@ -134,7 +134,7 @@ count                ·                 ·            ()                        
            │         render 4          2            ·                            ·
            └── scan  ·                 ·            (x, y, z)                    ·
 ·                    table             xyz@primary  ·                            ·
-·                    spans             ALL          ·                            ·
+·                    spans             FULL SCAN    ·                            ·
 ·                    locking strength  for update   ·                            ·
 
 query TTTTT
@@ -156,7 +156,7 @@ count                ·                 ·            ()               ·
            │         render 4          x            ·                ·
            └── scan  ·                 ·            (x, y, z)        ·
 ·                    table             xyz@primary  ·                ·
-·                    spans             ALL          ·                ·
+·                    spans             FULL SCAN    ·                ·
 ·                    locking strength  for update   ·                ·
 
 query TTTTT
@@ -183,7 +183,7 @@ count                     ·                 ·            ()                   
                 │         render 3          z            ·                            ·
                 └── scan  ·                 ·            (x, y, z)                    ·
 ·                         table             xyz@primary  ·                            ·
-·                         spans             ALL          ·                            ·
+·                         spans             FULL SCAN    ·                            ·
 ·                         locking strength  for update   ·                            ·
 
 statement ok
@@ -247,7 +247,7 @@ count                          ·            ·
                      │         order        -v
                      └── scan  ·            ·
 ·                              table        kv@primary
-·                              spans        ALL
+·                              spans        FULL SCAN
 
 # Use case for UPDATE ... ORDER BY: renumbering a PK without unique violation.
 query TTT
@@ -296,7 +296,7 @@ count                ·                 ·
            │         render 3          c + 1
            └── scan  ·                 ·
 ·                    table             tu@primary
-·                    spans             ALL
+·                    spans             FULL SCAN
 ·                    locking strength  for update
 
 statement ok
@@ -368,7 +368,7 @@ root                                          ·                 ·             
                                     │         render 4          c                                 ·                         ·
                                     └── scan  ·                 ·                                 (a, b, c, rowid[hidden])  ·
 ·                                             table             abc@primary                       ·                         ·
-·                                             spans             ALL                               ·                         ·
+·                                             spans             FULL SCAN                         ·                         ·
 ·                                             locking strength  for update                        ·                         ·
 
 # ------------------------------------------------------------------------------
@@ -422,7 +422,7 @@ count                           ·            ·               ()               
                      │          key columns  a               ·                   ·
                      └── scan   ·            ·               (a, b)              ·
 ·                               table        t38799@foo      ·                   ·
-·                               spans        ALL             ·                   ·
+·                               spans        FULL SCAN       ·                   ·
 
 # ------------------------------------------------------------------------------
 # Test without implicit SELECT FOR UPDATE.
@@ -478,7 +478,7 @@ count                ·                 ·
       └── render     ·                 ·
            └── scan  ·                 ·
 ·                    table             kv@primary
-·                    spans             ALL
+·                    spans             FULL SCAN
 ·                    locking strength  for update
 
 statement ok
@@ -580,7 +580,7 @@ count                ·            ·
       └── render     ·            ·
            └── scan  ·            ·
 ·                    table        kv@primary
-·                    spans        ALL
+·                    spans        FULL SCAN
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
@@ -601,7 +601,7 @@ count                ·            ·            ()                           ·
            │         render 4     2            ·                            ·
            └── scan  ·            ·            (x, y, z)                    ·
 ·                    table        xyz@primary  ·                            ·
-·                    spans        ALL          ·                            ·
+·                    spans        FULL SCAN    ·                            ·
 
 query TTT
 EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
@@ -675,7 +675,7 @@ count                ·            ·
       └── render     ·            ·
            └── scan  ·            ·
 ·                    table        tu@primary
-·                    spans        ALL
+·                    spans        FULL SCAN
 
 # Reset for rest of test.
 statement ok

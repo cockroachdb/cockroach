@@ -222,7 +222,7 @@ SELECT * FROM [EXPLAIN SELECT * FROM child@i] OFFSET 2
 ----
 scan  ·      ·
 ·     table  child@i
-·     spans  ALL
+·     spans  FULL SCAN
 
 query IIII
 SELECT * FROM child@i
@@ -385,7 +385,7 @@ index-join  ·            ·
  │          key columns  y
  └── scan   ·            ·
 ·           table        t@i1
-·           spans        ALL
+·           spans        FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i1
@@ -400,7 +400,7 @@ index-join  ·            ·
  │          key columns  y
  └── scan   ·            ·
 ·           table        t@i2
-·           spans        ALL
+·           spans        FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i2
@@ -415,7 +415,7 @@ index-join  ·            ·
  │          key columns  y
  └── scan   ·            ·
 ·           table        t@i3
-·           spans        ALL
+·           spans        FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i3
@@ -430,7 +430,7 @@ index-join  ·            ·
  │          key columns  y
  └── scan   ·            ·
 ·           table        t@i4
-·           spans        ALL
+·           spans        FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i4
@@ -445,7 +445,7 @@ index-join  ·            ·
  │          key columns  y
  └── scan   ·            ·
 ·           table        t@i5
-·           spans        ALL
+·           spans        FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i5
@@ -460,7 +460,7 @@ index-join  ·            ·
  │          key columns  y
  └── scan   ·            ·
 ·           table        t@i7
-·           spans        ALL
+·           spans        FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i5

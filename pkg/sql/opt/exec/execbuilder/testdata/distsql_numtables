@@ -93,11 +93,11 @@ render           ·                   ·                    (x, str)     ·
       │          mergeJoinOrder      +"(x=y)"             ·            ·
       ├── scan   ·                   ·                    (x)          +x
       │          table               numtosquare@primary  ·            ·
-      │          spans               ALL                  ·            ·
+      │          spans               FULL SCAN            ·            ·
       │          filter              (x % 2) = 0          ·            ·
       └── scan   ·                   ·                    (y, str)     +y
 ·                table               numtostr@primary     ·            ·
-·                spans               ALL                  ·            ·
+·                spans               FULL SCAN            ·            ·
 ·                filter              (y % 2) = 0          ·            ·
 
 query T
@@ -154,7 +154,7 @@ EXPLAIN (VERBOSE) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)
 ·     vectorized   true                 ·    ·
 scan  ·            ·                    (x)  ·
 ·     table        numtosquare@primary  ·    ·
-·     spans        ALL                  ·    ·
+·     spans        FULL SCAN            ·    ·
 
 # Verifies that unused renders don't cause us to do rendering instead of a
 # simple projection.
@@ -180,7 +180,7 @@ render               ·            ·                  (y, str, res)  ·
            │         render 2     str                ·              ·
            └── scan  ·            ·                  (y, str)       ·
 ·                    table        numtostr@primary   ·              ·
-·                    spans        ALL                ·              ·
+·                    spans        FULL SCAN          ·              ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res LIMIT 10
@@ -201,7 +201,7 @@ render                    ·            ·                  (y, str, res)  ·
                 │         render 2     str                ·              ·
                 └── scan  ·            ·                  (y, str)       ·
 ·                         table        numtostr@primary   ·              ·
-·                         spans        ALL                ·              ·
+·                         spans        FULL SCAN          ·              ·
 
 # Regression test for #20481.
 query T
