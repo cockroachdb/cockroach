@@ -14,7 +14,7 @@ group            ·            ·                (max)           ·
  └── ordinality  ·            ·                ("ordinality")  ·
       └── scan   ·            ·                ()              ·
 ·                table        foo@primary      ·               ·
-·                spans        ALL              ·               ·
+·                spans        FULL SCAN        ·               ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality
@@ -26,7 +26,7 @@ filter           ·            ·                 (x, "ordinality")  +"ordinalit
  └── ordinality  ·            ·                 (x, "ordinality")  ·
       └── scan   ·            ·                 (x)                ·
 ·                table        foo@primary       ·                  ·
-·                spans        ALL               ·                  ·
+·                spans        FULL SCAN         ·                  ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality DESC
@@ -40,7 +40,7 @@ sort                  ·            ·                 (x, "ordinality")  -"ordi
       └── ordinality  ·            ·                 (x, "ordinality")  ·
            └── scan   ·            ·                 (x)                ·
 ·                     table        foo@primary       ·                  ·
-·                     spans        ALL               ·                  ·
+·                     spans        FULL SCAN         ·                  ·
 
 # Show that the primary key is used under ordinalityNode.
 query TTTTT
@@ -65,4 +65,4 @@ filter           ·            ·            (x, "ordinality")  ·
  └── ordinality  ·            ·            (x, "ordinality")  ·
       └── scan   ·            ·            (x)                ·
 ·                table        foo@primary  ·                  ·
-·                spans        ALL          ·                  ·
+·                spans        FULL SCAN    ·                  ·

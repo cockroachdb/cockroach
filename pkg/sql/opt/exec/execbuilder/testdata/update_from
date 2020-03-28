@@ -24,10 +24,10 @@ count                      ·                   ·
                 │          mergeJoinOrder      +"(a=a)"
                 ├── scan   ·                   ·
                 │          table               abc@primary
-                │          spans               ALL
+                │          spans               FULL SCAN
                 └── scan   ·                   ·
 ·                          table               abc@primary
-·                          spans               ALL
+·                          spans               FULL SCAN
 
 # Update from another table.
 statement ok
@@ -53,10 +53,10 @@ count                          ·                  ·
                      │         left cols are key  ·
                      ├── scan  ·                  ·
                      │         table              abc@primary
-                     │         spans              ALL
+                     │         spans              FULL SCAN
                      └── scan  ·                  ·
 ·                              table              new_abc@primary
-·                              spans              ALL
+·                              spans              FULL SCAN
 
 # Returning old values.
 query TTT
@@ -88,10 +88,10 @@ render                          ·                   ·
                      │          mergeJoinOrder      +"(a=a)"
                      ├── scan   ·                   ·
                      │          table               abc@primary
-                     │          spans               ALL
+                     │          spans               FULL SCAN
                      └── scan   ·                   ·
 ·                               table               abc@primary
-·                               spans               ALL
+·                               spans               FULL SCAN
 
 # Check if RETURNING * returns everything
 query TTTTT
@@ -122,10 +122,10 @@ run                        ·                   ·            (a, b, c, a, b, c)
                 │          mergeJoinOrder      +"(a=a)"     ·                                       ·
                 ├── scan   ·                   ·            (a, b, c)                               +a
                 │          table               abc@primary  ·                                       ·
-                │          spans               ALL          ·                                       ·
+                │          spans               FULL SCAN    ·                                       ·
                 └── scan   ·                   ·            (a, b, c)                               +a
 ·                          table               abc@primary  ·                                       ·
-·                          spans               ALL          ·                                       ·
+·                          spans               FULL SCAN    ·                                       ·
 
 # Update values of table from values expression
 query TTT
@@ -177,17 +177,17 @@ count                               ·                   ·
                      │              equality            (a) = (a)
                      ├── scan       ·                   ·
                      │              table               ab@primary
-                     │              spans               ALL
+                     │              spans               FULL SCAN
                      └── hash-join  ·                   ·
                           │         type                inner
                           │         equality            (a) = (a)
                           │         right cols are key  ·
                           ├── scan  ·                   ·
                           │         table               ac@primary
-                          │         spans               ALL
+                          │         spans               FULL SCAN
                           └── scan  ·                   ·
 ·                                   table               abc@primary
-·                                   spans               ALL
+·                                   spans               FULL SCAN
 
 # Make sure UPDATE ... FROM works with LATERAL.
 query TTT
@@ -218,14 +218,14 @@ run                                 ·                   ·
                      │              equality            (a) = (a)
                      ├── scan       ·                   ·
                      │              table               ab@primary
-                     │              spans               ALL
+                     │              spans               FULL SCAN
                      └── hash-join  ·                   ·
                           │         type                inner
                           │         equality            (a) = (a)
                           │         right cols are key  ·
                           ├── scan  ·                   ·
                           │         table               ac@primary
-                          │         spans               ALL
+                          │         spans               FULL SCAN
                           └── scan  ·                   ·
 ·                                   table               abc@primary
-·                                   spans               ALL
+·                                   spans               FULL SCAN

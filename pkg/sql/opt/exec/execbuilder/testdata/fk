@@ -50,7 +50,7 @@ render                ·                   ·
            │          filter              (a_y IS NOT NULL) AND (a_x IS NOT NULL)
            └── scan   ·                   ·
 ·                     table               a@primary
-·                     spans               ALL
+·                     spans               FULL SCAN
 
 statement ok
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref

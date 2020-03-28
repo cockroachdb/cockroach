@@ -27,7 +27,7 @@ root                        ·             ·                (a, a)  ·
            │                label         buffer 1 (t)     ·       ·
            └── scan         ·             ·                (a)     ·
 ·                           table         y@primary        ·       ·
-·                           spans         ALL              ·       ·
+·                           spans         FULL SCAN        ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -39,7 +39,7 @@ render     ·            ·          (a)  ·
  │         render 0     a          ·    ·
  └── scan  ·            ·          (a)  ·
 ·          table        y@primary  ·    ·
-·          spans        ALL        ·    ·
+·          spans        FULL SCAN  ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -88,10 +88,10 @@ cross-join  ·            ·                   (col)  ·
  │          type         cross               ·      ·
  ├── scan   ·            ·                   ()     ·
  │          table        table39010@primary  ·      ·
- │          spans        ALL                 ·      ·
+ │          spans        FULL SCAN           ·      ·
  └── scan   ·            ·                   (col)  ·
 ·           table        table39010@primary  ·      ·
-·           spans        ALL                 ·      ·
+·           spans        FULL SCAN           ·      ·
 
 query TTTTT
 EXPLAIN (VERBOSE)

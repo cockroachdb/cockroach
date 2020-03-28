@@ -41,17 +41,17 @@ limit                     ·            ·            (w)      +w
                 │         order        +w           ·        ·
                 └── scan  ·            ·            (w)      ·
 ·                         table        t@primary    ·        ·
-·                         spans        ALL          ·        ·
+·                         spans        FULL SCAN    ·        ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k LIMIT 5
 ----
-·     distributed  false      ·       ·
-·     vectorized   true       ·       ·
-scan  ·            ·          (k, v)  +k
-·     table        t@primary  ·       ·
-·     spans        ALL        ·       ·
-·     limit        5          ·       ·
+·     distributed  false         ·       ·
+·     vectorized   true          ·       ·
+scan  ·            ·             (k, v)  +k
+·     table        t@primary     ·       ·
+·     spans        LIMITED SCAN  ·       ·
+·     limit        5             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k OFFSET 5
@@ -62,31 +62,31 @@ limit      ·            ·          (k, v)  +k
  │         offset       5          ·       ·
  └── scan  ·            ·          (k, v)  +k
 ·          table        t@primary  ·       ·
-·          spans        ALL        ·       ·
+·          spans        FULL SCAN  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v LIMIT (1+4) OFFSET 1
 ----
-·          distributed  false      ·       ·
-·          vectorized   true       ·       ·
-limit      ·            ·          (k, v)  +v
- │         offset       1          ·       ·
- └── scan  ·            ·          (k, v)  +v
-·          table        t@t_v_idx  ·       ·
-·          spans        ALL        ·       ·
-·          limit        6          ·       ·
+·          distributed  false         ·       ·
+·          vectorized   true          ·       ·
+limit      ·            ·             (k, v)  +v
+ │         offset       1             ·       ·
+ └── scan  ·            ·             (k, v)  +v
+·          table        t@t_v_idx     ·       ·
+·          spans        LIMITED SCAN  ·       ·
+·          limit        6             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v DESC LIMIT (1+4) OFFSET 1
 ----
-·             distributed  false      ·       ·
-·             vectorized   true       ·       ·
-limit         ·            ·          (k, v)  -v
- │            offset       1          ·       ·
- └── revscan  ·            ·          (k, v)  -v
-·             table        t@t_v_idx  ·       ·
-·             spans        ALL        ·       ·
-·             limit        6          ·       ·
+·             distributed  false         ·       ·
+·             vectorized   true          ·       ·
+limit         ·            ·             (k, v)  -v
+ │            offset       1             ·       ·
+ └── revscan  ·            ·             (k, v)  -v
+·             table        t@t_v_idx     ·       ·
+·             spans        LIMITED SCAN  ·       ·
+·             limit        6             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT sum(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
@@ -107,43 +107,43 @@ render                    ·            ·                (sum)                 
                 │         ordered      +k               ·                       ·
                 └── scan  ·            ·                (k, v, w)               +k
 ·                         table        t@primary        ·                       ·
-·                         spans        ALL              ·                       ·
+·                         spans        FULL SCAN        ·                       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
 ----
-·          distributed  false      ·       ·
-·          vectorized   true       ·       ·
-render     ·            ·          (k)     ·
- │         render 0     k          ·       ·
- └── scan  ·            ·          (k, v)  ·
-·          table        t@t_v_idx  ·       ·
-·          spans        ALL        ·       ·
-·          limit        4          ·       ·
+·          distributed  false         ·       ·
+·          vectorized   true          ·       ·
+render     ·            ·             (k)     ·
+ │         render 0     k             ·       ·
+ └── scan  ·            ·             (k, v)  ·
+·          table        t@t_v_idx     ·       ·
+·          spans        LIMITED SCAN  ·       ·
+·          limit        4             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
 ----
-·          distributed  false      ·       ·
-·          vectorized   true       ·       ·
-render     ·            ·          (k)     ·
- │         render 0     k          ·       ·
- └── scan  ·            ·          (k, v)  ·
-·          table        t@t_v_idx  ·       ·
-·          spans        ALL        ·       ·
-·          limit        4          ·       ·
+·          distributed  false         ·       ·
+·          vectorized   true          ·       ·
+render     ·            ·             (k)     ·
+ │         render 0     k             ·       ·
+ └── scan  ·            ·             (k, v)  ·
+·          table        t@t_v_idx     ·       ·
+·          spans        LIMITED SCAN  ·       ·
+·          limit        4             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k FROM t LIMIT 5) WHERE k != 2
 ----
-·          distributed  false      ·    ·
-·          vectorized   true       ·    ·
-filter     ·            ·          (k)  ·
- │         filter       k != 2     ·    ·
- └── scan  ·            ·          (k)  ·
-·          table        t@t_v_idx  ·    ·
-·          spans        ALL        ·    ·
-·          limit        5          ·    ·
+·          distributed  false         ·    ·
+·          vectorized   true          ·    ·
+filter     ·            ·             (k)  ·
+ │         filter       k != 2        ·    ·
+ └── scan  ·            ·             (k)  ·
+·          table        t@t_v_idx     ·    ·
+·          spans        LIMITED SCAN  ·    ·
+·          limit        5             ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k, w FROM t WHERE v >= 1 AND v <= 100 LIMIT 10
@@ -157,7 +157,7 @@ render          ·            ·                        (k, w)     ·
       │         count        10                       ·          ·
       └── scan  ·            ·                        (k, v, w)  ·
 ·               table        t@primary                ·          ·
-·               spans        ALL                      ·          ·
+·               spans        FULL SCAN                ·          ·
 ·               filter       (v >= 1) AND (v <= 100)  ·          ·
 
 query TTTTT
@@ -190,5 +190,5 @@ render               ·            ·                        (k, w)     ·
            │         count        10                       ·          ·
            └── scan  ·            ·                        (k, v, w)  +k
 ·                    table        t@primary                ·          ·
-·                    spans        ALL                      ·          ·
+·                    spans        FULL SCAN                ·          ·
 ·                    filter       (v >= 1) AND (v <= 100)  ·          ·

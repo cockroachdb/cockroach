@@ -65,7 +65,7 @@ tree          field        description
 ·             vectorized   false
 delete range  ·            ·
 ·             from         unindexed
-·             spans        ALL
+·             spans        FULL SCAN
 
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v LIMIT 10
@@ -82,7 +82,7 @@ count                     ·            ·
                 │         count        10
                 └── scan  ·            ·
 ·                         table        unindexed@primary
-·                         spans        ALL
+·                         spans        FULL SCAN
 ·                         filter       v = 7
 
 # Check DELETE with LIMIT clause (MySQL extension)
@@ -101,7 +101,7 @@ count                     ·            ·
                 │         count        10
                 └── scan  ·            ·
 ·                         table        unindexed@primary
-·                         spans        ALL
+·                         spans        FULL SCAN
 ·                         filter       v = 5
 
 # Check fast DELETE.
@@ -161,7 +161,7 @@ count           ·            ·
       │         auto commit  ·
       └── scan  ·            ·
 ·               table        indexed@indexed_value_idx
-·               spans        ALL
+·               spans        LIMITED SCAN
 ·               limit        10
 
 # TODO(andyk): Prune columns so that index-join is not necessary.
@@ -197,4 +197,4 @@ count           ·            ·           ()      ·
       │         auto commit  ·           ·       ·
       └── scan  ·            ·           (a, b)  ·
 ·               table        t38799@foo  ·       ·
-·               spans        ALL         ·       ·
+·               spans        FULL SCAN   ·       ·

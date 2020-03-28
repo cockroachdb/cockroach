@@ -38,7 +38,7 @@ EXPLAIN (VERBOSE) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY
 ordinality  ·            ·            (x, y, z, "ordinality")  ·
  └── scan   ·            ·            (x, y, z)                ·
 ·           table        xyz@primary  ·                        ·
-·           spans        ALL          ·                        ·
+·           spans        FULL SCAN    ·                        ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY]

@@ -20,7 +20,7 @@ EXPLAIN SELECT * FROM t FOR UPDATE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 query TTT
@@ -30,7 +30,7 @@ EXPLAIN SELECT * FROM t FOR NO KEY UPDATE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for no key update
 
 query TTT
@@ -40,7 +40,7 @@ EXPLAIN SELECT * FROM t FOR SHARE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for share
 
 query TTT
@@ -50,7 +50,7 @@ EXPLAIN SELECT * FROM t FOR KEY SHARE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for key share
 
 query TTT
@@ -60,7 +60,7 @@ EXPLAIN SELECT * FROM t FOR KEY SHARE FOR SHARE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for share
 
 query TTT
@@ -70,7 +70,7 @@ EXPLAIN SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for no key update
 
 query TTT
@@ -80,7 +80,7 @@ EXPLAIN SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 query TTT
@@ -90,7 +90,7 @@ EXPLAIN SELECT * FROM t FOR UPDATE OF t
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
@@ -104,7 +104,7 @@ EXPLAIN SELECT 1 FROM t FOR UPDATE OF t
 render     ·                 ·
  └── scan  ·                 ·
 ·          table             t@primary
-·          spans             ALL
+·          spans             FULL SCAN
 ·          locking strength  for update
 
 query TTT
@@ -212,7 +212,7 @@ EXPLAIN SELECT * FROM t AS t2 FOR UPDATE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
@@ -225,7 +225,7 @@ EXPLAIN SELECT * FROM t AS t2 FOR UPDATE OF t2
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 # ------------------------------------------------------------------------------
@@ -240,7 +240,7 @@ EXPLAIN SELECT * FROM [53 AS t] FOR UPDATE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 query TTT
@@ -250,7 +250,7 @@ EXPLAIN SELECT * FROM [53 AS t] FOR UPDATE OF t
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
@@ -267,7 +267,7 @@ EXPLAIN SELECT * FROM v FOR UPDATE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 query TTT
@@ -277,7 +277,7 @@ EXPLAIN SELECT * FROM v FOR UPDATE OF v
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 query error pgcode 42P01 relation "v2" in FOR UPDATE clause not found in FROM clause
@@ -300,7 +300,7 @@ EXPLAIN SELECT * FROM v AS v2 FOR UPDATE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 query error pgcode 42P01 relation "v" in FOR UPDATE clause not found in FROM clause
@@ -313,7 +313,7 @@ EXPLAIN SELECT * FROM v AS v2 FOR UPDATE OF v2
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 # ------------------------------------------------------------------------------
@@ -331,7 +331,7 @@ EXPLAIN SELECT * FROM (SELECT a FROM t) FOR UPDATE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 query TTT
@@ -341,7 +341,7 @@ EXPLAIN SELECT * FROM (SELECT a FROM t FOR UPDATE)
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 query TTT
@@ -351,7 +351,7 @@ EXPLAIN SELECT * FROM (SELECT a FROM t FOR NO KEY UPDATE) FOR KEY SHARE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for no key update
 
 query TTT
@@ -361,7 +361,7 @@ EXPLAIN SELECT * FROM (SELECT a FROM t FOR KEY SHARE) FOR NO KEY UPDATE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for no key update
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
@@ -374,7 +374,7 @@ EXPLAIN SELECT * FROM (SELECT a FROM t FOR UPDATE OF t)
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 query TTT
@@ -384,7 +384,7 @@ EXPLAIN SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 query TTT
@@ -394,7 +394,7 @@ EXPLAIN SELECT * FROM (SELECT a FROM t FOR UPDATE) AS r
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
@@ -407,7 +407,7 @@ EXPLAIN SELECT * FROM (SELECT a FROM t FOR UPDATE OF t) AS r
 ·     vectorized        true
 scan  ·                 ·
 ·     table             t@primary
-·     spans             ALL
+·     spans             FULL SCAN
 ·     locking strength  for update
 
 query TTT
@@ -425,7 +425,7 @@ root                 ·             ·
       └── max1row    ·             ·
            └── scan  ·             ·
 ·                    table         t@primary
-·                    spans         ALL
+·                    spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT (SELECT a FROM t FOR UPDATE)
@@ -442,7 +442,7 @@ root                 ·                 ·
       └── max1row    ·                 ·
            └── scan  ·                 ·
 ·                    table             t@primary
-·                    spans             ALL
+·                    spans             FULL SCAN
 ·                    locking strength  for update
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
@@ -463,7 +463,7 @@ root                 ·                 ·
       └── max1row    ·                 ·
            └── scan  ·                 ·
 ·                    table             t@primary
-·                    spans             ALL
+·                    spans             FULL SCAN
 ·                    locking strength  for update
 
 query TTT
@@ -481,7 +481,7 @@ root                 ·             ·
       └── max1row    ·             ·
            └── scan  ·             ·
 ·                    table         t@primary
-·                    spans         ALL
+·                    spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT (SELECT a FROM t FOR UPDATE) AS r
@@ -498,7 +498,7 @@ root                 ·                 ·
       └── max1row    ·                 ·
            └── scan  ·                 ·
 ·                    table             t@primary
-·                    spans             ALL
+·                    spans             FULL SCAN
 ·                    locking strength  for update
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
@@ -519,7 +519,7 @@ root                 ·                 ·
       └── max1row    ·                 ·
            └── scan  ·                 ·
 ·                    table             t@primary
-·                    spans             ALL
+·                    spans             FULL SCAN
 ·                    locking strength  for update
 
 query TTT
@@ -535,11 +535,11 @@ merge-join  ·                   ·
  │          mergeJoinOrder      +"(a=a)"
  ├── scan   ·                   ·
  │          table               t@primary
- │          spans               ALL
+ │          spans               FULL SCAN
  │          locking strength    for update
  └── scan   ·                   ·
 ·           table               t@primary
-·           spans               ALL
+·           spans               FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE)
@@ -554,10 +554,10 @@ merge-join  ·                   ·
  │          mergeJoinOrder      +"(a=a)"
  ├── scan   ·                   ·
  │          table               t@primary
- │          spans               ALL
+ │          spans               FULL SCAN
  └── scan   ·                   ·
 ·           table               t@primary
-·           spans               ALL
+·           spans               FULL SCAN
 ·           locking strength    for update
 
 query TTT
@@ -573,11 +573,11 @@ merge-join  ·                   ·
  │          mergeJoinOrder      +"(a=a)"
  ├── scan   ·                   ·
  │          table               t@primary
- │          spans               ALL
+ │          spans               FULL SCAN
  │          locking strength    for update
  └── scan   ·                   ·
 ·           table               t@primary
-·           spans               ALL
+·           spans               FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a IN (SELECT a FROM t FOR UPDATE OF t)
@@ -592,10 +592,10 @@ merge-join  ·                   ·
  │          mergeJoinOrder      +"(a=a)"
  ├── scan   ·                   ·
  │          table               t@primary
- │          spans               ALL
+ │          spans               FULL SCAN
  └── scan   ·                   ·
 ·           table               t@primary
-·           spans               ALL
+·           spans               FULL SCAN
 ·           locking strength    for update
 
 # ------------------------------------------------------------------------------
@@ -617,7 +617,7 @@ EXPLAIN SELECT * FROM [SELECT a FROM t] FOR UPDATE
 render     ·            ·
  └── scan  ·            ·
 ·          table        t@primary
-·          spans        ALL
+·          spans        FULL SCAN
 
 query TTT
 EXPLAIN WITH cte AS (SELECT a FROM t) SELECT * FROM cte FOR UPDATE
@@ -627,7 +627,7 @@ EXPLAIN WITH cte AS (SELECT a FROM t) SELECT * FROM cte FOR UPDATE
 render     ·            ·
  └── scan  ·            ·
 ·          table        t@primary
-·          spans        ALL
+·          spans        FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM [SELECT a FROM t FOR UPDATE]
@@ -645,7 +645,7 @@ root                   ·                 ·
            │           label             buffer 1
            └── scan    ·                 ·
 ·                      table             t@primary
-·                      spans             ALL
+·                      spans             FULL SCAN
 ·                      locking strength  for update
 
 query TTT
@@ -664,7 +664,7 @@ root                   ·                 ·
            │           label             buffer 1 (cte)
            └── scan    ·                 ·
 ·                      table             t@primary
-·                      spans             ALL
+·                      spans             FULL SCAN
 ·                      locking strength  for update
 
 # Verify that the unused CTE doesn't get eliminated.
@@ -678,7 +678,7 @@ SELECT c FROM u
 root                   ·                 ·
  ├── scan              ·                 ·
  │                     table             u@primary
- │                     spans             ALL
+ │                     spans             FULL SCAN
  └── subquery          ·                 ·
       │                id                @S1
       │                original sql      SELECT a FROM t FOR UPDATE
@@ -687,7 +687,7 @@ root                   ·                 ·
            │           label             buffer 1 (sfu)
            └── scan    ·                 ·
 ·                      table             t@primary
-·                      spans             ALL
+·                      spans             FULL SCAN
 ·                      locking strength  for update
 
 # ------------------------------------------------------------------------------
@@ -708,11 +708,11 @@ render           ·                   ·
       │          mergeJoinOrder      +"(a=a)"
       ├── scan   ·                   ·
       │          table               t@primary
-      │          spans               ALL
+      │          spans               FULL SCAN
       │          locking strength    for update
       └── scan   ·                   ·
 ·                table               u@primary
-·                spans               ALL
+·                spans               FULL SCAN
 ·                locking strength    for update
 
 query TTT
@@ -729,11 +729,11 @@ render           ·                   ·
       │          mergeJoinOrder      +"(a=a)"
       ├── scan   ·                   ·
       │          table               t@primary
-      │          spans               ALL
+      │          spans               FULL SCAN
       │          locking strength    for update
       └── scan   ·                   ·
 ·                table               u@primary
-·                spans               ALL
+·                spans               FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF u
@@ -749,10 +749,10 @@ render           ·                   ·
       │          mergeJoinOrder      +"(a=a)"
       ├── scan   ·                   ·
       │          table               t@primary
-      │          spans               ALL
+      │          spans               FULL SCAN
       └── scan   ·                   ·
 ·                table               u@primary
-·                spans               ALL
+·                spans               FULL SCAN
 ·                locking strength    for update
 
 query TTT
@@ -769,11 +769,11 @@ render           ·                   ·
       │          mergeJoinOrder      +"(a=a)"
       ├── scan   ·                   ·
       │          table               t@primary
-      │          spans               ALL
+      │          spans               FULL SCAN
       │          locking strength    for update
       └── scan   ·                   ·
 ·                table               u@primary
-·                spans               ALL
+·                spans               FULL SCAN
 ·                locking strength    for update
 
 query TTT
@@ -790,11 +790,11 @@ render           ·                   ·
       │          mergeJoinOrder      +"(a=a)"
       ├── scan   ·                   ·
       │          table               t@primary
-      │          spans               ALL
+      │          spans               FULL SCAN
       │          locking strength    for update
       └── scan   ·                   ·
 ·                table               u@primary
-·                spans               ALL
+·                spans               FULL SCAN
 ·                locking strength    for share
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
@@ -814,11 +814,11 @@ render           ·                   ·
       │          mergeJoinOrder      +"(a=a)"
       ├── scan   ·                   ·
       │          table               t@primary
-      │          spans               ALL
+      │          spans               FULL SCAN
       │          locking strength    for update
       └── scan   ·                   ·
 ·                table               u@primary
-·                spans               ALL
+·                spans               FULL SCAN
 ·                locking strength    for share
 
 query TTT
@@ -835,11 +835,11 @@ render           ·                   ·
       │          mergeJoinOrder      +"(a=a)"
       ├── scan   ·                   ·
       │          table               t@primary
-      │          spans               ALL
+      │          spans               FULL SCAN
       │          locking strength    for update
       └── scan   ·                   ·
 ·                table               u@primary
-·                spans               ALL
+·                spans               FULL SCAN
 ·                locking strength    for update
 
 query TTT
@@ -856,11 +856,11 @@ render           ·                   ·
       │          mergeJoinOrder      +"(a=a)"
       ├── scan   ·                   ·
       │          table               t@primary
-      │          spans               ALL
+      │          spans               FULL SCAN
       │          locking strength    for no key update
       └── scan   ·                   ·
 ·                table               u@primary
-·                spans               ALL
+·                spans               FULL SCAN
 ·                locking strength    for key share
 
 query TTT
@@ -877,11 +877,11 @@ render           ·                   ·
       │          mergeJoinOrder      +"(a=a)"
       ├── scan   ·                   ·
       │          table               t@primary
-      │          spans               ALL
+      │          spans               FULL SCAN
       │          locking strength    for no key update
       └── scan   ·                   ·
 ·                table               u@primary
-·                spans               ALL
+·                spans               FULL SCAN
 ·                locking strength    for update
 
 # ------------------------------------------------------------------------------
@@ -902,11 +902,11 @@ render           ·                   ·
       │          mergeJoinOrder      +"(a=a)"
       ├── scan   ·                   ·
       │          table               t@primary
-      │          spans               ALL
+      │          spans               FULL SCAN
       │          locking strength    for update
       └── scan   ·                   ·
 ·                table               u@primary
-·                spans               ALL
+·                spans               FULL SCAN
 ·                locking strength    for update
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
@@ -932,11 +932,11 @@ render           ·                   ·
       │          mergeJoinOrder      +"(a=a)"
       ├── scan   ·                   ·
       │          table               t@primary
-      │          spans               ALL
+      │          spans               FULL SCAN
       │          locking strength    for update
       └── scan   ·                   ·
 ·                table               u@primary
-·                spans               ALL
+·                spans               FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u2
@@ -952,10 +952,10 @@ render           ·                   ·
       │          mergeJoinOrder      +"(a=a)"
       ├── scan   ·                   ·
       │          table               t@primary
-      │          spans               ALL
+      │          spans               FULL SCAN
       └── scan   ·                   ·
 ·                table               u@primary
-·                spans               ALL
+·                spans               FULL SCAN
 ·                locking strength    for update
 
 query TTT
@@ -972,11 +972,11 @@ render           ·                   ·
       │          mergeJoinOrder      +"(a=a)"
       ├── scan   ·                   ·
       │          table               t@primary
-      │          spans               ALL
+      │          spans               FULL SCAN
       │          locking strength    for update
       └── scan   ·                   ·
 ·                table               u@primary
-·                spans               ALL
+·                spans               FULL SCAN
 ·                locking strength    for update
 
 # Postgres doesn't support applying locking clauses to joins. The following
@@ -997,11 +997,11 @@ render           ·                   ·
       │          mergeJoinOrder      +"(a=a)"
       ├── scan   ·                   ·
       │          table               t@primary
-      │          spans               ALL
+      │          spans               FULL SCAN
       │          locking strength    for update
       └── scan   ·                   ·
 ·                table               u@primary
-·                spans               ALL
+·                spans               FULL SCAN
 ·                locking strength    for update
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
@@ -1027,11 +1027,11 @@ render           ·                   ·
       │          mergeJoinOrder      +"(a=a)"
       ├── scan   ·                   ·
       │          table               t@primary
-      │          spans               ALL
+      │          spans               FULL SCAN
       │          locking strength    for update
       └── scan   ·                   ·
 ·                table               u@primary
-·                spans               ALL
+·                spans               FULL SCAN
 ·                locking strength    for update
 
 # ------------------------------------------------------------------------------
@@ -1047,11 +1047,11 @@ cross-join  ·                 ·
  │          type              cross
  ├── scan   ·                 ·
  │          table             t@primary
- │          spans             ALL
+ │          spans             FULL SCAN
  │          locking strength  for update
  └── scan   ·                 ·
 ·           table             u@primary
-·           spans             ALL
+·           spans             FULL SCAN
 ·           locking strength  for update
 
 query TTT
@@ -1063,11 +1063,11 @@ cross-join  ·                 ·
  │          type              cross
  ├── scan   ·                 ·
  │          table             t@primary
- │          spans             ALL
+ │          spans             FULL SCAN
  │          locking strength  for update
  └── scan   ·                 ·
 ·           table             u@primary
-·           spans             ALL
+·           spans             FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM t, u FOR SHARE OF t FOR UPDATE OF u
@@ -1078,11 +1078,11 @@ cross-join  ·                 ·
  │          type              cross
  ├── scan   ·                 ·
  │          table             t@primary
- │          spans             ALL
+ │          spans             FULL SCAN
  │          locking strength  for share
  └── scan   ·                 ·
 ·           table             u@primary
-·           spans             ALL
+·           spans             FULL SCAN
 ·           locking strength  for update
 
 query TTT
@@ -1094,11 +1094,11 @@ cross-join  ·                 ·
  │          type              cross
  ├── scan   ·                 ·
  │          table             t@primary
- │          spans             ALL
+ │          spans             FULL SCAN
  │          locking strength  for update
  └── scan   ·                 ·
 ·           table             u@primary
-·           spans             ALL
+·           spans             FULL SCAN
 ·           locking strength  for update
 
 query error pgcode 42P01 relation "u" in FOR UPDATE clause not found in FROM clause
@@ -1113,8 +1113,8 @@ cross-join  ·                 ·
  │          type              cross
  ├── scan   ·                 ·
  │          table             t@primary
- │          spans             ALL
+ │          spans             FULL SCAN
  └── scan   ·                 ·
 ·           table             u@primary
-·           spans             ALL
+·           spans             FULL SCAN
 ·           locking strength  for update
