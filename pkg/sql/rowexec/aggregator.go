@@ -764,9 +764,12 @@ func (ag *aggregatorBase) accumulateRowIntoBucket(
 		// the first argument and allocation of (if applicable) a variadic
 		// collection of arguments thereafter.
 		var firstArg tree.Datum
+		var firstArgType *types.T
 		var otherArgs tree.Datums
+		var otherArgTypes []*types.T
 		if len(a.ColIdx) > 1 {
 			otherArgs = make(tree.Datums, len(a.ColIdx)-1)
+			otherArgTypes = make([]*types.T, len(a.ColIdx)-1)
 		}
 		isFirstArg := true
 		for j, c := range a.ColIdx {
@@ -775,15 +778,25 @@ func (ag *aggregatorBase) accumulateRowIntoBucket(
 			}
 			if isFirstArg {
 				firstArg = row[c].Datum
+				firstArgType = &ag.inputTypes[c]
 				isFirstArg = false
 				continue
 			}
 			otherArgs[j-1] = row[c].Datum
+			otherArgTypes[j-1] = &ag.inputTypes[c]
 		}
 
 		canAdd := true
 		if a.Distinct {
-			canAdd, err = ag.funcs[i].isDistinct(ag.Ctx, groupKey, firstArg, otherArgs)
+			canAdd, err = ag.funcs[i].isDistinct(
+				ag.Ctx,
+				&ag.datumAlloc,
+				groupKey,
+				firstArg,
+				firstArgType,
+				otherArgs,
+				otherArgTypes,
+			)
 			if err != nil {
 				return err
 			}
@@ -889,17 +902,24 @@ func (ag *aggregatorBase) newAggregateFuncHolder(
 // when we have DISTINCT aggregation so that we can aggregate only the "first"
 // row in the group.
 func (a *aggregateFuncHolder) isDistinct(
-	ctx context.Context, encodingPrefix []byte, firstArg tree.Datum, otherArgs tree.Datums,
+	ctx context.Context,
+	alloc *sqlbase.DatumAlloc,
+	prefix []byte,
+	firstArg tree.Datum,
+	firstArgType *types.T,
+	otherArgs tree.Datums,
+	otherArgTypes []*types.T,
 ) (bool, error) {
-	encoded, err := sqlbase.EncodeDatumKeyAscending(encodingPrefix, firstArg)
+	// Allocate one EncDatum up front.
+	ed := sqlbase.EncDatum{Datum: firstArg}
+	encoded, err := ed.Fingerprint(firstArgType, alloc, prefix)
 	if err != nil {
 		return false, err
 	}
-	// Encode additional arguments if necessary.
 	if otherArgs != nil {
-		encoded, err = sqlbase.EncodeDatumsKeyAscending(encoded, otherArgs)
-		if err != nil {
-			return false, err
+		for i, arg := range otherArgs {
+			ed.Datum = arg
+			encoded, err = ed.Fingerprint(otherArgTypes[i], alloc, encoded)
 		}
 	}
 
