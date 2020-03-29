@@ -132,8 +132,8 @@ func isDoneGC(progress *jobspb.SchemaChangeGCProgress) bool {
 }
 
 // getAllTablesWaitingForGC returns a slice with all of the table IDs which have
-// note yet been scheduled to be GC'd or have not yet been GC'd. This is used to
-// determine which tables' statuses need to be updated.
+// note yet been been GC'd. This is used to determine which tables' statuses
+// need to be updated.
 func getAllTablesWaitingForGC(
 	details *jobspb.SchemaChangeGCDetails, progress *jobspb.SchemaChangeGCProgress,
 ) []sqlbase.ID {
@@ -142,7 +142,7 @@ func getAllTablesWaitingForGC(
 		allRemainingTableIDs = append(allRemainingTableIDs, details.ParentID)
 	}
 	for _, table := range progress.Tables {
-		if table.Status == jobspb.SchemaChangeGCProgress_WAITING_FOR_GC {
+		if table.Status != jobspb.SchemaChangeGCProgress_DELETED {
 			allRemainingTableIDs = append(allRemainingTableIDs, table.ID)
 		}
 	}
