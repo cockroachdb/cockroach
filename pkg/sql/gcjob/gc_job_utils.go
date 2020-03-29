@@ -142,7 +142,7 @@ func getAllTablesWaitingForGC(
 		allRemainingTableIDs = append(allRemainingTableIDs, details.ParentID)
 	}
 	for _, table := range progress.Tables {
-		if table.Status == jobspb.SchemaChangeGCProgress_WAITING_FOR_GC {
+		if table.Status != jobspb.SchemaChangeGCProgress_DELETED {
 			allRemainingTableIDs = append(allRemainingTableIDs, table.ID)
 		}
 	}

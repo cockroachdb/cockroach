@@ -39,10 +39,8 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 	defer func(oldAdoptInterval, oldGCInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldAdoptInterval
-		gcjob.MaxSQLGCInterval = oldGCInterval
 	}(jobs.DefaultAdoptInterval, gcjob.MaxSQLGCInterval)
 	jobs.DefaultAdoptInterval = 100 * time.Millisecond
-	gcjob.MaxSQLGCInterval = 500 * time.Millisecond
 
 	type DropItem int
 	const (
@@ -51,8 +49,15 @@ func TestSchemaChangeGCJob(t *testing.T) {
 		DATABASE
 	)
 
+	type TTLTime int
+	const (
+		PAST   = iota // An item was supposed to be GC already.
+		SOON          // An item will be GC'd soon.
+		FUTURE        // An item should not be GC'd during this test.
+	)
+
 	for _, dropItem := range []DropItem{INDEX, TABLE, DATABASE} {
-		for _, lowerTTL := range []bool{true, false} {
+		for _, ttlTime := range []TTLTime{PAST, SOON, FUTURE} {
 			s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 			ctx := context.Background()
 			defer s.Stopper().Stop(ctx)
@@ -64,9 +69,9 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			sqlDB.Exec(t, "USE my_db")
 			sqlDB.Exec(t, "CREATE TABLE my_table (a int primary key, b int, index (b))")
 			sqlDB.Exec(t, "CREATE TABLE my_other_table (a int primary key, b int, index (b))")
-			if lowerTTL {
+			if ttlTime == SOON {
 				sqlDB.Exec(t, "ALTER TABLE my_table CONFIGURE ZONE USING gc.ttlseconds = 1")
-				sqlDB.Exec(t, "ALTER TABLE my_other_table CONFIGURE ZONE USING gc.ttlseconds = 3")
+				sqlDB.Exec(t, "ALTER TABLE my_other_table CONFIGURE ZONE USING gc.ttlseconds = 1")
 			}
 			myDBID := sqlbase.ID(keys.MinUserDescID + 2)
 			myTableID := sqlbase.ID(keys.MinUserDescID + 3)
@@ -88,6 +93,9 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			// Start the job that drops an index.
 			dropTime := timeutil.Now().UnixNano()
+			if ttlTime == PAST {
+				dropTime = 1
+			}
 			var details jobspb.SchemaChangeGCDetails
 			switch dropItem {
 			case INDEX:
@@ -95,7 +103,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					Indexes: []jobspb.SchemaChangeGCDetails_DroppedIndex{
 						{
 							IndexID:  sqlbase.IndexID(2),
-							DropTime: timeutil.Now().UnixNano(),
+							DropTime: dropTime,
 						},
 					},
 					ParentID: myTableID,
@@ -152,9 +160,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			case INDEX:
 				myTableDesc.Indexes = myTableDesc.Indexes[:0]
 				myTableDesc.GCMutations = append(myTableDesc.GCMutations, sqlbase.TableDescriptor_GCDescriptorMutation{
-					IndexID:  sqlbase.IndexID(2),
-					DropTime: timeutil.Now().UnixNano(),
-					JobID:    *job.ID(),
+					IndexID: sqlbase.IndexID(2),
 				})
 			case DATABASE:
 				myOtherTableDesc.State = sqlbase.TableDescriptor_DROP
@@ -184,25 +190,25 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if lowerTTL {
+			if ttlTime == FUTURE {
+				time.Sleep(500 * time.Millisecond)
+			} else {
 				sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %s", jobIDStr), [][]string{{"succeeded"}})
 				if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, lookupJR); err != nil {
 					t.Fatal(err)
 				}
-			} else {
-				time.Sleep(500 * time.Millisecond)
 			}
 
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				var err error
 				myTableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, myTableID)
-				if lowerTTL && (dropItem == TABLE || dropItem == DATABASE) {
+				if ttlTime != FUTURE && (dropItem == TABLE || dropItem == DATABASE) {
 					// We dropped the table, so expect it to not be found.
 					require.EqualError(t, err, "descriptor not found")
 					return nil
 				}
 				myOtherTableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, myOtherTableID)
-				if lowerTTL && dropItem == DATABASE {
+				if ttlTime != FUTURE && dropItem == DATABASE {
 					// We dropped the entire database, so expect none of the tables to be found.
 					require.EqualError(t, err, "descriptor not found")
 					return nil
@@ -214,10 +220,10 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			switch dropItem {
 			case INDEX:
-				if lowerTTL {
-					require.Equal(t, 0, len(myTableDesc.GCMutations))
-				} else {
+				if ttlTime == FUTURE {
 					require.Equal(t, 1, len(myTableDesc.GCMutations))
+				} else {
+					require.Equal(t, 0, len(myTableDesc.GCMutations))
 				}
 			case TABLE:
 			case DATABASE:
