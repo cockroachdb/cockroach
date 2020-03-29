@@ -783,7 +783,13 @@ func (ag *aggregatorBase) accumulateRowIntoBucket(
 
 		canAdd := true
 		if a.Distinct {
-			canAdd, err = ag.funcs[i].isDistinct(ag.Ctx, groupKey, firstArg, otherArgs)
+			canAdd, err = ag.funcs[i].isDistinct(
+				ag.Ctx,
+				&ag.datumAlloc,
+				groupKey,
+				firstArg,
+				otherArgs,
+			)
 			if err != nil {
 				return err
 			}
@@ -889,17 +895,25 @@ func (ag *aggregatorBase) newAggregateFuncHolder(
 // when we have DISTINCT aggregation so that we can aggregate only the "first"
 // row in the group.
 func (a *aggregateFuncHolder) isDistinct(
-	ctx context.Context, encodingPrefix []byte, firstArg tree.Datum, otherArgs tree.Datums,
+	ctx context.Context,
+	alloc *sqlbase.DatumAlloc,
+	prefix []byte,
+	firstArg tree.Datum,
+	otherArgs tree.Datums,
 ) (bool, error) {
-	encoded, err := sqlbase.EncodeDatumKeyAscending(encodingPrefix, firstArg)
+	// Allocate one EncDatum that will be reused when encoding every argument.
+	ed := sqlbase.EncDatum{Datum: firstArg}
+	encoded, err := ed.Fingerprint(firstArg.ResolvedType(), alloc, prefix)
 	if err != nil {
 		return false, err
 	}
-	// Encode additional arguments if necessary.
 	if otherArgs != nil {
-		encoded, err = sqlbase.EncodeDatumsKeyAscending(encoded, otherArgs)
-		if err != nil {
-			return false, err
+		for _, arg := range otherArgs {
+			ed.Datum = arg
+			encoded, err = ed.Fingerprint(arg.ResolvedType(), alloc, encoded)
+			if err != nil {
+				return false, err
+			}
 		}
 	}
 

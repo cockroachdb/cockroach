@@ -555,32 +555,6 @@ func decodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 	}
 }
 
-// EncodeDatumKeyAscending encodes a datum using an order-preserving
-// encoding.
-// The encoding is lossy: some datums need composite encoding where
-// the key part only contains part of the datum's information.
-func EncodeDatumKeyAscending(b []byte, d tree.Datum) ([]byte, error) {
-	if values, ok := d.(*tree.DTuple); ok {
-		return EncodeDatumsKeyAscending(b, values.D)
-	}
-	return EncodeTableKey(b, d, encoding.Ascending)
-}
-
-// EncodeDatumsKeyAscending encodes a Datums (tuple) using an
-// order-preserving encoding.
-// The encoding is lossy: some datums need composite encoding where
-// the key part only contains part of the datum's information.
-func EncodeDatumsKeyAscending(b []byte, d tree.Datums) ([]byte, error) {
-	for _, val := range d {
-		var err error
-		b, err = EncodeDatumKeyAscending(b, val)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return b, nil
-}
-
 // MarshalColumnValue produces the value encoding of the given datum,
 // constrained by the given column type, into a roachpb.Value.
 //
