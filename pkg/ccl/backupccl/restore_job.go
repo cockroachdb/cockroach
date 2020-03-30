@@ -18,12 +18,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/opentracing/opentracing-go"
@@ -558,7 +559,7 @@ func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.
 func restore(
 	restoreCtx context.Context,
 	db *kv.DB,
-	gossip *gossip.Gossip,
+	numClusterNodes int,
 	settings *cluster.Settings,
 	backupManifests []BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
@@ -645,7 +646,6 @@ func restore(
 	// that's wrong.
 	//
 	// TODO(dan): Make this limiting per node.
-	numClusterNodes := clusterNodeCount(gossip)
 	maxConcurrentImports := numClusterNodes * runtime.NumCPU()
 	importsSem := make(chan struct{}, maxConcurrentImports)
 
@@ -976,10 +976,11 @@ func (r *restoreResumer) Resume(
 		return nil
 	}
 
+	numClusterNodes := clusterNodeCount(p.ExecCfg().Gossip)
 	res, err := restore(
 		ctx,
 		p.ExecCfg().DB,
-		p.ExecCfg().Gossip,
+		numClusterNodes,
 		p.ExecCfg().Settings,
 		backupManifests,
 		details.BackupLocalityInfo,
@@ -1017,6 +1018,26 @@ func (r *restoreResumer) Resume(
 		tree.NewDInt(tree.DInt(res.DataSize)),
 	}
 
+	// Collect telemetry.
+	{
+		telemetry.Count("restore.total.succeeded")
+		const mb = 1 << 20
+		sizeMb := res.DataSize / mb
+		sec := int64(timeutil.Since(timeutil.FromUnixMicros(r.job.Payload().StartedMicros)).Seconds())
+		var mbps int64
+		if sec > 0 {
+			mbps = mb / sec
+		}
+		telemetry.CountBucketed("restore.duration-sec.succeeded", sec)
+		telemetry.CountBucketed("restore.size-mb.full", sizeMb)
+		telemetry.CountBucketed("restore.speed-mbps.total", mbps)
+		telemetry.CountBucketed("restore.speed-mbps.per-node", mbps/int64(numClusterNodes))
+		// Tiny restores may skew throughput numbers due to overhead.
+		if sizeMb > 10 {
+			telemetry.CountBucketed("restore.speed-mbps.over10mb", mbps)
+			telemetry.CountBucketed("restore.speed-mbps.over10mb.per-node", mbps/int64(numClusterNodes))
+		}
+	}
 	return nil
 }
 
@@ -1101,6 +1122,10 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 // this by adding the table descriptors in DROP state, which causes the schema
 // change stuff to delete the keys in the background.
 func (r *restoreResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
+	telemetry.Count("restore.total.failed")
+	telemetry.CountBucketed("restore.duration-sec.failed",
+		int64(timeutil.Since(timeutil.FromUnixMicros(r.job.Payload().StartedMicros)).Seconds()))
+
 	return phs.(sql.PlanHookState).ExecCfg().DB.Txn(ctx, r.dropTables)
 }
 

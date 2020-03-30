@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -761,6 +762,14 @@ func doRestorePlan(
 	}
 	if err := RewriteTableDescs(tables, tableRewrites, opts[restoreOptIntoDB]); err != nil {
 		return err
+	}
+
+	// Collect telemetry.
+	{
+		telemetry.Count("restore.total.started")
+		if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
+			telemetry.Count("restore.full-cluster")
+		}
 	}
 
 	_, errCh, err := p.ExecCfg().JobRegistry.CreateAndStartJob(ctx, resultsCh, jobs.Record{
