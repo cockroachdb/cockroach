@@ -3893,17 +3893,8 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 		},
 		ReturnType: tree.FixedReturnType(types.String),
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-			runes := []rune(string(tree.MustBeDString(args[0])))
-			// SQL strings are 1-indexed.
-			start := int(tree.MustBeDInt(args[1])) - 1
-
-			if start < 0 {
-				start = 0
-			} else if start > len(runes) {
-				start = len(runes)
-			}
-
-			return tree.NewDString(string(runes[start:])), nil
+			substring := getSubstringFromIndex(string(tree.MustBeDString(args[0])), int(tree.MustBeDInt(args[1])))
+			return tree.NewDString(substring), nil
 		},
 		Info: "Returns a substring of `input` starting at `start_pos` (count starts at 1).",
 	},
@@ -3916,33 +3907,15 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 		SpecializedVecBuiltin: tree.SubstringStringIntInt,
 		ReturnType:            tree.FixedReturnType(types.String),
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-			runes := []rune(string(tree.MustBeDString(args[0])))
-			// SQL strings are 1-indexed.
-			start := int(tree.MustBeDInt(args[1])) - 1
+			str := string(tree.MustBeDString(args[0]))
+			start := int(tree.MustBeDInt(args[1]))
 			length := int(tree.MustBeDInt(args[2]))
 
-			if length < 0 {
-				return nil, pgerror.Newf(
-					pgcode.InvalidParameterValue, "negative substring length %d not allowed", length)
+			substring, err := getSubstringFromIndexOfLength(str, "substring", start, length)
+			if err != nil {
+				return nil, err
 			}
-
-			end := start + length
-			// Check for integer overflow.
-			if end < start {
-				end = len(runes)
-			} else if end < 0 {
-				end = 0
-			} else if end > len(runes) {
-				end = len(runes)
-			}
-
-			if start < 0 {
-				start = 0
-			} else if start > len(runes) {
-				start = len(runes)
-			}
-
-			return tree.NewDString(string(runes[start:end])), nil
+			return tree.NewDString(substring), nil
 		},
 		Info: "Returns a substring of `input` starting at `start_pos` (count starts at 1) and " +
 			"including up to `length` characters.",
@@ -3976,7 +3949,121 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 		Info: "Returns a substring of `input` that matches the regular expression `regex` using " +
 			"`escape_char` as your escape character instead of `\\`.",
 	},
+	tree.Overload{
+		Types: tree.ArgTypes{
+			{"input", types.VarBit},
+			{"start_pos", types.Int},
+		},
+		ReturnType: tree.FixedReturnType(types.VarBit),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			bitString := tree.MustBeDBitArray(args[0])
+			start := int(tree.MustBeDInt(args[1]))
+			substring := getSubstringFromIndex(bitString.BitArray.String(), start)
+			return tree.ParseDBitArray(substring)
+		},
+		Info: "Returns a bit subarray of `input` starting at `start_pos` (count starts at 1).",
+	},
+	tree.Overload{
+		Types: tree.ArgTypes{
+			{"input", types.VarBit},
+			{"start_pos", types.Int},
+			{"length", types.Int},
+		},
+		ReturnType: tree.FixedReturnType(types.VarBit),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			bitString := tree.MustBeDBitArray(args[0])
+			start := int(tree.MustBeDInt(args[1]))
+			length := int(tree.MustBeDInt(args[2]))
+
+			substring, err := getSubstringFromIndexOfLength(bitString.BitArray.String(), "bit subarray", start, length)
+			if err != nil {
+				return nil, err
+			}
+			return tree.ParseDBitArray(substring)
+		},
+		Info: "Returns a bit subarray of `input` starting at `start_pos` (count starts at 1) and " +
+			"including up to `length` characters.",
+	},
+	tree.Overload{
+		Types: tree.ArgTypes{
+			{"input", types.Bytes},
+			{"start_pos", types.Int},
+		},
+		ReturnType: tree.FixedReturnType(types.Bytes),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			byteString := string(*args[0].(*tree.DBytes))
+			start := int(tree.MustBeDInt(args[1]))
+			substring := getSubstringFromIndex(byteString, start)
+			return tree.ParseDByte(substring)
+		},
+		Info: "Returns a byte subarray of `input` starting at `start_pos` (count starts at 1).",
+	},
+	tree.Overload{
+		Types: tree.ArgTypes{
+			{"input", types.Bytes},
+			{"start_pos", types.Int},
+			{"length", types.Int},
+		},
+		ReturnType: tree.FixedReturnType(types.Bytes),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			byteString := string(*args[0].(*tree.DBytes))
+			start := int(tree.MustBeDInt(args[1]))
+			length := int(tree.MustBeDInt(args[2]))
+
+			substring, err := getSubstringFromIndexOfLength(byteString, "byte subarray", start, length)
+			if err != nil {
+				return nil, err
+			}
+			return tree.ParseDByte(substring)
+		},
+		Info: "Returns a byte subarray of `input` starting at `start_pos` (count starts at 1) and " +
+			"including up to `length` characters.",
+	},
 )
+
+// Returns a substring of given string starting at given position.
+func getSubstringFromIndex(str string, start int) string {
+	runes := []rune(str)
+	// SQL strings are 1-indexed.
+	start--
+
+	if start < 0 {
+		start = 0
+	} else if start > len(runes) {
+		start = len(runes)
+	}
+	return string(runes[start:])
+}
+
+// Returns a substring of given string starting at given position and
+// include upto certain length.
+func getSubstringFromIndexOfLength(str, errMsg string, start, length int) (string, error) {
+	runes := []rune(str)
+	// SQL strings are 1-indexed.
+	start--
+
+	if length < 0 {
+		return "", pgerror.Newf(
+			pgcode.InvalidParameterValue, "negative %s length %d not allowed", errMsg, length)
+	}
+
+	end := start + length
+	// Check for integer overflow.
+	if end < start {
+		end = len(runes)
+	} else if end < 0 {
+		end = 0
+	} else if end > len(runes) {
+		end = len(runes)
+	}
+
+	if start < 0 {
+		start = 0
+	} else if start > len(runes) {
+		start = len(runes)
+	}
+	return string(runes[start:end]), nil
+}
 
 var uuidV4Impl = makeBuiltin(
 	tree.FunctionProperties{
