@@ -764,6 +764,14 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 		rightExpr.Relational().OutputCols,
 		*filters,
 	)
+	if !b.disableTelemetry {
+		if len(leftEq) > 0 {
+			telemetry.Inc(sqltelemetry.JoinAlgoHashUseCounter)
+		} else {
+			telemetry.Inc(sqltelemetry.JoinAlgoCrossUseCounter)
+		}
+		telemetry.Inc(opt.JoinTypeToUseCounter(join.Op()))
+	}
 
 	left, right, onExpr, outputCols, err := b.initJoinBuild(
 		leftExpr,
@@ -802,6 +810,11 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 }
 
 func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
+	if !b.disableTelemetry {
+		telemetry.Inc(sqltelemetry.JoinAlgoMergeUseCounter)
+		telemetry.Inc(opt.JoinTypeToUseCounter(join.JoinType))
+	}
+
 	joinType := joinOpToJoinType(join.JoinType)
 
 	left, right, onExpr, outputCols, err := b.initJoinBuild(
@@ -1280,6 +1293,11 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 }
 
 func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
+	if !b.disableTelemetry {
+		telemetry.Inc(sqltelemetry.JoinAlgoLookupUseCounter)
+		telemetry.Inc(opt.JoinTypeToUseCounter(join.JoinType))
+	}
+
 	input, err := b.buildRelational(join.Input)
 	if err != nil {
 		return execPlan{}, err
