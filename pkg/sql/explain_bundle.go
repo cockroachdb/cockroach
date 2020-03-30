@@ -46,33 +46,39 @@ func setExplainBundleResult(
 	res.ResetStmtType(&tree.ExplainAnalyzeDebug{})
 	res.SetColumns(ctx, sqlbase.ExplainAnalyzeDebugColumns)
 
-	traceJSON, bundle, err := getTraceAndBundle(ctx, execCfg.DB, ie, trace, plan)
-	if err != nil {
-		res.SetError(err)
-		return nil
-	}
+	var text []string
+	func() {
+		traceJSON, bundle, err := getTraceAndBundle(ctx, execCfg.DB, ie, trace, plan)
+		if err != nil {
+			// TODO(radu): we cannot simply set an error on the result here without
+			// changing the executor logic (e.g. an implicit transaction could have
+			// committed already). Just show the error in the result.
+			text = []string{fmt.Sprintf("Error generating bundle: %v", err)}
+			return
+		}
 
-	fingerprint := tree.AsStringWithFlags(ast, tree.FmtHideConstants)
-	stmtStr := tree.AsString(ast)
+		fingerprint := tree.AsStringWithFlags(ast, tree.FmtHideConstants)
+		stmtStr := tree.AsString(ast)
 
-	diagID, err := execCfg.StmtDiagnosticsRecorder.InsertStatementDiagnostics(
-		ctx,
-		fingerprint,
-		stmtStr,
-		traceJSON,
-		bundle,
-	)
-	if err != nil {
-		res.SetError(err)
-		return nil
-	}
+		diagID, err := execCfg.StmtDiagnosticsRecorder.InsertStatementDiagnostics(
+			ctx,
+			fingerprint,
+			stmtStr,
+			traceJSON,
+			bundle,
+		)
+		if err != nil {
+			text = []string{fmt.Sprintf("Error recording bundle: %v", err)}
+			return
+		}
 
-	url := fmt.Sprintf("  %s/_admin/v1/stmtbundle/%d", execCfg.AdminURL(), diagID)
-	text := []string{
-		"Download the bundle from:",
-		url,
-		"or from the Admin UI (Advanced Debug -> Statement Diagnostics).",
-	}
+		url := fmt.Sprintf("  %s/_admin/v1/stmtbundle/%d", execCfg.AdminURL(), diagID)
+		text = []string{
+			"Download the bundle from:",
+			url,
+			"or from the Admin UI (Advanced Debug -> Statement Diagnostics).",
+		}
+	}()
 
 	if err := res.Err(); err != nil {
 		// Add the bundle information as a detail to the query error.
