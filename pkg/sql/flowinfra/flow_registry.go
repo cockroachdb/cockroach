@@ -341,7 +341,14 @@ func (fr *FlowRegistry) waitForFlowLocked(
 // waited for. However, this is fine since there should be no local flows
 // running when the FlowRegistry drains as the draining logic starts with
 // draining all client connections to a node.
-func (fr *FlowRegistry) Drain(flowDrainWait time.Duration, minFlowDrainWait time.Duration) {
+//
+// The reporter callback, if non-nil, is called on a best effort basis
+// to report work that needed to be done and which may or may not have
+// been done by the time this call returns. See the explanation in
+// pkg/server/drain.go for details.
+func (fr *FlowRegistry) Drain(
+	flowDrainWait time.Duration, minFlowDrainWait time.Duration, reporter func(int, string),
+) {
 	allFlowsDone := make(chan struct{}, 1)
 	start := timeutil.Now()
 	stopWaiting := false
@@ -370,8 +377,6 @@ func (fr *FlowRegistry) Drain(flowDrainWait time.Duration, minFlowDrainWait time
 		fr.Unlock()
 	}()
 
-	// If the flow registry is empty, wait minFlowDrainWait for any incoming flows
-	// to register.
 	fr.Lock()
 	if len(fr.flows) == 0 {
 		fr.Unlock()
@@ -382,6 +387,10 @@ func (fr *FlowRegistry) Drain(flowDrainWait time.Duration, minFlowDrainWait time
 			fr.Unlock()
 			return
 		}
+	}
+	if reporter != nil {
+		// Report progress to the Drain RPC.
+		reporter(len(fr.flows), "distSQL execution flows")
 	}
 
 	go func() {

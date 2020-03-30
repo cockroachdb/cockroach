@@ -1334,7 +1334,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 			for i := 0; i < 2; i++ {
 				wg.Add(1)
 				go func(i int) {
-					mtc.stores[i].SetDraining(true)
+					mtc.stores[i].SetDraining(true, nil /* reporter */)
 					wg.Done()
 				}(i)
 			}

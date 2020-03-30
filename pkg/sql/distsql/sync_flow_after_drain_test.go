@@ -40,7 +40,8 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 	cfg := s.DistSQLServer().(*ServerImpl).ServerConfig
 
 	distSQLSrv := NewServer(ctx, cfg)
-	distSQLSrv.flowRegistry.Drain(time.Duration(0) /* flowDrainWait */, time.Duration(0) /* minFlowDrainWait */)
+	distSQLSrv.flowRegistry.Drain(
+		time.Duration(0) /* flowDrainWait */, time.Duration(0) /* minFlowDrainWait */, nil /* reporter */)
 
 	// We create some flow; it doesn't matter what.
 	req := execinfrapb.SetupFlowRequest{Version: execinfra.Version}
