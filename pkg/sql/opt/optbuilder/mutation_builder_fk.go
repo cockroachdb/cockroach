@@ -11,11 +11,13 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,6 +57,7 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 	}
 	if !mb.b.evalCtx.SessionData.OptimizerFKs {
 		mb.fkFallback = true
+		telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
 		return
 	}
 
@@ -69,6 +72,7 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 		h.initWithOutboundFK(mb, i)
 		mb.checks = append(mb.checks, h.buildInsertionCheck())
 	}
+	telemetry.Inc(sqltelemetry.ForeignKeyChecksUseCounter)
 }
 
 // buildFKChecks* methods populate mb.checks with queries that check the
@@ -106,6 +110,7 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 	}
 	if !mb.b.evalCtx.SessionData.OptimizerFKs {
 		mb.fkFallback = true
+		telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
 		return
 	}
 
@@ -121,12 +126,15 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 			// Bail, so that exec FK checks pick up on FK checks and perform them.
 			mb.checks = nil
 			mb.fkFallback = true
+			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
+			telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
 			return
 		}
 
 		fkInput, withScanCols, _ := h.makeFKInputScan(fkInputScanFetchedVals)
 		mb.checks = append(mb.checks, h.buildDeletionCheck(fkInput, withScanCols))
 	}
+	telemetry.Inc(sqltelemetry.ForeignKeyChecksUseCounter)
 }
 
 // buildFKChecks* methods populate mb.checks with queries that check the
@@ -194,6 +202,7 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 	}
 	if !mb.b.evalCtx.SessionData.OptimizerFKs {
 		mb.fkFallback = true
+		telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
 		return
 	}
 
@@ -247,6 +256,8 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 			// Bail, so that exec FK checks pick up on FK checks and perform them.
 			mb.checks = nil
 			mb.fkFallback = true
+			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
+			telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
 			return
 		}
 
@@ -292,6 +303,7 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 
 		mb.checks = append(mb.checks, h.buildDeletionCheck(deletedRows, colsForOldRow))
 	}
+	telemetry.Inc(sqltelemetry.ForeignKeyChecksUseCounter)
 }
 
 // buildFKChecks* methods populate mb.checks with queries that check the
@@ -323,6 +335,7 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 
 	if !mb.b.evalCtx.SessionData.OptimizerFKs {
 		mb.fkFallback = true
+		telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
 		return
 	}
 
@@ -350,6 +363,8 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 			// Bail, so that exec FK checks pick up on FK checks and perform them.
 			mb.checks = nil
 			mb.fkFallback = true
+			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
+			telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
 			return
 		}
 
@@ -378,6 +393,7 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 		)
 		mb.checks = append(mb.checks, h.buildDeletionCheck(deletedRows, colsForOldRow))
 	}
+	telemetry.Inc(sqltelemetry.ForeignKeyChecksUseCounter)
 }
 
 // outboundFKColsUpdated returns true if any of the FK columns for an outbound
