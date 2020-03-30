@@ -32,8 +32,6 @@ type CreateRoleNode struct {
 	isRole      bool
 	roleOptions roleoption.List
 	userNameInfo
-
-	run createUserRun
 }
 
 var userTableName = tree.NewTableName("system", "users")
@@ -155,7 +153,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	}
 
 	// TODO(richardjcai): move hashedPassword column to system.role_options.
-	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+	rowsAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		opName,
 		params.p.txn,
@@ -167,9 +165,9 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 
 	if err != nil {
 		return err
-	} else if n.run.rowsAffected != 1 {
+	} else if rowsAffected != 1 {
 		return errors.AssertionFailedf("%d rows affected by user creation; expected exactly one row affected",
-			n.run.rowsAffected,
+			rowsAffected,
 		)
 	}
 
@@ -197,7 +195,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 			}
 		}
 
-		rowsAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 			params.ctx,
 			opName,
 			params.p.txn,
@@ -208,14 +206,9 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		n.run.rowsAffected += rowsAffected
 	}
 
 	return nil
-}
-
-type createUserRun struct {
-	rowsAffected int
 }
 
 // Next implements the planNode interface.
@@ -226,9 +219,6 @@ func (*CreateRoleNode) Values() tree.Datums { return tree.Datums{} }
 
 // Close implements the planNode interface.
 func (*CreateRoleNode) Close(context.Context) {}
-
-// FastPathResults implements the planNodeFastPath interface.
-func (n *CreateRoleNode) FastPathResults() (int, bool) { return n.run.rowsAffected, true }
 
 const usernameHelp = "Usernames are case insensitive, must start with a letter, " +
 	"digit or underscore, may contain letters, digits, dashes, periods, or underscores, and must not exceed 63 characters."
