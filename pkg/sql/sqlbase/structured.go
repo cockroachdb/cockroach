@@ -1214,7 +1214,8 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 	desc.initIDs()
 	columnNames := map[string]ColumnID{}
 
-	r := rand.New(rand.NewSource(time.Now().Unix()))
+	r := rand.New(rand.NewSource(1))
+
 	for _, i := range r.Perm(len(desc.Columns)) {
 		desc.MaybeFillColumnID(&desc.Columns[i], columnNames)
 	}
