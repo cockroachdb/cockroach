@@ -517,7 +517,7 @@ func canDoServersideRetry(
 	pErr *roachpb.Error,
 	ba *roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
-	spans *spanset.SpanSet,
+	latchSpans *spanset.SpanSet,
 	deadline *hlc.Timestamp,
 ) bool {
 	if ba.Txn != nil {
@@ -568,21 +568,8 @@ func canDoServersideRetry(
 		newTimestamp = br.Txn.WriteTimestamp
 	}
 
-	if spans.MaxProtectedTimestamp().Less(newTimestamp) {
-		// If the batch acquired any read latches with bounded (MVCC) timestamps
-		// below this new timestamp then we can not trivially bump the batch's
-		// timestamp without dropping and re-acquiring those latches. Doing so
-		// could allow the request to read at an unprotected timestamp.
-		//
-		// NOTE: we could consider adding a retry-loop above the latch
-		// acquisition to allow this to be retried, but given that we try not to
-		// mix read-only and read-write requests, doing so doesn't seem worth
-		// it.
-		return false
-	}
 	if deadline != nil && deadline.LessEq(newTimestamp) {
 		return false
 	}
-	bumpBatchTimestamp(ctx, ba, newTimestamp)
-	return true
+	return tryBumpBatchTimestamp(ctx, ba, newTimestamp, latchSpans)
 }

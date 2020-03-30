@@ -86,7 +86,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 	rw storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ba *roachpb.BatchRequest,
-	spans *spanset.SpanSet,
+	latchSpans *spanset.SpanSet,
 ) (br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	for retries := 0; ; retries++ {
 		if retries > 0 {
@@ -96,7 +96,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 
 		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only.
-		if pErr == nil || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, spans, nil /* deadline */) {
+		if pErr == nil || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, latchSpans, nil /* deadline */) {
 			break
 		}
 	}
