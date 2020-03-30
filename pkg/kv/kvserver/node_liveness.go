@@ -233,9 +233,12 @@ func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool) {
 		if err != nil && err != ErrNoLivenessRecord {
 			log.Errorf(ctx, "unexpected error getting liveness: %+v", err)
 		}
-		if err := nl.setDrainingInternal(ctx, liveness, drain); err == nil {
-			return
+		err = nl.setDrainingInternal(ctx, liveness, drain)
+		if err != nil {
+			log.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
+			continue
 		}
+		return
 	}
 }
 
@@ -349,6 +352,7 @@ func (nl *NodeLiveness) setDrainingInternal(
 		}
 		return errors.New("failed to update liveness record")
 	}); err != nil {
+		log.Infof(ctx, "updating liveness record: %v", err)
 		if err == errNodeDrainingSet {
 			return nil
 		}
@@ -819,7 +823,11 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	// First check the existing liveness map to avoid known conditional
 	// put failures.
 	if !update.ignoreCache {
-		if l, err := nl.GetLiveness(update.NodeID); err == nil && l != oldLiveness {
+		l, err := nl.GetLiveness(update.NodeID)
+		if err != nil && err != ErrNoLivenessRecord {
+			return err
+		}
+		if err == nil && l != oldLiveness {
 			return handleCondFailed(l)
 		}
 	}
