@@ -83,9 +83,13 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 // drainAndShutdown attempts to drain the server and then shut it
 // down. When given an empty onModes slice, it's a hard shutdown.
 func drainAndShutdown(ctx context.Context, c serverpb.AdminClient) (err error) {
-	hardError, err := doDrain(ctx, c)
+	hardError, remainingWork, err := doDrain(ctx, c)
 	if hardError {
 		return err
+	}
+
+	if remainingWork {
+		log.Warningf(ctx, "graceful shutdown may not have completed successfully; check the node's logs for details.")
 	}
 
 	if err != nil {
@@ -108,7 +112,9 @@ func drainAndShutdown(ctx context.Context, c serverpb.AdminClient) (err error) {
 // If the function returns hardError true, then the caller should not
 // proceed with an alternate strategy (it's likely the server has gone
 // away).
-func doDrain(ctx context.Context, c serverpb.AdminClient) (hardError bool, err error) {
+func doDrain(
+	ctx context.Context, c serverpb.AdminClient,
+) (hardError, remainingWork bool, err error) {
 	// The next step is to drain. The timeout is configurable
 	// via --drain-wait.
 	if quitCtx.drainWait == 0 {
@@ -116,18 +122,19 @@ func doDrain(ctx context.Context, c serverpb.AdminClient) (hardError bool, err e
 	}
 
 	err = contextutil.RunWithTimeout(ctx, "drain", quitCtx.drainWait, func(ctx context.Context) (err error) {
-		hardError, err = doDrainNoTimeout(ctx, c)
+		hardError, remainingWork, err = doDrainNoTimeout(ctx, c)
 		return err
 	})
 	if _, ok := err.(*contextutil.TimeoutError); ok {
 		log.Infof(ctx, "drain timed out: %v", err)
 		err = errors.New("drain timeout")
 	}
-
-	return hardError, err
+	return
 }
 
-func doDrainNoTimeout(ctx context.Context, c serverpb.AdminClient) (hardError bool, err error) {
+func doDrainNoTimeout(
+	ctx context.Context, c serverpb.AdminClient,
+) (hardError, remainingWork bool, err error) {
 	defer func() {
 		if server.IsWaitingForInit(err) {
 			log.Infof(ctx, "%v", err)
@@ -135,30 +142,72 @@ func doDrainNoTimeout(ctx context.Context, c serverpb.AdminClient) (hardError bo
 		}
 	}()
 
-	// Send a drain request with the drain bit set and the shutdown bit
-	// unset.
-	stream, err := c.Drain(ctx, &serverpb.DrainRequest{
-		DeprecatedProbeIndicator: server.DeprecatedDrainParameter,
-		DoDrain:                  true,
-	})
-	if err != nil {
-		return true, errors.Wrap(err, "error sending drain request")
-	}
+	remainingWork = true
 	for {
-		_, err := stream.Recv()
-		if err == io.EOF {
-			// Done.
+		// Tell the user we're starting to drain. This enables the user to
+		// mentally prepare for something to take some time, as opposed to
+		// wondering why nothing is happening.
+		fmt.Fprintf(stderr, "node is draining... ") // notice no final newline.
+
+		// Send a drain request with the drain bit set and the shutdown bit
+		// unset.
+		stream, err := c.Drain(ctx, &serverpb.DrainRequest{
+			DeprecatedProbeIndicator: server.DeprecatedDrainParameter,
+			DoDrain:                  true,
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "\n") // finish the line started above.
+			return true, remainingWork, errors.Wrap(err, "error sending drain request")
+		}
+		for {
+			resp, err := stream.Recv()
+			if err == io.EOF {
+				// Done.
+				break
+			}
+			if err != nil {
+				// Unexpected error.
+				fmt.Fprintf(stderr, "\n") // finish the line started above.
+				log.Infof(ctx, "graceful shutdown failed: %v", err)
+				return false, remainingWork, err
+			}
+
+			if resp.IsDraining {
+				// We want to assert that the node is quitting, and tell the
+				// story about how much work was performed in logs for
+				// debugging.
+				finalString := ""
+				if resp.DrainRemainingIndicator == 0 {
+					finalString = " (complete)"
+				}
+				// We use stderr so that 'cockroach quit''s stdout remains a
+				// simple 'ok' in case of success (for compatibility with
+				// scripts).
+				fmt.Fprintf(stderr, "remaining: %d%s\n",
+					resp.DrainRemainingIndicator, finalString)
+				remainingWork = resp.DrainRemainingIndicator > 0
+			} else {
+				// Either the server has decided it wanted to stop quitting; or
+				// we're running a pre-20.1 node which doesn't populate IsDraining.
+				// In either case, we need to stop sending drain requests.
+				remainingWork = false
+				fmt.Fprintf(stderr, "done\n")
+			}
+
+			if resp.DrainRemainingDescription != "" {
+				// Only show this information in the log; we'd use this for debugging.
+				// (This can be revealed e.g. via --logtostderr.)
+				log.Infof(ctx, "drain details: %s\n", resp.DrainRemainingDescription)
+			}
+
+			// Iterate until end of stream, which indicates the drain is
+			// complete.
+		}
+		if !remainingWork {
 			break
 		}
-		if err != nil {
-			// Unexpected error.
-			log.Infof(ctx, "graceful shutdown failed: %v", err)
-			return false, err
-		}
-		// Iterate until end of stream, which indicates the drain is
-		// complete.
 	}
-	return false, nil
+	return false, remainingWork, nil
 }
 
 // doShutdown attempts to trigger a server shutdown *without*
