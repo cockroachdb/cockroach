@@ -927,9 +927,11 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			ac := log.AmbientContext{}
 			ac.AddLogTag("server drain process", nil)
 			drainCtx := ac.AnnotateCtx(context.Background())
-			if err := s.Drain(drainCtx); err != nil {
+
+			if _, _, err := s.Drain(drainCtx); err != nil {
 				log.Warning(drainCtx, err)
 			}
+
 			stopper.Stop(drainCtx)
 		}()
 
