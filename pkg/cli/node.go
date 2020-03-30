@@ -525,7 +525,7 @@ func runDrain(cmd *cobra.Command, args []string) (err error) {
 	}
 	defer finish()
 
-	_, err = doDrain(ctx, c)
+	_, _, err = doDrain(ctx, c)
 	return err
 }
 

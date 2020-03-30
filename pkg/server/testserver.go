@@ -470,7 +470,7 @@ func (ts *TestServer) RPCAddr() string {
 
 // DrainClients exports the drainClients() method for use by tests.
 func (ts *TestServer) DrainClients(ctx context.Context) error {
-	return ts.drainClients(ctx)
+	return ts.drainClients(ctx, nil /* reporter */)
 }
 
 // SQLAddr returns the server's listening SQL address.
