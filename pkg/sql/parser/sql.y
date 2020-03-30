@@ -527,7 +527,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> BLOB BOOL BOOLEAN BOTH BUNDLE BY BYTEA BYTES
 
 %token <str> CACHE CANCEL CASCADE CASE CAST CHANGEFEED CHAR
-%token <str> CHARACTER CHARACTERISTICS CHECK
+%token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMIT
 %token <str> COMMITTED COMPACT COMPLETE CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
 %token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONVERSION COPY COVERING CREATE CREATEROLE
@@ -536,7 +536,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> CURRENT_USER CYCLE
 
 %token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT
-%token <str> DEALLOCATE DEFERRABLE DEFERRED DELETE DESC
+%token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DESC
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> ELSE ENCODING END ENUM ESCAPE EXCEPT EXCLUDE
@@ -800,6 +800,9 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> upsert_stmt
 %type <tree.Statement> use_stmt
 
+%type <tree.Statement> close_cursor_stmt
+%type <tree.Statement> declare_cursor_stmt
+
 %type <[]string> opt_incremental
 %type <tree.KVOption> kv_option
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list
@@ -842,7 +845,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.UnresolvedName> func_name
 %type <str> opt_collate
 
-%type <str> database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
+%type <str> cursor_name database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
 %type <str> db_object_name_component
 %type <*tree.UnresolvedObjectName> table_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
@@ -1136,6 +1139,8 @@ stmt:
 | release_stmt      // EXTEND WITH HELP: RELEASE
 | nonpreparable_set_stmt // help texts in sub-rule
 | transaction_stmt  // help texts in sub-rule
+| close_cursor_stmt
+| declare_cursor_stmt
 | /* EMPTY */
   {
     $$.val = tree.Statement(nil)
@@ -3392,6 +3397,15 @@ show_stmt:
 | show_users_stmt           // EXTEND WITH HELP: SHOW USERS
 | show_zone_stmt
 | SHOW error                // SHOW HELP: SHOW
+
+// Cursors are not yet supported by CockroachDB. CLOSE ALL is safe to no-op
+// since there will be no open cursors.
+close_cursor_stmt:
+	CLOSE ALL { }
+| CLOSE cursor_name { return unimplementedWithIssue(sqllex, 41412) }
+
+declare_cursor_stmt:
+	DECLARE { return unimplementedWithIssue(sqllex, 41412) }
 
 // %Help: SHOW SESSION - display session variables
 // %Category: Cfg
@@ -9588,6 +9602,8 @@ standalone_index_name: db_object_name
 
 explain_option_name:   non_reserved_word
 
+cursor_name:           name
+
 // Names for column references.
 // Accepted patterns:
 // <colname>
@@ -9790,6 +9806,7 @@ unreserved_keyword:
 | CANCEL
 | CASCADE
 | CHANGEFEED
+| CLOSE
 | CLUSTER
 | COLUMNS
 | COMMENT
@@ -9815,6 +9832,7 @@ unreserved_keyword:
 | DATE
 | DAY
 | DEALLOCATE
+| DECLARE
 | DELETE
 | DEFERRED
 | DISCARD
