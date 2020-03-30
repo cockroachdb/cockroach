@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -1377,102 +1376,6 @@ func (s *adminServer) QueryPlan(
 	return &serverpb.QueryPlanResponse{
 		DistSQLPhysicalQueryPlan: string(dbDatum),
 	}, nil
-}
-
-// Drain puts the node into the specified drain mode(s) and optionally
-// instructs the process to terminate.
-func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer) error {
-	// `cockroach quit` sends a probe to check that the server is able
-	// to process a Drain request, prior to sending an actual drain
-	// request.
-	isProbe := len(req.On) == 0 && len(req.Off) == 0 && !req.Shutdown
-
-	ctx := stream.Context()
-
-	on := make([]serverpb.DrainMode, len(req.On))
-	off := make([]serverpb.DrainMode, len(req.Off))
-
-	if !isProbe {
-		var buf strings.Builder
-		comma := ""
-		for i := range req.On {
-			on[i] = serverpb.DrainMode(req.On[i])
-			fmt.Fprintf(&buf, "%sshutdown: %s", comma, on[i].String())
-			comma = ", "
-		}
-		for i := range req.Off {
-			off[i] = serverpb.DrainMode(req.Off[i])
-			fmt.Fprintf(&buf, "%sresume: %s", comma, off[i].String())
-			comma = ", "
-		}
-		// Report the event to the log file for troubleshootability.
-		log.Infof(ctx, "drain request received (%s), process shutdown: %v", buf.String(), req.Shutdown)
-	} else {
-		log.Infof(ctx, "received request for drain status")
-	}
-
-	nowOn, err := s.server.Undrain(ctx, off)
-	if err != nil {
-		return err
-	}
-	if len(on) > 0 {
-		nowOn, err = s.server.Drain(ctx, on)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Report the current status to the client.
-	res := serverpb.DrainResponse{
-		On: make([]int32, len(nowOn)),
-	}
-	for i := range nowOn {
-		res.On[i] = int32(nowOn[i])
-	}
-	if err := stream.Send(&res); err != nil {
-		return err
-	}
-
-	if !req.Shutdown {
-		if !isProbe {
-			// We don't need an info message for just a probe.
-			log.Infof(ctx, "drain request completed without server shutdown")
-		}
-		return nil
-	}
-
-	go func() {
-		// TODO(tbg): why don't we stop the stopper first? Stopping the stopper
-		// first seems more reasonable since grpc.Stop closes the listener right
-		// away (and who knows whether gRPC-goroutines are tied up in some
-		// stopper task somewhere).
-		s.server.grpc.Stop()
-		s.server.stopper.Stop(ctx)
-	}()
-
-	select {
-	case <-s.server.stopper.IsStopped():
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(10 * time.Second):
-		// This is a hack to work around the problem in
-		// https://github.com/cockroachdb/cockroach/issues/37425#issuecomment-494336131
-		//
-		// There appear to be deadlock scenarios in which we don't manage to
-		// fully stop the grpc server (which implies closing the listener, i.e.
-		// seeming dead to the outside world) or don't manage to shut down the
-		// stopper (the evidence in #37425 is inconclusive which one it is).
-		//
-		// Other problems in this area are known, such as
-		// https://github.com/cockroachdb/cockroach/pull/31692
-		//
-		// The signal-based shutdown path uses a similar time-based escape hatch.
-		// Until we spend (potentially lots of time to) understand and fix this
-		// issue, this will serve us well.
-		os.Exit(1)
-		return errors.New("unreachable")
-	}
 }
 
 // DecommissionStatus returns the DecommissionStatus for all or the given nodes.
