@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Set this to 1 to require a "release justification" note in the commit message
+# or the PR description.
+require_justification=0
+
 set -euo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
