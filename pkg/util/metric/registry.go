@@ -13,6 +13,7 @@ package metric
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"regexp"
 
@@ -77,6 +78,7 @@ func (r *Registry) AddMetric(metric Iterable) {
 // AddMetricStruct examines all fields of metricStruct and adds
 // all Iterable or metric.Struct objects to the registry.
 func (r *Registry) AddMetricStruct(metricStruct interface{}) {
+	ctx := context.TODO()
 	v := reflect.ValueOf(metricStruct)
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
@@ -85,22 +87,51 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 
 	for i := 0; i < v.NumField(); i++ {
 		vfield, tfield := v.Field(i), t.Field(i)
+		tname := tfield.Name
 		if !vfield.CanInterface() {
 			if log.V(2) {
-				log.Infof(context.TODO(), "Skipping unexported field %s", tfield.Name)
+				log.Infof(ctx, "Skipping unexported field %s", tname)
 			}
 			continue
 		}
-		val := vfield.Interface()
-		switch typ := val.(type) {
-		case Iterable:
-			r.AddMetric(typ)
-		case Struct:
-			r.AddMetricStruct(typ)
-		default:
-			if log.V(2) {
-				log.Infof(context.TODO(), "Skipping non-metric field %s", tfield.Name)
+		switch vfield.Kind() {
+		case reflect.Array:
+			for i := 0; i < vfield.Len(); i++ {
+				velem := vfield.Index(i)
+				telemName := fmt.Sprintf("%s[%d]", tname, i)
+				// Permit elements in the array to be nil.
+				const skipNil = true
+				r.addMetricValue(ctx, velem, telemName, skipNil)
 			}
+		default:
+			// No metric fields should be nil.
+			const skipNil = false
+			r.addMetricValue(ctx, vfield, tname, skipNil)
+		}
+	}
+}
+
+func (r *Registry) addMetricValue(
+	ctx context.Context, val reflect.Value, name string, skipNil bool,
+) {
+	switch typ := val.Interface().(type) {
+	case Iterable:
+		if val.Kind() == reflect.Ptr && val.IsNil() {
+			if skipNil {
+				if log.V(2) {
+					log.Infof(ctx, "Skipping nil metric field %s", name)
+				}
+			} else {
+				log.Fatalf(ctx, "Found nil metric field %s", name)
+			}
+			return
+		}
+		r.AddMetric(typ)
+	case Struct:
+		r.AddMetricStruct(typ)
+	default:
+		if log.V(2) {
+			log.Infof(ctx, "Skipping non-metric field %s", name)
 		}
 	}
 }
