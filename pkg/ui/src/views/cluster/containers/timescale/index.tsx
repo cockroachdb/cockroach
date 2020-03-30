@@ -49,12 +49,7 @@ interface TimeScaleDropdownProps extends RouteComponentProps {
 }
 
 export const getTimeLabel = (currentWindow?: timewindow.TimeWindow, windowSize?: moment.Duration) => {
-  let time = moment.duration(10, "minutes");
-  if (windowSize) {
-    time = windowSize;
-  } else if (currentWindow) {
-    time = moment.duration(moment(currentWindow.end).diff(currentWindow.start));
-  }
+  const time = windowSize ? windowSize : currentWindow ? moment.duration(moment(currentWindow.end).diff(currentWindow.start)) : moment.duration(10, "minutes");
   const seconds = time.asSeconds();
   const minutes = 60;
   const hour = minutes * 60;
