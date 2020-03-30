@@ -205,12 +205,7 @@ func (c *transientCluster) DrainNode(nodeID roachpb.NodeID) error {
 	}
 	defer finish()
 
-	onModes := make([]int32, len(server.GracefulDrainModes))
-	for i, m := range server.GracefulDrainModes {
-		onModes[i] = int32(m)
-	}
-
-	if err := doShutdown(ctx, adminClient, onModes, true /*requestNodeShutdown*/); err != nil {
+	if err := doShutdown(ctx, adminClient, false /* skipDrain */, true /*requestNodeShutdown*/); err != nil {
 		return err
 	}
 	c.servers[nodeIndex] = nil
