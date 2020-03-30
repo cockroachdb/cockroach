@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { Checkbox, Select } from "antd";
-import Dropdown from "oss/src/views/shared/components/dropdown";
+import Dropdown, { arrowRenderer } from "src/views/shared/components/dropdown";
 import React from "react";
 import classNames from "classnames";
 import { NetworkFilter, NetworkSort } from "..";
@@ -125,7 +125,7 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
                 >
                   <div className="Select-control">
                     <div className="Select-arrow-zone">
-                      <span className="Select-arrow"></span>
+                      {arrowRenderer({ isOpen: opened })}
                     </div>
                   </div>
                 </div>
