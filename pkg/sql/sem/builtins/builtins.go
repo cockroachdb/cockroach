@@ -2557,30 +2557,17 @@ may increase either contention or retry errors, or both.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Timestamp),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				// Try both ways around.
-				// TODO(otan): after 20.1, only accept (timezone, timestamptz).
-				for _, attempt := range []struct {
-					ts, tz tree.Datum
-				}{
-					{args[0], args[1]},
-					{args[1], args[0]},
-				} {
-					ts, err := tree.ParseDTimestampTZ(
-						ctx, string(tree.MustBeDString(attempt.ts)), time.Microsecond,
-					)
-					if err != nil {
-						continue
-					}
-					loc, err := timeutil.TimeZoneStringToLocation(
-						string(tree.MustBeDString(attempt.tz)),
-						timeutil.TimeZoneStringToLocationPOSIXStandard,
-					)
-					if err != nil {
-						continue
-					}
-					return ts.EvalAtTimeZone(ctx, loc), nil
+				tzArg := string(tree.MustBeDString(args[0]))
+				tsArg := string(tree.MustBeDString(args[1]))
+				ts, err := tree.ParseDTimestampTZ(ctx, tsArg, time.Microsecond)
+				if err != nil {
+					return nil, err
 				}
-				return nil, errors.Newf("cannot evaluate timezone(%s, %s)", args[0].String(), args[1].String())
+				loc, err := timeutil.TimeZoneStringToLocation(tzArg, timeutil.TimeZoneStringToLocationPOSIXStandard)
+				if err != nil {
+					return nil, err
+				}
+				return ts.EvalAtTimeZone(ctx, loc), nil
 			},
 			Info: "Convert given time stamp with time zone to the new time zone, with no time zone designation.",
 		},
@@ -2672,101 +2659,6 @@ may increase either contention or retry errors, or both.`,
 				return tree.NewDTimeTZ(timetz.MakeTimeTZFromTime(tTime.In(loc))), nil
 			},
 			Info: "Convert given time with time zone to the new time zone.",
-		},
-
-		// TODO(otan): the below should be deleted after 20.1 after sql.y is changed
-		// for the arguments to be the correct way around.
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"timestamp", types.Timestamp},
-				{"timezone", types.String},
-			},
-			ReturnType: tree.FixedReturnType(types.TimestampTZ),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				ts := tree.MustBeDTimestamp(args[0])
-				tzStr := string(tree.MustBeDString(args[1]))
-				loc, err := timeutil.TimeZoneStringToLocation(
-					tzStr,
-					timeutil.TimeZoneStringToLocationPOSIXStandard,
-				)
-				if err != nil {
-					return nil, err
-				}
-				_, beforeOffsetSecs := ts.Time.Zone()
-				_, afterOffsetSecs := ts.Time.In(loc).Zone()
-				durationDelta := time.Duration(beforeOffsetSecs-afterOffsetSecs) * time.Second
-				return tree.MakeDTimestampTZ(ts.Time.Add(durationDelta), time.Microsecond), nil
-			},
-			Info: "Treat given time stamp without time zone as located in the specified time zone.\n" +
-				"This is deprecated in favor of timezone(str, timestamp)",
-		},
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"timestamptz", types.TimestampTZ},
-				{"timezone", types.String},
-			},
-			ReturnType: tree.FixedReturnType(types.Timestamp),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				ts := tree.MustBeDTimestampTZ(args[0])
-				tzStr := string(tree.MustBeDString(args[1]))
-				loc, err := timeutil.TimeZoneStringToLocation(
-					tzStr,
-					timeutil.TimeZoneStringToLocationPOSIXStandard,
-				)
-				if err != nil {
-					return nil, err
-				}
-				return ts.EvalAtTimeZone(ctx, loc), nil
-			},
-			Info: "Convert given time stamp with time zone to the new time zone, with no time zone designation\n" +
-				"This is deprecated in favor of timezone(str, timestamptz)",
-		},
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"time", types.Time},
-				{"timezone", types.String},
-			},
-			ReturnType: tree.FixedReturnType(types.TimeTZ),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				tArg := args[0].(*tree.DTime)
-				tzStr := string(tree.MustBeDString(args[1]))
-				loc, err := timeutil.TimeZoneStringToLocation(
-					tzStr,
-					timeutil.TimeZoneStringToLocationPOSIXStandard,
-				)
-				if err != nil {
-					return nil, err
-				}
-				tTime := timeofday.TimeOfDay(*tArg).ToTime()
-				_, beforeOffsetSecs := tTime.In(ctx.GetLocation()).Zone()
-				durationDelta := time.Duration(-beforeOffsetSecs) * time.Second
-				return tree.NewDTimeTZ(timetz.MakeTimeTZFromTime(tTime.In(loc).Add(durationDelta))), nil
-			},
-			Info: "Treat given time without time zone as located in the specified time zone\n" +
-				"This is deprecated in favor of timezone(str, time)",
-		},
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"timetz", types.TimeTZ},
-				{"timezone", types.String},
-			},
-			ReturnType: tree.FixedReturnType(types.TimeTZ),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				// This one should disappear with implicit casts.
-				tArg := args[0].(*tree.DTimeTZ)
-				tzStr := string(tree.MustBeDString(args[1]))
-				loc, err := timeutil.TimeZoneStringToLocation(
-					tzStr,
-					timeutil.TimeZoneStringToLocationPOSIXStandard,
-				)
-				if err != nil {
-					return nil, err
-				}
-				tTime := tArg.TimeTZ.ToTime()
-				return tree.NewDTimeTZ(timetz.MakeTimeTZFromTime(tTime.In(loc))), nil
-			},
-			Info: "Convert given time with time zone to the new time zone\n" +
-				"This is deprecated in favor of timezone(str, timetz)",
 		},
 	),
 
