@@ -15,6 +15,11 @@ statement ok
 SELECT * FROM t a NATURAL INNER MERGE JOIN t b
 
 query T
-SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.plan.opt.node.merge-join' AND usage_count > 0
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.plan.opt.node.join.algo.merge' AND usage_count > 0
 ----
-sql.plan.opt.node.merge-join
+sql.plan.opt.node.join.algo.merge
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.plan.opt.node.join.type.inner' AND usage_count > 0
+----
+sql.plan.opt.node.join.type.inner

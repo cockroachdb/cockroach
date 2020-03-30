@@ -192,7 +192,7 @@ define Project {
 # predicate are filtered. While expressions in the predicate can refer to
 # columns projected by either the left or right inputs, the inputs are not
 # allowed to refer to the other's projected columns.
-[Relational, Join, JoinNonApply, Telemetry]
+[Relational, Join, JoinNonApply]
 define InnerJoin {
     Left  RelExpr
     Right RelExpr
@@ -201,7 +201,7 @@ define InnerJoin {
     _ JoinPrivate
 }
 
-[Relational, Join, JoinNonApply, Telemetry]
+[Relational, Join, JoinNonApply]
 define LeftJoin {
     Left  RelExpr
     Right RelExpr
@@ -210,7 +210,7 @@ define LeftJoin {
    _ JoinPrivate
 }
 
-[Relational, Join, JoinNonApply, Telemetry]
+[Relational, Join, JoinNonApply]
 define RightJoin {
     Left  RelExpr
     Right RelExpr
@@ -219,7 +219,7 @@ define RightJoin {
     _ JoinPrivate
 }
 
-[Relational, Join, JoinNonApply, Telemetry]
+[Relational, Join, JoinNonApply]
 define FullJoin {
     Left  RelExpr
     Right RelExpr
@@ -228,7 +228,7 @@ define FullJoin {
     _ JoinPrivate
 }
 
-[Relational, Join, JoinNonApply, Telemetry]
+[Relational, Join, JoinNonApply]
 define SemiJoin {
     Left  RelExpr
     Right RelExpr
@@ -237,7 +237,7 @@ define SemiJoin {
     _ JoinPrivate
 }
 
-[Relational, Join, JoinNonApply, Telemetry]
+[Relational, Join, JoinNonApply]
 define AntiJoin {
     Left  RelExpr
     Right RelExpr
@@ -281,7 +281,7 @@ define IndexJoinPrivate {
 
 # LookupJoin represents a join between an input expression and an index. The
 # type of join is in the LookupJoinPrivate field.
-[Relational, Telemetry]
+[Relational]
 define LookupJoin {
     Input RelExpr
     On    FiltersExpr
@@ -340,7 +340,7 @@ define LookupJoinPrivate {
 # MergeOn is a scalar which contains the ON condition and merge-join ordering
 # information; see the MergeOn scalar operator.
 # It can be any type of join (identified in the MergeJoinPrivate field).
-[Relational, Telemetry]
+[Relational]
 define MergeJoin {
     Left  RelExpr
     Right RelExpr
