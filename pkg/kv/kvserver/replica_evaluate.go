@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -333,7 +334,14 @@ func evaluateBatch(
 		if limit := baHeader.MaxSpanRequestKeys; limit > 0 {
 			retResults := reply.Header().NumKeys
 			if retResults > limit {
-				log.Fatalf(ctx, "received %d results, limit was %d", retResults, limit)
+				index, retResults, limit := index, retResults, limit // don't alloc unless branch taken
+				err := errorutil.UnexpectedWithIssueErrorf(46652,
+					"received %d results, limit was %d (original limit: %d, batch=%s idx=%d)",
+					errors.Safe(retResults), errors.Safe(limit),
+					errors.Safe(ba.Header.MaxSpanRequestKeys), // already on heap
+					errors.Safe(ba.Summary()), errors.Safe(index))
+				errorutil.SendReport(ctx, &rec.ClusterSettings().SV, err)
+				return nil, mergedResult, roachpb.NewError(err)
 			} else if retResults < limit {
 				baHeader.MaxSpanRequestKeys -= retResults
 			} else {
