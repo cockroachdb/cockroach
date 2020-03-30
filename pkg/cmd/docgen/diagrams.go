@@ -353,7 +353,7 @@ var specs = []stmtSpec{
 		name:   "alter_role_stmt",
 		inline: []string{"role_or_group_or_user", "opt_role_options"},
 		replace: map[string]string{
-			"string_or_placeholder":             "name'",
+			"string_or_placeholder":             "name",
 			"opt_role_options":                  "OPTIONS",
 			"string_or_placeholder  'PASSWORD'": "name 'PASSWORD'",
 			"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
@@ -1196,6 +1196,9 @@ var specs = []stmtSpec{
 		name: "show_roles_stmt",
 	},
 	{
+		name: "show_users_stmt",
+	},
+	{
 		name: "show_ranges_stmt",
 		stmt: "show_ranges_stmt",
 	},
@@ -1245,11 +1248,6 @@ var specs = []stmtSpec{
 		name:  "show_savepoint_status",
 		stmt:  "show_savepoint_stmt",
 		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'SAVEPOINT' 'STATUS'")},
-	},
-	{
-		name:  "show_users",
-		stmt:  "show_stmt",
-		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'USERS'")},
 	},
 	{
 		name:   "show_zone_stmt",
