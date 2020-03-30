@@ -166,41 +166,12 @@ func (s *Server) doDrain(
 	for _, mode := range modes {
 		switch mode {
 		case serverpb.DrainMode_CLIENT:
-			if setTo {
-				s.grpc.setMode(modeDraining)
-				// Wait for drainUnreadyWait. This will fail load balancer checks and
-				// delay draining so that client traffic can move off this node.
-				time.Sleep(drainWait.Get(&s.st.SV))
-			}
-			if err := func() error {
-				if !setTo {
-					// Execute this last.
-					defer func() { s.grpc.setMode(modeOperational) }()
-				}
-				// Since enabling the lease manager's draining mode will prevent
-				// the acquisition of new leases, the switch must be made after
-				// the pgServer has given sessions a chance to finish ongoing
-				// work.
-				defer s.leaseMgr.SetDraining(setTo)
-
-				if !setTo {
-					s.distSQLServer.Undrain(ctx)
-					s.pgServer.Undrain()
-					return nil
-				}
-
-				drainMaxWait := queryWait.Get(&s.st.SV)
-				if err := s.pgServer.Drain(drainMaxWait); err != nil {
-					return err
-				}
-				s.distSQLServer.Drain(ctx, drainMaxWait)
-				return nil
-			}(); err != nil {
+			if err := s.drainClients(ctx, setTo); err != nil {
 				return nil, err
 			}
+
 		case serverpb.DrainMode_LEASES:
-			s.nodeLiveness.SetDraining(ctx, setTo)
-			if err := s.node.SetDraining(setTo); err != nil {
+			if err := s.drainRangeLeases(ctx, setTo); err != nil {
 				return nil, err
 			}
 		default:
@@ -215,4 +186,48 @@ func (s *Server) doDrain(
 		nowOn = append(nowOn, serverpb.DrainMode_LEASES)
 	}
 	return nowOn, nil
+}
+
+// drainClients starts draining the SQL layer if setTo is true, and
+// stops draining SQL if setTo is false.
+func (s *Server) drainClients(ctx context.Context, setTo bool) error {
+	if setTo {
+		s.grpc.setMode(modeDraining)
+		// Wait for drainUnreadyWait. This will fail load balancer checks and
+		// delay draining so that client traffic can move off this node.
+		time.Sleep(drainWait.Get(&s.st.SV))
+	} else {
+		// We're disableing the drain. Make the server
+		// operational again at the end.
+		defer func() { s.grpc.setMode(modeOperational) }()
+	}
+	// Since enabling the SQL table lease manager's draining mode will
+	// prevent the acquisition of new leases, the switch must be made
+	// after the pgServer has given sessions a chance to finish ongoing
+	// work.
+	defer s.leaseMgr.SetDraining(setTo)
+
+	if !setTo {
+		// Re-enable client connections.
+		s.distSQLServer.Undrain(ctx)
+		s.pgServer.Undrain()
+		return nil
+	}
+
+	// Disable incoming SQL clients up to the queryWait timeout.
+	drainMaxWait := queryWait.Get(&s.st.SV)
+	if err := s.pgServer.Drain(drainMaxWait); err != nil {
+		return err
+	}
+	// Stop ongoing SQL execution up to the queryWait timeout.
+	s.distSQLServer.Drain(ctx, drainMaxWait)
+
+	// Done. This executes the defers set above to (un)drain SQL leases.
+	return nil
+}
+
+// drainRangeLeases starts draining range leases if setTo is true, and stops draining leases if setTo is false.
+func (s *Server) drainRangeLeases(ctx context.Context, setTo bool) error {
+	s.nodeLiveness.SetDraining(ctx, setTo)
+	return s.node.SetDraining(setTo)
 }
