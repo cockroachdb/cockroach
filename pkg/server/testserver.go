@@ -409,7 +409,7 @@ func (ts *TestServer) Addr() string {
 
 // DrainClients exports the drainClients() method for use by tests.
 func (ts *TestServer) DrainClients(ctx context.Context) error {
-	return ts.drainClients(ctx)
+	return ts.drainClients(ctx, nil /* reporter */)
 }
 
 // WriteSummaries implements TestServerInterface.

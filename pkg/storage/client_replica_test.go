@@ -826,7 +826,7 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 		// caught up to replica0 as draining code doesn't transfer leases to
 		// behind replicas.
 		l.ensureLeaderAndRaftState(t, l.replica0, l.replica1Desc)
-		l.mtc.stores[0].SetDraining(true)
+		l.mtc.stores[0].SetDraining(true, nil /* reporter */)
 
 		// Check that replica0 doesn't serve reads any more.
 		pErr := l.sendRead(0)
@@ -842,7 +842,7 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 		// Check that replica1 now has the lease.
 		l.checkHasLease(t, 1)
 
-		l.mtc.stores[0].SetDraining(false)
+		l.mtc.stores[0].SetDraining(false, nil /* reporter */)
 	})
 
 	// DrainTransferWithExtension verifies that a draining store waits for any
@@ -875,7 +875,7 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 
 		// Drain node 1 with an extension in progress.
 		go func() {
-			l.mtc.stores[1].SetDraining(true)
+			l.mtc.stores[1].SetDraining(true, nil /* reporter */)
 		}()
 		// Now unblock the extension.
 		extensionSem <- struct{}{}
@@ -1634,7 +1634,7 @@ func TestDrainRangeRejection(t *testing.T) {
 	}
 
 	drainingIdx := 1
-	mtc.stores[drainingIdx].SetDraining(true)
+	mtc.stores[drainingIdx].SetDraining(true, nil /* reporter */)
 	if _, err := repl.ChangeReplicas(
 		context.Background(),
 		roachpb.ADD_REPLICA,
