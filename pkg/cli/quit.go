@@ -135,15 +135,12 @@ func doDrainNoTimeout(ctx context.Context, c serverpb.AdminClient) (hardError bo
 		}
 	}()
 
-	// modes is the set of drain flags to pass to the Drain() RPC.
-	modes := make([]int32, len(server.GracefulDrainModes))
-	for i, m := range server.GracefulDrainModes {
-		modes[i] = int32(m)
-	}
-
 	// Send a drain request with the drain bit set and the shutdown bit
 	// unset.
-	stream, err := c.Drain(ctx, &serverpb.DrainRequest{On: modes})
+	stream, err := c.Drain(ctx, &serverpb.DrainRequest{
+		DeprecatedProbeIndicator: server.DeprecatedDrainParameter,
+		DoDrain:                  true,
+	})
 	if err != nil {
 		return true, errors.Wrap(err, "error sending drain request")
 	}
