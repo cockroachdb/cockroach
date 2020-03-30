@@ -12,13 +12,16 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -70,13 +73,16 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 
 	log.Infof(ctx, "drain request received with doDrain = %v, shutdown = %v", doDrain, req.Shutdown)
 
+	res := serverpb.DrainResponse{}
 	if doDrain {
-		if err := s.server.Drain(ctx); err != nil {
+		remaining, info, err := s.server.Drain(ctx)
+		if err != nil {
 			log.Errorf(ctx, "drain failed: %v", err)
 			return err
 		}
+		res.DrainRemainingIndicator = remaining
+		res.DrainRemainingDescription = info
 	}
-	res := serverpb.DrainResponse{}
 	if s.server.isDraining() {
 		res.DeprecatedDrainStatus = DeprecatedDrainParameter
 		res.IsDraining = true
@@ -138,11 +144,47 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 // state; the client should either continue calling Drain() or shut
 // down the server.
 //
+// The reporter function, if non-nil, is called for each
+// packet of load shed away from the server during the drain.
+//
 // TODO(knz): This method is currently exported for use by the
 // shutdown code in cli/start.go; however, this is a mis-design. The
 // start code should use the Drain() RPC like quit does.
-func (s *Server) Drain(ctx context.Context) error {
-	if err := s.drainClients(ctx); err != nil {
+func (s *Server) Drain(ctx context.Context) (remaining uint64, info string, err error) {
+	reports := make(map[string]int)
+	var mu syncutil.Mutex
+	reporter := func(howMany int, what string) {
+		if howMany > 0 {
+			mu.Lock()
+			reports[what] += howMany
+			mu.Unlock()
+		}
+	}
+	defer func() {
+		// Detail the counts based on the collected reports.
+		var descBuf strings.Builder
+		comma := ""
+		for what, howMany := range reports {
+			remaining += uint64(howMany)
+			fmt.Fprintf(&descBuf, "%s%s: %d", comma, what, howMany)
+			comma = ", "
+		}
+		info = descBuf.String()
+		log.Infof(ctx, "drain remaining: %d", remaining)
+		if info != "" {
+			log.Infof(ctx, "drain details: %s", info)
+		}
+	}()
+
+	if err := s.doDrain(ctx, reporter); err != nil {
+		return 0, "", err
+	}
+
+	return
+}
+
+func (s *Server) doDrain(ctx context.Context, reporter func(int, string)) error {
+	if err := s.drainClients(ctx, reporter); err != nil {
 		return err
 	}
 	// If we had a Drain call already ongoing, the drainNode() call
@@ -157,7 +199,7 @@ func (s *Server) Drain(ctx context.Context) error {
 		return err
 	}
 	// Finally, perform the drain proper.
-	return s.drainNode(ctx)
+	return s.drainNode(ctx, reporter)
 }
 
 // isDraining returns true if either clients are being drained
@@ -167,7 +209,7 @@ func (s *Server) isDraining() bool {
 }
 
 // drainClients starts draining the SQL layer.
-func (s *Server) drainClients(ctx context.Context) error {
+func (s *Server) drainClients(ctx context.Context, reporter func(int, string)) error {
 	// Mark the server as draining in a way that probes to
 	// /health?ready=1 will notice.
 	s.grpc.setMode(modeDraining)
@@ -179,15 +221,15 @@ func (s *Server) drainClients(ctx context.Context) error {
 	// prevent the acquisition of new leases, the switch must be made
 	// after the pgServer has given sessions a chance to finish ongoing
 	// work.
-	defer s.leaseMgr.SetDraining(true /* drain */)
+	defer s.leaseMgr.SetDraining(true /* drain */, reporter)
 
 	// Disable incoming SQL clients up to the queryWait timeout.
 	drainMaxWait := queryWait.Get(&s.st.SV)
-	if err := s.pgServer.Drain(drainMaxWait); err != nil {
+	if err := s.pgServer.Drain(drainMaxWait, reporter); err != nil {
 		return err
 	}
 	// Stop ongoing SQL execution up to the queryWait timeout.
-	s.distSQLServer.Drain(ctx, drainMaxWait)
+	s.distSQLServer.Drain(ctx, drainMaxWait, reporter)
 
 	// Done. This executes the defers set above to drain SQL leases.
 	return nil
@@ -195,13 +237,13 @@ func (s *Server) drainClients(ctx context.Context) error {
 
 // drainNode initiates the draining mode for the node, which
 // starts draining range leases.
-func (s *Server) drainNode(ctx context.Context) error {
-	s.nodeLiveness.SetDraining(ctx, true /* drain */)
-	return s.node.SetDraining(true /* drain */)
+func (s *Server) drainNode(ctx context.Context, reporter func(int, string)) error {
+	s.nodeLiveness.SetDraining(ctx, true /* drain */, reporter)
+	return s.node.SetDraining(true /* drain */, reporter)
 }
 
 // stopDrain should be called prior to successive invocations of
 // drainNode(), otherwise the drain call would deadlock.
 func (s *Server) stopDrain(ctx context.Context) error {
-	return s.node.SetDraining(false /* drain */)
+	return s.node.SetDraining(false /* drain */, nil /* reporter */)
 }
