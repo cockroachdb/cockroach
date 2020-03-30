@@ -221,3 +221,14 @@ query I
 SELECT NULLIF(0, NULL) + NULLIF(0, NULL)
 ----
 0
+
+# Regression test for #46196.
+query T
+SELECT max(t0.c0) FROM (VALUES (NULL), (NULL)) t0(c0)
+----
+NULL
+
+query T
+SELECT max(NULL) FROM (VALUES (NULL), (NULL)) t0(c0)
+----
+NULL
