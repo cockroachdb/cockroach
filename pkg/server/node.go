@@ -527,9 +527,9 @@ func (n *Node) IsDraining() bool {
 }
 
 // SetDraining sets the draining mode on all of the node's underlying stores.
-func (n *Node) SetDraining(drain bool) error {
+func (n *Node) SetDraining(drain bool, reporter func(int, string)) error {
 	return n.stores.VisitStores(func(s *kvserver.Store) error {
-		s.SetDraining(drain)
+		s.SetDraining(drain, reporter)
 		return nil
 	})
 }

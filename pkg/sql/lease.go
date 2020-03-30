@@ -1734,7 +1734,10 @@ func (m *LeaseManager) isDraining() bool {
 
 // SetDraining (when called with 'true') removes all inactive leases. Any leases
 // that are active will be removed once the lease's reference count drops to 0.
-func (m *LeaseManager) SetDraining(drain bool) {
+//
+// The reported callback, if non-nil, is called to report the number of
+// leases removed. See the explanation in pkg/drain.go for details.
+func (m *LeaseManager) SetDraining(drain bool, reporter func(int, string)) {
 	m.draining.Store(drain)
 	if !drain {
 		return
@@ -1748,6 +1751,10 @@ func (m *LeaseManager) SetDraining(drain bool) {
 		t.mu.Unlock()
 		for _, l := range leases {
 			releaseLease(l, m)
+		}
+		if reporter != nil {
+			// Report progress through the Drain RPC.
+			reporter(len(leases), "table leases")
 		}
 	}
 }

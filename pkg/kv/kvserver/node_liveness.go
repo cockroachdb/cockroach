@@ -226,14 +226,18 @@ func (nl *NodeLiveness) sem(nodeID roachpb.NodeID) chan struct{} {
 
 // SetDraining attempts to update this node's liveness record to put itself
 // into the draining state.
-func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool) {
+//
+// The reporter callback, if non-nil, is called on a best effort basis
+// to report when the draining state is set when it wasn't before. See
+// the explanation in pkg/server/drain.go for details.
+func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool, reporter func(int, string)) {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		liveness, err := nl.Self()
 		if err != nil && err != ErrNoLivenessRecord {
 			log.Errorf(ctx, "unexpected error getting liveness: %+v", err)
 		}
-		err = nl.setDrainingInternal(ctx, liveness, drain)
+		err = nl.setDrainingInternal(ctx, liveness, drain, reporter)
 		if err != nil {
 			log.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
 			continue
@@ -319,7 +323,7 @@ func (nl *NodeLiveness) SetDecommissioning(
 }
 
 func (nl *NodeLiveness) setDrainingInternal(
-	ctx context.Context, liveness storagepb.Liveness, drain bool,
+	ctx context.Context, liveness storagepb.Liveness, drain bool, reporter func(int, string),
 ) error {
 	nodeID := nl.gossip.NodeID.Get()
 	sem := nl.sem(nodeID)
@@ -341,6 +345,10 @@ func (nl *NodeLiveness) setDrainingInternal(
 	}
 	if liveness != (storagepb.Liveness{}) {
 		update.Liveness = liveness
+	}
+	if reporter != nil && drain && !update.Draining {
+		// Report progress to the Drain RPC.
+		reporter(1, "liveness record")
 	}
 	update.Draining = drain
 	update.ignoreCache = true

@@ -990,7 +990,10 @@ func (s *Store) AnnotateCtx(ctx context.Context) context.Context {
 // rejected, prevents all of the Store's Replicas from acquiring or extending
 // range leases, and attempts to transfer away any leases owned.
 // When called with 'false', returns to the normal mode of operation.
-func (s *Store) SetDraining(drain bool) {
+//
+// The reporter function, if non-nil, is called to report leases being
+// transferred. See the explanation in server/drain.go.
+func (s *Store) SetDraining(drain bool, reporter func(int, string)) {
 	s.draining.Store(drain)
 	if !drain {
 		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
@@ -1121,6 +1124,11 @@ func (s *Store) SetDraining(drain bool) {
 			for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 				err = nil
 				if numRemaining := transferAllAway(); numRemaining > 0 {
+					// Report progress to the Drain RPC.
+					if reporter != nil {
+						reporter(numRemaining, "range leases")
+					}
+
 					err = errors.Errorf("waiting for %d replicas to transfer their lease away", numRemaining)
 					if everySecond.ShouldLog() {
 						log.Info(ctx, err)

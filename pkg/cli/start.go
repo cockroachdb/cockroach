@@ -930,9 +930,11 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			ac := log.AmbientContext{}
 			ac.AddLogTag("server drain process", nil)
 			drainCtx := ac.AnnotateCtx(context.Background())
-			if err := s.Drain(drainCtx); err != nil {
+
+			if _, _, err := s.Drain(drainCtx); err != nil {
 				log.Warning(drainCtx, err)
 			}
+
 			stopper.Stop(drainCtx)
 		}()
 
@@ -1417,13 +1419,68 @@ func doShutdown(
 		return errors.Wrap(err, "error sending drain request")
 	}
 	for {
-		if _, err := stream.Recv(); err != nil {
+		resp, err := stream.Recv()
+		if err != nil {
 			if tolerateConnClosedByServer && grpcutil.IsClosedConnection(err) {
 				return nil
 			}
 			// Unexpected error; the caller should try again (and harder).
 			return errTryHardShutdown{err}
 		}
+
+		if resp.DrainProgressDescription != "" {
+			// Only show this information in the log; we'd use this for debugging.
+			// (This can be revealed e.g. via --logtostderr.)
+			log.Infof(ctx, "drain details: %s\n", resp.DrainProgressDescription)
+		}
+
+		if resp.IsDraining {
+			// To report the status of the drain, we have two cases:
+			//
+			// - in the initial drain request sent by quit (with shutdown =
+			//   false) we want to assert that the node is quitting, and
+			//   tell the story about how much work was performed in logs
+			//   for debugging. This is also the only thing that happens
+			//   with --only-drain.
+			//
+			// - in the final drain request sent by quit (with shutdown = true)
+			//   we want to assert that the progress indicator is zero,
+			//   otherwise something may be afoul in the server.
+			//
+			// In any case we want to print on stderr or in logs, not
+			// stdout. That's because stdout's interface should just be "ok"
+			// on success (otherwise redirects could confuse scripts).
+			log.Infof(ctx, "drain progress indicator: %d\n", resp.DrainProgressIndicator)
+			if !requestNodeShutdown {
+				// initial request. If --only-drain was specified,
+				// tell the user how much work was performed.
+				// The user can then re-run quit --only-drain multiple
+				// times to see the value decrease.
+				if quitCtx.onlyDrain {
+					finalString := ""
+					if resp.DrainProgressIndicator == 0 {
+						finalString = " (complete)"
+					}
+					fmt.Fprintf(stderr, "# node is shutting down; progress: %d%s\n",
+						resp.DrainProgressIndicator, finalString)
+				}
+				// If --only-drain was not specified, then it's a regular
+				// `quit` and there's not so much the user can do with the
+				// progress indicator anyway, so we don't report it to not
+				// raise questions. Only a non-zero value at shutdown time
+				// (below) should raise eyebrows.
+			} else {
+				// Final request. At this point, we'd really prefer that there
+				// is no work performed any more. If there is, there is cause
+				// for concern for the user.
+				if resp.DrainProgressIndicator > 0 {
+					fmt.Fprintf(stderr,
+						"# warning: graceful shutdown may not have completed successfully.\n"+
+							"# check the node's logs for details.\n")
+				}
+			}
+		}
+
 		if !requestNodeShutdown {
 			// When the node is *not* meant to shutdown, the drain stream
 			// will not be closed by the server and we're not expecting an
