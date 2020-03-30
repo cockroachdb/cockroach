@@ -407,6 +407,11 @@ func (ts *TestServer) Addr() string {
 	return ts.cfg.Addr
 }
 
+// DrainClients exports the drainClients() method for use by tests.
+func (ts *TestServer) DrainClients(ctx context.Context) error {
+	return ts.drainClients(ctx)
+}
+
 // WriteSummaries implements TestServerInterface.
 func (ts *TestServer) WriteSummaries() error {
 	return ts.node.writeNodeStatus(context.TODO(), time.Hour)

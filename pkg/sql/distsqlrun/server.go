@@ -254,15 +254,6 @@ func (ds *ServerImpl) Drain(ctx context.Context, flowDrainWait time.Duration) {
 	ds.flowRegistry.Drain(flowWait, minWait)
 }
 
-// Undrain changes the node's draining state through gossip and undrains the
-// server's flowRegistry. See flowRegistry.Undrain for more details.
-func (ds *ServerImpl) Undrain(ctx context.Context) {
-	ds.flowRegistry.Undrain()
-	if err := ds.setDraining(false); err != nil {
-		log.Warningf(ctx, "unable to gossip distsql draining state: %s", err)
-	}
-}
-
 // setDraining changes the node's draining state through gossip to the provided
 // state.
 func (ds *ServerImpl) setDraining(drain bool) error {

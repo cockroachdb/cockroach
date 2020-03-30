@@ -12,21 +12,30 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"strings"
+	"reflect"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
-	// GracefulDrainModes is the standard succession of drain modes entered
-	// for a graceful shutdown.
-	GracefulDrainModes = []serverpb.DrainMode{serverpb.DrainMode_CLIENT, serverpb.DrainMode_LEASES}
+	// DeprecatedDrainParameter the special value that must be
+	// passed in DrainRequest.DeprecatedProbeIndicator to signal the
+	// drain request is not a probe.
+	// This variable is also used in the v20.1 "quit" client
+	// to provide a valid input to the request sent to
+	// v19.1 nodes.
+	//
+	// TODO(knz): Remove this in v20.2 and whenever the "quit" command
+	// is not meant to work with 19.x servers any more, whichever comes
+	// later.
+	DeprecatedDrainParameter = []int32{0, 1}
 
 	queryWait = settings.RegisterDurationSetting(
 		"server.shutdown.query_wait",
@@ -46,61 +55,41 @@ var (
 // instructs the process to terminate.
 // This method is part of the serverpb.AdminClient interface.
 func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer) error {
-	// `cockroach quit` sends a probe to check that the server is able
-	// to process a Drain request, prior to sending an actual drain
-	// request.
-	isProbe := len(req.On) == 0 && len(req.Off) == 0 && !req.Shutdown
-
 	ctx := stream.Context()
 	ctx = s.server.AnnotateCtx(ctx)
 
-	on := make([]serverpb.DrainMode, len(req.On))
-	off := make([]serverpb.DrainMode, len(req.Off))
-
-	if !isProbe {
-		var buf strings.Builder
-		comma := ""
-		for i := range req.On {
-			on[i] = serverpb.DrainMode(req.On[i])
-			fmt.Fprintf(&buf, "%sshutdown: %s", comma, on[i].String())
-			comma = ", "
+	doDrain := req.DoDrain
+	if len(req.DeprecatedProbeIndicator) > 0 {
+		// Pre-20.1 behavior.
+		// TODO(knz): Remove this condition in 20.2.
+		doDrain = true
+		if !reflect.DeepEqual(req.DeprecatedProbeIndicator, DeprecatedDrainParameter) {
+			return status.Errorf(codes.InvalidArgument, "Invalid drain request parameter.")
 		}
-		for i := range req.Off {
-			off[i] = serverpb.DrainMode(req.Off[i])
-			fmt.Fprintf(&buf, "%sresume: %s", comma, off[i].String())
-			comma = ", "
-		}
-		// Report the event to the log file for troubleshootability.
-		log.Infof(ctx, "drain request received (%s), process shutdown: %v", buf.String(), req.Shutdown)
-	} else {
-		log.Infof(ctx, "received request for drain status")
 	}
 
-	nowOn, err := s.server.Undrain(ctx, off)
-	if err != nil {
-		return err
-	}
-	if len(on) > 0 {
-		nowOn, err = s.server.Drain(ctx, on)
-		if err != nil {
+	log.Infof(ctx, "drain request received with doDrain = %v, shutdown = %v", doDrain, req.Shutdown)
+
+	if doDrain {
+		if err := s.server.Drain(ctx); err != nil {
+			log.Errorf(ctx, "drain failed: %v", err)
 			return err
 		}
 	}
+	res := serverpb.DrainResponse{}
+	if s.server.isDraining() {
+		res.DeprecatedDrainStatus = DeprecatedDrainParameter
+		res.IsDraining = true
+	}
 
-	// Report the current status to the client.
-	res := serverpb.DrainResponse{
-		On: make([]int32, len(nowOn)),
-	}
-	for i := range nowOn {
-		res.On[i] = int32(nowOn[i])
-	}
 	if err := stream.Send(&res); err != nil {
 		return err
 	}
 
 	if !req.Shutdown {
-		if !isProbe {
-			// We don't need an info message for just a probe.
+		if doDrain {
+			// The condition "if doDrain" is because we don't need an info
+			// message for just a probe.
 			log.Infof(ctx, "drain request completed without server shutdown")
 		}
 		return nil
@@ -140,79 +129,48 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 	}
 }
 
-// Drain idempotently activates the given DrainModes on the Server in the order
-// in which they are supplied.
-// For example, Drain is typically called with [CLIENT,LEADERSHIP] before
-// terminating the process for graceful shutdown.
-// On success, returns all active drain modes after carrying out the request.
-// On failure, the system may be in a partially drained state and should be
-// recovered by calling Undrain() with the same (or a larger) slice of modes.
-func (s *Server) Drain(ctx context.Context, on []serverpb.DrainMode) ([]serverpb.DrainMode, error) {
-	return s.doDrain(ctx, on, true /* setTo */)
+// Drain idempotently activates the draining mode.
+// Note: new code should not be taught to use this method
+// directly. Use the Drain() RPC instead with a suitably crafted
+// DrainRequest.
+//
+// On failure, the system may be in a partially drained
+// state; the client should either continue calling Drain() or shut
+// down the server.
+//
+// TODO(knz): This method is currently exported for use by the
+// shutdown code in cli/start.go; however, this is a mis-design. The
+// start code should use the Drain() RPC like quit does.
+func (s *Server) Drain(ctx context.Context) error {
+	// First drain all clients and SQL leases.
+	if err := s.drainClients(ctx); err != nil {
+		return err
+	}
+	// Finally, mark the node as draining in liveness and drain the
+	// range leases.
+	return s.drainNode(ctx)
 }
 
-// Undrain idempotently deactivates the given DrainModes on the Server in the
-// order in which they are supplied.
-// On success, returns any remaining active drain modes.
-func (s *Server) Undrain(
-	ctx context.Context, off []serverpb.DrainMode,
-) ([]serverpb.DrainMode, error) {
-	return s.doDrain(ctx, off, false /* setTo */)
+// isDraining returns true if either clients are being drained
+// or one of the stores on the node is not accepting replicas.
+func (s *Server) isDraining() bool {
+	return s.pgServer.IsDraining() || s.node.IsDraining()
 }
 
-func (s *Server) doDrain(
-	ctx context.Context, modes []serverpb.DrainMode, setTo bool,
-) ([]serverpb.DrainMode, error) {
-	for _, mode := range modes {
-		switch mode {
-		case serverpb.DrainMode_CLIENT:
-			if err := s.drainClients(ctx, setTo); err != nil {
-				return nil, err
-			}
+// drainClients starts draining the SQL layer.
+func (s *Server) drainClients(ctx context.Context) error {
+	// Mark the server as draining in a way that probes to
+	// /health?ready=1 will notice.
+	s.grpc.setMode(modeDraining)
+	// Wait for drainUnreadyWait. This will fail load balancer checks and
+	// delay draining so that client traffic can move off this node.
+	time.Sleep(drainWait.Get(&s.st.SV))
 
-		case serverpb.DrainMode_LEASES:
-			if err := s.drainRangeLeases(ctx, setTo); err != nil {
-				return nil, err
-			}
-		default:
-			return nil, errors.Errorf("unknown drain mode: %s", mode)
-		}
-	}
-	var nowOn []serverpb.DrainMode
-	if s.pgServer.IsDraining() {
-		nowOn = append(nowOn, serverpb.DrainMode_CLIENT)
-	}
-	if s.node.IsDraining() {
-		nowOn = append(nowOn, serverpb.DrainMode_LEASES)
-	}
-	return nowOn, nil
-}
-
-// drainClients starts draining the SQL layer if setTo is true, and
-// stops draining SQL if setTo is false.
-func (s *Server) drainClients(ctx context.Context, setTo bool) error {
-	if setTo {
-		s.grpc.setMode(modeDraining)
-		// Wait for drainUnreadyWait. This will fail load balancer checks and
-		// delay draining so that client traffic can move off this node.
-		time.Sleep(drainWait.Get(&s.st.SV))
-	} else {
-		// We're disableing the drain. Make the server
-		// operational again at the end.
-		defer func() { s.grpc.setMode(modeOperational) }()
-	}
 	// Since enabling the SQL table lease manager's draining mode will
 	// prevent the acquisition of new leases, the switch must be made
 	// after the pgServer has given sessions a chance to finish ongoing
 	// work.
-	defer s.leaseMgr.SetDraining(setTo)
-
-	if !setTo {
-		// Re-enable client connections.
-		s.distSQLServer.Undrain(ctx)
-		s.pgServer.Undrain()
-		return nil
-	}
+	defer s.leaseMgr.SetDraining(true /* drain */)
 
 	// Disable incoming SQL clients up to the queryWait timeout.
 	drainMaxWait := queryWait.Get(&s.st.SV)
@@ -222,12 +180,19 @@ func (s *Server) drainClients(ctx context.Context, setTo bool) error {
 	// Stop ongoing SQL execution up to the queryWait timeout.
 	s.distSQLServer.Drain(ctx, drainMaxWait)
 
-	// Done. This executes the defers set above to (un)drain SQL leases.
+	// Done. This executes the defers set above to drain SQL leases.
 	return nil
 }
 
-// drainRangeLeases starts draining range leases if setTo is true, and stops draining leases if setTo is false.
-func (s *Server) drainRangeLeases(ctx context.Context, setTo bool) error {
-	s.nodeLiveness.SetDraining(ctx, setTo)
-	return s.node.SetDraining(setTo)
+// drainNode initiates the draining mode for the node, which
+// starts draining range leases.
+func (s *Server) drainNode(ctx context.Context) error {
+	s.nodeLiveness.SetDraining(ctx, true /* drain */)
+	return s.node.SetDraining(true /* drain */)
+}
+
+// stopDrain should be called prior to successive invocations of
+// drainNode(), otherwise the drain call would deadlock.
+func (s *Server) stopDrain(ctx context.Context) error {
+	return s.node.SetDraining(false /* drain */)
 }
