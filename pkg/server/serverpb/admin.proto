@@ -335,34 +335,54 @@ message ClusterResponse {
   bool enterprise_enabled = 3;
 }
 
-enum DrainMode {
-    // CLIENT instructs the server to refuse new SQL clients.
-    // TODO(tschottdorf): also terminate existing clients in a graceful manner.
-    CLIENT = 0;
-    // LEADERSHIP instructs the server to gracefully let all its Replicas'
-    // range leases expire.
-    LEASES = 1;
-}
-
 // DrainRequest requests the server to enter the specified draining mode. The
 // server first deactivates all the modes specified in 'off' and then activates
 // all those in 'on'.
 message DrainRequest {
-  // These are actually of type DrainMode, but grpc-gateway does not support
-  // proxying enum fields (yet:
-  // https://github.com/grpc-ecosystem/grpc-gateway/issues/5) and it fails in
-  // pretty dramatic ways (panics the server).
-  repeated int32 on = 1;
-  repeated int32 off = 2;
-  // When true, terminates the process after the given drain modes have been
-  // activated.
+  // deprecated_probe_indicator works as follows:
+  // - if nil, it indicates that the request is a probe only and
+  //   the server should not actually drain. This indicator
+  //   is supported for pre-20.1 RPC clients which do not know
+  //   about the skip_drain field below.
+  // - if non-nil, it must be exactly equal to the slice [0, 1].
+  //   Other values result in an error. When non-nil,
+  //   it implies do_drain = true regardless of the value of the
+  //   other field (pre-20.1 clients don't populate the other field).
+  //
+  // This field will be removed in 20.2 in favor of
+  // do_drain below.
+  repeated int32 deprecated_probe_indicator = 1;
+  reserved 2;
+  // When true, terminates the process after the server has started draining.
+  // Setting both shutdown and do_drain to false causes
+  // the request to only operate as a probe.
+  // Setting do_drain to false and shutdown to true causes
+  // the server to shut down immediately without
+  // first draining.
   bool shutdown = 3;
+  // When true, perform the drain phase. See the comment above on
+  // shutdown for an explanation of the interaction between the two.
+  // do_drain is also implied by a non-nil deprecated_probe_indicator.
+  bool do_drain = 4;
 }
 
-// DrainResponse is the response to a successful DrainRequest and lists the
-// modes which are activated after having processing the request.
+// DrainResponse is the response to a successful DrainRequest.
 message DrainResponse {
-  repeated int32 on = 1;
+  // deprecated_drain_status works as follows:
+  // - if the server is NOT currently draining,
+  //   it will be set to an empty or nil slice.
+  // - a non-nil slice indicates the server is currently
+  //   draining.
+  //
+  // This field exists for the benefit of 19.x clients
+  // and will be removed in 20.2.
+  repeated int32 deprecated_drain_status = 1;
+  // is_draining is set to true iff the server is currently draining.
+  // This is set to true in response to a request where skip_drain
+  // is false; but it can also be set to true in response
+  // to a probe request (!shutdown && skip_drain) if another
+  // drain request has been issued prior or asynchronously.
+  bool is_draining = 2;
 }
 
 // DecommissionStatusRequest requests the decommissioning status for the
