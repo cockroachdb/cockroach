@@ -132,6 +132,17 @@ describe("selectStatements", () => {
 
     assert.equal(result.length, 1);
   });
+
+  it("filters out statements with app set when app param is \"(internal)\"", () => {
+    const state = makeStateWithStatements([
+      makeFingerprint(1, "$ internal_stmnt_app"),
+      makeFingerprint(2, "bar"),
+      makeFingerprint(3, "baz"),
+    ]);
+    const props = makeRoutePropsWithApp("(internal)");
+    const result = selectStatements(state, props);
+    assert.equal(result.length, 1);
+  });
 });
 
 describe("selectApps", () => {
@@ -364,6 +375,26 @@ describe("selectStatement", () => {
       makeFingerprint(3, "baz"),
     ]);
     const props = makeRoutePropsWithStatementAndApp(stmtA.key.key_data.query, "(unset)");
+
+    const result = selectStatement(state, props);
+
+    assert.equal(result.statement, stmtA.key.key_data.query);
+    assert.equal(result.stats.count.toNumber(), stmtA.stats.count.toNumber());
+    assert.deepEqual(result.app, [stmtA.key.key_data.app]);
+    assert.deepEqual(result.distSQL, { numerator: 0, denominator: 1 });
+    assert.deepEqual(result.opt, { numerator: 0, denominator: 1 });
+    assert.deepEqual(result.failed, { numerator: 0, denominator: 1 });
+    assert.deepEqual(result.node_id, [stmtA.key.node_id]);
+  });
+
+  it("filters out statements with app set when app param is \"(internal)\"", () => {
+    const stmtA = makeFingerprint(1, "$ internal_stmnt_app");
+    const state = makeStateWithStatements([
+      stmtA,
+      makeFingerprint(2, "bar"),
+      makeFingerprint(3, "baz"),
+    ]);
+    const props = makeRoutePropsWithStatementAndApp(stmtA.key.key_data.query, "(internal)");
 
     const result = selectStatement(state, props);
 
