@@ -1823,15 +1823,25 @@ func planProjectionExpr(
 		// (for example, INT2 + INT2 will be typed as INT8); however,
 		// vectorized operators do respect the width. In order to go around
 		// this limitation, we explicitly check whether output type is INT8,
-		// and if so, we override the output physical type to be what the
-		// vectorized projection operators expect.
+		// and if so, we override the output logical and physical types to be
+		// what the vectorized projection operators expect.
+		// NOTE: overriding output logical type is acceptable for two reasons:
+		// 1. if this output type is used only "inside" of the vectorized flow,
+		// then the output logical type *must* match what we have physically
+		// 2. if this output type will be exposed outside of the vectorized
+		// engine (i.e. at materializer level), then we will error out when
+		// setting up such flow due to type mismatch (SyncFlowConsumer
+		// expecting a different type schema) and will fallback to a row-based
+		// flow.
 		leftPhysType := typeconv.FromColumnType(left.ResolvedType())
 		rightPhysType := typeconv.FromColumnType(right.ResolvedType())
 		if leftPhysType == coltypes.Int16 && rightPhysType == coltypes.Int16 {
+			outputType = types.Int2
 			outputPhysType = coltypes.Int16
 		} else if (leftPhysType == coltypes.Int16 && rightPhysType == coltypes.Int32) ||
 			(leftPhysType == coltypes.Int32 && rightPhysType == coltypes.Int16) ||
 			(leftPhysType == coltypes.Int32 && rightPhysType == coltypes.Int32) {
+			outputType = types.Int4
 			outputPhysType = coltypes.Int32
 		}
 	}
