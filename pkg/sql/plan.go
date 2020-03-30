@@ -225,9 +225,6 @@ var _ planNode = &virtualTableNode{}
 var _ planNode = &windowNode{}
 var _ planNode = &zeroNode{}
 
-var _ planNodeFastPath = &CreateRoleNode{}
-var _ planNodeFastPath = &DropRoleNode{}
-var _ planNodeFastPath = &alterRoleNode{}
 var _ planNodeFastPath = &deleteRangeNode{}
 var _ planNodeFastPath = &rowCountNode{}
 var _ planNodeFastPath = &serializeNode{}
