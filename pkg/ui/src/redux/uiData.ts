@@ -60,6 +60,10 @@ export const VERSION_DISMISSED_KEY = "version_dismissed";
 // instructions box on the cluster viz has been collapsed or not.
 export const INSTRUCTIONS_BOX_COLLAPSED_KEY = "clusterviz_instructions_box_collapsed";
 
+// RELEASE_NOTES_SIGNUP_DISMISSED_KEY is the uiData key on the server that tracks when the user
+// dismisses Release Nodes signup form.
+export const RELEASE_NOTES_SIGNUP_DISMISSED_KEY = "release_notes_signup_dismissed";
+
 export enum UIDataStatus {
   UNINITIALIZED, // Data has not been loaded yet.
   LOADING,
