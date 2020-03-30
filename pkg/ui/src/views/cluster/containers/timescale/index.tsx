@@ -296,11 +296,11 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     return disabledArrows;
   }
 
-  onFocus = () => {
+  onOpened = () => {
     this.setState({ is_opened: true });
   }
 
-  onBlur = () => {
+  onClosed = () => {
     this.setState({ is_opened: false });
   }
 
@@ -318,8 +318,8 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
           isTimeRange
           content={
             <RangeSelect
-              onFocus={this.onFocus}
-              onBlur={this.onBlur}
+              onOpened={this.onOpened}
+              onClosed={this.onClosed}
               value={currentWindow}
               useTimeRange={useTimeRange}
               selected={this.getTimeRangeTitle()}
