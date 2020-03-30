@@ -102,6 +102,42 @@ var TurnAutoStatsOnUseCounter = telemetry.GetCounterOnce("sql.plan.automatic-sta
 // collection is explicitly disabled.
 var TurnAutoStatsOffUseCounter = telemetry.GetCounterOnce("sql.plan.automatic-stats.disabled")
 
+// JoinAlgoHashUseCounter is to be incremented whenever a hash join node is
+// planned.
+var JoinAlgoHashUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.algo.hash")
+
+// JoinAlgoMergeUseCounter is to be incremented whenever a merge join node is
+// planned.
+var JoinAlgoMergeUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.algo.merge")
+
+// JoinAlgoLookupUseCounter is to be incremented whenever a lookup join node is
+// planned.
+var JoinAlgoLookupUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.algo.lookup")
+
+// JoinAlgoCrossUseCounter is to be incremented whenever a cross join node is
+// planned.
+var JoinAlgoCrossUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.algo.cross")
+
+// JoinTypeInnerUseCounter is to be incremented whenever an inner join node is
+// planned.
+var JoinTypeInnerUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.type.inner")
+
+// JoinTypeLeftUseCounter is to be incremented whenever a left outer join node is
+// planned.
+var JoinTypeLeftUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.type.left-outer")
+
+// JoinTypeFullUseCounter is to be incremented whenever a full outer join node is
+// planned.
+var JoinTypeFullUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.type.full-outer")
+
+// JoinTypeSemiUseCounter is to be incremented whenever a semi-join node is
+// planned.
+var JoinTypeSemiUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.type.semi")
+
+// JoinTypeAntiUseCounter is to be incremented whenever an anti-join node is
+// planned.
+var JoinTypeAntiUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.type.anti")
+
 // We can't parameterize these telemetry counters, so just make a bunch of
 // buckets for setting the join reorder limit since the range of reasonable
 // values for the join reorder limit is quite small.
@@ -139,4 +175,11 @@ func ReportJoinReorderLimit(value int) {
 // being planned.
 func WindowFunctionCounter(wf string) telemetry.Counter {
 	return telemetry.GetCounter("sql.plan.window_function." + wf)
+}
+
+// OptNodeCounter should be incremented every time a node of the given
+// type is encountered at the end of the query optimization (i.e. it
+// counts the nodes actually used for physical planning).
+func OptNodeCounter(nodeType string) telemetry.Counter {
+	return telemetry.GetCounterOnce(fmt.Sprintf("sql.plan.opt.node.%s", nodeType))
 }
