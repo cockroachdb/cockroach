@@ -50,8 +50,21 @@ var MergeJoinHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.merge-joi
 var LookupJoinHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.lookup-join")
 
 // IndexHintUseCounter is to be incremented whenever a query specifies an index
-// hint.
+// hint. Incremented whenever one of the more specific variants below is
+// incremented.
 var IndexHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.index")
+
+// IndexHintSelectUseCounter is to be incremented whenever a query specifies an
+// index hint in a SELECT.
+var IndexHintSelectUseCounter = telemetry.GetCounterOnce("sql.plan.hints.index.select")
+
+// IndexHintUpdateUseCounter is to be incremented whenever a query specifies an
+// index hint in an UPDATE.
+var IndexHintUpdateUseCounter = telemetry.GetCounterOnce("sql.plan.hints.index.update")
+
+// IndexHintDeleteUseCounter is to be incremented whenever a query specifies an
+// index hint in a DELETE.
+var IndexHintDeleteUseCounter = telemetry.GetCounterOnce("sql.plan.hints.index.delete")
 
 // InterleavedTableJoinCounter is to be incremented whenever an InterleavedTableJoin is planned.
 var InterleavedTableJoinCounter = telemetry.GetCounterOnce("sql.plan.interleaved-table-join")
