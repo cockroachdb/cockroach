@@ -7800,7 +7800,39 @@ a_expr:
   }
 | a_expr COLLATE collation_name
   {
-    $$.val = &tree.CollateExpr{Expr: $1.expr(), Locale: $3}
+    // If a_expr is a cast or type annotation to an array we need to parse
+    // this as a cast to a collated array type instead of a collation on
+    // the cast. For example, we should parse x::STRING[] COLLATE en as
+    // an array of collated strings rather than a collation on a string array.
+    var err error
+    e := $1.expr()
+    collation := $3
+    switch t := e.(type) {
+    case *tree.AnnotateTypeExpr:
+      if t.Type.Family() == types.ArrayFamily {
+        t.Type, err = tree.AdjustTypeForCollate(t.Type, collation)
+        if err != nil {
+          return setErr(sqllex, err)
+        }
+        $$.val = t
+      } else {
+        $$.val = &tree.CollateExpr{Expr: $1.expr(), Locale: $3}
+      }
+    case *tree.CastExpr:
+      // We only want to apply this logic in the case of x::TY COLLATE,
+      // and not in the cases of TY x or (x AS TY).
+      if t.SyntaxMode == tree.CastShort && t.Type.Family() == types.ArrayFamily {
+        t.Type, err = tree.AdjustTypeForCollate(t.Type, collation)
+        if err != nil {
+          return setErr(sqllex, err)
+        }
+        $$.val = t
+      } else {
+        $$.val = &tree.CollateExpr{Expr: $1.expr(), Locale: $3}
+      }
+    default:
+      $$.val = &tree.CollateExpr{Expr: $1.expr(), Locale: $3}
+    }
   }
 | a_expr AT TIME ZONE a_expr %prec AT
   {

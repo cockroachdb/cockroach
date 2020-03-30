@@ -546,6 +546,25 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExp
 		"incompatible type for COLLATE: %s", t)
 }
 
+// AdjustTypeForCollate returns the collated version of the input type.
+func AdjustTypeForCollate(typ *types.T, locale string) (*types.T, error) {
+	switch typ.Family() {
+	case types.StringFamily:
+		return types.MakeCollatedString(typ, locale), nil
+	case types.CollatedStringFamily:
+		return nil, pgerror.Newf(pgcode.Syntax, "multiple COLLATE declarations")
+	case types.ArrayFamily:
+		elemTyp, err := AdjustTypeForCollate(typ.ArrayContents(), locale)
+		if err != nil {
+			return nil, err
+		}
+		return types.MakeArray(elemTyp), nil
+	default:
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch,
+			"incompatible type for COLLATE: %s", typ)
+	}
+}
+
 // NewTypeIsNotCompositeError generates an error suitable to report
 // when a ColumnAccessExpr or TupleStar is applied to a non-composite
 // type.
