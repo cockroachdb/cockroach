@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
@@ -163,7 +164,7 @@ type spanAndTime struct {
 func backup(
 	ctx context.Context,
 	db *kv.DB,
-	gossip *gossip.Gossip,
+	numClusterNodes int,
 	settings *cluster.Settings,
 	defaultStore cloud.ExternalStorage,
 	storageByLocalityKV map[string]*roachpb.ExternalStorage,
@@ -264,7 +265,7 @@ func backup(
 	// TODO(dan): Make this limiting per node.
 	//
 	// TODO(dan): See if there's some better solution than rate-limiting #14798.
-	maxConcurrentExports := clusterNodeCount(gossip) * int(kvserver.ExportRequestsLimit.Get(&settings.SV)) * 10
+	maxConcurrentExports := numClusterNodes * int(kvserver.ExportRequestsLimit.Get(&settings.SV)) * 10
 	exportsSem := make(chan struct{}, maxConcurrentExports)
 
 	g := ctxgroup.WithContext(ctx)
@@ -514,10 +515,13 @@ func (b *backupResumer) Resume(
 		// implementations.
 		log.Warningf(ctx, "unable to load backup checkpoint while resuming job %d: %v", *b.job.ID(), err)
 	}
+
+	numClusterNodes := clusterNodeCount(p.ExecCfg().Gossip)
+
 	res, err := backup(
 		ctx,
 		p.ExecCfg().DB,
-		p.ExecCfg().Gossip,
+		numClusterNodes,
 		p.ExecCfg().Settings,
 		defaultStore,
 		storageByLocalityKV,
@@ -553,6 +557,30 @@ func (b *backupResumer) Resume(
 			log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 		}
 	}
+
+	// Collect telemetry.
+	{
+		telemetry.Count("backup.total.succeeded")
+		const mb = 1 << 20
+		sizeMb := res.DataSize / mb
+		sec := int64(timeutil.Since(timeutil.FromUnixMicros(b.job.Payload().StartedMicros)).Seconds())
+		var mbps int64
+		if sec > 0 {
+			mbps = mb / sec
+		}
+		if details.StartTime.IsEmpty() {
+			telemetry.CountBucketed("backup.duration-sec.full-succeeded", sec)
+			telemetry.CountBucketed("backup.size-mb.full", sizeMb)
+			telemetry.CountBucketed("backup.speed-mbps.full.total", mbps)
+			telemetry.CountBucketed("backup.speed-mbps.full.per-node", mbps/int64(numClusterNodes))
+		} else {
+			telemetry.CountBucketed("backup.duration-sec.inc-succeeded", sec)
+			telemetry.CountBucketed("backup.size-mb.inc", sizeMb)
+			telemetry.CountBucketed("backup.speed-mbps.inc.total", mbps)
+			telemetry.CountBucketed("backup.speed-mbps.full.per-node", mbps/int64(numClusterNodes))
+		}
+	}
+
 	return nil
 }
 
@@ -576,6 +604,10 @@ func (b *backupResumer) clearStats(ctx context.Context, DB *kv.DB) error {
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (b *backupResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
+	telemetry.Count("backup.total.failed")
+	telemetry.CountBucketed("backup.duration-sec.failed",
+		int64(timeutil.Since(timeutil.FromUnixMicros(b.job.Payload().StartedMicros)).Seconds()))
+
 	cfg := phs.(sql.PlanHookState).ExecCfg()
 	b.deleteCheckpoint(ctx, cfg)
 	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
