@@ -27,15 +27,15 @@ interface TimeSeriesSummaryProps {
 // NonTableSummary displays a summary section describing the current data
 // usage of the time series system.
 class NonTableSummary extends React.Component<TimeSeriesSummaryProps> {
-  componentWillMount() {
+  componentDidMount() {
     // Refresh nodes status query when mounting.
     this.props.refreshNonTableStats();
   }
 
-  componentWillReceiveProps(props: TimeSeriesSummaryProps) {
+  componentDidUpdate() {
     // Refresh nodes status query when props are received; this will immediately
     // trigger a new request if previous results are invalidated.
-    props.refreshNonTableStats();
+    this.props.refreshNonTableStats();
   }
 
   renderTable() {

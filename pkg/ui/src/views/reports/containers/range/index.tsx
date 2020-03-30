@@ -94,14 +94,14 @@ export class Range extends React.Component<RangeProps, {}> {
     props.refreshRangeLog(rangeLogRequestFromProps(props));
   }
 
-  componentWillMount() {
+  componentDidMount() {
     // Refresh nodes status query when mounting.
     this.refresh();
   }
 
-  componentWillReceiveProps(nextProps: RangeProps) {
-    if (this.props.location !== nextProps.location) {
-      this.refresh(nextProps);
+  componentDidUpdate(prevProps: RangeProps) {
+    if (!_.isEqual(this.props.location, prevProps.location)) {
+      this.refresh(this.props);
     }
   }
 

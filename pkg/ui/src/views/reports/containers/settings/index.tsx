@@ -36,7 +36,7 @@ export class Settings extends React.Component<SettingsProps, {}> {
     props.refreshSettings(new protos.cockroach.server.serverpb.SettingsRequest());
   }
 
-  componentWillMount() {
+  componentDidMount() {
     // Refresh settings query when mounting.
     this.refresh();
   }

@@ -97,12 +97,12 @@ export class StatementsPage extends React.Component<StatementsPageProps & RouteC
     this.props.history.push(`/statements/${app.value}`);
   }
 
-  componentWillMount() {
+  componentDidMount() {
     this.props.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
   }
 
-  componentWillReceiveProps() {
+  componentDidUpdate() {
     this.props.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
   }

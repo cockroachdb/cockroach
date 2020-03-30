@@ -89,14 +89,14 @@ export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
     props.refreshProblemRanges(problemRangeRequestFromProps(props));
   }
 
-  componentWillMount() {
+  componentDidMount() {
     // Refresh nodes status query when mounting.
     this.refresh();
   }
 
-  componentWillReceiveProps(nextProps: ProblemRangesProps) {
-    if (this.props.location !== nextProps.location) {
-      this.refresh(nextProps);
+  componentDidUpdate(prevProps: ProblemRangesProps) {
+    if (!_.isEqual(this.props.location, prevProps.location)) {
+      this.refresh(this.props);
     }
   }
 

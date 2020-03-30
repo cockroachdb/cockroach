@@ -53,14 +53,14 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
     props.refreshCertificates(certificatesRequestFromProps(props));
   }
 
-  componentWillMount() {
+  componentDidMount() {
     // Refresh nodes status query when mounting.
     this.refresh();
   }
 
-  componentWillReceiveProps(nextProps: CertificatesProps) {
-    if (this.props.location !== nextProps.location) {
-      this.refresh(nextProps);
+  componentDidUpdate(prevProps: CertificatesProps) {
+    if (!_.isEqual(this.props.location, prevProps.location)) {
+      this.refresh(this.props);
     }
   }
 

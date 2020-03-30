@@ -75,14 +75,14 @@ export class DatabaseSummaryBase extends React.Component<DatabaseSummaryProps, {
   }
 
   // Refresh when the component is mounted.
-  componentWillMount() {
+  componentDidMount() {
     this.props.refreshDatabaseDetails(new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database: this.props.name }));
     this.loadTableDetails();
   }
 
   // Refresh when the component receives properties.
-  componentWillReceiveProps(props: DatabaseSummaryProps) {
-    this.loadTableDetails(props);
+  componentDidUpdate() {
+    this.loadTableDetails(this.props);
   }
 
   render(): React.ReactElement<any> {
