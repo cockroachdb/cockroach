@@ -253,14 +253,14 @@ export class Nodes extends React.Component<NodesProps, {}> {
     props.refreshNodes();
   }
 
-  componentWillMount() {
+  componentDidMount() {
     // Refresh nodes status query when mounting.
     this.refresh();
   }
 
-  componentWillReceiveProps(nextProps: NodesProps) {
-    if (this.props.location !== nextProps.location) {
-      this.refresh(nextProps);
+  componentDidUpdate(prevProps: NodesProps) {
+    if (!_.isEqual(this.props.location, prevProps.location)) {
+      this.refresh(this.props);
     }
   }
 

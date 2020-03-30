@@ -579,17 +579,17 @@ interface NodesMainProps {
  * of all nodes.
  */
 class NodesMain extends React.Component<NodesMainProps, {}> {
-  componentWillMount() {
+  componentDidMount() {
     // Refresh nodes status query when mounting.
     this.props.refreshNodes();
     this.props.refreshLiveness();
   }
 
-  componentWillReceiveProps(props: NodesMainProps) {
+  componentDidUpdate() {
     // Refresh nodes status query when props are received; this will immediately
     // trigger a new request if previous results are invalidated.
-    props.refreshNodes();
-    props.refreshLiveness();
+    this.props.refreshNodes();
+    this.props.refreshLiveness();
   }
 
   render() {

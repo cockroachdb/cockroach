@@ -20,11 +20,11 @@ interface RequireLoginProps {
 }
 
 class RequireLogin extends React.Component<RouteComponentProps & RequireLoginProps> {
-  componentWillMount() {
+  componentDidMount() {
     this.checkLogin();
   }
 
-  componentWillReceiveProps() {
+  componentDidUpdate() {
     this.checkLogin();
   }
 

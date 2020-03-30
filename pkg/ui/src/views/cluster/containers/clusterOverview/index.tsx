@@ -175,11 +175,11 @@ interface ClusterSummaryActionsProps {
 type ClusterSummaryProps = ClusterSummaryStateProps & ClusterSummaryActionsProps;
 
 class ClusterSummary extends React.Component<ClusterSummaryProps, {}> {
-  componentWillMount() {
+  componentDidMount() {
     this.refresh();
   }
 
-  componentWillReceiveProps() {
+  componentDidUpdate() {
     this.refresh();
   }
 

@@ -91,14 +91,14 @@ export interface EventBoxProps {
 
 export class EventBoxUnconnected extends React.Component<EventBoxProps, {}> {
 
-  componentWillMount() {
+  componentDidMount() {
     // Refresh events when mounting.
     this.props.refreshEvents();
   }
 
-  componentWillReceiveProps(props: EventPageProps) {
+  componentDidUpdate() {
     // Refresh events when props change.
-    props.refreshEvents();
+    this.props.refreshEvents();
   }
 
   render() {
@@ -129,14 +129,14 @@ export interface EventPageProps {
 }
 
 export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
-  componentWillMount() {
+  componentDidMount() {
     // Refresh events when mounting.
     this.props.refreshEvents();
   }
 
-  componentWillReceiveProps(props: EventPageProps) {
+  componentDidUpdate() {
     // Refresh events when props change.
-    props.refreshEvents();
+    this.props.refreshEvents();
   }
 
   render() {

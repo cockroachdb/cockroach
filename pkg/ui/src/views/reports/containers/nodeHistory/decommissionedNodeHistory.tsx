@@ -88,14 +88,14 @@ export class DecommissionedNodeHistory extends React.Component<DecommissionedNod
     },
   ];
 
-  componentWillMount() {
+  componentDidMount() {
     this.props.refreshNodes();
     this.props.refreshLiveness();
   }
 
-  componentWillReceiveProps(props: DecommissionedNodeHistoryProps) {
-    props.refreshNodes();
-    props.refreshLiveness();
+  componentDidUpdate() {
+    this.props.refreshNodes();
+    this.props.refreshLiveness();
   }
 
   render() {

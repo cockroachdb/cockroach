@@ -70,16 +70,16 @@ export class RangesMain extends React.Component<RangesMainProps, RangesMainState
     offset: 0,
   };
 
-  componentWillMount() {
+  componentDidMount() {
     // Refresh nodes status query when mounting.
     this.props.refreshRaft();
   }
 
-  componentWillReceiveProps(props: RangesMainProps) {
+  componentDidUpdate() {
     // Refresh ranges when props are received; this will immediately
     // trigger a new request if previous results are invalidated.
-    if (!props.state.valid) {
-      props.refreshRaft();
+    if (!this.props.state.valid) {
+      this.props.refreshRaft();
     }
   }
 
