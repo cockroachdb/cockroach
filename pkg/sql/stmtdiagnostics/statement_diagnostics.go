@@ -355,8 +355,9 @@ func (r *Registry) InsertStatementDiagnostics(
 //
 // traceJSON is either DNull (when collectionErr should not be nil) or a *DJSON.
 //
-// If requestID is not zero, it also marks the request as completed in
-// system.statement_diagnostics_requests.
+// It also marks the request as completed in
+// system.statement_diagnostics_requests. If requestID is zero, a new entry is
+// inserted.
 //
 // collectionErr should be any error generated during the serialization of the
 // collected trace.
@@ -417,6 +418,8 @@ func (r *Registry) insertStatementDiagnostics(
 			bundleChunksVal = array
 		}
 
+		collectionTime := timeutil.Now()
+
 		// Insert the trace into system.statement_diagnostics.
 		row, err := r.ie.QueryRowEx(
 			ctx, "stmt-diag-insert", txn,
@@ -424,7 +427,7 @@ func (r *Registry) insertStatementDiagnostics(
 			"INSERT INTO system.statement_diagnostics "+
 				"(statement_fingerprint, statement, collected_at, trace, bundle_chunks, error) "+
 				"VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-			stmtFingerprint, stmt, timeutil.Now(), traceJSON, bundleChunksVal, errorVal,
+			stmtFingerprint, stmt, collectionTime, traceJSON, bundleChunksVal, errorVal,
 		)
 		if err != nil {
 			return err
@@ -438,6 +441,19 @@ func (r *Registry) insertStatementDiagnostics(
 				"UPDATE system.statement_diagnostics_requests "+
 					"SET completed = true, statement_diagnostics_id = $1 WHERE id = $2",
 				diagID, requestID)
+			if err != nil {
+				return err
+			}
+		} else {
+			// Insert a completed request into system.statement_diagnostics_request.
+			// This is necessary because the UI uses this table to discover completed
+			// diagnostics.
+			_, err := r.ie.ExecEx(ctx, "stmt-diag-add-completed", txn,
+				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+				"INSERT INTO system.statement_diagnostics_requests"+
+					" (completed, statement_fingerprint, statement_diagnostics_id, requested_at)"+
+					" VALUES (true, $1, $2, $3)",
+				stmtFingerprint, diagID, collectionTime)
 			if err != nil {
 				return err
 			}
