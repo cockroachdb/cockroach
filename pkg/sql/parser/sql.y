@@ -7800,7 +7800,31 @@ a_expr:
   }
 | a_expr COLLATE collation_name
   {
-    $$.val = &tree.CollateExpr{Expr: $1.expr(), Locale: $3}
+    // If a_expr is a cast expression or a type annotation expression,
+    // then this collation needs to apply to the underlying type there.
+    // For example, a:::STRING[] COLLATE en -- the COLLATE en applies
+    // to the STRING[].
+    e := $1.expr()
+    collation := $3
+    switch t := e.(type) {
+    case *tree.AnnotateTypeExpr:
+      newTyp, err := tree.AdjustTypeForCollate(t.Type, collation)
+      if err != nil {
+        return setErr(sqllex, err)
+      }
+      t.Type = newTyp
+      $$.val = t
+    case *tree.CastExpr:
+      // TODO (rohany): This doesn't seem to be correct in some cases.
+      newTyp, err := tree.AdjustTypeForCollate(t.Type, collation)
+      if err != nil {
+        return setErr(sqllex, err)
+      }
+      t.Type = newTyp
+      $$.val = t
+    default:
+      $$.val = &tree.CollateExpr{Expr: $1.expr(), Locale: $3}
+    }
   }
 | a_expr AT TIME ZONE a_expr %prec AT
   {
