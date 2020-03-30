@@ -991,7 +991,12 @@ func (s *Store) AnnotateCtx(ctx context.Context) context.Context {
 // rejected, prevents all of the Store's Replicas from acquiring or extending
 // range leases, and attempts to transfer away any leases owned.
 // When called with 'false', returns to the normal mode of operation.
-func (s *Store) SetDraining(drain bool) {
+//
+// The reporter callback, if non-nil, is called on a best effort basis
+// to report work that needed to be done and which may or may not have
+// been done by the time this call returns. See the explanation in
+// pkg/server/drain.go for details.
+func (s *Store) SetDraining(drain bool, reporter func(int, string)) {
 	s.draining.Store(drain)
 	if !drain {
 		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
@@ -1141,6 +1146,23 @@ func (s *Store) SetDraining(drain bool) {
 		return int(numTransfersAttempted)
 	}
 
+	// Give all replicas at least one chance to transfer.
+	// If we don't do that, then it's possible that a configured
+	// value for raftLeadershipTransferWait is too low to iterate
+	// through all the replicas at least once, and the drain
+	// condition on the remaining value will never be reached.
+	if numRemaining := transferAllAway(ctx); numRemaining > 0 {
+		// Report progress to the Drain RPC.
+		if reporter != nil {
+			reporter(numRemaining, "range lease iterations")
+		}
+	} else {
+		// No more work to do.
+		return
+	}
+
+	// We've seen all the replicas once. Now we're going to iterate
+	// until they're all gone, up to the configured timeout.
 	transferTimeout := raftLeadershipTransferWait.Get(&s.cfg.Settings.SV)
 
 	if err := contextutil.RunWithTimeout(ctx, "wait for raft leadership transfer", transferTimeout,
@@ -1156,6 +1178,10 @@ func (s *Store) SetDraining(drain bool) {
 			for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 				err = nil
 				if numRemaining := transferAllAway(ctx); numRemaining > 0 {
+					// Report progress to the Drain RPC.
+					if reporter != nil {
+						reporter(numRemaining, "range lease iterations")
+					}
 					err = errors.Errorf("waiting for %d replicas to transfer their lease away", numRemaining)
 					if everySecond.ShouldLog() {
 						log.Info(ctx, err)
