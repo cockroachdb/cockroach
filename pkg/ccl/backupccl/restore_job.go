@@ -789,7 +789,6 @@ func loadBackupSQLDescs(
 type restoreResumer struct {
 	job                *jobs.Job
 	settings           *cluster.Settings
-	res                RowCount
 	databases          []*sqlbase.DatabaseDescriptor
 	tables             []*sqlbase.TableDescriptor
 	descriptorCoverage tree.DescriptorCoverage
@@ -991,7 +990,6 @@ func (r *restoreResumer) Resume(
 		r.job,
 		details.Encryption,
 	)
-	r.res = res
 	if err != nil {
 		return err
 	}
@@ -1014,9 +1012,9 @@ func (r *restoreResumer) Resume(
 		tree.NewDInt(tree.DInt(*r.job.ID())),
 		tree.NewDString(string(jobs.StatusSucceeded)),
 		tree.NewDFloat(tree.DFloat(1.0)),
-		tree.NewDInt(tree.DInt(r.res.Rows)),
-		tree.NewDInt(tree.DInt(r.res.IndexEntries)),
-		tree.NewDInt(tree.DInt(r.res.DataSize)),
+		tree.NewDInt(tree.DInt(res.Rows)),
+		tree.NewDInt(tree.DInt(res.IndexEntries)),
+		tree.NewDInt(tree.DInt(res.DataSize)),
 	}
 
 	return nil
