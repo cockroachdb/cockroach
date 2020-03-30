@@ -33,6 +33,21 @@ var SubqueryUseCounter = telemetry.GetCounterOnce("sql.plan.subquery")
 // correlated subquery has been processed during planning.
 var CorrelatedSubqueryUseCounter = telemetry.GetCounterOnce("sql.plan.subquery.correlated")
 
+// ForeignKeyChecksUseCounter is to be incremented every time a mutation has
+// foreign key checks and the checks are planned by the optimizer.
+var ForeignKeyChecksUseCounter = telemetry.GetCounterOnce("sql.plan.fk.checks")
+
+// ForeignKeyCascadesUseCounter is to be incremented every time a mutation
+// involves a cascade. Currently, cascades use the legacy paths, so the
+// ForeignKeyLegacyUseCounter would also be incremented in these cases.
+var ForeignKeyCascadesUseCounter = telemetry.GetCounterOnce("sql.plan.fk.cascades")
+
+// ForeignKeyLegacyUseCounter is to be incremented every time a mutation
+// involves foreign key checks or cascades but uses the legacy execution path
+// (either because it has cascades or because the optimizer_foreign_keys setting
+// is off).
+var ForeignKeyLegacyUseCounter = telemetry.GetCounterOnce("sql.plan.fk.legacy")
+
 // LateralJoinUseCounter is to be incremented whenever a query uses the
 // LATERAL keyword.
 var LateralJoinUseCounter = telemetry.GetCounterOnce("sql.plan.lateral-join")
