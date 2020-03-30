@@ -12,14 +12,17 @@ package sql
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 // GrantRoleNode creates entries in the system.role_members table.
@@ -85,6 +88,13 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 
 	for _, r := range n.Roles {
 		if _, ok := roles[string(r)]; !ok {
+			for name := range roleoption.ByName {
+				if uppercase := strings.ToUpper(string(r)); uppercase == name {
+					return nil, errors.WithHintf(
+						pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", r),
+						"%s is a role option, try using ALTER ROLE to change a role's options.", uppercase)
+				}
+			}
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", r)
 		}
 	}
