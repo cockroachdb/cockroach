@@ -82,20 +82,23 @@ func TestRegistry(t *testing.T) {
 
 	r.AddMetric(NewGauge(Metadata{Name: "bottom.gauge"}))
 	ms := &struct {
-		StructGauge       *Gauge
-		StructGauge64     *GaugeFloat64
-		StructCounter     *Counter
-		StructHistogram   *Histogram
-		NestedStructGauge NestedStruct
+		StructGauge         *Gauge
+		StructGauge64       *GaugeFloat64
+		StructCounter       *Counter
+		StructHistogram     *Histogram
+		NestedStructGauge   NestedStruct
+		ArrayStructCounters [4]*Counter
 		// A few extra ones: either not exported, or not metric objects.
-		privateStructGauge       *Gauge
-		privateStructGauge64     *GaugeFloat64
-		privateStructCounter     *Counter
-		privateStructHistogram   *Histogram
-		privateNestedStructGauge NestedStruct
-		NotAMetric               int
-		AlsoNotAMetric           string
-		ReallyNotAMetric         *Registry
+		privateStructGauge            *Gauge
+		privateStructGauge64          *GaugeFloat64
+		privateStructCounter          *Counter
+		privateStructHistogram        *Histogram
+		privateNestedStructGauge      NestedStruct
+		privateArrayStructCounters    [2]*Counter
+		NotAMetric                    int
+		AlsoNotAMetric                string
+		ReallyNotAMetric              *Registry
+		DefinitelyNotAnArrayOfMetrics [2]int
 	}{
 		StructGauge:     NewGauge(Metadata{Name: "struct.gauge"}),
 		StructGauge64:   NewGaugeFloat64(Metadata{Name: "struct.gauge64"}),
@@ -104,6 +107,12 @@ func TestRegistry(t *testing.T) {
 		NestedStructGauge: NestedStruct{
 			NestedStructGauge: NewGauge(Metadata{Name: "nested.struct.gauge"}),
 		},
+		ArrayStructCounters: [...]*Counter{
+			NewCounter(Metadata{Name: "array.struct.counter.0"}),
+			NewCounter(Metadata{Name: "array.struct.counter.1"}),
+			nil, // skipped
+			NewCounter(Metadata{Name: "array.struct.counter.3"}),
+		},
 		privateStructGauge:     NewGauge(Metadata{Name: "private.struct.gauge"}),
 		privateStructGauge64:   NewGaugeFloat64(Metadata{Name: "private.struct.gauge64"}),
 		privateStructCounter:   NewCounter(Metadata{Name: "private.struct.counter"}),
@@ -111,23 +120,31 @@ func TestRegistry(t *testing.T) {
 		privateNestedStructGauge: NestedStruct{
 			NestedStructGauge: NewGauge(Metadata{Name: "private.nested.struct.gauge"}),
 		},
-		NotAMetric:       0,
-		AlsoNotAMetric:   "foo",
-		ReallyNotAMetric: NewRegistry(),
+		privateArrayStructCounters: [...]*Counter{
+			NewCounter(Metadata{Name: "private.array.struct.counter.0"}),
+			NewCounter(Metadata{Name: "private.array.struct.counter.1"}),
+		},
+		NotAMetric:                    0,
+		AlsoNotAMetric:                "foo",
+		ReallyNotAMetric:              NewRegistry(),
+		DefinitelyNotAnArrayOfMetrics: [...]int{1, 2},
 	}
 	r.AddMetricStruct(ms)
 
 	expNames := map[string]struct{}{
-		"top.histogram":       {},
-		"top.gauge":           {},
-		"top.floatgauge":      {},
-		"top.counter":         {},
-		"bottom.gauge":        {},
-		"struct.gauge":        {},
-		"struct.gauge64":      {},
-		"struct.counter":      {},
-		"struct.histogram":    {},
-		"nested.struct.gauge": {},
+		"top.histogram":          {},
+		"top.gauge":              {},
+		"top.floatgauge":         {},
+		"top.counter":            {},
+		"bottom.gauge":           {},
+		"struct.gauge":           {},
+		"struct.gauge64":         {},
+		"struct.counter":         {},
+		"struct.histogram":       {},
+		"nested.struct.gauge":    {},
+		"array.struct.counter.0": {},
+		"array.struct.counter.1": {},
+		"array.struct.counter.3": {},
 	}
 
 	r.Each(func(name string, _ interface{}) {

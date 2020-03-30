@@ -48,7 +48,7 @@ func (s *Store) HandleSnapshot(
 	ctx := s.AnnotateCtx(stream.Context())
 	const name = "storage.Store: handle snapshot"
 	return s.stopper.RunTaskWithErr(ctx, name, func(ctx context.Context) error {
-		s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
+		s.metrics.RaftRcvdMessages[raftpb.MsgSnap].Inc(1)
 
 		if s.IsDraining() {
 			return stream.Send(&SnapshotResponse{
@@ -146,7 +146,7 @@ func (s *Store) HandleRaftUncoalescedRequest(
 	// HandleRaftRequest is called on locally uncoalesced heartbeats (which are
 	// not sent over the network if the environment variable is set) so do not
 	// count them.
-	s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
+	s.metrics.RaftRcvdMessages[req.Message.Type].Inc(1)
 
 	value, ok := s.replicaQueues.Load(int64(req.RangeID))
 	if !ok {

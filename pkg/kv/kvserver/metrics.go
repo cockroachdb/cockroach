@@ -1102,29 +1102,14 @@ type StoreMetrics struct {
 	RaftApplyCommittedLatency *metric.Histogram
 
 	// Raft message metrics.
-	RaftRcvdMsgProp           *metric.Counter
-	RaftRcvdMsgApp            *metric.Counter
-	RaftRcvdMsgAppResp        *metric.Counter
-	RaftRcvdMsgVote           *metric.Counter
-	RaftRcvdMsgVoteResp       *metric.Counter
-	RaftRcvdMsgPreVote        *metric.Counter
-	RaftRcvdMsgPreVoteResp    *metric.Counter
-	RaftRcvdMsgSnap           *metric.Counter
-	RaftRcvdMsgHeartbeat      *metric.Counter
-	RaftRcvdMsgHeartbeatResp  *metric.Counter
-	RaftRcvdMsgTransferLeader *metric.Counter
-	RaftRcvdMsgTimeoutNow     *metric.Counter
-	RaftRcvdMsgDropped        *metric.Counter
+	//
+	// An array for conveniently finding the appropriate metric.
+	RaftRcvdMessages   [maxRaftMsgType + 1]*metric.Counter
+	RaftRcvdMsgDropped *metric.Counter
 
 	// Raft log metrics.
 	RaftLogFollowerBehindCount *metric.Gauge
 	RaftLogTruncated           *metric.Counter
-
-	// An array for conveniently finding the appropriate metric. The individual
-	// metric references must exist as AddMetricStruct adds them by reflection
-	// on this struct and does not process array types.
-	// TODO(arjun): eliminate this duplication.
-	raftRcvdMessages [maxRaftMsgType + 1]*metric.Counter
 
 	RaftEnqueuedPending            *metric.Gauge
 	RaftCoalescedHeartbeatsPending *metric.Gauge
@@ -1312,29 +1297,31 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftApplyCommittedLatency: metric.NewLatency(metaRaftApplyCommittedLatency, histogramWindow),
 
 		// Raft message metrics.
-		RaftRcvdMsgProp:           metric.NewCounter(metaRaftRcvdProp),
-		RaftRcvdMsgApp:            metric.NewCounter(metaRaftRcvdApp),
-		RaftRcvdMsgAppResp:        metric.NewCounter(metaRaftRcvdAppResp),
-		RaftRcvdMsgVote:           metric.NewCounter(metaRaftRcvdVote),
-		RaftRcvdMsgVoteResp:       metric.NewCounter(metaRaftRcvdVoteResp),
-		RaftRcvdMsgPreVote:        metric.NewCounter(metaRaftRcvdPreVote),
-		RaftRcvdMsgPreVoteResp:    metric.NewCounter(metaRaftRcvdPreVoteResp),
-		RaftRcvdMsgSnap:           metric.NewCounter(metaRaftRcvdSnap),
-		RaftRcvdMsgHeartbeat:      metric.NewCounter(metaRaftRcvdHeartbeat),
-		RaftRcvdMsgHeartbeatResp:  metric.NewCounter(metaRaftRcvdHeartbeatResp),
-		RaftRcvdMsgTransferLeader: metric.NewCounter(metaRaftRcvdTransferLeader),
-		RaftRcvdMsgTimeoutNow:     metric.NewCounter(metaRaftRcvdTimeoutNow),
-		RaftRcvdMsgDropped:        metric.NewCounter(metaRaftRcvdDropped),
+		RaftRcvdMessages: [...]*metric.Counter{
+			raftpb.MsgProp:           metric.NewCounter(metaRaftRcvdProp),
+			raftpb.MsgApp:            metric.NewCounter(metaRaftRcvdApp),
+			raftpb.MsgAppResp:        metric.NewCounter(metaRaftRcvdAppResp),
+			raftpb.MsgVote:           metric.NewCounter(metaRaftRcvdVote),
+			raftpb.MsgVoteResp:       metric.NewCounter(metaRaftRcvdVoteResp),
+			raftpb.MsgPreVote:        metric.NewCounter(metaRaftRcvdPreVote),
+			raftpb.MsgPreVoteResp:    metric.NewCounter(metaRaftRcvdPreVoteResp),
+			raftpb.MsgSnap:           metric.NewCounter(metaRaftRcvdSnap),
+			raftpb.MsgHeartbeat:      metric.NewCounter(metaRaftRcvdHeartbeat),
+			raftpb.MsgHeartbeatResp:  metric.NewCounter(metaRaftRcvdHeartbeatResp),
+			raftpb.MsgTransferLeader: metric.NewCounter(metaRaftRcvdTransferLeader),
+			raftpb.MsgTimeoutNow:     metric.NewCounter(metaRaftRcvdTimeoutNow),
+		},
+		RaftRcvdMsgDropped: metric.NewCounter(metaRaftRcvdDropped),
+
+		// Raft log metrics.
+		RaftLogFollowerBehindCount: metric.NewGauge(metaRaftLogFollowerBehindCount),
+		RaftLogTruncated:           metric.NewCounter(metaRaftLogTruncated),
 
 		RaftEnqueuedPending: metric.NewGauge(metaRaftEnqueuedPending),
 
 		// This Gauge measures the number of heartbeats queued up just before
 		// the queue is cleared, to avoid flapping wildly.
 		RaftCoalescedHeartbeatsPending: metric.NewGauge(metaRaftCoalescedHeartbeatsPending),
-
-		// Raft log metrics.
-		RaftLogFollowerBehindCount: metric.NewGauge(metaRaftLogFollowerBehindCount),
-		RaftLogTruncated:           metric.NewCounter(metaRaftLogTruncated),
 
 		// Replica queue metrics.
 		GCQueueSuccesses:                          metric.NewCounter(metaGCQueueSuccesses),
@@ -1417,19 +1404,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Closed timestamp metrics.
 		ClosedTimestampMaxBehindNanos: metric.NewGauge(metaClosedTimestampMaxBehindNanos),
 	}
-
-	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp
-	sm.raftRcvdMessages[raftpb.MsgApp] = sm.RaftRcvdMsgApp
-	sm.raftRcvdMessages[raftpb.MsgAppResp] = sm.RaftRcvdMsgAppResp
-	sm.raftRcvdMessages[raftpb.MsgVote] = sm.RaftRcvdMsgVote
-	sm.raftRcvdMessages[raftpb.MsgVoteResp] = sm.RaftRcvdMsgVoteResp
-	sm.raftRcvdMessages[raftpb.MsgPreVote] = sm.RaftRcvdMsgPreVote
-	sm.raftRcvdMessages[raftpb.MsgPreVoteResp] = sm.RaftRcvdMsgPreVoteResp
-	sm.raftRcvdMessages[raftpb.MsgSnap] = sm.RaftRcvdMsgSnap
-	sm.raftRcvdMessages[raftpb.MsgHeartbeat] = sm.RaftRcvdMsgHeartbeat
-	sm.raftRcvdMessages[raftpb.MsgHeartbeatResp] = sm.RaftRcvdMsgHeartbeatResp
-	sm.raftRcvdMessages[raftpb.MsgTransferLeader] = sm.RaftRcvdMsgTransferLeader
-	sm.raftRcvdMessages[raftpb.MsgTimeoutNow] = sm.RaftRcvdMsgTimeoutNow
 
 	storeRegistry.AddMetricStruct(sm)
 
