@@ -142,3 +142,49 @@ WHERE feature_name IN (
 ----
 sql.schema.inverted_index
 sql.schema.hash_sharded_index
+
+subtest create_index_concurrently
+
+statement ok
+CREATE TABLE create_index_concurrently_tbl (a int)
+
+query T noticetrace
+CREATE INDEX CONCURRENTLY create_index_concurrently_idx ON create_index_concurrently_tbl(a)
+----
+NOTICE: CONCURRENTLY is not required as all indexes are created concurrently
+
+query T noticetrace
+CREATE INDEX CONCURRENTLY IF NOT EXISTS create_index_concurrently_idx ON create_index_concurrently_tbl(a)
+----
+
+query TT
+SHOW CREATE TABLE create_index_concurrently_tbl
+----
+create_index_concurrently_tbl  CREATE TABLE create_index_concurrently_tbl (
+                               a INT8 NULL,
+                               INDEX create_index_concurrently_idx (a ASC),
+                               FAMILY "primary" (a, rowid)
+)
+
+query T noticetrace
+DROP INDEX CONCURRENTLY create_index_concurrently_idx
+----
+NOTICE: CONCURRENTLY is not required as all indexes are dropped concurrently
+NOTICE: the data for dropped indexes is reclaimed asynchronously
+HINT: The reclamation delay can be customized in the zone configuration for the table.
+
+query T noticetrace
+DROP INDEX CONCURRENTLY IF EXISTS create_index_concurrently_idx
+----
+NOTICE: CONCURRENTLY is not required as all indexes are dropped concurrently
+
+query TT
+SHOW CREATE TABLE create_index_concurrently_tbl
+----
+create_index_concurrently_tbl  CREATE TABLE create_index_concurrently_tbl (
+                               a INT8 NULL,
+                               FAMILY "primary" (a, rowid)
+)
+
+statement ok
+DROP TABLE create_index_concurrently_tbl

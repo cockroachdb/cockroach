@@ -1496,6 +1496,9 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 		title = append(title, pretty.Keyword("INVERTED"))
 	}
 	title = append(title, pretty.Keyword("INDEX"))
+	if node.Concurrently {
+		title = append(title, pretty.Keyword("CONCURRENTLY"))
+	}
 	if node.IfNotExists {
 		title = append(title, pretty.Keyword("IF NOT EXISTS"))
 	}

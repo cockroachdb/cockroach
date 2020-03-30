@@ -80,6 +80,7 @@ func TestParse(t *testing.T) {
 		{`CREATE SCHEMA foo`},
 
 		{`CREATE INDEX a ON b (c)`},
+		{`CREATE INDEX CONCURRENTLY a ON b (c)`},
 		{`EXPLAIN CREATE INDEX a ON b (c)`},
 		{`CREATE INDEX a ON b.c (d)`},
 		{`CREATE INDEX ON a (b)`},

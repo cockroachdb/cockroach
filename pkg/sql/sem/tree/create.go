@@ -112,9 +112,10 @@ type CreateIndex struct {
 	Sharded     *ShardedIndexDef
 	// Extra columns to be stored together with the indexed ones as an optimization
 	// for improved reading performance.
-	Storing     NameList
-	Interleave  *InterleaveDef
-	PartitionBy *PartitionBy
+	Storing      NameList
+	Interleave   *InterleaveDef
+	PartitionBy  *PartitionBy
+	Concurrently bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -127,6 +128,9 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 		ctx.WriteString("INVERTED ")
 	}
 	ctx.WriteString("INDEX ")
+	if node.Concurrently {
+		ctx.WriteString("CONCURRENTLY ")
+	}
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
 	}

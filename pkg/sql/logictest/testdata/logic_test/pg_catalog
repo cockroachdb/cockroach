@@ -1278,6 +1278,10 @@ substring  1307062959    NULL      0        NULL     NULL     0
 substring  1307062959    NULL      0        NULL     NULL     0
 substring  1307062959    NULL      0        NULL     NULL     0
 substring  1307062959    NULL      0        NULL     NULL     0
+substring  1307062959    NULL      0        NULL     NULL     0
+substring  1307062959    NULL      0        NULL     NULL     0
+substring  1307062959    NULL      0        NULL     NULL     0
+substring  1307062959    NULL      0        NULL     NULL     0
 
 query TTBBBB colnames
 SELECT proname, protransform, proisagg, proiswindow, prosecdef, proleakproof
@@ -1285,6 +1289,10 @@ FROM pg_catalog.pg_proc
 WHERE proname='substring'
 ----
 proname    protransform  proisagg  proiswindow  prosecdef  proleakproof
+substring  NULL          false     false        false      true
+substring  NULL          false     false        false      true
+substring  NULL          false     false        false      true
+substring  NULL          false     false        false      true
 substring  NULL          false     false        false      true
 substring  NULL          false     false        false      true
 substring  NULL          false     false        false      true
@@ -1300,6 +1308,10 @@ substring  false        false      NULL         NULL
 substring  false        false      NULL         NULL
 substring  false        false      NULL         NULL
 substring  false        false      NULL         NULL
+substring  false        false      NULL         NULL
+substring  false        false      NULL         NULL
+substring  false        false      NULL         NULL
+substring  false        false      NULL         NULL
 
 query TIIOTTTT colnames
 SELECT proname, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargdefaults
@@ -1311,6 +1323,10 @@ substring  2         0                25          25 20        NULL            N
 substring  3         0                25          25 20 20     NULL            NULL         NULL
 substring  2         0                25          25 25        NULL            NULL         NULL
 substring  3         0                25          25 25 25     NULL            NULL         NULL
+substring  2         0                1562        1562 20      NULL            NULL         NULL
+substring  3         0                1562        1562 20 20   NULL            NULL         NULL
+substring  2         0                17          17 20        NULL            NULL         NULL
+substring  3         0                17          17 20 20     NULL            NULL         NULL
 
 query TTTTTT colnames
 SELECT proname, protrftypes, prosrc, probin, proconfig, proacl
@@ -1318,6 +1334,10 @@ FROM pg_catalog.pg_proc
 WHERE proname='substring'
 ----
 proname    protrftypes  prosrc     probin  proconfig  proacl
+substring  NULL         substring  NULL    NULL       NULL
+substring  NULL         substring  NULL    NULL       NULL
+substring  NULL         substring  NULL    NULL       NULL
+substring  NULL         substring  NULL    NULL       NULL
 substring  NULL         substring  NULL    NULL       NULL
 substring  NULL         substring  NULL    NULL       NULL
 substring  NULL         substring  NULL    NULL       NULL
