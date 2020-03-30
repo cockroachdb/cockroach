@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -90,13 +91,13 @@ var (
 	}
 	metaDistSenderInLeaseTransferBackoffsCount = metric.Metadata{
 		Name:        "distsender.errors.inleasetransferbackoffs",
-		Help:        "Number of times backed off due to NotLeaseHolderErrors during lease transfer.",
+		Help:        "Number of times backed off due to NotLeaseHolderErrors during lease transfer",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaDistSenderRangeLookups = metric.Metadata{
 		Name:        "distsender.rangelookups",
-		Help:        "Number of range lookups.",
+		Help:        "Number of range lookups",
 		Measurement: "Range Lookups",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -104,6 +105,12 @@ var (
 		Name:        "requests.slow.distsender",
 		Help:        "Number of RPCs stuck or retrying for a long time",
 		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDistSenderMethodCountTmpl = metric.Metadata{
+		Name:        "distsender.rpc.%s.sent",
+		Help:        "Number of %s requests sent",
+		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
 	}
 )
@@ -157,10 +164,11 @@ type DistSenderMetrics struct {
 	InLeaseTransferBackoffs *metric.Counter
 	RangeLookups            *metric.Counter
 	SlowRPCs                *metric.Gauge
+	MethodCounts            [roachpb.NumMethods]*metric.Counter
 }
 
 func makeDistSenderMetrics() DistSenderMetrics {
-	return DistSenderMetrics{
+	m := DistSenderMetrics{
 		BatchCount:              metric.NewCounter(metaDistSenderBatchCount),
 		PartialBatchCount:       metric.NewCounter(metaDistSenderPartialBatchCount),
 		AsyncSentCount:          metric.NewCounter(metaDistSenderAsyncSentCount),
@@ -173,6 +181,14 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		RangeLookups:            metric.NewCounter(metaDistSenderRangeLookups),
 		SlowRPCs:                metric.NewGauge(metaDistSenderSlowRPCs),
 	}
+	for i := range m.MethodCounts {
+		method := roachpb.Method(i).String()
+		meta := metaDistSenderMethodCountTmpl
+		meta.Name = fmt.Sprintf(meta.Name, strings.ToLower(method))
+		meta.Help = fmt.Sprintf(meta.Help, method)
+		m.MethodCounts[i] = metric.NewCounter(meta)
+	}
+	return m
 }
 
 // FirstRangeProvider is capable of providing DistSender with the descriptor of
@@ -631,9 +647,8 @@ func splitBatchAndCheckForRefreshSpans(
 func (ds *DistSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	ds.metrics.BatchCount.Inc(1)
-
 	tracing.AnnotateTrace()
+	ds.incrementBatchCounters(&ba)
 
 	// TODO(nvanbenschoten): This causes ba to escape to the heap. Either
 	// commit to passing BatchRequests by reference or return an updated
@@ -739,6 +754,16 @@ func (ds *DistSender) Send(
 	}
 
 	return reply, nil
+}
+
+// incrementBatchCounters increments the appropriate counters to track the
+// batch and its composite request methods.
+func (ds *DistSender) incrementBatchCounters(ba *roachpb.BatchRequest) {
+	ds.metrics.BatchCount.Inc(1)
+	for _, ru := range ba.Requests {
+		m := ru.GetInner().Method()
+		ds.metrics.MethodCounts[m].Inc(1)
+	}
 }
 
 type response struct {
