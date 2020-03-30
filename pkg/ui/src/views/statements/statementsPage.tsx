@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { Icon, Pagination } from "antd";
-import isNil from "lodash/isNil";
+import { isNil, merge, forIn } from "lodash";
 import moment from "moment";
 import { DATE_FORMAT } from "src/util/format";
 import React from "react";
@@ -89,7 +89,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     };
 
     const stateFromHistory = this.getStateFromHistory();
-    this.state = _.merge(defaultState, stateFromHistory);
+    this.state = merge(defaultState, stateFromHistory);
     this.activateDiagnosticsRef = React.createRef();
   }
 
@@ -114,7 +114,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     const currentSearchParams = new URLSearchParams(history.location.search);
     // const nextSearchParams = new URLSearchParams(params);
 
-    _.forIn(params, (value, key) => {
+    forIn(params, (value, key) => {
       if (!value) {
         currentSearchParams.delete(key);
       } else {
@@ -148,19 +148,16 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     this.props.refreshStatementDiagnosticsRequests();
   }
 
-  componentDidUpdate() {
+  componentDidUpdate = (__: StatementsPageProps, prevState: StatementsPageState) => {
+    if (this.state.search && this.state.search !== prevState.search) {
+      this.trackSearch(this.state.search, this.filteredStatementsData().length);
+    }
     this.props.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
   }
 
   componentWillUnmount() {
     this.props.dismissAlertMessage();
-  }
-
-  componentDidUpdate = (__: StatementsPageProps, prevState: StatementsPageState) => {
-    if (this.state.search && this.state.search !== prevState.search) {
-      this.trackSearch(this.state.search, this.filteredStatementsData().length);
-    }
   }
 
   onChangePage = (current: number) => {
