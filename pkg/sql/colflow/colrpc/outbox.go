@@ -103,6 +103,16 @@ func NewOutbox(
 	return o, nil
 }
 
+func (o *Outbox) close(ctx context.Context) {
+	for _, closer := range o.closers {
+		if err := closer.IdempotentClose(ctx); err != nil {
+			if log.V(1) {
+				log.Infof(ctx, "error closing Closer: %v", err)
+			}
+		}
+	}
+}
+
 // Run starts an outbox by connecting to the provided node and pushing
 // coldata.Batches over the stream after sending a header with the provided flow
 // and stream ID. Note that an extra goroutine is spawned so that Recv may be
@@ -131,39 +141,47 @@ func (o *Outbox) Run(
 ) {
 	o.runnerCtx = ctx
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
-
 	log.VEventf(ctx, 2, "Outbox Dialing %s", nodeID)
-	conn, err := dialer.Dial(ctx, nodeID, rpc.DefaultClass)
-	if err != nil {
-		log.Warningf(
-			ctx,
-			"Outbox Dial connection error, distributed query will fail: %+v",
-			err,
-		)
-		return
-	}
 
-	client := execinfrapb.NewDistSQLClient(conn)
-	stream, err := client.FlowStream(ctx)
-	if err != nil {
-		log.Warningf(
-			ctx,
-			"Outbox FlowStream connection error, distributed query will fail: %+v",
-			err,
-		)
-		return
-	}
+	var stream execinfrapb.DistSQL_FlowStreamClient
+	if err := func() error {
+		conn, err := dialer.Dial(ctx, nodeID, rpc.DefaultClass)
+		if err != nil {
+			log.Warningf(
+				ctx,
+				"Outbox Dial connection error, distributed query will fail: %+v",
+				err,
+			)
+			return err
+		}
 
-	log.VEvent(ctx, 2, "Outbox sending header")
-	// Send header message to establish the remote server (consumer).
-	if err := stream.Send(
-		&execinfrapb.ProducerMessage{Header: &execinfrapb.ProducerHeader{FlowID: flowID, StreamID: streamID}},
-	); err != nil {
-		log.Warningf(
-			ctx,
-			"Outbox Send header error, distributed query will fail: %+v",
-			err,
-		)
+		client := execinfrapb.NewDistSQLClient(conn)
+		stream, err = client.FlowStream(ctx)
+		if err != nil {
+			log.Warningf(
+				ctx,
+				"Outbox FlowStream connection error, distributed query will fail: %+v",
+				err,
+			)
+			return err
+		}
+
+		log.VEvent(ctx, 2, "Outbox sending header")
+		// Send header message to establish the remote server (consumer).
+		if err := stream.Send(
+			&execinfrapb.ProducerMessage{Header: &execinfrapb.ProducerHeader{FlowID: flowID, StreamID: streamID}},
+		); err != nil {
+			log.Warningf(
+				ctx,
+				"Outbox Send header error, distributed query will fail: %+v",
+				err,
+			)
+			return err
+		}
+		return nil
+	}(); err != nil {
+		// error during stream set up.
+		o.close(ctx)
 		return
 	}
 
@@ -324,13 +342,6 @@ func (o *Outbox) runWithStream(
 		}
 	}
 
-	for _, closer := range o.closers {
-		if err := closer.IdempotentClose(ctx); err != nil {
-			if log.V(1) {
-				log.Infof(ctx, "error closing Closer: %v", err)
-			}
-		}
-	}
-
+	o.close(ctx)
 	<-waitCh
 }

@@ -146,7 +146,7 @@ func updateTableStatus(
 
 	for i, t := range progress.Tables {
 		droppedTable := &progress.Tables[i]
-		if droppedTable.ID != table.ID || droppedTable.Status != jobspb.SchemaChangeGCProgress_WAITING_FOR_GC {
+		if droppedTable.ID != table.ID || droppedTable.Status == jobspb.SchemaChangeGCProgress_DELETED {
 			continue
 		}
 
@@ -191,6 +191,9 @@ func updateIndexesStatus(
 	soonestDeadline = timeutil.Unix(0, int64(math.MaxInt64))
 	for i := 0; i < len(progress.Indexes); i++ {
 		idxProgress := &progress.Indexes[i]
+		if idxProgress.Status == jobspb.SchemaChangeGCProgress_DELETED {
+			continue
+		}
 
 		sp := table.IndexSpan(idxProgress.IndexID)
 

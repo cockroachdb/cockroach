@@ -97,6 +97,9 @@ func (r schemaChangeGCResumer) Resume(
 	tableDropTimes, indexDropTimes := getDropTimes(details)
 
 	allTables := getAllTablesWaitingForGC(details, progress)
+	if len(allTables) == 0 {
+		return nil
+	}
 	expired, earliestDeadline := refreshTables(ctx, execCfg, allTables, tableDropTimes, indexDropTimes, r.jobID, progress)
 	timerDuration := timeutil.Until(earliestDeadline)
 	if expired {
@@ -121,6 +124,9 @@ func (r schemaChangeGCResumer) Resume(
 			// that this job is responsible for, and computing the earliest deadline
 			// from our set of cached TTL values.
 			remainingTables := getAllTablesWaitingForGC(details, progress)
+			if len(remainingTables) == 0 {
+				return nil
+			}
 			expired, earliestDeadline = refreshTables(ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, progress)
 			timerDuration := time.Until(earliestDeadline)
 			if expired {
