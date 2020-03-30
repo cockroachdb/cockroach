@@ -101,8 +101,9 @@ var gopgIgnoreList19_2 = blacklist{
 	"pg | ORM struct model | fetches Author relations":    "41690",
 	"pg | ORM struct model | fetches Book relations":      "41690",
 	"pg | ORM struct model | fetches Genre relations":     "41690",
-	// This test assumes different transaction isolation level (READ COMMITTED).
-	"pg | Tx | supports CopyFrom and CopyIn": "41690",
+	// These tests assume different transaction isolation level (READ COMMITTED).
+	"pg | Tx | supports CopyFrom and CopyIn":             "41690",
+	"pg | Tx | supports CopyFrom and CopyIn with errors": "41690",
 	// These tests sometimes failed and we haven't diagnosed it
 	"pg | DB race | SelectOrInsert with OnConflict is race free":    "unknown",
 	"pg | DB race | SelectOrInsert without OnConflict is race free": "unknown",
