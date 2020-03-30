@@ -26,7 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	"golang.org/x/time/rate"
 )
+
+var sentryIssue46720Limiter = rate.NewLimiter(0.1, 1) // 1 every 10s
 
 // optimizePuts searches for contiguous runs of Put & CPut commands in
 // the supplied request union. Any run which exceeds a minimum length
@@ -340,7 +343,9 @@ func evaluateBatch(
 					errors.Safe(retResults), errors.Safe(limit),
 					errors.Safe(ba.Header.MaxSpanRequestKeys),
 					errors.Safe(ba.Summary()), errors.Safe(index))
-				errorutil.SendReport(ctx, &rec.ClusterSettings().SV, err)
+				if sentryIssue46720Limiter.Allow() {
+					errorutil.SendReport(ctx, &rec.ClusterSettings().SV, err)
+				}
 				return nil, mergedResult, roachpb.NewError(err)
 			} else if retResults < limit {
 				baHeader.MaxSpanRequestKeys -= retResults
