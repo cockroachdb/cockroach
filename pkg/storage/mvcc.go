@@ -2429,11 +2429,6 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 
 // MVCCScanOptions bundles options for the MVCCScan family of functions.
 type MVCCScanOptions struct {
-	// TODO(benesch): The max parameter should be moved into this struct. Its
-	// semantics make that tricky, though, as the zero value for this struct
-	// naturally represents an unbounded scan, but a max of zero currently means
-	// to return no results.
-
 	// See the documentation for MVCCScan for information on these parameters.
 	Inconsistent     bool
 	Tombstones       bool
