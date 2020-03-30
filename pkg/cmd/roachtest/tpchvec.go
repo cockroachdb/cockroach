@@ -21,33 +21,54 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 )
 
 func registerTPCHVec(r *testRegistry) {
 	const (
 		nodeCount      = 3
 		numTPCHQueries = 22
-		// vecOnSlowerFailFactor describes the threshold at which we fail the test
-		// if vec ON is slower that vec OFF, meaning that if
-		// vec_on_time > vecOnSlowerFailFactor * vec_off_time, the test is failed.
-		// This will help catch any regressions.
-		vecOnSlowerFailFactor = 1.15
 	)
 
-	// queriesToSkipByVersionPrefix is a map from version prefix to another map
-	// that contains query numbers to be skipped (as well as the reasons for why
+	type crdbVersion int
+	const (
+		version19_2 crdbVersion = iota
+		version20_1
+	)
+	toCRDBVersion := func(v string) (crdbVersion, error) {
+		if strings.HasPrefix(v, "v19.2") {
+			return version19_2, nil
+		} else if strings.HasPrefix(v, "v20.1") {
+			return version20_1, nil
+		} else {
+			return 0, errors.Errorf("unrecognized version: %s", v)
+		}
+	}
+
+	// queriesToSkipByVersion is a map from crdbVersion to another map that
+	// contains query numbers to be skipped (as well as the reasons for why
 	// they are skipped).
-	queriesToSkipByVersionPrefix := make(map[string]map[int]string)
-	queriesToSkipByVersionPrefix["v19.2"] = map[int]string{
+	queriesToSkipByVersion := make(map[crdbVersion]map[int]string)
+	queriesToSkipByVersion[version19_2] = map[int]string{
 		5:  "can cause OOM",
 		7:  "can cause OOM",
 		8:  "can cause OOM",
 		9:  "can cause OOM",
 		19: "can cause OOM",
 	}
-	vectorizeOptionByVersionPrefix := map[string]string{
-		"v19.2": "experimental_on",
-		"v20.1": "on",
+	vectorizeOnOptionByVersion := map[crdbVersion]string{
+		version19_2: "experimental_on",
+		version20_1: "on",
+	}
+	// slownessThreshold describes the threshold at which we fail the test
+	// if vec ON is slower that vec OFF, meaning that if
+	// vec_on_time > vecOnSlowerFailFactor * vec_off_time, the test is failed.
+	// This will help catch any regressions.
+	// Note that for 19.2 version the threshold is higher in order to reduce
+	// the noise.
+	slownessThresholdByVersion := map[crdbVersion]float64{
+		version19_2: 1.5,
+		version20_1: 1.15,
 	}
 
 	TPCHTables := []string{
@@ -505,25 +526,21 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 				t.Fatal(err)
 			}
 		}
-		version, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
+		versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
 		if err != nil {
 			t.Fatal(err)
 		}
-		var queriesToSkip map[int]string
-		for versionPrefix, toSkip := range queriesToSkipByVersionPrefix {
-			if strings.HasPrefix(version, versionPrefix) {
-				queriesToSkip = toSkip
-				break
-			}
+		version, err := toCRDBVersion(versionString)
+		if err != nil {
+			t.Fatal(err)
 		}
+		queriesToSkip := queriesToSkipByVersion[version]
 		runConfig := runConfigs[option]
 		rng, _ := randutil.NewPseudoRand()
-		var vmoduleValue int
 		if runConfig.stressDiskSpilling {
 			// In order to stress the disk spilling of the vectorized
 			// engine, we will set workmem limit to a random value in range
-			// [100KiB, 1000KiB). We will also enable some logging.
-			vmoduleValue = 2
+			// [100KiB, 1000KiB).
 			workmemInKiB := 100 + rng.Intn(900)
 			workmem := fmt.Sprintf("%dKiB", workmemInKiB)
 			t.Status(fmt.Sprintf("setting workmem='%s'", workmem))
@@ -533,19 +550,9 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 		} else {
 			// We are interested in the performance comparison between
 			// vectorized and row-by-row engines, so we will reset workmem
-			// limit to the default value. We will also disable logging.
-			vmoduleValue = 0
+			// limit to the default value.
 			t.Status("resetting workmem to default")
 			if _, err := conn.Exec("RESET CLUSTER SETTING sql.distsql.temp_storage.workmem"); err != nil {
-				t.Fatal(err)
-			}
-		}
-		t.Status(fmt.Sprintf("setting vmodule=vectorized_flow=%d on all nodes", vmoduleValue))
-		for node := 1; node <= nodeCount; node++ {
-			conn := c.Conn(ctx, node)
-			if _, err := conn.Exec(
-				fmt.Sprintf("SELECT crdb_internal.set_vmodule('vectorized_flow=%d');", vmoduleValue),
-			); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -558,15 +565,7 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 				}
 				vectorizeSetting := "off"
 				if vectorize {
-					for versionPrefix, vectorizeOption := range vectorizeOptionByVersionPrefix {
-						if strings.HasPrefix(version, versionPrefix) {
-							vectorizeSetting = vectorizeOption
-							break
-						}
-					}
-					if vectorizeSetting == "off" {
-						t.Fatal("unexpectedly didn't find the corresponding vectorize option for ON case")
-					}
+					vectorizeSetting = vectorizeOnOptionByVersion[version]
 				}
 				cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
 					"--max-ops=%d --queries=%d --vectorize=%s {pgurl:1-%d}",
@@ -641,7 +640,7 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 							queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime,
 							vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
 				}
-				if vecOnTime >= vecOnSlowerFailFactor*vecOffTime {
+				if vecOnTime >= slownessThresholdByVersion[version]*vecOffTime {
 					t.Fatal(fmt.Sprintf(
 						"[q%d] vec ON is slower by %.2f%% than vec OFF\n"+
 							"vec ON times: %v\nvec OFF times: %v",
@@ -661,10 +660,12 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 		},
 	})
 	r.Add(testSpec{
-		Name:       "tpchvec/disk",
-		Owner:      OwnerSQLExec,
-		Cluster:    makeClusterSpec(nodeCount),
-		MinVersion: "v19.2.0",
+		Name:    "tpchvec/disk",
+		Owner:   OwnerSQLExec,
+		Cluster: makeClusterSpec(nodeCount),
+		// 19.2 version doesn't have disk spilling nor memory monitoring, so
+		// there is no point in running this config on that version.
+		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCHVec(ctx, t, c, stressDiskSpilling)
 		},
