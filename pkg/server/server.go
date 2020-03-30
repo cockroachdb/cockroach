@@ -1613,9 +1613,10 @@ func (s *Server) Start(ctx context.Context) error {
 	s.refreshSettings()
 
 	raven.SetTagsContext(map[string]string{
-		"cluster":   s.ClusterID().String(),
-		"node":      s.NodeID().String(),
-		"server_id": fmt.Sprintf("%s-%s", s.ClusterID().Short(), s.NodeID()),
+		"cluster":     s.ClusterID().String(),
+		"node":        s.NodeID().String(),
+		"server_id":   fmt.Sprintf("%s-%s", s.ClusterID().Short(), s.NodeID()),
+		"engine_type": s.cfg.StorageEngine.String(),
 	})
 
 	// We can now add the node registry.

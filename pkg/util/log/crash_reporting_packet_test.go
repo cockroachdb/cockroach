@@ -113,7 +113,7 @@ func TestCrashReportingPacket(t *testing.T) {
 			message += ": " + panicPre
 			return message
 		}()},
-		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 10, func() string {
+		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 11, func() string {
 			message := prefix
 			// gccgo stack traces are different in the presence of function literals.
 			if runtime.Compiler == "gccgo" {
