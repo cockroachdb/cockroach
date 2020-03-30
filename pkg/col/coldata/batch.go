@@ -14,8 +14,10 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/errors"
 )
 
 // Batch is the type that columnar operators receive and produce. It
@@ -64,37 +66,33 @@ type Batch interface {
 
 var _ Batch = &MemBatch{}
 
-const (
-	// MinBatchSize is the minimum acceptable size of batches.
-	MinBatchSize = 3
-	// MaxBatchSize is the maximum acceptable size of batches.
-	MaxBatchSize = 4096
-)
-
 // TODO(jordan): tune.
-var batchSize = 1024
+const defaultBatchSize = 1024
+
+var batchSize int64 = defaultBatchSize
 
 // BatchSize is the maximum number of tuples that fit in a column batch.
 func BatchSize() int {
-	return batchSize
+	return int(atomic.LoadInt64(&batchSize))
 }
 
+// MaxBatchSize is the maximum acceptable size of batches.
+const MaxBatchSize = 4096
+
 // SetBatchSizeForTests modifies batchSize variable. It should only be used in
-// tests.
-func SetBatchSizeForTests(newBatchSize int) {
+// tests. batch sizes greater than MaxBatchSize will return an error.
+func SetBatchSizeForTests(newBatchSize int) error {
 	if newBatchSize > MaxBatchSize {
-		panic(
-			fmt.Sprintf("requested batch size %d is greater than MaxBatchSize %d",
-				newBatchSize, MaxBatchSize),
-		)
+		return errors.Errorf("batch size %d greater than maximum allowed batch size %d", newBatchSize, MaxBatchSize)
 	}
-	if newBatchSize < MinBatchSize {
-		panic(
-			fmt.Sprintf("requested batch size %d is smaller than MinBatchSize %d",
-				newBatchSize, MinBatchSize),
-		)
-	}
-	batchSize = newBatchSize
+	atomic.SwapInt64(&batchSize, int64(newBatchSize))
+	return nil
+}
+
+// ResetBatchSizeForTests resets the batchSize variable to the default batch
+// size. It should only be used in tests.
+func ResetBatchSizeForTests() {
+	atomic.SwapInt64(&batchSize, defaultBatchSize)
 }
 
 // NewMemBatch allocates a new in-memory Batch. A coltypes.Unknown type
