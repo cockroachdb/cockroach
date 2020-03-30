@@ -32,12 +32,8 @@ func TestLogic(t *testing.T) {
 	RunLogicTest(t, "testdata/logic_test/[^.]*")
 }
 
-// TestSqlLiteLogic runs the subset of SqlLite logic tests that do not require
-// support for correlated subqueries. The heuristic planner does not support
-// correlated subqueries, so until that is fully deprecated, it can only run
-// this subset.
-//
-// See the comments for runSQLLiteLogicTest for more detail on these tests.
+// TestSqlLiteLogic runs the supported SqlLite logic tests. See the comments
+// for runSQLLiteLogicTest for more detail on these tests.
 func TestSqlLiteLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runSQLLiteLogicTest(t,
@@ -49,6 +45,14 @@ func TestSqlLiteLogic(t *testing.T) {
 		"/test/index/orderby_nosort/*/*.test",
 		"/test/index/view/*/*.test",
 
+		"/test/select1.test",
+		"/test/select2.test",
+		"/test/select3.test",
+		"/test/select4.test",
+
+		// TODO(andyk): No support for join ordering yet, so this takes too long.
+		// "/test/select5.test",
+
 		// TODO(pmattis): Incompatibilities in numeric types.
 		// For instance, we type SUM(int) as a decimal since all of our ints are
 		// int64.
@@ -59,24 +63,6 @@ func TestSqlLiteLogic(t *testing.T) {
 		// "/test/random/aggregates/*.test",
 		// "/test/random/groupby/*.test",
 		// "/test/random/select/*.test",
-	)
-}
-
-// TestSqlLiteCorrelatedLogic runs the subset of SqlLite logic tests that
-// require support for correlated subqueries. The cost-based optimizer has this
-// support, whereas the heuristic planner does not.
-//
-// See the comments for runSQLLiteLogicTest for more detail on these tests.
-func TestSqlLiteCorrelatedLogic(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	runSQLLiteLogicTest(t,
-		"/test/select1.test",
-		"/test/select2.test",
-		"/test/select3.test",
-		"/test/select4.test",
-
-		// TODO(andyk): No support for join ordering yet, so this takes too long.
-		// "/test/select5.test",
 	)
 }
 
