@@ -29,3 +29,6 @@
 [submodule "c-deps/libedit"]
 	path = c-deps/libedit
 	url = https://github.com/cockroachdb/libedit.git
+[submodule "c-deps/geos"]
+	path = c-deps/geos
+	url = https://github.com/libgeos/geos.git

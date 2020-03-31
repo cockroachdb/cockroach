@@ -137,6 +137,8 @@ vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cock
 # are nested, as they are here.)
 mkdir -p "${cockroach_toplevel}"/bin{.docker_amd64,}
 vols="${vols} --volume=${cockroach_toplevel}/bin.docker_amd64:/go/src/github.com/cockroachdb/cockroach/bin${delegated_volume_mode}"
+mkdir -p "${cockroach_toplevel}"/lib{.docker_amd64,}
+vols="${vols} --volume=${cockroach_toplevel}/lib.docker_amd64:/go/src/github.com/cockroachdb/cockroach/lib${delegated_volume_mode}"
 
 mkdir -p "${gocache}"/docker/bin
 vols="${vols} --volume=${gocache}/docker/bin:/go/bin${delegated_volume_mode}"
