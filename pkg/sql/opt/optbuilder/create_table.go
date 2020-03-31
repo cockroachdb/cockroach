@@ -102,7 +102,8 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 		input = b.factory.ConstructZeroValues()
 	}
 
-	expr := b.factory.ConstructCreateTable(
+	outScope = b.allocScope()
+	outScope.expr = b.factory.ConstructCreateTable(
 		input,
 		&memo.CreateTablePrivate{
 			Schema:    schID,
@@ -110,5 +111,5 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 			Syntax:    ct,
 		},
 	)
-	return &scope{builder: b, expr: expr}
+	return outScope
 }
