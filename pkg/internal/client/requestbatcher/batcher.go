@@ -259,23 +259,23 @@ func (b *RequestBatcher) sendDone(ba *batch) {
 }
 
 func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
-	var br *roachpb.BatchResponse
-	send := func(ctx context.Context) error {
-		var pErr *roachpb.Error
-		if br, pErr = b.cfg.Sender.Send(ctx, ba.batchRequest()); pErr != nil {
-			return pErr.GoError()
-		}
-		return nil
-	}
-	if !ba.sendDeadline.IsZero() {
-		actualSend := send
-		send = func(context.Context) error {
-			return contextutil.RunWithTimeout(
-				ctx, b.sendBatchOpName, timeutil.Until(ba.sendDeadline), actualSend)
-		}
-	}
 	b.cfg.Stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer b.sendDone(ba)
+		var br *roachpb.BatchResponse
+		send := func(ctx context.Context) error {
+			var pErr *roachpb.Error
+			if br, pErr = b.cfg.Sender.Send(ctx, ba.batchRequest()); pErr != nil {
+				return pErr.GoError()
+			}
+			return nil
+		}
+		if !ba.sendDeadline.IsZero() {
+			actualSend := send
+			send = func(context.Context) error {
+				return contextutil.RunWithTimeout(
+					ctx, b.sendBatchOpName, timeutil.Until(ba.sendDeadline), actualSend)
+			}
+		}
 		err := send(ctx)
 		for i, r := range ba.reqs {
 			res := Response{}
