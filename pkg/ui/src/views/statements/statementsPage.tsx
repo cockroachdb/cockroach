@@ -141,6 +141,18 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     const { history } = this.props;
     history.location.pathname = `/statements/${app.value}`;
     history.replace(history.location);
+    this.resetPagination();
+  }
+
+  resetPagination = () => {
+    this.setState((prevState) => {
+      return {
+        pagination: {
+          current: 1,
+          pageSize: prevState.pagination.pageSize,
+        },
+      };
+    });
   }
 
   componentDidMount() {
@@ -176,7 +188,8 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
   }
 
   onSubmitSearchField = (search: string) => {
-    this.setState({ pagination: { ...this.state.pagination, current: 1 }, search });
+    this.setState({ search });
+    this.resetPagination();
     this.syncHistory({
       "q": search,
     });
