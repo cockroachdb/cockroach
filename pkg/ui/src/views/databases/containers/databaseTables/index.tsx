@@ -147,7 +147,7 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
               <SummaryBar>
                 <SummaryHeadlineStat
                   title="Database Size"
-                  tooltip="Approximate total disk size of this database across all replicas."
+                  tooltip="Approximate total disk size of this database across all table replicas."
                   value={this.totalSize()}
                   format={Bytes} />
                 <SummaryHeadlineStat
