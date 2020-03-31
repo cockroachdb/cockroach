@@ -20,7 +20,26 @@ describe("trackActivateDiagnostics", () => {
     sandbox.reset();
   });
 
-  it("should send a track call given a payload", () => {
+  it("should only call track once", () => {
+    const spy = sandbox.spy();
+    track(spy)("some statement");
+    assert.isTrue(spy.calledOnce);
+  });
+
+  it("should send the right event", () => {
+    const spy = sandbox.spy();
+    const expected = "Diagnostics Activation";
+
+    track(spy)("whatever");
+
+    const sent = spy.getCall(0).args[0];
+    const event = get(sent, "event");
+
+    assert.isTrue(isString(event));
+    assert.isTrue( event === expected);
+  });
+
+  it("should send the correct payload", () => {
     const spy = sandbox.spy();
     const statement = "SELECT blah from blah-blah";
 
@@ -29,7 +48,6 @@ describe("trackActivateDiagnostics", () => {
     const sent = spy.getCall(0).args[0];
     const fingerprint = get(sent, "properties.fingerprint");
 
-    assert.isTrue(spy.calledOnce);
     assert.isTrue(isString(fingerprint));
     assert.isTrue( fingerprint === statement);
   });
