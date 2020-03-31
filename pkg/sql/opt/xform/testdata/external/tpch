@@ -1789,7 +1789,6 @@ WHERE
 project
  ├── columns: avg_yearly:45
  ├── cardinality: [1 - 1]
- ├── side-effects
  ├── key: ()
  ├── fd: ()-->(45)
  ├── scalar-group-by
@@ -1856,7 +1855,7 @@ project
  │         └── sum [as=sum:44, outer=(6)]
  │              └── l_extendedprice:6
  └── projections
-      └── sum:44 / 7.0 [as=avg_yearly:45, outer=(44), side-effects]
+      └── sum:44 / 7.0 [as=avg_yearly:45, outer=(44)]
 
 # --------------------------------------------------
 # Q18

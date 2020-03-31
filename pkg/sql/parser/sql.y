@@ -4828,6 +4828,10 @@ constraint_elem:
       Actions: $10.referenceActions(),
     }
   }
+| EXCLUDE USING error
+  {
+    return unimplementedWithIssueDetail(sqllex, 46657, "add constraint exclude using")
+  }
 
 
 create_as_opt_col_list:
