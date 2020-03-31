@@ -88,6 +88,14 @@ var TurnAutoStatsOnUseCounter = telemetry.GetCounterOnce("sql.plan.automatic-sta
 // collection is explicitly disabled.
 var TurnAutoStatsOffUseCounter = telemetry.GetCounterOnce("sql.plan.automatic-stats.disabled")
 
+// CancelQueriesUseCounter is to be incremented whenever CANCEL QUERY or
+// CANCEL QUERIES is run.
+var CancelQueriesUseCounter = telemetry.GetCounterOnce("sql.session.cancel-queries")
+
+// CancelSessionsUseCounter is to be incremented whenever CANCEL SESSION or
+// CANCEL SESSIONS is run.
+var CancelSessionsUseCounter = telemetry.GetCounterOnce("sql.session.cancel-sessions")
+
 // We can't parameterize these telemetry counters, so just make a bunch of
 // buckets for setting the join reorder limit since the range of reasonable
 // values for the join reorder limit is quite small.
