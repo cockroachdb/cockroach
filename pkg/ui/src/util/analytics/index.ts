@@ -9,4 +9,5 @@
 // licenses/APL.txt.
 
 export { default as trackActivateDiagnostics } from "./trackActivateDiagnostics";
+export { default as trackDiagnosticsModalOpen } from "./trackDiagnosticsModalOpen";
 export { default as trackSubnavSelection } from "./trackStatementDetailsSubnavSelection";
