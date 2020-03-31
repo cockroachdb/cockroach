@@ -13,6 +13,8 @@ import cn from "classnames";
 
 import { Text, TextTypes } from "src/components";
 import "./textInput.styl";
+import Eye from "assets/eye.svg";
+import { Button } from "../button";
 
 interface TextInputProps {
   onChange: (value: string) => void;
@@ -21,9 +23,12 @@ interface TextInputProps {
   placeholder?: string;
   className?: string;
   name?: string;
+  type?: string;
+  label?: string;
   // validate function returns validation message
   // in case validation failed or undefined if successful.
   validate?: (value: string) => string | undefined;
+  autoComplete?: string;
 }
 
 interface TextInputState {
@@ -32,12 +37,14 @@ interface TextInputState {
   isDirty: boolean;
   isTouched: boolean;
   needValidation: boolean;
+  showPassword?: boolean;
 }
 
 export class TextInput extends React.Component<TextInputProps, TextInputState> {
   static defaultProps = {
     initialValue: "",
     validate: () => true,
+    autoComplete: "on",
   };
 
   constructor(props: TextInputProps) {
@@ -49,6 +56,7 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
       isDirty: false,
       isTouched: false,
       needValidation: false,
+      showPassword: false,
     };
   }
 
@@ -82,10 +90,23 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
     });
   }
 
+  togglePassword = () => {
+    this.setState({
+      showPassword: !this.state.showPassword,
+    });
+  }
+
+  renderPasswordIcon = () => (
+    <Button type="flat" onClick={this.togglePassword} className="crl-button__show-password">
+      <img src={Eye} alt="Show password" />
+    </Button>
+  )
+
   render() {
-    const { initialValue, placeholder, className, name, value } = this.props;
-    const { isDirty, isValid, validationMessage } = this.state;
+    const { initialValue, placeholder, className, name, label, value, type, autoComplete } = this.props;
+    const { isDirty, isValid, validationMessage, showPassword } = this.state;
     const textValue = isDirty ? value : initialValue;
+    const inputType = type === "password" ? showPassword ? "text" : "password" : type;
 
     const classes = cn(
       className,
@@ -96,16 +117,19 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
     );
     return (
       <div className="crl-text-input__wrapper">
+        {label && <label htmlFor={name} className="crl-text-input__label">{label}</label>}
         <input
+          id="name"
           name={name}
-          type="text"
+          type={inputType}
           value={textValue}
           placeholder={placeholder}
           className={classes}
           onChange={this.handleOnTextChange}
           onBlur={this.handleOnBlur}
-          autoComplete="off"
+          autoComplete={autoComplete}
         />
+        {type === "password" && this.renderPasswordIcon()}
         {
           !isValid && (
             <div className="crl-text-input__validation-container">
