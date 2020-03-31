@@ -523,7 +523,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
 
-%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCREMENT INCREMENTAL
+%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE INCREMENT INCREMENTAL
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
 %token <str> INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
@@ -4178,7 +4178,7 @@ pause_stmt:
 // Table constraints:
 //    PRIMARY KEY ( <colnames...> )
 //    FOREIGN KEY ( <colnames...> ) REFERENCES <tablename> [( <colnames...> )] [ON DELETE {NO ACTION | RESTRICT}] [ON UPDATE {NO ACTION | RESTRICT}]
-//    UNIQUE ( <colnames... ) [STORING ( <colnames...> )] [<interleave>]
+//    UNIQUE ( <colnames... ) [{STORING | INCLUDE | COVERING} ( <colnames...> )] [<interleave>]
 //    CHECK ( <expr> )
 //
 // Column qualifiers:
@@ -4745,6 +4745,7 @@ opt_deferrable:
 storing:
   COVERING
 | STORING
+| INCLUDE
 
 // TODO(pmattis): It would be nice to support a syntax like STORING
 // ALL or STORING (*). The syntax addition is straightforward, but we
@@ -9354,6 +9355,7 @@ unreserved_keyword:
 | HOUR
 | IMMEDIATE
 | IMPORT
+| INCLUDE
 | INCREMENT
 | INCREMENTAL
 | INDEXES
