@@ -77,7 +77,7 @@ type topKSorter struct {
 	// comparators stores one comparator per ordering column.
 	comparators []vecComparator
 	// topK stores the top K rows. It is not sorted internally.
-	topK coldata.Batch
+	topK *appendOnlyBufferedBatch
 	// heap is a max heap which stores indices into topK.
 	heap []int
 	// sel is a selection vector which specifies an ordering on topK.
@@ -93,7 +93,9 @@ type topKSorter struct {
 
 func (t *topKSorter) Init() {
 	t.input.Init()
-	t.topK = t.allocator.NewMemBatchWithSize(t.inputTypes, 0 /* size */)
+	t.topK = newAppendOnlyBufferedBatch(
+		t.allocator, t.inputTypes, 0, /* initialSize */
+	)
 	t.comparators = make([]vecComparator, len(t.inputTypes))
 	for i := range t.inputTypes {
 		typ := t.inputTypes[i]
@@ -130,10 +132,8 @@ func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
 func (t *topKSorter) spool(ctx context.Context) {
 	// Fill up t.topK by spooling up to K rows from the input.
 	t.inputBatch = t.input.Next(ctx)
-	spooledRows := 0
 	remainingRows := int(t.k)
 	for remainingRows > 0 && t.inputBatch.Length() > 0 {
-		toLength := spooledRows
 		fromLength := t.inputBatch.Length()
 		if remainingRows < t.inputBatch.Length() {
 			// t.topK will be full after this batch.
@@ -141,22 +141,7 @@ func (t *topKSorter) spool(ctx context.Context) {
 		}
 		t.firstUnprocessedTupleIdx = fromLength
 		t.allocator.PerformOperation(t.topK.ColVecs(), func() {
-			for i := range t.inputTypes {
-				destVec := t.topK.ColVec(i)
-				vec := t.inputBatch.ColVec(i)
-				colType := t.inputTypes[i]
-				destVec.Append(
-					coldata.SliceArgs{
-						ColType:   colType,
-						Src:       vec,
-						Sel:       t.inputBatch.Selection(),
-						DestIdx:   toLength,
-						SrcEndIdx: fromLength,
-					},
-				)
-			}
-			spooledRows += fromLength
-			t.topK.SetLength(spooledRows)
+			t.topK.append(t.inputBatch, 0 /* startIdx */, fromLength)
 		})
 		remainingRows -= fromLength
 		if fromLength == t.inputBatch.Length() {

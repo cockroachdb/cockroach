@@ -136,3 +136,79 @@ func (p *partitionerToOperator) Next(ctx context.Context) coldata.Batch {
 	}
 	return p.batch
 }
+
+func newAppendOnlyBufferedBatch(
+	allocator *Allocator, typs []coltypes.T, initialSize int,
+) *appendOnlyBufferedBatch {
+	batch := allocator.NewMemBatchWithSize(typs, initialSize)
+	return &appendOnlyBufferedBatch{
+		Batch:   batch,
+		colVecs: batch.ColVecs(),
+		typs:    typs,
+	}
+}
+
+// appendOnlyBufferedBatch is a wrapper around coldata.Batch that should be
+// used by operators that buffer many tuples into a single batch by appending
+// to it. It stores the length of the batch separately and intercepts calls to
+// Length() and SetLength() in order to avoid updating offsets on vectors of
+// coltypes.Bytes type - which would result in a quadratic behavior - because
+// it is not necessary since coldata.Vec.Append maintains the correct offsets.
+//
+// Note: "appendOnly" in the name indicates that the tuples should *only* be
+// appended to the vectors (which can be done via explicit Vec.Append calls or
+// using utility append() method); however, this batch prohibits appending and
+// replacing of the vectors themselves.
+type appendOnlyBufferedBatch struct {
+	coldata.Batch
+
+	length  int
+	colVecs []coldata.Vec
+	typs    []coltypes.T
+}
+
+var _ coldata.Batch = &appendOnlyBufferedBatch{}
+
+func (b *appendOnlyBufferedBatch) Length() int {
+	return b.length
+}
+
+func (b *appendOnlyBufferedBatch) SetLength(n int) {
+	b.length = n
+}
+
+func (b *appendOnlyBufferedBatch) ColVec(i int) coldata.Vec {
+	return b.colVecs[i]
+}
+
+func (b *appendOnlyBufferedBatch) ColVecs() []coldata.Vec {
+	return b.colVecs
+}
+
+func (b *appendOnlyBufferedBatch) AppendCol(coldata.Vec) {
+	execerror.VectorizedInternalPanic("AppendCol is prohibited on appendOnlyBufferedBatch")
+}
+
+func (b *appendOnlyBufferedBatch) ReplaceCol(coldata.Vec, int) {
+	execerror.VectorizedInternalPanic("ReplaceCol is prohibited on appendOnlyBufferedBatch")
+}
+
+// append is a helper method that appends all tuples with indices in range
+// [startIdx, endIdx) from batch (paying attention to the selection vector)
+// into b.
+// NOTE: this does *not* perform memory accounting.
+func (b *appendOnlyBufferedBatch) append(batch coldata.Batch, startIdx, endIdx int) {
+	for i, colVec := range b.colVecs {
+		colVec.Append(
+			coldata.SliceArgs{
+				ColType:     b.typs[i],
+				Src:         batch.ColVec(i),
+				Sel:         batch.Selection(),
+				DestIdx:     b.length,
+				SrcStartIdx: startIdx,
+				SrcEndIdx:   endIdx,
+			},
+		)
+	}
+	b.length += endIdx - startIdx
+}
