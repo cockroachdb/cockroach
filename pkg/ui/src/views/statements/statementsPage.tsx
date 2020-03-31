@@ -47,7 +47,7 @@ import "./statements.styl";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
-interface StatementsPageProps {
+interface OwnProps {
   statements: AggregateStatistics[];
   statementsError: Error | null;
   apps: string[];
@@ -62,20 +62,22 @@ type PaginationSettings = {
   current: number;
 };
 
-interface StatementsPageState {
+export interface StatementsPageState {
   sortSetting: SortSetting;
   pagination: PaginationSettings;
   search?: string;
 }
 
-export class StatementsPage extends React.Component<StatementsPageProps & RouteComponentProps<any>, StatementsPageState> {
+export type StatementsPageProps = OwnProps & RouteComponentProps<any>;
+
+export class StatementsPage extends React.Component<StatementsPageProps, StatementsPageState> {
   activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
 
-  constructor(props: StatementsPageProps & RouteComponentProps<any>) {
+  constructor(props: StatementsPageProps) {
     super(props);
     const defaultState = {
       sortSetting: {
-        sortKey: 6, // Latency column is default for sorting
+        sortKey: 3, // Sort by Execution Count column as default option
         ascending: false,
       },
       pagination: {
