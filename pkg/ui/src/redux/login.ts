@@ -208,8 +208,14 @@ export function doLogin(username: string, password: string): ThunkAction<Promise
     });
     return userLogin(loginReq)
       .then(
-        () => { dispatch(loginSuccess(username)); },
-        (err) => { dispatch(loginFailure(err)); },
+        (res) => {
+          dispatch(loginSuccess(username));
+          return res;
+        },
+        (err) => {
+          dispatch(loginFailure(err));
+          return err;
+        },
       );
   };
 }
