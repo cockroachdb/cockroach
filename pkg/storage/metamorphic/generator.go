@@ -161,6 +161,7 @@ type metaTestRunner struct {
 	valueGenerator  *valueGenerator
 	pastTSGenerator *pastTSGenerator
 	nextTSGenerator *nextTSGenerator
+	floatGenerator  *floatGenerator
 	openIters       map[iteratorID]iteratorInfo
 	openBatches     map[readWriterID]storage.ReadWriter
 	openTxns        map[txnID]*roachpb.Transaction
@@ -179,6 +180,7 @@ func (m *metaTestRunner) init() {
 	var err error
 	m.engine, err = m.engineImpls[0].create(m.path, m.seed)
 	if err != nil {
+		m.engine = nil
 		m.t.Fatal(err)
 	}
 
@@ -216,6 +218,7 @@ func (m *metaTestRunner) init() {
 			tsGenerator: &m.tsGenerator,
 		},
 	}
+	m.floatGenerator = &floatGenerator{rng: m.rng}
 
 	m.opGenerators = map[operandType]operandGenerator{
 		operandTransaction: m.txnGenerator,
@@ -225,6 +228,7 @@ func (m *metaTestRunner) init() {
 		operandNextTS:      m.nextTSGenerator,
 		operandValue:       m.valueGenerator,
 		operandIterator:    m.iterGenerator,
+		operandFloat:       m.floatGenerator,
 	}
 
 	m.nameToGenerator = make(map[string]*opGenerator)
@@ -268,8 +272,10 @@ func (m *metaTestRunner) closeAll() {
 	m.openIters = make(map[iteratorID]iteratorInfo)
 	m.openBatches = make(map[readWriterID]storage.ReadWriter)
 	m.openTxns = make(map[txnID]*roachpb.Transaction)
-	m.engine.Close()
-	m.engine = nil
+	if m.engine != nil {
+		m.engine.Close()
+		m.engine = nil
+	}
 }
 
 // Getters and setters for txns, batches, and iterators.
@@ -350,6 +356,7 @@ func (m *metaTestRunner) restart() (string, string) {
 	var err error
 	m.engine, err = m.engineImpls[m.curEngine].create(m.path, m.seed)
 	if err != nil {
+		m.engine = nil
 		m.t.Fatal(err)
 	}
 	return oldEngineName, m.engineImpls[m.curEngine].name
