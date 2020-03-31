@@ -108,6 +108,10 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					},
 					ParentID: myTableID,
 				}
+				myTableDesc.Indexes = myTableDesc.Indexes[:0]
+				myTableDesc.GCMutations = append(myTableDesc.GCMutations, sqlbase.TableDescriptor_GCDescriptorMutation{
+					IndexID: sqlbase.IndexID(2),
+				})
 			case TABLE:
 				details = jobspb.SchemaChangeGCDetails{
 					Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
@@ -117,6 +121,8 @@ func TestSchemaChangeGCJob(t *testing.T) {
 						},
 					},
 				}
+				myTableDesc.State = sqlbase.TableDescriptor_DROP
+				myTableDesc.DropTime = dropTime
 			case DATABASE:
 				details = jobspb.SchemaChangeGCDetails{
 					Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
@@ -131,6 +137,23 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					},
 					ParentID: myDBID,
 				}
+				myTableDesc.State = sqlbase.TableDescriptor_DROP
+				myTableDesc.DropTime = dropTime
+				myOtherTableDesc.State = sqlbase.TableDescriptor_DROP
+				myOtherTableDesc.DropTime = dropTime
+			}
+
+			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				descKey := sqlbase.MakeDescMetadataKey(myTableID)
+				descDesc := sqlbase.WrapDescriptor(myTableDesc)
+				b.Put(descKey, descDesc)
+				descKey2 := sqlbase.MakeDescMetadataKey(myOtherTableID)
+				descDesc2 := sqlbase.WrapDescriptor(myOtherTableDesc)
+				b.Put(descKey2, descDesc2)
+				return txn.Run(ctx, b)
+			}); err != nil {
+				t.Fatal(err)
 			}
 
 			jobRecord := jobs.Record{
@@ -153,34 +176,6 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			resultsCh := make(chan tree.Datums)
 			job, _, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, jobRecord)
 			if err != nil {
-				t.Fatal(err)
-			}
-
-			switch dropItem {
-			case INDEX:
-				myTableDesc.Indexes = myTableDesc.Indexes[:0]
-				myTableDesc.GCMutations = append(myTableDesc.GCMutations, sqlbase.TableDescriptor_GCDescriptorMutation{
-					IndexID: sqlbase.IndexID(2),
-				})
-			case DATABASE:
-				myOtherTableDesc.State = sqlbase.TableDescriptor_DROP
-				myOtherTableDesc.DropTime = dropTime
-				fallthrough
-			case TABLE:
-				myTableDesc.State = sqlbase.TableDescriptor_DROP
-				myTableDesc.DropTime = dropTime
-			}
-
-			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				b := txn.NewBatch()
-				descKey := sqlbase.MakeDescMetadataKey(myTableID)
-				descDesc := sqlbase.WrapDescriptor(myTableDesc)
-				b.Put(descKey, descDesc)
-				descKey2 := sqlbase.MakeDescMetadataKey(myOtherTableID)
-				descDesc2 := sqlbase.WrapDescriptor(myOtherTableDesc)
-				b.Put(descKey2, descDesc2)
-				return txn.Run(ctx, b)
-			}); err != nil {
 				t.Fatal(err)
 			}
 
