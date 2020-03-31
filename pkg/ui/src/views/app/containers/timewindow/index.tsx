@@ -89,7 +89,7 @@ class TimeWindowManager extends React.Component<TimeWindowManagerProps, TimeWind
    */
   setWindow(props: TimeWindowManagerProps) {
     if (!props.timeWindow.scale.windowEnd) {
-      if (!props.timeWindow.useTimeRage) {
+      if (!props.timeWindow.useTimeRange) {
         const now = props.now ? props.now() : moment();
         props.setTimeWindow({
           start: now.clone().subtract(props.timeWindow.scale.windowSize),
