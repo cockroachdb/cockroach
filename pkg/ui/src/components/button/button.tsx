@@ -23,10 +23,11 @@ export interface ButtonProps {
   iconPosition?: "left" | "right";
   onClick?: (event: React.MouseEvent<HTMLElement>) => void;
   className?: string;
+  buttonType?: "button" | "submit" | "reset";
 }
 
 export function Button(props: ButtonProps) {
-  const { children, type, disabled, size, icon, iconPosition, onClick, className } = props;
+  const { children, type, disabled, size, icon, iconPosition, onClick, className, buttonType } = props;
 
   const rootStyles = cn(
     "crl-button",
@@ -54,6 +55,7 @@ export function Button(props: ButtonProps) {
       onClick={onClick}
       className={rootStyles}
       disabled={disabled}
+      type={buttonType}
     >
       <div className="crl-button__container">
         { iconPosition === "left" && renderIcon() }
@@ -73,6 +75,7 @@ Button.defaultProps = {
   size: "default",
   className: "",
   iconPosition: "left",
+  buttonType: "button",
 };
 
 // tslint:disable-next-line: variable-name
