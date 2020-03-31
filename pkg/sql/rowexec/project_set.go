@@ -290,7 +290,10 @@ func (ps *projectSetProcessor) ConsumerClosed() {
 
 // ChildCount is part of the execinfra.OpNode interface.
 func (ps *projectSetProcessor) ChildCount(verbose bool) int {
-	return 1
+	if _, ok := ps.input.(execinfra.OpNode); ok {
+		return 1
+	}
+	return 0
 }
 
 // Child is part of the execinfra.OpNode interface.

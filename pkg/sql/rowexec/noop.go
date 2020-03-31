@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -29,6 +30,7 @@ type noopProcessor struct {
 
 var _ execinfra.Processor = &noopProcessor{}
 var _ execinfra.RowSource = &noopProcessor{}
+var _ execinfra.OpNode = &noopProcessor{}
 
 const noopProcName = "noop"
 
@@ -88,4 +90,23 @@ func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetada
 func (n *noopProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	n.InternalClose()
+}
+
+// ChildCount is part of the execinfra.OpNode interface.
+func (n *noopProcessor) ChildCount(bool) int {
+	if _, ok := n.input.(execinfra.OpNode); ok {
+		return 1
+	}
+	return 0
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (n *noopProcessor) Child(nth int, _ bool) execinfra.OpNode {
+	if nth == 0 {
+		if n, ok := n.input.(execinfra.OpNode); ok {
+			return n
+		}
+		panic("input to noop is not an execinfra.OpNode")
+	}
+	panic(fmt.Sprintf("invalid index %d", nth))
 }

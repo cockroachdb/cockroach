@@ -383,7 +383,10 @@ func (d *distinct) outputStatsToTrace() {
 
 // ChildCount is part of the execinfra.OpNode interface.
 func (d *distinct) ChildCount(verbose bool) int {
-	return 1
+	if _, ok := d.input.(execinfra.OpNode); ok {
+		return 1
+	}
+	return 0
 }
 
 // Child is part of the execinfra.OpNode interface.

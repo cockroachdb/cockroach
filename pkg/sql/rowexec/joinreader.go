@@ -696,7 +696,10 @@ func (jr *joinReader) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetad
 
 // ChildCount is part of the execinfra.OpNode interface.
 func (jr *joinReader) ChildCount(verbose bool) int {
-	return 1
+	if _, ok := jr.input.(execinfra.OpNode); ok {
+		return 1
+	}
+	return 0
 }
 
 // Child is part of the execinfra.OpNode interface.

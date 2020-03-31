@@ -855,7 +855,12 @@ func shouldShortCircuit(storedSide joinSide, joinType sqlbase.JoinType) bool {
 
 // ChildCount is part of the execinfra.OpNode interface.
 func (h *hashJoiner) ChildCount(verbose bool) int {
-	return 2
+	if _, ok := h.leftSource.(execinfra.OpNode); ok {
+		if _, ok := h.rightSource.(execinfra.OpNode); ok {
+			return 2
+		}
+	}
+	return 0
 }
 
 // Child is part of the execinfra.OpNode interface.
