@@ -86,7 +86,7 @@ add-discovered r=<name> k=<key> txn=<name>
 ----
 <error string>
 
- Adds a discovered lock that is disovered by the named request.
+ Adds a discovered lock that is discovered by the named request.
 
 dequeue r=<name>
 ----
