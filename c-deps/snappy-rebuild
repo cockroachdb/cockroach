@@ -1,4 +1,4 @@
 Bump the version below when changing snappy configure flags. Search for "BUILD
 ARTIFACT CACHING" in build/common.mk for rationale.
 
-6
+7

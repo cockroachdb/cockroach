@@ -191,6 +191,11 @@ RUN git clone git://git.sv.gnu.org/sed \
 
 # xenial installs cmake 3.5.1. We need a newer version. Run this step
 # after the llvm/cross-compile step which is exceedingly slow.
+#
+# NOTE: When upgrading cmake, bump the rebuild counters in
+# c-deps/*-rebuild to force recreating the makefiles. This prevents
+# strange build errors caused by those makefiles depending on the
+# installed version of cmake.
 RUN curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.17.0/cmake-3.17.0-Linux-x86_64.tar.gz -o cmake.tar.gz \
  && echo 'b44685227b9f9be103e305efa2075a8ccf2415807fbcf1fc192da4d36aacc9f5 cmake.tar.gz' | sha256sum -c - \
  && tar --strip-components=1 -C /usr -xzf cmake.tar.gz \
