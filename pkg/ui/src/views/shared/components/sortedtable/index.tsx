@@ -15,6 +15,11 @@ import React from "react";
 import { createSelector } from "reselect";
 import { ExpandableConfig, SortableColumn, SortableTable, SortSetting } from "src/views/shared/components/sortabletable";
 
+export interface ISortedTablePagination {
+  current: number;
+  pageSize: number;
+}
+
 /**
  * ColumnDescriptor is used to describe metadata about an individual column
  * in a SortedTable.
@@ -74,10 +79,7 @@ interface SortedTableProps<T> {
   drawer?: boolean;
   firstCellBordered?: boolean;
   renderNoResult?: React.ReactNode;
-  pagination?: {
-    current: number;
-    pageSize: number;
-  };
+  pagination?: ISortedTablePagination;
 }
 
 interface SortedTableState {
@@ -199,7 +201,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
   paginatedData = (sortData?: T[]) => {
     const { pagination, data } = this.props;
     if (!pagination) {
-      return data;
+      return sortData || data;
     }
     const currentDefault = pagination.current - 1;
     const start = (currentDefault * pagination.pageSize);
