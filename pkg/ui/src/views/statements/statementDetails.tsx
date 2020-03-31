@@ -48,7 +48,7 @@ import {
   selectDiagnosticsReportsCountByStatementFingerprint,
 } from "src/redux/statements/statementsSelectors";
 import { Button, BackIcon } from "oss/src/components/button";
-import { analytics } from "src/redux/analytics";
+import { trackSubnavSelection } from "src/util/analytics";
 
 const { TabPane } = Tabs;
 
@@ -147,18 +147,6 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
     );
   }
 }
-
-const handleTabChange = (key: string) => {
-  // const tabInfo = find(tabPaneIndex, { key: key });
-  const payload = {
-    event: "SubNavigation Selection",
-    properties: {
-      selection: key,
-    },
-  };
-
-  analytics.track(payload);
-};
 
 export class StatementDetails extends React.Component<StatementDetailsProps, StatementDetailsState> {
 
@@ -261,7 +249,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
     const logicalPlan = stats.sensitive_info && stats.sensitive_info.most_recent_plan_description;
     const duration = (v: number) => Duration(v * 1e9);
     return (
-      <Tabs defaultActiveKey="1" className="cockroach--tabs" onChange={handleTabChange}>
+      <Tabs defaultActiveKey="1" className="cockroach--tabs" onChange={trackSubnavSelection}>
         <TabPane tab="Overview" key="overview">
           <Row gutter={16}>
             <Col className="gutter-row" span={16}>
