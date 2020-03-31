@@ -117,7 +117,7 @@ func (ds *DistSender) divideAndSendRangeFeedToRanges(
 			break
 		}
 	}
-	return ri.Error().GoError()
+	return ri.Error()
 }
 
 // partialRangeFeed establishes a RangeFeed to the range specified by desc. It

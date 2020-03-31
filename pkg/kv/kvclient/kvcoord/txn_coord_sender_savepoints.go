@@ -41,9 +41,8 @@ type savepoint struct {
 	seqNum enginepb.TxnSeq
 
 	// txnSpanRefresher fields.
-	refreshSpans     []roachpb.Span
-	refreshInvalid   bool
-	refreshSpanBytes int64
+	refreshSpans   []roachpb.Span
+	refreshInvalid bool
 }
 
 var _ kv.SavepointToken = (*savepoint)(nil)

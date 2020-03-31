@@ -8,11 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import classNames from "classnames";
-import _ from "lodash";
-import getHighlightedText from "oss/src/util/highlightedText";
 import React from "react";
+import classNames from "classnames";
+import map from "lodash/map";
+import isUndefined from "lodash/isUndefined";
+import times from "lodash/times";
+
+import getHighlightedText from "oss/src/util/highlightedText";
 import { DrawerComponent } from "../drawer";
+import { analytics } from "src/redux/analytics";
+
 import "./sortabletable.styl";
 
 /**
@@ -172,7 +177,7 @@ export class SortableTable extends React.Component<TableProps> {
         }}
       >
         {expandableConfig ? this.expansionControl(expanded) : null}
-        {_.map(columns, (c: SortableColumn, colIndex: number) => {
+        {map(columns, (c: SortableColumn, colIndex: number) => {
           return (
             <td className={classNames("sort-table__cell", { "sort-table__cell--header": firstCellBordered && colIndex === 0 }, c.className)} key={colIndex}>
               {c.cell(rowIndex)}
@@ -233,25 +238,43 @@ export class SortableTable extends React.Component<TableProps> {
     });
   }
 
+  trackTableSort = (name?: String, col?: SortableColumn, sortSetting?: SortSetting) => {
+    const tableName = name || "";
+    const columnName = col.title || "";
+    const sortDirection = (sortSetting.ascending) ? "asc" : "desc";
+
+    const payload = {
+      event: "Table Sort",
+      properties: {
+        tableName,
+        columnName,
+        sortDirection,
+      },
+    };
+
+    analytics.track(payload);
+  }
+
   render() {
-    const { sortSetting, columns, expandableConfig, drawer, firstCellBordered, count, renderNoResult } = this.props;
+    const { sortSetting, columns, expandableConfig, drawer, firstCellBordered, count, renderNoResult, className } = this.props;
     const { visible, drawerData } = this.state;
     return (
       <React.Fragment>
-        <table className={classNames("sort-table", this.props.className)}>
+        <table className={classNames("sort-table", className)}>
           <thead>
             <tr className="sort-table__row sort-table__row--header">
               {expandableConfig ? <th className="sort-table__cell" /> : null}
-              {_.map(columns, (c: SortableColumn, colIndex: number) => {
+              {map(columns, (c: SortableColumn, colIndex: number) => {
                 const classes = ["sort-table__cell"];
                 const style = {
                   textAlign: c.titleAlign,
                 };
                 let onClick: (e: any) => void = undefined;
 
-                if (!_.isUndefined(c.sortKey)) {
+                if (!isUndefined(c.sortKey)) {
                   classes.push("sort-table__cell--sortable");
                   onClick = () => {
+                    this.trackTableSort(className, c, sortSetting);
                     this.clickSort(c.sortKey);
                   };
                   if (c.sortKey === sortSetting.sortKey) {
@@ -268,14 +291,14 @@ export class SortableTable extends React.Component<TableProps> {
                 return (
                   <th className={classNames(classes)} key={colIndex} onClick={onClick} style={style}>
                     {c.title}
-                    {!_.isUndefined(c.sortKey) && <span className="sortable__actions" />}
+                    {!isUndefined(c.sortKey) && <span className="sortable__actions" />}
                   </th>
                 );
               })}
             </tr>
           </thead>
           <tbody>
-            {_.times(this.props.count, this.renderRow)}
+            {times(this.props.count, this.renderRow)}
           </tbody>
         </table>
         {drawer && (

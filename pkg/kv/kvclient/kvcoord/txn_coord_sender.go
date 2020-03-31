@@ -172,7 +172,7 @@ type txnInterceptor interface {
 
 	// importLeafFinalState updates any internal state held inside the
 	// interceptor from the given LeafTxn final state.
-	importLeafFinalState(*roachpb.LeafTxnFinalState)
+	importLeafFinalState(context.Context, *roachpb.LeafTxnFinalState)
 
 	// epochBumpedLocked resets the interceptor in the case of a txn epoch
 	// increment.
@@ -217,10 +217,6 @@ func newRootTxnCoordSender(
 	// txnLockGatekeeper at the bottom of the stack to connect it with the
 	// TxnCoordSender's wrapped sender. First, each of the interceptor objects
 	// is initialized.
-	var riGen RangeIteratorGen
-	if ds, ok := tcf.wrapped.(*DistSender); ok {
-		riGen = ds.rangeIteratorGen
-	}
 	tcs.interceptorAlloc.txnHeartbeater.init(
 		tcf.AmbientContext,
 		tcs.stopper,
@@ -241,7 +237,7 @@ func newRootTxnCoordSender(
 		clock:   tcs.clock,
 		txn:     &tcs.mu.txn,
 	}
-	tcs.initCommonInterceptors(tcf, txn, kv.RootTxn, riGen)
+	tcs.initCommonInterceptors(tcf, txn, kv.RootTxn)
 
 	// Once the interceptors are initialized, piece them all together in the
 	// correct order.
@@ -279,8 +275,12 @@ func newRootTxnCoordSender(
 }
 
 func (tc *TxnCoordSender) initCommonInterceptors(
-	tcf *TxnCoordSenderFactory, txn *roachpb.Transaction, typ kv.TxnType, riGen RangeIteratorGen,
+	tcf *TxnCoordSenderFactory, txn *roachpb.Transaction, typ kv.TxnType,
 ) {
+	var riGen rangeIteratorFactory
+	if ds, ok := tcf.wrapped.(*DistSender); ok {
+		riGen.ds = ds
+	}
 	tc.interceptorAlloc.txnPipeliner = txnPipeliner{
 		st:    tcf.st,
 		riGen: riGen,
@@ -288,13 +288,16 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 	tc.interceptorAlloc.txnSpanRefresher = txnSpanRefresher{
 		st:    tcf.st,
 		knobs: &tcf.testingKnobs,
+		riGen: riGen,
 		// We can only allow refresh span retries on root transactions
 		// because those are the only places where we have all of the
 		// refresh spans. If this is a leaf, as in a distributed sql flow,
 		// we need to propagate the error to the root for an epoch restart.
-		canAutoRetry:                    typ == kv.RootTxn,
-		autoRetryCounter:                tc.metrics.AutoRetries,
-		refreshSpanBytesExceededCounter: tc.metrics.RefreshSpanBytesExceeded,
+		canAutoRetry:                  typ == kv.RootTxn,
+		refreshSuccess:                tc.metrics.RefreshSuccess,
+		refreshFail:                   tc.metrics.RefreshFail,
+		refreshFailWithCondensedSpans: tc.metrics.RefreshFailWithCondensedSpans,
+		refreshMemoryLimitExceeded:    tc.metrics.RefreshMemoryLimitExceeded,
 	}
 	tc.interceptorAlloc.txnLockGatekeeper = txnLockGatekeeper{
 		wrapped:                 tc.wrapped,
@@ -348,11 +351,7 @@ func newLeafTxnCoordSender(
 	// txnLockGatekeeper at the bottom of the stack to connect it with the
 	// TxnCoordSender's wrapped sender. First, each of the interceptor objects
 	// is initialized.
-	var riGen RangeIteratorGen
-	if ds, ok := tcf.wrapped.(*DistSender); ok {
-		riGen = ds.rangeIteratorGen
-	}
-	tcs.initCommonInterceptors(tcf, txn, kv.LeafTxn, riGen)
+	tcs.initCommonInterceptors(tcf, txn, kv.LeafTxn)
 
 	// Per-interceptor leaf initialization. If/when more interceptors
 	// need leaf initialization, this should be turned into an interface
@@ -1078,7 +1077,7 @@ func (tc *TxnCoordSender) UpdateRootWithLeafFinalState(
 
 	tc.mu.txn.Update(&tfs.Txn)
 	for _, reqInt := range tc.interceptorStack {
-		reqInt.importLeafFinalState(tfs)
+		reqInt.importLeafFinalState(ctx, tfs)
 	}
 }
 

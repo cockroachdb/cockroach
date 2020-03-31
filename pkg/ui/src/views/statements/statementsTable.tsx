@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Tooltip } from "antd";
 import getHighlightedText from "oss/src/util/highlightedText";
 import React from "react";
 import { Link } from "react-router-dom";
@@ -18,7 +17,7 @@ import { FixLong } from "src/util/fixLong";
 import { StatementSummary, summarize } from "src/util/sql/summarize";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { countBarChart, latencyBarChart, retryBarChart, rowsBarChart } from "./barCharts";
-import { Anchor } from "src/components";
+import { Anchor, Tooltip } from "src/components";
 import "./statements.styl";
 import { DiagnosticStatusBadge } from "./diagnostics/diagnosticStatusBadge";
 import { cockroach } from "src/js/protos";
@@ -45,8 +44,8 @@ function StatementLink(props: { statement: string, app: string, implicitTxn: boo
   return (
     <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
       <div className="cl-table-link__tooltip">
-        <Tooltip overlayClassName="preset-black" placement="bottom" title={
-          <pre style={{ whiteSpace: "pre-wrap" }}>{ getHighlightedText(props.statement, props.search) }</pre>
+        <Tooltip placement="bottom" title={
+          <pre className="cl-table-link__description">{ getHighlightedText(props.statement, props.search) }</pre>
         }>
           <div className="cl-table-link__tooltip-hover-area">
             { getHighlightedText(shortStatement(summary, props.statement), props.search, true) }

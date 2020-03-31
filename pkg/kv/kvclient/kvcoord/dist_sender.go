@@ -210,9 +210,6 @@ type DistSender struct {
 	// It is copied out of the rpcContext at construction time and used in
 	// testing.
 	clusterID *base.ClusterIDContainer
-	// rangeIteratorGen returns a range iterator bound to the DistSender.
-	// Used to avoid allocations.
-	rangeIteratorGen RangeIteratorGen
 
 	// disableFirstRangeUpdates disables updates of the first range via
 	// gossip. Used by tests which want finer control of the contents of the
@@ -303,7 +300,6 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 		ds.asyncSenderSem.UpdateCapacity(uint64(senderConcurrencyLimit.Get(&cfg.Settings.SV)))
 	})
 	ds.rpcContext.Stopper.AddCloser(ds.asyncSenderSem.Closer("stopper"))
-	ds.rangeIteratorGen = func() *RangeIterator { return NewRangeIterator(ds) }
 
 	if g != nil {
 		ctx := ds.AnnotateCtx(context.Background())
@@ -482,7 +478,7 @@ func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64,
 			break
 		}
 	}
-	return count, ri.Error().GoError()
+	return count, ri.Error()
 }
 
 // getDescriptor looks up the range descriptor to use for a query of
@@ -1079,7 +1075,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	ri := NewRangeIterator(ds)
 	ri.Seek(ctx, seekKey, scanDir)
 	if !ri.Valid() {
-		return nil, ri.Error()
+		return nil, roachpb.NewError(ri.Error())
 	}
 	// Take the fast path if this batch fits within a single range.
 	if !ri.NeedAnother(rs) {
@@ -1292,7 +1288,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 
 	// We've exited early. Return the range iterator error.
 	responseCh := make(chan response, 1)
-	responseCh <- response{pErr: ri.Error()}
+	responseCh <- response{pErr: roachpb.NewError(ri.Error())}
 	responseChs = append(responseChs, responseCh)
 	return
 }
@@ -1473,22 +1469,24 @@ func (ds *DistSender) sendPartialBatch(
 	// Propagate error if either the retry closer or context done
 	// channels were closed.
 	if pErr == nil {
-		if pErr = ds.deduceRetryEarlyExitError(ctx); pErr == nil {
+		if err := ds.deduceRetryEarlyExitError(ctx); err == nil {
 			log.Fatal(ctx, "exited retry loop without an error")
+		} else {
+			pErr = roachpb.NewError(err)
 		}
 	}
 
 	return response{pErr: pErr}
 }
 
-func (ds *DistSender) deduceRetryEarlyExitError(ctx context.Context) *roachpb.Error {
+func (ds *DistSender) deduceRetryEarlyExitError(ctx context.Context) error {
 	select {
 	case <-ds.rpcRetryOptions.Closer:
 		// Typically happens during shutdown.
-		return roachpb.NewError(&roachpb.NodeUnavailableError{})
+		return &roachpb.NodeUnavailableError{}
 	case <-ctx.Done():
 		// Happens when the client request is canceled.
-		return roachpb.NewError(errors.Wrap(ctx.Err(), "aborted in distSender"))
+		return errors.Wrap(ctx.Err(), "aborted in distSender")
 	default:
 	}
 	return nil
