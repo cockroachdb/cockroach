@@ -1578,6 +1578,7 @@ reserved_keyword ::=
 	| 'ELSE'
 	| 'END'
 	| 'EXCEPT'
+	| 'EXCLUDE'
 	| 'FALSE'
 	| 'FETCH'
 	| 'FOR'

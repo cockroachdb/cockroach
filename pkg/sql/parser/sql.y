@@ -496,7 +496,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> ELSE ENCODING END ENUM ESCAPE EXCEPT
-%token <str> EXISTS EXECUTE EXPERIMENTAL
+%token <str> EXISTS EXECUTE EXCLUDE EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT
 %token <str> EXPLAIN EXPORT EXTENSION EXTRACT EXTRACT_DURATION
@@ -4346,6 +4346,10 @@ constraint_elem:
       Match: $9.compositeKeyMatchMethod(),
       Actions: $10.referenceActions(),
     }
+  }
+| EXCLUDE USING error
+  {
+    return unimplementedWithIssueDetail(sqllex, 46657, "add constraint exclude using")
   }
 
 opt_deferrable:
@@ -9147,6 +9151,7 @@ reserved_keyword:
 | ELSE
 | END
 | EXCEPT
+| EXCLUDE
 | FALSE
 | FETCH
 | FOR
