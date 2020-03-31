@@ -70,28 +70,21 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
   }
 
   render() {
+    const { onClear, ...rest } = this.props;
     const { value, submitted } = this.state;
     const className = submitted ? "_submitted" : "";
-
-    /*
-      current antdesign (3.25.3) has Input.d.ts incompatible with latest @types/react
-      temporary fix, remove as soon antd can be updated
-    */
-
-    // tslint:disable-next-line: variable-name
-    const MyInput = Input as any;
 
     return (
       <Form onSubmit={this.onSubmit} className="_search-form">
         <Form.Item>
-          <MyInput
+          <Input
             className={className}
             placeholder="Search Statement"
             onChange={this.onChange}
             prefix={<img className="_prefix-icon" src={SearchIcon} />}
             suffix={this.renderSuffix()}
             value={value}
-            {...this.props}
+            {...rest}
          />
         </Form.Item>
       </Form>
