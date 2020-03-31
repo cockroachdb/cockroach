@@ -136,10 +136,10 @@ export class TimeWindowState {
   currentWindow: TimeWindow;
   // True if scale has changed since currentWindow was generated.
   scaleChanged: boolean;
-  useTimeRage: boolean;
+  useTimeRange: boolean;
   constructor() {
     this.scale = availableTimeScales["Past 10 Minutes"];
-    this.useTimeRage = false;
+    this.useTimeRange = false;
     this.scaleChanged = false;
   }
 }
@@ -156,16 +156,16 @@ export function timeWindowReducer(state = new TimeWindowState(), action: Action)
       const { payload: data } = action as PayloadAction<TimeWindow>;
       state = _.clone(state);
       state.currentWindow = data;
-      state.useTimeRage = true;
+      state.useTimeRange = true;
       state.scaleChanged = false;
       return state;
     case SET_SCALE:
       const { payload: scale } = action as PayloadAction<TimeScale>;
       state = _.clone(state);
       if (scale.key === "Custom") {
-        state.useTimeRage = true;
+        state.useTimeRange = true;
       } else {
-        state.useTimeRage = false;
+        state.useTimeRange = false;
       }
       state.scale = scale;
       state.scaleChanged = true;
