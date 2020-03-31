@@ -150,7 +150,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
 
   componentDidUpdate = (__: StatementsPageProps, prevState: StatementsPageState) => {
     if (this.state.search && this.state.search !== prevState.search) {
-      this.trackSearch(this.state.search, this.filteredStatementsData().length);
+      this.trackSearch(this.filteredStatementsData().length);
     }
     this.props.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
@@ -185,11 +185,10 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     return statements.filter(statement => search.split(" ").every(val => statement.label.toLowerCase().includes(val.toLowerCase())));
   }
 
-  trackSearch = (searchTerm: string, numberOfResults: number) => {
+  trackSearch = (numberOfResults: number) => {
     analytics.track({
       event: "Search",
       properties: {
-        searchTerm,
         numberOfResults,
       },
     });
