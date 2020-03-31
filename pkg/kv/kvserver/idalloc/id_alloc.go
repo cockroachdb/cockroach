@@ -52,6 +52,7 @@ func NewAllocator(
 	if blockSize == 0 {
 		return nil, errors.Errorf("blockSize must be a positive integer: %d", blockSize)
 	}
+	ambient.AddLogTag("idalloc", nil)
 	ia := &Allocator{
 		AmbientContext: ambient,
 		db:             db,
@@ -91,10 +92,9 @@ func (ia *Allocator) start() {
 			var res kv.KeyValue
 			for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 				idKey := ia.idKey.Load().(roachpb.Key)
-				if err := ia.stopper.RunTask(ctx, "storage.Allocator: allocating block", func(ctx context.Context) {
+				if stopperErr := ia.stopper.RunTask(ctx, "idalloc: allocating block", func(ctx context.Context) {
 					res, err = ia.db.Inc(ctx, idKey, int64(ia.blockSize))
-				}); err != nil {
-					log.Warning(ctx, err)
+				}); stopperErr != nil {
 					return
 				}
 				if err == nil {
