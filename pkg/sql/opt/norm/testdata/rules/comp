@@ -13,7 +13,6 @@ SELECT * FROM a WHERE 1+i<k AND k-1<=i AND i*i>k AND k/2>=i
 ----
 select
  ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6
- ├── side-effects
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan a
@@ -24,7 +23,7 @@ select
       ├── k:1 > (i:2 + 1) [outer=(1,2), constraints=(/1: (/NULL - ])]
       ├── i:2 >= (k:1 - 1) [outer=(1,2), constraints=(/2: (/NULL - ])]
       ├── k:1 < (i:2 * i:2) [outer=(1,2), constraints=(/1: (/NULL - ])]
-      └── i:2 <= (k:1 / 2) [outer=(1,2), side-effects, constraints=(/2: (/NULL - ])]
+      └── i:2 <= (k:1 / 2) [outer=(1,2), constraints=(/2: (/NULL - ])]
 
 # --------------------------------------------------
 # CommuteConstInequality

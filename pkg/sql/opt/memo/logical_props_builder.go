@@ -1374,8 +1374,22 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 		return
 
 	case *DivExpr:
-		// Division by zero error is possible.
-		shared.CanHaveSideEffects = true
+		// Division by zero error is possible, unless the right-hand side is a
+		// non-zero constant.
+		var nonZero bool
+		if c, ok := t.Right.(*ConstExpr); ok {
+			switch v := c.Value.(type) {
+			case *tree.DInt:
+				nonZero = (*v != 0)
+			case *tree.DFloat:
+				nonZero = (*v != 0.0)
+			case *tree.DDecimal:
+				nonZero = !v.IsZero()
+			}
+		}
+		if !nonZero {
+			shared.CanHaveSideEffects = true
+		}
 
 	case *SubqueryExpr, *ExistsExpr, *AnyExpr, *ArrayFlattenExpr:
 		shared.HasSubquery = true
