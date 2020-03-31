@@ -104,8 +104,23 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
                   />
                 )}
               >
-                Download
+                Trace (.json)
               </Button>
+              <a href={`_admin/v1/stmtbundle/${record.statement_diagnostics_id}`}>
+                <Button
+                  size="small"
+                  type="flat"
+                  iconPosition="left"
+                  icon={() => (
+                    <span
+                      className="crl-statements-diagnostics-view__icon"
+                      dangerouslySetInnerHTML={ trustIcon(DownloadIcon) }
+                    />
+                  )}
+                >
+                  Debug (.zip)
+                </Button>
+              </a>
             </div>
           );
         }

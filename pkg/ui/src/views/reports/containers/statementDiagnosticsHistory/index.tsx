@@ -97,8 +97,24 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
                   />
                 )}
               >
-                Download
+                Trace (.json)
               </Button>
+              <div className="crl-statements-diagnostics-view__divider" />
+              <a href={`_admin/v1/stmtbundle/${record.statement_diagnostics_id}`}>
+                <Button
+                  size="small"
+                  type="flat"
+                  iconPosition="left"
+                  icon={() => (
+                    <span
+                      className="crl-statements-diagnostics-view__icon"
+                      dangerouslySetInnerHTML={ trustIcon(DownloadIcon) }
+                    />
+                  )}
+                >
+                  Debug (.zip)
+                </Button>
+              </a>
             </div>
           );
         }
