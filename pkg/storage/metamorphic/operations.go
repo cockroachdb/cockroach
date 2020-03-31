@@ -361,6 +361,8 @@ func (m mvccScanOp) run(ctx context.Context) string {
 		Tombstones:   true,
 		Reverse:      m.reverse,
 		Txn:          txn,
+		MaxKeys:      16,
+		TargetBytes:  1 << 20,
 	})
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)

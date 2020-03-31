@@ -179,6 +179,7 @@ func (m *metaTestRunner) init() {
 	var err error
 	m.engine, err = m.engineImpls[0].create(m.path, m.seed)
 	if err != nil {
+		m.engine = nil
 		m.t.Fatal(err)
 	}
 
@@ -268,8 +269,10 @@ func (m *metaTestRunner) closeAll() {
 	m.openIters = make(map[iteratorID]iteratorInfo)
 	m.openBatches = make(map[readWriterID]storage.ReadWriter)
 	m.openTxns = make(map[txnID]*roachpb.Transaction)
-	m.engine.Close()
-	m.engine = nil
+	if m.engine != nil {
+		m.engine.Close()
+		m.engine = nil
+	}
 }
 
 // Getters and setters for txns, batches, and iterators.
@@ -350,6 +353,7 @@ func (m *metaTestRunner) restart() (string, string) {
 	var err error
 	m.engine, err = m.engineImpls[m.curEngine].create(m.path, m.seed)
 	if err != nil {
+		m.engine = nil
 		m.t.Fatal(err)
 	}
 	return oldEngineName, m.engineImpls[m.curEngine].name
