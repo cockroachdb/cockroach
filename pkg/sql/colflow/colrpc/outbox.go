@@ -247,7 +247,9 @@ func (o *Outbox) sendBatches(
 		}
 
 		if err := execerror.CatchVectorizedRuntimeError(nextBatch); err != nil {
-			log.Warningf(ctx, "Outbox Next error: %+v", err)
+			if log.V(1) {
+				log.Warningf(ctx, "Outbox Next error: %+v", err)
+			}
 			return false, err
 		}
 		if o.batch.Length() == 0 {
