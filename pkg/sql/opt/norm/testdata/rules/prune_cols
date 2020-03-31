@@ -249,19 +249,16 @@ SELECT i FROM (SELECT k, i, s, f/2.0 f FROM a WHERE k = 5) a2 WHERE i::float = f
 project
  ├── columns: i:2
  ├── cardinality: [0 - 1]
- ├── side-effects
  ├── key: ()
  ├── fd: ()-->(2)
  └── select
       ├── columns: i:2 f:5!null
       ├── cardinality: [0 - 1]
-      ├── side-effects
       ├── key: ()
       ├── fd: ()-->(2,5)
       ├── project
       │    ├── columns: f:5 i:2
       │    ├── cardinality: [0 - 1]
-      │    ├── side-effects
       │    ├── key: ()
       │    ├── fd: ()-->(2,5)
       │    ├── select
@@ -276,7 +273,7 @@ project
       │    │    └── filters
       │    │         └── k:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
       │    └── projections
-      │         └── a.f:3 / 2.0 [as=f:5, outer=(3), side-effects]
+      │         └── a.f:3 / 2.0 [as=f:5, outer=(3)]
       └── filters
            └── f:5 = i:2::FLOAT8 [outer=(2,5), constraints=(/5: (/NULL - ])]
 
@@ -763,7 +760,6 @@ SELECT a.k+1 AS r, a.i/2 AS s, xy.* FROM a INNER JOIN xy ON a.k*a.k=xy.x AND a.s
 ----
 project
  ├── columns: r:8!null s:9 x:5!null y:6
- ├── side-effects
  ├── fd: (5)-->(6)
  ├── inner-join (hash)
  │    ├── columns: k:1!null i:2 x:5!null y:6 column7:7!null
@@ -793,7 +789,7 @@ project
  │         └── column7:7 = x:5 [outer=(5,7), constraints=(/5: (/NULL - ]; /7: (/NULL - ]), fd=(5)==(7), (7)==(5)]
  └── projections
       ├── k:1 + 1 [as=r:8, outer=(1)]
-      └── i:2 / 2 [as=s:9, outer=(2), side-effects]
+      └── i:2 / 2 [as=s:9, outer=(2)]
 
 # Join that is nested in another join.
 norm expect=PruneJoinLeftCols
@@ -1035,7 +1031,6 @@ SELECT xy.*, a.k+1 AS r, a.i/2 AS s FROM xy INNER JOIN a ON xy.x=a.k*a.k AND a.s
 ----
 project
  ├── columns: x:1!null y:2 r:8!null s:9
- ├── side-effects
  ├── fd: (1)-->(2)
  ├── inner-join (hash)
  │    ├── columns: x:1!null y:2 k:3!null i:4 column7:7!null
@@ -1065,7 +1060,7 @@ project
  │         └── x:1 = column7:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
  └── projections
       ├── k:3 + 1 [as=r:8, outer=(3)]
-      └── i:4 / 2 [as=s:9, outer=(4), side-effects]
+      └── i:4 / 2 [as=s:9, outer=(4)]
 
 # Join that is nested in another join.
 norm expect=PruneJoinRightCols

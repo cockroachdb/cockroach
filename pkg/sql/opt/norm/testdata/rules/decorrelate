@@ -1031,21 +1031,17 @@ SELECT i*i/5=ANY(SELECT y FROM xy WHERE x=k) AS r FROM a
 ----
 project
  ├── columns: r:8
- ├── side-effects
  ├── group-by
  │    ├── columns: k:1!null scalar:9 bool_or:11
  │    ├── grouping columns: k:1!null
- │    ├── side-effects
  │    ├── key: (1)
  │    ├── fd: (1)-->(9,11)
  │    ├── left-join (hash)
  │    │    ├── columns: k:1!null x:6 y:7 scalar:9 notnull:10
- │    │    ├── side-effects
  │    │    ├── key: (1,6)
  │    │    ├── fd: (1)-->(9), (6)-->(7), (7)~~>(10), (1,6)-->(10)
  │    │    ├── project
  │    │    │    ├── columns: scalar:9 k:1!null
- │    │    │    ├── side-effects
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: (1)-->(9)
  │    │    │    ├── scan a
@@ -1053,7 +1049,7 @@ project
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── fd: (1)-->(2)
  │    │    │    └── projections
- │    │    │         └── (i:2 * i:2) / 5 [as=scalar:9, outer=(2), side-effects]
+ │    │    │         └── (i:2 * i:2) / 5 [as=scalar:9, outer=(2)]
  │    │    ├── project
  │    │    │    ├── columns: notnull:10!null x:6!null y:7
  │    │    │    ├── key: (6)
@@ -1088,15 +1084,12 @@ WHERE EXISTS
 distinct-on
  ├── columns: k:1!null
  ├── grouping columns: k:1!null
- ├── side-effects
  ├── key: (1)
  └── select
       ├── columns: k:1!null x:6!null div:10!null
-      ├── side-effects
       ├── fd: (6)==(10), (10)==(6)
       ├── project
       │    ├── columns: div:10!null k:1!null x:6!null
-      │    ├── side-effects
       │    ├── inner-join (cross)
       │    │    ├── columns: k:1!null i:2!null x:6!null u:8!null
       │    │    ├── key: (1,6,8)
@@ -1123,7 +1116,7 @@ distinct-on
       │    │    │    └── filters (true)
       │    │    └── filters (true)
       │    └── projections
-      │         └── u:8 / 1.1 [as=div:10, outer=(8), side-effects]
+      │         └── u:8 / 1.1 [as=div:10, outer=(8)]
       └── filters
            └── x:6 = div:10 [outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
 
@@ -1137,11 +1130,9 @@ WHERE EXISTS
 ----
 project
  ├── columns: k:1!null
- ├── side-effects
  ├── key: (1)
  └── semi-join-apply
       ├── columns: k:1!null i:2
-      ├── side-effects
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── scan a
@@ -1151,11 +1142,9 @@ project
       ├── left-join (cross)
       │    ├── columns: x:6 div:10!null
       │    ├── outer: (2)
-      │    ├── side-effects
       │    ├── project
       │    │    ├── columns: div:10!null
       │    │    ├── outer: (2)
-      │    │    ├── side-effects
       │    │    ├── select
       │    │    │    ├── columns: u:8!null
       │    │    │    ├── outer: (2)
@@ -1166,7 +1155,7 @@ project
       │    │    │    └── filters
       │    │    │         └── i:2 = 5 [outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
       │    │    └── projections
-      │    │         └── u:8 / 1.1 [as=div:10, outer=(8), side-effects]
+      │    │         └── u:8 / 1.1 [as=div:10, outer=(8)]
       │    ├── scan xy
       │    │    ├── columns: x:6!null
       │    │    └── key: (6)
@@ -3732,21 +3721,17 @@ SELECT i*i/100 < ALL(SELECT y FROM xy WHERE x=k) AS r, s FROM a
 ----
 project
  ├── columns: r:8 s:4
- ├── side-effects
  ├── group-by
  │    ├── columns: k:1!null s:4 scalar:9 bool_or:11
  │    ├── grouping columns: k:1!null
- │    ├── side-effects
  │    ├── key: (1)
  │    ├── fd: (1)-->(4,9,11)
  │    ├── left-join (hash)
  │    │    ├── columns: k:1!null s:4 x:6 y:7 scalar:9 notnull:10
- │    │    ├── side-effects
  │    │    ├── key: (1,6)
  │    │    ├── fd: (1)-->(4,9), (6)-->(7), (7)~~>(10), (1,6)-->(10)
  │    │    ├── project
  │    │    │    ├── columns: scalar:9 k:1!null s:4
- │    │    │    ├── side-effects
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: (1)-->(4,9)
  │    │    │    ├── scan a
@@ -3754,7 +3739,7 @@ project
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── fd: (1)-->(2,4)
  │    │    │    └── projections
- │    │    │         └── (i:2 * i:2) / 100 [as=scalar:9, outer=(2), side-effects]
+ │    │    │         └── (i:2 * i:2) / 100 [as=scalar:9, outer=(2)]
  │    │    ├── project
  │    │    │    ├── columns: notnull:10!null x:6!null y:7
  │    │    │    ├── key: (6)

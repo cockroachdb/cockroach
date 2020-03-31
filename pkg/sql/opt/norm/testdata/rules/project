@@ -123,7 +123,6 @@ SELECT y1*2, y1/2 FROM (SELECT y+1 AS y1 FROM a)
 ----
 project
  ├── columns: "?column?":6 "?column?":7
- ├── side-effects
  ├── project
  │    ├── columns: y1:5
  │    ├── scan a
@@ -132,7 +131,7 @@ project
  │         └── y:2 + 1 [as=y1:5, outer=(2)]
  └── projections
       ├── y1:5 * 2 [as="?column?":6, outer=(5)]
-      └── y1:5 / 2 [as="?column?":7, outer=(5), side-effects]
+      └── y1:5 / 2 [as="?column?":7, outer=(5)]
 
 # Discard all inner columns.
 norm expect=MergeProjects
