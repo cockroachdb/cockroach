@@ -38,6 +38,10 @@ const databaseTableGrantsSortSetting = new LocalSetting<AdminUIState, SortSettin
   "tableDetails/sort_setting/grants", (s) => s.localSettings,
 );
 
+const databaseTableStatementsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
+  "tableDetails/sort_setting/statements", (s) => s.localSettings,
+);
+
 /**
  * TableMainData are the data properties which should be passed to the TableMain
  * container.
@@ -45,6 +49,7 @@ const databaseTableGrantsSortSetting = new LocalSetting<AdminUIState, SortSettin
 interface TableMainData {
   tableInfo: TableInfo;
   grantsSortSetting: SortSetting;
+  statementsSortSetting: SortSetting;
   statements: AggregateStatistics[];
 }
 
@@ -59,6 +64,7 @@ interface TableMainActions {
   refreshStatements: typeof refreshStatements;
   refreshDatabaseDetails: typeof refreshDatabaseDetails;
   setSort: typeof databaseTableGrantsSortSetting.set;
+  setStatementsTableSort: typeof databaseTableStatementsSortSetting.set;
   dbResponse: protos.cockroach.server.serverpb.DatabaseDetailsResponse;
 }
 
@@ -103,7 +109,15 @@ export class TableMain extends React.Component<TableMainProps, {}> {
   }
 
   render() {
-    const { tableInfo, grantsSortSetting, statements, match, dbResponse } = this.props;
+    const {
+      tableInfo,
+      grantsSortSetting,
+      statements,
+      match,
+      dbResponse,
+      statementsSortSetting,
+      setStatementsTableSort,
+    } = this.props;
     const database = getMatchParamByName(match, databaseNameAttr);
     const table = getMatchParamByName(match, tableNameAttr);
     const selectedApp = getMatchParamByName(match, appAttr);
@@ -164,6 +178,8 @@ export class TableMain extends React.Component<TableMainProps, {}> {
               <TabPane tab="Statements" key="2">
                 <SummaryCard>
                   <StatementsSortedTable
+                    sortSetting={statementsSortSetting}
+                    onChangeSortSetting={(setting) => setStatementsTableSort(setting) }
                     data={this.getStatementsTableData()}
                     columns={statements && makeStatementsColumns(statements, selectedApp)}
                   />
@@ -213,12 +229,14 @@ export function selectTableInfo(state: AdminUIState, props: RouteComponentProps)
 const mapStateToProps = (state: AdminUIState, ownProps: RouteComponentProps) => ({
   tableInfo: selectTableInfo(state, ownProps),
   grantsSortSetting: databaseTableGrantsSortSetting.selector(state),
+  statementsSortSetting: databaseTableStatementsSortSetting.selector(state),
   statements: selectStatements(state, ownProps),
   dbResponse: databaseDetails(state)[getMatchParamByName(ownProps.match, databaseNameAttr)] && databaseDetails(state)[getMatchParamByName(ownProps.match, databaseNameAttr)].data,
 });
 
 const mapDispatchToProps = {
   setSort: databaseTableGrantsSortSetting.set,
+  setStatementsTableSort: databaseTableStatementsSortSetting.set,
   refreshTableDetails,
   refreshTableStats,
   refreshStatements,
