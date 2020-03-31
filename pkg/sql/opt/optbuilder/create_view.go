@@ -58,7 +58,8 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		}
 	}
 
-	expr := b.factory.ConstructCreateView(
+	outScope = b.allocScope()
+	outScope.expr = b.factory.ConstructCreateView(
 		&memo.CreateViewPrivate{
 			Schema:      schID,
 			ViewName:    cv.Name.Table(),
@@ -69,5 +70,5 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 			Deps:        b.viewDeps,
 		},
 	)
-	return &scope{builder: b, expr: expr}
+	return outScope
 }
