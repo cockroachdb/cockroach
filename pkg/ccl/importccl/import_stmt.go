@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -197,6 +198,7 @@ func importPlanHook(
 	if !ok {
 		return nil, nil, nil, false, nil
 	}
+	telemetry.Count("import.total.attempted")
 
 	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionPartitionedBackup) {
 		return nil, nil, nil, false, errors.Errorf("IMPORT requires a cluster fully upgraded to version >= 19.2")
@@ -1031,6 +1033,8 @@ func (r *importResumer) prepareTableDescsForIngestion(
 func (r *importResumer) Resume(
 	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
+	telemetry.Count("import.total.started")
+
 	details := r.job.Details().(jobspb.ImportDetails)
 	p := phs.(sql.PlanHookState)
 	ptsID := details.ProtectedTimestampRecord
@@ -1126,9 +1130,24 @@ func (r *importResumer) Resume(
 		}
 	}
 
+	telemetry.Count("import.total.succeeded")
 	telemetry.CountBucketed("import.rows", r.res.Rows)
 	const mb = 1 << 20
-	telemetry.CountBucketed("import.size-mb", r.res.DataSize/mb)
+	sizeMb := r.res.DataSize / mb
+	telemetry.CountBucketed("import.size-mb", sizeMb)
+
+	sec := int64(timeutil.Since(timeutil.FromUnixMicros(r.job.Payload().StartedMicros)).Seconds())
+	var mbps int64
+	if sec > 0 {
+		mbps = mb / sec
+	}
+	telemetry.CountBucketed("import.duration-sec.succeeded", sec)
+	telemetry.CountBucketed("import.speed-mbps", mbps)
+	// Tiny imports may skew throughput numbers due to overhead.
+	if sizeMb > 10 {
+		telemetry.CountBucketed("import.speed-mbps.over10mb", mbps)
+	}
+
 	resultsCh <- tree.Datums{
 		tree.NewDInt(tree.DInt(*r.job.ID())),
 		tree.NewDString(string(jobs.StatusSucceeded)),
@@ -1233,6 +1252,8 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 // by adding the table descriptors in DROP state, which causes the schema change
 // stuff to delete the keys in the background.
 func (r *importResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
+	telemetry.Count("import.total.failed")
+
 	cfg := phs.(sql.PlanHookState).ExecCfg()
 	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := r.dropTables(ctx, txn); err != nil {
