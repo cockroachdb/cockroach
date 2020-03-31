@@ -699,6 +699,7 @@ unreserved_keyword ::=
 	| 'HOUR'
 	| 'IMMEDIATE'
 	| 'IMPORT'
+	| 'INCLUDE'
 	| 'INCREMENT'
 	| 'INCREMENTAL'
 	| 'INDEXES'
@@ -1800,6 +1801,7 @@ index_elem ::=
 storing ::=
 	'COVERING'
 	| 'STORING'
+	| 'INCLUDE'
 
 partition_by ::=
 	'PARTITION' 'BY' 'LIST' '(' name_list ')' '(' list_partitions ')'
