@@ -29,6 +29,8 @@ import (
 	"github.com/nlopes/slack"
 )
 
+var errNoSlackClient = fmt.Errorf("no Slack client")
+
 type status struct {
 	good    []*Cluster
 	warn    []*Cluster
@@ -100,23 +102,15 @@ func findChannel(client *slack.Client, name string) (string, error) {
 }
 
 func findUserChannel(client *slack.Client, email string) (string, error) {
-	if client != nil {
-		// TODO(peter): GetUserByEmail doesn't seem to work. Why?
-		users, err := client.GetUsers()
-		if err != nil {
-			return "", err
-		}
-		for _, user := range users {
-			if user.Profile.Email == email {
-				_, _, channelID, err := client.OpenIMChannel(user.ID)
-				if err != nil {
-					return "", err
-				}
-				return channelID, nil
-			}
-		}
+	if client == nil {
+		return "", errNoSlackClient
 	}
-	return "", fmt.Errorf("not found")
+	u, err := client.GetUserByEmail(email)
+	if err != nil {
+		return "", err
+	}
+	_, _, channelID, err := client.OpenIMChannel(u.ID)
+	return channelID, err
 }
 
 func postStatus(client *slack.Client, channel string, dryrun bool, s *status, badVMs vm.List) {
@@ -320,6 +314,8 @@ func GCClusters(cloud *Cloud, dryrun bool) error {
 			userChannel, err := findUserChannel(client, user+config.EmailDomain)
 			if err == nil {
 				postStatus(client, userChannel, dryrun, status, nil)
+			} else if err != errNoSlackClient {
+				log.Printf("could not deliver Slack DM to %s: %v", user+config.EmailDomain, err)
 			}
 		}
 	}
