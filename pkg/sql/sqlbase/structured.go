@@ -35,7 +35,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // ID, ColumnID, FamilyID, and IndexID are all uint32, but are each given a

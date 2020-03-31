@@ -408,11 +408,11 @@ CREATE TABLE pg_catalog.pg_attrdef (
 						defSrc = tree.NewDString(ctx.String())
 					}
 					return addRow(
-						h.ColumnOid(table.ID, column.ID), // oid
-						defaultOid(table.ID),             // adrelid
-						tree.NewDInt(tree.DInt(colNum)),  // adnum
-						defSrc,                           // adbin
-						defSrc,                           // adsrc
+						h.ColumnOid(table.ID, column.ID),   // oid
+						defaultOid(table.ID),               // adrelid
+						tree.NewDInt(tree.DInt(column.ID)), // adnum
+						defSrc,                             // adbin
+						defSrc,                             // adsrc
 					)
 				})
 			})
