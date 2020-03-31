@@ -116,6 +116,11 @@ export default function Debug() {
           url="#/data-distribution"
           note="View the distribution of table data across nodes and verify zone configuration."
         />
+        <DebugPanelLink
+          name="Statement Diagnostics History"
+          url="#/reports/statements/diagnosticshistory"
+          note="View the history of statement diagnostics requests"
+        />
         <PanelTitle>Configuration</PanelTitle>
         <DebugPanelLink
           name="Cluster Settings"
@@ -178,13 +183,6 @@ export default function Debug() {
           />
           <DebugTableLink name="Raft Messages" url="#/raft/messages/all" />
           <DebugTableLink name="Raft for all ranges" url="#/raft/ranges" />
-        </DebugTableRow>
-        <DebugTableRow title="Statements">
-          <DebugTableLink
-            name="Statement diagnostics history"
-            url="#/reports/statements/diagnosticshistory"
-            note="#/reports/statements/diagnosticshistory"
-          />
         </DebugTableRow>
       </DebugTable>
       <DebugTable heading="Tracing and Profiling Endpoints (local node only)">
