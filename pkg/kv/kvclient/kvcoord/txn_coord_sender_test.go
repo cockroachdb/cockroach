@@ -907,7 +907,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 
 	// Verify presence of both locks.
 	tcs := txn.Sender().(*TxnCoordSender)
-	refreshSpans := tcs.interceptorAlloc.txnSpanRefresher.refreshSpans
+	refreshSpans := tcs.interceptorAlloc.txnSpanRefresher.refreshFootprint.asSlice()
 	require.Equal(t, []roachpb.Span{{Key: key}, {Key: key2}}, refreshSpans)
 
 	ba := txn.NewBatch()

@@ -19,13 +19,17 @@ import (
 
 // TxnMetrics holds all metrics relating to KV transactions.
 type TxnMetrics struct {
-	Aborts                   *metric.Counter
-	Commits                  *metric.Counter
-	Commits1PC               *metric.Counter // Commits which finished in a single phase
-	ParallelCommits          *metric.Counter // Commits which entered the STAGING state
-	AutoRetries              *metric.Counter // Auto retries which avoid client-side restarts
-	RefreshSpanBytesExceeded *metric.Counter // Transactions which don't refresh due to span bytes
-	Durations                *metric.Histogram
+	Aborts          *metric.Counter
+	Commits         *metric.Counter
+	Commits1PC      *metric.Counter // Commits which finished in a single phase
+	ParallelCommits *metric.Counter // Commits which entered the STAGING state
+
+	RefreshSuccess                *metric.Counter
+	RefreshFail                   *metric.Counter
+	RefreshFailWithCondensedSpans *metric.Counter
+	RefreshMemoryLimitExceeded    *metric.Counter
+
+	Durations *metric.Histogram
 
 	// Restarts is the number of times we had to restart the transaction.
 	Restarts *metric.Histogram
@@ -66,16 +70,33 @@ var (
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaAutoRetriesRates = metric.Metadata{
-		Name:        "txn.autoretries",
-		Help:        "Number of automatic retries to avoid serializable restarts",
-		Measurement: "Retries",
+	metaRefreshSuccess = metric.Metadata{
+		Name:        "txn.refresh.success",
+		Help:        "Number of successful refreshes",
+		Measurement: "Refreshes",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaRefreshSpanBytesExceeded = metric.Metadata{
-		Name:        "txn.refreshspanbytesexceeded",
-		Help:        "Number of transaction retries which fail to refresh due to the refresh span bytes",
-		Measurement: "Retries",
+	metaRefreshFail = metric.Metadata{
+		Name:        "txn.refresh.fail",
+		Help:        "Number of failed refreshes",
+		Measurement: "Refreshes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRefreshFailWithCondensedSpans = metric.Metadata{
+		Name: "txn.refresh.fail_with_condensed_spans",
+		Help: "Number of failed refreshes for transactions whose read " +
+			"tracking lost fidelity because of condensing. Such a failure " +
+			"could be a false conflict. Failures counted here are also counted " +
+			"in txn.refresh.fail, and the respective transactions are also counted in " +
+			"txn.refresh.memory_limit_exceeded.",
+		Measurement: "Refreshes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRefreshMemoryLimitExceeded = metric.Metadata{
+		Name: "txn.refresh.memory_limit_exceeded",
+		Help: "Number of transaction which exceed the refresh span bytes limit, causing " +
+			"their read spans to be condensed",
+		Measurement: "Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaDurationsHistograms = metric.Metadata{
@@ -175,8 +196,10 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		Commits:                       metric.NewCounter(metaCommitsRates),
 		Commits1PC:                    metric.NewCounter(metaCommits1PCRates),
 		ParallelCommits:               metric.NewCounter(metaParallelCommitsRates),
-		AutoRetries:                   metric.NewCounter(metaAutoRetriesRates),
-		RefreshSpanBytesExceeded:      metric.NewCounter(metaRefreshSpanBytesExceeded),
+		RefreshFail:                   metric.NewCounter(metaRefreshFail),
+		RefreshFailWithCondensedSpans: metric.NewCounter(metaRefreshFailWithCondensedSpans),
+		RefreshSuccess:                metric.NewCounter(metaRefreshSuccess),
+		RefreshMemoryLimitExceeded:    metric.NewCounter(metaRefreshMemoryLimitExceeded),
 		Durations:                     metric.NewLatency(metaDurationsHistograms, histogramWindow),
 		Restarts:                      metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
 		RestartsWriteTooOld:           telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),

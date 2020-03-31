@@ -70,7 +70,7 @@ func (*txnMetricRecorder) populateLeafInputState(*roachpb.LeafTxnInputState) {}
 func (*txnMetricRecorder) populateLeafFinalState(*roachpb.LeafTxnFinalState) {}
 
 // importLeafFinalState is part of the txnInterceptor interface.
-func (*txnMetricRecorder) importLeafFinalState(*roachpb.LeafTxnFinalState) {}
+func (*txnMetricRecorder) importLeafFinalState(context.Context, *roachpb.LeafTxnFinalState) {}
 
 // epochBumpedLocked is part of the txnInterceptor interface.
 func (*txnMetricRecorder) epochBumpedLocked() {}
