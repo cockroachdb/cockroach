@@ -850,6 +850,20 @@
   revision = "22125cfaa6ddc71e145b1535d4b7ee9744fefff2"
 
 [[projects]]
+  branch = "master"
+  digest = "1:8078afa79ad405d39dc505aa3eb5345577d9b4ca3e4bd363bdff43d5b9b85629"
+  name = "github.com/golang/geo"
+  packages = [
+    "r1",
+    "r2",
+    "r3",
+    "s1",
+    "s2",
+  ]
+  pruneopts = "UT"
+  revision = "673a6f80352d38c1ea2f05c915a659938872212f"
+
+[[projects]]
   digest = "1:1ba1d79f2810270045c328ae5d674321db34e3aae468eb4233883b473c5c0467"
   name = "github.com/golang/glog"
   packages = ["."]
@@ -1575,6 +1589,32 @@
   version = "v1.4.0"
 
 [[projects]]
+  digest = "1:661aa35409435cec194eb640ec712cf1e9b483d988d587a8b91847293e715f59"
+  name = "github.com/twpayne/go-geom"
+  packages = [
+    ".",
+    "encoding/ewkb",
+    "encoding/ewkbhex",
+    "encoding/geojson",
+    "encoding/kml",
+    "encoding/wkb",
+    "encoding/wkbcommon",
+    "encoding/wkbhex",
+    "encoding/wkt",
+  ]
+  pruneopts = "UT"
+  revision = "6e58c69044b13f84504654b4741390b92a70a402"
+  version = "v1.0.6"
+
+[[projects]]
+  digest = "1:43e0db2b113d1aee4bb68745598c135511976a44fb380ebd701cd0c14a77c303"
+  name = "github.com/twpayne/go-kml"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "324bc36063aba8d64871e9cebc45b8753ff9de9e"
+  version = "v1.5.0"
+
+[[projects]]
   branch = "master"
   digest = "1:7bff42fbbef28d0ef60138c92cb3872cacb035133b3cfa39e3ff2c43f1fc332e"
   name = "github.com/wadey/gocovmerge"
@@ -2068,6 +2108,7 @@
     "github.com/gogo/protobuf/vanity/command",
     "github.com/golang-commonmark/markdown",
     "github.com/golang/dep/cmd/dep",
+    "github.com/golang/geo/s2",
     "github.com/golang/protobuf/proto",
     "github.com/golang/snappy",
     "github.com/google/btree",
@@ -2133,6 +2174,14 @@
     "github.com/spf13/pflag",
     "github.com/stretchr/testify/assert",
     "github.com/stretchr/testify/require",
+    "github.com/twpayne/go-geom",
+    "github.com/twpayne/go-geom/encoding/ewkb",
+    "github.com/twpayne/go-geom/encoding/ewkbhex",
+    "github.com/twpayne/go-geom/encoding/geojson",
+    "github.com/twpayne/go-geom/encoding/kml",
+    "github.com/twpayne/go-geom/encoding/wkb",
+    "github.com/twpayne/go-geom/encoding/wkbhex",
+    "github.com/twpayne/go-geom/encoding/wkt",
     "github.com/wadey/gocovmerge",
     "go.etcd.io/etcd/raft",
     "go.etcd.io/etcd/raft/confchange",
