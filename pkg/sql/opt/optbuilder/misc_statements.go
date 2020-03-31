@@ -25,7 +25,7 @@ func (b *Builder) buildControlJobs(n *tree.ControlJobs, inScope *scope) (outScop
 
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
-	emptyScope := &scope{builder: b}
+	emptyScope := b.allocScope()
 	colTypes := []*types.T{types.Int}
 	inputScope := b.buildStmt(n.Jobs, colTypes, emptyScope)
 
@@ -50,7 +50,7 @@ func (b *Builder) buildControlJobs(n *tree.ControlJobs, inScope *scope) (outScop
 func (b *Builder) buildCancelQueries(n *tree.CancelQueries, inScope *scope) (outScope *scope) {
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
-	emptyScope := &scope{builder: b}
+	emptyScope := b.allocScope()
 	colTypes := []*types.T{types.String}
 	inputScope := b.buildStmt(n.Queries, colTypes, emptyScope)
 
@@ -75,7 +75,7 @@ func (b *Builder) buildCancelQueries(n *tree.CancelQueries, inScope *scope) (out
 func (b *Builder) buildCancelSessions(n *tree.CancelSessions, inScope *scope) (outScope *scope) {
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
-	emptyScope := &scope{builder: b}
+	emptyScope := b.allocScope()
 	colTypes := []*types.T{types.String}
 	inputScope := b.buildStmt(n.Sessions, colTypes, emptyScope)
 
