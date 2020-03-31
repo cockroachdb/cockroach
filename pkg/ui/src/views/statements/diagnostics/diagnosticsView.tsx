@@ -43,7 +43,7 @@ import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnost
 import { getDiagnosticsStatus, sortByCompletedField, sortByRequestedAtField } from "./diagnosticsUtils";
 import { statementDiagnostics } from "src/util/docs";
 import { createStatementDiagnosticsAlertLocalSetting } from "oss/src/redux/alerts";
-import { trackActivateDiagnostics } from "src/util/analytics";
+import { trackActivateDiagnostics, trackDownloadDiagnosticsBundle } from "src/util/analytics";
 
 interface DiagnosticsViewOwnProps {
   statementFingerprint?: string;
@@ -93,20 +93,22 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
         if (record.completed) {
           return (
             <div className="crl-statements-diagnostics-view__actions-column">
-              <Button
-                onClick={() => this.getStatementDiagnostics(record.statement_diagnostics_id)}
-                size="small"
-                type="flat"
-                iconPosition="left"
-                icon={() => (
-                  <span
-                    className="crl-statements-diagnostics-view__icon"
-                    dangerouslySetInnerHTML={ trustIcon(DownloadIcon) }
-                  />
-                )}
-              >
-                Download
-              </Button>
+              <a href={`_admin/v1/stmtbundle/${record.statement_diagnostics_id}`}
+                 onClick={() => trackDownloadDiagnosticsBundle(record.statement_fingerprint)}>
+                <Button
+                  size="small"
+                  type="flat"
+                  iconPosition="left"
+                  icon={() => (
+                    <span
+                      className="crl-statements-diagnostics-view__icon"
+                      dangerouslySetInnerHTML={ trustIcon(DownloadIcon) }
+                    />
+                  )}
+                >
+                  Bundle (.zip)
+                </Button>
+              </a>
             </div>
           );
         }
