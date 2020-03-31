@@ -30,6 +30,7 @@ const (
 	operandNextTS
 	operandValue
 	operandIterator
+	operandFloat
 )
 
 const (
@@ -457,4 +458,37 @@ func (i *iteratorGenerator) closeAll() {
 	i.liveIters = nil
 	i.iterInfo = make(map[iteratorID]iteratorInfo)
 	i.readerToIter = make(map[readWriterID][]iteratorID)
+}
+
+type floatGenerator struct {
+	rng *rand.Rand
+}
+
+func (f *floatGenerator) get() string {
+	return fmt.Sprintf("%.4f", f.rng.Float32())
+}
+
+func (f *floatGenerator) getNew() string {
+	return f.get()
+}
+
+func (f *floatGenerator) parse(input string) float32 {
+	var result float32
+	if _, err := fmt.Sscanf(input, "%f", &result); err != nil {
+		panic(err)
+	}
+	return result
+}
+
+func (f *floatGenerator) opener() string {
+	// Not applicable, because count() is always nonzero.
+	return ""
+}
+
+func (f *floatGenerator) count() int {
+	return 1
+}
+
+func (f *floatGenerator) closeAll() {
+	// No-op.
 }
