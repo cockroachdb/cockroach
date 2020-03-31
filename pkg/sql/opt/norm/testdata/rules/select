@@ -475,15 +475,14 @@ SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE div=2
 ----
 select
  ├── columns: i:2 div:6!null f:3
- ├── side-effects
  ├── fd: ()-->(6)
  ├── project
  │    ├── columns: div:6 i:2 f:3
- │    ├── side-effects
+ │    ├── fd: (2)-->(6)
  │    ├── scan a
  │    │    └── columns: i:2 f:3
  │    └── projections
- │         └── i:2 / 2 [as=div:6, outer=(2), side-effects]
+ │         └── i:2 / 2 [as=div:6, outer=(2)]
  └── filters
       └── div:6 = 2 [outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
 
@@ -493,12 +492,10 @@ SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE 10.0=f AND 2=div AND i=1
 ----
 select
  ├── columns: i:2!null div:6!null f:3!null
- ├── side-effects
  ├── fd: ()-->(2,3,6)
  ├── project
  │    ├── columns: div:6!null i:2!null f:3!null
- │    ├── side-effects
- │    ├── fd: ()-->(2,3)
+ │    ├── fd: ()-->(2,3,6)
  │    ├── select
  │    │    ├── columns: i:2!null f:3!null
  │    │    ├── fd: ()-->(2,3)
@@ -508,7 +505,7 @@ select
  │    │         ├── f:3 = 10.0 [outer=(3), constraints=(/3: [/10.0 - /10.0]; tight), fd=()-->(3)]
  │    │         └── i:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
  │    └── projections
- │         └── i:2 / 2 [as=div:6, outer=(2), side-effects]
+ │         └── i:2 / 2 [as=div:6, outer=(2)]
  └── filters
       └── div:6 = 2 [outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
 

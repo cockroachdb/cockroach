@@ -43,7 +43,6 @@ project
  ├── save-table-name: q17_project_1
  ├── columns: avg_yearly:45(float)
  ├── cardinality: [1 - 1]
- ├── side-effects
  ├── stats: [rows=1, distinct(45)=1, null(45)=0]
  ├── key: ()
  ├── fd: ()-->(45)
@@ -131,7 +130,7 @@ project
  │         └── sum [as=sum:44, type=float, outer=(6)]
  │              └── l_extendedprice:6 [type=float]
  └── projections
-      └── sum:44 / 7.0 [as=avg_yearly:45, type=float, outer=(44), side-effects]
+      └── sum:44 / 7.0 [as=avg_yearly:45, type=float, outer=(44)]
 
 stats table=q17_project_1
 ----
