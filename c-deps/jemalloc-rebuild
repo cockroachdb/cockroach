@@ -1,4 +1,4 @@
 Bump the version below when changing jemalloc configure flags. Search for "BUILD
 ARTIFACT CACHING" in build/common.mk for rationale.
 
-4
+5
