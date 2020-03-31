@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -661,6 +663,32 @@ func backupPlanHook(
 				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
 					log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
 				}
+			}
+		}
+
+		// Collect telemetry.
+		{
+			telemetry.Count("backup.total.started")
+			if startTime.IsEmpty() {
+				telemetry.Count("backup.span.full")
+			} else {
+				telemetry.Count("backup.span.incremental")
+				telemetry.CountBucketed("backup.incremental-span-sec", int64(timeutil.Since(startTime.GoTime()).Seconds()))
+				if len(incrementalFrom) == 0 {
+					telemetry.Count("backup.auto-incremental")
+				}
+			}
+			if len(backupStmt.To) > 1 {
+				telemetry.Count("backup.partitioned")
+			}
+			if mvccFilter == MVCCFilter_All {
+				telemetry.Count("backup.revision-history")
+			}
+			if encryption != nil {
+				telemetry.Count("backup.encrypted")
+			}
+			if backupStmt.DescriptorCoverage == tree.AllDescriptors {
+				telemetry.Count("backup.targets.full_cluster")
 			}
 		}
 
