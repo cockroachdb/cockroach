@@ -307,7 +307,12 @@ func (m *mergeJoiner) outputStatsToTrace() {
 
 // ChildCount is part of the execinfra.OpNode interface.
 func (m *mergeJoiner) ChildCount(verbose bool) int {
-	return 2
+	if _, ok := m.leftSource.(execinfra.OpNode); ok {
+		if _, ok := m.rightSource.(execinfra.OpNode); ok {
+			return 2
+		}
+	}
+	return 0
 }
 
 // Child is part of the execinfra.OpNode interface.
