@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -48,7 +49,7 @@ func setExplainBundleResult(
 
 	var text []string
 	func() {
-		traceJSON, bundle, err := getTraceAndBundle(ctx, execCfg.DB, ie, trace, plan)
+		bundle, err := buildStatementBundle(ctx, execCfg.DB, ie, plan, trace)
 		if err != nil {
 			// TODO(radu): we cannot simply set an error on the result here without
 			// changing the executor logic (e.g. an implicit transaction could have
@@ -64,8 +65,8 @@ func setExplainBundleResult(
 			ctx,
 			fingerprint,
 			stmtStr,
-			traceJSON,
-			bundle,
+			bundle.trace,
+			bundle.zip,
 		)
 		if err != nil {
 			text = []string{fmt.Sprintf("Error recording bundle: %v", err)}
@@ -100,24 +101,6 @@ func setExplainBundleResult(
 	return nil
 }
 
-// getTraceAndBundle converts the trace to a JSON datum and creates a statement
-// bundle. It tries to return as much information as possible even in error
-// case.
-func getTraceAndBundle(
-	ctx context.Context, db *kv.DB, ie *InternalExecutor, trace tracing.Recording, plan *planTop,
-) (traceJSON tree.Datum, bundle *bytes.Buffer, _ error) {
-	traceJSON, traceStr, err := traceToJSON(trace)
-	bundle, bundleErr := buildStatementBundle(ctx, db, ie, plan, trace, traceStr)
-	if bundleErr != nil {
-		if err == nil {
-			err = bundleErr
-		} else {
-			err = errors.WithMessage(bundleErr, err.Error())
-		}
-	}
-	return traceJSON, bundle, err
-}
-
 // traceToJSON converts a trace to a JSON datum suitable for the
 // system.statement_diagnostics.trace column. In case of error, the returned
 // datum is DNull. Also returns the string representation of the trace.
@@ -127,7 +110,7 @@ func getTraceAndBundle(
 func traceToJSON(trace tracing.Recording) (tree.Datum, string, error) {
 	root := normalizeSpan(trace[0], trace)
 	marshaller := jsonpb.Marshaler{
-		Indent: "  ",
+		Indent: "\t",
 	}
 	str, err := marshaller.MarshalToString(&root)
 	if err != nil {
@@ -157,23 +140,20 @@ func normalizeSpan(s tracing.RecordedSpan, trace tracing.Recording) tracing.Norm
 	return n
 }
 
+// diagnosticsBundle contains diagnostics information collected for a statement.
+type diagnosticsBundle struct {
+	zip   []byte
+	trace tree.Datum
+}
+
 // buildStatementBundle collects metadata related the planning and execution of
-// the statement, generates a bundle, stores it in the
-// system.statement_bundle_chunks table and adds an entry in
+// the statement. It generates a bundle for storage in
 // system.statement_diagnostics.
-//
-// Returns the bundle ID, which is the key for the row added in
-// statement_diagnostics.
 func buildStatementBundle(
-	ctx context.Context,
-	db *kv.DB,
-	ie *InternalExecutor,
-	plan *planTop,
-	trace tracing.Recording,
-	traceJSONStr string,
-) (*bytes.Buffer, error) {
+	ctx context.Context, db *kv.DB, ie *InternalExecutor, plan *planTop, trace tracing.Recording,
+) (diagnosticsBundle, error) {
 	if plan == nil {
-		return nil, errors.AssertionFailedf("execution terminated early")
+		return diagnosticsBundle{}, errors.AssertionFailedf("execution terminated early")
 	}
 	b := makeStmtBundleBuilder(db, ie, plan)
 
@@ -181,10 +161,24 @@ func buildStatementBundle(
 	b.addOptPlans()
 	b.addExecPlan()
 	b.addDistSQLDiagrams(trace)
-	b.addTrace(traceJSONStr)
+
+	traceJSON, traceJSONStr, err := traceToJSON(trace)
+	if err != nil {
+		log.Errorf(ctx, "failed to convert trace to json: %s", err)
+		return diagnosticsBundle{}, nil
+	}
+
+	// The JSON is not very human-readable, so we include another format too.
+	readableTrace := trace.String()
+	b.addTrace(traceJSONStr, readableTrace)
+
 	b.addEnv(ctx)
 
-	return b.finalize()
+	buf, err := b.finalize()
+	if err != nil {
+		return diagnosticsBundle{}, err
+	}
+	return diagnosticsBundle{trace: traceJSON, zip: buf.Bytes()}, nil
 }
 
 // stmtBundleBuilder is a helper for building a statement bundle.
@@ -262,10 +256,11 @@ func (b *stmtBundleBuilder) addDistSQLDiagrams(trace tracing.Recording) {
 	}
 }
 
-func (b *stmtBundleBuilder) addTrace(traceJSONStr string) {
-	if traceJSONStr != "" {
-		b.z.AddFile("trace.json", traceJSONStr)
-	}
+// addTrace adds two files to the bundle: one is a json representation of the
+// trace, the other one is a human-readable representation.
+func (b *stmtBundleBuilder) addTrace(traceJSONStr, readableTrace string) {
+	b.z.AddFile("trace.json", traceJSONStr)
+	b.z.AddFile("trace.txt", readableTrace)
 }
 
 func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
