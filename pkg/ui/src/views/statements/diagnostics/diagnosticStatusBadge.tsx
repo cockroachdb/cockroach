@@ -99,10 +99,9 @@ export function DiagnosticStatusBadge(props: OwnProps) {
 
   return (
     <Tooltip
-      visible={enableTooltip}
       title={tooltipContent}
       theme="blue"
-      placement="bottom"
+      placement="bottomLeft"
     >
       <div
         className="diagnostic-status-badge__content"

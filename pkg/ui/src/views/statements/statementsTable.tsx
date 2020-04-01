@@ -44,9 +44,13 @@ function StatementLink(props: { statement: string, app: string, implicitTxn: boo
   return (
     <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
       <div className="cl-table-link__tooltip">
-        <Tooltip placement="bottom" title={
-          <pre className="cl-table-link__description">{ getHighlightedText(props.statement, props.search) }</pre>
-        }>
+        <Tooltip
+          placement="bottom"
+          title={<pre className="cl-table-link__description">
+            { getHighlightedText(props.statement, props.search) }
+          </pre>}
+          overlayClassName="cl-table-link__statement-tooltip--fixed-width"
+        >
           <div className="cl-table-link__tooltip-hover-area">
             { getHighlightedText(shortStatement(summary, props.statement), props.search, true) }
           </div>
