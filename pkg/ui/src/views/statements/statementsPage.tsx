@@ -44,7 +44,7 @@ import { getMatchParamByName } from "src/util/query";
 import { trackPaginate, trackSearch } from "src/util/analytics";
 
 import "./statements.styl";
-import { statementsTable } from "oss/src/util/docs";
+import { statementsTable } from "src/util/docs";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 

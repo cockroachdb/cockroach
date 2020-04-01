@@ -19,7 +19,7 @@ import { DrawerComponent } from "../drawer";
 import { trackTableSort } from "src/util/analytics";
 
 import "./sortabletable.styl";
-import Empty, { IEmptyProps } from "oss/src/components/empty/empty";
+import { Empty, IEmptyProps } from "src/components/empty";
 
 /**
  * SortableColumn describes the contents a single column of a

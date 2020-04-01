@@ -9,20 +9,20 @@
 // licenses/APL.txt.
 
 import React, { MouseEvent } from "react";
-import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
-import { cockroach } from "src/js/protos";
-import { TimestampToMoment } from "src/util/convert";
-import { DATE_FORMAT } from "src/util/format";
-import { JobStatusCell } from "oss/src/views/jobs/jobStatusCell";
-import { Icon, Pagination } from "antd";
-import { SortSetting } from "oss/src/views/shared/components/sortabletable";
-import { CachedDataReducerState } from "oss/src/redux/cachedDataReducer";
+import {ColumnDescriptor, SortedTable} from "src/views/shared/components/sortedtable";
+import {cockroach} from "src/js/protos";
+import {TimestampToMoment} from "src/util/convert";
+import {DATE_FORMAT} from "src/util/format";
+import {JobStatusCell} from "src/views/jobs/jobStatusCell";
+import {Icon, Pagination} from "antd";
+import {SortSetting} from "src/views/shared/components/sortabletable";
+import {CachedDataReducerState} from "src/redux/cachedDataReducer";
 import { isEmpty, isEqual, map } from "lodash";
-import { JobDescriptionCell } from "oss/src/views/jobs/jobDescriptionCell";
-import { trackDocsLink } from "src/util/analytics";
+import {JobDescriptionCell} from "src/views/jobs/jobDescriptionCell";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
-import { jobTable } from "oss/src/util/docs";
+import { jobTable } from "src/util/docs";
+import { trackDocsLink } from "oss/src/util/analytics";
 
 class JobsSortedTable extends SortedTable<Job> {}
 

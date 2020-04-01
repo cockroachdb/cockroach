@@ -9,10 +9,10 @@
 // licenses/APL.txt.
 
 import { Col, Row, Tabs } from "antd";
-import { Highlight } from "oss/src/views/shared/components/sql/highlight";
-import { SummaryCard } from "oss/src/views/shared/components/summaryCard";
-import { selectStatements } from "oss/src/views/statements/statementsPage";
-import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "oss/src/views/statements/statementsTable";
+import { Highlight } from "src/views/shared/components/sql/highlight";
+import { SummaryCard } from "src/views/shared/components/summaryCard";
+import { selectStatements } from "src/views/statements/statementsPage";
+import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "src/views/statements/statementsTable";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
@@ -30,8 +30,8 @@ import "./styles.styl";
 const { TabPane } = Tabs;
 import { getMatchParamByName } from "src/util/query";
 import { databaseDetails } from "../databaseSummary";
-import { Button, BackIcon } from "oss/src/components/button";
-import { databaseTable } from "oss/src/util/docs";
+import { Button, BackIcon } from "src/components/button";
+import { databaseTable } from "src/util/docs";
 
 class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.IGrant> {}
 
