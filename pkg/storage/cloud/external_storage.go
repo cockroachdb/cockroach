@@ -85,6 +85,9 @@ var redactedQueryParams = map[string]struct{}{
 	CredentialsParam:     {},
 }
 
+// ErrListingUnsupported is a marker for indicating listing is unsupported.
+var ErrListingUnsupported = errors.New("listing is not supported")
+
 // ExternalStorageFactory describes a factory function for ExternalStorage.
 type ExternalStorageFactory func(ctx context.Context, dest roachpb.ExternalStorage) (ExternalStorage, error)
 
