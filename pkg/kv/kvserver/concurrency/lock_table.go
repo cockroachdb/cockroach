@@ -1138,7 +1138,8 @@ func (l *lockState) acquireLock(
 		// Already held.
 		beforeTxn, beforeTs, _ := l.getLockerInfo()
 		if txn.ID != beforeTxn.ID {
-			return errors.Errorf("caller violated contract: existing lock cannot be acquired by different transaction")
+			return errors.Errorf("caller violated contract: " +
+				"existing lock cannot be acquired by different transaction")
 		}
 		seqs := l.holder.holder[durability].seqs
 		if l.holder.holder[durability].txn != nil && l.holder.holder[durability].txn.Epoch < txn.Epoch {
@@ -1248,7 +1249,8 @@ func (l *lockState) discoveredLock(
 
 	if l.holder.locked {
 		if !l.isLockedBy(txn.ID) {
-			panic("bug in caller or lockTable")
+			return errors.Errorf("caller violated contract: " +
+				"discovered lock by different transaction than existing lock")
 		}
 	} else {
 		l.holder.locked = true
