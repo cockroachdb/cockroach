@@ -16,20 +16,39 @@ import { track } from "./trackStatementDetailsSubnavSelection";
 const sandbox = createSandbox();
 
 describe("trackSubnavSelection", () => {
+  const subNavKey = "subnav-test";
+
   afterEach(() => {
     sandbox.reset();
   });
 
-  it("should send a track call given a selected nav item key", () => {
+  it("should only call track once", () => {
     const spy = sandbox.spy();
-    const subNavKey = "subnav-test";
+    track(spy)(subNavKey);
+    assert.isTrue(spy.calledOnce);
+  });
+
+  it("should send a track call with the correct event", () => {
+    const spy = sandbox.spy();
+    const expected = "SubNavigation Selection";
+
+    track(spy)(subNavKey);
+
+    const sent = spy.getCall(0).args[0];
+    const event = get(sent, "event");
+
+    assert.isTrue(isString(event));
+    assert.isTrue(event === expected);
+  });
+
+  it("send the correct payload", () => {
+    const spy = sandbox.spy();
 
     track(spy)(subNavKey);
 
     const sent = spy.getCall(0).args[0];
     const selection = get(sent, "properties.selection");
 
-    assert.isTrue(spy.calledOnce);
     assert.isTrue(isString(selection));
     assert.isTrue(selection === subNavKey);
   });
