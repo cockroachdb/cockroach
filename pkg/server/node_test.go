@@ -262,50 +262,48 @@ func TestBootstrapCluster(t *testing.T) {
 func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	e := storage.NewDefaultInMem()
-	if _, err := bootstrapCluster(
-		ctx, []storage.Engine{e}, clusterversion.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
-	); err != nil {
-		t.Fatal(err)
+
+	path, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	// Start server with persisted store so that it gets bootstrapped.
+	{
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			StoreSpecs: []base.StoreSpec{
+				{Path: path},
+			},
+		})
+		s.Stopper().Stop(ctx)
 	}
 
-	// Start a new node with two new stores which will require bootstrapping.
-	engines := Engines([]storage.Engine{
-		e,
-		storage.NewDefaultInMem(),
-		storage.NewDefaultInMem(),
+	specs := []base.StoreSpec{
+		{Path: path},
+		{InMemory: true},
+		{InMemory: true},
+	}
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		StoreSpecs: specs,
 	})
-	defer engines.Close()
-	_, _, node, stopper := createAndStartTestNode(
-		ctx,
-		util.TestAddr,
-		engines,
-		util.TestAddr,
-		roachpb.Locality{},
-		t,
-	)
-	defer stopper.Stop(ctx)
-
-	// Non-initialized stores (in this case the new in-memory-based
-	// store) will be bootstrapped by the node upon start. This happens
-	// in a goroutine, so we'll have to wait a bit until we can find the
-	// new node.
-	testutils.SucceedsSoon(t, func() error {
-		if n := node.stores.GetStoreCount(); n != 3 {
-			return errors.Errorf("expected 3 stores but got %d", n)
-		}
-		return nil
-	})
+	defer s.Stopper().Stop(ctx)
 
 	// Check whether all stores are started properly.
-	if err := node.stores.VisitStores(func(s *kvserver.Store) error {
-		if !s.IsStarted() {
-			return errors.Errorf("fail to start store: %s", s)
+	testutils.SucceedsSoon(t, func() error {
+		var n int
+		err := s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+			if !s.IsStarted() {
+				return fmt.Errorf("not started: %s", s)
+			}
+			n++
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		if exp := len(specs); exp != n {
+			return fmt.Errorf("found only %d of %d stores", n, exp)
 		}
 		return nil
-	}); err != nil {
-		t.Error(err)
-	}
+	})
 }
 
 // TestNodeJoin verifies a new node is able to join a bootstrapped
