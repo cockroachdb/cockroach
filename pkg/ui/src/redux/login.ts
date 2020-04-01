@@ -26,27 +26,16 @@ const dataFromServer = getDataFromServer();
 // State for application use.
 
 export interface LoginState {
-  // useLogin() indicates whether the login drop-down menu should be
+  // displayUserMenu() indicates whether the login drop-down menu should be
   // displayed at the top right.
-  //
-  // Despite its name, it does not indicate whether the login
-  // page should be displayed or not. It merely controls the
-  // display of the drop-down menu.
-  useLogin(): boolean;
-  // loginEnabled() indicates whether the connection is secure. If
+  displayUserMenu(): boolean;
+  // secureCluster() indicates whether the connection is secure. If
   // false, an "insecure" indicator is displayed at the top right.
-  //
-  // Note that an "insecure" indicator should be displayed at the
-  // top right even when useLogin() is false.
-  //
-  // Despite its name, it does not indicate whether users can
-  // log in or not; it merely controls the display of the indicator.
-  loginEnabled(): boolean;
-  // hasAccess() indicates whether the login page can be displayed
-  // at all.
-  // Despite its name, it does not constrain whether a user
-  // can log in or not.
-  hasAccess(): boolean;
+  secureCluster(): boolean;
+  // hideLoginPage() indicates whether the login page can be
+  // displayed at all. The login page is hidden e.g.
+  // after a user has logged in.
+  hideLoginPage(): boolean;
   // loggedInUser() returns the name of the user logged in.
   loggedInUser(): string;
 }
@@ -58,15 +47,15 @@ class LoginEnabledState {
     this.apiState = state;
   }
 
-  useLogin(): boolean {
+  displayUserMenu(): boolean {
     return true;
   }
 
-  loginEnabled(): boolean {
+  secureCluster(): boolean {
     return true;
   }
 
-  hasAccess(): boolean {
+  hideLoginPage(): boolean {
     return this.apiState.loggedInUser != null;
   }
 
@@ -76,15 +65,15 @@ class LoginEnabledState {
 }
 
 class LoginDisabledState {
-  useLogin(): boolean {
+  displayUserMenu(): boolean {
     return true;
   }
 
-  loginEnabled(): boolean {
+  secureCluster(): boolean {
     return false;
   }
 
-  hasAccess(): boolean {
+  hideLoginPage(): boolean {
     return true;
   }
 
@@ -94,15 +83,15 @@ class LoginDisabledState {
 }
 
 class NoLoginState {
-  useLogin(): boolean {
+  displayUserMenu(): boolean {
     return false;
   }
 
-  loginEnabled(): boolean {
+  secureCluster(): boolean {
     return false;
   }
 
-  hasAccess(): boolean {
+  hideLoginPage(): boolean {
     return true;
   }
 

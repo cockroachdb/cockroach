@@ -47,7 +47,7 @@ class LoginIndicator extends React.Component<LoginIndicatorProps, LoginIndicator
   render() {
     const { loginState, handleLogout } = this.props;
     const { isOpenMenu } = this.state;
-    if (!loginState.loginEnabled()) {
+    if (!loginState.secureCluster()) {
       return (
         <div className="login-indicator login-indicator--insecure">
           <div
@@ -60,7 +60,7 @@ class LoginIndicator extends React.Component<LoginIndicatorProps, LoginIndicator
       );
     }
 
-    if (!loginState.useLogin()) {
+    if (!loginState.displayUserMenu()) {
       return null;
     }
 
