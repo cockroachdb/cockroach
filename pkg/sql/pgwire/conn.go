@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -259,9 +258,6 @@ func (c *conn) serveImpl(
 	var sessionAuthLogger *log.SecondaryLogger
 	if !inTestWithoutSQL && c.authLogEnabled() {
 		sessionAuthLogger = authLogger
-		telemetry.Inc(sqltelemetry.LoggedAuthAttempts)
-	} else {
-		telemetry.Inc(sqltelemetry.UnloggedAuthAttempts)
 	}
 
 	// We'll build an authPipe to communicate with the authentication process.

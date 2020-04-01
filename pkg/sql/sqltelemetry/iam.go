@@ -92,3 +92,15 @@ func IncIAMRevokePrivilegesCounter(on string) {
 	telemetry.Inc(telemetry.GetCounter(
 		fmt.Sprintf("%s.%s.%s.%s", iamRoles, "revoke", "privileges", on)))
 }
+
+// TurnConnAuditingOnUseCounter counts how many time connection audit logs were enabled.
+var TurnConnAuditingOnUseCounter = telemetry.GetCounterOnce("auditing.connection.enabled")
+
+// TurnConnAuditingOffUseCounter counts how many time connection audit logs were disabled.
+var TurnConnAuditingOffUseCounter = telemetry.GetCounterOnce("auditing.connection.disabled")
+
+// TurnAuthAuditingOnUseCounter counts how many time connection audit logs were enabled.
+var TurnAuthAuditingOnUseCounter = telemetry.GetCounterOnce("auditing.authentication.enabled")
+
+// TurnAuthAuditingOffUseCounter counts how many time connection audit logs were disabled.
+var TurnAuthAuditingOffUseCounter = telemetry.GetCounterOnce("auditing.authentication.disabled")
