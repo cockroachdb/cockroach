@@ -38,7 +38,7 @@ describe("trackSearch", () => {
     const event = get(sent, "event");
 
     assert.isTrue(isString(event));
-    assert.isTrue( event === expected);
+    assert.isTrue(event === expected);
   });
 
   it("should send the correct payload", () => {
@@ -50,6 +50,6 @@ describe("trackSearch", () => {
     const numberOfResults = get(sent, "properties.numberOfResults");
 
     assert.isTrue(isNumber(numberOfResults));
-    assert.isTrue( numberOfResults === testSearchResults);
+    assert.isTrue(numberOfResults === testSearchResults);
   });
 });

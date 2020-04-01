@@ -36,13 +36,13 @@ describe("trackTableSort", () => {
     const event = get(sent, "event");
 
     assert.isTrue(isString(event));
-    assert.isTrue( event === expected);
+    assert.isTrue(event === expected);
   });
 
   it("should send the correct payload", () => {
     const spy = sandbox.spy();
     const tableName = "Test table";
-    const column = { title: "test", cell: (x: number) => x};
+    const column = { title: "test", cell: (x: number) => x };
     const sortSetting = { sortKey: "whatever", ascending: true };
 
     track(spy)(tableName, column, sortSetting);

@@ -36,7 +36,7 @@ describe("trackActivateDiagnostics", () => {
     const event = get(sent, "event");
 
     assert.isTrue(isString(event));
-    assert.isTrue( event === expected);
+    assert.isTrue(event === expected);
   });
 
   it("should send the correct payload", () => {
@@ -49,6 +49,6 @@ describe("trackActivateDiagnostics", () => {
     const fingerprint = get(sent, "properties.fingerprint");
 
     assert.isTrue(isString(fingerprint));
-    assert.isTrue( fingerprint === statement);
+    assert.isTrue(fingerprint === statement);
   });
 });
