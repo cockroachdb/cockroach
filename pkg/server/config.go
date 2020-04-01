@@ -268,9 +268,11 @@ type Config struct {
 	// in a timely fashion, typically 30s after the server starts listening.
 	DelayedBootstrapFn func()
 
-	// EnableWebSessionAuthentication enables session-based authentication for
-	// the Admin API's HTTP endpoints.
-	EnableWebSessionAuthentication bool
+	// TestingInsecureWebAccess enables uses of the HTTP and UI
+	// endpoints without a valid authentication token. This should be
+	// used only in tests what want a secure cluster with RPC
+	// auth but no auth in HTTP.
+	TestingInsecureWebAccess bool
 
 	enginesCreated bool
 }
@@ -337,23 +339,20 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		panic(err)
 	}
 
-	disableWebLogin := envutil.EnvOrDefaultBool("COCKROACH_DISABLE_WEB_LOGIN", false)
-
 	cfg := Config{
-		Config:                         new(base.Config),
-		DefaultZoneConfig:              zonepb.DefaultZoneConfig(),
-		DefaultSystemZoneConfig:        zonepb.DefaultSystemZoneConfig(),
-		MaxOffset:                      MaxOffsetType(base.DefaultMaxClockOffset),
-		Settings:                       st,
-		CacheSize:                      DefaultCacheSize,
-		SQLMemoryPoolSize:              defaultSQLMemoryPoolSize,
-		SQLTableStatCacheSize:          defaultSQLTableStatCacheSize,
-		SQLQueryCacheSize:              defaultSQLQueryCacheSize,
-		ScanInterval:                   defaultScanInterval,
-		ScanMinIdleTime:                defaultScanMinIdleTime,
-		ScanMaxIdleTime:                defaultScanMaxIdleTime,
-		EventLogEnabled:                defaultEventLogEnabled,
-		EnableWebSessionAuthentication: !disableWebLogin,
+		Config:                  new(base.Config),
+		DefaultZoneConfig:       zonepb.DefaultZoneConfig(),
+		DefaultSystemZoneConfig: zonepb.DefaultSystemZoneConfig(),
+		MaxOffset:               MaxOffsetType(base.DefaultMaxClockOffset),
+		Settings:                st,
+		CacheSize:               DefaultCacheSize,
+		SQLMemoryPoolSize:       defaultSQLMemoryPoolSize,
+		SQLTableStatCacheSize:   defaultSQLTableStatCacheSize,
+		SQLQueryCacheSize:       defaultSQLQueryCacheSize,
+		ScanInterval:            defaultScanInterval,
+		ScanMinIdleTime:         defaultScanMinIdleTime,
+		ScanMaxIdleTime:         defaultScanMaxIdleTime,
+		EventLogEnabled:         defaultEventLogEnabled,
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
@@ -627,10 +626,10 @@ func (cfg *Config) FilterGossipBootstrapResolvers(
 	return filtered
 }
 
-// RequireWebSession indicates whether the server should require authentication
-// sessions when serving admin API requests.
-func (cfg *Config) RequireWebSession() bool {
-	return !cfg.Insecure && cfg.EnableWebSessionAuthentication
+// InsecureWebAccess indicates whether the server should allow
+// access to the HTTP endpoints without a valid auth cookie.
+func (cfg *Config) InsecureWebAccess() bool {
+	return cfg.Insecure || cfg.TestingInsecureWebAccess
 }
 
 // readEnvironmentVariables populates all context values that are environment

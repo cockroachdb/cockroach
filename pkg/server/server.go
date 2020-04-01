@@ -1728,9 +1728,8 @@ func (s *Server) Start(ctx context.Context) error {
 	authenticatedUIHandler := newAuthenticationMuxAllowAnonymous(
 		s.authentication,
 		ui.Handler(ui.Config{
-			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
-			LoginEnabled:         s.cfg.RequireWebSession(),
-			NodeID:               &s.nodeIDContainer,
+			Insecure: s.cfg.InsecureWebAccess(),
+			NodeID:   &s.nodeIDContainer,
 			GetUser: func(ctx context.Context) *string {
 				if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
 					return &u
@@ -1743,7 +1742,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Register gRPC-gateway endpoints used by the admin UI.
 	var authHandler http.Handler = gwMux
-	if s.cfg.RequireWebSession() {
+	if !s.cfg.InsecureWebAccess() {
 		authHandler = newAuthenticationMux(s.authentication, authHandler)
 	}
 

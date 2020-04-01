@@ -107,7 +107,7 @@ type TestServerArgs struct {
 
 	// If set, web session authentication will be disabled, even if the server
 	// is running in secure mode.
-	DisableWebSessionAuthentication bool
+	InsecureWebAccess bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test

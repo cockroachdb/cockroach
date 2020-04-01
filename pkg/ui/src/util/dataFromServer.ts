@@ -9,8 +9,7 @@
 // licenses/APL.txt.
 
 export interface DataFromServer {
-  ExperimentalUseLogin: boolean;
-  LoginEnabled: boolean;
+  Insecure: boolean;
   LoggedInUser: string;
   Tag: string;
   Version: string;
