@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -379,7 +380,14 @@ func resolveBackupManifests(
 		// automatically created incremental layers inside the base layer.
 		prev, err := findPriorBackups(ctx, baseStores[0])
 		if err != nil {
-			return nil, nil, nil, err
+			if errors.Is(err, cloud.ErrListingUnsupported) {
+				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", baseStores[0])
+				// If we do not support listing, we have to just assume there are none
+				// and restore the specified base.
+				prev = nil
+			} else {
+				return nil, nil, nil, err
+			}
 		}
 
 		numLayers := len(prev) + 1
