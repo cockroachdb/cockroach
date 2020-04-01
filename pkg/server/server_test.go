@@ -54,8 +54,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
-
 // TestSelfBootstrap verifies operation when no bootstrap hosts have
 // been specified.
 func TestSelfBootstrap(t *testing.T) {

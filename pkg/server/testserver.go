@@ -267,6 +267,11 @@ type TestServer struct {
 	}
 }
 
+// Node returns the Node as an interface{}.
+func (ts *TestServer) Node() interface{} {
+	return ts.node
+}
+
 // Stopper returns the embedded server's Stopper.
 func (ts *TestServer) Stopper() *stop.Stopper {
 	return ts.stopper
