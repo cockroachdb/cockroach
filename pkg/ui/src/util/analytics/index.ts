@@ -12,3 +12,4 @@ export { default as trackActivateDiagnostics } from "./trackActivateDiagnostics"
 export { default as trackDiagnosticsModalOpen } from "./trackDiagnosticsModalOpen";
 export { default as trackSubnavSelection } from "./trackStatementDetailsSubnavSelection";
 export { default as trackTableSort } from "./trackTableSort";
+export { default as trackPaginate } from "./trackPaginate";

@@ -43,6 +43,7 @@ import {
 } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
+import { trackPaginate } from "src/util/analytics";
 
 import "./statements.styl";
 
@@ -163,7 +164,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
   onChangePage = (current: number) => {
     const { pagination } = this.state;
     this.setState({ pagination: { ...pagination, current } });
-    this.trackPaginate(current);
+    trackPaginate(current);
   }
   onSubmitSearchField = (search: string) => {
     this.setState({ pagination: { ...this.state.pagination, current: 1 }, search });
@@ -190,15 +191,6 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
       event: "Search",
       properties: {
         numberOfResults,
-      },
-    });
-  }
-
-  trackPaginate = (page: number) => {
-    analytics.track({
-      event: "Paginate",
-      properties: {
-        selectedPage: page,
       },
     });
   }
