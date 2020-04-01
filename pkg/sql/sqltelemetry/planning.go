@@ -33,6 +33,21 @@ var SubqueryUseCounter = telemetry.GetCounterOnce("sql.plan.subquery")
 // correlated subquery has been processed during planning.
 var CorrelatedSubqueryUseCounter = telemetry.GetCounterOnce("sql.plan.subquery.correlated")
 
+// ForeignKeyChecksUseCounter is to be incremented every time a mutation has
+// foreign key checks and the checks are planned by the optimizer.
+var ForeignKeyChecksUseCounter = telemetry.GetCounterOnce("sql.plan.fk.checks")
+
+// ForeignKeyCascadesUseCounter is to be incremented every time a mutation
+// involves a cascade. Currently, cascades use the legacy paths, so the
+// ForeignKeyLegacyUseCounter would also be incremented in these cases.
+var ForeignKeyCascadesUseCounter = telemetry.GetCounterOnce("sql.plan.fk.cascades")
+
+// ForeignKeyLegacyUseCounter is to be incremented every time a mutation
+// involves foreign key checks or cascades but uses the legacy execution path
+// (either because it has cascades or because the optimizer_foreign_keys setting
+// is off).
+var ForeignKeyLegacyUseCounter = telemetry.GetCounterOnce("sql.plan.fk.legacy")
+
 // LateralJoinUseCounter is to be incremented whenever a query uses the
 // LATERAL keyword.
 var LateralJoinUseCounter = telemetry.GetCounterOnce("sql.plan.lateral-join")
@@ -50,8 +65,21 @@ var MergeJoinHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.merge-joi
 var LookupJoinHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.lookup-join")
 
 // IndexHintUseCounter is to be incremented whenever a query specifies an index
-// hint.
+// hint. Incremented whenever one of the more specific variants below is
+// incremented.
 var IndexHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.index")
+
+// IndexHintSelectUseCounter is to be incremented whenever a query specifies an
+// index hint in a SELECT.
+var IndexHintSelectUseCounter = telemetry.GetCounterOnce("sql.plan.hints.index.select")
+
+// IndexHintUpdateUseCounter is to be incremented whenever a query specifies an
+// index hint in an UPDATE.
+var IndexHintUpdateUseCounter = telemetry.GetCounterOnce("sql.plan.hints.index.update")
+
+// IndexHintDeleteUseCounter is to be incremented whenever a query specifies an
+// index hint in a DELETE.
+var IndexHintDeleteUseCounter = telemetry.GetCounterOnce("sql.plan.hints.index.delete")
 
 // InterleavedTableJoinCounter is to be incremented whenever an InterleavedTableJoin is planned.
 var InterleavedTableJoinCounter = telemetry.GetCounterOnce("sql.plan.interleaved-table-join")
@@ -87,6 +115,42 @@ var TurnAutoStatsOnUseCounter = telemetry.GetCounterOnce("sql.plan.automatic-sta
 // TurnAutoStatsOffUseCounter is to be incremented whenever automatic stats
 // collection is explicitly disabled.
 var TurnAutoStatsOffUseCounter = telemetry.GetCounterOnce("sql.plan.automatic-stats.disabled")
+
+// JoinAlgoHashUseCounter is to be incremented whenever a hash join node is
+// planned.
+var JoinAlgoHashUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.algo.hash")
+
+// JoinAlgoMergeUseCounter is to be incremented whenever a merge join node is
+// planned.
+var JoinAlgoMergeUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.algo.merge")
+
+// JoinAlgoLookupUseCounter is to be incremented whenever a lookup join node is
+// planned.
+var JoinAlgoLookupUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.algo.lookup")
+
+// JoinAlgoCrossUseCounter is to be incremented whenever a cross join node is
+// planned.
+var JoinAlgoCrossUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.algo.cross")
+
+// JoinTypeInnerUseCounter is to be incremented whenever an inner join node is
+// planned.
+var JoinTypeInnerUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.type.inner")
+
+// JoinTypeLeftUseCounter is to be incremented whenever a left or right outer
+// join node is planned.
+var JoinTypeLeftUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.type.left-outer")
+
+// JoinTypeFullUseCounter is to be incremented whenever a full outer join node is
+// planned.
+var JoinTypeFullUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.type.full-outer")
+
+// JoinTypeSemiUseCounter is to be incremented whenever a semi-join node is
+// planned.
+var JoinTypeSemiUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.type.semi")
+
+// JoinTypeAntiUseCounter is to be incremented whenever an anti-join node is
+// planned.
+var JoinTypeAntiUseCounter = telemetry.GetCounterOnce("sql.plan.opt.node.join.type.anti")
 
 // We can't parameterize these telemetry counters, so just make a bunch of
 // buckets for setting the join reorder limit since the range of reasonable
@@ -125,4 +189,11 @@ func ReportJoinReorderLimit(value int) {
 // being planned.
 func WindowFunctionCounter(wf string) telemetry.Counter {
 	return telemetry.GetCounter("sql.plan.window_function." + wf)
+}
+
+// OptNodeCounter should be incremented every time a node of the given
+// type is encountered at the end of the query optimization (i.e. it
+// counts the nodes actually used for physical planning).
+func OptNodeCounter(nodeType string) telemetry.Counter {
+	return telemetry.GetCounterOnce(fmt.Sprintf("sql.plan.opt.node.%s", nodeType))
 }

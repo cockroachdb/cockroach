@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -215,8 +217,10 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	orderBy tree.OrderBy,
 ) {
 	var indexFlags *tree.IndexFlags
-	if source, ok := texpr.(*tree.AliasedTableExpr); ok {
+	if source, ok := texpr.(*tree.AliasedTableExpr); ok && source.IndexFlags != nil {
 		indexFlags = source.IndexFlags
+		telemetry.Inc(sqltelemetry.IndexHintUseCounter)
+		telemetry.Inc(sqltelemetry.IndexHintUpdateUseCounter)
 	}
 
 	// Fetch columns from different instance of the table metadata, so that it's
@@ -321,8 +325,10 @@ func (mb *mutationBuilder) buildInputForDelete(
 	inScope *scope, texpr tree.TableExpr, where *tree.Where, limit *tree.Limit, orderBy tree.OrderBy,
 ) {
 	var indexFlags *tree.IndexFlags
-	if source, ok := texpr.(*tree.AliasedTableExpr); ok {
+	if source, ok := texpr.(*tree.AliasedTableExpr); ok && source.IndexFlags != nil {
 		indexFlags = source.IndexFlags
+		telemetry.Inc(sqltelemetry.IndexHintUseCounter)
+		telemetry.Inc(sqltelemetry.IndexHintDeleteUseCounter)
 	}
 
 	// Fetch columns from different instance of the table metadata, so that it's
