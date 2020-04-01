@@ -157,17 +157,16 @@
   .rows-dev
     background-color $colors--primary-blue-3
 
-  &-grey
-    .bar-chart__latency
-      &--parse, &--plan, &--run, &--overhead, &--overall
-        background-color $colors--neutral-4
+  .bar-chart
+    &__parse, &__plan, &__run, &__overhead, &__overall
+      background-color $colors--neutral-4
+  
   &-red
-    .bar-chart__latency
-      &--parse, &--plan, &--run, &--overhead, &--overall
+    .bar-chart
+      &__parse, &__plan, &__run, &__overhead, &__overall
         background-color $colors--functional-red-2
 
-  &__latency
-    &--parse-dev, &--plan-dev, &--run-dev, &--overhead-dev, &--overall-dev
+  &__parse-dev, &__plan-dev, &__run-dev, &__overhead-dev, &__overall-dev
       background-color $colors--primary-blue-3
 
 .numeric-stats-table

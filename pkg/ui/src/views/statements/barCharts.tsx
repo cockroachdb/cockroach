@@ -39,13 +39,13 @@ const rowsBars = [
 ];
 
 const latencyBars = [
-  bar("bar-chart__latency--parse", (d: StatementStatistics) => d.stats.parse_lat.mean),
-  bar("bar-chart__latency--plan", (d: StatementStatistics) => d.stats.plan_lat.mean),
-  bar("bar-chart__latency--run", (d: StatementStatistics) => d.stats.run_lat.mean),
-  bar("bar-chart__latency--overhead", (d: StatementStatistics) => d.stats.overhead_lat.mean),
+  bar("bar-chart__parse", (d: StatementStatistics) => d.stats.parse_lat.mean),
+  bar("bar-chart__plan", (d: StatementStatistics) => d.stats.plan_lat.mean),
+  bar("bar-chart__run", (d: StatementStatistics) => d.stats.run_lat.mean),
+  bar("bar-chart__overhead", (d: StatementStatistics) => d.stats.overhead_lat.mean),
 ];
 
-const latencyStdDev = bar("bar-chart__latency--overall-dev", (d: StatementStatistics) => stdDevLong(d.stats.service_lat, d.stats.count));
+const latencyStdDev = bar("bar-chart__overall-dev", (d: StatementStatistics) => stdDevLong(d.stats.service_lat, d.stats.count));
 const rowsStdDev = bar("rows-dev", (d: StatementStatistics) => stdDevLong(d.stats.num_rows, d.stats.count));
 
 function bar(name: string, value: (d: StatementStatistics) => number) {
@@ -149,8 +149,8 @@ const makeBarChart = (
               <div className="bar-chart__label">{ formatter(getTotal(d)) }</div>
               <div className="bar-chart__multiplebars">
                 <div
-                  key="bar-chart__latency--parse"
-                  className="bar-chart__latency--parse bar-chart__bar"
+                  key="bar-chart__parse"
+                  className="bar-chart__parse bar-chart__bar"
                   style={{ width: scale(getTotal(d)) + "%" }}
                 />
                 { renderStdDev() }
@@ -163,8 +163,8 @@ const makeBarChart = (
           <div className={className}>
             <div className="bar-chart__label">{ formatter(getTotal(d)) }</div>
             <div
-              key="bar-chart__latency--parse"
-              className="bar-chart__latency--parse bar-chart__bar"
+              key="bar-chart__parse"
+              className="bar-chart__parse bar-chart__bar"
               style={{ width: scale(getTotal(d)) + "%" }}
             />
           </div>
@@ -258,11 +258,11 @@ export function latencyBreakdown(s: StatementStatistics) {
             <div className="bar-chart__label">{ Duration(parseMean * 1e9) }</div>
             <div className="bar-chart__multiplebars">
               <div
-                className="bar-chart__latency--parse bar-chart__bar"
+                className="bar-chart__parse bar-chart__bar"
                 style={{ width: right + "%", position: "absolute", left: 0 }}
               />
               <div
-                className="bar-chart__latency--parse-dev bar-chart__bar bar-chart__bar--dev"
+                className="bar-chart__parse-dev bar-chart__bar bar-chart__bar--dev"
                 style={{ width: spread + "%", position: "absolute", left: width + "%" }}
               />
             </div>
@@ -283,11 +283,11 @@ export function latencyBreakdown(s: StatementStatistics) {
             <div className="bar-chart__label">{ Duration(planMean * 1e9) }</div>
             <div className="bar-chart__multiplebars">
               <div
-                className="bar-chart__latency--plan bar-chart__bar"
+                className="bar-chart__plan bar-chart__bar"
                 style={{ width: right + "%", position: "absolute", left: left + "%" }}
               />
               <div
-                className="bar-chart__latency--plan-dev bar-chart__bar bar-chart__bar--dev"
+                className="bar-chart__plan-dev bar-chart__bar bar-chart__bar--dev"
                 style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
               />
             </div>
@@ -308,11 +308,11 @@ export function latencyBreakdown(s: StatementStatistics) {
             <div className="bar-chart__label">{ Duration(runMean * 1e9) }</div>
             <div className="bar-chart__multiplebars">
               <div
-                className="bar-chart__latency--run bar-chart__bar"
+                className="bar-chart__run bar-chart__bar"
                 style={{ width: right + "%", position: "absolute", left: left + "%" }}
               />
               <div
-                className="bar-chart__latency--run-dev bar-chart__bar bar-chart__bar--dev"
+                className="bar-chart__run-dev bar-chart__bar bar-chart__bar--dev"
                 style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
               />
             </div>
@@ -333,11 +333,11 @@ export function latencyBreakdown(s: StatementStatistics) {
             <div className="bar-chart__label">{ Duration(overheadMean * 1e9) }</div>
             <div className="bar-chart__multiplebars">
               <div
-                className="bar-chart__latency--overhead bar-chart__bar"
+                className="bar-chart__overhead bar-chart__bar"
                 style={{ width: right + "%", position: "absolute", left: left + "%" }}
               />
               <div
-                className="bar-chart__latency--overhead-dev bar-chart__bar bar-chart__bar--dev"
+                className="bar-chart__overhead-dev bar-chart__bar bar-chart__bar--dev"
                 style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
               />
             </div>
@@ -360,11 +360,11 @@ export function latencyBreakdown(s: StatementStatistics) {
             <div className="bar-chart__label">{ Duration(overallMean * 1e9) }</div>
             <div className="bar-chart__multiplebars">
               <div
-                className="bar-chart__latency--parse bar-chart__bar"
+                className="bar-chart__parse bar-chart__bar"
                 style={{ width: parse + plan + run + overhead + "%", position: "absolute", left: 0 }}
               />
               <div
-                className="bar-chart__latency--overall-dev bar-chart__bar bar-chart__bar--dev"
+                className="bar-chart__overall-dev bar-chart__bar bar-chart__bar--dev"
                 style={{ width: spread + "%", position: "absolute", left: width + "%" }}
               />
             </div>
