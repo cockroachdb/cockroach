@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -150,33 +149,33 @@ func (ex *connExecutor) prepare(
 	// Preparing needs a transaction because it needs to retrieve db/table
 	// descriptors for type checking. If we already have an open transaction for
 	// this planner, use it. Using the user's transaction here is critical for
-	// proper deadlock detection. At the time of writing it is the case that any
+	// proper deadlock detection. At the time of writing, it is the case that any
 	// data read on behalf of this transaction is not cached for use in other
 	// transactions. It's critical that this fact remain true but nothing really
 	// enforces it. If we create a new transaction (newTxn is true), we'll need to
 	// finish it before we return.
-	newTxn, txn := false, ex.state.mu.txn
-	if txn == nil || txn.Serialize().Status != roachpb.PENDING {
-		newTxn, txn = true, client.NewTxn(ctx, ex.server.cfg.DB, ex.server.cfg.NodeID.Get(), client.RootTxn)
+
+	var flags planFlags
+	prepare := func(ctx context.Context, txn *client.Txn) (err error) {
+		ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+		p := &ex.planner
+		ex.resetPlanner(ctx, p, txn,
+			ex.server.cfg.Clock.PhysicalTime() /* stmtTS */, stmt.NumAnnotations)
+		p.stmt = &stmt
+		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
+		flags, err = ex.populatePrepared(ctx, txn, placeholderHints, p)
+		return err
 	}
 
-	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
-	p := &ex.planner
-	ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */, stmt.NumAnnotations)
-	p.stmt = &stmt
-	flags, err := ex.populatePrepared(ctx, txn, placeholderHints, p)
-	if err != nil {
-		// NB: if this is not a new transaction then let the connExecutor state
-		// machine decide whether we should clean up intents; we may be restarting
-		// and want to leave them in place.
-		if newTxn {
-			txn.CleanupOnError(ctx, err)
+	if txn := ex.state.mu.txn; txn != nil && !txn.Serialize().Status.IsFinalized() {
+		// Use the existing transaction.
+		if err := prepare(ctx, txn); err != nil {
+			return nil, err
 		}
-		return nil, err
-	}
-	if newTxn {
-		// Clean up the newly created transaction if we made one.
-		if err := txn.CommitOrCleanup(ctx); err != nil {
+	} else {
+		// Use a new transaction. This will handle retriable errors here rather
+		// than bubbling them up to the connExecutor state machine.
+		if err := ex.server.cfg.DB.Txn(ctx, prepare); err != nil {
 			return nil, err
 		}
 	}
@@ -194,6 +193,11 @@ func (ex *connExecutor) prepare(
 func (ex *connExecutor) populatePrepared(
 	ctx context.Context, txn *client.Txn, placeholderHints tree.PlaceholderTypes, p *planner,
 ) (planFlags, error) {
+	if before := ex.server.cfg.TestingKnobs.BeforePrepare; before != nil {
+		if err := before(ctx, ex.planner.stmt.String(), txn); err != nil {
+			return 0, err
+		}
+	}
 	stmt := p.stmt
 	if err := p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints); err != nil {
 		return 0, err

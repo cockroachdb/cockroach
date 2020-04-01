@@ -1771,4 +1771,3 @@ ALTER TABLE t42508 ADD COLUMN y INT DEFAULT nextval('s42508')
 
 statement error pgcode XXA00 unimplemented: cannot backfill such sequence operation.*\nHINT.*\n.*42508
 COMMIT
-
