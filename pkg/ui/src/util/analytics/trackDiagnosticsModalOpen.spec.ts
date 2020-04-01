@@ -36,10 +36,10 @@ describe("trackDiagnosticsModalOpen", () => {
     const event = get(sent, "event");
 
     assert.isTrue(isString(event));
-    assert.isTrue( event === expected);
+    assert.isTrue(event === expected);
   });
 
-  it("should send a track call with the correct fingerprint", () => {
+  it("send the correct payload", () => {
     const spy = sandbox.spy();
     const statement = "SELECT blah from blah-blah";
 
@@ -49,6 +49,6 @@ describe("trackDiagnosticsModalOpen", () => {
     const fingerprint = get(sent, "properties.fingerprint");
 
     assert.isTrue(isString(fingerprint));
-    assert.isTrue( fingerprint === statement);
+    assert.isTrue(fingerprint === statement);
   });
 });

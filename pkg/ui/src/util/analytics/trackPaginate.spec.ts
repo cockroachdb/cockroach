@@ -38,7 +38,7 @@ describe("trackPaginate", () => {
     const event = get(sent, "event");
 
     assert.isTrue(isString(event));
-    assert.isTrue( event === expected);
+    assert.isTrue(event === expected);
   });
 
   it("should send the correct payload", () => {
@@ -50,6 +50,6 @@ describe("trackPaginate", () => {
     const selectedPage = get(sent, "properties.selectedPage");
 
     assert.isTrue(isNumber(selectedPage));
-    assert.isTrue( selectedPage === testPage);
+    assert.isTrue(selectedPage === testPage);
   });
 });
