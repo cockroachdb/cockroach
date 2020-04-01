@@ -4035,3 +4035,25 @@ project
                                └── eq [type=bool]
                                     ├── variable: sum [type=decimal]
                                     └── variable: t3.x [type=int]
+
+# Regression test for #46196. Don't eliminate the scalar group by, and
+# default to type string.
+build
+SELECT max(t0.c0) FROM (VALUES (NULL), (NULL)) t0(c0);
+----
+scalar-group-by
+ ├── columns: max:3(string)
+ ├── project
+ │    ├── columns: column2:2(string)
+ │    ├── values
+ │    │    ├── columns: column1:1(unknown)
+ │    │    ├── tuple [type=tuple{unknown}]
+ │    │    │    └── null [type=unknown]
+ │    │    └── tuple [type=tuple{unknown}]
+ │    │         └── null [type=unknown]
+ │    └── projections
+ │         └── cast: STRING [type=string]
+ │              └── variable: column1 [type=unknown]
+ └── aggregations
+      └── max [type=string]
+           └── variable: column2 [type=string]
