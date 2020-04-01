@@ -44,6 +44,9 @@ type TestServerInterface interface {
 
 	Start(params base.TestServerArgs) error
 
+	// Node returns the server.Node as an interface{}.
+	Node() interface{}
+
 	// NodeID returns the ID of this node within its cluster.
 	NodeID() roachpb.NodeID
 
