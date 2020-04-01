@@ -14,8 +14,154 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/golang/geo/s2"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGeographyAsS2(t *testing.T) {
+	testCases := []struct {
+		wkt      geopb.WKT
+		expected []s2.Region
+	}{
+		{
+			"POINT(1.0 5.0)",
+			[]s2.Region{s2.PointFromLatLng(s2.LatLngFromDegrees(5.0, 1.0))},
+		},
+		{
+			"LINESTRING(1.0 5.0, 6.0 7.0)",
+			[]s2.Region{
+				s2.PolylineFromLatLngs([]s2.LatLng{
+					s2.LatLngFromDegrees(5.0, 1.0),
+					s2.LatLngFromDegrees(7.0, 6.0),
+				}),
+			},
+		},
+		{
+			`POLYGON(
+				(0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0),
+				(0.2 0.2, 0.2 0.4, 0.4 0.4, 0.4 0.2, 0.2 0.2)
+			)`,
+			[]s2.Region{
+				s2.PolygonFromLoops([]*s2.Loop{
+					s2.LoopFromPoints([]s2.Point{
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 0.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 1.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(1.0, 1.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(1.0, 0.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 0.0)),
+					}),
+					s2.LoopFromPoints([]s2.Point{
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.2)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.4)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.4, 0.4)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.4, 0.2)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.2)),
+					}),
+				}),
+			},
+		},
+		{
+			`GEOMETRYCOLLECTION(POINT(1.0 2.0), POLYGON(
+				(0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0),
+				(0.2 0.2, 0.2 0.4, 0.4 0.4, 0.4 0.2, 0.2 0.2)
+			))`,
+			[]s2.Region{
+				s2.PointFromLatLng(s2.LatLngFromDegrees(2.0, 1.0)),
+				s2.PolygonFromLoops([]*s2.Loop{
+					s2.LoopFromPoints([]s2.Point{
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 0.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 1.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(1.0, 1.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(1.0, 0.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 0.0)),
+					}),
+					s2.LoopFromPoints([]s2.Point{
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.2)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.4)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.4, 0.4)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.4, 0.2)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.2)),
+					}),
+				}),
+			},
+		},
+		{
+			"MULTIPOINT((1.0 5.0), (3.0 4.0))",
+			[]s2.Region{
+				s2.PointFromLatLng(s2.LatLngFromDegrees(5.0, 1.0)),
+				s2.PointFromLatLng(s2.LatLngFromDegrees(4.0, 3.0)),
+			},
+		},
+		{
+			"MULTILINESTRING((1.0 5.0, 6.0 7.0), (3.0 4.0, 5.0 6.0))",
+			[]s2.Region{
+				s2.PolylineFromLatLngs([]s2.LatLng{
+					s2.LatLngFromDegrees(5.0, 1.0),
+					s2.LatLngFromDegrees(7.0, 6.0),
+				}),
+				s2.PolylineFromLatLngs([]s2.LatLng{
+					s2.LatLngFromDegrees(4.0, 3.0),
+					s2.LatLngFromDegrees(6.0, 5.0),
+				}),
+			},
+		},
+		{
+			`MULTIPOLYGON(
+				((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0),
+				(0.2 0.2, 0.2 0.4, 0.4 0.4, 0.4 0.2, 0.2 0.2)),
+
+				((3.0 3.0, 4.0 3.0, 4.0 4.0, 3.0 4.0, 3.0 3.0),
+				(3.2 3.2, 3.2 3.4, 3.4 3.4, 3.4 3.2, 3.2 3.2))
+			)`,
+			[]s2.Region{
+				s2.PolygonFromLoops([]*s2.Loop{
+					s2.LoopFromPoints([]s2.Point{
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 0.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 1.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(1.0, 1.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(1.0, 0.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 0.0)),
+					}),
+					s2.LoopFromPoints([]s2.Point{
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.2)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.4)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.4, 0.4)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.4, 0.2)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.2)),
+					}),
+				}),
+				s2.PolygonFromLoops([]*s2.Loop{
+					s2.LoopFromPoints([]s2.Point{
+						s2.PointFromLatLng(s2.LatLngFromDegrees(3.0, 3.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(3.0, 4.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(4.0, 4.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(4.0, 3.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(3.0, 3.0)),
+					}),
+					s2.LoopFromPoints([]s2.Point{
+						s2.PointFromLatLng(s2.LatLngFromDegrees(3.2, 3.2)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(3.2, 3.4)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(3.4, 3.4)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(3.4, 3.2)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(3.2, 3.2)),
+					}),
+				}),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(string(tc.wkt), func(t *testing.T) {
+			g, err := ParseGeography(tc.wkt)
+			require.NoError(t, err)
+
+			figures, err := g.AsS2()
+			require.NoError(t, err)
+
+			require.Equal(t, tc.expected, figures)
+		})
+	}
+}
 
 func TestParseGeometry(t *testing.T) {
 	testCases := []struct {
