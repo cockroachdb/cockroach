@@ -68,25 +68,7 @@ class LoginEnabledState {
   }
 }
 
-class LoginDisabledState {
-  displayUserMenu(): boolean {
-    return true;
-  }
-
-  secureCluster(): boolean {
-    return false;
-  }
-
-  hideLoginPage(): boolean {
-    return true;
-  }
-
-  loggedInUser(): string {
-    return null;
-  }
-}
-
-class NoLoginState {
+class InsecureState {
   displayUserMenu(): boolean {
     return false;
   }
@@ -100,7 +82,7 @@ class NoLoginState {
   }
 
   loggedInUser(): string {
-    return null;
+    return "";
   }
 }
 
@@ -110,12 +92,8 @@ export const selectLoginState = createSelector(
   (state: AdminUIState) => state.login,
   (login: LoginAPIState) => {
     const dataFromServer = getDataFromServer();
-    if (!dataFromServer.ExperimentalUseLogin) {
-      return new NoLoginState();
-    }
-
-    if (!dataFromServer.LoginEnabled) {
-      return new LoginDisabledState();
+    if (dataFromServer.Insecure) {
+      return new InsecureState();
     }
 
     return new LoginEnabledState(login);

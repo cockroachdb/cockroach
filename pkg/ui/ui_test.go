@@ -58,9 +58,8 @@ func TestUIHandlerDevelopment(t *testing.T) {
 	}()()
 
 	cfg := Config{
-		ExperimentalUseLogin: false,
-		LoginEnabled:         false,
-		NodeID:               &base.NodeIDContainer{},
+		Insecure: true,
+		NodeID:   &base.NodeIDContainer{},
 		GetUser: func(ctx context.Context) *string {
 			z := ""
 			return &z
@@ -133,9 +132,8 @@ func TestUIHandler(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	cfg := Config{
-		ExperimentalUseLogin: false,
-		LoginEnabled:         false,
-		NodeID:               &base.NodeIDContainer{},
+		Insecure: true,
+		NodeID:   &base.NodeIDContainer{},
 		GetUser: func(ctx context.Context) *string {
 			z := ""
 			return &z

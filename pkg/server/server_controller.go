@@ -673,7 +673,7 @@ func makeInMemoryTenantServerConfig(
 
 	baseCfg.MaxOffset = kvServerCfg.BaseConfig.MaxOffset
 	baseCfg.StorageEngine = kvServerCfg.BaseConfig.StorageEngine
-	baseCfg.EnableWebSessionAuthentication = kvServerCfg.BaseConfig.EnableWebSessionAuthentication
+	baseCfg.TestingInsecureWebAccess = kvServerCfg.BaseConfig.TestingInsecureWebAccess
 	baseCfg.Locality = kvServerCfg.BaseConfig.Locality
 	baseCfg.SpanConfigsDisabled = kvServerCfg.BaseConfig.SpanConfigsDisabled
 	baseCfg.EnableDemoLoginEndpoint = kvServerCfg.BaseConfig.EnableDemoLoginEndpoint
