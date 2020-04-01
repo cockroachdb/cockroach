@@ -285,14 +285,14 @@ func registerTPCC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "weekly/tpcc-max",
+		Name:       "weekly/tpcc/headroom",
 		Owner:      OwnerKV,
 		MinVersion: maybeMinVersionForFixturesImport(cloud),
 		Tags:       []string{`weekly`},
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Timeout:    time.Duration(6*24)*time.Hour + time.Duration(10)*time.Minute,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			warehouses := 1350
+			warehouses := 1000
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
 				Duration:   6 * 24 * time.Hour,
