@@ -44,7 +44,7 @@ import { getDiagnosticsStatus, sortByCompletedField, sortByRequestedAtField } fr
 import { statementDiagnostics } from "src/util/docs";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { trackActivateDiagnostics, trackDownloadDiagnosticsBundle } from "src/util/analytics";
-import Empty from "oss/src/components/empty/empty";
+import { Empty } from "src/components/empty";
 
 interface DiagnosticsViewOwnProps {
   statementFingerprint?: string;

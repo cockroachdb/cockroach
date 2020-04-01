@@ -21,7 +21,7 @@ import { trackTableSort } from "src/util/analytics";
 import "./sortabletable.styl";
 import { Spin, Icon } from "antd";
 import SpinIcon from "oss/src/components/icon/spin";
-import Empty, { IEmptyProps } from "oss/src/components/empty/empty";
+import { Empty, IEmptyProps } from "src/components/empty";
 
 /**
  * SortableColumn describes the contents a single column of a

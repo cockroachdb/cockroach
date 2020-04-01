@@ -24,7 +24,7 @@ export interface IEmptyProps {
   btnType?: "button" | "anchor";
 }
 
-const Empty = ({
+export const Empty = ({
   title,
   description,
   anchor,
@@ -69,5 +69,3 @@ Empty.defaultProps = {
   label: "Learn more",
   title: "No results",
 };
-
-export default Empty;
