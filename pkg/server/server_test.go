@@ -684,9 +684,9 @@ func TestClusterIDMismatch(t *testing.T) {
 		engines[i] = e
 	}
 
-	_, _, _, err := inspectEngines(
-		context.TODO(), engines, roachpb.Version{}, roachpb.Version{}, &base.ClusterIDContainer{})
-	expected := "conflicting store cluster IDs"
+	_, err := inspectEngines(
+		context.TODO(), engines, roachpb.Version{}, roachpb.Version{})
+	expected := "conflicting store ClusterIDs"
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s error, got %v", expected, err)
 	}

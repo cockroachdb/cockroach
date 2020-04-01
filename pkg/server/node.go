@@ -207,7 +207,7 @@ func bootstrapCluster(
 	bootstrapVersion clusterversion.ClusterVersion,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
-) (uuid.UUID, error) {
+) (*initState, error) {
 	clusterID := uuid.MakeV4()
 	// TODO(andrei): It'd be cool if this method wouldn't do anything to engines
 	// other than the first one, and let regular node startup code deal with them.
@@ -221,7 +221,7 @@ func bootstrapCluster(
 		// Initialize the engine backing the store with the store ident and cluster
 		// version.
 		if err := kvserver.InitEngine(ctx, eng, sIdent, bootstrapVersion); err != nil {
-			return uuid.UUID{}, err
+			return nil, err
 		}
 
 		// Create first range, writing directly to engine. Note this does
@@ -240,11 +240,21 @@ func bootstrapCluster(
 				bootstrapVersion.Version, len(engines), splits,
 				hlc.UnixNano(),
 			); err != nil {
-				return uuid.UUID{}, err
+				return nil, err
 			}
 		}
 	}
-	return clusterID, nil
+
+	state := &initState{
+		initDiskState: initDiskState{
+			nodeID:             FirstNodeID,
+			clusterID:          clusterID,
+			clusterVersion:     bootstrapVersion,
+			initializedEngines: engines,
+		},
+		joined: true,
+	}
+	return state, nil
 }
 
 // NewNode returns a new instance of Node.
@@ -304,27 +314,6 @@ func (n *Node) AnnotateCtxWithSpan(
 	return n.storeCfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 
-func (n *Node) bootstrapCluster(
-	ctx context.Context,
-	engines []storage.Engine,
-	bootstrapVersion clusterversion.ClusterVersion,
-	defaultZoneConfig *zonepb.ZoneConfig,
-	defaultSystemZoneConfig *zonepb.ZoneConfig,
-) error {
-	if n.initialBoot || n.clusterID.Get() != uuid.Nil {
-		return fmt.Errorf("cluster has already been initialized with ID %s", n.clusterID.Get())
-	}
-	n.initialBoot = true
-	clusterID, err := bootstrapCluster(ctx, engines, bootstrapVersion, defaultZoneConfig, defaultSystemZoneConfig)
-	if err != nil {
-		return err
-	}
-	n.clusterID.Set(ctx, clusterID)
-
-	log.Infof(ctx, "**** cluster %s has been created", clusterID)
-	return nil
-}
-
 func (n *Node) onClusterVersionChange(ctx context.Context, cv clusterversion.ClusterVersion) {
 	if err := n.stores.OnClusterVersionChange(ctx, cv); err != nil {
 		log.Fatal(ctx, errors.Wrapf(err, "updating cluster version to %v", cv))
@@ -339,37 +328,37 @@ func (n *Node) onClusterVersionChange(ctx context.Context, cv clusterversion.Clu
 func (n *Node) start(
 	ctx context.Context,
 	addr, sqlAddr net.Addr,
-	initializedEngines, emptyEngines []storage.Engine,
+	state initState,
 	clusterName string,
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
-	cv clusterversion.ClusterVersion,
 	localityAddress []roachpb.LocalityAddress,
 	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
-	if err := clusterversion.Initialize(ctx, cv.Version, &n.storeCfg.Settings.SV); err != nil {
+	if err := clusterversion.Initialize(ctx, state.clusterVersion.Version, &n.storeCfg.Settings.SV); err != nil {
 		return err
 	}
 
 	// Obtaining the NodeID requires a dance of sorts. If the node has initialized
 	// stores, the NodeID is persisted in each of them. If not, then we'll need to
 	// use the KV store to get a NodeID assigned.
-	var nodeID roachpb.NodeID
-	if len(initializedEngines) > 0 {
-		firstIdent, err := kvserver.ReadStoreIdent(ctx, initializedEngines[0])
-		if err != nil {
-			return err
+	n.initialBoot = state.joined
+	nodeID := state.nodeID
+	if nodeID == 0 {
+		if !state.joined {
+			log.Fatalf(ctx, "node has no NodeID, but claims to not be joining cluster")
 		}
-		nodeID = firstIdent.NodeID
-	} else {
-		n.initialBoot = true
 		// Wait until Gossip is connected before trying to allocate a NodeID.
 		// This isn't strictly necessary but avoids trying to use the KV store
 		// before it can possibly work.
+		//
+		// TODO(tbg): this should be obsolete as Gossip is always already
+		// connected at this point. Remove.
 		if err := n.connectGossip(ctx); err != nil {
 			return err
 		}
-		// If no NodeID has been assigned yet, allocate a new node ID.
+
+		// Allocate NodeID.
 		ctxWithSpan, span := n.AnnotateCtxWithSpan(ctx, "alloc-node-id")
 		newID, err := allocateNodeID(ctxWithSpan, n.storeCfg.DB)
 		if err != nil {
@@ -413,7 +402,7 @@ func (n *Node) start(
 	n.storeCfg.ClosedTimestamp.Start(n.Descriptor.NodeID)
 
 	// Create stores from the engines that were already bootstrapped.
-	for _, e := range initializedEngines {
+	for _, e := range state.initializedEngines {
 		s := kvserver.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
 		if err := s.Start(ctx, n.stopper); err != nil {
 			return errors.Errorf("failed to start store: %s", err)
@@ -464,7 +453,7 @@ func (n *Node) start(
 		return err
 	}
 
-	if len(initializedEngines) != 0 {
+	if len(state.initializedEngines) != 0 {
 		// Connect gossip before starting bootstrap. This will be necessary
 		// to bootstrap new stores. We do it before initializing the NodeID
 		// as well (if needed) to avoid awkward error messages until Gossip
@@ -472,14 +461,16 @@ func (n *Node) start(
 		//
 		// NB: if we have no bootstrapped engines, then we've done this above
 		// already.
+		//
+		// TODO(tbg): remove, see other caller to this method.
 		if err := n.connectGossip(ctx); err != nil {
 			return err
 		}
 	}
 
 	// Bootstrap any uninitialized stores.
-	if len(emptyEngines) > 0 {
-		if err := n.bootstrapStores(ctx, emptyEngines, n.stopper); err != nil {
+	if len(state.newEngines) > 0 {
+		if err := n.bootstrapStores(ctx, state.newEngines, n.stopper); err != nil {
 			return err
 		}
 	}
@@ -504,8 +495,8 @@ func (n *Node) start(
 	// bumped immediately, which would be possible if gossip got started earlier).
 	n.startGossip(ctx, n.stopper)
 
-	allEngines := append([]storage.Engine(nil), initializedEngines...)
-	allEngines = append(allEngines, emptyEngines...)
+	allEngines := append([]storage.Engine(nil), state.initializedEngines...)
+	allEngines = append(allEngines, state.newEngines...)
 	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, allEngines, attrs.Attrs)
 	return nil
 }
