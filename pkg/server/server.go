@@ -1489,10 +1489,37 @@ func (s *Server) Start(ctx context.Context) error {
 	// This opens the main listener.
 	startRPCServer(workersCtx)
 
+	// The start cli command wants to print helpful information if it looks as
+	// though this node didn't immediately manage to connect to the cluster.
+	// This isn't the prettiest way to achieve this, but it gets the job done.
+	//
+	//
+	// TODO(tbg): we should avoid this when the node is bootstrapped.
+	// Unfortunately this knowledge is nicely encapsulated away in ServeAndWait.
+	// Perhaps that method should be split up.
+	haveStateCh := make(chan struct{})
+	if s.cfg.ReadyFn != nil {
+		_ = s.stopper.RunAsyncTask(ctx, "signal-readiness", func(ctx context.Context) {
+			waitForInit := true
+			tm := time.After(2 * time.Second)
+			select {
+			case <-haveStateCh:
+				waitForInit = false
+			case <-tm:
+			case <-ctx.Done():
+				return
+			case <-s.stopper.ShouldQuiesce():
+				return
+			}
+			s.cfg.ReadyFn(waitForInit)
+		})
+	}
+
 	state, err := s.initServer.ServeAndWait(ctx, s.stopper, s.engines, s.gossip)
 	if err != nil {
 		log.Fatal(ctx, errors.Wrap(err, "during init"))
 	}
+	close(haveStateCh)
 
 	s.rpcContext.ClusterID.Set(ctx, state.clusterID)
 	// If there's no NodeID here, then we didn't just bootstrap. The Node will
@@ -1571,30 +1598,6 @@ func (s *Server) Start(ctx context.Context) error {
 			hlcUpperBound,
 			timeutil.SleepUntil,
 		)
-	}
-
-	ready := make(chan struct{})
-	if s.cfg.ReadyFn != nil {
-		// s.cfg.ReadyFn must be called in any case because the `start`
-		// command requires it to signal readiness to a process manager.
-		//
-		// However we want to be somewhat precisely informative to the user
-		// about whether the node is waiting on init / join, or whether
-		// the join was successful straight away. So we spawn this goroutine
-		// and either:
-		// - its timer will fire after 2 seconds and we call ReadyFn(true)
-		// - bootstrap completes earlier and the ready chan gets closed,
-		//   then we call ReadyFn(false).
-		go func() {
-			waitForInit := false
-			tm := time.After(2 * time.Second)
-			select {
-			case <-tm:
-				waitForInit = true
-			case <-ready:
-			}
-			s.cfg.ReadyFn(waitForInit)
-		}()
 	}
 
 	// Record a walltime that is lower than the lowest hlc timestamp this current

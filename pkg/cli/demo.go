@@ -265,7 +265,7 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 
 	// We want to only return after the server is ready.
 	readyCh := make(chan struct{})
-	serv.Cfg.ReadyFn = func(_ bool) {
+	serv.Cfg.ReadyFn = func(bool) {
 		close(readyCh)
 	}
 
@@ -483,7 +483,7 @@ func setupTransientCluster(
 
 		// We force a wait for all servers until they are ready.
 		servReadyFnCh := make(chan struct{})
-		serv.Cfg.ReadyFn = func(_ bool) {
+		serv.Cfg.ReadyFn = func(bool) {
 			close(servReadyFnCh)
 		}
 
