@@ -12,8 +12,7 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import IFeatureFlags = cockroach.server.serverpb.IFeatureFlags;
 
 export interface DataFromServer {
-  ExperimentalUseLogin: boolean;
-  LoginEnabled: boolean;
+  Insecure: boolean;
   LoggedInUser: string;
   Tag: string;
   Version: string;
