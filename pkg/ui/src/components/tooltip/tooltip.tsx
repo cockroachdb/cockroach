@@ -21,13 +21,13 @@ export interface TooltipProps {
 }
 
 export function Tooltip(props: TooltipProps & AntTooltipProps) {
-  const { children, theme } = props;
-  const classes = cn("tooltip-overlay", `crl-tooltip--theme-${theme}`);
+  const { children, theme, overlayClassName } = props;
+  const classes = cn("tooltip-overlay", `crl-tooltip--theme-${theme}`, overlayClassName);
   return (
     <AntTooltip
+      {...props}
       mouseEnterDelay={0.5}
       overlayClassName={classes}
-      {...props}
     >
       {children}
     </AntTooltip>
