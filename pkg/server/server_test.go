@@ -675,8 +675,8 @@ func TestClusterIDMismatch(t *testing.T) {
 
 		sIdent := roachpb.StoreIdent{
 			ClusterID: uuid.MakeV4(),
-			NodeID:    roachpb.NodeID(i),
-			StoreID:   roachpb.StoreID(i),
+			NodeID:    roachpb.NodeID(i + 1),
+			StoreID:   roachpb.StoreID(i + 1),
 		}
 		if err := storage.MVCCPutProto(
 			context.Background(), e, nil, keys.StoreIdentKey(), hlc.Timestamp{}, nil, &sIdent); err != nil {
