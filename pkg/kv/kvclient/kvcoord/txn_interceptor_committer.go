@@ -138,8 +138,34 @@ func (tc *txnCommitter) SendLocked(
 	// set. This is the only place where EndTxnRequest.Key is assigned, but we
 	// could be dealing with a re-issued batch after a refresh. Remember, the
 	// committer is below the span refresh on the interceptor stack.
+	var etAttempt endTxnAttempt
 	if et.Key == nil {
 		et.Key = ba.Txn.Key
+		etAttempt = endTxnFirstAttempt
+	} else {
+		// If this is a retry, we'll disable parallel commit. Since the previous
+		// attempt might have partially succeeded (i.e. the batch might have been
+		// split into sub-batches and some of them might have evaluated
+		// successfully), there might be intents laying around. If we'd perform a
+		// parallel commit, and the batch gets split again, and the STAGING txn
+		// record were written before we evaluate some of the other sub-batche. We
+		// could technically enter the "implicitly committed" state before all the
+		// sub-batches are evaluated and this is problematic: there's a race between
+		// evaluating those requests and other pushers coming along and
+		// transitioning the txn to explicitly committed (and cleaning up all the
+		// intents), and the evaluations of the outstanding sub-batches. If the
+		// randos win, then the re-evaluations will fail because we don't have
+		// idempotency of evaluations across a txn commit (for example, the
+		// re-evaluations might notice that their transaction is already committed
+		// and get confused).
+		etAttempt = endTxnRetry
+		if len(et.InFlightWrites) > 0 {
+			// Make a copy of the EndTxn, since we're going to change it below to
+			// disable the parallel commit.
+			etCpy := *et
+			ba.Requests[len(ba.Requests)-1].SetInner(&etCpy)
+			et = &etCpy
+		}
 	}
 
 	// Determine whether the commit request can be run in parallel with the rest
@@ -147,7 +173,7 @@ func (tc *txnCommitter) SendLocked(
 	// attached to the EndTxn request to the LockSpans and clear the in-flight
 	// write set; no writes will be in-flight concurrently with the EndTxn
 	// request.
-	if len(et.InFlightWrites) > 0 && !tc.canCommitInParallel(ctx, ba, et) {
+	if len(et.InFlightWrites) > 0 && !tc.canCommitInParallel(ctx, ba, et, etAttempt) {
 		// NB: when parallel commits is disabled, this is the best place to
 		// detect whether the batch has only distinct spans. We can set this
 		// flag based on whether any of previously declared in-flight writes
@@ -208,6 +234,8 @@ func (tc *txnCommitter) SendLocked(
 	// could be a combination of protos from responses, all merged by
 	// DistSender.
 	if pErr := needTxnRetryAfterStaging(br); pErr != nil {
+		log.VEventf(ctx, 2, "parallel commit failed since some writes were pushed. "+
+			"Synthesized err: %s", pErr)
 		return nil, pErr
 	}
 
@@ -274,14 +302,30 @@ func (tc *txnCommitter) sendLockedWithElidedEndTxn(
 	return br, nil
 }
 
+// endTxnAttempt specifies whether it's the first time that we're attempting to
+// evaluate an EndTxn request or whether it's a retry (i.e. after a successful
+// refresh). There are some precautions we need to take when sending out
+// retries.
+type endTxnAttempt int
+
+const (
+	endTxnFirstAttempt endTxnAttempt = iota
+	endTxnRetry
+)
+
 // canCommitInParallel determines whether the batch can issue its committing
 // EndTxn in parallel with the rest of its requests and with any in-flight
 // writes, which all should have corresponding QueryIntent requests in the
 // batch.
 func (tc *txnCommitter) canCommitInParallel(
-	ctx context.Context, ba roachpb.BatchRequest, et *roachpb.EndTxnRequest,
+	ctx context.Context, ba roachpb.BatchRequest, et *roachpb.EndTxnRequest, etAttempt endTxnAttempt,
 ) bool {
 	if !parallelCommitsEnabled.Get(&tc.st.SV) {
+		return false
+	}
+
+	if etAttempt == endTxnRetry {
+		log.VEventf(ctx, 2, "retrying batch not eligible for parallel commit")
 		return false
 	}
 

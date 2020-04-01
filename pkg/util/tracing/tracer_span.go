@@ -13,6 +13,7 @@ package tracing
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -253,86 +254,42 @@ func GetRecording(os opentracing.Span) Recording {
 type traceLogData struct {
 	opentracing.LogRecord
 	depth int
-}
-
-type traceLogs []traceLogData
-
-func (l traceLogs) Len() int {
-	return len(l)
-}
-
-func (l traceLogs) Less(i, j int) bool {
-	return l[i].Timestamp.Before(l[j].Timestamp)
-}
-
-func (l traceLogs) Swap(i, j int) {
-	l[i], l[j] = l[j], l[i]
+	// timeSincePrev represents the duration since the previous log line (previous in the
+	// set of log lines that this is part of). This is always computed relative to a log line
+	// from the same span, except for start of span in which case the duration is computed relative
+	// to the last log in the parent occurring before this start. For example:
+	// start span A
+	// log 1           // duration relative to "start span A"
+	//   start span B  // duration relative to "log 1"
+	//   log 2  			 // duration relative to "start span B"
+	// log 3  				 // duration relative to "log 1"
+	timeSincePrev time.Duration
 }
 
 // String formats the given spans for human consumption, showing the
 // relationship using nesting and times as both relative to the previous event
-// and cumulative.
+// and cumulative. The order in which log lines are displayed is similar to the
+// one in generateSessionTraceVTable().
 //
 // TODO(andrei): this should be unified with
 // SessionTracing.GenerateSessionTraceVTable.
 func (r Recording) String() string {
-	m := make(map[uint64]*RecordedSpan)
-	for i, sp := range r {
-		m[sp.SpanID] = &r[i]
-	}
-
-	var depth func(uint64) int
-	depth = func(parentID uint64) int {
-		p := m[parentID]
-		if p == nil {
-			return 0
-		}
-		return depth(p.ParentSpanID) + 1
-	}
-
-	var logs traceLogs
+	var logs []traceLogData
 	var start time.Time
 	for _, sp := range r {
 		if sp.ParentSpanID == 0 {
-			start = sp.StartTime
-		}
-		d := depth(sp.ParentSpanID)
-		// Issue a log with the operation name. Include any tags.
-		lr := opentracing.LogRecord{
-			Timestamp: sp.StartTime,
-			Fields:    []otlog.Field{otlog.String("operation", sp.Operation)},
-		}
-		if len(sp.Tags) > 0 {
-			tags := make([]string, 0, len(sp.Tags))
-			for k := range sp.Tags {
-				tags = append(tags, k)
+			if start == (time.Time{}) {
+				start = sp.StartTime
 			}
-			sort.Strings(tags)
-			for _, k := range tags {
-				lr.Fields = append(lr.Fields, otlog.String(k, sp.Tags[k]))
-			}
-		}
-		logs = append(logs, traceLogData{LogRecord: lr, depth: d})
-		for _, l := range sp.Logs {
-			lr := opentracing.LogRecord{
-				Timestamp: l.Time,
-				Fields:    make([]otlog.Field, len(l.Fields)),
-			}
-			for i, f := range l.Fields {
-				lr.Fields[i] = otlog.String(f.Key, f.Value)
-			}
-
-			logs = append(logs, traceLogData{LogRecord: lr, depth: d})
+			logs = append(logs, r.visitSpan(sp, 0 /* depth */)...)
 		}
 	}
-	sort.Sort(logs)
 
-	var buf bytes.Buffer
-	last := start
+	var buf strings.Builder
 	for _, entry := range logs {
 		fmt.Fprintf(&buf, "% 10.3fms % 10.3fms%s",
 			1000*entry.Timestamp.Sub(start).Seconds(),
-			1000*entry.Timestamp.Sub(last).Seconds(),
+			1000*entry.timeSincePrev.Seconds(),
 			strings.Repeat("    ", entry.depth+1))
 		for i, f := range entry.Fields {
 			if i != 0 {
@@ -341,9 +298,113 @@ func (r Recording) String() string {
 			fmt.Fprintf(&buf, "%s:%v", f.Key(), f.Value())
 		}
 		buf.WriteByte('\n')
-		last = entry.Timestamp
 	}
 	return buf.String()
+}
+
+// FindLogMessage returns the first log message in the recording that matches
+// the given regexp. The bool return value is true if such a message is found.
+func (r Recording) FindLogMessage(pattern string) (string, bool) {
+	re := regexp.MustCompile(pattern)
+	for _, sp := range r {
+		for _, l := range sp.Logs {
+			msg := l.Msg()
+			if re.MatchString(msg) {
+				return msg, true
+			}
+		}
+	}
+	return "", false
+}
+
+// visitSpan returns the log messages for sp, and all of sp's children.
+func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
+	ownLogs := make([]traceLogData, 0, len(sp.Logs)+1)
+
+	conv := func(l opentracing.LogRecord, ref time.Time) traceLogData {
+		var timeSincePrev time.Duration
+		if ref != (time.Time{}) {
+			timeSincePrev = l.Timestamp.Sub(ref)
+		}
+		return traceLogData{
+			LogRecord:     l,
+			depth:         depth,
+			timeSincePrev: timeSincePrev,
+		}
+	}
+
+	// Add a log line representing the start of the span.
+	lr := opentracing.LogRecord{
+		Timestamp: sp.StartTime,
+		Fields:    []otlog.Field{otlog.String("=== operation", sp.Operation)},
+	}
+	if len(sp.Tags) > 0 {
+		tags := make([]string, 0, len(sp.Tags))
+		for k := range sp.Tags {
+			tags = append(tags, k)
+		}
+		sort.Strings(tags)
+		for _, k := range tags {
+			lr.Fields = append(lr.Fields, otlog.String(k, sp.Tags[k]))
+		}
+	}
+	ownLogs = append(ownLogs, conv(
+		lr,
+		// ref - this entries timeSincePrev will be computed when we merge it into the parent
+		time.Time{}))
+
+	for _, l := range sp.Logs {
+		lr := opentracing.LogRecord{
+			Timestamp: l.Time,
+			Fields:    make([]otlog.Field, len(l.Fields)),
+		}
+		for i, f := range l.Fields {
+			lr.Fields[i] = otlog.String(f.Key, f.Value)
+		}
+		lastLog := ownLogs[len(ownLogs)-1]
+		ownLogs = append(ownLogs, conv(lr, lastLog.Timestamp))
+	}
+
+	childSpans := make([][]traceLogData, 0)
+	for _, osp := range r {
+		if osp.ParentSpanID != sp.SpanID {
+			continue
+		}
+		childSpans = append(childSpans, r.visitSpan(osp, depth+1))
+	}
+
+	// Merge ownLogs with childSpans.
+	mergedLogs := make([]traceLogData, 0, len(ownLogs))
+	timeMax := time.Date(2200, 0, 0, 0, 0, 0, 0, time.UTC)
+	i, j := 0, 0
+	var lastTimestamp time.Time
+	for i < len(ownLogs) || j < len(childSpans) {
+		if len(mergedLogs) > 0 {
+			lastTimestamp = mergedLogs[len(mergedLogs)-1].Timestamp
+		}
+		nextLog, nextChild := timeMax, timeMax
+		if i < len(ownLogs) {
+			nextLog = ownLogs[i].Timestamp
+		}
+		if j < len(childSpans) {
+			nextChild = childSpans[j][0].Timestamp
+		}
+		if nextLog.After(nextChild) {
+			// Fill in timeSincePrev for the first one of the child's entries.
+			if lastTimestamp != (time.Time{}) {
+				childSpans[j][0].timeSincePrev = childSpans[j][0].Timestamp.Sub(lastTimestamp)
+			}
+			mergedLogs = append(mergedLogs, childSpans[j]...)
+			lastTimestamp = childSpans[j][0].Timestamp
+			j++
+		} else {
+			mergedLogs = append(mergedLogs, ownLogs[i])
+			lastTimestamp = ownLogs[i].Timestamp
+			i++
+		}
+	}
+
+	return mergedLogs
 }
 
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given span;
@@ -490,7 +551,7 @@ func (s *span) LogFields(fields ...otlog.Field) {
 		// TODO(radu): when LightStep supports arbitrary fields, we should make
 		// the formatting of the message consistent with that. Until then we treat
 		// legacy events that just have an "event" key specially.
-		if len(fields) == 1 && fields[0].Key() == "event" {
+		if len(fields) == 1 && fields[0].Key() == LogMessageField {
 			s.netTr.LazyPrintf("%s", fields[0].Value())
 		} else {
 			var buf bytes.Buffer
@@ -565,12 +626,12 @@ func (s *span) Tracer() opentracing.Tracer {
 
 // LogEvent is part of the opentracing.Span interface. Deprecated.
 func (s *span) LogEvent(event string) {
-	s.LogFields(otlog.String("event", event))
+	s.LogFields(otlog.String(LogMessageField, event))
 }
 
 // LogEventWithPayload is part of the opentracing.Span interface. Deprecated.
 func (s *span) LogEventWithPayload(event string, payload interface{}) {
-	s.LogFields(otlog.String("event", event), otlog.Object("payload", payload))
+	s.LogFields(otlog.String(LogMessageField, event), otlog.Object("payload", payload))
 }
 
 // Log is part of the opentracing.Span interface. Deprecated.

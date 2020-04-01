@@ -38,7 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -2626,6 +2627,279 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			} else if !tc.clientRetry && hadClientRetry {
 				t.Errorf("did not expect but experienced client retry")
 			}
+		})
+	}
+}
+
+type pushExpectation int
+
+const (
+	// expectPusheeTxnRecovery means we're expecting transaction recovery to be
+	// performed (after finding a STAGING txn record).
+	expectPusheeTxnRecovery pushExpectation = iota
+	// expectPusheeTxnRecordNotFound means we're expecting the push to not find the
+	// pushee txn record.
+	expectPusheeTxnRecordNotFound
+	// dontExpectAnything means we're not going to check the state in which the
+	// pusher found the pushee's txn record.
+	dontExpectAnything
+)
+
+type expectedTxnResolution int
+
+const (
+	expectAborted expectedTxnResolution = iota
+	expectCommitted
+)
+
+// checkPushResult pushes the specified txn and checks that the pushee's
+// resolution is the expected one.
+func checkPushResult(
+	ctx context.Context,
+	db *kv.DB,
+	txn roachpb.Transaction,
+	expResolution expectedTxnResolution,
+	pushExpectation pushExpectation,
+) error {
+	pushReq := roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txn.Key,
+		},
+		PusheeTxn: txn.TxnMeta,
+		PushTo:    hlc.Timestamp{},
+		PushType:  roachpb.PUSH_ABORT,
+		// We're going to Force the push in order to not wait for the pushee to
+		// expire.
+		Force: true,
+	}
+	ba := roachpb.BatchRequest{}
+	ba.Add(&pushReq)
+
+	recCtx, collectRec, cancel := tracing.ContextWithRecordingSpan(ctx, "test trace")
+	defer cancel()
+
+	resp, pErr := db.NonTransactionalSender().Send(recCtx, ba)
+	if pErr != nil {
+		return pErr.GoError()
+	}
+
+	var statusErr error
+	pusheeStatus := resp.Responses[0].GetPushTxn().PusheeTxn.Status
+	switch pusheeStatus {
+	case roachpb.ABORTED:
+		if expResolution != expectAborted {
+			statusErr = errors.Errorf("transaction unexpectedly aborted")
+		}
+	case roachpb.COMMITTED:
+		if expResolution != expectCommitted {
+			statusErr = errors.Errorf("transaction unexpectedly committed")
+		}
+	default:
+		return errors.Errorf("unexpected txn status: %s", pusheeStatus)
+	}
+
+	// Verify that we're not fooling ourselves and that checking for the implicit
+	// commit actually caused the txn recovery procedure to run.
+	recording := collectRec()
+	var resolutionErr error
+	switch pushExpectation {
+	case expectPusheeTxnRecovery:
+		expMsg := fmt.Sprintf("recovered txn %s", txn.ID.Short())
+		if _, ok := recording.FindLogMessage(expMsg); !ok {
+			resolutionErr = errors.Errorf(
+				"recovery didn't run as expected (missing \"%s\"). recording: %s",
+				expMsg, recording)
+		}
+	case expectPusheeTxnRecordNotFound:
+		expMsg := "pushee txn record not found"
+		if _, ok := recording.FindLogMessage(expMsg); !ok {
+			resolutionErr = errors.Errorf(
+				"push didn't run as expected (missing \"%s\"). recording: %s",
+				expMsg, recording)
+		}
+	case dontExpectAnything:
+	}
+
+	return errors.CombineErrors(statusErr, resolutionErr)
+}
+
+// Test that, even though at the kvserver level requests are not idempotent
+// across an EndTxn, a TxnCoordSender retry of the final batch after a refresh
+// still works fine. We check that a transaction is not considered implicitly
+// committed through a combination of writes from a previous attempt of the
+// EndTxn batch and a STAGING txn record written by a newer attempt of that
+// batch.
+// Namely, the scenario is as follows:
+// 1. client sends CPut(a) + CPut(b) + EndTxn. The CPut(a) is split by the
+//    DistSender from the rest. Note that the parallel commit mechanism is in
+//    effect here.
+// 2. One of the two sides gets a WriteTooOldError, the other succeeds.
+//    The client needs to refresh.
+// 3. The refresh succeeds.
+// 4. The client resends the whole batch (note that we don't keep track of the
+//    previous partial success).
+// 5. The batch is split again, and one of the two sides fails.
+//
+// This tests checks that, for the different combinations of failures across the
+// two attempts of the request, the transaction is not erroneously considered to
+// be committed. We don't want an intent laid down by the first attempt to
+// satisfy a STAGING record from the 2nd attempt, or the other way around (an
+// intent written in the 2nd attempt satisfying a STAGING record written on the
+// first attempt). See subtests for more details.
+func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var filterFn atomic.Value
+	var storeKnobs kvserver.StoreTestingKnobs
+	storeKnobs.EvalKnobs.TestingEvalFilter =
+		func(fArgs storagebase.FilterArgs) *roachpb.Error {
+			fnVal := filterFn.Load()
+			if fn, ok := fnVal.(func(storagebase.FilterArgs) *roachpb.Error); ok && fn != nil {
+				return fn(fArgs)
+			}
+			return nil
+		}
+
+	// The left side is CPut(a), the right side is CPut(b)+EndTxn(STAGING).
+	type side int
+	const (
+		left side = iota
+		right
+	)
+
+	testCases := []struct {
+		// sidePushedOnFirstAttempt controls which sub-batch will return a
+		// WriteTooOldError on the first attempt.
+		sidePushedOnFirstAttempt    side
+		sideRejectedOnSecondAttempt side
+		txnRecExpectation           pushExpectation
+	}{
+		{
+			// On the first attempt, the left side succeeds in laying down an intent,
+			// while the right side fails. On the 2nd attempt, the right side succeeds
+			// while the left side fails.
+			//
+			// The point of this test is to check that the txn is not considered to be
+			// implicitly committed at this point. Handling this scenario requires
+			// special care. If we didn't do anything, then we'd end up with a STAGING
+			// txn record (from the second attempt of the request) and an intent on
+			// "a" from the first attempt. That intent would have a lower timestamp
+			// than the txn record and so the txn would be considered explicitly
+			// committed. If the txn were to be considered implicitly committed, and
+			// the intent on "a" was resolved, then write on a (when it eventually
+			// evaluates) might return wrong results, or be pushed, or generally get
+			// very confused about how its own transaction got committed already.
+			//
+			// We handle this scenario by disabling the parallel commit on the
+			// request's 2nd attempt. Thus, the EndTxn will be split from all the
+			// other requests, and the txn record is never written if anything fails.
+			sidePushedOnFirstAttempt:    right,
+			sideRejectedOnSecondAttempt: left,
+			// The first attempt of right side contains a parallel commit (i.e. an
+			// EndTxn), but fails. The 2nd attempt of the right side will no longer
+			// contain an EndTxn, as explained above. So we expect the txn record to
+			// not exist.
+			txnRecExpectation: expectPusheeTxnRecordNotFound,
+		},
+		{
+			// On the first attempt, the right side succeed in writing a STAGING txn
+			// record, but the left side fails. On the second attempt, the right side
+			// is rejected.
+			//
+			// The point of this test is to check that the txn is not considered
+			// implicitly committed at this point. All the intents are in place for
+			// the txn to be considered committed, but we rely on the fact that the
+			// intent on "a" has a timestamp that's too high (it gets the timestamp
+			// from the 2nd attempt, after a refresh, but the STAGING txn record has
+			// an older timestamp). If the txn were to be considered implicitly
+			// committed, it'd be bad as we are returning an error to the client
+			// telling it that the EndTxn failed.
+			sidePushedOnFirstAttempt:    left,
+			sideRejectedOnSecondAttempt: right,
+			// The first attempt of the right side writes a STAGING txn record, so we
+			// expect to perform txn recovery.
+			txnRecExpectation: expectPusheeTxnRecovery,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			s, _, db := serverutils.StartServer(t,
+				base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
+			ctx := context.Background()
+			defer s.Stopper().Stop(ctx)
+
+			keyA, keyA1, keyB, keyB1 := roachpb.Key("a"), roachpb.Key("a1"), roachpb.Key("b"), roachpb.Key("b1")
+			require.NoError(t, setupMultipleRanges(ctx, db, string(keyB)))
+
+			origValA := roachpb.MakeValueFromString("initA")
+			require.NoError(t, db.Put(ctx, keyA, &origValA))
+			origValB := roachpb.MakeValueFromString("initA")
+			require.NoError(t, db.Put(ctx, keyB, &origValB))
+
+			txn := db.NewTxn(ctx, "test txn")
+
+			// Do a write to anchor the txn on b's range.
+			require.NoError(t, txn.Put(ctx, keyB1, "b1"))
+
+			// Take a snapshot of the txn early. We'll use it when verifying if the txn is
+			// implicitly committed. If we didn't use this early snapshot and, instead,
+			// used the transaction with a bumped timestamp, then the push code would
+			// infer that the txn is not implicitly committed without actually running the
+			// recovery procedure. Using this snapshot mimics a pusher that ran into an
+			// old intent.
+			origTxn := txn.TestingCloneTxn()
+
+			// Do a read to prevent the txn for performing server-side refreshes.
+			_, err := txn.Get(ctx, keyA1)
+			require.NoError(t, err)
+
+			// After the txn started, do a conflicting read. This will cause one of
+			// the txn's upcoming CPuts to return a WriteTooOldError on the first
+			// attempt, causing in turn to refresh and a retry. Note that, being
+			// CPuts, the pushed writes don't defer the error by returning the
+			// WriteTooOld flag instead of a WriteTooOldError.
+			var readKey roachpb.Key
+			if tc.sidePushedOnFirstAttempt == left {
+				readKey = keyA
+			} else {
+				readKey = keyB
+			}
+			_, err = db.Get(ctx, readKey)
+			require.NoError(t, err)
+
+			b := txn.NewBatch()
+			b.CPut(keyA, "a", &origValA)
+			b.CPut(keyB, "b", &origValB)
+
+			var secondAttemptRejectKey roachpb.Key
+			if tc.sideRejectedOnSecondAttempt == left {
+				secondAttemptRejectKey = keyA
+			} else {
+				secondAttemptRejectKey = keyB
+			}
+
+			// Install a filter which will reject requests touching
+			// secondAttemptRejectKey on the retry.
+			var count int32
+			filterFn.Store(func(args storagebase.FilterArgs) *roachpb.Error {
+				put, ok := args.Req.(*roachpb.ConditionalPutRequest)
+				if !ok {
+					return nil
+				}
+				if !put.Key.Equal(secondAttemptRejectKey) {
+					return nil
+				}
+				count++
+				// Reject the right request on the 2nd attempt.
+				if count == 2 {
+					return roachpb.NewErrorf("injected error; test rejecting request")
+				}
+				return nil
+			})
+
+			require.Error(t, txn.CommitInBatch(ctx, b), "injected")
+			require.NoError(t, checkPushResult(ctx, db, *origTxn, expectAborted, tc.txnRecExpectation))
 		})
 	}
 }

@@ -142,6 +142,7 @@ func PushTxn(
 	if err != nil {
 		return result.Result{}, err
 	} else if !ok {
+		log.VEventf(ctx, 2, "pushee txn record not found")
 		// There are three cases in which there is no transaction record:
 		//
 		// * the pushee is still active but its transaction record has not
@@ -259,17 +260,13 @@ func PushTxn(
 	recoverOnFailedPush := cArgs.EvalCtx.EvalKnobs().RecoverIndeterminateCommitsOnFailedPushes
 	if reply.PusheeTxn.Status == roachpb.STAGING && (pusherWins || recoverOnFailedPush) {
 		err := roachpb.NewIndeterminateCommitError(reply.PusheeTxn)
-		if log.V(1) {
-			log.Infof(ctx, "%v", err)
-		}
+		log.VEventf(ctx, 1, "%v", err)
 		return result.Result{}, err
 	}
 
 	if !pusherWins {
 		err := roachpb.NewTransactionPushError(reply.PusheeTxn)
-		if log.V(1) {
-			log.Infof(ctx, "%v", err)
-		}
+		log.VEventf(ctx, 1, "%v", err)
 		return result.Result{}, err
 	}
 

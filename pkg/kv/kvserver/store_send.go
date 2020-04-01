@@ -165,10 +165,8 @@ func (s *Store) Send(
 		}
 	}
 
-	if log.V(1) {
+	if log.ExpensiveLogEnabled(ctx, 1) {
 		log.Eventf(ctx, "executing %s", ba)
-	} else if log.HasSpanOrEvent(ctx) {
-		log.Eventf(ctx, "executing %d requests", len(ba.Requests))
 	}
 
 	// Get range and add command to the range for execution.
