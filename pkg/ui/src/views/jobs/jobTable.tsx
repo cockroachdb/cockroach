@@ -121,16 +121,6 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
     return `${count} of ${total} jobs`;
   }
 
-  getData = () => {
-    const { pagination: { current, pageSize } } = this.state;
-    const jobs = this.props.jobs.data.jobs;
-    const currentDefault = current - 1;
-    const start = (currentDefault * pageSize);
-    const end = (currentDefault * pageSize + pageSize);
-    const data = jobs.slice(start, end);
-    return data;
-  }
-
   noJobResult = () => (
     <>
       <p>There are no jobs that match your search in filter.</p>
@@ -159,13 +149,14 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
         </div>
         <section className="cl-table-wrapper">
           <JobsSortedTable
-            data={this.getData()}
+            data={jobs}
             sortSetting={this.props.sort}
             onChangeSortSetting={this.props.setSort}
             className="jobs-table"
             rowClass={job => "jobs-table__row--" + job.status}
             columns={jobsTableColumns}
             renderNoResult={this.noJobResult()}
+            pagination={pagination}
           />
         </section>
         <Pagination

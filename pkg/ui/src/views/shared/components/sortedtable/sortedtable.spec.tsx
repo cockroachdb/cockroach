@@ -15,7 +15,7 @@ import { mount } from "enzyme";
 import * as sinon from "sinon";
 
 import "src/enzymeInit";
-import { SortedTable, ColumnDescriptor } from "src/views/shared/components/sortedtable";
+import { SortedTable, ColumnDescriptor, ISortedTablePagination } from "src/views/shared/components/sortedtable";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 
 class TestRow {
@@ -39,11 +39,12 @@ const columns: ColumnDescriptor<TestRow>[] = [
 class TestSortedTable extends SortedTable<TestRow> {}
 
 function makeTable(
-  data: TestRow[], sortSetting?: SortSetting, onChangeSortSetting?: (ss: SortSetting) => void,
+  data: TestRow[], sortSetting?: SortSetting, onChangeSortSetting?: (ss: SortSetting) => void, pagination?: ISortedTablePagination,
 ) {
   return mount(<TestSortedTable data={data}
                                 sortSetting={sortSetting}
                                 onChangeSortSetting={onChangeSortSetting}
+                                pagination={pagination}
                                 columns={columns}/>);
 }
 
@@ -134,5 +135,32 @@ describe("<SortedTable>", function() {
       wrapper.find(".sort-table__cell__expansion-control").simulate("click");
       assert.lengthOf(wrapper.find(".sort-table__row--expanded-area"), 0, "row collapsed again");
     });
+  });
+
+  it("should correctly render rows with pagination and sort settings", function() {
+    const data = [
+      new TestRow("c", 3),
+      new TestRow("d", 4),
+      new TestRow("a", 1),
+      new TestRow("b", 2),
+    ];
+    let wrapper = makeTable(data, undefined, undefined, { current: 1, pageSize: 2});
+    let rows = wrapper.find("tbody");
+    assert.lengthOf(wrapper.find("tbody tr"), 2, "two body rows");
+    assert.equal(rows.childAt(1).childAt(0).text(), "d", "second row column at first page match");
+
+    wrapper = makeTable(data, undefined, undefined, { current: 2, pageSize: 2});
+    rows = wrapper.find("tbody");
+    assert.lengthOf(wrapper.find("tbody tr"), 2, "two body rows");
+    assert.equal(rows.childAt(0).childAt(0).text(), "a", "first row column at seconds page match");
+
+    wrapper = makeTable(data, {sortKey: 0, ascending: true}, undefined, { current: 1, pageSize: 2});
+    rows = wrapper.find("tbody");
+    assert.equal(rows.childAt(1).childAt(0).text(), "b", "second row column at first page match");
+
+    wrapper = makeTable(data, {sortKey: 0, ascending: true}, undefined, { current: 2, pageSize: 2});
+    rows = wrapper.find("tbody");
+    assert.equal(rows.childAt(0).childAt(0).text(), "c", "first row column at seconds page match");
+
   });
 });
