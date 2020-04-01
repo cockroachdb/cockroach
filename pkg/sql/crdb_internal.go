@@ -1586,32 +1586,30 @@ CREATE TABLE crdb_internal.table_columns (
   hidden           BOOL NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
-				tableID := tree.NewDInt(tree.DInt(table.ID))
-				tableName := tree.NewDString(table.Name)
-				for i := range table.Columns {
-					col := &table.Columns[i]
-					defStr := tree.DNull
-					if col.DefaultExpr != nil {
-						defStr = tree.NewDString(*col.DefaultExpr)
-					}
-					if err := addRow(
-						tableID,
-						tableName,
-						tree.NewDInt(tree.DInt(col.ID)),
-						tree.NewDString(col.Name),
-						tree.NewDString(col.Type.DebugString()),
-						tree.MakeDBool(tree.DBool(col.Nullable)),
-						defStr,
-						tree.MakeDBool(tree.DBool(col.Hidden)),
-					); err != nil {
-						return err
-					}
+	generator: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor) (virtualTableGenerator, error) {
+		return forEachTableDescAllGenerator(ctx, p, dbContext, hideVirtual,
+			func(db *DatabaseDescriptor, _ string, table *TableDescriptor, iter int) (tree.Datums, error) {
+				if iter >= len(table.Columns) {
+					return nil, nil
 				}
-				return nil
-			})
+				// TODO (rohany): share allocations of these datums.
+				col := &table.Columns[iter]
+				defStr := tree.DNull
+				if col.DefaultExpr != nil {
+					defStr = tree.NewDString(*col.DefaultExpr)
+				}
+				return tree.Datums{
+					tree.NewDInt(tree.DInt(table.ID)),
+					tree.NewDString(table.Name),
+					tree.NewDInt(tree.DInt(col.ID)),
+					tree.NewDString(col.Name),
+					tree.NewDString(col.Type.DebugString()),
+					tree.MakeDBool(tree.DBool(col.Nullable)),
+					defStr,
+					tree.MakeDBool(tree.DBool(col.Hidden)),
+				}, nil
+			},
+		)
 	},
 }
 
@@ -1631,26 +1629,26 @@ CREATE TABLE crdb_internal.table_indexes (
   is_inverted      BOOL NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	generator: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor) (virtualTableGenerator, error) {
 		primary := tree.NewDString("primary")
 		secondary := tree.NewDString("secondary")
-		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
+		return forEachTableDescAllGenerator(ctx, p, dbContext, hideVirtual,
+			func(db *DatabaseDescriptor, _ string, table *TableDescriptor, iter int) (tree.Datums, error) {
 				tableID := tree.NewDInt(tree.DInt(table.ID))
 				tableName := tree.NewDString(table.Name)
-				if err := addRow(
-					tableID,
-					tableName,
-					tree.NewDInt(tree.DInt(table.PrimaryIndex.ID)),
-					tree.NewDString(table.PrimaryIndex.Name),
-					primary,
-					tree.MakeDBool(tree.DBool(table.PrimaryIndex.Unique)),
-					tree.MakeDBool(table.PrimaryIndex.Type == sqlbase.IndexDescriptor_INVERTED),
-				); err != nil {
-					return err
-				}
-				for _, idx := range table.Indexes {
-					if err := addRow(
+				if iter == 0 {
+					return tree.Datums{
+						tableID,
+						tableName,
+						tree.NewDInt(tree.DInt(table.PrimaryIndex.ID)),
+						tree.NewDString(table.PrimaryIndex.Name),
+						primary,
+						tree.MakeDBool(tree.DBool(table.PrimaryIndex.Unique)),
+						tree.MakeDBool(table.PrimaryIndex.Type == sqlbase.IndexDescriptor_INVERTED),
+					}, nil
+				} else if iter <= len(table.Indexes) {
+					idx := &table.Indexes[iter-1]
+					return tree.Datums{
 						tableID,
 						tableName,
 						tree.NewDInt(tree.DInt(idx.ID)),
@@ -1658,12 +1656,11 @@ CREATE TABLE crdb_internal.table_indexes (
 						secondary,
 						tree.MakeDBool(tree.DBool(idx.Unique)),
 						tree.MakeDBool(idx.Type == sqlbase.IndexDescriptor_INVERTED),
-					); err != nil {
-						return err
-					}
+					}, nil
 				}
-				return nil
-			})
+				return nil, nil
+			},
+		)
 	},
 }
 

@@ -1529,6 +1529,198 @@ const (
 	hideVirtual
 )
 
+// The below table generator functions are used to define lazy iterations
+// over each table. The function takes in a db, schema and table,
+// and also the number of times that this triple has been passed to
+// the function. This is useful if the function needs to generate multiple
+// rows per table, such as returning a row for each column in the table.
+// The function returns nil, nil if there are no more rows to return
+// for this set of db, schema, table at the current iteration count.
+type tableIterationGenerator func(
+	db *sqlbase.DatabaseDescriptor,
+	schema string,
+	table *sqlbase.TableDescriptor,
+	iter int,
+) (tree.Datums, error)
+type tableIterationGeneratorWithLookup func(
+	db *sqlbase.DatabaseDescriptor,
+	schema string,
+	table *sqlbase.TableDescriptor,
+	lookup tableLookupFn,
+	iter int,
+) (tree.Datums, error)
+
+// forEachTableDescAllGenerator takes in a tableIterationGenerator and returns
+// a virtualTableGenerator that applies the tableIterationGenerator to all tables.
+func forEachTableDescAllGenerator(
+	ctx context.Context,
+	p *planner,
+	dbContext *DatabaseDescriptor,
+	virtualOpts virtualOpts,
+	gen tableIterationGenerator,
+) (virtualTableGenerator, error) {
+	return forEachTableDescAllGeneratorWithLookupInternal(
+		ctx,
+		p,
+		dbContext,
+		virtualOpts,
+		true, /* allowAdding */
+		func(
+			db *sqlbase.DatabaseDescriptor,
+			scName string,
+			table *sqlbase.TableDescriptor,
+			_ tableLookupFn,
+			iter int,
+		) (tree.Datums, error) {
+			return gen(db, scName, table, iter)
+		},
+	)
+}
+
+// To get rid of lint messages.
+var _ = forEachTableDescAllGeneratorWithLookup
+
+// forEachTableDescAllGenerator takes in a tableIterationGeneratorWithLookup
+// and returns a virtualTableGenerator that applies the tableIterationGenerator
+// to all tables.
+func forEachTableDescAllGeneratorWithLookup(
+	ctx context.Context,
+	p *planner,
+	db *DatabaseDescriptor,
+	virtualOpts virtualOpts,
+	gen tableIterationGeneratorWithLookup,
+) (virtualTableGenerator, error) {
+	return forEachTableDescAllGeneratorWithLookupInternal(
+		ctx,
+		p,
+		db,
+		virtualOpts,
+		true, /* allowAdding */
+		gen,
+	)
+}
+
+// forEachTableDescAllGeneratorWithLookupInternal takes in a
+// tableIterationGeneratorWithLookup and returns a virtualTableGenerator
+// that lazily applies the tableIterationGeneratorWithLookup to all tables.
+func forEachTableDescAllGeneratorWithLookupInternal(
+	ctx context.Context,
+	p *planner,
+	dbContext *DatabaseDescriptor,
+	virtualOpts virtualOpts,
+	allowAdding bool,
+	gen tableIterationGeneratorWithLookup,
+) (virtualTableGenerator, error) {
+	// Eagerly lookup data we need, like physical and virtual
+	// table descriptors.
+	descs, err := p.Tables().getAllDescriptors(ctx, p.Txn())
+	if err != nil {
+		return nil, err
+	}
+	lCtx := newInternalLookupCtx(descs, dbContext)
+	var vEntries map[string]virtualSchemaEntry
+	var vSchemaNames []string
+	if virtualOpts == virtualMany || virtualOpts == virtualOnce {
+		vt := p.getVirtualTabler()
+		vEntries = vt.getEntries()
+		vSchemaNames = vt.getSchemaNames()
+	}
+	schemaNames, err := getSchemaNames(ctx, p, dbContext)
+	if err != nil {
+		return nil, err
+	}
+
+	// Indexes into different streams to remember where we are in iteration.
+	virtualDBIdx := 0
+	virtualSchemaIdx := 0
+	virtualTableIdx := 0
+	physTableIdx := 0
+
+	// iterCount holds how many times we have processed this same set
+	// of (db, schema, table).
+	iterCount := 0
+
+	// iterateVirtual perfoms a lazy iteration over the set of virtual tables.
+	iterateVirtual := func(db *DatabaseDescriptor) (tree.Datums, error) {
+		for virtualSchemaIdx < len(vSchemaNames) {
+			vSchemaName := vSchemaNames[virtualSchemaIdx]
+			e := vEntries[vSchemaName]
+			for virtualTableIdx < len(e.orderedDefNames) {
+				te := e.defs[e.orderedDefNames[virtualTableIdx]]
+				res, err := gen(nil, vSchemaName, te.desc, lCtx, iterCount)
+				if err != nil {
+					return nil, err
+				}
+				if res == nil {
+					virtualTableIdx++
+					iterCount = 0
+					continue
+				}
+				iterCount++
+				return res, nil
+			}
+			virtualSchemaIdx++
+			iterCount = 0
+		}
+		return nil, nil
+	}
+
+	return func() (tree.Datums, error) {
+		// Handle lazy iteration over virtual tables.
+		if virtualOpts == virtualOnce || virtualOpts == virtualMany {
+			if virtualOpts == virtualOnce {
+				res, err := iterateVirtual(nil)
+				if err != nil {
+					return nil, err
+				}
+				if res != nil {
+					return res, nil
+				}
+			} else {
+				for virtualDBIdx < len(lCtx.dbIDs) {
+					dbDesc := lCtx.dbDescs[lCtx.dbIDs[virtualDBIdx]]
+					res, err := iterateVirtual(dbDesc)
+					if err != nil {
+						return nil, err
+					}
+					if res != nil {
+						return res, nil
+					}
+					virtualDBIdx++
+					iterCount = 0
+				}
+			}
+		}
+
+		// Handle lazy iteration over physical tables.
+		for physTableIdx < len(lCtx.tbIDs) {
+			table := lCtx.tbDescs[lCtx.tbIDs[physTableIdx]]
+			dbDesc, parentExists := lCtx.dbDescs[table.GetParentID()]
+			if table.Dropped() || !userCanSeeTable(ctx, p, table, allowAdding) || !parentExists {
+				physTableIdx++
+				iterCount = 0
+				continue
+			}
+			scName, ok := schemaNames[table.GetParentSchemaID()]
+			if !ok {
+				return nil, errors.AssertionFailedf("schema id %d not found", table.GetParentSchemaID())
+			}
+			res, err := gen(dbDesc, scName, table, lCtx, iterCount)
+			if err != nil {
+				return nil, err
+			}
+			if res == nil {
+				iterCount = 0
+				physTableIdx++
+				continue
+			}
+			iterCount++
+			return res, nil
+		}
+		return nil, nil
+	}, nil
+}
+
 // forEachTableDescAll does the same as forEachTableDesc but also
 // includes newly added non-public descriptors.
 func forEachTableDescAll(
