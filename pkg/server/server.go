@@ -995,6 +995,10 @@ func inspectEngines(
 		} else if err != nil {
 			return nil, nil, clusterversion.ClusterVersion{}, err
 		}
+		if storeIdent.StoreID == 0 || storeIdent.NodeID == 0 || storeIdent.ClusterID == uuid.Nil {
+			return nil, nil, clusterversion.ClusterVersion{},
+				errors.Errorf("partially initialized store: %+v", storeIdent)
+		}
 		clusterID := clusterIDContainer.Get()
 		if storeIdent.ClusterID != uuid.Nil {
 			if clusterID == uuid.Nil {

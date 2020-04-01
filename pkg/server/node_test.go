@@ -389,8 +389,10 @@ func TestCorruptedClusterID(t *testing.T) {
 	e := storage.NewDefaultInMem()
 	defer e.Close()
 
+	cv := clusterversion.TestingClusterVersion
+
 	if _, err := bootstrapCluster(
-		ctx, []storage.Engine{e}, clusterversion.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+		ctx, []storage.Engine{e}, cv, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -407,26 +409,10 @@ func TestCorruptedClusterID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	engines := []storage.Engine{e}
-	_, serverAddr, _, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
-	defer stopper.Stop(ctx)
-	bootstrappedEngines, newEngines, cv, err := inspectEngines(
-		ctx, engines,
-		clusterversion.TestingBinaryVersion,
-		clusterversion.TestingBinaryMinSupportedVersion,
-		node.clusterID)
-	if err != nil {
+	var c base.ClusterIDContainer
+	_, _, _, err := inspectEngines(ctx, []storage.Engine{e}, cv.Version, cv.Version, &c)
+	if !testutils.IsError(err, `partially initialized`) {
 		t.Fatal(err)
-	}
-	if err := node.start(
-		ctx, serverAddr,
-		serverAddr, // Note: this is not really a SQL address but the tests in this package do not use SQL so all is fine.
-		bootstrappedEngines, newEngines, "",
-		roachpb.Attributes{}, roachpb.Locality{}, cv,
-		[]roachpb.LocalityAddress{},
-		nil, /* nodeDescriptorCallback */
-	); !testutils.IsError(err, "unidentified store") {
-		t.Errorf("unexpected error %v", err)
 	}
 }
 
