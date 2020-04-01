@@ -115,7 +115,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
     },
   );
 
-  sorted = createSelector(
+  sortedAndPaginated = createSelector(
     (props: SortedTableProps<T>) => props.data,
     (props: SortedTableProps<T>) => props.sortSetting,
     (props: SortedTableProps<T>) => props.columns,
@@ -136,7 +136,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
    * sortableTable.
    */
   columns = createSelector(
-    this.sorted,
+    this.sortedAndPaginated,
     this.rollups,
     (props: SortedTableProps<T>) => props.columns,
     (sorted: T[], rollups: React.ReactNode[], columns: ColumnDescriptor<T>[]) => {
@@ -153,7 +153,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
     });
 
   rowClass = createSelector(
-    this.sorted,
+    this.sortedAndPaginated,
     (props: SortedTableProps<T>) => props.rowClass,
     (sorted: T[], rowClass: (obj: T) => string) => {
       return (index: number) => rowClass(sorted[index]);
@@ -167,7 +167,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
   };
 
   getItemAt(rowIndex: number): T {
-    const sorted = this.sorted(this.props);
+    const sorted = this.sortedAndPaginated(this.props);
     return sorted[rowIndex];
   }
 
