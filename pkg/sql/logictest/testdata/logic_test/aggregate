@@ -2232,3 +2232,12 @@ INSERT INTO t46423(c0) VALUES(0)
 query T
 SELECT c0 FROM t46423 GROUP BY c0 HAVING NOT (variance(0) IS NULL);
 ----
+
+# Regression test for #45453 - make sure that we don't incorrectly treat the
+# aggregation as scalar.
+statement ok
+CREATE TABLE t45453(c INT)
+
+query I
+SELECT count(*) FROM t45453 GROUP BY 0 + 0
+----

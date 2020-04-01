@@ -640,11 +640,7 @@ func NewColOperator(
 				result.ColumnTypes = make([]types.T, 0)
 				break
 			}
-			if len(aggSpec.GroupCols) == 0 &&
-				len(aggSpec.Aggregations) == 1 &&
-				aggSpec.Aggregations[0].FilterColIdx == nil &&
-				aggSpec.Aggregations[0].Func == execinfrapb.AggregatorSpec_COUNT_ROWS &&
-				!aggSpec.Aggregations[0].Distinct {
+			if aggSpec.IsRowCount() {
 				result.Op, result.IsStreaming, err = NewCountOp(NewAllocator(ctx, streamingMemAccount), inputs[0]), true, nil
 				result.ColumnTypes = []types.T{*types.Int}
 				break
@@ -713,7 +709,7 @@ func NewColOperator(
 			} else {
 				result.Op, err = NewOrderedAggregator(
 					NewAllocator(ctx, streamingMemAccount), inputs[0], typs, aggFns,
-					aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
+					aggSpec.GroupCols, aggCols, aggSpec.IsScalar(),
 				)
 				result.IsStreaming = true
 			}
