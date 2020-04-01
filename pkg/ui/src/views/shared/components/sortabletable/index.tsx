@@ -16,7 +16,7 @@ import times from "lodash/times";
 
 import getHighlightedText from "oss/src/util/highlightedText";
 import { DrawerComponent } from "../drawer";
-import { analytics } from "src/redux/analytics";
+import { trackTableSort } from "src/util/analytics";
 
 import "./sortabletable.styl";
 
@@ -238,23 +238,6 @@ export class SortableTable extends React.Component<TableProps> {
     });
   }
 
-  trackTableSort = (name?: String, col?: SortableColumn, sortSetting?: SortSetting) => {
-    const tableName = name || "";
-    const columnName = col.title || "";
-    const sortDirection = (sortSetting.ascending) ? "asc" : "desc";
-
-    const payload = {
-      event: "Table Sort",
-      properties: {
-        tableName,
-        columnName,
-        sortDirection,
-      },
-    };
-
-    analytics.track(payload);
-  }
-
   render() {
     const { sortSetting, columns, expandableConfig, drawer, firstCellBordered, count, renderNoResult, className } = this.props;
     const { visible, drawerData } = this.state;
@@ -274,7 +257,7 @@ export class SortableTable extends React.Component<TableProps> {
                 if (!isUndefined(c.sortKey)) {
                   classes.push("sort-table__cell--sortable");
                   onClick = () => {
-                    this.trackTableSort(className, c, sortSetting);
+                    trackTableSort(className, c, sortSetting);
                     this.clickSort(c.sortKey);
                   };
                   if (c.sortKey === sortSetting.sortKey) {

@@ -22,7 +22,6 @@ import * as protos from "src/js/protos";
 import { refreshStatementDiagnosticsRequests, refreshStatements } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
-import { analytics } from "src/redux/analytics";
 import { StatementsResponseMessage } from "src/util/api";
 import { aggregateStatementStats, combineStatementStats, ExecutionStatistics, flattenStatementStats, StatementStatistics } from "src/util/appStats";
 import { appAttr } from "src/util/constants";
@@ -43,6 +42,7 @@ import {
 } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
+import { trackPaginate, trackSearch } from "src/util/analytics";
 
 import "./statements.styl";
 
@@ -150,7 +150,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
 
   componentDidUpdate = (__: StatementsPageProps, prevState: StatementsPageState) => {
     if (this.state.search && this.state.search !== prevState.search) {
-      this.trackSearch(this.filteredStatementsData().length);
+      trackSearch(this.filteredStatementsData().length);
     }
     this.props.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
@@ -163,7 +163,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
   onChangePage = (current: number) => {
     const { pagination } = this.state;
     this.setState({ pagination: { ...pagination, current } });
-    this.trackPaginate(current);
+    trackPaginate(current);
   }
   onSubmitSearchField = (search: string) => {
     this.setState({ pagination: { ...this.state.pagination, current: 1 }, search });
@@ -183,24 +183,6 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     const { search } = this.state;
     const { statements } = this.props;
     return statements.filter(statement => search.split(" ").every(val => statement.label.toLowerCase().includes(val.toLowerCase())));
-  }
-
-  trackSearch = (numberOfResults: number) => {
-    analytics.track({
-      event: "Search",
-      properties: {
-        numberOfResults,
-      },
-    });
-  }
-
-  trackPaginate = (page: number) => {
-    analytics.track({
-      event: "Paginate",
-      properties: {
-        selectedPage: page,
-      },
-    });
   }
 
   renderPage = (_page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next", originalElement: React.ReactNode) => {

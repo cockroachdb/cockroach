@@ -43,6 +43,7 @@ import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnost
 import { getDiagnosticsStatus, sortByCompletedField, sortByRequestedAtField } from "./diagnosticsUtils";
 import { statementDiagnostics } from "src/util/docs";
 import { createStatementDiagnosticsAlertLocalSetting } from "oss/src/redux/alerts";
+import { trackActivateDiagnostics } from "src/util/analytics";
 
 interface DiagnosticsViewOwnProps {
   statementFingerprint?: string;
@@ -126,6 +127,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
   onActivateButtonClick = () => {
     const { activate, statementFingerprint } = this.props;
     activate(statementFingerprint);
+    trackActivateDiagnostics(statementFingerprint);
   }
 
   componentWillUnmount() {
@@ -190,6 +192,7 @@ export class EmptyDiagnosticsView extends React.Component<DiagnosticsViewProps> 
   onActivateButtonClick = () => {
     const { activate, statementFingerprint } = this.props;
     activate(statementFingerprint);
+    trackActivateDiagnostics(statementFingerprint);
   }
 
   render() {
