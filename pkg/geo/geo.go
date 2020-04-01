@@ -14,10 +14,10 @@ package geo
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/golang/geo/s2"
+	"github.com/twpayne/go-geom"
+	"github.com/twpayne/go-geom/encoding/ewkb"
 	// Force these into vendor until they're used.
-	_ "github.com/golang/geo/s2"
-	_ "github.com/twpayne/go-geom"
-	_ "github.com/twpayne/go-geom/encoding/ewkb"
 	_ "github.com/twpayne/go-geom/encoding/ewkbhex"
 	_ "github.com/twpayne/go-geom/encoding/geojson"
 	_ "github.com/twpayne/go-geom/encoding/kml"
@@ -70,4 +70,74 @@ func ParseGeography(str geopb.WKT) (*Geography, error) {
 		return nil, err
 	}
 	return NewGeography(geopb.EWKB(wkb)), nil
+}
+
+// AsS2 converts a given Geography into it's S2 form.
+func (g *Geography) AsS2() ([]s2.Region, error) {
+	// TODO(otan): parse EWKB ourselves.
+	geomRepr, err := ewkb.Unmarshal(g.ewkb)
+	if err != nil {
+		return nil, err
+	}
+	// TODO(otan): convert by reading from S2 directly.
+	return s2RegionsFromGeom(geomRepr), nil
+}
+
+// s2RegionsFromGeom converts an geom representation of an object
+// to s2 regions.
+func s2RegionsFromGeom(geomRepr geom.T) []s2.Region {
+	var regions []s2.Region
+	switch repr := geomRepr.(type) {
+	case *geom.Point:
+		regions = []s2.Region{
+			s2.PointFromLatLng(s2.LatLngFromDegrees(repr.Y(), repr.X())),
+		}
+	case *geom.LineString:
+		latLngs := make([]s2.LatLng, repr.NumCoords())
+		for i := 0; i < repr.NumCoords(); i++ {
+			p := repr.Coord(i)
+			latLngs[i] = s2.LatLngFromDegrees(p.Y(), p.X())
+		}
+		regions = []s2.Region{
+			s2.PolylineFromLatLngs(latLngs),
+		}
+	case *geom.Polygon:
+		loops := make([]*s2.Loop, repr.NumLinearRings())
+		// The first ring is a "shell", which is represented as CCW.
+		// Following rings are "holes", which are CW. For S2, they are CCW and automatically figured out.
+		for ringIdx := 0; ringIdx < repr.NumLinearRings(); ringIdx++ {
+			linearRing := repr.LinearRing(ringIdx)
+			points := make([]s2.Point, linearRing.NumCoords())
+			for pointIdx := 0; pointIdx < linearRing.NumCoords(); pointIdx++ {
+				p := linearRing.Coord(pointIdx)
+				pt := s2.PointFromLatLng(s2.LatLngFromDegrees(p.Y(), p.X()))
+				if ringIdx == 0 {
+					points[pointIdx] = pt
+				} else {
+					points[len(points)-pointIdx-1] = pt
+				}
+			}
+			loops[ringIdx] = s2.LoopFromPoints(points)
+		}
+		regions = []s2.Region{
+			s2.PolygonFromLoops(loops),
+		}
+	case *geom.GeometryCollection:
+		for _, geom := range repr.Geoms() {
+			regions = append(regions, s2RegionsFromGeom(geom)...)
+		}
+	case *geom.MultiPoint:
+		for i := 0; i < repr.NumPoints(); i++ {
+			regions = append(regions, s2RegionsFromGeom(repr.Point(i))...)
+		}
+	case *geom.MultiLineString:
+		for i := 0; i < repr.NumLineStrings(); i++ {
+			regions = append(regions, s2RegionsFromGeom(repr.LineString(i))...)
+		}
+	case *geom.MultiPolygon:
+		for i := 0; i < repr.NumPolygons(); i++ {
+			regions = append(regions, s2RegionsFromGeom(repr.Polygon(i))...)
+		}
+	}
+	return regions
 }
