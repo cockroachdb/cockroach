@@ -249,8 +249,7 @@ func TestCorruptedClusterID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var c base.ClusterIDContainer
-	_, _, _, err := inspectEngines(ctx, []storage.Engine{e}, cv.Version, cv.Version, &c)
+	_, err := inspectEngines(ctx, []storage.Engine{e}, cv.Version, cv.Version)
 	if !testutils.IsError(err, `partially initialized`) {
 		t.Fatal(err)
 	}
