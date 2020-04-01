@@ -70,6 +70,13 @@ func (n *dropIndexNode) ReadingOwnWrites() {}
 func (n *dropIndexNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter("index"))
 
+	if n.n.Concurrently {
+		params.p.SendClientNotice(
+			params.ctx,
+			pgerror.Noticef("CONCURRENTLY is not required as all indexes are dropped concurrently"),
+		)
+	}
+
 	ctx := params.ctx
 	for _, index := range n.idxNames {
 		// Need to retrieve the descriptor again for each index name in
