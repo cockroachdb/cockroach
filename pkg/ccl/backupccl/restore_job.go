@@ -1126,11 +1126,14 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, phs interface{}) er
 	telemetry.CountBucketed("restore.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(r.job.Payload().StartedMicros)).Seconds()))
 
-	return phs.(sql.PlanHookState).ExecCfg().DB.Txn(ctx, r.dropTables)
+	execCfg := phs.(sql.PlanHookState).ExecCfg()
+	return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return r.dropTables(ctx, execCfg.JobRegistry, txn)
+	})
 }
 
 // dropTables implements the OnFailOrCancel logic.
-func (r *restoreResumer) dropTables(ctx context.Context, txn *kv.Txn) error {
+func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn *kv.Txn) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
 	// No need to mark the tables as dropped if they were not even created in the
@@ -1146,7 +1149,9 @@ func (r *restoreResumer) dropTables(ctx context.Context, txn *kv.Txn) error {
 
 	b := txn.NewBatch()
 	// Drop the table descriptors that were created at the start of the restore.
+	tablesToGC := make([]sqlbase.ID, 0, len(details.TableDescs))
 	for _, tbl := range details.TableDescs {
+		tablesToGC = append(tablesToGC, tbl.ID)
 		tableDesc := *tbl
 		tableDesc.Version++
 		tableDesc.State = sqlbase.TableDescriptor_DROP
@@ -1163,6 +1168,29 @@ func (r *restoreResumer) dropTables(ctx context.Context, txn *kv.Txn) error {
 			sqlbase.WrapDescriptor(&tableDesc),
 			existingDescVal,
 		)
+	}
+
+	// Queue a GC job.
+	// Set the drop time as 1 (ns in Unix time), so that the table gets GC'd
+	// immediately.
+	dropTime := int64(1)
+	gcDetails := jobspb.SchemaChangeGCDetails{}
+	for _, tableID := range tablesToGC {
+		gcDetails.Tables = append(gcDetails.Tables, jobspb.SchemaChangeGCDetails_DroppedID{
+			ID:       tableID,
+			DropTime: dropTime,
+		})
+	}
+	gcJobRecord := jobs.Record{
+		Description:   fmt.Sprintf("GC for %s", r.job.Payload().Description),
+		Username:      r.job.Payload().Username,
+		DescriptorIDs: tablesToGC,
+		Details:       gcDetails,
+		Progress:      jobspb.SchemaChangeGCProgress{},
+		NonCancelable: true,
+	}
+	if _, err := jr.CreateJobWithTxn(ctx, gcJobRecord, txn); err != nil {
+		return err
 	}
 
 	// Drop the database descriptors that were created at the start of the
