@@ -566,7 +566,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
 ·                distributed  false       ·                   ·
-·                vectorized   true        ·                   ·
+·                vectorized   false       ·                   ·
 sort             ·            ·           (a, b)              +b
  │               order        +b          ·                   ·
  └── index-join  ·            ·           (a, b)              ·
@@ -724,7 +724,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT v FROM t ORDER BY v
 ----
 ·          distributed  false      ·        ·
-·          vectorized   true       ·        ·
+·          vectorized   false      ·        ·
 sort       ·            ·          (v int)  +v
  │         order        +v         ·        ·
  └── scan  ·            ·          (v int)  ·
