@@ -348,17 +348,13 @@ func (n *Node) start(
 		if !state.joined {
 			log.Fatalf(ctx, "node has no NodeID, but claims to not be joining cluster")
 		}
-		// Wait until Gossip is connected before trying to allocate a NodeID.
-		// This isn't strictly necessary but avoids trying to use the KV store
-		// before it can possibly work.
-		//
-		// TODO(tbg): this should be obsolete as Gossip is always already
-		// connected at this point. Remove.
-		if err := n.connectGossip(ctx); err != nil {
-			return err
+		// Allocate NodeID. Note that Gossip is already connected because if there's
+		// no NodeID yet, this means that we had to connect Gossip to learn the ClusterID.
+		select {
+		case <-n.storeCfg.Gossip.Connected:
+		default:
+			log.Fatalf(ctx, "Gossip is not connected yet")
 		}
-
-		// Allocate NodeID.
 		ctxWithSpan, span := n.AnnotateCtxWithSpan(ctx, "alloc-node-id")
 		newID, err := allocateNodeID(ctxWithSpan, n.storeCfg.DB)
 		if err != nil {
@@ -453,22 +449,10 @@ func (n *Node) start(
 		return err
 	}
 
-	if len(state.initializedEngines) != 0 {
-		// Connect gossip before starting bootstrap. This will be necessary
-		// to bootstrap new stores. We do it before initializing the NodeID
-		// as well (if needed) to avoid awkward error messages until Gossip
-		// has connected.
-		//
-		// NB: if we have no bootstrapped engines, then we've done this above
-		// already.
-		//
-		// TODO(tbg): remove, see other caller to this method.
-		if err := n.connectGossip(ctx); err != nil {
-			return err
-		}
-	}
-
 	// Bootstrap any uninitialized stores.
+	//
+	// TODO(tbg): address https://github.com/cockroachdb/cockroach/issues/39415.
+	// Should be easy enough. Writing the test is probably most of the work.
 	if len(state.newEngines) > 0 {
 		if err := n.bootstrapStores(ctx, state.newEngines, n.stopper); err != nil {
 			return err
@@ -547,6 +531,8 @@ func (n *Node) addStore(store *kvserver.Store) {
 // validateStores iterates over all stores, verifying they agree on node ID.
 // The node's ident is initialized based on the agreed-upon node ID. Note that
 // cluster ID consistency is checked elsewhere in inspectEngines.
+//
+// TODO(tbg): remove this, we already validate everything in inspectEngines now.
 func (n *Node) validateStores(ctx context.Context) error {
 	return n.stores.VisitStores(func(s *kvserver.Store) error {
 		if n.Descriptor.NodeID != s.Ident.NodeID {
@@ -625,51 +611,24 @@ func (n *Node) bootstrapStores(
 	return nil
 }
 
-// connectGossip connects to gossip network and reads cluster ID. If
-// this node is already part of a cluster, the cluster ID is verified
-// for a match. If not part of a cluster, the cluster ID is set. The
-// node's address is gossiped with node ID as the gossip key.
-func (n *Node) connectGossip(ctx context.Context) error {
-	log.Infof(ctx, "connecting to gossip network to verify cluster ID...")
-	select {
-	case <-n.stopper.ShouldStop():
-		return errors.New("stop called before we could connect to gossip")
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-n.storeCfg.Gossip.Connected:
-	}
-
-	gossipClusterID, err := n.storeCfg.Gossip.GetClusterID()
-	if err != nil {
-		return err
-	}
-	clusterID := n.clusterID.Get()
-	if clusterID == uuid.Nil {
-		n.clusterID.Set(ctx, gossipClusterID)
-	} else if clusterID != gossipClusterID {
-		return errors.Errorf("node %d belongs to cluster %q but is attempting to connect to a gossip network for cluster %q",
-			n.Descriptor.NodeID, clusterID, gossipClusterID)
-	}
-	log.Infof(ctx, "node connected via gossip and verified as part of cluster %q", gossipClusterID)
-	return nil
-}
-
 // startGossip loops on a periodic ticker to gossip node-related
 // information. Starts a goroutine to loop until the node is closed.
 func (n *Node) startGossip(ctx context.Context, stopper *stop.Stopper) {
 	ctx = n.AnnotateCtx(ctx)
 	stopper.RunWorker(ctx, func(ctx context.Context) {
-		// This should always return immediately and acts as a sanity check that we
-		// don't try to gossip before we're connected.
-		select {
-		case <-n.storeCfg.Gossip.Connected:
-		default:
-			panic(fmt.Sprintf("%s: not connected to gossip", n))
-		}
 		// Verify we've already gossiped our node descriptor.
+		//
+		// TODO(tbg): see if we really needed to do this earlier already. We
+		// probably needed to (this call has to come late for ... reasons I
+		// still need to look into) and nobody can talk to this node until
+		// the descriptor is in Gossip.
 		if _, err := n.storeCfg.Gossip.GetNodeDescriptor(n.Descriptor.NodeID); err != nil {
 			panic(err)
 		}
+
+		// NB: Gossip may not be connected at this point. That's fine though,
+		// we can still gossip something; Gossip sends it out reactively once
+		// it can.
 
 		statusTicker := time.NewTicker(gossipStatusInterval)
 		storesTicker := time.NewTicker(gossip.StoresInterval)
