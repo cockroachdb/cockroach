@@ -266,7 +266,7 @@ query TTT
 EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 ----
 ·       distributed  false
-·       vectorized   true
+·       vectorized   false
 norows  ·            ·
 
 statement ok
@@ -434,21 +434,21 @@ query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
 ----
 ·       distributed  false
-·       vectorized   true
+·       vectorized   false
 norows  ·            ·
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND NULL
 ----
 ·       distributed  false
-·       vectorized   true
+·       vectorized   false
 norows  ·            ·
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = NULL AND a != NULL
 ----
 ·       distributed  false
-·       vectorized   true
+·       vectorized   false
 norows  ·            ·
 
 # Make sure that mixed type comparison operations are not used
@@ -628,7 +628,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT i, s FROM ab WHERE (i, s) < (1, 'c')
 ----
 ·          distributed  false              ·       ·
-·          vectorized   true               ·       ·
+·          vectorized   false              ·       ·
 render     ·            ·                  (i, s)  ·
  │         render 0     i                  ·       ·
  │         render 1     s                  ·       ·
@@ -644,7 +644,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 ----
 ·          distributed  false              ·       ·
-·          vectorized   true               ·       ·
+·          vectorized   false              ·       ·
 render     ·            ·                  (i, s)  ·
  │         render 0     i                  ·       ·
  │         render 1     s                  ·       ·
@@ -939,7 +939,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v SIMILAR TO 'ABC_*'
 ----
 ·     distributed  false                 ·       ·
-·     vectorized   true                  ·       ·
+·     vectorized   false                 ·       ·
 scan  ·            ·                     (k, v)  ·
 ·     table        str@str_v_idx         ·       ·
 ·     spans        /"ABC"-/"ABD"         ·       ·
@@ -1001,7 +1001,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM 4
 ----
 ·     distributed  false                 ·       ·
-·     vectorized   true                  ·       ·
+·     vectorized   false                 ·       ·
 scan  ·            ·                     (x, y)  ·
 ·     table        xy@primary            ·       ·
 ·     spans        ALL                   ·       ·
@@ -1262,7 +1262,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0
 ]
 ----
 ·           distributed  false
-·           vectorized   true
+·           vectorized   false
 index-join  ·            ·
  │          table        t2@primary
  │          key columns  a

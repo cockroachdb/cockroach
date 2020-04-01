@@ -67,6 +67,6 @@ WHERE
 ----
 tree         field        description
 ·            distributed  false
-·            vectorized   true
+·            vectorized   false
 render       ·            ·
  └── norows  ·            ·
