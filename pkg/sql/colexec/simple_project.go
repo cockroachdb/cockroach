@@ -45,9 +45,12 @@ type projectingBatch struct {
 }
 
 func newProjectionBatch(projection []uint32) *projectingBatch {
-	return &projectingBatch{
-		projection: projection,
+	p := &projectingBatch{
+		projection: make([]uint32, len(projection)),
 	}
+	// We make a copy of projection to be safe.
+	copy(p.projection, projection)
+	return p
 }
 
 func (b *projectingBatch) ColVec(i int) coldata.Vec {
@@ -86,12 +89,15 @@ func NewSimpleProjectOp(input Operator, numInputCols int, projection []uint32) O
 			return input
 		}
 	}
-	return &simpleProjectOp{
+	s := &simpleProjectOp{
 		OneInputNode:               NewOneInputNode(input),
-		projection:                 projection,
+		projection:                 make([]uint32, len(projection)),
 		batches:                    make(map[coldata.Batch]*projectingBatch),
 		numBatchesLoggingThreshold: 128,
 	}
+	// We make a copy of projection to be safe.
+	copy(s.projection, projection)
+	return s
 }
 
 func (d *simpleProjectOp) Init() {
@@ -102,8 +108,7 @@ func (d *simpleProjectOp) Next(ctx context.Context) coldata.Batch {
 	batch := d.input.Next(ctx)
 	projBatch, found := d.batches[batch]
 	if !found {
-		// We pass in a copy of d.projection just to be safe.
-		projBatch = newProjectionBatch(append([]uint32{}, d.projection...))
+		projBatch = newProjectionBatch(d.projection)
 		d.batches[batch] = projBatch
 		if len(d.batches) == d.numBatchesLoggingThreshold {
 			if log.V(1) {
