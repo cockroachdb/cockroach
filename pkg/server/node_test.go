@@ -14,27 +14,140 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc"
 )
+
+// createTestNode creates an rpc server using the specified address,
+// gossip instance, KV database and a node using the specified slice
+// of engines. The server, clock and node are returned. If gossipBS is
+// not nil, the gossip bootstrap address is set to gossipBS.
+func createTestNode(
+	addr net.Addr, gossipBS net.Addr, t *testing.T,
+) (*grpc.Server, net.Addr, kvserver.StoreConfig, *Node, *stop.Stopper) {
+	cfg := kvserver.TestStoreConfig(nil /* clock */)
+	st := cfg.Settings
+
+	stopper := stop.NewStopper()
+	nodeRPCContext := rpc.NewContext(
+		log.AmbientContext{Tracer: cfg.Settings.Tracer}, nodeTestBaseContext, cfg.Clock, stopper,
+		cfg.Settings)
+	cfg.RPCContext = nodeRPCContext
+	cfg.ScanInterval = 10 * time.Hour
+	grpcServer := rpc.NewServer(nodeRPCContext)
+	cfg.Gossip = gossip.NewTest(
+		0,
+		nodeRPCContext,
+		grpcServer,
+		stopper,
+		metric.NewRegistry(),
+		cfg.DefaultZoneConfig,
+	)
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.Closer = stopper.ShouldQuiesce()
+	cfg.AmbientCtx.Tracer = st.Tracer
+	distSender := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
+		AmbientCtx:      cfg.AmbientCtx,
+		Settings:        st,
+		Clock:           cfg.Clock,
+		RPCContext:      nodeRPCContext,
+		RPCRetryOptions: &retryOpts,
+		NodeDialer:      nodedialer.New(nodeRPCContext, gossip.AddressResolver(cfg.Gossip)),
+	}, cfg.Gossip)
+	tsf := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
+			AmbientCtx: cfg.AmbientCtx,
+			Settings:   st,
+			Clock:      cfg.Clock,
+			Stopper:    stopper,
+		},
+		distSender,
+	)
+	cfg.DB = kv.NewDB(cfg.AmbientCtx, tsf, cfg.Clock)
+	cfg.Transport = kvserver.NewDummyRaftTransport(st)
+	active, renewal := cfg.NodeLivenessDurations()
+	cfg.HistogramWindowInterval = metric.TestSampleInterval
+	cfg.NodeLiveness = kvserver.NewNodeLiveness(
+		cfg.AmbientCtx,
+		cfg.Clock,
+		cfg.DB,
+		nil, // engines; only used for stall checks
+		cfg.Gossip,
+		active,
+		renewal,
+		cfg.Settings,
+		cfg.HistogramWindowInterval,
+	)
+
+	kvserver.TimeUntilStoreDead.Override(&cfg.Settings.SV, 10*time.Millisecond)
+	cfg.StorePool = kvserver.NewStorePool(
+		cfg.AmbientCtx,
+		st,
+		cfg.Gossip,
+		cfg.Clock,
+		cfg.NodeLiveness.GetNodeCount,
+		kvserver.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
+		/* deterministic */ false,
+	)
+	metricsRecorder := status.NewMetricsRecorder(cfg.Clock, cfg.NodeLiveness, nodeRPCContext, cfg.Gossip, st)
+	node := NewNode(cfg, metricsRecorder, metric.NewRegistry(), stopper,
+		kvcoord.MakeTxnMetrics(metric.TestSampleInterval), nil, /* execCfg */
+		&nodeRPCContext.ClusterID)
+	roachpb.RegisterInternalServer(grpcServer, node)
+	node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(grpcServer)
+	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gossipBS != nil {
+		// Handle possibility of a :0 port specification.
+		if gossipBS.Network() == addr.Network() && gossipBS.String() == addr.String() {
+			gossipBS = ln.Addr()
+		}
+		r, err := resolver.NewResolverFromAddress(gossipBS)
+		if err != nil {
+			t.Fatal(err)
+		}
+		serverCfg := MakeConfig(context.TODO(), st)
+		serverCfg.GossipBootstrapResolvers = []resolver.Resolver{r}
+		filtered := serverCfg.FilterGossipBootstrapResolvers(
+			context.Background(), ln.Addr(), ln.Addr(),
+		)
+		cfg.Gossip.Start(ln.Addr(), filtered)
+	}
+	return grpcServer, ln.Addr(), cfg, node, stopper
+}
 
 func formatKeys(keys []roachpb.Key) string {
 	var buf bytes.Buffer
@@ -109,6 +222,8 @@ func TestBootstrapCluster(t *testing.T) {
 
 // TestBootstrapNewStore starts a cluster with two unbootstrapped
 // stores and verifies both stores are added and started.
+//
+// TODO(tbg): this test has rotted.
 func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -158,6 +273,8 @@ func TestBootstrapNewStore(t *testing.T) {
 
 // TestNodeJoin verifies a new node is able to join a bootstrapped
 // cluster consisting of one node.
+//
+// TODO(tbg): this test has rotted.
 func TestNodeJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -249,8 +366,7 @@ func TestCorruptedClusterID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var c base.ClusterIDContainer
-	_, _, _, err := inspectEngines(ctx, []storage.Engine{e}, cv.Version, cv.Version, &c)
+	_, err := inspectEngines(ctx, []storage.Engine{e}, cv.Version, cv.Version)
 	if !testutils.IsError(err, `partially initialized`) {
 		t.Fatal(err)
 	}
