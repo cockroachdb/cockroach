@@ -68,7 +68,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz
 ----
 ·          distributed  true         ·          ·
-·          vectorized   true         ·          ·
+·          vectorized   false        ·          ·
 distinct   ·            ·            (x, y, z)  ·
  │         distinct on  x, y, z      ·          ·
  └── scan  ·            ·            (x, y, z)  ·
