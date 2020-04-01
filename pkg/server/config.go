@@ -261,7 +261,8 @@ type Config struct {
 	// The argument waitForInit indicates (iff true) that the
 	// server is not bootstrapped yet, will not bootstrap itself and
 	// will be waiting for an `init` command or accept bootstrapping
-	// from a joined node.
+	// from a joined node. It is set in an advisory fashion, that is,
+	// should be used for logging output only.
 	ReadyFn func(waitForInit bool)
 
 	// DelayedBootstrapFn is called if the boostrap process does not complete
