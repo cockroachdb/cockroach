@@ -39,7 +39,7 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(godb)
 	r.Exec(t, "CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE)")
 
-	base := "statement.txt trace.json env.sql"
+	base := "statement.txt trace.json trace.txt env.sql"
 	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"
 
 	t.Run("basic", func(t *testing.T) {

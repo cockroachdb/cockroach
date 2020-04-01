@@ -11,7 +11,6 @@
 package stmtdiagnostics
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"time"
@@ -263,10 +262,7 @@ func (r *Registry) removeOngoing(requestID requestID) {
 // stmtDiagnosticsHelper once the data was collected.
 func (r *Registry) ShouldCollectDiagnostics(
 	ctx context.Context, ast tree.Statement,
-) (
-	bool,
-	func(ctx context.Context, traceJSON tree.Datum, bundle *bytes.Buffer, collectionErr error),
-) {
+) (bool, func(ctx context.Context, traceJSON tree.Datum, bundle []byte, collectionErr error)) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -318,7 +314,7 @@ func makeStmtDiagnosticsHelper(
 // Finish reports the trace and creates the support bundle, and inserts them in
 // the system tables.
 func (h *stmtDiagnosticsHelper) Finish(
-	ctx context.Context, traceJSON tree.Datum, bundle *bytes.Buffer, collectionErr error,
+	ctx context.Context, traceJSON tree.Datum, bundle []byte, collectionErr error,
 ) {
 	defer h.r.removeOngoing(h.requestID)
 
@@ -340,11 +336,7 @@ func (h *stmtDiagnosticsHelper) Finish(
 //
 // traceJSON is either DNull (when collectionErr should not be nil) or a *DJSON.
 func (r *Registry) InsertStatementDiagnostics(
-	ctx context.Context,
-	stmtFingerprint string,
-	stmt string,
-	traceJSON tree.Datum,
-	bundle *bytes.Buffer,
+	ctx context.Context, stmtFingerprint string, stmt string, traceJSON tree.Datum, bundle []byte,
 ) (int64, error) {
 	id, err := r.insertStatementDiagnostics(ctx, 0, /* requestID */
 		stmtFingerprint, stmt, traceJSON, bundle, nil /* collectionErr */)
@@ -367,7 +359,7 @@ func (r *Registry) insertStatementDiagnostics(
 	stmtFingerprint string,
 	stmt string,
 	traceJSON tree.Datum,
-	bundle *bytes.Buffer,
+	bundle []byte,
 	collectionErr error,
 ) (stmtID, error) {
 	var diagID stmtID
@@ -396,7 +388,7 @@ func (r *Registry) insertStatementDiagnostics(
 		}
 
 		bundleChunksVal := tree.DNull
-		if bundle != nil && bundle.Len() != 0 {
+		if len(bundle) != 0 {
 			// Insert the bundle into system.statement_bundle_chunks.
 			// TODO(radu): split in chunks.
 			row, err := r.ie.QueryRowEx(
@@ -404,7 +396,7 @@ func (r *Registry) insertStatementDiagnostics(
 				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 				"INSERT INTO system.statement_bundle_chunks(description, data) VALUES ($1, $2) RETURNING id",
 				"statement diagnostics bundle",
-				tree.NewDBytes(tree.DBytes(bundle.String())),
+				tree.NewDBytes(tree.DBytes(bundle)),
 			)
 			if err != nil {
 				return err
