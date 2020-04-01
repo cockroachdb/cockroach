@@ -26,9 +26,17 @@ const dataFromServer = getDataFromServer();
 // State for application use.
 
 export interface LoginState {
-  useLogin(): boolean;
-  loginEnabled(): boolean;
-  hasAccess(): boolean;
+  // displayUserMenu() indicates whether the login drop-down menu should be
+  // displayed at the top right.
+  displayUserMenu(): boolean;
+  // secureCluster() indicates whether the connection is secure. If
+  // false, an "insecure" indicator is displayed at the top right.
+  secureCluster(): boolean;
+  // hideLoginPage() indicates whether the login page can be
+  // displayed at all. The login page is hidden e.g.
+  // after a user has logged in.
+  hideLoginPage(): boolean;
+  // loggedInUser() returns the name of the user logged in.
   loggedInUser(): string;
 }
 
@@ -39,15 +47,15 @@ class LoginEnabledState {
     this.apiState = state;
   }
 
-  useLogin(): boolean {
+  displayUserMenu(): boolean {
     return true;
   }
 
-  loginEnabled(): boolean {
+  secureCluster(): boolean {
     return true;
   }
 
-  hasAccess(): boolean {
+  hideLoginPage(): boolean {
     return this.apiState.loggedInUser != null;
   }
 
@@ -56,34 +64,16 @@ class LoginEnabledState {
   }
 }
 
-class LoginDisabledState {
-  useLogin(): boolean {
-    return true;
-  }
-
-  loginEnabled(): boolean {
+class InsecureState {
+  displayUserMenu(): boolean {
     return false;
   }
 
-  hasAccess(): boolean {
-    return true;
-  }
-
-  loggedInUser(): string {
-    return null;
-  }
-}
-
-class NoLoginState {
-  useLogin(): boolean {
+  secureCluster(): boolean {
     return false;
   }
 
-  loginEnabled(): boolean {
-    return false;
-  }
-
-  hasAccess(): boolean {
+  hideLoginPage(): boolean {
     return true;
   }
 
@@ -97,12 +87,8 @@ class NoLoginState {
 export const selectLoginState = createSelector(
   (state: AdminUIState) => state.login,
   (login: LoginAPIState) => {
-    if (!dataFromServer.ExperimentalUseLogin) {
-      return new NoLoginState();
-    }
-
-    if (!dataFromServer.LoginEnabled) {
-      return new LoginDisabledState();
+    if (dataFromServer.Insecure) {
+      return new InsecureState();
     }
 
     return new LoginEnabledState(login);

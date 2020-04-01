@@ -141,8 +141,12 @@ type lazyCertificateManager struct {
 // Config is embedded by server.Config. A base config is not meant to be used
 // directly, but embedding configs should call cfg.InitDefaults().
 type Config struct {
-	// Insecure specifies whether to use SSL or not.
+	// Insecure specifies whether to perform authentication or not.
+	// When authentication is disabled, anyone can log in, including
+	// logging in as 'root' without a valid password.
 	// This is really not recommended.
+	// (We are considering removing this option for production
+	// clusters entirely and keep it only for tests.)
 	Insecure bool
 
 	// SSLCAKey is used to sign new certs.

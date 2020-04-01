@@ -955,10 +955,6 @@ func TestServeIndexHTML(t *testing.T) {
 	t.Run("Insecure mode", func(t *testing.T) {
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 			Insecure: true,
-			// This test server argument has the same effect as setting the environment variable
-			// `COCKROACH_EXPERIMENTAL_REQUIRE_WEB_SESSION` to false, or not setting it.
-			// In test servers, web sessions are required by default.
-			DisableWebSessionAuthentication: true,
 		})
 		defer s.Stopper().Stop(context.TODO())
 		tsrv := s.(*TestServer)
@@ -1010,7 +1006,7 @@ Binary built without web UI.
 			expected := fmt.Sprintf(
 				htmlTemplate,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d"}`,
+					`{"Insecure":true,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d"}`,
 					build.GetInfo().Tag,
 					build.VersionPrefix(),
 					1,
@@ -1045,7 +1041,7 @@ Binary built without web UI.
 			{
 				loggedInClient,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s","NodeID":"%d"}`,
+					`{"Insecure":false,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s","NodeID":"%d"}`,
 					build.GetInfo().Tag,
 					build.VersionPrefix(),
 					1,
@@ -1054,7 +1050,7 @@ Binary built without web UI.
 			{
 				loggedOutClient,
 				fmt.Sprintf(
-					`{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d"}`,
+					`{"Insecure":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d"}`,
 					build.GetInfo().Tag,
 					build.VersionPrefix(),
 					1,

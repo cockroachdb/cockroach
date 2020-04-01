@@ -87,12 +87,12 @@ var indexHTMLTemplate = template.Must(template.New("index").Parse(`<!DOCTYPE htm
 `))
 
 type indexHTMLArgs struct {
-	ExperimentalUseLogin bool
-	LoginEnabled         bool
-	LoggedInUser         *string
-	Tag                  string
-	Version              string
-	NodeID               string
+	// Insecure means disable auth entirely - anyone can use.
+	Insecure     bool
+	LoggedInUser *string
+	Tag          string
+	Version      string
+	NodeID       string
 }
 
 // bareIndexHTML is used in place of indexHTMLTemplate when the binary is built
@@ -105,10 +105,10 @@ Binary built without web UI.
 
 // Config contains the configuration parameters for Handler.
 type Config struct {
-	ExperimentalUseLogin bool
-	LoginEnabled         bool
-	NodeID               *base.NodeIDContainer
-	GetUser              func(ctx context.Context) *string
+	// Insecure means disable auth entirely - anyone can use.
+	Insecure bool
+	NodeID   *base.NodeIDContainer
+	GetUser  func(ctx context.Context) *string
 }
 
 // Handler returns an http.Handler that serves the UI,
@@ -134,12 +134,11 @@ func Handler(cfg Config) http.Handler {
 		}
 
 		if err := indexHTMLTemplate.Execute(w, indexHTMLArgs{
-			ExperimentalUseLogin: cfg.ExperimentalUseLogin,
-			LoginEnabled:         cfg.LoginEnabled,
-			LoggedInUser:         cfg.GetUser(r.Context()),
-			Tag:                  buildInfo.Tag,
-			Version:              build.VersionPrefix(),
-			NodeID:               cfg.NodeID.String(),
+			Insecure:     cfg.Insecure,
+			LoggedInUser: cfg.GetUser(r.Context()),
+			Tag:          buildInfo.Tag,
+			Version:      build.VersionPrefix(),
+			NodeID:       cfg.NodeID.String(),
 		}); err != nil {
 			err = errors.Wrap(err, "templating index.html")
 			http.Error(w, err.Error(), 500)
