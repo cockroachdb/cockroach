@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -629,6 +630,37 @@ func TestPrepareInExplicitTransactionDoesNotDeadlock(t *testing.T) {
 			require.Regexp(t, "RETRY_SERIALIZABLE", tx2CommitErr)
 		}
 	}
+}
+
+// TestRetriableErrorDuringPrepare ensures that when preparing and using a new
+// transaction, retriable errors are handled properly and do not propagate to
+// the user's transaction.
+func TestRetriableErrorDuringPrepare(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const uniqueString = "'a very unique string'"
+	var failed int64
+	const numToFail = 2 // only fail on the first two attempts
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				BeforePrepare: func(ctx context.Context, stmt string, txn *kv.Txn) error {
+					if strings.Contains(stmt, uniqueString) && atomic.AddInt64(&failed, 1) <= numToFail {
+						return roachpb.NewTransactionRetryWithProtoRefreshError("boom",
+							txn.ID(), *txn.TestingCloneTxn())
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	testDB := sqlutils.MakeSQLRunner(sqlDB)
+	testDB.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+
+	stmt, err := sqlDB.Prepare("SELECT " + uniqueString)
+	require.NoError(t, err)
+	defer func() { _ = stmt.Close() }()
 }
 
 // This test ensures that when in an explicit transaction and statement

@@ -285,8 +285,9 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v20.1.
-		name:   "remove public permissions on system.comments",
-		workFn: depublicizeSystemComments,
+		name:                "remove public permissions on system.comments",
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionSchemaChangeJob),
+		workFn:              depublicizeSystemComments,
 	},
 	{
 		// Introduced in v20.1.

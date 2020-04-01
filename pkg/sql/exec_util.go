@@ -652,6 +652,10 @@ type ExecutorTestingKnobs struct {
 	// statement has been executed.
 	StatementFilter StatementFilter
 
+	// BeforePrepare can be used to trap execution of SQL statement preparation.
+	// If a nil error is returned, planning continues as usual.
+	BeforePrepare func(ctx context.Context, stmt string, txn *kv.Txn) error
+
 	// BeforeExecute is called by the Executor before plan execution. It is useful
 	// for synchronizing statement execution.
 	BeforeExecute func(ctx context.Context, stmt string)

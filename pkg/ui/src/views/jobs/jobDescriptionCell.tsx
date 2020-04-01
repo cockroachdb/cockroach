@@ -25,9 +25,14 @@ export class JobDescriptionCell extends React.PureComponent<{ job: Job }> {
     return (
       <Link className={`${additionalStyle}`} to={`jobs/${String(job.id)}`}>
         <div className="cl-table-link__tooltip">
-          <Tooltip arrowPointAtCenter placement="bottom" title={
-            <pre style={{whiteSpace: "pre-wrap"}} className="cl-table-link__description">{description}</pre>
-          }>
+          <Tooltip
+            arrowPointAtCenter
+            placement="bottom"
+            title={
+              <pre style={{whiteSpace: "pre-wrap"}} className="cl-table-link__description">{description}</pre>
+            }
+            overlayClassName="cl-table-link__statement-tooltip--fixed-width"
+          >
             <div className="jobs-table__cell--description">{job.statement || job.description}</div>
           </Tooltip>
         </div>

@@ -231,11 +231,10 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	// Job still running, waiting for GC.
-	// TODO (lucy): The offset of +4 accounts for unrelated startup migrations.
-	// Maybe this test API should use an offset starting from the most recent job
-	// instead.
+	// TODO (lucy): Maybe this test API should use an offset starting
+	// from the most recent job instead.
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	if err := jobutils.VerifySystemJob(t, sqlRun, 4, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
 		Description: "DROP DATABASE t CASCADE",
 		DescriptorIDs: sqlbase.IDs{
@@ -382,10 +381,9 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	tests.CheckKeyCount(t, kvDB, tableSpan, 6)
 	tests.CheckKeyCount(t, kvDB, table2Span, 6)
 
-	// TODO (lucy): The offset of +4 accounts for unrelated startup migrations.
-	// Maybe this test API should use an offset starting from the most recent job
-	// instead.
-	const migrationJobOffset = 4
+	// TODO (lucy): Maybe this test API should use an offset starting
+	// from the most recent job instead.
+	const migrationJobOffset = 0
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifySystemJob(t, sqlRun, migrationJobOffset, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
@@ -559,10 +557,9 @@ func TestDropIndex(t *testing.T) {
 	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(), 3*numRows)
 
-	// TODO (lucy): The offset of +4 accounts for unrelated startup migrations.
-	// Maybe this test API should use an offset starting from the most recent job
-	// instead.
-	const migrationJobOffset = 4
+	// TODO (lucy): Maybe this test API should use an offset starting
+	// from the most recent job instead.
+	const migrationJobOffset = 0
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifySystemJob(t, sqlRun, migrationJobOffset+1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
@@ -776,7 +773,7 @@ func TestDropTable(t *testing.T) {
 
 	// Job still running, waiting for GC.
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	if err := jobutils.VerifySystemJob(t, sqlRun, 5, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
 		Description: `DROP TABLE t.public.kv`,
 		DescriptorIDs: sqlbase.IDs{
@@ -848,10 +845,9 @@ func TestDropTableDeleteData(t *testing.T) {
 		}
 	}
 
-	// TODO (lucy): The offset of +4 accounts for unrelated startup migrations.
-	// Maybe this test API should use an offset starting from the most recent job
-	// instead.
-	const migrationJobOffset = 4
+	// TODO (lucy): Maybe this test API should use an offset starting
+	// from the most recent job instead.
+	const migrationJobOffset = 0
 
 	// Data hasn't been GC-ed.
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
@@ -1133,12 +1129,11 @@ func TestDropDatabaseAfterDropTable(t *testing.T) {
 	}
 
 	// Job still running, waiting for draining names.
-	// TODO (lucy): The offset of +4 accounts for unrelated startup migrations.
-	// Maybe this test API should use an offset starting from the most recent job
-	// instead.
+	// TODO (lucy): Maybe this test API should use an offset starting
+	// from the most recent job instead.
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifySystemJob(
-		t, sqlRun, 5, jobspb.TypeSchemaChange, jobs.StatusSucceeded,
+		t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded,
 		jobs.Record{
 			Username:    security.RootUser,
 			Description: "DROP TABLE t.public.kv",
