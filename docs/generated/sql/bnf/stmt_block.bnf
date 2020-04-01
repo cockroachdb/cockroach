@@ -787,6 +787,7 @@ unreserved_keyword ::=
 	| 'REGPROCEDURE'
 	| 'REGNAMESPACE'
 	| 'REGTYPE'
+	| 'REINDEX'
 	| 'RELEASE'
 	| 'RENAME'
 	| 'REPEATABLE'

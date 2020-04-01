@@ -46,6 +46,11 @@ func unimplemented(sqllex sqlLexer, feature string) int {
     return 1
 }
 
+func purposelyUnimplemented(sqllex sqlLexer, feature string, reason string) int {
+    sqllex.(*lexer).PurposelyUnimplemented(feature, reason)
+    return 1
+}
+
 func setErr(sqllex sqlLexer, err error) int {
     sqllex.(*lexer).setErr(err)
     return 1
@@ -582,7 +587,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> QUERIES QUERY
 
 %token <str> RANGE RANGES READ REAL RECURSIVE REF REFERENCES
-%token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE
+%token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE
 %token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
 %token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE
@@ -799,6 +804,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> update_stmt
 %type <tree.Statement> upsert_stmt
 %type <tree.Statement> use_stmt
+
+%type <tree.Statement> reindex_stmt
 
 %type <[]string> opt_incremental
 %type <tree.KVOption> kv_option
@@ -1136,6 +1143,7 @@ stmt:
 | release_stmt      // EXTEND WITH HELP: RELEASE
 | nonpreparable_set_stmt // help texts in sub-rule
 | transaction_stmt  // help texts in sub-rule
+| reindex_stmt
 | /* EMPTY */
   {
     $$.val = tree.Statement(nil)
@@ -3394,6 +3402,28 @@ show_stmt:
 | show_users_stmt           // EXTEND WITH HELP: SHOW USERS
 | show_zone_stmt
 | SHOW error                // SHOW HELP: SHOW
+
+reindex_stmt:
+  REINDEX TABLE error
+  {
+    /* SKIP DOC */
+    return purposelyUnimplemented(sqllex, "reindex table", "CockroachDB does not require reindexing.")
+  }
+| REINDEX INDEX error
+  {
+    /* SKIP DOC */
+    return purposelyUnimplemented(sqllex, "reindex index", "CockroachDB does not require reindexing.")
+  }
+| REINDEX DATABASE error
+  {
+    /* SKIP DOC */
+    return purposelyUnimplemented(sqllex, "reindex database", "CockroachDB does not require reindexing.")
+  }
+| REINDEX SYSTEM error
+  {
+    /* SKIP DOC */
+    return purposelyUnimplemented(sqllex, "reindex system", "CockroachDB does not require reindexing.")
+  }
 
 // %Help: SHOW SESSION - display session variables
 // %Category: Cfg
@@ -9967,6 +9997,7 @@ unreserved_keyword:
 | REGPROCEDURE
 | REGNAMESPACE
 | REGTYPE
+| REINDEX
 | RELEASE
 | RENAME
 | REPEATABLE
