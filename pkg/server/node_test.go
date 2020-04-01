@@ -14,177 +14,27 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net"
 	"reflect"
 	"sort"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
-	"google.golang.org/grpc"
 )
-
-// createTestNode creates an rpc server using the specified address,
-// gossip instance, KV database and a node using the specified slice
-// of engines. The server, clock and node are returned. If gossipBS is
-// not nil, the gossip bootstrap address is set to gossipBS.
-func createTestNode(
-	addr net.Addr, engines []storage.Engine, gossipBS net.Addr, t *testing.T,
-) (*grpc.Server, net.Addr, kvserver.StoreConfig, *Node, *stop.Stopper) {
-	cfg := kvserver.TestStoreConfig(nil /* clock */)
-	st := cfg.Settings
-
-	stopper := stop.NewStopper()
-	nodeRPCContext := rpc.NewContext(
-		log.AmbientContext{Tracer: cfg.Settings.Tracer}, nodeTestBaseContext, cfg.Clock, stopper,
-		cfg.Settings)
-	cfg.RPCContext = nodeRPCContext
-	cfg.ScanInterval = 10 * time.Hour
-	grpcServer := rpc.NewServer(nodeRPCContext)
-	cfg.Gossip = gossip.NewTest(
-		0,
-		nodeRPCContext,
-		grpcServer,
-		stopper,
-		metric.NewRegistry(),
-		cfg.DefaultZoneConfig,
-	)
-	retryOpts := base.DefaultRetryOptions()
-	retryOpts.Closer = stopper.ShouldQuiesce()
-	cfg.AmbientCtx.Tracer = st.Tracer
-	distSender := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
-		AmbientCtx:      cfg.AmbientCtx,
-		Settings:        st,
-		Clock:           cfg.Clock,
-		RPCContext:      nodeRPCContext,
-		RPCRetryOptions: &retryOpts,
-		NodeDialer:      nodedialer.New(nodeRPCContext, gossip.AddressResolver(cfg.Gossip)),
-	}, cfg.Gossip)
-	tsf := kvcoord.NewTxnCoordSenderFactory(
-		kvcoord.TxnCoordSenderFactoryConfig{
-			AmbientCtx: cfg.AmbientCtx,
-			Settings:   st,
-			Clock:      cfg.Clock,
-			Stopper:    stopper,
-		},
-		distSender,
-	)
-	cfg.DB = kv.NewDB(cfg.AmbientCtx, tsf, cfg.Clock)
-	cfg.Transport = kvserver.NewDummyRaftTransport(st)
-	active, renewal := cfg.NodeLivenessDurations()
-	cfg.HistogramWindowInterval = metric.TestSampleInterval
-	cfg.NodeLiveness = kvserver.NewNodeLiveness(
-		cfg.AmbientCtx,
-		cfg.Clock,
-		cfg.DB,
-		engines,
-		cfg.Gossip,
-		active,
-		renewal,
-		cfg.Settings,
-		cfg.HistogramWindowInterval,
-	)
-
-	kvserver.TimeUntilStoreDead.Override(&cfg.Settings.SV, 10*time.Millisecond)
-	cfg.StorePool = kvserver.NewStorePool(
-		cfg.AmbientCtx,
-		st,
-		cfg.Gossip,
-		cfg.Clock,
-		cfg.NodeLiveness.GetNodeCount,
-		kvserver.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
-		/* deterministic */ false,
-	)
-	metricsRecorder := status.NewMetricsRecorder(cfg.Clock, cfg.NodeLiveness, nodeRPCContext, cfg.Gossip, st)
-	node := NewNode(cfg, metricsRecorder, metric.NewRegistry(), stopper,
-		kvcoord.MakeTxnMetrics(metric.TestSampleInterval), nil, /* execCfg */
-		&nodeRPCContext.ClusterID)
-	roachpb.RegisterInternalServer(grpcServer, node)
-	node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(grpcServer)
-	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gossipBS != nil {
-		// Handle possibility of a :0 port specification.
-		if gossipBS.Network() == addr.Network() && gossipBS.String() == addr.String() {
-			gossipBS = ln.Addr()
-		}
-		r, err := resolver.NewResolverFromAddress(gossipBS)
-		if err != nil {
-			t.Fatal(err)
-		}
-		serverCfg := MakeConfig(context.TODO(), st)
-		serverCfg.GossipBootstrapResolvers = []resolver.Resolver{r}
-		filtered := serverCfg.FilterGossipBootstrapResolvers(
-			context.Background(), ln.Addr(), ln.Addr(),
-		)
-		cfg.Gossip.Start(ln.Addr(), filtered)
-	}
-	return grpcServer, ln.Addr(), cfg, node, stopper
-}
-
-// createAndStartTestNode creates a new test node and starts it. The server and node are returned.
-func createAndStartTestNode(
-	ctx context.Context,
-	addr net.Addr,
-	engines []storage.Engine,
-	gossipBS net.Addr,
-	locality roachpb.Locality,
-	t *testing.T,
-) (*grpc.Server, net.Addr, *Node, *stop.Stopper) {
-	grpcServer, addr, cfg, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	bootstrappedEngines, newEngines, cv, err := inspectEngines(
-		ctx, engines,
-		cfg.Settings.Version.BinaryVersion(),
-		cfg.Settings.Version.BinaryMinSupportedVersion(),
-		node.clusterID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Starting the heartbeat is usually done by the server. This test needs it
-	// because otherwise some of the initial ranges cannot be accessed (since
-	// they need an epoch-based lease).
-	cfg.NodeLiveness.StartHeartbeat(ctx, stopper, nil /* alive */)
-	if err := node.start(ctx,
-		addr,
-		addr, // Note: this is not really a SQL address but these tests do not use SQL so all is fine.
-		bootstrappedEngines, newEngines, "",
-		roachpb.Attributes{}, locality, cv, []roachpb.LocalityAddress{},
-		nil, /*nodeDescriptorCallback */
-	); err != nil {
-		stopper.Stop(ctx)
-		t.Fatal(err)
-	}
-
-	return grpcServer, addr, node, stopper
-}
 
 func formatKeys(keys []roachpb.Key) string {
 	var buf bytes.Buffer
@@ -262,50 +112,48 @@ func TestBootstrapCluster(t *testing.T) {
 func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	e := storage.NewDefaultInMem()
-	if _, err := bootstrapCluster(
-		ctx, []storage.Engine{e}, clusterversion.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
-	); err != nil {
-		t.Fatal(err)
+
+	path, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	// Start server with persisted store so that it gets bootstrapped.
+	{
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			StoreSpecs: []base.StoreSpec{
+				{Path: path},
+			},
+		})
+		s.Stopper().Stop(ctx)
 	}
 
-	// Start a new node with two new stores which will require bootstrapping.
-	engines := Engines([]storage.Engine{
-		e,
-		storage.NewDefaultInMem(),
-		storage.NewDefaultInMem(),
+	specs := []base.StoreSpec{
+		{Path: path},
+		{InMemory: true},
+		{InMemory: true},
+	}
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		StoreSpecs: specs,
 	})
-	defer engines.Close()
-	_, _, node, stopper := createAndStartTestNode(
-		ctx,
-		util.TestAddr,
-		engines,
-		util.TestAddr,
-		roachpb.Locality{},
-		t,
-	)
-	defer stopper.Stop(ctx)
-
-	// Non-initialized stores (in this case the new in-memory-based
-	// store) will be bootstrapped by the node upon start. This happens
-	// in a goroutine, so we'll have to wait a bit until we can find the
-	// new node.
-	testutils.SucceedsSoon(t, func() error {
-		if n := node.stores.GetStoreCount(); n != 3 {
-			return errors.Errorf("expected 3 stores but got %d", n)
-		}
-		return nil
-	})
+	defer s.Stopper().Stop(ctx)
 
 	// Check whether all stores are started properly.
-	if err := node.stores.VisitStores(func(s *kvserver.Store) error {
-		if !s.IsStarted() {
-			return errors.Errorf("fail to start store: %s", s)
+	testutils.SucceedsSoon(t, func() error {
+		var n int
+		err := s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+			if !s.IsStarted() {
+				return fmt.Errorf("not started: %s", s)
+			}
+			n++
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		if exp := len(specs); exp != n {
+			return fmt.Errorf("found only %d of %d stores", n, exp)
 		}
 		return nil
-	}); err != nil {
-		t.Error(err)
-	}
+	})
 }
 
 // TestNodeJoin verifies a new node is able to join a bootstrapped
@@ -313,67 +161,59 @@ func TestBootstrapNewStore(t *testing.T) {
 func TestNodeJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	engineStopper := stop.NewStopper()
-	defer engineStopper.Stop(ctx)
-	e := storage.NewDefaultInMem()
-	engineStopper.AddCloser(e)
 
-	if _, err := bootstrapCluster(
-		ctx, []storage.Engine{e}, clusterversion.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
-	); err != nil {
-		t.Fatal(err)
+	// For kicks, start both nodes in the cluster with two initially empty
+	// engines. The first node is expected to bootstrap itself, so the second
+	// one will join the first.
+	perNode := map[int]base.TestServerArgs{}
+	perNode[0] = base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{
+			{InMemory: true},
+			{InMemory: true},
+		},
+	}
+	perNode[1] = perNode[0]
+
+	args := base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual, // saves time in this test
+		ServerArgsPerNode: perNode,
 	}
 
-	// Start the bootstrap node.
-	engines1 := []storage.Engine{e}
-	_, server1Addr, node1, stopper1 := createAndStartTestNode(
-		ctx,
-		util.TestAddr,
-		engines1,
-		util.TestAddr,
-		roachpb.Locality{},
-		t,
-	)
-	defer stopper1.Stop(ctx)
+	numNodes := len(perNode)
 
-	// Create a new node.
-	e2 := storage.NewDefaultInMem()
-	engineStopper.AddCloser(e2)
-	engines2 := []storage.Engine{e2}
-	_, server2Addr, node2, stopper2 := createAndStartTestNode(
-		ctx,
-		util.TestAddr,
-		engines2,
-		server1Addr,
-		roachpb.Locality{},
-		t,
-	)
-	defer stopper2.Stop(ctx)
+	s := serverutils.StartTestCluster(t, numNodes, args)
+	defer s.Stopper().Stop(ctx)
 
-	// Verify new node is able to bootstrap its store.
-	testutils.SucceedsSoon(t, func() error {
-		if sc := node2.stores.GetStoreCount(); sc != 1 {
-			return errors.Errorf("GetStoreCount() expected 1; got %d", sc)
-		}
-		return nil
-	})
+	// Verify all stores are initialized.
+	for i := 0; i < numNodes; i++ {
+		testutils.SucceedsSoon(t, func() error {
+			exp := len(perNode[i].StoreSpecs)
+			sc := s.Server(i).GetStores().(*kvserver.Stores).GetStoreCount()
+			if sc != exp {
+				return errors.Errorf("%d: saw only %d out of %d stores", i, sc, exp)
+			}
+			return nil
+		})
+	}
 
 	// Verify node1 sees node2 via gossip and vice versa.
-	node1Key := gossip.MakeNodeIDKey(node1.Descriptor.NodeID)
-	node2Key := gossip.MakeNodeIDKey(node2.Descriptor.NodeID)
+	node1Key := gossip.MakeNodeIDKey(s.Server(0).NodeID())
+	node2Key := gossip.MakeNodeIDKey(s.Server(1).NodeID())
+	server1Addr := s.Server(0).ServingRPCAddr()
+	server2Addr := s.Server(1).ServingRPCAddr()
 	testutils.SucceedsSoon(t, func() error {
 		var nodeDesc1 roachpb.NodeDescriptor
-		if err := node1.storeCfg.Gossip.GetInfoProto(node2Key, &nodeDesc1); err != nil {
+		if err := s.Server(0).GossipI().(*gossip.Gossip).GetInfoProto(node2Key, &nodeDesc1); err != nil {
 			return err
 		}
-		if addr2Str, server2AddrStr := nodeDesc1.Address.String(), server2Addr.String(); addr2Str != server2AddrStr {
+		if addr2Str, server2AddrStr := nodeDesc1.Address.String(), server2Addr; addr2Str != server2AddrStr {
 			return errors.Errorf("addr2 gossip %s doesn't match addr2 address %s", addr2Str, server2AddrStr)
 		}
 		var nodeDesc2 roachpb.NodeDescriptor
-		if err := node2.storeCfg.Gossip.GetInfoProto(node1Key, &nodeDesc2); err != nil {
+		if err := s.Server(1).GossipI().(*gossip.Gossip).GetInfoProto(node1Key, &nodeDesc2); err != nil {
 			return err
 		}
-		if addr1Str, server1AddrStr := nodeDesc2.Address.String(), server1Addr.String(); addr1Str != server1AddrStr {
+		if addr1Str, server1AddrStr := nodeDesc2.Address.String(), server1Addr; addr1Str != server1AddrStr {
 			return errors.Errorf("addr1 gossip %s doesn't match addr1 address %s", addr1Str, server1AddrStr)
 		}
 		return nil
@@ -389,8 +229,10 @@ func TestCorruptedClusterID(t *testing.T) {
 	e := storage.NewDefaultInMem()
 	defer e.Close()
 
+	cv := clusterversion.TestingClusterVersion
+
 	if _, err := bootstrapCluster(
-		ctx, []storage.Engine{e}, clusterversion.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+		ctx, []storage.Engine{e}, cv, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -407,26 +249,10 @@ func TestCorruptedClusterID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	engines := []storage.Engine{e}
-	_, serverAddr, _, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
-	defer stopper.Stop(ctx)
-	bootstrappedEngines, newEngines, cv, err := inspectEngines(
-		ctx, engines,
-		clusterversion.TestingBinaryVersion,
-		clusterversion.TestingBinaryMinSupportedVersion,
-		node.clusterID)
-	if err != nil {
+	var c base.ClusterIDContainer
+	_, _, _, err := inspectEngines(ctx, []storage.Engine{e}, cv.Version, cv.Version, &c)
+	if !testutils.IsError(err, `partially initialized`) {
 		t.Fatal(err)
-	}
-	if err := node.start(
-		ctx, serverAddr,
-		serverAddr, // Note: this is not really a SQL address but the tests in this package do not use SQL so all is fine.
-		bootstrappedEngines, newEngines, "",
-		roachpb.Attributes{}, roachpb.Locality{}, cv,
-		[]roachpb.LocalityAddress{},
-		nil, /* nodeDescriptorCallback */
-	); !testutils.IsError(err, "unidentified store") {
-		t.Errorf("unexpected error %v", err)
 	}
 }
 
@@ -733,32 +559,21 @@ func TestStartNodeWithLocality(t *testing.T) {
 	ctx := context.Background()
 
 	testLocalityWithNewNode := func(locality roachpb.Locality) {
-		e := storage.NewDefaultInMem()
-		defer e.Close()
-		if _, err := bootstrapCluster(
-			ctx, []storage.Engine{e}, clusterversion.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
-		); err != nil {
-			t.Fatal(err)
+		args := base.TestServerArgs{
+			Locality: locality,
 		}
-		_, _, node, stopper := createAndStartTestNode(
-			ctx,
-			util.TestAddr,
-			[]storage.Engine{e},
-			util.TestAddr,
-			locality,
-			t,
-		)
-		defer stopper.Stop(ctx)
+		s, _, _ := serverutils.StartServer(t, args)
+		defer s.Stopper().Stop(ctx)
 
-		// Check the node to make sure the locality was propagated to its
-		// nodeDescriptor.
-		if !reflect.DeepEqual(node.Descriptor.Locality, locality) {
-			t.Fatalf("expected node locality to be %s, but it was %s", locality, node.Descriptor.Locality)
+		// Check that the locality is present both on the Node and was also
+		// handed to each StoreDescriptor.
+
+		desc := s.Node().(*Node).Descriptor
+		if !reflect.DeepEqual(desc.Locality, locality) {
+			t.Fatalf("expected node locality to be %s, but it was %s", locality, desc.Locality)
 		}
 
-		// Check the store to make sure the locality was propagated to its
-		// nodeDescriptor.
-		if err := node.stores.VisitStores(func(store *kvserver.Store) error {
+		if err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			desc, err := store.Descriptor(false /* useCached */)
 			if err != nil {
 				t.Fatal(err)

@@ -44,7 +44,8 @@ var tolerateErrors = runFlags.Bool("tolerate-errors", false, "Keep running on er
 var maxRate = runFlags.Float64(
 	"max-rate", 0, "Maximum frequency of operations (reads/writes). If 0, no limit.")
 var maxOps = runFlags.Uint64("max-ops", 0, "Maximum number of operations to run")
-var duration = runFlags.Duration("duration", 0, "The duration to run. If 0, run forever.")
+var duration = runFlags.Duration("duration", 0,
+	"The duration to run (in addition to --ramp). If 0, run forever.")
 var doInit = runFlags.Bool("init", false, "Automatically run init. DEPRECATED: Use workload init instead.")
 var ramp = runFlags.Duration("ramp", 0*time.Second, "The duration over which to ramp up load.")
 

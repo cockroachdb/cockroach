@@ -10,6 +10,7 @@ package importccl
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"math"
 	"sort"
@@ -1255,8 +1256,9 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, phs interface{}) err
 	telemetry.Count("import.total.failed")
 
 	cfg := phs.(sql.PlanHookState).ExecCfg()
+	jr := cfg.JobRegistry
 	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := r.dropTables(ctx, txn); err != nil {
+		if err := r.dropTables(ctx, jr, txn); err != nil {
 			return err
 		}
 		return r.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
@@ -1283,7 +1285,7 @@ func (r *importResumer) releaseProtectedTimestamp(
 }
 
 // dropTables implements the OnFailOrCancel logic.
-func (r *importResumer) dropTables(ctx context.Context, txn *kv.Txn) error {
+func (r *importResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn *kv.Txn) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 
 	// Needed to trigger the schema change manager.
@@ -1325,6 +1327,8 @@ func (r *importResumer) dropTables(ctx context.Context, txn *kv.Txn) error {
 	}
 
 	b := txn.NewBatch()
+	dropTime := int64(1)
+	tablesToGC := make([]sqlbase.ID, 0, len(details.Tables))
 	for _, tbl := range details.Tables {
 		tableDesc := *tbl.Desc
 		tableDesc.Version++
@@ -1336,9 +1340,8 @@ func (r *importResumer) dropTables(ctx context.Context, txn *kv.Txn) error {
 			// (that is, 1ns past the epoch) to allow this to be cleaned up as soon as
 			// possible. This is safe since the table data was never visible to users,
 			// and so we don't need to preserve MVCC semantics.
-			tableDesc.DropTime = 1
-			err := sqlbase.RemovePublicTableNamespaceEntry(ctx, txn, tableDesc.ParentID, tableDesc.Name)
-			if err != nil {
+			tableDesc.DropTime = dropTime
+			if err := sqlbase.RemovePublicTableNamespaceEntry(ctx, txn, tableDesc.ParentID, tableDesc.Name); err != nil {
 				return err
 			}
 		} else {
@@ -1358,6 +1361,27 @@ func (r *importResumer) dropTables(ctx context.Context, txn *kv.Txn) error {
 			sqlbase.WrapDescriptor(&tableDesc),
 			existingDesc)
 	}
+
+	// Queue a GC job.
+	gcDetails := jobspb.SchemaChangeGCDetails{}
+	for _, tableID := range tablesToGC {
+		gcDetails.Tables = append(gcDetails.Tables, jobspb.SchemaChangeGCDetails_DroppedID{
+			ID:       tableID,
+			DropTime: dropTime,
+		})
+	}
+	gcJobRecord := jobs.Record{
+		Description:   fmt.Sprintf("GC for %s", r.job.Payload().Description),
+		Username:      r.job.Payload().Username,
+		DescriptorIDs: tablesToGC,
+		Details:       gcDetails,
+		Progress:      jobspb.SchemaChangeGCProgress{},
+		NonCancelable: true,
+	}
+	if _, err := jr.CreateJobWithTxn(ctx, gcJobRecord, txn); err != nil {
+		return err
+	}
+
 	return errors.Wrap(txn.Run(ctx, b), "rolling back tables")
 }
 

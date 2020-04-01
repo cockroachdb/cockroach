@@ -122,6 +122,8 @@ func generateMVCCScan(
 	} else {
 		txn = txnID(args[2])
 	}
+	maxKeys := int64(m.floatGenerator.parse(args[3]) * 32)
+	targetBytes := int64(m.floatGenerator.parse(args[4]) * (1 << 20))
 	return &mvccScanOp{
 		m:            m,
 		key:          key.Key,
@@ -130,6 +132,8 @@ func generateMVCCScan(
 		txn:          txn,
 		inconsistent: inconsistent,
 		reverse:      reverse,
+		maxKeys:      maxKeys,
+		targetBytes:  targetBytes,
 	}
 }
 
@@ -343,6 +347,8 @@ type mvccScanOp struct {
 	txn          txnID
 	inconsistent bool
 	reverse      bool
+	maxKeys      int64
+	targetBytes  int64
 }
 
 func (m mvccScanOp) run(ctx context.Context) string {
@@ -361,11 +367,14 @@ func (m mvccScanOp) run(ctx context.Context) string {
 		Tombstones:   true,
 		Reverse:      m.reverse,
 		Txn:          txn,
+		MaxKeys:      m.maxKeys,
+		TargetBytes:  m.targetBytes,
 	})
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
-	return fmt.Sprintf("kvs = %v, intents = %v", result.KVs, result.Intents)
+	return fmt.Sprintf("kvs = %v, intents = %v, resumeSpan = %v, numBytes = %d, numKeys = %d",
+		result.KVs, result.Intents, result.ResumeSpan, result.NumBytes, result.NumKeys)
 }
 
 type txnOpenOp struct {
@@ -903,6 +912,8 @@ var opGenerators = []opGenerator{
 			operandMVCCKey,
 			operandMVCCKey,
 			operandTransaction,
+			operandFloat,
+			operandFloat,
 		},
 		weight: 100,
 	},
@@ -915,6 +926,8 @@ var opGenerators = []opGenerator{
 			operandMVCCKey,
 			operandMVCCKey,
 			operandPastTS,
+			operandFloat,
+			operandFloat,
 		},
 		weight: 100,
 	},
@@ -927,6 +940,8 @@ var opGenerators = []opGenerator{
 			operandMVCCKey,
 			operandMVCCKey,
 			operandTransaction,
+			operandFloat,
+			operandFloat,
 		},
 		weight: 100,
 	},
