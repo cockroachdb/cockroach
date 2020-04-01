@@ -379,7 +379,13 @@ func resolveBackupManifests(
 		// automatically created incremental layers inside the base layer.
 		prev, err := findPriorBackups(ctx, baseStores[0])
 		if err != nil {
-			return nil, nil, nil, err
+			if errors.Is(err, cloud.ErrListingUnsupported) {
+				// If we do not support listing, we have to just assume there are none
+				// and restore the specified base.
+				prev = nil
+			} else {
+				return nil, nil, nil, err
+			}
 		}
 
 		numLayers := len(prev) + 1

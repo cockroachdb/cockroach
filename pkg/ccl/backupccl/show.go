@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -102,7 +103,13 @@ func showBackupPlanHook(
 
 		incPaths, err := findPriorBackups(ctx, store)
 		if err != nil {
-			return err
+			if errors.Is(err, cloud.ErrListingUnsupported) {
+				// If we do not support listing, we have to just assume there are none
+				// and show the specified base.
+				incPaths = nil
+			} else {
+				return err
+			}
 		}
 
 		manifests := make([]BackupManifest, len(incPaths)+1)
