@@ -25,7 +25,10 @@ export default function UserAvatar(props: UserAvatarProps) {
     "user-avatar--disabled": disabled,
   });
 
-  const nameAbbreviation = userName[0].toUpperCase();
+  const nameAbbreviation =
+    typeof userName[0] == "undefined" || userName[0] == null
+      ? ""
+      : userName[0].toUpperCase();
 
   return (
     <div className={classes}>
