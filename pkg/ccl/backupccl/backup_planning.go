@@ -443,7 +443,7 @@ func backupPlanHook(
 
 				prev, err := findPriorBackups(ctx, defaultStore)
 				if err != nil {
-					return err
+					return errors.Wrapf(err, "determining base for incremental backup")
 				}
 				prevBackups = make([]BackupManifest, 0, len(prev)+1)
 
