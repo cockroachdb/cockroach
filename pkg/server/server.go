@@ -307,10 +307,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.nodeDialer = nodedialer.New(s.rpcContext, gossip.AddressResolver(s.gossip))
 
 	// Create blob service for inter-node file sharing.
-	if blobService, err := blobs.NewBlobService(s.ClusterSettings().ExternalIODir); err != nil {
-		log.Fatal(ctx, err)
-	} else {
-		s.blobService = blobService
+	var err error
+	s.blobService, err = blobs.NewBlobService(s.ClusterSettings().ExternalIODir)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating blob service")
 	}
 	blobspb.RegisterBlobServer(s.grpc.Server, s.blobService)
 
@@ -424,7 +424,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	useStoreSpec := cfg.Stores.Specs[s.cfg.TempStorageConfig.SpecIdx]
 	tempEngine, tempFS, err := storage.NewTempEngine(ctx, s.cfg.StorageEngine, s.cfg.TempStorageConfig, useStoreSpec)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create temp storage")
+		return nil, errors.Wrap(err, "creating temp storage")
 	}
 	s.stopper.AddCloser(tempEngine)
 	// Remove temporary directory linked to tempEngine after closing
@@ -718,7 +718,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	virtualSchemas, err := sql.NewVirtualSchemaHolder(ctx, st)
 	if err != nil {
-		log.Fatal(ctx, err)
+		return nil, errors.Wrap(err, "creating virtual schema holder")
 	}
 
 	// Set up Executor
@@ -1059,7 +1059,7 @@ func (s *singleListener) Addr() net.Addr {
 
 // startMonitoringForwardClockJumps starts a background task to monitor forward
 // clock jumps based on a cluster setting
-func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) {
+func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) error {
 	forwardJumpCheckEnabled := make(chan bool, 1)
 	s.stopper.AddCloser(stop.CloserFn(func() { close(forwardJumpCheckEnabled) }))
 
@@ -1072,10 +1072,11 @@ func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) {
 		time.NewTicker,
 		nil, /* tick callback */
 	); err != nil {
-		log.Fatal(ctx, err)
+		return errors.Wrap(err, "monitoring forward clock jumps")
 	}
 
 	log.Info(ctx, "monitoring forward clock jumps based on server.clock.forward_jump_check_enabled")
+	return nil
 }
 
 // ensureClockMonotonicity sleeps till the wall time reaches
@@ -1225,7 +1226,7 @@ func (s *Server) startPersistingHLCUpperBound(
 	hlcUpperBoundExists bool,
 	persistHLCUpperBoundFn func(int64) error,
 	tickerFn func(d time.Duration) *time.Ticker,
-) {
+) error {
 	persistHLCUpperBoundIntervalCh := make(chan time.Duration, 1)
 	persistHLCUpperBoundInterval.SetOnChange(&s.st.SV, func() {
 		persistHLCUpperBoundIntervalCh <- persistHLCUpperBoundInterval.Get(&s.st.SV)
@@ -1240,7 +1241,7 @@ func (s *Server) startPersistingHLCUpperBound(
 			persistHLCUpperBoundFn,
 			int64(5*time.Second),
 		); err != nil {
-			log.Fatal(context.TODO(), err)
+			return errors.Wrap(err, "refreshing HLC upper bound")
 		}
 	}
 
@@ -1257,6 +1258,7 @@ func (s *Server) startPersistingHLCUpperBound(
 			)
 		},
 	)
+	return nil
 }
 
 // Start starts the server on the specified port, starts gossip and initializes
@@ -1282,7 +1284,9 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Start the time sanity checker.
 	s.startTime = timeutil.Now()
-	s.startMonitoringForwardClockJumps(ctx)
+	if err := s.startMonitoringForwardClockJumps(ctx); err != nil {
+		return err
+	}
 
 	// Connect the node as loopback handler for RPC requests to the
 	// local node.
@@ -1475,7 +1479,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 		hlcUpperBound, err := kvserver.ReadMaxHLCUpperBound(ctx, bootstrappedEngines)
 		if err != nil {
-			log.Fatal(ctx, err)
+			return errors.Wrap(err, "reading max HLC upper bound")
 		}
 
 		if hlcUpperBound > 0 {
@@ -1493,7 +1497,7 @@ func (s *Server) Start(ctx context.Context) error {
 		// Ensure that any subsequent use of `cockroach init` will receive
 		// an error "the cluster was already initialized."
 		if _, err := s.initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
-			log.Fatal(ctx, err)
+			return errors.Wrap(err, "bootstrapping init server")
 		}
 	} else {
 		// We have no existing stores. We start an initServer and then wait for
@@ -1595,13 +1599,15 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	log.Event(ctx, "started node")
-	s.startPersistingHLCUpperBound(
+	if err := s.startPersistingHLCUpperBound(
 		hlcUpperBoundExists,
 		func(t int64) error { /* function to persist upper bound of HLC to all stores */
 			return s.node.SetHLCUpperBound(context.Background(), t)
 		},
 		time.NewTicker,
-	)
+	); err != nil {
+		return err
+	}
 	s.replicationReporter.Start(ctx, s.stopper)
 	s.temporaryObjectCleaner.Start(ctx, s.stopper)
 
@@ -1623,7 +1629,9 @@ func (s *Server) Start(ctx context.Context) error {
 	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAdvertiseAddr, s.cfg.SQLAdvertiseAddr)
 
 	// Begin recording runtime statistics.
-	s.startSampleEnvironment(ctx, DefaultMetricsSampleInterval)
+	if err := s.startSampleEnvironment(ctx, DefaultMetricsSampleInterval); err != nil {
+		return err
+	}
 
 	// Begin recording time series data collected by the status monitor.
 	s.tsDB.PollSource(
@@ -1781,13 +1789,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	if err := migMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
-		select {
-		case <-s.stopper.ShouldQuiesce():
-			// Avoid turning an early shutdown into a fatal error. See #19579.
-			return errors.New("server is shutting down")
-		default:
-			log.Fatalf(ctx, "%+v", err)
-		}
+		return errors.Wrap(err, "ensuring SQL migrations")
 	}
 	log.Infof(ctx, "done ensuring all necessary migrations have run")
 
@@ -2209,7 +2211,7 @@ func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb
 }
 
 // startSampleEnvironment begins the heap profiler worker.
-func (s *Server) startSampleEnvironment(ctx context.Context, frequency time.Duration) {
+func (s *Server) startSampleEnvironment(ctx context.Context, frequency time.Duration) error {
 	// Immediately record summaries once on server startup.
 	ctx = s.AnnotateCtx(ctx)
 
@@ -2231,21 +2233,21 @@ func (s *Server) startSampleEnvironment(ctx context.Context, frequency time.Dura
 		var err error
 		if s.cfg.GoroutineDumpDirName != "" {
 			if err := os.MkdirAll(s.cfg.GoroutineDumpDirName, 0755); err != nil {
-				log.Fatalf(ctx, "could not create goroutine dump dir: %v", err)
+				return errors.Wrap(err, "creating goroutine dump dir")
 			}
 			goroutineDumper, err = goroutinedumper.NewGoroutineDumper(s.cfg.GoroutineDumpDirName)
 			if err != nil {
-				log.Infof(ctx, "could not start goroutine dumper worker: %v", err)
+				return errors.Wrap(err, "starting goroutine dumper worker")
 			}
 		}
 
 		if s.cfg.HeapProfileDirName != "" {
 			if err := os.MkdirAll(s.cfg.HeapProfileDirName, 0755); err != nil {
-				log.Fatalf(ctx, "could not create heap profiles dir: %v", err)
+				return errors.Wrap(err, "creating heap profiles dir")
 			}
 			heapProfiler, err = heapprofiler.NewHeapProfiler(s.cfg.HeapProfileDirName, s.ClusterSettings())
 			if err != nil {
-				log.Fatalf(ctx, "could not start heap profiler worker: %v", err)
+				return errors.Wrap(err, "starting heap profiler worker")
 			}
 		}
 	}
@@ -2308,6 +2310,7 @@ func (s *Server) startSampleEnvironment(ctx context.Context, frequency time.Dura
 			}
 		}
 	})
+	return nil
 }
 
 // Stop stops the server.
