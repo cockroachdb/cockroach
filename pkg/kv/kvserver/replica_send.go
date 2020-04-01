@@ -161,17 +161,9 @@ var _ batchExecutionFn = (*Replica).executeReadOnlyBatch
 func (r *Replica) executeBatchWithConcurrencyRetries(
 	ctx context.Context, ba *roachpb.BatchRequest, fn batchExecutionFn,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	// Determine the maximal set of key spans that the batch will operate on.
-	latchSpans, lockSpans, err := r.collectSpans(ba)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	// Handle load-based splitting.
-	r.recordBatchForLoadBasedSplitting(ctx, ba, latchSpans)
-
 	// Try to execute command; exit retry loop on success.
 	var g *concurrency.Guard
+	var latchSpans, lockSpans *spanset.SpanSet
 	defer func() {
 		// NB: wrapped to delay g evaluation to its value when returning.
 		if g != nil {
@@ -204,6 +196,20 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		}
 		// Limit the transaction's maximum timestamp using observed timestamps.
 		r.limitTxnMaxTimestamp(ctx, ba, status)
+
+		// Determine the maximal set of key spans that the batch will operate
+		// on. We only need to do this once and we make sure to do so after we
+		// have limited the transaction's maximum timestamp.
+		if latchSpans == nil {
+			var err error
+			latchSpans, lockSpans, err = r.collectSpans(ba)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+
+			// Handle load-based splitting.
+			r.recordBatchForLoadBasedSplitting(ctx, ba, latchSpans)
+		}
 
 		// Acquire latches to prevent overlapping requests from executing until
 		// this request completes. After latching, wait on any conflicting locks
