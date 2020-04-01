@@ -390,8 +390,8 @@ func TestUseCerts(t *testing.T) {
 	// authenticate the individual clients being instantiated (session auth has
 	// no effect on what is being tested here).
 	params := base.TestServerArgs{
-		SSLCertsDir:                     certsDir,
-		DisableWebSessionAuthentication: true,
+		SSLCertsDir:       certsDir,
+		InsecureWebAccess: true,
 	}
 	s, _, db := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -472,8 +472,8 @@ func TestUseSplitCACerts(t *testing.T) {
 	// authenticate the individual clients being instantiated (session auth has
 	// no effect on what is being tested here).
 	params := base.TestServerArgs{
-		SSLCertsDir:                     certsDir,
-		DisableWebSessionAuthentication: true,
+		SSLCertsDir:       certsDir,
+		InsecureWebAccess: true,
 	}
 	s, _, db := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -590,8 +590,8 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	// authenticate the individual clients being instantiated (session auth has
 	// no effect on what is being tested here).
 	params := base.TestServerArgs{
-		SSLCertsDir:                     certsDir,
-		DisableWebSessionAuthentication: true,
+		SSLCertsDir:       certsDir,
+		InsecureWebAccess: true,
 	}
 	s, _, db := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
