@@ -17,18 +17,8 @@ import { createStatementDiagnosticsReportAction } from "src/redux/statements";
 import { AdminUIState } from "src/redux/state";
 import { invalidateStatementDiagnosticsRequests, refreshStatementDiagnosticsRequests } from "src/redux/apiReducers";
 import { statementDiagnostics } from "src/util/docs";
-import { analytics } from "src/redux/analytics";
-
+import { trackActivateDiagnostics, trackDiagnosticsModalOpen } from "src/util/analytics";
 export type ActivateDiagnosticsModalProps = MapDispatchToProps;
-
-function trackActivateDiagnostics (statement: string) {
-  analytics.track({
-    event: "Diagnostics Activation",
-    properties: {
-      fingerprint: statement,
-    },
-  });
-}
 
 export interface ActivateDiagnosticsModalRef {
   showModalFor: (statement: string) => void;
@@ -55,6 +45,7 @@ const ActivateDiagnosticsModal = (props: ActivateDiagnosticsModalProps, ref: Rea
     return {
       showModalFor: (forwardStatement: string) => {
         setStatement(forwardStatement);
+        trackDiagnosticsModalOpen(forwardStatement);
         setVisible(true);
       },
     };
