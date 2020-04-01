@@ -1843,10 +1843,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 	// State of jobs table
 	t.Skip("TODO(pbardea): The following fails due to causes seemingly unrelated to GC")
 	runner := sqlutils.SQLRunner{DB: sqlDB}
-	// TODO (lucy): The offset of +4 accounts for unrelated startup migrations.
-	// Maybe this test API should use an offset starting from the most recent job
-	// instead.
-	const migrationJobOffset = 4
+	// TODO (lucy): This test API should use an offset starting from the
+	// most recent job instead.
+	const migrationJobOffset = 0
 	for i, tc := range testCases {
 		status := jobs.StatusSucceeded
 		if tc.errString != "" {
@@ -3989,10 +3988,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	// Ensure that the job is marked as succeeded.
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 
-	// TODO (lucy): The offset of +4 accounts for unrelated startup migrations.
-	// Maybe this test API should use an offset starting from the most recent job
-	// instead.
-	schemaChangeJobOffset := 4
+	// TODO (lucy): This test API should use an offset starting from the
+	// most recent job instead.
+	schemaChangeJobOffset := 0
 	if err := jobutils.VerifySystemJob(t, sqlRun, schemaChangeJobOffset+2, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
 		Description: "TRUNCATE TABLE t.public.test",
@@ -5542,10 +5540,9 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 100);
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	runBeforeConstraintValidation = func() error {
-		// TODO (lucy): The offset of +4 accounts for unrelated startup migrations.
-		// Maybe this test API should use an offset starting from the most recent job
-		// instead.
-		return jobutils.VerifyRunningSystemJob(t, sqlRun, 4, jobspb.TypeSchemaChange, sql.RunningStatusValidation, jobs.Record{
+		// TODO (lucy): Maybe this test API should use an offset starting
+		// from the most recent job instead.
+		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusValidation, jobs.Record{
 			Username:    security.RootUser,
 			Description: "ALTER TABLE t.public.test ADD COLUMN a INT8 AS (v - 1) STORED, ADD CHECK ((a < v) AND (a IS NOT NULL))",
 			DescriptorIDs: sqlbase.IDs{
