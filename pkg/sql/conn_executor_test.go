@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -629,6 +630,35 @@ func TestPrepareInExplicitTransactionDoesNotDeadlock(t *testing.T) {
 			require.Regexp(t, "RETRY_SERIALIZABLE", tx2CommitErr)
 		}
 	}
+}
+
+// This test ensures that when in an explicit transaction and statement
+// preparation uses the user's transaction, errors during those planning queries
+// are handled correctly.
+func TestRetriableErrorDuringPrepare(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var failed int64
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				BeforePrepare: func(ctx context.Context, stmt string, txn *kv.Txn) error {
+					if strings.Contains(stmt, "SHOW COLUMN") && atomic.AddInt64(&failed, 1) == 1 {
+						return roachpb.NewTransactionRetryWithProtoRefreshError("boom",
+							txn.ID(), *txn.TestingCloneTxn())
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	testDB := sqlutils.MakeSQLRunner(sqlDB)
+	testDB.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+
+	stmt, err := sqlDB.Prepare("SELECT * FROM [SHOW COLUMNS FROM foo]")
+	require.NoError(t, err)
+	defer func() { _ = stmt.Close() }()
 }
 
 // This test ensures that when in an explicit transaction and statement
