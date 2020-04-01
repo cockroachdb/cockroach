@@ -624,14 +624,14 @@ type StmtDiagnosticsRecorder interface {
 		stmtFingerprint string,
 		stmt string,
 		traceJSON tree.Datum,
-		bundle *bytes.Buffer,
+		bundleZip []byte,
 	) (id int64, err error)
 }
 
 // StmtDiagnosticsTraceFinishFunc is the type of function returned from
 // ShouldCollectDiagnostics to report the outcome of a trace.
 type StmtDiagnosticsTraceFinishFunc = func(
-	ctx context.Context, traceJSON tree.Datum, bundle *bytes.Buffer, collectionErr error,
+	ctx context.Context, traceJSON tree.Datum, bundle []byte, collectionErr error,
 )
 
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}
