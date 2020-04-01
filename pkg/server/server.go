@@ -1506,6 +1506,59 @@ func (s *Server) Start(ctx context.Context) error {
 		s.rpcContext.NodeID.Set(ctx, state.nodeID)
 	}
 
+	// TODO(tbg): split this method here. Everything above this comment is
+	// the early stage of startup -- setting up listeners and determining the
+	// initState -- and everything after it is actually starting the server,
+	// using the listeners and init state.
+
+	// Defense in depth: set up an eager sanity check that we're not
+	// accidentally being pointed at a different cluster. We have checks for
+	// this in the RPC layer, but since the RPC layer gets set up before the
+	// clusterID is known, early connections won't validate the clusterID (at
+	// least not until the next Ping).
+	//
+	// The check is simple: listen for clusterID changes from Gossip. If we see
+	// one, make sure it's the clusterID we already know (and are guaranteed to
+	// know) at this point. If it's not the same, explode.
+	//
+	// TODO(tbg): remove this when we have changed ServeAndWait() to join an
+	// existing cluster via a one-off RPC, at which point we can create gossip
+	// (and thus the RPC layer) only after the clusterID is already known. We
+	// can then rely on the RPC layer's protection against cross-cluster
+	// communication.
+	{
+		// We populated this above, so it should still be set. This is just to
+		// demonstrate that we're not doing anything functional here (and to
+		// prevent bugs during further refactors).
+		if s.rpcContext.ClusterID.Get() == uuid.Nil {
+			return errors.New("gossip should already be connected")
+		}
+		unregister := s.gossip.RegisterCallback(gossip.KeyClusterID, func(string, roachpb.Value) {
+			clusterID, err := s.gossip.GetClusterID()
+			if err != nil {
+				log.Fatalf(ctx, "unable to read ClusterID: %v", err)
+			}
+			s.rpcContext.ClusterID.Set(ctx, clusterID) // fatals on mismatch
+		})
+		defer unregister()
+	}
+
+	// Spawn a goroutine that will print a nice message when Gossip connects.
+	// Note that we already know the clusterID, but we don't know that Gossip
+	// has connected. The pertinent case is that of restarting an entire
+	// cluster. Someone has to gossip the ClusterID before Gossip is connected,
+	// but this gossip only happens once the first range has a leaseholder, i.e.
+	// when a quorum of nodes has gone fully operational.
+	_ = s.stopper.RunAsyncTask(ctx, "connect-gossip", func(ctx context.Context) {
+		log.Infof(ctx, "connecting to gossip network to verify cluster ID %q", state.clusterID)
+		select {
+		case <-s.gossip.Connected:
+			log.Infof(ctx, "node connected via gossip")
+		case <-ctx.Done():
+		case <-s.stopper.ShouldQuiesce():
+		}
+	})
+
 	// NB: if this store is freshly bootstrapped (or no upper bound was
 	// persisted), hlcUpperBound will be zero.
 	hlcUpperBound, err := kvserver.ReadMaxHLCUpperBound(ctx, s.engines)
@@ -1567,6 +1620,7 @@ func (s *Server) Start(ctx context.Context) error {
 	); err != nil {
 		return err
 	}
+
 	log.Event(ctx, "started node")
 	if err := s.startPersistingHLCUpperBound(
 		hlcUpperBound > 0,
@@ -1579,11 +1633,6 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.replicationReporter.Start(ctx, s.stopper)
 	s.temporaryObjectCleaner.Start(ctx, s.stopper)
-
-	// Cluster ID should have been determined by this point.
-	if s.rpcContext.ClusterID.Get() == uuid.Nil {
-		log.Fatal(ctx, "Cluster ID failed to be determined during node startup.")
-	}
 
 	s.refreshSettings()
 
