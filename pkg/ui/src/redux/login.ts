@@ -26,9 +26,17 @@ const dataFromServer = getDataFromServer();
 // State for application use.
 
 export interface LoginState {
-  useLogin(): boolean;
-  loginEnabled(): boolean;
-  hasAccess(): boolean;
+  // displayUserMenu() indicates whether the login drop-down menu should be
+  // displayed at the top right.
+  displayUserMenu(): boolean;
+  // secureCluster() indicates whether the connection is secure. If
+  // false, an "insecure" indicator is displayed at the top right.
+  secureCluster(): boolean;
+  // hideLoginPage() indicates whether the login page can be
+  // displayed at all. The login page is hidden e.g.
+  // after a user has logged in.
+  hideLoginPage(): boolean;
+  // loggedInUser() returns the name of the user logged in.
   loggedInUser(): string;
 }
 
@@ -39,15 +47,15 @@ class LoginEnabledState {
     this.apiState = state;
   }
 
-  useLogin(): boolean {
+  displayUserMenu(): boolean {
     return true;
   }
 
-  loginEnabled(): boolean {
+  secureCluster(): boolean {
     return true;
   }
 
-  hasAccess(): boolean {
+  hideLoginPage(): boolean {
     return this.apiState.loggedInUser != null;
   }
 
@@ -57,15 +65,15 @@ class LoginEnabledState {
 }
 
 class LoginDisabledState {
-  useLogin(): boolean {
+  displayUserMenu(): boolean {
     return true;
   }
 
-  loginEnabled(): boolean {
+  secureCluster(): boolean {
     return false;
   }
 
-  hasAccess(): boolean {
+  hideLoginPage(): boolean {
     return true;
   }
 
@@ -75,15 +83,15 @@ class LoginDisabledState {
 }
 
 class NoLoginState {
-  useLogin(): boolean {
+  displayUserMenu(): boolean {
     return false;
   }
 
-  loginEnabled(): boolean {
+  secureCluster(): boolean {
     return false;
   }
 
-  hasAccess(): boolean {
+  hideLoginPage(): boolean {
     return true;
   }
 
