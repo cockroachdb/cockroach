@@ -161,6 +161,20 @@ func (l *lexer) UnimplementedWithIssueDetail(issue int, detail string) {
 	l.populateErrorDetails()
 }
 
+// PurposelyUnimplemented wraps Error, setting lastUnimplementedError.
+func (l *lexer) PurposelyUnimplemented(feature string, reason string) {
+	// We purposely do not use unimp here, as it appends hints to suggest that
+	// the error may be actively tracked as a bug.
+	l.lastError = errors.WithHint(
+		errors.WithTelemetry(
+			pgerror.Newf(pgcode.Syntax, "unimplemented: this syntax"),
+			fmt.Sprintf("sql.purposely_unimplemented.%s", feature),
+		),
+		reason,
+	)
+	l.populateErrorDetails()
+}
+
 // setErr is called from parsing action rules to register an error observed
 // while running the action. That error becomes the actual "cause" of the
 // syntax error.
