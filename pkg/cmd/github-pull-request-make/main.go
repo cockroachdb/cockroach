@@ -258,8 +258,8 @@ func main() {
 		if len(pkgs) > 0 {
 			for name, pkg := range pkgs {
 				// 10 minutes total seems OK, but at least a minute per test.
-				duration := (10 * time.Minute) / time.Duration(len(pkgs))
-				minDuration := time.Minute * time.Duration(len(pkg.tests))
+				duration := (20 * time.Minute) / time.Duration(len(pkgs))
+				minDuration := (2 * time.Minute) * time.Duration(len(pkg.tests))
 				if duration < minDuration {
 					duration = minDuration
 				}
