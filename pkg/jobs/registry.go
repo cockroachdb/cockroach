@@ -868,7 +868,7 @@ func (r *Registry) stepThroughStateMachine(
 			// If the job has failed with any error different than canceled we
 			// mark it as Failed.
 			nextStatus := StatusFailed
-			if errors.Is(errJobCanceled, jobErr) {
+			if errors.Is(jobErr, errJobCanceled) {
 				nextStatus = StatusCanceled
 			}
 			return r.stepThroughStateMachine(ctx, phs, resumer, resultsCh, job, nextStatus, jobErr)
