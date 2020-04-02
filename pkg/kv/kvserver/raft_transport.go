@@ -546,7 +546,6 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest, class rpc.ConnectionC
 		}
 	}()
 
-	ctx := t.AnnotateCtx(context.Background())
 	if req.RangeID == 0 && len(req.Heartbeats) == 0 && len(req.HeartbeatResps) == 0 {
 		// Coalesced heartbeats are addressed to range 0; everything else
 		// needs an explicit range ID.
@@ -563,6 +562,7 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest, class rpc.ConnectionC
 	ch, existingQueue := t.getQueue(toNodeID, class)
 	if !existingQueue {
 		// Note that startProcessNewQueue is in charge of deleting the queue.
+		ctx := t.AnnotateCtx(context.Background())
 		if !t.startProcessNewQueue(ctx, toNodeID, class, stats) {
 			return false
 		}
@@ -614,7 +614,7 @@ func (t *RaftTransport) startProcessNewQueue(
 	worker := func(ctx context.Context) {
 		ch, existingQueue := t.getQueue(toNodeID, class)
 		if !existingQueue {
-			log.Fatalf(t.AnnotateCtx(context.Background()), "queue for n%d does not exist", toNodeID)
+			log.Fatalf(ctx, "queue for n%d does not exist", toNodeID)
 		}
 		defer cleanup(ch)
 		defer t.queues[class].Delete(int64(toNodeID))
