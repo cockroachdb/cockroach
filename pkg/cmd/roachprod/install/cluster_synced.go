@@ -1012,18 +1012,38 @@ func (c *SyncedCluster) Put(src, dest string) {
 		}
 	}
 
-	mkpath := func(i int) string {
+	mkpath := func(i int, dest string) (string, error) {
 		if i == -1 {
-			return src
+			return src, nil
 		}
-		return fmt.Sprintf("%s@%s:%s", c.user(c.Nodes[i]), c.host(c.Nodes[i]), dest)
+		// Expand the destination to allow, for example, putting directly
+		// into {store-dir}.
+		e := expander{
+			node: c.Nodes[i],
+		}
+		dest, err := e.expand(c, dest)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%s@%s:%s", c.user(c.Nodes[i]), c.host(c.Nodes[i]), dest), nil
 	}
 
 	for i := range c.Nodes {
-		go func(i int) {
+		go func(i int, dest string) {
 			defer wg.Done()
 
 			if c.IsLocal() {
+				// Expand the destination to allow, for example, putting directly
+				// into {store-dir}.
+				e := expander{
+					node: c.Nodes[i],
+				}
+				var err error
+				dest, err = e.expand(c, dest)
+				if err != nil {
+					results <- result{i, err}
+					return
+				}
 				if _, err := os.Stat(src); err != nil {
 					results <- result{i, err}
 					return
@@ -1033,7 +1053,16 @@ func (c *SyncedCluster) Put(src, dest string) {
 					results <- result{i, err}
 					return
 				}
-				to := fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d/%s"), c.Nodes[i], dest)
+				// TODO(jlinder): this does not take into account things like
+				// roachprod put local:1 /some/file.txt /some/dir
+				// and will replace 'dir' with the contents of file.txt, instead
+				// of creating /some/dir/file.txt.
+				var to string
+				if filepath.IsAbs(dest) {
+					to = dest
+				} else {
+					to = fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d/%s"), c.Nodes[i], dest)
+				}
 				// Remove the destination if it exists, ignoring errors which we'll
 				// handle via the os.Symlink() call.
 				_ = os.Remove(to)
@@ -1049,12 +1078,21 @@ func (c *SyncedCluster) Put(src, dest string) {
 			// achieving this approach is likely a generalization of the current
 			// code.
 			srcIndex := <-sources
-			from := mkpath(srcIndex)
+			from, err := mkpath(srcIndex, dest)
+			if err != nil {
+				results <- result{i, err}
+				return
+			}
 			// TODO(peter): For remote-to-remote copies, should the destination use
 			// the internal IP address? The external address works, but it might be
 			// slower.
-			to := mkpath(i)
-			err := c.scp(from, to)
+			to, err := mkpath(i, dest)
+			if err != nil {
+				results <- result{i, err}
+				return
+			}
+
+			err = c.scp(from, to)
 			results <- result{i, err}
 
 			if err != nil {
@@ -1070,7 +1108,7 @@ func (c *SyncedCluster) Put(src, dest string) {
 					pushSource(i)
 				}
 			}
-		}(i)
+		}(i, dest)
 	}
 
 	go func() {
