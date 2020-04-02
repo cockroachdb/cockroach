@@ -66,11 +66,3 @@ func Caller(depth ...int) string {
 	}
 	return buf.String()
 }
-
-// MakeCaller returns a function which will invoke Caller with the specified
-// arguments.
-func MakeCaller(depth ...int) func() string {
-	return func() string {
-		return Caller(depth...)
-	}
-}

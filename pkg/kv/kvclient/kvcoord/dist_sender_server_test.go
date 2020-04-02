@@ -133,8 +133,6 @@ func setupMultipleRanges(ctx context.Context, db *kv.DB, splitAt ...string) erro
 	return nil
 }
 
-var errInfo = testutils.MakeCaller(3, 2)
-
 type checkResultsMode int
 
 const (
@@ -168,6 +166,7 @@ func checkSpanResults(
 	expSatisfied map[int]struct{},
 	opt checkOptions,
 ) {
+	t.Helper()
 	if len(expResults) != len(results) {
 		t.Fatalf("only got %d results, wanted %d", len(expResults), len(results))
 	}
@@ -177,14 +176,14 @@ func checkSpanResults(
 		count += len(res.Rows)
 		if opt.mode == Strict {
 			if len(res.Rows) != len(expResults[i]) {
-				t.Fatalf("%s: scan %d (%s): expected %d rows, got %d (%s)",
-					errInfo(), i, spans[i], len(expResults[i]), len(res.Rows), res)
+				t.Fatalf("scan %d (%s): expected %d rows, got %d (%s)",
+					i, spans[i], len(expResults[i]), len(res.Rows), res)
 			}
 		}
 		for j, kv := range res.Rows {
 			if key, expKey := string(kv.Key), expResults[i][j]; key != expKey {
-				t.Fatalf("%s: scan %d (%s) expected result %d to be %q; got %q",
-					errInfo(), i, spans[i], j, expKey, key)
+				t.Fatalf("scan %d (%s) expected result %d to be %q; got %q",
+					i, spans[i], j, expKey, key)
 			}
 		}
 	}
@@ -203,20 +202,21 @@ func checkResumeSpanScanResults(
 	expSatisfied map[int]struct{},
 	opt checkOptions,
 ) {
+	t.Helper()
 	for i, res := range results {
 		rowLen := len(res.Rows)
 		// Check that satisfied scans don't have resume spans.
 		if _, satisfied := expSatisfied[i]; satisfied {
 			if res.ResumeSpan != nil {
-				t.Fatalf("%s: satisfied scan %d (%s) has ResumeSpan: %v",
-					errInfo(), i, spans[i], res.ResumeSpan)
+				t.Fatalf("satisfied scan %d (%s) has ResumeSpan: %v",
+					i, spans[i], res.ResumeSpan)
 			}
 			continue
 		}
 
 		if res.ResumeReason == roachpb.RESUME_UNKNOWN {
-			t.Fatalf("%s: scan %d (%s): no resume reason. resume span: %+v",
-				errInfo(), i, spans[i], res.ResumeSpan)
+			t.Fatalf("scan %d (%s): no resume reason. resume span: %+v",
+				i, spans[i], res.ResumeSpan)
 		}
 
 		// The scan is not expected to be satisfied, so there must be a resume span.
@@ -225,25 +225,25 @@ func checkResumeSpanScanResults(
 		// otherwise.
 		resumeKey := string(res.ResumeSpan.Key)
 		if res.ResumeReason != roachpb.RESUME_KEY_LIMIT {
-			t.Fatalf("%s: scan %d (%s): unexpected resume reason %s",
-				errInfo(), i, spans[i], res.ResumeReason)
+			t.Fatalf("scan %d (%s): unexpected resume reason %s",
+				i, spans[i], res.ResumeReason)
 		}
 		if rowLen == 0 {
 			if resumeKey != spans[i][0] {
-				t.Fatalf("%s: scan %d: expected resume %s, got: %s",
-					errInfo(), i, spans[i][0], resumeKey)
+				t.Fatalf("scan %d: expected resume %s, got: %s",
+					i, spans[i][0], resumeKey)
 			}
 		} else {
 			lastRes := expResults[i][rowLen-1]
 			if resumeKey <= lastRes {
-				t.Fatalf("%s: scan %d: expected resume %s to be above last result %s",
-					errInfo(), i, resumeKey, lastRes)
+				t.Fatalf("scan %d: expected resume %s to be above last result %s",
+					i, resumeKey, lastRes)
 			}
 		}
 
 		// The EndKey must be untouched.
 		if key, expKey := string(res.ResumeSpan.EndKey), spans[i][1]; key != expKey {
-			t.Errorf("%s: expected resume endkey %d to be %q; got %q", errInfo(), i, expKey, key)
+			t.Errorf("expected resume endkey %d to be %q; got %q", i, expKey, key)
 		}
 	}
 }
@@ -257,12 +257,13 @@ func checkResumeSpanReverseScanResults(
 	expSatisfied map[int]struct{},
 	opt checkOptions,
 ) {
+	t.Helper()
 	for i, res := range results {
 		rowLen := len(res.Rows)
 		// Check that satisfied scans don't have resume spans.
 		if _, satisfied := expSatisfied[i]; satisfied {
 			if res.ResumeSpan != nil {
-				t.Fatalf("%s: satisfied scan %d has ResumeSpan: %v", errInfo(), i, res.ResumeSpan)
+				t.Fatalf("satisfied scan %d has ResumeSpan: %v", i, res.ResumeSpan)
 			}
 			continue
 		}
@@ -273,25 +274,25 @@ func checkResumeSpanReverseScanResults(
 		// otherwise.
 		resumeKey := string(res.ResumeSpan.EndKey)
 		if res.ResumeReason != roachpb.RESUME_KEY_LIMIT {
-			t.Fatalf("%s: scan %d (%s): unexpected resume reason %s",
-				errInfo(), i, spans[i], res.ResumeReason)
+			t.Fatalf("scan %d (%s): unexpected resume reason %s",
+				i, spans[i], res.ResumeReason)
 		}
 		if rowLen == 0 {
 			if resumeKey != spans[i][1] {
-				t.Fatalf("%s: scan %d (%s) expected resume %s, got: %s",
-					errInfo(), i, spans[i], spans[i][1], resumeKey)
+				t.Fatalf("scan %d (%s) expected resume %s, got: %s",
+					i, spans[i], spans[i][1], resumeKey)
 			}
 		} else {
 			lastRes := expResults[i][rowLen-1]
 			if resumeKey >= lastRes {
-				t.Fatalf("%s: scan %d: expected resume %s to be below last result %s",
-					errInfo(), i, resumeKey, lastRes)
+				t.Fatalf("scan %d: expected resume %s to be below last result %s",
+					i, resumeKey, lastRes)
 			}
 		}
 
 		// The Key must be untouched.
 		if key, expKey := string(res.ResumeSpan.Key), spans[i][0]; key != expKey {
-			t.Errorf("%s: expected resume key %d to be %q; got %q", errInfo(), i, expKey, key)
+			t.Errorf("expected resume key %d to be %q; got %q", i, expKey, key)
 		}
 	}
 }
@@ -594,6 +595,7 @@ func TestMultiRangeBoundedBatchScanSortedOverlapping(t *testing.T) {
 func checkResumeSpanDelRangeResults(
 	t *testing.T, spans [][]string, results []kv.Result, expResults [][]string, expCount int,
 ) {
+	t.Helper()
 	for i, res := range results {
 		// Check ResumeSpan when request has been processed.
 		rowLen := len(res.Keys)
@@ -607,17 +609,17 @@ func checkResumeSpanDelRangeResults(
 			}
 			// The next start key is always greater than the last key seen.
 			if key, expKey := string(res.ResumeSpan.Key), expResults[i][rowLen-1]; key <= expKey {
-				t.Errorf("%s: expected resume key %d, %d to be %q; got %q", errInfo(), i, expCount, expKey, key)
+				t.Errorf("expected resume key %d, %d to be %q; got %q", i, expCount, expKey, key)
 			}
 		} else {
 			// The request was not processed; the resume span key <= first seen key.
 			if key, expKey := string(res.ResumeSpan.Key), expResults[i][0]; key > expKey {
-				t.Errorf("%s: expected resume key %d, %d to be %q; got %q", errInfo(), i, expCount, expKey, key)
+				t.Errorf("expected resume key %d, %d to be %q; got %q", i, expCount, expKey, key)
 			}
 		}
 		// The EndKey is untouched.
 		if key, expKey := string(res.ResumeSpan.EndKey), spans[i][1]; key != expKey {
-			t.Errorf("%s: expected resume endkey %d, %d to be %q; got %q", errInfo(), i, expCount, expKey, key)
+			t.Errorf("expected resume endkey %d, %d to be %q; got %q", i, expCount, expKey, key)
 		}
 	}
 }
@@ -676,7 +678,7 @@ func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 			rem -= len(res.Keys)
 			for j, key := range res.Keys {
 				if expKey := expResults[i][j]; string(key) != expKey {
-					t.Errorf("%s: expected scan key %d, %d to be %q; got %q", errInfo(), i, j, expKey, key)
+					t.Errorf("expected scan key %d, %d to be %q; got %q", i, j, expKey, key)
 				}
 			}
 		}
@@ -789,7 +791,7 @@ func TestMultiRangeBoundedBatchDelRangeOverlappingKeys(t *testing.T) {
 			rem -= len(res.Keys)
 			for j, key := range res.Keys {
 				if expKey := expResults[i][j]; string(key) != expKey {
-					t.Errorf("%s: expected scan key %d, %d to be %q; got %q", errInfo(), i, j, expKey, key)
+					t.Errorf("expected scan key %d, %d to be %q; got %q", i, j, expKey, key)
 				}
 			}
 		}
