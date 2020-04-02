@@ -15,4 +15,4 @@ export { default as trackTableSort } from "./trackTableSort";
 export { default as trackPaginate } from "./trackPaginate";
 export { default as trackSearch } from "./trackSearch";
 export { default as trackDocsLink} from "./trackDocsLink";
-export { default as trackStatusFilter } from "./trackStatusFilter";
+export { default as trackFilter } from "./trackFilter";
