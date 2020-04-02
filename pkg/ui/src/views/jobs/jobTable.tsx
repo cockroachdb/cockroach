@@ -8,18 +8,19 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import {ColumnDescriptor, SortedTable} from "src/views/shared/components/sortedtable";
-import {cockroach} from "src/js/protos";
-import {TimestampToMoment} from "src/util/convert";
-import {DATE_FORMAT} from "src/util/format";
-import {JobStatusCell} from "oss/src/views/jobs/jobStatusCell";
-import {Icon, Pagination} from "antd";
+import React, { MouseEvent } from "react";
+import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
+import { cockroach } from "src/js/protos";
+import { TimestampToMoment } from "src/util/convert";
+import { DATE_FORMAT } from "src/util/format";
+import { JobStatusCell } from "oss/src/views/jobs/jobStatusCell";
+import { Icon, Pagination } from "antd";
 import Empty from "src/views/app/components/empty";
-import {SortSetting} from "oss/src/views/shared/components/sortabletable";
-import {CachedDataReducerState} from "oss/src/redux/cachedDataReducer";
-import _ from "lodash";
-import {JobDescriptionCell} from "oss/src/views/jobs/jobDescriptionCell";
+import { SortSetting } from "oss/src/views/shared/components/sortabletable";
+import { CachedDataReducerState } from "oss/src/redux/cachedDataReducer";
+import { isEmpty, isEqual, map } from "lodash";
+import { JobDescriptionCell } from "oss/src/views/jobs/jobDescriptionCell";
+import { trackDocsLink } from "src/util/analytics";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
 
@@ -121,17 +122,26 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
     return `${count} of ${total} jobs`;
   }
 
+  redirectToLearnMore = (e: MouseEvent<HTMLAnchorElement>) => {
+    trackDocsLink(e.currentTarget.text);
+  }
+
   noJobResult = () => (
     <>
       <p>There are no jobs that match your search in filter.</p>
-      <a href="https://www.cockroachlabs.com/docs/stable/admin-ui-jobs-page.html" target="_blank">Learn more about jobs</a>
+      <a
+        href="https://www.cockroachlabs.com/docs/stable/admin-ui-jobs-page.html"
+        target="_blank"
+        onClick={this.redirectToLearnMore}>
+        Learn more about jobs
+      </a>
     </>
   )
 
   render() {
     const jobs = this.props.jobs.data.jobs;
     const { pagination } = this.state;
-    if (_.isEmpty(jobs) && !this.props.isUsedFilter) {
+    if (isEmpty(jobs) && !this.props.isUsedFilter) {
       return (
         <Empty
           title="There are no jobs to display."
@@ -173,11 +183,11 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
   }
 
   private setCurrentPageToOneIfJobsChanged(prevProps: Readonly<JobTableProps>) {
-    if (!_.isEqual(
-      _.map(prevProps.jobs.data.jobs, (j) => {
+    if (!isEqual(
+      map(prevProps.jobs.data.jobs, (j) => {
         return j.id;
       }),
-      _.map(this.props.jobs.data.jobs, (j) => {
+      map(this.props.jobs.data.jobs, (j) => {
         return j.id;
       }),
     )) {
