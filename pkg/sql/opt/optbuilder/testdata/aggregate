@@ -2706,12 +2706,9 @@ scalar-group-by
 build
 SELECT corr(k, NULL) FROM kv
 ----
-project
- ├── columns: corr:5
- ├── scan kv
- │    └── columns: k:1!null v:2 w:3 s:4
- └── projections
-      └── NULL [as=corr:5]
+error (42725): ambiguous call: corr(int, unknown), candidates are:
+corr(int, int) -> float
+corr(int, float) -> float
 
 build
 SELECT corr('foo', v) FROM kv
@@ -3839,3 +3836,22 @@ project
                      │              └── b:3
                      └── projections
                           └── (max:4, unnest:1) [as="?column?":6]
+
+# Regression test for #46196. Don't eliminate the scalar group by, and
+# default to type string.
+build format=show-types
+SELECT max(t0.c0) FROM (VALUES (NULL), (NULL)) t0(c0);
+----
+scalar-group-by
+ ├── columns: max:3(string)
+ ├── project
+ │    ├── columns: column2:2(string)
+ │    ├── values
+ │    │    ├── columns: column1:1(unknown)
+ │    │    ├── (NULL,) [type=tuple{unknown}]
+ │    │    └── (NULL,) [type=tuple{unknown}]
+ │    └── projections
+ │         └── column1:1::STRING [as=column2:2, type=string]
+ └── aggregations
+      └── max [as=max:3, type=string]
+           └── column2:2 [type=string]

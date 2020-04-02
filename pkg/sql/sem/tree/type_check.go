@@ -847,10 +847,46 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 			"%s()", def.Name)
 	}
 
+	// If the function is an aggregate that does not accept null arguments and we
+	// have arguments of unknown type, see if we can assign type string instead.
+	// TODO(rytaft): If there are no overloads with string inputs, Postgres
+	// chooses the overload with preferred type for the given category. For
+	// example, float8 is the preferred type for the numeric category in Postgres.
+	// To match Postgres' behavior, we should add that logic here too.
+	if !def.NullableArgs && def.FunctionProperties.Class == AggregateClass {
+		for i := range typedSubExprs {
+			if typedSubExprs[i].ResolvedType().Family() == types.UnknownFamily {
+				var filtered []overloadImpl
+				for j := range fns {
+					if fns[j].params().GetAt(i).Equivalent(types.String) {
+						if filtered == nil {
+							filtered = make([]overloadImpl, 0, len(fns)-j)
+						}
+						filtered = append(filtered, fns[j])
+					}
+				}
+
+				// Only use the filtered list if it's not empty.
+				if filtered != nil {
+					fns = filtered
+
+					// Cast the expression to a string so the execution engine will find
+					// the correct overload.
+					e, err := NewTypedCastExpr(typedSubExprs[i], types.String)
+					if err != nil {
+						return nil, err
+					}
+					typedSubExprs[i] = e
+				}
+			}
+		}
+	}
+
 	// Return NULL if at least one overload is possible, no overload accepts
-	// NULL arguments, the function isn't a generator builtin, and NULL is given
-	// as an argument.
-	if !def.NullableArgs && def.FunctionProperties.Class != GeneratorClass {
+	// NULL arguments, the function isn't a generator or aggregate builtin, and
+	// NULL is given as an argument.
+	if !def.NullableArgs && def.FunctionProperties.Class != GeneratorClass &&
+		def.FunctionProperties.Class != AggregateClass {
 		for _, expr := range typedSubExprs {
 			if expr.ResolvedType().Family() == types.UnknownFamily {
 				return DNull, nil
