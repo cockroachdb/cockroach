@@ -9,16 +9,16 @@
 // licenses/APL.txt.
 import { analytics } from "src/redux/analytics";
 
-export const track = (fn: Function) => (filter: string) => {
+export const track = (fn: Function) => (filter: string, value: string) => {
   fn({
-    event: "Status Filter",
+    event: `${filter} Filter`,
     properties: {
-      selectedFilter: filter,
+      selectedFilter: value,
     },
   });
 };
 
-export default function trackStatusFilter (filter: string) {
+export default function trackFilter (filter: string, value: string) {
   const boundTrack = analytics.track.bind(analytics);
-  track(boundTrack)(filter);
+  track(boundTrack)(filter, value);
 }

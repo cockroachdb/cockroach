@@ -16,4 +16,4 @@ export { default as trackPaginate } from "./trackPaginate";
 export { default as trackSearch } from "./trackSearch";
 export { default as trackDownloadDiagnosticsBundle } from "./trackDownloadDiagnosticsBundle";
 export { default as trackDocsLink} from "./trackDocsLink";
-export { default as trackStatusFilter } from "./trackStatusFilter";
+export { default as trackFilter } from "./trackFilter";
