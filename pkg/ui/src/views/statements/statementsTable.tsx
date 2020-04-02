@@ -23,6 +23,7 @@ import { DiagnosticStatusBadge } from "./diagnostics/diagnosticStatusBadge";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import { ActivateDiagnosticsModalRef } from "./diagnostics/activateDiagnosticsModal";
+import { statementsSql, transactionalPipelining, statementDiagnostics, statementsRetries, statementsTimeInterval } from "oss/src/util/docs";
 
 const longToInt = (d: number | Long) => FixLong(d).toInt();
 
@@ -80,7 +81,29 @@ export function makeStatementsColumns(
 ): ColumnDescriptor<AggregateStatistics>[]  {
   const columns: ColumnDescriptor<AggregateStatistics>[] = [
     {
-      title: "Statement",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title={
+            <div className="tooltip__table--title">
+              <p>
+                {"SQL statement "}
+                <Anchor
+                  href={statementsSql}
+                  target="_blank"
+                >
+                  fingerprint.
+                </Anchor>
+              </p>
+              <p>
+                To view additional details of a SQL statement fingerprint, click this to open the Statement Details page.
+              </p>
+            </div>
+          }
+        >
+          Statements
+        </Tooltip>
+      ),
       className: "cl-table__col-query-text",
       cell: (stmt) => (
         <StatementLink
@@ -93,7 +116,34 @@ export function makeStatementsColumns(
       sort: (stmt) => stmt.label,
     },
     {
-      title: "Txn Type",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title={
+            <div className="tooltip__table--title">
+              <p>
+                {"Type of transaction (implicit or explicit). Explicit transactions refer to statements that are wrapped by "}
+                <code>BEGIN</code>
+                {" and "}
+                <code>COMMIT</code>
+                {" statements by the client. Explicit transactions employ "}
+                <Anchor
+                  href={transactionalPipelining}
+                  target="_blank"
+                >
+                  transactional pipelining
+                </Anchor>
+                {" and therefore report latencies that do not account for replication."}
+              </p>
+              <p>
+                For statements not in explicit transactions, CockroachDB wraps each statement in individual implicit transactions.
+              </p>
+            </div>
+          }
+        >
+          TXN Type
+        </Tooltip>
+      ),
       className: "statements-table__col-time",
       cell: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
       sort: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
@@ -103,7 +153,28 @@ export function makeStatementsColumns(
 
   if (activateDiagnosticsRef) {
     const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
-      title: "Diagnostics",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title={
+            <div className="tooltip__table--title">
+              <p>
+                {"Option to activate "}
+                <Anchor
+                  href={statementDiagnostics}
+                  target="_blank"
+                >
+                  diagnostics
+                </Anchor>
+                {" for each statement. If activated, this displays the status of diagnostics collection ("}
+                <code>WAITING FOR QUERY</code>, <code>READY</code>, OR <code>ERROR</code>).
+              </p>
+            </div>
+          }
+        >
+          Diagnostics
+        </Tooltip>
+      ),
       cell: (stmt) => {
         if (stmt.diagnosticsReport) {
           return <DiagnosticStatusBadge status={stmt.diagnosticsReport.completed ? "READY" : "WAITING FOR QUERY"}/>;
@@ -158,25 +229,112 @@ function makeCommonColumns(statements: AggregateStatistics[])
 
   return [
     {
-      title: "Retries",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title={
+            <div className="tooltip__table--title">
+              <p>
+                {"Cumulative number of "}
+                <Anchor
+                  href={statementsRetries}
+                  target="_blank"
+                >
+                  retries
+                </Anchor>
+                {" of statements with this fingerprint within the last hour or specified time interval."}
+              </p>
+            </div>
+          }
+        >
+          Retries
+        </Tooltip>
+      ),
       className: "statements-table__col-retries",
       cell: retryBar,
       sort: (stmt) => (longToInt(stmt.stats.count) - longToInt(stmt.stats.first_attempt_count)),
     },
     {
-      title: "Execution Count",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title={
+            <div className="tooltip__table--title">
+              <p>
+                {"Cumulative number of executions of statements with this fingerprint within the last hour or specified "}
+                <Anchor
+                  href={statementsTimeInterval}
+                  target="_blank"
+                >
+                  time interval
+                </Anchor>.
+              </p>
+              <p>
+                {"The bar indicates the ratio of runtime success (gray) to "}
+                <Anchor
+                  href={statementsRetries}
+                  target="_blank"
+                >
+                  retries
+                </Anchor>
+                {" (red) for the SQL statement fingerprint."}
+              </p>
+            </div>
+          }
+        >
+          Execution Count
+        </Tooltip>
+      ),
       className: "statements-table__col-count",
       cell: countBar,
       sort: (stmt) => FixLong(stmt.stats.count).toInt(),
     },
     {
-      title: "Rows Affected",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title={
+            <div className="tooltip__table--title">
+              <p>
+                {"Average number of rows returned while executing statements with this fingerprint within the last hour or specified "}
+                <Anchor
+                  href={statementsTimeInterval}
+                  target="_blank"
+                >
+                  time interval
+                </Anchor>.
+              </p>
+              <p>
+                The gray bar indicates the mean number of rows returned. The blue bar indicates one standard deviation from the mean.
+              </p>
+            </div>
+          }
+        >
+          Rows Affected
+        </Tooltip>
+      ),
       className: "statements-table__col-rows",
       cell: rowsBar,
       sort: (stmt) => stmt.stats.num_rows.mean,
     },
     {
-      title: "Latency",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title={
+            <div className="tooltip__table--title">
+              <p>
+                Average service latency of statements with this fingerprint within the last hour or specified time interval.
+              </p>
+              <p>
+                The gray bar indicates the mean latency. The blue bar indicates one standard deviation from the mean.
+              </p>
+            </div>
+          }
+        >
+          Latency
+        </Tooltip>
+      ),
       className: "statements-table__col-latency",
       cell: latencyBar,
       sort: (stmt) => stmt.stats.service_lat.mean,
