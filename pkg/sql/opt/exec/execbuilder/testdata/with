@@ -83,7 +83,7 @@ EXPLAIN (VERBOSE)
     w, table39010
 ----
 ·           distributed  false               ·      ·
-·           vectorized   true                ·      ·
+·           vectorized   false               ·      ·
 cross-join  ·            ·                   (col)  ·
  │          type         cross               ·      ·
  ├── scan   ·            ·                   ()     ·

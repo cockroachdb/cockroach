@@ -830,7 +830,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT * FROM dec2 WHERE isnan(d)
 ----
 ·     distributed  false                        ·            ·
-·     vectorized   true                         ·            ·
+·     vectorized   false                        ·            ·
 scan  ·            ·                            (d decimal)  ·
 ·     table        dec2@primary                 ·            ·
 ·     spans        ALL                          ·            ·
@@ -870,7 +870,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT * FROM flt WHERE isnan(f)
 ----
 ·     distributed  false                      ·          ·
-·     vectorized   true                       ·          ·
+·     vectorized   false                      ·          ·
 scan  ·            ·                          (f float)  ·
 ·     table        flt@primary                ·          ·
 ·     spans        ALL                        ·          ·
@@ -1143,7 +1143,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a + x FROM (SELECT a, b, a + b + c AS x FROM abcd) ORDER BY b
 ----
 ·                    distributed  false              ·                ·
-·                    vectorized   true               ·                ·
+·                    vectorized   false              ·                ·
 render               ·            ·                  ("?column?")     ·
  │                   render 0     "?column?"         ·                ·
  └── sort            ·            ·                  ("?column?", b)  +b
@@ -1182,7 +1182,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a > b ORDER BY a DESC, b DESC
 ----
 ·          distributed  false         ·             ·
-·          vectorized   true          ·             ·
+·          vectorized   false         ·             ·
 sort       ·            ·             (a, b, c, d)  -a,-b
  │         order        -a,-b         ·             ·
  └── scan  ·            ·             (a, b, c, d)  ·
@@ -1505,7 +1505,7 @@ query TTT
 EXPLAIN SELECT e.z, s.z, n FROM e, s, generate_series(0, s.z, 1000) as n WHERE e.y = s.y ORDER BY s.z LIMIT 10
 ----
 ·                              distributed  false
-·                              vectorized   true
+·                              vectorized   false
 render                         ·            ·
  └── limit                     ·            ·
       │                        count        10
