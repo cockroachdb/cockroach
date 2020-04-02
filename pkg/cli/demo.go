@@ -595,7 +595,12 @@ func setupTransientCluster(
 	// Prepare the URL for use by the SQL shell.
 	// TODO (rohany): there should be a way that the user can request a specific node
 	//  to connect to to see the effects of the artificial latency.
-	c.connURL, err = makeURLForServer(c.s, gen, c.certsDir)
+	c.connURL, err = makeURLForServer(
+		c.s,
+		gen,
+		c.certsDir,
+		true, /* includeAppName */
+	)
 	if err != nil {
 		return c, err
 	}
@@ -659,7 +664,12 @@ func (c *transientCluster) setupWorkload(
 		if demoCtx.runWorkload {
 			var sqlURLs []string
 			for i := range c.servers {
-				sqlURL, err := makeURLForServer(c.servers[i], gen, c.certsDir)
+				sqlURL, err := makeURLForServer(
+					c.servers[i],
+					gen,
+					c.certsDir,
+					true, /* includeAppName */
+				)
 				if err != nil {
 					return err
 				}
@@ -723,7 +733,7 @@ func (c *transientCluster) runWorkload(
 }
 
 func makeURLForServer(
-	s *server.TestServer, gen workload.Generator, certPath string,
+	s *server.TestServer, gen workload.Generator, certPath string, includeAppName bool,
 ) (string, error) {
 	options := url.Values{}
 	cfg := base.Config{
@@ -734,7 +744,9 @@ func makeURLForServer(
 	if err := cfg.LoadSecurityOptions(options, security.RootUser); err != nil {
 		return "", err
 	}
-	options.Add("application_name", sqlbase.ReportableAppNamePrefix+"cockroach demo")
+	if includeAppName {
+		options.Add("application_name", sqlbase.ReportableAppNamePrefix+"cockroach demo")
+	}
 	sqlURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(security.RootUser),
@@ -968,6 +980,35 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 # Web UI: %s
 #
 `, c.s.AdminURL())
+
+		// Don't include the application name in the URLs we display to users.
+		if demoCtx.nodes == 1 {
+			connURL, err := makeURLForServer(
+				c.servers[0],
+				gen,
+				c.certsDir,
+				false, /* includeAppName */
+			)
+			if err != nil {
+				return checkAndMaybeShout(err)
+			}
+			fmt.Printf("# Connect to the cluster on a SQL shell at: '%s'.\n#\n", connURL)
+		} else {
+			fmt.Printf("# Connect to different nodes in the cluster on a SQL shell at:\n")
+			for _, s := range c.servers {
+				connURL, err := makeURLForServer(
+					s,
+					gen,
+					c.certsDir,
+					false, /* includeAppName */
+				)
+				if err != nil {
+					return checkAndMaybeShout(err)
+				}
+				fmt.Printf("# * Node %d: '%s'\n", s.NodeID(), connURL)
+			}
+			fmt.Printf("#\n")
+		}
 
 		if !demoCtx.insecure {
 			fmt.Printf(
