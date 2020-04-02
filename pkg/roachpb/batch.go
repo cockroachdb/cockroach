@@ -430,15 +430,8 @@ func (br *BatchResponse) Combine(otherBatch *BatchResponse, positions []int) err
 		}
 		valLeft := br.Responses[pos].GetInner()
 		valRight := otherBatch.Responses[i].GetInner()
-		cValLeft, lOK := valLeft.(combinable)
-		cValRight, rOK := valRight.(combinable)
-		if lOK && rOK {
-			if err := cValLeft.combine(cValRight); err != nil {
-				return err
-			}
-			continue
-		} else if lOK != rOK {
-			return errors.Errorf("can not combine %T and %T", valLeft, valRight)
+		if err := CombineResponses(valLeft, valRight); err != nil {
+			return err
 		}
 	}
 	return nil
