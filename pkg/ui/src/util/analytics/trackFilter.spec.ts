@@ -11,12 +11,13 @@
 import { get, isString } from "lodash";
 import { assert } from "chai";
 import { createSandbox } from "sinon";
-import { track } from "./trackStatusFilter";
+import { track } from "./trackFilter";
 
 const sandbox = createSandbox();
 
 describe("trackSubnavSelection", () => {
-  const filter = "test filter";
+  const filter = "Test";
+  const filterValue = "test-value";
 
   afterEach(() => {
     sandbox.reset();
@@ -24,15 +25,15 @@ describe("trackSubnavSelection", () => {
 
   it("should only call track once", () => {
     const spy = sandbox.spy();
-    track(spy)(filter);
+    track(spy)(filter, filterValue);
     assert.isTrue(spy.calledOnce);
   });
 
   it("should send a track call with the correct event", () => {
     const spy = sandbox.spy();
-    const expected = "Status Filter";
+    const expected = "Test Filter";
 
-    track(spy)(filter);
+    track(spy)(filter, filterValue);
 
     const sent = spy.getCall(0).args[0];
     const event = get(sent, "event");
@@ -44,12 +45,12 @@ describe("trackSubnavSelection", () => {
   it("send the correct payload", () => {
     const spy = sandbox.spy();
 
-    track(spy)(filter);
+    track(spy)(filter, filterValue);
 
     const sent = spy.getCall(0).args[0];
     const selectedFilter = get(sent, "properties.selectedFilter");
 
     assert.isTrue(isString(selectedFilter));
-    assert.isTrue(selectedFilter === filter);
+    assert.isTrue(selectedFilter === filterValue);
   });
 });
