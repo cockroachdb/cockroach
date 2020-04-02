@@ -132,6 +132,8 @@ var ComparisonOpReverseMap = map[Operator]tree.ComparisonOperator{
 	NotRegMatchOp:    tree.NotRegMatch,
 	RegIMatchOp:      tree.RegIMatch,
 	NotRegIMatchOp:   tree.NotRegIMatch,
+	IsNullOp:         tree.IsNull,
+	IsNotNullOp:      tree.IsNotNull,
 	IsOp:             tree.IsNotDistinctFrom,
 	IsNotOp:          tree.IsDistinctFrom,
 	ContainsOp:       tree.Contains,
@@ -237,6 +239,8 @@ var NegateOpMap = map[Operator]Operator{
 	NotRegMatchOp:  RegMatchOp,
 	RegIMatchOp:    NotRegIMatchOp,
 	NotRegIMatchOp: RegIMatchOp,
+	IsNullOp:       IsNotNullOp,
+	IsNotNullOp:    IsNullOp,
 	IsOp:           IsNotOp,
 	IsNotOp:        IsOp,
 }

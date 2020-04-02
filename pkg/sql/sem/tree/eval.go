@@ -1830,6 +1830,54 @@ func makeIsFn(a, b *types.T) *CmpOp {
 	return makeCmpOpOverload(cmpOpScalarIsFn, a, b, true /* NullableArgs */)
 }
 
+// allIsNotDistinctFromOverloadsExceptForTuples stores all overloads of IS NOT
+// DISTINCT FROM comparison operator with input types other than tuples.
+var allIsNotDistinctFromOverloadsExceptForTuples = []overloadImpl{
+	&CmpOp{
+		LeftType:     types.Unknown,
+		RightType:    types.Unknown,
+		Fn:           cmpOpScalarIsFn,
+		NullableArgs: true,
+		// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL>
+		isPreferred: true,
+	},
+	// Single-type comparisons.
+	makeIsFn(types.Bool, types.Bool),
+	makeIsFn(types.Bytes, types.Bytes),
+	makeIsFn(types.Date, types.Date),
+	makeIsFn(types.Decimal, types.Decimal),
+	makeIsFn(types.AnyCollatedString, types.AnyCollatedString),
+	makeIsFn(types.Float, types.Float),
+	makeIsFn(types.INet, types.INet),
+	makeIsFn(types.Int, types.Int),
+	makeIsFn(types.Interval, types.Interval),
+	makeIsFn(types.Jsonb, types.Jsonb),
+	makeIsFn(types.Oid, types.Oid),
+	makeIsFn(types.String, types.String),
+	makeIsFn(types.Time, types.Time),
+	makeIsFn(types.TimeTZ, types.TimeTZ),
+	makeIsFn(types.Timestamp, types.Timestamp),
+	makeIsFn(types.TimestampTZ, types.TimestampTZ),
+	makeIsFn(types.Uuid, types.Uuid),
+	makeIsFn(types.VarBit, types.VarBit),
+
+	// Mixed-type comparisons.
+	makeIsFn(types.Date, types.Timestamp),
+	makeIsFn(types.Date, types.TimestampTZ),
+	makeIsFn(types.Decimal, types.Float),
+	makeIsFn(types.Decimal, types.Int),
+	makeIsFn(types.Float, types.Decimal),
+	makeIsFn(types.Float, types.Int),
+	makeIsFn(types.Int, types.Decimal),
+	makeIsFn(types.Int, types.Float),
+	makeIsFn(types.Timestamp, types.Date),
+	makeIsFn(types.Timestamp, types.TimestampTZ),
+	makeIsFn(types.TimestampTZ, types.Date),
+	makeIsFn(types.TimestampTZ, types.Timestamp),
+	makeIsFn(types.Time, types.TimeTZ),
+	makeIsFn(types.TimeTZ, types.Time),
+}
+
 // CmpOps contains the comparison operations indexed by operation type.
 var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 	EQ: {
@@ -1971,50 +2019,35 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		},
 	},
 
-	IsNotDistinctFrom: {
-		&CmpOp{
-			LeftType:     types.Unknown,
-			RightType:    types.Unknown,
-			Fn:           cmpOpScalarIsFn,
-			NullableArgs: true,
-			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL>
-			isPreferred: true,
-		},
-		// Single-type comparisons.
-		makeIsFn(types.Bool, types.Bool),
-		makeIsFn(types.Bytes, types.Bytes),
-		makeIsFn(types.Date, types.Date),
-		makeIsFn(types.Decimal, types.Decimal),
-		makeIsFn(types.AnyCollatedString, types.AnyCollatedString),
-		makeIsFn(types.Float, types.Float),
-		makeIsFn(types.INet, types.INet),
-		makeIsFn(types.Int, types.Int),
-		makeIsFn(types.Interval, types.Interval),
-		makeIsFn(types.Jsonb, types.Jsonb),
-		makeIsFn(types.Oid, types.Oid),
-		makeIsFn(types.String, types.String),
-		makeIsFn(types.Time, types.Time),
-		makeIsFn(types.TimeTZ, types.TimeTZ),
-		makeIsFn(types.Timestamp, types.Timestamp),
-		makeIsFn(types.TimestampTZ, types.TimestampTZ),
-		makeIsFn(types.Uuid, types.Uuid),
-		makeIsFn(types.VarBit, types.VarBit),
+	IsNull: append(
+		allIsNotDistinctFromOverloadsExceptForTuples,
 
-		// Mixed-type comparisons.
-		makeIsFn(types.Date, types.Timestamp),
-		makeIsFn(types.Date, types.TimestampTZ),
-		makeIsFn(types.Decimal, types.Float),
-		makeIsFn(types.Decimal, types.Int),
-		makeIsFn(types.Float, types.Decimal),
-		makeIsFn(types.Float, types.Int),
-		makeIsFn(types.Int, types.Decimal),
-		makeIsFn(types.Int, types.Float),
-		makeIsFn(types.Timestamp, types.Date),
-		makeIsFn(types.Timestamp, types.TimestampTZ),
-		makeIsFn(types.TimestampTZ, types.Date),
-		makeIsFn(types.TimestampTZ, types.Timestamp),
-		makeIsFn(types.Time, types.TimeTZ),
-		makeIsFn(types.TimeTZ, types.Time),
+		// Tuple comparison.
+		&CmpOp{
+			LeftType:     types.AnyTuple,
+			RightType:    types.AnyTuple,
+			NullableArgs: true,
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				if right != DNull {
+					return nil, errors.Errorf(
+						"unexpectedly IS NULL comparison operator with non-NULL right operand",
+					)
+				}
+				if left == DNull {
+					return MakeDBool(true), nil
+				}
+				for _, tupleDatum := range left.(*DTuple).D {
+					if tupleDatum != DNull {
+						return MakeDBool(false), nil
+					}
+				}
+				return MakeDBool(true), nil
+			},
+		},
+	),
+
+	IsNotDistinctFrom: append(
+		allIsNotDistinctFromOverloadsExceptForTuples,
 
 		// Tuple comparison.
 		&CmpOp{
@@ -2028,7 +2061,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), IsNotDistinctFrom), nil
 			},
 		},
-	},
+	),
 
 	In: {
 		makeEvalTupleIn(types.Bool),
@@ -4529,6 +4562,9 @@ func foldComparisonExpr(
 	case NotRegIMatch:
 		// NotRegIMatch(left, right) is implemented as !RegIMatch(left, right)
 		return RegIMatch, left, right, false, true
+	case IsNotNull:
+		// IsNotNull(left, right) is implemented as !IsNull(left, right)
+		return IsNull, left, right, false, true
 	case IsDistinctFrom:
 		// IsDistinctFrom(left, right) is implemented as !IsNotDistinctFrom(left, right)
 		// Note: this seems backwards, but IS NOT DISTINCT FROM is an extended

@@ -411,6 +411,18 @@ define NotRegIMatch {
 }
 
 [Scalar, Bool, Comparison]
+define IsNull {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Bool, Comparison]
+define IsNotNull {
+   Left  ScalarExpr
+   Right ScalarExpr
+}
+
+[Scalar, Bool, Comparison]
 define Is {
    Left  ScalarExpr
    Right ScalarExpr

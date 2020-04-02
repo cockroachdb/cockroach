@@ -317,6 +317,8 @@ const (
 	NotRegMatch
 	RegIMatch
 	NotRegIMatch
+	IsNull
+	IsNotNull
 	IsDistinctFrom
 	IsNotDistinctFrom
 	Contains
@@ -367,6 +369,8 @@ var comparisonOpName = [...]string{
 	NotRegMatch:       "!~",
 	RegIMatch:         "~*",
 	NotRegIMatch:      "!~*",
+	IsNull:            "IS NULL",
+	IsNotNull:         "IS NOT NULL",
 	IsDistinctFrom:    "IS DISTINCT FROM",
 	IsNotDistinctFrom: "IS NOT DISTINCT FROM",
 	Contains:          "@>",
