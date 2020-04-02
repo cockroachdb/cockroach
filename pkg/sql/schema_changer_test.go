@@ -2908,6 +2908,9 @@ ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v);
 func TestPrimaryKeyChangeWithCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// Adopt the job to drop old indexes quickly.
+	defer setTestJobsAdoptInterval()()
+
 	var chunkSize int64 = 100
 	var maxValue = 4000
 	if util.RaceEnabled {
