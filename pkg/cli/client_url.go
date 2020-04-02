@@ -77,6 +77,10 @@ func (u urlParser) Type() string {
 }
 
 func (u urlParser) Set(v string) error {
+	return u.setInternal(v, true /* warn */)
+}
+
+func (u urlParser) setInternal(v string, warn bool) error {
 	parsedURL, err := url.Parse(v)
 	if err != nil {
 		return err
@@ -110,9 +114,11 @@ func (u urlParser) Set(v string) error {
 			// information. We do not produce an error however, so that a
 			// user can readily copy-paste the URL produced by `cockroach
 			// start` even if the client command does not accept a username.
-			fmt.Fprintf(stderr,
-				"warning: --url specifies user/password, but command %q does not accept user/password details - details ignored\n",
-				u.cmd.Name())
+			if warn {
+				fmt.Fprintf(stderr,
+					"warning: --url specifies user/password, but command %q does not accept user/password details - details ignored\n",
+					u.cmd.Name())
+			}
 		} else {
 			if err := f.Value.Set(parsedURL.User.Username()); err != nil {
 				return errors.Wrapf(err, "extracting user")
@@ -149,9 +155,11 @@ func (u urlParser) Set(v string) error {
 			// not produce an error however, so that a user can readily
 			// copy-paste an URL they picked up from another tool (a GUI
 			// tool for example).
-			fmt.Fprintf(stderr,
-				"warning: --url specifies database %q, but command %q does not accept a database name - database name ignored\n",
-				dbPath, u.cmd.Name())
+			if warn {
+				fmt.Fprintf(stderr,
+					"warning: --url specifies database %q, but command %q does not accept a database name - database name ignored\n",
+					dbPath, u.cmd.Name())
+			}
 		} else {
 			if err := f.Value.Set(dbPath); err != nil {
 				return errors.Wrapf(err, "extracting database name")
