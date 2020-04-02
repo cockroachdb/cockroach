@@ -108,6 +108,10 @@ type routerOutput struct {
 
 	// memoryMonitor and diskMonitor are mu.rowContainer's monitors.
 	memoryMonitor, diskMonitor *mon.BytesMonitor
+
+	rowAlloc               sqlbase.EncDatumRowAlloc
+	rowBufToPushFrom       [routerRowBufSize]sqlbase.EncDatumRow
+	rowBufToPushFromMemAcc *mon.BoundAccount
 }
 
 func (ro *routerOutput) addMetadataLocked(meta *execinfrapb.ProducerMetadata) {
@@ -138,16 +142,14 @@ func (ro *routerOutput) addRowLocked(ctx context.Context, row sqlbase.EncDatumRo
 	return nil
 }
 
-func (ro *routerOutput) popRowsLocked(
-	ctx context.Context, rowBuf []sqlbase.EncDatumRow,
-) ([]sqlbase.EncDatumRow, error) {
+func (ro *routerOutput) popRowsLocked(ctx context.Context) ([]sqlbase.EncDatumRow, error) {
 	n := 0
 	// First try to get rows from the row container.
 	if ro.mu.rowContainer.Len() > 0 {
 		if err := func() error {
 			i := ro.mu.rowContainer.NewFinalIterator(ctx)
 			defer i.Close()
-			for i.Rewind(); n < len(rowBuf); i.Next() {
+			for i.Rewind(); n < len(ro.rowBufToPushFrom); i.Next() {
 				if ok, err := i.Valid(); err != nil {
 					return err
 				} else if !ok {
@@ -157,9 +159,18 @@ func (ro *routerOutput) popRowsLocked(
 				if err != nil {
 					return err
 				}
-				// TODO(radu): use an EncDatumRowAlloc?
-				rowBuf[n] = make(sqlbase.EncDatumRow, len(row))
-				copy(rowBuf[n], row)
+				// We're reusing the same rowBufToPushFrom slice, so we can
+				// only release the memory under the "old" row once we
+				// overwrite it in rowBufToPushFrom which we're about to do for
+				// rowBufToPushFrom[n].
+				prevSize := uintptr(0)
+				if ro.rowBufToPushFrom[n] != nil {
+					prevSize = ro.rowBufToPushFrom[n].Size()
+				}
+				if err := ro.rowBufToPushFromMemAcc.Grow(ctx, int64(row.Size()-prevSize)); err != nil {
+					return err
+				}
+				ro.rowBufToPushFrom[n] = ro.rowAlloc.CopyRow(row)
 				n++
 			}
 			return nil
@@ -169,12 +180,12 @@ func (ro *routerOutput) popRowsLocked(
 	}
 
 	// If the row container is empty, get more rows from the row buffer.
-	for ; n < len(rowBuf) && ro.mu.rowBufLen > 0; n++ {
-		rowBuf[n] = ro.mu.rowBuf[ro.mu.rowBufLeft]
+	for ; n < len(ro.rowBufToPushFrom) && ro.mu.rowBufLen > 0; n++ {
+		ro.rowBufToPushFrom[n] = ro.mu.rowBuf[ro.mu.rowBufLeft]
 		ro.mu.rowBufLeft = (ro.mu.rowBufLeft + 1) % routerRowBufSize
 		ro.mu.rowBufLen--
 	}
-	return rowBuf[:n], nil
+	return ro.rowBufToPushFrom[:n], nil
 }
 
 // See the comment for routerBase.semaphoreCount.
@@ -251,6 +262,8 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, type
 			ctx, evalCtx.Mon, flowCtx.Cfg,
 			fmt.Sprintf("router-limited-%d", rb.outputs[i].streamID),
 		)
+		memAcc := rb.outputs[i].memoryMonitor.MakeBoundAccount()
+		rb.outputs[i].rowBufToPushFromMemAcc = &memAcc
 		rb.outputs[i].diskMonitor = execinfra.NewMonitor(
 			ctx, flowCtx.Cfg.DiskMonitor,
 			fmt.Sprintf("router-disk-%d", rb.outputs[i].streamID),
@@ -285,7 +298,6 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 			}
 
 			drain := false
-			rowBuf := make([]sqlbase.EncDatumRow, routerRowBufSize)
 			streamStatus := execinfra.NeedMoreRows
 			ro.mu.Lock()
 			for {
@@ -314,8 +326,10 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 				if !drain {
 					// Send any rows that have been buffered. We grab multiple rows at a
 					// time to reduce contention.
-					if rows, err := ro.popRowsLocked(ctx, rowBuf); err != nil {
+					if rows, err := ro.popRowsLocked(ctx); err != nil {
+						ro.mu.Unlock()
 						rb.fwdMetadata(&execinfrapb.ProducerMetadata{Err: err})
+						ro.mu.Lock()
 						atomic.StoreUint32(&rb.aggregatedStatus, uint32(execinfra.DrainRequested))
 						drain = true
 						continue
@@ -360,6 +374,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 			ro.mu.rowContainer.Close(ctx)
 			ro.mu.Unlock()
 
+			ro.rowBufToPushFromMemAcc.Close(ctx)
 			ro.memoryMonitor.Stop(ctx)
 			ro.diskMonitor.Stop(ctx)
 
