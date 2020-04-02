@@ -40,6 +40,12 @@ export const statementDiagnostics = docsURLNoVersion("admin-ui-statements-page.h
 export const statementsSql = docsURL("admin-ui-statements-page.html#sql-statement-fingerprints");
 export const statementsRetries = docsURL("transactions.html#transaction-retries");
 export const statementsTimeInterval = docsURL("admin-ui-statements-page.html#time-interval");
+export const capacityMetrics = docsURL("admin-ui-cluster-overview.html#capacity-metrics");
+export const nodeLivenessIssues = docsURL("cluster-setup-troubleshooting.html#node-liveness-issues");
+export const howItWork = docsURL("cockroach-quit.html#how-it-works");
+export const clusterStore = docsURL("cockroach-start.html#store");
+export const clusterGlossary = docsURL("architecture/overview.html#glossary");
+export const reviewOfCockroachTerminology = docsURL("admin-ui-replication-dashboard.html#review-of-cockroachdb-terminology");
 // Note that these explicitly don't use the current version, since we want to
 // link to the most up-to-date documentation available.
 export const upgradeCockroachVersion = "https://www.cockroachlabs.com/docs/stable/upgrade-cockroach-version.html";
