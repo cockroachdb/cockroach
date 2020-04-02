@@ -44,35 +44,34 @@ import (
 // testUser has valid client certs.
 var testUser = server.TestUser
 
-var errInfo = testutils.MakeCaller(3, 2)
-
 // checkKVs verifies that a KeyValue slice contains the expected keys and
 // values. The values can be either integers or strings; the expected results
 // are passed as alternating keys and values, e.g:
 //   checkScanResult(t, result, key1, val1, key2, val2)
 func checkKVs(t *testing.T, kvs []kv.KeyValue, expected ...interface{}) {
+	t.Helper()
 	expLen := len(expected) / 2
 	if expLen != len(kvs) {
-		t.Errorf("%s: expected %d scan results, got %d", errInfo(), expLen, len(kvs))
+		t.Errorf("expected %d scan results, got %d", expLen, len(kvs))
 		return
 	}
 	for i := 0; i < expLen; i++ {
 		expKey := expected[2*i].(roachpb.Key)
 		if key := kvs[i].Key; !key.Equal(expKey) {
-			t.Errorf("%s: expected scan key %d to be %q; got %q", errInfo(), i, expKey, key)
+			t.Errorf("expected scan key %d to be %q; got %q", i, expKey, key)
 		}
 		switch expValue := expected[2*i+1].(type) {
 		case int:
 			if value, err := kvs[i].Value.GetInt(); err != nil {
-				t.Errorf("%s: non-integer scan value %d: %q", errInfo(), i, kvs[i].Value)
+				t.Errorf("non-integer scan value %d: %q", i, kvs[i].Value)
 			} else if value != int64(expValue) {
-				t.Errorf("%s: expected scan value %d to be %d; got %d",
-					errInfo(), i, expValue, value)
+				t.Errorf("expected scan value %d to be %d; got %d",
+					i, expValue, value)
 			}
 		case string:
 			if value := kvs[i].Value.String(); value != expValue {
-				t.Errorf("%s: expected scan value %d to be %s; got %s",
-					errInfo(), i, expValue, value)
+				t.Errorf("expected scan value %d to be %s; got %s",
+					i, expValue, value)
 			}
 		default:
 			t.Fatalf("unsupported type %T", expValue)
