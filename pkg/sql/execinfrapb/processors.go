@@ -102,9 +102,8 @@ func (a AggregatorSpec_Aggregation) Equals(b AggregatorSpec_Aggregation) bool {
 	return true
 }
 
-// IsScalarAggregate returns whether the aggregate function is in scalar
-// context.
-func IsScalarAggregate(spec *AggregatorSpec) bool {
+// IsScalar returns whether the aggregate function is in scalar context.
+func (spec *AggregatorSpec) IsScalar() bool {
 	switch spec.Type {
 	case AggregatorSpec_SCALAR:
 		return true
@@ -114,6 +113,16 @@ func IsScalarAggregate(spec *AggregatorSpec) bool {
 		// This case exists for backward compatibility.
 		return (len(spec.GroupCols) == 0)
 	}
+}
+
+// IsRowCount returns true if the aggregator spec is scalar and has a single
+// COUNT_ROWS aggregation with no FILTER or DISTINCT.
+func (spec *AggregatorSpec) IsRowCount() bool {
+	return len(spec.Aggregations) == 1 &&
+		spec.Aggregations[0].FilterColIdx == nil &&
+		spec.Aggregations[0].Func == AggregatorSpec_COUNT_ROWS &&
+		!spec.Aggregations[0].Distinct &&
+		spec.IsScalar()
 }
 
 // GetWindowFunctionInfo returns windowFunc constructor and the return type
