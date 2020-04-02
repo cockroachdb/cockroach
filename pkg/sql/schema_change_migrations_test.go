@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -226,7 +225,7 @@ func setupServerAndStartSchemaChange(
 	var runner *sqlutils.SQLRunner
 	var kvDB *kv.DB
 	var registry *jobs.Registry
-	blockSchemaChanges := int32(0)
+	blockSchemaChanges := false
 	migrateJob := func(jobID int64) {
 		if blockState == WaitingForGC {
 			if err := migrateGCJobToOldFormat(kvDB, registry, jobID, schemaChangeType); err != nil {
@@ -264,7 +263,7 @@ func setupServerAndStartSchemaChange(
 	}
 
 	runner.CheckQueryResultsRetry(t, "SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE' AND NOT (status = 'succeeded' OR status = 'canceled')", [][]string{{"0"}})
-	atomic.StoreInt32(&blockSchemaChanges, 1)
+	blockSchemaChanges = true
 
 	bg := ctxgroup.WithContext(ctx)
 	bg.Go(func() error {
@@ -474,8 +473,7 @@ func setupTestingKnobs(
 	schemaChangeType SchemaChangeType,
 	shouldCancel bool,
 	args *base.TestServerArgs,
-	blockSchemaChanges *int32,
-	blockMigration *bool,
+	blockSchemaChanges, blockMigration *bool,
 	blockCh, migrationDoneCh chan struct{},
 	migrateJob, cancelJob func(int64),
 ) {
@@ -493,7 +491,7 @@ func setupTestingKnobs(
 	blockFn := func(jobID int64) error {
 		mu.Lock()
 		defer mu.Unlock()
-		if atomic.LoadInt32(blockSchemaChanges) == 0 {
+		if !(*blockSchemaChanges) {
 			return nil
 		}
 
