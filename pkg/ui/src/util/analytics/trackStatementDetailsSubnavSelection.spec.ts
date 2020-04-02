@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { get, isString } from "lodash";
+import { get } from "lodash";
 import { assert } from "chai";
 import { createSandbox } from "sinon";
 import { track } from "./trackStatementDetailsSubnavSelection";
@@ -37,7 +37,6 @@ describe("trackSubnavSelection", () => {
     const sent = spy.getCall(0).args[0];
     const event = get(sent, "event");
 
-    assert.isTrue(isString(event));
     assert.isTrue(event === expected);
   });
 
@@ -49,7 +48,6 @@ describe("trackSubnavSelection", () => {
     const sent = spy.getCall(0).args[0];
     const selection = get(sent, "properties.selection");
 
-    assert.isTrue(isString(selection));
     assert.isTrue(selection === subNavKey);
   });
 });
