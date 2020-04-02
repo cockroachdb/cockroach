@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"runtime"
@@ -265,377 +266,391 @@ func registerUpgrade(r *testRegistry) {
 	})
 }
 
+type versionFeatureTest struct {
+	name              string
+	minAllowedVersion string
+	query             string
+}
+
+var versionUpgradeTestFeatures = []versionFeatureTest{
+	{
+		name:              "JSONB",
+		minAllowedVersion: "2.0-0",
+		query: `
+	CREATE DATABASE IF NOT EXISTS test;
+	CREATE TABLE test.t (j JSONB);
+	DROP TABLE test.t;
+	`,
+	}, {
+		name:              "Sequences",
+		minAllowedVersion: "2.0-0",
+		query: `
+	 CREATE DATABASE IF NOT EXISTS test;
+	 CREATE SEQUENCE test.test_sequence;
+	 DROP SEQUENCE test.test_sequence;
+	`,
+	}, {
+		name:              "Computed Columns",
+		minAllowedVersion: "2.0-0",
+		query: `
+	CREATE DATABASE IF NOT EXISTS test;
+	CREATE TABLE test.t (x INT AS (3) STORED);
+	DROP TABLE test.t;
+	`,
+	},
+}
+
+const headVersion = "HEAD"
+
 func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 	// This is ugly, but we can't pass `--encrypt=false` to old versions of
 	// Cockroach.
+	//
+	// TODO(tbg): revisit as old versions are aged out of this test.
 	c.encryptDefault = false
 
-	nodes := c.Range(1, 3)
-	goos := ifLocal(runtime.GOOS, "linux")
-	const headVersion = "HEAD"
+	// versionUpgradeStep performs a cluster version upgrade to its version.
+	// It waits until all nodes have seen the upgraded cluster version.
+	// If newVersion is set, we'll performe a SET CLUSTER SETTING version =
+	// <newVersion>. If it's not, we'll rely on the automatic cluster version
+	// upgrade mechanism (which is not inhibited by the
+	// cluster.preserve_downgrade_option cluster setting in this test.
 
-	// versionStep is an isolated version migration on a running cluster.
-	type versionStep struct {
-		clusterVersion string // if empty, use crdb_internal.node_executable_version
-		run            func()
+	const baseVersion = "v1.0.6"
+	u := newVersionUpgradeTest(c, versionUpgradeTestFeatures,
+		// v1.1.0 is the first binary version that knows about cluster versions.
+		binaryUpgradeStep("v1.1.9"),
+		versionUpgradeStep("1.1"),
+
+		binaryUpgradeStep("v2.0.7"),
+		versionUpgradeStep("2.0"),
+
+		binaryUpgradeStep("v2.1.2"),
+		versionUpgradeStep("2.1"),
+
+		// From now on, all version upgrade steps pass an empty version which
+		// means the test will look it up from node_executable_version().
+
+		binaryUpgradeStep("v19.1.5"),
+		versionUpgradeStep(""),
+
+		binaryUpgradeStep("v19.2.1"),
+		versionUpgradeStep(""),
+
+		// Each new release has to be added here. When adding a new release, you'll
+		// probably need to use a release candidate binary.
+
+		// HEAD gives us the main binary for this roachtest run.
+		binaryUpgradeStep("HEAD"),
+		versionUpgradeStep(""),
+	)
+
+	args := u.uploadVersion(ctx, t, baseVersion)
+	// Hack to skip initializing settings which doesn't work on very old versions
+	// of cockroach.
+	c.Run(ctx, c.Node(1), "mkdir -p {store-dir} && touch {store-dir}/settings-initialized")
+	c.Start(ctx, t, c.All(), args, startArgsDontEncrypt)
+
+	db := c.Conn(ctx, 1)
+	defer db.Close()
+
+	if err := createLotsaTables(db); err != nil {
+		t.Fatal(err)
 	}
 
-	uploadVersion := func(newVersion string) option {
-		var binary string
-		if newVersion == headVersion {
-			binary = cockroach
-		} else {
-			var err error
-			binary, err = binfetcher.Download(ctx, binfetcher.Options{
-				Binary:  "cockroach",
-				Version: newVersion,
-				GOOS:    goos,
-				GOARCH:  "amd64",
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
+	for _, node := range c.All() {
+		u.checkNode(ctx, t, node, baseVersion)
+	}
+
+	if err := setupEnsureObjectAccess(db); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, step := range u.steps {
+		step.run(ctx, t, u)
+		ensureObjectAccess(ctx, t, db)
+		for _, feature := range u.features {
+			u.testFeature(ctx, t, feature)
 		}
-
-		target := "./cockroach-" + newVersion
-		c.Put(ctx, binary, target, nodes)
-		return startArgs("--binary=" + target)
 	}
+}
 
-	checkNode := func(nodeIdx int, newVersion string) {
-		err := retry.ForDuration(30*time.Second, func() error {
-			db := c.Conn(ctx, nodeIdx)
-			defer db.Close()
+type versionUpgradeTest struct {
+	goOS     string
+	c        *cluster
+	steps    []versionStep
+	features []versionFeatureTest
+}
 
-			// 'Version' for 1.1, 'Tag' in 1.0.x.
-			var version string
-			if err := db.QueryRow(
-				`SELECT value FROM crdb_internal.node_build_info where field IN ('Version' , 'Tag')`,
-			).Scan(&version); err != nil {
-				return err
-			}
-			if version != newVersion && newVersion != headVersion {
-				t.Fatalf("created node at v%s, but it is %s", newVersion, version)
-			}
-			return nil
+func newVersionUpgradeTest(
+	c *cluster, features []versionFeatureTest, steps ...versionStep,
+) *versionUpgradeTest {
+	return &versionUpgradeTest{
+		goOS:     ifLocal(runtime.GOOS, "linux"),
+		c:        c, // all nodes are CRDB nodes
+		steps:    steps,
+		features: features,
+	}
+}
+
+func (u *versionUpgradeTest) uploadVersion(ctx context.Context, t *test, newVersion string) option {
+	var binary string
+	if newVersion == headVersion {
+		binary = cockroach
+	} else {
+		var err error
+		binary, err = binfetcher.Download(ctx, binfetcher.Options{
+			Binary:  "cockroach",
+			Version: newVersion,
+			GOOS:    u.goOS,
+			GOARCH:  "amd64",
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// binaryVersionUpgrade performs a rolling upgrade of the specified nodes in
-	// the cluster.
-	binaryVersionUpgrade := func(newVersion string, nodes nodeListOption) versionStep {
-		return versionStep{
-			run: func() {
-				t.l.Printf("%s: binary\n", newVersion)
-				args := uploadVersion(newVersion)
+	target := "./cockroach-" + newVersion
+	u.c.Put(ctx, binary, target, u.c.All())
+	return startArgs("--binary=" + target)
+}
 
-				// Restart nodes in a random order; otherwise node 1 would be running all
-				// the migrations and it probably also has all the leases.
-				rand.Shuffle(len(nodes), func(i, j int) {
-					nodes[i], nodes[j] = nodes[j], nodes[i]
-				})
-				for _, node := range nodes {
-					t.l.Printf("%s: upgrading node %d\n", newVersion, node)
-					c.Stop(ctx, c.Node(node))
-					c.Start(ctx, t, c.Node(node), args, startArgsDontEncrypt)
+func (u *versionUpgradeTest) checkNode(
+	ctx context.Context, t *test, nodeIdx int, newVersion string,
+) {
+	err := retry.ForDuration(30*time.Second, func() error {
+		db := u.c.Conn(ctx, nodeIdx)
+		defer db.Close()
 
-					checkNode(node, newVersion)
-
-					// TODO(nvanbenschoten): add upgrade qualification step. What should we
-					// test? We could run logictests. We could add custom logic here. Maybe
-					// this should all be pushed to nightly migration tests instead.
-					time.Sleep(1 * time.Second)
-				}
-			},
+		// 'Version' for 1.1, 'Tag' in 1.0.x.
+		var version string
+		if err := db.QueryRow(
+			`SELECT value FROM crdb_internal.node_build_info where field IN ('Version' , 'Tag')`,
+		).Scan(&version); err != nil {
+			return err
 		}
-	}
-
-	// clusterVersionUpgrade performs a cluster version upgrade to its version.
-	// It waits until all nodes have seen the upgraded cluster version.
-	// If newVersion is set, we'll performe a SET CLUSTER SETTING version =
-	// <newVersion>. If it's not, we'll rely on the automatic cluster version
-	// upgrade mechanism (which is not inhibited by the
-	// cluster.preserve_downgrade_option cluster setting in this test.
-	var currentVersion string
-	clusterVersionUpgrade := func(newVersion string) versionStep {
-		return versionStep{
-			clusterVersion: newVersion,
-			run: func() {
-				manual := newVersion != "" // old binary; needs hacks
-
-				func() {
-					if manual {
-						return
-					}
-					db1 := c.Conn(ctx, 1)
-					defer db1.Close()
-					if err := db1.QueryRow(`SELECT crdb_internal.node_executable_version()`).Scan(&newVersion); err != nil {
-						t.Fatal(err)
-					}
-					t.l.Printf("%s: auto-resolved target version via node_executable_version()\n", newVersion)
-				}()
-				t.l.Printf("%s: cluster\n", newVersion)
-
-				// hasShowSettingBug is true when we're working around
-				// https://github.com/cockroachdb/cockroach/issues/22796.
-				//
-				// The problem there is that `SHOW CLUSTER SETTING version` does not
-				// take into account the gossiped value of that setting but reads it
-				// straight from the KV store. This means that even though a node may
-				// report a certain version, it may not actually have processed it yet,
-				// which leads to illegal upgrades in this test. When this flag is set
-				// to true, we query `crdb_internal.cluster_settings` instead, which
-				// *does* take everything from Gossip.
-				v, err := roachpb.ParseVersion(newVersion)
-				if err != nil {
-					t.Fatal(err)
-				}
-				hasShowSettingBug := v.Less(roachpb.Version{Major: 1, Minor: 1, Unstable: 1})
-
-				if manual {
-					func() {
-						node := nodes.randNode()[0]
-						db := c.Conn(ctx, node)
-						defer db.Close()
-
-						t.l.Printf("%s: upgrading cluster version (node %d)\n", newVersion, node)
-						if _, err := db.Exec(fmt.Sprintf(`SET CLUSTER SETTING version = '%s'`, newVersion)); err != nil {
-							t.Fatal(err)
-						}
-					}()
-				}
-
-				if hasShowSettingBug {
-					t.l.Printf("%s: using workaround for upgrade\n", newVersion)
-				}
-
-				for i := 1; i < c.spec.NodeCount; i++ {
-					err := retry.ForDuration(30*time.Second, func() error {
-						db := c.Conn(ctx, i)
-						defer db.Close()
-
-						if !hasShowSettingBug {
-							if err := db.QueryRow("SHOW CLUSTER SETTING version").Scan(&currentVersion); err != nil {
-								t.Fatalf("%d: %s", i, err)
-							}
-						} else {
-							// This uses the receiving node's Gossip and as such allows us to verify that all of the
-							// nodes have gotten wind of the version bump.
-							if err := db.QueryRow(
-								`SELECT current_value FROM crdb_internal.cluster_settings WHERE name = 'version'`,
-							).Scan(&currentVersion); err != nil {
-								t.Fatalf("%d: %s", i, err)
-							}
-						}
-						if currentVersion != newVersion {
-							return fmt.Errorf("%d: expected version %s, got %s", i, newVersion, currentVersion)
-						}
-						return nil
-					})
-					if err != nil {
-						t.Fatal(err)
-					}
-				}
-
-				t.l.Printf("%s: cluster is upgraded\n", newVersion)
-
-				// TODO(nvanbenschoten): add upgrade qualification step.
-				time.Sleep(1 * time.Second)
-			},
+		if version != newVersion && newVersion != headVersion {
+			t.Fatalf("created node at v%s, but it is %s", newVersion, version)
 		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (u *versionUpgradeTest) testFeature(ctx context.Context, t *test, f versionFeatureTest) {
+	c := u.c
+	db := c.Conn(ctx, 1)
+	defer db.Close()
+
+	var cv string
+	if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&cv); err != nil {
+		t.Fatal(err)
 	}
 
-	const baseVersion = "v1.0.6"
-	steps := []versionStep{
-		// v1.1.0 is the first binary version that knows about cluster versions.
-		binaryVersionUpgrade("v1.1.9", nodes),
-		clusterVersionUpgrade("1.1"),
-
-		binaryVersionUpgrade("v2.0.7", nodes),
-		clusterVersionUpgrade("2.0"),
-
-		binaryVersionUpgrade("v2.1.2", nodes),
-		clusterVersionUpgrade("2.1"),
-
-		// From now on, all version upgrade steps pass an empty version which
-		// means the test will look it up from node_executable_version().
-
-		binaryVersionUpgrade("v19.1.5", nodes),
-		clusterVersionUpgrade(""),
-
-		binaryVersionUpgrade("v19.2.1", nodes),
-		clusterVersionUpgrade(""),
-
-		// Each new release has to be added here. When adding a new release, you'll
-		// probably need to use a release candidate binary.
-
-		// HEAD gives us the main binary for this roachtest run.
-		binaryVersionUpgrade("HEAD", nodes),
-		clusterVersionUpgrade(""),
+	minAllowedVersion, err := roachpb.ParseVersion(f.minAllowedVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actualVersion, err := roachpb.ParseVersion(cv)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	type feature struct {
-		name              string
-		minAllowedVersion string
-		query             string
+	_, err = db.Exec(f.query)
+	if actualVersion.Less(minAllowedVersion) {
+		if err == nil {
+			t.Fatalf("expected %s to fail on cluster version %s", f.name, cv)
+		}
+		t.l.Printf("%s: %s fails expected\n", cv, f.name)
+	} else {
+		if err != nil {
+			t.Fatalf("expected %s to succeed on cluster version %s, got %s", f.name, cv, err)
+		}
+		t.l.Printf("%s: %s works as expected\n", cv, f.name)
 	}
+}
 
-	features := []feature{
-		{
-			name:              "JSONB",
-			minAllowedVersion: "2.0-0",
-			query: `
-	CREATE DATABASE IF NOT EXISTS test;
-	CREATE TABLE test.t (j JSONB);
-	DROP TABLE test.t;
-	`,
-		}, {
-			name:              "Sequences",
-			minAllowedVersion: "2.0-0",
-			query: `
-	 CREATE DATABASE IF NOT EXISTS test;
-	 CREATE SEQUENCE test.test_sequence;
-	 DROP SEQUENCE test.test_sequence;
-	`,
-		}, {
-			name:              "Computed Columns",
-			minAllowedVersion: "2.0-0",
-			query: `
-	CREATE DATABASE IF NOT EXISTS test;
-	CREATE TABLE test.t (x INT AS (3) STORED);
-	DROP TABLE test.t;
-	`,
+// versionStep is an isolated version migration on a running cluster.
+type versionStep struct {
+	clusterVersion string // if empty, use crdb_internal.node_executable_version
+	run            func(ctx context.Context, t *test, u *versionUpgradeTest)
+}
+
+// binaryUpgradeStep performs a rolling upgrade of the specified nodes in
+// the cluster.
+func binaryUpgradeStep(newVersion string) versionStep {
+	return versionStep{
+		run: func(ctx context.Context, t *test, u *versionUpgradeTest) {
+			c := u.c
+			nodes := c.All()
+			t.l.Printf("%s: binary\n", newVersion)
+			args := u.uploadVersion(ctx, t, newVersion)
+
+			// Restart nodes in a random order; otherwise node 1 would be running all
+			// the migrations and it probably also has all the leases.
+			rand.Shuffle(len(nodes), func(i, j int) {
+				nodes[i], nodes[j] = nodes[j], nodes[i]
+			})
+			for _, node := range nodes {
+				t.l.Printf("%s: upgrading node %d\n", newVersion, node)
+				c.Stop(ctx, c.Node(node))
+				c.Start(ctx, t, c.Node(node), args, startArgsDontEncrypt)
+
+				u.checkNode(ctx, t, node, newVersion)
+
+				// TODO(nvanbenschoten): add upgrade qualification step. What should we
+				// test? We could run logictests. We could add custom logic here. Maybe
+				// this should all be pushed to nightly migration tests instead.
+			}
 		},
 	}
+}
 
-	testFeature := func(f feature) {
-		db := c.Conn(ctx, 1)
-		defer db.Close()
+func versionUpgradeStep(newVersion string) versionStep {
+	return versionStep{
+		clusterVersion: newVersion,
+		run: func(ctx context.Context, t *test, u *versionUpgradeTest) {
+			manual := newVersion != "" // old binary; needs hacks
+			c := u.c
+			func() {
+				if manual {
+					return
+				}
+				db1 := c.Conn(ctx, 1)
+				defer db1.Close()
+				if err := db1.QueryRow(`SELECT crdb_internal.node_executable_version()`).Scan(&newVersion); err != nil {
+					t.Fatal(err)
+				}
+				t.l.Printf("%s: auto-resolved target version via node_executable_version()\n", newVersion)
+			}()
+			t.l.Printf("%s: cluster\n", newVersion)
 
-		var cv string
-		if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&cv); err != nil {
-			t.Fatal(err)
-		}
-
-		minAllowedVersion, err := roachpb.ParseVersion(f.minAllowedVersion)
-		if err != nil {
-			t.Fatal(err)
-		}
-		actualVersion, err := roachpb.ParseVersion(cv)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, err = db.Exec(f.query)
-		if actualVersion.Less(minAllowedVersion) {
-			if err == nil {
-				t.Fatalf("expected %s to fail on cluster version %s", f.name, cv)
-			}
-			t.l.Printf("%s: %s fails expected\n", cv, f.name)
-		} else {
-			if err != nil {
-				t.Fatalf("expected %s to succeed on cluster version %s, got %s", f.name, cv, err)
-			}
-			t.l.Printf("%s: %s works as expected\n", cv, f.name)
-		}
-	}
-
-	args := uploadVersion(baseVersion)
-	// Hack to skip initializing settings which doesn't work on very old versions
-	// of cockroach.
-	c.Run(ctx, c.Node(1), "mkdir -p {store-dir} && touch {store-dir}/settings-initialized")
-	c.Start(ctx, t, nodes, args, startArgsDontEncrypt)
-
-	func() {
-		// Create a bunch of tables, over the batch size on which some migrations
-		// operate. It generally seems like a good idea to have a bunch of tables in
-		// the cluster, and we had a bug about migrations on large numbers of tables:
-		// #22370.
-		db := c.Conn(ctx, 1)
-		defer db.Close()
-		if _, err := db.Exec(fmt.Sprintf("create database lotsatables")); err != nil {
-			t.Fatal(err)
-		}
-		for i := 0; i < 100; i++ {
-			_, err := db.Exec(fmt.Sprintf("create table lotsatables.t%d (x int primary key)", i))
+			// hasShowSettingBug is true when we're working around
+			// https://github.com/cockroachdb/cockroach/issues/22796.
+			//
+			// The problem there is that `SHOW CLUSTER SETTING version` does not
+			// take into account the gossiped value of that setting but reads it
+			// straight from the KV store. This means that even though a node may
+			// report a certain version, it may not actually have processed it yet,
+			// which leads to illegal upgrades in this test. When this flag is set
+			// to true, we query `crdb_internal.cluster_settings` instead, which
+			// *does* take everything from Gossip.
+			v, err := roachpb.ParseVersion(newVersion)
 			if err != nil {
 				t.Fatal(err)
 			}
-		}
-	}()
+			hasShowSettingBug := v.Less(roachpb.Version{Major: 1, Minor: 1, Unstable: 1})
 
-	setupEnsureObjectAccess := func() {
-		// setupEnsureObjectAccess creates a db/table the first time, before
-		// the upgrade sequence starts. This is done to create the db/table without
-		// relying on "if not exists" modifier.
-		db := c.Conn(ctx, 1)
-		defer db.Close()
+			if manual {
+				func() {
+					node := c.All().randNode()[0]
+					db := c.Conn(ctx, node)
+					defer db.Close()
 
-		_, err := db.Exec(fmt.Sprintf("create database persistent_db"))
+					t.l.Printf("%s: upgrading cluster version (node %d)\n", newVersion, node)
+					if _, err := db.Exec(fmt.Sprintf(`SET CLUSTER SETTING version = '%s'`, newVersion)); err != nil {
+						t.Fatal(err)
+					}
+				}()
+			}
+
+			if hasShowSettingBug {
+				t.l.Printf("%s: using workaround for upgrade\n", newVersion)
+			}
+
+			for i := 1; i < c.spec.NodeCount; i++ {
+				err := retry.ForDuration(30*time.Second, func() error {
+					db := c.Conn(ctx, i)
+					defer db.Close()
+
+					var currentVersion string
+					if !hasShowSettingBug {
+						if err := db.QueryRow("SHOW CLUSTER SETTING version").Scan(&currentVersion); err != nil {
+							t.Fatalf("%d: %s", i, err)
+						}
+					} else {
+						// This uses the receiving node's Gossip and as such allows us to verify that all of the
+						// nodes have gotten wind of the version bump.
+						if err := db.QueryRow(
+							`SELECT current_value FROM crdb_internal.cluster_settings WHERE name = 'version'`,
+						).Scan(&currentVersion); err != nil {
+							t.Fatalf("%d: %s", i, err)
+						}
+					}
+					if currentVersion != newVersion {
+						return fmt.Errorf("%d: expected version %s, got %s", i, newVersion, currentVersion)
+					}
+					return nil
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			t.l.Printf("%s: cluster is upgraded\n", newVersion)
+
+			// TODO(nvanbenschoten): add upgrade qualification step.
+		},
+	}
+}
+
+// TODO(tbg): make this a step that runs only once, at the very beginning.
+func createLotsaTables(db *gosql.DB) error {
+	// Create a bunch of tables, over the batch size on which some migrations
+	// operate. It generally seems like a good idea to have a bunch of tables in
+	// the cluster, and we had a bug about migrations on large numbers of tables:
+	// #22370.
+	if _, err := db.Exec(fmt.Sprintf("create database lotsatables")); err != nil {
+		return err
+	}
+	for i := 0; i < 100; i++ {
+		_, err := db.Exec(fmt.Sprintf("create table lotsatables.t%d (x int primary key)", i))
 		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(fmt.Sprintf("create table persistent_db.persistent_table(a int)")); err != nil {
-			t.Fatal(err)
+			return err
 		}
 	}
-	ensureObjectAccess := func() {
-		// run the setup function to create a db with one table before the upgrade
-		// sequence begins. After each step, we should be able to successfully select
-		// from the objects using their FQNs. Prevents bugs such as #43141, where
-		// databases created before the migration were inaccessible after the
-		// migration.
-		db := c.Conn(ctx, 1)
-		defer db.Close()
-		var cv string
-		if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&cv); err != nil {
-			t.Fatal(err)
-		}
+	return nil
+}
 
-		_, err := db.Query(fmt.Sprintf("select * from persistent_db.persistent_table"))
-		if err != nil {
-			t.Fatalf(
-				"expected querying a table created before upgrade to succeed in version %s, got %s",
-				cv, err)
-		}
-		_, err = db.Query(fmt.Sprintf("show tables from persistent_db"))
-		if err != nil {
-			t.Fatalf(
-				"expected querying show tables on a database created before upgrade to succeed in version %s, got %s",
-				cv, err)
-		}
-		t.l.Printf("%s: querying a table/db created before upgrade works as expected\n", cv)
+// TODO(tbg): fold this and ensureObjectAccess together into a feature test, where
+// the setup runs only once and the other one runs every time.
+func setupEnsureObjectAccess(db *gosql.DB) error {
+	// setupEnsureObjectAccess creates a db/table the first time, before
+	// the upgrade sequence starts. This is done to create the db/table without
+	// relying on "if not exists" modifier.
+	_, err := db.Exec(fmt.Sprintf("create database persistent_db"))
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(fmt.Sprintf("create table persistent_db.persistent_table(a int)"))
+	return err
+}
+
+func ensureObjectAccess(ctx context.Context, t *test, db *gosql.DB) error {
+	// run the setup function to create a db with one table before the upgrade
+	// sequence begins. After each step, we should be able to successfully select
+	// from the objects using their FQNs. Prevents bugs such as #43141, where
+	// databases created before the migration were inaccessible after the
+	// migration.
+	var cv string
+	if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&cv); err != nil {
+		return err
 	}
 
-	for _, node := range nodes {
-		checkNode(node, baseVersion)
+	_, err := db.Query(fmt.Sprintf("select * from persistent_db.persistent_table"))
+	if err != nil {
+		return errors.Errorf(
+			"expected querying a table created before upgrade to succeed in version %s, got %s",
+			cv, err)
 	}
-	setupEnsureObjectAccess()
-	for _, step := range steps {
-		step.run()
-		ensureObjectAccess()
-		for _, feature := range features {
-			testFeature(feature)
-		}
+	_, err = db.Query(fmt.Sprintf("show tables from persistent_db"))
+	if err != nil {
+		return errors.Errorf(
+			"expected querying show tables on a database created before upgrade to succeed in version %s, got %s",
+			cv, err)
 	}
-
-	func() {
-		db := c.Conn(ctx, 1)
-		defer db.Close()
-
-		var nodeVersion string
-		if err := db.QueryRow(
-			`SELECT crdb_internal.node_executable_version()`,
-		).Scan(&nodeVersion); err != nil {
-			t.Fatal(err)
-		}
-		if nodeVersion != currentVersion {
-			t.Fatalf("not fully upgraded at end of test; have cluster setting at %s but node could run at %s",
-				currentVersion, nodeVersion,
-			)
-		}
-	}()
+	t.l.Printf("%s: querying a table/db created before upgrade works as expected\n", cv)
+	return nil
 }
