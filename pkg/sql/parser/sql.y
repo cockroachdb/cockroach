@@ -45,6 +45,11 @@ func unimplemented(sqllex sqlLexer, feature string) int {
     return 1
 }
 
+func purposelyUnimplemented(sqllex sqlLexer, feature string, reason string) int {
+    sqllex.(*lexer).PurposelyUnimplemented(feature, reason)
+    return 1
+}
+
 func setErr(sqllex sqlLexer, err error) int {
     sqllex.(*lexer).setErr(err)
     return 1
@@ -496,7 +501,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> ELSE ENCODING END ENUM ESCAPE EXCEPT
-%token <str> EXISTS EXECUTE EXPERIMENTAL
+%token <str> EXISTS EXECUTE EXCLUDE EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT
 %token <str> EXPLAIN EXPORT EXTENSION EXTRACT EXTRACT_DURATION
@@ -509,7 +514,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
 
-%token <str> IF IFERROR IFNULL ILIKE IMMEDIATE IMPORT IN INCREMENT INCREMENTAL
+%token <str> IF IFERROR IFNULL ILIKE IMMEDIATE IMPORT IN INCLUDE INCREMENT INCREMENTAL
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
 %token <str> INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
@@ -538,7 +543,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> QUERIES QUERY
 
 %token <str> RANGE RANGES READ REAL RECURSIVE REF REFERENCES
-%token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE
+%token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE
 %token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
 %token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE
@@ -747,6 +752,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> update_stmt
 %type <tree.Statement> upsert_stmt
 %type <tree.Statement> use_stmt
+
+%type <tree.Statement> reindex_stmt
 
 %type <[]string> opt_incremental
 %type <tree.KVOption> kv_option
@@ -1067,6 +1074,7 @@ stmt:
 | release_stmt      // EXTEND WITH HELP: RELEASE
 | nonpreparable_set_stmt // help texts in sub-rule
 | transaction_stmt  // help texts in sub-rule
+| reindex_stmt
 | /* EMPTY */
   {
     $$.val = tree.Statement(nil)
@@ -3144,6 +3152,28 @@ show_stmt:
 | show_zone_stmt
 | SHOW error                // SHOW HELP: SHOW
 
+reindex_stmt:
+  REINDEX TABLE error
+  {
+    /* SKIP DOC */
+    return purposelyUnimplemented(sqllex, "reindex table", "CockroachDB does not require reindexing.")
+  }
+| REINDEX INDEX error
+  {
+    /* SKIP DOC */
+    return purposelyUnimplemented(sqllex, "reindex index", "CockroachDB does not require reindexing.")
+  }
+| REINDEX DATABASE error
+  {
+    /* SKIP DOC */
+    return purposelyUnimplemented(sqllex, "reindex database", "CockroachDB does not require reindexing.")
+  }
+| REINDEX SYSTEM error
+  {
+    /* SKIP DOC */
+    return purposelyUnimplemented(sqllex, "reindex system", "CockroachDB does not require reindexing.")
+  }
+
 // %Help: SHOW SESSION - display session variables
 // %Category: Cfg
 // %Text: SHOW [SESSION] { <var> | ALL }
@@ -3898,7 +3928,7 @@ pause_stmt:
 // Table constraints:
 //    PRIMARY KEY ( <colnames...> )
 //    FOREIGN KEY ( <colnames...> ) REFERENCES <tablename> [( <colnames...> )] [ON DELETE {NO ACTION | RESTRICT}] [ON UPDATE {NO ACTION | RESTRICT}]
-//    UNIQUE ( <colnames... ) [STORING ( <colnames...> )] [<interleave>]
+//    UNIQUE ( <colnames... ) [{STORING | INCLUDE | COVERING} ( <colnames...> )] [<interleave>]
 //    CHECK ( <expr> )
 //
 // Column qualifiers:
@@ -4347,6 +4377,10 @@ constraint_elem:
       Actions: $10.referenceActions(),
     }
   }
+| EXCLUDE USING error
+  {
+    return unimplementedWithIssueDetail(sqllex, 46657, "add constraint exclude using")
+  }
 
 opt_deferrable:
   /* EMPTY */ { /* no error */ }
@@ -4359,6 +4393,7 @@ opt_deferrable:
 storing:
   COVERING
 | STORING
+| INCLUDE
 
 // TODO(pmattis): It would be nice to support a syntax like STORING
 // ALL or STORING (*). The syntax addition is straightforward, but we
@@ -8837,6 +8872,7 @@ unreserved_keyword:
 | HOUR
 | IMMEDIATE
 | IMPORT
+| INCLUDE
 | INCREMENT
 | INCREMENTAL
 | INDEXES
@@ -8918,6 +8954,7 @@ unreserved_keyword:
 | REGPROCEDURE
 | REGNAMESPACE
 | REGTYPE
+| REINDEX
 | RELEASE
 | RENAME
 | REPEATABLE
@@ -9147,6 +9184,7 @@ reserved_keyword:
 | ELSE
 | END
 | EXCEPT
+| EXCLUDE
 | FALSE
 | FETCH
 | FOR

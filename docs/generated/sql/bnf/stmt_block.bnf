@@ -635,6 +635,7 @@ unreserved_keyword ::=
 	| 'HOUR'
 	| 'IMMEDIATE'
 	| 'IMPORT'
+	| 'INCLUDE'
 	| 'INCREMENT'
 	| 'INCREMENTAL'
 	| 'INDEXES'
@@ -716,6 +717,7 @@ unreserved_keyword ::=
 	| 'REGPROCEDURE'
 	| 'REGNAMESPACE'
 	| 'REGTYPE'
+	| 'REINDEX'
 	| 'RELEASE'
 	| 'RENAME'
 	| 'REPEATABLE'
@@ -1578,6 +1580,7 @@ reserved_keyword ::=
 	| 'ELSE'
 	| 'END'
 	| 'EXCEPT'
+	| 'EXCLUDE'
 	| 'FALSE'
 	| 'FETCH'
 	| 'FOR'
@@ -1663,6 +1666,7 @@ index_elem ::=
 storing ::=
 	'COVERING'
 	| 'STORING'
+	| 'INCLUDE'
 
 partition_by ::=
 	'PARTITION' 'BY' 'LIST' '(' name_list ')' '(' list_partitions ')'
