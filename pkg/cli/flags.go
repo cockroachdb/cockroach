@@ -675,9 +675,9 @@ func init() {
 // actually parsed. For example, it will inject the value of
 // $COCKROACH_URL into the urlParser object linked to the --url flag.
 func processEnvVarDefaults() error {
-	for envVar, d := range envVarDefaults {
+	for _, d := range envVarDefaults {
 		if err := d.flagSet.Set(d.flagName, d.envValue); err != nil {
-			return errors.Wrapf(err, "setting --%s from %s", d.flagName, envVar)
+			return errors.Wrapf(err, "setting --%s from %s", d.flagName, d.envVar)
 		}
 	}
 	return nil
@@ -687,6 +687,7 @@ func processEnvVarDefaults() error {
 // setting covered by a flag from the value of an environment
 // variable.
 type envVarDefault struct {
+	envVar   string
 	envValue string
 	flagName string
 	flagSet  *pflag.FlagSet
@@ -694,7 +695,7 @@ type envVarDefault struct {
 
 // envVarDefaults records the initializations from environment variables
 // for processing at the end of initialization, before flag parsing.
-var envVarDefaults = map[string]envVarDefault{}
+var envVarDefaults []envVarDefault
 
 // registerEnvVarDefault registers a deferred initialization of a flag
 // from an environment variable.
@@ -707,11 +708,12 @@ func registerEnvVarDefault(f *pflag.FlagSet, flagInfo cliflags.FlagInfo) {
 		// Env var not set. Nothing to do.
 		return
 	}
-	envVarDefaults[flagInfo.EnvVar] = envVarDefault{
+	envVarDefaults = append(envVarDefaults, envVarDefault{
+		envVar:   flagInfo.EnvVar,
 		envValue: value,
 		flagName: flagInfo.Name,
 		flagSet:  f,
-	}
+	})
 }
 
 // extraServerFlagInit configures the server.Config based on the command-line flags.
