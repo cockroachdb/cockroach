@@ -12,7 +12,6 @@ package main
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"runtime"
@@ -268,37 +267,44 @@ func registerUpgrade(r *testRegistry) {
 }
 
 type versionFeatureTest struct {
-	name              string
-	minAllowedVersion string
-	query             string
+	name string
+	fn   func(context.Context, *test, *versionUpgradeTest) (skipped bool)
 }
 
+var v20 = roachpb.Version{Major: 2}
+
+// Feature tests that are invoked between each step of the version upgrade test.
+// Tests can use u.clusterVersion to determine which version is active at the
+// moment.
 var versionUpgradeTestFeatures = []versionFeatureTest{
-	{
-		name:              "JSONB",
-		minAllowedVersion: "2.0-0",
-		query: `
-	CREATE DATABASE IF NOT EXISTS test;
-	CREATE TABLE test.t (j JSONB);
-	DROP TABLE test.t;
-	`,
-	}, {
-		name:              "Sequences",
-		minAllowedVersion: "2.0-0",
-		query: `
-	 CREATE DATABASE IF NOT EXISTS test;
-	 CREATE SEQUENCE test.test_sequence;
-	 DROP SEQUENCE test.test_sequence;
-	`,
-	}, {
-		name:              "Computed Columns",
-		minAllowedVersion: "2.0-0",
-		query: `
-	CREATE DATABASE IF NOT EXISTS test;
-	CREATE TABLE test.t (x INT AS (3) STORED);
-	DROP TABLE test.t;
-	`,
-	},
+	stmtFeatureTest("Object Access", v20, `
+-- We should be able to successfully select from objects created in ancient
+-- versions of CRDB using their FQNs. Prevents bugs such as #43141, where
+-- databases created before a migration were inaccessible after the
+-- migration.
+--
+-- NB: the data has been baked into the fixtures. Originally created via:
+--   create database persistent_db
+--   create table persistent_db.persistent_table(a int)"))
+-- on CRDB v1.0
+select * from persistent_db.persistent_table;
+show tables from persistent_db;
+`),
+	stmtFeatureTest("JSONB", v20, `
+CREATE DATABASE IF NOT EXISTS test;
+CREATE TABLE test.t (j JSONB);
+DROP TABLE test.t;
+	`),
+	stmtFeatureTest("Sequences", v20, `
+CREATE DATABASE IF NOT EXISTS test;
+CREATE SEQUENCE test.test_sequence;
+DROP SEQUENCE test.test_sequence;
+	`),
+	stmtFeatureTest("Computed Columns", v20, `
+CREATE DATABASE IF NOT EXISTS test;
+CREATE TABLE test.t (x INT AS (3) STORED);
+DROP TABLE test.t;
+	`),
 }
 
 const (
@@ -384,9 +390,9 @@ func (u *versionUpgradeTest) run(ctx context.Context, t *test) {
 
 	for _, step := range u.steps {
 		step.run(ctx, t, u)
-		ensureObjectAccess(ctx, t, db)
 		for _, feature := range u.features {
-			u.testFeature(ctx, t, feature)
+			t.l.Printf("checking %s", feature.name)
+			feature.fn(ctx, t, u)
 		}
 	}
 
@@ -461,37 +467,20 @@ func (u *versionUpgradeTest) checkNode(
 	}
 }
 
-func (u *versionUpgradeTest) testFeature(ctx context.Context, t *test, f versionFeatureTest) {
-	c := u.c
-	db := c.Conn(ctx, 1)
+func (u *versionUpgradeTest) version(ctx context.Context, t *test, i int) roachpb.Version {
+	db := u.c.Conn(ctx, i)
 	defer db.Close()
 
-	var cv string
-	if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&cv); err != nil {
+	var sv string
+	if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&sv); err != nil {
 		t.Fatal(err)
 	}
 
-	minAllowedVersion, err := roachpb.ParseVersion(f.minAllowedVersion)
+	cv, err := roachpb.ParseVersion(sv)
 	if err != nil {
 		t.Fatal(err)
 	}
-	actualVersion, err := roachpb.ParseVersion(cv)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = db.Exec(f.query)
-	if actualVersion.Less(minAllowedVersion) {
-		if err == nil {
-			t.Fatalf("expected %s to fail on cluster version %s", f.name, cv)
-		}
-		t.l.Printf("%s: %s fails expected\n", cv, f.name)
-	} else {
-		if err != nil {
-			t.Fatalf("expected %s to succeed on cluster version %s, got %s", f.name, cv, err)
-		}
-		t.l.Printf("%s: %s works as expected\n", cv, f.name)
-	}
+	return cv
 }
 
 // versionStep is an isolated version migration on a running cluster.
@@ -624,31 +613,22 @@ func versionUpgradeStep() versionStep {
 	}
 }
 
-func ensureObjectAccess(ctx context.Context, t *test, db *gosql.DB) {
-	// We should be able to successfully select
-	// from the objects using their FQNs. Prevents bugs such as #43141, where
-	// databases created before the migration were inaccessible after the
-	// migration.
-	//
-	// NB: the table has been baked into the fixtures. Originally created via:
-	//   create database persistent_db
-	//   create table persistent_db.persistent_table(a int)"))
-	var cv string
-	if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&cv); err != nil {
-		t.Fatal(err)
+func stmtFeatureTest(
+	name string, minVersion roachpb.Version, stmt string, args ...interface{},
+) versionFeatureTest {
+	return versionFeatureTest{
+		name: name,
+		fn: func(ctx context.Context, t *test, u *versionUpgradeTest) (skipped bool) {
+			i := u.c.All().randNode()[0]
+			if u.version(ctx, t, i).Less(minVersion) {
+				return true // skipped
+			}
+			db := u.c.Conn(ctx, i)
+			defer db.Close()
+			if _, err := db.ExecContext(ctx, stmt, args...); err != nil {
+				t.Fatal(err)
+			}
+			return false
+		},
 	}
-
-	_, err := db.Query(fmt.Sprintf("select * from persistent_db.persistent_table"))
-	if err != nil {
-		t.Fatalf(
-			"expected querying a table created before upgrade to succeed in version %s, got %s",
-			cv, err)
-	}
-	_, err = db.Query(fmt.Sprintf("show tables from persistent_db"))
-	if err != nil {
-		t.Fatalf(
-			"expected querying show tables on a database created before upgrade to succeed in version %s, got %s",
-			cv, err)
-	}
-	t.l.Printf("%s: querying a table/db created before upgrade works as expected\n", cv)
 }
