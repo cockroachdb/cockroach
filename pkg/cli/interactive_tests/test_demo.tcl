@@ -39,3 +39,21 @@ eexpect root@
 # Ensure db is movr.
 eexpect "movr>"
 end_test
+
+# Test that demo displays connection URLs for nodes in the cluster.
+start_test "Check that node URLs are displayed"
+spawn $argv demo --insecure
+# Check that we see our message.
+eexpect "Connect to the cluster on a SQL shell at"
+
+# Start the test again with a multi node cluster.
+spawn $argv demo --insecure --nodes 3
+
+# Check that we get a message for each node.
+eexpect "Connect to different nodes in the cluster on a SQL shell at"
+eexpect "Node 1"
+eexpect "Node 2"
+eexpect "Node 3"
+
+end_test
+

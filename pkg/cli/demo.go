@@ -969,6 +969,20 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 #
 `, c.s.AdminURL())
 
+		if demoCtx.nodes == 1 {
+			fmt.Printf("# Connect to the cluster on a SQL shell at: '%s'.\n#\n", c.connURL)
+		} else {
+			fmt.Printf("# Connect to different nodes in the cluster on a SQL shell at:\n")
+			for _, s := range c.servers {
+				connUrl, err := makeURLForServer(s, gen, c.certsDir)
+				if err != nil {
+					return checkAndMaybeShout(err)
+				}
+				fmt.Printf("# * Node %d: '%s'\n", s.NodeID(), connUrl)
+			}
+			fmt.Printf("#\n")
+		}
+
 		if !demoCtx.insecure {
 			fmt.Printf(
 				"# The user %q with password %q has been created. Use it to access the Web UI!\n#\n",
