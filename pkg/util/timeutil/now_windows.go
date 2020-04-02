@@ -11,6 +11,7 @@
 package timeutil
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -34,7 +35,19 @@ func init() {
 // obviate the need for this, since we only need the higher precision when
 // subtracting `time.Time`s.
 func Now() time.Time {
+	atomic.AddUint64(&nowCallCount, 1)
 	var ft windows.Filetime
 	windows.GetSystemTimePreciseAsFileTime(&ft)
 	return time.Unix(0, ft.Nanoseconds()).UTC()
+}
+
+// Use the given device as a clock source.
+func UseClockDevice(clockDeviceName string) error {
+	return errors.New("clock device not supported")
+}
+
+// only called by Hlc
+func HlcNow() time.Time {
+	atomic.AddUint64(&nowHlcCallCount, 1)
+	return Now()
 }

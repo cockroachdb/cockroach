@@ -1286,6 +1286,13 @@ func (s *Server) startPersistingHLCUpperBound(
 func (s *Server) Start(ctx context.Context) error {
 	ctx = s.AnnotateCtx(ctx)
 
+	if s.cfg.ClockDevice != "" {
+		err := timeutil.UseClockDevice(s.cfg.ClockDevice)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Start the time sanity checker.
 	s.startTime = timeutil.Now()
 	if err := s.startMonitoringForwardClockJumps(ctx); err != nil {

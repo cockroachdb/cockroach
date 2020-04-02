@@ -119,7 +119,7 @@ func (m *ManualClock) Set(nanos int64) {
 // unix epoch timestamp as a convenience to create a HLC via
 // c := hlc.NewClock(hlc.UnixNano, ...).
 func UnixNano() int64 {
-	return timeutil.Now().UnixNano()
+	return timeutil.HlcNow().UnixNano()
 }
 
 // NewClock creates a new hybrid logical clock associated with the given

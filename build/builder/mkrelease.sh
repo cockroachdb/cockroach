@@ -39,7 +39,7 @@ case "${1-}" in
       XGOARCH=amd64
       XCMAKE_SYSTEM_NAME=Linux
       TARGET_TRIPLE=x86_64-unknown-linux-gnu
-      LDFLAGS="-static-libgcc -static-libstdc++"
+      LDFLAGS="-static-libgcc -static-libstdc++ -lrt"
       SUFFIX=-linux-2.6.32-gnu-amd64
     ) ;;
 

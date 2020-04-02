@@ -240,14 +240,16 @@ type RuntimeStatSampler struct {
 	// The last sampled values of some statistics are kept only to compute
 	// derivative statistics.
 	last struct {
-		now         int64
-		utime       int64
-		stime       int64
-		cgoCall     int64
-		gcCount     int64
-		gcPauseTime uint64
-		disk        diskStats
-		net         net.IOCountersStat
+		now             int64
+		utime           int64
+		stime           int64
+		cgoCall         int64
+		gcCount         int64
+		gcPauseTime     uint64
+		nowCallCount    uint64
+		nowHlcCallCount uint64
+		disk            diskStats
+		net             net.IOCountersStat
 	}
 
 	initialDiskCounters diskStats
@@ -465,6 +467,9 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, ms GoMemSt
 	// useful percentage of total CPU usage, which would be somewhat less accurate
 	// if calculated later using downsampled time series data.
 	now := rsr.clock.PhysicalNow()
+	nowCallCount, nowHlcCallCount := timeutil.NowCallCount()
+	nowCallCountInc := nowCallCount - rsr.last.nowCallCount
+	nowHlcCallCountInc := nowHlcCallCount - rsr.last.nowHlcCallCount
 	dur := float64(now - rsr.last.now)
 	// cpuTime.{User,Sys} are in milliseconds, convert to nanoseconds.
 	utime := int64(cpuTime.User) * 1e6
@@ -474,6 +479,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, ms GoMemSt
 	combinedNormalizedPerc := (sPerc + uPerc) / float64(runtime.NumCPU())
 	gcPausePercent := float64(uint64(gc.PauseTotal)-rsr.last.gcPauseTime) / dur
 	rsr.last.now = now
+	rsr.last.nowCallCount = nowCallCount
+	rsr.last.nowHlcCallCount = nowHlcCallCount
 	rsr.last.utime = utime
 	rsr.last.stime = stime
 	rsr.last.gcPauseTime = uint64(gc.PauseTotal)
@@ -497,13 +504,15 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, ms GoMemSt
 	goTotal := ms.Sys - ms.HeapReleased
 	log.Infof(ctx, "runtime stats: %s RSS, %d goroutines, %s/%s/%s GO alloc/idle/total%s, "+
 		"%s/%s CGO alloc/total, %.1f CGO/sec, %.1f/%.1f %%(u/s)time, %.1f %%gc (%dx), "+
-		"%s/%s (r/w)net",
+		"%s/%s (r/w)net, timeutil.Now calls (all: %d, hlc: %d)",
 		humanize.IBytes(mem.Resident), numGoroutine,
 		humanize.IBytes(ms.HeapAlloc), humanize.IBytes(ms.HeapIdle), humanize.IBytes(goTotal),
 		staleMsg,
 		humanize.IBytes(uint64(cgoAllocated)), humanize.IBytes(uint64(cgoTotal)),
 		cgoRate, 100*uPerc, 100*sPerc, 100*gcPausePercent, gc.NumGC-rsr.last.gcCount,
 		humanize.IBytes(deltaNet.BytesRecv), humanize.IBytes(deltaNet.BytesSent),
+		nowCallCountInc,
+		nowHlcCallCountInc,
 	)
 	rsr.last.cgoCall = numCgoCall
 	rsr.last.gcCount = gc.NumGC

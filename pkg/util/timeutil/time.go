@@ -15,6 +15,16 @@ import (
 	"time"
 )
 
+var (
+	nowCallCount    uint64
+	nowHlcCallCount uint64
+)
+
+// return the call count for the timeutil.Now() and separately the counts from Hlc
+func NowCallCount() (uint64, uint64) {
+	return nowCallCount, nowHlcCallCount
+}
+
 // LibPQTimePrefix is the prefix lib/pq prints time-type datatypes with.
 const LibPQTimePrefix = "0000-01-01"
 
