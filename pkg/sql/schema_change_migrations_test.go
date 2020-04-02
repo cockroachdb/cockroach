@@ -169,22 +169,22 @@ func testSchemaChangeMigrations(
 		schemaChange:     schemaChange,
 	}
 	ctx := context.Background()
-	blockCh := make(chan struct{})
 	shouldBlockMigration := false
 	blockFnErrChan := make(chan error, 1)
+	revMigrationDoneCh, signalRevMigrationDone := makeSignal()
 	migrationDoneCh, signalMigrationDone := makeCondSignal(&shouldBlockMigration)
 	runner, sqlDB, tc := setupServerAndStartSchemaChange(
 		t,
 		blockFnErrChan,
 		testCase,
-		blockCh,
+		signalRevMigrationDone,
 		signalMigrationDone,
 	)
 	defer tc.Stopper().Stop(context.TODO())
 	defer disableGCTTLStrictEnforcement(t, sqlDB)()
 
 	log.Info(ctx, "waiting for all schema changes to block")
-	<-blockCh
+	<-revMigrationDoneCh
 	log.Info(ctx, "all schema changes have blocked")
 
 	close(blockFnErrChan)
@@ -229,19 +229,23 @@ func makeCondSignal(shouldSignal *bool) (chan struct{}, func()) {
 	return signalCh, signalFn
 }
 
+func makeSignal() (chan struct{}, func()) {
+	alwaysSignal := true
+	return makeCondSignal(&alwaysSignal)
+}
+
 func setupServerAndStartSchemaChange(
-	t *testing.T,
-	errCh chan error,
-	testCase testCase,
-	blockCh chan struct{},
-	signalMigrationDone func(),
+	t *testing.T, errCh chan error, testCase testCase, revMigrationDone, signalMigrationDone func(),
 ) (*sqlutils.SQLRunner, *gosql.DB, serverutils.TestClusterInterface) {
 	clusterSize := 3
 	params, _ := tests.CreateTestServerParams()
+
 	var runner *sqlutils.SQLRunner
 	var kvDB *kv.DB
 	var registry *jobs.Registry
+
 	blockSchemaChanges := false
+
 	migrateJob := func(jobID int64) {
 		if testCase.blockState == WaitingForGC {
 			if err := migrateGCJobToOldFormat(kvDB, registry, jobID, testCase.schemaChangeType); err != nil {
@@ -260,7 +264,8 @@ func setupServerAndStartSchemaChange(
 						job_id = $1
 				)`, jobID)
 	}
-	setupTestingKnobs(t, testCase, &params, &blockSchemaChanges, blockCh, signalMigrationDone, migrateJob, cancelJob)
+
+	setupTestingKnobs(t, testCase, &params, &blockSchemaChanges, revMigrationDone, signalMigrationDone, migrateJob, cancelJob)
 
 	tc := serverutils.StartTestCluster(t, clusterSize,
 		base.TestClusterArgs{
@@ -488,8 +493,7 @@ func setupTestingKnobs(
 	testCase testCase,
 	args *base.TestServerArgs,
 	blockSchemaChanges *bool,
-	blockCh chan struct{},
-	signalMigrationDone func(),
+	revMigrationDone, signalMigrationDone func(),
 	migrateJob, cancelJob func(int64),
 ) {
 	numJobs := 1
@@ -527,7 +531,7 @@ func setupTestingKnobs(
 
 		if migratedCount == numJobs {
 			doneReverseMigration = true
-			blockCh <- struct{}{}
+			revMigrationDone()
 		}
 
 		// Return a retryable error so that the job doesn't make any progress past
