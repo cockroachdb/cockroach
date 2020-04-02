@@ -22,7 +22,7 @@ import { LivenessStatus, NodesSummary, nodesSummarySelector, selectLivenessReque
 import { AdminUIState } from "src/redux/state";
 import { LongToMoment, NanoToMilli } from "src/util/convert";
 import { FixLong } from "src/util/fixLong";
-import { trackFilter } from "src/util/analytics";
+import { trackFilter, trackCollapseNodes } from "src/util/analytics";
 import { getFilters, localityToString, NodeFilterList, NodeFilterListProps } from "src/views/reports/components/nodeFilterList";
 import Loading from "src/views/shared/components/loading";
 import { Latency } from "./latency";
@@ -108,7 +108,10 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     }
   }
 
-  onChangeCollapse = (collapsed: boolean) => this.setState({ collapsed });
+  onChangeCollapse = (collapsed: boolean) => {
+    trackCollapseNodes(collapsed);
+    this.setState({ collapsed });
+  }
 
   onChangeFilter = (key: string, value: string) => {
     const { filter } = this.state;

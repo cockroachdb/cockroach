@@ -18,3 +18,4 @@ export { default as trackDownloadDiagnosticsBundle } from "./trackDownloadDiagno
 export { default as trackDocsLink} from "./trackDocsLink";
 export { default as trackFilter } from "./trackFilter";
 export { default as trackNetworkSort } from "./trackNetworkSort";
+export { default as trackCollapseNodes } from "./trackCollapseNodes";
