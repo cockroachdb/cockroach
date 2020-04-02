@@ -381,7 +381,9 @@ func (u *versionUpgradeTest) run(ctx context.Context, t *test) {
 		step.run(ctx, t, u)
 		for _, feature := range u.features {
 			t.l.Printf("checking %s", feature.name)
-			feature.fn(ctx, t, u)
+			if skipped := feature.fn(ctx, t, u); skipped {
+				t.l.Printf("^-- skipped")
+			}
 		}
 	}
 
