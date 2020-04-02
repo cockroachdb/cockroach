@@ -228,10 +228,10 @@ func (ex *connExecutor) execStmtInOpenState(
 			trace := tracing.GetRecording(sp)
 			ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
 			if finishCollectionDiagnostics != nil {
-				traceJSON, bundle, collectionErr := getTraceAndBundle(
-					origCtx, ex.server.cfg.DB, ie, trace, &p.curPlan,
+				bundle, collectionErr := buildStatementBundle(
+					origCtx, ex.server.cfg.DB, ie, &p.curPlan, trace,
 				)
-				finishCollectionDiagnostics(origCtx, traceJSON, bundle, collectionErr)
+				finishCollectionDiagnostics(origCtx, bundle.trace, bundle.zip, collectionErr)
 			} else {
 				// Handle EXPLAIN ANALYZE (DEBUG).
 				// If there was a communication error, no point in setting any results.
