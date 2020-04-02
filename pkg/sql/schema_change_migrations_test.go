@@ -227,7 +227,25 @@ func setupServerAndStartSchemaChange(
 	var kvDB *kv.DB
 	var registry *jobs.Registry
 	blockSchemaChanges := int32(0)
-	setupTestingKnobs(t, errCh, &kvDB, blockState, schemaChangeType, shouldCancel, &registry, &params, &runner, &blockSchemaChanges, shouldBlockMigration, blockCh, migrationDoneCh)
+	migrateJob := func(jobID int64) {
+		if blockState == WaitingForGC {
+			if err := migrateGCJobToOldFormat(kvDB, registry, jobID, schemaChangeType); err != nil {
+				errCh <- err
+			}
+		} else {
+			if err := migrateJobToOldFormat(kvDB, registry, jobID, schemaChangeType); err != nil {
+				errCh <- err
+			}
+		}
+	}
+	cancelJob := func(jobID int64) {
+		runner.Exec(t, `CANCEL JOB (
+					SELECT job_id FROM [SHOW JOBS]
+					WHERE
+						job_id = $1
+				)`, jobID)
+	}
+	setupTestingKnobs(t, blockState, schemaChangeType, shouldCancel, &params, &blockSchemaChanges, shouldBlockMigration, blockCh, migrationDoneCh, migrateJob, cancelJob)
 
 	tc := serverutils.StartTestCluster(t, clusterSize,
 		base.TestClusterArgs{
@@ -452,17 +470,14 @@ func migrateGCJobToOldFormat(
 // The runner should only be used inside callback closures.
 func setupTestingKnobs(
 	t *testing.T,
-	errCh chan error,
-	db **kv.DB,
 	blockState BlockState,
 	schemaChangeType SchemaChangeType,
 	shouldCancel bool,
-	registryAddr **jobs.Registry,
 	args *base.TestServerArgs,
-	runnerAddr **sqlutils.SQLRunner,
 	blockSchemaChanges *int32,
 	blockMigration *bool,
 	blockCh, migrationDoneCh chan struct{},
+	migrateJob, cancelJob func(int64),
 ) {
 	numJobs := 1
 	if schemaChangeType == CreateTable {
@@ -473,29 +488,19 @@ func setupTestingKnobs(
 	mu := syncutil.Mutex{}
 
 	ranCancelCommand := false
-	hasCanceled := int32(0)
+	hasCanceled := false
 
 	blockFn := func(jobID int64) error {
 		mu.Lock()
 		defer mu.Unlock()
-		// These are instantiated between the time that the knob is set and when the
-		// knob is run.
-		runner := *runnerAddr
-		if runner == nil {
-			// Server hasn't started yet. This will be the case when running "updating
-			// privilege" schema changes during startup.
-			return nil
-		}
 		if atomic.LoadInt32(blockSchemaChanges) == 0 {
 			return nil
 		}
-		kvDB := *db
-		registry := *registryAddr
 
 		// In the case we're canceling the job, this blockFn should only be called
 		// after the OnFailOrCancel hook is called. At this point we know that the
 		// job is actually canceled.
-		atomic.StoreInt32(&hasCanceled, 1)
+		hasCanceled = true
 
 		if doneReverseMigration {
 			// Already migrated all the jobs that we want to migrate to 19.2.
@@ -503,15 +508,7 @@ func setupTestingKnobs(
 			// to continue.
 			return nil
 		} else {
-			if blockState == WaitingForGC {
-				if err := migrateGCJobToOldFormat(kvDB, registry, jobID, schemaChangeType); err != nil {
-					errCh <- err
-				}
-			} else {
-				if err := migrateJobToOldFormat(kvDB, registry, jobID, schemaChangeType); err != nil {
-					errCh <- err
-				}
-			}
+			migrateJob(jobID)
 			migratedCount++
 		}
 
@@ -529,24 +526,13 @@ func setupTestingKnobs(
 	cancelFn := func(jobID int64) error {
 		mu.Lock()
 		defer mu.Unlock()
-		// These are instantiated between the time that the knob is set and when the
-		// knob is run.
-		runner := *runnerAddr
-		if runner == nil {
-			return nil
-		}
-
-		if atomic.LoadInt32(&hasCanceled) == 1 {
+		if hasCanceled {
 			// The job has already been successfully canceled.
 			return nil
 		}
 
 		if !ranCancelCommand {
-			runner.Exec(t, `CANCEL JOB (
-					SELECT job_id FROM [SHOW JOBS]
-					WHERE
-						job_id = $1
-				)`, jobID)
+			cancelJob(jobID)
 			ranCancelCommand = true
 		}
 
