@@ -18,7 +18,7 @@ export const track = (fn: Function) => (page: number) => {
   });
 };
 
-export default function trackSearch(pageNumber: number) {
+export default function trackPaginate(pageNumber: number) {
   const boundTrack = analytics.track.bind(analytics);
   track(boundTrack)(pageNumber);
 }
