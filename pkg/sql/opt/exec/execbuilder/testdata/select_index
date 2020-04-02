@@ -196,7 +196,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t x JOIN t y USING(b) WHERE x.b = '3'
 ----
 ·                     distributed     false                ·                         ·
-·                     vectorized      true                 ·                         ·
+·                     vectorized      false                ·                         ·
 render                ·               ·                    (b, a, c, d, a, c, d)     ·
  │                    render 0        b                    ·                         ·
  │                    render 1        a                    ·                         ·
@@ -266,7 +266,7 @@ query TTT
 EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 ----
 ·       distributed  false
-·       vectorized   true
+·       vectorized   false
 norows  ·            ·
 
 statement ok
@@ -434,21 +434,21 @@ query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
 ----
 ·       distributed  false
-·       vectorized   true
+·       vectorized   false
 norows  ·            ·
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND NULL
 ----
 ·       distributed  false
-·       vectorized   true
+·       vectorized   false
 norows  ·            ·
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = NULL AND a != NULL
 ----
 ·       distributed  false
-·       vectorized   true
+·       vectorized   false
 norows  ·            ·
 
 # Make sure that mixed type comparison operations are not used
@@ -628,7 +628,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT i, s FROM ab WHERE (i, s) < (1, 'c')
 ----
 ·          distributed  false              ·       ·
-·          vectorized   true               ·       ·
+·          vectorized   false              ·       ·
 render     ·            ·                  (i, s)  ·
  │         render 0     i                  ·       ·
  │         render 1     s                  ·       ·
@@ -644,7 +644,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 ----
 ·          distributed  false              ·       ·
-·          vectorized   true               ·       ·
+·          vectorized   false              ·       ·
 render     ·            ·                  (i, s)  ·
  │         render 0     i                  ·       ·
  │         render 1     s                  ·       ·
@@ -782,7 +782,7 @@ GROUP BY resource_key
 ORDER BY total DESC
 ----
 ·                    distributed  false
-·                    vectorized   true
+·                    vectorized   false
 sort                 ·            ·
  │                   order        -total
  └── group           ·            ·
@@ -939,7 +939,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v SIMILAR TO 'ABC_*'
 ----
 ·     distributed  false                 ·       ·
-·     vectorized   true                  ·       ·
+·     vectorized   false                 ·       ·
 scan  ·            ·                     (k, v)  ·
 ·     table        str@str_v_idx         ·       ·
 ·     spans        /"ABC"-/"ABD"         ·       ·
@@ -1001,7 +1001,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM 4
 ----
 ·     distributed  false                 ·       ·
-·     vectorized   true                  ·       ·
+·     vectorized   false                 ·       ·
 scan  ·            ·                     (x, y)  ·
 ·     table        xy@primary            ·       ·
 ·     spans        ALL                   ·       ·
@@ -1110,7 +1110,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c DESC
 ----
 ·          distributed  false             ·             ·
-·          vectorized   true              ·             ·
+·          vectorized   false             ·             ·
 sort       ·            ·                 (a, b, c, d)  -c
  │         order        -c                ·             ·
  └── scan  ·            ·                 (a, b, c, d)  ·
@@ -1122,7 +1122,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c
 ----
 ·          distributed  false             ·             ·
-·          vectorized   true              ·             ·
+·          vectorized   false             ·             ·
 sort       ·            ·                 (a, b, c, d)  +c
  │         order        +c                ·             ·
  └── scan  ·            ·                 (a, b, c, d)  ·
@@ -1147,7 +1147,7 @@ query TTT
 EXPLAIN SELECT * FROM noncover ORDER BY c
 ----
 ·          distributed  false
-·          vectorized   true
+·          vectorized   false
 sort       ·            ·
  │         order        +c
  └── scan  ·            ·
@@ -1173,7 +1173,7 @@ EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c OFFSET 5
 ]
 ----
 ·               distributed  false
-·               vectorized   true
+·               vectorized   false
 limit           ·            ·
  │              offset       5
  └── sort       ·            ·
@@ -1206,7 +1206,7 @@ EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 1000000
 ]
 ----
 ·               distributed  false
-·               vectorized   true
+·               vectorized   false
 limit           ·            ·
  │              count        1000000
  └── sort       ·            ·
@@ -1262,7 +1262,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0
 ]
 ----
 ·           distributed  false
-·           vectorized   true
+·           vectorized   false
 index-join  ·            ·
  │          table        t2@primary
  │          key columns  a

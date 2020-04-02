@@ -46,7 +46,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))
 ----
 ·                            distributed   false                                                                        ·               ·
-·                            vectorized    true                                                                         ·               ·
+·                            vectorized    false                                                                        ·               ·
 root                         ·             ·                                                                            (a, b, c)       ·
  ├── scan                    ·             ·                                                                            (a, b, c)       ·
  │                           table         abc@primary                                                                  ·               ·
@@ -140,7 +140,7 @@ WHERE
     AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
 ·               distributed   false                                                                                                       ·                   ·
-·               vectorized    true                                                                                                        ·                   ·
+·               vectorized    false                                                                                                       ·                   ·
 root            ·             ·                                                                                                           (col0)              ·
  ├── render     ·             ·                                                                                                           (col0)              ·
  │    │         render 0      col0                                                                                                        ·                   ·
@@ -186,7 +186,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x-1 = a.x)
 ----
 ·               distributed        false            ·          ·
-·               vectorized         true             ·          ·
+·               vectorized         false            ·          ·
 hash-join       ·                  ·                (x, y)     ·
  │              type               semi             ·          ·
  │              equality           (x) = (column5)  ·          ·
@@ -222,7 +222,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b.x)
 ----
 ·               distributed        false            ·          ·
-·               vectorized         true             ·          ·
+·               vectorized         false            ·          ·
 hash-join       ·                  ·                (x, z)     ·
  │              type               anti             ·          ·
  │              equality           (x) = (column5)  ·          ·
