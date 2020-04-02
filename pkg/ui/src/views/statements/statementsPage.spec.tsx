@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -27,8 +27,7 @@ describe("StatementsPage", () => {
       const statementsPageWrapper: ReactWrapper<StatementsPageProps, StatementsPageState> = rootWrapper.find(StatementsPage).first();
       const statementsPageInstance = statementsPageWrapper.instance();
 
-      assert.equal(statementsPageInstance.state.sortSetting.sortKey, 3);
-      assert.equal(statementsPageInstance.state.sortSetting.ascending, false);
+      assert.equal(statementsPageInstance.state.search, "");
     });
   });
 });

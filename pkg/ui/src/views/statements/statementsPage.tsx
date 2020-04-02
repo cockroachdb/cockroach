@@ -8,10 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Icon, Pagination } from "antd";
 import { isNil, merge, forIn } from "lodash";
-import moment from "moment";
-import { DATE_FORMAT } from "src/util/format";
 import _ from "lodash";
 import React from "react";
 import Helmet from "react-helmet";
@@ -41,7 +38,6 @@ import {
 } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
-import { trackPaginate, trackSearch } from "src/util/analytics";
 import StatementSortTable from "./statementSortTable";
 
 import "./statements.styl";
@@ -61,7 +57,6 @@ interface OwnProps {
 }
 
 export interface StatementsPageState {
-  sortSetting: SortSetting;
   search?: string;
   pagination: ISortedTablePagination;
 }
@@ -74,14 +69,6 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
   constructor(props: StatementsPageProps) {
     super(props);
     const defaultState = {
-      sortSetting: {
-        sortKey: 3, // Sort by Execution Count column as default option
-        ascending: false,
-      },
-      pagination: {
-        pageSize: 20,
-        current: 1,
-      },
       search: "",
     };
 
@@ -93,15 +80,9 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
   getStateFromHistory = (): Partial<StatementsPageState> => {
     const { history } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
-    const sortKey = searchParams.get("sortKey") || undefined;
-    const ascending = searchParams.get("ascending") || undefined;
     const searchQuery = searchParams.get("q") || undefined;
 
     return {
-      sortSetting: {
-        sortKey,
-        ascending: Boolean(ascending),
-      },
       search: searchQuery,
     };
   }
@@ -121,17 +102,6 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
 
     history.location.search = currentSearchParams.toString();
     history.replace(history.location);
-  }
-
-  changeSortSetting = (ss: SortSetting) => {
-    this.setState({
-      sortSetting: ss,
-    });
-
-    this.syncHistory({
-      "sortKey": ss.sortKey,
-      "ascending": Boolean(ss.ascending).toString(),
-    });
   }
 
   selectApp = (app: DropdownOption) => {
@@ -157,10 +127,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     this.props.refreshStatementDiagnosticsRequests();
   }
 
-  componentDidUpdate = (__: StatementsPageProps, prevState: StatementsPageState) => {
-    if (this.state.search && this.state.search !== prevState.search) {
-      trackSearch(this.filteredStatementsData().length);
-    }
+  componentDidUpdate = (__: StatementsPageProps) => {
     this.props.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
   }
@@ -169,11 +136,6 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     this.props.dismissAlertMessage();
   }
 
-  onChangePage = (current: number) => {
-    const { pagination } = this.state;
-    this.setState({ pagination: { ...pagination, current } });
-    trackPaginate(current);
-  }
   onSubmitSearchField = (search: string) => {
     this.setState({ search });
     this.syncHistory({
@@ -195,7 +157,6 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     const selectedApp = appAttrValue || "";
     const appOptions = [{ value: "", label: "All" }];
     this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
-    const data = this.filteredStatementsData();
     return (
       <>
         <PageConfig>
@@ -215,57 +176,12 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
             />
           </PageConfigItem>
         </PageConfig>
-        <section className="cl-table-container">
-          <div className="cl-table-statistic">
-            <h4 className="cl-count-title">
-              {paginationPageCount({ ...pagination, total: this.filteredStatementsData().length }, "statements", match, appAttr, search)}
-            </h4>
-            <h4 className="last-cleared-title">
-              {this.renderLastCleared()}
-            </h4>
-          </div>
-          {data.length === 0 && search.length === 0 && (
-            <Empty
-              title="This page helps you identify frequently executed or high latency SQL statements."
-              description="No SQL statements were executed since this page was last cleared."
-              buttonHref="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html"
-            />
-          )}
-          {(data.length > 0 || search.length > 0) && (
-            <div className="cl-table-wrapper">
-              <StatementsSortedTable
-                className="statements-table"
-                data={data}
-                columns={
-                  makeStatementsColumns(
-                    statements,
-                    selectedApp,
-                    search,
-                    this.activateDiagnosticsRef,
-                  )
-                }
-                sortSetting={this.state.sortSetting}
-                onChangeSortSetting={this.changeSortSetting}
-                renderNoResult={this.noStatementResult()}
-                pagination={pagination}
-              />
-            </div>
-          )}
-        </section>
-        <Pagination
-          size="small"
-          itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
-          pageSize={pagination.pageSize}
-          current={pagination.current}
-          total={data.length}
-          onChange={this.onChangePage}
-          hideOnSinglePage
-        />
         <div className="section">
           <StatementSortTable
             statements={statements}
             search={search}
             lastReset={lastReset}
+            activateDiagnosticsRef={this.activateDiagnosticsRef}
           />
         </div>
       </>

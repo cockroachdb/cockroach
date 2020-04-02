@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -19,11 +19,15 @@ import { SortSetting } from "src/views/shared/components/sortabletable";
 import Empty from "../app/components/empty";
 import "./statements.styl";
 import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
+import { merge, forIn } from "lodash";
+import { trackSearch, trackPaginate } from "src/util/analytics";
+import { ActivateDiagnosticsModalRef } from "./diagnostics/activateDiagnosticsModal";
 
-interface StatementSortTableProps {
+export interface StatementSortTableProps {
   statements: AggregateStatistics[];
   lastReset: string;
   search?: string;
+  activateDiagnosticsRef?: React.RefObject<ActivateDiagnosticsModalRef>;
 }
 
 interface PaginationSettings {
@@ -31,33 +35,80 @@ interface PaginationSettings {
   current: number;
 }
 
-interface StatementSortTableState {
+export interface StatementSortTableState {
   sortSetting: SortSetting;
   pagination: PaginationSettings;
 }
 
-class StatementSortTable extends React.Component<StatementSortTableProps & RouteComponentProps<any>, StatementSortTableState> {
+export class StatementSortTable extends React.Component<StatementSortTableProps & RouteComponentProps<any>, StatementSortTableState> {
 
-  state: StatementSortTableState = {
-    sortSetting: {
-      sortKey: 6,  // Latency
-      ascending: false,
-    },
-    pagination: {
-      pageSize: 20,
-      current: 1,
-    },
-  };
+  constructor(props: StatementSortTableProps & RouteComponentProps<any>) {
+    super(props);
+    const defaultState = {
+      sortSetting: {
+        sortKey: 3, // Sort by Execution Count column as default option
+        ascending: false,
+      },
+      pagination: {
+        pageSize: 20,
+        current: 1,
+      },
+    };
+
+    const stateFromHistory = this.getStateFromHistory();
+    this.state = merge(defaultState, stateFromHistory);
+  }
+
+  getStateFromHistory = (): Partial<StatementSortTableState> => {
+    const { history } = this.props;
+    const searchParams = new URLSearchParams(history.location.search);
+    const sortKey = searchParams.get("sortKey") || undefined;
+    const ascending = searchParams.get("ascending") || undefined;
+
+    return {
+      sortSetting: {
+        sortKey,
+        ascending: Boolean(ascending),
+      },
+    };
+  }
+
+  syncHistory = (params: Record<string, string | undefined>) => {
+    const { history } = this.props;
+    const currentSearchParams = new URLSearchParams(history.location.search);
+
+    forIn(params, (value, key) => {
+      if (!value) {
+        currentSearchParams.delete(key);
+      } else {
+        currentSearchParams.set(key, value);
+      }
+    });
+
+    history.location.search = currentSearchParams.toString();
+    history.replace(history.location);
+  }
+
+  componentDidUpdate = (prevProps: StatementSortTableProps & RouteComponentProps<any>) => {
+    if (this.props.search && this.props.search !== prevProps.search) {
+      trackSearch(this.filteredStatementsData().length);
+    }
+  }
 
   changeSortSetting = (ss: SortSetting) => {
     this.setState({
       sortSetting: ss,
+    });
+    this.syncHistory({
+      "sortKey": ss.sortKey,
+      "ascending": Boolean(ss.ascending).toString(),
     });
   }
 
   onChangePage = (current: number) => {
     const { pagination } = this.state;
     this.setState({ pagination: { ...pagination, current }});
+    trackPaginate(current);
   }
 
   getStatementsData = () => {
@@ -120,9 +171,17 @@ class StatementSortTable extends React.Component<StatementSortTableProps & Route
     const { lastReset } = this.props;
     return `Last cleared ${moment.utc(lastReset).format(DATE_FORMAT)}`;
   }
+
+  noStatementResult = () => (
+    <>
+      <p>There are no SQL statements that match your search or filter since this page was last cleared.</p>
+      <a href="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html" target="_blank">Learn more about the statement page</a>
+    </>
+  )
+
   render() {
     const { pagination } = this.state;
-    const { statements, match, search } = this.props;
+    const { statements, match, search, activateDiagnosticsRef } = this.props;
     const appAttrValue = getMatchParamByName(match, appAttr);
     const selectedApp = appAttrValue || "";
     const data = this.getStatementsData();
@@ -149,10 +208,12 @@ class StatementSortTable extends React.Component<StatementSortTableProps & Route
             <div className="cl-table-wrapper">
               <StatementsSortedTable
                 className="statements-table"
-                data={data}
-                columns={makeStatementsColumns(statements, selectedApp, search)}
+                data={this.filteredStatementsData()}
+                columns={makeStatementsColumns(statements, selectedApp, search, activateDiagnosticsRef)}
                 sortSetting={this.state.sortSetting}
                 onChangeSortSetting={this.changeSortSetting}
+                renderNoResult={this.noStatementResult()}
+                pagination={pagination}
               />
             </div>
           )}
