@@ -281,6 +281,12 @@ var v20 = roachpb.Version{Major: 2}
 // Feature tests that are invoked between each step of the version upgrade test.
 // Tests can use u.clusterVersion to determine which version is active at the
 // moment.
+//
+// A gotcha is that these feature tests are also invoked when the cluster is
+// in the middle of upgrading -- i.e. a state where the cluster version has
+// already been bumped, but not all nodes are aware). This should be considered
+// a feature of this test, and feature tests that flake because of it need to
+// be fixed.
 var versionUpgradeTestFeatures = []versionFeatureTest{
 	stmtFeatureTest("Object Access", v20, `
 -- We should be able to successfully select from objects created in ancient
@@ -313,7 +319,6 @@ DROP TABLE test.t;
 }
 
 const (
-	baseVersion = "v19.1.5"
 	headVersion = "HEAD"
 )
 
@@ -324,24 +329,26 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 	// TODO(tbg): revisit as old versions are aged out of this test.
 	c.encryptDefault = false
 
-	// versionUpgradeStep performs a cluster version upgrade to its version.
-	// It waits until all nodes have seen the upgraded cluster version.
-	// If newVersion is set, we'll performe a SET CLUSTER SETTING version =
-	// <newVersion>. If it's not, we'll rely on the automatic cluster version
-	// upgrade mechanism (which is not inhibited by the
-	// cluster.preserve_downgrade_option cluster setting in this test.
-
+	const baseVersion = "v19.1.5"
 	u := newVersionUpgradeTest(c, versionUpgradeTestFeatures,
+		// Load baseVersion fixture. That fixture's cluster version may be
+		// at the predecessor version, so add a waitForUpgradeStep to make
+		// sure we're actually running at baseVersion before moving on.
+		//
+		// See the comment on createCheckpoints for details on fixtures.
+		uploadAndStartFromCheckpointFixture(baseVersion),
+		waitForUpgradeStep(),
+
 		// NB: before the first step, cluster and binary version equals baseVersion.
 		binaryUpgradeStep("v19.2.1"),
-		versionUpgradeStep(),
+		waitForUpgradeStep(),
 
 		// Each new release has to be added here. When adding a new release, you'll
 		// probably need to use a release candidate binary.
 
 		// HEAD gives us the main binary for this roachtest run.
 		binaryUpgradeStep("HEAD"),
-		versionUpgradeStep(),
+		waitForUpgradeStep(),
 	)
 
 	u.run(ctx, t)
@@ -374,24 +381,6 @@ func (u *versionUpgradeTest) run(ctx context.Context, t *test) {
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()
-
-	// Load baseVersion fixture. That fixture's cluster version may be
-	// at the predecessor version, so add a versionUpgradeStep to make
-	// sure we're actually running at baseVersion before moving on.
-	//
-	// See the comment on createCheckpoints for details on fixtures.
-	initSteps := []versionStep{
-		loadCheckpointFixtureStep(baseVersion),
-		uploadAndstartStep(baseVersion),
-		versionUpgradeStep(),
-	}
-	for _, step := range initSteps {
-		step.run(ctx, t, u)
-	}
-
-	for _, node := range c.All() {
-		u.checkNode(ctx, t, node, baseVersion)
-	}
 
 	for _, step := range u.steps {
 		step.run(ctx, t, u)
@@ -494,7 +483,7 @@ type versionStep struct {
 	run            func(ctx context.Context, t *test, u *versionUpgradeTest)
 }
 
-func loadCheckpointFixtureStep(version string) versionStep {
+func uploadAndStartFromCheckpointFixture(version string) versionStep {
 	return versionStep{
 		clusterVersion: "",
 		run: func(ctx context.Context, t *test, u *versionUpgradeTest) {
@@ -509,6 +498,9 @@ func loadCheckpointFixtureStep(version string) versionStep {
 			}
 			// Extract fixture. Fail if there's already an LSM in the store dir.
 			u.c.Run(ctx, nodes, "cd {store-dir} && [ ! -f {store-dir}/CURRENT ] && tar -xf fixture.tgz")
+
+			// Start the binary.
+			uploadAndstartStep(version).run(ctx, t, u)
 		},
 	}
 }
@@ -578,7 +570,12 @@ func binaryUpgradeStep(newVersion string) versionStep {
 	}
 }
 
-func versionUpgradeStep() versionStep {
+// waitForUpgradeStep waits for the cluster version to reach that reflected by the first node. We
+// rely on the cluster's internal self-upgrading mechanism.
+// The point of making this a separate step is to expose the feature tests to the world in which
+// some nodes may already have learned of an upgrade (via Gossip) while others have not. This
+// situation tends to exhibit unexpected behavior.
+func waitForUpgradeStep() versionStep {
 	return versionStep{
 		run: func(ctx context.Context, t *test, u *versionUpgradeTest) {
 			c := u.c
