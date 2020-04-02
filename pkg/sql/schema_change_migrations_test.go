@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -156,10 +157,10 @@ type migrationTestCase struct {
 // 6. Ensure that the schema change completes.
 func testSchemaChangeMigrations(t *testing.T, testCase migrationTestCase) {
 	ctx := context.Background()
-	shouldBlockMigration := false
+	shouldSignalMigration := int32(0)
 	blockFnErrChan := make(chan error, 1)
 	revMigrationDoneCh, signalRevMigrationDone := makeSignal()
-	migrationDoneCh, signalMigrationDone := makeCondSignal(&shouldBlockMigration)
+	migrationDoneCh, signalMigrationDone := makeCondSignal(&shouldSignalMigration)
 	runner, sqlDB, tc := setupServerAndStartSchemaChange(
 		t,
 		blockFnErrChan,
@@ -185,7 +186,7 @@ func testSchemaChangeMigrations(t *testing.T, testCase migrationTestCase) {
 
 	// Start the migrations.
 	log.Info(ctx, "starting job migration")
-	shouldBlockMigration = true
+	atomic.StoreInt32(&shouldSignalMigration, 1)
 	migMgr := tc.Server(0).MigrationManager().(*sqlmigrations.Manager)
 	if err := migMgr.StartSchemaChangeJobMigration(ctx); err != nil {
 		t.Fatal(err)
@@ -193,7 +194,6 @@ func testSchemaChangeMigrations(t *testing.T, testCase migrationTestCase) {
 
 	log.Info(ctx, "waiting for migration to complete")
 	<-migrationDoneCh
-	shouldBlockMigration = false
 
 	// TODO(pbardea): SHOW JOBS WHEN COMPLETE SELECT does not work on some schema
 	// changes when canceling jobs, but querying until there are no jobs works.
@@ -206,10 +206,10 @@ func testSchemaChangeMigrations(t *testing.T, testCase migrationTestCase) {
 	verifySchemaChangeJobRan(t, runner, testCase)
 }
 
-func makeCondSignal(shouldSignal *bool) (chan struct{}, func()) {
+func makeCondSignal(shouldSignal *int32) (chan struct{}, func()) {
 	signalCh := make(chan struct{})
 	signalFn := func() {
-		if *shouldSignal {
+		if atomic.LoadInt32(shouldSignal) == 1 {
 			signalCh <- struct{}{}
 		}
 	}
@@ -217,7 +217,7 @@ func makeCondSignal(shouldSignal *bool) (chan struct{}, func()) {
 }
 
 func makeSignal() (chan struct{}, func()) {
-	alwaysSignal := true
+	alwaysSignal := int32(1)
 	return makeCondSignal(&alwaysSignal)
 }
 
@@ -355,10 +355,12 @@ func migrateJobToOldFormat(
 	}
 
 	// Write the table descriptor back.
-	if err := kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc)); err != nil {
-		return err
-	}
-	return nil
+	return kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
+		return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc))
+	})
 }
 
 // migrateGCJobToOldFormat converts a GC job created in 20.1 into a 19.2-style
@@ -445,15 +447,15 @@ func migrateGCJobToOldFormat(
 		tableDesc.GCMutations[0].DropTime = timeutil.Now().UnixNano()
 
 		// Write the table descriptor back.
-		if err := kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc)); err != nil {
-			return err
-		}
-
+		return kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := txn.SetSystemConfigTrigger(); err != nil {
+				return err
+			}
+			return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc))
+		})
 	default:
 		return errors.Errorf("invalid schema change type: %d", schemaChangeType)
 	}
-
-	return nil
 }
 
 // Set up server testing args such that knobs are set to block and abandon any
