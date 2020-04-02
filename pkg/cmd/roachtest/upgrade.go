@@ -300,7 +300,10 @@ var versionUpgradeTestFeatures = []versionFeatureTest{
 	},
 }
 
-const headVersion = "HEAD"
+const (
+	baseVersion = "v1.0.6"
+	headVersion = "HEAD"
+)
 
 func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 	// This is ugly, but we can't pass `--encrypt=false` to old versions of
@@ -316,7 +319,6 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 	// upgrade mechanism (which is not inhibited by the
 	// cluster.preserve_downgrade_option cluster setting in this test.
 
-	const baseVersion = "v1.0.6"
 	u := newVersionUpgradeTest(c, versionUpgradeTestFeatures,
 		// v1.1.0 is the first binary version that knows about cluster versions.
 		binaryUpgradeStep("v1.1.9"),
@@ -345,9 +347,35 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 		versionUpgradeStep(""),
 	)
 
+	u.run(ctx, t)
+}
+
+// createCheckpoints is used to "age out" old versions of CockroachDB. We want
+// to test data that was created at v1.0, but we don't actually want to run a
+// long chain of binaries starting all the way at v1.0. Instead, we periodically
+// bake a set of store directories that originally started out on v1.0 and
+// maintain it as a fixture for this test.
+//
+// The checkpoints will be created in the log directories. The test will fail
+// on purpose when it's done. After, manually invoke the following to move the
+// archives to the right place and commit the result:
+//
+// for i in 1 2 3 4; do
+//   mkdir -p pkg/cmd/roachtest/fixtures/${i} && \
+//   mv artifacts/acceptance/version-upgrade/run_1/${i}.logs/checkpoint-*.tgz \
+//     pkg/cmd/roachtest/fixtures/${i}/
+// done
+const createCheckpoints = true
+
+func (u *versionUpgradeTest) run(ctx context.Context, t *test) {
+	if createCheckpoints {
+		_ = u.uploadVersion(ctx, t, headVersion) // HACK
+	}
+
 	args := u.uploadVersion(ctx, t, baseVersion)
 	// Hack to skip initializing settings which doesn't work on very old versions
 	// of cockroach.
+	c := u.c
 	c.Run(ctx, c.Node(1), "mkdir -p {store-dir} && touch {store-dir}/settings-initialized")
 	c.Start(ctx, t, c.All(), args, startArgsDontEncrypt)
 
@@ -372,6 +400,10 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 		for _, feature := range u.features {
 			u.testFeature(ctx, t, feature)
 		}
+	}
+
+	if createCheckpoints {
+		t.Fatal("failing on purpose to have store snapshots collected in artifacts")
 	}
 }
 
@@ -503,6 +535,31 @@ func binaryUpgradeStep(newVersion string) versionStep {
 				// TODO(nvanbenschoten): add upgrade qualification step. What should we
 				// test? We could run logictests. We could add custom logic here. Maybe
 				// this should all be pushed to nightly migration tests instead.
+			}
+
+			if createCheckpoints && newVersion != headVersion {
+				// If we're taking checkpoints, momentarily stop the cluster (we
+				// need to do that to get the checkpoints to reflect a
+				// consistent cluster state). The binary at this point will be
+				// the new one, but the cluster version was not explicitly
+				// bumped, though auto-update may have taken place already.
+				// For example, if newVersion is 2.1, the cluster version in
+				// the store directories may be 2.0 on some stores and 2.1 on
+				// the others (though if any are on 2.1, then that's what's
+				// stored in system.settings).
+				// This means that when we restart from that version, we're
+				// going to want to use the binary mentioned in the checkpoint,
+				// or at least one compatible with the *predecessor* of the
+				// checkpoint version. For example, for checkpoint-2.1, the
+				// cluster version might be 2.0, so we can only use the 2.0 or
+				// 2.1 binary, but not the 19.1 binary (as 19.1 and 2.0 are not
+				// compatible).
+				c.Stop(ctx, nodes)
+				checkpointName := "checkpoint-" + newVersion
+				c.Run(ctx, c.All(), "./cockroach-HEAD", "debug", "rocksdb", "--db={store-dir}",
+					"checkpoint", "--checkpoint_dir={store-dir}/"+checkpointName)
+				c.Run(ctx, c.All(), "tar", "-C", "{store-dir}/"+checkpointName, "-czf", "{log-dir}/"+checkpointName+".tgz", ".")
+				c.Start(ctx, t, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
 			}
 		},
 	}
