@@ -14,6 +14,8 @@ import { connect } from "react-redux";
 import moment from "moment";
 import { Action, Dispatch } from "redux";
 import Long from "long";
+import { isUndefined } from "lodash";
+import { Link } from "react-router-dom";
 
 import { Button, ColumnsConfig, DownloadFile, DownloadFileRef, Table, Text, TextTypes } from "src/components";
 import HeaderSection from "src/views/shared/components/headerSection";
@@ -22,11 +24,13 @@ import { getStatementDiagnostics } from "src/util/api";
 import { trustIcon } from "src/util/trust";
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import {
+  selectStatementByFingerprint,
   selectStatementDiagnosticsReports,
 } from "src/redux/statements/statementsSelectors";
 import {
   invalidateStatementDiagnosticsRequests,
   refreshStatementDiagnosticsRequests,
+  refreshStatements,
 } from "src/redux/apiReducers";
 import { DiagnosticStatusBadge } from "src/views/statements/diagnostics/diagnosticStatusBadge";
 import "./statementDiagnosticsHistoryView.styl";
@@ -60,9 +64,25 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
       key: "statement",
       title: "statement",
       sorter: sortByStatementFingerprintField,
-      render: (_text, record) => (
-        <Text textType={TextTypes.Code}>{record.statement_fingerprint}</Text>
-      ),
+      render: (_text, record) => {
+        const { getStatementByFingerprint } = this.props;
+        const fingerprint = record.statement_fingerprint;
+        const statement = getStatementByFingerprint(fingerprint);
+        const { implicit_txn: implicitTxn = "true", query } = statement?.key?.key_data || {};
+
+        if (isUndefined(query)) {
+          return <Text textType={TextTypes.Code}>{fingerprint}</Text>
+        }
+
+        return (
+          <Link
+            to={ `/statement/${implicitTxn}/${encodeURIComponent(query)}` }
+            className="crl-statements-diagnostics-view__statements-link"
+          >
+            <Text textType={TextTypes.Code}>{fingerprint}</Text>
+          </Link>
+        )
+      },
     },
     {
       key: "status",
@@ -182,6 +202,7 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
 
 interface MapStateToProps {
   diagnosticsReports: IStatementDiagnosticsReport[];
+  getStatementByFingerprint: (fingerprint: string) => ReturnType<typeof selectStatementByFingerprint>;
 }
 
 interface MapDispatchToProps {
@@ -190,12 +211,14 @@ interface MapDispatchToProps {
 
 const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
   diagnosticsReports: selectStatementDiagnosticsReports(state) || [],
+  getStatementByFingerprint: (fingerprint: string) => selectStatementByFingerprint(state, fingerprint),
 });
 
 const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>): MapDispatchToProps => ({
   refresh: () => {
     dispatch(invalidateStatementDiagnosticsRequests());
     dispatch(refreshStatementDiagnosticsRequests());
+    dispatch(refreshStatements());
   },
 });
 
