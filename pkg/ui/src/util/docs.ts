@@ -34,7 +34,9 @@ export const adminUIAccess = docsURL("admin-ui-overview.html#admin-ui-access");
 export const statementDiagnostics = docsURL("admin-ui-statements-page.html#diagnostics");
 export const howAreCapacityMetricsCalculated = docsURL("admin-ui-storage-dashboard.html#capacity-metrics");
 export const keyValuePairs = docsURL("architecture/distribution-layer.html#table-data");
-
+export const statementsSql = docsURL("admin-ui-statements-page.html#sql-statement-fingerprints");
+export const statementsRetries = docsURL("transactions.html#transaction-retries");
+export const statementsTimeInterval = docsURL("admin-ui-statements-page.html#time-interval");
 // Note that these explicitly don't use the current version, since we want to
 // link to the most up-to-date documentation available.
 export const upgradeCockroachVersion = "https://www.cockroachlabs.com/docs/stable/upgrade-cockroach-version.html";
