@@ -28,7 +28,7 @@ import { LocalSetting } from "src/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { LongToMoment } from "src/util/convert";
 import { INodeStatus, MetricConstants } from "src/util/proto";
-import { ColumnsConfig, Table, Text, TextTypes, Tooltip, Badge, BadgeProps } from "src/components";
+import { ColumnsConfig, Table, Text, TextTypes, Tooltip, Badge, BadgeProps, Anchor } from "src/components";
 import { Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";
@@ -37,6 +37,7 @@ import { switchExhaustiveCheck } from "src/util/switchExhaustiveCheck";
 
 import TableSection from "./tableSection";
 import "./nodes.styl";
+import { capacityMetrics, nodeLivenessIssues, howItWork } from "src/util/docs";
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting", (s) => s.localSettings,
@@ -115,14 +116,106 @@ interface DecommissionedNodeListProps extends NodeCategoryListProps {
 const getStatusDescription = (status: LivenessStatus) => {
   switch (status) {
     case LivenessStatus.LIVE:
-      return "This node is currently healthy.";
+      return (
+        <div className="tooltip__table--title">
+          <p>
+            {"This node is online and updating its "}
+            <Anchor
+              href={nodeLivenessIssues}
+              target="_blank"
+            >
+              liveness record
+            </Anchor>.
+          </p>
+        </div>
+      );
+    case LivenessStatus.UNKNOWN:
+    case LivenessStatus.UNAVAILABLE:
+      return (
+        <div className="tooltip__table--title">
+          <p>
+            {"This node has an "}
+            <Anchor
+              href={nodeLivenessIssues}
+              target="_blank"
+            >
+              unavailable liveness
+            </Anchor>
+            {" status."}
+          </p>
+        </div>
+      );
+    case LivenessStatus.DEAD:
+      return (
+        <div className="tooltip__table--title">
+          <p>
+            {"This node has not updated its "}
+            <Anchor
+              href={nodeLivenessIssues}
+              target="_blank"
+            >
+              liveness record
+            </Anchor>
+            {" for 5 minutes. CockroachDB "}
+            <Anchor
+              href={howItWork}
+              target="_blank"
+            >
+              automatically rebalances replicas
+            </Anchor>
+            {" from dead nodes to live nodes."}
+          </p>
+        </div>
+      );
     case LivenessStatus.DECOMMISSIONING:
-      return `This node is in the process of being decommissioned.
-       It may take some time to transfer the data to other nodes.
-       When finished, it will appear below as a decommissioned node.`;
+      return (
+        <div className="tooltip__table--title">
+          <p>
+            {"This node is in the "}
+            <Anchor
+              href={howItWork}
+              target="_blank"
+            >
+              process of decommissioning
+            </Anchor>
+            {" , and may need time to transfer its data to other nodes. When finished, the node will appear below in the list of decommissioned nodes."}
+          </p>
+        </div>
+      );
     default:
       return "This node has not recently reported as being live. " +
         "It may not be functioning correctly, but no automatic action has yet been taken.";
+  }
+};
+
+const getNodeStatusDescription = (status: AggregatedNodeStatus) => {
+  switch (status) {
+    case AggregatedNodeStatus.LIVE:
+      return (
+        <div className="tooltip__table--title">
+          <p>
+            All nodes in this locality are live.
+          </p>
+        </div>
+      );
+    case AggregatedNodeStatus.WARNING:
+      return (
+        <div className="tooltip__table--title">
+          <p>
+            This locality has 1 or more <code>SUSPECT</code> or <code>DECOMMISSIONING</code> nodes.
+          </p>
+        </div>
+      );
+    case AggregatedNodeStatus.DEAD:
+      return (
+        <div className="tooltip__table--title">
+          <p>
+            This locality has 1 or more <code>DEAD</code> nodes.
+          </p>
+        </div>
+      );
+    default:
+      return "This node is decommissioned and has been permanently removed from this cluster.";
   }
 };
 
@@ -211,7 +304,20 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     },
     {
       key: "nodesCount",
-      title: "node count",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title={
+            <div className="tooltip__table--title">
+              <p>
+                Number of nodes in the locality.
+              </p>
+            </div>
+          }
+        >
+          Node Count
+        </Tooltip>
+      ),
       sorter: (a, b) => {
         if (_.isUndefined(a.nodesCount) || _.isUndefined(b.nodesCount)) { return 0; }
         if (a.nodesCount < b.nodesCount) { return -1; }
@@ -226,7 +332,20 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     {
       key: "uptime",
       dataIndex: "uptime",
-      title: "uptime",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title={
+            <div className="tooltip__table--title">
+              <p>
+                Amount of time the node has been running.
+              </p>
+            </div>
+          }
+        >
+          Uptime
+        </Tooltip>
+      ),
       sorter: true,
       className: "column--align-right",
       width: "10%",
@@ -235,14 +354,48 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     {
       key: "replicas",
       dataIndex: "replicas",
-      title: "replicas",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title={
+            <div className="tooltip__table--title">
+              <p>
+                Number of replicas on the node or in the locality.
+              </p>
+            </div>
+          }
+        >
+          Replicas
+        </Tooltip>
+      ),
       sorter: true,
       className: "column--align-right",
       width: "10%",
     },
     {
       key: "capacityUse",
-      title: "capacity use",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title={
+            <div className="tooltip__table--title">
+              <p>
+                Percentage of usable disk space occupied by CockroachDB data at the locality or node.
+              </p>
+              <p>
+                <Anchor
+                  href={capacityMetrics}
+                  target="_blank"
+                >
+                  How is this metric calculated?
+                </Anchor>
+              </p>
+            </div>
+          }
+        >
+          Capacity Use
+        </Tooltip>
+      ),
       render: (_text, record) => Percentage(record.usedCapacity, record.availableCapacity),
       sorter: (a, b) =>
         a.usedCapacity / a.availableCapacity - b.usedCapacity / b.availableCapacity,
@@ -251,7 +404,20 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     },
     {
       key: "memoryUse",
-      title: "memory use",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title={
+            <div className="tooltip__table--title">
+              <p>
+                Percentage of total memory at the locality or node in use by CockroachDB.
+              </p>
+            </div>
+          }
+        >
+          Memory Use
+        </Tooltip>
+      ),
       render: (_text, record) => Percentage(record.usedMemory, record.availableMemory),
       sorter: (a, b) =>
         a.usedMemory / a.availableMemory - b.usedMemory / b.availableMemory,
@@ -260,7 +426,20 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     },
     {
       key: "numCpus",
-      title: "cpus",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title={
+            <div className="tooltip__table--title">
+              <p>
+                Number of vCPUs on the machine.
+              </p>
+            </div>
+          }
+        >
+          CPUs
+        </Tooltip>
+      ),
       dataIndex: "numCpus",
       sorter: true,
       className: "column--align-right",
@@ -269,25 +448,55 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     {
       key: "version",
       dataIndex: "version",
-      title: "version",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title={
+            <div className="tooltip__table--title">
+              <p>
+                Build tag of the CockroachDB version installed on the node.
+              </p>
+            </div>
+          }
+        >
+          Version
+        </Tooltip>
+      ),
       sorter: true,
       width: "8%",
       ellipsis: true,
     },
     {
       key: "status",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title={
+            <div className="tooltip__table--title">
+              <p>
+                Node status can be live, suspect, dead, decommissioning, or decommissioned. Hover over the status for each node to learn more.
+              </p>
+            </div>
+          }
+        >
+          Status
+        </Tooltip>
+      ),
       render: (_text, record) => {
         let badgeText: string;
-        let tooltipText: string;
+        let tooltipText: any;
+        let nodeTooltip: any;
         const badgeType = getBadgeTypeByNodeStatus(record.status);
-
         switch (record.status) {
           case AggregatedNodeStatus.DEAD:
             badgeText = "warning";
+            tooltipText = getStatusDescription(LivenessStatus.DEAD);
+            nodeTooltip = getNodeStatusDescription(record.status);
             break;
           case AggregatedNodeStatus.LIVE:
           case AggregatedNodeStatus.WARNING:
             badgeText = AggregatedNodeStatus[record.status];
+            nodeTooltip = getNodeStatusDescription(record.status);
             break;
           case LivenessStatus.UNKNOWN:
           case LivenessStatus.UNAVAILABLE:
@@ -298,6 +507,17 @@ export class NodeList extends React.Component<LiveNodeListProps> {
             badgeText = LivenessStatus[record.status];
             tooltipText = getStatusDescription(record.status);
             break;
+        }
+        if (!record.nodeId) {
+          return (
+            <Tooltip title={nodeTooltip}>
+              {""}
+              <Badge
+                status={badgeType}
+                text={badgeText}
+              />
+            </Tooltip>
+          );
         }
         return (
           <Badge
@@ -310,7 +530,6 @@ export class NodeList extends React.Component<LiveNodeListProps> {
           />
         );
       },
-      title: "status",
       sorter: (a, b) => a.status - b.status,
       width: "13%",
     },
