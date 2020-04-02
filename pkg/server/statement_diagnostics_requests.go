@@ -11,7 +11,9 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -205,7 +207,12 @@ func (s *statusServer) StatementDiagnostics(
 		if err != nil {
 			return nil, err
 		}
-		diagnostics.Trace = *traceJSONString
+		var prettyJSON bytes.Buffer
+		if err := json.Indent(
+			&prettyJSON, []byte(*traceJSONString), "" /* prefix */, "\t" /* indent */); err != nil {
+			return nil, errors.Wrap(err, "failed to parse JSON")
+		}
+		diagnostics.Trace = prettyJSON.String()
 	}
 
 	diagnosticsProto := diagnostics.toProto()
