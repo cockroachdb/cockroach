@@ -5,7 +5,7 @@ EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE
 ----
 tree    field        description
 ·       distributed  false
-·       vectorized   true
+·       vectorized   false
 norows  ·            ·
 
 query TTT colnames
@@ -13,7 +13,7 @@ EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE NULL
 ----
 tree    field        description
 ·       distributed  false
-·       vectorized   true
+·       vectorized   false
 norows  ·            ·
 
 query TTT colnames
@@ -498,7 +498,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
 ----
 ·     distributed  false        ·       ·
-·     vectorized   true         ·       ·
+·     vectorized   false        ·       ·
 scan  ·            ·            (k, v)  ·
 ·     table        t@primary    ·       ·
 ·     spans        ALL          ·       ·
@@ -537,7 +537,7 @@ query TTT
 EXPLAIN SELECT DISTINCT v FROM t
 ----
 ·          distributed  false
-·          vectorized   true
+·          vectorized   false
 distinct   ·            ·
  │         distinct on  v
  └── scan  ·            ·
@@ -548,7 +548,7 @@ query TTT
 SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1]
 ----
 ·                    distributed  false
-·                    vectorized   true
+·                    vectorized   false
 limit                ·            ·
  │                   offset       1
  └── limit           ·            ·
@@ -566,7 +566,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
 ·                distributed  false       ·                   ·
-·                vectorized   true        ·                   ·
+·                vectorized   false       ·                   ·
 sort             ·            ·           (a, b)              +b
  │               order        +b          ·                   ·
  └── index-join  ·            ·           (a, b)              ·
@@ -655,7 +655,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT 2*count(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND count(k)>1
 ----
 ·            distributed  false     ·               ·
-·            vectorized   true      ·               ·
+·            vectorized   false     ·               ·
 render       ·            ·         (z int, v int)  ·
  │           render 0     (z)[int]  ·               ·
  │           render 1     (v)[int]  ·               ·
@@ -724,7 +724,7 @@ query TTTTT
 EXPLAIN (TYPES) SELECT v FROM t ORDER BY v
 ----
 ·          distributed  false      ·        ·
-·          vectorized   true       ·        ·
+·          vectorized   false      ·        ·
 sort       ·            ·          (v int)  +v
  │         order        +v         ·        ·
  └── scan  ·            ·          (v int)  ·
@@ -1035,7 +1035,7 @@ query TTT
 EXPLAIN SELECT corr(a, b) FROM tc;
 ----
 ·          distributed  false
-·          vectorized   true
+·          vectorized   false
 group      ·            ·
  │         aggregate 0  corr(a, b)
  │         scalar       ·

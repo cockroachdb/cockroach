@@ -232,7 +232,7 @@ func populateExplain(
 		isVec = true
 		if ctxSessionData.VectorizeMode == sessiondata.VectorizeOff {
 			isVec = false
-		} else if !vectorizedThresholdMet && (ctxSessionData.VectorizeMode == sessiondata.Vectorize192Auto || ctxSessionData.VectorizeMode == sessiondata.VectorizeAuto) {
+		} else if !vectorizedThresholdMet && ctxSessionData.VectorizeMode == sessiondata.VectorizeAuto {
 			isVec = false
 		} else {
 			thisNodeID := distSQLPlanner.nodeDesc.NodeID

@@ -81,7 +81,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 ----
 ·                distributed         true                 ·            ·
-·                vectorized          true                 ·            ·
+·                vectorized          false                ·            ·
 render           ·                   ·                    (x, str)     ·
  │               render 0            x                    ·            ·
  │               render 1            str                  ·            ·
@@ -167,7 +167,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res
 ----
 ·                    distributed  true               ·              ·
-·                    vectorized   true               ·              ·
+·                    vectorized   false              ·              ·
 render               ·            ·                  (y, str, res)  ·
  │                   render 0     y                  ·              ·
  │                   render 1     str                ·              ·
@@ -186,7 +186,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res LIMIT 10
 ----
 ·                         distributed  true               ·              ·
-·                         vectorized   true               ·              ·
+·                         vectorized   false              ·              ·
 render                    ·            ·                  (y, str, res)  ·
  │                        render 0     y                  ·              ·
  │                        render 1     str                ·              ·

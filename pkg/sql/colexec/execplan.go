@@ -143,18 +143,8 @@ type NewColOperatorResult struct {
 	// idempotent.
 	ToClose     []IdempotentCloser
 	IsStreaming bool
-	// CanRunInAutoMode returns whether the result can be run in auto mode if
-	// IsStreaming is false. This applies to operators that can spill to disk,
-	// but also operators such as the hash aggregator that buffer, but not
-	// proportionally to the input size (in the hash aggregator's case, it is
-	// the number of distinct groups).
-	// NOTE: if you set this value to 'false' for some operator, make sure to
-	// make the corresponding adjustment to 'isSupported' check so that we can
-	// plan wrapped processor core in the vectorized flow rather than rejecting
-	// the vectorization entirely in 'auto' mode.
-	CanRunInAutoMode bool
-	OpMonitors       []*mon.BytesMonitor
-	OpAccounts       []*mon.BoundAccount
+	OpMonitors  []*mon.BytesMonitor
+	OpAccounts  []*mon.BoundAccount
 }
 
 // resetToState resets r to the state specified in arg. arg may be a shallow
@@ -467,6 +457,10 @@ func (r *NewColOperatorResult) createAndWrapRowSource(
 	spec *execinfrapb.ProcessorSpec,
 	processorConstructor execinfra.ProcessorConstructor,
 ) error {
+	if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto &&
+		spec.Core.JoinReader == nil {
+		return errors.New("rowexec processor wrapping for non-JoinReader core unsupported in vectorize=auto mode")
+	}
 	c, err := wrapRowSources(
 		ctx,
 		flowCtx,
@@ -700,12 +694,6 @@ func NewColOperator(
 					NewAllocator(ctx, hashAggregatorMemAccount), inputs[0], typs, aggFns,
 					aggSpec.GroupCols, aggCols,
 				)
-				// Auto mode is enabled for hashAggregator since it performs online
-				// aggregation. This limits memory growth in the aggregator to be
-				// proportional to the number of distinct groups. hashAggregator does
-				// not spill to disk, but neither does the hashAggregator in the row
-				// execution engine.
-				result.CanRunInAutoMode = true
 			} else {
 				result.Op, err = NewOrderedAggregator(
 					NewAllocator(ctx, streamingMemAccount), inputs[0], typs, aggFns,
@@ -851,9 +839,6 @@ func NewColOperator(
 					},
 					args.TestingKnobs.SpillingCallbackFn,
 				)
-				// A hash joiner can run in auto mode because it falls back to disk if
-				// there is not enough memory available.
-				result.CanRunInAutoMode = true
 			}
 			result.ColumnTypes = append(leftLogTypes, rightLogTypes...)
 
@@ -927,10 +912,6 @@ func NewColOperator(
 				}
 			}
 
-			// Merge joiner can run in auto mode because it falls back to disk if
-			// there is not enough memory available.
-			result.CanRunInAutoMode = true
-
 		case core.Sorter != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
 				return result, err
@@ -948,9 +929,6 @@ func NewColOperator(
 				spec.ProcessorID, post, "", /* memMonitorNamePrefix */
 			)
 			result.ColumnTypes = spec.Input[0].ColumnTypes
-			// A sorter can run in auto mode because it falls back to disk if there
-			// is not enough memory available.
-			result.CanRunInAutoMode = true
 
 		case core.Windower != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
@@ -959,10 +937,6 @@ func NewColOperator(
 			memMonitorsPrefix := "window-"
 			input := inputs[0]
 			result.ColumnTypes = spec.Input[0].ColumnTypes
-			// Most supported window functions can run in auto mode because they are
-			// streaming operators and internally they might use a sorter which can
-			// fall back to disk if needed.
-			canRunInAutoMode := true
 			for _, wf := range core.Windower.WindowFns {
 				var typs []coltypes.T
 				typs, err = typeconv.FromColumnTypes(result.ColumnTypes)
@@ -1046,9 +1020,6 @@ func NewColOperator(
 					if c, ok := result.Op.(IdempotentCloser); ok {
 						result.ToClose = append(result.ToClose, c)
 					}
-					// Relative rank operators are buffering operators, and we
-					// are not comfortable running them with `auto` mode.
-					canRunInAutoMode = false
 				default:
 					return result, errors.AssertionFailedf("window function %s is not supported", wf.String())
 				}
@@ -1071,7 +1042,6 @@ func NewColOperator(
 				result.ColumnTypes = append(result.ColumnTypes, *returnType)
 				input = result.Op
 			}
-			result.CanRunInAutoMode = canRunInAutoMode
 
 		default:
 			return result, errors.Newf("unsupported processor core %q", core)
