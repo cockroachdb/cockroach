@@ -50,7 +50,7 @@ var backpressureRangeSizeMultiplier = settings.RegisterValidatedFloatSetting(
 // is reduced by roughly exactly the multiplier then we'd potentially have
 // lots of ranges in this state.
 //
-// We additionally mitigate this situation further by:
+// We additionally mitigate this situation further by doing the following:
 //
 //  1) We store in-memory on each replica the largest zone configuration range
 //     size (largestPreviousMaxRangeBytes) we've seen and we do not backpressure
@@ -59,8 +59,6 @@ var backpressureRangeSizeMultiplier = settings.RegisterValidatedFloatSetting(
 //     the current max range size. This mitigation alone is insufficient because
 //     a node may restart before the splitting has concluded, leaving the
 //     cluster in a state of backpressure.
-//
-// TODO(ajwerner): We could mitigate this even further by:
 //
 //  2) We assign a higher priority in the snapshot queue to ranges which are
 //     currently backpressuring than ranges which are larger but are not

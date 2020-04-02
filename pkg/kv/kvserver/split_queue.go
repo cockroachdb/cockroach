@@ -90,7 +90,11 @@ func newSplitQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *splitQueue {
 }
 
 func shouldSplitRange(
-	desc *roachpb.RangeDescriptor, ms enginepb.MVCCStats, maxBytes int64, sysCfg *config.SystemConfig,
+	desc *roachpb.RangeDescriptor,
+	ms enginepb.MVCCStats,
+	maxBytes int64,
+	shouldBackpressureWrites bool,
+	sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	if sysCfg.NeedsSplit(desc.StartKey, desc.EndKey) {
 		// Set priority to 1 in the event the range is split by zone configs.
@@ -105,6 +109,22 @@ func shouldSplitRange(
 		shouldQ = true
 	}
 
+	// additionalPriorityDueToBackpressure is a mechanism to prioritize splitting
+	// ranges which will actively backpressure writes.
+	//
+	// NB: This additional weight is totally arbitrary. The priority in the split
+	// queue is usually 1 plus the ratio of the current size over the max size.
+	// When a range is much larger than it is allowed to be given the
+	// backpressureRangeSizeMultiplier and the zone config, backpressure is
+	// not going to be applied because of the backpressureByteTolerance (see the
+	// comment there for more details). However, when the range size is close to
+	// the limit, we will backpressure. We strongly prefer to split over
+	// backpressure.
+	const additionalPriorityDueToBackpressure = 50
+	if shouldQ && shouldBackpressureWrites {
+		priority += additionalPriorityDueToBackpressure
+	}
+
 	return shouldQ, priority
 }
 
@@ -116,7 +136,7 @@ func (sq *splitQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	shouldQ, priority = shouldSplitRange(repl.Desc(), repl.GetMVCCStats(),
-		repl.GetMaxBytes(), sysCfg)
+		repl.GetMaxBytes(), repl.shouldBackpressureWrites(), sysCfg)
 
 	if !shouldQ && repl.SplitByLoadEnabled() {
 		if splitKey := repl.loadBasedSplitter.MaybeSplitKey(timeutil.Now()); splitKey != nil {
