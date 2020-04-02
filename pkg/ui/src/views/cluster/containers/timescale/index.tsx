@@ -18,6 +18,7 @@ import { refreshNodes } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import * as timewindow from "src/redux/timewindow";
 import { INodeStatus } from "src/util/proto";
+import { trackTimeFrameChange } from "src/util/analytics";
 import Dropdown, { ArrowDirection, DropdownOption } from "src/views/shared/components/dropdown";
 import TimeFrameControls from "../../components/controls";
 import RangeSelect, { DateTypes } from "../../components/range";
@@ -82,14 +83,17 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
 
     switch (direction) {
       case ArrowDirection.RIGHT:
+        trackTimeFrameChange("next frame");
         if (windowEnd) {
           windowEnd = windowEnd.add(seconds, "seconds");
         }
         break;
       case ArrowDirection.LEFT:
+        trackTimeFrameChange("previous frame");
         windowEnd = windowEnd.subtract(seconds, "seconds");
         break;
       case ArrowDirection.CENTER:
+        trackTimeFrameChange("now");
         windowEnd = moment.utc();
         break;
       default:
