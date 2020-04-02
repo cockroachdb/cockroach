@@ -369,29 +369,8 @@ func startGCJob(
 	details jobspb.SchemaChangeGCDetails,
 ) error {
 	var sj *jobs.StartableJob
-	descriptorIDs := make([]sqlbase.ID, 0)
-	if len(details.Indexes) > 0 {
-		if len(descriptorIDs) == 0 {
-			descriptorIDs = []sqlbase.ID{details.ParentID}
-		}
-	} else if len(details.Tables) > 0 {
-		for _, table := range details.Tables {
-			descriptorIDs = append(descriptorIDs, table.ID)
-		}
-	} else {
-		// Nothing to GC.
-		return nil
-	}
-
+	jobRecord := CreateGCJobRecord(schemaChangeDescription, username, details)
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		jobRecord := jobs.Record{
-			Description:   fmt.Sprintf("GC for %s", schemaChangeDescription),
-			Username:      username,
-			DescriptorIDs: descriptorIDs,
-			Details:       details,
-			Progress:      jobspb.SchemaChangeGCProgress{},
-			NonCancelable: true,
-		}
 		var err error
 		if sj, err = jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn, nil /* resultCh */); err != nil {
 			return err
@@ -404,16 +383,6 @@ func startGCJob(
 		return err
 	}
 	return nil
-}
-
-func (sc *SchemaChanger) startGCJob(
-	ctx context.Context, details jobspb.SchemaChangeGCDetails, isRollback bool,
-) error {
-	description := sc.job.Payload().Description
-	if isRollback {
-		description = "ROLLBACK of " + description
-	}
-	return startGCJob(ctx, sc.db, sc.jobRegistry, sc.job.Payload().Username, description, details)
 }
 
 // Execute the entire schema change in steps.
@@ -467,7 +436,9 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 				},
 			},
 		}
-		if err := sc.startGCJob(ctx, gcDetails, false /* isRollback */); err != nil {
+		if err := startGCJob(
+			ctx, sc.db, sc.jobRegistry, sc.job.Payload().Username, sc.job.Payload().Description, gcDetails,
+		); err != nil {
 			return err
 		}
 	}
@@ -826,6 +797,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 		}
 	}
 
+	var indexGCJob *jobs.StartableJob
 	update := func(txn *kv.Txn, descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
 		// Reset vars here because update function can be called multiple times in a retry.
 		isRollback = false
@@ -864,7 +836,14 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 						},
 						ParentID: sc.tableID,
 					}
-					if err := sc.startGCJob(ctx, indexGCDetails, isRollback); err != nil {
+
+					description := sc.job.Payload().Description
+					if isRollback {
+						description = "ROLLBACK of " + description
+					}
+					gcJobRecord := CreateGCJobRecord(description, sc.job.Payload().Username, indexGCDetails)
+					indexGCJob, err = sc.jobRegistry.CreateStartableJobWithTxn(ctx, gcJobRecord, txn, nil /* resultsCh */)
+					if err != nil {
 						return err
 					}
 				}
@@ -1001,6 +980,15 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 	})
 	if err != nil {
 		return nil, err
+	}
+	// TODO (lucy): Can we do the same thing with the PK drop index job?
+	if indexGCJob != nil {
+		log.VEventf(ctx, 2, "attempting to start GC job %d", *indexGCJob.ID())
+		if _, err := indexGCJob.Start(ctx); err != nil {
+			// TODO (lucy): Should we be returning the error here? Presumably if this
+			// fails, the job was still created and can be adopted later.
+			log.Warningf(ctx, "starting GC job %d failed with error: %s", *indexGCJob.ID(), err)
+		}
 	}
 	return descs[sc.tableID], nil
 }
@@ -1400,6 +1388,31 @@ func (sc *SchemaChanger) reverseMutation(
 	return mutation, columns
 }
 
+// CreateGCJobRecord creates the job record for a GC job, setting some
+// properties which are common for all GC jobs.
+func CreateGCJobRecord(
+	originalDescription string, username string, details jobspb.SchemaChangeGCDetails,
+) jobs.Record {
+	descriptorIDs := make([]sqlbase.ID, 0)
+	if len(details.Indexes) > 0 {
+		if len(descriptorIDs) == 0 {
+			descriptorIDs = []sqlbase.ID{details.ParentID}
+		}
+	} else if len(details.Tables) > 0 {
+		for _, table := range details.Tables {
+			descriptorIDs = append(descriptorIDs, table.ID)
+		}
+	}
+	return jobs.Record{
+		Description:   fmt.Sprintf("GC for %s", originalDescription),
+		Username:      username,
+		DescriptorIDs: descriptorIDs,
+		Details:       details,
+		Progress:      jobspb.SchemaChangeGCProgress{},
+		NonCancelable: true,
+	}
+}
+
 // GCJobTestingKnobs is for testing the Schema Changer GC job.
 // Note that this is defined here for testing purposes to avoid cyclic
 // dependencies.
@@ -1597,6 +1610,11 @@ func (r schemaChangeResumer) Resume(
 	// If a database is being dropped, handle this separately by draining names
 	// for all the tables.
 	if details.DroppedDatabaseID != sqlbase.InvalidID {
+		// If the database is empty, the zone config for it was already GC'ed and
+		// there's nothing left to do.
+		if len(details.DroppedTables) == 0 {
+			return nil
+		}
 		for i := range details.DroppedTables {
 			droppedTable := &details.DroppedTables[i]
 			if err := execSchemaChange(droppedTable.ID, sqlbase.InvalidMutationID, details.DroppedDatabaseID); err != nil {
