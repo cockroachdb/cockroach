@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math/rand"
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -301,7 +302,7 @@ var versionUpgradeTestFeatures = []versionFeatureTest{
 }
 
 const (
-	baseVersion = "v1.0.6"
+	baseVersion = "v19.1.5" // see createCheckpoints below if you want to bump this
 	headVersion = "HEAD"
 )
 
@@ -320,22 +321,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 	// cluster.preserve_downgrade_option cluster setting in this test.
 
 	u := newVersionUpgradeTest(c, versionUpgradeTestFeatures,
-		// v1.1.0 is the first binary version that knows about cluster versions.
-		binaryUpgradeStep("v1.1.9"),
-		versionUpgradeStep("1.1"),
-
-		binaryUpgradeStep("v2.0.7"),
-		versionUpgradeStep("2.0"),
-
-		binaryUpgradeStep("v2.1.2"),
-		versionUpgradeStep("2.1"),
-
-		// From now on, all version upgrade steps pass an empty version which
-		// means the test will look it up from node_executable_version().
-
-		binaryUpgradeStep("v19.1.5"),
-		versionUpgradeStep(""),
-
+		// NB: before the first step, cluster and binary version equals baseVersion.
 		binaryUpgradeStep("v19.2.1"),
 		versionUpgradeStep(""),
 
@@ -365,33 +351,35 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 //   mv artifacts/acceptance/version-upgrade/run_1/${i}.logs/checkpoint-*.tgz \
 //     pkg/cmd/roachtest/fixtures/${i}/
 // done
-const createCheckpoints = true
+const createCheckpoints = false
 
 func (u *versionUpgradeTest) run(ctx context.Context, t *test) {
 	if createCheckpoints {
-		_ = u.uploadVersion(ctx, t, headVersion) // HACK
+		// We rely on cockroach-HEAD to create checkpoint, so upload it early.
+		_ = u.uploadVersion(ctx, t, headVersion)
 	}
 
-	args := u.uploadVersion(ctx, t, baseVersion)
-	// Hack to skip initializing settings which doesn't work on very old versions
-	// of cockroach.
 	c := u.c
-	c.Run(ctx, c.Node(1), "mkdir -p {store-dir} && touch {store-dir}/settings-initialized")
-	c.Start(ctx, t, c.All(), args, startArgsDontEncrypt)
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()
 
-	if err := createLotsaTables(db); err != nil {
-		t.Fatal(err)
+	// Load baseVersion fixture. That fixture's cluster version may be
+	// at the predecessor version, so add a versionUpgradeStep to make
+	// sure we're actually running at baseVersion before moving on.
+	//
+	// See the comment on createCheckpoints for details on fixtures.
+	initSteps := []versionStep{
+		loadCheckpointFixtureStep(baseVersion),
+		uploadAndstartStep(baseVersion),
+		versionUpgradeStep(""), // baseVersion
+	}
+	for _, step := range initSteps {
+		step.run(ctx, t, u)
 	}
 
 	for _, node := range c.All() {
 		u.checkNode(ctx, t, node, baseVersion)
-	}
-
-	if err := setupEnsureObjectAccess(db); err != nil {
-		t.Fatal(err)
 	}
 
 	for _, step := range u.steps {
@@ -424,6 +412,8 @@ func newVersionUpgradeTest(
 		features: features,
 	}
 }
+
+func checkpointName(binaryVersion string) string { return "checkpoint-" + binaryVersion }
 
 func (u *versionUpgradeTest) uploadVersion(ctx context.Context, t *test, newVersion string) option {
 	var binary string
@@ -510,6 +500,35 @@ type versionStep struct {
 	run            func(ctx context.Context, t *test, u *versionUpgradeTest)
 }
 
+func loadCheckpointFixtureStep(version string) versionStep {
+	return versionStep{
+		clusterVersion: "",
+		run: func(ctx context.Context, t *test, u *versionUpgradeTest) {
+			nodes := u.c.All()
+			u.c.Run(ctx, nodes, "mkdir", "-p", "{store-dir}")
+			name := checkpointName(version)
+			for _, i := range nodes {
+				u.c.Put(ctx,
+					"pkg/cmd/roachtest/fixtures/"+strconv.Itoa(i)+"/"+name+".tgz",
+					"{store-dir}/fixture.tgz", u.c.Node(i),
+				)
+			}
+			// Extract fixture. Fail if there's already an LSM in the store dir.
+			u.c.Run(ctx, nodes, "cd {store-dir} && [ ! -f {store-dir}/CURRENT ] && tar -xf fixture.tgz")
+		},
+	}
+}
+
+func uploadAndstartStep(v string) versionStep {
+	return versionStep{
+		run: func(ctx context.Context, t *test, u *versionUpgradeTest) {
+			args := u.uploadVersion(ctx, t, v)
+			// NB: can't start sequentially since cluster already bootstrapped.
+			u.c.Start(ctx, t, u.c.All(), args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
+		},
+	}
+}
+
 // binaryUpgradeStep performs a rolling upgrade of the specified nodes in
 // the cluster.
 func binaryUpgradeStep(newVersion string) versionStep {
@@ -554,11 +573,11 @@ func binaryUpgradeStep(newVersion string) versionStep {
 				// cluster version might be 2.0, so we can only use the 2.0 or
 				// 2.1 binary, but not the 19.1 binary (as 19.1 and 2.0 are not
 				// compatible).
+				name := checkpointName(newVersion)
 				c.Stop(ctx, nodes)
-				checkpointName := "checkpoint-" + newVersion
 				c.Run(ctx, c.All(), "./cockroach-HEAD", "debug", "rocksdb", "--db={store-dir}",
-					"checkpoint", "--checkpoint_dir={store-dir}/"+checkpointName)
-				c.Run(ctx, c.All(), "tar", "-C", "{store-dir}/"+checkpointName, "-czf", "{log-dir}/"+checkpointName+".tgz", ".")
+					"checkpoint", "--checkpoint_dir={store-dir}/"+name)
+				c.Run(ctx, c.All(), "tar", "-C", "{store-dir}/"+name, "-czf", "{log-dir}/"+name+".tgz", ".")
 				c.Start(ctx, t, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
 			}
 		},
@@ -653,44 +672,15 @@ func versionUpgradeStep(newVersion string) versionStep {
 	}
 }
 
-// TODO(tbg): make this a step that runs only once, at the very beginning.
-func createLotsaTables(db *gosql.DB) error {
-	// Create a bunch of tables, over the batch size on which some migrations
-	// operate. It generally seems like a good idea to have a bunch of tables in
-	// the cluster, and we had a bug about migrations on large numbers of tables:
-	// #22370.
-	if _, err := db.Exec(fmt.Sprintf("create database lotsatables")); err != nil {
-		return err
-	}
-	for i := 0; i < 100; i++ {
-		_, err := db.Exec(fmt.Sprintf("create table lotsatables.t%d (x int primary key)", i))
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// TODO(tbg): fold this and ensureObjectAccess together into a feature test, where
-// the setup runs only once and the other one runs every time.
-func setupEnsureObjectAccess(db *gosql.DB) error {
-	// setupEnsureObjectAccess creates a db/table the first time, before
-	// the upgrade sequence starts. This is done to create the db/table without
-	// relying on "if not exists" modifier.
-	_, err := db.Exec(fmt.Sprintf("create database persistent_db"))
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(fmt.Sprintf("create table persistent_db.persistent_table(a int)"))
-	return err
-}
-
 func ensureObjectAccess(ctx context.Context, t *test, db *gosql.DB) error {
-	// run the setup function to create a db with one table before the upgrade
-	// sequence begins. After each step, we should be able to successfully select
+	// We should be able to successfully select
 	// from the objects using their FQNs. Prevents bugs such as #43141, where
 	// databases created before the migration were inaccessible after the
 	// migration.
+	//
+	// NB: the table has been baked into the fixtures. Originally created via:
+	//   create database persistent_db
+	//   create table persistent_db.persistent_table(a int)"))
 	var cv string
 	if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&cv); err != nil {
 		return err
