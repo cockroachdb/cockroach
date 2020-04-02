@@ -909,12 +909,15 @@ WHERE EXISTS (
 project
  ├── columns: "?column?":22!null
  ├── fd: ()-->(22)
- ├── semi-join-apply
- │    ├── columns: s:4
- │    ├── scan a
- │    │    └── columns: s:4
+ ├── semi-join (cross)
+ │    ├── columns: s:4!null
+ │    ├── select
+ │    │    ├── columns: s:4!null
+ │    │    ├── scan a
+ │    │    │    └── columns: s:4
+ │    │    └── filters
+ │    │         └── s:4 >= 'foo' [outer=(4), constraints=(/4: [/'foo' - ]; tight)]
  │    ├── inner-join (cross)
- │    │    ├── outer: (4)
  │    │    ├── inner-join (cross)
  │    │    │    ├── select
  │    │    │    │    ├── scan xy
@@ -945,17 +948,20 @@ project
  │    │    │    │              │              └── columns: s:19
  │    │    │    │              └── 'foo'
  │    │    │    └── filters (true)
- │    │    ├── limit
- │    │    │    ├── outer: (4)
- │    │    │    ├── cardinality: [0 - 10]
- │    │    │    ├── select
- │    │    │    │    ├── outer: (4)
- │    │    │    │    ├── limit hint: 10.00
- │    │    │    │    ├── scan b
- │    │    │    │    │    └── limit hint: 10.00
- │    │    │    │    └── filters
- │    │    │    │         └── s:4 >= 'foo' [outer=(4), constraints=(/4: [/'foo' - ]; tight)]
- │    │    │    └── 10
+ │    │    ├── select
+ │    │    │    ├── scan b
+ │    │    │    └── filters
+ │    │    │         └── eq [subquery]
+ │    │    │              ├── subquery
+ │    │    │              │    └── max1-row
+ │    │    │              │         ├── columns: s:19
+ │    │    │              │         ├── error: "more than one row returned by a subquery used as an expression"
+ │    │    │              │         ├── cardinality: [0 - 1]
+ │    │    │              │         ├── key: ()
+ │    │    │              │         ├── fd: ()-->(19)
+ │    │    │              │         └── scan a
+ │    │    │              │              └── columns: s:19
+ │    │    │              └── 'foo'
  │    │    └── filters (true)
  │    └── filters (true)
  └── projections

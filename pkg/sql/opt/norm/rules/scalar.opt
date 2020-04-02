@@ -104,7 +104,7 @@
 [EliminateExistsGroupBy, Normalize]
 (Exists (GroupBy | DistinctOn $input:*) $subqueryPrivate:*) => (Exists $input $subqueryPrivate)
 
-# ExistsLimit inserts a LIMIT 1 "under" Exists so as to save resources
+# IntroduceExistsLimit inserts a LIMIT 1 "under" Exists so as to save resources
 # to make the EXISTS determination.
 #
 # This rule uses and sets a boolean "WasLimited" on the Exists
@@ -112,14 +112,14 @@
 # rule expands to an Exists pattern that's also a valid input pattern
 # and it would recurse otherwise.
 #
-# We avoid this rule if the query is decorrelated because the
-# decorrelation rules get confused by the presence of a limit.
-# (It will be worth re-considering this when a general-purpose apply
-# operator is supported - in that case it can be definitely worthwhile
-# pushing down a LIMIT 1 to limit the amount of work done on every row.)
+# We avoid this rule if the query is correlated because the decorrelation rules
+# get confused by the presence of a limit. (It will be worth re-considering this
+# when a general-purpose apply operator is supported - in that case it can be
+# definitely worthwhile pushing down a LIMIT 1 to limit the amount of work done
+# on every row.)
 [IntroduceExistsLimit, Normalize]
 (Exists
-    $input:^(Project | GroupBy | DistinctOn) & ^(HasOuterCols $input) & ^(HasZeroOrOneRow $input)
+    $input:* & ^(HasOuterCols $input) & ^(HasZeroOrOneRow $input)
     $subqueryPrivate:* & ^(IsLimited $subqueryPrivate)
 )
 =>
@@ -128,6 +128,27 @@
     (MakeLimited $subqueryPrivate)
 )
 
+# EliminateExistsLimit discards a Limit operator with a positive limit inside an
+# Exist operator.
+#
+# The Limit operator prevents decorrelation rules from being applied. By
+# discarding the Limit, which is a no-op inside of Exist operators, the query
+# can be decorrelated into a more efficient SemiJoin or AntiJoin.
+#
+# Note that this rule uses HasOuterCols to ensure that it only matches
+# correlated Exists subqueries. There is no need to discard limits from
+# non-correlated Exists subqueries. Limits are preferred for non-correlated
+# Exists subqueries. See IntroduceExistsLimit above for details.
+[EliminateExistsLimit, Normalize]
+(Exists
+    (Limit
+        $input:* & (HasOuterCols $input)
+        (Const $limit:*) & (IsPositiveLimit $limit)
+    )
+    $subqueryPrivate:*
+)
+=>
+(Exists $input $subqueryPrivate)
 
 # NormalizeJSONFieldAccess transforms field access into a containment with a
 # simpler LHS. This allows inverted index constraints to be generated in some

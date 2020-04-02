@@ -378,6 +378,151 @@ select
                 └── 1
 
 # --------------------------------------------------
+# IntroduceExistsLimit
+# --------------------------------------------------
+norm expect=IntroduceExistsLimit
+SELECT * FROM a WHERE EXISTS(SELECT i FROM a)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters
+      └── exists [subquery]
+           └── limit
+                ├── columns: i:8
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(8)
+                ├── scan a
+                │    ├── columns: i:8
+                │    └── limit hint: 1.00
+                └── 1
+
+# Don't introduce a limit on correlated subqueries (when HasOuterCols is true).
+norm expect-not=IntroduceExistsLimit
+SELECT * FROM a a1 WHERE EXISTS(SELECT i FROM a a2 where a1.i = a2.i)
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a1
+ │    ├── columns: a1.k:1!null a1.i:2 a1.f:3 a1.s:4 a1.j:5 a1.arr:6
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ ├── scan a2
+ │    └── columns: a2.i:8
+ └── filters
+      └── a1.i:2 = a2.i:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+
+# Don't introduce a limit when the subquery has one row.
+norm expect-not=IntroduceExistsLimit
+SELECT * FROM a WHERE EXISTS(SELECT * FROM (VALUES (1)))
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters
+      └── exists [subquery]
+           └── values
+                ├── columns: column1:7!null
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(7)
+                └── (1,)
+
+# --------------------------------------------------
+# EliminateExistsLimit
+# --------------------------------------------------
+norm expect=EliminateExistsLimit
+SELECT * FROM a a1 WHERE EXISTS(SELECT i FROM a a2 where a1.i = a2.i LIMIT 1)
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a1
+ │    ├── columns: a1.k:1!null a1.i:2 a1.f:3 a1.s:4 a1.j:5 a1.arr:6
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ ├── scan a2
+ │    └── columns: a2.i:8
+ └── filters
+      └── a1.i:2 = a2.i:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+
+norm expect=EliminateExistsLimit
+SELECT * FROM a a1 WHERE NOT EXISTS(SELECT i FROM a a2 where a1.i = a2.i LIMIT 1)
+----
+anti-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a1
+ │    ├── columns: a1.k:1!null a1.i:2 a1.f:3 a1.s:4 a1.j:5 a1.arr:6
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ ├── scan a2
+ │    └── columns: a2.i:8
+ └── filters
+      └── a1.i:2 = a2.i:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+
+# Don't eliminate a non-positive limit.
+norm expect-not=EliminateExistsLimit
+SELECT * FROM a a1 WHERE EXISTS(SELECT i FROM a a2 where a1.i = a2.i LIMIT 0)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a1
+ │    ├── columns: a1.k:1!null a1.i:2 a1.f:3 a1.s:4 a1.j:5 a1.arr:6
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters
+      └── exists [subquery]
+           └── values
+                ├── columns: a2.i:8!null
+                ├── cardinality: [0 - 0]
+                ├── key: ()
+                └── fd: ()-->(8)
+
+# Don't eliminate a limit from a non-correlated subquery.
+norm expect-not=EliminateExistsLimit
+SELECT * FROM a WHERE EXISTS(SELECT * FROM a LIMIT 1)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters
+      └── exists [subquery]
+           └── limit
+                ├── columns: k:7!null i:8 f:9 s:10 j:11 arr:12
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(7-12)
+                ├── scan a
+                │    ├── columns: k:7!null i:8 f:9 s:10 j:11 arr:12
+                │    ├── key: (7)
+                │    ├── fd: (7)-->(8-12)
+                │    └── limit hint: 1.00
+                └── 1
+
+# --------------------------------------------------
 # NormalizeJSONFieldAccess
 # --------------------------------------------------
 norm expect=NormalizeJSONFieldAccess
