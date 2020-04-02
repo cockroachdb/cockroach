@@ -465,20 +465,13 @@ project
       │              │    │         │    ├── true
       │              │    │         │    ├── when
       │              │    │         │    │    ├── exists
-      │              │    │         │    │    │    └── limit
+      │              │    │         │    │    │    └── select
       │              │    │         │    │    │         ├── columns: ref_1.config_yaml:10!null
       │              │    │         │    │    │         ├── outer: (6)
-      │              │    │         │    │    │         ├── cardinality: [0 - 52]
-      │              │    │         │    │    │         ├── select
-      │              │    │         │    │    │         │    ├── columns: ref_1.config_yaml:10!null
-      │              │    │         │    │    │         │    ├── outer: (6)
-      │              │    │         │    │    │         │    ├── limit hint: 52.00
-      │              │    │         │    │    │         │    ├── scan ref_1
-      │              │    │         │    │    │         │    │    ├── columns: ref_1.config_yaml:10!null
-      │              │    │         │    │    │         │    │    └── limit hint: 52.00
-      │              │    │         │    │    │         │    └── filters
-      │              │    │         │    │    │         │         └── c0:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
-      │              │    │         │    │    │         └── 52
+      │              │    │         │    │    │         ├── scan ref_1
+      │              │    │         │    │    │         │    └── columns: ref_1.config_yaml:10!null
+      │              │    │         │    │    │         └── filters
+      │              │    │         │    │    │              └── c0:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
       │              │    │         │    │    └── version()
       │              │    │         │    └── version()
       │              │    │         └── current_date()
