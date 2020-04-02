@@ -298,11 +298,7 @@ func NewColOperator(
 			result.ColumnTypes = make([]types.T, 0)
 			break
 		}
-		if len(aggSpec.GroupCols) == 0 &&
-			len(aggSpec.Aggregations) == 1 &&
-			aggSpec.Aggregations[0].FilterColIdx == nil &&
-			aggSpec.Aggregations[0].Func == execinfrapb.AggregatorSpec_COUNT_ROWS &&
-			!aggSpec.Aggregations[0].Distinct {
+		if aggSpec.IsRowCount() {
 			result.Op, result.IsStreaming, err = NewCountOp(inputs[0]), true, nil
 			result.ColumnTypes = []types.T{*types.Int}
 			break
@@ -393,11 +389,11 @@ func NewColOperator(
 		}
 		if needHash {
 			result.Op, err = NewHashAggregator(
-				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
+				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, aggSpec.IsScalar(),
 			)
 		} else {
 			result.Op, err = NewOrderedAggregator(
-				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, execinfrapb.IsScalarAggregate(aggSpec),
+				inputs[0], typs, aggFns, aggSpec.GroupCols, aggCols, aggSpec.IsScalar(),
 			)
 			result.IsStreaming = true
 		}

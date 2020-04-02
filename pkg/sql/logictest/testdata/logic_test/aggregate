@@ -1844,3 +1844,12 @@ statement ok
 SELECT DISTINCT ON (b) b
 FROM t44469_a INNER LOOKUP JOIN t44469_b ON a = b INNER LOOKUP JOIN t44469_cd ON c = 1 AND d = a
 ORDER BY b
+
+# Regression test for #45453 - make sure that we don't incorrectly treat the
+# aggregation as scalar.
+statement ok
+CREATE TABLE t45453(c INT)
+
+query I
+SELECT count(*) FROM t45453 GROUP BY 0 + 0
+----
