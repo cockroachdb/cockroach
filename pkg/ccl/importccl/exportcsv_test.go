@@ -9,9 +9,12 @@
 package importccl_test
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -195,6 +198,49 @@ func TestExportOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if expected, got := "3,32,1,34\n2,22,2,24\n", string(content); expected != got {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
+
+func TestExportOrderCompressed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+
+	var close = func(c io.Closer) {
+		if err := c.Close(); err != nil {
+			t.Fatalf("failed to close stream, got error %s", err)
+		}
+	}
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `create table foo (i int primary key, x int, y int, z int, index (y))`)
+	sqlDB.Exec(t, `insert into foo values (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
+
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/order' with compression = gzip from select * from foo order by y asc limit 2`)
+	fi, err := os.Open(filepath.Join(dir, "order", "n1.0.csv.gz"))
+	defer close(fi)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gzipReader, err := gzip.NewReader(fi)
+	defer close(gzipReader)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	content, err := ioutil.ReadAll(gzipReader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	if expected, got := "3,32,1,34\n2,22,2,24\n", string(content); expected != got {
 		t.Fatalf("expected %q, got %q", expected, got)
 	}

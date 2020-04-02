@@ -12,9 +12,12 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -28,9 +31,10 @@ type exportNode struct {
 
 	source planNode
 
-	fileName  string
-	csvOpts   roachpb.CSVOptions
-	chunkSize int
+	fileName        string
+	csvOpts         roachpb.CSVOptions
+	chunkSize       int
+	fileCompression execinfrapb.FileCompression
 }
 
 func (e *exportNode) startExec(params runParams) error {
@@ -50,22 +54,25 @@ func (e *exportNode) Close(ctx context.Context) {
 }
 
 const (
-	exportOptionDelimiter = "delimiter"
-	exportOptionNullAs    = "nullas"
-	exportOptionChunkSize = "chunk_rows"
-	exportOptionFileName  = "filename"
+	exportOptionDelimiter   = "delimiter"
+	exportOptionNullAs      = "nullas"
+	exportOptionChunkSize   = "chunk_rows"
+	exportOptionFileName    = "filename"
+	exportOptionCompression = "compression"
 )
 
 var exportOptionExpectValues = map[string]KVStringOptValidate{
-	exportOptionChunkSize: KVStringOptRequireValue,
-	exportOptionDelimiter: KVStringOptRequireValue,
-	exportOptionFileName:  KVStringOptRequireValue,
-	exportOptionNullAs:    KVStringOptRequireValue,
+	exportOptionChunkSize:   KVStringOptRequireValue,
+	exportOptionDelimiter:   KVStringOptRequireValue,
+	exportOptionFileName:    KVStringOptRequireValue,
+	exportOptionNullAs:      KVStringOptRequireValue,
+	exportOptionCompression: KVStringOptRequireValue,
 }
 
 const exportChunkSizeDefault = 100000
 const exportFilePatternPart = "%part%"
 const exportFilePatternDefault = exportFilePatternPart + ".csv"
+const exportCompressionCodec = "gzip"
 
 // ConstructExport is part of the exec.Factory interface.
 func (ef *execFactory) ConstructExport(
@@ -117,10 +124,22 @@ func (ef *execFactory) ConstructExport(
 		}
 	}
 
+	// Check whenever compression is expected and extract compression codec name in case
+	// of positive result
+	var codec execinfrapb.FileCompression
+	if name, ok := optVals[exportOptionCompression]; ok && len(name) != 0 {
+		if strings.EqualFold(name, exportCompressionCodec) {
+			codec = execinfrapb.FileCompression_Gzip
+		} else {
+			return nil, pgerror.New(pgcode.InvalidParameterValue, fmt.Sprintf("unsupported compression codec %s", name))
+		}
+	}
+
 	return &exportNode{
-		source:    input.(planNode),
-		fileName:  string(*fileNameStr),
-		csvOpts:   csvOpts,
-		chunkSize: chunkSize,
+		source:          input.(planNode),
+		fileName:        string(*fileNameStr),
+		csvOpts:         csvOpts,
+		chunkSize:       chunkSize,
+		fileCompression: codec,
 	}, nil
 }
