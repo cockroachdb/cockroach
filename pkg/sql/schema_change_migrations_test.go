@@ -137,6 +137,13 @@ func checkBlockedSchemaChange(
 	}
 }
 
+type testCase struct {
+	blockState       BlockState
+	shouldCancel     bool
+	schemaChangeType SchemaChangeType
+	schemaChange     string
+}
+
 // testSchemaChangeMigrations tests that a schema change can be migrated after
 // being blocked in a certain state.
 //
@@ -155,21 +162,23 @@ func testSchemaChangeMigrations(
 	shouldCancel bool,
 	schemaChange string,
 ) {
+	testCase := testCase{
+		blockState:       blockState,
+		shouldCancel:     shouldCancel,
+		schemaChangeType: schemaChangeType,
+		schemaChange:     schemaChange,
+	}
 	ctx := context.Background()
 	blockCh := make(chan struct{})
-	migrationDoneCh := make(chan struct{})
 	shouldBlockMigration := false
 	blockFnErrChan := make(chan error, 1)
+	migrationDoneCh, signalMigrationDone := makeCondSignal(&shouldBlockMigration)
 	runner, sqlDB, tc := setupServerAndStartSchemaChange(
 		t,
 		blockFnErrChan,
-		blockState,
-		schemaChangeType,
-		shouldCancel,
-		schemaChange,
-		&shouldBlockMigration,
+		testCase,
 		blockCh,
-		migrationDoneCh,
+		signalMigrationDone,
 	)
 	defer tc.Stopper().Stop(context.TODO())
 	defer disableGCTTLStrictEnforcement(t, sqlDB)()
@@ -210,15 +219,22 @@ func testSchemaChangeMigrations(
 	verifySchemaChangeJobRan(t, runner, schemaChange, schemaChangeType, blockState, shouldCancel)
 }
 
+func makeCondSignal(shouldSignal *bool) (chan struct{}, func()) {
+	signalCh := make(chan struct{})
+	signalFn := func() {
+		if *shouldSignal {
+			signalCh <- struct{}{}
+		}
+	}
+	return signalCh, signalFn
+}
+
 func setupServerAndStartSchemaChange(
 	t *testing.T,
 	errCh chan error,
-	blockState BlockState,
-	schemaChangeType SchemaChangeType,
-	shouldCancel bool,
-	schemaChange string,
-	shouldBlockMigration *bool,
-	blockCh, migrationDoneCh chan struct{},
+	testCase testCase,
+	blockCh chan struct{},
+	signalMigrationDone func(),
 ) (*sqlutils.SQLRunner, *gosql.DB, serverutils.TestClusterInterface) {
 	clusterSize := 3
 	params, _ := tests.CreateTestServerParams()
@@ -227,12 +243,12 @@ func setupServerAndStartSchemaChange(
 	var registry *jobs.Registry
 	blockSchemaChanges := false
 	migrateJob := func(jobID int64) {
-		if blockState == WaitingForGC {
-			if err := migrateGCJobToOldFormat(kvDB, registry, jobID, schemaChangeType); err != nil {
+		if testCase.blockState == WaitingForGC {
+			if err := migrateGCJobToOldFormat(kvDB, registry, jobID, testCase.schemaChangeType); err != nil {
 				errCh <- err
 			}
 		} else {
-			if err := migrateJobToOldFormat(kvDB, registry, jobID, schemaChangeType); err != nil {
+			if err := migrateJobToOldFormat(kvDB, registry, jobID, testCase.schemaChangeType); err != nil {
 				errCh <- err
 			}
 		}
@@ -244,7 +260,7 @@ func setupServerAndStartSchemaChange(
 						job_id = $1
 				)`, jobID)
 	}
-	setupTestingKnobs(t, blockState, schemaChangeType, shouldCancel, &params, &blockSchemaChanges, shouldBlockMigration, blockCh, migrationDoneCh, migrateJob, cancelJob)
+	setupTestingKnobs(t, testCase, &params, &blockSchemaChanges, blockCh, signalMigrationDone, migrateJob, cancelJob)
 
 	tc := serverutils.StartTestCluster(t, clusterSize,
 		base.TestClusterArgs{
@@ -267,7 +283,7 @@ func setupServerAndStartSchemaChange(
 
 	bg := ctxgroup.WithContext(ctx)
 	bg.Go(func() error {
-		if _, err := sqlDB.ExecContext(ctx, schemaChange); err != nil {
+		if _, err := sqlDB.ExecContext(ctx, testCase.schemaChange); err != nil {
 			cancel()
 			return err
 		}
@@ -469,16 +485,15 @@ func migrateGCJobToOldFormat(
 // The runner should only be used inside callback closures.
 func setupTestingKnobs(
 	t *testing.T,
-	blockState BlockState,
-	schemaChangeType SchemaChangeType,
-	shouldCancel bool,
+	testCase testCase,
 	args *base.TestServerArgs,
-	blockSchemaChanges, blockMigration *bool,
-	blockCh, migrationDoneCh chan struct{},
+	blockSchemaChanges *bool,
+	blockCh chan struct{},
+	signalMigrationDone func(),
 	migrateJob, cancelJob func(int64),
 ) {
 	numJobs := 1
-	if schemaChangeType == CreateTable {
+	if testCase.schemaChangeType == CreateTable {
 		numJobs = 2
 	}
 	migratedCount := 0
@@ -542,15 +557,16 @@ func setupTestingKnobs(
 	knobs := &sql.SchemaChangerTestingKnobs{}
 	gcKnobs := &sql.GCJobTestingKnobs{}
 
+	shouldCancel := testCase.shouldCancel
 	if shouldCancel {
-		if _, ok := runsBackfill[schemaChangeType]; ok {
+		if _, ok := runsBackfill[testCase.schemaChangeType]; ok {
 			knobs.RunAfterBackfill = cancelFn
 		} else {
 			knobs.RunBeforeResume = cancelFn
 		}
 	}
 
-	switch blockState {
+	switch testCase.blockState {
 	case BeforeBackfill:
 		if shouldCancel {
 			knobs.RunBeforeOnFailOrCancel = blockFn
@@ -578,11 +594,7 @@ func setupTestingKnobs(
 
 	args.Knobs.SQLSchemaChanger = knobs
 	args.Knobs.SQLMigrationManager = &sqlmigrations.MigrationManagerTestingKnobs{
-		AfterJobMigration: func() {
-			if *blockMigration {
-				migrationDoneCh <- struct{}{}
-			}
-		},
+		AfterJobMigration:     signalMigrationDone,
 		AlwaysRunJobMigration: true,
 	}
 	args.Knobs.GCJob = gcKnobs
