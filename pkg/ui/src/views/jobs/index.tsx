@@ -26,7 +26,7 @@ import { SortSetting} from "src/views/shared/components/sortabletable";
 import "./index.styl";
 import { statusOptions } from "./jobStatusOptions";
 import { JobTable} from "oss/src/views/jobs/jobTable";
-import { trackStatusFilter } from "src/util/analytics";
+import { trackFilter } from "src/util/analytics";
 import JobType = cockroach.sql.jobs.jobspb.Type;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
@@ -103,13 +103,15 @@ export class JobsTable extends React.Component<JobsTableProps> {
 
   onStatusSelected = (selected: DropdownOption) => {
     const filter = (selected.value === "") ? "all" : selected.value;
-    trackStatusFilter(filter);
+    trackFilter("Status", filter);
     this.props.setStatus(selected.value);
   }
 
   onTypeSelected = (selected: DropdownOption) => {
-    // track here
-    this.props.setType(parseInt(selected.value, 10));
+    const type = parseInt(selected.value, 10);
+    const typeLabel = typeOptions[type].label;
+    trackFilter("Type", typeLabel);
+    this.props.setType(type);
   }
 
   onShowSelected = (selected: DropdownOption) => {
