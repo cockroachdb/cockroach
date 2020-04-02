@@ -936,7 +936,6 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				}
 				// Only start a job if spanList has any spans. If len(spanList) == 0, then
 				// no mutations were enqueued by the primary key change.
-				println(len(spanList))
 				if len(spanList) > 0 {
 					jobRecord := jobs.Record{
 						Description:   fmt.Sprintf("CLEANUP JOB for '%s'", sc.job.Payload().Description),
@@ -967,8 +966,6 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				if fn := sc.testingKnobs.RunBeforeComputedColumnSwap; fn != nil {
 					fn()
 				}
-
-				println("done computed")
 
 				// Create jobs for dropped columns / indexes to be deleted.
 				var spanList []jobspb.ResumeSpanList
