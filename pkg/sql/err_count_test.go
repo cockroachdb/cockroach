@@ -63,28 +63,6 @@ func TestErrorCounts(t *testing.T) {
 	}
 }
 
-func TestUnimplementedCounts(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
-
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-
-	if _, err := db.Exec("CREATE TABLE t(x INT8)"); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := db.Exec("ALTER TABLE t ALTER COLUMN x SET DATA TYPE STRING USING x::STRING"); err == nil {
-		t.Fatal("expected error, got no error")
-	}
-
-	if telemetry.GetRawFeatureCounts()["unimplemented.#9851.INT8->STRING"] == 0 {
-		t.Fatal("expected unimplemented telemetry, got nothing")
-	}
-}
-
 func TestTransactionRetryErrorCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
