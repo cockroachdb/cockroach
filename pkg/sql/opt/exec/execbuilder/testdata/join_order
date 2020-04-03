@@ -56,10 +56,10 @@ render                ·                   ·                (a, b, c, d, b, x, 
       │    │          type                cross            ·                         ·
       │    ├── scan   ·                   ·                (b, x)                    ·
       │    │          table               bx@primary       ·                         ·
-      │    │          spans               ALL              ·                         ·
+      │    │          spans               FULL SCAN        ·                         ·
       │    └── scan   ·                   ·                (c, y)                    ·
       │               table               cy@primary       ·                         ·
-      │               spans               ALL              ·                         ·
+      │               spans               FULL SCAN        ·                         ·
       └── scan        ·                   ·                (a, b, c, d)              ·
 ·                     table               abc@primary      ·                         ·
 ·                     spans               /1-/1/#          ·                         ·

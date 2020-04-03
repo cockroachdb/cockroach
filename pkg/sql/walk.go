@@ -49,8 +49,9 @@ type planObserver struct {
 	// expr is invoked for each expression field in each node.
 	expr func(verbosity observeVerbosity, nodeName, fieldName string, n int, expr tree.Expr)
 
-	// spans is invoked for spans embbeded in each node.
-	spans func(nodeName, fieldName string, index *sqlbase.IndexDescriptor, spans []roachpb.Span)
+	// spans is invoked for spans embedded in each node. hardLimitSet indicates
+	// whether the node will "touch" a limited number of rows.
+	spans func(nodeName, fieldName string, index *sqlbase.IndexDescriptor, spans []roachpb.Span, hardLimitSet bool)
 
 	// attr is invoked for non-expression metadata in each node.
 	attr func(nodeName, fieldName, attr string)
@@ -173,7 +174,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			}
 		}
 		if v.observer.spans != nil {
-			v.observer.spans(name, "spans", n.index, n.spans)
+			v.observer.spans(name, "spans", n.index, n.spans, n.hardLimit != 0)
 		}
 		if v.observer.attr != nil {
 			// Only print out "parallel" when it makes sense. i.e. don't print if
@@ -598,7 +599,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			}
 		}
 		if v.observer.spans != nil {
-			v.observer.spans(name, "spans", &n.desc.PrimaryIndex, n.spans)
+			v.observer.spans(name, "spans", &n.desc.PrimaryIndex, n.spans, false /* hardLimitSet */)
 		}
 
 	case *serializeNode:

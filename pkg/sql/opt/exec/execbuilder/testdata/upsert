@@ -29,7 +29,7 @@ count                          ·            ·
                      │         order        -v
                      └── scan  ·            ·
 ·                              table        kv@primary
-·                              spans        ALL
+·                              spans        FULL SCAN
 
 # Use explicit target columns (which can use blind KV Put).
 query TTT
@@ -54,7 +54,7 @@ count                          ·            ·
                      │         order        -v
                      └── scan  ·            ·
 ·                              table        kv@primary
-·                              spans        ALL
+·                              spans        FULL SCAN
 
 # Add RETURNING clause (should still use blind KV Put).
 query TTT
@@ -79,7 +79,7 @@ run                            ·            ·
                      │         order        -v
                      └── scan  ·            ·
 ·                              table        kv@primary
-·                              spans        ALL
+·                              spans        FULL SCAN
 
 # Use subset of explicit target columns (which cannot use blind KV Put).
 query TTT
@@ -117,7 +117,7 @@ count                                         ·                      ·
                                     │         order                  -v
                                     └── scan  ·                      ·
 ·                                             table                  kv@primary
-·                                             spans                  ALL
+·                                             spans                  FULL SCAN
 
 # Use Upsert with indexed table, default columns, computed columns, and check
 # columns.
@@ -384,7 +384,7 @@ root                                               ·             ·            
                                          │         render 3      c                                                    ·                            ·
                                          └── scan  ·             ·                                                    (a, b, c)                    ·
 ·                                                  table         abc@primary                                          ·                            ·
-·                                                  spans         ALL                                                  ·                            ·
+·                                                  spans         FULL SCAN                                            ·                            ·
 
 # ------------------------------------------------------------------------------
 # Regression for #35364. This tests behavior that is different between the CBO

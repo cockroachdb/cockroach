@@ -25,7 +25,7 @@ tree       field        description
 render     ·            ·
  └── scan  ·            ·
 ·          table        jobs@jobs_status_created_idx
-·          spans        ALL
+·          spans        FULL SCAN
 
 query TTTTT colnames
 EXPLAIN (PLAN, VERBOSE) SELECT 1 a
@@ -391,13 +391,13 @@ render                                                             ·           
                                │                        │          mergeJoinOrder     +"(username=username)"
                                │                        ├── scan   ·                  ·
                                │                        │          table              users@primary
-                               │                        │          spans              ALL
+                               │                        │          spans              FULL SCAN
                                │                        └── scan   ·                  ·
                                │                                   table              role_options@primary
-                               │                                   spans              ALL
+                               │                                   spans              FULL SCAN
                                └── scan                            ·                  ·
 ·                                                                  table              role_members@role_members_role_idx
-·                                                                  spans              ALL
+·                                                                  spans              FULL SCAN
 
 # EXPLAIN selecting from a sequence.
 statement ok
@@ -455,7 +455,7 @@ EXPLAIN SELECT * FROM t
 ·     vectorized   true
 scan  ·            ·
 ·     table        t@primary
-·     spans        ALL
+·     spans        FULL SCAN
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t
@@ -464,7 +464,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t
 ·     vectorized   true       ·       ·
 scan  ·            ·          (k, v)  ·
 ·     table        t@primary  ·       ·
-·     spans        ALL        ·       ·
+·     spans        FULL SCAN  ·       ·
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
@@ -492,7 +492,7 @@ lookup-join  ·                      ·
  │           parallel               ·
  └── scan    ·                      ·
 ·            table                  t@primary
-·            spans                  ALL
+·            spans                  FULL SCAN
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
@@ -501,7 +501,7 @@ EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
 ·     vectorized   false        ·       ·
 scan  ·            ·            (k, v)  ·
 ·     table        t@primary    ·       ·
-·     spans        ALL          ·       ·
+·     spans        FULL SCAN    ·       ·
 ·     filter       (k % 2) = 0  ·       ·
 
 query TTT
@@ -530,7 +530,7 @@ limit            ·            ·
  └── ordinality  ·            ·
       └── scan   ·            ·
 ·                table        t@primary
-·                spans        ALL
+·                spans        LIMITED SCAN
 ·                limit        2
 
 query TTT
@@ -542,7 +542,7 @@ distinct   ·            ·
  │         distinct on  v
  └── scan  ·            ·
 ·          table        t@primary
-·          spans        ALL
+·          spans        FULL SCAN
 
 query TTT
 SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1]
@@ -557,7 +557,7 @@ limit                ·            ·
            │         distinct on  v
            └── scan  ·            ·
 ·                    table        t@primary
-·                    spans        ALL
+·                    spans        FULL SCAN
 
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a), FAMILY "primary" (a, b, rowid))
@@ -607,7 +607,7 @@ EXPLAIN (TYPES) SELECT * FROM t
 ·     vectorized   true       ·               ·
 scan  ·            ·          (k int, v int)  ·
 ·     table        t@primary  ·               ·
-·     spans        ALL        ·               ·
+·     spans        FULL SCAN  ·               ·
 
 query TTTTT
 EXPLAIN (TYPES,SYMVARS) SELECT k FROM t
@@ -616,7 +616,7 @@ EXPLAIN (TYPES,SYMVARS) SELECT k FROM t
 ·     vectorized   true       ·        ·
 scan  ·            ·          (k int)  ·
 ·     table        t@primary  ·        ·
-·     spans        ALL        ·        ·
+·     spans        FULL SCAN  ·        ·
 
 query TTTTT
 EXPLAIN (TYPES,VERBOSE) SELECT k FROM t
@@ -625,7 +625,7 @@ EXPLAIN (TYPES,VERBOSE) SELECT k FROM t
 ·     vectorized   true       ·        ·
 scan  ·            ·          (k int)  ·
 ·     table        t@primary  ·        ·
-·     spans        ALL        ·        ·
+·     spans        FULL SCAN  ·        ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM t WHERE v > 123
@@ -634,7 +634,7 @@ EXPLAIN (TYPES) SELECT * FROM t WHERE v > 123
 ·     vectorized   true                           ·               ·
 scan  ·            ·                              (k int, v int)  ·
 ·     table        t@primary                      ·               ·
-·     spans        ALL                            ·               ·
+·     spans        FULL SCAN                      ·               ·
 ·     filter       ((v)[int] > (123)[int])[bool]  ·               ·
 
 query TTTTT
@@ -675,7 +675,7 @@ count                ·            ·                            ()             
            │         render 0     (k)[int]                     ·               ·
            └── scan  ·            ·                            (k int, v int)  ·
 ·                    table        t@primary                    ·               ·
-·                    spans        ALL                          ·               ·
+·                    spans        FULL SCAN                    ·               ·
 ·                    filter       ((v)[int] > (1)[int])[bool]  ·               ·
 
 query TTTTT
@@ -695,7 +695,7 @@ count                ·            ·                              ()           
            │         render 2     ((k)[int] + (1)[int])[int]     ·                            ·
            └── scan  ·            ·                              (k int, v int)               ·
 ·                    table        t@primary                      ·                            ·
-·                    spans        ALL                            ·                            ·
+·                    spans        FULL SCAN                      ·                            ·
 ·                    filter       ((v)[int] > (123)[int])[bool]  ·                            ·
 
 query TTTTT
@@ -718,7 +718,7 @@ EXPLAIN (TYPES) SELECT DISTINCT k FROM t
 ·     vectorized   true       ·        ·
 scan  ·            ·          (k int)  ·
 ·     table        t@primary  ·        ·
-·     spans        ALL        ·        ·
+·     spans        FULL SCAN  ·        ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT v FROM t ORDER BY v
@@ -729,17 +729,17 @@ sort       ·            ·          (v int)  +v
  │         order        +v         ·        ·
  └── scan  ·            ·          (v int)  ·
 ·          table        t@primary  ·        ·
-·          spans        ALL        ·        ·
+·          spans        FULL SCAN  ·        ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT v FROM t LIMIT 1
 ----
-·     distributed  false      ·        ·
-·     vectorized   true       ·        ·
-scan  ·            ·          (v int)  ·
-·     table        t@primary  ·        ·
-·     spans        ALL        ·        ·
-·     limit        1          ·        ·
+·     distributed  false         ·        ·
+·     vectorized   true          ·        ·
+scan  ·            ·             (v int)  ·
+·     table        t@primary     ·        ·
+·     spans        LIMITED SCAN  ·        ·
+·     limit        1             ·        ·
 
 statement ok
 CREATE TABLE tt (x INT, y INT, INDEX a(x), INDEX b(y))
@@ -751,7 +751,7 @@ EXPLAIN (TYPES) SELECT * FROM tt WHERE x < 10 AND y > 10
 ·     vectorized   true                                                                       ·               ·
 scan  ·            ·                                                                          (x int, y int)  ·
 ·     table        tt@primary                                                                 ·               ·
-·     spans        ALL                                                                        ·               ·
+·     spans        FULL SCAN                                                                  ·               ·
 ·     filter       ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]  ·               ·
 
 # TODO(radu): we don't support placeholders with no values.
@@ -1041,4 +1041,4 @@ group      ·            ·
  │         scalar       ·
  └── scan  ·            ·
 ·          table        tc@primary
-·          spans        ALL
+·          spans        FULL SCAN
