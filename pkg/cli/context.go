@@ -165,7 +165,7 @@ func initCLIDefaults() {
 	demoCtx.disableTelemetry = false
 	demoCtx.disableLicenseAcquisition = false
 	demoCtx.transientCluster = nil
-	demoCtx.insecure = false
+	demoCtx.insecure = true
 
 	authCtx.validityPeriod = 1 * time.Hour
 

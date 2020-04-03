@@ -1010,7 +1010,13 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 			fmt.Printf("#\n")
 		}
 
-		if !demoCtx.insecure {
+		if demoCtx.insecure {
+			fmt.Printf(
+				"# Cockroach demo is running in insecure mode.\n" +
+					"# Run with --insecure=false to use security related features.\n" +
+					"# Note: Starting in secure mode will become the default in v20.2.\n#\n",
+			)
+		} else {
 			fmt.Printf(
 				"# The user %q with password %q has been created. Use it to access the Web UI!\n#\n",
 				security.RootUser,

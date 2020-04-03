@@ -10,6 +10,8 @@ eexpect "Welcome"
 eexpect "your changes to data stored in the demo session will not be saved!"
 # Inform the necessary URL.
 eexpect "Web UI: http:"
+# See the notice about insecure mode.
+eexpect "Cockroach demo is running in insecure mode."
 # Ensure same messages as cockroach sql.
 eexpect "Server version"
 eexpect "Cluster ID"
@@ -28,6 +30,8 @@ start_test "Check that demo insecure says hello properly"
 set ::env(COCKROACH_INSECURE) "true"
 spawn $argv demo
 eexpect "Welcome"
+# See the notice about insecure mode.
+eexpect "Cockroach demo is running in insecure mode."
 eexpect "movr>"
 interrupt
 eexpect eof
@@ -36,6 +40,8 @@ eexpect eof
 set ::env(COCKROACH_INSECURE) "false"
 spawn $argv demo --insecure=true
 eexpect "Welcome"
+# See the notice about insecure mode.
+eexpect "Cockroach demo is running in insecure mode."
 eexpect "movr>"
 interrupt
 eexpect eof
@@ -66,12 +72,12 @@ end_test
 
 # Test that demo displays connection URLs for nodes in the cluster.
 start_test "Check that node URLs are displayed"
-spawn $argv demo --insecure
+spawn $argv demo
 # Check that we see our message.
 eexpect "Connect to the cluster on a SQL shell at"
 
 # Start the test again with a multi node cluster.
-spawn $argv demo --insecure --nodes 3
+spawn $argv demo --nodes 3
 
 # Check that we get a message for each node.
 eexpect "Connect to different nodes in the cluster on a SQL shell at"
