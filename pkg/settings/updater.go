@@ -89,32 +89,32 @@ func (u updater) Set(key, rawValue string, vt string) error {
 
 	switch setting := d.(type) {
 	case *StringSetting:
-		return setting.set(u.sv, rawValue)
+		return setting.override(u.sv, rawValue)
 	case *BoolSetting:
 		b, err := strconv.ParseBool(rawValue)
 		if err != nil {
 			return err
 		}
-		setting.set(u.sv, b)
+		setting.override(u.sv, b)
 		return nil
 	case numericSetting: // includes *EnumSetting
 		i, err := strconv.Atoi(rawValue)
 		if err != nil {
 			return err
 		}
-		return setting.set(u.sv, int64(i))
+		return setting.override(u.sv, int64(i))
 	case *FloatSetting:
 		f, err := strconv.ParseFloat(rawValue, 64)
 		if err != nil {
 			return err
 		}
-		return setting.set(u.sv, f)
+		return setting.override(u.sv, f)
 	case *DurationSetting:
 		d, err := time.ParseDuration(rawValue)
 		if err != nil {
 			return err
 		}
-		return setting.set(u.sv, d)
+		return setting.override(u.sv, d)
 	case *StateMachineSetting:
 		return setting.set(u.sv, []byte(rawValue))
 	}

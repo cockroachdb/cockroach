@@ -66,10 +66,7 @@ func (i *IntSetting) Override(sv *Values, v int64) {
 	sv.setDefaultOverrideInt64(i.slotIdx, v)
 }
 
-func (i *IntSetting) set(sv *Values, v int64) error {
-	if err := i.Validate(v); err != nil {
-		return err
-	}
+func (i *IntSetting) override(sv *Values, v int64) error {
 	sv.setInt64(i.slotIdx, v)
 	return nil
 }
@@ -80,10 +77,10 @@ func (i *IntSetting) setToDefault(sv *Values) {
 	if ok {
 		// As per the semantics of override, these values don't go through
 		// validation.
-		_ = i.set(sv, val)
+		_ = i.override(sv, val)
 		return
 	}
-	if err := i.set(sv, i.defaultValue); err != nil {
+	if err := i.override(sv, i.defaultValue); err != nil {
 		panic(err)
 	}
 }
