@@ -80,9 +80,9 @@ func TestAllocateIDs(t *testing.T) {
 		Version:  1,
 		Name:     "foo",
 		Columns: []ColumnDescriptor{
-			{ID: 1, Name: "a"},
-			{ID: 2, Name: "b"},
-			{ID: 3, Name: "c"},
+			{ID: 1, Name: "a", LogicalColumnID: 1},
+			{ID: 2, Name: "b", LogicalColumnID: 2},
+			{ID: 3, Name: "c", LogicalColumnID: 3},
 		},
 		Families: []ColumnFamilyDescriptor{
 			{
@@ -1409,4 +1409,25 @@ func TestSQLString(t *testing.T) {
 	if got := index.SQLString(&AnonymousTable); got != expected {
 		t.Errorf("Expected '%s', but got '%s'", expected, got)
 	}
+}
+
+func TestLogicalColumnID(t *testing.T) {
+	tests := []struct {
+		desc     TableDescriptor
+		expected ColumnID
+	}{
+		{TableDescriptor{Columns: []ColumnDescriptor{{ID: 1, LogicalColumnID: 1}}}, 1},
+		{TableDescriptor{Columns: []ColumnDescriptor{{ID: 2}}}, 2},
+	}
+
+	for i := range tests {
+		tests[i].desc.MaybeFillInLogicalColumnID()
+		actual := tests[i].desc.Columns[0].LogicalColumnID
+		expected := tests[i].expected
+
+		if expected != actual {
+			t.Fatalf("Expected LogicalColumnID to be %d, got %d.", expected, actual)
+		}
+	}
+
 }
