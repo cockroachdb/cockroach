@@ -9,16 +9,16 @@
 // licenses/APL.txt.
 import { analytics } from "src/redux/analytics";
 
-export const track = (fn: Function) => (page: number) => {
+export const track = (fn: Function) => (collapsed: boolean) => {
   fn({
-    event: "Paginate",
+    event: "Collapse Nodes",
     properties: {
-      selectedPage: page,
+      collapsed: collapsed,
     },
   });
 };
 
-export default function trackPaginate(pageNumber: number) {
+export default function trackCollapseNode (collapsed: boolean) {
   const boundTrack = analytics.track.bind(analytics);
-  track(boundTrack)(pageNumber);
+  track(boundTrack)(collapsed);
 }
