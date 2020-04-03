@@ -363,7 +363,7 @@ func GetTableDescFromID(
 		return nil, err
 	}
 
-	if err := table.MaybeFillInDescriptor(ctx, protoGetter); err != nil {
+	if _, err := table.MaybeFillInDescriptor(ctx, protoGetter); err != nil {
 		return nil, err
 	}
 
@@ -381,12 +381,11 @@ func GetTableDescFromIDWithFKsChanged(
 	if err != nil {
 		return nil, false, err
 	}
-	table.maybeUpgradeFormatVersion()
-	table.Privileges.MaybeFixPrivileges(table.ID)
-	changed, err := table.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, false /* skipFKsWithNoMatchingTable */)
+	changed, err := table.MaybeFillInDescriptor(ctx, protoGetter)
 	if err != nil {
 		return nil, false, err
 	}
+
 	return table, changed, err
 }
 
@@ -886,15 +885,21 @@ func generatedFamilyName(familyID FamilyID, columnNames []string) string {
 // in a similar way.
 func (desc *TableDescriptor) MaybeFillInDescriptor(
 	ctx context.Context, protoGetter protoGetter,
-) error {
+) (bool, error) {
 	desc.maybeUpgradeFormatVersion()
 	desc.Privileges.MaybeFixPrivileges(desc.ID)
+
+	var changed bool
+	var err error
 	if protoGetter != nil {
-		if _, err := desc.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, false /* skipFKsWithNoMatchingTable*/); err != nil {
-			return err
+		if changed, err = desc.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, false /* skipFKsWithNoMatchingTable*/); err != nil {
+			return false, err
 		}
 	}
-	return nil
+
+	desc.MaybeFillInLogicalColumnID()
+
+	return changed, nil
 }
 
 // MapProtoGetter is a protoGetter that has a hard-coded map of keys to proto
@@ -1198,6 +1203,27 @@ func (desc *MutableTableDescriptor) MaybeFillColumnID(
 	}
 	columnNames[c.Name] = columnID
 	c.ID = columnID
+	c.LogicalColumnID = columnID
+}
+
+// MaybeFillInLogicalColumnID assigns a LogicalColumnID to a column
+// if the ColumnID is set and the LogicalColumnID is not
+// it assigns the ColumnID as the LogicalColumnID.
+func (desc *TableDescriptor) MaybeFillInLogicalColumnID() {
+	for i := range desc.Columns {
+		col := &desc.Columns[i]
+		if col.ID != 0 && col.LogicalColumnID == 0 {
+			col.LogicalColumnID = col.ID
+		}
+	}
+
+	for _, m := range desc.Mutations {
+		if col := m.GetColumn(); col != nil {
+			if col.ID != 0 && col.LogicalColumnID == 0 {
+				col.LogicalColumnID = col.ID
+			}
+		}
+	}
 }
 
 // AllocateIDs allocates column, family, and index ids for any column, family,

@@ -129,6 +129,8 @@ message ColumnDescriptor {
   // Expression to use to compute the value of this column if this is a
   // computed column.
   optional string compute_expr = 12;
+  optional uint32 logical_id = 13 [(gogoproto.nullable) = false,
+   (gogoproto.customname) = "LogicalColumnID", (gogoproto.casttype) = "ColumnID"];
 }
 
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.

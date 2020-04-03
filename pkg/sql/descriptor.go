@@ -255,7 +255,7 @@ func getDescriptorByID(
 			return pgerror.Newf(pgcode.WrongObjectType,
 				"%q is not a table", desc.String())
 		}
-		if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
+		if _, err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
 			return err
 		}
 
@@ -320,7 +320,7 @@ func GetAllDescriptors(ctx context.Context, txn *kv.Txn) ([]sqlbase.DescriptorPr
 		switch t := desc.Union.(type) {
 		case *sqlbase.Descriptor_Table:
 			table := desc.Table(kv.Value.Timestamp)
-			if err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
+			if _, err := table.MaybeFillInDescriptor(ctx, txn); err != nil {
 				return nil, err
 			}
 			descs = append(descs, table)

@@ -80,7 +80,7 @@ func GetTableDescriptor(kvDB *kv.DB, database string, table string) *TableDescri
 	if tableDesc == nil {
 		return nil
 	}
-	err = tableDesc.MaybeFillInDescriptor(ctx, kvDB)
+	_, err = tableDesc.MaybeFillInDescriptor(ctx, kvDB)
 	if err != nil {
 		log.Fatalf(ctx, "failure to fill in descriptor. err: %v", err)
 	}
