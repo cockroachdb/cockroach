@@ -213,24 +213,12 @@ func DefaultZoneConfigRef() *ZoneConfig {
 }
 
 // DefaultSystemZoneConfig is the default zone configuration used when no custom
-// config has been specified.
+// config has been specified. The DefaultSystemZoneConfig is like the
+// DefaultZoneConfig but has a replication factor of 5 instead of 3.
 func DefaultSystemZoneConfig() ZoneConfig {
-	return ZoneConfig{
-		NumReplicas:   proto.Int32(5),
-		RangeMinBytes: proto.Int64(128 << 30), // 128 MB
-		RangeMaxBytes: proto.Int64(512 << 30), // 512 MB
-		GC: &GCPolicy{
-			// Use 25 hours instead of the previous 24 to make users successful by
-			// default. Users desiring to take incremental backups every 24h may
-			// incorrectly assume that the previous default 24h was sufficient to do
-			// that. But the equation for incremental backups is:
-			// 	GC TTLSeconds >= (desired backup interval) + (time to perform incremental backup)
-			// We think most new users' incremental backups will complete within an
-			// hour, and larger clusters will have more experienced operators and will
-			// understand how to change these settings if needed.
-			TTLSeconds: 25 * 60 * 60,
-		},
-	}
+	defaultSystemZoneConfig := DefaultZoneConfig()
+	defaultSystemZoneConfig.NumReplicas = proto.Int32(5)
+	return defaultSystemZoneConfig
 }
 
 // DefaultSystemZoneConfigRef is the default zone configuration used when no custom

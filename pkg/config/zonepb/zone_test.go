@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	proto "github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -908,4 +909,13 @@ func tableSpecifier(
 		},
 		Partition: partition,
 	}
+}
+
+// TestDefaultRangeSizesAreSane is a sanity check test to ensure that the values
+// in the default zone configs are what the author intended.
+func TestDefaultRangeSizesAreSane(t *testing.T) {
+	require.Regexp(t, "range_min_bytes:134217728 range_max_bytes:536870912",
+		DefaultSystemZoneConfigRef().String())
+	require.Regexp(t, "range_min_bytes:134217728 range_max_bytes:536870912",
+		DefaultZoneConfigRef().String())
 }
