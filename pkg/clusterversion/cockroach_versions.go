@@ -62,6 +62,7 @@ const (
 	Version20_1
 	VersionStart20_2
 	VersionGeospatialType
+	VersionAlterColumnTypeGeneral
 
 	// Add new versions here (step one of two).
 )
@@ -471,7 +472,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	},
 	{
 		// VersionGeospatialType enables the use of Geospatial features.
-		Key:     VersionGeospatialType,
+		Key: VersionGeospatialType,
+		// VersionAlterColumnTypeGeneral enables the use of alter column type for general conversions.
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 2},
+	},
+	{
+		// VersionGeospatialType enables the use of Geospatial features.
+		Key: VersionAlterColumnTypeGeneral,
+		// VersionAlterColumnTypeGeneral enables the use of alter column type for general conversions.
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 2},
 	},
 

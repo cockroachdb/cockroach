@@ -387,6 +387,9 @@ func GetTableDescFromIDWithFKsChanged(
 	if err != nil {
 		return nil, false, err
 	}
+
+	table.MaybeFillInLogicalColumnID()
+
 	return table, changed, err
 }
 
@@ -889,11 +892,15 @@ func (desc *TableDescriptor) MaybeFillInDescriptor(
 ) error {
 	desc.maybeUpgradeFormatVersion()
 	desc.Privileges.MaybeFixPrivileges(desc.ID)
+
 	if protoGetter != nil {
 		if _, err := desc.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, false /* skipFKsWithNoMatchingTable*/); err != nil {
 			return err
 		}
 	}
+
+	desc.MaybeFillInLogicalColumnID()
+
 	return nil
 }
 
@@ -1198,6 +1205,27 @@ func (desc *MutableTableDescriptor) MaybeFillColumnID(
 	}
 	columnNames[c.Name] = columnID
 	c.ID = columnID
+	c.LogicalColumnID = columnID
+}
+
+// MaybeFillInLogicalColumnID assigns a LogicalColumnID to a column
+// if the ColumnID is set and the LogicalColumnID is not
+// it assigns the ColumnID as the LogicalColumnID.
+func (desc *TableDescriptor) MaybeFillInLogicalColumnID() {
+	for i := range desc.Columns {
+		col := &desc.Columns[i]
+		if col.ID != 0 && col.LogicalColumnID == 0 {
+			col.LogicalColumnID = col.ID
+		}
+	}
+
+	for _, m := range desc.Mutations {
+		if col := m.GetColumn(); col != nil {
+			if col.ID != 0 && col.LogicalColumnID == 0 {
+				col.LogicalColumnID = col.ID
+			}
+		}
+	}
 }
 
 // AllocateIDs allocates column, family, and index ids for any column, family,
@@ -1841,6 +1869,11 @@ func (desc *TableDescriptor) ValidateTable() error {
 				return errors.AssertionFailedf(
 					"primary key swap mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
 			}
+		case *DescriptorMutation_ComputedColumnSwap:
+			if m.Direction == DescriptorMutation_NONE {
+				return errors.AssertionFailedf(
+					"computed column swap mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
+			}
 		default:
 			return errors.AssertionFailedf(
 				"mutation in state %s, direction %s, and no column/index descriptor",
@@ -2463,6 +2496,102 @@ func (desc *MutableTableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
 			}
 		}
 	}
+}
+
+// RenameColumn finds all references to a column and changes the name
+// to newColName.
+func (desc *MutableTableDescriptor) RenameColumn(
+	tableDesc *MutableTableDescriptor, col *ColumnDescriptor, oldName, newName string,
+) error {
+	// This function renames a column and validates the name.
+	preFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if vBase, ok := expr.(tree.VarName); ok {
+			// Validate the column name. Ensure variable is not an UnresolvedName.
+			v, err := vBase.NormalizeVarName()
+			if err != nil {
+				return false, nil, err
+			}
+			if c, ok := v.(*tree.ColumnItem); ok {
+				if string(c.ColumnName) == oldName {
+					c.ColumnName = tree.Name(newName)
+				}
+			}
+			return false, v, nil
+		}
+		return true, expr, nil
+	}
+
+	renameIn := func(expression string) (string, error) {
+		parsed, err := parser.ParseExpr(expression)
+		if err != nil {
+			return "", err
+		}
+
+		renamed, err := tree.SimpleVisit(parsed, preFn)
+		if err != nil {
+			return "", err
+		}
+
+		return renamed.String(), nil
+	}
+
+	// Rename the column in CHECK constraints.
+	// Renaming columns that are being referenced by checks that are being added is not allowed.
+	for i := range tableDesc.Checks {
+		var err error
+		tableDesc.Checks[i].Expr, err = renameIn(tableDesc.Checks[i].Expr)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Rename the column in computed columns.
+	for i := range tableDesc.Columns {
+		if otherCol := &tableDesc.Columns[i]; otherCol.IsComputed() {
+			newExpr, err := renameIn(*otherCol.ComputeExpr)
+			if err != nil {
+				return err
+			}
+			otherCol.ComputeExpr = &newExpr
+		}
+	}
+
+	// Rename the column in hash-sharded index descriptors. Potentially rename the
+	// shard column too if we haven't already done it.
+	shardColumnsToRename := make(map[tree.Name]tree.Name) // map[oldShardColName]newShardColName
+	maybeUpdateShardedDesc := func(shardedDesc *ShardedDescriptor) {
+		if !shardedDesc.IsSharded {
+			return
+		}
+		oldShardColName := tree.Name(GetShardColumnName(
+			shardedDesc.ColumnNames, shardedDesc.ShardBuckets))
+		var changed bool
+		for i, c := range shardedDesc.ColumnNames {
+			if c == oldName {
+				changed = true
+				shardedDesc.ColumnNames[i] = newName
+			}
+		}
+		if !changed {
+			return
+		}
+		newName, alreadyRenamed := shardColumnsToRename[oldShardColName]
+		if !alreadyRenamed {
+			newName = tree.Name(GetShardColumnName(
+				shardedDesc.ColumnNames, shardedDesc.ShardBuckets))
+			shardColumnsToRename[oldShardColName] = newName
+		}
+		// Keep the shardedDesc name in sync with the column name.
+		shardedDesc.Name = string(newName)
+	}
+	for _, idx := range tableDesc.AllNonDropIndexes() {
+		maybeUpdateShardedDesc(&idx.Sharded)
+	}
+
+	// Rename the column in the indexes.
+	tableDesc.RenameColumnDescriptor(col, newName)
+
+	return nil
 }
 
 // RenameColumnDescriptor updates all references to a column name in
@@ -3115,6 +3244,10 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 					return err
 				}
 			}
+		case *DescriptorMutation_ComputedColumnSwap:
+			if err := desc.PerformComputedColumnSwap(t.ComputedColumnSwap); err != nil {
+				return err
+			}
 		}
 
 	case DescriptorMutation_DROP:
@@ -3126,6 +3259,97 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 			desc.RemoveColumnFromFamily(t.Column.ID)
 		}
 	}
+	return nil
+}
+
+func (desc *MutableTableDescriptor) PerformComputedColumnSwap(swap *ComputedColumnSwap) error {
+	// Get the old and new columns from the descriptor.
+	oldCol, err := desc.FindColumnByID(swap.OldColumnId)
+	if err != nil {
+		return err
+	}
+	newCol, err := desc.FindColumnByID(swap.NewColumnId)
+	if err != nil {
+		return err
+	}
+
+	// Mark newCol as no longer a computed column.
+	newCol.ComputeExpr = nil
+
+	// oldCol still needs to have values written to it in case nodes read it from
+	// it with a TableDescriptor verison from before the swap.
+	// To achieve this, we make oldCol a computed column of newCol.
+	oldColComputeExpr := tree.CastExpr{
+		Expr:       &tree.ColumnItem{ColumnName: tree.Name(oldCol.Name)},
+		Type:       oldCol.DatumType(),
+		SyntaxMode: tree.CastShort,
+	}
+	s := tree.Serialize(&oldColComputeExpr)
+	oldCol.ComputeExpr = &s
+
+	//Generate unique name for old column.
+	nameExists := func(name string) bool {
+		_, _, err := desc.FindColumnByName(tree.Name(name))
+		return err == nil
+	}
+
+	uniqueName := GenerateUniqueConstraintName(newCol.Name, nameExists)
+
+	// Remember the name of oldCol, because newCol will take it.
+	oldColName := oldCol.Name
+
+	// Rename old column to this new name, and rename newCol to oldCol's name.
+	desc.RenameColumnDescriptor(oldCol, uniqueName)
+	desc.RenameColumnDescriptor(newCol, oldColName)
+
+	// Swap Column Family references.
+	// This preserves the ordering of column families when querying for it.
+	// Since both columns are in the same family, this only affects the
+	// ordering of ColumnIDs in the family.
+	// The old column will be removed from column families
+	// when the column is dropped.
+	for i := range desc.Families {
+		for j := range desc.Families[i].ColumnIDs {
+			if desc.Families[i].ColumnIDs[j] == oldCol.ID {
+				desc.Families[i].ColumnIDs[j] = newCol.ID
+				desc.Families[i].ColumnNames[j] = newCol.Name
+			} else if desc.Families[i].ColumnIDs[j] == newCol.ID {
+				desc.Families[i].ColumnIDs[j] = oldCol.ID
+				desc.Families[i].ColumnNames[j] = oldCol.Name
+			}
+		}
+	}
+
+	// Set newCol's LogicalColumnID to oldCol's LogicalColumnID. This makes
+	// newCol display like oldCol in catalog tables.
+	newCol.LogicalColumnID = oldCol.LogicalColumnID
+	oldCol.LogicalColumnID = 0
+
+	// Mark oldCol as being the result of an AlterColumnType. This allows us
+	// to generate better errors for failing inserts.
+	oldCol.AlterColumnTypeInProgress = true
+
+	// Remove ownership for sequences for the old column otherwise
+	// the owned sequences will be dropped when the old column is dropped.
+	oldCol.OwnsSequenceIds = nil
+
+	// Clone oldColDesc so that we can queue it up as a mutation.
+	// Use oldColCopy to queue mutation in case oldCol's memory address
+	// gets overwritten during mutation.
+	oldColCopy := protoutil.Clone(oldCol).(*ColumnDescriptor)
+	desc.AddColumnMutation(oldColCopy, DescriptorMutation_DROP)
+
+	// Now move newCol into oldCol's position in the descriptor slice
+	// and remove the original entry for newCol in the descriptor slice.
+	for i := range desc.Columns {
+		if desc.Columns[i].ID == oldColCopy.ID {
+			desc.Columns[i] = *newCol
+		} else if desc.Columns[i].ID == newCol.ID {
+			desc.Columns = append(desc.Columns[:i:i], desc.Columns[i+1:]...)
+			break
+		}
+	}
+
 	return nil
 }
 
@@ -3260,6 +3484,12 @@ func (desc *MutableTableDescriptor) AddIndexMutation(
 // AddPrimaryKeySwapMutation adds a PrimaryKeySwap mutation to the table descriptor.
 func (desc *MutableTableDescriptor) AddPrimaryKeySwapMutation(swap *PrimaryKeySwap) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_PrimaryKeySwap{PrimaryKeySwap: swap}, Direction: DescriptorMutation_ADD}
+	desc.addMutation(m)
+}
+
+// AddComputedColumnSwapMutation adds a ComputedColumnSwap mutation to the table descriptor.
+func (desc *MutableTableDescriptor) AddComputedColumnSwapMutation(swap *ComputedColumnSwap) {
+	m := DescriptorMutation{Descriptor_: &DescriptorMutation_ComputedColumnSwap{ComputedColumnSwap: swap}, Direction: DescriptorMutation_ADD}
 	desc.addMutation(m)
 }
 
@@ -3861,6 +4091,20 @@ func (desc *ColumnDescriptor) CheckCanBeFKRef() error {
 		)
 	}
 	return nil
+}
+
+// GetColumnFamily returns the ColumnFamilyDescriptor for the
+// the family the column is part of.
+func (desc *TableDescriptor) GetColumnFamily(colID ColumnID) (*ColumnFamilyDescriptor, error) {
+	for _, fam := range desc.Families {
+		for _, id := range fam.ColumnIDs {
+			if id == colID {
+				return &fam, nil
+			}
+		}
+	}
+
+	return nil, errors.Newf("no column family found for column id %v", colID)
 }
 
 // PartitionNames returns a slice containing the name of every partition and

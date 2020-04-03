@@ -487,6 +487,9 @@ func characterMaximumLength(colType *types.T) tree.Datum {
 			if colType.Width() > 0 {
 				return colType.Width(), true
 			}
+			if colType.Width() > 0 {
+				return colType.Width(), true
+			}
 		}
 		return 0, false
 	})

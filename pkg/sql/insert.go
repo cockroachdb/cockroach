@@ -12,6 +12,9 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/errors"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -223,6 +226,21 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 		if next, err := n.source.Next(params); !next {
 			lastBatch = true
 			if err != nil {
+				// TODO(richardjcai): Don't like this, not sure how to check if the
+				// parse error is specifically from the column undergoing the
+				// alter column type schema change.
+
+				// Intercept parse error due to ALTER COLUMN TYPE schema change.
+				for _, insertCol := range n.run.insertCols {
+					if insertCol.AlterColumnTypeInProgress {
+						code := pgerror.GetPGCode(err)
+						if code == pgcode.InvalidTextRepresentation {
+							return false, errors.Wrap(err,
+								"This table is still undergoing the ALTER COLUMN TYPE schema change, "+
+									"this insert may not be supported until the schema change is finalized")
+						}
+					}
+				}
 				return false, err
 			}
 			break

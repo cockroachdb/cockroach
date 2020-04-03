@@ -12,10 +12,12 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -282,6 +284,16 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 			var err error
 			inputRow[col], err = typedExpr.Eval(params.EvalContext())
 			if err != nil {
+				// Intercept parse error due to ALTER COLUMN TYPE schema change.
+				insertCol := n.run.insertRun.insertCols[col]
+				if insertCol.AlterColumnTypeInProgress {
+					code := pgerror.GetPGCode(err)
+					if code == pgcode.InvalidTextRepresentation {
+						return false, errors.Wrap(err,
+							"This table is still undergoing the ALTER COLUMN TYPE schema change, "+
+								"this insert is not supported until the schema change is finalized")
+					}
+				}
 				return false, err
 			}
 		}

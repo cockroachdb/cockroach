@@ -161,3 +161,210 @@ ALTER TABLE t ALTER s TYPE STRING
 
 statement ok
 DROP TABLE t
+
+subtest alter_column_type_general
+
+statement ok
+CREATE TABLE t1 (date string)
+
+statement ok
+INSERT INTO t1 VALUES ('hello')
+
+statement error pq: alter column type general is experimental; you can enable alter column type general support by running `SET enable_experimental_alter_column_type_general = true
+ALTER TABLE t1 ALTER COLUMN date TYPE timestamp
+
+statement ok
+SET enable_experimental_alter_column_type_general = true
+
+statement error pq: parsing as type timestamp: could not parse "hello"
+ALTER TABLE t1 ALTER COLUMN date TYPE timestamp
+
+#ColumnNotPartOfIndex
+
+statement ok
+CREATE TABLE t2 (id int)
+
+statement ok
+INSERT INTO t2 VALUES (1), (2), (3), (4)
+
+statement ok
+ALTER TABLE t2 ALTER COLUMN id TYPE string
+
+query TTBTTTB
+SHOW COLUMNS FROM t2
+----
+id     STRING  true   NULL            ·  {}         false
+rowid  INT8    false  unique_rowid()  ·  {primary}  true
+
+statement ok
+INSERT INTO t2 VALUES ('5')
+
+statement error pq: value type int doesn't match type string of column "id"
+INSERT INTO t2 VALUES (6)
+
+statement ok
+CREATE TABLE t3 (id int, id2 int, id3 int)
+
+statement ok
+INSERT INTO t3 VALUES (1,1,1), (2,2,2), (3,3,3)
+
+statement ok
+ALTER TABLE t3 ALTER COLUMN id2 TYPE string
+
+query TTBTTTB
+SHOW COLUMNS FROM t3
+----
+id     INT8    true   NULL            ·  {}         false
+id2    STRING  true   NULL            ·  {}         false
+id3    INT8    true   NULL            ·  {}         false
+rowid  INT8    false  unique_rowid()  ·  {primary}  true
+
+statement ok
+INSERT INTO t3 VALUES (4,'4',4)
+
+query ITI
+SELECT * FROM t3 ORDER BY id
+----
+1  1  1
+2  2  2
+3  3  3
+4  4  4
+
+statement ok
+CREATE TABLE t4 (x INT, y INT, z INT)
+
+statement ok
+INSERT INTO t4 VALUES (1, 2, 3)
+
+statement ok
+ALTER TABLE t4 ALTER COLUMN y TYPE STRING
+
+query TTBTTTB
+SHOW COLUMNS FROM t4
+----
+x      INT8    true   NULL            ·  {}         false
+y      STRING  true   NULL            ·  {}         false
+z      INT8    true   NULL            ·  {}         false
+rowid  INT8    false  unique_rowid()  ·  {primary}  true
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE t5 (x INT, y INT)
+
+statement error pq: unimplemented: performing an ALTER TABLE ... ALTER COLUMN TYPE in the same txn as the table was created is not supported
+ALTER TABLE t5 ALTER COLUMN x TYPE STRING
+
+statement ok
+ROLLBACK
+
+statement ok
+CREATE TABLE t6 (x TIMESTAMPTZ(6));
+INSERT INTO t6 VALUES ('2016-01-25 10:10:10.555555-05:00');
+INSERT INTO t6 VALUES ('2016-01-26 10:10:10.555555-05:00');
+ALTER TABLE t6 ALTER COLUMN x TYPE TIMESTAMPTZ(3);
+INSERT INTO t6 VALUES ('2016-01-26 10:10:10.55-05:00');
+
+query T
+SELECT * FROM t6 ORDER BY x
+----
+2016-01-25 16:10:10.556 +0100 CET
+2016-01-26 16:10:10.55 +0100 CET
+2016-01-26 16:10:10.556 +0100 CET
+
+# ensure column families stay the same
+statement ok
+CREATE TABLE t7(id INT, id2 INT, FAMILY f1 (id), FAMILY f2 (id2));
+INSERT INTO t7 VALUES (1), (2), (3);
+ALTER TABLE t7 ALTER COLUMN id2 TYPE STRING;
+
+query TT
+SHOW CREATE TABLE t7
+----
+t7      CREATE TABLE t7 (
+              id INT8 NULL,
+              id2 STRING NULL,
+              FAMILY f1 (id, rowid),
+              FAMILY f2 (id2)
+            )
+
+# ensure default expressions are casted correctly.
+statement ok
+CREATE TABLE t8 (x INT DEFAULT 1, y INT);
+INSERT INTO t8 (y) VALUES (1), (2), (3);
+ALTER TABLE t8 ALTER COLUMN x TYPE DATE;
+INSERT INTO t8 (y) VALUES (4);
+
+query TI
+SELECT * FROM t8 ORDER BY y
+----
+1970-01-02 00:00:00 +0000 +0000  1
+1970-01-02 00:00:00 +0000 +0000  2
+1970-01-02 00:00:00 +0000 +0000  3
+1970-01-02 00:00:00 +0000 +0000  4
+
+# ensure a runtime error rollsback correctly.
+statement ok
+
+statement ok
+CREATE TABLE t9 (x INT PRIMARY KEY)
+
+statement error pq: unimplemented: alter column type requiring rewrite of on-disk data is currently not supported for columns that are part of an index
+ALTER TABLE t9 ALTER COLUMN x TYPE STRING
+
+statement ok
+CREATE TABLE t10 (x INT, y INT, INDEX(x, y))
+
+statement error pq: unimplemented: alter column type requiring rewrite of on-disk data is currently not supported for columns that are part of an index
+ALTER TABLE t10 ALTER COLUMN y TYPE STRING
+
+statement ok
+CREATE TABLE t11 (x INT)
+
+statement error pq: unimplemented: alter column type using expression is not supported\nHINT: You have attempted to use a feature that is not yet implemented.\nSee: https://github.com/cockroachdb/cockroach/issues/47706
+ALTER TABLE t11 ALTER COLUMN x TYPE STRING USING CAST(x AS STRING)
+
+# alter column type should not drop the column's owned sequence.
+statement ok
+CREATE TABLE t12 (x INT)
+
+statement ok
+CREATE SEQUENCE seq OWNED BY t12.x
+
+statement ok
+ALTER TABLE t12 ALTER COLUMN x TYPE STRING
+
+query TT
+SHOW CREATE SEQUENCE seq
+----
+  seq CREATE SEQUENCE seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+
+# dropping the column after the schema change should drop the sequence.
+
+statement ok
+ALTER TABLE t12 DROP COLUMN x
+
+statement error relation "seq" does not exist
+SHOW CREATE SEQUENCE seq
+
+# alter column type should maintain dependent sequences.
+statement ok
+CREATE SEQUENCE seq
+
+statement ok
+CREATE TABLE t13 (x INT, y INT DEFAULT nextval('seq'))
+
+statement ok
+ALTER TABLE t13 ALTER COLUMN y TYPE STRING
+
+statement error pq: cannot drop sequence seq because other objects depend on it
+DROP SEQUENCE seq
+
+# column types cannot be altered in the same txn the table is created.
+
+statement error pq: unimplemented: performing an ALTER TABLE ... ALTER COLUMN TYPE in the same txn as the table was created is not supported
+BEGIN;
+CREATE TABLE t14 (x INT);
+ALTER TABLE t14 ALTER COLUMN x TYPE STRING;
+COMMIT;
