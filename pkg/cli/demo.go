@@ -623,7 +623,7 @@ func setupTransientCluster(
 }
 
 func (c *transientCluster) setupWorkload(
-	ctx context.Context, gen workload.Generator, licenseDone chan struct{},
+	ctx context.Context, gen workload.Generator, licenseDone <-chan error,
 ) error {
 	// If there is a load generator, create its database and load its
 	// fixture.
@@ -652,7 +652,9 @@ func (c *transientCluster) setupWorkload(
 			if cliCtx.isInteractive {
 				fmt.Println("#\n# Waiting for license acquisition to complete...")
 			}
-			<-licenseDone
+			if err := waitForLicense(licenseDone); err != nil {
+				return err
+			}
 			if cliCtx.isInteractive {
 				fmt.Println("#\n# Partitioning the demo database, please wait...")
 			}
@@ -822,8 +824,9 @@ func checkDemoConfiguration(
 		demoCtx.disableTelemetry || (GetAndApplyLicense == nil) || demoCtx.disableLicenseAcquisition
 
 	if demoCtx.geoPartitionedReplicas {
+		geoFlag := "--" + cliflags.DemoGeoPartitionedReplicas.Name
 		if demoCtx.disableLicenseAcquisition {
-			return nil, errors.New("enterprise features are needed for this demo (--geo-partitioned-replicas)")
+			return nil, errors.Newf("enterprise features are needed for this demo (%s)", geoFlag)
 		}
 
 		// Make sure that the user didn't request to have a topology and an empty database.
@@ -833,18 +836,18 @@ func checkDemoConfiguration(
 
 		// Make sure that the Movr database is selected when automatically partitioning.
 		if gen == nil || gen.Meta().Name != "movr" {
-			return nil, errors.New("--geo-partitioned-replicas must be used with the Movr dataset")
+			return nil, errors.Newf("%s must be used with the Movr dataset", geoFlag)
 		}
 
 		// If the geo-partitioned replicas flag was given and the demo localities have changed, throw an error.
 		if demoCtx.localities != nil {
-			return nil, errors.New("--demo-locality cannot be used with --geo-partitioned-replicas")
+			return nil, errors.Newf("--demo-locality cannot be used with %s", geoFlag)
 		}
 
 		// If the geo-partitioned replicas flag was given and the nodes have changed, throw an error.
 		if flagSetForCmd(cmd).Lookup(cliflags.DemoNodes.Name).Changed {
 			if demoCtx.nodes != 9 {
-				return nil, errors.New("--nodes with a value different from 9 cannot be used with --geo-partitioned-replicas")
+				return nil, errors.Newf("--nodes with a value different from 9 cannot be used with %s", geoFlag)
 			}
 		} else {
 			const msg = `#
@@ -872,10 +875,10 @@ func checkDemoConfiguration(
 // temporary demo license from the Cockroach Labs website. It returns
 // a channel that can be waited on if it is needed to wait on the
 // license acquisition.
-func (c *transientCluster) acquireDemoLicense(ctx context.Context) (chan struct{}, error) {
+func (c *transientCluster) acquireDemoLicense(ctx context.Context) (chan error, error) {
 	// Communicate information about license acquisition to services
 	// that depend on it.
-	licenseDone := make(chan struct{})
+	licenseDone := make(chan error)
 	if demoCtx.disableLicenseAcquisition {
 		// If we are not supposed to acquire a license, close the channel
 		// immediately so that future waiters don't hang.
@@ -892,17 +895,17 @@ func (c *transientCluster) acquireDemoLicense(ctx context.Context) (chan struct{
 
 			success, err := GetAndApplyLicense(db, c.s.ClusterID(), demoOrg)
 			if err != nil {
-				exitWithError("demo", err)
+				licenseDone <- err
+				return
 			}
 			if !success {
 				if demoCtx.geoPartitionedReplicas {
-					log.Shout(ctx, log.Severity_ERROR,
-						"license acquisition was unsuccessful.\nNote: enterprise features are needed for --geo-partitioned-replicas.")
-					exitWithError("demo", errors.New("unable to acquire a license for this demo"))
+					licenseDone <- errors.WithDetailf(
+						errors.New("unable to acquire a license for this demo"),
+						"Enterprise features are needed for this demo (--%s).",
+						cliflags.DemoGeoPartitionedReplicas.Name)
+					return
 				}
-
-				const msg = "\nwarning: unable to acquire demo license - enterprise features are not enabled."
-				fmt.Fprintln(stderr, msg)
 			}
 			close(licenseDone)
 		}()
@@ -989,17 +992,35 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 				defaultRootPassword,
 			)
 		}
+		// If we didn't launch a workload, we still need to inform the
+		// user if the license check fails. Do this asynchronously and print
+		// the final error if any.
+		//
+		// It's ok to do this twice (if workload setup already waited) because
+		// then the error return is guaranteed to be nil.
+		go func() {
+			if err := waitForLicense(licenseDone); err != nil {
+				_ = checkAndMaybeShout(err)
+			}
+		}()
 	} else {
 		// If we are not running an interactive shell, we need to wait to ensure
 		// that license acquisition is successful. If license acquisition is
 		// disabled, then a read on this channel will return immediately.
-		<-licenseDone
+		if err := waitForLicense(licenseDone); err != nil {
+			return checkAndMaybeShout(err)
+		}
 	}
 
 	conn := makeSQLConn(c.connURL)
 	defer conn.Close()
 
 	return runClient(cmd, conn)
+}
+
+func waitForLicense(licenseDone <-chan error) error {
+	err := <-licenseDone
+	return err
 }
 
 // sockForServer generates the metadata for a unix socket for the given node.

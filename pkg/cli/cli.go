@@ -65,10 +65,7 @@ func Main() {
 	defer log.RecoverAndReportPanic(context.Background(), &serverCfg.Settings.SV)
 
 	err := Run(os.Args[1:])
-	exitWithError(cmdName, err)
-}
 
-func exitWithError(cmdName string, err error) {
 	errCode := 0
 	if err != nil {
 		// Display the error and its details/hints.
@@ -85,6 +82,7 @@ func exitWithError(cmdName string, err error) {
 			errCode = cliErr.exitCode
 		}
 	}
+
 	os.Exit(errCode)
 }
 
