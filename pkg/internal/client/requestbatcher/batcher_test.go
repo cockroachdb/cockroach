@@ -29,6 +29,8 @@ import (
 )
 
 type batchResp struct {
+	// TODO(ajwerner): we never actually test that this result is what we expect
+	// it to be. We should add a test that does so.
 	br *roachpb.BatchResponse
 	pe *roachpb.Error
 }
@@ -58,6 +60,22 @@ func (c chanSender) Send(
 	}
 }
 
+type senderGroup struct {
+	b *RequestBatcher
+	g errgroup.Group
+}
+
+func (g *senderGroup) Send(rangeID roachpb.RangeID, request roachpb.Request) {
+	g.g.Go(func() error {
+		_, err := g.b.Send(context.Background(), rangeID, request)
+		return err
+	})
+}
+
+func (g *senderGroup) Wait() error {
+	return g.g.Wait()
+}
+
 func TestBatcherSendOnSizeWithReset(t *testing.T) {
 	// This test ensures that when a single batch ends up sending due to size
 	// constrains its timer is successfully canceled and does not lead to a
@@ -84,15 +102,9 @@ func TestBatcherSendOnSizeWithReset(t *testing.T) {
 		Sender:          sc,
 		Stopper:         stopper,
 	})
-	var g errgroup.Group
-	sendRequest := func(rangeID roachpb.RangeID, request roachpb.Request) {
-		g.Go(func() error {
-			_, err := b.Send(context.Background(), rangeID, request)
-			return err
-		})
-	}
-	sendRequest(1, &roachpb.GetRequest{})
-	sendRequest(1, &roachpb.GetRequest{})
+	g := senderGroup{b: b}
+	g.Send(1, &roachpb.GetRequest{})
+	g.Send(1, &roachpb.GetRequest{})
 	s := <-sc
 	s.respChan <- batchResp{}
 	// See the comment above wait. In rare cases the batch will be sent before the
@@ -212,22 +224,16 @@ func TestBatcherSend(t *testing.T) {
 		Sender:          sc,
 		Stopper:         stopper,
 	})
-	var g errgroup.Group
-	sendRequest := func(rangeID roachpb.RangeID, request roachpb.Request) {
-		g.Go(func() error {
-			_, err := b.Send(context.Background(), rangeID, request)
-			return err
-		})
-	}
 	// Send 3 requests to range 2 and 2 to range 1.
 	// The 3rd range 2 request will trigger immediate sending due to the
 	// MaxMsgsPerBatch configuration. The range 1 batch will be sent after the
 	// MaxWait timeout expires.
-	sendRequest(1, &roachpb.GetRequest{})
-	sendRequest(2, &roachpb.GetRequest{})
-	sendRequest(1, &roachpb.GetRequest{})
-	sendRequest(2, &roachpb.GetRequest{})
-	sendRequest(2, &roachpb.GetRequest{})
+	g := senderGroup{b: b}
+	g.Send(1, &roachpb.GetRequest{})
+	g.Send(2, &roachpb.GetRequest{})
+	g.Send(1, &roachpb.GetRequest{})
+	g.Send(2, &roachpb.GetRequest{})
+	g.Send(2, &roachpb.GetRequest{})
 	// Wait for the range 2 request and ensure it contains 3 requests.
 	s := <-sc
 	assert.Len(t, s.ba.Requests, 3)
@@ -305,7 +311,7 @@ func TestPanicWithNilStopper(t *testing.T) {
 	New(Config{Sender: make(chanSender)})
 }
 
-// TestBatchTimeout verfies the the RequestBatcher uses the context with the
+// TestBatchTimeout verifies the the RequestBatcher uses the context with the
 // deadline from the latest call to send.
 func TestBatchTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -405,27 +411,135 @@ func TestIdleAndMaxTimeoutDisabled(t *testing.T) {
 		Sender:          sc,
 		Stopper:         stopper,
 	})
-	var g errgroup.Group
-	sendRequest := func(rangeID roachpb.RangeID, request roachpb.Request) {
-		g.Go(func() error {
-			_, err := b.Send(context.Background(), rangeID, request)
-			return err
-		})
-	}
-	// Send 3 requests to range 2 and 2 to range 1.
-	// The 3rd range 2 request will trigger immediate sending due to the
-	// MaxMsgsPerBatch configuration. The range 1 batch will be sent after the
-	// MaxWait timeout expires.
-	sendRequest(1, &roachpb.GetRequest{})
+	// Send 2 requests to range 1. Even with an arbitrarily large delay between
+	// the requests, they should only be sent when the MaxMsgsPerBatch limit is
+	// reached, because no MaxWait timeout is configured.
+	g := senderGroup{b: b}
+	g.Send(1, &roachpb.GetRequest{})
 	select {
 	case <-sc:
 		t.Fatalf("RequestBatcher should not sent based on time")
 	case <-time.After(10 * time.Millisecond):
 	}
-	sendRequest(1, &roachpb.GetRequest{})
+	g.Send(1, &roachpb.GetRequest{})
 	s := <-sc
 	assert.Len(t, s.ba.Requests, 2)
 	s.respChan <- batchResp{}
+	// Make sure everything gets a response.
+	if err := g.Wait(); err != nil {
+		t.Fatalf("expected no errors, got %v", err)
+	}
+}
+
+// TestMaxKeysPerBatchReq exercises the RequestBatcher when it is configured to
+// assign each request a MaxSpanRequestKeys limit. When such a limit is used,
+// the RequestBatcher may receive partial responses to the requests that it
+// issues, so it needs to be prepared to paginate requests and combine partial
+// responses.
+func TestMaxKeysPerBatchReq(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	sc := make(chanSender)
+	b := New(Config{
+		MaxMsgsPerBatch:    3,
+		MaxKeysPerBatchReq: 5,
+		Sender:             sc,
+		Stopper:            stopper,
+	})
+	// Send 3 ResolveIntentRange requests. The requests are limited so
+	// pagination will be required. The following sequence of partial
+	// results will be returned:
+	//  send([{d-g}, {a-d}, {b, m}]) ->
+	//    scans from [a, c) before hitting limit
+	//    returns [{d-g}, {c-d}, {c-m}]
+	//  send([{d-g}, {c-d}, {c-m}]) ->
+	//    scans from [c, e) before hitting limit
+	//    returns [{e-g}, {}, {e-m}]
+	//  send([{e-g}, {e-m}]) ->
+	//    scans from [e, h) before hitting limit
+	//    returns [{}, {h-m}]
+	//  send([{h-m}]) ->
+	//    scans from [h, m) without hitting limit
+	//    returns [{}]
+	type span [2]string // [key, endKey]
+	type spanMap map[span]span
+	var nilResumeSpan span
+	makeReq := func(sp span) *roachpb.ResolveIntentRangeRequest {
+		var req roachpb.ResolveIntentRangeRequest
+		req.Key = roachpb.Key(sp[0])
+		req.EndKey = roachpb.Key(sp[1])
+		return &req
+	}
+	makeResp := func(ba *roachpb.BatchRequest, resumeSpans spanMap) *roachpb.BatchResponse {
+		br := ba.CreateReply()
+		for i, ru := range ba.Requests {
+			req := ru.GetResolveIntentRange()
+			reqSp := span{string(req.Key), string(req.EndKey)}
+			resumeSp, ok := resumeSpans[reqSp]
+			if !ok {
+				t.Fatalf("unexpected request: %+v", req)
+			}
+			if resumeSp == nilResumeSpan {
+				continue
+			}
+			resp := br.Responses[i].GetResolveIntentRange()
+			resp.ResumeSpan = &roachpb.Span{
+				Key: roachpb.Key(resumeSp[0]), EndKey: roachpb.Key(resumeSp[1]),
+			}
+			resp.ResumeReason = roachpb.RESUME_KEY_LIMIT
+		}
+		return br
+	}
+	g := senderGroup{b: b}
+	g.Send(1, makeReq(span{"d", "g"}))
+	g.Send(1, makeReq(span{"a", "d"}))
+	g.Send(1, makeReq(span{"b", "m"}))
+	//  send([{d-g}, {a-d}, {b, m}]) ->
+	//    scans from [a, c) before hitting limit
+	//    returns [{d-g}, {c-d}, {c-m}]
+	s := <-sc
+	assert.Equal(t, int64(5), s.ba.MaxSpanRequestKeys)
+	assert.Len(t, s.ba.Requests, 3)
+	br := makeResp(&s.ba, spanMap{
+		{"d", "g"}: {"d", "g"},
+		{"a", "d"}: {"c", "d"},
+		{"b", "m"}: {"c", "m"},
+	})
+	s.respChan <- batchResp{br: br}
+	//  send([{d-g}, {c-d}, {c-m}]) ->
+	//    scans from [c, e) before hitting limit
+	//    returns [{e-g}, {}, {e-m}]
+	s = <-sc
+	assert.Equal(t, int64(5), s.ba.MaxSpanRequestKeys)
+	assert.Len(t, s.ba.Requests, 3)
+	br = makeResp(&s.ba, spanMap{
+		{"d", "g"}: {"e", "g"},
+		{"c", "d"}: nilResumeSpan,
+		{"c", "m"}: {"e", "m"},
+	})
+	s.respChan <- batchResp{br: br}
+	//  send([{e-g}, {e-m}]) ->
+	//    scans from [e, h) before hitting limit
+	//    returns [{}, {h-m}]
+	s = <-sc
+	assert.Equal(t, int64(5), s.ba.MaxSpanRequestKeys)
+	assert.Len(t, s.ba.Requests, 2)
+	br = makeResp(&s.ba, spanMap{
+		{"e", "g"}: nilResumeSpan,
+		{"e", "m"}: {"h", "m"},
+	})
+	s.respChan <- batchResp{br: br}
+	//  send([{h-m}]) ->
+	//    scans from [h, m) without hitting limit
+	//    returns [{}]
+	s = <-sc
+	assert.Equal(t, int64(5), s.ba.MaxSpanRequestKeys)
+	assert.Len(t, s.ba.Requests, 1)
+	br = makeResp(&s.ba, spanMap{
+		{"h", "m"}: nilResumeSpan,
+	})
+	s.respChan <- batchResp{br: br}
 	// Make sure everything gets a response.
 	if err := g.Wait(); err != nil {
 		t.Fatalf("expected no errors, got %v", err)

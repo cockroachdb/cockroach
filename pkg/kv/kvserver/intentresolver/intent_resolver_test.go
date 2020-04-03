@@ -341,7 +341,7 @@ func TestCleanupIntentsAsync(t *testing.T) {
 }
 
 // TestCleanupMultipleIntentsAsync verifies that CleanupIntentsAsync sends the
-// expected requests when multiple IntentsWithArg are provided to it.
+// expected requests when multiple intents are provided to it.
 func TestCleanupMultipleIntentsAsync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -520,7 +520,7 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 	type testCase struct {
 		intents   []result.EndTxnIntents
 		before    func(*testCase, *IntentResolver) func()
-		sendFuncs []sendFunc
+		sendFuncs *sendFuncs
 	}
 	testEndTxnIntents := []result.EndTxnIntents{
 		{
@@ -531,6 +531,9 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 				},
 				LockSpans: []roachpb.Span{
 					{Key: roachpb.Key("a")},
+					{Key: roachpb.Key("b")},
+					{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+					{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")},
 				},
 			},
 		},
@@ -539,7 +542,7 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 	cases := []testCase{
 		{
 			intents:   testEndTxnIntents,
-			sendFuncs: []sendFunc{},
+			sendFuncs: newSendFuncs(t),
 			before: func(tc *testCase, ir *IntentResolver) func() {
 				_, f := ir.lockInFlightTxnCleanup(context.Background(), tc.intents[0].Txn.ID)
 				return f
@@ -547,10 +550,14 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 		},
 		{
 			intents: testEndTxnIntents,
-			sendFuncs: []sendFunc{
-				resolveIntentsSendFunc(t),
-				gcSendFunc(t),
-			},
+			sendFuncs: func() *sendFuncs {
+				s := newSendFuncs(t)
+				s.pushFrontLocked(
+					resolveIntentsSendFuncs(s, 4, 2),
+					gcSendFunc(t),
+				)
+				return s
+			}(),
 		},
 	}
 
@@ -562,23 +569,19 @@ func TestCleanupTxnIntentsAsync(t *testing.T) {
 				Stopper: stopper,
 				Clock:   clock,
 			}
-			var sendFuncCalled int64
-			numSendFuncs := int64(len(c.sendFuncs))
-			sf := newSendFuncs(t, counterSendFuncs(&sendFuncCalled, c.sendFuncs)...)
-			ir := newIntentResolverWithSendFuncs(cfg, sf)
+			ir := newIntentResolverWithSendFuncs(cfg, c.sendFuncs)
 			if c.before != nil {
 				defer c.before(&c, ir)()
 			}
 			err := ir.CleanupTxnIntentsAsync(context.Background(), 1, c.intents, false)
 			testutils.SucceedsSoon(t, func() error {
-				if called := atomic.LoadInt64(&sendFuncCalled); called < numSendFuncs {
-					return fmt.Errorf("still waiting for %d calls", numSendFuncs-called)
+				if left := c.sendFuncs.len(); left != 0 {
+					return fmt.Errorf("still waiting for %d calls", left)
 				}
 				return nil
 			})
 			stopper.Stop(context.Background())
 			assert.Nil(t, err)
-			assert.Equal(t, sf.len(), 0)
 		})
 	}
 }
@@ -598,6 +601,7 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 				LockSpans: []roachpb.Span{
 					{Key: roachpb.Key("a")},
 					{Key: roachpb.Key("b")},
+					{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
 				},
 			},
 		},
@@ -605,8 +609,9 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 			Txn: &roachpb.Transaction{
 				TxnMeta: txn2.TxnMeta,
 				LockSpans: []roachpb.Span{
-					{Key: roachpb.Key("c")},
-					{Key: roachpb.Key("d")},
+					{Key: roachpb.Key("e")},
+					{Key: roachpb.Key("f")},
+					{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")},
 				},
 			},
 		},
@@ -632,6 +637,13 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 			reqs.resolved = append(reqs.resolved, string(ru.GetResolveIntent().Key))
 			reqs.Unlock()
 			return resolveIntentsSendFunc(t)(ba)
+		case roachpb.ResolveIntentRange:
+			reqs.Lock()
+			req := ru.GetResolveIntentRange()
+			reqs.resolved = append(reqs.resolved,
+				fmt.Sprintf("%s-%s", string(req.Key), string(req.EndKey)))
+			reqs.Unlock()
+			return resolveIntentsSendFunc(t)(ba)
 		case roachpb.GC:
 			reqs.Lock()
 			reqs.gced = append(reqs.gced, string(ru.GetGc().Key))
@@ -641,7 +653,7 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 			return nil, roachpb.NewErrorf("unexpected")
 		}
 	}
-	sf := newSendFuncs(t, repeat(resolveOrGCFunc, 6)...)
+	sf := newSendFuncs(t, repeat(resolveOrGCFunc, 8)...)
 
 	stopper := stop.NewStopper()
 	cfg := Config{
@@ -664,22 +676,8 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 	// All four intents should be resolved and both txn records should be GCed.
 	sort.Strings(reqs.resolved)
 	sort.Strings(reqs.gced)
-	assert.Equal(t, []string{"a", "b", "c", "d"}, reqs.resolved)
+	assert.Equal(t, []string{"a", "b", "c-d", "e", "f", "g-h"}, reqs.resolved)
 	assert.Equal(t, []string{"a", "c"}, reqs.gced)
-}
-
-func counterSendFuncs(counter *int64, funcs []sendFunc) []sendFunc {
-	for i, f := range funcs {
-		funcs[i] = counterSendFunc(counter, f)
-	}
-	return funcs
-}
-
-func counterSendFunc(counter *int64, f sendFunc) sendFunc {
-	return func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		defer atomic.AddInt64(counter, 1)
-		return f(ba)
-	}
 }
 
 // TestCleanupIntents verifies that CleanupIntents sends the expected requests

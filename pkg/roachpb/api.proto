@@ -1881,7 +1881,7 @@ message Header {
   // - EndTxnRequest
   //
   // Forward requests and reverse requests cannot be mixed in the same batch if
-  // a limit is set. There doesn't seem to be a fundemental reason for this
+  // a limit is set. There doesn't seem to be a fundamental reason for this
   // restriction, but a batch that mixed forward and reverse requests would be
   // impossible to order, so it would unavoidably have to deal with the added
   // complications discussed in "Unordered requests". For now, that's a good
