@@ -276,6 +276,11 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b STRING[] COLLATE de)`},
 		{`CREATE TABLE a (b STRING(3)[] COLLATE de)`},
 
+		{`CREATE TABLE a (LIKE b)`},
+		{`CREATE TABLE a (LIKE b, c INT8)`},
+		{`CREATE TABLE a (LIKE b EXCLUDING INDEXES INCLUDING INDEXES)`},
+		{`CREATE TABLE a (LIKE b INCLUDING ALL EXCLUDING INDEXES, c INT8)`},
+
 		{`CREATE VIEW a AS SELECT * FROM b`},
 		{`EXPLAIN CREATE VIEW a AS SELECT * FROM b`},
 		{`CREATE VIEW a AS SELECT b.* FROM b LIMIT 5`},
@@ -3179,8 +3184,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(x INT[][])`, 32552, ``, ``},
 		{`CREATE TABLE a(x INT[1][2])`, 32552, ``, ``},
 		{`CREATE TABLE a(x INT ARRAY[1][2])`, 32552, ``, ``},
-
-		{`CREATE TABLE a(LIKE b)`, 30840, ``, ``},
 
 		{`CREATE TABLE a(b INT8) WITH OIDS`, 0, `create table with oids`, ``},
 
