@@ -39,7 +39,7 @@ root            ·             ·
       │         exec mode     exists
       └── scan  ·             ·
 ·               table         abc@primary
-·               spans         ALL
+·               spans         LIMITED SCAN
 ·               limit         1
 
 query TTTTT
@@ -50,7 +50,7 @@ EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXIS
 root                         ·             ·                                                                            (a, b, c)       ·
  ├── scan                    ·             ·                                                                            (a, b, c)       ·
  │                           table         abc@primary                                                                  ·               ·
- │                           spans         ALL                                                                          ·               ·
+ │                           spans         FULL SCAN                                                                    ·               ·
  │                           filter        a = @S2                                                                      ·               ·
  ├── subquery                ·             ·                                                                            (a, b, c)       ·
  │    │                      id            @S1                                                                          ·               ·
@@ -60,7 +60,7 @@ root                         ·             ·                                  
  │         │                 count         1                                                                            ·               ·
  │         └── scan          ·             ·                                                                            (a, b, c)       ·
  │                           table         abc@primary                                                                  ·               ·
- │                           spans         ALL                                                                          ·               ·
+ │                           spans         FULL SCAN                                                                    ·               ·
  │                           filter        c = (a + 3)                                                                  ·               ·
  └── subquery                ·             ·                                                                            (a, b, c)       ·
       │                      id            @S2                                                                          ·               ·
@@ -73,7 +73,7 @@ root                         ·             ·                                  
                 │            count         1                                                                            ·               ·
                 └── revscan  ·             ·                                                                            (a)             -a
 ·                            table         abc@primary                                                                  ·               ·
-·                            spans         ALL                                                                          ·               ·
+·                            spans         FULL SCAN                                                                    ·               ·
 ·                            filter        @S1                                                                          ·               ·
 
 # IN expression transformed into semi-join.
@@ -90,10 +90,10 @@ merge-join  ·                   ·            (a)  ·
  │          mergeJoinOrder      +"(a=a)"     ·    ·
  ├── scan   ·                   ·            (a)  +a
  │          table               abc@primary  ·    ·
- │          spans               ALL          ·    ·
+ │          spans               FULL SCAN    ·    ·
  └── scan   ·                   ·            (a)  +a
 ·           table               abc@primary  ·    ·
-·           spans               ALL          ·    ·
+·           spans               FULL SCAN    ·    ·
 
 query TTT
 EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
@@ -146,7 +146,7 @@ root            ·             ·                                               
  │    │         render 0      col0                                                                                                        ·                   ·
  │    └── scan  ·             ·                                                                                                           (col0, col3, col4)  ·
  │              table         tab4@primary                                                                                                ·                   ·
- │              spans         ALL                                                                                                         ·                   ·
+ │              spans         FULL SCAN                                                                                                   ·                   ·
  │              filter        ((col0 <= 0) AND (col4 <= 5.38)) OR ((((col4 = ANY @S1) AND (col3 <= 5)) AND (col3 >= 7)) AND (col3 <= 9))  ·                   ·
  └── subquery   ·             ·                                                                                                           (col0)              ·
       │         id            @S1                                                                                                         ·                   ·
@@ -154,7 +154,7 @@ root            ·             ·                                               
       │         exec mode     all rows normalized                                                                                         ·                   ·
       └── scan  ·             ·                                                                                                           (col1)              ·
 ·               table         tab4@primary                                                                                                ·                   ·
-·               spans         ALL                                                                                                         ·                   ·
+·               spans         FULL SCAN                                                                                                   ·                   ·
 ·               filter        col1 > 8.27                                                                                                 ·                   ·
 
 # ------------------------------------------------------------------------------
@@ -177,10 +177,10 @@ merge-join  ·                   ·          (x, y)  ·
  │          mergeJoinOrder      +"(x=x)"   ·       ·
  ├── scan   ·                   ·          (x, y)  +x
  │          table               a@primary  ·       ·
- │          spans               ALL        ·       ·
+ │          spans               FULL SCAN  ·       ·
  └── scan   ·                   ·          (x)     +x
 ·           table               b@primary  ·       ·
-·           spans               ALL        ·       ·
+·           spans               FULL SCAN  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x-1 = a.x)
@@ -193,12 +193,12 @@ hash-join       ·                  ·                (x, y)     ·
  │              left cols are key  ·                ·          ·
  ├── scan       ·                  ·                (x, y)     ·
  │              table              a@primary        ·          ·
- │              spans              ALL              ·          ·
+ │              spans              FULL SCAN        ·          ·
  └── render     ·                  ·                (column5)  ·
       │         render 0           x - 1            ·          ·
       └── scan  ·                  ·                (x)        ·
 ·               table              b@primary        ·          ·
-·               spans              ALL              ·          ·
+·               spans              FULL SCAN        ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM b WHERE b.x = a.x)
@@ -213,10 +213,10 @@ merge-join  ·                   ·          (x, y)  ·
  │          mergeJoinOrder      +"(x=x)"   ·       ·
  ├── scan   ·                   ·          (x, y)  +x
  │          table               a@primary  ·       ·
- │          spans               ALL        ·       ·
+ │          spans               FULL SCAN  ·       ·
  └── scan   ·                   ·          (x)     +x
 ·           table               b@primary  ·       ·
-·           spans               ALL        ·       ·
+·           spans               FULL SCAN  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b.x)
@@ -229,12 +229,12 @@ hash-join       ·                  ·                (x, z)     ·
  │              left cols are key  ·                ·          ·
  ├── scan       ·                  ·                (x, z)     ·
  │              table              b@primary        ·          ·
- │              spans              ALL              ·          ·
+ │              spans              FULL SCAN        ·          ·
  └── render     ·                  ·                (column5)  ·
       │         render 0           x - 1            ·          ·
       └── scan  ·                  ·                (x)        ·
 ·               table              a@primary        ·          ·
-·               spans              ALL              ·          ·
+·               spans              FULL SCAN        ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT x FROM b)
@@ -251,7 +251,7 @@ root            ·              ·                  ("array")  ·
       │         exec mode      all rows           ·          ·
       └── scan  ·              ·                  (x)        ·
 ·               table          b@primary          ·          ·
-·               spans          ALL                ·          ·
+·               spans          FULL SCAN          ·          ·
 
 # Case where the plan has an apply join.
 query TTTTT
@@ -264,7 +264,7 @@ apply-join  ·            ·            (a, b, c)  ·
  │          pred         column1 = a  ·          ·
  └── scan   ·            ·            (a, b, c)  ·
 ·           table        abc@primary  ·          ·
-·           spans        ALL          ·          ·
+·           spans        FULL SCAN    ·          ·
 
 # Case where the EXISTS subquery still has outer columns in the subquery
 # (regression test for #28816).

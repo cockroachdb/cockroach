@@ -59,7 +59,7 @@ root                                       ·                   ·
  │              │                          label               buffer 1
  │              └── scan                   ·                   ·
  │                                         table               xy@primary
- │                                         spans               ALL
+ │                                         spans               FULL SCAN
  └── postquery                             ·                   ·
       └── error if rows                    ·                   ·
            └── hash-join                   ·                   ·
@@ -71,7 +71,7 @@ root                                       ·                   ·
                 │                          label               buffer 1
                 └── scan                   ·                   ·
 ·                                          table               parent@primary
-·                                          spans               ALL
+·                                          spans               FULL SCAN
 
 statement ok
 CREATE TABLE child_nullable (c INT PRIMARY KEY, p INT REFERENCES parent(p));
@@ -338,7 +338,7 @@ root                                       ·                   ·
  │              └── render                 ·                   ·
  │                   └── scan              ·                   ·
  │                                         table               child@primary
- │                                         spans               ALL
+ │                                         spans               FULL SCAN
  │                                         locking strength    for update
  └── postquery                             ·                   ·
       └── error if rows                    ·                   ·
@@ -351,7 +351,7 @@ root                                       ·                   ·
                 │                          label               buffer 1
                 └── scan                   ·                   ·
 ·                                          table               parent@primary
-·                                          spans               ALL
+·                                          spans               FULL SCAN
 
 query TTT
 EXPLAIN UPDATE child SET p = 4 WHERE c = 10
@@ -399,7 +399,7 @@ root                                                 ·                   ·
  │              └── render                           ·                   ·
  │                   └── scan                        ·                   ·
  │                                                   table               parent@primary
- │                                                   spans               ALL
+ │                                                   spans               FULL SCAN
  │                                                   locking strength    for update
  ├── postquery                                       ·                   ·
  │    └── error if rows                              ·                   ·
@@ -421,7 +421,7 @@ root                                                 ·                   ·
  │                        │                          order key           p
  │                        └── scan                   ·                   ·
  │                                                   table               child@child_auto_index_fk_p_ref_parent
- │                                                   spans               ALL
+ │                                                   spans               FULL SCAN
  └── postquery                                       ·                   ·
       └── error if rows                              ·                   ·
            └── render                                ·                   ·
@@ -442,7 +442,7 @@ root                                                 ·                   ·
                           │                          order key           p
                           └── scan                   ·                   ·
 ·                                                    table               child_nullable@child_nullable_auto_index_fk_p_ref_parent
-·                                                    spans               ALL
+·                                                    spans               FULL SCAN
 
 query TTT
 EXPLAIN UPDATE parent SET p = p+1 WHERE other = 10
@@ -508,7 +508,7 @@ root                                                 ·                   ·
  │              └── render                           ·                   ·
  │                   └── scan                        ·                   ·
  │                                                   table               child@primary
- │                                                   spans               ALL
+ │                                                   spans               FULL SCAN
  │                                                   locking strength    for update
  └── postquery                                       ·                   ·
       └── error if rows                              ·                   ·
@@ -530,7 +530,7 @@ root                                                 ·                   ·
                           │                          order key           c
                           └── scan                   ·                   ·
 ·                                                    table               grandchild@grandchild_auto_index_fk_c_ref_child
-·                                                    spans               ALL
+·                                                    spans               FULL SCAN
 
 # This update shouldn't emit checks for c, since it's unchanged.
 query TTT
@@ -549,7 +549,7 @@ root                                       ·                   ·
  │              └── render                 ·                   ·
  │                   └── scan              ·                   ·
  │                                         table               child@primary
- │                                         spans               ALL
+ │                                         spans               FULL SCAN
  │                                         locking strength    for update
  └── postquery                             ·                   ·
       └── error if rows                    ·                   ·
@@ -562,7 +562,7 @@ root                                       ·                   ·
                 │                          label               buffer 1
                 └── scan                   ·                   ·
 ·                                          table               parent@primary
-·                                          spans               ALL
+·                                          spans               FULL SCAN
 
 query TTT
 EXPLAIN UPDATE child SET p = p
@@ -580,7 +580,7 @@ root                                       ·                   ·
  │              └── render                 ·                   ·
  │                   └── scan              ·                   ·
  │                                         table               child@primary
- │                                         spans               ALL
+ │                                         spans               FULL SCAN
  │                                         locking strength    for update
  └── postquery                             ·                   ·
       └── error if rows                    ·                   ·
@@ -593,7 +593,7 @@ root                                       ·                   ·
                 │                          label               buffer 1
                 └── scan                   ·                   ·
 ·                                          table               parent@primary
-·                                          spans               ALL
+·                                          spans               FULL SCAN
 
 query TTT
 EXPLAIN UPDATE child SET p = p+1, c = c+1
@@ -611,7 +611,7 @@ root                                                 ·                   ·
  │              └── render                           ·                   ·
  │                   └── scan                        ·                   ·
  │                                                   table               child@primary
- │                                                   spans               ALL
+ │                                                   spans               FULL SCAN
  │                                                   locking strength    for update
  ├── postquery                                       ·                   ·
  │    └── error if rows                              ·                   ·
@@ -624,7 +624,7 @@ root                                                 ·                   ·
  │              │                                    label               buffer 1
  │              └── scan                             ·                   ·
  │                                                   table               parent@primary
- │                                                   spans               ALL
+ │                                                   spans               FULL SCAN
  └── postquery                                       ·                   ·
       └── error if rows                              ·                   ·
            └── render                                ·                   ·
@@ -645,7 +645,7 @@ root                                                 ·                   ·
                           │                          order key           c
                           └── scan                   ·                   ·
 ·                                                    table               grandchild@grandchild_auto_index_fk_c_ref_child
-·                                                    spans               ALL
+·                                                    spans               FULL SCAN
 
 # Multiple grandchild tables
 statement ok
@@ -667,7 +667,7 @@ root                                       ·                   ·
  │              └── render                 ·                   ·
  │                   └── scan              ·                   ·
  │                                         table               child@primary
- │                                         spans               ALL
+ │                                         spans               FULL SCAN
  │                                         locking strength    for update
  └── postquery                             ·                   ·
       └── error if rows                    ·                   ·
@@ -680,7 +680,7 @@ root                                       ·                   ·
                 │                          label               buffer 1
                 └── scan                   ·                   ·
 ·                                          table               parent@primary
-·                                          spans               ALL
+·                                          spans               FULL SCAN
 
 statement ok
 CREATE TABLE self (x INT PRIMARY KEY, y INT NOT NULL REFERENCES self(x))
@@ -701,7 +701,7 @@ root                                       ·                   ·
  │              └── render                 ·                   ·
  │                   └── scan              ·                   ·
  │                                         table               self@primary
- │                                         spans               ALL
+ │                                         spans               FULL SCAN
  │                                         locking strength    for update
  └── postquery                             ·                   ·
       └── error if rows                    ·                   ·
@@ -714,7 +714,7 @@ root                                       ·                   ·
                 │                          label               buffer 1
                 └── scan                   ·                   ·
 ·                                          table               self@primary
-·                                          spans               ALL
+·                                          spans               FULL SCAN
 
 query TTT
 EXPLAIN UPDATE self SET x = 3
@@ -732,7 +732,7 @@ root                                                 ·                   ·
  │              └── render                           ·                   ·
  │                   └── scan                        ·                   ·
  │                                                   table               self@primary
- │                                                   spans               ALL
+ │                                                   spans               FULL SCAN
  │                                                   locking strength    for update
  └── postquery                                       ·                   ·
       └── error if rows                              ·                   ·
@@ -754,7 +754,7 @@ root                                                 ·                   ·
                           │                          order key           y
                           └── scan                   ·                   ·
 ·                                                    table               self@self_auto_index_fk_y_ref_self
-·                                                    spans               ALL
+·                                                    spans               FULL SCAN
 
 # Tests for the insert fast path.
 statement ok

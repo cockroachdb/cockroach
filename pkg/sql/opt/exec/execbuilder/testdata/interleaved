@@ -43,7 +43,7 @@ EXPLAIN SELECT * FROM level4
 ·     vectorized   true
 scan  ·            ·
 ·     table        level4@primary
-·     spans        ALL
+·     spans        FULL SCAN
 
 # The span below ends at the end of the first index of table 53, and is not
 # constraining the value of k2 or k3. This is confusing on first glance because

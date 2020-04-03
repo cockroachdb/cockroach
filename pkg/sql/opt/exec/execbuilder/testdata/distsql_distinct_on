@@ -73,7 +73,7 @@ distinct   ·            ·            (x, y, z)  ·
  │         distinct on  x, y, z      ·          ·
  └── scan  ·            ·            (x, y, z)  ·
 ·          table        xyz@primary  ·          ·
-·          spans        ALL          ·          ·
+·          spans        FULL SCAN    ·          ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz]
@@ -93,7 +93,7 @@ distinct        ·            ·            (x, y, z)  +x
       │         order        +x           ·          ·
       └── scan  ·            ·            (x, y, z)  ·
 ·               table        xyz@primary  ·          ·
-·               spans        ALL          ·          ·
+·               spans        FULL SCAN    ·          ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x]
@@ -114,7 +114,7 @@ distinct        ·            ·            (x, y)  +y
       │         order        +y,+x        ·       ·
       └── scan  ·            ·            (x, y)  ·
 ·               table        xyz@primary  ·       ·
-·               spans        ALL          ·       ·
+·               spans        FULL SCAN    ·       ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x]
@@ -129,7 +129,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
 ·     vectorized   true         ·          ·
 scan  ·            ·            (a, b, c)  ·
 ·     table        abc@primary  ·          ·
-·     spans        ALL          ·          ·
+·     spans        FULL SCAN    ·          ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc]
@@ -149,7 +149,7 @@ render          ·            ·            (a, b)     +a,+b
       │         order key    a, b         ·          ·
       └── scan  ·            ·            (a, b, c)  +a,+b,+c
 ·               table        abc@primary  ·          ·
-·               spans        ALL          ·          ·
+·               spans        FULL SCAN    ·          ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c]

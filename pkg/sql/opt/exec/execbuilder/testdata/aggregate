@@ -33,7 +33,7 @@ group           ·             ·                   (min int, max int, count int
       │         render 3      ('\x01')[bytes]     ·                                                                                                                                                   ·
       └── scan  ·             ·                   ()                                                                                                                                                  ·
 ·               table         kv@primary          ·                                                                                                                                                   ·
-·               spans         ALL                 ·                                                                                                                                                   ·
+·               spans         FULL SCAN           ·                                                                                                                                                   ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), variance(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
@@ -71,7 +71,7 @@ render               ·            ·                            (min int, max i
            │         render 3     (v)[int]                     ·                                                                                                                                                    ·
            └── scan  ·            ·                            (v int, s string)                                                                                                                                    ·
 ·                    table        kv@primary                   ·                                                                                                                                                    ·
-·                    spans        ALL                          ·                                                                                                                                                    ·
+·                    spans        FULL SCAN                    ·                                                                                                                                                    ·
 
 # Aggregate functions trigger aggregation and computation when there is no source.
 query TTTTT
@@ -125,7 +125,7 @@ render          ·            ·                  (count int, k int)       ·
       │         ordered      +k                 ·                        ·
       └── scan  ·            ·                  (k int)                  +k
 ·               table        kv@primary         ·                        ·
-·               spans        ALL                ·                        ·
+·               spans        FULL SCAN          ·                        ·
 
 # Selecting and grouping on a more complex expression works.
 query TTTTT
@@ -144,7 +144,7 @@ render               ·            ·                           (count int, r in
            │         render 0     ((k)[int] + (v)[int])[int]  ·                              ·
            └── scan  ·            ·                           (k int, v int)                 ·
 ·                    table        kv@primary                  ·                              ·
-·                    spans        ALL                         ·                              ·
+·                    spans        FULL SCAN                   ·                              ·
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
 query TTTTT
@@ -163,7 +163,7 @@ render          ·            ·                                      (count int
       │         ordered      +k                                     ·                                          ·
       └── scan  ·            ·                                      (k int, v int)                             +k
 ·               table        kv@primary                             ·                                          ·
-·               spans        ALL                                    ·                                          ·
+·               spans        FULL SCAN                              ·                                          ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT count(k) FROM kv
@@ -175,7 +175,7 @@ group      ·            ·           (count int)  ·
  │         scalar       ·           ·            ·
  └── scan  ·            ·           (k int)      ·
 ·          table        kv@primary  ·            ·
-·          spans        ALL         ·            ·
+·          spans        FULL SCAN   ·            ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT count(k), sum(k), max(k) FROM kv
@@ -189,7 +189,7 @@ group      ·            ·           (count int, sum decimal, max int)  ·
  │         scalar       ·           ·                                  ·
  └── scan  ·            ·           (k int)                            ·
 ·          table        kv@primary  ·                                  ·
-·          spans        ALL         ·                                  ·
+·          spans        FULL SCAN   ·                                  ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT count(v), count(DISTINCT v), sum(v), sum(DISTINCT v), min(v), min(DISTINCT v) FROM kv
@@ -206,7 +206,7 @@ group      ·            ·                  (count, count, sum, sum, min, min) 
  │         scalar       ·                  ·                                   ·
  └── scan  ·            ·                  (v)                                 ·
 ·          table        kv@primary         ·                                   ·
-·          spans        ALL                ·                                   ·
+·          spans        FULL SCAN          ·                                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT count(DISTINCT a.*) FROM kv a, kv b
@@ -222,10 +222,10 @@ group                 ·            ·                             (count)      
            │          type         cross                         ·             ·
            ├── scan   ·            ·                             (k, v, w, s)  ·
            │          table        kv@primary                    ·             ·
-           │          spans        ALL                           ·             ·
+           │          spans        FULL SCAN                     ·             ·
            └── scan   ·            ·                             ()            ·
 ·                     table        kv@primary                    ·             ·
-·                     spans        ALL                           ·             ·
+·                     spans        FULL SCAN                     ·             ·
 
 query TTT
 SELECT tree, field, description FROM [
@@ -244,10 +244,10 @@ render                ·            ·
            │          type         cross
            ├── scan   ·            ·
            │          table        kv@primary
-           │          spans        ALL
+           │          spans        FULL SCAN
            └── scan   ·            ·
 ·                     table        kv@primary
-·                     spans        ALL
+·                     spans        FULL SCAN
 
 query TTT
 SELECT tree, field, description FROM [
@@ -266,10 +266,10 @@ render                ·            ·
            │          type         cross
            ├── scan   ·            ·
            │          table        kv@primary
-           │          spans        ALL
+           │          spans        FULL SCAN
            └── scan   ·            ·
 ·                     table        kv@primary
-·                     spans        ALL
+·                     spans        FULL SCAN
 
 # A useful optimization: naked tuple expansion in GROUP BY clause.
 query TTT
@@ -289,10 +289,10 @@ render                ·            ·
            │          type         cross
            ├── scan   ·            ·
            │          table        kv@primary
-           │          spans        ALL
+           │          spans        FULL SCAN
            └── scan   ·            ·
 ·                     table        kv@primary
-·                     spans        ALL
+·                     spans        FULL SCAN
 
 # Show reuse of renders expression inside an expansion.
 query TTT
@@ -310,10 +310,10 @@ render                ·            ·
            │          type         cross
            ├── scan   ·            ·
            │          table        kv@primary
-           │          spans        ALL
+           │          spans        FULL SCAN
            └── scan   ·            ·
 ·                     table        kv@primary
-·                     spans        ALL
+·                     spans        FULL SCAN
 
 statement ok
 CREATE TABLE abc (
@@ -333,7 +333,7 @@ group      ·            ·                (min char)  ·
  │         scalar       ·                ·           ·
  └── scan  ·            ·                (a char)    ·
 ·          table        abc@primary      ·           ·
-·          spans        ALL              ·           ·
+·          spans        LIMITED SCAN     ·           ·
 ·          limit        1                ·           ·
 
 statement ok
@@ -361,7 +361,7 @@ group      ·            ·                (min int)  ·
  │         scalar       ·                ·          ·
  └── scan  ·            ·                (x int)    ·
 ·          table        xyz@xy           ·          ·
-·          spans        ALL              ·          ·
+·          spans        LIMITED SCAN     ·          ·
 ·          limit        1                ·          ·
 
 query TTTTT
@@ -387,7 +387,7 @@ group         ·            ·                (max int)  ·
  │            scalar       ·                ·          ·
  └── revscan  ·            ·                (x int)    ·
 ·             table        xyz@xy           ·          ·
-·             spans        ALL              ·          ·
+·             spans        LIMITED SCAN     ·          ·
 ·             limit        1                ·          ·
 
 query TTTTT
@@ -591,7 +591,7 @@ sort            ·            ·           (v int, count int)  +count
       │         group by     v           ·                   ·
       └── scan  ·            ·           (k int, v int)      ·
 ·               table        kv@primary  ·                   ·
-·               spans        ALL         ·                   ·
+·               spans        FULL SCAN   ·                   ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
@@ -606,7 +606,7 @@ sort            ·            ·             (v int, count int)  +count
       │         group by     v             ·                   ·
       └── scan  ·            ·             (v int)             ·
 ·               table        kv@primary    ·                   ·
-·               spans        ALL           ·                   ·
+·               spans        FULL SCAN     ·                   ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT v, count(1) FROM kv GROUP BY v ORDER BY count(1)
@@ -624,7 +624,7 @@ sort                 ·            ·               (v int, count int)    +count
            │         render 1     (v)[int]        ·                     ·
            └── scan  ·            ·               (v int)               ·
 ·                    table        kv@primary      ·                     ·
-·                    spans        ALL             ·                     ·
+·                    spans        FULL SCAN       ·                     ·
 
 # Check that filters propagate through no-op aggregation.
 query TTTTT
@@ -641,7 +641,7 @@ group           ·            ·               (v, count)    ·
       │         render 1     v               ·             ·
       └── scan  ·            ·               (v)           ·
 ·               table        kv@primary      ·             ·
-·               spans        ALL             ·             ·
+·               spans        FULL SCAN       ·             ·
 ·               filter       v > 10          ·             ·
 
 # Verify that FILTER works.
@@ -673,7 +673,7 @@ render               ·            ·                                      (coun
            │         render 2     v                                      ·                      ·
            └── scan  ·            ·                                      (k, v)                 ·
 ·                    table        filter_test@primary                    ·                      ·
-·                    spans        ALL                                    ·                      ·
+·                    spans        FULL SCAN                              ·                      ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
@@ -692,7 +692,7 @@ render               ·            ·                                      (coun
            │         render 2     v                                      ·                      ·
            └── scan  ·            ·                                      (k, v)                 ·
 ·                    table        filter_test@primary                    ·                      ·
-·                    spans        ALL                                    ·                      ·
+·                    spans        FULL SCAN                              ·                      ·
 
 # Tests with * inside GROUP BY.
 query TTTTT
@@ -704,7 +704,7 @@ render     ·            ·           (a int)  ·
  │         render 0     (1)[int]    ·        ·
  └── scan  ·            ·           ()       ·
 ·          table        kv@primary  ·        ·
-·          spans        ALL         ·        ·
+·          spans        FULL SCAN   ·        ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
@@ -722,10 +722,10 @@ render                ·            ·                                 (sum deci
            │          pred         ((k)[int] >= (d)[decimal])[bool]  ·                     ·
            ├── scan   ·            ·                                 (k int)               ·
            │          table        kv@primary                        ·                     ·
-           │          spans        ALL                               ·                     ·
+           │          spans        FULL SCAN                         ·                     ·
            └── scan   ·            ·                                 (d decimal)           ·
 ·                     table        abc@primary                       ·                     ·
-·                     spans        ALL                               ·                     ·
+·                     spans        FULL SCAN                         ·                     ·
 
 # opt_test is used for tests around the single-row optimization for MIN/MAX.
 statement ok
@@ -779,7 +779,7 @@ group           ·            ·                           (min int)      ·
       │         render 0     ((v)[int] + (1)[int])[int]  ·              ·
       └── scan  ·            ·                           (v int)        ·
 ·               table        opt_test@primary            ·              ·
-·               spans        ALL                         ·              ·
+·               spans        FULL SCAN                   ·              ·
 
 # Verify that we don't use the optimization if there is a GROUP BY.
 query TTTTT
@@ -796,7 +796,7 @@ render          ·            ·                 (min int)         ·
       │         ordered      +k                ·                 ·
       └── scan  ·            ·                 (k int, v int)    +k
 ·               table        opt_test@primary  ·                 ·
-·               spans        ALL               ·                 ·
+·               spans        FULL SCAN         ·                 ·
 
 statement ok
 CREATE TABLE xy(x STRING, y STRING);
@@ -810,7 +810,7 @@ render     ·            ·                                        (r tuple{int,
  │         render 0     (((b)[int], (a)[int]))[tuple{int, int}]  ·                    ·
  └── scan  ·            ·                                        (a int, b int)       ·
 ·          table        ab@primary                               ·                    ·
-·          spans        ALL                                      ·                    ·
+·          spans        FULL SCAN                                ·                    ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT min(y), (b, a) r FROM ab, xy GROUP BY (x, (a, b))
@@ -830,10 +830,10 @@ render                ·            ·                                          
            │          type         cross                                               ·                                                ·
            ├── scan   ·            ·                                                   (a int, b int)                                   ·
            │          table        ab@primary                                          ·                                                ·
-           │          spans        ALL                                                 ·                                                ·
+           │          spans        FULL SCAN                                           ·                                                ·
            └── scan   ·            ·                                                   (x string, y string)                             ·
 ·                     table        xy@primary                                          ·                                                ·
-·                     spans        ALL                                                 ·                                                ·
+·                     spans        FULL SCAN                                           ·                                                ·
 
 # Test that ordering on GROUP BY columns is maintained.
 # TODO(radu): Derive GROUP BY ordering in physicalPropsBuilder.
@@ -966,7 +966,7 @@ render                    ·            ·                                      
                 │         render 1     (v)[int]                                   ·                         ·
                 └── scan  ·            ·                                          (v int, w int)            ·
 ·                         table        kv@primary                                 ·                         ·
-·                         spans        ALL                                        ·                         ·
+·                         spans        FULL SCAN                                  ·                         ·
 
 statement ok
 CREATE TABLE foo(a INT, b CHAR)
@@ -988,7 +988,7 @@ render               ·            ·            (m)             ·
            │         render 1     a            ·               ·
            └── scan  ·            ·            (a)             ·
 ·                    table        foo@primary  ·               ·
-·                    spans        ALL          ·               ·
+·                    spans        FULL SCAN    ·               ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
@@ -1006,7 +1006,7 @@ render               ·            ·            (m)             ·
            │         render 1     a            ·               ·
            └── scan  ·            ·            (a, b)          ·
 ·                    table        foo@primary  ·               ·
-·                    spans        ALL          ·               ·
+·                    spans        FULL SCAN    ·               ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT array_agg(v) FROM (SELECT * FROM kv ORDER BY v)
@@ -1020,7 +1020,7 @@ group           ·            ·             (array_agg)  ·
       │         order        +v            ·            ·
       └── scan  ·            ·             (v)          ·
 ·               table        kv@primary    ·            ·
-·               spans        ALL           ·            ·
+·               spans        FULL SCAN     ·            ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY s
@@ -1033,7 +1033,7 @@ render          ·            ·           (k)     ·
       │         order        +s          ·       ·
       └── scan  ·            ·           (k, s)  ·
 ·               table        kv@primary  ·       ·
-·               spans        ALL         ·       ·
+·               spans        FULL SCAN   ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT concat_agg(s) FROM (SELECT s FROM kv ORDER BY k)
@@ -1045,7 +1045,7 @@ group      ·            ·              (concat_agg)  ·
  │         scalar       ·              ·             ·
  └── scan  ·            ·              (k, s)        +k
 ·          table        kv@primary     ·             ·
-·          spans        ALL            ·             ·
+·          spans        FULL SCAN      ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT array_agg(k) FROM (SELECT k FROM kv ORDER BY s)
@@ -1059,7 +1059,7 @@ group           ·            ·             (array_agg)  ·
       │         order        +s            ·            ·
       └── scan  ·            ·             (k, s)       ·
 ·               table        kv@primary    ·            ·
-·               spans        ALL           ·            ·
+·               spans        FULL SCAN     ·            ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT string_agg(s, ',') FROM (SELECT s FROM kv ORDER BY k)
@@ -1075,7 +1075,7 @@ group           ·            ·                       (string_agg)     ·
       │         render 2     s                       ·                ·
       └── scan  ·            ·                       (k, s)           +k
 ·               table        kv@primary              ·                ·
-·               spans        ALL                     ·                ·
+·               spans        FULL SCAN               ·                ·
 
 # Verify that we project away all input columns for count(*).
 query TTTTT
@@ -1092,10 +1092,10 @@ group                ·            ·             (count)  ·
            │         equality     (y) = (v)     ·        ·
            ├── scan  ·            ·             (y)      ·
            │         table        xyz@xy        ·        ·
-           │         spans        ALL           ·        ·
+           │         spans        FULL SCAN     ·        ·
            └── scan  ·            ·             (v)      ·
 ·                    table        kv@primary    ·        ·
-·                    spans        ALL           ·        ·
+·                    spans        FULL SCAN     ·        ·
 
 
 # Regression test for #31882: make sure we don't incorrectly advertise an
@@ -1116,7 +1116,7 @@ group      ·            ·             (u, v, s)  ·
  │         ordered      +u,+v         ·          ·
  └── scan  ·            ·             (u, v, w)  +u,+v,+w
 ·          table        uvw@uvw       ·          ·
-·          spans        ALL           ·          ·
+·          spans        FULL SCAN     ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT string_agg(s, ', ') FROM kv
@@ -1131,7 +1131,7 @@ group           ·            ·                       (string_agg)  ·
       │         render 1     s                       ·             ·
       └── scan  ·            ·                       (s)           ·
 ·               table        kv@primary              ·             ·
-·               spans        ALL                     ·             ·
+·               spans        FULL SCAN               ·             ·
 
 statement ok
 CREATE TABLE string_agg_test (
@@ -1165,7 +1165,7 @@ sort                 ·            ·                              (company_id, 
            │         render 2     employee                       ·                                ·
            └── scan  ·            ·                              (company_id, employee)           ·
 ·                    table        string_agg_test@primary        ·                                ·
-·                    spans        ALL                            ·                                ·
+·                    spans        FULL SCAN                      ·                                ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -1192,7 +1192,7 @@ sort                 ·            ·                             (company_id, s
            │         render 2     company_id                    ·                               ·
            └── scan  ·            ·                             (company_id, employee)          ·
 ·                    table        string_agg_test@primary       ·                               ·
-·                    spans        ALL                           ·                               ·
+·                    spans        FULL SCAN                     ·                               ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -1219,7 +1219,7 @@ sort                 ·            ·                              (company_id, 
            │         render 2     employee                       ·                                ·
            └── scan  ·            ·                              (company_id, employee)           ·
 ·                    table        string_agg_test@primary        ·                                ·
-·                    spans        ALL                            ·                                ·
+·                    spans        FULL SCAN                      ·                                ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -1246,4 +1246,4 @@ sort                 ·            ·                             (company_id, s
            │         render 2     company_id                    ·                               ·
            └── scan  ·            ·                             (company_id, employee)          ·
 ·                    table        string_agg_test@primary       ·                               ·
-·                    spans        ALL                           ·                               ·
+·                    spans        FULL SCAN                     ·                               ·

@@ -40,7 +40,7 @@ lookup-join  ·            ·            (a, b, c, d, e, f)  ·
  │           equality     (b) = (f)    ·                   ·
  └── scan    ·            ·            (a, b, c)           ·
 ·            table        abc@primary  ·                   ·
-·            spans        ALL          ·                   ·
+·            spans        FULL SCAN    ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND e = c
@@ -56,7 +56,7 @@ lookup-join  ·                      ·                (a, b, c, d, e, f)  ·
  │           parallel               ·                ·                   ·
  └── scan    ·                      ·                (a, b, c)           ·
 ·            table                  abc@primary      ·                   ·
-·            spans                  ALL              ·                   ·
+·            spans                  FULL SCAN        ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
@@ -101,7 +101,7 @@ lookup-join  ·            ·            (a, b, c, d, e, f)  ·
  │           pred         @1 >= @5     ·                   ·
  └── scan    ·            ·            (a, b, c)           ·
 ·            table        abc@primary  ·                   ·
-·            spans        ALL          ·                   ·
+·            spans        FULL SCAN    ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a >= e
@@ -116,7 +116,7 @@ lookup-join  ·            ·            (a, b, c, d, e, f)  ·
  │           pred         @1 >= @5     ·                   ·
  └── scan    ·            ·            (a, b, c)           ·
 ·            table        abc@primary  ·                   ·
-·            spans        ALL          ·                   ·
+·            spans        FULL SCAN    ·                   ·
 
 # Verify a distsql plan.
 statement ok
@@ -175,7 +175,7 @@ render            ·                      ·                            (a, b, c
       │           parallel               ·                            ·                         ·
       └── scan    ·                      ·                            (a, b, c, d)              ·
 ·                 table                  data@primary                 ·                         ·
-·                 spans                  ALL                          ·                         ·
+·                 spans                  FULL SCAN                    ·                         ·
 ·                 filter                 c = 1                        ·                         ·
 
 query T
@@ -227,7 +227,7 @@ distinct               ·            ·                  (title)                
            │           pred         @2 != @4           ·                             ·
            └── scan    ·            ·                  (title, shelf)                +title
 ·                      table        books@primary      ·                             ·
-·                      spans        ALL                ·                             ·
+·                      spans        FULL SCAN          ·                             ·
 
 statement ok
 CREATE TABLE authors (name STRING, book STRING)
@@ -262,10 +262,10 @@ distinct                  ·            ·                  (name)              
                 │         equality     (book) = (title)   ·                                         ·
                 ├── scan  ·            ·                  (name, book)                              ·
                 │         table        authors@primary    ·                                         ·
-                │         spans        ALL                ·                                         ·
+                │         spans        FULL SCAN          ·                                         ·
                 └── scan  ·            ·                  (title, shelf)                            ·
 ·                         table        books@primary      ·                                         ·
-·                         spans        ALL                ·                                         ·
+·                         spans        FULL SCAN          ·                                         ·
 
 # Verify data placement.
 query TTTI colnames
@@ -295,7 +295,7 @@ render               ·            ·                 (name)               +name
            │         order        +name             ·                    ·
            └── scan  ·            ·                 (name, book)         ·
 ·                    table        authors@primary   ·                    ·
-·                    spans        ALL               ·                    ·
+·                    spans        FULL SCAN         ·                    ·
 
 # Cross joins should not be planned as lookup joins.
 query TTTTT colnames
@@ -315,10 +315,10 @@ render           ·            ·               (title, edition, shelf, title, e
       │          type         cross           ·                                               ·
       ├── scan   ·            ·               (title, edition, shelf)                         ·
       │          table        books2@primary  ·                                               ·
-      │          spans        ALL             ·                                               ·
+      │          spans        FULL SCAN       ·                                               ·
       └── scan   ·            ·               (title, edition, shelf)                         ·
 ·                table        books@primary   ·                                               ·
-·                spans        ALL             ·                                               ·
+·                spans        FULL SCAN       ·                                               ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book]
@@ -381,7 +381,7 @@ render            ·            ·              (a, c)     ·
       │           equality     (a) = (b)      ·          ·
       └── scan    ·            ·              (a)        ·
 ·                 table        small@primary  ·          ·
-·                 spans        ALL            ·          ·
+·                 spans        FULL SCAN      ·          ·
 
 # Lookup join on non-covering secondary index
 query TTTTT
@@ -404,7 +404,7 @@ render                 ·                      ·                (a, d)        �
            │           equality               (a) = (b)        ·             ·
            └── scan    ·                      ·                (a)           ·
 ·                      table                  small@primary    ·             ·
-·                      spans                  ALL              ·             ·
+·                      spans                  FULL SCAN        ·             ·
 
 ############################
 #  LEFT OUTER LOOKUP JOIN  #
@@ -422,7 +422,7 @@ lookup-join  ·            ·              (b, a)  ·
  │           equality     (b) = (a)      ·       ·
  └── scan    ·            ·              (b)     ·
 ·            table        small@primary  ·       ·
-·            spans        ALL            ·       ·
+·            spans        FULL SCAN      ·       ·
 
 # Left join should preserve input order.
 query TTTTT
@@ -440,7 +440,7 @@ render            ·            ·              (a, b)     +a
       │           pred         (@3 % 6) = 0   ·          ·
       └── scan    ·            ·              (a)        +a
 ·                 table        small@primary  ·          ·
-·                 spans        ALL            ·          ·
+·                 spans        FULL SCAN      ·          ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a]
@@ -462,7 +462,7 @@ render            ·            ·              (c, c)     ·
       │           equality     (c) = (b)      ·          ·
       └── scan    ·            ·              (c)        ·
 ·                 table        small@primary  ·          ·
-·                 spans        ALL            ·          ·
+·                 spans        FULL SCAN      ·          ·
 
 # Left join against non-covering secondary index
 query TTTTT
@@ -485,7 +485,7 @@ render                 ·                      ·                (c, d)        �
            │           equality               (c) = (b)        ·             ·
            └── scan    ·                      ·                (c)           ·
 ·                      table                  small@primary    ·             ·
-·                      spans                  ALL              ·             ·
+·                      spans                  FULL SCAN        ·             ·
 
 # Left join with ON filter on covering index
 query TTTTT
@@ -503,7 +503,7 @@ render            ·            ·              (c, c)     ·
       │           pred         @3 < 20        ·          ·
       └── scan    ·            ·              (c)        ·
 ·                 table        small@primary  ·          ·
-·                 spans        ALL            ·          ·
+·                 spans        FULL SCAN      ·          ·
 
 # Left join with ON filter on non-covering index
 # TODO(radu): this doesn't use lookup join yet, the current rules don't cover
@@ -521,11 +521,11 @@ render          ·            ·              (c, d)     ·
       │         equality     (b) = (c)      ·          ·
       ├── scan  ·            ·              (b, d)     ·
       │         table        large@primary  ·          ·
-      │         spans        ALL            ·          ·
+      │         spans        FULL SCAN      ·          ·
       │         filter       d < 30         ·          ·
       └── scan  ·            ·              (c)        ·
 ·               table        small@primary  ·          ·
-·               spans        ALL            ·          ·
+·               spans        FULL SCAN      ·          ·
 
 ###########################################################
 #  LOOKUP JOINS ON IMPLICIT INDEX KEY COLUMNS             #
@@ -554,7 +554,7 @@ render            ·            ·                (a)              ·
       │           equality     (d, a) = (d, a)  ·                ·
       └── scan    ·            ·                (a, d, e)        ·
 ·                 table        t@primary        ·                ·
-·                 spans        ALL              ·                ·
+·                 spans        FULL SCAN        ·                ·
 ·                 filter       e = 5            ·                ·
 
 # Test unique version of same index. (Lookup join should not use column a.)
@@ -580,7 +580,7 @@ render            ·                      ·          (a)              ·
       │           pred                   @1 = @4    ·                ·
       └── scan    ·                      ·          (a, d, e)        ·
 ·                 table                  t@primary  ·                ·
-·                 spans                  ALL        ·                ·
+·                 spans                  FULL SCAN  ·                ·
 ·                 filter                 e = 5      ·                ·
 
 # Test index with first primary key column explicit and the rest implicit.
@@ -603,7 +603,7 @@ render            ·            ·                      (a)                    �
       │           equality     (d, a, b) = (d, a, b)  ·                      ·
       └── scan    ·            ·                      (a, b, d, e)           ·
 ·                 table        t@primary              ·                      ·
-·                 spans        ALL                    ·                      ·
+·                 spans        FULL SCAN              ·                      ·
 ·                 filter       e = 5                  ·                      ·
 
 # Test index with middle primary key column explicit and the rest implicit.
@@ -626,7 +626,7 @@ render            ·            ·                      (a)                    �
       │           equality     (d, b, a) = (d, b, a)  ·                      ·
       └── scan    ·            ·                      (a, b, d, e)           ·
 ·                 table        t@primary              ·                      ·
-·                 spans        ALL                    ·                      ·
+·                 spans        FULL SCAN              ·                      ·
 ·                 filter       e = 5                  ·                      ·
 
 # Test index with last primary key column explicit and the rest implicit.
@@ -650,7 +650,7 @@ render            ·            ·          (a)              ·
       │           pred         @1 = @4    ·                ·
       └── scan    ·            ·          (a, d, e)        ·
 ·                 table        t@primary  ·                ·
-·                 spans        ALL        ·                ·
+·                 spans        FULL SCAN  ·                ·
 ·                 filter       e = 5      ·                ·
 
 query TTTTT
@@ -671,7 +671,7 @@ render            ·            ·            (d, e, f, a, b, c)  ·
       │           equality     (a) = (f)    ·                   ·
       └── scan    ·            ·            (a, b, c)           +a
 ·                 table        abc@primary  ·                   ·
-·                 spans        ALL          ·                   ·
+·                 spans        FULL SCAN    ·                   ·
 
 # Test that we don't get a lookup join if we force a merge join.
 query TTTTT
@@ -685,10 +685,10 @@ merge-join  ·               ·            (d, e, f, a, b, c)  +f
  │          mergeJoinOrder  +"(f=a)"     ·                   ·
  ├── scan   ·               ·            (d, e, f)           +f
  │          table           def@primary  ·                   ·
- │          spans           ALL          ·                   ·
+ │          spans           FULL SCAN    ·                   ·
  └── scan   ·               ·            (a, b, c)           +a
 ·           table           abc@primary  ·                   ·
-·           spans           ALL          ·                   ·
+·           spans           FULL SCAN    ·                   ·
 
 # Test that we don't get a lookup join if we force a hash join.
 query TTTTT
@@ -703,10 +703,10 @@ sort            ·            ·            (d, e, f, a, b, c)  +f
       │         equality     (f) = (a)    ·                   ·
       ├── scan  ·            ·            (d, e, f)           ·
       │         table        def@primary  ·                   ·
-      │         spans        ALL          ·                   ·
+      │         spans        FULL SCAN    ·                   ·
       └── scan  ·            ·            (a, b, c)           ·
 ·               table        abc@primary  ·                   ·
-·               spans        ALL          ·                   ·
+·               spans        FULL SCAN    ·                   ·
 
 # Test lookup semi and anti join.
 query TTTTT
@@ -720,7 +720,7 @@ lookup-join  ·            ·            (a, b, c)  ·
  │           equality     (a) = (f)    ·          ·
  └── scan    ·            ·            (a, b, c)  ·
 ·            table        abc@primary  ·          ·
-·            spans        ALL          ·          ·
+·            spans        FULL SCAN    ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f)
@@ -733,7 +733,7 @@ lookup-join  ·            ·            (a, b, c)  ·
  │           equality     (a) = (f)    ·          ·
  └── scan    ·            ·            (a, b, c)  ·
 ·            table        abc@primary  ·          ·
-·            spans        ALL          ·          ·
+·            spans        FULL SCAN    ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
@@ -748,7 +748,7 @@ lookup-join  ·                      ·                (a, b, c)  ·
  │           parallel               ·                ·          ·
  └── scan    ·                      ·                (a, b, c)  ·
 ·            table                  abc@primary      ·          ·
-·            spans                  ALL              ·          ·
+·            spans                  FULL SCAN        ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND c=e)
@@ -763,7 +763,7 @@ lookup-join  ·                      ·                (a, b, c)  ·
  │           parallel               ·                ·          ·
  └── scan    ·                      ·                (a, b, c)  ·
 ·            table                  abc@primary      ·          ·
-·            spans                  ALL              ·          ·
+·            spans                  FULL SCAN        ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
@@ -777,7 +777,7 @@ lookup-join  ·            ·              (a, b, c)  ·
  │           pred         (@4 + @2) > 1  ·          ·
  └── scan    ·            ·              (a, b, c)  ·
 ·            table        abc@primary    ·          ·
-·            spans        ALL            ·          ·
+·            spans        FULL SCAN      ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
@@ -791,7 +791,7 @@ lookup-join  ·            ·              (a, b, c)  ·
  │           pred         (@4 + @2) > 1  ·          ·
  └── scan    ·            ·              (a, b, c)  ·
 ·            table        abc@primary    ·          ·
-·            spans        ALL            ·          ·
+·            spans        FULL SCAN      ·          ·
 
 query T
 SELECT url FROM [ EXPLAIN (DISTSQL)
@@ -838,7 +838,7 @@ group                  ·            ·
            │           equality     (a) = (a)
            └── scan    ·            ·
 ·                      table        b@primary
-·                      spans        ALL
+·                      spans        FULL SCAN
 
 statement ok
 SET tracing = on
@@ -1457,9 +1457,9 @@ limit                                               ·                      ·
                                          │          mergeJoinOrder         +"(l_orderkey=l_orderkey)"
                                          ├── scan   ·                      ·
                                          │          table                  lineitem@primary
-                                         │          spans                  ALL
+                                         │          spans                  FULL SCAN
                                          │          filter                 l_receiptdate > l_commitdate
                                          └── scan   ·                      ·
 ·                                                   table                  lineitem@primary
-·                                                   spans                  ALL
+·                                                   spans                  FULL SCAN
 ·                                                   filter                 l_receiptdate > l_commitdate

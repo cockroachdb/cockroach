@@ -31,7 +31,7 @@ root                                ·             ·
                           │         strategy      inserter
                           └── scan  ·             ·
 ·                                   table         t2@primary
-·                                   spans         ALL
+·                                   spans         FULL SCAN
 
 query TTT
 EXPLAIN WITH a AS (DELETE FROM t RETURNING x)
@@ -57,7 +57,7 @@ root                                ·             ·
                           │         strategy      deleter
                           └── scan  ·             ·
 ·                                   table         t@primary
-·                                   spans         ALL
+·                                   spans         FULL SCAN
 
 
 query TTT
@@ -86,7 +86,7 @@ root                                     ·                 ·
                           └── render     ·                 ·
                                └── scan  ·                 ·
 ·                                        table             t@primary
-·                                        spans             ALL
+·                                        spans             FULL SCAN
 ·                                        locking strength  for update
 
 query TTT
@@ -138,7 +138,7 @@ root                                ·             ·
                           │         strategy      inserter
                           └── scan  ·             ·
 ·                                   table         t2@primary
-·                                   spans         ALL
+·                                   spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM [DELETE FROM t RETURNING x] LIMIT 1
@@ -163,7 +163,7 @@ root                                ·             ·
                           │         strategy      deleter
                           └── scan  ·             ·
 ·                                   table         t@primary
-·                                   spans         ALL
+·                                   spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM [UPDATE t SET x = x + 1 RETURNING x] LIMIT 1
@@ -190,7 +190,7 @@ root                                     ·                 ·
                           └── render     ·                 ·
                                └── scan  ·                 ·
 ·                                        table             t@primary
-·                                        spans             ALL
+·                                        spans             FULL SCAN
 ·                                        locking strength  for update
 
 query TTT
@@ -243,7 +243,7 @@ root                                ·             ·
                           │         strategy      inserter
                           └── scan  ·             ·
 ·                                   table         t2@primary
-·                                   spans         ALL
+·                                   spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x], t
@@ -257,7 +257,7 @@ root                                ·             ·
  │    │                             label         buffer 1
  │    └── scan                      ·             ·
  │                                  table         t@primary
- │                                  spans         ALL
+ │                                  spans         FULL SCAN
  └── subquery                       ·             ·
       │                             id            @S1
       │                             original sql  INSERT INTO t SELECT * FROM t2 RETURNING x
@@ -271,7 +271,7 @@ root                                ·             ·
                           │         strategy      inserter
                           └── scan  ·             ·
 ·                                   table         t2@primary
-·                                   spans         ALL
+·                                   spans         FULL SCAN
 
 # Check that if a spool is already added at some level, then it is not added
 # again at levels below.
@@ -301,7 +301,7 @@ root                                                 ·             ·
  │                        │                          strategy      inserter
  │                        └── scan                   ·             ·
  │                                                   table         t2@primary
- │                                                   spans         ALL
+ │                                                   spans         FULL SCAN
  └── subquery                                        ·             ·
       │                                              id            @S2
       │                                              original sql  INSERT INTO t SELECT x + 1 FROM a RETURNING x
@@ -339,7 +339,7 @@ root                                ·             ·
                           │         strategy      inserter
                           └── scan  ·             ·
 ·                                   table         t2@primary
-·                                   spans         ALL
+·                                   spans         FULL SCAN
 
 # Check that no spool is used for a top-level INSERT, but
 # sub-INSERTs still get a spool.
@@ -369,7 +369,7 @@ root                                  ·             ·
                           │           strategy      inserter
                           └── scan    ·             ·
 ·                                     table         t2@primary
-·                                     spans         ALL
+·                                     spans         FULL SCAN
 
 # Check that simple computations using RETURNING get their spool pulled up.
 query TTT
@@ -398,7 +398,7 @@ root                                     ·             ·
                                │         strategy      inserter
                                └── scan  ·             ·
 ·                                        table         t2@primary
-·                                        spans         ALL
+·                                        spans         FULL SCAN
 
 # Check that a pulled up spool gets elided at the top level.
 query TTT
@@ -425,4 +425,4 @@ root                                     ·             ·
                                │         strategy      inserter
                                └── scan  ·             ·
 ·                                        table         t2@primary
-·                                        spans         ALL
+·                                        spans         FULL SCAN

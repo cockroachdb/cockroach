@@ -69,7 +69,7 @@ render               ·            ·                                           
            │         render 0     1                                                                   ·                      ·
            └── scan  ·            ·                                                                   ()                     ·
 ·                    table        kv@primary                                                          ·                      ·
-·                    spans        ALL                                                                 ·                      ·
+·                    spans        FULL SCAN                                                           ·                      ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT nth_value(1, 2) OVER () FROM kv
@@ -86,7 +86,7 @@ render               ·            ·                                           
            │         render 1     2                                                                           ·                                                ·
            └── scan  ·            ·                                                                           ()                                               ·
 ·                    table        kv@primary                                                                  ·                                                ·
-·                    spans        ALL                                                                         ·                                                ·
+·                    spans        FULL SCAN                                                                   ·                                                ·
 
 statement error column "v" must appear in the GROUP BY clause or be used in an aggregate function
 EXPLAIN (VERBOSE) SELECT max(v) OVER (), min(v) FROM kv ORDER BY 1
@@ -103,7 +103,7 @@ render                    ·            ·
            └── window     ·            ·
                 └── scan  ·            ·
 ·                         table        kv@primary
-·                         spans        ALL
+·                         spans        FULL SCAN
 
 query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
@@ -126,7 +126,7 @@ render                    ·            ·                                      
                 │         render 4     (variance((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                                            ·
                 └── scan  ·            ·                                                                                                                   (k int, v int, d decimal)                                    ·
 ·                         table        kv@primary                                                                                                          ·                                                            ·
-·                         spans        ALL                                                                                                                 ·                                                            ·
+·                         spans        FULL SCAN                                                                                                           ·                                                            ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
@@ -150,7 +150,7 @@ render                         ·            ·                                 
                      │         render 3     (stddev((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
                      └── scan  ·            ·                                                                                                                   (k int, v int, d decimal)                                    ·
 ·                              table        kv@primary                                                                                                          ·                                                            ·
-·                              spans        ALL                                                                                                                 ·                                                            ·
+·                              spans        FULL SCAN                                                                                                           ·                                                            ·
 
 query TTTTT
 EXPLAIN (TYPES,NONORMALIZE) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY k
@@ -167,7 +167,7 @@ sort                 ·            ·                                           
            │         render 3     (stddev((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                          ·
            └── scan  ·            ·                                                                                                                 (k int, v int, d decimal)                  ·
 ·                    table        kv@primary                                                                                                        ·                                          ·
-·                    spans        ALL                                                                                                               ·                                          ·
+·                    spans        FULL SCAN                                                                                                         ·                                          ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT k, k + stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
@@ -191,7 +191,7 @@ render                         ·            ·                                 
                      │         render 3     (stddev((@3)[decimal]) OVER (PARTITION BY (@2)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
                      └── scan  ·            ·                                                                                                                   (k int, v int, d decimal)                                    ·
 ·                              table        kv@primary                                                                                                          ·                                                            ·
-·                              spans        ALL                                                                                                                 ·                                                            ·
+·                              spans        FULL SCAN                                                                                                           ·                                                            ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT max(k), max(k) + stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY variance(d) OVER (PARTITION BY v, 100)
@@ -220,7 +220,7 @@ render                              ·            ·                            
                           │         group by     v, d                                                                                                                ·                                                              ·
                           └── scan  ·            ·                                                                                                                   (k int, v int, d decimal)                                      ·
 ·                                   table        kv@primary                                                                                                          ·                                                              ·
-·                                   spans        ALL                                                                                                                 ·                                                              ·
+·                                   spans        FULL SCAN                                                                                                           ·                                                              ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT max(k), stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY 1
@@ -242,7 +242,7 @@ sort                      ·            ·                                      
                 │         group by     v, d                                                                                                              ·                                            ·
                 └── scan  ·            ·                                                                                                                 (k int, v int, d decimal)                    ·
 ·                         table        kv@primary                                                                                                        ·                                            ·
-·                         spans        ALL                                                                                                               ·                                            ·
+·                         spans        FULL SCAN                                                                                                         ·                                            ·
 
 # Partition
 
@@ -271,7 +271,7 @@ render                         ·            ·                                 
                      │         render 2     2                                                                          ·                                                       ·
                      └── scan  ·            ·                                                                          ()                                                      ·
 ·                              table        kv@primary                                                                 ·                                                       ·
-·                              spans        ALL                                                                        ·                                                       ·
+·                              spans        FULL SCAN                                                                  ·                                                       ·
 
 # Ordering
 
@@ -287,7 +287,7 @@ sort            ·            ·                                                
       │         render 2     rank() OVER (ORDER BY @1 ASC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·             ·
       └── scan  ·            ·                                                                                (k, v)        ·
 ·               table        kv@primary                                                                       ·             ·
-·               spans        ALL                                                                              ·             ·
+·               spans        FULL SCAN                                                                        ·             ·
 
 
 # Frames
@@ -304,7 +304,7 @@ render          ·            ·                                                
       │         render 1     avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·         ·
       └── scan  ·            ·                                                                 (k)       ·
 ·               table        kv@primary                                                        ·         ·
-·               spans        ALL                                                               ·         ·
+·               spans        FULL SCAN                                                         ·         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM kv
@@ -318,7 +318,7 @@ render          ·            ·                                                
       │         render 1     avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)  ·         ·
       └── scan  ·            ·                                                                         (k)       ·
 ·               table        kv@primary                                                                ·         ·
-·               spans        ALL                                                                       ·         ·
+·               spans        FULL SCAN                                                                 ·         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM kv
@@ -332,7 +332,7 @@ render          ·            ·                                                
       │         render 1     avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·         ·
       └── scan  ·            ·                                                                 (k)       ·
 ·               table        kv@primary                                                        ·         ·
-·               spans        ALL                                                               ·         ·
+·               spans        FULL SCAN                                                         ·         ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -395,7 +395,7 @@ render               ·            ·                                           
            │         render 8     avg(@1) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW)                                    ·                                                                ·
            └── scan  ·            ·                                                                                          (k)                                                              ·
 ·                    table        kv@primary                                                                                 ·                                                                ·
-·                    spans        ALL                                                                                        ·                                                                ·
+·                    spans        FULL SCAN                                                                                  ·                                                                ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -419,7 +419,7 @@ root                 ·             ·                                          
  │         │         render 2      avg(@1) OVER (PARTITION BY @2 ROWS BETWEEN @S1 PRECEDING AND 1 FOLLOWING)  ·             ·
  │         └── scan  ·             ·                                                                          (v, w)        ·
  │                   table         kv@primary                                                                 ·             ·
- │                   spans         ALL                                                                        ·             ·
+ │                   spans         FULL SCAN                                                                  ·             ·
  └── subquery        ·             ·                                                                          (avg)         ·
       │              id            @S1                                                                        ·             ·
       │              original sql  (SELECT count(*) FROM kv)                                                  ·             ·
@@ -429,7 +429,7 @@ root                 ·             ·                                          
            │         scalar        ·                                                                          ·             ·
            └── scan  ·             ·                                                                          ()            ·
 ·                    table         kv@primary                                                                 ·             ·
-·                    spans         ALL                                                                        ·             ·
+·                    spans         FULL SCAN                                                                  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -459,4 +459,4 @@ render          ·            ·                                                
       │         render 4     avg(@1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)                      ·                        ·
       └── scan  ·            ·                                                                                     (k)                      ·
 ·               table        kv@primary                                                                            ·                        ·
-·               spans        ALL                                                                                   ·                        ·
+·               spans        FULL SCAN                                                                             ·                        ·

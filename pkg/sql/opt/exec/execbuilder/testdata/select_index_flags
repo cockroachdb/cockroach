@@ -92,7 +92,7 @@ filter           ·            ·
       │          key columns  a
       └── scan   ·            ·
 ·                table        abcd@b
-·                spans        ALL
+·                spans        FULL SCAN
 
 # Force index b, reverse scan.
 query TTT
@@ -107,7 +107,7 @@ filter             ·            ·
       │            key columns  a
       └── revscan  ·            ·
 ·                  table        abcd@b
-·                  spans        ALL
+·                  spans        FULL SCAN
 
 # Force index b, allowing reverse scan.
 query TTT
@@ -120,7 +120,7 @@ index-join    ·            ·
  │            key columns  a
  └── revscan  ·            ·
 ·             table        abcd@b
-·             spans        ALL
+·             spans        LIMITED SCAN
 ·             limit        5
 
 # Force index b, reverse scan.
@@ -134,7 +134,7 @@ index-join    ·            ·
  │            key columns  a
  └── revscan  ·            ·
 ·             table        abcd@b
-·             spans        ALL
+·             spans        LIMITED SCAN
 ·             limit        5
 
 
@@ -153,7 +153,7 @@ limit                 ·            ·
            │          key columns  a
            └── scan   ·            ·
 ·                     table        abcd@b
-·                     spans        ALL
+·                     spans        FULL SCAN
 
 # Force index cd
 query TTT
@@ -168,7 +168,7 @@ filter           ·            ·
       │          key columns  a
       └── scan   ·            ·
 ·                table        abcd@cd
-·                spans        ALL
+·                spans        FULL SCAN
 
 # Force index bcd
 query TTT
@@ -178,7 +178,7 @@ EXPLAIN SELECT * FROM abcd@bcd WHERE a >= 20 AND a <= 30
 ·     vectorized   true
 scan  ·            ·
 ·     table        abcd@bcd
-·     spans        ALL
+·     spans        FULL SCAN
 ·     filter       (a >= 20) AND (a <= 30)
 
 # Force index b (covering)
@@ -190,7 +190,7 @@ EXPLAIN SELECT b FROM abcd@b WHERE a >= 20 AND a <= 30
 render     ·            ·
  └── scan  ·            ·
 ·          table        abcd@b
-·          spans        ALL
+·          spans        FULL SCAN
 ·          filter       (a >= 20) AND (a <= 30)
 
 # Force index b (non-covering due to WHERE clause)
@@ -207,7 +207,7 @@ render                ·            ·
            │          key columns  a
            └── scan   ·            ·
 ·                     table        abcd@b
-·                     spans        ALL
+·                     spans        FULL SCAN
 
 # No hint, should be using index cd
 query TTT
@@ -227,7 +227,7 @@ EXPLAIN SELECT c, d FROM abcd@primary WHERE c >= 20 AND c < 40
 ·     vectorized   true
 scan  ·            ·
 ·     table        abcd@primary
-·     spans        ALL
+·     spans        FULL SCAN
 ·     filter       (c >= 20) AND (c < 40)
 
 # Force index b
@@ -243,7 +243,7 @@ filter           ·            ·
       │          key columns  a
       └── scan   ·            ·
 ·                table        abcd@b
-·                spans        ALL
+·                spans        FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b} WHERE a >= 20 AND a <= 30
@@ -257,7 +257,7 @@ filter           ·            ·
       │          key columns  a
       └── scan   ·            ·
 ·                table        abcd@b
-·                spans        ALL
+·                spans        FULL SCAN
 
 query TTT
 EXPLAIN SELECT b, c, d FROM abcd WHERE c = 10
@@ -278,7 +278,7 @@ EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10
 ·     vectorized   true
 scan  ·            ·
 ·     table        abcd@primary
-·     spans        ALL
+·     spans        FULL SCAN
 ·     filter       c = 10
 
 query TTT
@@ -288,7 +288,7 @@ EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=bcd} WHERE c = 10
 ·     vectorized   true
 scan  ·            ·
 ·     table        abcd@bcd
-·     spans        ALL
+·     spans        FULL SCAN
 ·     filter       c = 10
 
 query TTT
@@ -298,5 +298,5 @@ EXPLAIN SELECT b, c, d FROM abcd@{FORCE_INDEX=primary} WHERE c = 10
 ·     vectorized   true
 scan  ·            ·
 ·     table        abcd@primary
-·     spans        ALL
+·     spans        FULL SCAN
 ·     filter       c = 10

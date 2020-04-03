@@ -71,14 +71,14 @@ render                        ·            ·                      (a, b, gener
       │    │                  type         cross                  ·                                         ·
       │    ├── scan           ·            ·                      (b)                                       ·
       │    │                  table        u@primary              ·                                         ·
-      │    │                  spans        ALL                    ·                                         ·
+      │    │                  spans        FULL SCAN              ·                                         ·
       │    └── project set    ·            ·                      (generate_series, generate_series)        ·
       │         │             render 0     generate_series(1, 2)  ·                                         ·
       │         │             render 1     generate_series(3, 4)  ·                                         ·
       │         └── emptyrow  ·            ·                      ()                                        ·
       └── scan                ·            ·                      (a)                                       ·
 ·                             table        t@primary              ·                                         ·
-·                             spans        ALL                    ·                                         ·
+·                             spans        FULL SCAN              ·                                         ·
 
 subtest correlated_SRFs
 
@@ -96,7 +96,7 @@ sort              ·            ·                            (a, generate_serie
       │           render 0     generate_series(@1, @1 + 1)  ·                     ·
       └── scan    ·            ·                            (a)                   ·
 ·                 table        data@primary                 ·                     ·
-·                 spans        ALL                          ·                     ·
+·                 spans        FULL SCAN                    ·                     ·
 
 statement ok
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
@@ -133,10 +133,10 @@ render                          ·                   ·                         
                      │          pred                y < z                                                  ·                                                ·
                      ├── scan   ·                   ·                                                      (x, y)                                           +x
                      │          table               xy@primary                                             ·                                                ·
-                     │          spans               ALL                                                    ·                                                ·
+                     │          spans               FULL SCAN                                              ·                                                ·
                      └── scan   ·                   ·                                                      (x, z)                                           +x
 ·                               table               xz@primary                                             ·                                                ·
-·                               spans               ALL                                                    ·                                                ·
+·                               spans               FULL SCAN                                              ·                                                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series(x, z) FROM xz WHERE z < ANY(SELECT generate_series(x, y) FROM xy)
@@ -152,12 +152,12 @@ render                      ·            ·                        (generate_se
            │                pred         z < generate_series      ·                        ·
            ├── scan         ·            ·                        (x, z)                   ·
            │                table        xz@primary               ·                        ·
-           │                spans        ALL                      ·                        ·
+           │                spans        FULL SCAN                ·                        ·
            └── project set  ·            ·                        (x, y, generate_series)  ·
                 │           render 0     generate_series(@1, @2)  ·                        ·
                 └── scan    ·            ·                        (x, y)                   ·
 ·                           table        xy@primary               ·                        ·
-·                           spans        ALL                      ·                        ·
+·                           spans        FULL SCAN                ·                        ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_subscripts(ARRAY[0, x, 1, 2]), generate_series(x, y), unnest(ARRAY[0, x, y, z]), y, z
@@ -183,10 +183,10 @@ render                ·                   ·                                   
            │          mergeJoinOrder      +"(x=x)"                                 ·                                                           ·
            ├── scan   ·                   ·                                        (x, y)                                                      +x
            │          table               xy@primary                               ·                                                           ·
-           │          spans               ALL                                      ·                                                           ·
+           │          spans               FULL SCAN                                ·                                                           ·
            └── scan   ·                   ·                                        (x, z)                                                      +x
 ·                     table               xz@primary                               ·                                                           ·
-·                     spans               ALL                                      ·                                                           ·
+·                     spans               FULL SCAN                                ·                                                           ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series((SELECT unnest(ARRAY[x, y]) FROM xy), z) FROM xz
@@ -200,7 +200,7 @@ root                             ·             ·                              
  │         │                     render 0      generate_series(@S1, @1)              ·                     ·
  │         └── scan              ·             ·                                     (z)                   ·
  │                               table         xz@primary                            ·                     ·
- │                               spans         ALL                                   ·                     ·
+ │                               spans         FULL SCAN                             ·                     ·
  └── subquery                    ·             ·                                     (generate_series)     ·
       │                          id            @S1                                   ·                     ·
       │                          original sql  (SELECT unnest(ARRAY[x, y]) FROM xy)  ·                     ·
@@ -212,7 +212,7 @@ root                             ·             ·                              
                      │           render 0      unnest(ARRAY[@1, @2])                 ·                     ·
                      └── scan    ·             ·                                     (x, y)                ·
 ·                                table         xy@primary                            ·                     ·
-·                                spans         ALL                                   ·                     ·
+·                                spans         FULL SCAN                             ·                     ·
 
 # Regression test for #24676.
 statement ok
@@ -240,7 +240,7 @@ render                ·            ·                         (group_name, json
            │          type         left outer                ·                                         ·
            └── scan   ·            ·                         (data)                                    ·
 ·                     table        groups@primary            ·                                         ·
-·                     spans        ALL                       ·                                         ·
+·                     spans        FULL SCAN                 ·                                         ·
 
 # Regression test for #32162.
 query TTTTT
@@ -307,7 +307,7 @@ limit                                 ·            ·                          
                           │           render 0     unnest(@6)                 ·                                                                                        ·
                           └── scan    ·            ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
 ·                                     table        articles@primary           ·                                                                                        ·
-·                                     spans        ALL                        ·                                                                                        ·
+·                                     spans        FULL SCAN                  ·                                                                                        ·
 
 # Regression test for #32723.
 query TTTTT

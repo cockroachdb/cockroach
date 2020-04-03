@@ -30,7 +30,7 @@ render                               (cid int, date date, value decimal)
  │         render 2  (@2)[decimal]
  └── scan                            (cid int, value decimal, date date)
            table     orders@primary
-           spans     ALL
+           spans     FULL SCAN
 
 plan-tree
 SELECT cid, date, value FROM t.orders
@@ -49,7 +49,7 @@ children:
   - key: table
     value: orders@primary
   - key: spans
-    value: ALL
+    value: FULL SCAN
   children: []
 
 plan-string
@@ -73,7 +73,7 @@ render                                                                          
                      │         render 1     (@2)[decimal]
                      └── scan                                                          (cid int, value decimal, date date)
                                table        orders@primary
-                               spans        ALL
+                               spans        FULL SCAN
                                filter       ((@3)[date] > ('2015-01-01')[date])[bool]
 
 plan-tree
@@ -121,7 +121,7 @@ children:
           - key: table
             value: orders@primary
           - key: spans
-            value: ALL
+            value: FULL SCAN
           - key: filter
             value: date > _
           children: []
@@ -131,7 +131,7 @@ SELECT value FROM (SELECT cid, date, value FROM t.orders)
 ----
 scan                         (value decimal)
       table  orders@primary
-      spans  ALL
+      spans  FULL SCAN
 
 plan-tree
 SELECT value FROM (SELECT cid, date, value FROM t.orders)
@@ -141,7 +141,7 @@ attrs:
 - key: table
   value: orders@primary
 - key: spans
-  value: ALL
+  value: FULL SCAN
 children: []
 
 plan-string
@@ -157,12 +157,12 @@ render                                                    (cid int, date date, v
       │              right cols are key
       ├── scan                                            (cid int, value decimal, date date)
       │              table               orders@primary
-      │              spans               ALL
+      │              spans               FULL SCAN
       └── distinct                                        (date date)
            │         distinct on         date
            └── scan                                       (date date)
                      table               orders@primary
-                     spans               ALL
+                     spans               FULL SCAN
 
 plan-tree
 SELECT cid, date, value FROM t.orders WHERE date IN (SELECT date FROM t.orders)
@@ -190,7 +190,7 @@ children:
     - key: table
       value: orders@primary
     - key: spans
-      value: ALL
+      value: FULL SCAN
     children: []
   - name: distinct
     attrs:
@@ -202,7 +202,7 @@ children:
       - key: table
         value: orders@primary
       - key: spans
-        value: ALL
+        value: FULL SCAN
       children: []
 
 exec
@@ -231,7 +231,7 @@ root                                                                            
  │    │              render 2      (@S1)[string]
  │    └── scan                                                                     (id int, title string)
  │                   table         movies@primary
- │                   spans         ALL
+ │                   spans         FULL SCAN
  └── subquery                                                                      (movie_id int, title string, name string)
       │              id            @S1
       │              original sql  (SELECT name FROM t.actors WHERE name = 'Foo')
@@ -239,7 +239,7 @@ root                                                                            
       └── max1row                                                                  (name string)
            └── scan                                                                (name string)
                      table         actors@primary
-                     spans         ALL
+                     spans         FULL SCAN
                      filter        ((@1)[string] = ('Foo')[string])[bool]
 
 plan-tree
@@ -262,7 +262,7 @@ children:
     - key: table
       value: movies@primary
     - key: spans
-      value: ALL
+      value: FULL SCAN
     children: []
 - name: subquery
   attrs:
@@ -281,7 +281,7 @@ children:
       - key: table
         value: actors@primary
       - key: spans
-        value: ALL
+        value: FULL SCAN
       - key: filter
         value: name = _
       children: []

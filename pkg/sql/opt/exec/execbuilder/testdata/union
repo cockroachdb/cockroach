@@ -14,10 +14,10 @@ EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 union      ·            ·
  ├── scan  ·            ·
  │         table        uniontest@primary
- │         spans        ALL
+ │         spans        FULL SCAN
  └── scan  ·            ·
 ·          table        uniontest@primary
-·          spans        ALL
+·          spans        FULL SCAN
 
 query TTT
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
@@ -27,10 +27,10 @@ EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 append     ·            ·
  ├── scan  ·            ·
  │         table        uniontest@primary
- │         spans        ALL
+ │         spans        FULL SCAN
  └── scan  ·            ·
 ·          table        uniontest@primary
-·          spans        ALL
+·          spans        FULL SCAN
 
 # Check that EXPLAIN properly releases memory for virtual tables.
 query TTT
@@ -60,12 +60,12 @@ sort                 ·            ·            (a)     +a
       │    │         render 0     a            ·       ·
       │    └── scan  ·            ·            (a, c)  ·
       │              table        abc@primary  ·       ·
-      │              spans        ALL          ·       ·
+      │              spans        FULL SCAN    ·       ·
       └── render     ·            ·            (a)     ·
            │         render 0     a            ·       ·
            └── scan  ·            ·            (a, b)  ·
 ·                    table        abc@primary  ·       ·
-·                    spans        ALL          ·       ·
+·                    spans        FULL SCAN    ·       ·
 
 # Regression test for #32723.
 query TTTTT
@@ -125,11 +125,11 @@ render               ·            ·                  ("?column?")  ·
  └── append          ·            ·                  ()            ·
       ├── scan       ·            ·                  ()            ·
       │              table        uniontest@primary  ·             ·
-      │              spans        ALL                ·             ·
+      │              spans        FULL SCAN          ·             ·
       └── render     ·            ·                  ()            ·
            └── scan  ·            ·                  (k)           ·
 ·                    table        uniontest@primary  ·             ·
-·                    spans        ALL                ·             ·
+·                    spans        FULL SCAN          ·             ·
 ·                    filter       k > 3              ·             ·
 
 statement ok
