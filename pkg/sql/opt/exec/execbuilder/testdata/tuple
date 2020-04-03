@@ -128,7 +128,7 @@ render     ·            ·                                                     
  │         render 0     ((((v)[int], (v)[int], (v)[int]) AS a, b, c))[tuple{int AS a, int AS b, int AS c}]  ·                                        ·
  └── scan  ·            ·                                                                                   (v int)                                  ·
 ·          table        kv@primary                                                                          ·                                        ·
-·          spans        ALL                                                                                 ·                                        ·
+·          spans        FULL SCAN                                                                           ·                                        ·
 
 query TTTTT
 EXPLAIN (VERBOSE, TYPES) SELECT (x).a, (x).b, (x).c FROM (SELECT (row(v,v,v) AS a,b,c) AS x FROM kv)
@@ -143,7 +143,7 @@ render          ·            ·                                                
       │         render 0     ((((v)[int], (v)[int], (v)[int]) AS a, b, c))[tuple{int AS a, int AS b, int AS c}]  ·                                        ·
       └── scan  ·            ·                                                                                   (v int)                                  ·
 ·               table        kv@primary                                                                          ·                                        ·
-·               spans        ALL                                                                                 ·                                        ·
+·               spans        FULL SCAN                                                                           ·                                        ·
 
 query TTTTT
 EXPLAIN (VERBOSE, TYPES) SELECT (x).e, (x).f, (x).g

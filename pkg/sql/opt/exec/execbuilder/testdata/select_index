@@ -475,7 +475,7 @@ render     ·            ·          (a)     ·
  │         render 0     a          ·       ·
  └── scan  ·            ·          (a, c)  ·
 ·          table        t@primary  ·       ·
-·          spans        ALL        ·       ·
+·          spans        FULL SCAN  ·       ·
 ·          filter       c > 1      ·       ·
 
 query TTTTT
@@ -499,7 +499,7 @@ render     ·            ·          (a)     ·
  │         render 0     a          ·       ·
  └── scan  ·            ·          (a, c)  ·
 ·          table        t@primary  ·       ·
-·          spans        ALL        ·       ·
+·          spans        FULL SCAN  ·       ·
 ·          filter       c > 1      ·       ·
 
 query TTTTT
@@ -511,7 +511,7 @@ render     ·            ·          (a)     ·
  │         render 0     a          ·       ·
  └── scan  ·            ·          (a, c)  ·
 ·          table        t@primary  ·       ·
-·          spans        ALL        ·       ·
+·          spans        FULL SCAN  ·       ·
 ·          filter       c < 1      ·       ·
 
 query TTTTT
@@ -634,7 +634,7 @@ render     ·            ·                  (i, s)  ·
  │         render 1     s                  ·       ·
  └── scan  ·            ·                  (s, i)  ·
 ·          table        ab@primary         ·       ·
-·          spans        ALL                ·       ·
+·          spans        FULL SCAN          ·       ·
 ·          filter       (i, s) < (1, 'c')  ·       ·
 
 statement ok
@@ -668,12 +668,12 @@ abz  abz_c_b_key  false  3  a  ASC   false  true
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM abz ORDER BY a DESC LIMIT 1
 ----
-·     distributed  false        ·    ·
-·     vectorized   true         ·    ·
-scan  ·            ·            (a)  ·
-·     table        abz@primary  ·    ·
-·     spans        ALL          ·    ·
-·     limit        1            ·    ·
+·     distributed  false         ·    ·
+·     vectorized   true          ·    ·
+scan  ·            ·             (a)  ·
+·     table        abz@primary   ·    ·
+·     spans        LIMITED SCAN  ·    ·
+·     limit        1             ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT c FROM abz ORDER BY c DESC LIMIT 1
@@ -682,7 +682,7 @@ EXPLAIN (VERBOSE) SELECT c FROM abz ORDER BY c DESC LIMIT 1
 ·     vectorized   true             ·    ·
 scan  ·            ·                (c)  ·
 ·     table        abz@abz_c_b_key  ·    ·
-·     spans        ALL              ·    ·
+·     spans        LIMITED SCAN     ·    ·
 ·     limit        1                ·    ·
 
 # Issue #14426: verify we don't have an internal filter that contains "a IN ()"
@@ -703,7 +703,7 @@ render     ·            ·                                      (k)        ·
  │         render 0     k                                      ·          ·
  └── scan  ·            ·                                      (k, a, b)  ·
 ·          table        tab0@primary                           ·          ·
-·          spans        ALL                                    ·          ·
+·          spans        FULL SCAN                              ·          ·
 ·          filter       ((a IN (6,)) AND (a > 6)) OR (b >= 4)  ·          ·
 
 # Check that no extraneous rows are fetched due to excessive batching (#15910)
@@ -994,7 +994,7 @@ EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM NULL
 ·     vectorized   true           ·       ·
 scan  ·            ·              (x, y)  ·
 ·     table        xy@primary     ·       ·
-·     spans        ALL            ·       ·
+·     spans        FULL SCAN      ·       ·
 ·     filter       y IS NOT NULL  ·       ·
 
 query TTTTT
@@ -1004,7 +1004,7 @@ EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM 4
 ·     vectorized   false                 ·       ·
 scan  ·            ·                     (x, y)  ·
 ·     table        xy@primary            ·       ·
-·     spans        ALL                   ·       ·
+·     spans        FULL SCAN             ·       ·
 ·     filter       y IS DISTINCT FROM 4  ·       ·
 
 # Regression tests for #22670.
@@ -1115,7 +1115,7 @@ sort       ·            ·                 (a, b, c, d)  -c
  │         order        -c                ·             ·
  └── scan  ·            ·                 (a, b, c, d)  ·
 ·          table        noncover@primary  ·             ·
-·          spans        ALL               ·             ·
+·          spans        FULL SCAN         ·             ·
 ·          filter       c > 0             ·             ·
 
 query TTTTT
@@ -1127,7 +1127,7 @@ sort       ·            ·                 (a, b, c, d)  +c
  │         order        +c                ·             ·
  └── scan  ·            ·                 (a, b, c, d)  ·
 ·          table        noncover@primary  ·             ·
-·          spans        ALL               ·             ·
+·          spans        FULL SCAN         ·             ·
 ·          filter       c > 0             ·             ·
 
 query TTTTT
@@ -1137,7 +1137,7 @@ EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 AND d = 8
 ·     vectorized   true                 ·             ·
 scan  ·            ·                    (a, b, c, d)  ·
 ·     table        noncover@primary     ·             ·
-·     spans        ALL                  ·             ·
+·     spans        FULL SCAN            ·             ·
 ·     filter       (c > 0) AND (d = 8)  ·             ·
 
 # The following testcases verify that when we have a small limit, we prefer an
@@ -1152,7 +1152,7 @@ sort       ·            ·
  │         order        +c
  └── scan  ·            ·
 ·          table        noncover@primary
-·          spans        ALL
+·          spans        FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM noncover ORDER BY c LIMIT 5
@@ -1164,7 +1164,7 @@ index-join  ·            ·
  │          key columns  a
  └── scan   ·            ·
 ·           table        noncover@c
-·           spans        ALL
+·           spans        LIMITED SCAN
 ·           limit        5
 
 query TTT
@@ -1180,7 +1180,7 @@ limit           ·            ·
       │         order        +c
       └── scan  ·            ·
 ·               table        noncover@primary
-·               spans        ALL
+·               spans        FULL SCAN
 
 # TODO(radu): need to prefer the order-matching index when OFFSET is present.
 query TTT
@@ -1197,7 +1197,7 @@ limit            ·            ·
       │          key columns  a
       └── scan   ·            ·
 ·                table        noncover@c
-·                spans        ALL
+·                spans        LIMITED SCAN
 ·                limit        10
 
 query TTT
@@ -1213,7 +1213,7 @@ limit           ·            ·
       │         order        +c
       └── scan  ·            ·
 ·               table        noncover@primary
-·               spans        ALL
+·               spans        FULL SCAN
 
 # ------------------------------------------------------------------------------
 # These tests verify that while we are joining an index with the table, we

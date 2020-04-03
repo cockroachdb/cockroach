@@ -1351,7 +1351,7 @@ func Example_misc_table() {
 	//   render    |             |
 	//    └── scan |             |
 	//             | table       | t@primary
-	//             | spans       | ALL
+	//             | spans       | FULL SCAN
 	// (6 rows)
 }
 

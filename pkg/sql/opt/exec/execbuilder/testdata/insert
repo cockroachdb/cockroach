@@ -324,7 +324,7 @@ count                          ·            ·
                      │         order        -v
                      └── scan  ·            ·
 ·                              table        select_t@primary
-·                              spans        ALL
+·                              spans        FULL SCAN
 
 # Check that INSERT supports LIMIT (MySQL extension)
 query TTT
@@ -345,7 +345,7 @@ count                ·            ·
            │         render 2     unique_rowid()
            └── scan  ·            ·
 ·                    table        select_t@primary
-·                    spans        ALL
+·                    spans        LIMITED SCAN
 ·                    limit        1
 
 # Check the grouping of LIMIT and ORDER BY
@@ -446,7 +446,7 @@ render                                   ·            ·                      (
                                │         render 2     k || v                 ·                              ·
                                └── scan  ·            ·                      (k, v)                         ·
 ·                                        table        kv@primary             ·                              ·
-·                                        spans        ALL                    ·                              ·
+·                                        spans        FULL SCAN              ·                              ·
 
 # ------------------------------------------------------------------------------
 # Insert rows into table during schema changes.
@@ -538,7 +538,7 @@ root                                          ·             ·                 
                                     │         render 3      unique_rowid()                                       ·                   ·
                                     └── scan  ·             ·                                                    (a, b, c)           ·
 ·                                             table         abc@primary                                          ·                   ·
-·                                             spans         ALL                                                  ·                   ·
+·                                             spans         FULL SCAN                                            ·                   ·
 
 # ------------------------------------------------------------------------------
 # Regression for #35364. This tests behavior that is different between the CBO

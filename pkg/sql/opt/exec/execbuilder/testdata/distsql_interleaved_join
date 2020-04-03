@@ -264,10 +264,10 @@ render           ·                   ·
       │          mergeJoinOrder      +"(pid1=pid1)"
       ├── scan   ·                   ·
       │          table               grandchild2@primary
-      │          spans               ALL
+      │          spans               FULL SCAN
       └── scan   ·                   ·
 ·                table               parent1@primary
-·                spans               ALL
+·                spans               FULL SCAN
 ·                filter              ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)
 
 # Join on multiple interleaved columns with an overarching ancestor (parent1).
@@ -307,10 +307,10 @@ merge-join  ·                  ·
  │          mergeJoinOrder     +"(pid1=pid1)",+"(cid2=cid2)",+"(cid3=cid3)"
  ├── scan   ·                  ·
  │          table              child2@primary
- │          spans              ALL
+ │          spans              FULL SCAN
  └── scan   ·                  ·
 ·           table              grandchild2@primary
-·           spans              ALL
+·           spans              FULL SCAN
 ·           filter             (((pid1 >= 5) AND (pid1 <= 7)) OR ((cid2 >= 12) AND (cid2 <= 14))) OR ((gcid2 >= 49) AND (gcid2 <= 51))
 
 # Aggregation over parent and child keys.
