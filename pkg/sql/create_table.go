@@ -1282,7 +1282,7 @@ func MakeTableDesc(
 				if n.Interleave != nil {
 					return desc, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
 				}
-				buckets, err := tree.EvalShardBucketCount(d.PrimaryKey.ShardBuckets)
+				buckets, err := sqlbase.EvalShardBucketCount(semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)
 				if err != nil {
 					return desc, err
 				}
@@ -1302,7 +1302,7 @@ func MakeTableDesc(
 				n.Defs = append(n.Defs, checkConstraint)
 				columnDefaultExprs = append(columnDefaultExprs, nil)
 			}
-			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, semaCtx)
+			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, semaCtx, evalCtx)
 			if err != nil {
 				return desc, err
 			}
@@ -1364,7 +1364,8 @@ func MakeTableDesc(
 		}
 		shardCol, newColumn, err := setupShardedIndex(
 			ctx,
-			st,
+			evalCtx,
+			semaCtx,
 			sessionData.HashShardedIndexesEnabled,
 			&d.Columns,
 			d.Sharded.ShardBuckets,
@@ -1375,7 +1376,7 @@ func MakeTableDesc(
 			return err
 		}
 		if newColumn {
-			buckets, err := tree.EvalShardBucketCount(d.Sharded.ShardBuckets)
+			buckets, err := sqlbase.EvalShardBucketCount(semaCtx, evalCtx, d.Sharded.ShardBuckets)
 			if err != nil {
 				return err
 			}

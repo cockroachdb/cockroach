@@ -125,7 +125,7 @@ func avroFieldMetadataToColDesc(metadata string) (*sqlbase.ColumnDescriptor, err
 		return nil, err
 	}
 	def := parsed.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
-	col, _, _, err := sqlbase.MakeColumnDefDescs(def, &tree.SemaContext{})
+	col, _, _, err := sqlbase.MakeColumnDefDescs(def, &tree.SemaContext{}, &tree.EvalContext{})
 	return col, err
 }
 

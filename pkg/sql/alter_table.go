@@ -175,7 +175,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			d = newDef
 			incTelemetryForNewColumn(d)
 
-			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx)
+			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, params.EvalContext())
 			if err != nil {
 				return err
 			}
