@@ -179,6 +179,14 @@ func (s LeaseStore) acquire(
 ) (*tableVersionState, error) {
 	var table *tableVersionState
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		// Run the descriptor read as high-priority, thereby pushing any intents out
+		// of its way. We don't want schema changes to prevent lease acquisitions;
+		// we'd rather force them to refresh. Also this prevents deadlocks in cases
+		// where the name resolution is triggered by the transaction doing the
+		// schema change itself.
+		if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
+			return err
+		}
 		expiration := txn.OrigTimestamp()
 		expiration.WallTime += int64(s.jitteredLeaseDuration())
 		if !minExpiration.Less(expiration) {
@@ -209,6 +217,7 @@ func (s LeaseStore) acquire(
 			ImmutableTableDescriptor: *sqlbase.NewImmutableTableDescriptor(*tableDesc),
 			expiration:               expiration,
 		}
+		log.VEventf(ctx, 2, "LeaseStore acquired lease %+v", storedLease)
 		table.mu.lease = storedLease
 
 		// ValidateTable instead of Validate, even though we have a txn available,
@@ -1574,6 +1583,14 @@ func (m *LeaseManager) resolveName(
 	key := sqlbase.NewTableKey(dbID, tableName).Key()
 	id := sqlbase.InvalidID
 	if err := m.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		// Run the name lookup as high-priority, thereby pushing any intents out of
+		// its way. We don't want schema changes to prevent name resolution/lease
+		// acquisitions; we'd rather force them to refresh. Also this prevents
+		// deadlocks in cases where the name resolution is triggered by the
+		// transaction doing the schema change itself.
+		if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
+			return err
+		}
 		txn.SetFixedTimestamp(ctx, timestamp)
 		gr, err := txn.Get(ctx, key)
 		if err != nil {
