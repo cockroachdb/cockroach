@@ -57,8 +57,10 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64 << 20, 64 << 20, false, 0},
 		// No intersection, max bytes+1, no load.
 		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64<<20 + 1, 64 << 20, true, 1},
-		// No intersection, max bytes * 2, no load.
-		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64 << 21, 64 << 20, true, 2},
+		// No intersection, max bytes * 2 + 2, no load, should backpressure.
+		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64<<21 + 2, 64 << 20, true, 52},
+		// No intersection, max bytes * 4, no load, should not backpressure.
+		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64 << 22, 64 << 20, true, 4},
 		// Intersection, max bytes +1, no load.
 		{keys.MakeTablePrefix(2000), roachpb.RKeyMax, 32<<20 + 1, 32 << 20, true, 2},
 		// Split needed at table boundary, but no zone config, no load.
@@ -92,7 +94,8 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		// Testing using shouldSplitRange instead of shouldQueue to avoid using the splitFinder
 		// This tests the merge queue behavior too as a result. For splitFinder tests,
 		// see split/split_test.go.
-		shouldQ, priority := shouldSplitRange(repl.Desc(), repl.GetMVCCStats(), repl.GetMaxBytes(), cfg)
+		shouldQ, priority := shouldSplitRange(repl.Desc(), repl.GetMVCCStats(),
+			repl.GetMaxBytes(), repl.ShouldBackpressureWrites(), cfg)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}

@@ -245,7 +245,9 @@ func (mq *mergeQueue) process(
 	// in a situation where we keep merging ranges that would be split soon after
 	// by a small increase in load.
 	conservativeLoadBasedSplitThreshold := 0.5 * lhsRepl.SplitByLoadQPSThreshold()
-	if ok, _ := shouldSplitRange(mergedDesc, mergedStats, lhsRepl.GetMaxBytes(), sysCfg); ok || mergedQPS >= conservativeLoadBasedSplitThreshold {
+	shouldSplit, _ := shouldSplitRange(mergedDesc, mergedStats,
+		lhsRepl.GetMaxBytes(), lhsRepl.shouldBackpressureWrites(), sysCfg)
+	if shouldSplit || mergedQPS >= conservativeLoadBasedSplitThreshold {
 		log.VEventf(ctx, 2,
 			"skipping merge to avoid thrashing: merged range %s may split "+
 				"(estimated size, estimated QPS: %d, %v)",

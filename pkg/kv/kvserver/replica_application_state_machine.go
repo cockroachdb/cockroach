@@ -835,6 +835,12 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	prevStats := *r.mu.state.Stats
 	*r.mu.state.Stats = *b.state.Stats
 
+	// If the range is now less than its RangeMaxBytes, clear the history of its
+	// largest previous max bytes.
+	if r.mu.largestPreviousMaxRangeSizeBytes > 0 && b.state.Stats.Total() < *r.mu.zone.RangeMaxBytes {
+		r.mu.largestPreviousMaxRangeSizeBytes = 0
+	}
+
 	// Check the queuing conditions while holding the lock.
 	needsSplitBySize := r.needsSplitBySizeRLocked()
 	needsMergeBySize := r.needsMergeBySizeRLocked()

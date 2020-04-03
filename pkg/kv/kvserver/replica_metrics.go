@@ -239,15 +239,29 @@ func (r *Replica) WritesPerSecond() float64 {
 }
 
 func (r *Replica) needsSplitBySizeRLocked() bool {
-	return r.exceedsMultipleOfSplitSizeRLocked(1)
+	exceeded, _ := r.exceedsMultipleOfSplitSizeRLocked(1)
+	return exceeded
 }
 
 func (r *Replica) needsMergeBySizeRLocked() bool {
 	return r.mu.state.Stats.Total() < *r.mu.zone.RangeMinBytes
 }
 
-func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) bool {
+// exceedsMultipleOfSplitSizeRLocked returns whether the current size of the
+// range exceeds the max size times mult. If so, the bytes overage is also
+// returned. Note that the max size is determined by either the current maximum
+// size as dictated by the zone config or a previous max size indicating that
+// the max size has changed relatively recently and thus we should not
+// backpressure for being over.
+func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) (exceeded bool, bytesOver int64) {
 	maxBytes := *r.mu.zone.RangeMaxBytes
+	if r.mu.largestPreviousMaxRangeSizeBytes > maxBytes {
+		maxBytes = r.mu.largestPreviousMaxRangeSizeBytes
+	}
 	size := r.mu.state.Stats.Total()
-	return maxBytes > 0 && float64(size) > float64(maxBytes)*mult
+	maxSize := int64(float64(maxBytes)*mult) + 1
+	if maxBytes <= 0 || size <= maxSize {
+		return false, 0
+	}
+	return true, size - maxSize
 }
