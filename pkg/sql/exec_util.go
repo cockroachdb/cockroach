@@ -1924,7 +1924,9 @@ func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 }
 
 func (m *sessionDataMutator) SetReadOnly(val bool) {
-	m.setCurTxnReadOnly(val)
+	if m.setCurTxnReadOnly != nil {
+		m.setCurTxnReadOnly(val)
+	}
 }
 
 func (m *sessionDataMutator) SetStmtTimeout(timeout time.Duration) {
