@@ -66,17 +66,19 @@ export function PaginationComponent(props: PaginationComponentProps) {
   );
 }
 
+const getPageStart = (pageSize: number, current: number) => pageSize * current;
+
 // tslint:disable-next-line: no-shadowed-variable
 export const paginationPageCount = (pagination: PaginationSettings, pageName: string, match?: match<any>, appAttr?: string, search?: string) => {
   const { pageSize, current, total } = pagination;
   const appAttrValue = match && getMatchParamByName(match, appAttr);
   const selectedApp = appAttrValue || "";
-  const pageCount = current * pageSize > total ? total : current * pageSize;
-  const count = total > 10 ? pageCount : current * total;
-  const start = count > pageSize ? count - pageSize + 1 : 1;
+  const start = Math.max(getPageStart(pageSize, current > 0 ? (current - 1) : current), 0);
+  const recountedStart = total > 0 ? start + 1 : start;
+  const end = Math.min(getPageStart(pageSize, current), total);
   const label = (search && search.length > 0) || selectedApp.length > 0 ? "results" : pageName;
-  if (count === 0) {
+  if (end === 0) {
     return `0 ${label}`;
   }
-  return `${start}-${count} of ${total} ${label}`;
+  return `${recountedStart}-${end} of ${total} ${label}`;
 };
