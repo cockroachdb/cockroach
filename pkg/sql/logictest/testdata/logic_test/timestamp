@@ -410,3 +410,27 @@ DROP TABLE example
 
 statement ok
 SET TIME ZONE 0
+
+subtest regression_46973
+
+statement ok
+CREATE TABLE regression_46973(c0 TIMESTAMP, c1 TIMESTAMPTZ)
+
+query TT
+SELECT * FROM regression_46973 WHERE (-9223372036854775808)::TIMESTAMP!=regression_46973.c0
+----
+
+query TT
+SELECT * FROM regression_46973 WHERE (-9223372036854775808)::TIMESTAMPTZ!=regression_46973.c1
+----
+
+query TT
+SELECT * FROM regression_46973 WHERE (9223372036854775807::TIMESTAMP + '999999 microseconds'::interval)!=regression_46973.c0
+----
+
+query TT
+SELECT * FROM regression_46973 WHERE (9223372036854775807::TIMESTAMPTZ + '999999 microseconds'::interval)!=regression_46973.c1
+----
+
+statement ok
+DROP TABLE regression_46973
