@@ -1410,3 +1410,24 @@ func TestSQLString(t *testing.T) {
 		t.Errorf("Expected '%s', but got '%s'", expected, got)
 	}
 }
+
+func TestLogicalColumnID(t *testing.T) {
+	tests := []struct {
+		desc     TableDescriptor
+		expected ColumnID
+	}{
+		{TableDescriptor{Columns: []ColumnDescriptor{{ID: 1, LogicalColumnID: 1}}}, 1},
+		// If LogicalColumnID is not explicitly set, it should be lazy loaded as ID.
+		{TableDescriptor{Columns: []ColumnDescriptor{{ID: 2}}}, 2},
+	}
+
+	for i := range tests {
+		actual := tests[i].desc.Columns[0].GetLogicalColumnID()
+		expected := tests[i].expected
+
+		if expected != actual {
+			t.Fatalf("Expected LogicalColumnID to be %d, got %d.", expected, actual)
+		}
+	}
+
+}

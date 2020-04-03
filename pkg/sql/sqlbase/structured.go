@@ -4130,3 +4130,14 @@ func GenerateUniqueConstraintName(prefix string, nameExistsFunc func(name string
 	}
 	return name
 }
+
+// GetLogicalColumnID returns the LogicalColumnID of the ColumnDescriptor
+// if the LogicalColumnID is set (non-zero). Returns the ID of the
+// ColumnDescriptor if the LogicalColumnID is not set.
+func (desc ColumnDescriptor) GetLogicalColumnID() ColumnID {
+	if desc.LogicalColumnID != 0 {
+		return desc.LogicalColumnID
+	}
+
+	return desc.ID
+}
