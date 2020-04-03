@@ -15,6 +15,9 @@ import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
 import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
+import {
+  LogicalBytesGraphTooltip,
+} from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 
 export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, storeSources } = props;
@@ -83,7 +86,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Logical Bytes per Store" tooltip={`The number of logical bytes of data on each store.`}>
+    <LineGraph title="Logical Bytes per Store" tooltip={<LogicalBytesGraphTooltip />}>
       <Axis units={AxisUnits.Bytes} label="logical store size">
         {
           _.map(nodeIDs, (nid) => (
