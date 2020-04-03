@@ -2041,7 +2041,7 @@ func (s *statusServer) JobRegistryStatus(
 	resp := &serverpb.JobRegistryStatusResponse{
 		NodeID: remoteNodeID,
 	}
-	for _, jID := range s.admin.server.jobRegistry.CurrentlyRunningJobs() {
+	for _, jID := range s.admin.server.sqlServer.jobRegistry.CurrentlyRunningJobs() {
 		job := serverpb.JobRegistryStatusResponse_Job{
 			Id: jID,
 		}
@@ -2061,7 +2061,7 @@ func (s *statusServer) JobStatus(
 
 	ctx = s.AnnotateCtx(propagateGatewayMetadata(ctx))
 
-	j, err := s.admin.server.jobRegistry.LoadJob(ctx, req.JobId)
+	j, err := s.admin.server.sqlServer.jobRegistry.LoadJob(ctx, req.JobId)
 	if err != nil {
 		return nil, err
 	}

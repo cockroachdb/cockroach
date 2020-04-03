@@ -37,7 +37,7 @@ CREATE TABLE t.test (x INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	sqlServer := s.(*TestServer).Server.pgServer.SQLServer
+	sqlServer := s.(*TestServer).Server.sqlServer.pgServer.SQLServer
 
 	// Flush stats at the beginning of the test.
 	sqlServer.ResetSQLStats(ctx)
@@ -78,7 +78,7 @@ func TestSQLStatCollection(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	sqlServer := s.(*TestServer).Server.pgServer.SQLServer
+	sqlServer := s.(*TestServer).Server.sqlServer.pgServer.SQLServer
 
 	// Flush stats at the beginning of the test.
 	sqlServer.ResetSQLStats(ctx)

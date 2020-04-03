@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -156,51 +157,59 @@ type Server struct {
 	startTime  time.Time
 	rpcContext *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
-	grpc           *grpcServer
-	gossip         *gossip.Gossip
-	nodeDialer     *nodedialer.Dialer
-	nodeLiveness   *kvserver.NodeLiveness
-	storePool      *kvserver.StorePool
-	tcsFactory     *kvcoord.TxnCoordSenderFactory
-	distSender     *kvcoord.DistSender
-	db             *kv.DB
-	pgServer       *pgwire.Server
-	distSQLServer  *distsql.ServerImpl
-	node           *Node
-	registry       *metric.Registry
-	recorder       *status.MetricsRecorder
-	runtime        *status.RuntimeStatSampler
+	grpc         *grpcServer
+	gossip       *gossip.Gossip
+	nodeDialer   *nodedialer.Dialer
+	nodeLiveness *kvserver.NodeLiveness
+	storePool    *kvserver.StorePool
+	tcsFactory   *kvcoord.TxnCoordSenderFactory
+	distSender   *kvcoord.DistSender
+	db           *kv.DB
+	node         *Node
+	registry     *metric.Registry
+	recorder     *status.MetricsRecorder
+	runtime      *status.RuntimeStatSampler
+
 	admin          *adminServer
 	status         *statusServer
 	authentication *authenticationServer
 	// initServer receives requests to bootstrap a new cluster (via the
 	// Bootstrap RPC). This server will never accept requests if any of the
 	// stores is already initialized.
-	initServer       *initServer
-	tsDB             *ts.DB
-	tsServer         ts.Server
-	raftTransport    *kvserver.RaftTransport
-	stopper          *stop.Stopper
+	initServer    *initServer
+	tsDB          *ts.DB
+	tsServer      ts.Server
+	raftTransport *kvserver.RaftTransport
+	stopper       *stop.Stopper
+
+	debug *debug.Server
+
+	replicationReporter   *reports.Reporter
+	engines               Engines
+	protectedtsProvider   protectedts.Provider
+	protectedtsReconciler *ptreconcile.Reconciler
+
+	sqlServer *sqlServer
+}
+
+type sqlServer struct {
+	pgServer         *pgwire.Server
+	distSQLServer    *distsql.ServerImpl
 	execCfg          *sql.ExecutorConfig
 	internalExecutor *sql.InternalExecutor
 	leaseMgr         *sql.LeaseManager
 	blobService      *blobs.Service
-	debug            *debug.Server
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
 	sessionRegistry        *sql.SessionRegistry
 	jobRegistry            *jobs.Registry
 	migMgr                 *sqlmigrations.Manager
 	statsRefresher         *stats.Refresher
-	replicationReporter    *reports.Reporter
 	temporaryObjectCleaner *sql.TemporaryObjectCleaner
-	engines                Engines
 	internalMemMetrics     sql.MemoryMetrics
 	adminMemMetrics        sql.MemoryMetrics
 	// sqlMemMetrics are used to track memory usage of sql sessions.
 	sqlMemMetrics           sql.MemoryMetrics
-	protectedtsProvider     protectedts.Provider
-	protectedtsReconciler   *ptreconcile.Reconciler
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
 }
 
@@ -302,13 +311,24 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	s.nodeDialer = nodedialer.New(s.rpcContext, gossip.AddressResolver(s.gossip))
 
-	// Create blob service for inter-node file sharing.
-	var err error
-	s.blobService, err = blobs.NewBlobService(s.ClusterSettings().ExternalIODir)
-	if err != nil {
-		return nil, errors.Wrap(err, "creating blob service")
+	bootstrapVersion := cfg.Settings.Version.BinaryVersion()
+	if knobs := cfg.TestingKnobs.Server; knobs != nil {
+		if ov := knobs.(*TestingKnobs).BootstrapVersionOverride; ov != (roachpb.Version{}) {
+			bootstrapVersion = ov
+		}
 	}
-	blobspb.RegisterBlobServer(s.grpc.Server, s.blobService)
+
+	s.initServer = newInitServer(
+		cfg.Settings.Version.BinaryVersion(),
+		cfg.Settings.Version.BinaryMinSupportedVersion(),
+		clusterversion.ClusterVersion{Version: bootstrapVersion},
+		&cfg.DefaultZoneConfig,
+		&cfg.DefaultSystemZoneConfig,
+	)
+	serverpb.RegisterInitServer(s.grpc.Server, s.initServer)
+
+	s.runtime = status.NewRuntimeStatSampler(context.TODO(), s.clock)
+	s.registry.AddMetricStruct(s.runtime)
 
 	// A custom RetryOptions is created which uses stopper.ShouldQuiesce() as
 	// the Closer. This prevents infinite retry loops from occurring during
@@ -389,65 +409,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.cfg.AmbientCtx, st, s.nodeDialer, s.grpc.Server, s.stopper,
 	)
 
-	// Set up internal memory metrics for use by internal SQL executors.
-	s.internalMemMetrics = sql.MakeMemMetrics("internal", cfg.HistogramWindowInterval())
-	s.registry.AddMetricStruct(s.internalMemMetrics)
-
-	// We do not set memory monitors or a noteworthy limit because the children of
-	// this monitor will be setting their own noteworthy limits.
-	rootSQLMemoryMonitor := mon.MakeMonitor(
-		"root",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment: use default increment */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
-	rootSQLMemoryMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(s.cfg.SQLMemoryPoolSize))
-
-	// bulkMemoryMonitor is the parent to all child SQL monitors tracking bulk
-	// operations (IMPORT, index backfill). It is itself a child of the
-	// ParentMemoryMonitor.
-	bulkMemoryMonitor := mon.MakeMonitorInheritWithLimit("bulk-mon", 0 /* limit */, &rootSQLMemoryMonitor)
-	bulkMetrics := bulk.MakeBulkMetrics(cfg.HistogramWindowInterval())
-	s.registry.AddMetricStruct(bulkMetrics)
-	bulkMemoryMonitor.SetMetrics(bulkMetrics.CurBytesCount, bulkMetrics.MaxBytesHist)
-	bulkMemoryMonitor.Start(context.Background(), &rootSQLMemoryMonitor, mon.BoundAccount{})
-
-	// Set up the DistSQL temp engine.
-
-	useStoreSpec := cfg.Stores.Specs[s.cfg.TempStorageConfig.SpecIdx]
-	tempEngine, tempFS, err := storage.NewTempEngine(ctx, s.cfg.StorageEngine, s.cfg.TempStorageConfig, useStoreSpec)
-	if err != nil {
-		return nil, errors.Wrap(err, "creating temp storage")
-	}
-	s.stopper.AddCloser(tempEngine)
-	// Remove temporary directory linked to tempEngine after closing
-	// tempEngine.
-	s.stopper.AddCloser(stop.CloserFn(func() {
-		firstStore := cfg.Stores.Specs[s.cfg.TempStorageConfig.SpecIdx]
-		var err error
-		if firstStore.InMemory {
-			// First store is in-memory so we remove the temp
-			// directory directly since there is no record file.
-			err = os.RemoveAll(s.cfg.TempStorageConfig.Path)
-		} else {
-			// If record file exists, we invoke CleanupTempDirs to
-			// also remove the record after the temp directory is
-			// removed.
-			recordPath := filepath.Join(firstStore.Path, TempDirsRecordFilename)
-			err = storage.CleanupTempDirs(recordPath)
-		}
-		if err != nil {
-			log.Errorf(context.TODO(), "could not remove temporary store directory: %v", err.Error())
-		}
-	}))
-
-	// Set up admin memory metrics for use by admin SQL executors.
-	s.adminMemMetrics = sql.MakeMemMetrics("admin", cfg.HistogramWindowInterval())
-	s.registry.AddMetricStruct(s.adminMemMetrics)
-
 	s.tsDB = ts.NewDB(s.db, s.cfg.Settings)
 	s.registry.AddMetricStruct(s.tsDB.Metrics())
 	nodeCountFn := func() int64 {
@@ -461,6 +422,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// which in turn needs many things. That's why everybody that needs an
 	// InternalExecutor uses this one instance.
 	internalExecutor := &sql.InternalExecutor{}
+	jobRegistry := &jobs.Registry{} // ditto
 
 	// This function defines how ExternalStorage objects are created.
 	externalStorage := func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
@@ -484,6 +446,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		)
 	}
 
+	var err error
 	if s.protectedtsProvider, err = ptprovider.New(ptprovider.Config{
 		DB:               s.db,
 		InternalExecutor: internalExecutor,
@@ -491,9 +454,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}); err != nil {
 		return nil, err
 	}
-
-	// Similarly for execCfg.
-	var execCfg sql.ExecutorConfig
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	storeCfg := kvserver.StoreConfig{
@@ -552,9 +512,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.recorder = status.NewMetricsRecorder(s.clock, s.nodeLiveness, s.rpcContext, s.gossip, st)
 	s.registry.AddMetricStruct(s.rpcContext.RemoteClocks.Metrics())
 
-	s.runtime = status.NewRuntimeStatSampler(ctx, s.clock)
-	s.registry.AddMetricStruct(s.runtime)
-
 	s.node = NewNode(
 		storeCfg, s.recorder, s.registry, s.stopper,
 		txnMetrics, nil /* execCfg */, &s.rpcContext.ClusterID)
@@ -565,31 +522,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.db, s.node.stores, s.storePool,
 		s.ClusterSettings(), s.nodeLiveness, internalExecutor)
 
-	s.sessionRegistry = sql.NewSessionRegistry()
-	var jobAdoptionStopFile string
-	for _, spec := range s.cfg.Stores.Specs {
-		if !spec.InMemory && spec.Path != "" {
-			jobAdoptionStopFile = filepath.Join(spec.Path, jobs.PreventAdoptionFile)
-			break
-		}
-	}
-	s.jobRegistry = jobs.MakeRegistry(
-		s.cfg.AmbientCtx,
-		s.stopper,
-		s.clock,
-		s.db,
-		internalExecutor,
-		&s.nodeIDContainer,
-		st,
-		s.cfg.HistogramWindowInterval(),
-		func(opName, user string) (interface{}, func()) {
-			// This is a hack to get around a Go package dependency cycle. See comment
-			// in sql/jobs/registry.go on planHookMaker.
-			return sql.NewInternalPlanner(opName, nil, user, &sql.MemoryMetrics{}, &execCfg)
-		},
-		jobAdoptionStopFile,
-	)
-	s.registry.AddMetricStruct(s.jobRegistry.MetricsStruct())
 	s.protectedtsReconciler = ptreconcile.NewReconciler(ptreconcile.Config{
 		Settings: s.st,
 		Stores:   s.node.stores,
@@ -597,84 +529,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Storage:  s.protectedtsProvider,
 		Cache:    s.protectedtsProvider,
 		StatusFuncs: ptreconcile.StatusFuncs{
-			jobsprotectedts.MetaType: jobsprotectedts.MakeStatusFunc(s.jobRegistry),
+			jobsprotectedts.MetaType: jobsprotectedts.MakeStatusFunc(jobRegistry),
 		},
 	})
 	s.registry.AddMetricStruct(s.protectedtsReconciler.Metrics())
 
-	distSQLMetrics := execinfra.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
-	s.registry.AddMetricStruct(distSQLMetrics)
-
-	// Set up Lease Manager
-	var lmKnobs sql.LeaseManagerTestingKnobs
-	if leaseManagerTestingKnobs := cfg.TestingKnobs.SQLLeaseManager; leaseManagerTestingKnobs != nil {
-		lmKnobs = *leaseManagerTestingKnobs.(*sql.LeaseManagerTestingKnobs)
-	}
-	s.leaseMgr = sql.NewLeaseManager(
-		s.cfg.AmbientCtx,
-		&s.nodeIDContainer,
-		s.db,
-		s.clock,
-		nil, /* internalExecutor - will be set later because of circular dependencies */
-		st,
-		lmKnobs,
-		s.stopper,
-		s.cfg.LeaseManagerConfig,
-	)
-
-	// Set up the DistSQL server.
-	distSQLCfg := execinfra.ServerConfig{
-		AmbientContext: s.cfg.AmbientCtx,
-		Settings:       st,
-		RuntimeStats:   s.runtime,
-		DB:             s.db,
-		Executor:       internalExecutor,
-		FlowDB:         kv.NewDB(s.cfg.AmbientCtx, s.tcsFactory, s.clock),
-		RPCContext:     s.rpcContext,
-		Stopper:        s.stopper,
-		NodeID:         &s.nodeIDContainer,
-		ClusterID:      &s.rpcContext.ClusterID,
-		ClusterName:    s.cfg.ClusterName,
-
-		TempStorage:     tempEngine,
-		TempStoragePath: s.cfg.TempStorageConfig.Path,
-		TempFS:          tempFS,
-		// COCKROACH_VEC_MAX_OPEN_FDS specifies the maximum number of open file
-		// descriptors that the vectorized execution engine may have open at any
-		// one time. This limit is implemented as a weighted semaphore acquired
-		// before opening files.
-		VecFDSemaphore: semaphore.New(envutil.EnvOrDefaultInt("COCKROACH_VEC_MAX_OPEN_FDS", colexec.VecMaxOpenFDsLimit)),
-		DiskMonitor:    s.cfg.TempStorageConfig.Mon,
-
-		ParentMemoryMonitor: &rootSQLMemoryMonitor,
-		BulkAdder: func(
-			ctx context.Context, db *kv.DB, ts hlc.Timestamp, opts storagebase.BulkAdderOptions,
-		) (storagebase.BulkAdder, error) {
-			// Attach a child memory monitor to enable control over the BulkAdder's
-			// memory usage.
-			bulkMon := execinfra.NewMonitor(ctx, &bulkMemoryMonitor, fmt.Sprintf("bulk-adder-monitor"))
-			return bulk.MakeBulkAdder(ctx, db, s.distSender.RangeDescriptorCache(), s.st, ts, opts, bulkMon)
-		},
-
-		Metrics: &distSQLMetrics,
-
-		JobRegistry:  s.jobRegistry,
-		Gossip:       s.gossip,
-		NodeDialer:   s.nodeDialer,
-		LeaseManager: s.leaseMgr,
-
-		ExternalStorage:        externalStorage,
-		ExternalStorageFromURI: externalStorageFromURI,
-	}
-	s.cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
-	if distSQLTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
-		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)
-	}
-
-	s.distSQLServer = distsql.NewServer(ctx, distSQLCfg)
-	execinfrapb.RegisterDistSQLServer(s.grpc.Server, s.distSQLServer)
-
 	s.admin = newAdminServer(s)
+	sessionRegistry := sql.NewSessionRegistry()
+
 	s.status = newStatusServer(
 		s.cfg.AmbientCtx,
 		st,
@@ -688,38 +550,249 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.rpcContext,
 		s.node.stores,
 		s.stopper,
-		s.sessionRegistry,
+		sessionRegistry,
 		internalExecutor,
 	)
 	s.authentication = newAuthenticationServer(s)
-	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
+	for i, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
+		if reflect.ValueOf(gw).IsNil() {
+			return nil, errors.Errorf("%d: nil", i)
+		}
 		gw.RegisterService(s.grpc.Server)
 	}
 
-	bootstrapVersion := cfg.Settings.Version.BinaryVersion()
-	if knobs := cfg.TestingKnobs.Server; knobs != nil {
-		if ov := knobs.(*TestingKnobs).BootstrapVersionOverride; ov != (roachpb.Version{}) {
-			bootstrapVersion = ov
+	flowDB := kv.NewDB(cfg.AmbientCtx, s.tcsFactory, s.clock)
+	s.sqlServer, err = newSQLServer(sqlServerArgs{
+		Config:                 &s.cfg, // NB: s.cfg has a populated AmbientContext.
+		stopper:                stopper,
+		clock:                  clock,
+		rpcContext:             s.rpcContext,
+		distSender:             s.distSender,
+		status:                 s.status,
+		nodeLiveness:           s.nodeLiveness,
+		protectedtsProvider:    s.protectedtsProvider,
+		gossip:                 s.gossip,
+		nodeDialer:             s.nodeDialer,
+		grpcServer:             s.grpc.Server,
+		recorder:               s.recorder,
+		node:                   s.node,
+		runtime:                s.runtime,
+		db:                     s.db,
+		registry:               s.registry,
+		internalExecutor:       internalExecutor,
+		nodeIDContainer:        &s.nodeIDContainer,
+		flowDB:                 flowDB,
+		externalStorage:        externalStorage,
+		externalStorageFromURI: externalStorageFromURI,
+		jobRegistry:            jobRegistry,
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.debug = debug.NewServer(s.ClusterSettings(), s.sqlServer.pgServer.HBADebugFn())
+	return s, err
+}
+
+type sqlServerArgs struct {
+	*Config
+	stopper             *stop.Stopper
+	clock               *hlc.Clock
+	rpcContext          *rpc.Context
+	distSender          *kvcoord.DistSender
+	status              *statusServer
+	nodeLiveness        *kvserver.NodeLiveness
+	protectedtsProvider protectedts.Provider
+	gossip              *gossip.Gossip
+	nodeDialer          *nodedialer.Dialer
+	grpcServer          *grpc.Server
+	recorder            *status.MetricsRecorder
+	node                *Node
+	runtime             *status.RuntimeStatSampler
+
+	db                     *kv.DB
+	registry               *metric.Registry
+	internalExecutor       *sql.InternalExecutor // empty initially
+	nodeIDContainer        *base.NodeIDContainer
+	flowDB                 *kv.DB // for DistSQL
+	externalStorage        cloud.ExternalStorageFactory
+	externalStorageFromURI cloud.ExternalStorageFromURIFactory
+
+	jobRegistry *jobs.Registry
+}
+
+func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
+	s := &sqlServer{}
+	s.sessionRegistry = cfg.status.sessionRegistry
+	execCfg := &sql.ExecutorConfig{}
+	var jobAdoptionStopFile string
+	for _, spec := range cfg.Stores.Specs {
+		if !spec.InMemory && spec.Path != "" {
+			jobAdoptionStopFile = filepath.Join(spec.Path, jobs.PreventAdoptionFile)
+			break
 		}
 	}
 
-	s.initServer = newInitServer(
-		cfg.Settings.Version.BinaryVersion(),
-		cfg.Settings.Version.BinaryMinSupportedVersion(),
-		clusterversion.ClusterVersion{Version: bootstrapVersion},
-		&cfg.DefaultZoneConfig,
-		&cfg.DefaultSystemZoneConfig,
-	)
-	serverpb.RegisterInitServer(s.grpc.Server, s.initServer)
+	// Create blob service for inter-node file sharing.
+	var err error
+	s.blobService, err = blobs.NewBlobService(cfg.Settings.ExternalIODir)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating blob service")
+	}
+	blobspb.RegisterBlobServer(cfg.grpcServer, s.blobService)
 
-	nodeInfo := sql.NodeInfo{
-		AdminURL:  cfg.AdminURL,
-		PGURL:     cfg.PGURL,
-		ClusterID: s.ClusterID,
-		NodeID:    &s.nodeIDContainer,
+	*cfg.jobRegistry = *jobs.MakeRegistry(
+		cfg.AmbientCtx,
+		cfg.stopper,
+		cfg.clock,
+		cfg.db,
+		cfg.internalExecutor,
+		cfg.nodeIDContainer,
+		cfg.Settings,
+		cfg.HistogramWindowInterval(),
+		func(opName, user string) (interface{}, func()) {
+			// This is a hack to get around a Go package dependency cycle. See comment
+			// in sql/jobs/registry.go on planHookMaker.
+			return sql.NewInternalPlanner(opName, nil, user, &sql.MemoryMetrics{}, execCfg)
+		},
+		jobAdoptionStopFile,
+	)
+	s.jobRegistry = cfg.jobRegistry
+	cfg.registry.AddMetricStruct(s.jobRegistry.MetricsStruct())
+
+	distSQLMetrics := execinfra.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
+	cfg.registry.AddMetricStruct(distSQLMetrics)
+
+	// Set up Lease Manager
+	var lmKnobs sql.LeaseManagerTestingKnobs
+	if leaseManagerTestingKnobs := cfg.TestingKnobs.SQLLeaseManager; leaseManagerTestingKnobs != nil {
+		lmKnobs = *leaseManagerTestingKnobs.(*sql.LeaseManagerTestingKnobs)
+	}
+	s.leaseMgr = sql.NewLeaseManager(
+		cfg.AmbientCtx,
+		cfg.nodeIDContainer,
+		cfg.db,
+		cfg.clock,
+		nil, /* internalExecutor - will be set later because of circular dependencies */
+		cfg.Settings,
+		lmKnobs,
+		cfg.stopper,
+		cfg.LeaseManagerConfig,
+	)
+
+	// Set up internal memory metrics for use by internal SQL executors.
+	s.internalMemMetrics = sql.MakeMemMetrics("internal", cfg.HistogramWindowInterval())
+	cfg.registry.AddMetricStruct(s.internalMemMetrics)
+
+	// We do not set memory monitors or a noteworthy limit because the children of
+	// this monitor will be setting their own noteworthy limits.
+	rootSQLMemoryMonitor := mon.MakeMonitor(
+		"root",
+		mon.MemoryResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment: use default increment */
+		math.MaxInt64, /* noteworthy */
+		cfg.Settings,
+	)
+	rootSQLMemoryMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(cfg.SQLMemoryPoolSize))
+
+	// bulkMemoryMonitor is the parent to all child SQL monitors tracking bulk
+	// operations (IMPORT, index backfill). It is itself a child of the
+	// ParentMemoryMonitor.
+	bulkMemoryMonitor := mon.MakeMonitorInheritWithLimit("bulk-mon", 0 /* limit */, &rootSQLMemoryMonitor)
+	bulkMetrics := bulk.MakeBulkMetrics(cfg.HistogramWindowInterval())
+	cfg.registry.AddMetricStruct(bulkMetrics)
+	bulkMemoryMonitor.SetMetrics(bulkMetrics.CurBytesCount, bulkMetrics.MaxBytesHist)
+	bulkMemoryMonitor.Start(context.Background(), &rootSQLMemoryMonitor, mon.BoundAccount{})
+
+	// Set up the DistSQL temp engine.
+
+	useStoreSpec := cfg.Stores.Specs[cfg.TempStorageConfig.SpecIdx]
+	tempEngine, tempFS, err := storage.NewTempEngine(context.TODO(), cfg.StorageEngine, cfg.TempStorageConfig, useStoreSpec)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating temp storage")
+	}
+	cfg.stopper.AddCloser(tempEngine)
+	// Remove temporary directory linked to tempEngine after closing
+	// tempEngine.
+	cfg.stopper.AddCloser(stop.CloserFn(func() {
+		firstStore := cfg.Stores.Specs[cfg.TempStorageConfig.SpecIdx]
+		var err error
+		if firstStore.InMemory {
+			// First store is in-memory so we remove the temp
+			// directory directly since there is no record file.
+			err = os.RemoveAll(cfg.TempStorageConfig.Path)
+		} else {
+			// If record file exists, we invoke CleanupTempDirs to
+			// also remove the record after the temp directory is
+			// removed.
+			recordPath := filepath.Join(firstStore.Path, TempDirsRecordFilename)
+			err = storage.CleanupTempDirs(recordPath)
+		}
+		if err != nil {
+			log.Errorf(context.TODO(), "could not remove temporary store directory: %v", err.Error())
+		}
+	}))
+
+	// Set up admin memory metrics for use by admin SQL executors.
+	s.adminMemMetrics = sql.MakeMemMetrics("admin", cfg.HistogramWindowInterval())
+	cfg.registry.AddMetricStruct(s.adminMemMetrics)
+
+	// Set up the DistSQL server.
+	distSQLCfg := execinfra.ServerConfig{
+		AmbientContext: cfg.AmbientCtx,
+		Settings:       cfg.Settings,
+		RuntimeStats:   cfg.runtime,
+		DB:             cfg.db,
+		Executor:       cfg.internalExecutor,
+		FlowDB:         cfg.flowDB,
+		RPCContext:     cfg.rpcContext,
+		Stopper:        cfg.stopper,
+		NodeID:         cfg.nodeIDContainer,
+		ClusterID:      &cfg.rpcContext.ClusterID,
+		ClusterName:    cfg.ClusterName,
+
+		TempStorage:     tempEngine,
+		TempStoragePath: cfg.TempStorageConfig.Path,
+		TempFS:          tempFS,
+		// COCKROACH_VEC_MAX_OPEN_FDS specifies the maximum number of open file
+		// descriptors that the vectorized execution engine may have open at any
+		// one time. This limit is implemented as a weighted semaphore acquired
+		// before opening files.
+		VecFDSemaphore: semaphore.New(envutil.EnvOrDefaultInt("COCKROACH_VEC_MAX_OPEN_FDS", colexec.VecMaxOpenFDsLimit)),
+		DiskMonitor:    cfg.TempStorageConfig.Mon,
+
+		ParentMemoryMonitor: &rootSQLMemoryMonitor,
+		BulkAdder: func(
+			ctx context.Context, db *kv.DB, ts hlc.Timestamp, opts storagebase.BulkAdderOptions,
+		) (storagebase.BulkAdder, error) {
+			// Attach a child memory monitor to enable control over the BulkAdder's
+			// memory usage.
+			bulkMon := execinfra.NewMonitor(ctx, &bulkMemoryMonitor, fmt.Sprintf("bulk-adder-monitor"))
+			return bulk.MakeBulkAdder(ctx, db, cfg.distSender.RangeDescriptorCache(), cfg.Settings, ts, opts, bulkMon)
+		},
+
+		Metrics: &distSQLMetrics,
+
+		JobRegistry:  s.jobRegistry,
+		Gossip:       cfg.gossip,
+		NodeDialer:   cfg.nodeDialer,
+		LeaseManager: s.leaseMgr,
+
+		ExternalStorage:        cfg.externalStorage,
+		ExternalStorageFromURI: cfg.externalStorageFromURI,
+	}
+	cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
+	if distSQLTestingKnobs := cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
+		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)
 	}
 
-	virtualSchemas, err := sql.NewVirtualSchemaHolder(ctx, st)
+	ctx := context.TODO()
+
+	s.distSQLServer = distsql.NewServer(context.TODO(), distSQLCfg)
+	execinfrapb.RegisterDistSQLServer(cfg.grpcServer, s.distSQLServer)
+
+	virtualSchemas, err := sql.NewVirtualSchemaHolder(ctx, cfg.Settings)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating virtual schema holder")
 	}
@@ -727,58 +800,65 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Set up Executor
 
 	var sqlExecutorTestingKnobs sql.ExecutorTestingKnobs
-	if k := s.cfg.TestingKnobs.SQLExecutor; k != nil {
+	if k := cfg.TestingKnobs.SQLExecutor; k != nil {
 		sqlExecutorTestingKnobs = *k.(*sql.ExecutorTestingKnobs)
 	} else {
 		sqlExecutorTestingKnobs = sql.ExecutorTestingKnobs{}
 	}
 
-	loggerCtx, _ := s.stopper.WithCancelOnStop(ctx)
+	loggerCtx, _ := cfg.stopper.WithCancelOnStop(ctx)
 
-	execCfg = sql.ExecutorConfig{
-		Settings:                s.st,
+	nodeInfo := sql.NodeInfo{
+		AdminURL:  cfg.AdminURL,
+		PGURL:     cfg.PGURL,
+		ClusterID: cfg.rpcContext.ClusterID.Get,
+		NodeID:    cfg.nodeIDContainer,
+	}
+
+	*execCfg = sql.ExecutorConfig{
+		Settings:                cfg.Settings,
 		NodeInfo:                nodeInfo,
-		DefaultZoneConfig:       &s.cfg.DefaultZoneConfig,
-		Locality:                s.cfg.Locality,
-		AmbientCtx:              s.cfg.AmbientCtx,
-		DB:                      s.db,
-		Gossip:                  s.gossip,
-		MetricsRecorder:         s.recorder,
-		DistSender:              s.distSender,
-		RPCContext:              s.rpcContext,
+		DefaultZoneConfig:       &cfg.DefaultZoneConfig,
+		Locality:                cfg.Locality,
+		AmbientCtx:              cfg.AmbientCtx,
+		DB:                      cfg.db,
+		Gossip:                  cfg.gossip,
+		MetricsRecorder:         cfg.recorder,
+		DistSender:              cfg.distSender,
+		RPCContext:              cfg.rpcContext,
 		LeaseManager:            s.leaseMgr,
-		Clock:                   s.clock,
+		Clock:                   cfg.clock,
 		DistSQLSrv:              s.distSQLServer,
-		StatusServer:            s.status,
+		StatusServer:            cfg.status,
 		SessionRegistry:         s.sessionRegistry,
 		JobRegistry:             s.jobRegistry,
 		VirtualSchemas:          virtualSchemas,
-		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
-		RangeDescriptorCache:    s.distSender.RangeDescriptorCache(),
-		LeaseHolderCache:        s.distSender.LeaseHolderCache(),
+		HistogramWindowInterval: cfg.HistogramWindowInterval(),
+		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
+		LeaseHolderCache:        cfg.distSender.LeaseHolderCache(),
 		RoleMemberCache:         &sql.MembershipCache{},
 		TestingKnobs:            sqlExecutorTestingKnobs,
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
 			execinfra.Version,
-			s.st,
+			cfg.Settings,
 			// The node descriptor will be set later, once it is initialized.
 			roachpb.NodeDescriptor{},
-			s.rpcContext,
+			cfg.rpcContext,
 			s.distSQLServer,
-			s.distSender,
-			s.gossip,
-			s.stopper,
-			s.nodeLiveness,
-			s.nodeDialer,
+			cfg.distSender,
+			cfg.gossip,
+			cfg.stopper,
+			cfg.nodeLiveness,
+			cfg.nodeDialer,
 		),
 
 		TableStatsCache: stats.NewTableStatisticsCache(
-			s.cfg.SQLTableStatCacheSize,
-			s.gossip,
-			s.db,
-			internalExecutor,
+			cfg.SQLTableStatCacheSize,
+			cfg.gossip,
+			cfg.db,
+			cfg.internalExecutor,
 		),
 
 		// Note: don't forget to add the secondary loggers as closers
@@ -805,7 +885,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 		// AuditLogger syncs to disk for the same reason as AuthLogger.
 		AuditLogger: log.NewSecondaryLogger(
-			loggerCtx, s.cfg.SQLAuditLogDirName, "sql-audit",
+			loggerCtx, cfg.SQLAuditLogDirName, "sql-audit",
 			true /*enableGc*/, true /*forceSyncWrites*/, true, /* enableMsgCount */
 		),
 
@@ -814,40 +894,40 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			true /*enableGc*/, false /*forceSyncWrites*/, true, /* enableMsgCount */
 		),
 
-		QueryCache:                 querycache.New(s.cfg.SQLQueryCacheSize),
-		ProtectedTimestampProvider: s.protectedtsProvider,
+		QueryCache:                 querycache.New(cfg.SQLQueryCacheSize),
+		ProtectedTimestampProvider: cfg.protectedtsProvider,
 	}
 
-	s.stopper.AddCloser(execCfg.ExecLogger)
-	s.stopper.AddCloser(execCfg.AuditLogger)
-	s.stopper.AddCloser(execCfg.SlowQueryLogger)
-	s.stopper.AddCloser(execCfg.AuthLogger)
+	cfg.stopper.AddCloser(execCfg.ExecLogger)
+	cfg.stopper.AddCloser(execCfg.AuditLogger)
+	cfg.stopper.AddCloser(execCfg.SlowQueryLogger)
+	cfg.stopper.AddCloser(execCfg.AuthLogger)
 
-	if sqlSchemaChangerTestingKnobs := s.cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
+	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
 		execCfg.SchemaChangerTestingKnobs = sqlSchemaChangerTestingKnobs.(*sql.SchemaChangerTestingKnobs)
 	} else {
 		execCfg.SchemaChangerTestingKnobs = new(sql.SchemaChangerTestingKnobs)
 	}
-	if gcJobTestingKnobs := s.cfg.TestingKnobs.GCJob; gcJobTestingKnobs != nil {
+	if gcJobTestingKnobs := cfg.TestingKnobs.GCJob; gcJobTestingKnobs != nil {
 		execCfg.GCJobTestingKnobs = gcJobTestingKnobs.(*sql.GCJobTestingKnobs)
 	} else {
 		execCfg.GCJobTestingKnobs = new(sql.GCJobTestingKnobs)
 	}
-	if distSQLRunTestingKnobs := s.cfg.TestingKnobs.DistSQL; distSQLRunTestingKnobs != nil {
+	if distSQLRunTestingKnobs := cfg.TestingKnobs.DistSQL; distSQLRunTestingKnobs != nil {
 		execCfg.DistSQLRunTestingKnobs = distSQLRunTestingKnobs.(*execinfra.TestingKnobs)
 	} else {
 		execCfg.DistSQLRunTestingKnobs = new(execinfra.TestingKnobs)
 	}
-	if sqlEvalContext := s.cfg.TestingKnobs.SQLEvalContext; sqlEvalContext != nil {
+	if sqlEvalContext := cfg.TestingKnobs.SQLEvalContext; sqlEvalContext != nil {
 		execCfg.EvalContextTestingKnobs = *sqlEvalContext.(*tree.EvalContextTestingKnobs)
 	}
-	if pgwireKnobs := s.cfg.TestingKnobs.PGWireTestingKnobs; pgwireKnobs != nil {
+	if pgwireKnobs := cfg.TestingKnobs.PGWireTestingKnobs; pgwireKnobs != nil {
 		execCfg.PGWireTestingKnobs = pgwireKnobs.(*sql.PGWireTestingKnobs)
 	}
 
 	s.statsRefresher = stats.MakeRefresher(
-		s.st,
-		internalExecutor,
+		cfg.Settings,
+		cfg.internalExecutor,
 		execCfg.TableStatsCache,
 		stats.DefaultAsOfTime,
 	)
@@ -855,15 +935,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up internal memory metrics for use by internal SQL executors.
 	s.sqlMemMetrics = sql.MakeMemMetrics("sql", cfg.HistogramWindowInterval())
-	s.registry.AddMetricStruct(s.sqlMemMetrics)
+	cfg.registry.AddMetricStruct(s.sqlMemMetrics)
 	s.pgServer = pgwire.MakeServer(
-		s.cfg.AmbientCtx,
-		s.cfg.Config,
-		s.ClusterSettings(),
+		cfg.AmbientCtx,
+		cfg.Config.Config,
+		cfg.Settings,
 		s.sqlMemMetrics,
 		&rootSQLMemoryMonitor,
-		s.cfg.HistogramWindowInterval(),
-		&execCfg,
+		cfg.HistogramWindowInterval(),
+		execCfg,
 	)
 
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
@@ -877,7 +957,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			ctx,
 			s.pgServer.SQLServer,
 			s.sqlMemMetrics,
-			s.st,
+			cfg.Settings,
 		)
 		ie.SetSessionData(sessionData)
 		return &ie
@@ -888,38 +968,35 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.distSQLServer.ServerConfig.ProtectedTimestampProvider = execCfg.ProtectedTimestampProvider
 
 	for _, m := range s.pgServer.Metrics() {
-		s.registry.AddMetricStruct(m)
+		cfg.registry.AddMetricStruct(m)
 	}
-	*internalExecutor = sql.MakeInternalExecutor(
-		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.ClusterSettings(),
+	*cfg.internalExecutor = sql.MakeInternalExecutor(
+		ctx, s.pgServer.SQLServer, s.internalMemMetrics, cfg.Settings,
 	)
-	s.internalExecutor = internalExecutor
-	execCfg.InternalExecutor = internalExecutor
+	execCfg.InternalExecutor = cfg.internalExecutor
 	s.stmtDiagnosticsRegistry = stmtdiagnostics.NewRegistry(
-		internalExecutor, s.db, s.gossip, st)
-	s.status.setStmtDiagnosticsRequester(s.stmtDiagnosticsRegistry)
+		cfg.internalExecutor, cfg.db, cfg.gossip, cfg.Settings)
+	cfg.status.setStmtDiagnosticsRequester(s.stmtDiagnosticsRegistry)
 	execCfg.StmtDiagnosticsRecorder = s.stmtDiagnosticsRegistry
-	s.execCfg = &execCfg
+	s.execCfg = execCfg
 
 	s.leaseMgr.SetInternalExecutor(execCfg.InternalExecutor)
-	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
+	s.leaseMgr.RefreshLeases(cfg.stopper, cfg.db, cfg.gossip)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases()
 
-	s.node.InitLogger(&execCfg)
-	s.cfg.DefaultZoneConfig = cfg.DefaultZoneConfig
-
-	s.debug = debug.NewServer(s.ClusterSettings(), s.pgServer.HBADebugFn())
+	cfg.node.InitLogger(execCfg)
 
 	s.temporaryObjectCleaner = sql.NewTemporaryObjectCleaner(
-		s.st,
-		s.db,
-		s.registry,
+		cfg.Settings,
+		cfg.db,
+		cfg.registry,
 		s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
-		s.status,
-		s.node.stores.IsMeta1Leaseholder,
+		cfg.status,
+		cfg.node.stores.IsMeta1Leaseholder,
 		sqlExecutorTestingKnobs,
 	)
 
+	s.internalExecutor = cfg.internalExecutor
 	return s, nil
 }
 
@@ -1611,7 +1688,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 		s.cfg.LocalityAddresses,
-		s.execCfg.DistSQLPlanner.SetNodeDesc,
+		s.sqlServer.execCfg.DistSQLPlanner.SetNodeDesc,
 	); err != nil {
 		return err
 	}
@@ -1627,7 +1704,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	s.replicationReporter.Start(ctx, s.stopper)
-	s.temporaryObjectCleaner.Start(ctx, s.stopper)
+	s.sqlServer.temporaryObjectCleaner.Start(ctx, s.stopper)
 
 	s.refreshSettings()
 
@@ -1660,8 +1737,8 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	})
 
-	s.distSQLServer.Start()
-	s.pgServer.Start(ctx, s.stopper)
+	s.sqlServer.distSQLServer.Start()
+	s.sqlServer.pgServer.Start(ctx, s.stopper)
 
 	s.grpc.setMode(modeOperational)
 
@@ -1712,10 +1789,10 @@ func (s *Server) Start(ctx context.Context) error {
 	s.node.startWriteNodeStatus(DefaultMetricsSampleInterval)
 
 	// Start the background thread for periodically refreshing table statistics.
-	if err := s.statsRefresher.Start(ctx, s.stopper, stats.DefaultRefreshInterval); err != nil {
+	if err := s.sqlServer.statsRefresher.Start(ctx, s.stopper, stats.DefaultRefreshInterval); err != nil {
 		return err
 	}
-	s.stmtDiagnosticsRegistry.Start(ctx, s.stopper)
+	s.sqlServer.stmtDiagnosticsRegistry.Start(ctx, s.stopper)
 
 	// Start the protected timestamp subsystem.
 	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {
@@ -1734,7 +1811,7 @@ func (s *Server) Start(ctx context.Context) error {
 		mmKnobs = *migrationManagerTestingKnobs.(*sqlmigrations.MigrationManagerTestingKnobs)
 	}
 	migrationsExecutor := sql.MakeInternalExecutor(
-		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.ClusterSettings())
+		ctx, s.sqlServer.pgServer.SQLServer, s.sqlServer.internalMemMetrics, s.ClusterSettings())
 	migrationsExecutor.SetSessionData(
 		&sessiondata.SessionData{
 			// Migrations need an executor with query distribution turned off. This is
@@ -1754,9 +1831,9 @@ func (s *Server) Start(ctx context.Context) error {
 		mmKnobs,
 		s.NodeID().String(),
 		s.ClusterSettings(),
-		s.jobRegistry,
+		s.sqlServer.jobRegistry,
 	)
-	s.migMgr = migMgr
+	s.sqlServer.migMgr = migMgr
 
 	// Start garbage collecting system events.
 	s.startSystemLogsGC(ctx)
@@ -1808,7 +1885,7 @@ func (s *Server) Start(ctx context.Context) error {
 		if testingLiveness := s.cfg.TestingKnobs.RegistryLiveness; testingLiveness != nil {
 			regLiveness = testingLiveness.(*jobs.FakeNodeLiveness)
 		}
-		if err := s.jobRegistry.Start(
+		if err := s.sqlServer.jobRegistry.Start(
 			ctx, s.stopper, regLiveness, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
 		); err != nil {
 			return err
@@ -1867,7 +1944,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
-	s.leaseMgr.DeleteOrphanedLeases(timeThreshold)
+	s.sqlServer.leaseMgr.DeleteOrphanedLeases(timeThreshold)
 
 	log.Event(ctx, "server ready")
 
@@ -2064,7 +2141,7 @@ func (s *Server) startServeSQL(
 	log.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
 
-	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
+	pgCtx := s.sqlServer.pgServer.AmbientCtx.AnnotateCtx(context.Background())
 	tcpKeepAlive := tcpKeepAliveManager{
 		tcpKeepAlive: envutil.EnvOrDefaultDuration("COCKROACH_SQL_TCP_KEEP_ALIVE", time.Minute),
 	}
@@ -2074,7 +2151,7 @@ func (s *Server) startServeSQL(
 			connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
 			tcpKeepAlive.configure(connCtx, conn)
 
-			if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketTCP); err != nil {
+			if err := s.sqlServer.pgServer.ServeConn(connCtx, conn, pgwire.SocketTCP); err != nil {
 				log.Errorf(connCtx, "serving SQL client conn: %v", err)
 			}
 		}))
@@ -2100,7 +2177,7 @@ func (s *Server) startServeSQL(
 		s.stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
 			netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, s.stopper, unixLn, func(conn net.Conn) {
 				connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
-				if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
+				if err := s.sqlServer.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
 					log.Error(connCtx, err)
 				}
 			}))
@@ -2111,7 +2188,7 @@ func (s *Server) startServeSQL(
 
 // Decommission idempotently sets the decommissioning flag for specified nodes.
 func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb.NodeID) error {
-	eventLogger := sql.MakeEventLogger(s.execCfg)
+	eventLogger := sql.MakeEventLogger(s.sqlServer.execCfg)
 	eventType := sql.EventLogNodeDecommissioned
 	if !setTo {
 		eventType = sql.EventLogNodeRecommissioned
@@ -2289,7 +2366,7 @@ func (s *Server) TempDir() string {
 
 // PGServer exports the pgwire server. Used by tests.
 func (s *Server) PGServer() *pgwire.Server {
-	return s.pgServer
+	return s.sqlServer.pgServer
 }
 
 // TODO(benesch): Use https://github.com/NYTimes/gziphandler instead.
@@ -2425,5 +2502,5 @@ func listen(
 func (s *Server) RunLocalSQL(
 	ctx context.Context, fn func(ctx context.Context, sqlExec *sql.InternalExecutor) error,
 ) error {
-	return fn(ctx, s.internalExecutor)
+	return fn(ctx, s.sqlServer.internalExecutor)
 }

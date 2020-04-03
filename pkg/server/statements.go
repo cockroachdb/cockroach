@@ -87,8 +87,8 @@ func (s *statusServer) Statements(
 }
 
 func (s *statusServer) StatementsLocal(ctx context.Context) (*serverpb.StatementsResponse, error) {
-	stmtStats := s.admin.server.pgServer.SQLServer.GetUnscrubbedStmtStats()
-	lastReset := s.admin.server.pgServer.SQLServer.GetStmtStatsLastReset()
+	stmtStats := s.admin.server.sqlServer.pgServer.SQLServer.GetUnscrubbedStmtStats()
+	lastReset := s.admin.server.sqlServer.pgServer.SQLServer.GetStmtStatsLastReset()
 
 	resp := &serverpb.StatementsResponse{
 		Statements:            make([]serverpb.StatementsResponse_CollectedStatementStatistics, len(stmtStats)),
