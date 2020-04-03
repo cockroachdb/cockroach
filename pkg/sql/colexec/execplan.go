@@ -742,7 +742,10 @@ func NewColOperator(
 				return result, err
 			}
 			outputIdx := len(spec.Input[0].ColumnTypes)
-			result.Op, result.IsStreaming = NewOrdinalityOp(NewAllocator(ctx, streamingMemAccount), inputs[0], outputIdx), true
+			result.Op = NewOrdinalityOp(
+				NewAllocator(ctx, streamingMemAccount), inputs[0], outputIdx,
+			)
+			result.IsStreaming = true
 			result.ColumnTypes = append(spec.Input[0].ColumnTypes, *types.Int)
 
 		case core.HashJoiner != nil:
@@ -989,15 +992,16 @@ func NewColOperator(
 					typs = append(typs, coltypes.Bool)
 				}
 
+				outputIdx := int(wf.OutputColIdx + tempColOffset)
 				switch windowFn {
 				case execinfrapb.WindowerSpec_ROW_NUMBER:
 					result.Op = NewRowNumberOperator(
-						NewAllocator(ctx, streamingMemAccount), input, int(wf.OutputColIdx+tempColOffset), partitionColIdx,
+						NewAllocator(ctx, streamingMemAccount), input, outputIdx, partitionColIdx,
 					)
 				case execinfrapb.WindowerSpec_RANK, execinfrapb.WindowerSpec_DENSE_RANK:
 					result.Op, err = NewRankOperator(
-						NewAllocator(ctx, streamingMemAccount), input, windowFn, wf.Ordering.Columns,
-						int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx,
+						NewAllocator(ctx, streamingMemAccount), input, windowFn,
+						wf.Ordering.Columns, outputIdx, partitionColIdx, peersColIdx,
 					)
 				case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
 					// We are using an unlimited memory monitor here because
@@ -1012,7 +1016,7 @@ func NewColOperator(
 					result.Op, err = NewRelativeRankOperator(
 						unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx.Cfg), args.DiskQueueCfg,
 						args.FDSemaphore, input, typs, windowFn, wf.Ordering.Columns,
-						int(wf.OutputColIdx+tempColOffset), partitionColIdx, peersColIdx, diskAcc,
+						outputIdx, partitionColIdx, peersColIdx, diskAcc,
 					)
 					// NewRelativeRankOperator sometimes returns a constOp when there
 					// are no ordering columns, so we check that the returned operator
@@ -1504,6 +1508,10 @@ func planTypedMaybeNullProjectionOperators(
 func checkCastSupported(fromType, toType *types.T) error {
 	switch toType.Family() {
 	case types.DecimalFamily:
+		// If we're casting to a decimal, we're only allowing casting from the
+		// decimal of the same precision due to the fact that we're losing
+		// precision information once we start operating on coltypes.T. For
+		// such casts we will fallback to row-by-row engine.
 		if !fromType.Equal(*toType) {
 			return errors.New("decimal casts with rounding unsupported")
 		}
@@ -1530,6 +1538,30 @@ func planCastOperator(
 	op, err = GetCastOperator(NewAllocator(ctx, acc), input, inputIdx, outputIdx, fromType, toType)
 	ct = append(columnTypes, *toType)
 	return op, outputIdx, ct, err
+}
+
+// toPhysTypesMaybeUnhandled converts logical types to their physical
+// equivalents. If a logical type is not supported by the vectorized engine, it
+// is converted into coltypes.Unhandled and no error occurs.
+//
+// It is the same as typeconv.FromColumnTypes but without an error, and this
+// method was created for the sole purpose of supporting render expressions
+// with projection operators that are planned after colBatchScan which can
+// output batches with coltypes.Unhandled when those columns are not needed.
+// For example, if we have a table with type schema (a INT, j JSON), but the
+// query uses only column 'a', then colBatchScan will output batch with schema
+// (coltypes.Int64, coltypes.Unhandled), and we want to be ok with that when
+// enforcing the prefix of type schema of the batch.
+//
+// WARNING: use this with caution - only when the caller of this method is
+// *not* responsible for making sure that we support all types in ct, when it
+// should have been checked before.
+func toPhysTypesMaybeUnhandled(ct []types.T) []coltypes.T {
+	physTypesMaybeUnhandled := make([]coltypes.T, len(ct))
+	for i, logType := range ct {
+		physTypesMaybeUnhandled[i] = typeconv.FromColumnType(&logType)
+	}
+	return physTypesMaybeUnhandled
 }
 
 // planProjectionOperators plans a chain of operators to execute the provided
@@ -1592,7 +1624,9 @@ func planProjectionOperators(
 		funcOutputType := t.ResolvedType()
 		resultIdx = len(ct)
 		ct = append(ct, *funcOutputType)
-		op, err = NewBuiltinFunctionOperator(NewAllocator(ctx, acc), evalCtx, t, ct, inputCols, resultIdx, op)
+		op, err = NewBuiltinFunctionOperator(
+			NewAllocator(ctx, acc), evalCtx, t, ct, inputCols, resultIdx, op,
+		)
 		return op, resultIdx, ct, internalMemUsed, err
 	case tree.Datum:
 		datumType := t.ResolvedType()
@@ -1617,7 +1651,11 @@ func planProjectionOperators(
 			return nil, resultIdx, ct, internalMemUsed, errors.New("CASE <expr> WHEN expressions unsupported")
 		}
 
-		buffer := NewBufferOp(input)
+		allocator := NewAllocator(ctx, acc)
+		// We don't know the schema yet and will update it below, right before
+		// instantiating caseOp.
+		schemaEnforcer := newBatchSchemaPrefixEnforcer(allocator, input, nil /* typs */)
+		buffer := NewBufferOp(schemaEnforcer)
 		caseOps := make([]Operator, len(t.Whens))
 		caseOutputType := typeconv.FromColumnType(t.ResolvedType())
 		switch caseOutputType {
@@ -1715,7 +1753,8 @@ func planProjectionOperators(
 			}
 		}
 
-		op := NewCaseOp(NewAllocator(ctx, acc), buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
+		schemaEnforcer.typs = toPhysTypesMaybeUnhandled(ct)
+		op := NewCaseOp(allocator, buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
 		internalMemUsed += op.(InternalMemoryOperator).InternalMemoryUsage()
 		return op, caseOutputIdx, ct, internalMemUsed, err
 	case *tree.AndExpr, *tree.OrExpr:
@@ -1755,17 +1794,44 @@ func checkSupportedProjectionExpr(binOp tree.Operator, left, right tree.TypedExp
 func planProjectionExpr(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
-	binOp tree.Operator,
+	projOp tree.Operator,
 	outputType *types.T,
 	left, right tree.TypedExpr,
 	columnTypes []types.T,
 	input Operator,
 	acc *mon.BoundAccount,
 ) (op Operator, resultIdx int, ct []types.T, internalMemUsed int, err error) {
-	if err := checkSupportedProjectionExpr(binOp, left, right); err != nil {
+	if err := checkSupportedProjectionExpr(projOp, left, right); err != nil {
 		return nil, resultIdx, ct, internalMemUsed, err
 	}
 	resultIdx = -1
+	outputPhysType := typeconv.FromColumnType(outputType)
+	// actualOutputType tracks the logical type of the output column of the
+	// projection operator. See the comment below for more details.
+	actualOutputType := outputType
+	if outputType.Equivalent(types.Int) {
+		// Currently, SQL type system does not respect the width of integers
+		// when figuring out the type of the output of a projection expression
+		// (for example, INT2 + INT2 will be typed as INT8); however,
+		// vectorized operators do respect the width. In order to go around
+		// this limitation, we explicitly check whether output type is INT8,
+		// and if so, we override the output physical types to be what the
+		// vectorized projection operators will actually output.
+		//
+		// We do, however, need to plan a cast to the expected logical type and
+		// we will do that below.
+		leftPhysType := typeconv.FromColumnType(left.ResolvedType())
+		rightPhysType := typeconv.FromColumnType(right.ResolvedType())
+		if leftPhysType == coltypes.Int16 && rightPhysType == coltypes.Int16 {
+			actualOutputType = types.Int2
+			outputPhysType = coltypes.Int16
+		} else if (leftPhysType == coltypes.Int16 && rightPhysType == coltypes.Int32) ||
+			(leftPhysType == coltypes.Int32 && rightPhysType == coltypes.Int16) ||
+			(leftPhysType == coltypes.Int32 && rightPhysType == coltypes.Int32) {
+			actualOutputType = types.Int4
+			outputPhysType = coltypes.Int32
+		}
+	}
 	// There are 3 cases. Either the left is constant, the right is constant,
 	// or neither are constant.
 	if lConstArg, lConst := left.(tree.Datum); lConst {
@@ -1773,9 +1839,8 @@ func planProjectionExpr(
 		// Normally, the optimizer normalizes binary exprs so that the constant
 		// argument is on the right side. This doesn't happen for non-commutative
 		// operators such as - and /, though, so we still need this case.
-		var rightOp Operator
 		var rightIdx int
-		rightOp, rightIdx, ct, internalMemUsed, err = planProjectionOperators(
+		input, rightIdx, ct, internalMemUsed, err = planProjectionOperators(
 			ctx, evalCtx, right, columnTypes, input, acc,
 		)
 		if err != nil {
@@ -1785,81 +1850,100 @@ func planProjectionExpr(
 		// The projection result will be outputted to a new column which is appended
 		// to the input batch.
 		op, err = GetProjectionLConstOperator(
-			NewAllocator(ctx, acc), left.ResolvedType(), &ct[rightIdx], binOp,
-			rightOp, rightIdx, lConstArg, resultIdx,
+			NewAllocator(ctx, acc), left.ResolvedType(), &ct[rightIdx], outputPhysType,
+			projOp, input, rightIdx, lConstArg, resultIdx,
 		)
-		ct = append(ct, *outputType)
-		if sMem, ok := op.(InternalMemoryOperator); ok {
-			internalMemUsed += sMem.InternalMemoryUsage()
+	} else {
+		var (
+			leftIdx             int
+			internalMemUsedLeft int
+		)
+		input, leftIdx, ct, internalMemUsedLeft, err = planProjectionOperators(
+			ctx, evalCtx, left, columnTypes, input, acc,
+		)
+		if err != nil {
+			return nil, resultIdx, ct, internalMemUsed, err
 		}
-		return op, resultIdx, ct, internalMemUsed, err
-	}
-	leftOp, leftIdx, ct, internalMemUsedLeft, err := planProjectionOperators(
-		ctx, evalCtx, left, columnTypes, input, acc,
-	)
-	if err != nil {
-		return nil, resultIdx, ct, internalMemUsed, err
-	}
-	internalMemUsed += internalMemUsedLeft
-	if rConstArg, rConst := right.(tree.Datum); rConst {
-		// Case 2: The right is constant.
-		// The projection result will be outputted to a new column which is appended
-		// to the input batch.
-		resultIdx = len(ct)
-		if binOp == tree.Like || binOp == tree.NotLike {
-			negate := binOp == tree.NotLike
-			op, err = GetLikeProjectionOperator(
-				NewAllocator(ctx, acc), evalCtx, leftOp, leftIdx, resultIdx,
-				string(tree.MustBeDString(rConstArg)), negate,
-			)
-		} else if binOp == tree.In || binOp == tree.NotIn {
-			negate := binOp == tree.NotIn
-			datumTuple, ok := tree.AsDTuple(rConstArg)
-			if !ok {
-				err = errors.Errorf("IN operator supported only on constant expressions")
-				return nil, resultIdx, ct, internalMemUsed, err
+		internalMemUsed += internalMemUsedLeft
+		if rConstArg, rConst := right.(tree.Datum); rConst {
+			// Case 2: The right is constant.
+			// The projection result will be outputted to a new column which is appended
+			// to the input batch.
+			resultIdx = len(ct)
+			if projOp == tree.Like || projOp == tree.NotLike {
+				negate := projOp == tree.NotLike
+				op, err = GetLikeProjectionOperator(
+					NewAllocator(ctx, acc), evalCtx, input, leftIdx, resultIdx,
+					string(tree.MustBeDString(rConstArg)), negate,
+				)
+			} else if projOp == tree.In || projOp == tree.NotIn {
+				negate := projOp == tree.NotIn
+				datumTuple, ok := tree.AsDTuple(rConstArg)
+				if !ok {
+					err = errors.Errorf("IN operator supported only on constant expressions")
+					return nil, resultIdx, ct, internalMemUsed, err
+				}
+				op, err = GetInProjectionOperator(
+					NewAllocator(ctx, acc), &ct[leftIdx], input, leftIdx,
+					resultIdx, datumTuple, negate,
+				)
+			} else if projOp == tree.IsDistinctFrom || projOp == tree.IsNotDistinctFrom {
+				if right != tree.DNull {
+					err = errors.Errorf("IS DISTINCT FROM and IS NOT DISTINCT FROM are supported only with NULL argument")
+					return nil, resultIdx, ct, internalMemUsed, err
+				}
+				// IS NULL is replaced with IS NOT DISTINCT FROM NULL, so we want to
+				// negate when IS DISTINCT FROM is used.
+				negate := projOp == tree.IsDistinctFrom
+				op = newIsNullProjOp(NewAllocator(ctx, acc), input, leftIdx, resultIdx, negate)
+			} else {
+				op, err = GetProjectionRConstOperator(
+					NewAllocator(ctx, acc), &ct[leftIdx], right.ResolvedType(), outputPhysType,
+					projOp, input, leftIdx, rConstArg, resultIdx,
+				)
 			}
-			op, err = GetInProjectionOperator(
-				NewAllocator(ctx, acc), &ct[leftIdx], leftOp, leftIdx,
-				resultIdx, datumTuple, negate,
-			)
-		} else if binOp == tree.IsDistinctFrom || binOp == tree.IsNotDistinctFrom {
-			if right != tree.DNull {
-				err = errors.Errorf("IS DISTINCT FROM and IS NOT DISTINCT FROM are supported only with NULL argument")
-				return nil, resultIdx, ct, internalMemUsed, err
-			}
-			// IS NULL is replaced with IS NOT DISTINCT FROM NULL, so we want to
-			// negate when IS DISTINCT FROM is used.
-			negate := binOp == tree.IsDistinctFrom
-			op = newIsNullProjOp(NewAllocator(ctx, acc), leftOp, leftIdx, resultIdx, negate)
 		} else {
-			op, err = GetProjectionRConstOperator(
-				NewAllocator(ctx, acc), &ct[leftIdx], right.ResolvedType(), binOp,
-				leftOp, leftIdx, rConstArg, resultIdx,
+			// Case 3: neither are constant.
+			var (
+				rightIdx             int
+				internalMemUsedRight int
+			)
+			input, rightIdx, ct, internalMemUsedRight, err = planProjectionOperators(
+				ctx, evalCtx, right, ct, input, acc,
+			)
+			if err != nil {
+				return nil, resultIdx, nil, internalMemUsed, err
+			}
+			internalMemUsed += internalMemUsedRight
+			resultIdx = len(ct)
+			op, err = GetProjectionOperator(
+				NewAllocator(ctx, acc), &ct[leftIdx], &ct[rightIdx], outputPhysType,
+				projOp, input, leftIdx, rightIdx, resultIdx,
 			)
 		}
-		ct = append(ct, *outputType)
-		if sMem, ok := op.(InternalMemoryOperator); ok {
-			internalMemUsed += sMem.InternalMemoryUsage()
-		}
+	}
+	if err != nil {
 		return op, resultIdx, ct, internalMemUsed, err
 	}
-	// Case 3: neither are constant.
-	rightOp, rightIdx, ct, internalMemUsedRight, err := planProjectionOperators(
-		ctx, evalCtx, right, ct, leftOp, acc,
-	)
-	if err != nil {
-		return nil, resultIdx, nil, internalMemUsed, err
-	}
-	internalMemUsed += internalMemUsedRight
-	resultIdx = len(ct)
-	op, err = GetProjectionOperator(
-		NewAllocator(ctx, acc), &ct[leftIdx], &ct[rightIdx], binOp, rightOp,
-		leftIdx, rightIdx, resultIdx,
-	)
-	ct = append(ct, *outputType)
 	if sMem, ok := op.(InternalMemoryOperator); ok {
 		internalMemUsed += sMem.InternalMemoryUsage()
+	}
+	ct = append(ct, *actualOutputType)
+	if !outputType.Equivalent(actualOutputType) {
+		// The projection operator outputs a column of a different type than
+		// the expected logical type. In order to "synchronize" the reality and
+		// the expectations, we plan a cast.
+		//
+		// For example, INT2 + INT2 will be typed as INT8 by the SQL type
+		// system, but we will plan a projection operator that outputs
+		// coltypes.Int16 = INT2, so in such scenario we will have
+		//    actualOutputType = types.Int2
+		//          outputType = types.Int8
+		// and will plan the corresponding cast.
+		//
+		// NOTE: this is *only* needed for integer types and should be removed
+		// once #46940 is resolved.
+		op, resultIdx, ct, err = planCastOperator(ctx, acc, ct, op, resultIdx, actualOutputType, outputType)
 	}
 	return op, resultIdx, ct, internalMemUsed, err
 }
@@ -1906,17 +1990,19 @@ func planLogicalProjectionOp(
 	if err != nil {
 		return nil, resultIdx, ct, internalMemUsed, err
 	}
+	allocator := NewAllocator(ctx, acc)
+	input = newBatchSchemaPrefixEnforcer(allocator, input, toPhysTypesMaybeUnhandled(ct))
 	switch expr.(type) {
 	case *tree.AndExpr:
 		outputOp = NewAndProjOp(
-			NewAllocator(ctx, acc),
+			allocator,
 			input, leftProjOpChain, rightProjOpChain,
 			&leftFeedOp, &rightFeedOp,
 			leftIdx, rightIdx, resultIdx,
 		)
 	case *tree.OrExpr:
 		outputOp = NewOrProjOp(
-			NewAllocator(ctx, acc),
+			allocator,
 			input, leftProjOpChain, rightProjOpChain,
 			&leftFeedOp, &rightFeedOp,
 			leftIdx, rightIdx, resultIdx,
