@@ -16,6 +16,10 @@ eexpect root@
 send "\\demo_node shutdown 2\n"
 eexpect "\\demo_node can only be run with cockroach demo"
 
+# Ensure rand_fill_table does not work.
+send "\\rand_fill_table t 1\n"
+eexpect "\\rand_fill_table can only be run with cockroach demo"
+
 # Exit the shell.
 interrupt
 eexpect eof

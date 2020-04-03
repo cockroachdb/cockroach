@@ -36,6 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/cockroach/pkg/workload/rand"
 	"github.com/cockroachdb/errors"
 	readline "github.com/knz/go-libedit"
 	isatty "github.com/mattn/go-isatty"
@@ -470,6 +473,71 @@ func isEndOfStatement(lastTok int) bool {
 	return lastTok == ';' || lastTok == parser.HELPTOKEN
 }
 
+func (c *cliState) handleDemoRandDataGeneration(
+	cmd []string, nextState, errState cliStateEnum,
+) cliStateEnum {
+	usageStr := `Usage: \rand_fill_table <tablename> <numrows>` + "\n"
+	// TODO (rohany): maybe this should be allowed to work in cockroach sql too?
+	if demoCtx.transientCluster == nil {
+		return c.invalidSyntax(errState, `\rand_fill_table can only be run with cockroach demo`)
+	}
+	if len(cmd) != 2 {
+		fmt.Fprint(stderr, usageStr)
+		c.exitErr = errInvalidSyntax
+		return errState
+	}
+
+	// Disallow using the command during a transaction. We have to also handle
+	// the case the smart prompt fired and statements are being collected
+	// for a multiline statement.
+	c.refreshTransactionStatus()
+	parsedStmts, _, _ := c.serverSideParse(c.concatLines)
+	if c.lastKnownTxnStatus != "" ||
+		(c.lastKnownTxnStatus == "" && endsWithIncompleteTxn(parsedStmts)) {
+		return c.invalidSyntax(
+			errState,
+			`\rand_fill_table cannot be run within a transaction`,
+		)
+	}
+
+	table := cmd[0]
+	numRows, err := strconv.ParseInt(cmd[1], 10, 32)
+	if err != nil {
+		return c.invalidSyntax(
+			errState,
+			"%s",
+			errors.Wrapf(err, "cannot convert %s to string", cmd[1]).Error(),
+		)
+	}
+
+	wkld := rand.CreateRandWorkload(c.conn.dbName, table, int(numRows))
+	opser := wkld.(workload.Opser)
+	// Dummy registry to provide to the Opser.
+	reg := histogram.NewRegistry(time.Duration(100) * time.Millisecond)
+	ops, err := opser.Ops([]string{demoCtx.transientCluster.connURL}, reg)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err.Error())
+		c.exitErr = err
+		return errState
+	}
+
+	fns := ops.WorkerFns
+	if len(fns) != 1 {
+		return c.internalServerError(
+			errState,
+			errors.Newf(
+				"expected one workload func, found %d",
+				len(fns),
+			),
+		)
+	}
+	if err := fns[0](context.TODO()); err != nil {
+		return c.internalServerError(errState, err)
+	}
+	fmt.Printf("Successfully loaded %d random rows into %s\n", numRows, table)
+	return nextState
+}
+
 // handleDemoNode handles operations on \demo_node.
 // This can only be done from `cockroach demo`.
 func (c *cliState) handleDemoNode(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
@@ -488,7 +556,7 @@ func (c *cliState) handleDemoNode(cmd []string, nextState, errState cliStateEnum
 		return c.invalidSyntax(
 			errState,
 			"%s",
-			errors.Wrapf(err, "cannot convert %s to string", cmd[2]).Error(),
+			errors.Wrapf(err, "cannot convert %s to string", cmd[1]).Error(),
 		)
 	}
 	switch cmd[0] {
@@ -1061,6 +1129,9 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 	case `\demo_node`:
 		return c.handleDemoNode(cmd[1:], loopState, errState)
+
+	case `\rand_fill_table`:
+		return c.handleDemoRandDataGeneration(cmd[1:], loopState, errState)
 
 	default:
 		if strings.HasPrefix(cmd[0], `\d`) {
