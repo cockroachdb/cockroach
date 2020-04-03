@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -282,6 +284,8 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 			var err error
 			inputRow[col], err = typedExpr.Eval(params.EvalContext())
 			if err != nil {
+				insertCol := n.run.insertRun.insertCols[col]
+				err = interceptAlterColumnTypeParseError(insertCol, err)
 				return false, err
 			}
 		}
@@ -340,4 +344,18 @@ func (n *insertFastPathNode) Close(ctx context.Context) {
 // See planner.autoCommit.
 func (n *insertFastPathNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()
+}
+
+// interceptAlterColumnTypeParseError wraps a type parsing error with a warning
+// about the column undergoing an ALTER COLUMN TYPE schema change.
+func interceptAlterColumnTypeParseError(insertCol sqlbase.ColumnDescriptor, err error) error {
+	if insertCol.AlterColumnTypeInProgress {
+		code := pgerror.GetPGCode(err)
+		if code == pgcode.InvalidTextRepresentation {
+			return errors.Wrap(err,
+				"This table is still undergoing the ALTER COLUMN TYPE schema change, "+
+					"this insert is not supported until the schema change is finalized")
+		}
+	}
+	return err
 }
