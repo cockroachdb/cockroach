@@ -150,7 +150,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		cfg.AmbientCtx,
 		cfg.Clock,
 		cfg.DB,
-		[]storage.Engine{ltc.Eng},
 		cfg.Gossip,
 		active,
 		renewal,

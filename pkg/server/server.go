@@ -1588,8 +1588,8 @@ func (s *Server) Start(ctx context.Context) error {
 		if storeSpec.InMemory {
 			continue
 		}
-		for base, val := range listenerFiles {
-			file := filepath.Join(storeSpec.Path, base)
+		for name, val := range listenerFiles {
+			file := filepath.Join(storeSpec.Path, name)
 			if err := ioutil.WriteFile(file, []byte(val), 0644); err != nil {
 				return errors.Wrapf(err, "failed to write %s", file)
 			}
