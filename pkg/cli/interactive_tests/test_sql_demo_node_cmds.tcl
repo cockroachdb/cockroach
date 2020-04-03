@@ -13,8 +13,8 @@ set client_spawn_id $spawn_id
 eexpect root@
 
 # Ensure the demo command does not work.
-send "\\demo_node shutdown 2\n"
-eexpect "\\demo_node can only be run with cockroach demo"
+send "\\demo shutdown 2\n"
+eexpect "\\demo can only be run with cockroach demo"
 
 # Exit the shell.
 interrupt
