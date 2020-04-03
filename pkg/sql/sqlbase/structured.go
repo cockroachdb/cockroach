@@ -387,6 +387,9 @@ func GetTableDescFromIDWithFKsChanged(
 	if err != nil {
 		return nil, false, err
 	}
+
+	table.MaybeFillInLogicalColumnID()
+
 	return table, changed, err
 }
 
@@ -889,11 +892,16 @@ func (desc *TableDescriptor) MaybeFillInDescriptor(
 ) error {
 	desc.maybeUpgradeFormatVersion()
 	desc.Privileges.MaybeFixPrivileges(desc.ID)
+
+	var err error
 	if protoGetter != nil {
-		if _, err := desc.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, false /* skipFKsWithNoMatchingTable*/); err != nil {
+		if _, err = desc.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, false /* skipFKsWithNoMatchingTable*/); err != nil {
 			return err
 		}
 	}
+
+	desc.MaybeFillInLogicalColumnID()
+
 	return nil
 }
 
@@ -1198,6 +1206,27 @@ func (desc *MutableTableDescriptor) MaybeFillColumnID(
 	}
 	columnNames[c.Name] = columnID
 	c.ID = columnID
+	c.LogicalColumnID = columnID
+}
+
+// MaybeFillInLogicalColumnID assigns a LogicalColumnID to a column
+// if the ColumnID is set and the LogicalColumnID is not
+// it assigns the ColumnID as the LogicalColumnID.
+func (desc *TableDescriptor) MaybeFillInLogicalColumnID() {
+	for i := range desc.Columns {
+		col := &desc.Columns[i]
+		if col.ID != 0 && col.LogicalColumnID == 0 {
+			col.LogicalColumnID = col.ID
+		}
+	}
+
+	for _, m := range desc.Mutations {
+		if col := m.GetColumn(); col != nil {
+			if col.ID != 0 && col.LogicalColumnID == 0 {
+				col.LogicalColumnID = col.ID
+			}
+		}
+	}
 }
 
 // AllocateIDs allocates column, family, and index ids for any column, family,
