@@ -148,14 +148,14 @@ func (mux *safeServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Server is the cockroach server node.
 type Server struct {
-	nodeIDContainer *base.NodeIDContainer
+	// The following fields are populated in NewServer.
 
-	cfg        Config
-	st         *cluster.Settings
-	mux        safeServeMux
-	clock      *hlc.Clock
-	startTime  time.Time
-	rpcContext *rpc.Context
+	nodeIDContainer *base.NodeIDContainer
+	cfg             Config
+	st              *cluster.Settings
+	mux             safeServeMux
+	clock           *hlc.Clock
+	rpcContext      *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
 	grpc         *grpcServer
 	gossip       *gossip.Gossip
@@ -185,11 +185,15 @@ type Server struct {
 	debug *debug.Server
 
 	replicationReporter   *reports.Reporter
-	engines               Engines
 	protectedtsProvider   protectedts.Provider
 	protectedtsReconciler *ptreconcile.Reconciler
 
 	sqlServer *sqlServer
+
+	// The fields below are populated at start time, i.e. in `(*Server).Start`.
+
+	startTime time.Time
+	engines   Engines
 }
 
 type sqlServer struct {
