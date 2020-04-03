@@ -15,6 +15,7 @@ import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
 import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
+import { CapacityGraphTooltip } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 
 export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, storeSources, tooltipSelection } = props;
@@ -23,7 +24,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Capacity"
       sources={storeSources}
-      tooltip={`Summary of total and available capacity ${tooltipSelection}.`}
+      tooltip={<CapacityGraphTooltip tooltipSelection={tooltipSelection} />}
     >
       <Axis units={AxisUnits.Bytes} label="capacity">
         <Metric name="cr.store.capacity" title="Capacity" />
@@ -36,8 +37,7 @@ export default function (props: GraphDashboardProps) {
       title="Live Bytes"
       sources={storeSources}
       tooltip={
-        `The amount of Live data used by both applications and the
-           CockroachDB system ${tooltipSelection}. This excludes historical and deleted data.`
+        `Amount of data that can be read by applications and CockroachDB ${tooltipSelection}`
       }
     >
       <Axis units={AxisUnits.Bytes} label="live bytes">
