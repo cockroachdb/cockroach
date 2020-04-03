@@ -17,7 +17,7 @@ import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { PaginationSettings, paginationPageCount } from "src/components/pagination/pagination";
+import { paginationPageCount } from "src/components/pagination/pagination";
 import * as protos from "src/js/protos";
 import { refreshStatementDiagnosticsRequests, refreshStatements } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -45,6 +45,7 @@ import { getMatchParamByName } from "src/util/query";
 import { trackPaginate, trackSearch } from "src/util/analytics";
 
 import "./statements.styl";
+import { ISortedTablePagination } from "../shared/components/sortedtable";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
@@ -61,8 +62,8 @@ interface OwnProps {
 
 export interface StatementsPageState {
   sortSetting: SortSetting;
-  pagination: PaginationSettings;
   search?: string;
+  pagination: ISortedTablePagination;
 }
 
 export type StatementsPageProps = OwnProps & RouteComponentProps<any>;
