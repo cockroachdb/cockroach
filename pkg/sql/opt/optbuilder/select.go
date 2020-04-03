@@ -155,7 +155,7 @@ func (b *Builder) buildDataSource(
 		// This is the special '[ ... ]' syntax. We treat this as syntactic sugar
 		// for a top-level CTE, so it cannot refer to anything in the input scope.
 		// See #41078.
-		emptyScope := &scope{builder: b}
+		emptyScope := b.allocScope()
 		innerScope := b.buildStmt(source.Statement, nil /* desiredTypes */, emptyScope)
 		if len(innerScope.cols) == 0 {
 			panic(pgerror.Newf(pgcode.UndefinedColumn,
@@ -550,7 +550,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 	// Find all the check constraints that apply to the table and add them
 	// to the table meta data. To do this, we must build them into scalar
 	// expressions.
-	tableScope := scope{builder: b}
+	var tableScope *scope
 	tab := tabMeta.Table
 	for i, n := 0, tab.CheckCount(); i < n; i++ {
 		checkConstraint := tab.Check(i)
@@ -564,12 +564,13 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 			panic(err)
 		}
 
-		if len(tableScope.cols) == 0 {
+		if tableScope == nil {
+			tableScope = b.allocScope()
 			tableScope.appendColumnsFromTable(tabMeta, &tabMeta.Alias)
 		}
 
 		if texpr := tableScope.resolveAndRequireType(expr, types.Bool); texpr != nil {
-			scalar := b.buildScalar(texpr, &tableScope, nil, nil, nil)
+			scalar := b.buildScalar(texpr, tableScope, nil, nil, nil)
 			tabMeta.AddConstraint(scalar)
 		}
 	}
@@ -578,7 +579,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 // addComputedColsForTable finds all computed columns in the given table and
 // caches them in the table metadata as scalar expressions.
 func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
-	tableScope := scope{builder: b}
+	var tableScope *scope
 	tab := tabMeta.Table
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
 		tabCol := tab.Column(i)
@@ -590,13 +591,14 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 			continue
 		}
 
-		if len(tableScope.cols) == 0 {
+		if tableScope == nil {
+			tableScope = b.allocScope()
 			tableScope.appendColumnsFromTable(tabMeta, &tabMeta.Alias)
 		}
 
 		if texpr := tableScope.resolveAndRequireType(expr, types.Any); texpr != nil {
 			colID := tabMeta.MetaID.ColumnID(i)
-			scalar := b.buildScalar(texpr, &tableScope, nil, nil, nil)
+			scalar := b.buildScalar(texpr, tableScope, nil, nil, nil)
 			tabMeta.AddComputedCol(colID, scalar)
 		}
 	}
@@ -659,12 +661,11 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 }
 
 func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
-	outScope = inScope.push()
-
 	if with == nil {
-		return outScope
+		return inScope
 	}
 
+	outScope = inScope.push()
 	addedCTEs := make([]cteSource, len(with.CTEList))
 	hasRecursive := false
 

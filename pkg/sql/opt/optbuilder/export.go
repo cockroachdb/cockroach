@@ -24,7 +24,7 @@ func (b *Builder) buildExport(export *tree.Export, inScope *scope) (outScope *sc
 	}
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
-	emptyScope := &scope{builder: b}
+	emptyScope := b.allocScope()
 	inputScope := b.buildStmt(export.Query, nil /* desiredTypes */, emptyScope)
 
 	texpr := emptyScope.resolveType(export.File, types.String)
