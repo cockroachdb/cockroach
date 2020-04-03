@@ -453,6 +453,11 @@ func backupPlanHook(
 				}
 				prevBackups = append(prevBackups, m)
 
+				if m.DescriptorCoverage == tree.AllDescriptors &&
+					backupStmt.DescriptorCoverage != tree.AllDescriptors {
+					return errors.Errorf("cannot append a backup of specific tables or databases to a full-cluster backup")
+				}
+
 				for _, inc := range prev {
 					m, err := readBackupManifest(ctx, defaultStore, inc, encryption)
 					if err != nil {

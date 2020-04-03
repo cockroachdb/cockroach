@@ -414,17 +414,19 @@ func TestBackupRestoreAppend(t *testing.T) {
 	var tsBefore, ts1, ts2 string
 	sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsBefore)
 
-	sqlDB.Exec(t, "BACKUP DATABASE data TO ($1, $2, $3) AS OF SYSTEM TIME "+tsBefore, backups...)
+	sqlDB.Exec(t, "BACKUP TO ($1, $2, $3) AS OF SYSTEM TIME "+tsBefore, backups...)
 
 	sqlDB.QueryRow(t, "UPDATE data.bank SET balance = 100 RETURNING cluster_logical_timestamp()").Scan(&ts1)
-	sqlDB.Exec(t, "BACKUP DATABASE data TO ($1, $2, $3) AS OF SYSTEM TIME "+ts1, backups...)
+	sqlDB.Exec(t, "BACKUP TO ($1, $2, $3) AS OF SYSTEM TIME "+ts1, backups...)
 
 	sqlDB.QueryRow(t, "UPDATE data.bank SET balance = 200 RETURNING cluster_logical_timestamp()").Scan(&ts2)
 	rowsTS2 := sqlDB.QueryStr(t, "SELECT * from data.bank ORDER BY id")
-	sqlDB.Exec(t, "BACKUP DATABASE data TO ($1, $2, $3) AS OF SYSTEM TIME "+ts2, backups...)
+	sqlDB.Exec(t, "BACKUP TO ($1, $2, $3) AS OF SYSTEM TIME "+ts2, backups...)
 
 	sqlDB.Exec(t, "ALTER TABLE data.bank RENAME TO data.renamed")
-	sqlDB.Exec(t, "BACKUP DATABASE data TO ($1, $2, $3)", backups...)
+	sqlDB.Exec(t, "BACKUP TO ($1, $2, $3)", backups...)
+
+	sqlDB.ExpectErr(t, "cannot append a backup of specific", "BACKUP system.users TO ($1, $2, $3)", backups...)
 
 	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
 	sqlDB.Exec(t, "RESTORE DATABASE data FROM ($1, $2, $3)", backups...)
