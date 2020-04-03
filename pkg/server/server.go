@@ -592,7 +592,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		nodeDialer:             s.nodeDialer,
 		grpcServer:             s.grpc.Server,
 		recorder:               s.recorder,
-		node:                   s.node,
 		runtime:                s.runtime,
 		db:                     s.db,
 		registry:               s.registry,
@@ -602,38 +601,73 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		externalStorage:        externalStorage,
 		externalStorageFromURI: externalStorageFromURI,
 		jobRegistry:            jobRegistry,
+		isMeta1Leaseholder:     s.node.stores.IsMeta1Leaseholder,
 	})
 	if err != nil {
 		return nil, err
 	}
 	s.debug = debug.NewServer(s.ClusterSettings(), s.sqlServer.pgServer.HBADebugFn())
+	s.node.InitLogger(s.sqlServer.execCfg)
 	return s, err
 }
 
 type sqlServerArgs struct {
 	*Config
-	stopper             *stop.Stopper
-	clock               *hlc.Clock
-	rpcContext          *rpc.Context
-	distSender          *kvcoord.DistSender
-	status              *statusServer
-	nodeLiveness        *kvserver.NodeLiveness
-	protectedtsProvider protectedts.Provider
-	gossip              *gossip.Gossip
-	nodeDialer          *nodedialer.Dialer
-	grpcServer          *grpc.Server
-	recorder            *status.MetricsRecorder
-	node                *Node
-	runtime             *status.RuntimeStatSampler
+	stopper    *stop.Stopper
+	clock      *hlc.Clock
+	rpcContext *rpc.Context
 
-	db                     *kv.DB
-	registry               *metric.Registry
-	internalExecutor       *sql.InternalExecutor // empty initially
-	nodeIDContainer        *base.NodeIDContainer
-	flowDB                 *kv.DB // for DistSQL
+	// SQL mostly uses the DistSender "wrapped" under a *kv.DB, but SQL also
+	// uses range descriptors and leaseholders, which DistSender maintains,
+	// for debugging and DistSQL planning purposes.
+	distSender *kvcoord.DistSender
+	// The executorConfig depends on the status server.
+	// The status server is handed the stmtDiagnosticsRegistry.
+	status *statusServer
+	// The DistSQLPlanner uses node liveness.
+	nodeLiveness *kvserver.NodeLiveness
+	// The executorConfig uses the provider.
+	protectedtsProvider protectedts.Provider
+	// Gossip is relied upon by distSQLCfg (execinfra.ServerConfig), the executor
+	// config, the DistSQL planner, the table statistics cache, the statements
+	// diagnostics registry, and the lease manager.
+	gossip *gossip.Gossip
+	// Used by DistSQLConfig and DistSQLPlanner.
+	nodeDialer *nodedialer.Dialer
+	// To register blob and DistSQL servers.
+	grpcServer *grpc.Server
+	// Used by executorConfig.
+	recorder *status.MetricsRecorder
+	// For the temporaryObjectCleaner.
+	isMeta1Leaseholder func(hlc.Timestamp) (bool, error)
+	// DistSQLCfg holds on to this to check for node CPU utilization in
+	// samplerProcessor.
+	runtime *status.RuntimeStatSampler
+
+	// SQL needs to use KV. There's one regular DB and one for DistSQL.
+	//
+	// TODO(tbg): why can't it be the same?
+	db     *kv.DB
+	flowDB *kv.DB // for DistSQL
+
+	// Various components want to register themselves with metrics.
+	registry *metric.Registry
+
+	// KV depends on the internal executor, so it is early bound but only filled
+	// in newSQLServer.
+	internalExecutor *sql.InternalExecutor // empty initially
+	// DistSQL, lease management, and others want to know the node they're on.
+	//
+	// TODO(tbg): reasonable ask, but a SQL tenant process has no NodeID.
+	// Replace this with a method that can refuse to return a result.
+	nodeIDContainer *base.NodeIDContainer
+
+	// Used by backup/restore.
 	externalStorage        cloud.ExternalStorageFactory
 	externalStorageFromURI cloud.ExternalStorageFromURIFactory
 
+	// The protected timestamps KV subsystem depends on this, so it is bound
+	// early but only gets filled in newSQLServer.
 	jobRegistry *jobs.Registry
 }
 
@@ -1001,15 +1035,13 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 	s.leaseMgr.RefreshLeases(cfg.stopper, cfg.db, cfg.gossip)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases()
 
-	cfg.node.InitLogger(execCfg)
-
 	s.temporaryObjectCleaner = sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
 		cfg.db,
 		cfg.registry,
 		s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
 		cfg.status,
-		cfg.node.stores.IsMeta1Leaseholder,
+		cfg.isMeta1Leaseholder,
 		sqlExecutorTestingKnobs,
 	)
 
