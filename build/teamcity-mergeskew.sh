@@ -13,6 +13,8 @@ rm artifacts/c-build.log
 tc_end_block "compile c dependencies"
 
 tc_start_block "check merge skew"
+git fetch origin master
+git rebase origin/master
 run build/builder.sh make test TESTS=-
 tc_end_block "check merge skew"
 
