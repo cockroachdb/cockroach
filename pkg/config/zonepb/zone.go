@@ -217,8 +217,8 @@ func DefaultZoneConfigRef() *ZoneConfig {
 func DefaultSystemZoneConfig() ZoneConfig {
 	return ZoneConfig{
 		NumReplicas:   proto.Int32(5),
-		RangeMinBytes: proto.Int64(128 << 30), // 128 MB
-		RangeMaxBytes: proto.Int64(512 << 30), // 512 MB
+		RangeMinBytes: proto.Int64(128 << 20), // 128 MB
+		RangeMaxBytes: proto.Int64(512 << 20), // 512 MB
 		GC: &GCPolicy{
 			// Use 25 hours instead of the previous 24 to make users successful by
 			// default. Users desiring to take incremental backups every 24h may
