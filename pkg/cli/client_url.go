@@ -168,6 +168,14 @@ func (u urlParser) Set(v string) error {
 			return err
 		}
 
+		// If the URL specifies host/port as query args, we're having to do
+		// with a unix socket. In that case, we don't want to populate
+		// the host field in the URL.
+		if options.Get("host") != "" {
+			cliCtx.clientConnHost = ""
+			cliCtx.clientConnPort = ""
+		}
+
 		cliCtx.extraConnURLOptions = options
 
 		switch sslMode := options.Get("sslmode"); sslMode {
@@ -305,9 +313,13 @@ func (u urlParser) Set(v string) error {
 // Do not call this function before command-line argument parsing has completed:
 // this initializes the certificate manager with the configured --certs-dir.
 func (cliCtx *cliContext) makeClientConnURL() (url.URL, error) {
+	netHost := ""
+	if cliCtx.clientConnHost != "" || cliCtx.clientConnPort != "" {
+		netHost = net.JoinHostPort(cliCtx.clientConnHost, cliCtx.clientConnPort)
+	}
 	pgurl := url.URL{
 		Scheme: "postgresql",
-		Host:   net.JoinHostPort(cliCtx.clientConnHost, cliCtx.clientConnPort),
+		Host:   netHost,
 		Path:   cliCtx.sqlConnDBName,
 	}
 
@@ -324,12 +336,16 @@ func (cliCtx *cliContext) makeClientConnURL() (url.URL, error) {
 		opts[k] = v
 	}
 
-	userName := cliCtx.sqlConnUser
-	if userName == "" {
-		userName = security.RootUser
+	var err error
+	if netHost != "" {
+		// Only add TLS parameters when using a network connection.
+		userName := cliCtx.sqlConnUser
+		if userName == "" {
+			userName = security.RootUser
+		}
+		err = cliCtx.LoadSecurityOptions(opts, userName)
 	}
 
-	err := cliCtx.LoadSecurityOptions(opts, userName)
 	pgurl.RawQuery = opts.Encode()
 	return pgurl, err
 }
