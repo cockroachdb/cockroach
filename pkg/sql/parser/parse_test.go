@@ -3154,6 +3154,9 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`REINDEX TABLE a`, 0, `reindex table`, `CockroachDB does not require reindexing.`},
 		{`REINDEX DATABASE a`, 0, `reindex database`, `CockroachDB does not require reindexing.`},
 		{`REINDEX SYSTEM a`, 0, `reindex system`, `CockroachDB does not require reindexing.`},
+
+		{`CREATE INDEX CONCURRENTLY a ON a(a)`, 0, `concurrently`, `CockroachDB performs this operation concurrently - CONCURRENTLY is not required.`},
+		{`DROP INDEX CONCURRENTLY a@a`, 0, `concurrently`, `CockroachDB performs this operation concurrently - CONCURRENTLY is not required.`},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
