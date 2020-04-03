@@ -1563,6 +1563,7 @@ reserved_keyword ::=
 	| 'CHECK'
 	| 'COLLATE'
 	| 'COLUMN'
+	| 'CONCURRENTLY'
 	| 'CONSTRAINT'
 	| 'CREATE'
 	| 'CURRENT_CATALOG'

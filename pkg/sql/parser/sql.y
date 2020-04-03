@@ -490,7 +490,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> CACHE CANCEL CASCADE CASE CAST CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMIT
-%token <str> COMMITTED COMPACT CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
+%token <str> COMMITTED COMPACT CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
 %token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONVERSION COPY COVERING CREATE
 %token <str> CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
@@ -859,7 +859,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.DurationField> opt_interval interval_second interval_qualifier
 %type <tree.Expr> overlay_placing
 
-%type <bool> opt_unique opt_cluster
+%type <bool> opt_unique opt_concurrently opt_cluster
 %type <bool> opt_using_gin_btree
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
@@ -2363,20 +2363,20 @@ drop_table_stmt:
 // %Text: DROP INDEX [IF EXISTS] <idxname> [, ...] [CASCADE | RESTRICT]
 // %SeeAlso: WEBDOCS/drop-index.html
 drop_index_stmt:
-  DROP INDEX table_index_name_list opt_drop_behavior
+  DROP INDEX opt_concurrently table_index_name_list opt_drop_behavior
   {
     $$.val = &tree.DropIndex{
-      IndexList: $3.newTableIndexNames(),
+      IndexList: $4.newTableIndexNames(),
       IfExists: false,
-      DropBehavior: $4.dropBehavior(),
+      DropBehavior: $5.dropBehavior(),
     }
   }
-| DROP INDEX IF EXISTS table_index_name_list opt_drop_behavior
+| DROP INDEX opt_concurrently IF EXISTS table_index_name_list opt_drop_behavior
   {
     $$.val = &tree.DropIndex{
-      IndexList: $5.newTableIndexNames(),
+      IndexList: $6.newTableIndexNames(),
       IfExists: true,
-      DropBehavior: $6.dropBehavior(),
+      DropBehavior: $7.dropBehavior(),
     }
   }
 | DROP INDEX error // SHOW HELP: DROP INDEX
@@ -4699,62 +4699,62 @@ create_type_stmt:
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE,
 // WEBDOCS/create-index.html
 create_index_stmt:
-  CREATE opt_unique INDEX opt_index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
-  {
-    table := $6.unresolvedObjectName().ToTableName()
-    $$.val = &tree.CreateIndex{
-      Name:    tree.Name($4),
-      Table:   table,
-      Unique:  $2.bool(),
-      Columns: $9.idxElems(),
-      Storing: $11.nameList(),
-      Interleave: $12.interleave(),
-      PartitionBy: $13.partitionBy(),
-      Inverted: $7.bool(),
-    }
-  }
-| CREATE opt_unique INDEX IF NOT EXISTS index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
-  {
-    table := $9.unresolvedObjectName().ToTableName()
-    $$.val = &tree.CreateIndex{
-      Name:        tree.Name($7),
-      Table:       table,
-      Unique:      $2.bool(),
-      IfNotExists: true,
-      Columns:     $12.idxElems(),
-      Storing:     $14.nameList(),
-      Interleave:  $15.interleave(),
-      PartitionBy: $16.partitionBy(),
-      Inverted:    $10.bool(),
-    }
-  }
-| CREATE opt_unique INVERTED INDEX opt_index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
+  CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
   {
     table := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
-      Name:       tree.Name($5),
-      Table:      table,
-      Unique:     $2.bool(),
-      Inverted:   true,
-      Columns:    $9.idxElems(),
-      Storing:     $11.nameList(),
-      Interleave:  $12.interleave(),
-      PartitionBy: $13.partitionBy(),
+      Name:    tree.Name($5),
+      Table:   table,
+      Unique:  $2.bool(),
+      Columns: $10.idxElems(),
+      Storing: $12.nameList(),
+      Interleave: $13.interleave(),
+      PartitionBy: $14.partitionBy(),
+      Inverted: $8.bool(),
     }
   }
-| CREATE opt_unique INVERTED INDEX IF NOT EXISTS index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
+| CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
   {
     table := $10.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
       Name:        tree.Name($8),
       Table:       table,
       Unique:      $2.bool(),
+      IfNotExists: true,
+      Columns:     $13.idxElems(),
+      Storing:     $15.nameList(),
+      Interleave:  $16.interleave(),
+      PartitionBy: $17.partitionBy(),
+      Inverted:    $11.bool(),
+    }
+  }
+| CREATE opt_unique INVERTED INDEX opt_concurrently opt_index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
+  {
+    table := $8.unresolvedObjectName().ToTableName()
+    $$.val = &tree.CreateIndex{
+      Name:       tree.Name($6),
+      Table:      table,
+      Unique:     $2.bool(),
+      Inverted:   true,
+      Columns:    $10.idxElems(),
+      Storing:     $12.nameList(),
+      Interleave:  $13.interleave(),
+      PartitionBy: $14.partitionBy(),
+    }
+  }
+| CREATE opt_unique INVERTED INDEX opt_concurrently IF NOT EXISTS index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
+  {
+    table := $11.unresolvedObjectName().ToTableName()
+    $$.val = &tree.CreateIndex{
+      Name:        tree.Name($9),
+      Table:       table,
+      Unique:      $2.bool(),
       Inverted:    true,
       IfNotExists: true,
-      Columns:     $12.idxElems(),
-      Storing:     $14.nameList(),
-      Interleave:  $15.interleave(),
-      PartitionBy: $16.partitionBy(),
+      Columns:     $13.idxElems(),
+      Storing:     $15.nameList(),
+      Interleave:  $16.interleave(),
+      PartitionBy: $17.partitionBy(),
     }
   }
 | CREATE opt_unique INDEX error // SHOW HELP: CREATE INDEX
@@ -4778,6 +4778,21 @@ opt_using_gin_btree:
         sqllex.Error("unrecognized access method: " + $2)
         return 1
     }
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
+
+opt_concurrently:
+  CONCURRENTLY
+  {
+    /* SKIP DOC */
+    return purposelyUnimplemented(
+      sqllex,
+      "concurrently",
+      "CockroachDB performs this operation concurrently - CONCURRENTLY is not required.",
+    )
   }
 | /* EMPTY */
   {
@@ -9167,6 +9182,7 @@ reserved_keyword:
 | CHECK
 | COLLATE
 | COLUMN
+| CONCURRENTLY
 | CONSTRAINT
 | CREATE
 | CURRENT_CATALOG
