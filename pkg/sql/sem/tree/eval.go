@@ -63,6 +63,13 @@ var (
 	big10E10 = big.NewInt(1e10)
 )
 
+// NewCannotMixBitArraySizesError creates an error for the case when a bitwise
+// aggregate function is called on bit arrays with different sizes.
+func NewCannotMixBitArraySizesError(op string) error {
+	return pgerror.Newf(pgcode.StringDataLengthMismatch,
+		"cannot %s bit strings of different sizes", op)
+}
+
 // UnaryOp is a unary operator.
 type UnaryOp struct {
 	Typ        *types.T
@@ -382,11 +389,6 @@ func getJSONPath(j DJSON, ary DArray) (Datum, error) {
 	return &DJSON{result}, nil
 }
 
-func newCannotMixBitArraySizesError(op string) error {
-	return pgerror.Newf(pgcode.StringDataLengthMismatch,
-		"cannot %s bit strings of different sizes", op)
-}
-
 // BinOps contains the binary operations indexed by operation type.
 var BinOps = map[BinaryOperator]binOpOverload{
 	Bitand: {
@@ -406,7 +408,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				lhs := MustBeDBitArray(left)
 				rhs := MustBeDBitArray(right)
 				if lhs.BitLen() != rhs.BitLen() {
-					return nil, newCannotMixBitArraySizesError("AND")
+					return nil, NewCannotMixBitArraySizesError("AND")
 				}
 				return &DBitArray{
 					BitArray: bitarray.And(lhs.BitArray, rhs.BitArray),
@@ -443,7 +445,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				lhs := MustBeDBitArray(left)
 				rhs := MustBeDBitArray(right)
 				if lhs.BitLen() != rhs.BitLen() {
-					return nil, newCannotMixBitArraySizesError("OR")
+					return nil, NewCannotMixBitArraySizesError("OR")
 				}
 				return &DBitArray{
 					BitArray: bitarray.Or(lhs.BitArray, rhs.BitArray),
@@ -480,7 +482,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				lhs := MustBeDBitArray(left)
 				rhs := MustBeDBitArray(right)
 				if lhs.BitLen() != rhs.BitLen() {
-					return nil, newCannotMixBitArraySizesError("XOR")
+					return nil, NewCannotMixBitArraySizesError("XOR")
 				}
 				return &DBitArray{
 					BitArray: bitarray.Xor(lhs.BitArray, rhs.BitArray),
