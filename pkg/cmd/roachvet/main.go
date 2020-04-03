@@ -16,6 +16,7 @@ package main
 import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/descriptormarshal"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/hash"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/nakedreturn"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/nocopy"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/returnerrcheck"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/timer"
@@ -55,6 +56,7 @@ func main() {
 		returnerrcheck.Analyzer,
 		timer.Analyzer,
 		unconvert.Analyzer,
+		nakedreturn.Analyzer,
 
 		// Standard go vet analyzers:
 		asmdecl.Analyzer,
