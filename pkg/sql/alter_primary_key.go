@@ -142,7 +142,8 @@ func (p *planner) AlterPrimaryKey(
 	if alterPKNode.Sharded != nil {
 		shardCol, newColumn, err := setupShardedIndex(
 			ctx,
-			p.EvalContext().Settings,
+			p.EvalContext(),
+			&p.semaCtx,
 			p.SessionData().HashShardedIndexesEnabled,
 			&alterPKNode.Columns,
 			alterPKNode.Sharded.ShardBuckets,

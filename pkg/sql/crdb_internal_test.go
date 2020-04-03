@@ -201,7 +201,7 @@ CREATE TABLE t.test (k INT);
 		t.Fatal(err)
 	}
 	colDef := alterCmd.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
-	col, _, _, err := sqlbase.MakeColumnDefDescs(colDef, nil)
+	col, _, _, err := sqlbase.MakeColumnDefDescs(colDef, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
