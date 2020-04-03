@@ -618,6 +618,7 @@ unreserved_keyword ::=
 	| 'ADMIN'
 	| 'AGGREGATE'
 	| 'ALTER'
+	| 'ALWAYS'
 	| 'AT'
 	| 'AUTOMATIC'
 	| 'AUTHORIZATION'
@@ -639,6 +640,7 @@ unreserved_keyword ::=
 	| 'CLUSTER'
 	| 'COLUMNS'
 	| 'COMMENT'
+	| 'COMMENTS'
 	| 'COMMIT'
 	| 'COMMITTED'
 	| 'COMPACT'
@@ -663,6 +665,7 @@ unreserved_keyword ::=
 	| 'DEALLOCATE'
 	| 'DECLARE'
 	| 'DELETE'
+	| 'DEFAULTS'
 	| 'DEFERRED'
 	| 'DISCARD'
 	| 'DOMAIN'
@@ -672,6 +675,7 @@ unreserved_keyword ::=
 	| 'ENUM'
 	| 'ESCAPE'
 	| 'EXCLUDE'
+	| 'EXCLUDING'
 	| 'EXECUTE'
 	| 'EXPERIMENTAL'
 	| 'EXPERIMENTAL_AUDIT'
@@ -690,6 +694,7 @@ unreserved_keyword ::=
 	| 'FOLLOWING'
 	| 'FORCE_INDEX'
 	| 'FUNCTION'
+	| 'GENERATED'
 	| 'GEOMETRYCOLLECTION'
 	| 'GLOBAL'
 	| 'GRANTS'
@@ -698,9 +703,11 @@ unreserved_keyword ::=
 	| 'HIGH'
 	| 'HISTOGRAM'
 	| 'HOUR'
+	| 'IDENTITY'
 	| 'IMMEDIATE'
 	| 'IMPORT'
 	| 'INCLUDE'
+	| 'INCLUDING'
 	| 'INCREMENT'
 	| 'INCREMENTAL'
 	| 'INDEXES'
@@ -846,6 +853,7 @@ unreserved_keyword ::=
 	| 'START'
 	| 'STATISTICS'
 	| 'STDIN'
+	| 'STORAGE'
 	| 'STORE'
 	| 'STORED'
 	| 'STORING'
@@ -1125,6 +1133,7 @@ table_elem ::=
 	| index_def
 	| family_def
 	| table_constraint
+	| 'LIKE' table_name like_table_option_list
 
 insert_column_item ::=
 	column_name
@@ -1531,6 +1540,9 @@ table_constraint ::=
 	'CONSTRAINT' constraint_name constraint_elem
 	| constraint_elem
 
+like_table_option_list ::=
+	(  ) ( ( 'INCLUDING' like_table_option | 'EXCLUDING' like_table_option ) )*
+
 column_name ::=
 	name
 
@@ -1860,6 +1872,13 @@ constraint_elem ::=
 	| 'UNIQUE' '(' index_params ')' opt_storing opt_interleave opt_partition_by
 	| 'PRIMARY' 'KEY' '(' index_params ')' opt_hash_sharded opt_interleave
 	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
+
+like_table_option ::=
+	'CONSTRAINTS'
+	| 'DEFAULTS'
+	| 'GENERATED'
+	| 'INDEXES'
+	| 'ALL'
 
 const_typename ::=
 	numeric
@@ -2364,7 +2383,7 @@ col_qualification_elem ::=
 	| 'CHECK' '(' a_expr ')'
 	| 'DEFAULT' b_expr
 	| 'REFERENCES' table_name opt_name_parens key_match reference_actions
-	| 'AS' '(' a_expr ')' 'STORED'
+	| generated_as '(' a_expr ')' 'STORED'
 
 family_name ::=
 	name
@@ -2468,6 +2487,9 @@ create_as_params ::=
 opt_name_parens ::=
 	'(' name ')'
 	| 
+
+generated_as ::=
+	'AS'
 
 reference_action ::=
 	'NO' 'ACTION'

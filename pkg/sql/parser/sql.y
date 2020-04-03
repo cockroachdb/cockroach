@@ -220,6 +220,12 @@ func (u *sqlSymUnion) tblDef() tree.TableDef {
 func (u *sqlSymUnion) tblDefs() tree.TableDefs {
     return u.val.(tree.TableDefs)
 }
+func (u *sqlSymUnion) likeTableOption() tree.LikeTableOption {
+    return u.val.(tree.LikeTableOption)
+}
+func (u *sqlSymUnion) likeTableOptionList() []tree.LikeTableOption {
+    return u.val.([]tree.LikeTableOption)
+}
 func (u *sqlSymUnion) colQual() tree.NamedColumnQualification {
     return u.val.(tree.NamedColumnQualification)
 }
@@ -528,7 +534,7 @@ func newNameFromStr(s string) *tree.Name {
 
 // Ordinary key words in alphabetical order.
 %token <str> ABORT ACTION ADD ADMIN AGGREGATE
-%token <str> ALL ALTER ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
+%token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str> ASYMMETRIC AT AUTHORIZATION AUTOMATIC
 
 %token <str> BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
@@ -537,18 +543,18 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> CACHE CANCEL CASCADE CASE CAST CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
-%token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMIT
+%token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
 %token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONVERSION COPY COVERING CREATE CREATEROLE
 %token <str> CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CYCLE
 
-%token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT
+%token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT DEFAULTS
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DESC
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
-%token <str> ELSE ENCODING END ENUM ESCAPE EXCEPT EXCLUDE
+%token <str> ELSE ENCODING END ENUM ESCAPE EXCEPT EXCLUDE EXCLUDING
 %token <str> EXISTS EXECUTE EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT
@@ -558,12 +564,13 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> FILES FILTER
 %token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE_INDEX FOREIGN FROM FULL FUNCTION
 
-%token <str> GEOGRAPHY GEOMETRY GEOMETRYCOLLECTION
+%token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYCOLLECTION
 %token <str> GLOBAL GRANT GRANTS GREATEST GROUP GROUPING GROUPS
 
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
 
-%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE INCREMENT INCREMENTAL
+%token <str> IDENTITY
+%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE INCLUDING INCREMENT INCREMENTAL
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
 %token <str> INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
@@ -603,7 +610,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
-%token <str> START STATISTICS STATUS STDIN STRICT STRING STORE STORED STORING SUBSTRING
+%token <str> START STATISTICS STATUS STDIN STRICT STRING STORAGE STORE STORED STORING SUBSTRING
 %token <str> SYMMETRIC SYNTAX SYSTEM SUBSCRIPTION
 
 %token <str> TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
@@ -875,6 +882,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.UserPriority> user_priority
 
 %type <tree.TableDefs> opt_table_elem_list table_elem_list create_as_opt_col_list create_as_table_defs
+%type <[]tree.LikeTableOption> like_table_option_list
+%type <tree.LikeTableOption> like_table_option
 %type <tree.CreateTableOnCommitSetting> opt_create_table_on_commit
 %type <*tree.InterleaveDef> opt_interleave
 %type <*tree.PartitionBy> opt_partition_by partition_by
@@ -4530,7 +4539,41 @@ table_elem:
   {
     $$.val = $1.constraintDef()
   }
-| LIKE table_name error { return unimplementedWithIssue(sqllex, 30840) }
+| LIKE table_name like_table_option_list
+  {
+    $$.val = &tree.LikeTableDef{
+      Name: $2.unresolvedObjectName().ToTableName(),
+      Options: $3.likeTableOptionList(),
+    }
+  }
+
+like_table_option_list:
+  like_table_option_list INCLUDING like_table_option
+  {
+    $$.val = append($1.likeTableOptionList(), $3.likeTableOption())
+  }
+| like_table_option_list EXCLUDING like_table_option
+  {
+    opt := $3.likeTableOption()
+    opt.Excluded = true
+    $$.val = append($1.likeTableOptionList(), opt)
+  }
+| /* EMPTY */
+  {
+    $$.val = []tree.LikeTableOption(nil)
+  }
+
+like_table_option:
+  COMMENTS			{ return unimplementedWithIssueDetail(sqllex, 47071, "like table in/excluding comments") }
+| CONSTRAINTS		{ $$.val = tree.LikeTableOption{Opt: tree.LikeTableOptConstraints} }
+| DEFAULTS			{ $$.val = tree.LikeTableOption{Opt: tree.LikeTableOptDefaults} }
+| IDENTITY	  	{ return unimplementedWithIssueDetail(sqllex, 47071, "like table in/excluding identity") }
+| GENERATED			{ $$.val = tree.LikeTableOption{Opt: tree.LikeTableOptGenerated} }
+| INDEXES			{ $$.val = tree.LikeTableOption{Opt: tree.LikeTableOptIndexes} }
+| STATISTICS		{ return unimplementedWithIssueDetail(sqllex, 47071, "like table in/excluding statistics") }
+| STORAGE			{ return unimplementedWithIssueDetail(sqllex, 47071, "like table in/excluding storage") }
+| ALL				{ $$.val = tree.LikeTableOption{Opt: tree.LikeTableOptAll} }
+
 
 opt_interleave:
   INTERLEAVE IN PARENT table_name '(' name_list ')' opt_interleave_drop_behavior
@@ -4753,19 +4796,25 @@ col_qualification_elem:
       Match: $4.compositeKeyMatchMethod(),
     }
  }
-| AS '(' a_expr ')' STORED
+| generated_as '(' a_expr ')' STORED
  {
     $$.val = &tree.ColumnComputedDef{Expr: $3.expr()}
  }
-| AS '(' a_expr ')' VIRTUAL
+| generated_as '(' a_expr ')' VIRTUAL
  {
     return unimplemented(sqllex, "virtual computed columns")
  }
-| AS error
+| generated_as error
  {
     sqllex.Error("use AS ( <expr> ) STORED")
     return 1
  }
+
+// GENERATED ALWAYS is a noise word for compatibility with Postgres.
+generated_as:
+  AS {}
+//  GENERATED ALWAYS AS {}
+
 
 index_def:
   INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by
@@ -9878,6 +9927,7 @@ unreserved_keyword:
 | ADMIN
 | AGGREGATE
 | ALTER
+| ALWAYS
 | AT
 | AUTOMATIC
 | AUTHORIZATION
@@ -9899,6 +9949,7 @@ unreserved_keyword:
 | CLUSTER
 | COLUMNS
 | COMMENT
+| COMMENTS
 | COMMIT
 | COMMITTED
 | COMPACT
@@ -9923,6 +9974,7 @@ unreserved_keyword:
 | DEALLOCATE
 | DECLARE
 | DELETE
+| DEFAULTS
 | DEFERRED
 | DISCARD
 | DOMAIN
@@ -9932,6 +9984,7 @@ unreserved_keyword:
 | ENUM
 | ESCAPE
 | EXCLUDE
+| EXCLUDING
 | EXECUTE
 | EXPERIMENTAL
 | EXPERIMENTAL_AUDIT
@@ -9950,6 +10003,7 @@ unreserved_keyword:
 | FOLLOWING
 | FORCE_INDEX
 | FUNCTION
+| GENERATED
 | GEOMETRYCOLLECTION
 | GLOBAL
 | GRANTS
@@ -9958,9 +10012,11 @@ unreserved_keyword:
 | HIGH
 | HISTOGRAM
 | HOUR
+| IDENTITY
 | IMMEDIATE
 | IMPORT
 | INCLUDE
+| INCLUDING
 | INCREMENT
 | INCREMENTAL
 | INDEXES
@@ -10106,6 +10162,7 @@ unreserved_keyword:
 | START
 | STATISTICS
 | STDIN
+| STORAGE
 | STORE
 | STORED
 | STORING
