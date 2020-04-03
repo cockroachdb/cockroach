@@ -1094,9 +1094,6 @@ subtest regression_47141
 statement ok
 CREATE TABLE regression_47141(a time(3), b bytea)
 
-statement error type conversion from TIME\(3\) to TIME\(2\) requires overwriting existing values which is not yet implemented
-ALTER TABLE regression_47141 ALTER a SET DATA TYPE time(2)
-
 # Regression for #26045.
 statement ok
 CREATE TABLE t25045 (x INT, y INT AS (x+1) STORED)
