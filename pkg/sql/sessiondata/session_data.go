@@ -122,6 +122,9 @@ type SessionData struct {
 	// NoticeDisplaySeverity indicates the level of Severity to send notices for the given
 	// session.
 	NoticeDisplaySeverity pgnotice.DisplaySeverity
+	// AlterColumnTypeGeneral is true if ALTER TABLE ... ALTER COLUMN ... TYPE x
+	// may be used for general conversions requiring online schema change/
+	AlterColumnTypeGeneral bool
 }
 
 // DataConversionConfig contains the parameters that influence

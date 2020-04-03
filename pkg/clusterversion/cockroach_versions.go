@@ -64,6 +64,7 @@ const (
 	VersionGeospatialType
 	VersionEnums
 	VersionRangefeedLeases
+	VersionAlterColumnTypeGeneral
 
 	// Add new versions here (step one of two).
 )
@@ -491,6 +492,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// will not pass gossip to the SQL layer.
 		Key:     VersionRangefeedLeases,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 4},
+	},
+	{
+		// VersionAlterColumnTypeGeneral enables the use of alter column type for general conversions.
+		Key:     VersionAlterColumnTypeGeneral,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 5},
 	},
 
 	// Add new versions here (step two of two).

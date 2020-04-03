@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -284,6 +286,7 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 			var err error
 			inputRow[col], err = typedExpr.Eval(params.EvalContext())
 			if err != nil {
+				err = interceptAlterColumnTypeParseError(n.run.insertCols, col, err)
 				return false, err
 			}
 		}
@@ -342,4 +345,61 @@ func (n *insertFastPathNode) Close(ctx context.Context) {
 // See planner.autoCommit.
 func (n *insertFastPathNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()
+}
+
+// interceptAlterColumnTypeParseError wraps a type parsing error with a warning
+// about the column undergoing an ALTER COLUMN TYPE schema change.
+// If colNum is not -1, only the colNum'th column in insertCols will be checked
+// for AlterColumnTypeInProgress, otherwise every column in insertCols will
+// be checked.
+func interceptAlterColumnTypeParseError(
+	insertCols []sqlbase.ColumnDescriptor, colNum int, err error,
+) error {
+	var insertCol sqlbase.ColumnDescriptor
+
+	// wrapParseError is a helper function that checks if an insertCol has the
+	// AlterColumnTypeInProgress flag and wraps the parse error msg stating
+	// that the error may be because the column is being altered.
+	// Returns if the error msg has been wrapped and the wrapped error msg.
+	wrapParseError := func(insertCol sqlbase.ColumnDescriptor, colNum int, err error) (bool, error) {
+		if insertCol.AlterColumnTypeInProgress {
+			code := pgerror.GetPGCode(err)
+			if code == pgcode.InvalidTextRepresentation {
+				if colNum != -1 {
+					// If a column is specified, we can ensure the parse error
+					// is happening because the column is undergoing an alter column type
+					// schema change.
+					return true, errors.Wrapf(err,
+						"This table is still undergoing the ALTER COLUMN TYPE schema change, "+
+							"this insert is not supported until the schema change is finalized")
+				}
+				// If no column is specified, the error message is slightly changed to say
+				// that the error MAY be because a column is undergoing an alter column type
+				// schema change.
+				return true, errors.Wrap(err,
+					"This table is still undergoing the ALTER COLUMN TYPE schema change, "+
+						"this insert may not be supported until the schema change is finalized")
+			}
+		}
+		return false, err
+	}
+
+	// If a colNum is specified, we just check the one column for
+	// AlterColumnTypeInProgress and return the error whether it's wrapped or not.
+	if colNum != -1 {
+		insertCol = insertCols[colNum]
+		_, err = wrapParseError(insertCol, colNum, err)
+		return err
+	}
+
+	// If the colNum is -1, we check every insertCol for AlterColumnTypeInProgress.
+	for _, insertCol = range insertCols {
+		var changed bool
+		changed, err = wrapParseError(insertCol, colNum, err)
+		if changed {
+			return err
+		}
+	}
+
+	return err
 }

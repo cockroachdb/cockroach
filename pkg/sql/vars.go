@@ -1029,6 +1029,25 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(hashShardedIndexesEnabledClusterMode.Get(sv))
 		},
 	},
+
+	// CockroachDB extension.
+	`enable_experimental_alter_column_type_general`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_experimental_alter_column_type_general`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parseBoolVar("enable_experimental_alter_column_type_general", s)
+			if err != nil {
+				return err
+			}
+			m.SetAlterColumnTypeGeneral(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.AlterColumnTypeGeneral)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(experimentalAlterColumnTypeGeneralMode.Get(sv))
+		},
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."

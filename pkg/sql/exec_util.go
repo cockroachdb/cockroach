@@ -225,6 +225,12 @@ var insertFastPathClusterMode = settings.RegisterBoolSetting(
 	true,
 )
 
+var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_experimental_alter_column_type.enabled",
+	"default value for experimental_alter_column_type session setting; enables a the use of Alter Column Type for general conversions",
+	false,
+)
+
 // VectorizeClusterSettingName is the name for the cluster setting that controls
 // the VectorizeClusterMode below.
 const VectorizeClusterSettingName = "sql.defaults.vectorize"
@@ -2026,6 +2032,10 @@ func (m *sessionDataMutator) SetTempTablesEnabled(val bool) {
 
 func (m *sessionDataMutator) SetHashShardedIndexesEnabled(val bool) {
 	m.data.HashShardedIndexesEnabled = val
+}
+
+func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
+	m.data.AlterColumnTypeGeneral = val
 }
 
 // RecordLatestSequenceValue records that value to which the session incremented
