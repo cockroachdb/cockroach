@@ -12,10 +12,10 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -154,7 +154,8 @@ func MakeIndexDescriptor(
 		}
 		shardCol, newColumn, err := setupShardedIndex(
 			params.ctx,
-			params.EvalContext().Settings,
+			params.EvalContext(),
+			&params.p.semaCtx,
 			params.SessionData().HashShardedIndexesEnabled,
 			&n.Columns,
 			n.Sharded.ShardBuckets,
@@ -192,7 +193,8 @@ var hashShardedIndexesDisabledError = pgerror.Newf(pgcode.FeatureNotSupported,
 
 func setupShardedIndex(
 	ctx context.Context,
-	st *cluster.Settings,
+	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
 	shardedIndexEnabled bool,
 	columns *tree.IndexElemList,
 	bucketsExpr tree.Expr,
@@ -200,6 +202,7 @@ func setupShardedIndex(
 	indexDesc *sqlbase.IndexDescriptor,
 	isNewTable bool,
 ) (shard *sqlbase.ColumnDescriptor, newColumn bool, err error) {
+	st := evalCtx.Settings
 	if !st.Version.IsActive(ctx, clusterversion.VersionHashShardedIndexes) {
 		return nil, false, invalidClusterForShardedIndexError
 	}
@@ -211,7 +214,7 @@ func setupShardedIndex(
 	for _, c := range *columns {
 		colNames = append(colNames, string(c.Column))
 	}
-	buckets, err := tree.EvalShardBucketCount(bucketsExpr)
+	buckets, err := sqlbase.EvalShardBucketCount(semaCtx, evalCtx, bucketsExpr)
 	if err != nil {
 		return nil, false, err
 	}
@@ -249,6 +252,12 @@ func maybeCreateAndAddShardCol(
 		// TODO(ajwerner): In what ways is existingShardCol allowed to differ from
 		// the newly made shardCol? Should there be some validation of
 		// existingShardCol?
+		if !existingShardCol.Hidden {
+			// The user managed to reverse-engineer our crazy shard column name, so
+			// we'll return an error here rather than try to be tricky.
+			return nil, false, pgerror.New(pgcode.DuplicateColumn,
+				fmt.Sprintf("column %s already specified; can't be used for sharding", shardCol.Name))
+		}
 		return existingShardCol, false, nil
 	}
 	columnIsUndefined := sqlbase.IsUndefinedColumnError(err)

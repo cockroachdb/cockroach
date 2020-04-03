@@ -17,8 +17,11 @@ sharded_primary  CREATE TABLE sharded_primary (
 statement error pgcode 22023 BUCKET_COUNT must be a strictly positive integer value
 CREATE TABLE invalid_bucket_count (k INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=-1)
 
-statement error pgcode 22003 BUCKET_COUNT must be a strictly positive integer value
+statement error expected BUCKET_COUNT expression to have type int, but '2.32' has type decimal
 CREATE TABLE fractional_bucket_count (k INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=2.32)
+
+statement error variable sub-expressions are not allowed in BUCKET_COUNT
+CREATE TABLE invalid_bucket_count (k INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=(SELECT 1))
 
 # Ensure that this is round-tripable
 statement ok
