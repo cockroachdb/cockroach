@@ -1198,6 +1198,7 @@ func (desc *MutableTableDescriptor) MaybeFillColumnID(
 	}
 	columnNames[c.Name] = columnID
 	c.ID = columnID
+	c.LogicalColumnID = columnID
 }
 
 // AllocateIDs allocates column, family, and index ids for any column, family,
