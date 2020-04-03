@@ -17,7 +17,16 @@ import Long from "long";
 import { isUndefined } from "lodash";
 import { Link } from "react-router-dom";
 
-import { Button, ColumnsConfig, DownloadFile, DownloadFileRef, Table, Text, TextTypes } from "src/components";
+import {
+  Button,
+  ColumnsConfig,
+  DownloadFile,
+  DownloadFileRef,
+  Table,
+  Text,
+  TextTypes,
+  Tooltip,
+} from "src/components";
 import HeaderSection from "src/views/shared/components/headerSection";
 import { AdminUIState } from "src/redux/state";
 import { getStatementDiagnostics } from "src/util/api";
@@ -44,8 +53,35 @@ import {
   sortByStatementFingerprintField,
 } from "src/views/statements/diagnostics";
 import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
+import { shortStatement } from "src/views/statements/statementsTable";
+import { summarize } from "src/util/sql/summarize";
 
 type StatementDiagnosticsHistoryViewProps = MapStateToProps & MapDispatchToProps;
+
+const StatementColumn: React.FC<{ fingerprint: string }> = ({ fingerprint }) => {
+  const summary = summarize(fingerprint);
+  const shortenedStatement = shortStatement(summary, fingerprint);
+  const showTooltip = fingerprint !== shortenedStatement;
+
+  if (showTooltip) {
+    return (
+      <Text textType={TextTypes.Code}>
+        <Tooltip
+          placement="bottom"
+          title={
+            <pre className="cl-table-link__description">{ fingerprint }</pre>
+          }
+          overlayClassName="cl-table-link__statement-tooltip--fixed-width"
+        >
+          {shortenedStatement}
+        </Tooltip>
+      </Text>
+    );
+  }
+  return (
+    <Text textType={TextTypes.Code}>{shortenedStatement}</Text>
+  );
+};
 
 class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosticsHistoryViewProps> {
   columns: ColumnsConfig<IStatementDiagnosticsReport> = [
@@ -71,7 +107,7 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
         const { implicit_txn: implicitTxn = "true", query } = statement?.key?.key_data || {};
 
         if (isUndefined(query)) {
-          return <Text textType={TextTypes.Code}>{fingerprint}</Text>
+          return <StatementColumn fingerprint={fingerprint} />;
         }
 
         return (
@@ -79,9 +115,9 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
             to={ `/statement/${implicitTxn}/${encodeURIComponent(query)}` }
             className="crl-statements-diagnostics-view__statements-link"
           >
-            <Text textType={TextTypes.Code}>{fingerprint}</Text>
+            <StatementColumn fingerprint={fingerprint} />
           </Link>
-        )
+        );
       },
     },
     {
