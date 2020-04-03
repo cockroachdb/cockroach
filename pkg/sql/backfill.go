@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -203,7 +204,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 					constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, *t.Constraint)
 					constraintsToValidate = append(constraintsToValidate, *t.Constraint)
 				}
-			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
+			case *sqlbase.DescriptorMutation_PrimaryKeySwap, *sqlbase.DescriptorMutation_ComputedColumnSwap:
 				// The backfiller doesn't need to do anything here.
 			default:
 				return errors.AssertionFailedf(
@@ -220,7 +221,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 				}
 			case *sqlbase.DescriptorMutation_Constraint:
 				constraintsToDrop = append(constraintsToDrop, *t.Constraint)
-			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
+			case *sqlbase.DescriptorMutation_PrimaryKeySwap, *sqlbase.DescriptorMutation_ComputedColumnSwap:
 				// The backfiller doesn't need to do anything here.
 			default:
 				return errors.AssertionFailedf(
@@ -1353,6 +1354,9 @@ func runSchemaChangesInTxn(
 			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
 				// Don't need to do anything here, as the call to MakeMutationComplete
 				// will perform the steps for this operation.
+			case *sqlbase.DescriptorMutation_ComputedColumnSwap:
+				return unimplemented.NewWithIssue(47537,
+					"performing an ALTER TABLE ... ALTER COLUMN TYPE in the same txn as the table was created is not supported")
 			case *sqlbase.DescriptorMutation_Column:
 				if doneColumnBackfill || !sqlbase.ColumnNeedsBackfill(m.GetColumn()) {
 					break

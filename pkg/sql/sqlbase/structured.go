@@ -890,6 +890,7 @@ func (desc *TableDescriptor) MaybeFillInDescriptor(
 ) error {
 	desc.maybeUpgradeFormatVersion()
 	desc.Privileges.MaybeFixPrivileges(desc.ID)
+
 	if protoGetter != nil {
 		if _, err := desc.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, codec, false /* skipFKsWithNoMatchingTable*/); err != nil {
 			return err
@@ -1858,6 +1859,11 @@ func (desc *TableDescriptor) ValidateTable() error {
 			if m.Direction == DescriptorMutation_NONE {
 				return errors.AssertionFailedf(
 					"primary key swap mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
+			}
+		case *DescriptorMutation_ComputedColumnSwap:
+			if m.Direction == DescriptorMutation_NONE {
+				return errors.AssertionFailedf(
+					"computed column swap mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
 			}
 		default:
 			return errors.AssertionFailedf(
@@ -3191,6 +3197,10 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 					return err
 				}
 			}
+		case *DescriptorMutation_ComputedColumnSwap:
+			if err := desc.performComputedColumnSwap(t.ComputedColumnSwap); err != nil {
+				return err
+			}
 		}
 
 	case DescriptorMutation_DROP:
@@ -3202,6 +3212,111 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 			desc.RemoveColumnFromFamily(t.Column.ID)
 		}
 	}
+	return nil
+}
+
+func (desc *MutableTableDescriptor) performComputedColumnSwap(swap *ComputedColumnSwap) error {
+	// Get the old and new columns from the descriptor.
+	oldCol, err := desc.FindColumnByID(swap.OldColumnId)
+	if err != nil {
+		return err
+	}
+	newCol, err := desc.FindColumnByID(swap.NewColumnId)
+	if err != nil {
+		return err
+	}
+
+	// Mark newCol as no longer a computed column.
+	newCol.ComputeExpr = nil
+
+	// oldCol still needs to have values written to it in case nodes read it from
+	// it with a TableDescriptor version from before the swap.
+	// To achieve this, we make oldCol a computed column of newCol.
+	oldColComputeExpr := tree.CastExpr{
+		Expr:       &tree.ColumnItem{ColumnName: tree.Name(oldCol.Name)},
+		Type:       oldCol.DatumType(),
+		SyntaxMode: tree.CastShort,
+	}
+	s := tree.Serialize(&oldColComputeExpr)
+	oldCol.ComputeExpr = &s
+
+	// Generate unique name for old column.
+	nameExists := func(name string) bool {
+		_, _, err := desc.FindColumnByName(tree.Name(name))
+		return err == nil
+	}
+
+	uniqueName := GenerateUniqueConstraintName(newCol.Name, nameExists)
+
+	// Remember the name of oldCol, because newCol will take it.
+	oldColName := oldCol.Name
+
+	// Rename old column to this new name, and rename newCol to oldCol's name.
+	desc.RenameColumnDescriptor(oldCol, uniqueName)
+	desc.RenameColumnDescriptor(newCol, oldColName)
+
+	// Swap Column Family ordering for oldCol and newCol.
+	// Both columns must be in the same family since the new column is
+	// created explicitly with the same column family as the old column.
+	// This preserves the ordering of column families when querying
+	// for column families.
+	oldColColumnFamily, err := desc.GetFamilyOfColumn(oldCol.ID)
+	if err != nil {
+		return err
+	}
+	newColColumnFamily, err := desc.GetFamilyOfColumn(newCol.ID)
+	if err != nil {
+		return err
+	}
+
+	if oldColColumnFamily.ID != newColColumnFamily.ID {
+		return errors.Newf("expected the column families of the old and new columns to match,"+
+			"oldCol column family: %v, newCol column family: %v",
+			oldColColumnFamily.ID, newColColumnFamily.ID)
+	}
+
+	for i := range oldColColumnFamily.ColumnIDs {
+		if oldColColumnFamily.ColumnIDs[i] == oldCol.ID {
+			oldColColumnFamily.ColumnIDs[i] = newCol.ID
+			oldColColumnFamily.ColumnNames[i] = newCol.Name
+		} else if oldColColumnFamily.ColumnIDs[i] == newCol.ID {
+			oldColColumnFamily.ColumnIDs[i] = oldCol.ID
+			oldColColumnFamily.ColumnNames[i] = oldCol.Name
+		}
+	}
+
+	// Set newCol's LogicalColumnID to oldCol's ID. This makes
+	// newCol display like oldCol in catalog tables.
+	newCol.LogicalColumnID = oldCol.ID
+	oldCol.LogicalColumnID = 0
+
+	// Mark oldCol as being the result of an AlterColumnType. This allows us
+	// to generate better errors for failing inserts.
+	oldCol.AlterColumnTypeInProgress = true
+
+	// Clone oldColDesc so that we can queue it up as a mutation.
+	// Use oldColCopy to queue mutation in case oldCol's memory address
+	// gets overwritten during mutation.
+	oldColCopy := protoutil.Clone(oldCol).(*ColumnDescriptor)
+	newColCopy := protoutil.Clone(newCol).(*ColumnDescriptor)
+	desc.AddColumnMutation(oldColCopy, DescriptorMutation_DROP)
+
+	// Remove the new column from the TableDescriptor first so we can reinsert
+	// it into the position where the old column is.
+	for i := range desc.Columns {
+		if desc.Columns[i].ID == newCol.ID {
+			desc.Columns = append(desc.Columns[:i:i], desc.Columns[i+1:]...)
+			break
+		}
+	}
+
+	// Replace the old column with the new column.
+	for i := range desc.Columns {
+		if desc.Columns[i].ID == oldCol.ID {
+			desc.Columns[i] = *newColCopy
+		}
+	}
+
 	return nil
 }
 
@@ -3336,6 +3451,12 @@ func (desc *MutableTableDescriptor) AddIndexMutation(
 // AddPrimaryKeySwapMutation adds a PrimaryKeySwap mutation to the table descriptor.
 func (desc *MutableTableDescriptor) AddPrimaryKeySwapMutation(swap *PrimaryKeySwap) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_PrimaryKeySwap{PrimaryKeySwap: swap}, Direction: DescriptorMutation_ADD}
+	desc.addMutation(m)
+}
+
+// AddComputedColumnSwapMutation adds a ComputedColumnSwap mutation to the table descriptor.
+func (desc *MutableTableDescriptor) AddComputedColumnSwapMutation(swap *ComputedColumnSwap) {
+	m := DescriptorMutation{Descriptor_: &DescriptorMutation_ComputedColumnSwap{ComputedColumnSwap: swap}, Direction: DescriptorMutation_ADD}
 	desc.addMutation(m)
 }
 
@@ -3939,6 +4060,20 @@ func (desc *ColumnDescriptor) CheckCanBeFKRef() error {
 		)
 	}
 	return nil
+}
+
+// GetFamilyOfColumn returns the ColumnFamilyDescriptor for the
+// the family the column is part of.
+func (desc *TableDescriptor) GetFamilyOfColumn(colID ColumnID) (*ColumnFamilyDescriptor, error) {
+	for _, fam := range desc.Families {
+		for _, id := range fam.ColumnIDs {
+			if id == colID {
+				return &fam, nil
+			}
+		}
+	}
+
+	return nil, errors.Newf("no column family found for column id %v", colID)
 }
 
 // PartitionNames returns a slice containing the name of every partition and
