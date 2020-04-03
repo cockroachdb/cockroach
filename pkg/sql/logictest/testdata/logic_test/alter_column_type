@@ -330,10 +330,3 @@ CREATE TABLE t11 (x INT)
 
 statement error pq: unimplemented: alter column type using expression is not supported\nHINT: You have attempted to use a feature that is not yet implemented.\nSee: https://github.com/cockroachdb/cockroach/issues/47706
 ALTER TABLE t11 ALTER COLUMN x TYPE STRING USING CAST(x AS STRING)
-
-# Ensure alter column type is disallowed if the column has a constraint.
-statement ok
-CREATE TABLE t12 (x INT check (x > 0))
-
-statement error pq: unimplemented: alter column type for a column that has a constraint is currently not supported
-ALTER TABLE t12 ALTER COLUMN x TYPE STRING

@@ -36,10 +36,6 @@ var colOwnsSequenceNotSupportedErr = unimplemented.NewWithIssuef(
 	48244, "alter column type for a column that owns a sequence "+
 		"is currently not supported")
 
-var colWithConstraintNotSupportedErr = unimplemented.NewWithIssuef(
-	48288, "alter column type for a column that has a constraint "+
-		"is currently not supported")
-
 // AlterColumnType takes an AlterTableAlterColumnType, determines
 // which conversion to use and applies the type conversion.
 func AlterColumnType(
@@ -145,17 +141,6 @@ func alterColumnTypeGeneral(
 	// Disallow ALTER COLUMN TYPE general for columns that own sequences.
 	if len(col.OwnsSequenceIds) != 0 {
 		return colOwnsSequenceNotSupportedErr
-	}
-
-	// Disallow ALTER COLUMN TYPE general for columns that have a constraint.
-	for i := range tableDesc.Checks {
-		uses, err := tableDesc.Checks[i].UsesColumn(tableDesc.TableDesc(), col.ID)
-		if err != nil {
-			return err
-		}
-		if uses {
-			return colWithConstraintNotSupportedErr
-		}
 	}
 
 	// Disallow ALTER COLUMN TYPE general for columns that are
