@@ -20,9 +20,9 @@ import (
 	"go/types"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
-	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/ast/inspector"
 )
 
@@ -48,7 +48,7 @@ var Analyzer = &analysis.Analyzer{
 			ifStmt := n.(*ast.IfStmt)
 
 			// Are we inside of a function which returns an error?
-			containing := findContainingFunc(pass, n)
+			containing := passes.FindContainingFuncSig(pass, n)
 			if !funcReturnsErrorLast(containing) {
 				return
 			}
@@ -163,7 +163,7 @@ func hasAcceptableAction(pass *analysis.Pass, errObj types.Object, statements []
 }
 
 func hasNoLintComment(pass *analysis.Pass, ifStmt, returnStmt ast.Node) bool {
-	f := findContainingFile(pass, ifStmt)
+	f := passes.FindContainingFile(pass, ifStmt)
 	cm := ast.NewCommentMap(pass.Fset, ifStmt, f.Comments)
 	cm = cm.Filter(returnStmt)
 	for _, cg := range cm[returnStmt] {
@@ -208,27 +208,4 @@ func funcReturnsErrorLast(f *types.Signature) bool {
 	results := f.Results()
 	return results.Len() > 0 &&
 		results.At(results.Len()-1).Type() == errorType
-}
-
-func findContainingFile(pass *analysis.Pass, n ast.Node) *ast.File {
-	fPos := pass.Fset.File(n.Pos())
-	for _, f := range pass.Files {
-		if pass.Fset.File(f.Pos()) == fPos {
-			return f
-		}
-	}
-	panic(fmt.Errorf("cannot file file for %v", n))
-}
-
-func findContainingFunc(pass *analysis.Pass, n ast.Node) *types.Signature {
-	stack, _ := astutil.PathEnclosingInterval(findContainingFile(pass, n), n.Pos(), n.End())
-	for _, n := range stack {
-		if funcDecl, ok := n.(*ast.FuncDecl); ok {
-			return pass.TypesInfo.ObjectOf(funcDecl.Name).(*types.Func).Type().(*types.Signature)
-		}
-		if funcLit, ok := n.(*ast.FuncLit); ok {
-			return pass.TypesInfo.Types[funcLit].Type.(*types.Signature)
-		}
-	}
-	return nil
 }
