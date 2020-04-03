@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { Icon, Pagination } from "antd";
-import _ from "lodash";
+import { isNil, merge, forIn } from "lodash";
 import moment from "moment";
 import { DATE_FORMAT } from "src/util/format";
 import React from "react";
@@ -42,6 +42,7 @@ import {
 } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
+import { trackPaginate, trackSearch } from "src/util/analytics";
 
 import "./statements.styl";
 
@@ -88,7 +89,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     };
 
     const stateFromHistory = this.getStateFromHistory();
-    this.state = _.merge(defaultState, stateFromHistory);
+    this.state = merge(defaultState, stateFromHistory);
     this.activateDiagnosticsRef = React.createRef();
   }
 
@@ -113,7 +114,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     const currentSearchParams = new URLSearchParams(history.location.search);
     // const nextSearchParams = new URLSearchParams(params);
 
-    _.forIn(params, (value, key) => {
+    forIn(params, (value, key) => {
       if (!value) {
         currentSearchParams.delete(key);
       } else {
@@ -147,7 +148,10 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     this.props.refreshStatementDiagnosticsRequests();
   }
 
-  componentDidUpdate() {
+  componentDidUpdate = (__: StatementsPageProps, prevState: StatementsPageState) => {
+    if (this.state.search && this.state.search !== prevState.search) {
+      trackSearch(this.filteredStatementsData().length);
+    }
     this.props.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
   }
@@ -158,7 +162,8 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
 
   onChangePage = (current: number) => {
     const { pagination } = this.state;
-    this.setState({ pagination: { ...pagination, current }});
+    this.setState({ pagination: { ...pagination, current } });
+    trackPaginate(current);
   }
   onSubmitSearchField = (search: string) => {
     this.setState({ pagination: { ...this.state.pagination, current: 1 }, search });
@@ -313,14 +318,14 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     const app = getMatchParamByName(match, appAttr);
     return (
       <React.Fragment>
-        <Helmet title={ app ? `${app} App | Statements` : "Statements"} />
+        <Helmet title={app ? `${app} App | Statements` : "Statements"} />
 
         <section className="section">
           <h1 className="base-heading">Statements</h1>
         </section>
 
         <Loading
-          loading={_.isNil(this.props.statements)}
+          loading={isNil(this.props.statements)}
           error={this.props.statementsError}
           render={this.renderStatements}
         />

@@ -11,6 +11,7 @@
 import { Button, TimePicker, notification, Calendar, Icon } from "antd";
 import moment, { Moment } from "moment";
 import { TimeWindow } from "oss/src/redux/timewindow";
+import { trackTimeScaleSelected } from "src/util/analytics";
 import React from "react";
 import "./range.styl";
 
@@ -127,11 +128,16 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
 
   toggleDropDown = () => this.setState({ opened: !this.state.opened }, this.toggleCustomPicker(this.state.opened ));
 
+  handleOptionButtonOnClick = (option: RangeOption) => () => {
+    trackTimeScaleSelected(option.label);
+    (option.value === "Custom" ? this.toggleCustomPicker(true) : this.onChangeOption(option))();
+  }
+
   optionButton = (option: RangeOption) => (
     <Button
       type="default"
       className={`_time-button ${this.props.selected.title === option.value && "active" || ""}`}
-      onClick={option.value === "Custom" ? this.toggleCustomPicker(true) : this.onChangeOption(option)}
+      onClick={this.handleOptionButtonOnClick(option)}
       ghost
     >
       <span className="dropdown__range-title">{this.props.selected.title !== "Custom" && option.value === "Custom" ? "--" : option.timeLabel}</span>

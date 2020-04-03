@@ -48,6 +48,7 @@ import {
   selectDiagnosticsReportsCountByStatementFingerprint,
 } from "src/redux/statements/statementsSelectors";
 import { Button, BackIcon } from "oss/src/components/button";
+import { trackSubnavSelection } from "src/util/analytics";
 
 const { TabPane } = Tabs;
 
@@ -248,8 +249,8 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
     const logicalPlan = stats.sensitive_info && stats.sensitive_info.most_recent_plan_description;
     const duration = (v: number) => Duration(v * 1e9);
     return (
-      <Tabs defaultActiveKey="1" className="cockroach--tabs">
-        <TabPane tab="Overview" key="1">
+      <Tabs defaultActiveKey="1" className="cockroach--tabs" onChange={trackSubnavSelection}>
+        <TabPane tab="Overview" key="overview">
           <Row gutter={16}>
             <Col className="gutter-row" span={16}>
               <SqlBox value={ statement } />
@@ -324,10 +325,10 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
             </Col>
           </Row>
         </TabPane>
-        <TabPane tab={`Diagnostics ${diagnosticsCount > 0 ? `(${diagnosticsCount})` : ""}`} key="2">
+        <TabPane tab={`Diagnostics ${diagnosticsCount > 0 ? `(${diagnosticsCount})` : ""}`} key="diagnostics">
           <DiagnosticsView statementFingerprint={statement} />
         </TabPane>
-        <TabPane tab="Logical Plan" key="3">
+        <TabPane tab="Logical Plan" key="logical-plan">
           <SummaryCard>
             <PlanView
               title="Logical Plan"
@@ -335,7 +336,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
             />
           </SummaryCard>
         </TabPane>
-        <TabPane tab="Execution Stats" key="4">
+        <TabPane tab="Execution Stats" key="execution-stats">
           <SummaryCard>
             <h2 className="base-heading summary--card__title">
               Execution Latency By Phase
