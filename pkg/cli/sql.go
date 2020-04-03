@@ -71,6 +71,7 @@ More documentation about our SQL dialect and the CLI shell is available online:
 
 	demoCommandsHelp = `
 Commands specific to the demo shell (EXPERIMENTAL):
+  \demo ls                     list the demo nodes and their connection URLs.
   \demo shutdown <nodeid>      stop a demo node.
   \demo restart <nodeid>       restart a stopped demo node.
   \demo decommission <nodeid>  decommission a node.
@@ -490,9 +491,16 @@ func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cl
 	if demoCtx.transientCluster == nil {
 		return c.invalidSyntax(errState, `\demo can only be run with cockroach demo`)
 	}
+
+	if len(cmd) == 1 && cmd[0] == "ls" {
+		demoCtx.transientCluster.listDemoNodes(os.Stdout, false /* justOne */)
+		return nextState
+	}
+
 	if len(cmd) != 2 {
 		return c.invalidSyntax(errState, `\demo expects 2 parameters`)
 	}
+
 	nodeID, err := strconv.ParseInt(cmd[1], 10, 32)
 	if err != nil {
 		return c.invalidSyntax(
@@ -501,6 +509,7 @@ func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cl
 			errors.Wrapf(err, "cannot convert %s to string", cmd[2]).Error(),
 		)
 	}
+
 	switch cmd[0] {
 	case "shutdown":
 		if err := demoCtx.transientCluster.DrainNode(roachpb.NodeID(nodeID)); err != nil {
