@@ -100,8 +100,7 @@ start_test "Expect an error if geo-partitioning is requested and a license canno
 set env(COCKROACH_DEMO_LICENSE_URL) "https://127.0.0.1:9999/"
 spawn $argv demo --geo-partitioned-replicas
 eexpect "error while contacting licensing server"
-eexpect "dial tcp"
-eexpect "ERROR: license acquisition was unsuccessful"
+eexpect "Enterprise features are needed for this demo"
 eexpect eof
 end_test
 
