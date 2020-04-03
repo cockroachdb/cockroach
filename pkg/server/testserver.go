@@ -301,7 +301,7 @@ func (ts *TestServer) Clock() *hlc.Clock {
 // JobRegistry returns the *jobs.Registry as an interface{}.
 func (ts *TestServer) JobRegistry() interface{} {
 	if ts != nil {
-		return ts.jobRegistry
+		return ts.sqlServer.jobRegistry
 	}
 	return nil
 }
@@ -309,7 +309,7 @@ func (ts *TestServer) JobRegistry() interface{} {
 // MigrationManager returns the *sqlmigrations.Manager as an interface{}.
 func (ts *TestServer) MigrationManager() interface{} {
 	if ts != nil {
-		return ts.migMgr
+		return ts.sqlServer.migMgr
 	}
 	return nil
 }
@@ -341,7 +341,7 @@ func (ts *TestServer) DB() *kv.DB {
 // PGServer returns the pgwire.Server used by the TestServer.
 func (ts *TestServer) PGServer() *pgwire.Server {
 	if ts != nil {
-		return ts.pgServer
+		return ts.sqlServer.pgServer
 	}
 	return nil
 }
@@ -566,7 +566,7 @@ func (ts *TestServer) getAuthenticatedHTTPClientAndCookie(
 }
 
 func (ts *TestServer) createAuthUser(userName string, isAdmin bool) error {
-	if _, err := ts.Server.internalExecutor.ExecEx(context.TODO(),
+	if _, err := ts.Server.sqlServer.internalExecutor.ExecEx(context.TODO(),
 		"create-auth-user", nil,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		"CREATE USER $1", userName,
@@ -576,7 +576,7 @@ func (ts *TestServer) createAuthUser(userName string, isAdmin bool) error {
 	if isAdmin {
 		// We can't use the GRANT statement here because we don't want
 		// to rely on CCL code.
-		if _, err := ts.Server.internalExecutor.ExecEx(context.TODO(),
+		if _, err := ts.Server.sqlServer.internalExecutor.ExecEx(context.TODO(),
 			"grant-admin", nil,
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			"INSERT INTO system.role_members (role, member, \"isAdmin\") VALUES ('admin', $1, true)", userName,
@@ -616,7 +616,7 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 	var found bool
 
 	reg := metric.NewRegistry()
-	for _, m := range ts.pgServer.Metrics() {
+	for _, m := range ts.sqlServer.pgServer.Metrics() {
 		reg.AddMetricStruct(m)
 	}
 	reg.Each(func(n string, v interface{}) {
@@ -639,12 +639,12 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 
 // LeaseManager is part of TestServerInterface.
 func (ts *TestServer) LeaseManager() interface{} {
-	return ts.leaseMgr
+	return ts.sqlServer.leaseMgr
 }
 
 // InternalExecutor is part of TestServerInterface.
 func (ts *TestServer) InternalExecutor() interface{} {
-	return ts.internalExecutor
+	return ts.sqlServer.internalExecutor
 }
 
 // GetNode exposes the Server's Node.
@@ -670,12 +670,12 @@ func (ts *TestServer) SQLServer() interface{} {
 
 // DistSQLServer is part of TestServerInterface.
 func (ts *TestServer) DistSQLServer() interface{} {
-	return ts.distSQLServer
+	return ts.sqlServer.distSQLServer
 }
 
 // SetDistSQLSpanResolver is part of TestServerInterface.
 func (s *Server) SetDistSQLSpanResolver(spanResolver interface{}) {
-	s.execCfg.DistSQLPlanner.SetSpanResolver(spanResolver.(physicalplan.SpanResolver))
+	s.sqlServer.execCfg.DistSQLPlanner.SetSpanResolver(spanResolver.(physicalplan.SpanResolver))
 }
 
 // GetFirstStoreID is part of TestServerInterface.
@@ -848,7 +848,7 @@ func (ts *TestServer) GetRangeLease(
 
 // ExecutorConfig is part of the TestServerInterface.
 func (ts *TestServer) ExecutorConfig() interface{} {
-	return *ts.execCfg
+	return *ts.sqlServer.execCfg
 }
 
 // GCSystemLog deletes entries in the given system log table between
@@ -874,7 +874,7 @@ func (ts *TestServer) ForceTableGC(
    JOIN system.namespace dbs ON dbs.id = tables."parentID"
    WHERE dbs.name = $1 AND tables.name = $2
  `
-	row, err := ts.internalExecutor.QueryRowEx(
+	row, err := ts.sqlServer.internalExecutor.QueryRowEx(
 		ctx, "resolve-table-id", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		tableIDQuery, database, table)

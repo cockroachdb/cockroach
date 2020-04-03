@@ -82,7 +82,6 @@ var errAdminAPIError = status.Errorf(codes.Internal, "An internal server error "
 type adminServer struct {
 	server     *Server
 	memMonitor mon.BytesMonitor
-	memMetrics *sql.MemoryMetrics
 }
 
 // noteworthyAdminMemoryUsageBytes is the minimum size tracked by the
@@ -93,7 +92,7 @@ var noteworthyAdminMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEW
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
 func newAdminServer(s *Server) *adminServer {
-	server := &adminServer{server: s, memMetrics: &s.adminMemMetrics}
+	server := &adminServer{server: s}
 	// TODO(knz): We do not limit memory usage by admin operations
 	// yet. Is this wise?
 	server.memMonitor = mon.MakeUnlimitedMonitor(
@@ -219,7 +218,7 @@ func (s *adminServer) Databases(
 		return nil, err
 	}
 
-	rows, err := s.server.internalExecutor.QueryEx(
+	rows, err := s.server.sqlServer.internalExecutor.QueryEx(
 		ctx, "admin-show-dbs", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: sessionUser},
 		"SHOW DATABASES",
@@ -259,7 +258,7 @@ func (s *adminServer) DatabaseDetails(
 	// TODO(cdo): Use placeholders when they're supported by SHOW.
 
 	// Marshal grants.
-	rows, cols, err := s.server.internalExecutor.QueryWithCols(
+	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-show-grants", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: userName},
 		fmt.Sprintf("SHOW GRANTS ON DATABASE %s", escDBName),
@@ -304,7 +303,7 @@ func (s *adminServer) DatabaseDetails(
 	}
 
 	// Marshal table names.
-	rows, cols, err = s.server.internalExecutor.QueryWithCols(
+	rows, cols, err = s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-show-tables", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: userName},
 		fmt.Sprintf("SHOW TABLES FROM %s", escDBName),
@@ -381,7 +380,7 @@ func (s *adminServer) TableDetails(
 	var resp serverpb.TableDetailsResponse
 
 	// Marshal SHOW COLUMNS result.
-	rows, cols, err := s.server.internalExecutor.QueryWithCols(
+	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-show-columns",
 		nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: userName},
@@ -444,7 +443,7 @@ func (s *adminServer) TableDetails(
 	}
 
 	// Marshal SHOW INDEX result.
-	rows, cols, err = s.server.internalExecutor.QueryWithCols(
+	rows, cols, err = s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-showindex", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: userName},
 		fmt.Sprintf("SHOW INDEX FROM %s", escQualTable),
@@ -497,7 +496,7 @@ func (s *adminServer) TableDetails(
 	}
 
 	// Marshal SHOW GRANTS result.
-	rows, cols, err = s.server.internalExecutor.QueryWithCols(
+	rows, cols, err = s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-show-grants", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: userName},
 		fmt.Sprintf("SHOW GRANTS ON TABLE %s", escQualTable),
@@ -530,7 +529,7 @@ func (s *adminServer) TableDetails(
 	}
 
 	// Marshal SHOW CREATE result.
-	rows, cols, err = s.server.internalExecutor.QueryWithCols(
+	rows, cols, err = s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-show-create", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: userName},
 		fmt.Sprintf("SHOW CREATE %s", escQualTable),
@@ -840,7 +839,7 @@ func (s *adminServer) Users(
 		return nil, err
 	}
 	query := `SELECT username FROM system.users WHERE "isRole" = false`
-	rows, err := s.server.internalExecutor.QueryEx(
+	rows, err := s.server.sqlServer.internalExecutor.QueryEx(
 		ctx, "admin-users", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: userName},
 		query,
@@ -899,7 +898,7 @@ func (s *adminServer) Events(
 	if len(q.Errors()) > 0 {
 		return nil, s.serverErrors(q.Errors())
 	}
-	rows, cols, err := s.server.internalExecutor.QueryWithCols(
+	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-events", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: userName},
 		q.String(), q.QueryArguments()...)
@@ -991,7 +990,7 @@ func (s *adminServer) RangeLog(
 	if len(q.Errors()) > 0 {
 		return nil, s.serverErrors(q.Errors())
 	}
-	rows, cols, err := s.server.internalExecutor.QueryWithCols(
+	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-range-log", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: userName},
 		q.String(), q.QueryArguments()...,
@@ -1104,7 +1103,7 @@ func (s *adminServer) getUIData(
 	if err := query.Errors(); err != nil {
 		return nil, s.serverErrorf("error constructing query: %v", err)
 	}
-	rows, err := s.server.internalExecutor.QueryEx(
+	rows, err := s.server.sqlServer.internalExecutor.QueryEx(
 		ctx, "admin-getUIData", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		query.String(), query.QueryArguments()...,
@@ -1175,7 +1174,7 @@ func (s *adminServer) SetUIData(
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
 		query := `UPSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`
-		rowsAffected, err := s.server.internalExecutor.ExecEx(
+		rowsAffected, err := s.server.sqlServer.internalExecutor.ExecEx(
 			ctx, "admin-set-ui-data", nil, /* txn */
 			sqlbase.InternalExecutorSessionDataOverride{
 				User: security.RootUser,
@@ -1424,7 +1423,7 @@ func (s *adminServer) Jobs(
 	if req.Limit > 0 {
 		q.Append(" LIMIT $", tree.DInt(req.Limit))
 	}
-	rows, cols, err := s.server.internalExecutor.QueryWithCols(
+	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-jobs", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: userName},
 		q.String(), q.QueryArguments()...,
@@ -1494,7 +1493,7 @@ func (s *adminServer) Locations(
 
 	q := makeSQLQuery()
 	q.Append(`SELECT "localityKey", "localityValue", latitude, longitude FROM system.locations`)
-	rows, cols, err := s.server.internalExecutor.QueryWithCols(
+	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-locations", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: userName},
 		q.String(),
@@ -1550,7 +1549,7 @@ func (s *adminServer) QueryPlan(
 	explain := fmt.Sprintf(
 		"SELECT json FROM [EXPLAIN (DISTSQL) %s]",
 		strings.Trim(req.Query, ";"))
-	rows, err := s.server.internalExecutor.QueryEx(
+	rows, err := s.server.sqlServer.internalExecutor.QueryEx(
 		ctx, "admin-query-plan", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: userName},
 		explain,
@@ -1578,7 +1577,7 @@ func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.R
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	row, err := s.server.internalExecutor.QueryRowEx(
+	row, err := s.server.sqlServer.internalExecutor.QueryRowEx(
 		ctx, "admin-stmt-bundle", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: sessionUser},
 		"SELECT bundle_chunks FROM system.statement_diagnostics WHERE id=$1 AND bundle_chunks IS NOT NULL",
@@ -1597,7 +1596,7 @@ func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.R
 	var bundle bytes.Buffer
 	chunkIDs := row[0].(*tree.DArray).Array
 	for _, chunkID := range chunkIDs {
-		chunkRow, err := s.server.internalExecutor.QueryRowEx(
+		chunkRow, err := s.server.sqlServer.internalExecutor.QueryRowEx(
 			ctx, "admin-stmt-bundle", nil, /* txn */
 			sqlbase.InternalExecutorSessionDataOverride{User: sessionUser},
 			"SELECT data FROM system.statement_bundle_chunks WHERE id=$1",
@@ -1810,7 +1809,7 @@ func (s *adminServer) DataDistribution(
 	// and deleted tables (as opposed to e.g. information_schema) because we are interested
 	// in the data for all ranges, not just ranges for visible tables.
 	tablesQuery := `SELECT name, table_id, database_name, drop_time FROM "".crdb_internal.tables WHERE schema_name = 'public'`
-	rows1, err := s.server.internalExecutor.QueryEx(
+	rows1, err := s.server.sqlServer.internalExecutor.QueryEx(
 		ctx, "admin-replica-matrix", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: userName},
 		tablesQuery,
@@ -1852,7 +1851,7 @@ func (s *adminServer) DataDistribution(
 				`SELECT zone_id FROM [SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
 				(*tree.Name)(dbName), (*tree.Name)(tableName),
 			)
-			rows, err := s.server.internalExecutor.QueryEx(
+			rows, err := s.server.sqlServer.internalExecutor.QueryEx(
 				ctx, "admin-replica-matrix", nil, /* txn */
 				sqlbase.InternalExecutorSessionDataOverride{User: userName},
 				zoneConfigQuery,
@@ -1929,7 +1928,7 @@ func (s *adminServer) DataDistribution(
 		FROM crdb_internal.zones
 		WHERE target IS NOT NULL
 	`
-	rows2, err := s.server.internalExecutor.QueryEx(
+	rows2, err := s.server.sqlServer.internalExecutor.QueryEx(
 		ctx, "admin-replica-matrix", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: userName},
 		zoneConfigsQuery)
@@ -2342,7 +2341,7 @@ func (s *adminServer) queryZone(
 	ctx context.Context, userName string, id sqlbase.ID,
 ) (zonepb.ZoneConfig, bool, error) {
 	const query = `SELECT crdb_internal.get_zone_config($1)`
-	rows, cols, err := s.server.internalExecutor.QueryWithCols(
+	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx,
 		"admin-query-zone",
 		nil, /* txn */
@@ -2399,7 +2398,7 @@ func (s *adminServer) queryNamespaceID(
 	ctx context.Context, userName string, parentID sqlbase.ID, name string,
 ) (sqlbase.ID, error) {
 	const query = `SELECT crdb_internal.get_namespace_id($1, $2)`
-	rows, cols, err := s.server.internalExecutor.QueryWithCols(
+	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-query-namespace-ID", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: userName},
 		query, parentID, name,
@@ -2488,7 +2487,7 @@ func (s *adminServer) hasAdminRole(ctx context.Context, sessionUser string) (boo
 		// Shortcut.
 		return true, nil
 	}
-	rows, cols, err := s.server.internalExecutor.QueryWithCols(
+	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "check-is-admin", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: sessionUser},
 		"SELECT crdb_internal.is_admin()")
