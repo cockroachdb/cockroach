@@ -14,35 +14,19 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"io/ioutil"
-	"net/url"
-	"os"
-	"path/filepath"
+	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
-	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"golang.org/x/time/rate"
 )
 
 var demoCmd = &cobra.Command{
@@ -170,611 +154,6 @@ func init() {
 // The cliccl package sets this function if enterprise features are available to demo.
 var GetAndApplyLicense func(dbConn *gosql.DB, clusterID uuid.UUID, org string) (bool, error)
 
-type transientCluster struct {
-	connURL string
-	// certsDir is only set when demoCtx.insecure is false.
-	certsDir string
-	stopper  *stop.Stopper
-	s        *server.TestServer
-	servers  []*server.TestServer
-	cleanup  func()
-}
-
-// DrainNode will gracefully attempt to drain a node in the cluster.
-func (c *transientCluster) DrainNode(nodeID roachpb.NodeID) error {
-	nodeIndex := int(nodeID - 1)
-
-	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
-		return errors.Errorf("node %d does not exist", nodeID)
-	}
-	// This is possible if we re-assign c.s and make the other nodes to the new
-	// base node.
-	if nodeIndex == 0 {
-		return errors.Errorf("cannot shutdown node %d", nodeID)
-	}
-	if c.servers[nodeIndex] == nil {
-		return errors.Errorf("node %d is already shut down", nodeID)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	adminClient, finish, err := getAdminClient(ctx, *(c.servers[nodeIndex].Cfg))
-	if err != nil {
-		return err
-	}
-	defer finish()
-
-	onModes := make([]int32, len(server.GracefulDrainModes))
-	for i, m := range server.GracefulDrainModes {
-		onModes[i] = int32(m)
-	}
-
-	if err := doShutdown(ctx, adminClient, onModes); err != nil {
-		return err
-	}
-	c.servers[nodeIndex] = nil
-	return nil
-}
-
-// CallDecommission calls the Decommission RPC on a node.
-func (c *transientCluster) CallDecommission(nodeID roachpb.NodeID, decommissioning bool) error {
-	nodeIndex := int(nodeID - 1)
-
-	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
-		return errors.Errorf("node %d does not exist", nodeID)
-	}
-
-	req := &serverpb.DecommissionRequest{
-		NodeIDs:         []roachpb.NodeID{nodeID},
-		Decommissioning: decommissioning,
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	adminClient, finish, err := getAdminClient(ctx, *(c.s.Cfg))
-	if err != nil {
-		return err
-	}
-
-	defer finish()
-	_, err = adminClient.Decommission(ctx, req)
-	if err != nil {
-		return errors.Wrap(err, "while trying to mark as decommissioning")
-	}
-	return nil
-}
-
-// RestartNode will bring back a node in the cluster.
-// The node must have been shut down beforehand.
-// The node will restart, connecting to the same in memory node.
-func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
-	nodeIndex := int(nodeID - 1)
-
-	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
-		return errors.Errorf("node %d does not exist", nodeID)
-	}
-	if c.servers[nodeIndex] != nil {
-		return errors.Errorf("node %d is already running", nodeID)
-	}
-
-	// TODO(#42243): re-compute the latency mapping.
-	args := testServerArgsForTransientCluster(nodeID, c.s.ServingRPCAddr())
-	serv := server.TestServerFactory.New(args).(*server.TestServer)
-
-	// We want to only return after the server is ready.
-	readyCh := make(chan struct{})
-	serv.Cfg.ReadyFn = func(_ bool) {
-		close(readyCh)
-	}
-
-	if err := serv.Start(args); err != nil {
-		return err
-	}
-
-	// Wait until the server is ready to action.
-	select {
-	case <-readyCh:
-	case <-time.After(maxNodeInitTime):
-		return errors.Newf("could not initialize node %d in time", nodeID)
-	}
-
-	c.stopper.AddCloser(stop.CloserFn(serv.Stop))
-	c.servers[nodeIndex] = serv
-	return nil
-}
-
-// testServerArgsForTransientCluster creates the test arguments for
-// a necessary server in the demo cluster.
-func testServerArgsForTransientCluster(nodeID roachpb.NodeID, joinAddr string) base.TestServerArgs {
-	// Assign a path to the store spec, to be saved.
-	storeSpec := base.DefaultTestStoreSpec
-	storeSpec.StickyInMemoryEngineID = fmt.Sprintf("demo-node%d", nodeID)
-
-	args := base.TestServerArgs{
-		PartOfCluster:     true,
-		Stopper:           stop.NewStopper(),
-		JoinAddr:          joinAddr,
-		DisableTLSForHTTP: true,
-		StoreSpecs:        []base.StoreSpec{storeSpec},
-		SQLMemoryPoolSize: demoCtx.sqlPoolMemorySize,
-		CacheSize:         demoCtx.cacheSize,
-	}
-
-	if demoCtx.localities != nil {
-		args.Locality = demoCtx.localities[int(nodeID-1)]
-	}
-
-	return args
-}
-
-func maybeWarnMemSize(ctx context.Context) {
-	if maxMemory, err := status.GetTotalMemory(ctx); err == nil {
-		requestedMem := (demoCtx.cacheSize + demoCtx.sqlPoolMemorySize) * int64(demoCtx.nodes)
-		maxRecommendedMem := int64(.75 * float64(maxMemory))
-		if requestedMem > maxRecommendedMem {
-			log.Shout(
-				ctx,
-				log.Severity_WARNING,
-				fmt.Sprintf(`HIGH MEMORY USAGE
-The sum of --max-sql-memory (%s) and --cache (%s) multiplied by the
-number of nodes (%d) results in potentially high memory usage on your
-device.
-This server is running at increased risk of memory-related failures.`,
-					demoNodeSQLMemSizeValue,
-					demoNodeCacheSizeValue,
-					demoCtx.nodes,
-				),
-			)
-		}
-	}
-}
-
-// generateCerts generates some temporary certificates for cockroach demo.
-func generateCerts() (certsDir string, cleanup func(), err error) {
-	certsDir, err = ioutil.TempDir("", "demo_certs")
-	if err != nil {
-		return "", nil, err
-	}
-	caKeyPath := filepath.Join(certsDir, security.EmbeddedCAKey)
-	// Create a CA-Key.
-	if err := security.CreateCAPair(
-		certsDir,
-		caKeyPath,
-		defaultKeySize,
-		defaultCALifetime,
-		false, /* allowKeyReuse */
-		false, /*overwrite */
-	); err != nil {
-		return "", nil, err
-	}
-	// Generate a certificate for the demo nodes.
-	if err := security.CreateNodePair(
-		certsDir,
-		caKeyPath,
-		defaultKeySize,
-		defaultCertLifetime,
-		false, /* overwrite */
-		[]string{"127.0.0.1"},
-	); err != nil {
-		return "", nil, err
-	}
-	// Create a certificate for the root user.
-	if err := security.CreateClientPair(
-		certsDir,
-		caKeyPath,
-		defaultKeySize,
-		defaultCertLifetime,
-		false, /* overwrite */
-		security.RootUser,
-		false, /* generatePKCS8Key */
-	); err != nil {
-		return "", nil, err
-	}
-	cleanup = func() {
-		if err := checkAndMaybeShout(os.RemoveAll(certsDir)); err != nil {
-			// There's nothing to do here anymore if err != nil.
-			_ = err
-		}
-	}
-	return certsDir, cleanup, nil
-}
-
-func setupTransientCluster(
-	ctx context.Context, cmd *cobra.Command, gen workload.Generator,
-) (c transientCluster, err error) {
-	c.cleanup = func() {}
-
-	// The user specified some localities for their nodes.
-	if len(demoCtx.localities) != 0 {
-		// Error out of localities don't line up with requested node
-		// count before doing any sort of setup.
-		if len(demoCtx.localities) != demoCtx.nodes {
-			return c, errors.Errorf("number of localities specified must equal number of nodes")
-		}
-	} else {
-		demoCtx.localities = make([]roachpb.Locality, demoCtx.nodes)
-		for i := 0; i < demoCtx.nodes; i++ {
-			demoCtx.localities[i] = defaultLocalities[i%len(defaultLocalities)]
-		}
-	}
-
-	// Set up logging. For demo/transient server we use non-standard
-	// behavior where we avoid file creation if possible.
-	fl := flagSetForCmd(cmd)
-	df := fl.Lookup(cliflags.LogDir.Name)
-	sf := fl.Lookup(logflags.LogToStderrName)
-	if !df.Changed && !sf.Changed {
-		// User did not request logging flags; shut down all logging.
-		// Otherwise, the demo command would cause a cockroach-data
-		// directory to appear in the current directory just for logs.
-		_ = df.Value.Set("")
-		df.Changed = true
-		_ = sf.Value.Set(log.Severity_NONE.String())
-		sf.Changed = true
-	}
-	c.stopper, err = setupAndInitializeLoggingAndProfiling(ctx, cmd)
-	if err != nil {
-		return c, err
-	}
-	maybeWarnMemSize(ctx)
-	c.cleanup = func() {
-		c.stopper.Stop(ctx)
-	}
-
-	if !demoCtx.insecure {
-		certs, cleanup, err := generateCerts()
-		if err != nil {
-			return c, err
-		}
-		c.certsDir = certs
-		_ = cleanup
-		c.stopper.AddCloser(stop.CloserFn(cleanup))
-	}
-
-	serverFactory := server.TestServerFactory
-	var servers []*server.TestServer
-
-	// latencyMapWaitCh is used to block test servers after RPC address computation until the artificial
-	// latency map has been constructed.
-	latencyMapWaitCh := make(chan struct{})
-
-	// errCh is used to catch all errors when initializing servers.
-	// Sending a nil on this channel indicates success.
-	errCh := make(chan error, demoCtx.nodes)
-
-	for i := 0; i < demoCtx.nodes; i++ {
-		// All the nodes connect to the address of the first server created.
-		var joinAddr string
-		if c.s != nil {
-			joinAddr = c.s.ServingRPCAddr()
-		}
-		args := testServerArgsForTransientCluster(roachpb.NodeID(i+1), joinAddr)
-
-		// servRPCReadyCh is used if latency simulation is requested to notify that a test server has
-		// successfully computed its RPC address.
-		servRPCReadyCh := make(chan struct{})
-
-		if demoCtx.simulateLatency {
-			args.Knobs = base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					PauseAfterGettingRPCAddress:  latencyMapWaitCh,
-					SignalAfterGettingRPCAddress: servRPCReadyCh,
-					ContextTestingKnobs: rpc.ContextTestingKnobs{
-						ArtificialLatencyMap: make(map[string]int),
-					},
-				},
-			}
-		}
-		if demoCtx.insecure {
-			args.Insecure = true
-		} else {
-			args.Insecure = false
-			args.SSLCertsDir = c.certsDir
-		}
-
-		serv := serverFactory.New(args).(*server.TestServer)
-
-		if i == 0 {
-			c.s = serv
-		}
-		servers = append(servers, serv)
-
-		// We force a wait for all servers until they are ready.
-		servReadyFnCh := make(chan struct{})
-		serv.Cfg.ReadyFn = func(_ bool) {
-			close(servReadyFnCh)
-		}
-
-		// If latency simulation is requested, start the servers in a background thread. We do this because
-		// the start routine needs to wait for the latency map construction after their RPC address has been computed.
-		if demoCtx.simulateLatency {
-			go func(i int) {
-				if err := serv.Start(args); err != nil {
-					errCh <- err
-				} else {
-					// Block until the ReadyFn has been called before continuing.
-					<-servReadyFnCh
-					errCh <- nil
-				}
-			}(i)
-			<-servRPCReadyCh
-		} else {
-			if err := serv.Start(args); err != nil {
-				return c, err
-			}
-			// Block until the ReadyFn has been called before continuing.
-			<-servReadyFnCh
-			errCh <- nil
-		}
-
-		c.stopper.AddCloser(stop.CloserFn(serv.Stop))
-		// Ensure we close all sticky stores we've created.
-		for _, store := range args.StoreSpecs {
-			if store.StickyInMemoryEngineID != "" {
-				engineID := store.StickyInMemoryEngineID
-				c.stopper.AddCloser(stop.CloserFn(func() {
-					if err := server.CloseStickyInMemEngine(engineID); err != nil {
-						// Something else may have already closed the sticky store.
-						// Since we are closer, it doesn't really matter.
-						log.Warningf(
-							ctx,
-							"could not close sticky in-memory store %s: %+v",
-							engineID,
-							err,
-						)
-					}
-				}))
-			}
-		}
-	}
-
-	c.servers = servers
-
-	if demoCtx.simulateLatency {
-		// Now, all servers have been started enough to know their own RPC serving
-		// addresses, but nothing else. Assemble the artificial latency map.
-		for i, src := range servers {
-			latencyMap := src.Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
-			srcLocality, ok := src.Cfg.Locality.Find("region")
-			if !ok {
-				continue
-			}
-			srcLocalityMap, ok := regionToRegionToLatency[srcLocality]
-			if !ok {
-				continue
-			}
-			for j, dst := range servers {
-				if i == j {
-					continue
-				}
-				dstLocality, ok := dst.Cfg.Locality.Find("region")
-				if !ok {
-					continue
-				}
-				latency := srcLocalityMap[dstLocality]
-				latencyMap[dst.ServingRPCAddr()] = latency
-			}
-		}
-	}
-
-	// We've assembled our latency maps and are ready for all servers to proceed
-	// through bootstrapping.
-	close(latencyMapWaitCh)
-
-	// Wait for all servers to respond.
-	{
-		timeRemaining := maxNodeInitTime
-		lastUpdateTime := timeutil.Now()
-		var err error
-		for i := 0; i < demoCtx.nodes; i++ {
-			select {
-			case e := <-errCh:
-				err = errors.CombineErrors(err, e)
-			case <-time.After(timeRemaining):
-				return c, errors.New("failed to setup transientCluster in time")
-			}
-			updateTime := timeutil.Now()
-			timeRemaining -= updateTime.Sub(lastUpdateTime)
-			lastUpdateTime = updateTime
-		}
-		if err != nil {
-			return c, err
-		}
-	}
-
-	if demoCtx.nodes < 3 {
-		// Set up the default zone configuration. We are using an in-memory store
-		// so we really want to disable replication.
-		if err := cliDisableReplication(ctx, c.s.Server); err != nil {
-			return c, err
-		}
-	}
-
-	// Prepare the URL for use by the SQL shell.
-	// TODO (rohany): there should be a way that the user can request a specific node
-	//  to connect to to see the effects of the artificial latency.
-	c.connURL, err = makeURLForServer(
-		c.s,
-		gen,
-		c.certsDir,
-		true, /* includeAppName */
-	)
-	if err != nil {
-		return c, err
-	}
-
-	// Start up the update check loop.
-	// We don't do this in (*server.Server).Start() because we don't want it
-	// in tests.
-	if !demoCtx.disableTelemetry {
-		c.s.PeriodicallyCheckForUpdates(ctx)
-	}
-	return c, nil
-}
-
-func (c *transientCluster) setupWorkload(
-	ctx context.Context, gen workload.Generator, licenseDone chan struct{},
-) error {
-	// If there is a load generator, create its database and load its
-	// fixture.
-	if gen != nil {
-		db, err := gosql.Open("postgres", c.connURL)
-		if err != nil {
-			return err
-		}
-		defer db.Close()
-
-		if _, err := db.Exec(`CREATE DATABASE ` + gen.Meta().Name); err != nil {
-			return err
-		}
-
-		ctx := context.TODO()
-		var l workloadsql.InsertsDataLoader
-		if cliCtx.isInteractive {
-			fmt.Printf("#\n# Beginning initialization of the %s dataset, please wait...\n", gen.Meta().Name)
-		}
-		if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
-			return err
-		}
-		// Perform partitioning if requested by configuration.
-		if demoCtx.geoPartitionedReplicas {
-			// Wait until the license has been acquired to trigger partitioning.
-			if cliCtx.isInteractive {
-				fmt.Println("#\n# Waiting for license acquisition to complete...")
-			}
-			<-licenseDone
-			if cliCtx.isInteractive {
-				fmt.Println("#\n# Partitioning the demo database, please wait...")
-			}
-
-			db, err := gosql.Open("postgres", c.connURL)
-			if err != nil {
-				return err
-			}
-			defer db.Close()
-			// Based on validation done in setup, we know that this workload has a partitioning step.
-			if err := gen.(workload.Hookser).Hooks().Partition(db); err != nil {
-				return errors.Wrapf(err, "partitioning the demo database")
-			}
-		}
-
-		// Run the workload. This must occur after partitioning the database.
-		if demoCtx.runWorkload {
-			var sqlURLs []string
-			for i := range c.servers {
-				sqlURL, err := makeURLForServer(
-					c.servers[i],
-					gen,
-					c.certsDir,
-					true, /* includeAppName */
-				)
-				if err != nil {
-					return err
-				}
-				sqlURLs = append(sqlURLs, sqlURL)
-			}
-			if err := c.runWorkload(ctx, gen, sqlURLs); err != nil {
-				return errors.Wrapf(err, "starting background workload")
-			}
-		}
-	}
-
-	return nil
-}
-
-func (c *transientCluster) runWorkload(
-	ctx context.Context, gen workload.Generator, sqlUrls []string,
-) error {
-	opser, ok := gen.(workload.Opser)
-	if !ok {
-		return errors.Errorf("default dataset %s does not have a workload defined", gen.Meta().Name)
-	}
-
-	// Dummy registry to prove to the Opser.
-	reg := histogram.NewRegistry(time.Duration(100) * time.Millisecond)
-	ops, err := opser.Ops(sqlUrls, reg)
-	if err != nil {
-		return errors.Wrap(err, "unable to create workload")
-	}
-
-	// Use a light rate limit of 25 queries per second
-	limiter := rate.NewLimiter(rate.Limit(25), 1)
-
-	// Start a goroutine to run each of the workload functions.
-	for _, workerFn := range ops.WorkerFns {
-		workloadFun := func(f func(context.Context) error) func(context.Context) {
-			return func(ctx context.Context) {
-				for {
-					// Limit how quickly we can generate work.
-					if err := limiter.Wait(ctx); err != nil {
-						// When the limiter throws an error, panic because we don't
-						// expect any errors from it.
-						panic(err)
-					}
-					if err := f(ctx); err != nil {
-						// Only log an error and return when the workload function throws
-						// an error, because errors these errors should be ignored, and
-						// should not interrupt the rest of the demo.
-						log.Warningf(ctx, "Error running workload query: %+v\n", err)
-						return
-					}
-				}
-			}
-		}
-		// As the SQL shell is tied to `c.s`, this means we want to tie the workload
-		// onto this as we want the workload to stop when the server dies,
-		// rather than the cluster. Otherwise, interrupts on cockroach demo hangs.
-		c.s.Stopper().RunWorker(ctx, workloadFun(workerFn))
-	}
-
-	return nil
-}
-
-func makeURLForServer(
-	s *server.TestServer, gen workload.Generator, certPath string, includeAppName bool,
-) (string, error) {
-	options := url.Values{}
-	cfg := base.Config{
-		SSLCertsDir: certPath,
-		User:        security.RootUser,
-		Insecure:    demoCtx.insecure,
-	}
-	if err := cfg.LoadSecurityOptions(options, security.RootUser); err != nil {
-		return "", err
-	}
-	if includeAppName {
-		options.Add("application_name", sqlbase.ReportableAppNamePrefix+"cockroach demo")
-	}
-	sqlURL := url.URL{
-		Scheme:   "postgres",
-		User:     url.User(security.RootUser),
-		Host:     s.ServingSQLAddr(),
-		RawQuery: options.Encode(),
-	}
-	if gen != nil {
-		sqlURL.Path = gen.Meta().Name
-	}
-	return sqlURL.String(), nil
-}
-
-func (c *transientCluster) setupUserAuth(ctx context.Context) error {
-	db, err := gosql.Open("postgres", c.connURL)
-	if err != nil {
-		return err
-	}
-	if _, err := db.ExecContext(
-		ctx,
-		`ALTER USER $1 WITH PASSWORD $2`,
-		security.RootUser,
-		defaultRootPassword,
-	); err != nil {
-		return err
-	}
-	return nil
-}
-
 func incrementTelemetryCounters(cmd *cobra.Command) {
 	incrementDemoCounter(demo)
 	if flagSetForCmd(cmd).Lookup(cliflags.DemoNodes.Name).Changed {
@@ -822,8 +201,9 @@ func checkDemoConfiguration(
 		demoCtx.disableTelemetry || (GetAndApplyLicense == nil) || demoCtx.disableLicenseAcquisition
 
 	if demoCtx.geoPartitionedReplicas {
+		geoFlag := "--" + cliflags.DemoGeoPartitionedReplicas.Name
 		if demoCtx.disableLicenseAcquisition {
-			return nil, errors.New("enterprise features are needed for this demo (--geo-partitioned-replicas)")
+			return nil, errors.Newf("enterprise features are needed for this demo (%s)", geoFlag)
 		}
 
 		// Make sure that the user didn't request to have a topology and an empty database.
@@ -833,18 +213,18 @@ func checkDemoConfiguration(
 
 		// Make sure that the Movr database is selected when automatically partitioning.
 		if gen == nil || gen.Meta().Name != "movr" {
-			return nil, errors.New("--geo-partitioned-replicas must be used with the Movr dataset")
+			return nil, errors.Newf("%s must be used with the Movr dataset", geoFlag)
 		}
 
 		// If the geo-partitioned replicas flag was given and the demo localities have changed, throw an error.
 		if demoCtx.localities != nil {
-			return nil, errors.New("--demo-locality cannot be used with --geo-partitioned-replicas")
+			return nil, errors.Newf("--demo-locality cannot be used with %s", geoFlag)
 		}
 
 		// If the geo-partitioned replicas flag was given and the nodes have changed, throw an error.
 		if flagSetForCmd(cmd).Lookup(cliflags.DemoNodes.Name).Changed {
 			if demoCtx.nodes != 9 {
-				return nil, errors.New("--nodes with a value different from 9 cannot be used with --geo-partitioned-replicas")
+				return nil, errors.Newf("--nodes with a value different from 9 cannot be used with %s", geoFlag)
 			}
 		} else {
 			const msg = `#
@@ -868,49 +248,6 @@ func checkDemoConfiguration(
 	return gen, nil
 }
 
-// acquireDemoLicense begins an asynchronous process to obtain a
-// temporary demo license from the Cockroach Labs website. It returns
-// a channel that can be waited on if it is needed to wait on the
-// license acquisition.
-func (c *transientCluster) acquireDemoLicense(ctx context.Context) (chan struct{}, error) {
-	// Communicate information about license acquisition to services
-	// that depend on it.
-	licenseDone := make(chan struct{})
-	if demoCtx.disableLicenseAcquisition {
-		// If we are not supposed to acquire a license, close the channel
-		// immediately so that future waiters don't hang.
-		close(licenseDone)
-	} else {
-		// If we allow telemetry, then also try and get an enterprise license for the demo.
-		// GetAndApplyLicense will be nil in the pure OSS/BSL build of cockroach.
-		db, err := gosql.Open("postgres", c.connURL)
-		if err != nil {
-			return nil, err
-		}
-		go func() {
-			defer db.Close()
-
-			success, err := GetAndApplyLicense(db, c.s.ClusterID(), demoOrg)
-			if err != nil {
-				exitWithError("demo", err)
-			}
-			if !success {
-				if demoCtx.geoPartitionedReplicas {
-					log.Shout(ctx, log.Severity_ERROR,
-						"license acquisition was unsuccessful.\nNote: enterprise features are needed for --geo-partitioned-replicas.")
-					exitWithError("demo", errors.New("unable to acquire a license for this demo"))
-				}
-
-				const msg = "\nwarning: unable to acquire demo license - enterprise features are not enabled."
-				fmt.Fprintln(stderr, msg)
-			}
-			close(licenseDone)
-		}()
-	}
-
-	return licenseDone, nil
-}
-
 func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	if gen, err = checkDemoConfiguration(cmd, gen); err != nil {
 		return err
@@ -925,7 +262,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	}
 
 	c, err := setupTransientCluster(ctx, cmd, gen)
-	defer c.cleanup()
+	defer c.cleanup(ctx)
 	if err != nil {
 		return checkAndMaybeShout(err)
 	}
@@ -958,14 +295,9 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 		return checkAndMaybeShout(err)
 	}
 
+	// Initialize the workload, if requested.
 	if err := c.setupWorkload(ctx, gen, licenseDone); err != nil {
 		return checkAndMaybeShout(err)
-	}
-
-	if !demoCtx.insecure {
-		if err := c.setupUserAuth(ctx); err != nil {
-			return checkAndMaybeShout(err)
-		}
 	}
 
 	if cliCtx.isInteractive {
@@ -974,41 +306,13 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 				gen.Meta().Name, gen.Meta().Description)
 		}
 
-		fmt.Printf(`#
+		fmt.Println(`#
 # Reminder: your changes to data stored in the demo session will not be saved!
 #
-# Web UI: %s
-#
-`, c.s.AdminURL())
-
-		// Don't include the application name in the URLs we display to users.
-		if demoCtx.nodes == 1 {
-			connURL, err := makeURLForServer(
-				c.servers[0],
-				gen,
-				c.certsDir,
-				false, /* includeAppName */
-			)
-			if err != nil {
-				return checkAndMaybeShout(err)
-			}
-			fmt.Printf("# Connect to the cluster on a SQL shell at: '%s'.\n#\n", connURL)
-		} else {
-			fmt.Printf("# Connect to different nodes in the cluster on a SQL shell at:\n")
-			for _, s := range c.servers {
-				connURL, err := makeURLForServer(
-					s,
-					gen,
-					c.certsDir,
-					false, /* includeAppName */
-				)
-				if err != nil {
-					return checkAndMaybeShout(err)
-				}
-				fmt.Printf("# * Node %d: '%s'\n", s.NodeID(), connURL)
-			}
-			fmt.Printf("#\n")
-		}
+# Connection parameters:`)
+		var nodeList strings.Builder
+		c.listDemoNodes(&nodeList, true /* justOne */)
+		fmt.Println("#", strings.ReplaceAll(nodeList.String(), "\n", "\n# "))
 
 		if demoCtx.insecure {
 			fmt.Printf(
@@ -1023,15 +327,33 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 				defaultRootPassword,
 			)
 		}
+		// If we didn't launch a workload, we still need to inform the
+		// user if the license check fails. Do this asynchronously and print
+		// the final error if any.
+
+		// It's ok to do this twice (if workload setup already waited) because
+		// then the error return is guaranteed to be nil.
+		go func() {
+			if err := waitForLicense(licenseDone); err != nil {
+				_ = checkAndMaybeShout(err)
+			}
+		}()
 	} else {
 		// If we are not running an interactive shell, we need to wait to ensure
 		// that license acquisition is successful. If license acquisition is
 		// disabled, then a read on this channel will return immediately.
-		<-licenseDone
+		if err := waitForLicense(licenseDone); err != nil {
+			return checkAndMaybeShout(err)
+		}
 	}
 
 	conn := makeSQLConn(c.connURL)
 	defer conn.Close()
 
 	return runClient(cmd, conn)
+}
+
+func waitForLicense(licenseDone <-chan error) error {
+	err := <-licenseDone
+	return err
 }

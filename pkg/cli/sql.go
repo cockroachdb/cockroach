@@ -49,7 +49,6 @@ const (
 # To exit, type: \q.
 #
 `
-	// TODO(#42242): document the \demo_node command.
 	helpMessageFmt = `You are using 'cockroach sql', CockroachDB's lightweight SQL client.
 Type:
   \? or "help"      print this help.
@@ -65,9 +64,19 @@ Type:
   \dt               show the tables of the current schema in the current database.
   \du               list the users for all databases.
   \d [TABLE]        show details about columns in the specified table, or alias for '\dt' if no table is specified.
+%s
 More documentation about our SQL dialect and the CLI shell is available online:
 %s
 %s`
+
+	demoCommandsHelp = `
+Commands specific to the demo shell (EXPERIMENTAL):
+  \demo ls                     list the demo nodes and their connection URLs.
+  \demo shutdown <nodeid>      stop a demo node.
+  \demo restart <nodeid>       restart a stopped demo node.
+  \demo decommission <nodeid>  decommission a node.
+  \demo recommission <nodeid>  recommission a node.
+`
 
 	defaultPromptPattern = "%n@%M/%/%x>"
 
@@ -207,8 +216,13 @@ const (
 )
 
 // printCliHelp prints a short inline help about the CLI.
-func printCliHelp() {
+func (c *cliState) printCliHelp() {
+	demoHelpStr := ""
+	if demoCtx.transientCluster != nil {
+		demoHelpStr = demoCommandsHelp
+	}
 	fmt.Printf(helpMessageFmt,
+		demoHelpStr,
 		base.DocsURL("sql-statements.html"),
 		base.DocsURL("use-the-built-in-sql-client.html"),
 	)
@@ -470,19 +484,23 @@ func isEndOfStatement(lastTok int) bool {
 	return lastTok == ';' || lastTok == parser.HELPTOKEN
 }
 
-// handleDemoNode handles operations on \demo_node.
+// handleDemo handles operations on \demo.
 // This can only be done from `cockroach demo`.
-func (c *cliState) handleDemoNode(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
-	usageStr := `Usage: \demo_node <shutdown|restart|recommission|decommission> <node_id>` + "\n"
+func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
 	// A transient cluster signifies the presence of `cockroach demo`.
 	if demoCtx.transientCluster == nil {
-		return c.invalidSyntax(errState, `\demo_node can only be run with cockroach demo`)
+		return c.invalidSyntax(errState, `\demo can only be run with cockroach demo`)
 	}
+
+	if len(cmd) == 1 && cmd[0] == "ls" {
+		demoCtx.transientCluster.listDemoNodes(os.Stdout, false /* justOne */)
+		return nextState
+	}
+
 	if len(cmd) != 2 {
-		fmt.Fprint(stderr, usageStr)
-		c.exitErr = errInvalidSyntax
-		return errState
+		return c.invalidSyntax(errState, `\demo expects 2 parameters`)
 	}
+
 	nodeID, err := strconv.ParseInt(cmd[1], 10, 32)
 	if err != nil {
 		return c.invalidSyntax(
@@ -491,6 +509,7 @@ func (c *cliState) handleDemoNode(cmd []string, nextState, errState cliStateEnum
 			errors.Wrapf(err, "cannot convert %s to string", cmd[2]).Error(),
 		)
 	}
+
 	switch cmd[0] {
 	case "shutdown":
 		if err := demoCtx.transientCluster.DrainNode(roachpb.NodeID(nodeID)); err != nil {
@@ -517,9 +536,7 @@ func (c *cliState) handleDemoNode(cmd []string, nextState, errState cliStateEnum
 		fmt.Printf("node %d has been decommissioned\n", nodeID)
 		return nextState
 	}
-	fmt.Fprint(stderr, usageStr)
-	c.exitErr = errInvalidSyntax
-	return errState
+	return c.invalidSyntax(errState, `command not recognized: %s`, cmd[0])
 }
 
 // handleHelp prints SQL help.
@@ -972,7 +989,7 @@ func (c *cliState) doProcessFirstLine(startState, nextState cliStateEnum) cliSta
 		return startState
 
 	case "help":
-		printCliHelp()
+		c.printCliHelp()
 		return startState
 
 	case "exit", "quit":
@@ -1008,7 +1025,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return cliStop
 
 	case `\`, `\?`, `\help`:
-		printCliHelp()
+		c.printCliHelp()
 
 	case `\set`:
 		return c.handleSet(cmd[1:], loopState, errState)
@@ -1059,8 +1076,8 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		}
 		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
 
-	case `\demo_node`:
-		return c.handleDemoNode(cmd[1:], loopState, errState)
+	case `\demo`:
+		return c.handleDemo(cmd[1:], loopState, errState)
 
 	default:
 		if strings.HasPrefix(cmd[0], `\d`) {
