@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
 
 // Allocator is a memory management tool for vectorized components. It provides
@@ -159,37 +160,47 @@ func (a *Allocator) NewMemColumn(t coltypes.T, n int) coldata.Vec {
 	return coldata.NewMemColumn(t, n)
 }
 
-// MaybeAddColumn might add a newly allocated coldata.Vec of the given type to
-// b at position colIdx. It will do so if either
-// 1. the width of the batch is not greater than colIdx, or
-// 2. there is already an "unknown" vector in position colIdx in the batch.
-// If the first condition is true, then "unknown" vectors of zero length will
-// be appended to the batch before appending the requested column.
-// If the second condition is true, then the "unknown" column is replaced with
-// the newly created typed column.
+// maybeAppendColumn might append a newly allocated coldata.Vec of the given
+// type to b at position colIdx. Behavior of the function depends on how colIdx
+// compares to the width of b:
+// 1. if colIdx < b.Width(), then we expect that correctly-typed vector is
+// already present in position colIdx. If that's not the case, we will panic.
+// 2. if colIdx == b.Width(), then we will append a newly allocated coldata.Vec
+// of the given type.
+// 3. if colIdx > b.Width(), then we will panic because such condition
+// indicates an error in setting up vector type enforcers during the planning
+// stage.
 // NOTE: b must be non-zero length batch.
-func (a *Allocator) MaybeAddColumn(b coldata.Batch, t coltypes.T, colIdx int) {
+func (a *Allocator) maybeAppendColumn(b coldata.Batch, t coltypes.T, colIdx int) {
 	if b.Length() == 0 {
 		execerror.VectorizedInternalPanic("trying to add a column to zero length batch")
 	}
-	if b.Width() > colIdx && b.ColVec(colIdx).Type() != coltypes.Unhandled {
-		// Neither of the two conditions mentioned in the comment above are true,
-		// so there is nothing to do.
-		return
-	}
-	for b.Width() < colIdx {
-		b.AppendCol(a.NewMemColumn(coltypes.Unhandled, 0))
+	width := b.Width()
+	if colIdx < width {
+		switch presentType := b.ColVec(colIdx).Type(); presentType {
+		case t:
+			// We already have the vector of the desired type in place.
+			return
+		default:
+			// We have a vector with an unexpected type, so we panic.
+			execerror.VectorizedInternalPanic(errors.Errorf(
+				"trying to add a column of %s type at index %d but %s vector already present",
+				t, colIdx, presentType,
+			))
+		}
+	} else if colIdx > width {
+		// We have a batch of unexpected width which indicates an error in the
+		// planning stage.
+		execerror.VectorizedInternalPanic(errors.Errorf(
+			"trying to add a column of %s type at index %d but batch has width %d",
+			t, colIdx, width,
+		))
 	}
 	estimatedMemoryUsage := int64(estimateBatchSizeBytes([]coltypes.T{t}, coldata.BatchSize()))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
-	col := a.NewMemColumn(t, coldata.BatchSize())
-	if b.Width() == colIdx {
-		b.AppendCol(col)
-	} else {
-		b.ReplaceCol(col, colIdx)
-	}
+	b.AppendCol(a.NewMemColumn(t, coldata.BatchSize()))
 }
 
 // PerformOperation executes 'operation' (that somehow modifies 'destVecs') and

@@ -48,6 +48,7 @@ func NewWindowSortingPartitioner(
 		return nil, err
 	}
 
+	input = newVectorTypeEnforcer(allocator, input, coltypes.Bool, partitionColIdx)
 	return &windowSortingPartitioner{
 		OneInputNode:    NewOneInputNode(input),
 		allocator:       allocator,
@@ -76,7 +77,6 @@ func (p *windowSortingPartitioner) Next(ctx context.Context) coldata.Batch {
 	if b.Length() == 0 {
 		return coldata.ZeroBatch
 	}
-	p.allocator.MaybeAddColumn(b, coltypes.Bool, p.partitionColIdx)
 	partitionVec := b.ColVec(p.partitionColIdx).Bool()
 	sel := b.Selection()
 	if sel != nil {

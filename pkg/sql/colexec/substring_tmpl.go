@@ -30,6 +30,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// {{/*
+// Declarations to make the template compile properly.
+
+// Dummy import to pull in "coltypes" package.
+var _ coltypes.T
+
+// */}}
+
 func newSubstringOperator(
 	allocator *Allocator, columnTypes []types.T, argumentCols []int, outputIdx int, input Operator,
 ) Operator {
@@ -88,7 +96,6 @@ func (s *substring_StartType_LengthTypeOperator) Next(ctx context.Context) colda
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	s.allocator.MaybeAddColumn(batch, coltypes.Bytes, s.outputIdx)
 
 	sel := batch.Selection()
 	runeVec := batch.ColVec(s.argumentCols[0]).Bytes()

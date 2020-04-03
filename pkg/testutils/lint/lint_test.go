@@ -1480,6 +1480,43 @@ func TestLint(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("TestVectorizedAppendColumn", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			// We prohibit usage of Allocator.maybeAppendColumn outside of
+			// vectorTypeEnforcer and batchSchemaPrefixEnforcer.
+			fmt.Sprintf(`(maybeAppendColumn)\(`),
+			"--",
+			"sql/colexec",
+			":!sql/colexec/allocator.go",
+			":!sql/colexec/operator.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; use colexec.vectorTypeEnforcer "+
+				"or colexec.batchSchemaPrefixEnforcer", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
 	// RoachVet is expensive memory-wise and thus should not run with t.Parallel().
 	// RoachVet includes all of the passes of `go vet` plus first-party additions.
 	// See pkg/cmd/roachvet.
