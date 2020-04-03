@@ -519,3 +519,24 @@ SELECT a FROM regression_44774 ORDER BY a
 
 statement ok
 DROP TABLE regression_44774
+
+subtest regression_46973
+
+statement ok
+CREATE TABLE regression_46973 (a TIME UNIQUE)
+
+statement ok
+INSERT INTO regression_46973 VALUES ('23:59:59.999999'), ('24:00')
+
+query T
+SELECT * FROM regression_46973 WHERE a != '23:59:59.999999'
+----
+0000-01-01 00:00:00 +0000 UTC
+
+query T
+SELECT * FROM regression_46973 WHERE a != '24:00'
+----
+0000-01-01 23:59:59.999999 +0000 UTC
+
+statement ok
+DROP TABLE regression_46973

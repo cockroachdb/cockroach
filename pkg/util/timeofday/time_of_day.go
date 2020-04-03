@@ -28,11 +28,11 @@ const (
 	// Min is the minimum TimeOfDay value (midnight).
 	Min = TimeOfDay(0)
 
-	// Max is the maximum TimeOfDay value (1 second before midnight)
-	Max = TimeOfDay(microsecondsPerDay - 1)
-
 	// Time2400 is a special value to represent the 24:00 input time
 	Time2400 = TimeOfDay(microsecondsPerDay)
+
+	// Max is the maximum TimeOfDay value (1 second before midnight)
+	Max = Time2400
 
 	microsecondsPerSecond = 1e6
 	microsecondsPerMinute = 60 * microsecondsPerSecond
