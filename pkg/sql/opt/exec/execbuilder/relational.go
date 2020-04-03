@@ -1430,7 +1430,9 @@ func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
 		}
 	}
 	if e == nil {
-		panic(errors.AssertionFailedf("couldn't find With expression with ID %d", id))
+		err := errors.Errorf("couldn't find WITH expression %q with ID %d", withScan.Name, id)
+		return execPlan{}, errors.WithHint(
+			err, "references to WITH expressions from correlated subqueries are unsupported")
 	}
 
 	var label bytes.Buffer
