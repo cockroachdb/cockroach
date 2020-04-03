@@ -15,6 +15,10 @@ run build/builder.sh make -Otarget c-deps &> artifacts/c-build.log || (cat artif
 rm artifacts/c-build.log
 tc_end_block "Compile C dependencies"
 
+# HACK to avoid making another TC target
+./build/teamcity-mergeskew.sh
+exit 0
+
 maybe_stress stress
 
 tc_start_block "Run Go tests"
