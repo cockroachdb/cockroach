@@ -21,6 +21,7 @@ package tree
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -174,9 +175,6 @@ type TableDef interface {
 	// Placeholder function to ensure that only desired types (*TableDef) conform
 	// to the TableDef interface.
 	tableDef()
-
-	// SetName replaces the name of the definition in-place. Used in the parser.
-	SetName(name Name)
 }
 
 func (*ColumnTableDef) tableDef()               {}
@@ -184,6 +182,7 @@ func (*IndexTableDef) tableDef()                {}
 func (*FamilyTableDef) tableDef()               {}
 func (*ForeignKeyConstraintTableDef) tableDef() {}
 func (*CheckConstraintTableDef) tableDef()      {}
+func (*LikeTableDef) tableDef()                 {}
 
 // TableDefs represents a list of table definitions.
 type TableDefs []TableDef
@@ -361,11 +360,6 @@ func NewColumnTableDef(
 		}
 	}
 	return d, nil
-}
-
-// SetName implements the TableDef interface.
-func (node *ColumnTableDef) SetName(name Name) {
-	node.Name = name
 }
 
 // HasDefaultExpr returns if the ColumnTableDef has a default expression.
@@ -583,11 +577,6 @@ type IndexTableDef struct {
 	PartitionBy *PartitionBy
 }
 
-// SetName implements the TableDef interface.
-func (node *IndexTableDef) SetName(name Name) {
-	node.Name = name
-}
-
 // Format implements the NodeFormatter interface.
 func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	if node.Inverted {
@@ -624,6 +613,9 @@ type ConstraintTableDef interface {
 	// Placeholder function to ensure that only desired types
 	// (*ConstraintTableDef) conform to the ConstraintTableDef interface.
 	constraintTableDef()
+
+	// SetName replaces the name of the definition in-place. Used in the parser.
+	SetName(name Name)
 }
 
 func (*UniqueConstraintTableDef) constraintTableDef()     {}
@@ -635,6 +627,11 @@ func (*CheckConstraintTableDef) constraintTableDef()      {}
 type UniqueConstraintTableDef struct {
 	IndexTableDef
 	PrimaryKey bool
+}
+
+// SetName implements the TableDef interface.
+func (node *UniqueConstraintTableDef) SetName(name Name) {
+	node.Name = name
 }
 
 // Format implements the NodeFormatter interface.
@@ -772,7 +769,7 @@ func (node *ForeignKeyConstraintTableDef) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Actions)
 }
 
-// SetName implements the TableDef interface.
+// SetName implements the ConstraintTableDef interface.
 func (node *ForeignKeyConstraintTableDef) SetName(name Name) {
 	node.Name = name
 }
@@ -785,7 +782,7 @@ type CheckConstraintTableDef struct {
 	Hidden bool
 }
 
-// SetName implements the TableDef interface.
+// SetName implements the ConstraintTableDef interface.
 func (node *CheckConstraintTableDef) SetName(name Name) {
 	node.Name = name
 }
@@ -809,11 +806,6 @@ type FamilyTableDef struct {
 	Columns NameList
 }
 
-// SetName implements the TableDef interface.
-func (node *FamilyTableDef) SetName(name Name) {
-	node.Name = name
-}
-
 // Format implements the NodeFormatter interface.
 func (node *FamilyTableDef) Format(ctx *FmtCtx) {
 	ctx.WriteString("FAMILY ")
@@ -830,24 +822,6 @@ func (node *FamilyTableDef) Format(ctx *FmtCtx) {
 // TABLE or CREATE INDEX statement.
 type ShardedIndexDef struct {
 	ShardBuckets Expr
-}
-
-// EvalShardBucketCount evaluates and checks the integer argument to a `USING HASH WITH
-// BUCKET_COUNT` index creation query.
-func EvalShardBucketCount(shardBuckets Expr) (int32, error) {
-	const invalidBucketCountMsg = `BUCKET_COUNT must be a strictly positive integer value`
-	cst, ok := shardBuckets.(*NumVal)
-	if !ok {
-		return 0, pgerror.New(pgcode.InvalidParameterValue, invalidBucketCountMsg)
-	}
-	buckets, err := cst.AsInt32()
-	if err != nil || buckets <= 0 {
-		if err != nil {
-			return 0, pgerror.Wrap(err, pgcode.InvalidParameterValue, invalidBucketCountMsg)
-		}
-		return 0, pgerror.New(pgcode.InvalidParameterValue, invalidBucketCountMsg)
-	}
-	return buckets, nil
 }
 
 // Format implements the NodeFormatter interface.
@@ -1265,6 +1239,80 @@ const (
 	// Avoid unused warning for constants.
 	_ = SeqOptAs
 )
+
+// LikeTableDef represents a LIKE table declaration on a CREATE TABLE statement.
+type LikeTableDef struct {
+	Name    TableName
+	Options []LikeTableOption
+}
+
+// LikeTableOption represents an individual INCLUDING / EXCLUDING statement
+// on a LIKE table declaration.
+type LikeTableOption struct {
+	Excluded bool
+	Opt      LikeTableOpt
+}
+
+// Format implements the NodeFormatter interface.
+func (def *LikeTableDef) Format(ctx *FmtCtx) {
+	ctx.WriteString("LIKE ")
+	ctx.FormatNode(&def.Name)
+	for _, o := range def.Options {
+		ctx.WriteString(" ")
+		ctx.FormatNode(o)
+	}
+}
+
+// Format implements the NodeFormatter interface.
+func (l LikeTableOption) Format(ctx *FmtCtx) {
+	if l.Excluded {
+		ctx.WriteString("EXCLUDING ")
+	} else {
+		ctx.WriteString("INCLUDING ")
+	}
+	ctx.WriteString(l.Opt.String())
+}
+
+// LikeTableOpt represents one of the types of things that can be included or
+// excluded in a LIKE table declaration. It's a bitmap, where each of the Opt
+// values is a single enabled bit in the map.
+type LikeTableOpt int
+
+// The values for LikeTableOpt.
+const (
+	LikeTableOptConstraints LikeTableOpt = 1 << iota
+	LikeTableOptDefaults
+	LikeTableOptGenerated
+	LikeTableOptIndexes
+
+	// Make sure this field stays last!
+	likeTableOptInvalid
+)
+
+// LikeTableOptAll is the full LikeTableOpt bitmap.
+const LikeTableOptAll = ^likeTableOptInvalid
+
+// Has returns true if the receiver has the other options bits set.
+func (o LikeTableOpt) Has(other LikeTableOpt) bool {
+	return int(o)&int(other) != 0
+}
+
+func (o LikeTableOpt) String() string {
+	switch o {
+	case LikeTableOptConstraints:
+		return "CONSTRAINTS"
+	case LikeTableOptDefaults:
+		return "DEFAULTS"
+	case LikeTableOptGenerated:
+		return "GENERATED"
+	case LikeTableOptIndexes:
+		return "INDEXES"
+	case LikeTableOptAll:
+		return "ALL"
+	default:
+		panic("unknown like table opt" + strconv.Itoa(int(o)))
+	}
+}
 
 // ToRoleOptions converts KVOptions to a roleoption.List using
 // typeAsString to convert exprs to strings.
