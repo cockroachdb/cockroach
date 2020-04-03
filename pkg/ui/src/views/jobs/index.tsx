@@ -10,22 +10,23 @@
 
 import moment from "moment";
 import React from "react";
-import {Helmet} from "react-helmet";
-import {connect} from "react-redux";
-import {withRouter} from "react-router-dom";
+import { Helmet } from "react-helmet";
+import { connect } from "react-redux";
+import { withRouter } from "react-router-dom";
 
-import {cockroach} from "src/js/protos";
-import {jobsKey, refreshJobs} from "src/redux/apiReducers";
-import {CachedDataReducerState} from "src/redux/cachedDataReducer";
-import {LocalSetting} from "src/redux/localsettings";
-import {AdminUIState} from "src/redux/state";
-import Dropdown, {DropdownOption} from "src/views/shared/components/dropdown";
+import { cockroach } from "src/js/protos";
+import { jobsKey, refreshJobs } from "src/redux/apiReducers";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { LocalSetting } from "src/redux/localsettings";
+import { AdminUIState } from "src/redux/state";
+import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
-import {PageConfig, PageConfigItem} from "src/views/shared/components/pageconfig";
-import {SortSetting} from "src/views/shared/components/sortabletable";
+import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
+import { SortSetting} from "src/views/shared/components/sortabletable";
 import "./index.styl";
-import {statusOptions} from "./jobStatusOptions";
-import {JobTable} from "oss/src/views/jobs/jobTable";
+import { statusOptions } from "./jobStatusOptions";
+import { JobTable} from "oss/src/views/jobs/jobTable";
+import { trackFilter } from "src/util/analytics";
 import JobType = cockroach.sql.jobs.jobspb.Type;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
@@ -101,11 +102,16 @@ export class JobsTable extends React.Component<JobsTableProps> {
   }
 
   onStatusSelected = (selected: DropdownOption) => {
+    const filter = (selected.value === "") ? "all" : selected.value;
+    trackFilter("Status", filter);
     this.props.setStatus(selected.value);
   }
 
   onTypeSelected = (selected: DropdownOption) => {
-    this.props.setType(parseInt(selected.value, 10));
+    const type = parseInt(selected.value, 10);
+    const typeLabel = typeOptions[type].label;
+    trackFilter("Type", typeLabel);
+    this.props.setType(type);
   }
 
   onShowSelected = (selected: DropdownOption) => {
