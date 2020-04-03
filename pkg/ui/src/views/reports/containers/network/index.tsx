@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { deviation as d3Deviation, mean as d3Mean } from "d3";
-import _ from "lodash";
+import _, { capitalize } from "lodash";
 import moment from "moment";
 import React, { Fragment } from "react";
 import { Helmet } from "react-helmet";
@@ -22,6 +22,7 @@ import { LivenessStatus, NodesSummary, nodesSummarySelector, selectLivenessReque
 import { AdminUIState } from "src/redux/state";
 import { LongToMoment, NanoToMilli } from "src/util/convert";
 import { FixLong } from "src/util/fixLong";
+import { trackFilter, trackCollapseNodes } from "src/util/analytics";
 import { getFilters, localityToString, NodeFilterList, NodeFilterListProps } from "src/views/reports/components/nodeFilterList";
 import Loading from "src/views/shared/components/loading";
 import { Latency } from "./latency";
@@ -107,13 +108,17 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     }
   }
 
-  onChangeCollapse = (collapsed: boolean) => this.setState({ collapsed });
+  onChangeCollapse = (collapsed: boolean) => {
+    trackCollapseNodes(collapsed);
+    this.setState({ collapsed });
+  }
 
   onChangeFilter = (key: string, value: string) => {
     const { filter } = this.state;
     const newFilter = filter ? filter : {};
     const data = newFilter[key] || [];
     const values = data.indexOf(value) === -1 ? [...data, value] : data.length === 1 ? null : data.filter((m: string|number) => m !== value);
+    trackFilter(capitalize(key), value);
     this.setState({
       filter: {
         ...newFilter,
@@ -125,6 +130,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
   deselectFilterByKey = (key: string) => {
     const { filter } = this.state;
     const newFilter = filter ? filter : {};
+    trackFilter(capitalize(key), "deselect all");
     this.setState({
       filter: {
         ...newFilter,

@@ -11,12 +11,12 @@
 import { get } from "lodash";
 import { assert } from "chai";
 import { createSandbox } from "sinon";
-import { track } from "./trackStatementDetailsSubnavSelection";
+import { track } from "./trackNetworkSort";
 
 const sandbox = createSandbox();
 
-describe("trackSubnavSelection", () => {
-  const subNavKey = "subnav-test";
+describe("trackNetworkSort", () => {
+  const sortBy = "Test";
 
   afterEach(() => {
     sandbox.reset();
@@ -24,15 +24,15 @@ describe("trackSubnavSelection", () => {
 
   it("should only call track once", () => {
     const spy = sandbox.spy();
-    track(spy)(subNavKey);
+    track(spy)(sortBy);
     assert.isTrue(spy.calledOnce);
   });
 
-  it("should send a track call with the correct event", () => {
+  it("should send the right event", () => {
     const spy = sandbox.spy();
-    const expected = "SubNavigation Selection";
+    const expected = "Sort Network Diagnostics";
 
-    track(spy)(subNavKey);
+    track(spy)(sortBy);
 
     const sent = spy.getCall(0).args[0];
     const event = get(sent, "event");
@@ -40,14 +40,14 @@ describe("trackSubnavSelection", () => {
     assert.isTrue(event === expected);
   });
 
-  it("send the correct payload", () => {
+  it("should send the correct payload", () => {
     const spy = sandbox.spy();
 
-    track(spy)(subNavKey);
+    track(spy)(sortBy);
 
     const sent = spy.getCall(0).args[0];
-    const selection = get(sent, "properties.selection");
+    const sortedBy = get(sent, "properties.sortBy");
 
-    assert.isTrue(selection === subNavKey);
+    assert.isTrue(sortedBy === sortBy);
   });
 });

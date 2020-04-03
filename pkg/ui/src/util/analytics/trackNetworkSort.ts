@@ -9,16 +9,16 @@
 // licenses/APL.txt.
 import { analytics } from "src/redux/analytics";
 
-export const track = (fn: Function) => (page: number) => {
+export const track = (fn: Function) => (sortBy: string) => {
   fn({
-    event: "Paginate",
+    event: "Sort Network Diagnostics",
     properties: {
-      selectedPage: page,
+      sortBy,
     },
   });
 };
 
-export default function trackPaginate(pageNumber: number) {
+export default function trackNetworkSort(sortBy: string) {
   const boundTrack = analytics.track.bind(analytics);
-  track(boundTrack)(pageNumber);
+  track(boundTrack)(sortBy);
 }
