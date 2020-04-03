@@ -255,6 +255,11 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 			return nil
 		},
 	},
+	{
+		// Introduced in v20.1.
+		name:   "remove public permissions on system.comments",
+		workFn: depublicizeSystemComments,
+	},
 }
 
 func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
@@ -887,6 +892,22 @@ func updateSystemLocationData(ctx context.Context, r runner) error {
 		tier := loc.Locality.Tiers[0]
 		if _, err := r.sqlExecutor.Exec(ctx, "update-system-locations", nil,
 			stmt, tier.Key, tier.Value, loc.Latitude, loc.Longitude); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func depublicizeSystemComments(ctx context.Context, r runner) error {
+	// At some point in time, system.comments was mistakenly created
+	// with all privileges granted to the "public" role (i.e. everyone).
+	// This migration cleans this up.
+
+	for _, priv := range []string{"GRANT", "INSERT", "DELETE", "UPDATE"} {
+		stmt := fmt.Sprintf(`REVOKE %s ON TABLE system.comments FROM public`, priv)
+		// REVOKE should never fail here -- it's always possible for root
+		// to revoke a privilege even if it's not currently granted.
+		if _, err := r.sqlExecutor.Exec(ctx, "depublicize-system-comments", nil, stmt); err != nil {
 			return err
 		}
 	}

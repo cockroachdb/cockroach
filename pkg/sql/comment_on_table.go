@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -42,10 +43,11 @@ func (p *planner) CommentOnTable(ctx context.Context, n *tree.CommentOnTable) (p
 
 func (n *commentOnTableNode) startExec(params runParams) error {
 	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecWithUser(
 			params.ctx,
 			"set-table-comment",
 			params.p.Txn(),
+			security.RootUser,
 			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
 			keys.TableCommentType,
 			n.tableDesc.ID,
@@ -54,10 +56,11 @@ func (n *commentOnTableNode) startExec(params runParams) error {
 			return err
 		}
 	} else {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecWithUser(
 			params.ctx,
 			"delete-table-comment",
 			params.p.Txn(),
+			security.RootUser,
 			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 			keys.TableCommentType,
 			n.tableDesc.ID)
