@@ -39,6 +39,38 @@ var backpressureRangeSizeMultiplier = settings.RegisterValidatedFloatSetting(
 	},
 )
 
+// backpressureByteTolerance exists to deal with the fact that lowering the
+// range size by anything larger than the backpressureRangeSizeMultiplier would
+// immediately mean that all ranges require backpressure. To mitigate this
+// unwanted backpressure we say that any range which is larger than the
+// size where backpressure would kick in by more than this quantity will
+// immediately avoid backpressure. This approach is a bit risky because a
+// command larger than this value would effectively disable backpressure
+// altogether. Another downside of this approach is that if the range size
+// is reduced by roughly exactly the multiplier then we'd potentially have
+// lots of ranges in this state.
+//
+// We additionally mitigate this situation further by doing the following:
+//
+//  1) We store in-memory on each replica the largest zone configuration range
+//     size (largestPreviousMaxRangeBytes) we've seen and we do not backpressure
+//     if the current range size is less than that. That value is cleared when
+//     a range splits or runs GC such that the range size becomes smaller than
+//     the current max range size. This mitigation alone is insufficient because
+//     a node may restart before the splitting has concluded, leaving the
+//     cluster in a state of backpressure.
+//
+//  2) We assign a higher priority in the snapshot queue to ranges which are
+//     currently backpressuring than ranges which are larger but are not
+//     applying backpressure.
+//
+var backpressureByteTolerance = settings.RegisterByteSizeSetting(
+	"kv.range.backpressure_byte_tolerance",
+	"defines the number of bytes above the product of "+
+		"backpressure_range_size_multiplier and the range_max_size at which "+
+		"backpressure will not apply",
+	2<<20 /* 2 MiB */)
+
 // backpressurableSpans contains spans of keys where write backpressuring
 // is permitted. Writes to any keys within these spans may cause a batch
 // to be backpressured.
@@ -77,7 +109,9 @@ func canBackpressureBatch(ba *roachpb.BatchRequest) bool {
 // shouldBackpressureWrites returns whether writes to the range should be
 // subject to backpressure. This is based on the size of the range in
 // relation to the split size. The method returns true if the range is more
-// than backpressureRangeSizeMultiplier times larger than the split size.
+// than backpressureRangeSizeMultiplier times larger than the split size but not
+// larger than that by more than backpressureByteTolerance (see that comment for
+// further explanation).
 func (r *Replica) shouldBackpressureWrites() bool {
 	mult := backpressureRangeSizeMultiplier.Get(&r.store.cfg.Settings.SV)
 	if mult == 0 {
@@ -87,7 +121,14 @@ func (r *Replica) shouldBackpressureWrites() bool {
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.exceedsMultipleOfSplitSizeRLocked(mult)
+	exceeded, bytesOver := r.exceedsMultipleOfSplitSizeRLocked(mult)
+	if !exceeded {
+		return false
+	}
+	if bytesOver > backpressureByteTolerance.Get(&r.store.cfg.Settings.SV) {
+		return false
+	}
+	return true
 }
 
 // maybeBackpressureBatch blocks to apply backpressure if the replica deems
