@@ -398,9 +398,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		cfg.AmbientCtx,
 		clock,
 		db,
-		// TODO(tbg): this is supposed to get the engines slice, which is only
-		// available at start time.
-		nil,
 		g,
 		nlActive,
 		nlRenewal,
@@ -1869,7 +1866,7 @@ func (s *Server) Start(ctx context.Context) error {
 		}); err != nil {
 			log.Warning(ctx, errors.Wrap(err, "writing last up timestamp"))
 		}
-	})
+	}, s.engines)
 
 	// Begin recording status summaries.
 	s.node.startWriteNodeStatus(DefaultMetricsSampleInterval)

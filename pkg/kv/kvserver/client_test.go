@@ -980,7 +980,7 @@ func (m *multiTestContext) addStore(idx int) {
 		ran.Do(func() {
 			close(ran.ch)
 		})
-	})
+	}, []storage.Engine{m.engines[idx]})
 
 	store.WaitForInit()
 
@@ -1074,7 +1074,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
 			log.Warning(ctx, err)
 		}
-	})
+	}, []storage.Engine{m.engines[i]})
 }
 
 // restartStore restarts a store previously stopped with StopStore.
