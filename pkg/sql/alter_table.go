@@ -23,13 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -705,7 +703,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"column %q in the middle of being dropped", t.GetColumn())
 			}
 			// Apply mutations to copy of column descriptor.
-			if err := applyColumnMutation(n.tableDesc, col, t, params); err != nil {
+			if err := applyColumnMutation(n.tableDesc, col, t, params, n.n.Cmds); err != nil {
 				return err
 			}
 			descriptorChanged = true
@@ -904,74 +902,11 @@ func applyColumnMutation(
 	col *sqlbase.ColumnDescriptor,
 	mut tree.ColumnMutationCmd,
 	params runParams,
+	cmds tree.AlterTableCmds,
 ) error {
 	switch t := mut.(type) {
 	case *tree.AlterTableAlterColumnType:
-		typ, err := tree.ResolveType(t.ToType, params.p.semaCtx.GetTypeResolver())
-		if err != nil {
-			return err
-		}
-
-		version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
-		if supported, err := isTypeSupportedInVersion(version, typ); err != nil {
-			return err
-		} else if !supported {
-			return pgerror.Newf(
-				pgcode.FeatureNotSupported,
-				"type %s is not supported until version upgrade is finalized",
-				typ.SQLString(),
-			)
-		}
-
-		// Special handling for STRING COLLATE xy to verify that we recognize the language.
-		if t.Collation != "" {
-			if types.IsStringType(typ) {
-				typ = types.MakeCollatedString(typ, t.Collation)
-			} else {
-				return pgerror.New(pgcode.Syntax, "COLLATE can only be used with string types")
-			}
-		}
-
-		err = sqlbase.ValidateColumnDefType(typ)
-		if err != nil {
-			return err
-		}
-
-		// No-op if the types are Identical.  We don't use Equivalent here because
-		// the user may be trying to change the type of the column without changing
-		// the type family.
-		if col.Type.Identical(typ) {
-			return nil
-		}
-
-		kind, err := schemachange.ClassifyConversion(col.Type, typ)
-		if err != nil {
-			return err
-		}
-
-		switch kind {
-		case schemachange.ColumnConversionDangerous, schemachange.ColumnConversionImpossible:
-			// We're not going to make it impossible for the user to perform
-			// this conversion, but we do want them to explicit about
-			// what they're going for.
-			return pgerror.Newf(pgcode.CannotCoerce,
-				"the requested type conversion (%s -> %s) requires an explicit USING expression",
-				col.Type.SQLString(), typ.SQLString())
-		case schemachange.ColumnConversionTrivial:
-			col.Type = typ
-		case schemachange.ColumnConversionGeneral:
-			return unimplemented.NewWithIssueDetailf(
-				9851,
-				fmt.Sprintf("%s->%s", col.Type.SQLString(), typ.SQLString()),
-				"type conversion from %s to %s requires overwriting existing values which is not yet implemented",
-				col.Type.SQLString(),
-				typ.SQLString(),
-			)
-		default:
-			return unimplemented.NewWithIssueDetail(9851,
-				fmt.Sprintf("%s->%s", col.Type.SQLString(), typ.SQLString()),
-				"type conversion not yet implemented")
-		}
+		return AlterColumnType(tableDesc, col, t, params, cmds)
 
 	case *tree.AlterTableSetDefault:
 		if len(col.UsesSequenceIds) > 0 {

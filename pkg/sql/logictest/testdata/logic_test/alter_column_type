@@ -161,3 +161,283 @@ ALTER TABLE t ALTER s TYPE STRING
 
 statement ok
 DROP TABLE t
+
+subtest alter_column_type_general
+
+# Check that alter column general is disabled by default.
+statement ok
+CREATE TABLE t1 (date string)
+
+statement ok
+INSERT INTO t1 VALUES ('hello')
+
+statement error pq: ALTER COLUMN TYPE from string to timestamp is only supported experimentally
+ALTER TABLE t1 ALTER COLUMN date TYPE timestamp
+
+# After setting enable_experimental_alter_column_type_general, ALTER COLUMN TYPE should work.
+statement ok
+SET enable_experimental_alter_column_type_general = true
+
+statement error pq: parsing as type timestamp: could not parse "hello"
+ALTER TABLE t1 ALTER COLUMN date TYPE timestamp
+
+# Verify ALTER COLUMN TYPE from INT to STRING works correctly.
+statement ok
+CREATE TABLE t2 (id int)
+
+statement ok
+INSERT INTO t2 VALUES (1), (2), (3), (4)
+
+statement ok
+ALTER TABLE t2 ALTER COLUMN id TYPE STRING
+
+query TTBTTTB
+SHOW COLUMNS FROM t2
+----
+id     STRING  true   NULL            ·  {}         false
+rowid  INT8    false  unique_rowid()  ·  {primary}  true
+
+statement ok
+INSERT INTO t2 VALUES ('5')
+
+statement error pq: value type int doesn't match type string of column "id"
+INSERT INTO t2 VALUES (6)
+
+# Verify ALTER COLUMN TYPE from INT to STRING works correctly.
+# Column order should stay the same.
+statement ok
+CREATE TABLE t3 (id int, id2 int, id3 int)
+
+statement ok
+INSERT INTO t3 VALUES (1,1,1), (2,2,2), (3,3,3)
+
+statement ok
+ALTER TABLE t3 ALTER COLUMN id2 TYPE string
+
+query TTBTTTB
+SHOW COLUMNS FROM t3
+----
+id     INT8    true   NULL            ·  {}         false
+id2    STRING  true   NULL            ·  {}         false
+id3    INT8    true   NULL            ·  {}         false
+rowid  INT8    false  unique_rowid()  ·  {primary}  true
+
+statement ok
+INSERT INTO t3 VALUES (4,'4',4)
+
+query ITI
+SELECT * FROM t3 ORDER BY id
+----
+1  1  1
+2  2  2
+3  3  3
+4  4  4
+
+# Ensure ALTER COLUMN TYPE correctly changes the precision of TIMESTAMPTZ.
+statement ok
+CREATE TABLE t5 (x TIMESTAMPTZ(6));
+INSERT INTO t5 VALUES ('2016-01-25 10:10:10.555555-05:00');
+INSERT INTO t5 VALUES ('2016-01-26 10:10:10.555555-05:00');
+ALTER TABLE t5 ALTER COLUMN x TYPE TIMESTAMPTZ(3);
+INSERT INTO t5 VALUES ('2016-01-26 10:10:10.55-05:00');
+
+query T
+SELECT * FROM t5 ORDER BY x
+----
+2016-01-25 16:10:10.556 +0100 CET
+2016-01-26 16:10:10.55 +0100 CET
+2016-01-26 16:10:10.556 +0100 CET
+
+# Ensure column families stay the same.
+statement ok
+CREATE TABLE t6(id INT, id2 INT, FAMILY f1 (id), FAMILY f2 (id2));
+INSERT INTO t6 VALUES (1), (2), (3);
+ALTER TABLE t6 ALTER COLUMN id2 TYPE STRING;
+
+query TT
+SHOW CREATE TABLE t6
+----
+t6      CREATE TABLE t6 (
+              id INT8 NULL,
+              id2 STRING NULL,
+              FAMILY f1 (id, rowid),
+              FAMILY f2 (id2)
+            )
+
+# Ensure default expressions are casted correctly.
+statement ok
+CREATE TABLE t7 (x INT DEFAULT 1, y INT);
+INSERT INTO t7 (y) VALUES (1), (2), (3);
+ALTER TABLE t7 ALTER COLUMN x TYPE DATE;
+INSERT INTO t7 (y) VALUES (4);
+
+query TI
+SELECT * FROM t7 ORDER BY y
+----
+1970-01-02 00:00:00 +0000 +0000  1
+1970-01-02 00:00:00 +0000 +0000  2
+1970-01-02 00:00:00 +0000 +0000  3
+1970-01-02 00:00:00 +0000 +0000  4
+
+# Ensure a runtime error correctly rolls back and the table is unchanged.
+statement ok
+CREATE TABLE t8 (x STRING)
+
+statement ok
+INSERT INTO t8 VALUES ('hello')
+
+statement error pq: could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
+ALTER TABLE t8 ALTER COLUMN x TYPE INT
+
+query TT
+SHOW CREATE TABLE t8
+----
+t8  CREATE TABLE t8 (
+        x STRING NULL,
+        FAMILY "primary" (x, rowid)
+    )
+
+# Ensure ALTER COLUMN TYPE is disallowed if column is part of primary key.
+statement ok
+CREATE TABLE t9 (x INT PRIMARY KEY)
+
+statement error pq: unimplemented: ALTER COLUMN TYPE requiring rewrite of on-disk data is currently not supported for columns that are part of an index
+ALTER TABLE t9 ALTER COLUMN x TYPE STRING
+
+# Ensure ALTER COLUMN TYPE is disallowed if column is part of an index.
+statement ok
+CREATE TABLE t10 (x INT, y INT, INDEX(x, y))
+
+statement error pq: unimplemented: ALTER COLUMN TYPE requiring rewrite of on-disk data is currently not supported for columns that are part of an index
+ALTER TABLE t10 ALTER COLUMN y TYPE STRING
+
+# Ensure ALTER COLUMN TYPE is disallowed if an expression was provided.
+statement ok
+CREATE TABLE t11 (x INT)
+
+statement error pq: unimplemented: ALTER COLUMN TYPE USING EXPRESSION is not supported\nHINT: You have attempted to use a feature that is not yet implemented.\nSee: https://github.com/cockroachdb/cockroach/issues/47706
+ALTER TABLE t11 ALTER COLUMN x TYPE STRING USING CAST(x AS STRING)
+
+# Ensure ALTER COLUMN TYPE is disallowed if the column has a constraint.
+statement ok
+CREATE TABLE t12 (x INT check (x > 0))
+
+statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
+ALTER TABLE t12 ALTER COLUMN x TYPE STRING
+
+# Ensure ALTER COLUMN TYPE works correctly for interleaved tables.
+statement ok
+CREATE TABLE t13 (x INT PRIMARY KEY, y INT);
+INSERT INTO t13 VALUES (1, 1), (2, 2);
+CREATE TABLE t14 (x INT, y INT, z STRING, PRIMARY KEY(y, x)) INTERLEAVE IN PARENT t13 (y);
+INSERT INTO t14 VALUES (1, 1, '1'), (2, 2, '2')
+
+# Ensure we can change the column type of an interleaved child if the
+# column is not part of the primary key.
+statement ok
+ALTER TABLE t14 ALTER COLUMN z TYPE INT
+
+query III
+SELECT x, y, z FROM t14 ORDER BY x
+----
+1  1  1
+2  2  2
+
+# Ensure we can change the column type of an interleaved parent if the
+# column is not part of the primary key.
+statement ok
+ALTER TABLE t13 ALTER COLUMN y TYPE STRING
+
+query IT
+SELECT x, y FROM t13 ORDER BY x
+----
+1  1
+2  2
+
+# Ensure we can change the column type of a column stored in a secondary index.
+statement ok
+CREATE TABLE t15 (x INT, y INT);
+CREATE INDEX ON t15 (x) STORING (y);
+INSERT INTO t15 VALUES (1, 1), (2, 2)
+
+statement ok
+ALTER TABLE t15 ALTER COLUMN y TYPE STRING;
+
+query IT
+SELECT x, y FROM t15 ORDER BY x
+----
+1  1
+2  2
+
+# Ensure ALTER COLUMN TYPE works for collated strings.
+statement ok
+CREATE TABLE t16 (x STRING);
+INSERT INTO t16 VALUES ('Backhaus'), ('Bär'), ('Baz');
+
+query T
+SELECT x FROM t16 ORDER BY x
+----
+Backhaus
+Baz
+Bär
+
+statement ok
+ALTER TABLE t16 ALTER COLUMN x TYPE STRING COLLATE de
+
+query T
+SELECT x FROM t16 ORDER BY x
+----
+Backhaus
+Bär
+Baz
+
+# Ensure ALTER COLUMN TYPE fails if the DEFAULT EXPR cannot be casted to the new type.
+statement ok
+CREATE TABLE t17 (x STRING DEFAULT 'HELLO');
+
+statement error pq: could not parse "HELLO" as type int: strconv.ParseInt: parsing "HELLO": invalid syntax
+ALTER TABLE t17 ALTER COLUMN x TYPE INT
+
+query TT colnames
+show create table t17
+----
+table_name  create_statement
+t17         CREATE TABLE t17 (
+            x STRING NULL DEFAULT 'HELLO':::STRING,
+            FAMILY "primary" (x, rowid)
+)
+
+# Ensure ALTER COLUMN TYPE fails if the column is part of an FK relationship.
+statement ok
+CREATE TABLE t18 (x INT NOT NULL PRIMARY KEY);
+CREATE TABLE t19 (y INT NOT NULL REFERENCES t18 (x), INDEX(y));
+
+statement error pq: unimplemented: ALTER COLUMN TYPE requiring rewrite of on-disk data is currently not supported for columns that are part of an index
+ALTER TABLE t18 ALTER COLUMN x TYPE STRING
+
+statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
+ALTER TABLE t19 ALTER COLUMN y TYPE STRING
+
+# Ensure ALTER COLUMN TYPE does not work inside a transaction.
+statement ok
+CREATE TABLE t20 (x INT);
+BEGIN
+
+statement error pq: unimplemented: ALTER COLUMN TYPE is not supported inside a transaction
+ALTER TABLE t20 ALTER COLUMN x TYPE STRING
+
+statement ok
+ROLLBACK
+
+# Ensure ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE statements.
+statement ok
+CREATE TABLE t21 (x INT);
+
+statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE statements
+ALTER TABLE t21 ALTER COLUMN x TYPE STRING, ALTER COLUMN x SET NOT NULL;
+
+statement ok
+CREATE TABLE t22 (x INT);
+
+statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE statements
+ALTER TABLE t22 ALTER COLUMN x SET NOT NULL, ALTER COLUMN x TYPE STRING;

@@ -171,9 +171,6 @@ CREATE TABLE regression_47110(a TIME)
 statement error type TIMETZ is not supported until version upgrade is finalized
 ALTER TABLE regression_47110 ADD COLUMN b TIMETZ
 
-statement error type TIMETZ is not supported until version upgrade is finalized
-ALTER TABLE regression_47110 ALTER a SET DATA TYPE timetz
-
 # test precision as well
 
 # default statements ok
