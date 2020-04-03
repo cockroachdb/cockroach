@@ -86,13 +86,28 @@ func TestAvgIntervalResultDeepCopy(t *testing.T) {
 func TestBitAndIntResultDeepCopy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Run("all null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newBitAndAggregate, makeNullTestDatum(10))
+		testAggregateResultDeepCopy(t, newIntBitAndAggregate, makeNullTestDatum(10))
 	})
 	t.Run("with null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newBitAndAggregate, makeTestWithNullDatum(10, makeIntTestDatum))
+		testAggregateResultDeepCopy(t, newIntBitAndAggregate, makeTestWithNullDatum(10, makeIntTestDatum))
 	})
 	t.Run("without null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newBitAndAggregate, makeIntTestDatum(10))
+		testAggregateResultDeepCopy(t, newIntBitAndAggregate, makeIntTestDatum(10))
+	})
+}
+
+func TestBitAndBitResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	t.Run("all null", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newBitBitAndAggregate, makeNullTestDatum(10))
+	})
+	t.Run("with null", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newBitBitAndAggregate, makeTestWithNullDatum(10, makeBitTestDatum))
+	})
+	t.Run("without null", func(t *testing.T) {
+		for i := 0; i < 1000; i++ {
+			testAggregateResultDeepCopy(t, newBitBitAndAggregate, makeBitTestDatum(10))
+		}
 	})
 }
 
@@ -235,6 +250,19 @@ func makeIntTestDatum(count int) []tree.Datum {
 	vals := make([]tree.Datum, count)
 	for i := range vals {
 		vals[i] = tree.NewDInt(tree.DInt(rng.Int63()))
+	}
+	return vals
+}
+
+func makeBitTestDatum(count int) []tree.Datum {
+	rng, _ := randutil.NewPseudoRand()
+
+	// Compute randWidth outside the loop so that all bit arrays are the same
+	// length. Generate widths in the range [0, 64].
+	vals := make([]tree.Datum, count)
+	randWidth := uint(rng.Intn(65))
+	for i := range vals {
+		vals[i], _ = tree.NewDBitArrayFromInt(rng.Int63(), randWidth)
 	}
 	return vals
 }
