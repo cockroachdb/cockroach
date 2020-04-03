@@ -387,11 +387,11 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					collationName = tree.NewDString(locale)
 				}
 				return addRow(
-					dbNameStr,                                            // table_catalog
-					scNameStr,                                            // table_schema
-					tree.NewDString(table.Name),                          // table_name
-					tree.NewDString(column.Name),                         // column_name
-					tree.NewDInt(tree.DInt(column.ID)),                   // ordinal_position
+					dbNameStr,                    // table_catalog
+					scNameStr,                    // table_schema
+					tree.NewDString(table.Name),  // table_name
+					tree.NewDString(column.Name), // column_name
+					tree.NewDInt(tree.DInt(column.GetLogicalColumnID())), // ordinal_position
 					dStringPtrOrNull(column.DefaultExpr),                 // column_default
 					yesOrNoDatum(column.Nullable),                        // is_nullable
 					tree.NewDString(column.Type.InformationSchemaName()), // data_type

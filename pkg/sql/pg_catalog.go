@@ -391,9 +391,7 @@ CREATE TABLE pg_catalog.pg_attrdef (
 		h := makeOidHasher()
 		return forEachTableDesc(ctx, p, dbContext, virtualMany,
 			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
-				colNum := 0
 				return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
-					colNum++
 					if column.DefaultExpr == nil {
 						// pg_attrdef only expects rows for columns with default values.
 						return nil
@@ -408,11 +406,11 @@ CREATE TABLE pg_catalog.pg_attrdef (
 						defSrc = tree.NewDString(ctx.String())
 					}
 					return addRow(
-						h.ColumnOid(table.ID, column.ID), // oid
-						defaultOid(table.ID),             // adrelid
-						tree.NewDInt(tree.DInt(colNum)),  // adnum
-						defSrc,                           // adbin
-						defSrc,                           // adsrc
+						h.ColumnOid(table.ID, column.ID),                     // oid
+						defaultOid(table.ID),                                 // adrelid
+						tree.NewDInt(tree.DInt(column.GetLogicalColumnID())), // adnum
+						defSrc, // adbin
+						defSrc, // adsrc
 					)
 				})
 			})
@@ -450,7 +448,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 		h := makeOidHasher()
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
 			// addColumn adds adds either a table or a index column to the pg_attribute table.
-			addColumn := func(column *sqlbase.ColumnDescriptor, attRelID tree.Datum, colID sqlbase.ColumnID) error {
+			addColumn := func(column *sqlbase.ColumnDescriptor, attRelID tree.Datum, logicalColID sqlbase.ColumnID) error {
 				colTyp := &column.Type
 				attTypMod := int32(-1)
 				if width := colTyp.Width(); width != 0 {
@@ -470,18 +468,18 @@ CREATE TABLE pg_catalog.pg_attribute (
 					}
 				}
 				return addRow(
-					attRelID,                           // attrelid
-					tree.NewDName(column.Name),         // attname
-					typOid(colTyp),                     // atttypid
-					zeroVal,                            // attstattarget
-					typLen(colTyp),                     // attlen
-					tree.NewDInt(tree.DInt(colID)),     // attnum
-					zeroVal,                            // attndims
-					negOneVal,                          // attcacheoff
-					tree.NewDInt(tree.DInt(attTypMod)), // atttypmod
-					tree.DNull,                         // attbyval (see pg_type.typbyval)
-					tree.DNull,                         // attstorage
-					tree.DNull,                         // attalign
+					attRelID,                              // attrelid
+					tree.NewDName(column.Name),            // attname
+					typOid(colTyp),                        // atttypid
+					zeroVal,                               // attstattarget
+					typLen(colTyp),                        // attlen
+					tree.NewDInt(tree.DInt(logicalColID)), // attnum
+					zeroVal,                               // attndims
+					negOneVal,                             // attcacheoff
+					tree.NewDInt(tree.DInt(attTypMod)),    // atttypmod
+					tree.DNull,                            // attbyval (see pg_type.typbyval)
+					tree.DNull,                            // attstorage
+					tree.DNull,                            // attalign
 					tree.MakeDBool(tree.DBool(!column.Nullable)),          // attnotnull
 					tree.MakeDBool(tree.DBool(column.DefaultExpr != nil)), // atthasdef
 					tree.DBoolFalse,    // attisdropped
@@ -497,7 +495,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 			// Columns for table.
 			if err := forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
 				tableID := defaultOid(table.ID)
-				return addColumn(column, tableID, column.ID)
+				return addColumn(column, tableID, column.GetLogicalColumnID())
 			}); err != nil {
 				return err
 			}
@@ -507,7 +505,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 				return forEachColumnInIndex(table, index,
 					func(column *sqlbase.ColumnDescriptor) error {
 						idxID := h.IndexOid(table.ID, index.ID)
-						return addColumn(column, idxID, column.ID)
+						return addColumn(column, idxID, column.GetLogicalColumnID())
 					},
 				)
 			})

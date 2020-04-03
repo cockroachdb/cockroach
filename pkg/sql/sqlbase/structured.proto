@@ -129,6 +129,19 @@ message ColumnDescriptor {
   // Expression to use to compute the value of this column if this is a
   // computed column.
   optional string compute_expr = 11;
+  // LogicalColumnID is lazily set, do not access directly,
+  // access using GetLogicalColumnID().
+  // LogicalColumnID is used to order columns visually. This is because
+  // ordinal_position in information_schema determines a table's visual column
+  // ordering to the user (for example, when doing a SHOW COLUMNS).
+  // ordinal_position differs from the ordering of the Columns slice in the
+  // TableDescriptor which is used to determine the order of columns when
+  // performing a SELECT * / INSERT * command.
+  // This only differs from ID when the Column order is swapped or
+  // the ColumnDescriptor must be remade while remaining visual ordering.
+  // This does not exist in TableDescriptors pre 20.2.
+  optional uint32 logical_id = 13 [(gogoproto.nullable) = false,
+   (gogoproto.customname) = "LogicalColumnID", (gogoproto.casttype) = "ColumnID"];
 }
 
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.

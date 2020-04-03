@@ -389,6 +389,8 @@ func allocateTableRewrites(
 // backup descriptors provided. if skipFKsWithNoMatchingTable is set, FKs whose
 // "other" table is missing from the set provided are omitted during the
 // upgrade, instead of causing an error to be returned.
+// Also assigns LogicalColumnIDs for TableDescriptors that do not have it,
+// namely TableDescriptors created before 20.2.
 func maybeUpgradeTableDescsInBackupManifests(
 	ctx context.Context, backupManifests []BackupManifest, skipFKsWithNoMatchingTable bool,
 ) error {

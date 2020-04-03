@@ -387,6 +387,7 @@ func GetTableDescFromIDWithFKsChanged(
 	if err != nil {
 		return nil, false, err
 	}
+
 	return table, changed, err
 }
 
@@ -889,11 +890,13 @@ func (desc *TableDescriptor) MaybeFillInDescriptor(
 ) error {
 	desc.maybeUpgradeFormatVersion()
 	desc.Privileges.MaybeFixPrivileges(desc.ID)
+
 	if protoGetter != nil {
 		if _, err := desc.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, false /* skipFKsWithNoMatchingTable*/); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -1198,6 +1201,7 @@ func (desc *MutableTableDescriptor) MaybeFillColumnID(
 	}
 	columnNames[c.Name] = columnID
 	c.ID = columnID
+	c.LogicalColumnID = columnID
 }
 
 // AllocateIDs allocates column, family, and index ids for any column, family,
@@ -4111,4 +4115,18 @@ func GenerateUniqueConstraintName(prefix string, nameExistsFunc func(name string
 		name = fmt.Sprintf("%s_%d", prefix, i)
 	}
 	return name
+}
+
+// GetLogicalColumnID returns the LogicalColumnID of the ColumnDescriptor
+// if the LogicalColumnID is set (non-zero). Returns the ID of the
+// ColumnDescriptor if the LogicalColumnID is not set.
+// This allows for lazy generation of the LogicalColumnID.
+func (desc ColumnDescriptor) GetLogicalColumnID() ColumnID {
+	if desc.LogicalColumnID != 0 {
+		return desc.LogicalColumnID
+	}
+
+	// Lazily set LogicalColumnID.
+	desc.LogicalColumnID = desc.ID
+	return desc.ID
 }

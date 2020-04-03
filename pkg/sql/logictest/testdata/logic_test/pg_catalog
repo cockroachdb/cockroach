@@ -2180,3 +2180,26 @@ query TTTTTT
 select * from pg_indexes where indexname = 'regression_46450_idx'
 ----
 3047862654  public  regression_46450  regression_46450_idx  NULL  CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)
+
+subtest regression_46799
+statement ok
+create table t(x INT DEFAULT 1, y INT DEFAULT 1);
+
+query TI
+select adrelid, adnum from pg_attrdef WHERE adrelid = 82
+----
+82  1
+82  2
+82  3
+
+statement ok
+alter table t drop column y;
+alter table t add column y int default 1;
+
+# make sure after adding and dropping the same column, the adnum for the re-added column increases.
+query TI
+select adrelid, adnum from pg_attrdef WHERE adrelid = 82
+----
+82  1
+82  3
+82  4
