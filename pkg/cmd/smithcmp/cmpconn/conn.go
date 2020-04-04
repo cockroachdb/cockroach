@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package cmpconn assits in comparing results from DB connections.
+// Package cmpconn assists in comparing results from DB connections.
 package cmpconn
 
 import (
@@ -98,28 +98,24 @@ func (c *Conn) Exec(ctx context.Context, s string) error {
 	return errors.Wrap(err, "exec")
 }
 
-// Values executes prep and exec and returns the results of exec. Mutators
-// passed in during NewConn are applied only to exec. The mutated exec string
-// is returned.
-func (c *Conn) Values(
-	ctx context.Context, prep, exec string,
-) (rows *pgx.Rows, mutated string, err error) {
+// Values executes prep and exec and returns the results of exec.
+func (c *Conn) Values(ctx context.Context, prep, exec string) (rows *pgx.Rows, err error) {
 	if prep != "" {
 		rows, err = c.PGX.QueryEx(ctx, prep, simpleProtocol)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
 		rows.Close()
 	}
-	mutated, _ = mutations.ApplyString(c.rng, exec, c.sqlMutators...)
-	rows, err = c.PGX.QueryEx(ctx, mutated, simpleProtocol)
-	return rows, mutated, err
+	return c.PGX.QueryEx(ctx, exec, simpleProtocol)
 }
 
 var simpleProtocol = &pgx.QueryExOptions{SimpleProtocol: true}
 
 // CompareConns executes prep and exec on all connections in conns. If any
 // differ, an error is returned. SQL errors are ignored.
+// NOTE: exec will be mutated for each connection using the mutators passed in
+// in NewConn.
 func CompareConns(
 	ctx context.Context, timeout time.Duration, conns map[string]*Conn, prep, exec string,
 ) (err error) {
@@ -128,13 +124,13 @@ func CompareConns(
 	connRows := make(map[string]*pgx.Rows)
 	connExecs := make(map[string]string)
 	for name, conn := range conns {
-		rows, mutated, err := conn.Values(ctx, prep, exec)
+		connExecs[name], _ = mutations.ApplyString(conn.rng, exec, conn.sqlMutators...)
+		rows, err := conn.Values(ctx, prep, connExecs[name])
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
 		defer rows.Close()
 		connRows[name] = rows
-		connExecs[name] = mutated
 	}
 
 	// Annotate our error message with the exec queries since they can be
@@ -157,6 +153,34 @@ func CompareConns(
 		err = fmt.Errorf("%w%s", err, sb.String())
 	}()
 
+	return compareRows(connRows, true /* ignoreSQLErrors */)
+}
+
+// CompareConnsNoMutations executes prep and exec (without any mutations) on
+// all connections in conns. If any differ, an error is returned. SQL errors
+// are returned as well.
+func CompareConnsNoMutations(
+	ctx context.Context, timeout time.Duration, conns map[string]*Conn, prep, exec string,
+) (err error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	connRows := make(map[string]*pgx.Rows)
+	for name, conn := range conns {
+		rows, err := conn.Values(ctx, prep, exec)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		connRows[name] = rows
+	}
+	return compareRows(connRows, false /* ignoreSQLErrors */)
+}
+
+// compareRows compares the results of executing of queries on all connections.
+// It always returns an error if there are any differences. Additionally,
+// ignoreSQLErrors specifies whether SQL errors should be ignored (in which
+// case the function returns nil).
+func compareRows(connRows map[string]*pgx.Rows, ignoreSQLErrors bool) error {
 	var first []interface{}
 	var firstName string
 	var minCount int
@@ -173,10 +197,13 @@ ReadRows:
 			rowCounts[name]++
 			vals, err := rows.Values()
 			if err != nil {
-				// This function can fail if, for example,
-				// a number doesn't fit into a float64. Ignore
-				// them and move along to another query.
-				return nil //nolint:returnerrcheck
+				if ignoreSQLErrors {
+					// This function can fail if, for example,
+					// a number doesn't fit into a float64. Ignore
+					// them and move along to another query.
+					err = nil
+				}
+				return err
 			}
 			if firstName == "" {
 				firstName = name
@@ -194,8 +221,12 @@ ReadRows:
 			rowCounts[name]++
 		}
 		if err := rows.Err(); err != nil {
-			// Aww someone had a SQL error maybe, so we can't use this query.
-			return nil //nolint:returnerrcheck
+			if ignoreSQLErrors {
+				// Aww someone had a SQL error maybe, so we can't use this
+				// query.
+				err = nil
+			}
+			return err
 		}
 	}
 	// Ensure each connection returned the same number of rows.

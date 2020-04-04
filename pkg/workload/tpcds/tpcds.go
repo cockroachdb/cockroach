@@ -86,15 +86,15 @@ func (w *tpcds) Hooks() workload.Hooks {
 			if w.queryTimeLimit <= 0 {
 				return errors.Errorf("non-positive query time limit was set: %s", w.queryTimeLimit)
 			}
-			skipQuery := make([]bool, numQueries+1)
+			skipQuery := make([]bool, NumQueries+1)
 			for _, queryName := range strings.Split(w.queriesToOmitRaw, `,`) {
 				queryNum, err := strconv.Atoi(queryName)
 				if err != nil {
 					return err
 				}
-				if queryNum < 1 || queryNum > numQueries {
+				if queryNum < 1 || queryNum > NumQueries {
 					return errors.Errorf("unknown query %d (only queries in range [1, %d] are supported)",
-						queryNum, numQueries)
+						queryNum, NumQueries)
 				}
 				skipQuery[queryNum] = true
 			}
@@ -104,7 +104,7 @@ func (w *tpcds) Hooks() workload.Hooks {
 					if err != nil {
 						return err
 					}
-					if _, ok := queriesByNumber[queryNum]; !ok {
+					if _, ok := QueriesByNumber[queryNum]; !ok {
 						return errors.Errorf(`unknown query: %s (probably, the query needs modifications, `+
 							`so it is disabled for now)`, queryName)
 					}
@@ -114,7 +114,7 @@ func (w *tpcds) Hooks() workload.Hooks {
 				}
 				return nil
 			}
-			for queryNum := 1; queryNum <= numQueries; queryNum++ {
+			for queryNum := 1; queryNum <= NumQueries; queryNum++ {
 				if !skipQuery[queryNum] {
 					w.selectedQueries = append(w.selectedQueries, queryNum)
 				}
@@ -298,7 +298,7 @@ func (w *worker) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	query := queriesByNumber[queryNum]
+	query := QueriesByNumber[queryNum]
 
 	var rows *gosql.Rows
 	start := timeutil.Now()
