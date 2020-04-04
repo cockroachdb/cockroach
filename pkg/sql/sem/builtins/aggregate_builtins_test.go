@@ -114,13 +114,26 @@ func TestBitAndBitResultDeepCopy(t *testing.T) {
 func TestBitOrIntResultDeepCopy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Run("all null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newBitOrAggregate, makeNullTestDatum(10))
+		testAggregateResultDeepCopy(t, newIntBitOrAggregate, makeNullTestDatum(10))
 	})
 	t.Run("with null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newBitOrAggregate, makeTestWithNullDatum(10, makeIntTestDatum))
+		testAggregateResultDeepCopy(t, newIntBitOrAggregate, makeTestWithNullDatum(10, makeIntTestDatum))
 	})
 	t.Run("without null", func(t *testing.T) {
-		testAggregateResultDeepCopy(t, newBitOrAggregate, makeIntTestDatum(10))
+		testAggregateResultDeepCopy(t, newIntBitOrAggregate, makeIntTestDatum(10))
+	})
+}
+
+func TestBitOrBitResultDeepCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	t.Run("all null", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newBitBitOrAggregate, makeNullTestDatum(10))
+	})
+	t.Run("with null", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newBitBitOrAggregate, makeTestWithNullDatum(10, makeBitTestDatum))
+	})
+	t.Run("without null", func(t *testing.T) {
+		testAggregateResultDeepCopy(t, newBitBitOrAggregate, makeBitTestDatum(10))
 	})
 }
 
