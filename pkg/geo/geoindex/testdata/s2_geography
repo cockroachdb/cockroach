@@ -1,0 +1,24 @@
+init minlevel=0 maxlevel=30 maxcells=2
+----
+
+geometry
+MULTIPOINT((1.0 5.0), (3.0 4.0))
+----
+
+geometry
+LINESTRING (-86.609955 32.703682,-86.609836 32.703659)
+----
+
+# TODO(sumeer): check that the output is correct.
+
+index-keys
+----
+888ec045764,888ec04577b4
+
+covers
+----
+[888ec04576000001, 888ec045767fffff],[888ec04577b00001, 888ec04577b7ffff],888ec04577,888ec04574,888ec0457,888ec0454,888ec045,888ec044,888ec05,888ec04,888ec1,888ec4,888ed,888ec,888f,888c,889,88c,89,8c,9,888ec04577b,888ec04577c
+
+covered-by
+----
+9 8c 89 88c 889 888c 888f 888ec 888ed 888ec4 888ec1 888ec04 888ec05 888ec044 888ec045 888ec0454 888ec0457 888ec04574 888ec04577 888ec045764 888ec045767 888ec045766c 888ec0457669 888ec0457669c 888ec04576699 888ec045766984 888ec045766987 888ec045766987c 888ec0457669879 888ec0457669879c 888ec0457669879d union union union union union union union union union union union 888ec04577c 888ec04577b 888ec04577b4 888ec04577b1 888ec04577b04 888ec04577b03 888ec04577b024 888ec04577b025 888ec04577b025c 888ec04577b0259 888ec04577b0259c 888ec04577b0259f union union union union union union union union union union union intersection union union union union union union union union union union union union union union union union union union union

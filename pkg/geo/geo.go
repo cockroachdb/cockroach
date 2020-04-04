@@ -51,6 +51,14 @@ func ParseGeometry(str geopb.WKT) (*Geometry, error) {
 	return NewGeometry(geopb.EWKB(wkb)), nil
 }
 
+func (g *Geometry) AsGeomT() (geom.T, error) {
+	return ewkb.Unmarshal(g.ewkb)
+}
+
+func (g *Geometry) EWKB() geopb.EWKB {
+	return g.ewkb
+}
+
 // Geography is a spherical spatial object.
 type Geography struct {
 	spatialObjectBase
