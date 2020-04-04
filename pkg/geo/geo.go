@@ -89,6 +89,11 @@ func (g *Geometry) AsGeography() *Geography {
 	return NewGeography(g.ewkb)
 }
 
+// AsGeomT returns the geometry as a geom.T object.
+func (g *Geometry) AsGeomT() (geom.T, error) {
+	return ewkb.Unmarshal(g.ewkb)
+}
+
 // Geography is a spherical spatial object.
 type Geography struct {
 	spatialObjectBase
