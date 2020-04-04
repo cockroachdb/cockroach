@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -740,7 +739,6 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 }
 
 func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
-	log.Infof(ctx, "job %d: adopting", *j.ID())
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if !md.Payload.Lease.Equal(oldLease) {
 			return errors.Errorf("current lease %v did not match expected lease %v",

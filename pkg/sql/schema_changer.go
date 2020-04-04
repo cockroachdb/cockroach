@@ -44,6 +44,10 @@ import (
 )
 
 const (
+	// RunningStatusDrainingNames used to indicate that the job was draining names
+	// for dropped descriptors. This constant is now deprecated and only exists
+	// to be used for migrating old jobs.
+	RunningStatusDrainingNames jobs.RunningStatus = "draining names"
 	// RunningStatusWaitingGC is for jobs that are currently in progress and
 	// are waiting for the GC interval to expire
 	RunningStatusWaitingGC jobs.RunningStatus = "waiting for GC TTL"
@@ -384,14 +388,7 @@ func startGCJob(
 	}
 
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		jobRecord := jobs.Record{
-			Description:   fmt.Sprintf("GC for %s", schemaChangeDescription),
-			Username:      username,
-			DescriptorIDs: descriptorIDs,
-			Details:       details,
-			Progress:      jobspb.SchemaChangeGCProgress{},
-			NonCancelable: true,
-		}
+		jobRecord := CreateGCJobRecord(schemaChangeDescription, username, descriptorIDs, details)
 		var err error
 		if sj, err = jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn, nil /* resultCh */); err != nil {
 			return err
@@ -654,7 +651,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 	}
 
 	if fn := sc.testingKnobs.RunAfterMutationReversal; fn != nil {
-		if err := fn(); err != nil {
+		if err := fn(*sc.job.ID()); err != nil {
 			return err
 		}
 	}
@@ -1400,11 +1397,29 @@ func (sc *SchemaChanger) reverseMutation(
 	return mutation, columns
 }
 
+// CreateGCJobRecord creates the job record for a GC job setting some properties
+// which are common for all GC job.
+func CreateGCJobRecord(
+	originalDescription string,
+	username string,
+	descriptorIDs sqlbase.IDs,
+	details jobspb.SchemaChangeGCDetails,
+) jobs.Record {
+	return jobs.Record{
+		Description:   fmt.Sprintf("GC for %s", originalDescription),
+		Username:      username,
+		DescriptorIDs: descriptorIDs,
+		Details:       details,
+		Progress:      jobspb.SchemaChangeGCProgress{},
+		NonCancelable: true,
+	}
+}
+
 // GCJobTestingKnobs is for testing the Schema Changer GC job.
 // Note that this is defined here for testing purposes to avoid cyclic
 // dependencies.
 type GCJobTestingKnobs struct {
-	RunBeforeResume func()
+	RunBeforeResume func(jobID int64) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -1423,6 +1438,9 @@ type SchemaChangerTestingKnobs struct {
 	// RunBeforeBackfill is called just before starting the backfill.
 	RunBeforeBackfill func() error
 
+	// RunAfterBackfill is called after completing a backfill.
+	RunAfterBackfill func(jobID int64) error
+
 	// RunBeforeIndexBackfill is called just before starting the index backfill, after
 	// fixing the index backfill scan timestamp.
 	RunBeforeIndexBackfill func()
@@ -1440,10 +1458,16 @@ type SchemaChangerTestingKnobs struct {
 
 	// RunAfterMutationReversal runs in OnFailOrCancel after the mutations have
 	// been reversed.
-	RunAfterMutationReversal func() error
+	RunAfterMutationReversal func(jobID int64) error
 
-	// RunAtStartOfOnFailOrCancel
-	RunBeforeOnFailOrCancel func()
+	// RunAtStartOfOnFailOrCancel runs at the start of the OnFailOrCancel hook.
+	RunBeforeOnFailOrCancel func(jobID int64) error
+
+	// RunAfterOnFailOrCancel runs after the OnFailOrCancel hook.
+	RunAfterOnFailOrCancel func(jobID int64) error
+
+	// RunBeforeResume runs at the start of the Resume hook.
+	RunBeforeResume func(jobID int64) error
 
 	// OldNamesDrainedNotification is called during a schema change,
 	// after all leases on the version of the descriptor with the old
@@ -1541,6 +1565,11 @@ func (r schemaChangeResumer) Resume(
 		p.ExecCfg().SchemaChangerTestingKnobs.SchemaChangeJobNoOp() {
 		return nil
 	}
+	if fn := p.ExecCfg().SchemaChangerTestingKnobs.RunBeforeResume; fn != nil {
+		if err := fn(*r.job.ID()); err != nil {
+			return err
+		}
+	}
 
 	execSchemaChange := func(tableID sqlbase.ID, mutationID sqlbase.MutationID, droppedDatabaseID sqlbase.ID) error {
 		sc := SchemaChanger{
@@ -1596,7 +1625,11 @@ func (r schemaChangeResumer) Resume(
 
 	// If a database is being dropped, handle this separately by draining names
 	// for all the tables.
-	if details.DroppedDatabaseID != sqlbase.InvalidID {
+	//
+	// This also covers other cases where we have a leftover 19.2 job that drops
+	// multiple tables in a single job (e.g., TRUNCATE on multiple tables), so
+	// it's possible for DroppedDatabaseID to be unset.
+	if details.DroppedDatabaseID != sqlbase.InvalidID || len(details.DroppedTables) > 1 {
 		for i := range details.DroppedTables {
 			droppedTable := &details.DroppedTables[i]
 			if err := execSchemaChange(droppedTable.ID, sqlbase.InvalidMutationID, details.DroppedDatabaseID); err != nil {
@@ -1608,15 +1641,24 @@ func (r schemaChangeResumer) Resume(
 		for i, table := range details.DroppedTables {
 			tablesToGC[i] = jobspb.SchemaChangeGCDetails_DroppedID{ID: table.ID, DropTime: dropTime}
 		}
-		databaseGCDetails := jobspb.SchemaChangeGCDetails{
+		multiTableGCDetails := jobspb.SchemaChangeGCDetails{
 			Tables:   tablesToGC,
 			ParentID: details.DroppedDatabaseID,
 		}
-		return startGCJob(ctx, p.ExecCfg().DB, p.ExecCfg().JobRegistry, r.job.Payload().Username, r.job.Payload().Description, databaseGCDetails)
+
+		return startGCJob(
+			ctx,
+			p.ExecCfg().DB,
+			p.ExecCfg().JobRegistry,
+			r.job.Payload().Username,
+			r.job.Payload().Description,
+			multiTableGCDetails,
+		)
 	}
 	if details.TableID == sqlbase.InvalidID {
-		return errors.AssertionFailedf("job has no database ID or table ID")
+		return errors.AssertionFailedf("schema change has no specified database or table(s)")
 	}
+
 	return execSchemaChange(details.TableID, details.MutationID, details.DroppedDatabaseID)
 }
 
@@ -1653,7 +1695,9 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, phs interface{}
 	}
 
 	if fn := sc.testingKnobs.RunBeforeOnFailOrCancel; fn != nil {
-		fn()
+		if err := fn(*r.job.ID()); err != nil {
+			return err
+		}
 	}
 
 	if r.job.Payload().FinalResumeError == nil {
@@ -1684,6 +1728,12 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, phs interface{}
 			// Note that, in theory, this could mean retrying the job forever even for
 			// an error we can't recover from, if there's a bug.
 			return jobs.NewRetryJobError(rollbackErr.Error())
+		}
+	}
+
+	if fn := sc.testingKnobs.RunAfterOnFailOrCancel; fn != nil {
+		if err := fn(*r.job.ID()); err != nil {
+			return err
 		}
 	}
 	return nil

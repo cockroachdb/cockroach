@@ -57,6 +57,9 @@ func TestGetDescriptorFromDB(t *testing.T) {
 	bobDesc := &sqlbase.DatabaseDescriptor{Name: "bob"}
 
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
 		batch := txn.NewBatch()
 		batch.Put(sqlbase.NewDatabaseKey("bob").Key(), 9999)
 		batch.Put(sqlbase.NewDeprecatedDatabaseKey("alice").Key(), 10000)
