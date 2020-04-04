@@ -2242,9 +2242,9 @@ query I
 SELECT count(*) FROM t45453 GROUP BY 0 + 0
 ----
 
-# Tests for the bit_and aggregate function.
+# Tests for the bit_and and bit_or aggregate functions.
 
-subtest bit_and
+subtest bit_aggregates
 
 statement ok
 DROP TABLE IF EXISTS vals
@@ -2255,52 +2255,77 @@ CREATE TABLE vals (
   b BIT(8)
 )
 
-# Testing that bit_and returns NULL if there are no rows.
+# Testing that bit aggregate functions return NULL if there are no rows.
 
 query T
 SELECT bit_and(v) FROM vals
 ----
 NULL
 
-# Testing that bit_and does not trigger aggregation on a constant with a source
-# that has no rows.
+query T
+SELECT bit_or(v) FROM vals
+----
+NULL
+
+# Testing that bit aggregate functions do not trigger aggregation on a constant
+# with a source that has no rows.
 
 query T
 SELECT bit_and('1000'::varbit) FROM vals
 ----
 NULL
 
-# Testing that bit_and triggers aggregation and computation on a constant
-# with no source.
+query T
+SELECT bit_or('1000'::varbit) FROM vals
+----
+NULL
+
+# Testing that bit aggregate functions trigger aggregation and computation on a
+# constant with no source.
 
 query TTT
 SELECT bit_and('1'::varbit), bit_and('1000'::bit(4)), bit_and('1010'::varbit)
 ----
 1 1000 1010
 
-# Testing that bit_and returns null given a null.
+query TTT
+SELECT bit_or('1'::varbit), bit_or('1000'::bit(4)), bit_or('1010'::varbit)
+----
+1 1000 1010
+
+# Testing that bit aggregate functions return null given a null.
 
 query T
 SELECT bit_and(NULL::varbit)
 ----
 NULL
 
-# Testing a successful bit_and over a sequence of non-nulls.
+query T
+SELECT bit_or(NULL::varbit)
+----
+NULL
+
+# Testing successful bitwise aggregation over a sequence of non-nulls.
 
 statement ok
 INSERT INTO vals VALUES
-('11111111'::varbit, '11111111'::bit(8)),
-('01111111'::varbit, '01111111'::bit(8)),
-('10111111'::varbit, '10111111'::bit(8)),
-('11011111'::varbit, '11011111'::bit(8)),
-('11101111'::varbit, '11101111'::bit(8))
+('11111110'::varbit, '11111110'::bit(8)),
+('01111111'::varbit, '01111110'::bit(8)),
+('10111111'::varbit, '10111110'::bit(8)),
+('11011111'::varbit, '11011110'::bit(8)),
+('11101111'::varbit, '11101110'::bit(8))
 
 query TT
 SELECT bit_and(v), bit_and(b) FROM vals
 ----
-00001111 00001111
+00001110 00001110
 
-# Testing bit_and over a sequence with nulls and non-nulls.
+query TT
+SELECT bit_or(v), bit_or(b) FROM vals
+----
+11111111 11111110
+
+# Testing bit aggregate functions over a sequence with nulls and non-nulls.
 
 statement ok
 INSERT INTO vals VALUES
@@ -2310,9 +2335,14 @@ INSERT INTO vals VALUES
 query TT
 SELECT bit_and(v), bit_and(b) FROM vals
 ----
-00001111 00001111
+00001110 00001110
 
-# Testing bit_and over a sequence with all nulls.
+query TT
+SELECT bit_or(v), bit_or(b) FROM vals
+----
+11111111 11111110
+
+# Testing bit aggregate functions over a sequence with all nulls.
 
 statement ok
 DELETE FROM vals
@@ -2329,13 +2359,21 @@ SELECT bit_and(v) FROM vals
 ----
 NULL
 
-# Testing that bit_and returns an error when given an uncasted null.
+query T
+SELECT bit_or(v) FROM vals
+----
+NULL
+
+# Testing that bit aggregate functions return an error when given an uncasted null.
 
 statement error ambiguous call: bit_and\(unknown\), candidates are
 SELECT bit_and(NULL)
 
-# Testing that an error is returned when bit_and is called on bit arrays of
-# different sizes.
+statement error ambiguous call: bit_or\(unknown\), candidates are
+SELECT bit_or(NULL)
+
+# Testing that an error is returned when bit aggregate functions are called on bit
+# arrays of different sizes.
 
 statement error cannot AND bit strings of different sizes
 SELECT bit_and(x::varbit) FROM (VALUES ('1'), ('11')) t(x)
@@ -2345,3 +2383,12 @@ SELECT bit_and(x) FROM (VALUES ('100'::bit(3)), ('101010111'::varbit)) t(x)
 
 statement error cannot AND bit strings of different sizes
 SELECT bit_and(x) FROM (VALUES (''::varbit), ('1'::varbit)) t(x)
+
+statement error cannot OR bit strings of different sizes
+SELECT bit_or(x::varbit) FROM (VALUES ('1'), ('11')) t(x)
+
+statement error cannot OR bit strings of different sizes
+SELECT bit_or(x) FROM (VALUES ('100'::bit(3)), ('101010111'::varbit)) t(x)
+
+statement error cannot OR bit strings of different sizes
+SELECT bit_or(x) FROM (VALUES (''::varbit), ('1'::varbit)) t(x)

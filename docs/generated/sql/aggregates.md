@@ -47,6 +47,8 @@
 </span></td></tr>
 <tr><td><a name="bit_or"></a><code>bit_or(arg1: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the bitwise OR of all non-null input values, or null if none.</p>
 </span></td></tr>
+<tr><td><a name="bit_or"></a><code>bit_or(arg1: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates the bitwise OR of all non-null input values, or null if none.</p>
+</span></td></tr>
 <tr><td><a name="bool_and"></a><code>bool_and(arg1: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Calculates the boolean value of <code>AND</code>ing all selected values.</p>
 </span></td></tr>
 <tr><td><a name="bool_or"></a><code>bool_or(arg1: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Calculates the boolean value of <code>OR</code>ing all selected values.</p>
