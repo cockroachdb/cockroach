@@ -185,7 +185,7 @@ func WKTToEWKB(wkt geopb.WKT, srid geopb.SRID) (geopb.EWKB, error) {
 
 // ClipEWKBByRect clips a WKB to the specified rectangle.
 func ClipEWKBByRect(
-	wkb geopb.WKB, xMin float64, yMin float64, xMax float64, yMax float64,
+	wkb geopb.EWKB, xMin float64, yMin float64, xMax float64, yMax float64,
 ) (geopb.EWKB, error) {
 	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
 	if err != nil {
