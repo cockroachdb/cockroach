@@ -181,6 +181,11 @@ func decodeTableKeyToCol(
 		vec.Nulls().SetNull(idx)
 		return key, true, nil
 	}
+	// We might have read a NULL value in the interleaved child table which
+	// would update the nulls vector, so we need to explicitly unset the null
+	// value here.
+	vec.Nulls().UnsetNull(idx)
+
 	var rkey []byte
 	var err error
 	switch valType.Family() {

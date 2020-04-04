@@ -1198,3 +1198,16 @@ query I
 SELECT count(*) FROM t46183 WHERE y->'y' = to_jsonb('hello')
 ----
 1
+
+# Regression test for #47029 (not resetting nulls vector when cfetcher read a
+# NULL value in the interleaved table).
+statement ok
+CREATE TABLE t47029_0(c0 INT);
+CREATE TABLE t47029_1(c0 INT);
+INSERT INTO t47029_0(c0) VALUES(0);
+INSERT INTO t47029_1(c0) VALUES(NULL);
+CREATE INDEX ON t47029_1(c0) INTERLEAVE IN PARENT t47029_0(c0)
+
+query I
+SELECT * FROM t47029_0 WHERE (t47029_0.rowid > 0) IS NULL
+----
