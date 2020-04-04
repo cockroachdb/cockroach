@@ -2907,6 +2907,9 @@ ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v);
 
 func TestPrimaryKeyChangeWithCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if testing.Short() {
+		t.Skip("short flag - #47038")
+	}
 
 	var chunkSize int64 = 100
 	var maxValue = 4000
