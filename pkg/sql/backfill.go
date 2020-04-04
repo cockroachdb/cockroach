@@ -287,6 +287,12 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	log.Infof(ctx, "Completed backfill for %q, v=%d, m=%d",
 		tableDesc.Name, tableDesc.Version, sc.mutationID)
 
+	if sc.testingKnobs.RunAfterBackfill != nil {
+		if err := sc.testingKnobs.RunAfterBackfill(*sc.job.ID()); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
