@@ -134,3 +134,22 @@ EXPLAIN (VEC) SELECT stddev((t46404_1.c0 > ANY (0, 0))::INT) FROM t46404_0, t464
     └ *colexec.hashJoiner
       ├ *colexec.colBatchScan
       └ *colexec.colBatchScan
+
+statement ok
+CREATE TABLE xyz (
+  x INT,
+  y INT,
+  z TEXT
+)
+
+# Check that we fallback gracefully to row-by-row engine on a join type that
+# we don't support.
+query T
+EXPLAIN (VEC) (SELECT y FROM xyz) EXCEPT ALL (SELECT x AS y FROM xyz) ORDER BY y
+----
+│
+└ Node 1
+  └ *colexec.sortOp
+    └ *rowexec.hashJoiner
+      ├ *colexec.colBatchScan
+      └ *colexec.colBatchScan

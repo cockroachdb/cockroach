@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // hashJoinerState represents the state of the hash join columnar operator.
@@ -626,7 +626,7 @@ func makeHashJoinerSpec(
 		rightDistinct = true
 	case sqlbase.JoinType_LEFT_ANTI:
 	default:
-		return spec, errors.Errorf("hash join of type %s not supported", joinType)
+		return spec, errors.AssertionFailedf("hash join of type %s not supported", joinType)
 	}
 
 	left := hashJoinerSourceSpec{

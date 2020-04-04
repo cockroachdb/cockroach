@@ -244,6 +244,9 @@ func isSupported(
 		if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type != sqlbase.InnerJoin {
 			return false, errors.Newf("can't plan vectorized non-inner hash joins with ON expressions")
 		}
+		if core.HashJoiner.Type.IsSetOpJoin() {
+			return false, errors.Newf("vectorized hash join of type %s is not supported", core.HashJoiner.Type)
+		}
 		leftInput, rightInput := spec.Input[0], spec.Input[1]
 		if len(leftInput.ColumnTypes) == 0 || len(rightInput.ColumnTypes) == 0 {
 			// We have a cross join of two inputs, and at least one of them has
@@ -259,6 +262,9 @@ func isSupported(
 		if !core.MergeJoiner.OnExpr.Empty() &&
 			core.MergeJoiner.Type != sqlbase.JoinType_INNER {
 			return false, errors.Errorf("can't plan non-inner merge join with ON expressions")
+		}
+		if core.MergeJoiner.Type.IsSetOpJoin() {
+			return false, errors.Newf("vectorized merge join of type %s is not supported", core.MergeJoiner.Type)
 		}
 		return true, nil
 
@@ -854,9 +860,6 @@ func NewColOperator(
 		case core.MergeJoiner != nil:
 			if err := checkNumIn(inputs, 2); err != nil {
 				return result, err
-			}
-			if core.MergeJoiner.Type.IsSetOpJoin() {
-				return result, errors.AssertionFailedf("unexpectedly %s merge join was planned", core.MergeJoiner.Type.String())
 			}
 			// Merge joiner is a streaming operator when equality columns form a key
 			// for both of the inputs.
