@@ -32,6 +32,10 @@ type spatialObjectBase struct {
 	// TODO: denormalize SRID from EWKB.
 }
 
+func (s *spatialObjectBase) EWKB() geopb.EWKB {
+	return s.ewkb
+}
+
 // Geometry is planar spatial object.
 type Geometry struct {
 	spatialObjectBase
@@ -49,6 +53,10 @@ func ParseGeometry(str geopb.WKT) (*Geometry, error) {
 		return nil, err
 	}
 	return NewGeometry(geopb.EWKB(wkb)), nil
+}
+
+func (g *Geometry) AsGeomT() (geom.T, error) {
+	return ewkb.Unmarshal(g.ewkb)
 }
 
 // Geography is a spherical spatial object.
