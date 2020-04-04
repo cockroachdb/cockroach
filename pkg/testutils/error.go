@@ -11,13 +11,10 @@
 package testutils
 
 import (
-	"bytes"
-	"fmt"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 )
 
 // IsError returns true if the error string matches the supplied regex.
@@ -51,26 +48,4 @@ func IsPError(pErr *roachpb.Error, re string) bool {
 		return false
 	}
 	return matched
-}
-
-// Caller returns filename and line number info for the specified stack
-// depths. The info is formated as <file>:<line> and each entry is separated
-// for a space.
-func Caller(depth ...int) string {
-	var sep string
-	var buf bytes.Buffer
-	for _, d := range depth {
-		file, line, _ := caller.Lookup(d + 1)
-		fmt.Fprintf(&buf, "%s%s:%d", sep, file, line)
-		sep = " "
-	}
-	return buf.String()
-}
-
-// MakeCaller returns a function which will invoke Caller with the specified
-// arguments.
-func MakeCaller(depth ...int) func() string {
-	return func() string {
-		return Caller(depth...)
-	}
 }

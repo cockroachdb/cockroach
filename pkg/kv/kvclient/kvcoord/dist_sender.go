@@ -582,22 +582,19 @@ func (ds *DistSender) initAndVerifyBatch(
 		for _, req := range ba.Requests {
 			inner := req.GetInner()
 			switch inner.(type) {
-			case *roachpb.ScanRequest, *roachpb.DeleteRangeRequest:
-				// Accepted range requests. All other range requests are still
-				// not supported. Note that ReverseScanRequest is _not_ handled here.
-				// TODO(vivek): don't enumerate all range requests.
+			case *roachpb.ScanRequest, *roachpb.ResolveIntentRangeRequest,
+				*roachpb.DeleteRangeRequest, *roachpb.RevertRangeRequest:
+				// Accepted forward range requests.
 				if isReverse {
 					return roachpb.NewErrorf("batch with limit contains both forward and reverse scans")
 				}
 
-			case *roachpb.QueryIntentRequest, *roachpb.ResolveIntentRangeRequest:
-				continue
+			case *roachpb.ReverseScanRequest:
+				// Accepted reverse range requests.
 
-			case *roachpb.EndTxnRequest, *roachpb.ReverseScanRequest:
-				continue
+			case *roachpb.QueryIntentRequest, *roachpb.EndTxnRequest:
+				// Accepted point requests that can be in batches with limit.
 
-			case *roachpb.RevertRangeRequest:
-				continue
 			default:
 				return roachpb.NewErrorf("batch with limit contains %T request", inner)
 			}
