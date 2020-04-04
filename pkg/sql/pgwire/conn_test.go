@@ -385,6 +385,7 @@ const (
 func expectExecStmt(
 	ctx context.Context, t *testing.T, expSQL string, rd *sql.StmtBufReader, c *conn, typ executeType,
 ) {
+	t.Helper()
 	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
@@ -393,18 +394,18 @@ func expectExecStmt(
 
 	es, ok := cmd.(sql.ExecStmt)
 	if !ok {
-		t.Fatalf("%s: expected command ExecStmt, got: %T (%+v)", testutils.Caller(1), cmd, cmd)
+		t.Fatalf("expected command ExecStmt, got: %T (%+v)", cmd, cmd)
 	}
 
 	if es.AST.String() != expSQL {
-		t.Fatalf("%s: expected %s, got %s", testutils.Caller(1), expSQL, es.AST.String())
+		t.Fatalf("expected %s, got %s", expSQL, es.AST.String())
 	}
 
 	if es.ParseStart == (time.Time{}) {
-		t.Fatalf("%s: ParseStart not filled in", testutils.Caller(1))
+		t.Fatalf("ParseStart not filled in")
 	}
 	if es.ParseEnd == (time.Time{}) {
-		t.Fatalf("%s: ParseEnd not filled in", testutils.Caller(1))
+		t.Fatalf("ParseEnd not filled in")
 	}
 	if typ == queryStringComplete {
 		if err := finishQuery(execute, c); err != nil {
@@ -420,6 +421,7 @@ func expectExecStmt(
 func expectPrepareStmt(
 	ctx context.Context, t *testing.T, expName string, expSQL string, rd *sql.StmtBufReader, c *conn,
 ) {
+	t.Helper()
 	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
@@ -428,15 +430,15 @@ func expectPrepareStmt(
 
 	pr, ok := cmd.(sql.PrepareStmt)
 	if !ok {
-		t.Fatalf("%s: expected command PrepareStmt, got: %T (%+v)", testutils.Caller(1), cmd, cmd)
+		t.Fatalf("expected command PrepareStmt, got: %T (%+v)", cmd, cmd)
 	}
 
 	if pr.Name != expName {
-		t.Fatalf("%s: expected name %s, got %s", testutils.Caller(1), expName, pr.Name)
+		t.Fatalf("expected name %s, got %s", expName, pr.Name)
 	}
 
 	if pr.AST.String() != expSQL {
-		t.Fatalf("%s: expected %s, got %s", testutils.Caller(1), expSQL, pr.AST.String())
+		t.Fatalf("expected %s, got %s", expSQL, pr.AST.String())
 	}
 
 	if err := finishQuery(prepare, c); err != nil {
@@ -452,6 +454,7 @@ func expectDescribeStmt(
 	rd *sql.StmtBufReader,
 	c *conn,
 ) {
+	t.Helper()
 	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
@@ -460,15 +463,15 @@ func expectDescribeStmt(
 
 	desc, ok := cmd.(sql.DescribeStmt)
 	if !ok {
-		t.Fatalf("%s: expected command DescribeStmt, got: %T (%+v)", testutils.Caller(1), cmd, cmd)
+		t.Fatalf("expected command DescribeStmt, got: %T (%+v)", cmd, cmd)
 	}
 
 	if desc.Name != expName {
-		t.Fatalf("%s: expected name %s, got %s", testutils.Caller(1), expName, desc.Name)
+		t.Fatalf("expected name %s, got %s", expName, desc.Name)
 	}
 
 	if desc.Type != expType {
-		t.Fatalf("%s: expected type %s, got %s", testutils.Caller(1), expType, desc.Type)
+		t.Fatalf("expected type %s, got %s", expType, desc.Type)
 	}
 
 	if err := finishQuery(describe, c); err != nil {
@@ -479,6 +482,7 @@ func expectDescribeStmt(
 func expectBindStmt(
 	ctx context.Context, t *testing.T, expName string, rd *sql.StmtBufReader, c *conn,
 ) {
+	t.Helper()
 	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
@@ -487,11 +491,11 @@ func expectBindStmt(
 
 	bd, ok := cmd.(sql.BindStmt)
 	if !ok {
-		t.Fatalf("%s: expected command BindStmt, got: %T (%+v)", testutils.Caller(1), cmd, cmd)
+		t.Fatalf("expected command BindStmt, got: %T (%+v)", cmd, cmd)
 	}
 
 	if bd.PreparedStatementName != expName {
-		t.Fatalf("%s: expected name %s, got %s", testutils.Caller(1), expName, bd.PreparedStatementName)
+		t.Fatalf("expected name %s, got %s", expName, bd.PreparedStatementName)
 	}
 
 	if err := finishQuery(bind, c); err != nil {
@@ -500,6 +504,7 @@ func expectBindStmt(
 }
 
 func expectSync(ctx context.Context, t *testing.T, rd *sql.StmtBufReader) {
+	t.Helper()
 	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
@@ -508,13 +513,14 @@ func expectSync(ctx context.Context, t *testing.T, rd *sql.StmtBufReader) {
 
 	_, ok := cmd.(sql.Sync)
 	if !ok {
-		t.Fatalf("%s: expected command Sync, got: %T (%+v)", testutils.Caller(1), cmd, cmd)
+		t.Fatalf("expected command Sync, got: %T (%+v)", cmd, cmd)
 	}
 }
 
 func expectExecPortal(
 	ctx context.Context, t *testing.T, expName string, rd *sql.StmtBufReader, c *conn,
 ) {
+	t.Helper()
 	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
@@ -523,11 +529,11 @@ func expectExecPortal(
 
 	ep, ok := cmd.(sql.ExecPortal)
 	if !ok {
-		t.Fatalf("%s: expected command ExecPortal, got: %T (%+v)", testutils.Caller(1), cmd, cmd)
+		t.Fatalf("expected command ExecPortal, got: %T (%+v)", cmd, cmd)
 	}
 
 	if ep.Name != expName {
-		t.Fatalf("%s: expected name %s, got %s", testutils.Caller(1), expName, ep.Name)
+		t.Fatalf("expected name %s, got %s", expName, ep.Name)
 	}
 
 	if err := finishQuery(execPortal, c); err != nil {
@@ -538,6 +544,7 @@ func expectExecPortal(
 func expectSendError(
 	ctx context.Context, t *testing.T, pgErrCode string, rd *sql.StmtBufReader, c *conn,
 ) {
+	t.Helper()
 	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
@@ -546,7 +553,7 @@ func expectSendError(
 
 	se, ok := cmd.(sql.SendError)
 	if !ok {
-		t.Fatalf("%s: expected command SendError, got: %T (%+v)", testutils.Caller(1), cmd, cmd)
+		t.Fatalf("expected command SendError, got: %T (%+v)", cmd, cmd)
 	}
 
 	if code := pgerror.GetPGCode(se.Err); code != pgErrCode {

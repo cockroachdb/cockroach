@@ -1823,22 +1823,79 @@ message Header {
   // operations. The default is CONSISTENT. This value is ignored for
   // write operations.
   ReadConsistencyType read_consistency = 6;
-  // If set to a non-zero value, it limits the total number of keys touched
-  // by span requests in the batch. Span requests are requests like
-  // Scan, ReverseScan, and DelRange. If two requests touch the
-  // same key it is double counted.
+  // If set to a non-zero value, the total number of keys touched by requests in
+  // the batch is limited. A resume span will be provided on the response of the
+  // requests that were not able to run to completion before the limit was
+  // reached.
   //
-  // If a batch limit is used with Scan requests, the spans for the requests
-  // must be non-overlapping and in increasing order.
+  // Overlapping requests
   //
-  // If a batch limit is used with ReverseScan requests, the spans for the
-  // requests must be non-overlapping and in decreasing order.
+  // The spans accessed by the requests are allowed to overlap. However, if any
+  // requests overlap, the caller must be prepared to handle *multiple* partial
+  // responses in the corresponding BatchResponse. If no requests overlap, then
+  // only up to one request will return a partial result. Additionally, if two
+  // requests touch the same key, it is double counted towards the key limit.
+  //
+  // Unordered requests
+  //
+  // The spans accessed by requests do not need to be in sorted order. However,
+  // if the requests are not in sorted order (e.g. increasing key order for
+  // Scans and other forward requests, decreasing key order for ReverseScans),
+  // the caller must be prepared to handle empty responses interleaved with full
+  // responses and one (or more, see "Overlapping requests") partial response
+  // in the corresponding BatchResponse. If the requests are in sorted order,
+  // the caller can expect to receive a group of full responses, one (or more)
+  // partial responses, and a group of empty responses.
+  //
+  // Pagination of requests
+  //
+  // As discussed above, overlapping requests or unordered requests in batches
+  // with a limit can lead to response batches with multiple partial responses.
+  // In practice, this is because DistSender paginates request evaluation over
+  // ranges in increasing key order (decreasing for reverse batches). As ranges
+  // are iterated over in order, all requests that target a given range are sent
+  // to it, regardless of their position in the batch. Once split and delivered
+  // to a range, the applicable requests are executed in-full according to their
+  // order in the batch.
+  //
+  // This behavior makes it difficult to make assumptions about the resume spans
+  // of individual responses in batches that contain either overlapping requests
+  // or unordered requests. As such, clients should not make assumptions about
+  // resume spans and should instead inspect the result for every request in the
+  // batch if if cannot guarantee that the batch is ordered with no overlapping
+  // requests.
+  //
+  // Supported requests
+  //
+  // If a limit is provided, the batch can contain only the following range
+  // request types:
+  // - ScanRequest
+  // - ReverseScanRequest
+  // - DeleteRangeRequest
+  // - RevertRangeRequest
+  // - ResolveIntentRangeRequest
+  //
+  // The following two requests types are also allowed in the batch, although
+  // the limit has no effect on them:
+  // - QueryIntentRequest
+  // - EndTxnRequest
+  //
+  // Forward requests and reverse requests cannot be mixed in the same batch if
+  // a limit is set. There doesn't seem to be a fundamental reason for this
+  // restriction, but a batch that mixed forward and reverse requests would be
+  // impossible to order, so it would unavoidably have to deal with the added
+  // complications discussed in "Unordered requests". For now, that's a good
+  // enough reason to disallow such batches.
   int64 max_span_request_keys = 8;
   // If set to a non-zero value, sets a target (in bytes) for how large the
   // response may grow. This is only supported for (forward and reverse) scans
   // and limits the number of rows scanned (and returned). The target will be
   // overshot; in particular, at least one row will always be returned (assuming
   // one exists). A suitable resume span will be returned.
+  //
+  // The semantics around overlapping requests, unordered requests, and
+  // supported requests from max_span_request_keys apply to the target_bytes
+  // option as well.
   int64 target_bytes = 15;
   // If set, all of the spans in the batch are distinct. Note that the
   // calculation of distinct spans does not include intents in an

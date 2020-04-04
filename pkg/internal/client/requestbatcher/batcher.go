@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -108,6 +109,13 @@ type Config struct {
 	// MaxMsgsPerBatch is the maximum number of messages.
 	// If MaxMsgsPerBatch <= 0 then no limit is enforced.
 	MaxMsgsPerBatch int
+
+	// MaxKeysPerBatchReq is the maximum number of keys that each batch is
+	// allowed to touch during one of its requests. If the limit is exceeded,
+	// the batch is paginated over a series of individual requests. This limit
+	// corresponds to the MaxSpanRequestKeys assigned to the Header of each
+	// request. If MaxKeysPerBatchReq <= 0 then no limit is enforced.
+	MaxKeysPerBatchReq int
 
 	// MaxWait is the maximum amount of time a message should wait in a batch
 	// before being sent. If MaxWait is <= 0 then no wait timeout is enforced.
@@ -259,33 +267,78 @@ func (b *RequestBatcher) sendDone(ba *batch) {
 }
 
 func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
-	var br *roachpb.BatchResponse
-	send := func(ctx context.Context) error {
-		var pErr *roachpb.Error
-		if br, pErr = b.cfg.Sender.Send(ctx, ba.batchRequest()); pErr != nil {
-			return pErr.GoError()
-		}
-		return nil
-	}
-	if !ba.sendDeadline.IsZero() {
-		actualSend := send
-		send = func(context.Context) error {
-			return contextutil.RunWithTimeout(
-				ctx, b.sendBatchOpName, timeutil.Until(ba.sendDeadline), actualSend)
-		}
-	}
 	b.cfg.Stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer b.sendDone(ba)
-		err := send(ctx)
-		for i, r := range ba.reqs {
-			res := Response{}
-			if br != nil && i < len(br.Responses) {
-				res.Resp = br.Responses[i].GetInner()
+		var br *roachpb.BatchResponse
+		send := func(ctx context.Context) error {
+			var pErr *roachpb.Error
+			if br, pErr = b.cfg.Sender.Send(ctx, ba.batchRequest(&b.cfg)); pErr != nil {
+				return pErr.GoError()
 			}
-			if err != nil {
-				res.Err = err
+			return nil
+		}
+		if !ba.sendDeadline.IsZero() {
+			actualSend := send
+			send = func(context.Context) error {
+				return contextutil.RunWithTimeout(
+					ctx, b.sendBatchOpName, timeutil.Until(ba.sendDeadline), actualSend)
 			}
-			b.sendResponse(r, res)
+		}
+		// Send requests in a loop to support pagination, which may be necessary
+		// if MaxKeysPerBatchReq is set. If so, partial responses with resume
+		// spans may be returned for requests, indicating that the limit was hit
+		// before they could complete and that they should be resumed over the
+		// specified key span. Requests in the batch are neither guaranteed to
+		// be ordered nor guaranteed to be non-overlapping, so we can make no
+		// assumptions about the requests that will result in full responses
+		// (with no resume spans) vs. partial responses vs. empty responses (see
+		// the comment on roachpb.Header.MaxSpanRequestKeys).
+		//
+		// To accommodate this, we keep track of all partial responses from
+		// previous iterations. After receiving a batch of responses during an
+		// iteration, the responses are each combined with the previous response
+		// for their corresponding requests. From there, responses that have no
+		// resume spans are removed. Responses that have resume spans are
+		// updated appropriately and sent again in the next iteration. The loop
+		// proceeds until all requests have been run to completion.
+		var prevResps []roachpb.Response
+		for len(ba.reqs) > 0 {
+			err := send(ctx)
+			nextReqs, nextPrevResps := ba.reqs[:0], prevResps[:0]
+			for i, r := range ba.reqs {
+				var res Response
+				if br != nil {
+					resp := br.Responses[i].GetInner()
+					if prevResps != nil {
+						prevResp := prevResps[i]
+						if cErr := roachpb.CombineResponses(prevResp, resp); cErr != nil {
+							log.Fatal(ctx, cErr)
+						}
+						resp = prevResp
+					}
+					if resume := resp.Header().ResumeSpan; resume != nil {
+						// Add a trimmed request to the next batch.
+						h := r.req.Header()
+						h.SetSpan(*resume)
+						r.req = r.req.ShallowCopy()
+						r.req.SetHeader(h)
+						nextReqs = append(nextReqs, r)
+						// Strip resume span from previous response and record.
+						prevH := resp.Header()
+						prevH.ResumeSpan = nil
+						prevResp := resp
+						prevResp.SetHeader(prevH)
+						nextPrevResps = append(nextPrevResps, prevResp)
+						continue
+					}
+					res.Resp = resp
+				}
+				if err != nil {
+					res.Err = err
+				}
+				b.sendResponse(r, res)
+			}
+			ba.reqs, prevResps = nextReqs, nextPrevResps
 		}
 	})
 }
@@ -462,13 +515,16 @@ func (b *batch) rangeID() roachpb.RangeID {
 	return b.reqs[0].rangeID
 }
 
-func (b *batch) batchRequest() roachpb.BatchRequest {
+func (b *batch) batchRequest(cfg *Config) roachpb.BatchRequest {
 	req := roachpb.BatchRequest{
 		// Preallocate the Requests slice.
 		Requests: make([]roachpb.RequestUnion, 0, len(b.reqs)),
 	}
 	for _, r := range b.reqs {
 		req.Add(r.req)
+	}
+	if cfg.MaxKeysPerBatchReq > 0 {
+		req.MaxSpanRequestKeys = int64(cfg.MaxKeysPerBatchReq)
 	}
 	return req
 }

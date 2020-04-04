@@ -249,6 +249,21 @@ type combinable interface {
 	combine(combinable) error
 }
 
+// CombineResponses attempts to combine the two provided responses. If both of
+// the responses are combinable, they will be combined. If neither are
+// combinable, the function is a no-op and returns a nil error. If one of the
+// responses is combinable and the other isn't, the function returns an error.
+func CombineResponses(left, right Response) error {
+	cLeft, lOK := left.(combinable)
+	cRight, rOK := right.(combinable)
+	if lOK && rOK {
+		return cLeft.combine(cRight)
+	} else if lOK != rOK {
+		return errors.Errorf("can not combine %T and %T", left, right)
+	}
+	return nil
+}
+
 // combine is used by range-spanning Response types (e.g. Scan or DeleteRange)
 // to merge their headers.
 func (rh *ResponseHeader) combine(otherRH ResponseHeader) error {

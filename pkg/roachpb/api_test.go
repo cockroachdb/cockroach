@@ -17,6 +17,89 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestCombineResponses tests the behavior of the CombineResponses function,
+// which attempts to combine two provided responses.
+func TestCombineResponses(t *testing.T) {
+	t.Run("both combinable", func(t *testing.T) {
+		left := &ScanResponse{
+			Rows: []KeyValue{
+				{Key: Key("A"), Value: MakeValueFromString("V")},
+			},
+			IntentRows: []KeyValue{
+				{Key: Key("Ai"), Value: MakeValueFromString("X")},
+			},
+		}
+		right := &ScanResponse{
+			Rows: []KeyValue{
+				{Key: Key("B"), Value: MakeValueFromString("W")},
+			},
+			IntentRows: []KeyValue{
+				{Key: Key("Bi"), Value: MakeValueFromString("Z")},
+			},
+		}
+		expCombined := &ScanResponse{
+			Rows:       append(append([]KeyValue(nil), left.Rows...), right.Rows...),
+			IntentRows: append(append([]KeyValue(nil), left.IntentRows...), right.IntentRows...),
+		}
+
+		err := CombineResponses(left, right)
+		require.NoError(t, err)
+		require.Equal(t, expCombined, left)
+	})
+
+	t.Run("neither combinable", func(t *testing.T) {
+		left := &GetResponse{
+			Value: &Value{RawBytes: []byte("V")},
+		}
+		right := &GetResponse{
+			Value: &Value{RawBytes: []byte("W")},
+		}
+		expCombined := &GetResponse{
+			Value: left.Value.ShallowClone(),
+		}
+
+		err := CombineResponses(left, right)
+		require.NoError(t, err)
+		require.Equal(t, expCombined, left)
+	})
+
+	t.Run("left combinable", func(t *testing.T) {
+		left := &ScanResponse{
+			Rows: []KeyValue{
+				{Key: Key("A"), Value: MakeValueFromString("V")},
+			},
+			IntentRows: []KeyValue{
+				{Key: Key("Ai"), Value: MakeValueFromString("X")},
+			},
+		}
+		right := &GetResponse{
+			Value: &Value{RawBytes: []byte("W")},
+		}
+
+		err := CombineResponses(left, right)
+		require.Error(t, err)
+		require.Regexp(t, "can not combine", err)
+	})
+
+	t.Run("right combinable", func(t *testing.T) {
+		left := &GetResponse{
+			Value: &Value{RawBytes: []byte("V")},
+		}
+		right := &ScanResponse{
+			Rows: []KeyValue{
+				{Key: Key("B"), Value: MakeValueFromString("W")},
+			},
+			IntentRows: []KeyValue{
+				{Key: Key("Bi"), Value: MakeValueFromString("Z")},
+			},
+		}
+
+		err := CombineResponses(left, right)
+		require.Error(t, err)
+		require.Regexp(t, "can not combine", err)
+	})
+}
+
 // TestCombinable tests the correct behavior of some types that implement
 // the combinable interface, notably {Scan,DeleteRange}Response and
 // ResponseHeader.
@@ -27,6 +110,7 @@ func TestCombinable(t *testing.T) {
 			t.Fatalf("GetResponse implements combinable, so presumably all Response types will")
 		}
 	})
+
 	t.Run("Scan", func(t *testing.T) {
 
 		// Test that {Scan,DeleteRange}Response properly implement it.
