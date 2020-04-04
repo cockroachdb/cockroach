@@ -1853,3 +1853,12 @@ CREATE TABLE t45453(c INT)
 query I
 SELECT count(*) FROM t45453 GROUP BY 0 + 0
 ----
+
+# Regression test for #46981 (not propagating an error which occurs when
+# rendering the single output row of countRows aggregate).
+statement ok
+CREATE TABLE t46981_0(c0 INT);
+CREATE VIEW v46981_0(c0) AS SELECT count_rows() FROM t46981_0
+
+statement error parsing regexp: missing argument to repetition operator: `\+`
+SELECT * FROM v46981_0 WHERE '' !~ '+'
