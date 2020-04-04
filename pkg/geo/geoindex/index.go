@@ -1,0 +1,528 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package geoindex
+
+import (
+	"context"
+	"fmt"
+	"math"
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/golang/geo/s2"
+)
+
+// Interfaces for accelerating certain spatial operations, by allowing the
+// caller to use an externally stored index.
+//
+// An index interface has methods that specify what to write or read from the
+// stored index. It is the caller's responsibility to do the actual writes and
+// reads. Index keys are represented using uint64 which implies that the index
+// is transforming the 2D space (spherical or planar) to 1D space, say using a
+// space-filling curve. The index can return false positives so query
+// execution must use an exact filtering step after using the index. The
+// current implementations use the S2 geometry library.
+//
+// The externally stored index must support key-value semantics and range
+// queries over keys. The return values from Covers/CoveredBy/Intersects are
+// specialized to the computation that needs to be performed:
+// - Intersects needs to union (a) all the ranges corresponding to subtrees
+//   rooted at the covering of g, (b) all the parent nodes of the covering
+//   of g. The individual entries in (b) are representable as ranges of
+//   length 1. All of this is represented as UnionKeySpans. Covers, which
+//   is the shape that g covers, currently delegates to Interects so
+//   returns the same.
+//
+// - CoveredBy, which are the shapes that g is covered-by, needs to compute
+//   on the paths from each covering node to the root. For example, consider
+//   a quad-tree approach to dividing the space, where the nodes/cells
+//   covering g are c53, c61, c64. The corresponding ancestor path sets are
+//   {c53, c13, c3, c0}, {c61, c15, c3, c0}, {c64, c15, c3, c0}. Let I(c53)
+//   represent the index entries for c53. Then,
+//   I(c53) \union I(c13) \union I(c3) \union I(c0)
+//   represents all the shapes that cover cell c53. Similar union expressions
+//   can be constructed for all these paths. The computation needs to
+//   intersect these unions since all these cells need to be covered by a
+//   shape that covers g. One can extract the common sub-expressions to give
+//   I(c0) \union I(c3) \union
+//    ((I(c13) \union I(c53)) \intersection
+//     (I(c15) \union (I(c61) \intersection I(c64)))
+//   CoveredBy returns this factored expression in Reverse Polish notation.
+
+// GeographyIndex is an index over the unit sphere.
+type GeographyIndex interface {
+	// InvertedIndexKeys returns the keys to store this object under when adding
+	// it to the index.
+	InvertedIndexKeys(c context.Context, g *geo.Geography) ([]Key, error)
+
+	// Acceleration for topological relationships (see
+	// https://postgis.net/docs/reference.html#Spatial_Relationships). Distance
+	// relationships can be accelerated by adjusting g before calling these
+	// functions. Bounding box operators are not accelerated since we do not
+	// index the bounding box -- bounding box queries are an implementation
+	// detail of a particular indexing approach in PostGIS and are not part of
+	// the OGC or SQL/MM specs.
+
+	// Covers returns the index spans to read and union for the relationship
+	// ST_Covers(g, x), where x are the indexed geometries.
+	Covers(c context.Context, g *geo.Geography) (UnionKeySpans, error)
+
+	// CoveredBy returns the index entries to read and the expression to compute
+	// for ST_CoveredBy(g, x), where x are the indexed geometries.
+	CoveredBy(c context.Context, g *geo.Geography) (RPKeyExpr, error)
+
+	// Intersects returns the index spans to read and union for the relationship
+	// ST_Intersects(g, x), where x are the indexed geometries.
+	Intersects(c context.Context, g *geo.Geography) (UnionKeySpans, error)
+
+	// testingInnerCovering returns an inner covering of g.
+	testingInnerCovering(g *geo.Geography) s2.CellUnion
+}
+
+// GeometryIndex is an index over 2D cartesian coordinates.
+type GeometryIndex interface {
+	// InvertedIndexKeys returns the keys to store this object under when adding
+	// it to the index.
+	InvertedIndexKeys(c context.Context, g *geo.Geometry) ([]Key, error)
+
+	// Acceleration for topological relationships (see
+	// https://postgis.net/docs/reference.html#Spatial_Relationships). Distance
+	// relationships can be accelerated by adjusting g before calling these
+	// functions. Bounding box operators are not accelerated since we do not
+	// index the bounding box -- bounding box queries are an implementation
+	// detail of a particular indexing approach in PostGIS and are not part of
+	// the OGC or SQL/MM specs.
+
+	// Covers returns the index spans to read and union for the relationship
+	// ST_Covers(g, x), where x are the indexed geometries.
+	Covers(c context.Context, g *geo.Geometry) (UnionKeySpans, error)
+
+	// CoveredBy returns the index entries to read and the expression to compute
+	// for ST_CoveredBy(g, x), where x are the indexed geometries.
+	CoveredBy(c context.Context, g *geo.Geometry) (RPKeyExpr, error)
+
+	// Intersects returns the index spans to read and union for the relationship
+	// ST_Intersects(g, x), where x are the indexed geometries.
+	Intersects(c context.Context, g *geo.Geometry) (UnionKeySpans, error)
+
+	// testingInnerCovering returns an inner covering of g.
+	testingInnerCovering(g *geo.Geometry) s2.CellUnion
+}
+
+// Key is one entry under which a geospatial shape is stored on behalf of an
+// Index. The index is of the form (Key, Primary Key).
+type Key uint64
+
+// rpExprElement implements the RPExprElement interface.
+func (k Key) rpExprElement() {}
+
+func (k Key) String() string {
+	c := s2.CellID(k)
+	if !c.IsValid() {
+		return "spilled"
+	}
+	var b strings.Builder
+	b.WriteByte('F')
+	b.WriteByte("012345"[c.Face()])
+	fmt.Fprintf(&b, "/L%d/", c.Level())
+	for level := 1; level <= c.Level(); level++ {
+		b.WriteByte("0123"[c.ChildPosition(level)])
+	}
+	return b.String()
+}
+
+// KeySpan represents a range of Keys.
+type KeySpan struct {
+	// Both Start and End are inclusive, i.e., [Start, End].
+	Start, End Key
+}
+
+// UnionKeySpans is the set of indexed spans to retrieve and combine via set
+// union. The spans are guaranteed to be non-overlapping. Duplicate primary
+// keys will not be retrieved by any individual key, but they may be present
+// if more than one key is retrieved (including duplicates in a single span
+// where End - Start > 1).
+type UnionKeySpans []KeySpan
+
+func (s UnionKeySpans) String() string {
+	return s.toString(math.MaxInt32)
+}
+
+func (s UnionKeySpans) toString(wrap int) string {
+	b := newStringBuilderWithWrap(&strings.Builder{}, wrap)
+	for i, span := range s {
+		if span.Start == span.End {
+			fmt.Fprintf(b, "%s", span.Start)
+		} else {
+			fmt.Fprintf(b, "[%s, %s]", span.Start, span.End)
+		}
+		if i != len(s)-1 {
+			b.WriteString(", ")
+		}
+		b.tryWrap()
+	}
+	return b.String()
+}
+
+// RPExprElement is an element in the Reverse Polish notation expression.
+// It is implemented by Key and RPSetOperator.
+type RPExprElement interface {
+	rpExprElement()
+}
+
+// RPSetOperator is a set operator in the Reverse Polish notation expression.
+type RPSetOperator int
+
+const (
+	// RPSetUnion is the union operator.
+	RPSetUnion RPSetOperator = iota + 1
+
+	// RPSetIntersection is the intersection operator.
+	RPSetIntersection
+)
+
+// rpExprElement implements the RPExprElement interface.
+func (o RPSetOperator) rpExprElement() {}
+
+// RPKeyExpr is an expression to evaluate over primary keys retrieved for
+// index keys. If we view each index key as a posting list of primary keys,
+// the expression involves union and intersection over the sets represented by
+// each posting list. For S2, this expression represents an intersection of
+// ancestors of different keys (cell ids) and is likely to contain many common
+// keys. This special structure allows us to efficiently and easily eliminate
+// common sub-expressions, hence the interface presents the factored
+// expression. The expression is represented in Reverse Polish notation.
+type RPKeyExpr []RPExprElement
+
+func (x RPKeyExpr) String() string {
+	var elements []string
+	for _, e := range x {
+		switch elem := e.(type) {
+		case Key:
+			elements = append(elements, elem.String())
+		case RPSetOperator:
+			switch elem {
+			case RPSetUnion:
+				elements = append(elements, `\U`)
+			case RPSetIntersection:
+				elements = append(elements, `\I`)
+			}
+		}
+	}
+	return strings.Join(elements, " ")
+}
+
+// Helper functions for index implementations that use the S2 geometry
+// library.
+
+func covering(rc *s2.RegionCoverer, regions []s2.Region) s2.CellUnion {
+	// TODO(sumeer): Add a max cells constraint for the whole covering,
+	// to respect the index configuration.
+	var u s2.CellUnion
+	for _, r := range regions {
+		u = append(u, rc.Covering(r)...)
+	}
+	// Ensure the cells are non-overlapping.
+	u.Normalize()
+	return u
+}
+
+// The "inner covering", for shape s, represented by the regions parameter, is
+// used to find shapes that contain shape s. A regular covering that includes
+// a cell c not completely covered by shape s could result in false negatives,
+// since shape x that covers shape s could use a finer cell covering (using
+// cells below c). For example, consider a portion of the cell quad-tree
+// below:
+//
+//                      c0
+//                      |
+//                      c3
+//                      |
+//                  +---+---+
+//                  |       |
+//                 c13      c15
+//                  |       |
+//                 c53   +--+--+
+//                       |     |
+//                      c61    c64
+//
+// Shape s could have a regular covering c15, c53, where c15 has 4 child cells
+// c61..c64, and shape s only intersects wit c61, c64. A different shape x
+// that covers shape s may have a covering c61, c64, c53. That is, it has used
+// the finer cells c61, c64. If we used both regular coverings it is hard to
+// know that x covers g. Hence, we compute the "inner covering" of g (defined
+// below).
+//
+// The interior covering of shape s includes only cells covered by s. This is
+// computed by RegionCoverer.InteriorCovering() and is intuitively what we
+// need. But the interior covering is naturally empty for points and lines
+// (and can be empty for polygons too), and an empty covering is not useful
+// for constraining index lookups. We observe that leaf cells that intersect
+// shape s can be used in the covering, since the covering of shape x must
+// also cover these cells. This allows us to compute non-empty coverings for
+// all shapes. Since this is not technically the interior covering, we use the
+// term "inner covering".
+func innerCovering(rc *s2.RegionCoverer, regions []s2.Region) s2.CellUnion {
+	var u s2.CellUnion
+	for _, r := range regions {
+		switch region := r.(type) {
+		case s2.Point:
+			cellID := s2.CellFromPoint(region).ID()
+			if !cellID.IsLeaf() {
+				panic("bug in S2")
+			}
+			u = append(u, cellID)
+		case *s2.Polyline:
+			// TODO(sumeer): for long lines could also pick some intermediate
+			// points along the line. Decide based on experiments.
+			for _, p := range *region {
+				cellID := s2.CellFromPoint(p).ID()
+				u = append(u, cellID)
+			}
+		case *s2.Polygon:
+			// Iterate over all exterior points
+			if region.NumLoops() > 0 {
+				loop := region.Loop(0)
+				for _, p := range loop.Vertices() {
+					cellID := s2.CellFromPoint(p).ID()
+					u = append(u, cellID)
+				}
+				// Arbitrary threshold value. This is to avoid computing an expensive
+				// region covering for regions with small area.
+				// TODO(sumeer): Improve this heuristic:
+				// - Area() may be expensive.
+				// - For large area regions, put an upper bound on the
+				//   level used for cells.
+				// Decide based on experiments.
+				const smallPolygonLevelThreshold = 25
+				if region.Area() > s2.AvgAreaMetric.Value(smallPolygonLevelThreshold) {
+					u = append(u, rc.InteriorCovering(region)...)
+				}
+			}
+		default:
+			panic("bug: code should not be producing unhandled Region type")
+		}
+	}
+	// Ensure the cells are non-overlapping.
+	u.Normalize()
+
+	// TODO(sumeer): if the number of cells is too many, make the list sparser.
+	// u[len(u)-1] - u[0] / len(u) is the mean distance between cells. Pick a
+	// target distance based on the goal to reduce to k cells: target_distance
+	// := mean_distance * k / len(u) Then iterate over u and for every sequence
+	// of cells that are within target_distance, replace by median cell or by
+	// largest cell. Decide based on experiments.
+
+	return u
+}
+
+// ancestorCells returns the set of cells containing these cells, not
+// including the given cells.
+//
+// TODO(sumeer): use the MinLevel and LevelMod of the RegionCoverer used
+// for the index to constrain the ancestors set.
+func ancestorCells(cells []s2.CellID) []s2.CellID {
+	var ancestors []s2.CellID
+	var seen map[s2.CellID]struct{}
+	if len(cells) > 1 {
+		seen = make(map[s2.CellID]struct{})
+	}
+	for _, c := range cells {
+		for l := c.Level() - 1; l >= 0; l-- {
+			p := c.Parent(l)
+			if seen != nil {
+				if _, ok := seen[p]; ok {
+					break
+				}
+				seen[p] = struct{}{}
+			}
+			ancestors = append(ancestors, p)
+		}
+	}
+	return ancestors
+}
+
+// Helper for InvertedIndexKeys.
+func invertedIndexKeys(_ context.Context, rc *s2.RegionCoverer, r []s2.Region) []Key {
+	covering := covering(rc, r)
+	keys := make([]Key, len(covering))
+	for i, cid := range covering {
+		keys[i] = Key(cid)
+	}
+	return keys
+}
+
+// TODO(sumeer): examine RegionCoverer carefully to see if we can strengthen
+// the covering invariant, which would increase the efficiency of covers() and
+// remove the need for testingInnerCovering().
+//
+// Helper for Covers.
+func covers(c context.Context, rc *s2.RegionCoverer, r []s2.Region) UnionKeySpans {
+	// We use intersects since geometries covered by r may have been indexed
+	// using cells that are ancestors of the covering of r. We could avoid
+	// reading ancestors if we had a stronger covering invariant, such as by
+	// indexing inner coverings.
+	return intersects(c, rc, r)
+}
+
+// Helper for Intersects. Returns spans in sorted order for convenience of
+// scans.
+func intersects(_ context.Context, rc *s2.RegionCoverer, r []s2.Region) UnionKeySpans {
+	covering := covering(rc, r)
+	querySpans := make([]KeySpan, len(covering))
+	for i, cid := range covering {
+		querySpans[i] = KeySpan{Start: Key(cid.RangeMin()), End: Key(cid.RangeMax())}
+	}
+	for _, cid := range ancestorCells(covering) {
+		querySpans = append(querySpans, KeySpan{Start: Key(cid), End: Key(cid)})
+	}
+	return querySpans
+}
+
+// Helper for CoveredBy.
+func coveredBy(_ context.Context, rc *s2.RegionCoverer, r []s2.Region) RPKeyExpr {
+	covering := innerCovering(rc, r)
+	ancestors := ancestorCells(covering)
+
+	// The covering is normalized so no 2 cells are such that one is an ancestor
+	// of another. Arrange these cells and their ancestors in a quad-tree. Any cell
+	// with more than one child needs to be unioned with the intersection of the
+	// expressions corresponding to each child. See the detailed comment in
+	// generateRPExprForTree().
+
+	// It is sufficient to represent the tree(s) using presentCells since the ids
+	// of all possible 4 children of a cell can be computed and checked for
+	// presence in the map.
+	presentCells := make(map[s2.CellID]struct{}, len(covering)+len(ancestors))
+	for _, c := range covering {
+		presentCells[c] = struct{}{}
+	}
+	for _, c := range ancestors {
+		presentCells[c] = struct{}{}
+	}
+
+	// Construct the reverse polish expression. Note that there are up to 6
+	// trees corresponding to the 6 faces in S2. The expressions for the
+	// trees need to be intersected with each other.
+	expr := make([]RPExprElement, 0, len(presentCells)*2)
+	numFaces := 0
+	for face := 0; face < 6; face++ {
+		rootID := s2.CellIDFromFace(face)
+		if _, ok := presentCells[rootID]; !ok {
+			continue
+		}
+		expr = append(expr, generateRPExprForTree(rootID, presentCells)...)
+		numFaces++
+		if numFaces > 1 {
+			expr = append(expr, RPSetIntersection)
+		}
+	}
+	return expr
+}
+
+// The quad-trees stored in presentCells together represent a set expression.
+// This expression specifies:
+// - the path for each leaf to the root of that quad-tree. The index entries
+//   on each such path represent the shapes that cover that leaf. Hence these
+//   index entries for a single path need to be unioned to give the shapes
+//   that cover the leaf.
+// - The full expression specifies the shapes that cover all the leaves, so
+//   the union expressions for the paths must be intersected with each other.
+//
+// Reusing an example from earlier in this file, say the quad-tree is:
+//                      c0
+//                      |
+//                      c3
+//                      |
+//                  +---+---+
+//                  |       |
+//                 c13      c15
+//                  |       |
+//                 c53   +--+--+
+//                       |     |
+//                      c61    c64
+//
+// This tree represents the following expression (where I(c) are the index
+// entries stored at cell c):
+//  (I(c64) \union I(c15) \union I(c3) \union I(c0)) \intersection
+//  (I(c61) \union I(c15) \union I(c3) \union I(c0)) \intersection
+//  (I(c53) \union I(c13) \union I(c3) \union I(c0))
+// In this example all the union sub-expressions have the same number of terms
+// but that does not need to be true.
+//
+// The above expression can be factored to eliminate repetition of the
+// same cell. The factored expression for this example is:
+//   I(c0) \union I(c3) \union
+//    ((I(c13) \union I(c53)) \intersection
+//     (I(c15) \union (I(c61) \intersection I(c64)))
+//
+// This function generates this factored expression represented in reverse
+// polish notation.
+//
+// One can generate the factored expression in reverse polish notation using
+// a post-order traversal of this tree:
+// Step A. append the expression for the subtree rooted at c3
+// Step B. append c0 and the union operator
+// For Step A:
+// - append the expression for the subtree rooted at c13
+// - append the expression for the subtree rooted at c15
+// - append the intersection operator
+// - append c13
+// - append the union operator
+func generateRPExprForTree(rootID s2.CellID, presentCells map[s2.CellID]struct{}) []RPExprElement {
+	expr := []RPExprElement{Key(rootID)}
+	if rootID.IsLeaf() {
+		return expr
+	}
+	numChildren := 0
+	for _, childCellID := range rootID.Children() {
+		if _, ok := presentCells[childCellID]; !ok {
+			continue
+		}
+		expr = append(expr, generateRPExprForTree(childCellID, presentCells)...)
+		numChildren++
+		if numChildren > 1 {
+			expr = append(expr, RPSetIntersection)
+		}
+	}
+	if numChildren > 0 {
+		expr = append(expr, RPSetUnion)
+	}
+	return expr
+}
+
+// stringBuilderWithWrap is a strings.Builder that approximately wraps at a
+// certain number of characters. Newline characters should only be
+// written using tryWrap and doWrap.
+type stringBuilderWithWrap struct {
+	*strings.Builder
+	wrap     int
+	lastWrap int
+}
+
+func newStringBuilderWithWrap(b *strings.Builder, wrap int) *stringBuilderWithWrap {
+	return &stringBuilderWithWrap{
+		Builder:  b,
+		wrap:     wrap,
+		lastWrap: b.Len(),
+	}
+}
+
+func (b *stringBuilderWithWrap) tryWrap() {
+	if b.Len()-b.lastWrap > b.wrap {
+		b.doWrap()
+	}
+}
+
+func (b *stringBuilderWithWrap) doWrap() {
+	fmt.Fprintln(b)
+	b.lastWrap = b.Len()
+}
