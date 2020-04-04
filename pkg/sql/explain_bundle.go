@@ -72,11 +72,11 @@ func setExplainBundleResult(
 			return
 		}
 
-		url := fmt.Sprintf("  %s/_admin/v1/stmtbundle/%d", execCfg.AdminURL(), diagID)
 		text = []string{
-			"Download the bundle from:",
-			url,
-			"or from the Admin UI (Advanced Debug -> Statement Diagnostics).",
+			"Statement diagnostics bundle generated. Download from the Admin UI (Advanced",
+			"Debug -> Statement Diagnostics History) or use the direct link below.",
+			fmt.Sprintf("Admin UI: %s", execCfg.AdminURL()),
+			fmt.Sprintf("Direct link: %s/_admin/v1/stmtbundle/%d", execCfg.AdminURL(), diagID),
 		}
 	}()
 
