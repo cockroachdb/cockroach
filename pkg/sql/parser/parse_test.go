@@ -277,6 +277,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b STRING(3)[] COLLATE de)`},
 
 		{`CREATE VIEW a AS SELECT * FROM b`},
+		{`CREATE OR REPLACE VIEW a AS SELECT * FROM b`},
 		{`EXPLAIN CREATE VIEW a AS SELECT * FROM b`},
 		{`CREATE VIEW a AS SELECT b.* FROM b LIMIT 5`},
 		{`CREATE VIEW a AS (SELECT c, d FROM b WHERE c > 0 ORDER BY c)`},
