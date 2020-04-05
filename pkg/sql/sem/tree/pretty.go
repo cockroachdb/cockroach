@@ -1229,6 +1229,9 @@ func (node *CreateView) doc(p *PrettyCfg) pretty.Doc {
 	//     SELECT ...
 	//
 	title := pretty.Keyword("CREATE")
+	if node.Replace {
+		title = pretty.ConcatSpace(title, pretty.Keyword("OR REPLACE"))
+	}
 	if node.Temporary {
 		title = pretty.ConcatSpace(title, pretty.Keyword("TEMPORARY"))
 	}

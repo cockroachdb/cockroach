@@ -484,6 +484,7 @@ type Factory interface {
 		schema cat.Schema,
 		viewName string,
 		ifNotExists bool,
+		replace bool,
 		temporary bool,
 		viewQuery string,
 		columns sqlbase.ResultColumns,

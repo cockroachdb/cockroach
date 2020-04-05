@@ -5327,6 +5327,21 @@ create_view_stmt:
       AsSource: $8.slct(),
       Temporary: $2.persistenceType(),
       IfNotExists: false,
+      Replace: false,
+    }
+  }
+// We cannot use a rule like opt_or_replace here as that would cause a conflict
+// with the opt_temp rule.
+| CREATE OR REPLACE opt_temp opt_view_recursive VIEW view_name opt_column_list AS select_stmt
+  {
+    name := $7.unresolvedObjectName().ToTableName()
+    $$.val = &tree.CreateView{
+      Name: name,
+      ColumnNames: $8.nameList(),
+      AsSource: $10.slct(),
+      Temporary: $4.persistenceType(),
+      IfNotExists: false,
+      Replace: true,
     }
   }
 | CREATE opt_temp opt_view_recursive VIEW IF NOT EXISTS view_name opt_column_list AS select_stmt
@@ -5338,9 +5353,9 @@ create_view_stmt:
       AsSource: $11.slct(),
       Temporary: $2.persistenceType(),
       IfNotExists: true,
+      Replace: false,
     }
   }
-| CREATE OR REPLACE opt_temp opt_view_recursive VIEW error { return unimplementedWithIssue(sqllex, 24897) }
 | CREATE opt_temp opt_view_recursive VIEW error // SHOW HELP: CREATE VIEW
 
 role_option:
