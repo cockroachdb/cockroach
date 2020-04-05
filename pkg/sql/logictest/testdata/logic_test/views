@@ -567,3 +567,58 @@ SELECT * FROM v1
 1  1  false
 2  2  true
 3  3  true
+
+subtest create_or_replace
+
+statement ok
+DROP TABLE IF EXISTS t, t2;
+CREATE TABLE t (x INT);
+INSERT INTO t VALUES (1), (2);
+CREATE TABLE t2 (x INT);
+INSERT INTO t2 VALUES (3), (4);
+
+# Test some error cases.
+
+statement error pq: \"t\" is not a view
+CREATE OR REPLACE VIEW t AS VALUES (1)
+
+statement ok
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2 FROM t
+
+# Test cases where new columns don't line up.
+
+statement error pq: cannot drop columns from view
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1 FROM t
+
+statement error pq: cannot change name of view column \"x\" to \"xy\"
+CREATE OR REPLACE VIEW tview AS SELECT x AS xy, x+1 AS x1, x+2 AS x2 FROM t
+
+statement error pq: cannot change type of view column "x1" from int to string
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, (x+1)::STRING AS x1, x+2 AS x2 FROM t
+
+statement ok
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t
+
+query IIII rowsort
+SELECT * FROM tview
+----
+1 2 3 4
+2 3 4 5
+
+# Test cases where back references get updated.
+statement ok
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t2
+
+query IIII rowsort
+SELECT * FROM tview
+----
+3 4 5 6
+4 5 6 7
+
+# After remaking tview, it no longer depends on t.
+statement ok
+DROP TABLE t
+
+# However, we now depend on t2.
+statement error cannot drop relation "t2" because view "tview" depends on it
+DROP TABLE t2

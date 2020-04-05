@@ -118,7 +118,8 @@ var storageParamExpectedTypes = map[string]storageParamType{
 func (n *createTableNode) ReadingOwnWrites() {}
 
 // getTableCreateParams returns the table key needed for the new table,
-// as well as the schema id.
+// as well as the schema id. It returns valid data in the case that
+// the desired object exists.
 func getTableCreateParams(
 	params runParams, dbID sqlbase.ID, isTemporary bool, tableName string,
 ) (sqlbase.DescriptorKey, sqlbase.ID, error) {
@@ -161,7 +162,8 @@ func getTableCreateParams(
 
 	exists, _, err := sqlbase.LookupObjectID(params.ctx, params.p.txn, dbID, schemaID, tableName)
 	if err == nil && exists {
-		return nil, 0, sqlbase.NewRelationAlreadyExistsError(tableName)
+		// Still return data in this case.
+		return tKey, schemaID, sqlbase.NewRelationAlreadyExistsError(tableName)
 	} else if err != nil {
 		return nil, 0, err
 	}
