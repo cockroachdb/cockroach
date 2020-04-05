@@ -1232,3 +1232,19 @@ PREPARE q AS DELETE FROM ts WHERE ts.d <= $1
 
 statement ok
 EXECUTE q ('2020-03-25')
+
+# Test that if we replace a view the cached plan is invalidated.
+statement ok
+CREATE VIEW tview AS VALUES (1)
+
+statement ok
+PREPARE tview_prep AS SELECT * FROM tview
+
+statement ok
+CREATE OR REPLACE VIEW tview AS VALUES (2)
+
+query I
+EXECUTE tview_prep
+----
+2
+
