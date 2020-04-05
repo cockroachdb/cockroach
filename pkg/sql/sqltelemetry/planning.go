@@ -94,6 +94,10 @@ var ExplainDistSQLUseCounter = telemetry.GetCounterOnce("sql.plan.explain-distsq
 // ExplainAnalyzeUseCounter is to be incremented whenever EXPLAIN ANALYZE is run.
 var ExplainAnalyzeUseCounter = telemetry.GetCounterOnce("sql.plan.explain-analyze")
 
+// ExplainAnalyzeDebugUseCounter is to be incremented whenever
+// EXPLAIN ANALYZE (DEBUG) is run.
+var ExplainAnalyzeDebugUseCounter = telemetry.GetCounterOnce("sql.plan.explain-analyze-debug")
+
 // ExplainOptUseCounter is to be incremented whenever EXPLAIN (OPT) is run.
 var ExplainOptUseCounter = telemetry.GetCounterOnce("sql.plan.explain-opt")
 

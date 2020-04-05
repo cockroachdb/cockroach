@@ -243,6 +243,7 @@ func TestCBOReportUsage(t *testing.T) {
 	sqlDB.Exec(t, `EXPLAIN SELECT * FROM x`)
 	sqlDB.Exec(t, `EXPLAIN (distsql) SELECT * FROM x`)
 	sqlDB.Exec(t, `EXPLAIN ANALYZE SELECT * FROM x`)
+	sqlDB.Exec(t, `EXPLAIN ANALYZE (DEBUG) SELECT * FROM x`)
 	sqlDB.Exec(t, `EXPLAIN (opt) SELECT * FROM x`)
 	sqlDB.Exec(t, `EXPLAIN (opt, verbose) SELECT * FROM x`)
 	// Do joins different numbers of times to disambiguate them in the expected,
@@ -312,6 +313,7 @@ func TestCBOReportUsage(t *testing.T) {
 		"sql.plan.stats.created":                1,
 		"sql.plan.explain":                      1,
 		"sql.plan.explain-analyze":              1,
+		"sql.plan.explain-analyze-debug":        1,
 		"sql.plan.explain-opt":                  1,
 		"sql.plan.explain-opt-verbose":          1,
 		"sql.plan.explain-distsql":              1,
