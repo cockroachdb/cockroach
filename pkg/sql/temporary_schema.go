@@ -417,12 +417,19 @@ func makeTemporaryObjectCleanerMetrics() *temporaryObjectCleanerMetrics {
 }
 
 // doTemporaryObjectCleanup performs the actual cleanup.
-func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(ctx context.Context) error {
+func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
+	ctx context.Context, closerCh <-chan struct{},
+) error {
 	// Wrap the retry functionality with the default arguments.
 	retryFunc := func(ctx context.Context, do func() error) error {
 		return retry.WithMaxAttempts(
 			ctx,
-			retry.Options{InitialBackoff: 1 * time.Second, MaxBackoff: 1 * time.Minute, Multiplier: 2},
+			retry.Options{
+				InitialBackoff: 1 * time.Second,
+				MaxBackoff:     1 * time.Minute,
+				Multiplier:     2,
+				Closer:         closerCh,
+			},
 			5, // maxAttempts
 			func() error {
 				err := do()
@@ -547,7 +554,7 @@ func (c *TemporaryObjectCleaner) Start(ctx context.Context, stopper *stop.Stoppe
 
 			select {
 			case <-nextTickCh:
-				if err := c.doTemporaryObjectCleanup(ctx); err != nil {
+				if err := c.doTemporaryObjectCleanup(ctx, stopper.ShouldQuiesce()); err != nil {
 					log.Warningf(ctx, "failed to clean temp objects: %v", err)
 				}
 			case <-stopper.ShouldQuiesce():
