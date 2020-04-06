@@ -540,8 +540,8 @@ RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'
 		if runConfig.stressDiskSpilling {
 			// In order to stress the disk spilling of the vectorized
 			// engine, we will set workmem limit to a random value in range
-			// [100KiB, 1000KiB).
-			workmemInKiB := 100 + rng.Intn(900)
+			// [16KiB, 256KiB).
+			workmemInKiB := 16 + rng.Intn(240)
 			workmem := fmt.Sprintf("%dKiB", workmemInKiB)
 			t.Status(fmt.Sprintf("setting workmem='%s'", workmem))
 			if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.distsql.temp_storage.workmem='%s'", workmem)); err != nil {
