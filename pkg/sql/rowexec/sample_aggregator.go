@@ -322,7 +322,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				colIdx := int(si.spec.Columns[0])
 				typ := &s.inTypes[colIdx]
 
-				h, err := generateHistogram(
+				h, err := s.generateHistogram(
 					s.EvalCtx,
 					s.sr.Get(),
 					colIdx,
@@ -382,7 +382,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 // generateHistogram returns a histogram (on a given column) from a set of
 // samples.
 // numRows is the total number of rows from which values were sampled.
-func generateHistogram(
+func (s *sampleAggregator) generateHistogram(
 	evalCtx *tree.EvalContext,
 	samples []stats.SampledRow,
 	colIdx int,
@@ -391,10 +391,15 @@ func generateHistogram(
 	distinctCount int64,
 	maxBuckets int,
 ) (stats.HistogramData, error) {
-	var da sqlbase.DatumAlloc
+	// Account for the memory we'll use copying the samples into values.
+	if err := s.memAcc.Grow(evalCtx.Context, sizeOfDatum * int64(len(samples))); err != nil {
+		return stats.HistogramData{}, err
+	}
 	values := make(tree.Datums, 0, len(samples))
-	for _, s := range samples {
-		ed := &s.Row[colIdx]
+
+	var da sqlbase.DatumAlloc
+	for _, sample := range samples {
+		ed := &sample.Row[colIdx]
 		// Ignore NULLs (they are counted separately).
 		if !ed.IsNull() {
 			if err := ed.EnsureDecoded(colType, &da); err != nil {
