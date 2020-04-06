@@ -59,6 +59,7 @@ var (
 // This method is part of the serverpb.AdminClient interface.
 func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer) error {
 	ctx := stream.Context()
+	ctx = s.server.AnnotateCtx(ctx)
 
 	doDrain := req.DoDrain
 	if len(req.DeprecatedProbeIndicator) > 0 {
