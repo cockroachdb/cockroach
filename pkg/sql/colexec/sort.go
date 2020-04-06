@@ -103,8 +103,8 @@ type allSpooler struct {
 	// inputTypes contains the types of all of the columns from the input.
 	inputTypes []coltypes.T
 	// bufferedTuples stores all the values from the input after spooling. Each
-	// Vec in this slice is the entire column from the input.
-	bufferedTuples coldata.Batch
+	// Vec in this batch is the entire column from the input.
+	bufferedTuples *appendOnlyBufferedBatch
 	// spooled indicates whether spool() has already been called.
 	spooled       bool
 	windowedBatch coldata.Batch
@@ -123,7 +123,9 @@ func newAllSpooler(allocator *Allocator, input Operator, inputTypes []coltypes.T
 
 func (p *allSpooler) init() {
 	p.input.Init()
-	p.bufferedTuples = p.allocator.NewMemBatchWithSize(p.inputTypes, 0 /* size */)
+	p.bufferedTuples = newAppendOnlyBufferedBatch(
+		p.allocator, p.inputTypes, 0, /* initialSize */
+	)
 	p.windowedBatch = p.allocator.NewMemBatchWithSize(p.inputTypes, 0 /* size */)
 }
 
@@ -134,19 +136,7 @@ func (p *allSpooler) spool(ctx context.Context) {
 	p.spooled = true
 	for batch := p.input.Next(ctx); batch.Length() != 0; batch = p.input.Next(ctx) {
 		p.allocator.PerformOperation(p.bufferedTuples.ColVecs(), func() {
-			numBufferedTuples := p.bufferedTuples.Length()
-			for i, colVec := range p.bufferedTuples.ColVecs() {
-				colVec.Append(
-					coldata.SliceArgs{
-						ColType:   p.inputTypes[i],
-						Src:       batch.ColVec(i),
-						Sel:       batch.Selection(),
-						DestIdx:   numBufferedTuples,
-						SrcEndIdx: batch.Length(),
-					},
-				)
-			}
-			p.bufferedTuples.SetLength(numBufferedTuples + batch.Length())
+			p.bufferedTuples.append(batch, 0 /* startIdx */, batch.Length())
 		})
 	}
 }

@@ -232,7 +232,7 @@ type chunker struct {
 	// bufferedTuples is a buffer to store tuples when a chunk is bigger than
 	// coldata.BatchSize() or when the chunk is the last in the last read batch
 	// (we don't know yet where the end of such chunk is).
-	bufferedTuples coldata.Batch
+	bufferedTuples *appendOnlyBufferedBatch
 
 	readFrom chunkerReadingState
 	state    chunkerState
@@ -273,7 +273,9 @@ func newChunker(
 
 func (s *chunker) init() {
 	s.input.Init()
-	s.bufferedTuples = s.allocator.NewMemBatchWithSize(s.inputTypes, 0 /* size */)
+	s.bufferedTuples = newAppendOnlyBufferedBatch(
+		s.allocator, s.inputTypes, 0, /* initialSize */
+	)
 	s.partitionCol = make([]bool, coldata.BatchSize())
 	s.chunks = make([]int, 0, 16)
 }
@@ -417,18 +419,7 @@ func (s *chunker) buffer(start int, end int) {
 	}
 	s.allocator.PerformOperation(s.bufferedTuples.ColVecs(), func() {
 		s.exportState.numProcessedTuplesFromBatch = end
-		for i, colVec := range s.bufferedTuples.ColVecs() {
-			colVec.Append(
-				coldata.SliceArgs{
-					ColType:     s.inputTypes[i],
-					Src:         s.batch.ColVec(i),
-					DestIdx:     s.bufferedTuples.Length(),
-					SrcStartIdx: start,
-					SrcEndIdx:   end,
-				},
-			)
-		}
-		s.bufferedTuples.SetLength(s.bufferedTuples.Length() + end - start)
+		s.bufferedTuples.append(s.batch, start, end)
 	})
 }
 
