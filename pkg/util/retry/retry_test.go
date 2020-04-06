@@ -12,9 +12,11 @@ package retry
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
+
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRetryExceedsMaxBackoff(t *testing.T) {
@@ -140,26 +142,148 @@ func TestRetryNextCh(t *testing.T) {
 }
 
 func TestRetryWithMaxAttempts(t *testing.T) {
-	opts := Options{
-		InitialBackoff: time.Microsecond * 10,
-		MaxBackoff:     time.Second,
-		Multiplier:     2,
-		MaxRetries:     1,
-	}
-
-	attempts := 0
-	const maxAttempts = 3
 	expectedErr := errors.New("placeholder")
-	errFn := func() error {
+	attempts := 0
+	errWithAttemptsCounterFunc := func() error {
 		attempts++
 		return expectedErr
 	}
-
-	actualErr := WithMaxAttempts(context.TODO(), opts, maxAttempts, errFn)
-	if actualErr != expectedErr {
-		t.Fatalf("expected err %v, got %v", expectedErr, actualErr)
+	errorUntilAttemptNumFunc := func(until int) func() error {
+		return func() error {
+			attempts++
+			if attempts == until {
+				return nil
+			}
+			return expectedErr
+		}
 	}
-	if attempts != maxAttempts {
-		t.Errorf("expected %d attempts, got %d attempts", maxAttempts, attempts)
+	cancelCtx, cancelCtxFunc := context.WithCancel(context.Background())
+	closeCh := make(chan struct{})
+
+	testCases := []struct {
+		desc string
+
+		ctx                    context.Context
+		opts                   Options
+		preWithMaxAttemptsFunc func()
+		retryFunc              func() error
+		maxAttempts            int
+
+		// Due to channel races with select, we can allow a range of number of attempts.
+		minNumAttempts  int
+		maxNumAttempts  int
+		expectedErrText string
+	}{
+		{
+			desc: "succeeds when no errors are ever given",
+			ctx:  context.Background(),
+			opts: Options{
+				InitialBackoff: time.Microsecond * 10,
+				MaxBackoff:     time.Microsecond * 20,
+				Multiplier:     2,
+				MaxRetries:     1,
+			},
+			retryFunc:   func() error { return nil },
+			maxAttempts: 3,
+
+			minNumAttempts: 0,
+			maxNumAttempts: 0,
+		},
+		{
+			desc: "succeeds after one faked error",
+			ctx:  context.Background(),
+			opts: Options{
+				InitialBackoff: time.Microsecond * 10,
+				MaxBackoff:     time.Microsecond * 20,
+				Multiplier:     2,
+				MaxRetries:     1,
+			},
+			retryFunc:   errorUntilAttemptNumFunc(1),
+			maxAttempts: 3,
+
+			minNumAttempts: 1,
+			maxNumAttempts: 1,
+		},
+		{
+			desc: "errors when max attempts is exhausted",
+			ctx:  context.Background(),
+			opts: Options{
+				InitialBackoff: time.Microsecond * 10,
+				MaxBackoff:     time.Microsecond * 20,
+				Multiplier:     2,
+				MaxRetries:     1,
+			},
+			retryFunc:   errWithAttemptsCounterFunc,
+			maxAttempts: 3,
+
+			minNumAttempts:  3,
+			maxNumAttempts:  3,
+			expectedErrText: expectedErr.Error(),
+		},
+		{
+			desc: "errors with context that is canceled",
+			ctx:  cancelCtx,
+			opts: Options{
+				InitialBackoff: time.Microsecond * 10,
+				MaxBackoff:     time.Microsecond * 20,
+				Multiplier:     2,
+				MaxRetries:     1,
+			},
+			retryFunc:   errWithAttemptsCounterFunc,
+			maxAttempts: 3,
+			preWithMaxAttemptsFunc: func() {
+				cancelCtxFunc()
+			},
+
+			minNumAttempts:  0,
+			maxNumAttempts:  3,
+			expectedErrText: "did not run function due to context completion: context canceled",
+		},
+		{
+			desc: "errors with opt.Closer that is closed",
+			ctx:  context.Background(),
+			opts: Options{
+				InitialBackoff: time.Microsecond * 10,
+				MaxBackoff:     time.Microsecond * 20,
+				Multiplier:     2,
+				MaxRetries:     1,
+				Closer:         closeCh,
+			},
+			retryFunc:   errWithAttemptsCounterFunc,
+			maxAttempts: 3,
+			preWithMaxAttemptsFunc: func() {
+				close(closeCh)
+			},
+
+			minNumAttempts:  0,
+			maxNumAttempts:  3,
+			expectedErrText: "did not run function due to closed opts.Closer",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			attempts = 0
+			if tc.preWithMaxAttemptsFunc != nil {
+				tc.preWithMaxAttemptsFunc()
+			}
+			err := WithMaxAttempts(tc.ctx, tc.opts, tc.maxAttempts, tc.retryFunc)
+			if tc.expectedErrText != "" {
+				// Error can be either the expected error or the error timeout, as
+				// channels can race.
+				require.Truef(
+					t,
+					err.Error() == tc.expectedErrText || err.Error() == expectedErr.Error(),
+					"expected %s or %s, got %s",
+					tc.expectedErrText,
+					expectedErr.Error(),
+					err.Error(),
+				)
+			} else {
+				require.NoError(t, err)
+			}
+			require.GreaterOrEqual(t, attempts, tc.minNumAttempts)
+			require.LessOrEqual(t, attempts, tc.maxNumAttempts)
+		})
 	}
 }
