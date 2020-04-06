@@ -62,9 +62,9 @@ func SampleDatum(t *types.T) Datum {
 	case types.TimeTZFamily:
 		return NewDTimeTZFromOffset(timeofday.FromInt(345), 5*60*60 /* OffsetSecs */)
 	case types.TimestampFamily:
-		return MakeDTimestamp(timeutil.Unix(123, 123), time.Second)
+		return MustDTimestamp(timeutil.Unix(123, 123), time.Second)
 	case types.TimestampTZFamily:
-		return MakeDTimestampTZ(timeutil.Unix(123, 123), time.Second)
+		return MustDTimestampTZ(timeutil.Unix(123, 123), time.Second)
 	case types.IntervalFamily:
 		i, _ := ParseDInterval("1h1m1s")
 		return i

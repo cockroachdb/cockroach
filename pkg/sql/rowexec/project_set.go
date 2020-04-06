@@ -178,7 +178,11 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 				}
 				if hasVals {
 					// This source has values, use them.
-					for _, value := range gen.Values() {
+					values, err := gen.Values()
+					if err != nil {
+						return false, err
+					}
+					for _, value := range values {
 						ps.rowBuffer[colIdx] = ps.toEncDatum(value, colIdx)
 						colIdx++
 					}

@@ -190,11 +190,11 @@ func TestAvroSchema(t *testing.T) {
 			// whose nanosecond representation overflows an
 			// int64, so restrict input to fit.
 			t := randTime(rng).Truncate(time.Millisecond)
-			datum = tree.MakeDTimestamp(t, time.Microsecond)
+			datum = tree.MustDTimestamp(t, time.Microsecond)
 		case types.TimestampTZFamily:
 			// See comments above for TimestampFamily.
 			t := randTime(rng).Truncate(time.Millisecond)
-			datum = tree.MakeDTimestampTZ(t, time.Microsecond)
+			datum = tree.MustDTimestampTZ(t, time.Microsecond)
 		case types.DecimalFamily:
 			// TODO(dan): Make RandDatum respect Precision and Width instead.
 			// TODO(dan): The precision is really meant to be in [1,10], but it
