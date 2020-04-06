@@ -140,10 +140,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 		switch t := cmd.(type) {
 		case *tree.AlterTableAddColumn:
 			d := t.ColumnDef
-			if d.HasFKConstraint() {
-				return unimplemented.NewWithIssue(32917,
-					"adding a REFERENCES constraint while also adding a column via ALTER not supported")
-			}
 
 			newDef, seqDbDesc, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, tn)
 			if err != nil {
@@ -306,12 +302,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			case *tree.ForeignKeyConstraintTableDef:
 				for _, colName := range d.FromCols {
-					col, err := n.tableDesc.FindActiveColumnByName(string(colName))
+					col, err := n.tableDesc.FindActiveOrNewColumnByName(colName)
 					if err != nil {
-						if _, dropped, inactiveErr := n.tableDesc.FindColumnByName(colName); inactiveErr == nil && !dropped {
-							return unimplemented.NewWithIssue(32917,
-								"adding a REFERENCES constraint while the column is being added not supported")
-						}
 						return err
 					}
 
@@ -1038,6 +1030,29 @@ func labeledRowValues(cols []sqlbase.ColumnDescriptor, values tree.Datums) strin
 		s.WriteString(values[i].String())
 	}
 	return s.String()
+}
+
+func isFKOnNewlyAddedColumn(
+	desc *MutableTableDescriptor, originColumns []*sqlbase.ColumnDescriptor,
+) bool {
+	if len(originColumns) != 1 {
+		return false
+	}
+	col := originColumns[0]
+	// See if col is in the mutations list and created in the current txn.
+	currentMutationID := desc.ClusterVersion.NextMutationID
+	for i := range desc.Mutations {
+		mut := &desc.Mutations[i]
+		// We are looking for a column mutation with the same column ID as col,
+		// and an adding state with the current mutation ID.
+		if mutCol := mut.GetColumn(); mutCol != nil &&
+			mut.MutationID == currentMutationID &&
+			mut.Direction == sqlbase.DescriptorMutation_ADD &&
+			mutCol.ID == col.ID {
+			return true
+		}
+	}
+	return false
 }
 
 // injectTableStats implements the INJECT STATISTICS command, which deletes any

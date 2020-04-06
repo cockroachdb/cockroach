@@ -584,16 +584,16 @@ func ResolveFK(
 	validationBehavior tree.ValidationBehavior,
 	settings *cluster.Settings,
 ) error {
-	originColumnIDs := make(sqlbase.ColumnIDs, len(d.FromCols))
+	originColumns := make([]*sqlbase.ColumnDescriptor, len(d.FromCols))
 	for i, col := range d.FromCols {
-		col, _, err := tbl.FindColumnByName(col)
+		col, err := tbl.FindActiveOrNewColumnByName(col)
 		if err != nil {
 			return err
 		}
 		if err := col.CheckCanBeFKRef(); err != nil {
 			return err
 		}
-		originColumnIDs[i] = col.ID
+		originColumns[i] = col
 	}
 
 	target, err := ResolveMutableExistingObject(ctx, sc, &d.Table, true /*required*/, ResolveRequireTableDesc)
@@ -634,11 +634,6 @@ func ResolveFK(
 		}
 	}
 
-	srcCols, err := tbl.FindActiveColumnsByNames(d.FromCols)
-	if err != nil {
-		return err
-	}
-
 	targetColNames := d.ToCols
 	// If no columns are specified, attempt to default to PK.
 	if len(targetColNames) == 0 {
@@ -653,14 +648,14 @@ func ResolveFK(
 		return err
 	}
 
-	if len(targetCols) != len(srcCols) {
+	if len(targetCols) != len(originColumns) {
 		return pgerror.Newf(pgcode.Syntax,
 			"%d columns must reference exactly %d columns in referenced table (found %d)",
-			len(srcCols), len(srcCols), len(targetCols))
+			len(originColumns), len(originColumns), len(targetCols))
 	}
 
-	for i := range srcCols {
-		if s, t := srcCols[i], targetCols[i]; !s.Type.Equivalent(&t.Type) {
+	for i := range originColumns {
+		if s, t := originColumns[i], targetCols[i]; !s.Type.Equivalent(&t.Type) {
 			return pgerror.Newf(pgcode.DatatypeMismatch,
 				"type of %q (%s) does not match foreign key %q.%q (%s)",
 				s.Name, s.Type.String(), target.Name, t.Name, t.Type.String())
@@ -699,7 +694,7 @@ func ResolveFK(
 	// Don't add a SET NULL action on an index that has any column that is NOT
 	// NULL.
 	if d.Actions.Delete == tree.SetNull || d.Actions.Update == tree.SetNull {
-		for _, sourceColumn := range srcCols {
+		for _, sourceColumn := range originColumns {
 			if !sourceColumn.Nullable {
 				col := qualifyFKColErrorWithDB(ctx, txn, tbl.TableDesc(), sourceColumn.Name)
 				return pgerror.Newf(pgcode.InvalidForeignKey,
@@ -712,7 +707,7 @@ func ResolveFK(
 	// Don't add a SET DEFAULT action on an index that has any column that has
 	// a DEFAULT expression of NULL and a NOT NULL constraint.
 	if d.Actions.Delete == tree.SetDefault || d.Actions.Update == tree.SetDefault {
-		for _, sourceColumn := range srcCols {
+		for _, sourceColumn := range originColumns {
 			// Having a default expression of NULL, and a constraint of NOT NULL is a
 			// contradiction and should never be allowed.
 			if sourceColumn.DefaultExpr == nil && !sourceColumn.Nullable {
@@ -725,16 +720,22 @@ func ResolveFK(
 		}
 	}
 
+	originColumnIDs := make(sqlbase.ColumnIDs, len(originColumns))
+	for i, col := range originColumns {
+		originColumnIDs[i] = col.ID
+	}
 	var legacyOriginIndexID sqlbase.IndexID
 	// Search for an index on the origin table that matches. If one doesn't exist,
-	// we create one automatically if the table to alter is new or empty.
-	originIdx, err := sqlbase.FindFKOriginIndex(tbl.TableDesc(), originColumnIDs)
+	// we create one automatically if the table to alter is new or empty. We also
+	// create an index if the foreign key is on a newly added column. This allows
+	// us to automatically create an index for ADD COLUMN .. REFERENCES.
+	originIdx, err := sqlbase.FindFKOriginIndexInTxn(tbl, originColumnIDs)
 	if err == nil {
 		// If there was no error, we found a suitable index.
 		legacyOriginIndexID = originIdx.ID
 	} else {
 		// No existing suitable index was found.
-		if ts == NonEmptyTable {
+		if ts == NonEmptyTable && !isFKOnNewlyAddedColumn(tbl, originColumns) {
 			var colNames bytes.Buffer
 			colNames.WriteString(`("`)
 			for i, id := range originColumnIDs {
@@ -751,7 +752,7 @@ func ResolveFK(
 			return pgerror.Newf(pgcode.ForeignKeyViolation,
 				"foreign key requires an existing index on columns %s", colNames.String())
 		}
-		id, err := addIndexForFK(tbl, srcCols, constraintName, ts)
+		id, err := addIndexForFK(tbl, originColumns, constraintName, ts)
 		if err != nil {
 			return err
 		}
@@ -801,7 +802,7 @@ func ResolveFK(
 // that will support using `srcCols` as the referencing (src) side of an FK.
 func addIndexForFK(
 	tbl *sqlbase.MutableTableDescriptor,
-	srcCols []sqlbase.ColumnDescriptor,
+	srcCols []*sqlbase.ColumnDescriptor,
 	constraintName string,
 	ts FKTableState,
 ) (sqlbase.IndexID, error) {
