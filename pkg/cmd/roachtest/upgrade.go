@@ -378,7 +378,7 @@ func (u *versionUpgradeTest) run(ctx context.Context, t *test) {
 	defer db.Close()
 
 	for _, step := range u.steps {
-		step.run(ctx, t, u)
+		step(ctx, t, u)
 		for _, feature := range u.features {
 			t.l.Printf("checking %s", feature.name)
 			if skipped := feature.fn(ctx, t, u); skipped {
@@ -475,40 +475,32 @@ func (u *versionUpgradeTest) version(ctx context.Context, t *test, i int) roachp
 }
 
 // versionStep is an isolated version migration on a running cluster.
-type versionStep struct {
-	clusterVersion string // if empty, use crdb_internal.node_executable_version
-	run            func(ctx context.Context, t *test, u *versionUpgradeTest)
-}
+type versionStep func(ctx context.Context, t *test, u *versionUpgradeTest)
 
 func uploadAndStartFromCheckpointFixture(version string) versionStep {
-	return versionStep{
-		clusterVersion: "",
-		run: func(ctx context.Context, t *test, u *versionUpgradeTest) {
-			nodes := u.c.All()
-			u.c.Run(ctx, nodes, "mkdir", "-p", "{store-dir}")
-			name := checkpointName(version)
-			for _, i := range nodes {
-				u.c.Put(ctx,
-					"pkg/cmd/roachtest/fixtures/"+strconv.Itoa(i)+"/"+name+".tgz",
-					"{store-dir}/fixture.tgz", u.c.Node(i),
-				)
-			}
-			// Extract fixture. Fail if there's already an LSM in the store dir.
-			u.c.Run(ctx, nodes, "cd {store-dir} && [ ! -f {store-dir}/CURRENT ] && tar -xf fixture.tgz")
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		nodes := u.c.All()
+		u.c.Run(ctx, nodes, "mkdir", "-p", "{store-dir}")
+		name := checkpointName(version)
+		for _, i := range nodes {
+			u.c.Put(ctx,
+				"pkg/cmd/roachtest/fixtures/"+strconv.Itoa(i)+"/"+name+".tgz",
+				"{store-dir}/fixture.tgz", u.c.Node(i),
+			)
+		}
+		// Extract fixture. Fail if there's already an LSM in the store dir.
+		u.c.Run(ctx, nodes, "cd {store-dir} && [ ! -f {store-dir}/CURRENT ] && tar -xf fixture.tgz")
 
-			// Start the binary.
-			uploadAndstartStep(version).run(ctx, t, u)
-		},
+		// Start the binary.
+		uploadAndstartStep(version)(ctx, t, u)
 	}
 }
 
 func uploadAndstartStep(v string) versionStep {
-	return versionStep{
-		run: func(ctx context.Context, t *test, u *versionUpgradeTest) {
-			args := u.uploadVersion(ctx, t, v)
-			// NB: can't start sequentially since cluster already bootstrapped.
-			u.c.Start(ctx, t, u.c.All(), args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
-		},
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		args := u.uploadVersion(ctx, t, v)
+		// NB: can't start sequentially since cluster already bootstrapped.
+		u.c.Start(ctx, t, u.c.All(), args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
 	}
 }
 
@@ -516,55 +508,53 @@ func uploadAndstartStep(v string) versionStep {
 // Note that this does *not* wait for the cluster version to upgrade. Use a
 // waitForUpgradeStep() for that.
 func binaryUpgradeStep(newVersion string) versionStep {
-	return versionStep{
-		run: func(ctx context.Context, t *test, u *versionUpgradeTest) {
-			c := u.c
-			nodes := c.All()
-			t.l.Printf("%s: binary\n", newVersion)
-			args := u.uploadVersion(ctx, t, newVersion)
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		c := u.c
+		nodes := c.All()
+		t.l.Printf("%s: binary\n", newVersion)
+		args := u.uploadVersion(ctx, t, newVersion)
 
-			// Restart nodes in a random order; otherwise node 1 would be running all
-			// the migrations and it probably also has all the leases.
-			rand.Shuffle(len(nodes), func(i, j int) {
-				nodes[i], nodes[j] = nodes[j], nodes[i]
-			})
-			for _, node := range nodes {
-				t.l.Printf("%s: upgrading node %d\n", newVersion, node)
-				c.Stop(ctx, c.Node(node))
-				c.Start(ctx, t, c.Node(node), args, startArgsDontEncrypt)
+		// Restart nodes in a random order; otherwise node 1 would be running all
+		// the migrations and it probably also has all the leases.
+		rand.Shuffle(len(nodes), func(i, j int) {
+			nodes[i], nodes[j] = nodes[j], nodes[i]
+		})
+		for _, node := range nodes {
+			t.l.Printf("%s: upgrading node %d\n", newVersion, node)
+			c.Stop(ctx, c.Node(node))
+			c.Start(ctx, t, c.Node(node), args, startArgsDontEncrypt)
 
-				u.checkNode(ctx, t, node, newVersion)
+			u.checkNode(ctx, t, node, newVersion)
 
-				// TODO(nvanbenschoten): add upgrade qualification step. What should we
-				// test? We could run logictests. We could add custom logic here. Maybe
-				// this should all be pushed to nightly migration tests instead.
-			}
+			// TODO(nvanbenschoten): add upgrade qualification step. What should we
+			// test? We could run logictests. We could add custom logic here. Maybe
+			// this should all be pushed to nightly migration tests instead.
+		}
 
-			if createCheckpoints && newVersion != headVersion {
-				// If we're taking checkpoints, momentarily stop the cluster (we
-				// need to do that to get the checkpoints to reflect a
-				// consistent cluster state). The binary at this point will be
-				// the new one, but the cluster version was not explicitly
-				// bumped, though auto-update may have taken place already.
-				// For example, if newVersion is 2.1, the cluster version in
-				// the store directories may be 2.0 on some stores and 2.1 on
-				// the others (though if any are on 2.1, then that's what's
-				// stored in system.settings).
-				// This means that when we restart from that version, we're
-				// going to want to use the binary mentioned in the checkpoint,
-				// or at least one compatible with the *predecessor* of the
-				// checkpoint version. For example, for checkpoint-2.1, the
-				// cluster version might be 2.0, so we can only use the 2.0 or
-				// 2.1 binary, but not the 19.1 binary (as 19.1 and 2.0 are not
-				// compatible).
-				name := checkpointName(newVersion)
-				c.Stop(ctx, nodes)
-				c.Run(ctx, c.All(), "./cockroach-HEAD", "debug", "rocksdb", "--db={store-dir}",
-					"checkpoint", "--checkpoint_dir={store-dir}/"+name)
-				c.Run(ctx, c.All(), "tar", "-C", "{store-dir}/"+name, "-czf", "{log-dir}/"+name+".tgz", ".")
-				c.Start(ctx, t, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
-			}
-		},
+		if createCheckpoints && newVersion != headVersion {
+			// If we're taking checkpoints, momentarily stop the cluster (we
+			// need to do that to get the checkpoints to reflect a
+			// consistent cluster state). The binary at this point will be
+			// the new one, but the cluster version was not explicitly
+			// bumped, though auto-update may have taken place already.
+			// For example, if newVersion is 2.1, the cluster version in
+			// the store directories may be 2.0 on some stores and 2.1 on
+			// the others (though if any are on 2.1, then that's what's
+			// stored in system.settings).
+			// This means that when we restart from that version, we're
+			// going to want to use the binary mentioned in the checkpoint,
+			// or at least one compatible with the *predecessor* of the
+			// checkpoint version. For example, for checkpoint-2.1, the
+			// cluster version might be 2.0, so we can only use the 2.0 or
+			// 2.1 binary, but not the 19.1 binary (as 19.1 and 2.0 are not
+			// compatible).
+			name := checkpointName(newVersion)
+			c.Stop(ctx, nodes)
+			c.Run(ctx, c.All(), "./cockroach-HEAD", "debug", "rocksdb", "--db={store-dir}",
+				"checkpoint", "--checkpoint_dir={store-dir}/"+name)
+			c.Run(ctx, c.All(), "tar", "-C", "{store-dir}/"+name, "-czf", "{log-dir}/"+name+".tgz", ".")
+			c.Start(ctx, t, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
+		}
 	}
 }
 
@@ -578,42 +568,40 @@ func binaryUpgradeStep(newVersion string) versionStep {
 // learned of a cluster version bump (from Gossip) where others haven't. This
 // situation tends to exhibit unexpected behavior.
 func waitForUpgradeStep() versionStep {
-	return versionStep{
-		run: func(ctx context.Context, t *test, u *versionUpgradeTest) {
-			c := u.c
-			var newVersion string // the cluster version to bump to
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		c := u.c
+		var newVersion string // the cluster version to bump to
 
-			db1 := c.Conn(ctx, 1)
-			defer db1.Close()
-			if err := db1.QueryRow(`SELECT crdb_internal.node_executable_version()`).Scan(&newVersion); err != nil {
+		db1 := c.Conn(ctx, 1)
+		defer db1.Close()
+		if err := db1.QueryRow(`SELECT crdb_internal.node_executable_version()`).Scan(&newVersion); err != nil {
+			t.Fatal(err)
+		}
+
+		t.l.Printf("%s: waiting for cluster to auto-upgrade\n", newVersion)
+
+		for i := 1; i < c.spec.NodeCount; i++ {
+			err := retry.ForDuration(30*time.Second, func() error {
+				db := c.Conn(ctx, i)
+				defer db.Close()
+
+				var currentVersion string
+				if err := db.QueryRow("SHOW CLUSTER SETTING version").Scan(&currentVersion); err != nil {
+					t.Fatalf("%d: %s", i, err)
+				}
+				if currentVersion != newVersion {
+					return fmt.Errorf("%d: expected version %s, got %s", i, newVersion, currentVersion)
+				}
+				return nil
+			})
+			if err != nil {
 				t.Fatal(err)
 			}
+		}
 
-			t.l.Printf("%s: waiting for cluster to auto-upgrade\n", newVersion)
+		t.l.Printf("%s: cluster is upgraded\n", newVersion)
 
-			for i := 1; i < c.spec.NodeCount; i++ {
-				err := retry.ForDuration(30*time.Second, func() error {
-					db := c.Conn(ctx, i)
-					defer db.Close()
-
-					var currentVersion string
-					if err := db.QueryRow("SHOW CLUSTER SETTING version").Scan(&currentVersion); err != nil {
-						t.Fatalf("%d: %s", i, err)
-					}
-					if currentVersion != newVersion {
-						return fmt.Errorf("%d: expected version %s, got %s", i, newVersion, currentVersion)
-					}
-					return nil
-				})
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			t.l.Printf("%s: cluster is upgraded\n", newVersion)
-
-			// TODO(nvanbenschoten): add upgrade qualification step.
-		},
+		// TODO(nvanbenschoten): add upgrade qualification step.
 	}
 }
 
