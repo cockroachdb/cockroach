@@ -568,28 +568,28 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	flowDB := kv.NewDB(cfg.AmbientCtx, tcsFactory, clock)
 	sqlServer, err := newSQLServer(sqlServerArgs{
-		Config:                 &cfg, // NB: s.cfg has a populated AmbientContext.
-		stopper:                stopper,
-		clock:                  clock,
-		rpcContext:             rpcContext,
-		distSender:             distSender,
-		status:                 statusServer,
-		nodeLiveness:           nodeLiveness,
-		protectedtsProvider:    protectedtsProvider,
-		gossip:                 g,
-		nodeDialer:             nodeDialer,
-		grpcServer:             grpcServer.Server,
-		recorder:               recorder,
-		runtime:                runtimeSampler,
-		db:                     db,
-		registry:               registry,
-		internalExecutor:       internalExecutor,
-		nodeIDContainer:        nodeIDContainer,
-		flowDB:                 flowDB,
-		externalStorage:        externalStorage,
-		externalStorageFromURI: externalStorageFromURI,
-		jobRegistry:            jobRegistry,
-		isMeta1Leaseholder:     node.stores.IsMeta1Leaseholder,
+		Config:                    &cfg, // NB: s.cfg has a populated AmbientContext.
+		stopper:                   stopper,
+		clock:                     clock,
+		rpcContext:                rpcContext,
+		distSender:                distSender,
+		status:                    statusServer,
+		nodeLiveness:              nodeLiveness,
+		protectedtsProvider:       protectedtsProvider,
+		gossip:                    g,
+		nodeDialer:                nodeDialer,
+		grpcServer:                grpcServer.Server,
+		recorder:                  recorder,
+		runtime:                   runtimeSampler,
+		db:                        db,
+		registry:                  registry,
+		lateBoundInternalExecutor: internalExecutor,
+		nodeIDContainer:           nodeIDContainer,
+		flowDB:                    flowDB,
+		externalStorage:           externalStorage,
+		externalStorageFromURI:    externalStorageFromURI,
+		jobRegistry:               jobRegistry,
+		isMeta1Leaseholder:        node.stores.IsMeta1Leaseholder,
 	})
 	if err != nil {
 		return nil, err
@@ -676,7 +676,7 @@ type sqlServerArgs struct {
 
 	// KV depends on the internal executor, so it is early bound but only filled
 	// in newSQLServer.
-	internalExecutor *sql.InternalExecutor // empty initially
+	lateBoundInternalExecutor *sql.InternalExecutor // empty initially
 	// DistSQL, lease management, and others want to know the node they're on.
 	//
 	// TODO(tbg): reasonable ask, but a SQL tenant process has no NodeID.
@@ -693,8 +693,7 @@ type sqlServerArgs struct {
 }
 
 func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
-	s := &sqlServer{}
-	s.sessionRegistry = cfg.status.sessionRegistry
+	sessionRegistry := cfg.status.sessionRegistry
 	execCfg := &sql.ExecutorConfig{}
 	var jobAdoptionStopFile string
 	for _, spec := range cfg.Stores.Specs {
@@ -705,19 +704,19 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 	}
 
 	// Create blob service for inter-node file sharing.
-	var err error
-	s.blobService, err = blobs.NewBlobService(cfg.Settings.ExternalIODir)
+	blobService, err := blobs.NewBlobService(cfg.Settings.ExternalIODir)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating blob service")
 	}
-	blobspb.RegisterBlobServer(cfg.grpcServer, s.blobService)
+	blobspb.RegisterBlobServer(cfg.grpcServer, blobService)
 
-	*cfg.jobRegistry = *jobs.MakeRegistry(
+	jobRegistry := cfg.jobRegistry
+	*jobRegistry = *jobs.MakeRegistry(
 		cfg.AmbientCtx,
 		cfg.stopper,
 		cfg.clock,
 		cfg.db,
-		cfg.internalExecutor,
+		cfg.lateBoundInternalExecutor,
 		cfg.nodeIDContainer,
 		cfg.Settings,
 		cfg.HistogramWindowInterval(),
@@ -728,8 +727,7 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 		},
 		jobAdoptionStopFile,
 	)
-	s.jobRegistry = cfg.jobRegistry
-	cfg.registry.AddMetricStruct(s.jobRegistry.MetricsStruct())
+	cfg.registry.AddMetricStruct(jobRegistry.MetricsStruct())
 
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(distSQLMetrics)
@@ -739,12 +737,12 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 	if leaseManagerTestingKnobs := cfg.TestingKnobs.SQLLeaseManager; leaseManagerTestingKnobs != nil {
 		lmKnobs = *leaseManagerTestingKnobs.(*sql.LeaseManagerTestingKnobs)
 	}
-	s.leaseMgr = sql.NewLeaseManager(
+	leaseMgr := sql.NewLeaseManager(
 		cfg.AmbientCtx,
 		cfg.nodeIDContainer,
 		cfg.db,
 		cfg.clock,
-		nil, /* internalExecutor - will be set later because of circular dependencies */
+		cfg.lateBoundInternalExecutor,
 		cfg.Settings,
 		lmKnobs,
 		cfg.stopper,
@@ -752,8 +750,8 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 	)
 
 	// Set up internal memory metrics for use by internal SQL executors.
-	s.internalMemMetrics = sql.MakeMemMetrics("internal", cfg.HistogramWindowInterval())
-	cfg.registry.AddMetricStruct(s.internalMemMetrics)
+	internalMemMetrics := sql.MakeMemMetrics("internal", cfg.HistogramWindowInterval())
+	cfg.registry.AddMetricStruct(internalMemMetrics)
 
 	// We do not set memory monitors or a noteworthy limit because the children of
 	// this monitor will be setting their own noteworthy limits.
@@ -807,8 +805,8 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 	}))
 
 	// Set up admin memory metrics for use by admin SQL executors.
-	s.adminMemMetrics = sql.MakeMemMetrics("admin", cfg.HistogramWindowInterval())
-	cfg.registry.AddMetricStruct(s.adminMemMetrics)
+	adminMemMetrics := sql.MakeMemMetrics("admin", cfg.HistogramWindowInterval())
+	cfg.registry.AddMetricStruct(adminMemMetrics)
 
 	// Set up the DistSQL server.
 	distSQLCfg := execinfra.ServerConfig{
@@ -816,7 +814,7 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 		Settings:       cfg.Settings,
 		RuntimeStats:   cfg.runtime,
 		DB:             cfg.db,
-		Executor:       cfg.internalExecutor,
+		Executor:       cfg.lateBoundInternalExecutor,
 		FlowDB:         cfg.flowDB,
 		RPCContext:     cfg.rpcContext,
 		Stopper:        cfg.stopper,
@@ -846,10 +844,10 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 
 		Metrics: &distSQLMetrics,
 
-		JobRegistry:  s.jobRegistry,
+		JobRegistry:  jobRegistry,
 		Gossip:       cfg.gossip,
 		NodeDialer:   cfg.nodeDialer,
-		LeaseManager: s.leaseMgr,
+		LeaseManager: leaseMgr,
 
 		ExternalStorage:        cfg.externalStorage,
 		ExternalStorageFromURI: cfg.externalStorageFromURI,
@@ -861,8 +859,8 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 
 	ctx := context.TODO()
 
-	s.distSQLServer = distsql.NewServer(context.TODO(), distSQLCfg)
-	execinfrapb.RegisterDistSQLServer(cfg.grpcServer, s.distSQLServer)
+	distSQLServer := distsql.NewServer(context.TODO(), distSQLCfg)
+	execinfrapb.RegisterDistSQLServer(cfg.grpcServer, distSQLServer)
 
 	virtualSchemas, err := sql.NewVirtualSchemaHolder(ctx, cfg.Settings)
 	if err != nil {
@@ -898,12 +896,12 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 		MetricsRecorder:         cfg.recorder,
 		DistSender:              cfg.distSender,
 		RPCContext:              cfg.rpcContext,
-		LeaseManager:            s.leaseMgr,
+		LeaseManager:            leaseMgr,
 		Clock:                   cfg.clock,
-		DistSQLSrv:              s.distSQLServer,
+		DistSQLSrv:              distSQLServer,
 		StatusServer:            cfg.status,
-		SessionRegistry:         s.sessionRegistry,
-		JobRegistry:             s.jobRegistry,
+		SessionRegistry:         sessionRegistry,
+		JobRegistry:             jobRegistry,
 		VirtualSchemas:          virtualSchemas,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
@@ -918,7 +916,7 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 			// The node descriptor will be set later, once it is initialized.
 			roachpb.NodeDescriptor{},
 			cfg.rpcContext,
-			s.distSQLServer,
+			distSQLServer,
 			cfg.distSender,
 			cfg.gossip,
 			cfg.stopper,
@@ -930,7 +928,7 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.SQLTableStatCacheSize,
 			cfg.gossip,
 			cfg.db,
-			cfg.internalExecutor,
+			cfg.lateBoundInternalExecutor,
 		),
 
 		// Note: don't forget to add the secondary loggers as closers
@@ -997,22 +995,22 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 		execCfg.PGWireTestingKnobs = pgwireKnobs.(*sql.PGWireTestingKnobs)
 	}
 
-	s.statsRefresher = stats.MakeRefresher(
+	statsRefresher := stats.MakeRefresher(
 		cfg.Settings,
-		cfg.internalExecutor,
+		cfg.lateBoundInternalExecutor,
 		execCfg.TableStatsCache,
 		stats.DefaultAsOfTime,
 	)
-	execCfg.StatsRefresher = s.statsRefresher
+	execCfg.StatsRefresher = statsRefresher
 
 	// Set up internal memory metrics for use by internal SQL executors.
-	s.sqlMemMetrics = sql.MakeMemMetrics("sql", cfg.HistogramWindowInterval())
-	cfg.registry.AddMetricStruct(s.sqlMemMetrics)
-	s.pgServer = pgwire.MakeServer(
+	sqlMemMetrics := sql.MakeMemMetrics("sql", cfg.HistogramWindowInterval())
+	cfg.registry.AddMetricStruct(sqlMemMetrics)
+	pgServer := pgwire.MakeServer(
 		cfg.AmbientCtx,
 		cfg.Config.Config,
 		cfg.Settings,
-		s.sqlMemMetrics,
+		sqlMemMetrics,
 		&rootSQLMemoryMonitor,
 		cfg.HistogramWindowInterval(),
 		execCfg,
@@ -1027,47 +1025,58 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 	) sqlutil.InternalExecutor {
 		ie := sql.MakeInternalExecutor(
 			ctx,
-			s.pgServer.SQLServer,
-			s.sqlMemMetrics,
+			pgServer.SQLServer,
+			sqlMemMetrics,
 			cfg.Settings,
 		)
 		ie.SetSessionData(sessionData)
 		return &ie
 	}
-	s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory = ieFactory
-	s.jobRegistry.SetSessionBoundInternalExecutorFactory(ieFactory)
+	distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory = ieFactory
+	jobRegistry.SetSessionBoundInternalExecutorFactory(ieFactory)
 
-	s.distSQLServer.ServerConfig.ProtectedTimestampProvider = execCfg.ProtectedTimestampProvider
+	distSQLServer.ServerConfig.ProtectedTimestampProvider = execCfg.ProtectedTimestampProvider
 
-	for _, m := range s.pgServer.Metrics() {
+	for _, m := range pgServer.Metrics() {
 		cfg.registry.AddMetricStruct(m)
 	}
-	*cfg.internalExecutor = sql.MakeInternalExecutor(
-		ctx, s.pgServer.SQLServer, s.internalMemMetrics, cfg.Settings,
+	*cfg.lateBoundInternalExecutor = sql.MakeInternalExecutor(
+		ctx, pgServer.SQLServer, internalMemMetrics, cfg.Settings,
 	)
-	execCfg.InternalExecutor = cfg.internalExecutor
-	s.stmtDiagnosticsRegistry = stmtdiagnostics.NewRegistry(
-		cfg.internalExecutor, cfg.db, cfg.gossip, cfg.Settings)
-	cfg.status.setStmtDiagnosticsRequester(s.stmtDiagnosticsRegistry)
-	execCfg.StmtDiagnosticsRecorder = s.stmtDiagnosticsRegistry
-	s.execCfg = execCfg
+	execCfg.InternalExecutor = cfg.lateBoundInternalExecutor
+	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
+		cfg.lateBoundInternalExecutor, cfg.db, cfg.gossip, cfg.Settings)
+	cfg.status.setStmtDiagnosticsRequester(stmtDiagnosticsRegistry)
+	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
-	s.leaseMgr.SetInternalExecutor(execCfg.InternalExecutor)
-	s.leaseMgr.RefreshLeases(cfg.stopper, cfg.db, cfg.gossip)
-	s.leaseMgr.PeriodicallyRefreshSomeLeases()
+	leaseMgr.RefreshLeases(cfg.stopper, cfg.db, cfg.gossip)
+	leaseMgr.PeriodicallyRefreshSomeLeases()
 
-	s.temporaryObjectCleaner = sql.NewTemporaryObjectCleaner(
+	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
 		cfg.db,
 		cfg.registry,
-		s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
+		distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
 		cfg.status,
 		cfg.isMeta1Leaseholder,
 		sqlExecutorTestingKnobs,
 	)
-
-	s.internalExecutor = cfg.internalExecutor
-	return s, nil
+	return &sqlServer{
+		pgServer:                pgServer,
+		distSQLServer:           distSQLServer,
+		execCfg:                 execCfg,
+		internalExecutor:        cfg.lateBoundInternalExecutor,
+		leaseMgr:                leaseMgr,
+		blobService:             blobService,
+		sessionRegistry:         sessionRegistry,
+		jobRegistry:             jobRegistry,
+		statsRefresher:          statsRefresher,
+		temporaryObjectCleaner:  temporaryObjectCleaner,
+		internalMemMetrics:      internalMemMetrics,
+		adminMemMetrics:         adminMemMetrics,
+		sqlMemMetrics:           sqlMemMetrics,
+		stmtDiagnosticsRegistry: stmtDiagnosticsRegistry,
+	}, nil
 }
 
 // ClusterSettings returns the cluster settings.

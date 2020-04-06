@@ -1463,11 +1463,6 @@ func NewLeaseManager(
 	return lm
 }
 
-// SetInternalExecutor has to be called if a nil execCfg was passed to NewLeaseManager.
-func (m *LeaseManager) SetInternalExecutor(executor sqlutil.InternalExecutor) {
-	m.internalExecutor = executor
-}
-
 func nameMatchesTable(
 	table *sqlbase.TableDescriptor, dbID sqlbase.ID, schemaID sqlbase.ID, tableName string,
 ) bool {
