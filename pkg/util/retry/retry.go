@@ -162,7 +162,11 @@ func WithMaxAttempts(ctx context.Context, opts Options, n int, fn func() error) 
 		}
 	}
 	if err == nil {
-		err = errors.Wrap(ctx.Err(), "did not run function")
+		if ctx.Err() != nil {
+			err = errors.Wrap(ctx.Err(), "did not run function due to context completion")
+		} else {
+			err = errors.New("did not run function due to closed opts.Closer")
+		}
 	}
 	return err
 }

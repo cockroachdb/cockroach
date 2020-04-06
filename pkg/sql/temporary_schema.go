@@ -417,12 +417,20 @@ func makeTemporaryObjectCleanerMetrics() *temporaryObjectCleanerMetrics {
 }
 
 // doTemporaryObjectCleanup performs the actual cleanup.
-func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(ctx context.Context) error {
+func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
+	ctx context.Context, closerCh <-chan struct{},
+) error {
+	defer log.Infof(ctx, "completed temporary object cleanup job")
 	// Wrap the retry functionality with the default arguments.
 	retryFunc := func(ctx context.Context, do func() error) error {
 		return retry.WithMaxAttempts(
 			ctx,
-			retry.Options{InitialBackoff: 1 * time.Second, MaxBackoff: 1 * time.Minute, Multiplier: 2},
+			retry.Options{
+				InitialBackoff: 1 * time.Second,
+				MaxBackoff:     1 * time.Minute,
+				Multiplier:     2,
+				Closer:         closerCh,
+			},
 			5, // maxAttempts
 			func() error {
 				err := do()
@@ -460,6 +468,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(ctx context.Context) e
 	}); err != nil {
 		return err
 	}
+
 	sessionIDs := make(map[ClusterWideID]struct{})
 	for _, dbID := range dbIDs {
 		var schemaNames map[sqlbase.ID]string
@@ -483,6 +492,11 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(ctx context.Context) e
 		}
 	}
 	log.Infof(ctx, "found %d temporary schemas", len(sessionIDs))
+
+	if len(sessionIDs) == 0 {
+		log.Infof(ctx, "early exiting temporary schema cleaner as no temporary schemas were found")
+		return nil
+	}
 
 	// Get active sessions.
 	var response *serverpb.ListSessionsResponse
@@ -531,7 +545,6 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(ctx context.Context) e
 		}
 	}
 
-	log.Infof(ctx, "completed temporary object cleanup job")
 	return nil
 }
 
@@ -547,7 +560,7 @@ func (c *TemporaryObjectCleaner) Start(ctx context.Context, stopper *stop.Stoppe
 
 			select {
 			case <-nextTickCh:
-				if err := c.doTemporaryObjectCleanup(ctx); err != nil {
+				if err := c.doTemporaryObjectCleanup(ctx, stopper.ShouldQuiesce()); err != nil {
 					log.Warningf(ctx, "failed to clean temp objects: %v", err)
 				}
 			case <-stopper.ShouldQuiesce():
