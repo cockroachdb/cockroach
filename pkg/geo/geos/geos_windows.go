@@ -20,3 +20,9 @@ import (
 func WKTToWKB(wkt geopb.WKT) (geopb.WKB, error) {
 	return nil, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
 }
+
+func ClipWKBByRect(
+	wkb geopb.WKB, xmin float64, ymin float64, xmax float64, ymax float64,
+) (geopb.WKB, error) {
+	return nil, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
+}
