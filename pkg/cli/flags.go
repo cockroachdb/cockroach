@@ -358,6 +358,7 @@ func init() {
 		VarFlag(f, &serverCfg.Stores, cliflags.Store)
 		VarFlag(f, &serverCfg.StorageEngine, cliflags.StorageEngine)
 		VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
+		StringFlag(f, &serverCfg.ClockDevicePath, cliflags.ClockDevice, "")
 
 		StringFlag(f, &startCtx.listeningURLFile, cliflags.ListeningURLFile, startCtx.listeningURLFile)
 
