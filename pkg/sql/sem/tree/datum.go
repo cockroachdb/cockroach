@@ -1908,7 +1908,10 @@ func (d *DTime) Compare(ctx *EvalContext, other Datum) int {
 }
 
 // Prev implements the Datum interface.
-func (d *DTime) Prev(_ *EvalContext) (Datum, bool) {
+func (d *DTime) Prev(ctx *EvalContext) (Datum, bool) {
+	if d.IsMin(ctx) {
+		return nil, false
+	}
 	prev := *d - 1
 	return &prev, true
 }
@@ -1919,7 +1922,10 @@ func (d *DTime) Round(precision time.Duration) *DTime {
 }
 
 // Next implements the Datum interface.
-func (d *DTime) Next(_ *EvalContext) (Datum, bool) {
+func (d *DTime) Next(ctx *EvalContext) (Datum, bool) {
+	if d.IsMax(ctx) {
+		return nil, false
+	}
 	next := *d + 1
 	return &next, true
 }
@@ -1978,7 +1984,7 @@ var (
 	// DMinTimeTZ is the min TimeTZ.
 	DMinTimeTZ = NewDTimeTZFromOffset(timeofday.Min, timetz.MinTimeTZOffsetSecs)
 	// DMaxTimeTZ is the max TimeTZ.
-	DMaxTimeTZ = NewDTimeTZFromOffset(timeofday.Time2400, timetz.MaxTimeTZOffsetSecs)
+	DMaxTimeTZ = NewDTimeTZFromOffset(timeofday.Max, timetz.MaxTimeTZOffsetSecs)
 )
 
 // NewDTimeTZ creates a DTimeTZ from a timetz.TimeTZ.

@@ -96,8 +96,9 @@ func TestAdd(t *testing.T) {
 	}{
 		{New(12, 0, 0, 0), 1, New(12, 0, 0, 1)},
 		{New(12, 0, 0, 0), microsecondsPerDay, New(12, 0, 0, 0)},
-		{Max, 1, Min},
-		{Min, -1, Max},
+		{Max, 1, 1},
+		{Time2400, 1, 1},
+		{Min, -1, microsecondsPerDay - 1},
 	}
 	for _, td := range testData {
 		d := duration.MakeDuration(td.micros*nanosPerMicro, 0, 0)
@@ -119,8 +120,10 @@ func TestDifference(t *testing.T) {
 		{New(0, 0, 0, 0), New(0, 0, 0, 0), 0},
 		{New(0, 0, 0, 1), New(0, 0, 0, 0), 1},
 		{New(0, 0, 0, 0), New(0, 0, 0, 1), -1},
-		{Max, Min, microsecondsPerDay - 1},
-		{Min, Max, -1 * (microsecondsPerDay - 1)},
+		{Time2400, Min, microsecondsPerDay},
+		{Max, Min, microsecondsPerDay},
+		{Min, Max, -1 * (microsecondsPerDay)},
+		{Min, Time2400, -1 * (microsecondsPerDay)},
 	}
 	for _, td := range testData {
 		t.Run(fmt.Sprintf("%s,%s", td.t1, td.t2), func(t *testing.T) {

@@ -484,7 +484,8 @@ var (
 		},
 		types.TimeFamily: {
 			tree.MakeDTime(timeofday.Min),
-			tree.MakeDTime(timeofday.Max),
+			// Uncomment this once #44548 has been resolved.
+			// tree.MakeDTime(timeofday.Max),
 		},
 		types.TimeTZFamily: {
 			tree.DMinTimeTZ,
