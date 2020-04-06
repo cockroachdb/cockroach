@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"runtime"
@@ -153,10 +154,11 @@ func (u *versionUpgradeTest) run(ctx context.Context, t *test) {
 		_ = u.uploadVersion(ctx, t, headVersion)
 	}
 
-	c := u.c
-
-	db := c.Conn(ctx, 1)
-	defer db.Close()
+	defer func() {
+		for _, db := range u.conns {
+			_ = db.Close()
+		}
+	}()
 
 	for _, step := range u.steps {
 		step(ctx, t, u)
@@ -183,6 +185,10 @@ type versionUpgradeTest struct {
 	c        *cluster
 	steps    []versionStep
 	features []versionFeatureTest
+
+	// Cache conns because opening one takes hundreds of ms, and we do it quite
+	// a lot.
+	conns []*gosql.DB
 }
 
 func newVersionUpgradeTest(
@@ -197,6 +203,17 @@ func newVersionUpgradeTest(
 }
 
 func checkpointName(binaryVersion string) string { return "checkpoint-v" + binaryVersion }
+
+// Return a cached conn to the given node. Don't call .Close(), the test harness
+// will do it.
+func (u *versionUpgradeTest) conn(ctx context.Context, t *test, i int) *gosql.DB {
+	if u.conns == nil {
+		for _, i := range u.c.All() {
+			u.conns = append(u.conns, u.c.Conn(ctx, i))
+		}
+	}
+	return u.conns[i-1]
+}
 
 func (u *versionUpgradeTest) uploadVersion(ctx context.Context, t *test, newVersion string) option {
 	var binary string
@@ -224,8 +241,7 @@ func (u *versionUpgradeTest) uploadVersion(ctx context.Context, t *test, newVers
 // NB: version means major.minor[-unstable]; the patch level isn't returned. For example, a binary
 // of version 19.2.4 will return 19.2.
 func (u *versionUpgradeTest) binaryVersion(ctx context.Context, t *test, i int) roachpb.Version {
-	db := u.c.Conn(ctx, i)
-	defer db.Close()
+	db := u.conn(ctx, t, i)
 
 	var sv string
 	if err := db.QueryRow(`SELECT crdb_internal.node_executable_version();`).Scan(&sv); err != nil {
@@ -248,8 +264,7 @@ func (u *versionUpgradeTest) binaryVersion(ctx context.Context, t *test, i int) 
 // gossip asynchronicity.
 // NB: cluster versions are always major.minor[-unstable]; there isn't a patch level.
 func (u *versionUpgradeTest) clusterVersion(ctx context.Context, t *test, i int) roachpb.Version {
-	db := u.c.Conn(ctx, i)
-	defer db.Close()
+	db := u.conn(ctx, t, i)
 
 	var sv string
 	if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&sv); err != nil {
@@ -348,8 +363,7 @@ func binaryUpgradeStep(newVersion string) versionStep {
 
 func preventAutoUpgradeStep() versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		db := u.c.Conn(ctx, 1)
-		defer db.Close()
+		db := u.conn(ctx, t, 1)
 		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING cluster.preserve_downgrade_option = $1`, u.binaryVersion(ctx, t, 1).String())
 		if err != nil {
 			t.Fatal(err)
@@ -359,8 +373,7 @@ func preventAutoUpgradeStep() versionStep {
 
 func allowAutoUpgradeStep() versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		db := u.c.Conn(ctx, 1)
-		defer db.Close()
+		db := u.conn(ctx, t, 1)
 		_, err := db.ExecContext(ctx, `RESET CLUSTER SETTING cluster.preserve_downgrade_option`)
 		if err != nil {
 			t.Fatal(err)
@@ -380,20 +393,12 @@ func allowAutoUpgradeStep() versionStep {
 func waitForUpgradeStep() versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		c := u.c
-		var newVersion string // the cluster version to bump to
-
-		db := c.Conn(ctx, 1)
-		defer db.Close()
-		if err := db.QueryRow(`SELECT crdb_internal.node_executable_version()`).Scan(&newVersion); err != nil {
-			t.Fatal(err)
-		}
-
+		newVersion := u.binaryVersion(ctx, t, 1).String()
 		t.l.Printf("%s: waiting for cluster to auto-upgrade\n", newVersion)
 
 		for i := 1; i < c.spec.NodeCount; i++ {
 			err := retry.ForDuration(30*time.Second, func() error {
-				db := c.Conn(ctx, i)
-				defer db.Close()
+				db := u.conn(ctx, t, i)
 
 				var currentVersion string
 				if err := db.QueryRow("SHOW CLUSTER SETTING version").Scan(&currentVersion); err != nil {
@@ -425,8 +430,7 @@ func stmtFeatureTest(
 			if u.clusterVersion(ctx, t, i).Less(minVersion) {
 				return true // skipped
 			}
-			db := u.c.Conn(ctx, i)
-			defer db.Close()
+			db := u.conn(ctx, t, i)
 			if _, err := db.ExecContext(ctx, stmt, args...); err != nil {
 				t.Fatal(err)
 			}
