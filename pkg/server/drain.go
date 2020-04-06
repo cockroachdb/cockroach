@@ -192,6 +192,9 @@ func (s *Server) doDrain(ctx context.Context, reporter func(int, string)) error 
 	// after the range holding the liveness record is marked as draining
 	// already). To prevent this, we need to briefly drop draining the
 	// stores so that KV ops can go through.
+	//
+	// This is relevant in the particular case when shutting down enough
+	// nodes to lose quorum on the range.
 	if err := s.stopDrain(ctx); err != nil {
 		return err
 	}

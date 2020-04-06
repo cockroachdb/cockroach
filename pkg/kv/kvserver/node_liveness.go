@@ -240,7 +240,9 @@ func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool, reporter fu
 		}
 		err = nl.setDrainingInternal(ctx, liveness, drain, reporter)
 		if err != nil {
-			log.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
+			if log.V(1) {
+				log.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
+			}
 			continue
 		}
 		return
@@ -361,7 +363,9 @@ func (nl *NodeLiveness) setDrainingInternal(
 		}
 		return errors.New("failed to update liveness record")
 	}); err != nil {
-		log.Infof(ctx, "updating liveness record: %v", err)
+		if log.V(1) {
+			log.Infof(ctx, "updating liveness record: %v", err)
+		}
 		if err == errNodeDrainingSet {
 			return nil
 		}
