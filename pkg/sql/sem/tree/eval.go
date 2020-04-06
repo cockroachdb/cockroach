@@ -586,7 +586,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, err
 				}
 				t := time.Duration(*right.(*DTime)) * time.Microsecond
-				return MakeDTimestamp(leftTime.Add(t), time.Microsecond), nil
+				return MakeDTimestamp(leftTime.Add(t), time.Microsecond)
 			},
 		},
 		&BinOp{
@@ -599,7 +599,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, err
 				}
 				t := time.Duration(*left.(*DTime)) * time.Microsecond
-				return MakeDTimestamp(rightTime.Add(t), time.Microsecond), nil
+				return MakeDTimestamp(rightTime.Add(t), time.Microsecond)
 			},
 		},
 		&BinOp{
@@ -612,7 +612,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, err
 				}
 				t := leftTime.Add(right.(*DTimeTZ).ToDuration())
-				return MakeDTimestampTZ(t, time.Microsecond), nil
+				return MakeDTimestampTZ(t, time.Microsecond)
 			},
 		},
 		&BinOp{
@@ -625,7 +625,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, err
 				}
 				t := rightTime.Add(left.(*DTimeTZ).ToDuration())
-				return MakeDTimestampTZ(t, time.Microsecond), nil
+				return MakeDTimestampTZ(t, time.Microsecond)
 			},
 		},
 		&BinOp{
@@ -672,7 +672,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Timestamp,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return MakeDTimestamp(duration.Add(
-					left.(*DTimestamp).Time, right.(*DInterval).Duration), time.Microsecond), nil
+					left.(*DTimestamp).Time, right.(*DInterval).Duration), time.Microsecond)
 			},
 		},
 		&BinOp{
@@ -681,7 +681,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Timestamp,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return MakeDTimestamp(duration.Add(
-					right.(*DTimestamp).Time, left.(*DInterval).Duration), time.Microsecond), nil
+					right.(*DTimestamp).Time, left.(*DInterval).Duration), time.Microsecond)
 			},
 		},
 		&BinOp{
@@ -691,7 +691,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				// Convert time to be in the given timezone, as math relies on matching timezones..
 				t := duration.Add(left.(*DTimestampTZ).Time.In(ctx.GetLocation()), right.(*DInterval).Duration)
-				return MakeDTimestampTZ(t, time.Microsecond), nil
+				return MakeDTimestampTZ(t, time.Microsecond)
 			},
 		},
 		&BinOp{
@@ -701,7 +701,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				// Convert time to be in the given timezone, as math relies on matching timezones..
 				t := duration.Add(right.(*DTimestampTZ).Time.In(ctx.GetLocation()), left.(*DInterval).Duration)
-				return MakeDTimestampTZ(t, time.Microsecond), nil
+				return MakeDTimestampTZ(t, time.Microsecond)
 			},
 		},
 		&BinOp{
@@ -722,7 +722,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, err
 				}
 				t := duration.Add(leftTime, right.(*DInterval).Duration)
-				return MakeDTimestamp(t, time.Microsecond), nil
+				return MakeDTimestamp(t, time.Microsecond)
 			},
 		},
 		&BinOp{
@@ -735,7 +735,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, err
 				}
 				t := duration.Add(rightTime, left.(*DInterval).Duration)
-				return MakeDTimestamp(t, time.Microsecond), nil
+				return MakeDTimestamp(t, time.Microsecond)
 			},
 		},
 		&BinOp{
@@ -859,7 +859,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, err
 				}
 				t := time.Duration(*right.(*DTime)) * time.Microsecond
-				return MakeDTimestamp(leftTime.Add(-1*t), time.Microsecond), nil
+				return MakeDTimestamp(leftTime.Add(-1*t), time.Microsecond)
 			},
 		},
 		&BinOp{
@@ -898,7 +898,11 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				// These two quantities aren't directly comparable. Convert the
 				// TimestampTZ to a timestamp first.
-				nanos := left.(*DTimestamp).Sub(right.(*DTimestampTZ).stripTimeZone(ctx).Time).Nanoseconds()
+				stripped, err := right.(*DTimestampTZ).stripTimeZone(ctx)
+				if err != nil {
+					return nil, err
+				}
+				nanos := left.(*DTimestamp).Sub(stripped.Time).Nanoseconds()
 				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
 			},
 		},
@@ -909,7 +913,11 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				// These two quantities aren't directly comparable. Convert the
 				// TimestampTZ to a timestamp first.
-				nanos := left.(*DTimestampTZ).stripTimeZone(ctx).Sub(right.(*DTimestamp).Time).Nanoseconds()
+				stripped, err := left.(*DTimestampTZ).stripTimeZone(ctx)
+				if err != nil {
+					return nil, err
+				}
+				nanos := stripped.Sub(right.(*DTimestamp).Time).Nanoseconds()
 				return &DInterval{Duration: duration.MakeDuration(nanos, 0, 0)}, nil
 			},
 		},
@@ -938,7 +946,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Timestamp,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return MakeDTimestamp(duration.Add(
-					left.(*DTimestamp).Time, right.(*DInterval).Duration.Mul(-1)), time.Microsecond), nil
+					left.(*DTimestamp).Time, right.(*DInterval).Duration.Mul(-1)), time.Microsecond)
 			},
 		},
 		&BinOp{
@@ -950,7 +958,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					left.(*DTimestampTZ).Time.In(ctx.GetLocation()),
 					right.(*DInterval).Duration.Mul(-1),
 				)
-				return MakeDTimestampTZ(t, time.Microsecond), nil
+				return MakeDTimestampTZ(t, time.Microsecond)
 			},
 		},
 		&BinOp{
@@ -963,7 +971,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, err
 				}
 				t := duration.Add(leftTime, right.(*DInterval).Duration.Mul(-1))
-				return MakeDTimestamp(t, time.Microsecond), nil
+				return MakeDTimestamp(t, time.Microsecond)
 			},
 		},
 		&BinOp{
@@ -2983,7 +2991,7 @@ func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
 // inexact DTimestamp by dropping the logical counter and using the wall
 // time at the microsecond precision.
 func TimestampToInexactDTimestamp(ts hlc.Timestamp) *DTimestamp {
-	return MakeDTimestamp(timeutil.Unix(0, ts.WallTime), time.Microsecond)
+	return MustDTimestamp(timeutil.Unix(0, ts.WallTime), time.Microsecond)
 }
 
 // GetRelativeParseTime implements ParseTimeContext.
@@ -3003,7 +3011,7 @@ func (ctx *EvalContext) GetTxnTimestamp(precision time.Duration) *DTimestampTZ {
 	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
 		panic(errors.AssertionFailedf("zero transaction timestamp in EvalContext"))
 	}
-	return MakeDTimestampTZ(ctx.GetRelativeParseTime(), precision)
+	return MustDTimestampTZ(ctx.GetRelativeParseTime(), precision)
 }
 
 // GetTxnTimestampNoZone retrieves the current transaction timestamp as per
@@ -3017,7 +3025,7 @@ func (ctx *EvalContext) GetTxnTimestampNoZone(precision time.Duration) *DTimesta
 	// Move the time to UTC, but keeping the location's time.
 	t := ctx.GetRelativeParseTime()
 	_, offsetSecs := t.Zone()
-	return MakeDTimestamp(t.Add(time.Second*time.Duration(offsetSecs)).In(time.UTC), precision)
+	return MustDTimestamp(t.Add(time.Second*time.Duration(offsetSecs)).In(time.UTC), precision)
 }
 
 // GetTxnTime retrieves the current transaction time as per
@@ -3502,8 +3510,12 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			s = AsStringWithFlags(d, FmtBareStrings)
 		case *DTimestampTZ:
 			// Convert to context timezone for correct display.
+			ts, err := MakeDTimestampTZ(t.In(ctx.GetLocation()), time.Microsecond)
+			if err != nil {
+				return nil, err
+			}
 			s = AsStringWithFlags(
-				MakeDTimestampTZ(t.In(ctx.GetLocation()), time.Microsecond),
+				ts,
 				FmtBareStrings,
 			)
 		case *DTuple:
@@ -3619,7 +3631,11 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return MakeDTime(timeofday.FromTime(d.Time).Round(roundTo)), nil
 		case *DTimestampTZ:
 			// Strip time zone. Times don't carry their location.
-			return MakeDTime(timeofday.FromTime(d.stripTimeZone(ctx).Time).Round(roundTo)), nil
+			stripped, err := d.stripTimeZone(ctx)
+			if err != nil {
+				return stripped, nil
+			}
+			return MakeDTime(timeofday.FromTime(stripped.Time).Round(roundTo)), nil
 		case *DInterval:
 			return MakeDTime(timeofday.Min.Add(d.Duration).Round(roundTo)), nil
 		}
@@ -3649,14 +3665,21 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return ParseDTimestamp(ctx, d.Contents, roundTo)
 		case *DDate:
 			t, err := d.ToTime()
-			return MakeDTimestamp(t, roundTo), err
+			if err != nil {
+				return nil, err
+			}
+			return MakeDTimestamp(t, roundTo)
 		case *DInt:
-			return MakeDTimestamp(timeutil.Unix(int64(*d), 0), roundTo), nil
+			return MakeDTimestamp(timeutil.Unix(int64(*d), 0), roundTo)
 		case *DTimestamp:
-			return d.Round(roundTo), nil
+			return d.Round(roundTo)
 		case *DTimestampTZ:
 			// Strip time zone. Timestamps don't carry their location.
-			return d.stripTimeZone(ctx).Round(roundTo), nil
+			stripped, err := d.stripTimeZone(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return stripped.Round(roundTo)
 		}
 
 	case types.TimestampTZFamily:
@@ -3669,17 +3692,20 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return ParseDTimestampTZ(ctx, d.Contents, roundTo)
 		case *DDate:
 			t, err := d.ToTime()
+			if err != nil {
+				return nil, err
+			}
 			_, before := t.Zone()
 			_, after := t.In(ctx.GetLocation()).Zone()
-			return MakeDTimestampTZ(t.Add(time.Duration(before-after)*time.Second), roundTo), err
+			return MakeDTimestampTZ(t.Add(time.Duration(before-after)*time.Second), roundTo)
 		case *DTimestamp:
 			_, before := d.Time.Zone()
 			_, after := d.Time.In(ctx.GetLocation()).Zone()
-			return MakeDTimestampTZ(d.Time.Add(time.Duration(before-after)*time.Second), roundTo), nil
+			return MakeDTimestampTZ(d.Time.Add(time.Duration(before-after)*time.Second), roundTo)
 		case *DInt:
-			return MakeDTimestampTZ(timeutil.Unix(int64(*d), 0), roundTo), nil
+			return MakeDTimestampTZ(timeutil.Unix(int64(*d), 0), roundTo)
 		case *DTimestampTZ:
-			return d.Round(roundTo), nil
+			return d.Round(roundTo)
 		}
 
 	case types.IntervalFamily:
@@ -5395,8 +5421,8 @@ func (c *CallbackValueGenerator) Next(ctx context.Context) (bool, error) {
 }
 
 // Values is part of the ValueGenerator interface.
-func (c *CallbackValueGenerator) Values() Datums {
-	return Datums{NewDInt(DInt(c.val))}
+func (c *CallbackValueGenerator) Values() (Datums, error) {
+	return Datums{NewDInt(DInt(c.val))}, nil
 }
 
 // Close is part of the ValueGenerator interface.

@@ -1760,7 +1760,7 @@ CockroachDB supports the following flags:
 				if err != nil {
 					return nil, err
 				}
-				return tree.MakeDTimestampTZ(t.UTC(), time.Microsecond), nil
+				return tree.MakeDTimestampTZ(t.UTC(), time.Microsecond)
 			},
 			Info: "Returns `input` as a timestamptz using `format` (which uses standard " +
 				"`strptime` formatting).",
@@ -1813,7 +1813,7 @@ CockroachDB supports the following flags:
 			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
 			PreferredOverload: true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.MakeDTimestampTZ(ctx.GetStmtTimestamp(), time.Microsecond), nil
+				return tree.MakeDTimestampTZ(ctx.GetStmtTimestamp(), time.Microsecond)
 			},
 			Info: "Returns the start time of the current statement.",
 		},
@@ -1821,7 +1821,7 @@ CockroachDB supports the following flags:
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Timestamp),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.MakeDTimestamp(ctx.GetStmtTimestamp(), time.Microsecond), nil
+				return tree.MakeDTimestamp(ctx.GetStmtTimestamp(), time.Microsecond)
 			},
 			Info: "Returns the start time of the current statement.",
 		},
@@ -1837,7 +1837,7 @@ CockroachDB supports the following flags:
 				if err != nil {
 					return nil, err
 				}
-				return tree.MakeDTimestampTZ(ts, time.Microsecond), nil
+				return tree.MakeDTimestampTZ(ts, time.Microsecond)
 			},
 			Info: `Returns a timestamp which is very likely to be safe to perform
 against a follower replica.
@@ -1880,7 +1880,7 @@ may increase either contention or retry errors, or both.`,
 			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
 			PreferredOverload: true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.MakeDTimestampTZ(timeutil.Now(), time.Microsecond), nil
+				return tree.MakeDTimestampTZ(timeutil.Now(), time.Microsecond)
 			},
 			Info: "Returns the current system time on one of the cluster nodes.",
 		},
@@ -1888,7 +1888,7 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Timestamp),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.MakeDTimestamp(timeutil.Now(), time.Microsecond), nil
+				return tree.MakeDTimestamp(timeutil.Now(), time.Microsecond)
 			},
 			Info: "Returns the current system time on one of the cluster nodes.",
 		},
@@ -2078,7 +2078,7 @@ may increase either contention or retry errors, or both.`,
 				if err != nil {
 					return nil, err
 				}
-				return tree.MakeDTimestamp(tsTZ.Time, time.Microsecond), nil
+				return tree.MakeDTimestamp(tsTZ.Time, time.Microsecond)
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero (or one, for day and month)\n\n" +
@@ -2567,7 +2567,7 @@ may increase either contention or retry errors, or both.`,
 				if err != nil {
 					return nil, err
 				}
-				return ts.EvalAtTimeZone(ctx, loc), nil
+				return ts.EvalAtTimeZone(ctx, loc)
 			},
 			Info: "Convert given time stamp with time zone to the new time zone, with no time zone designation.",
 		},
@@ -2591,7 +2591,7 @@ may increase either contention or retry errors, or both.`,
 				_, beforeOffsetSecs := ts.Time.Zone()
 				_, afterOffsetSecs := ts.Time.In(loc).Zone()
 				durationDelta := time.Duration(beforeOffsetSecs-afterOffsetSecs) * time.Second
-				return tree.MakeDTimestampTZ(ts.Time.Add(durationDelta), time.Microsecond), nil
+				return tree.MakeDTimestampTZ(ts.Time.Add(durationDelta), time.Microsecond)
 			},
 			Info: "Treat given time stamp without time zone as located in the specified time zone.",
 		},
@@ -2611,7 +2611,7 @@ may increase either contention or retry errors, or both.`,
 				if err != nil {
 					return nil, err
 				}
-				return ts.EvalAtTimeZone(ctx, loc), nil
+				return ts.EvalAtTimeZone(ctx, loc)
 			},
 			Info: "Convert given time stamp with time zone to the new time zone, with no time zone designation.",
 		},
@@ -5613,7 +5613,7 @@ func truncateTimestamp(
 	}
 
 	toTime := time.Date(year, month, day, hour, min, sec, nsec, loc)
-	return tree.MakeDTimestampTZ(toTime, time.Microsecond), nil
+	return tree.MakeDTimestampTZ(toTime, time.Microsecond)
 }
 
 // Converts a scalar Datum to its string representation
@@ -5627,8 +5627,12 @@ func asJSONBuildObjectKey(d tree.Datum, loc *time.Location) (string, error) {
 	case *tree.DCollatedString:
 		return t.Contents, nil
 	case *tree.DTimestampTZ:
+		ts, err := tree.MakeDTimestampTZ(t.Time.In(loc), time.Microsecond)
+		if err != nil {
+			return "", err
+		}
 		return tree.AsStringWithFlags(
-			tree.MakeDTimestampTZ(t.Time.In(loc), time.Microsecond),
+			ts,
 			tree.FmtBareStrings,
 		), nil
 	case *tree.DBool, *tree.DInt, *tree.DFloat, *tree.DDecimal, *tree.DTimestamp,

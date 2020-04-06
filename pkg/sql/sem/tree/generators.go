@@ -54,7 +54,7 @@ type ValueGenerator interface {
 	Next(context.Context) (bool, error)
 
 	// Values retrieves the current row of data.
-	Values() Datums
+	Values() (Datums, error)
 
 	// Close must be called after Start() before disposing of the
 	// ValueGenerator. It does not need to be called if Start() has not

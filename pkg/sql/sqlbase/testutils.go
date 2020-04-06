@@ -174,8 +174,10 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 			(rng.Int31n(28*60+59)-(14*60+59))*60,
 		).Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 	case types.TimestampFamily:
-		return tree.MakeDTimestamp(timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000)),
-			tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
+		return tree.MustDTimestamp(
+			timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000)),
+			tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()),
+		)
 	case types.IntervalFamily:
 		sign := 1 - rng.Int63n(2)*2
 		return &tree.DInterval{Duration: duration.MakeDuration(
@@ -223,8 +225,10 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		_, _ = rng.Read(p)
 		return tree.NewDBytes(tree.DBytes(p))
 	case types.TimestampTZFamily:
-		return tree.MakeDTimestampTZ(timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000)),
-			tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
+		return tree.MustDTimestampTZ(
+			timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000)),
+			tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()),
+		)
 	case types.CollatedStringFamily:
 		// Generate a random Unicode string.
 		var buf bytes.Buffer
@@ -320,9 +324,9 @@ func RandDatumSimple(rng *rand.Rand, typ *types.T) tree.Datum {
 	case types.TimeFamily:
 		datum = tree.MakeDTime(timeofday.New(0, rng.Intn(simpleRange), 0, 0))
 	case types.TimestampFamily:
-		datum = tree.MakeDTimestamp(time.Date(2000, 1, 1, rng.Intn(simpleRange), 0, 0, 0, time.UTC), time.Microsecond)
+		datum = tree.MustDTimestamp(time.Date(2000, 1, 1, rng.Intn(simpleRange), 0, 0, 0, time.UTC), time.Microsecond)
 	case types.TimestampTZFamily:
-		datum = tree.MakeDTimestampTZ(time.Date(2000, 1, 1, rng.Intn(simpleRange), 0, 0, 0, time.UTC), time.Microsecond)
+		datum = tree.MustDTimestampTZ(time.Date(2000, 1, 1, rng.Intn(simpleRange), 0, 0, 0, time.UTC), time.Microsecond)
 	case types.UuidFamily:
 		datum = tree.NewDUuid(tree.DUuid{
 			UUID: uuid.FromUint128(uint128.FromInts(0, uint64(rng.Intn(simpleRange)))),
@@ -494,14 +498,14 @@ var (
 		types.TimestampFamily: func() []tree.Datum {
 			res := make([]tree.Datum, len(randTimestampSpecials))
 			for i, t := range randTimestampSpecials {
-				res[i] = tree.MakeDTimestamp(t, time.Microsecond)
+				res[i] = tree.MustDTimestamp(t, time.Microsecond)
 			}
 			return res
 		}(),
 		types.TimestampTZFamily: func() []tree.Datum {
 			res := make([]tree.Datum, len(randTimestampSpecials))
 			for i, t := range randTimestampSpecials {
-				res[i] = tree.MakeDTimestampTZ(t, time.Microsecond)
+				res[i] = tree.MustDTimestampTZ(t, time.Microsecond)
 			}
 			return res
 		}(),
@@ -575,6 +579,8 @@ var (
 		{},
 		time.Date(-2000, time.January, 1, 0, 0, 0, 0, time.UTC),
 		time.Date(3000, time.January, 1, 0, 0, 0, 0, time.UTC),
+		time.Unix(9224318016000-1, 999999000), // 294276-12-31 23:59:59.999999
+		time.Unix(-210863520000, 0),           // 4713-01-01 00:00:00 BC
 	}
 )
 

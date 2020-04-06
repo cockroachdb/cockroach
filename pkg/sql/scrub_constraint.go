@@ -119,8 +119,13 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 func (o *sqlCheckConstraintCheckOperation) Next(params runParams) (tree.Datums, error) {
 	row := o.run.rows[o.run.rowIndex]
 	o.run.rowIndex++
-	timestamp := tree.MakeDTimestamp(
-		params.extendedEvalCtx.GetStmtTimestamp(), time.Nanosecond)
+	timestamp, err := tree.MakeDTimestamp(
+		params.extendedEvalCtx.GetStmtTimestamp(),
+		time.Nanosecond,
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	var primaryKeyDatums tree.Datums
 	for _, rowIdx := range o.primaryColIdxs {
