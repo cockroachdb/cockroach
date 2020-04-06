@@ -458,7 +458,7 @@ func (w *schemaChangeWorker) createSequence(tx *pgx.Tx) (string, error) {
 }
 
 func (w *schemaChangeWorker) createTable(tx *pgx.Tx) (string, error) {
-	tableName, err := w.randTable(tx, 100)
+	tableName, err := w.randTable(tx, 10)
 	if err != nil {
 		return "", err
 	}
