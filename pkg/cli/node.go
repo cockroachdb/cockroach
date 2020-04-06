@@ -500,11 +500,7 @@ var drainNodeCmd = &cobra.Command{
 Prepare a server for shutting down. This stops accepting client
 connections, stops extant connections, and finally pushes range
 leases onto other nodes, subject to various timeout parameters
-configurable via cluster settings.
-
-See also 'cockroach quit' for draining and also stopping
-the server process.
-`,
+configurable via cluster settings.`,
 	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runDrain),
 }
@@ -544,8 +540,8 @@ var nodeCmds = []*cobra.Command{
 
 var nodeCmd = &cobra.Command{
 	Use:   "node [command]",
-	Short: "list, inspect, stop or remove nodes",
-	Long:  "List, inspect, stop or remove nodes.",
+	Short: "list, inspect, drain or remove nodes",
+	Long:  "List, inspect, drain or remove nodes.",
 	RunE:  usageAndErr,
 }
 

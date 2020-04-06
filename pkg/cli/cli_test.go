@@ -1391,7 +1391,7 @@ Available Commands:
 
   sql               open a sql shell
   auth-session      log in and out of HTTP sessions
-  node              list, inspect, stop or remove nodes
+  node              list, inspect, drain or remove nodes
   dump              dump sql tables
 
   nodelocal         upload and delete nodelocal files
