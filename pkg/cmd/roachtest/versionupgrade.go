@@ -332,9 +332,9 @@ func waitForUpgradeStep() versionStep {
 		c := u.c
 		var newVersion string // the cluster version to bump to
 
-		db1 := c.Conn(ctx, 1)
-		defer db1.Close()
-		if err := db1.QueryRow(`SELECT crdb_internal.node_executable_version()`).Scan(&newVersion); err != nil {
+		db := c.Conn(ctx, 1)
+		defer db.Close()
+		if err := db.QueryRow(`SELECT crdb_internal.node_executable_version()`).Scan(&newVersion); err != nil {
 			t.Fatal(err)
 		}
 
