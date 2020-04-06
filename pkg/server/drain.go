@@ -208,12 +208,6 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, string)) e
 	// delay draining so that client traffic can move off this node.
 	time.Sleep(drainWait.Get(&s.st.SV))
 
-	// Since enabling the SQL table lease manager's draining mode will
-	// prevent the acquisition of new leases, the switch must be made
-	// after the pgServer has given sessions a chance to finish ongoing
-	// work.
-	defer s.leaseMgr.SetDraining(true /* drain */, reporter)
-
 	// Disable incoming SQL clients up to the queryWait timeout.
 	drainMaxWait := queryWait.Get(&s.st.SV)
 	if err := s.pgServer.Drain(drainMaxWait, reporter); err != nil {
@@ -221,6 +215,10 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, string)) e
 	}
 	// Stop ongoing SQL execution up to the queryWait timeout.
 	s.distSQLServer.Drain(ctx, drainMaxWait, reporter)
+
+	// Drain the SQL leases. This must be done after the pgServer has
+	// given sessions a chance to finish ongoing work.
+	s.leaseMgr.SetDraining(true /* drain */, reporter)
 
 	// Done. This executes the defers set above to drain SQL leases.
 	return nil
