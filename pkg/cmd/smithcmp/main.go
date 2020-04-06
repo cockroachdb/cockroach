@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/cockroachdb/cockroach/pkg/cmd/smithcmp/cmpconn"
+	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -95,14 +95,14 @@ func main() {
 	}
 
 	rng := rand.New(rand.NewSource(opts.Seed))
-	conns := map[string]*cmpconn.Conn{}
+	conns := map[string]cmpconn.Conn{}
 	for name, db := range opts.Databases {
 		var err error
 		mutators := enableMutations(opts.Databases[name].AllowMutations, sqlMutators)
 		if opts.Postgres {
 			mutators = append(mutators, mutations.PostgresMutator)
 		}
-		conns[name], err = cmpconn.NewConn(
+		conns[name], err = cmpconn.NewConnWithMutators(
 			db.Addr, rng, mutators, db.InitSQL, opts.InitSQL)
 		if err != nil {
 			log.Fatalf("%s (%s): %+v", name, db.Addr, err)
@@ -131,14 +131,14 @@ func main() {
 	var smither *sqlsmith.Smither
 	var stmts []statement
 	if len(opts.SQL) == 0 {
-		smither, err = sqlsmith.NewSmither(conns[opts.Smither].DB, rng, smithOpts...)
+		smither, err = sqlsmith.NewSmither(conns[opts.Smither].DB(), rng, smithOpts...)
 		if err != nil {
 			log.Fatal(err)
 		}
 	} else {
 		stmts = make([]statement, len(opts.SQL))
 		for i, stmt := range opts.SQL {
-			ps, err := conns[opts.Smither].PGX.Prepare("", stmt)
+			ps, err := conns[opts.Smither].PGX().Prepare("", stmt)
 			if err != nil {
 				log.Fatalf("bad SQL statement on %s: %v\nSQL:\n%s", opts.Smither, stmt, err)
 			}
@@ -187,7 +187,9 @@ func main() {
 			fmt.Println(exec)
 		}
 		if compare {
-			if err := cmpconn.CompareConns(ctx, timeout, conns, prep, exec); err != nil {
+			if err := cmpconn.CompareConns(
+				ctx, timeout, conns, prep, exec, true, /* ignoreSQLErrors */
+			); err != nil {
 				fmt.Printf("prep:\n%s;\nexec:\n%s;\nERR: %s\n\n", prep, exec, err)
 				os.Exit(1)
 			}
@@ -207,7 +209,10 @@ func main() {
 				fmt.Printf("\n%s: ping failure: %v\nprevious SQL:\n%s;\n%s;\n", name, err, prep, exec)
 				// Try to reconnect.
 				db := opts.Databases[name]
-				newConn, err := cmpconn.NewConn(db.Addr, rng, enableMutations(db.AllowMutations, sqlMutators), db.InitSQL, opts.InitSQL)
+				newConn, err := cmpconn.NewConnWithMutators(
+					db.Addr, rng, enableMutations(db.AllowMutations, sqlMutators),
+					db.InitSQL, opts.InitSQL,
+				)
 				if err != nil {
 					log.Fatalf("tried to reconnect: %v\n", err)
 				}

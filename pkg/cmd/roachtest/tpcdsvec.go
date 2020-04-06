@@ -15,8 +15,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/smithcmp/cmpconn"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcds"
 )
@@ -121,27 +120,26 @@ func registerTPCDSVec(r *testRegistry) {
 		t.Status("waiting for full replication")
 		waitForFullReplication(t, clusterConn)
 
-		// TODO(yuzefovich): it seems like if cmpconn.CompareConnsNoMutations
-		// hits a timeout, the query actually keeps on going and the connection
+		// TODO(yuzefovich): it seems like if cmpconn.CompareConns hits a
+		// timeout, the query actually keeps on going and the connection
 		// becomes kinda stale. To go around it, we set a statement timeout
 		// variable on the connections and pass in 3 x timeout into
-		// CompareConnsNoMutations hoping that the session variable is better
-		// respected. We additionally open fresh connections for each query.
+		// CompareConns hoping that the session variable is better respected.
+		// We additionally open fresh connections for each query.
 		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout)
 		firstNode := c.Node(1)
 		firstNodeURL := c.ExternalPGUrl(ctx, firstNode)[0]
-		rng, _ := randutil.NewPseudoRand()
-		openNewConnections := func() (map[string]*cmpconn.Conn, func()) {
-			conns := map[string]*cmpconn.Conn{}
+		openNewConnections := func() (map[string]cmpconn.Conn, func()) {
+			conns := map[string]cmpconn.Conn{}
 			vecOffConn, err := cmpconn.NewConn(
-				firstNodeURL, rng, nil, setStmtTimeout+"SET vectorize=off; USE tpcds;",
+				firstNodeURL, setStmtTimeout+"SET vectorize=off; USE tpcds;",
 			)
 			if err != nil {
 				t.Fatal(err)
 			}
 			conns["vectorize=OFF"] = vecOffConn
 			vecOnConn, err := cmpconn.NewConn(
-				firstNodeURL, rng, nil, setStmtTimeout+"SET vectorize=on; USE tpcds;",
+				firstNodeURL, setStmtTimeout+"SET vectorize=on; USE tpcds;",
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -150,8 +148,8 @@ func registerTPCDSVec(r *testRegistry) {
 			// A sanity check that we have different values of 'vectorize'
 			// session variable on two connections and that the comparator will
 			// emit an error because of that difference.
-			if err := cmpconn.CompareConnsNoMutations(
-				ctx, timeout, conns, "", "SHOW vectorize;",
+			if err := cmpconn.CompareConns(
+				ctx, timeout, conns, "", "SHOW vectorize;", false, /* ignoreSQLErrors */
 			); err == nil {
 				t.Fatal("unexpectedly SHOW vectorize didn't trigger an error on comparison")
 			}
@@ -184,7 +182,9 @@ func registerTPCDSVec(r *testRegistry) {
 				conns, cleanup := openNewConnections()
 				defer cleanup()
 				start := timeutil.Now()
-				if err := cmpconn.CompareConnsNoMutations(ctx, 3*timeout, conns, "", query); err != nil {
+				if err := cmpconn.CompareConns(
+					ctx, 3*timeout, conns, "", query, false, /* ignoreSQLErrors */
+				); err != nil {
 					t.Status(fmt.Sprintf("encountered an error: %s\n", err))
 					encounteredErrors = true
 				} else {
