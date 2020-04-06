@@ -18,6 +18,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -151,61 +158,57 @@ func BenchmarkSelectInInt64(b *testing.B) {
 
 func TestProjectInInt64(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+		},
+	}
 	testCases := []struct {
 		desc         string
 		inputTuples  tuples
 		outputTuples tuples
-		filterRow    []int64
-		hasNulls     bool
-		negate       bool
+		inClause     string
 	}{
 		{
 			desc:         "Simple in test",
 			inputTuples:  tuples{{0}, {1}},
 			outputTuples: tuples{{0, true}, {1, true}},
-			filterRow:    []int64{0, 1},
-			hasNulls:     false,
-			negate:       false,
+			inClause:     "IN (0, 1)",
 		},
 		{
 			desc:         "Simple not in test",
 			inputTuples:  tuples{{2}},
 			outputTuples: tuples{{2, true}},
-			filterRow:    []int64{0, 1},
-			hasNulls:     false,
-			negate:       true,
+			inClause:     "NOT IN (0, 1)",
 		},
 		{
 			desc:         "In test with NULLs",
 			inputTuples:  tuples{{1}, {2}, {nil}},
 			outputTuples: tuples{{1, true}, {2, nil}, {nil, nil}},
-			filterRow:    []int64{1},
-			hasNulls:     true,
-			negate:       false,
+			inClause:     "IN (1, NULL)",
 		},
 		{
 			desc:         "Not in test with NULLs",
 			inputTuples:  tuples{{1}, {2}, {nil}},
 			outputTuples: tuples{{1, false}, {2, nil}, {nil, nil}},
-			filterRow:    []int64{1},
-			hasNulls:     true,
-			negate:       true,
+			inClause:     "NOT IN (1, NULL)",
 		},
 		{
 			desc:         "Not in test with NULLs and no nulls in filter",
 			inputTuples:  tuples{{1}, {2}, {nil}},
 			outputTuples: tuples{{1, false}, {2, true}, {nil, nil}},
-			filterRow:    []int64{1},
-			hasNulls:     false,
-			negate:       true,
+			inClause:     "NOT IN (1)",
 		},
 		{
 			desc:         "Test with false values",
 			inputTuples:  tuples{{1}, {2}},
 			outputTuples: tuples{{1, false}, {2, false}},
-			filterRow:    []int64{3},
-			hasNulls:     false,
-			negate:       false,
+			inClause:     "IN (3)",
 		},
 	}
 
@@ -213,16 +216,44 @@ func TestProjectInInt64(t *testing.T) {
 		t.Run(c.desc, func(t *testing.T) {
 			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier,
 				func(input []Operator) (Operator, error) {
-					op := projectInOpInt64{
-						OneInputNode: NewOneInputNode(input[0]),
-						allocator:    testAllocator,
-						colIdx:       0,
-						outputIdx:    1,
-						filterRow:    c.filterRow,
-						negate:       c.negate,
-						hasNulls:     c.hasNulls,
+					expr, err := parser.ParseExpr(fmt.Sprintf("@1 %s", c.inClause))
+					if err != nil {
+						return nil, err
 					}
-					return &op, nil
+					p := &mockTypeContext{typs: []types.T{*types.Int, *types.MakeTuple([]types.T{*types.Int})}}
+					typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarContainer: p}, types.Any)
+					if err != nil {
+						return nil, err
+					}
+					spec := &execinfrapb.ProcessorSpec{
+						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: []types.T{*types.Int}}},
+						Core: execinfrapb.ProcessorCoreUnion{
+							Noop: &execinfrapb.NoopCoreSpec{},
+						},
+						Post: execinfrapb.PostProcessSpec{
+							RenderExprs: []execinfrapb.Expression{
+								{Expr: "@1"},
+								{LocalExpr: typedExpr},
+							},
+						},
+					}
+					args := NewColOperatorArgs{
+						Spec:                spec,
+						Inputs:              input,
+						StreamingMemAccount: testMemAcc,
+						// TODO(yuzefovich): figure out how to make the second
+						// argument of IN comparison as DTuple not Tuple.
+						// TODO(yuzefovich): reuse createTestProjectingOperator
+						// once we don't need to provide the processor
+						// constructor.
+						ProcessorConstructor: rowexec.NewProcessor,
+					}
+					args.TestingKnobs.UseStreamingMemAccountForBuffering = true
+					result, err := NewColOperator(ctx, flowCtx, args)
+					if err != nil {
+						return nil, err
+					}
+					return result.Op, nil
 				})
 		})
 	}

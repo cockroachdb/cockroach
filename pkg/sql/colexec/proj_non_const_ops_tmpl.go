@@ -122,7 +122,6 @@ func (p _OP_NAME) Next(ctx context.Context) coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	p.allocator.MaybeAddColumn(batch, coltypes._RET_TYP, p.outputIdx)
 	projVec := batch.ColVec(p.outputIdx)
 	projCol := projVec._RET_TYP()
 	vec1 := batch.ColVec(p.col1Idx)
@@ -230,12 +229,14 @@ func GetProjectionOperator(
 	allocator *Allocator,
 	leftColType *types.T,
 	rightColType *types.T,
+	outputPhysType coltypes.T,
 	op tree.Operator,
 	input Operator,
 	col1Idx int,
 	col2Idx int,
 	outputIdx int,
 ) (Operator, error) {
+	input = newVectorTypeEnforcer(allocator, input, outputPhysType, outputIdx)
 	projOpBase := projOpBase{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,

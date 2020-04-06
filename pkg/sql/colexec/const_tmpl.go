@@ -62,6 +62,7 @@ type _GOTYPE interface{}
 func NewConstOp(
 	allocator *Allocator, input Operator, t coltypes.T, constVal interface{}, outputIdx int,
 ) (Operator, error) {
+	input = newVectorTypeEnforcer(allocator, input, t, outputIdx)
 	switch t {
 	// {{range .}}
 	case _TYPES_T:
@@ -69,7 +70,6 @@ func NewConstOp(
 			OneInputNode: NewOneInputNode(input),
 			allocator:    allocator,
 			outputIdx:    outputIdx,
-			typ:          t,
 			constVal:     constVal.(_GOTYPE),
 		}, nil
 	// {{end}}
@@ -84,7 +84,6 @@ type const_TYPEOp struct {
 	OneInputNode
 
 	allocator *Allocator
-	typ       coltypes.T
 	outputIdx int
 	constVal  _GOTYPE
 }
@@ -99,7 +98,6 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	c.allocator.MaybeAddColumn(batch, c.typ, c.outputIdx)
 	vec := batch.ColVec(c.outputIdx)
 	col := vec._TemplateType()
 	c.allocator.PerformOperation(
@@ -125,11 +123,11 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 // NewConstNullOp creates a new operator that produces a constant (untyped) NULL
 // value at index outputIdx.
 func NewConstNullOp(allocator *Allocator, input Operator, outputIdx int, typ coltypes.T) Operator {
+	input = newVectorTypeEnforcer(allocator, input, typ, outputIdx)
 	return &constNullOp{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
 		outputIdx:    outputIdx,
-		typ:          typ,
 	}
 }
 
@@ -137,7 +135,6 @@ type constNullOp struct {
 	OneInputNode
 	allocator *Allocator
 	outputIdx int
-	typ       coltypes.T
 }
 
 var _ Operator = &constNullOp{}
@@ -152,7 +149,6 @@ func (c constNullOp) Next(ctx context.Context) coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	c.allocator.MaybeAddColumn(batch, c.typ, c.outputIdx)
 
 	col := batch.ColVec(c.outputIdx)
 	nulls := col.Nulls()
