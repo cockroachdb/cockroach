@@ -16,7 +16,10 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/oid_extension"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -325,6 +328,30 @@ var (
 	INet = &T{InternalType: InternalType{
 		Family: INetFamily, Oid: oid.T_inet, Locale: &emptyLocale}}
 
+	// Geometry is the type of a geospatial Geometry object.
+	Geometry = &T{
+		InternalType: InternalType{
+			Family: GeometryFamily,
+			Oid:    oid_extension.T_geometry,
+			Locale: &emptyLocale,
+			GeoMetadata: &GeoMetadata{
+				SRID: geo.DefaultGeometrySRID,
+			},
+		},
+	}
+
+	// Geography is the type of a geospatial Geography object.
+	Geography = &T{
+		InternalType: InternalType{
+			Family: GeographyFamily,
+			Oid:    oid_extension.T_geography,
+			Locale: &emptyLocale,
+			GeoMetadata: &GeoMetadata{
+				SRID: geo.DefaultGeographySRID,
+			},
+		},
+	}
+
 	// Scalar contains all types that meet this criteria:
 	//
 	//   1. Scalar type (no ArrayFamily or TupleFamily types).
@@ -349,6 +376,7 @@ var (
 		TimeTZ,
 		Jsonb,
 		VarBit,
+		// TODO(otan): put geog/geom in scalar types.
 	}
 
 	// Any is a special type used only during static analysis as a wildcard type
@@ -493,8 +521,7 @@ func MakeScalar(family Family, o oid.Oid, precision, width int32, locale string)
 	t := OidToType[o]
 	if family != t.Family() {
 		if family != CollatedStringFamily || StringFamily != t.Family() {
-			panic(errors.AssertionFailedf(
-				"oid %s does not match %s", oid.TypeName[o], family))
+			panic(errors.AssertionFailedf("oid %d does not match %s", o, family))
 		}
 	}
 	if family == ArrayFamily || family == TupleFamily {
@@ -506,6 +533,7 @@ func MakeScalar(family Family, o oid.Oid, precision, width int32, locale string)
 
 	timePrecisionIsSet := false
 	var intervalDurationField *IntervalDurationField
+	var geoMetadata *GeoMetadata
 	switch family {
 	case IntervalFamily:
 		intervalDurationField = &IntervalDurationField{}
@@ -551,6 +579,10 @@ func MakeScalar(family Family, o oid.Oid, precision, width int32, locale string)
 		}
 	case StringFamily, BytesFamily, CollatedStringFamily, BitFamily:
 		// These types can have any width.
+	case GeometryFamily:
+		geoMetadata = &GeoMetadata{SRID: geo.DefaultGeometrySRID}
+	case GeographyFamily:
+		geoMetadata = &GeoMetadata{SRID: geo.DefaultGeographySRID}
 	default:
 		if width != 0 {
 			panic(errors.AssertionFailedf("type %s cannot have width", family))
@@ -565,6 +597,7 @@ func MakeScalar(family Family, o oid.Oid, precision, width int32, locale string)
 		Width:                 width,
 		Locale:                &locale,
 		IntervalDurationField: intervalDurationField,
+		GeoMetadata:           geoMetadata,
 	}}
 }
 
@@ -711,6 +744,33 @@ func MakeTimeTZ(precision int32) *T {
 		Precision:          precision,
 		TimePrecisionIsSet: true,
 		Locale:             &emptyLocale,
+	}}
+}
+
+// MakeGeometry constructs a new instance of a GEOMETRY type (oid = T_geometry)
+// that has the given figure and SRID.
+func MakeGeometry(figure geopb.Figure, srid geopb.SRID) *T {
+	return &T{InternalType: InternalType{
+		Family: GeometryFamily,
+		Oid:    oid_extension.T_geometry,
+		Locale: &emptyLocale,
+		GeoMetadata: &GeoMetadata{
+			Figure: figure,
+			SRID:   srid,
+		},
+	}}
+}
+
+// MakeGeography constructs a new instance of a geography-related type.
+func MakeGeography(figure geopb.Figure, srid geopb.SRID) *T {
+	return &T{InternalType: InternalType{
+		Family: GeographyFamily,
+		Oid:    oid_extension.T_geography,
+		Locale: &emptyLocale,
+		GeoMetadata: &GeoMetadata{
+			Figure: figure,
+			SRID:   srid,
+		},
 	}}
 }
 
@@ -1000,6 +1060,10 @@ func (t *T) Name() string {
 		default:
 			panic(errors.AssertionFailedf("programming error: unknown float width: %d", t.Width()))
 		}
+	case GeographyFamily:
+		return "geography"
+	case GeometryFamily:
+		return "geometry"
 	case INetFamily:
 		return "inet"
 	case IntFamily:
@@ -1066,7 +1130,7 @@ func (t *T) Name() string {
 //   int4[]       _int4
 //
 func (t *T) PGName() string {
-	name, ok := oid.TypeName[t.Oid()]
+	name, ok := oid_extension.TypeName(t.Oid())
 	if ok {
 		return strings.ToLower(name)
 	}
@@ -1162,6 +1226,20 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		default:
 			panic(errors.AssertionFailedf("programming error: unknown float width: %d", t.Width()))
 		}
+	case GeometryFamily, GeographyFamily:
+		ret := t.Name()
+		// If SRID is available, display both figure and SRID.
+		// If figure is available but not SRID, just display figure.
+		if t.InternalType.GeoMetadata.SRID != 0 {
+			figureName := strings.ToLower(t.InternalType.GeoMetadata.Figure.String())
+			if t.InternalType.GeoMetadata.Figure == geopb.Figure_Unset {
+				figureName = "geometry"
+			}
+			ret += fmt.Sprintf("(%s, %d)", figureName, t.InternalType.GeoMetadata.SRID)
+		} else if t.InternalType.GeoMetadata.Figure != geopb.Figure_Unset {
+			ret += fmt.Sprintf("(%s)", t.InternalType.GeoMetadata.Figure)
+		}
+		return ret
 	case INetFamily:
 		return "inet"
 	case IntFamily:
@@ -1359,7 +1437,7 @@ func (t *T) SQLString() string {
 			)
 		}
 	case OidFamily:
-		if name, ok := oid.TypeName[t.Oid()]; ok {
+		if name, ok := oid_extension.TypeName(t.Oid()); ok {
 			return name
 		}
 	case ArrayFamily:
@@ -1490,6 +1568,18 @@ func (t *InternalType) Identical(other *InternalType) bool {
 	} else if t.IntervalDurationField != nil {
 		return false
 	} else if other.IntervalDurationField != nil {
+		return false
+	}
+	if t.GeoMetadata != nil && other.GeoMetadata != nil {
+		if t.GeoMetadata.Figure != other.GeoMetadata.Figure {
+			return false
+		}
+		if t.GeoMetadata.SRID != other.GeoMetadata.SRID {
+			return false
+		}
+	} else if t.GeoMetadata != nil {
+		return false
+	} else if other.GeoMetadata != nil {
 		return false
 	}
 	if t.Locale != nil && other.Locale != nil {
@@ -2049,7 +2139,11 @@ var typNameLiterals map[string]*T
 func init() {
 	typNameLiterals = make(map[string]*T)
 	for o, t := range OidToType {
-		name := strings.ToLower(oid.TypeName[o])
+		name, ok := oid_extension.TypeName(o)
+		if !ok {
+			panic(errors.AssertionFailedf("oid %d has no type name", o))
+		}
+		name = strings.ToLower(name)
 		if _, ok := typNameLiterals[name]; !ok {
 			typNameLiterals[name] = t
 		}

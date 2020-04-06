@@ -26,6 +26,16 @@ import (
 	_ "github.com/twpayne/go-geom/encoding/wkt"
 )
 
+// The following are the common standard SRIDs that we support.
+const (
+	// UnknownSRID is the default SRID if none is provided.
+	UnknownSRID = geopb.SRID(0)
+	// DefaultGeometrySRID is the same as being unknown.
+	DefaultGeometrySRID = UnknownSRID
+	// DefaultGeographySRID (aka 4326) is the GPS lat/lng we all know and love.
+	DefaultGeographySRID = geopb.SRID(4326)
+)
+
 // spatialObjectBase is the base for spatial objects.
 type spatialObjectBase struct {
 	ewkb geopb.EWKB

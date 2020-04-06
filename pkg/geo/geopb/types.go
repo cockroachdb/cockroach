@@ -10,6 +10,13 @@
 
 package geopb
 
+// SRID is a Spatial Reference Identifer. All geometry and geography figures are
+// stored and represented as bare floats. SRIDs tie these floats to the planar
+// or spherical coordinate system, allowing them to be intrepred and compared.
+//
+// The zero value is special and means an unknown coordinate system.
+type SRID int32
+
 // WKT is the Well Known Text form of a spatial object.
 type WKT string
 

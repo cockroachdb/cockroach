@@ -11,6 +11,7 @@
 package types
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/oid_extension"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -49,6 +50,8 @@ var (
 	OidVector = &T{InternalType: InternalType{
 		Family: ArrayFamily, Oid: oid.T_oidvector, ArrayContents: Oid, Locale: &emptyLocale}}
 )
+
+const ()
 
 // OidToType maps Postgres object IDs to CockroachDB types.  We export the map
 // instead of a method so that other packages can iterate over the map directly.
@@ -89,6 +92,9 @@ var OidToType = map[oid.Oid]*T{
 	oid.T_uuid:         Uuid,
 	oid.T_varbit:       VarBit,
 	oid.T_varchar:      VarChar,
+
+	oid_extension.T_geometry:  Geometry,
+	oid_extension.T_geography: Geography,
 }
 
 // oidToArrayOid maps scalar type Oids to their corresponding array type Oid.
@@ -127,6 +133,9 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oid.T_uuid:         oid.T__uuid,
 	oid.T_varbit:       oid.T__varbit,
 	oid.T_varchar:      oid.T__varchar,
+
+	oid_extension.T_geometry:  oid_extension.T__geometry,
+	oid_extension.T_geography: oid_extension.T__geography,
 }
 
 // familyToOid maps each type family to a default OID value that is used when
@@ -155,6 +164,9 @@ var familyToOid = map[Family]oid.Oid{
 	TupleFamily:          oid.T_record,
 	BitFamily:            oid.T_bit,
 	AnyFamily:            oid.T_anyelement,
+
+	GeometryFamily:  oid_extension.T_geometry,
+	GeographyFamily: oid_extension.T_geography,
 }
 
 // ArrayOids is a set of all oids which correspond to an array type.
