@@ -9,19 +9,17 @@
 // licenses/APL.txt.
 
 import { Col, Row, Tabs } from "antd";
-import { Highlight } from "oss/src/views/shared/components/sql/highlight";
-import { SummaryCard } from "oss/src/views/shared/components/summaryCard";
-import { selectStatements } from "oss/src/views/statements/statementsPage";
-import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "oss/src/views/statements/statementsTable";
+import { Highlight } from "src/views/shared/components/sql/highlight";
+import { SummaryCard } from "src/views/shared/components/summaryCard";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import * as protos from "src/js/protos";
-import { generateTableID, refreshStatements, refreshTableDetails, refreshTableStats, refreshDatabaseDetails } from "src/redux/apiReducers";
+import { generateTableID, refreshTableDetails, refreshTableStats, refreshDatabaseDetails } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
-import { appAttr, databaseNameAttr, tableNameAttr } from "src/util/constants";
+import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import { Bytes } from "src/util/format";
 import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
@@ -30,7 +28,7 @@ import "./styles.styl";
 const { TabPane } = Tabs;
 import { getMatchParamByName } from "src/util/query";
 import { databaseDetails } from "../databaseSummary";
-import { Button, BackIcon } from "oss/src/components/button";
+import { Button, BackIcon } from "src/components/button";
 
 class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.IGrant> {}
 
@@ -45,7 +43,6 @@ const databaseTableGrantsSortSetting = new LocalSetting<AdminUIState, SortSettin
 interface TableMainData {
   tableInfo: TableInfo;
   grantsSortSetting: SortSetting;
-  statements: AggregateStatistics[];
 }
 
 /**
@@ -56,7 +53,6 @@ interface TableMainActions {
   // Refresh the table data
   refreshTableDetails: typeof refreshTableDetails;
   refreshTableStats: typeof refreshTableStats;
-  refreshStatements: typeof refreshStatements;
   refreshDatabaseDetails: typeof refreshDatabaseDetails;
   setSort: typeof databaseTableGrantsSortSetting.set;
   dbResponse: protos.cockroach.server.serverpb.DatabaseDetailsResponse;
@@ -85,28 +81,14 @@ export class TableMain extends React.Component<TableMainProps, {}> {
       database,
       table,
     }));
-    this.props.refreshStatements();
   }
 
   prevPage = () => this.props.history.goBack();
 
-  getStatementsTableData = () => {
-    const { statements, match } = this.props;
-    const database = getMatchParamByName(match, databaseNameAttr);
-    const table = getMatchParamByName(match, tableNameAttr);
-    const title = `${database}.${table}`;
-
-    if (statements) {
-      return statements.filter((statement: AggregateStatistics) => statement.label.indexOf(title) !== -1);
-    }
-    return;
-  }
-
   render() {
-    const { tableInfo, grantsSortSetting, statements, match, dbResponse } = this.props;
+    const { tableInfo, grantsSortSetting, match, dbResponse } = this.props;
     const database = getMatchParamByName(match, databaseNameAttr);
     const table = getMatchParamByName(match, tableNameAttr);
-    const selectedApp = getMatchParamByName(match, appAttr);
 
     const title = `${database}.${table}`;
     if (tableInfo) {
@@ -161,15 +143,7 @@ export class TableMain extends React.Component<TableMainProps, {}> {
                   </Col>
                 </Row>
               </TabPane>
-              <TabPane tab="Statements" key="2">
-                <SummaryCard>
-                  <StatementsSortedTable
-                    data={this.getStatementsTableData()}
-                    columns={statements && makeStatementsColumns(statements, selectedApp)}
-                  />
-                </SummaryCard>
-              </TabPane>
-              <TabPane tab="Grants" key="3">
+              <TabPane tab="Grants" key="2">
                 <SummaryCard>
                   <GrantsSortedTable
                     data={tableInfo.grants}
@@ -213,7 +187,6 @@ export function selectTableInfo(state: AdminUIState, props: RouteComponentProps)
 const mapStateToProps = (state: AdminUIState, ownProps: RouteComponentProps) => ({
   tableInfo: selectTableInfo(state, ownProps),
   grantsSortSetting: databaseTableGrantsSortSetting.selector(state),
-  statements: selectStatements(state, ownProps),
   dbResponse: databaseDetails(state)[getMatchParamByName(ownProps.match, databaseNameAttr)] && databaseDetails(state)[getMatchParamByName(ownProps.match, databaseNameAttr)].data,
 });
 
@@ -221,7 +194,6 @@ const mapDispatchToProps = {
   setSort: databaseTableGrantsSortSetting.set,
   refreshTableDetails,
   refreshTableStats,
-  refreshStatements,
   refreshDatabaseDetails,
 };
 
