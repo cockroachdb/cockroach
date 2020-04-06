@@ -68,9 +68,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/google/btree"
-	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"golang.org/x/time/rate"
 )
@@ -1014,13 +1014,24 @@ func (s *Store) SetDraining(drain bool, reporter func(int, string)) {
 		// Limit the number of concurrent lease transfers.
 		const leaseTransferConcurrency = 100
 		sem := quotapool.NewIntPool("Store.SetDraining", leaseTransferConcurrency)
-		// Incremented for every lease or Raft leadership transfer attempted. We try
-		// to send both the lease and the Raft leaders away, but this may not
-		// reliably work. Instead, we run the surrounding retry loop until there are
-		// no leaders/leases left (ignoring single-replica or uninitialized Raft
-		// groups).
+
+		// Incremented for every lease or Raft leadership transfer
+		// attempted. We try to send both the lease and the Raft leaders
+		// away, but this may not reliably work. Instead, we run the
+		// surrounding retry loop until there are no leaders/leases left
+		// (ignoring single-replica or uninitialized Raft groups).
 		var numTransfersAttempted int32
 		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+			//
+			// We need to be careful about the case where the ctx has been canceled
+			// prior to the call to (*Stopper).RunLimitedAsyncTask(). In that case,
+			// the goroutine is not even spawned. However, we don't want to
+			// mis-count the missing goroutine as the lack of transfer attempted.
+			// So what we do here is immediately increase numTransfersAttempted
+			// to count this replica, and then decrease it when it is known
+			// below that there is nothing to transfer (not lease holder and
+			// not raft leader).
+			atomic.AddInt32(&numTransfersAttempted, 1)
 			wg.Add(1)
 			if err := s.stopper.RunLimitedAsyncTask(
 				r.AnnotateCtx(ctx), "storage.Store: draining replica", sem, true, /* wait */
@@ -1036,12 +1047,9 @@ func (s *Store) SetDraining(drain bool, reporter func(int, string)) {
 						// We need this check here because each call of
 						// transferAllAway() traverses all stores/replicas without
 						// checking for the timeout otherwise.
-						log.Infof(ctx, "lease transfer aborted due to exceeded timeout")
-						// We don't want to let the caller think that there's no
-						// more work to do. Report this transfer as an attempt. If
-						// the caller wants to have a zero count, they need to
-						// wait longer.
-						atomic.AddInt32(&numTransfersAttempted, 1)
+						if log.V(1) {
+							log.Infof(ctx, "lease transfer aborted due to exceeded timeout")
+						}
 						return
 					default:
 					}
@@ -1080,8 +1088,17 @@ func (s *Store) SetDraining(drain bool, reporter func(int, string)) {
 						drainingLease.OwnedBy(s.StoreID()) &&
 						r.IsLeaseValid(drainingLease, s.Clock().Now())
 
-					if needsLeaseTransfer || needsRaftTransfer {
-						atomic.AddInt32(&numTransfersAttempted, 1)
+					if !needsLeaseTransfer && !needsRaftTransfer {
+						if log.V(1) {
+							// This logging is useful to troubleshoot incomplete drains.
+							log.Info(ctx, "not moving out")
+						}
+						atomic.AddInt32(&numTransfersAttempted, -1)
+						return
+					}
+					if log.V(1) {
+						// This logging is useful to troubleshoot incomplete drains.
+						log.Infof(ctx, "trying to move replica out: lease transfer = %v, raft transfer = %v", needsLeaseTransfer, needsRaftTransfer)
 					}
 
 					if needsLeaseTransfer {
@@ -1155,7 +1172,9 @@ func (s *Store) SetDraining(drain bool, reporter func(int, string)) {
 					break
 				}
 			}
-			return err
+			// If there's an error in the context but not yet detected in
+			// err, take it into account here.
+			return errors.CombineErrors(err, ctx.Err())
 		}); err != nil {
 		// You expect this message when shutting down a server in an unhealthy
 		// cluster. If we see it on healthy ones, there's likely something to fix.
