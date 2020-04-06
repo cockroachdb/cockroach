@@ -23,7 +23,8 @@ typedef struct {
   size_t len;
 } CR_GEOS_Slice;
 
-// CR_GEOS_String is a wrapper around a Go string.
+// CR_GEOS_String is a wrapper around a Go string. The data it
+// contains must be freed via a call to free().
 typedef struct {
   char *data;
   size_t len;

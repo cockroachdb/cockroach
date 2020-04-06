@@ -93,17 +93,17 @@ func initCRGEOS(locs []string) *C.CR_GEOS {
 // goToCString returns a CR_GEOS_Slice from a given Go string.
 func goToCString(str string) C.CR_GEOS_String {
 	if len(str) == 0 {
-		return C.CR_GEOS_Slice{data: nil, len: 0}
+		return C.CR_GEOS_String{data: nil, len: 0}
 	}
 	b := []byte(str)
-	return C.CR_GEOS_Slice{
+	return C.CR_GEOS_String{
 		data: (*C.char)(unsafe.Pointer(&b[0])),
 		len:  C.size_t(len(b)),
 	}
 }
 
-// cSliceToGo converts a CR_GEOS_Slice to go bytes.
-func cSliceToUnsafeGoBytes(s C.CR_GEOS_Slice) []byte {
+// cStringToUnsafeGoBytes converts a CR_GEOS_String to go bytes.
+func cStringToUnsafeGoBytes(s C.CR_GEOS_String) []byte {
 	if s.data == nil {
 		return nil
 	}
@@ -123,7 +123,7 @@ func WKTToWKB(wkt geopb.WKT) (geopb.WKB, error) {
 	if cWKB.data == nil {
 		return nil, errors.Newf("error decoding WKT: %s", wkt)
 	}
-	unsafeWKB := cSliceToUnsafeGoBytes(cWKB)
+	unsafeWKB := cStringToUnsafeGoBytes(cWKB)
 	wkb := make([]byte, len(unsafeWKB))
 	copy(wkb, unsafeWKB)
 	defer C.free(unsafe.Pointer(cWKB.data))
