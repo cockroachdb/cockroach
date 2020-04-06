@@ -70,46 +70,6 @@ func FromColumnTypes(cts []types.T) ([]coltypes.T, error) {
 	return typs, nil
 }
 
-// ToColumnType converts a types.T that corresponds to the column type. Note
-// that due to the fact that multiple types.T's are represented by a single
-// column type, this conversion might return the type that is unexpected.
-// NOTE: this should only be used in tests.
-func ToColumnType(t coltypes.T) *types.T {
-	switch t {
-	case coltypes.Bool:
-		return types.Bool
-	case coltypes.Bytes:
-		return types.Bytes
-	case coltypes.Decimal:
-		return types.Decimal
-	case coltypes.Int16:
-		return types.Int2
-	case coltypes.Int32:
-		return types.Int4
-	case coltypes.Int64:
-		return types.Int
-	case coltypes.Float64:
-		return types.Float
-	case coltypes.Timestamp:
-		return types.Timestamp
-	case coltypes.Interval:
-		return types.Interval
-	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected coltype %s", t.String()))
-	return nil
-}
-
-// ToColumnTypes calls ToColumnType on each element of typs returning the
-// resulting slice.
-func ToColumnTypes(typs []coltypes.T) []types.T {
-	cts := make([]types.T, len(typs))
-	for i := range cts {
-		t := ToColumnType(typs[i])
-		cts[i] = *t
-	}
-	return cts
-}
-
 // GetDatumToPhysicalFn returns a function for converting a datum of the given
 // ColumnType to the corresponding Go type.
 func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
