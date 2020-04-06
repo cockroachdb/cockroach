@@ -324,7 +324,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 	// TODO(tbg): revisit as old versions are aged out of this test.
 	c.encryptDefault = false
 
-	const baseVersion = "v19.1.5"
+	const baseVersion = "19.1.5"
 	u := newVersionUpgradeTest(c, versionUpgradeTestFeatures,
 		// Load baseVersion fixture. That fixture's cluster version may be
 		// at the predecessor version, so add a waitForUpgradeStep to make
@@ -335,7 +335,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 		waitForUpgradeStep(),
 
 		// NB: before the first step, cluster and binary version equals baseVersion.
-		binaryUpgradeStep("v19.2.1"),
+		binaryUpgradeStep("19.2.1"),
 		waitForUpgradeStep(),
 
 		// Each new release has to be added here. When adding a new release, you'll
@@ -410,7 +410,7 @@ func newVersionUpgradeTest(
 	}
 }
 
-func checkpointName(binaryVersion string) string { return "checkpoint-" + binaryVersion }
+func checkpointName(binaryVersion string) string { return "checkpoint-v" + binaryVersion }
 
 func (u *versionUpgradeTest) uploadVersion(ctx context.Context, t *test, newVersion string) option {
 	var binary string
@@ -420,7 +420,7 @@ func (u *versionUpgradeTest) uploadVersion(ctx context.Context, t *test, newVers
 		var err error
 		binary, err = binfetcher.Download(ctx, binfetcher.Options{
 			Binary:  "cockroach",
-			Version: newVersion,
+			Version: "v" + newVersion,
 			GOOS:    u.goOS,
 			GOARCH:  "amd64",
 		})
@@ -434,31 +434,34 @@ func (u *versionUpgradeTest) uploadVersion(ctx context.Context, t *test, newVers
 	return startArgs("--binary=" + target)
 }
 
-func (u *versionUpgradeTest) checkNode(
-	ctx context.Context, t *test, nodeIdx int, newVersion string,
-) {
-	err := retry.ForDuration(30*time.Second, func() error {
-		db := u.c.Conn(ctx, nodeIdx)
-		defer db.Close()
+// binaryVersion returns the binary running on the (one-indexed) node.
+// NB: version means major.minor[-unstable]; the patch level isn't returned. For example, a binary
+// of version 19.2.4 will return 19.2.
+func (u *versionUpgradeTest) binaryVersion(ctx context.Context, t *test, i int) roachpb.Version {
+	db := u.c.Conn(ctx, i)
+	defer db.Close()
 
-		// 'Version' for 1.1, 'Tag' in 1.0.x.
-		var version string
-		if err := db.QueryRow(
-			`SELECT value FROM crdb_internal.node_build_info where field IN ('Version' , 'Tag')`,
-		).Scan(&version); err != nil {
-			return err
-		}
-		if version != newVersion && newVersion != headVersion {
-			t.Fatalf("created node at v%s, but it is %s", newVersion, version)
-		}
-		return nil
-	})
+	var sv string
+	if err := db.QueryRow(`SELECT crdb_internal.node_executable_version();`).Scan(&sv); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(sv) == 0 {
+		t.Fatal("empty version")
+	}
+
+	cv, err := roachpb.ParseVersion(sv)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return cv
 }
 
-func (u *versionUpgradeTest) version(ctx context.Context, t *test, i int) roachpb.Version {
+// binaryVersion returns the cluster version active on the (one-indexed) node. Note that the
+// returned value might become stale due to the cluster auto-upgrading in the background plus
+// gossip asynchronicity.
+// NB: cluster versions are always major.minor[-unstable]; there isn't a patch level.
+func (u *versionUpgradeTest) clusterVersion(ctx context.Context, t *test, i int) roachpb.Version {
 	db := u.c.Conn(ctx, i)
 	defer db.Close()
 
@@ -520,11 +523,10 @@ func binaryUpgradeStep(newVersion string) versionStep {
 			nodes[i], nodes[j] = nodes[j], nodes[i]
 		})
 		for _, node := range nodes {
-			t.l.Printf("%s: upgrading node %d\n", newVersion, node)
+			t.l.Printf("restarting node %d into %s", node, newVersion)
 			c.Stop(ctx, c.Node(node))
 			c.Start(ctx, t, c.Node(node), args, startArgsDontEncrypt)
-
-			u.checkNode(ctx, t, node, newVersion)
+			t.l.Printf("node %d now running binary version %s", node, u.binaryVersion(ctx, t, node))
 
 			// TODO(nvanbenschoten): add upgrade qualification step. What should we
 			// test? We could run logictests. We could add custom logic here. Maybe
@@ -612,7 +614,7 @@ func stmtFeatureTest(
 		name: name,
 		fn: func(ctx context.Context, t *test, u *versionUpgradeTest) (skipped bool) {
 			i := u.c.All().randNode()[0]
-			if u.version(ctx, t, i).Less(minVersion) {
+			if u.clusterVersion(ctx, t, i).Less(minVersion) {
 				return true // skipped
 			}
 			db := u.c.Conn(ctx, i)
