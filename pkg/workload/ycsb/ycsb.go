@@ -149,32 +149,39 @@ func (g *ycsb) Flags() workload.Flags { return g.flags }
 func (g *ycsb) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
+			g.workload = strings.ToUpper(g.workload)
 			switch g.workload {
-			case "A", "a":
+			case "A":
 				g.readFreq = 0.5
 				g.updateFreq = 0.5
 				g.requestDistribution = "zipfian"
-			case "B", "b":
+			case "B":
 				g.readFreq = 0.95
 				g.updateFreq = 0.05
 				g.requestDistribution = "zipfian"
-			case "C", "c":
+			case "C":
 				g.readFreq = 1.0
 				g.requestDistribution = "zipfian"
-			case "D", "d":
+			case "D":
 				g.readFreq = 0.95
 				g.insertFreq = 0.05
 				g.requestDistribution = "latest"
-			case "E", "e":
+			case "E":
 				g.scanFreq = 0.95
 				g.insertFreq = 0.05
 				g.requestDistribution = "zipfian"
-			case "F", "f":
+			case "F":
 				g.readFreq = 0.5
 				g.readModifyWriteFreq = 0.5
 				g.requestDistribution = "zipfian"
 			default:
 				return errors.Errorf("Unknown workload: %q", g.workload)
+			}
+
+			if !g.flags.Lookup(`families`).Changed {
+				// If `--families` was not specified, default its value to the
+				// configuration that we expect to lead to better performance.
+				g.families = preferColumnFamilies(g.workload)
 			}
 
 			if g.recordCount == 0 {
@@ -185,6 +192,78 @@ func (g *ycsb) Hooks() workload.Hooks {
 			}
 			return nil
 		},
+	}
+}
+
+// preferColumnFamilies returns whether we expect the use of column families to
+// improve performance for a given workload.
+func preferColumnFamilies(workload string) bool {
+	// These determinations were computed on 80da27b (04/04/2020) while running
+	// the ycsb roachtests.
+	//
+	// ycsb/[A-F]/nodes=3 (3x n1-standard-8 VMs):
+	//
+	// | workload | --families=false | --families=true | better with families? |
+	// |----------|-----------------:|----------------:|-----------------------|
+	// | A        |         11,743.5 |        17,760.5 | true                  |
+	// | B        |         35,232.3 |        32,982.2 | false                 |
+	// | C        |         45,454.7 |        44,112.5 | false                 |
+	// | D        |         36,091.0 |        35,615.1 | false                 |
+	// | E        |          5,774.9 |         2,604.8 | false                 |
+	// | F        |          4,933.1 |         8,259.7 | true                  |
+	//
+	// ycsb/[A-F]/nodes=3/cpu=32 (3x n1-standard-32 VMs):
+	//
+	// | workload | --families=false | --families=true | better with families? |
+	// |----------|-----------------:|----------------:|-----------------------|
+	// | A        |         14,144.1 |        27,179.4 | true                  |
+	// | B        |         96,669.6 |       104,567.5 | true                  |
+	// | C        |        137,463.3 |       131,953.7 | false                 |
+	// | D        |        103,188.6 |        95,285.7 | false                 |
+	// | E        |         10,417.5 |         7,913.6 | false                 |
+	// | F        |          5,782.3 |        15,532.1 | true                  |
+	//
+	switch workload {
+	case "A":
+		// Workload A is highly contended. It performs 50% single-row lookups
+		// and 50% single-column updates. Using column families breaks the
+		// contention between all updates to different columns of the same row,
+		// so we use them by default.
+		return true
+	case "B":
+		// Workload B is less contended than Workload A, but still bottlenecks
+		// on contention as concurrency grows. It performs 95% single-row
+		// lookups and 5% single-column updates. Using column families slows
+		// down the single-row lookups but speeds up the updates (see above).
+		// This trade-off favors column families for higher concurrency levels
+		// but does not at lower concurrency levels. We prefer larger YCSB
+		// deployments, so we use column families by default.
+		return true
+	case "C":
+		// Workload C has no contention. It consistent entirely of single-row
+		// lookups. Using column families slows down single-row lookups, so we
+		// do not use them by default.
+		return false
+	case "D":
+		// Workload D has no contention. It performs 95% single-row lookups and
+		// 5% single-row insertion. Using column families slows down single-row
+		// lookups and single-row insertion, so we do not use them by default.
+		return false
+	case "E":
+		// Workload E has moderate contention. It performs 95% multi-row scans
+		// and 5% single-row insertion. Using column families slows down
+		// multi-row scans and single-row insertion, so we do not use them by
+		// default.
+		return false
+	case "F":
+		// Workload F is highly contended. It performs 50% single-row lookups
+		// and 50% single-column updates expressed as multi-statement
+		// read-modify-write transactions. Using column families breaks the
+		// contention between all updates to different columns of the same row,
+		// so we use them by default.
+		return true
+	default:
+		panic(fmt.Sprintf("unexpected workload: %s", workload))
 	}
 }
 
