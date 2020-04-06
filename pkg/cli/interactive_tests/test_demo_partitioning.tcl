@@ -15,7 +15,7 @@ expect {
   # can fail in various ways (i.e. not just a timeout).
   # So instead we use the specific error message shouted by `cockroach demo` when license
   # acquisition fails.
-  "license acquisition was unsuccessful" {
+  "unable to acquire a license for this demo" {
       # The license server is unreachable. There's not much we can test here.
       # Simply ignore the test.
       report "License server could not be reached - skipping with no error"
