@@ -90,25 +90,47 @@ func initCRGEOS(locs []string) *C.CR_GEOS {
 	return nil
 }
 
-// goToCString returns a CR_GEOS_Slice from a given Go string.
+// goToCString returns a CR_GEOS_String from a given Go string.
 func goToCString(str string) C.CR_GEOS_String {
 	if len(str) == 0 {
-		return C.CR_GEOS_Slice{data: nil, len: 0}
+		return C.CR_GEOS_String{data: nil, len: 0}
 	}
 	b := []byte(str)
+	return C.CR_GEOS_String{
+		data: (*C.char)(unsafe.Pointer(&b[0])),
+		len:  C.size_t(len(b)),
+	}
+}
+
+// goToCSlice returns a CR_GEOS_Slice from a given Go byte slice.
+func goToCSlice(b []byte) C.CR_GEOS_Slice {
+	if len(b) == 0 {
+		return C.CR_GEOS_Slice{data: nil, len: 0}
+	}
 	return C.CR_GEOS_Slice{
 		data: (*C.char)(unsafe.Pointer(&b[0])),
 		len:  C.size_t(len(b)),
 	}
 }
 
-// cSliceToGo converts a CR_GEOS_Slice to go bytes.
+// cSliceToUnsafeGoBytes converts a CR_GEOS_Slice to a Go byte slice that
+// refer to the underlying C memory.
 func cSliceToUnsafeGoBytes(s C.CR_GEOS_Slice) []byte {
 	if s.data == nil {
 		return nil
 	}
 	// Interpret the C pointer as a pointer to a Go array, then slice.
 	return (*[maxArrayLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
+}
+
+// cSliceToSafeGoBytes converts a CR_GEOS_Slice to a Go byte slice.
+// Additionally, it frees the memory in the C slice.
+func cSliceToSafeGoBytes(s C.CR_GEOS_Slice) []byte {
+	unsafeBytes := cSliceToUnsafeGoBytes(s)
+	b := make([]byte, len(unsafeBytes))
+	copy(b, unsafeBytes)
+	C.free(unsafe.Pointer(s.data))
+	return b
 }
 
 // WKTToWKB parses a WKT into WKB using the GEOS library.
@@ -123,9 +145,20 @@ func WKTToWKB(wkt geopb.WKT) (geopb.WKB, error) {
 	if cWKB.data == nil {
 		return nil, errors.Newf("error decoding WKT: %s", wkt)
 	}
-	unsafeWKB := cSliceToUnsafeGoBytes(cWKB)
-	wkb := make([]byte, len(unsafeWKB))
-	copy(wkb, unsafeWKB)
-	defer C.free(unsafe.Pointer(cWKB.data))
-	return wkb, nil
+	return cSliceToSafeGoBytes(cWKB), nil
+}
+
+// ClipWKBByRect clips a WKB to the specified rectangle.
+func ClipWKBByRect(
+	wkb geopb.WKB, xMin float64, yMin float64, xMax float64, yMax float64,
+) (geopb.WKB, error) {
+	if err := validOrError(crGEOS); err != nil {
+		return nil, err
+	}
+	cWKB := C.CR_GEOS_ClipWKBByRect(
+		crGEOS, goToCSlice(wkb), C.double(xMin), C.double(yMin), C.double(xMax), C.double(yMax))
+	if cWKB.data == nil {
+		return nil, nil
+	}
+	return cSliceToSafeGoBytes(cWKB), nil
 }
