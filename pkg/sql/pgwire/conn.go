@@ -1289,7 +1289,7 @@ func (c *conn) writeRowDescription(
 		typ := pgTypeForParserType(column.Typ)
 		c.msgBuilder.putInt32(0) // Table OID (optional).
 		c.msgBuilder.putInt16(0) // Column attribute ID (optional).
-		c.msgBuilder.putInt32(int32(mapResultOid(typ.oid)))
+		c.msgBuilder.putInt32(int32(typ.oid))
 		c.msgBuilder.putInt16(int16(typ.size))
 		// The type modifier (atttypmod) is used to include various extra information
 		// about the type being sent. -1 is used for values which don't make use of
