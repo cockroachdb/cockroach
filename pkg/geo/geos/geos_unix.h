@@ -41,6 +41,10 @@ char *CR_GEOS_Init(CR_GEOS_String loc, CR_GEOS **lib);
 // CR_GEOS_WKTToWKB converts a given WKT into it's WKB form.
 CR_GEOS_String CR_GEOS_WKTToWKB(CR_GEOS *lib, CR_GEOS_String wkt);
 
+// CR_GEOS_ClipWKBByRect clips a given WKB by the given rectangle.
+CR_GEOS_String CR_GEOS_ClipWKBByRect(
+  CR_GEOS *lib, CR_GEOS_Slice wkb, double xmin, double ymin, double xmax, double ymax);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
