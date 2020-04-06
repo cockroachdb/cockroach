@@ -229,7 +229,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		panic(errors.New("no tracer set in AmbientCtx"))
 	}
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset))
+	var clock *hlc.Clock
+	if cfg.ClockDevicePath != "" {
+		clockDev, err := hlc.MakeClockDevice(cfg.ClockDevicePath)
+		if err != nil {
+			return nil, errors.Wrap(err, "creating clock device")
+		}
+		clock = hlc.NewClock(clockDev.UnixNano, time.Duration(cfg.MaxOffset))
+	} else {
+		clock = hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset))
+	}
 	s := &Server{
 		st:       st,
 		clock:    clock,
