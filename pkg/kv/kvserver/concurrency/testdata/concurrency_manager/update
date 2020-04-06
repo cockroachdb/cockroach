@@ -5,7 +5,7 @@
 # still at the original timestamp. This is permitted but the
 # lock's timestamp should not regress.
 #
-# Setup: txn1 acquire lock k
+# Setup: txn1 acquires lock k
 #        txn2 reads k and waits
 #        txn2 pushes txn1
 #
@@ -124,7 +124,7 @@ reset namespace
 # the original timestamp. This is permitted but the lock's
 # timestamp should not regress.
 #
-# Setup: txn1 acquire lock k
+# Setup: txn1 acquires lock k
 #        txn2 reads k and waits
 #
 # Test:  txn2 pushes txn1's timestamp forward
@@ -234,6 +234,130 @@ debug-lock-table
 global: num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000012,2, info: unrepl epoch: 1, seqs: [0]
+local: num=0
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# A transaction acquires an unreplicated lock. The lock is
+# pushed to a higher timestamp by a second transaction. The
+# transaction then returns to upgrade the unreplicated lock to a
+# replicated intent at a new sequence number but still at the
+# original timestamp. This is permitted and the lock's timestamp
+# regresses back down to the intent's timestamp. In practice, if
+# the pusher wanted to prevent its push from being reverted, it
+# should have also bumped the timestamp cache to ensure that the
+# intent couldn't be laid down at the original timestamp.
+#
+# Setup: txn1 acquires unreplicated lock k
+#        txn2 reads k and waits
+#        txn2 pushes txn1
+#
+# Test:  txn2 succeeds in pushing txn1's ts forward
+#        txn2 proceeds
+#        txn1 re-acquires replicated lock k at lower ts
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=12,1 epoch=0
+----
+
+new-request name=req1 txn=txn1 ts=10,1
+  put key=k value=v
+----
+
+new-request name=req2 txn=txn2 ts=12,1
+  get key=k
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=k dur=u
+----
+[-] acquire lock: txn 00000001 @ k
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: waiting in lock wait-queues
+[2] sequence req2: pushing timestamp of txn 00000001 above 0.000000012,1
+[2] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+   waiting readers:
+    req: 8, txn: 00000002-0000-0000-0000-000000000000
+   distinguished req: 8
+local: num=0
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+on-txn-updated txn=txn1 status=pending ts=12,2
+----
+[-] update txn: increasing timestamp of txn1
+[2] sequence req2: resolving intent "k" for txn 00000001 with PENDING status
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000012,2, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# Issue another write to the same key for txn1 at its initial timestamp,
+# this time with a replicated durability. The timestamp in the lock
+# table should regress back down to reflect the replicated lock state.
+
+new-request name=req3 txn=txn1 ts=10,1
+  put key=k value=v2 seq=1
+----
+
+sequence req=req3
+----
+[3] sequence req3: sequencing request
+[3] sequence req3: acquiring latches
+[3] sequence req3: scanning lock table for conflicting locks
+[3] sequence req3: sequencing complete, returned guard
+
+on-lock-acquired req=req3 key=k seq=1 dur=r
+----
+[-] acquire lock: txn 00000001 @ k
+
+finish req=req3
+----
+[-] finish req3: finishing request
+
+debug-lock-table
+----
+global: num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [1], unrepl epoch: 0, seqs: [0]
 local: num=0
 
 reset namespace
