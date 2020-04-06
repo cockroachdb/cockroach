@@ -20,3 +20,4 @@ export { default as trackNetworkSort } from "./trackNetworkSort";
 export { default as trackCollapseNodes } from "./trackCollapseNodes";
 export { default as trackTimeScaleSelected } from "./trackTimeScaleSelected";
 export { default as trackTimeFrameChange } from "./trackTimeFrameChange";
+export { default as trackDownloadDiagnosticsBundle } from "./trackDownloadDiagnosticsBundle";
