@@ -31,6 +31,15 @@ const (
 	region                = "region"
 )
 
+var enabled = true
+
+// Disable disables cloud detection until the returned function is called.
+// Used for tests that trigger diagnostics updates.
+func Disable() (restore func()) {
+	enabled = false
+	return func() { enabled = true }
+}
+
 // client is necessary to provide a struct for mocking http requests
 // in testing.
 type client struct {
@@ -181,6 +190,10 @@ func (cli *client) getInstanceMetadata(
 // the node is running on, as well as the value of the requested metadata
 // element.
 func getCloudInfo(ctx context.Context, metadataElement string) (provider string, element string) {
+	if !enabled {
+		return "", ""
+	}
+
 	const timeout = 500 * time.Millisecond
 	cli := client{httputil.NewClientWithTimeout(timeout)}
 
