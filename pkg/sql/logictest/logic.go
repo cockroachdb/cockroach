@@ -36,6 +36,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -981,6 +982,12 @@ type logicTest struct {
 
 	curPath   string
 	curLineNo int
+
+	// randomizedVectorizedBatchSize stores the randomized batch size for
+	// vectorized engine if it is not turned off. The batch size will randomly be
+	// set to 1 with 25% probability, {2, 3} with 25% probability or default batch
+	// size with 50% probability.
+	randomizedVectorizedBatchSize int
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1258,7 +1265,15 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		); err != nil {
 			t.Fatal(err)
 		}
-
+	}
+	if strings.Compare(cfg.overrideVectorize, "off") != 0 {
+		if _, err := t.cluster.ServerConn(0).Exec(
+			fmt.Sprintf("SET CLUSTER SETTING sql.testing.vectorize.batch_size to %d",
+				t.randomizedVectorizedBatchSize),
+		); err != nil {
+			t.Fatal(err)
+		}
+		t.t().Log(fmt.Sprintf("randomize batchSize to %d\n", t.randomizedVectorizedBatchSize))
 	}
 
 	if cfg.overrideAutoStats != "" {
@@ -2478,6 +2493,18 @@ func RunLogicTest(t *testing.T, globs ...string) {
 		}
 	}
 
+	// Determining whether or not to randomize vectorize batch size.
+	rng, _ := randutil.NewPseudoRand()
+	randVal := rng.Float64()
+	randomizedVectorizedBatchSize := coldata.BatchSize()
+	if randVal < 0.25 {
+		randomizedVectorizedBatchSize = 1
+	} else if randVal < 0.375 {
+		randomizedVectorizedBatchSize = 2
+	} else if randVal < 0.5 {
+		randomizedVectorizedBatchSize = 3
+	}
+
 	// The tests below are likely to run concurrently; `log` is shared
 	// between all the goroutines and thus all tests, so it doesn't make
 	// sense to try to use separate `log.Scope` instances for each test.
@@ -2520,10 +2547,11 @@ func RunLogicTest(t *testing.T, globs ...string) {
 					}
 					rng, _ := randutil.NewPseudoRand()
 					lt := logicTest{
-						rootT:           t,
-						verbose:         verbose,
-						perErrorSummary: make(map[string][]string),
-						rng:             rng,
+						rootT:                         t,
+						verbose:                       verbose,
+						perErrorSummary:               make(map[string][]string),
+						rng:                           rng,
+						randomizedVectorizedBatchSize: randomizedVectorizedBatchSize,
 					}
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
