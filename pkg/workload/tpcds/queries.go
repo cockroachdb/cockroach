@@ -10,9 +10,12 @@
 
 package tpcds
 
-const numQueries = 99
+// NumQueries specifies the number of queries in TPC-DS benchmark.
+const NumQueries = 99
 
-var queriesByNumber = map[int]string{
+// QueriesByNumber is a mapping from the number of a TPC-DS query to the actual
+// query. Only queries that can be parsed by CockroachDB are present.
+var QueriesByNumber = map[int]string{
 	1:  query1,
 	2:  query2,
 	3:  query3,
@@ -6845,6 +6848,8 @@ select
  limit 100;
 `
 
+	// NOTE: this query has been modified by appending two extra columns to
+	// ORDER BY clause so that it had deterministic output.
 	query71 = `
 SELECT
 	i_brand_id AS brand_id,
@@ -6904,7 +6909,7 @@ WHERE
 GROUP BY
 	i_brand, i_brand_id, t_hour, t_minute
 ORDER BY
-	ext_price DESC, i_brand_id;
+	ext_price DESC, i_brand_id, t_hour, t_minute;
 `
 
 	query72 = `
@@ -7535,6 +7540,8 @@ LIMIT
 	100;
 `
 
+	// NOTE: this query has been modified by appending one extra column to
+	// ORDER BY clause so that it had deterministic output.
 	query79 = `
 SELECT
 	c_last_name,
@@ -7581,7 +7588,7 @@ FROM
 WHERE
 	ss_customer_sk = c_customer_sk
 ORDER BY
-	c_last_name, c_first_name, substr(s_city, 1, 30), profit
+	c_last_name, c_first_name, substr(s_city, 1, 30), profit, ss_ticket_number
 LIMIT
 	100;
 `
