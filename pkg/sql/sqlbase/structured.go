@@ -1198,6 +1198,20 @@ func (desc *MutableTableDescriptor) MaybeFillColumnID(
 	}
 	columnNames[c.Name] = columnID
 	c.ID = columnID
+}
+
+// MaybeFillLogicalColumnID assigns a column ID to the given column if the said column has an ID
+// of 0.
+func (desc *MutableTableDescriptor) MaybeFillLogicalColumnID(
+	c *ColumnDescriptor, columnNames map[string]ColumnID,
+) {
+	desc.initIDs()
+
+	columnID := c.LogicalColumnID
+	if columnID == 0 {
+		columnID = desc.NextColumnID
+		desc.NextColumnID++
+	}
 	c.LogicalColumnID = columnID
 }
 
@@ -1216,9 +1230,23 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 
 	r := rand.New(rand.NewSource(1))
 
+	oldNextColumnID := desc.NextColumnID
+	for i := range desc.Columns {
+		desc.MaybeFillLogicalColumnID(&desc.Columns[i], columnNames)
+	}
+	desc.NextColumnID = oldNextColumnID
+
 	for _, i := range r.Perm(len(desc.Columns)) {
 		desc.MaybeFillColumnID(&desc.Columns[i], columnNames)
 	}
+
+	oldNextColumnID = desc.NextColumnID
+	for _, m := range desc.Mutations {
+		if c := m.GetColumn(); c != nil {
+			desc.MaybeFillLogicalColumnID(c, columnNames)
+		}
+	}
+	desc.NextColumnID = oldNextColumnID
 
 	for _, i := range r.Perm(len(desc.Mutations)) {
 		if c := desc.Mutations[i].GetColumn(); c != nil {
