@@ -572,7 +572,10 @@ func fullClusterTargets(
 	for _, desc := range allDescs {
 		if dbDesc := desc.GetDatabase(); dbDesc != nil {
 			fullClusterDescs = append(fullClusterDescs, desc)
-			fullClusterDBs = append(fullClusterDBs, dbDesc)
+			if dbDesc.ID != sqlbase.SystemDB.ID {
+				// The only database that isn't being fully backed up is the system DB.
+				fullClusterDBs = append(fullClusterDBs, dbDesc)
+			}
 		}
 		if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
 			if tableDesc.ParentID == sqlbase.SystemDB.ID {
