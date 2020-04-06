@@ -114,6 +114,11 @@ func (p *planner) setupFamilyAndConstraintForShard(
 func MakeIndexDescriptor(
 	params runParams, n *tree.CreateIndex, tableDesc *sqlbase.MutableTableDescriptor,
 ) (*sqlbase.IndexDescriptor, error) {
+	// Ensure that the columns we want to index exist before trying to create the
+	// index.
+	if err := validateIndexColumnsExist(tableDesc, n.Columns); err != nil {
+		return nil, err
+	}
 	indexDesc := sqlbase.IndexDescriptor{
 		Name:              string(n.Name),
 		Unique:            n.Unique,
@@ -177,6 +182,23 @@ func MakeIndexDescriptor(
 		return nil, err
 	}
 	return &indexDesc, nil
+}
+
+// validateIndexColumnsExists validates that the columns for an index exist
+// in the table and are not being dropped prior to attempting to add the index.
+func validateIndexColumnsExist(
+	desc *sqlbase.MutableTableDescriptor, columns tree.IndexElemList,
+) error {
+	for _, column := range columns {
+		_, dropping, err := desc.FindColumnByName(column.Column)
+		if err != nil {
+			return err
+		}
+		if dropping {
+			return sqlbase.NewUndefinedColumnError(string(column.Column))
+		}
+	}
+	return nil
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.

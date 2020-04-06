@@ -141,7 +141,7 @@ CREATE INDEX foo ON t (b)
 statement error duplicate index name: \"foo\"
 CREATE INDEX foo ON t (a)
 
-statement error index \"bar\" contains unknown column \"c\"
+statement error column "c" does not exist
 CREATE INDEX bar ON t (c)
 
 statement error index \"bar\" contains duplicate column \"b\"
