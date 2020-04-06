@@ -287,13 +287,15 @@ type usingJoinBuilder struct {
 	rightScope *scope
 	outScope   *scope
 
-	// hideCols contains the ids of join columns which are hidden in the result
-	// expression.
-	hideCols opt.ColSet
+	// hideCols contains the join columns which are hidden in the result
+	// expression. Note that we cannot simply store the column ids since the
+	// same column may be used multiple times with different aliases.
+	hideCols map[*scopeColumn]struct{}
 
-	// showCols contains the ids of join columns which are not hidden in the
-	// resultexpression.
-	showCols opt.ColSet
+	// showCols contains the join columns which are not hidden in the result
+	// expression. Note that we cannot simply store the column ids since the
+	// same column may be used multiple times with different aliases.
+	showCols map[*scopeColumn]struct{}
 
 	// ifNullCols contains the ids of each synthesized column which performs the
 	// IFNULL check for a pair of join columns.
@@ -312,6 +314,8 @@ func (jb *usingJoinBuilder) init(
 	jb.leftScope = leftScope
 	jb.rightScope = rightScope
 	jb.outScope = outScope
+	jb.hideCols = make(map[*scopeColumn]struct{})
+	jb.showCols = make(map[*scopeColumn]struct{})
 }
 
 // buildUsingJoin constructs a Join operator with join columns matching the
@@ -320,18 +324,18 @@ func (jb *usingJoinBuilder) buildUsingJoin(using *tree.UsingJoinCond) {
 	var seenCols opt.ColSet
 	for _, name := range using.Cols {
 		// Find left and right USING columns in the scopes.
-		leftCol := jb.findUsingColumn(jb.leftScope.cols, name)
+		leftCol := jb.findUsingColumn(jb.leftScope.cols, name, "left table")
 		if leftCol == nil {
 			jb.raiseUndefinedColError(name, "left")
 		}
 		if seenCols.Contains(leftCol.id) {
 			// Same name exists more than once in USING column name list.
 			panic(pgerror.Newf(pgcode.DuplicateColumn,
-				"column %q appears more than once in USING clause", tree.ErrString(&name)))
+				"column name %q appears more than once in USING clause", tree.ErrString(&name)))
 		}
 		seenCols.Add(leftCol.id)
 
-		rightCol := jb.findUsingColumn(jb.rightScope.cols, name)
+		rightCol := jb.findUsingColumn(jb.rightScope.cols, name, "right table")
 		if rightCol == nil {
 			jb.raiseUndefinedColError(name, "right")
 		}
@@ -354,11 +358,17 @@ func (jb *usingJoinBuilder) buildNaturalJoin(natural tree.NaturalJoinCond) {
 			continue
 		}
 		if seenCols.Contains(leftCol.id) {
-			jb.raiseDuplicateColError(leftCol.name)
+			// Don't raise an error if the id matches but it has a different name.
+			for j := 0; j < i; j++ {
+				col := &jb.leftScope.cols[j]
+				if col.id == leftCol.id && col.name == leftCol.name {
+					jb.raiseDuplicateColError(leftCol.name, "left table")
+				}
+			}
 		}
 		seenCols.Add(leftCol.id)
 
-		rightCol := jb.findUsingColumn(jb.rightScope.cols, leftCol.name)
+		rightCol := jb.findUsingColumn(jb.rightScope.cols, leftCol.name, "right table")
 		if rightCol != nil {
 			jb.addEqualityCondition(leftCol, rightCol)
 		}
@@ -409,12 +419,10 @@ func (jb *usingJoinBuilder) finishBuild() {
 func (jb *usingJoinBuilder) addRemainingCols(cols []scopeColumn) {
 	for i := range cols {
 		col := &cols[i]
-		switch {
-		case jb.hideCols.Contains(col.id):
+		if _, ok := jb.hideCols[col]; ok {
 			jb.outScope.cols = append(jb.outScope.cols, *col)
 			jb.outScope.cols[len(jb.outScope.cols)-1].hidden = true
-
-		case !jb.showCols.Contains(col.id):
+		} else if _, ok := jb.showCols[col]; !ok {
 			jb.outScope.cols = append(jb.outScope.cols, *col)
 		}
 	}
@@ -422,14 +430,17 @@ func (jb *usingJoinBuilder) addRemainingCols(cols []scopeColumn) {
 
 // findUsingColumn finds the column in cols that has the given name. If no such
 // column exists, findUsingColumn returns nil. If multiple columns with the name
-// exist, then findUsingColumn raises an error.
-func (jb *usingJoinBuilder) findUsingColumn(cols []scopeColumn, name tree.Name) *scopeColumn {
+// exist, then findUsingColumn raises an error. The context is used for error
+// reporting.
+func (jb *usingJoinBuilder) findUsingColumn(
+	cols []scopeColumn, name tree.Name, context string,
+) *scopeColumn {
 	var foundCol *scopeColumn
 	for i := range cols {
 		col := &cols[i]
 		if !col.hidden && col.name == name {
 			if foundCol != nil {
-				jb.raiseDuplicateColError(name)
+				jb.raiseDuplicateColError(name, context)
 			}
 			foundCol = col
 		}
@@ -463,15 +474,15 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 		// The merged column is the same as the corresponding column from the
 		// left side.
 		jb.outScope.cols = append(jb.outScope.cols, *leftCol)
-		jb.showCols.Add(leftCol.id)
-		jb.hideCols.Add(rightCol.id)
+		jb.showCols[leftCol] = struct{}{}
+		jb.hideCols[rightCol] = struct{}{}
 	} else if jb.joinType == sqlbase.RightOuterJoin &&
 		!sqlbase.DatumTypeHasCompositeKeyEncoding(leftCol.typ) {
 		// The merged column is the same as the corresponding column from the
 		// right side.
 		jb.outScope.cols = append(jb.outScope.cols, *rightCol)
-		jb.showCols.Add(rightCol.id)
-		jb.hideCols.Add(leftCol.id)
+		jb.showCols[rightCol] = struct{}{}
+		jb.hideCols[leftCol] = struct{}{}
 	} else {
 		// Construct a new merged column to represent IFNULL(left, right).
 		var typ *types.T
@@ -484,14 +495,14 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 		merged := jb.b.factory.ConstructCoalesce(memo.ScalarListExpr{leftVar, rightVar})
 		col := jb.b.synthesizeColumn(jb.outScope, string(leftCol.name), typ, texpr, merged)
 		jb.ifNullCols.Add(col.id)
-		jb.hideCols.Add(leftCol.id)
-		jb.hideCols.Add(rightCol.id)
+		jb.hideCols[leftCol] = struct{}{}
+		jb.hideCols[rightCol] = struct{}{}
 	}
 }
 
-func (jb *usingJoinBuilder) raiseDuplicateColError(name tree.Name) {
+func (jb *usingJoinBuilder) raiseDuplicateColError(name tree.Name, context string) {
 	panic(pgerror.Newf(pgcode.DuplicateColumn,
-		"duplicate column name: %q", tree.ErrString(&name)))
+		"common column name %q appears more than once in %s", tree.ErrString(&name), context))
 }
 
 func (jb *usingJoinBuilder) raiseUndefinedColError(name tree.Name, context string) {
