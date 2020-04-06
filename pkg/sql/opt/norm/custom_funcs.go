@@ -1475,9 +1475,9 @@ func (c *CustomFuncs) mapSetOpFilter(
 	replace = func(nd opt.Expr) opt.Expr {
 		switch t := nd.(type) {
 		case *memo.VariableExpr:
-			dstCol, inCol := colMap.Get(int(t.Col))
-			if !inCol {
-				// Its not part of the out cols so no replacement required.
+			dstCol, ok := colMap.Get(int(t.Col))
+			if !ok {
+				// It is not part of the output cols so no replacement required.
 				return nd
 			}
 			return c.f.ConstructVariable(opt.ColumnID(dstCol))
