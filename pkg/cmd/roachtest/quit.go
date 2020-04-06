@@ -40,7 +40,10 @@ func runQuitTransfersLeases(
 	methodName string,
 	method func(ctx context.Context, t *test, c *cluster, nodeID int),
 ) {
-	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	args := startArgs(
+		"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms",               // iterate fast for rebalancing
+		"-a", "--vmodule=store=1,replica=1,replica_proposal=1", // verbosity to troubleshoot drains
+	)
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t, args)
 	defer func() {
