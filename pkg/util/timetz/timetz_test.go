@@ -52,7 +52,7 @@ func TestTimeTZString(t *testing.T) {
 		{MakeTimeTZ(timeofday.New(10, 11, 12, 0), 30), "10:11:12-00:00:30"},
 		{MakeTimeTZ(timeofday.New(10, 11, 12, 0), 120), "10:11:12-00:02:00"},
 		{MakeTimeTZ(timeofday.New(10, 11, 12, 0), 3), "10:11:12-00:00:03"},
-		{MakeTimeTZ(timeofday.Max, -10*60*60), "23:59:59.999999+10:00:00"},
+		{MakeTimeTZ(timeofday.Max-1, -10*60*60), "23:59:59.999999+10:00:00"},
 		{MakeTimeTZ(timeofday.Time2400, 10*60*60), "24:00:00-10:00:00"},
 	}
 	for i, tc := range testCases {
