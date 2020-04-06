@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -192,6 +193,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	var finishCollectionDiagnostics StmtDiagnosticsTraceFinishFunc
 
 	if explainBundle, ok := stmt.AST.(*tree.ExplainAnalyzeDebug); ok {
+		telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
 		// Always collect diagnostics for EXPLAIN ANALYZE (DEBUG).
 		shouldCollectDiagnostics = true
 		// Strip off the explain node to execute the inner statement.
@@ -211,6 +213,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		p.discardRows = true
 	} else {
 		shouldCollectDiagnostics, finishCollectionDiagnostics = ex.stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, stmt.AST)
+		if shouldCollectDiagnostics {
+			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
+		}
 	}
 
 	if shouldCollectDiagnostics {
