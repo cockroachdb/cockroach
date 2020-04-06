@@ -928,8 +928,23 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			ac.AddLogTag("server drain process", nil)
 			drainCtx := ac.AnnotateCtx(context.Background())
 
-			if _, _, err := s.Drain(drainCtx); err != nil {
-				log.Warning(drainCtx, err)
+			// Perform a graceful drain. We keep retrying forever, in
+			// case there are many range leases or some unavailability
+			// preventing progress. If the operator wants to expedite
+			// the shutdown, they will need to make it ungraceful
+			// via a 2nd signal.
+			for {
+				remaining, _, err := s.Drain(drainCtx)
+				if err != nil {
+					log.Errorf(drainCtx, "graceful drain failed: %v", err)
+					break
+				}
+				if remaining == 0 {
+					// No more work to do.
+					break
+				}
+				// Avoid a busy wait if something gets stuck.
+				time.Sleep(200 * time.Millisecond)
 			}
 
 			stopper.Stop(drainCtx)

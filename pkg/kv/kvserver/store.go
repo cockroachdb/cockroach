@@ -1147,6 +1147,23 @@ func (s *Store) SetDraining(drain bool, reporter func(int, string)) {
 		return int(numTransfersAttempted)
 	}
 
+	// Give all replicas at least one chance to transfer.
+	// If we don't do that, then it's possible that a configured
+	// value for raftLeadershipTransferWait is too low to iterate
+	// through all the replicas at least once, and the drain
+	// condition on the remaining value will never be reached.
+	if numRemaining := transferAllAway(ctx); numRemaining > 0 {
+		// Report progress to the Drain RPC.
+		if reporter != nil {
+			reporter(numRemaining, "range lease iterations")
+		}
+	} else {
+		// No more work to do.
+		return
+	}
+
+	// We've seen all the replicas once. Now we're going to iterate
+	// until they're all gone, up to the configured timeout.
 	transferTimeout := raftLeadershipTransferWait.Get(&s.cfg.Settings.SV)
 
 	if err := contextutil.RunWithTimeout(ctx, "wait for raft leadership transfer", transferTimeout,
@@ -1162,6 +1179,10 @@ func (s *Store) SetDraining(drain bool, reporter func(int, string)) {
 			for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 				err = nil
 				if numRemaining := transferAllAway(ctx); numRemaining > 0 {
+					// Report progress to the Drain RPC.
+					if reporter != nil {
+						reporter(numRemaining, "range lease iterations")
+					}
 					err = errors.Errorf("waiting for %d replicas to transfer their lease away", numRemaining)
 					if everySecond.ShouldLog() {
 						log.Info(ctx, err)
