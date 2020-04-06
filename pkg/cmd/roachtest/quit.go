@@ -17,12 +17,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 )
+
+type quitTest struct {
+	t *test
+	c *cluster
+}
 
 // runQuitTransfersLeases performs rolling restarts on a
 // 3-node cluster and ascertains that each node shutting down
@@ -38,91 +43,220 @@ func runQuitTransfersLeases(
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t, args)
+	defer func() {
+		// If the test below fails after shutting down node 1,
+		// just restart node 1, otherwise `debug zip` will fail
+		// and we won't get artifacts.
+		c.Stop(ctx, c.Node(1), roachprodArgOption{"--sig", "9", "--wait"})
+		_ = c.StartE(ctx, c.Node(1))
 
-	// rwt runs a command with a 1-minute timeout.
-	rwt := func(fn func(ctx context.Context)) {
-		if err := contextutil.RunWithTimeout(ctx, "do", time.Minute, func(ctx context.Context) error {
-			fn(ctx)
-			return nil
-		}); err != nil {
-			t.Fatal(err)
+		// We use a panic-based test failure protocol, so as to ensure
+		// that this defer is guaranteed to run. (The (*test).Fatal
+		// method uses runtime.Goexit() which does not guarantee this.)
+		if r := recover(); r != nil {
+			if qe, ok := r.(*quitErr); ok {
+				t.failWithMsg(qe.msg)
+			}
+		}
+	}()
+
+	q := quitTest{t, c}
+	q.runTest(ctx, args, method)
+}
+
+func (q *quitTest) Fatal(args ...interface{}) {
+	panic(&quitErr{q.t.decorate(1, fmt.Sprint(args...))})
+}
+func (q *quitTest) Fatalf(format string, args ...interface{}) {
+	panic(&quitErr{q.t.decorate(1, fmt.Sprintf(format, args...))})
+}
+
+type quitErr struct {
+	msg string
+}
+
+func (q *quitTest) runTest(
+	ctx context.Context,
+	args option,
+	method func(ctx context.Context, t *test, c *cluster, nodeID int),
+) {
+	q.waitForUpReplication(ctx)
+	q.createRanges(ctx)
+	q.setupIncrementalDrain(ctx)
+
+	// runTest iterates through the cluster two times and restarts each
+	// node in turn. After each node shutdown it verifies that there are
+	// no orphan ranges.
+	//
+	// The shutdown method can be customized; the different
+	// methods are exercised below.
+	q.t.l.Printf("now running restart loop\n")
+	for i := 0; i < 3; i++ {
+		q.t.l.Printf("iteration %d\n", i)
+		for nodeID := 1; nodeID <= q.c.spec.NodeCount; nodeID++ {
+			q.t.l.Printf("stopping node %d\n", nodeID)
+			q.runWithTimeout(ctx, func(ctx context.Context) { method(ctx, q.t, q.c, nodeID) })
+			q.runWithTimeout(ctx, func(ctx context.Context) { q.checkNoLeases(ctx, nodeID) })
+			q.t.l.Printf("restarting node %d\n", nodeID)
+			q.runWithTimeout(ctx, func(ctx context.Context) { q.restartNode(ctx, args, nodeID) })
 		}
 	}
+}
 
-	// Now start the remainder of the nodes, then wait for
-	// up-replication.
-	func() {
-		db := c.Conn(ctx, 1)
-		defer db.Close()
+// restartNode restarts one node and waits until it's up and ready to
+// accept clients.
+func (q *quitTest) restartNode(ctx context.Context, args option, nodeID int) {
+	q.c.Start(ctx, q.t, args, q.c.Node(nodeID))
 
-		// We'll want rebalancing to be a bit fast than normal, so
-		// that the up-replication does not take ages.
-		if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING	kv.snapshot_rebalance.max_rate = '128MiB'`); err != nil {
-			t.Fatal(err)
+	q.t.l.Printf("waiting for readiness of node %d\n", nodeID)
+	// Now perform a SQL query. This achieves two goals:
+	// - it waits until the server is ready.
+	// - the particular query forces a cluster-wide RPC; which
+	//   forces any circuit breaker to trip and re-establish
+	//   the RPC connection if needed.
+	db := q.c.Conn(ctx, nodeID)
+	defer db.Close()
+	if _, err := db.ExecContext(ctx, `TABLE crdb_internal.cluster_sessions`); err != nil {
+		q.Fatal(err)
+	}
+}
+
+func (q *quitTest) waitForUpReplication(ctx context.Context) {
+	db := q.c.Conn(ctx, 1)
+	defer db.Close()
+
+	// We'll want rebalancing to be a bit fast than normal, so
+	// that the up-replication does not take ages.
+	if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING	kv.snapshot_rebalance.max_rate = '128MiB'`); err != nil {
+		q.Fatal(err)
+	}
+
+	err := retry.ForDuration(30*time.Second, func() error {
+		q.t.l.Printf("waiting for up-replication\n")
+		row := db.QueryRowContext(ctx, `SELECT min(array_length(replicas, 1)) FROM crdb_internal.ranges_no_leases`)
+		minReplicas := 0
+		if err := row.Scan(&minReplicas); err != nil {
+			q.Fatal(err)
 		}
-
-		err := retry.ForDuration(30*time.Second, func() error {
-			t.l.Printf("waiting for up-replication\n")
-			row := db.QueryRowContext(ctx, `SELECT min(array_length(replicas, 1)) FROM crdb_internal.ranges_no_leases`)
-			minReplicas := 0
-			if err := row.Scan(&minReplicas); err != nil {
-				t.Fatal(err)
-			}
-			if minReplicas < 3 {
-				time.Sleep(time.Second)
-				return errors.Newf("some ranges not up-replicated yet")
-			}
-			return nil
-		})
-		if err != nil {
-			t.Fatalf("cluster did not up-replicate: %v", err)
+		if minReplicas < 3 {
+			time.Sleep(time.Second)
+			return errors.Newf("some ranges not up-replicated yet")
 		}
-	}()
+		return nil
+	})
+	if err != nil {
+		q.Fatalf("cluster did not up-replicate: %v", err)
+	}
+}
 
-	// Create a bunch of ranges.
+// runWithTimeout runs a command with a 1-minute timeout.
+func (q *quitTest) runWithTimeout(ctx context.Context, fn func(ctx context.Context)) {
+	if err := contextutil.RunWithTimeout(ctx, "do", time.Minute, func(ctx context.Context) error {
+		fn(ctx)
+		return nil
+	}); err != nil {
+		q.Fatal(err)
+	}
+}
+
+// setupIncrementalDrain simulate requiring more than one Drain round
+// to transfer all leases. This way, we exercise the iterating code in
+// quit/node drain.
+func (q *quitTest) setupIncrementalDrain(ctx context.Context) {
+	db := q.c.Conn(ctx, 1)
+	defer db.Close()
+	if _, err := db.ExecContext(ctx, `
+SET CLUSTER SETTING server.shutdown.lease_transfer_wait = '10ms'`); err != nil {
+		if strings.Contains(err.Error(), "unknown cluster setting") {
+			// old version; ok
+		} else {
+			q.Fatal(err)
+		}
+	}
+}
+
+// createRanges creates a bunch of ranges on the test cluster.
+func (q *quitTest) createRanges(ctx context.Context) {
 	const numRanges = 500
-	func() {
-		db := c.Conn(ctx, 1)
-		defer db.Close()
-		if _, err := db.ExecContext(ctx, fmt.Sprintf(`
+
+	db := q.c.Conn(ctx, 1)
+	defer db.Close()
+	if _, err := db.ExecContext(ctx, fmt.Sprintf(`
 CREATE TABLE t(x, y, PRIMARY KEY(x)) AS SELECT @1, 1 FROM generate_series(1,%[1]d)`,
-			numRanges)); err != nil {
-			t.Fatal(err)
-		}
-		// We split them from right-to-left so we're peeling at most 1
-		// row each time on the right.
-		for i := numRanges; i > 1; i -= 100 {
-			t.l.Printf("creating %d ranges (%d-%d)...\n", numRanges, i, i-99)
-			if _, err := db.ExecContext(ctx, fmt.Sprintf(`
+		numRanges)); err != nil {
+		q.Fatal(err)
+	}
+	// We split them from right-to-left so we're peeling at most 1
+	// row each time on the right.
+	//
+	// Also we do it a hundred at a time, so as to be able to see the
+	// progress when watching the roachtest progress interactively.
+	for i := numRanges; i > 1; i -= 100 {
+		q.t.l.Printf("creating %d ranges (%d-%d)...\n", numRanges, i, i-99)
+		if _, err := db.ExecContext(ctx, fmt.Sprintf(`
 ALTER TABLE t SPLIT AT TABLE generate_series(%[1]d,%[1]d-99,-1)`, i)); err != nil {
-				t.Fatal(err)
-			}
+			q.Fatal(err)
 		}
-	}()
+	}
+}
 
-	// checkNoLeases verifies that no range has a lease on the node
-	// that's just been shut down.
-	checkNoLease := func(ctx context.Context, nodeID int) {
-		// We need to use SQL against a node that's not the one we're
-		// shutting down.
-		otherNodeID := 1 + nodeID%c.spec.NodeCount
+// checkNoLeases verifies that no range has a lease on the node
+// that's just been shut down.
+func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
+	// We need to use SQL against a node that's not the one we're
+	// shutting down.
+	otherNodeID := 1 + nodeID%q.c.spec.NodeCount
 
+	// Now we're going to check two things:
+	//
+	// 1) *immediately*, that every range in the cluster has a lease
+	//    some other place than nodeID.
+	//
+	//    Note that for with this condition, it is possible that _some_
+	//    replica of any given range think that the leaseholder is
+	//    nodeID, even though _another_ replica has become leaseholder
+	//    already. That's because followers can lag behind and
+	//    drain does not wait for followers to catch up.
+	//    https://github.com/cockroachdb/cockroach/issues/47100
+	//
+	// 2) *eventually* that every other node than nodeID has no range
+	//    replica whose lease refers to nodeID, i.e. the followers
+	//    have all caught up.
+	//    Note: when issue #47100 is fixed, this 2nd condition
+	//    must be true immediately -- drain is then able to wait
+	//    for all followers to learn who the new leaseholder is.
+
+	if err := testutils.SucceedsSoonError(func() error {
+		// To achieve that, we ask first each range in turn for its range
+		// report.
+		//
+		// For condition (1) we accumulate all the known ranges in
+		// knownRanges, and assign them the node ID of their leaseholder
+		// whenever it is not nodeID. Then at the end we check that every
+		// entry in the map has a non-zero value.
+		knownRanges := map[string]int{}
+		//
+		// For condition (2) we accumulate the unwanted leases in
+		// invLeaseMap, then check at the end that the map is empty.
 		invLeaseMap := map[int][]string{}
-		for i := 1; i <= c.spec.NodeCount; i++ {
-			t.l.Printf("checking problem ranges for node %d\n", i)
+		for i := 1; i <= q.c.spec.NodeCount; i++ {
 			if i == nodeID {
 				// Can't request this node. Ignore.
 				continue
 			}
+
+			q.t.l.Printf("retrieving ranges for node %d\n", i)
+			// Get the report via HTTP.
 			// Flag -s is to remove progress on stderr, so that the buffer
 			// contains the JSON of the response and nothing else.
-			buf, err := c.RunWithBuffer(ctx, t.l, c.Node(otherNodeID),
+			buf, err := q.c.RunWithBuffer(ctx, q.t.l, q.c.Node(otherNodeID),
 				"curl", "-s", fmt.Sprintf("http://%s/_status/ranges/%d",
-					c.InternalAdminUIAddr(ctx, c.Node(otherNodeID))[0], i))
+					q.c.InternalAdminUIAddr(ctx, q.c.Node(otherNodeID))[0], i))
 			if err != nil {
-				t.Fatal(err)
+				q.Fatal(err)
 			}
-			// Load the JSON.
+			// We need just a subset of the response. Make an ad-hoc
+			// struct with just the bits of interest.
 			type jsonOutput struct {
 				Ranges []struct {
 					State struct {
@@ -137,98 +271,74 @@ ALTER TABLE t SPLIT AT TABLE generate_series(%[1]d,%[1]d-99,-1)`, i)); err != ni
 							} `json:"lease"`
 						} `json:"state"`
 					} `json:"state"`
-				} `json:ranges`
+				} `json:"ranges"`
 			}
 			var details jsonOutput
 			if err := json.Unmarshal(buf, &details); err != nil {
-				t.Fatal(err)
+				q.Fatal(err)
 			}
+			// Some sanity check.
 			if len(details.Ranges) == 0 {
-				t.Fatal("expected some ranges, from RPC, got none")
+				q.Fatal("expected some ranges from RPC, got none")
 			}
+			// Is there any range whose lease refers to nodeID?
 			var invalidLeases []string
 			for _, r := range details.Ranges {
+				// Some more sanity check.
 				if r.State.State.Lease.Replica.NodeID == 0 {
-					t.Fatalf("expected a valid lease state, got %# v", pretty.Formatter(r))
+					q.Fatalf("expected a valid lease state, got %# v", pretty.Formatter(r))
 				}
+				curLeaseHolder := knownRanges[r.State.State.Desc.RangeID]
 				if r.State.State.Lease.Replica.NodeID == nodeID {
+					// As per condition (2) above we want to know which ranges
+					// have an unexpected left over lease on nodeID.
 					invalidLeases = append(invalidLeases, r.State.State.Desc.RangeID)
+				} else {
+					// As per condition (1) above we track in knownRanges if there
+					// is at least one known other than nodeID that thinks that
+					// the lease has been transferred.
+					curLeaseHolder = r.State.State.Lease.Replica.NodeID
 				}
+				knownRanges[r.State.State.Desc.RangeID] = curLeaseHolder
 			}
 			if len(invalidLeases) > 0 {
 				invLeaseMap[i] = invalidLeases
 			}
 		}
-		if len(invLeaseMap) > 0 {
-			t.Fatalf("ranges with remaining leases on node %d, per node: %+v", nodeID, invLeaseMap)
-		}
-
-		t.l.Printf("checking lease status via node %d\n", otherNodeID)
-
-		db := c.Conn(ctx, otherNodeID)
-		defer db.Close()
-		rows, err := db.QueryContext(ctx, `
-SELECT range_id, start_pretty, end_pretty
-  FROM crdb_internal.ranges
- WHERE lease_holder = $1`, nodeID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer rows.Close()
-		matrix, err := sqlutils.RowsToStrMatrix(rows)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(matrix) > 0 {
-			t.Fatalf("expected no ranges with lease on stopped node, found:\n%s\n",
-				sqlutils.MatrixToStr(matrix))
-		}
-
-		// For good measure, also write to the table. This ensures it
-		// remains available.
-		if _, err := db.ExecContext(ctx, `UPDATE t SET y = y + 1`); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// For every method other than "signal", simulate requiring
-	// more than one Drain round to transfer all leases.
-	// This way, we exercise the iterating code in quit/ node drain.
-	//
-	// The reason why we don't do this for "signal" is that the server
-	// shutdown via a signal performs just one round of drain (i.e. it
-	// does not iterate).
-	if methodName != "signal" {
-		func() {
-			db := c.Conn(ctx, 1)
-			defer db.Close()
-			if _, err := db.ExecContext(ctx, `
-SET CLUSTER SETTING server.shutdown.lease_transfer_wait = '50ms'`); err != nil {
-				if strings.Contains(err.Error(), "unknown cluster setting") {
-					// old version; ok
-				} else {
-					t.Fatal(err)
-				}
+		// (1): is there a range with no replica outside of nodeID?
+		var leftOver []string
+		for r, n := range knownRanges {
+			if n == 0 {
+				leftOver = append(leftOver, r)
 			}
-		}()
+		}
+		if len(leftOver) > 0 {
+			q.Fatalf("(1) ranges with no lease outside of node %d: %# v", nodeID, pretty.Formatter(leftOver))
+		}
+		// (2): is there a range with left over replicas on nodeID?
+		//
+		// TODO(knz): Eventually we want this condition to be always
+		// true, i.e. fail the test immediately if found to be false
+		// instead of waiting. (#47100)
+		if len(invLeaseMap) > 0 {
+			err := errors.Newf(
+				"(2) ranges with remaining leases on node %d, per node: %# v",
+				nodeID, pretty.Formatter(invLeaseMap))
+			q.t.l.Printf("condition failed: %v\n", err)
+			q.t.l.Printf("retrying until SucceedsSoon has enough...\n")
+			return err
+		}
+		return nil
+	}); err != nil {
+		q.Fatal(err)
 	}
 
-	// runTest iterates through the cluster two times and restarts each
-	// node in turn. After each node shutdown it verifies that there are
-	// no orphan ranges.
-	//
-	// The shutdown method can be customized; the different
-	// methods are exercised below.
-	t.l.Printf("now running restart loop\n")
-	for i := 0; i < 3; i++ {
-		t.l.Printf("iteration %d\n", i)
-		for nodeID := 1; nodeID <= c.spec.NodeCount; nodeID++ {
-			t.l.Printf("stopping node %d\n", nodeID)
-			rwt(func(ctx context.Context) { method(ctx, t, c, nodeID) })
-			rwt(func(ctx context.Context) { checkNoLease(ctx, nodeID) })
-			t.l.Printf("restarting node %d\n", nodeID)
-			rwt(func(ctx context.Context) { c.Start(ctx, t, args, c.Node(nodeID)) })
-		}
+	db := q.c.Conn(ctx, otherNodeID)
+	defer db.Close()
+	// For good measure, also write to the table. This ensures it
+	// remains available.
+	if _, err := db.ExecContext(ctx, `UPDATE t SET y = y + 1`); err != nil {
+		q.Fatal(err)
 	}
 }
 
@@ -258,7 +368,8 @@ func registerQuitTransfersLeases(r *testRegistry) {
 	// for the process to self-exit.
 	registerTest("quit", "v19.2.0", func(ctx context.Context, t *test, c *cluster, nodeID int) {
 		buf, err := c.RunWithBuffer(ctx, t.l, c.Node(nodeID),
-			"./cockroach", "quit", "--insecure", fmt.Sprintf("--port={pgport:%d}", nodeID),
+			"./cockroach", "quit", "--insecure", "--logtostderr=INFO",
+			fmt.Sprintf("--port={pgport:%d}", nodeID),
 		)
 		t.l.Printf("cockroach quit:\n%s\n", buf)
 		if err != nil {
@@ -274,13 +385,20 @@ func registerQuitTransfersLeases(r *testRegistry) {
 	// successfully even if if the process terminates non-gracefully.
 	registerTest("drain", "v20.1.0", func(ctx context.Context, t *test, c *cluster, nodeID int) {
 		buf, err := c.RunWithBuffer(ctx, t.l, c.Node(nodeID),
-			"./cockroach", "node", "drain", "--insecure",
+			"./cockroach", "node", "drain", "--insecure", "--logtostderr=INFO",
 			fmt.Sprintf("--port={pgport:%d}", nodeID),
 		)
 		t.l.Printf("cockroach node drain:\n%s\n", buf)
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.Stop(ctx, c.Node(nodeID))
+		// Send first SIGHUP to the process to force it to flush its logs
+		// before terminating. Otherwise the SIGKILL below will truncate
+		// the log.
+		c.Stop(ctx, c.Node(nodeID),
+			roachprodArgOption{"--sig", "1"},
+		)
+		c.Stop(ctx, c.Node(nodeID),
+			roachprodArgOption{"--sig", "9", "--wait"})
 	})
 }
