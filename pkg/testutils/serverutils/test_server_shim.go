@@ -179,14 +179,20 @@ type TestServerInterface interface {
 
 	// CheckForUpdates phones home to check for updates and report usage.
 	//
-	// If using this, consider setting DiagnosticsReportingEnabled to false so the
-	// periodic check doesn't interfere with the test.
+	// When using this for testing, consider setting DiagnosticsReportingEnabled
+	// to false so the periodic check doesn't interfere with the test.
+	//
+	// This can be slow because of cloud detection; use cloudinfo.Disable() in
+	// tests to avoid that.
 	CheckForUpdates(ctx context.Context)
 
 	// ReportDiagnostics phones home to report diagnostics.
 	//
-	// If using this, consider setting DiagnosticsReportingEnabled to false so the
-	// periodic reporting doesn't interfere with the test.
+	// If using this for testing, consider setting DiagnosticsReportingEnabled to
+	// false so the periodic reporting doesn't interfere with the test.
+	//
+	// This can be slow because of cloud detection; use cloudinfo.Disable() in
+	// tests to avoid that.
 	ReportDiagnostics(ctx context.Context)
 }
 
