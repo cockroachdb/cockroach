@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -105,9 +106,16 @@ func NewMemBatch(types []coltypes.T) Batch {
 // NewMemBatchWithSize allocates a new in-memory Batch with the given column
 // size. Use for operators that have a precisely-sized output batch.
 func NewMemBatchWithSize(types []coltypes.T, size int) Batch {
+	return NewMemBatchWithSizeAndEvalCtx(types, size, nil /* evalCtx */)
+}
+
+// NewMemBatchWithSize allocates a new in-memory Batch with the given column
+// size and evalCtx. Use for operators that have a precisely-sized output batch
+// and also responsible for instantiating the first memColumn of DatumVec type.
+func NewMemBatchWithSizeAndEvalCtx(types []coltypes.T, size int, evalCtx *tree.EvalContext) Batch {
 	b := NewMemBatchNoCols(types, size).(*MemBatch)
 	for i, t := range types {
-		b.b[i] = NewMemColumn(t, size)
+		b.b[i] = NewMemColumnWithEvalContext(t, size, evalCtx)
 	}
 	return b
 }

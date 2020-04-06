@@ -16,7 +16,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -110,6 +112,12 @@ func RandomVec(
 		intervals := vec.Interval()
 		for i := 0; i < n; i++ {
 			intervals[i] = duration.FromFloat64(rng.Float64())
+		}
+	case coltypes.Datum:
+		datum := vec.Datum()
+		for i := 0; i < n; i++ {
+			j, _ := json.FromFloat64(rng.Float64())
+			datum.Set(i, &tree.DJSON{JSON: j})
 		}
 	default:
 		panic(fmt.Sprintf("unhandled type %s", typ))

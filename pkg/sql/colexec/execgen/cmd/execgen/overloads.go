@@ -567,6 +567,12 @@ type timestampCustomizer struct{}
 // operators.
 type intervalCustomizer struct{}
 
+// TODO(azhng): support JSON binary operators.
+// datumCustomizer is necessary since tree.Datum doesn't have infix operators,
+// support for binary or comparison operators, hash functions, and also doesn't
+// have normal variable-set semantics.
+type datumCustomizer struct{}
+
 // timestampIntervalCustomizer supports mixed type expression with a timestamp
 // left-hand side and an interval right-hand side.
 type timestampIntervalCustomizer struct{}
@@ -1143,6 +1149,21 @@ func (c intervalCustomizer) getBinOpAssignFunc() assignFunc {
 	}
 }
 
+func (c datumCustomizer) getCmpOpCompareFunc() compareFunc {
+	return func(target, l, r string) string {
+		return fmt.Sprintf(`
+			%s = %s.(*coldata.ContextWrappedDatum).CompareDatum(%s)
+		`, target, l, r)
+	}
+}
+
+func (c datumCustomizer) getHashAssignFunc() assignFunc {
+	return func(op overload, target, v, _ string) string {
+		return fmt.Sprintf("b := []byte(%[1]s.String())", v) +
+			fmt.Sprintf(hashByteSliceString, target, "b")
+	}
+}
+
 func (c timestampIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op overload, target, l, r string) string {
 		switch op.BinOp {
@@ -1283,6 +1304,7 @@ func registerTypeCustomizers() {
 	registerTypeCustomizer(coltypePair{coltypes.Decimal, coltypes.Decimal}, decimalCustomizer{})
 	registerTypeCustomizer(coltypePair{coltypes.Timestamp, coltypes.Timestamp}, timestampCustomizer{})
 	registerTypeCustomizer(coltypePair{coltypes.Interval, coltypes.Interval}, intervalCustomizer{})
+	registerTypeCustomizer(coltypePair{coltypes.Datum, coltypes.Datum}, datumCustomizer{})
 	for _, leftFloatType := range coltypes.FloatTypes {
 		for _, rightFloatType := range coltypes.FloatTypes {
 			registerTypeCustomizer(coltypePair{leftFloatType, rightFloatType}, floatCustomizer{width: 64})

@@ -53,6 +53,8 @@ func FromColumnType(ct *types.T) coltypes.T {
 		return coltypes.Timestamp
 	case types.IntervalFamily:
 		return coltypes.Interval
+	case types.JsonFamily:
+		return coltypes.Datum
 	}
 	return coltypes.Unhandled
 }
@@ -195,6 +197,14 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
 				return nil, errors.Errorf("expected *tree.DInterval, found %s", reflect.TypeOf(datum))
 			}
 			return d.Duration, nil
+		}
+	case types.JsonFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DJSON)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DJSON, found %s", reflect.TypeOf(datum))
+			}
+			return d, nil
 		}
 	}
 	// It would probably be more correct to return an error here, rather than a

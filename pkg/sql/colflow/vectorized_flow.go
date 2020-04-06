@@ -602,7 +602,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	toClose []colexec.IdempotentCloser,
 ) (execinfra.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(
-		colexec.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
+		colexec.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), flowCtx.EvalCtx),
 		op, outputTyps, metadataSourcesQueue, toClose,
 	)
 	if err != nil {
@@ -660,7 +660,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	allocators := make([]*colexec.Allocator, len(output.Streams))
 	for i := range allocators {
 		acc := hashRouterMemMonitor.MakeBoundAccount()
-		allocators[i] = colexec.NewAllocator(ctx, &acc)
+		allocators[i] = colexec.NewAllocator(ctx, &acc, flowCtx.EvalCtx)
 		s.accounts = append(s.accounts, &acc)
 	}
 	limit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
@@ -755,7 +755,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				return nil, nil, err
 			}
 			inbox, err := s.remoteComponentCreator.newInbox(
-				colexec.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
+				colexec.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), flowCtx.EvalCtx),
 				typs, inputStream.StreamID,
 			)
 			if err != nil {
@@ -794,7 +794,7 @@ func (s *vectorizedFlowCreator) setupInput(
 		}
 		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
 			op = colexec.NewOrderedSynchronizer(
-				colexec.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
+				colexec.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), flowCtx.EvalCtx),
 				inputStreamOps, typs, execinfrapb.ConvertToColumnOrdering(input.Ordering),
 			)
 		} else {

@@ -14,9 +14,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -26,7 +29,13 @@ import (
 // the result to the idx'th position of the input exec.Vec.
 // See the analog in sqlbase/column_type_encoding.go.
 func DecodeTableValueToCol(
-	vec coldata.Vec, idx int, typ encoding.Type, dataOffset int, valTyp *types.T, b []byte,
+	da sqlbase.DatumAlloc,
+	vec coldata.Vec,
+	idx int,
+	typ encoding.Type,
+	dataOffset int,
+	valTyp *types.T,
+	b []byte,
 ) ([]byte, error) {
 	// NULL is special because it is a valid value for any type.
 	if typ == encoding.Null {
@@ -37,7 +46,7 @@ func DecodeTableValueToCol(
 	if valTyp.Family() != types.BoolFamily {
 		b = b[dataOffset:]
 	}
-	return decodeUntaggedDatumToCol(vec, idx, valTyp, b)
+	return decodeUntaggedDatumToCol(da, vec, idx, valTyp, b)
 }
 
 // decodeUntaggedDatum is used to decode a Datum whose type is known,
@@ -50,7 +59,9 @@ func DecodeTableValueToCol(
 // If t is types.Bool, the value tag must be present, as its value is encoded in
 // the tag directly.
 // See the analog in sqlbase/column_type_encoding.go.
-func decodeUntaggedDatumToCol(vec coldata.Vec, idx int, t *types.T, buf []byte) ([]byte, error) {
+func decodeUntaggedDatumToCol(
+	da sqlbase.DatumAlloc, vec coldata.Vec, idx int, t *types.T, buf []byte,
+) ([]byte, error) {
 	var err error
 	switch t.Family() {
 	case types.BoolFamily:
@@ -102,6 +113,19 @@ func decodeUntaggedDatumToCol(vec coldata.Vec, idx int, t *types.T, buf []byte) 
 		var d duration.Duration
 		buf, d, err = encoding.DecodeUntaggedDurationValue(buf)
 		vec.Interval()[idx] = d
+	case types.JsonFamily:
+		var j json.JSON
+		var data []byte
+		buf, data, err = encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, err
+		}
+		j, err = json.FromEncoding(data)
+		if err != nil {
+			return nil, err
+		}
+		jd := da.NewDJSON(tree.DJSON{JSON: j})
+		vec.Datum().Set(idx, jd)
 	default:
 		return buf, errors.AssertionFailedf(
 			"couldn't decode type: %s", log.Safe(t))

@@ -26,6 +26,7 @@ import (
 
 func TestDecodeTableValueToCol(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
+	var da sqlbase.DatumAlloc
 	var buf []byte
 	var scratch []byte
 	nCols := 1000
@@ -57,7 +58,7 @@ func TestDecodeTableValueToCol(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		buf, err = DecodeTableValueToCol(batch.ColVec(i), 0 /* rowIdx */, typ,
+		buf, err = DecodeTableValueToCol(da, batch.ColVec(i), 0 /* rowIdx */, typ,
 			dataOffset, colTyps[i], buf[typeOffset:])
 		if err != nil {
 			t.Fatal(err)

@@ -29,6 +29,7 @@ import (
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
@@ -45,6 +46,9 @@ var _ time.Time
 
 // Dummy import to pull in "duration" package.
 var _ duration.Duration
+
+// Dummy import to pull in "tree" package.
+var _ tree.Datum
 
 // _TYPES_T is the template type variable for coltypes.T. It will be replaced by
 // coltypes.Foo for each type Foo in the coltypes.T type.

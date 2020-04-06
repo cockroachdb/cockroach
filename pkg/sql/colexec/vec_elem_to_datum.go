@@ -90,6 +90,8 @@ func PhysicalTypeColElemToDatum(
 		return da.NewDTimestampTZ(tree.DTimestampTZ{Time: col.Timestamp()[rowIdx]})
 	case types.IntervalFamily:
 		return da.NewDInterval(tree.DInterval{Duration: col.Interval()[rowIdx]})
+	case types.JsonFamily:
+		return col.Datum().Get(rowIdx).(*coldata.ContextWrappedDatum).Datum
 	default:
 		execerror.VectorizedInternalPanic(fmt.Sprintf("Unsupported column type %s", ct.String()))
 		// This code is unreachable, but the compiler cannot infer that.

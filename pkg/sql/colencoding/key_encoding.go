@@ -16,11 +16,13 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -271,7 +273,9 @@ func decodeTableKeyToCol(
 // idx. An error is returned if the value's type does
 // not match the column's type.
 // See the analog, UnmarshalColumnValue, in sqlbase/column_type_encoding.go
-func UnmarshalColumnValueToCol(vec coldata.Vec, idx int, typ *types.T, value roachpb.Value) error {
+func UnmarshalColumnValueToCol(
+	da sqlbase.DatumAlloc, vec coldata.Vec, idx int, typ *types.T, value roachpb.Value,
+) error {
 	if value.RawBytes == nil {
 		vec.Nulls().SetNull(idx)
 	}
@@ -317,6 +321,17 @@ func UnmarshalColumnValueToCol(vec coldata.Vec, idx int, typ *types.T, value roa
 		var v duration.Duration
 		v, err = value.GetDuration()
 		vec.Interval()[idx] = v
+	case types.JsonFamily:
+		v, err := value.GetBytes()
+		if err != nil {
+			return err
+		}
+		_, j, err := json.DecodeJSON(v)
+		if err != nil {
+			return err
+		}
+		jd := da.NewDJSON(tree.DJSON{JSON: j})
+		vec.Datum().Set(idx, jd)
 	default:
 		return errors.AssertionFailedf("unsupported column type: %s", log.Safe(typ.Family()))
 	}

@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
@@ -69,9 +70,14 @@ func TestExternalSort(t *testing.T) {
 			for _, tc := range tcs {
 				t.Run(fmt.Sprintf("spillForced=%t/%s", spillForced, tc.description), func(t *testing.T) {
 					var semsToCheck []semaphore.Semaphore
-					runTests(
+					physTypes, err := typeconv.FromColumnTypes(tc.logTypes)
+					if err != nil {
+						t.Fatal(err)
+					}
+					runTestsWithTyps(
 						t,
 						[]tuples{tc.tuples},
+						[][]coltypes.T{physTypes},
 						tc.expected,
 						orderedVerifier,
 						func(input []Operator) (Operator, error) {

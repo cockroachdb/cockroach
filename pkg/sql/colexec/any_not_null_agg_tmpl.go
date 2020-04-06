@@ -28,6 +28,7 @@ import (
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
@@ -55,6 +56,9 @@ var _ time.Time
 
 // Dummy import to pull in "duration" package.
 var _ duration.Duration
+
+// Dummy import to pull in "tree" package.
+var _ tree.Datum
 
 // _GOTYPESLICE is the template Go type slice variable for this operator. It
 // will be replaced by the Go slice representation for each type in coltypes.T, for

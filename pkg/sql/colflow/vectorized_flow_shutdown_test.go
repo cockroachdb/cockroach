@@ -172,7 +172,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				for i := range allocators {
 					acc := testMemMonitor.MakeBoundAccount()
 					defer acc.Close(ctxRemote)
-					allocators[i] = colexec.NewAllocator(ctxRemote, &acc)
+					allocators[i] = colexec.NewAllocator(ctxRemote, &acc, &evalCtx)
 					diskAcc := testDiskMonitor.MakeBoundAccount()
 					diskAccounts[i] = &diskAcc
 					defer diskAcc.Close(ctxRemote)
@@ -185,7 +185,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxLocal)
 					inbox, err := colrpc.NewInbox(
-						colexec.NewAllocator(ctxLocal, &inboxMemAccount), typs, execinfrapb.StreamID(streamID),
+						colexec.NewAllocator(ctxLocal, &inboxMemAccount, &evalCtx), typs, execinfrapb.StreamID(streamID),
 					)
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
@@ -213,7 +213,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					idToClosed.Lock()
 					idToClosed.mapping[id] = false
 					idToClosed.Unlock()
-					outbox, err := colrpc.NewOutbox(colexec.NewAllocator(ctx, outboxMemAcc), outboxInput, typs, append(outboxMetadataSources,
+					outbox, err := colrpc.NewOutbox(colexec.NewAllocator(ctx, outboxMemAcc, &evalCtx), outboxInput, typs, append(outboxMetadataSources,
 						execinfrapb.CallbackMetadataSource{
 							DrainMetaCb: func(ctx context.Context) []execinfrapb.ProducerMetadata {
 								return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("%d", id)}}
@@ -263,7 +263,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					} else {
 						sourceMemAccount := testMemMonitor.MakeBoundAccount()
 						defer sourceMemAccount.Close(ctxRemote)
-						remoteAllocator := colexec.NewAllocator(ctxRemote, &sourceMemAccount)
+						remoteAllocator := colexec.NewAllocator(ctxRemote, &sourceMemAccount, &evalCtx)
 						batch := remoteAllocator.NewMemBatch(typs)
 						batch.SetLength(coldata.BatchSize())
 						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colexec.NewRepeatableBatchSource(remoteAllocator, batch), inboxes[i], streamID, outboxMetadataSources)
@@ -278,7 +278,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxAnotherRemote)
 					inbox, err := colrpc.NewInbox(
-						colexec.NewAllocator(ctxAnotherRemote, &inboxMemAccount),
+						colexec.NewAllocator(ctxAnotherRemote, &inboxMemAccount, &evalCtx),
 						typs, execinfrapb.StreamID(streamID),
 					)
 					require.NoError(t, err)

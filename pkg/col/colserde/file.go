@@ -383,6 +383,11 @@ func schema(fb *flatbuffers.Builder, typs []coltypes.T) flatbuffers.UOffsetT {
 			arrowserde.BinaryStart(fb)
 			fbTypOffset = arrowserde.BinaryEnd(fb)
 			fbTyp = arrowserde.TypeInterval
+		case coltypes.Datum:
+			// Datums are marshaled into bytes, so we use binary headers.
+			arrowserde.BinaryStart(fb)
+			fbTypOffset = arrowserde.BinaryEnd(fb)
+			fbTyp = arrowserde.TypeUtf8
 		default:
 			panic(errors.Errorf(`don't know how to map %s`, typ))
 		}
@@ -472,6 +477,8 @@ func typeFromField(field *arrowserde.Field) (coltypes.T, error) {
 		return coltypes.Timestamp, nil
 	case arrowserde.TypeInterval:
 		return coltypes.Interval, nil
+	case arrowserde.TypeUtf8:
+		return coltypes.Datum, nil
 	}
 	// It'd be nice if this error could include more details, but flatbuffers
 	// doesn't make a String method or anything like that.

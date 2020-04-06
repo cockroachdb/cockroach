@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -366,6 +367,7 @@ func TestRouterOutputNext(t *testing.T) {
 func TestRouterOutputRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+	evalCtx := &tree.EvalContext{}
 
 	rng, _ := randutil.NewPseudoRand()
 
@@ -476,7 +478,7 @@ func TestRouterOutputRandom(t *testing.T) {
 					// a separate allocator to testAllocator since this is a separate
 					// goroutine and allocators may not be used concurrently.
 					acc := testMemMonitor.MakeBoundAccount()
-					allocator := NewAllocator(ctx, &acc)
+					allocator := NewAllocator(ctx, &acc, evalCtx)
 					defer acc.Close(ctx)
 					for {
 						b := o.Next(ctx)
@@ -773,6 +775,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 func TestHashRouterRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+	evalCtx := &tree.EvalContext{}
 
 	rng, _ := randutil.NewPseudoRand()
 
@@ -840,7 +843,7 @@ func TestHashRouterRandom(t *testing.T) {
 					defer acc.Close(ctx)
 					diskAcc := testDiskMonitor.MakeBoundAccount()
 					defer diskAcc.Close(ctx)
-					allocator := NewAllocator(ctx, &acc)
+					allocator := NewAllocator(ctx, &acc, evalCtx)
 					op := newRouterOutputOpWithBlockedThresholdAndBatchSize(allocator, typs, unblockEventsChan, memoryLimitPerOutput, queueCfg, NewTestingSemaphore(len(outputs)*2), blockedThreshold, outputSize, &diskAcc)
 					outputs[i] = op
 					outputsAsOps[i] = op
@@ -922,6 +925,7 @@ func TestHashRouterRandom(t *testing.T) {
 func BenchmarkHashRouter(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	ctx := context.Background()
+	evalCtx := &tree.EvalContext{}
 
 	types := []coltypes.T{coltypes.Int64}
 
@@ -942,7 +946,7 @@ func BenchmarkHashRouter(b *testing.B) {
 				diskAccounts := make([]*mon.BoundAccount, numOutputs)
 				for i := range allocators {
 					acc := testMemMonitor.MakeBoundAccount()
-					allocators[i] = NewAllocator(ctx, &acc)
+					allocators[i] = NewAllocator(ctx, &acc, evalCtx)
 					defer acc.Close(ctx)
 					diskAcc := testDiskMonitor.MakeBoundAccount()
 					diskAccounts[i] = &diskAcc

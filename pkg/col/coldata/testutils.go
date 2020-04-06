@@ -93,6 +93,16 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 					t.Fatalf("Interval mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedInterval[i], resultInterval[i])
 				}
 			}
+		} else if typ == coltypes.Datum {
+			// Cannot use require.Equal for this type.
+			expectedDatum := expectedVec.Datum().Slice(0 /* start */, expected.Length())
+			resultDatum := actualVec.Datum().Slice(0 /* start */, actual.Length())
+			require.Equal(t, expectedDatum.Len(), resultDatum.Len())
+			for i := 0; i < expectedDatum.Len(); i++ {
+				if expectedDatum.Get(i).(*ContextWrappedDatum).CompareDatum(resultDatum.Get(i)) != 0 {
+					t.Fatalf("Datum mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedDatum.Get(i), resultDatum.Get(i))
+				}
+			}
 		} else {
 			require.Equal(
 				t,

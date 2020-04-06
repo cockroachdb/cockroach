@@ -2058,6 +2058,7 @@ func newBatchOfRepeatedIntRows(nCols int, batch coldata.Batch, numRepeats int) c
 
 func BenchmarkMergeJoiner(b *testing.B) {
 	ctx := context.Background()
+	evalCtx := &tree.EvalContext{}
 	nCols := 4
 	sourceTypes := make([]coltypes.T, nCols)
 
@@ -2084,7 +2085,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 				benchMemAccount.Clear(ctx)
 				base, err := newMergeJoinBase(
-					NewAllocator(ctx, &benchMemAccount), defaultMemoryLimit, queueCfg, NewTestingSemaphore(mjFDLimit),
+					NewAllocator(ctx, &benchMemAccount, evalCtx), defaultMemoryLimit, queueCfg, NewTestingSemaphore(mjFDLimit),
 					sqlbase.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -2115,7 +2116,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 				benchMemAccount.Clear(ctx)
 				base, err := newMergeJoinBase(
-					NewAllocator(ctx, &benchMemAccount), defaultMemoryLimit, queueCfg, NewTestingSemaphore(mjFDLimit),
+					NewAllocator(ctx, &benchMemAccount, evalCtx), defaultMemoryLimit, queueCfg, NewTestingSemaphore(mjFDLimit),
 					sqlbase.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -2148,7 +2149,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 				benchMemAccount.Clear(ctx)
 				base, err := newMergeJoinBase(
-					NewAllocator(ctx, &benchMemAccount), defaultMemoryLimit, queueCfg, NewTestingSemaphore(mjFDLimit),
+					NewAllocator(ctx, &benchMemAccount, evalCtx), defaultMemoryLimit, queueCfg, NewTestingSemaphore(mjFDLimit),
 					sqlbase.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},

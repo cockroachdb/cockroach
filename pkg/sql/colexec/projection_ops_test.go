@@ -232,8 +232,9 @@ func TestRandomComparisons(t *testing.T) {
 	lDatums := make([]tree.Datum, numTuples)
 	rDatums := make([]tree.Datum, numTuples)
 	for _, ct := range types.Scalar {
-		if ct.Family() == types.DateFamily {
+		if ct.Family() == types.DateFamily || ct.Family() == types.JsonFamily {
 			// TODO(jordan): #40354 tracks failure to compare infinite dates.
+			// TODO(azhng): #43123 eventually support json comparison.
 			continue
 		}
 		typ := typeconv.FromColumnType(ct)

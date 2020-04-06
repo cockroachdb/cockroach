@@ -1069,7 +1069,9 @@ func (rf *cFetcher) processValueSingle(
 				return prettyKey, "", nil
 			}
 			typ := &table.cols[idx].Type
-			err := colencoding.UnmarshalColumnValueToCol(rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val)
+			err := colencoding.UnmarshalColumnValueToCol(
+				table.da, rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val,
+			)
 			if err != nil {
 				return "", "", err
 			}
@@ -1159,8 +1161,9 @@ func (rf *cFetcher) processValueBytes(
 		vec := rf.machine.colvecs[idx]
 
 		valTyp := &table.cols[idx].Type
-		valueBytes, err = colencoding.DecodeTableValueToCol(vec, rf.machine.rowIdx, typ, dataOffset, valTyp,
-			valueBytes)
+		valueBytes, err = colencoding.DecodeTableValueToCol(
+			table.da, vec, rf.machine.rowIdx, typ, dataOffset, valTyp, valueBytes,
+		)
 		if err != nil {
 			return "", "", err
 		}
