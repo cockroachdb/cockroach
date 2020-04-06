@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	_ "github.com/lib/pq"
 )
 
@@ -29,7 +30,7 @@ type versionFeatureTest struct {
 	fn   func(context.Context, *test, *versionUpgradeTest) (skipped bool)
 }
 
-var v20 = roachpb.Version{Major: 2}
+var v201 = roachpb.Version{Major: 20, Minor: 1}
 
 // Feature tests that are invoked between each step of the version upgrade test.
 // Tests can use u.clusterVersion to determine which version is active at the
@@ -41,7 +42,10 @@ var v20 = roachpb.Version{Major: 2}
 // a feature of this test, and feature tests that flake because of it need to
 // be fixed.
 var versionUpgradeTestFeatures = []versionFeatureTest{
-	stmtFeatureTest("Object Access", v20, `
+	// NB: the next four tests are ancient and supported since v2.0. However,
+	// in 19.2 -> 20.1 we had a migration that disallowed most DDL in the
+	// mixed version state, and so for convenience we gate them on v20.1.
+	stmtFeatureTest("Object Access", v201, `
 -- We should be able to successfully select from objects created in ancient
 -- versions of CRDB using their FQNs. Prevents bugs such as #43141, where
 -- databases created before a migration were inaccessible after the
@@ -54,17 +58,17 @@ var versionUpgradeTestFeatures = []versionFeatureTest{
 select * from persistent_db.persistent_table;
 show tables from persistent_db;
 `),
-	stmtFeatureTest("JSONB", v20, `
+	stmtFeatureTest("JSONB", v201, `
 CREATE DATABASE IF NOT EXISTS test;
 CREATE TABLE test.t (j JSONB);
 DROP TABLE test.t;
 	`),
-	stmtFeatureTest("Sequences", v20, `
+	stmtFeatureTest("Sequences", v201, `
 CREATE DATABASE IF NOT EXISTS test;
 CREATE SEQUENCE test.test_sequence;
 DROP SEQUENCE test.test_sequence;
 	`),
-	stmtFeatureTest("Computed Columns", v20, `
+	stmtFeatureTest("Computed Columns", v201, `
 CREATE DATABASE IF NOT EXISTS test;
 CREATE TABLE test.t (x INT AS (3) STORED);
 DROP TABLE test.t;
@@ -92,15 +96,34 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 		uploadAndStartFromCheckpointFixture(baseVersion),
 		waitForUpgradeStep(),
 
-		// NB: before the first step, cluster and binary version equals baseVersion.
+		// NB: before the next step, cluster and binary version equals baseVersion,
+		// and auto-upgrades are on.
+
 		binaryUpgradeStep("19.2.1"),
 		waitForUpgradeStep(),
 
-		// Each new release has to be added here. When adding a new release, you'll
-		// probably need to use a release candidate binary.
+		// Each new release has to be added here. When adding a new release,
+		// you'll probably need to use a release candidate binary. You may also
+		// want to bake in the last step above, i.e. run this test with
+		// createCheckpoints=true, update the fixtures (see comments there), and
+		// then change baseVersion to one release later.
 
-		// HEAD gives us the main binary for this roachtest run.
+		// HEAD gives us the main binary for this roachtest run. We upgrade into
+		// this version more capriciously to ensure better coverage by first
+		// rolling the cluster into the new version with auto-upgrade disabled,
+		// then rolling back, and then rolling forward and finalizing
+		// (automatically).
+		preventAutoUpgradeStep(),
+		// Roll nodes forward.
 		binaryUpgradeStep("HEAD"),
+		// Roll back again. Note that bad things would happen if the cluster had
+		// ignored our request to not auto-upgrade. The `autoupgrade` roachtest
+		// exercises this in more detail, so here we just rely on things working
+		// as they ought to.
+		binaryUpgradeStep("19.2.1"),
+		// Roll nodes forward, this time allowing them to upgrade.
+		binaryUpgradeStep("HEAD"),
+		allowAutoUpgradeStep(),
 		waitForUpgradeStep(),
 	)
 
@@ -139,8 +162,13 @@ func (u *versionUpgradeTest) run(ctx context.Context, t *test) {
 		step(ctx, t, u)
 		for _, feature := range u.features {
 			t.l.Printf("checking %s", feature.name)
-			if skipped := feature.fn(ctx, t, u); skipped {
-				t.l.Printf("^-- skipped")
+			tBegin := timeutil.Now()
+			skipped := feature.fn(ctx, t, u)
+			dur := fmt.Sprintf("%.2fs", timeutil.Since(tBegin).Seconds())
+			if skipped {
+				t.l.Printf("^-- skip (%s)", dur)
+			} else {
+				t.l.Printf("^-- ok (%s)", dur)
 			}
 		}
 	}
@@ -265,9 +293,9 @@ func uploadAndstartStep(v string) versionStep {
 	}
 }
 
-// binaryUpgradeStep rolling-restarts the cluster into the new binary version.
-// Note that this does *not* wait for the cluster version to upgrade. Use a
-// waitForUpgradeStep() for that.
+// binaryUpgradeStep rolling-restarts the given nodes into the new binary
+// version. Note that this does *not* wait for the cluster version to upgrade.
+// Use a waitForUpgradeStep() for that.
 func binaryUpgradeStep(newVersion string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		c := u.c
@@ -314,6 +342,28 @@ func binaryUpgradeStep(newVersion string) versionStep {
 				"checkpoint", "--checkpoint_dir={store-dir}/"+name)
 			c.Run(ctx, c.All(), "tar", "-C", "{store-dir}/"+name, "-czf", "{log-dir}/"+name+".tgz", ".")
 			c.Start(ctx, t, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
+		}
+	}
+}
+
+func preventAutoUpgradeStep() versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		db := u.c.Conn(ctx, 1)
+		defer db.Close()
+		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING cluster.preserve_downgrade_option = $1`, u.binaryVersion(ctx, t, 1).String())
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func allowAutoUpgradeStep() versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		db := u.c.Conn(ctx, 1)
+		defer db.Close()
+		_, err := db.ExecContext(ctx, `RESET CLUSTER SETTING cluster.preserve_downgrade_option`)
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 }
