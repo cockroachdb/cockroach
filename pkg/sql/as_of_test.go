@@ -33,7 +33,7 @@ func TestAsOfTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs.GCJob = &sql.GCJobTestingKnobs{RunBeforeResume: func() { select {} }}
+	params.Knobs.GCJob = &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { select {} }}
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
