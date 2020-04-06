@@ -39,11 +39,12 @@ import (
 type sampleAggregator struct {
 	execinfra.ProcessorBase
 
-	spec    *execinfrapb.SampleAggregatorSpec
-	input   execinfra.RowSource
-	memAcc  mon.BoundAccount
-	inTypes []types.T
-	sr      stats.SampleReservoir
+	spec       *execinfrapb.SampleAggregatorSpec
+	input      execinfra.RowSource
+	memAcc     mon.BoundAccount
+	tempMemAcc mon.BoundAccount
+	inTypes    []types.T
+	sr         stats.SampleReservoir
 
 	tableID     sqlbase.ID
 	sampledCols []sqlbase.ColumnID
@@ -98,6 +99,7 @@ func newSampleAggregator(
 		spec:         spec,
 		input:        input,
 		memAcc:       memMonitor.MakeBoundAccount(),
+		tempMemAcc:   memMonitor.MakeBoundAccount(),
 		inTypes:      input.OutputTypes(),
 		tableID:      spec.TableID,
 		sampledCols:  spec.SampledColumnIDs,
@@ -161,6 +163,7 @@ func (s *sampleAggregator) Run(ctx context.Context) {
 func (s *sampleAggregator) close() {
 	if s.InternalClose() {
 		s.memAcc.Close(s.Ctx)
+		s.tempMemAcc.Close(s.Ctx)
 		s.MemMonitor.Stop(s.Ctx)
 	}
 }
@@ -322,7 +325,8 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				colIdx := int(si.spec.Columns[0])
 				typ := &s.inTypes[colIdx]
 
-				h, err := generateHistogram(
+				h, err := s.generateHistogram(
+					s.EvalCtx.Context,
 					s.EvalCtx,
 					s.sr.Get(),
 					colIdx,
@@ -368,6 +372,9 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			); err != nil {
 				return err
 			}
+
+			// Release any memory temporarily used for this statistic.
+			s.tempMemAcc.Clear(ctx)
 		}
 
 		return nil
@@ -382,7 +389,8 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 // generateHistogram returns a histogram (on a given column) from a set of
 // samples.
 // numRows is the total number of rows from which values were sampled.
-func generateHistogram(
+func (s *sampleAggregator) generateHistogram(
+	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	samples []stats.SampledRow,
 	colIdx int,
@@ -391,15 +399,32 @@ func generateHistogram(
 	distinctCount int64,
 	maxBuckets int,
 ) (stats.HistogramData, error) {
-	var da sqlbase.DatumAlloc
+	// Account for the memory we'll use copying the samples into values.
+	if err := s.tempMemAcc.Grow(ctx, sizeOfDatum*int64(len(samples))); err != nil {
+		return stats.HistogramData{}, err
+	}
 	values := make(tree.Datums, 0, len(samples))
-	for _, s := range samples {
-		ed := &s.Row[colIdx]
+
+	var da sqlbase.DatumAlloc
+	for _, sample := range samples {
+		ed := &sample.Row[colIdx]
 		// Ignore NULLs (they are counted separately).
 		if !ed.IsNull() {
+			beforeSize := ed.Datum.Size()
 			if err := ed.EnsureDecoded(colType, &da); err != nil {
 				return stats.HistogramData{}, err
 			}
+			afterSize := ed.Datum.Size()
+
+			// Perform memory accounting. This memory is not added to the temporary
+			// account since it won't be released until the sampleAggregator is
+			// destroyed.
+			if afterSize > beforeSize {
+				if err := s.memAcc.Grow(ctx, int64(afterSize-beforeSize)); err != nil {
+					return stats.HistogramData{}, err
+				}
+			}
+
 			values = append(values, ed.Datum)
 		}
 	}
