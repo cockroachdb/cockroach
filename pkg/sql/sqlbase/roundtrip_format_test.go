@@ -58,23 +58,28 @@ func TestRandParseDatumStringAs(t *testing.T) {
 		t.Run(typ.String(), func(t *testing.T) {
 			for i := 0; i < testsForTyp; i++ {
 				datum := RandDatumWithNullChance(rng, typ, 0)
+				ds := tree.AsStringWithFlags(datum, tree.FmtExport)
 
 				// Because of how RandDatumWithNullChanceWorks, we might
 				// get an interesting datum for a time related type that
 				// doesn't have the precision that we requested. In these
 				// cases, manually correct the type ourselves.
+				var err error
 				switch d := datum.(type) {
 				case *tree.DTimestampTZ:
-					datum = d.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
+					datum, err = d.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 				case *tree.DTimestamp:
-					datum = d.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
+					datum, err = d.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 				case *tree.DTime:
 					datum = d.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 				case *tree.DTimeTZ:
 					datum = d.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 				}
 
-				ds := tree.AsStringWithFlags(datum, tree.FmtExport)
+				if err != nil {
+					t.Fatal(ds, err)
+				}
+
 				parsed, err := ParseDatumStringAs(typ, ds, evalCtx)
 				if err != nil {
 					t.Fatal(ds, err)

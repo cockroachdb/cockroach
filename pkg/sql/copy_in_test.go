@@ -254,7 +254,7 @@ func TestCopyRandom(t *testing.T) {
 				} else if typs[i].Family() == types.TimeTZFamily {
 					dt = tree.NewDTimeTZFromTime(d)
 				} else {
-					dt = tree.MakeDTimestamp(d, time.Microsecond)
+					dt = tree.MustDTimestamp(d, time.Microsecond)
 				}
 				ds = tree.AsStringWithFlags(dt, tree.FmtBareStrings)
 			}
