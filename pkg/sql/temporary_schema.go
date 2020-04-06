@@ -420,6 +420,7 @@ func makeTemporaryObjectCleanerMetrics() *temporaryObjectCleanerMetrics {
 func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	ctx context.Context, closerCh <-chan struct{},
 ) error {
+	defer log.Infof(ctx, "completed temporary object cleanup job")
 	// Wrap the retry functionality with the default arguments.
 	retryFunc := func(ctx context.Context, do func() error) error {
 		return retry.WithMaxAttempts(
@@ -467,6 +468,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	}); err != nil {
 		return err
 	}
+
 	sessionIDs := make(map[ClusterWideID]struct{})
 	for _, dbID := range dbIDs {
 		var schemaNames map[sqlbase.ID]string
@@ -490,6 +492,11 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		}
 	}
 	log.Infof(ctx, "found %d temporary schemas", len(sessionIDs))
+
+	if len(sessionIDs) == 0 {
+		log.Infof(ctx, "early exiting temporary schema cleaner as no temporary schemas were found")
+		return nil
+	}
 
 	// Get active sessions.
 	var response *serverpb.ListSessionsResponse
@@ -538,7 +545,6 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		}
 	}
 
-	log.Infof(ctx, "completed temporary object cleanup job")
 	return nil
 }
 
