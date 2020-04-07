@@ -1179,16 +1179,35 @@ func (l *lockState) acquireLock(
 		//  - txn A's coordinator does not immediately learn of the push
 		//  - txn A re-acquires lock at sequence 2, ts 15
 		//
-		// A lock's timestamp cannot be allowed to regress, so by forwarding
-		// its timestamp during the second acquisition instead if assigning
-		// to it blindly, it remains at 20.
+		// A lock's timestamp at a given durability level is not allowed to
+		// regress, so by forwarding its timestamp during the second acquisition
+		// instead if assigning to it blindly, it remains at 20.
+		//
+		// However, a lock's timestamp as reported by getLockerInfo can regress
+		// if it is acquired at a lower timestamp and a different durability
+		// than it was previously held with. This is necessary to support
+		// because the hard constraint which we must uphold here that the
+		// lockHolderInfo for a replicated lock cannot diverge from the
+		// replicated state machine in such a way that its timestamp in the
+		// lockTable exceeds that in the replicated keyspace. If this invariant
+		// were to be violated, we'd risk infinite lock-discovery loops for
+		// requests that conflict with the lock as is written in the replicated
+		// state machine but not as is reflected in the lockTable.
+		//
+		// Lock timestamp regressions are safe from the perspective of other
+		// transactions because the request which re-acquired the lock at the
+		// lower timestamp must have been holding a write latch at or below the
+		// new lock's timestamp. This means that no conflicting requests could
+		// be evaluating concurrently. Instead, all will need to re-scan the
+		// lockTable once they acquire latches and will notice the reduced
+		// timestamp at that point, which may cause them to conflict with the
+		// lock even if they had not conflicted before. In a sense, it is no
+		// different than the first time a lock is added to the lockTable.
 		l.holder.holder[durability].ts.Forward(ts)
 		l.holder.holder[durability].seqs = append(seqs, txn.Sequence)
 
 		_, afterTs, _ := l.getLockerInfo()
-		if afterTs.Less(beforeTs) {
-			panic("lockTable bug - lock timestamp regression")
-		} else if beforeTs.Less(afterTs) {
+		if beforeTs.Less(afterTs) {
 			l.increasedLockTs(afterTs)
 		}
 		return nil

@@ -60,7 +60,7 @@ import (
 // handle-write-intent-error  req=<req-name> txn=<txn-name> key=<key>
 // handle-txn-push-error      req=<req-name> txn=<txn-name> key=<key>  TODO(nvanbenschoten): implement this
 //
-// on-lock-acquired  req=<req-name> key=<key> [seq=<seq>]
+// on-lock-acquired  req=<req-name> key=<key> [seq=<seq>] [dur=r|u]
 // on-lock-updated   req=<req-name> txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts=<int>[,<int>]]
 // on-txn-updated    txn=<txn-name> status=[committed|aborted|pending] [ts=<int>[,<int>]]
 //
@@ -276,6 +276,11 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				seqNum := enginepb.TxnSeq(seq)
 
+				dur := lock.Unreplicated
+				if d.HasArg("dur") {
+					dur = scanLockDurability(t, d)
+				}
+
 				// Confirm that the request has a corresponding write request.
 				found := false
 				for _, ru := range guard.Req.Requests {
@@ -298,7 +303,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				mon.runSync("acquire lock", func(ctx context.Context) {
 					log.Eventf(ctx, "txn %s @ %s", txn.ID.Short(), key)
 					span := roachpb.Span{Key: roachpb.Key(key)}
-					up := roachpb.MakeLockUpdateWithDur(txnAcquire, span, lock.Unreplicated)
+					up := roachpb.MakeLockUpdateWithDur(txnAcquire, span, dur)
 					m.OnLockAcquired(ctx, &up)
 				})
 				return c.waitAndCollect(t, mon)
