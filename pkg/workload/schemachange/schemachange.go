@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 	"github.com/spf13/pflag"
 )
@@ -421,6 +422,10 @@ func (w *schemaChangeWorker) createIndex(tx *pgx.Tx) (string, error) {
 	columnNames, err := w.tableColumnsShuffled(tx, tableName)
 	if err != nil {
 		return "", err
+	}
+
+	if len(columnNames) <= 0 {
+		return "", errors.Errorf("table %s has no columns", tableName)
 	}
 
 	indexName, err := w.randIndex(tx, tableName, w.existingPct)
