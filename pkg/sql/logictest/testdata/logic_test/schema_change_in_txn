@@ -1798,3 +1798,61 @@ select * from d46224.t;
 
 statement ok
 commit;
+
+# Test that adding a self-referencing foreign key to a table in the same
+# transaction which creates the table is okay. In the past this created an
+# infinite loop.
+subtest create_and_add_self_referencing_fk_in_same_txn
+
+statement ok
+BEGIN;
+
+statement ok
+CREATE TABLE self_ref_fk (id INT8 PRIMARY KEY, parent_id INT8);
+
+statement ok
+ALTER TABLE "self_ref_fk" ADD CONSTRAINT fk_self_ref_fk__parent_id FOREIGN KEY (parent_id) REFERENCES self_ref_fk (id) ON DELETE CASCADE;
+
+# Test that the constraint is enforced in this transaction. Create a savepoint
+# so that we can rollback the error and commit the transaction.
+
+statement ok
+SAVEPOINT fk_violation;
+
+statement error insert on table "self_ref_fk" violates foreign key constraint "fk_self_ref_fk__parent_id"
+INSERT INTO self_ref_fk VALUES (2, 1);
+
+statement ok
+ROLLBACK TO SAVEPOINT fk_violation;
+
+statement ok
+COMMIT;
+
+# Ensure that the constraint is enforced after the transaction commits.
+
+query error insert on table "self_ref_fk" violates foreign key constraint "fk_self_ref_fk__parent_id"
+INSERT INTO self_ref_fk VALUES (2, 1);
+
+# Add some data and ensure the constraint is applied.
+
+statement ok
+INSERT INTO self_ref_fk VALUES (1, NULL), (2, 1), (3, 2);
+
+query II rowsort
+SELECT * FROM self_ref_fk
+----
+1 NULL
+2 1
+3 2
+
+# Check that the cascade delete takes effect and there are now no rows.
+
+statement ok
+DELETE FROM self_ref_fk WHERE id = 1;
+
+query II rowsort
+SELECT * FROM self_ref_fk;
+----
+
+statement ok
+DROP TABLE self_ref_fk;
