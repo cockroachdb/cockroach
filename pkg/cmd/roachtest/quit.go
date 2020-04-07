@@ -410,3 +410,46 @@ func runQuit(ctx context.Context, t *test, c *cluster, nodeID int, extraArgs ...
 	return buf
 }
 
+func registerQuitAllNodes(r *testRegistry) {
+	// This test verifies that 'cockroach quit' can terminate all nodes
+	// in the cluster: normally as long as there's quorum, then with a
+	// short --drain-wait for the remaining nodes under quorum.
+	r.Add(testSpec{
+		Name:       "quit-all-nodes",
+		Owner:      OwnerKV,
+		Cluster:    makeClusterSpec(5),
+		MinVersion: "v20.1.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			q := quitTest{t: t, c: c}
+
+			// Start the cluster.
+			q.init(ctx)
+			// Wait for up-replication so that the cluster expects 1 ranges
+			// everywhere for system ranges.
+			q.waitForUpReplication(ctx)
+
+			// Shut three nodes down gracefully with a very long wait (longer
+			// than the test timeout). This is guaranteed to work - we still
+			// have quorum at that point.
+			q.runWithTimeout(ctx, func(ctx context.Context) { _ = runQuit(ctx, q.t, q.c, 5, "--drain-wait=1h") })
+			q.runWithTimeout(ctx, func(ctx context.Context) { _ = runQuit(ctx, q.t, q.c, 4, "--drain-wait=1h") })
+			q.runWithTimeout(ctx, func(ctx context.Context) { _ = runQuit(ctx, q.t, q.c, 3, "--drain-wait=1h") })
+
+			// Now shut down the remaining 3 nodes less gracefully, with a
+			// short wait. The drain should be stuck server-side, because
+			// the liveness record doesn't have quorum. So we're expecting
+			// quit to stop waiting due to the lower --drain-wait, but still
+			// issue a hard shutdown afterwards and then succeed. We can
+			// also expect the node to exit successfully.
+			q.runWithTimeout(ctx, func(ctx context.Context) { expectHardShutdown(ctx, q.t, runQuit(ctx, q.t, q.c, 2, "--drain-wait=4s")) })
+			q.runWithTimeout(ctx, func(ctx context.Context) { expectHardShutdown(ctx, q.t, runQuit(ctx, q.t, q.c, 1, "--drain-wait=4s")) })
+		},
+	})
+}
+
+// expectHardShutdown expects a "drain did not complete successfully" message.
+func expectHardShutdown(ctx context.Context, t *test, cmdOut []byte) {
+	if !strings.Contains(string(cmdOut), "drain did not complete successfully") {
+		t.Fatalf("expected 'drain did not complete successfully' in quit output, got:\n%s", cmdOut)
+	}
+}
