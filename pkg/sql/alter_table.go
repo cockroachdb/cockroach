@@ -144,6 +144,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return unimplemented.NewWithIssue(32917,
 					"adding a REFERENCES constraint while also adding a column via ALTER not supported")
 			}
+			version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
+			if !isTypeSupportedInVersion(version, d.Type) {
+				return pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"type %s is not supported until version upgrade is finalized",
+					d.Type.SQLString(),
+				)
+			}
 
 			newDef, seqDbDesc, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, tn)
 			if err != nil {
@@ -869,6 +877,15 @@ func applyColumnMutation(
 	switch t := mut.(type) {
 	case *tree.AlterTableAlterColumnType:
 		typ := t.ToType
+
+		version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
+		if !isTypeSupportedInVersion(version, typ) {
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"type %s is not supported until version upgrade is finalized",
+				typ.SQLString(),
+			)
+		}
 
 		// Special handling for STRING COLLATE xy to verify that we recognize the language.
 		if t.Collation != "" {
