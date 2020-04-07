@@ -1,0 +1,70 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package main
+
+import (
+    "context"
+    "fmt"
+    "time"
+
+    "github.com/cockroachdb/cockroach/pkg/util/retry"
+    "github.com/cockroachdb/errors"
+)
+
+// runManySplits attempts to create 2000 tiny ranges on a 4-node cluster using
+// left-to-right splits and check the cluster is still live afterwards.
+func runManySplits(ctx context.Context, t *test, c *cluster) {
+    args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+    c.Put(ctx, cockroach, "./cockroach")
+    c.Start(ctx, t, args)
+
+    // Wait for upreplication then create many ranges.
+    func() {
+        db := c.Conn(ctx, 1)
+        defer db.Close()
+
+        err := retry.ForDuration(30*time.Second, func() error {
+            t.l.Printf("waiting for up-replication\n")
+            row := db.QueryRowContext(ctx, `SELECT min(array_length(replicas, 1)) FROM crdb_internal.ranges_no_leases`)
+            minReplicas := 0
+            if err := row.Scan(&minReplicas); err != nil {
+                t.Fatal(err)
+            }
+            if minReplicas < 3 {
+                time.Sleep(time.Second)
+                return errors.Newf("some ranges not up-replicated yet")
+            }
+            return nil
+        })
+        if err != nil {
+            t.Fatalf("cluster did not up-replicate: %v", err)
+        }
+
+        const numRanges = 2000
+        t.l.Printf("creating %d ranges...", numRanges)
+        if _, err := db.ExecContext(ctx, fmt.Sprintf(`
+CREATE TABLE t(x, PRIMARY KEY(x)) AS TABLE generate_series(1,%[1]d);
+ALTER TABLE t SPLIT AT TABLE generate_series(1,%[1]d)`, numRanges)); err != nil {
+            t.Fatal(err)
+        }
+    }()
+
+    for nodeID := 1; nodeID <= c.spec.NodeCount; nodeID++ {
+        t.l.Printf("checking node %d is live\n", nodeID)
+        func() {
+            db := c.Conn(ctx, nodeID)
+            defer db.Close()
+            if _, err := db.Exec(`SELECT 1`); err != nil {
+                t.Fatal(err)
+            }
+        }()
+    }
+}

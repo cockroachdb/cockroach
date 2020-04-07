@@ -462,21 +462,29 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 		decision.ChosenVia = truncatableIndexChosenViaFirstIndex
 	}
 
-	// Invariants: NewFirstIndex >= FirstIndex
-	//             NewFirstIndex <= LastIndex (if != 10)
-	//             NewFirstIndex <= CommitIndex (if != 10)
+	// Invariants:	FirstIndex    <= LastIndex + 1                          (1)
+	//              NewFirstIndex >= FirstIndex                             (2)
+	//              NewFirstIndex <= LastIndex + 1                          (3)
+	//              NewFirstIndex <= CommitIndex + 1                        (4)
 	//
-	// For uninit'ed replicas we can have NewFirstIndex > input.LastIndex, more
-	// specifically NewFirstIndex = input.LastIndex + 1. NewFirstIndex is set to
-	// TruncatedState.Index + 1, and for an unit'ed replica, input.LastIndex is
-	// simply 10. This is what informs the `input.LastIndex == 10` conditional
-	// below. The same reasoning holds for NewFirstIndex and
-	// decision.CommitIndex.
+	// Intuitively we'd expect (1) to be `FirstIndex <= LastIndex`. However, the
+	// "+ 1" is an unfortunate defect arising from the fact that for a
+	// freshly-minted replica (using either the default initial log index, or
+	// the truncated state from an incoming snapshot), its FirstIndex is
+	// initialized to be TruncatedState.Index + 1. This is in contrast to its
+	// LastIndex, which is simply set to TruncatedState.Index. In this
+	// particular situation we have the case where FirstIndex = LastIndex + 1.
+	//
+	// As for the remaining invariants: (2) simply asserts that we're not
+	// regressing our FirstIndex, (3) asserts that our we don't truncate past
+	// the last index we can truncate away, and (4) is similar to (3) in that we
+	// assert that we're not truncating past the last known CommitIndex.
+	// Both (3) and (4) make provisions for a "+ 1" for the same reasons as (1).
 	valid := (decision.NewFirstIndex >= input.FirstIndex) &&
-		(decision.NewFirstIndex <= input.LastIndex || input.LastIndex == 10) &&
-		(decision.NewFirstIndex <= decision.CommitIndex || decision.CommitIndex == 10)
+		(decision.NewFirstIndex <= input.LastIndex + 1) &&
+		(decision.NewFirstIndex <= decision.CommitIndex + 1)
 	if !valid {
-		err := fmt.Sprintf("invalid truncation decision; output = %d, input: [%d, %d], commit idx = %d",
+		err := fmt.Sprintf("invalid truncation decision: output = %d, input: [%d, %d], commit idx = %d",
 			decision.NewFirstIndex, input.FirstIndex, input.LastIndex, decision.CommitIndex)
 		panic(err)
 	}
