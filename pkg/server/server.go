@@ -173,23 +173,26 @@ type Server struct {
 	startTime  time.Time
 	rpcContext *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
-	grpc             *grpcServer
-	gossip           *gossip.Gossip
-	nodeDialer       *nodedialer.Dialer
-	nodeLiveness     *kvserver.NodeLiveness
-	storePool        *kvserver.StorePool
-	tcsFactory       *kvcoord.TxnCoordSenderFactory
-	distSender       *kvcoord.DistSender
-	db               *kv.DB
-	pgServer         *pgwire.Server
-	distSQLServer    *distsql.ServerImpl
-	node             *Node
-	registry         *metric.Registry
-	recorder         *status.MetricsRecorder
-	runtime          *status.RuntimeStatSampler
-	admin            *adminServer
-	status           *statusServer
-	authentication   *authenticationServer
+	grpc           *grpcServer
+	gossip         *gossip.Gossip
+	nodeDialer     *nodedialer.Dialer
+	nodeLiveness   *kvserver.NodeLiveness
+	storePool      *kvserver.StorePool
+	tcsFactory     *kvcoord.TxnCoordSenderFactory
+	distSender     *kvcoord.DistSender
+	db             *kv.DB
+	pgServer       *pgwire.Server
+	distSQLServer  *distsql.ServerImpl
+	node           *Node
+	registry       *metric.Registry
+	recorder       *status.MetricsRecorder
+	runtime        *status.RuntimeStatSampler
+	admin          *adminServer
+	status         *statusServer
+	authentication *authenticationServer
+	// initServer receives requests to bootstrap a new cluster (via the
+	// Bootstrap RPC). This server will never accept requests if any of the
+	// stores is already initialized.
 	initServer       *initServer
 	tsDB             *ts.DB
 	tsServer         ts.Server
@@ -710,13 +713,20 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		gw.RegisterService(s.grpc.Server)
 	}
 
-	// TODO(andrei): We're creating an initServer even through the inspection of
-	// our engines in Server.Start() might reveal that we're already bootstrapped
-	// and so we don't need to accept a Bootstrap RPC. The creation of this server
-	// early means that a Bootstrap RPC might erroneously succeed. We should
-	// figure out early if our engines are bootstrapped and, if they are, create a
-	// dummy implementation of the InitServer that rejects all RPCs.
-	s.initServer = newInitServer(s.gossip.Connected, s.stopper.ShouldStop())
+	bootstrapVersion := cfg.Settings.Version.BinaryVersion()
+	if knobs := cfg.TestingKnobs.Server; knobs != nil {
+		if ov := knobs.(*TestingKnobs).BootstrapVersionOverride; ov != (roachpb.Version{}) {
+			bootstrapVersion = ov
+		}
+	}
+
+	s.initServer = newInitServer(
+		cfg.Settings.Version.BinaryVersion(),
+		cfg.Settings.Version.BinaryMinSupportedVersion(),
+		clusterversion.ClusterVersion{Version: bootstrapVersion},
+		&cfg.DefaultZoneConfig,
+		&cfg.DefaultSystemZoneConfig,
+	)
 	serverpb.RegisterInitServer(s.grpc.Server, s.initServer)
 
 	nodeInfo := sql.NodeInfo{
@@ -982,50 +992,51 @@ type ListenError struct {
 	Addr string
 }
 
-// inspectEngines goes through engines and checks which ones are bootstrapped
-// and which ones are empty.
-// It also calls SynthesizeClusterVersionFromEngines to get the cluster version,
-// or to set it if no engines have a version in them already.
+// inspectEngines goes through engines and populates in initDiskState. It also
+// calls SynthesizeClusterVersionFromEngines, which selects and backfills the
+// cluster version to all initialized engines.
+//
+// The initDiskState returned by this method will reflect a zero NodeID if none
+// has been assigned yet (i.e. if none of the engines is initialized).
 func inspectEngines(
 	ctx context.Context,
 	engines []storage.Engine,
 	binaryVersion, binaryMinSupportedVersion roachpb.Version,
-	clusterIDContainer *base.ClusterIDContainer,
-) (
-	bootstrappedEngines []storage.Engine,
-	emptyEngines []storage.Engine,
-	_ clusterversion.ClusterVersion,
-	_ error,
-) {
+) (*initDiskState, error) {
+	state := &initDiskState{}
+
 	for _, eng := range engines {
 		storeIdent, err := kvserver.ReadStoreIdent(ctx, eng)
 		if _, notBootstrapped := err.(*kvserver.NotBootstrappedError); notBootstrapped {
-			emptyEngines = append(emptyEngines, eng)
+			state.newEngines = append(state.newEngines, eng)
 			continue
 		} else if err != nil {
-			return nil, nil, clusterversion.ClusterVersion{}, err
+			return nil, err
 		}
+
+		if state.clusterID != uuid.Nil && state.clusterID != storeIdent.ClusterID {
+			return nil, errors.Errorf("conflicting store ClusterIDs: %s, %s", storeIdent.ClusterID, state.clusterID)
+		}
+		state.clusterID = storeIdent.ClusterID
+
 		if storeIdent.StoreID == 0 || storeIdent.NodeID == 0 || storeIdent.ClusterID == uuid.Nil {
-			return nil, nil, clusterversion.ClusterVersion{},
-				errors.Errorf("partially initialized store: %+v", storeIdent)
+			return nil, errors.Errorf("partially initialized store: %+v", storeIdent)
 		}
-		clusterID := clusterIDContainer.Get()
-		if storeIdent.ClusterID != uuid.Nil {
-			if clusterID == uuid.Nil {
-				clusterIDContainer.Set(ctx, storeIdent.ClusterID)
-			} else if storeIdent.ClusterID != clusterID {
-				return nil, nil, clusterversion.ClusterVersion{},
-					errors.Errorf("conflicting store cluster IDs: %s, %s", storeIdent.ClusterID, clusterID)
-			}
+
+		if state.nodeID != 0 && state.nodeID != storeIdent.NodeID {
+			return nil, errors.Errorf("conflicting store NodeIDs: %s, %s", storeIdent.NodeID, state.nodeID)
 		}
-		bootstrappedEngines = append(bootstrappedEngines, eng)
+		state.nodeID = storeIdent.NodeID
+
+		state.initializedEngines = append(state.initializedEngines, eng)
 	}
 
-	cv, err := kvserver.SynthesizeClusterVersionFromEngines(ctx, bootstrappedEngines, binaryVersion, binaryMinSupportedVersion)
+	cv, err := kvserver.SynthesizeClusterVersionFromEngines(ctx, state.initializedEngines, binaryVersion, binaryMinSupportedVersion)
 	if err != nil {
-		return nil, nil, clusterversion.ClusterVersion{}, err
+		return nil, err
 	}
-	return bootstrappedEngines, emptyEngines, cv, nil
+	state.clusterVersion = cv
+	return state, nil
 }
 
 // listenerInfo is a helper used to write files containing various listener
@@ -1459,21 +1470,13 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 
-	bootstrappedEngines, _, _, err := inspectEngines(
-		ctx, s.engines,
-		s.cfg.Settings.Version.BinaryVersion(),
-		s.cfg.Settings.Version.BinaryMinSupportedVersion(),
-		&s.rpcContext.ClusterID)
-	if err != nil {
-		return errors.Wrap(err, "inspecting engines")
-	}
-
 	// Filter the gossip bootstrap resolvers based on the listen and
 	// advertise addresses.
 	listenAddrU := util.NewUnresolvedAddr("tcp", s.cfg.Addr)
 	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
 	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, listenAddrU, advAddrU)
+
 	s.gossip.Start(advAddrU, filtered)
 	log.Event(ctx, "started gossip")
 
@@ -1481,25 +1484,125 @@ func (s *Server) Start(ctx context.Context) error {
 		defer time.AfterFunc(30*time.Second, s.cfg.DelayedBootstrapFn).Stop()
 	}
 
-	var hlcUpperBoundExists bool
-	// doBootstrap is set if we're the ones who bootstrapped the cluster.
-	var doBootstrap bool
-	if len(bootstrappedEngines) > 0 {
-		// The cluster was already initialized.
-		doBootstrap = false
-		if s.cfg.ReadyFn != nil {
-			s.cfg.ReadyFn(false /*waitForInit*/)
-		}
+	if len(s.cfg.GossipBootstrapResolvers) == 0 {
+		// If the node is started without join flags, attempt self-bootstrap.
+		// Note that we're not checking whether the node is already bootstrapped;
+		// if this is the case, Bootstrap will simply fail.
+		_ = s.stopper.RunAsyncTask(ctx, "bootstrap", func(ctx context.Context) {
+			_, err := s.initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{})
+			switch err {
+			case nil:
+				log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
+			case ErrClusterInitialized:
+			default:
+				// Process is shutting down.
+			}
+		})
+	}
 
-		hlcUpperBound, err := kvserver.ReadMaxHLCUpperBound(ctx, bootstrappedEngines)
-		if err != nil {
-			return errors.Wrap(err, "reading max HLC upper bound")
-		}
+	// This opens the main listener.
+	startRPCServer(workersCtx)
 
-		if hlcUpperBound > 0 {
-			hlcUpperBoundExists = true
-		}
+	// The start cli command wants to print helpful information if it looks as
+	// though this node didn't immediately manage to connect to the cluster.
+	// This isn't the prettiest way to achieve this, but it gets the job done.
+	//
+	//
+	// TODO(tbg): we should avoid this when the node is bootstrapped.
+	// Unfortunately this knowledge is nicely encapsulated away in ServeAndWait.
+	// Perhaps that method should be split up.
+	haveStateCh := make(chan struct{})
+	if s.cfg.ReadyFn != nil {
+		_ = s.stopper.RunAsyncTask(ctx, "signal-readiness", func(ctx context.Context) {
+			waitForInit := true
+			tm := time.After(2 * time.Second)
+			select {
+			case <-haveStateCh:
+				waitForInit = false
+			case <-tm:
+			case <-ctx.Done():
+				return
+			case <-s.stopper.ShouldQuiesce():
+				return
+			}
+			s.cfg.ReadyFn(waitForInit)
+		})
+	}
 
+	state, err := s.initServer.ServeAndWait(ctx, s.stopper, s.engines, s.gossip)
+	if err != nil {
+		return errors.Wrap(err, "during init")
+	}
+	close(haveStateCh)
+
+	s.rpcContext.ClusterID.Set(ctx, state.clusterID)
+	// If there's no NodeID here, then we didn't just bootstrap. The Node will
+	// read its ID from the stores or request a new one via KV.
+	if state.nodeID != 0 {
+		s.rpcContext.NodeID.Set(ctx, state.nodeID)
+	}
+
+	// TODO(tbg): split this method here. Everything above this comment is
+	// the early stage of startup -- setting up listeners and determining the
+	// initState -- and everything after it is actually starting the server,
+	// using the listeners and init state.
+
+	// Defense in depth: set up an eager sanity check that we're not
+	// accidentally being pointed at a different cluster. We have checks for
+	// this in the RPC layer, but since the RPC layer gets set up before the
+	// clusterID is known, early connections won't validate the clusterID (at
+	// least not until the next Ping).
+	//
+	// The check is simple: listen for clusterID changes from Gossip. If we see
+	// one, make sure it's the clusterID we already know (and are guaranteed to
+	// know) at this point. If it's not the same, explode.
+	//
+	// TODO(tbg): remove this when we have changed ServeAndWait() to join an
+	// existing cluster via a one-off RPC, at which point we can create gossip
+	// (and thus the RPC layer) only after the clusterID is already known. We
+	// can then rely on the RPC layer's protection against cross-cluster
+	// communication.
+	{
+		// We populated this above, so it should still be set. This is just to
+		// demonstrate that we're not doing anything functional here (and to
+		// prevent bugs during further refactors).
+		if s.rpcContext.ClusterID.Get() == uuid.Nil {
+			return errors.New("gossip should already be connected")
+		}
+		unregister := s.gossip.RegisterCallback(gossip.KeyClusterID, func(string, roachpb.Value) {
+			clusterID, err := s.gossip.GetClusterID()
+			if err != nil {
+				log.Fatalf(ctx, "unable to read ClusterID: %v", err)
+			}
+			s.rpcContext.ClusterID.Set(ctx, clusterID) // fatals on mismatch
+		})
+		defer unregister()
+	}
+
+	// Spawn a goroutine that will print a nice message when Gossip connects.
+	// Note that we already know the clusterID, but we don't know that Gossip
+	// has connected. The pertinent case is that of restarting an entire
+	// cluster. Someone has to gossip the ClusterID before Gossip is connected,
+	// but this gossip only happens once the first range has a leaseholder, i.e.
+	// when a quorum of nodes has gone fully operational.
+	_ = s.stopper.RunAsyncTask(ctx, "connect-gossip", func(ctx context.Context) {
+		log.Infof(ctx, "connecting to gossip network to verify cluster ID %q", state.clusterID)
+		select {
+		case <-s.gossip.Connected:
+			log.Infof(ctx, "node connected via gossip")
+		case <-ctx.Done():
+		case <-s.stopper.ShouldQuiesce():
+		}
+	})
+
+	// NB: if this store is freshly bootstrapped (or no upper bound was
+	// persisted), hlcUpperBound will be zero.
+	hlcUpperBound, err := kvserver.ReadMaxHLCUpperBound(ctx, s.engines)
+	if err != nil {
+		return errors.Wrap(err, "reading max HLC upper bound")
+	}
+
+	if hlcUpperBound > 0 {
 		ensureClockMonotonicity(
 			ctx,
 			s.clock,
@@ -1507,88 +1610,6 @@ func (s *Server) Start(ctx context.Context) error {
 			hlcUpperBound,
 			timeutil.SleepUntil,
 		)
-
-		// Ensure that any subsequent use of `cockroach init` will receive
-		// an error "the cluster was already initialized."
-		if _, err := s.initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
-			return errors.Wrap(err, "bootstrapping init server")
-		}
-	} else {
-		// We have no existing stores. We start an initServer and then wait for
-		// one of the following:
-		//
-		// - gossip connects (i.e. we're joining an existing cluster, perhaps
-		//   freshly bootstrapped but this node doesn't have to know)
-		// - we auto-bootstrap (if no join flags were given)
-		// - a client bootstraps a cluster via node.
-		//
-		// TODO(knz): This may need tweaking when #24118 is addressed.
-
-		startRPCServer(workersCtx)
-
-		ready := make(chan struct{})
-		if s.cfg.ReadyFn != nil {
-			// s.cfg.ReadyFn must be called in any case because the `start`
-			// command requires it to signal readiness to a process manager.
-			//
-			// However we want to be somewhat precisely informative to the user
-			// about whether the node is waiting on init / join, or whether
-			// the join was successful straight away. So we spawn this goroutine
-			// and either:
-			// - its timer will fire after 2 seconds and we call ReadyFn(true)
-			// - bootstrap completes earlier and the ready chan gets closed,
-			//   then we call ReadyFn(false).
-			go func() {
-				waitForInit := false
-				tm := time.After(2 * time.Second)
-				select {
-				case <-tm:
-					waitForInit = true
-				case <-ready:
-				}
-				s.cfg.ReadyFn(waitForInit)
-			}()
-		}
-
-		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command or join with an already initialized node.")
-
-		if len(s.cfg.GossipBootstrapResolvers) == 0 {
-			// If the _unfiltered_ list of hosts from the --join flag is
-			// empty, then this node can bootstrap a new cluster. We disallow
-			// this if this node is being started with itself specified as a
-			// --join host, because that's too likely to be operator error.
-			if _, err := s.initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
-				return errors.Wrap(err, "while bootstrapping")
-			}
-			log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
-		}
-
-		initRes, err := s.initServer.awaitBootstrap()
-		close(ready)
-		if err != nil {
-			return err
-		}
-
-		doBootstrap = initRes == needBootstrap
-		if doBootstrap {
-			if err := s.bootstrapCluster(ctx, s.bootstrapVersion()); err != nil {
-				return err
-			}
-		}
-	}
-
-	// This opens the main listener.
-	startRPCServer(workersCtx)
-
-	// We ran this before, but might've bootstrapped in the meantime. This time
-	// we'll get the actual list of bootstrapped and empty engines.
-	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(
-		ctx, s.engines,
-		s.cfg.Settings.Version.BinaryVersion(),
-		s.cfg.Settings.Version.BinaryMinSupportedVersion(),
-		&s.rpcContext.ClusterID)
-	if err != nil {
-		return errors.Wrap(err, "inspecting engines")
 	}
 
 	// Record a walltime that is lower than the lowest hlc timestamp this current
@@ -1602,19 +1623,19 @@ func (s *Server) Start(ctx context.Context) error {
 	if err := s.node.start(
 		ctx,
 		advAddrU, advSQLAddrU,
-		bootstrappedEngines, emptyEngines,
+		*state,
 		s.cfg.ClusterName,
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
-		cv,
 		s.cfg.LocalityAddresses,
 		s.execCfg.DistSQLPlanner.SetNodeDesc,
 	); err != nil {
 		return err
 	}
+
 	log.Event(ctx, "started node")
 	if err := s.startPersistingHLCUpperBound(
-		hlcUpperBoundExists,
+		hlcUpperBound > 0,
 		func(t int64) error { /* function to persist upper bound of HLC to all stores */
 			return s.node.SetHLCUpperBound(context.Background(), t)
 		},
@@ -1624,11 +1645,6 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.replicationReporter.Start(ctx, s.stopper)
 	s.temporaryObjectCleaner.Start(ctx, s.stopper)
-
-	// Cluster ID should have been determined by this point.
-	if s.rpcContext.ClusterID.Get() == uuid.Nil {
-		log.Fatal(ctx, "Cluster ID failed to be determined during node startup.")
-	}
 
 	s.refreshSettings()
 
@@ -1677,6 +1693,25 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Infof(ctx, "advertising CockroachDB node at %s", s.cfg.AdvertiseAddr)
 
 	log.Event(ctx, "accepting connections")
+
+	if state.bootstrapped {
+		// If a new cluster is just starting up, force all the system ranges
+		// through the replication queue so they upreplicate as quickly as
+		// possible when a new node joins. Without this code, the upreplication
+		// would be up to the whim of the scanner, which might be too slow for
+		// new clusters.
+		// TODO(tbg): instead of this dubious band-aid we should make the
+		// replication queue reactive enough to avoid relying on the scanner
+		// alone.
+		var done bool
+		return s.node.stores.VisitStores(func(store *kvserver.Store) error {
+			if !done {
+				done = true
+				return store.ForceReplicationScanAndProcess()
+			}
+			return nil
+		})
+	}
 
 	// Begin the node liveness heartbeat. Add a callback which records the local
 	// store "last up" timestamp for every store whenever the liveness record is
@@ -2089,37 +2124,6 @@ func (s *Server) startServeSQL(
 		})
 	}
 	return nil
-}
-
-func (s *Server) bootstrapVersion() roachpb.Version {
-	v := s.cfg.Settings.Version.BinaryVersion()
-	if knobs := s.cfg.TestingKnobs.Server; knobs != nil {
-		if ov := knobs.(*TestingKnobs).BootstrapVersionOverride; ov != (roachpb.Version{}) {
-			v = ov
-		}
-	}
-	return v
-}
-
-func (s *Server) bootstrapCluster(ctx context.Context, bootstrapVersion roachpb.Version) error {
-	if err := s.node.bootstrapCluster(
-		ctx, s.engines, clusterversion.ClusterVersion{Version: bootstrapVersion},
-		&s.cfg.DefaultZoneConfig, &s.cfg.DefaultSystemZoneConfig,
-	); err != nil {
-		return err
-	}
-	// Force all the system ranges through the replication queue so they
-	// upreplicate as quickly as possible when a new node joins. Without this
-	// code, the upreplication would be up to the whim of the scanner, which
-	// might be too slow for new clusters.
-	done := false
-	return s.node.stores.VisitStores(func(store *kvserver.Store) error {
-		if !done {
-			done = true
-			return store.ForceReplicationScanAndProcess()
-		}
-		return nil
-	})
 }
 
 func (s *Server) doDrain(
