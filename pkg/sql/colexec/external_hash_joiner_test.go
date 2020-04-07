@@ -58,7 +58,7 @@ func TestExternalHashJoiner(t *testing.T) {
 	// which the joiner spills to disk.
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
-		for _, tcs := range [][]joinTestCase{hjTestCases, mjTestCases} {
+		for _, tcs := range [][]*joinTestCase{hjTestCases, mjTestCases} {
 			for _, tc := range tcs {
 				delegateFDAcquisitions := rng.Float64() < 0.5
 				t.Run(fmt.Sprintf("spillForced=%t/%s/delegateFDAcquisitions=%t", spillForced, tc.description, delegateFDAcquisitions), func(t *testing.T) {
@@ -139,15 +139,17 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	nBatches := 2
 	leftSource := newFiniteBatchSource(batch, nBatches)
 	rightSource := newFiniteBatchSource(batch, nBatches)
-	spec := createSpecForHashJoiner(joinTestCase{
-		joinType:     sqlbase.JoinType_INNER,
-		leftTypes:    sourceTypes,
-		leftOutCols:  []uint32{0},
-		leftEqCols:   []uint32{0},
-		rightTypes:   sourceTypes,
-		rightOutCols: []uint32{0},
-		rightEqCols:  []uint32{0},
-	})
+	tc := &joinTestCase{
+		joinType:       sqlbase.JoinType_INNER,
+		leftPhysTypes:  sourceTypes,
+		leftOutCols:    []uint32{0},
+		leftEqCols:     []uint32{0},
+		rightPhysTypes: sourceTypes,
+		rightOutCols:   []uint32{0},
+		rightEqCols:    []uint32{0},
+	}
+	tc.init()
+	spec := createSpecForHashJoiner(tc)
 	var spilled bool
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
@@ -241,15 +243,17 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 					if fullOuter {
 						joinType = sqlbase.JoinType_FULL_OUTER
 					}
-					spec := createSpecForHashJoiner(joinTestCase{
-						joinType:     joinType,
-						leftTypes:    sourceTypes,
-						leftOutCols:  []uint32{0, 1},
-						leftEqCols:   []uint32{0, 2},
-						rightTypes:   sourceTypes,
-						rightOutCols: []uint32{2, 3},
-						rightEqCols:  []uint32{0, 1},
-					})
+					tc := &joinTestCase{
+						joinType:       joinType,
+						leftPhysTypes:  sourceTypes,
+						leftOutCols:    []uint32{0, 1},
+						leftEqCols:     []uint32{0, 2},
+						rightPhysTypes: sourceTypes,
+						rightOutCols:   []uint32{2, 3},
+						rightEqCols:    []uint32{0, 1},
+					}
+					tc.init()
+					spec := createSpecForHashJoiner(tc)
 					b.Run(name, func(b *testing.B) {
 						// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize() (rows /
 						// batch) * nCols (number of columns / row) * 2 (number of sources).

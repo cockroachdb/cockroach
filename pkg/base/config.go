@@ -213,6 +213,10 @@ type Config struct {
 	// connections to determine connection health and update the local view
 	// of remote clocks.
 	RPCHeartbeatInterval time.Duration
+
+	// Enables the use of an PTP hardware clock user space API for HLC current time.
+	// This contains the path to the device to be used (i.e. /dev/ptp0)
+	ClockDevicePath string
 }
 
 func wrapError(err error) error {
@@ -243,6 +247,7 @@ func (cfg *Config) InitDefaults() {
 	cfg.RPCHeartbeatInterval = defaultRPCHeartbeatInterval
 	cfg.ClusterName = ""
 	cfg.DisableClusterNameVerification = false
+	cfg.ClockDevicePath = ""
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of

@@ -673,6 +673,20 @@ fields.
 		Description: `Path to the CA key.`,
 	}
 
+	ClockDevice = FlagInfo{
+		Name: "clock-device",
+		Description: `
+Override HLC to use PTP hardware clock user space API when querying for current time.
+The value corresponds to the clock device to be used. This is currently only tested
+and supported on Linux.
+<PRE>
+
+  --clock-device=/dev/ptp0
+
+</PRE>
+`,
+	}
+
 	MaxOffset = FlagInfo{
 		Name: "max-offset",
 		Description: `
