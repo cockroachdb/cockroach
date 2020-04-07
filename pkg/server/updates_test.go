@@ -22,7 +22,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -46,29 +45,28 @@ import (
 	"github.com/pkg/errors"
 )
 
-func stubURL(target **url.URL, stubURL *url.URL) func() {
-	realURL := *target
-	*target = stubURL
-	return func() {
-		*target = realURL
-	}
-}
-
 func TestCheckVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
-
-	r := makeMockRecorder(t)
-	defer r.Close()
-	defer stubURL(&updatesURL, r.url)()
-
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	s.(*TestServer).checkForUpdates(ctx, time.Minute)
-	r.Close()
-	s.Stopper().Stop(ctx)
+	ctx := context.Background()
 
 	t.Run("expected-reporting", func(t *testing.T) {
+		r := makeMockRecorder(t)
+		defer r.Close()
+
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &TestingKnobs{
+					DiagnosticsTestingKnobs: diagnosticspb.TestingKnobs{
+						OverrideUpdatesURL: &r.url,
+					},
+				},
+			},
+		})
+		defer s.Stopper().Stop(ctx)
+		s.CheckForUpdates(ctx)
+		r.Close()
+
 		r.Lock()
 		defer r.Unlock()
 
@@ -94,10 +92,22 @@ func TestCheckVersion(t *testing.T) {
 	})
 
 	t.Run("npe", func(t *testing.T) {
-		// ensure nil, which happens when an empty env override URL is used, does not
-		// cause a crash. We've deferred a cleanup of the original pointer above.
-		updatesURL = nil
-		s.(*TestServer).checkForUpdates(ctx, time.Minute)
+		// Ensure nil, which happens when an empty env override URL is used, does not
+		// cause a crash.
+		var nilURL *url.URL
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &TestingKnobs{
+					DiagnosticsTestingKnobs: diagnosticspb.TestingKnobs{
+						OverrideUpdatesURL:   &nilURL,
+						OverrideReportingURL: &nilURL,
+					},
+				},
+			},
+		})
+		defer s.Stopper().Stop(ctx)
+		s.CheckForUpdates(ctx)
+		s.ReportDiagnostics(ctx)
 	})
 }
 
@@ -105,15 +115,28 @@ func TestUsageQuantization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	r := makeMockRecorder(t)
-	defer stubURL(&reportingURL, r.url)()
 	defer r.Close()
 
 	st := cluster.MakeTestingClusterSettings()
 	ctx := context.TODO()
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: st,
+		Knobs: base.TestingKnobs{
+			Server: &TestingKnobs{
+				DiagnosticsTestingKnobs: diagnosticspb.TestingKnobs{
+					OverrideReportingURL: &r.url,
+				},
+			},
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 	ts := s.(*TestServer)
+
+	// Disable periodic reporting so it doesn't interfere with the test.
+	if _, err := db.Exec(`SET CLUSTER SETTING diagnostics.reporting.enabled = false`); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := db.Exec(`SET application_name = 'test'`); err != nil {
 		t.Fatal(err)
@@ -148,7 +171,7 @@ func TestUsageQuantization(t *testing.T) {
 	ts.Server.sqlServer.pgServer.SQLServer.ResetSQLStats(ctx)
 
 	// Collect a round of statistics.
-	ts.reportDiagnostics(ctx)
+	ts.ReportDiagnostics(ctx)
 
 	// The stats "hide" the application name by hashing it. To find the
 	// test app name, we need to hash the ref string too prior to the
@@ -194,7 +217,6 @@ func TestCBOReportUsage(t *testing.T) {
 	ctx := context.TODO()
 
 	r := makeMockRecorder(t)
-	defer stubURL(&reportingURL, r.url)()
 	defer r.Close()
 
 	st := cluster.MakeTestingClusterSettings()
@@ -221,6 +243,11 @@ func TestCBOReportUsage(t *testing.T) {
 				// query stats stable.
 				DisableDeleteOrphanedLeases: true,
 			},
+			Server: &TestingKnobs{
+				DiagnosticsTestingKnobs: diagnosticspb.TestingKnobs{
+					OverrideReportingURL: &r.url,
+				},
+			},
 		},
 	}
 
@@ -229,6 +256,11 @@ func TestCBOReportUsage(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 	defer db.Close()
 	ts := s.(*TestServer)
+
+	// Disable periodic reporting so it doesn't interfere with the test.
+	if _, err := db.Exec(`SET CLUSTER SETTING diagnostics.reporting.enabled = false`); err != nil {
+		t.Fatal(err)
+	}
 
 	// make sure the test's generated activity is the only activity we measure.
 	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
@@ -296,7 +328,7 @@ func TestCBOReportUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ts.reportDiagnostics(ctx)
+	ts.ReportDiagnostics(ctx)
 
 	expectedFeatureUsage := map[string]int32{
 		"sql.plan.hints.hash-join":              1,
@@ -336,7 +368,6 @@ func TestReportUsage(t *testing.T) {
 	ctx := context.TODO()
 
 	r := makeMockRecorder(t)
-	defer stubURL(&reportingURL, r.url)()
 	defer r.Close()
 
 	st := cluster.MakeTestingClusterSettings()
@@ -363,6 +394,11 @@ func TestReportUsage(t *testing.T) {
 				// query stats stable.
 				DisableDeleteOrphanedLeases: true,
 			},
+			Server: &TestingKnobs{
+				DiagnosticsTestingKnobs: diagnosticspb.TestingKnobs{
+					OverrideReportingURL: &r.url,
+				},
+			},
 		},
 	}
 
@@ -379,6 +415,11 @@ func TestReportUsage(t *testing.T) {
 	if _, err := db.Exec(`SET CLUSTER SETTING server.time_until_store_dead = '90s'`); err != nil {
 		t.Fatal(err)
 	}
+	// Disable periodic reporting so it doesn't interfere with the test.
+	if _, err := db.Exec(`SET CLUSTER SETTING diagnostics.reporting.enabled = false`); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := db.Exec(`SET CLUSTER SETTING diagnostics.reporting.send_crash_reports = false`); err != nil {
 		t.Fatal(err)
 	}
@@ -566,7 +607,7 @@ func TestReportUsage(t *testing.T) {
 		node := ts.node.recorder.GenerateNodeStatus(ctx)
 		// Clear the SQL stat pool before getting diagnostics.
 		ts.sqlServer.pgServer.SQLServer.ResetSQLStats(ctx)
-		ts.reportDiagnostics(ctx)
+		ts.ReportDiagnostics(ctx)
 
 		keyCounts := make(map[roachpb.StoreID]int64)
 		rangeCounts := make(map[roachpb.StoreID]int64)
@@ -757,7 +798,6 @@ func TestReportUsage(t *testing.T) {
 	}
 	for key, expected := range map[string]string{
 		"cluster.organization":                     "<redacted>",
-		"diagnostics.reporting.enabled":            "true",
 		"diagnostics.reporting.send_crash_reports": "false",
 		"server.time_until_store_dead":             "1m30s",
 		"version":                                  clusterversion.TestingBinaryVersion.String(),
@@ -870,6 +910,7 @@ func TestReportUsage(t *testing.T) {
 		`[opt,nodist,ok] ALTER TABLE _ CONFIGURE ZONE = _`,
 		`[opt,nodist,ok] CREATE DATABASE _`,
 		`[opt,nodist,ok] SET CLUSTER SETTING "cluster.organization" = _`,
+		`[opt,nodist,ok] SET CLUSTER SETTING "diagnostics.reporting.enabled" = _`,
 		`[opt,nodist,ok] SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
 		`[opt,nodist,ok] SET CLUSTER SETTING "server.time_until_store_dead" = _`,
 		`[opt,nodist,ok] SET application_name = $1`,
@@ -949,6 +990,7 @@ func TestReportUsage(t *testing.T) {
 			`SELECT crdb_internal.force_error(_, $1)`,
 			`SELECT crdb_internal.set_vmodule(_)`,
 			`SET CLUSTER SETTING "server.time_until_store_dead" = _`,
+			`SET CLUSTER SETTING "diagnostics.reporting.enabled" = _`,
 			`SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
 			`SET application_name = _`,
 			`WITH _ AS (SELECT _) SELECT * FROM _`,

@@ -18,11 +18,8 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net/http"
-	"net/url"
 	"reflect"
 	"runtime"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -38,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -51,27 +47,6 @@ import (
 	"github.com/shirou/gopsutil/load"
 	"github.com/shirou/gopsutil/mem"
 )
-
-const baseUpdatesURL = `https://register.cockroachdb.com/api/clusters/updates`
-const baseReportingURL = `https://register.cockroachdb.com/api/clusters/report`
-
-var updatesURL, reportingURL *url.URL
-
-func init() {
-	var err error
-	updatesURL, err = url.Parse(
-		envutil.EnvOrDefaultString("COCKROACH_UPDATE_CHECK_URL", baseUpdatesURL),
-	)
-	if err != nil {
-		panic(err)
-	}
-	reportingURL, err = url.Parse(
-		envutil.EnvOrDefaultString("COCKROACH_USAGE_REPORT_URL", baseReportingURL),
-	)
-	if err != nil {
-		panic(err)
-	}
-}
 
 const (
 	updateCheckFrequency = time.Hour * 24
@@ -115,7 +90,7 @@ func (s *Server) PeriodicallyCheckForUpdates(ctx context.Context) {
 			runningTime := now.Sub(s.startTime)
 
 			nextUpdateCheck = s.maybeCheckForUpdates(ctx, now, nextUpdateCheck, runningTime)
-			nextDiagnosticReport = s.maybeReportDiagnostics(ctx, now, nextDiagnosticReport, runningTime)
+			nextDiagnosticReport = s.maybeReportDiagnostics(ctx, now, nextDiagnosticReport)
 
 			sooner := nextUpdateCheck
 			if nextDiagnosticReport.Before(sooner) {
@@ -150,7 +125,7 @@ func (s *Server) maybeCheckForUpdates(
 
 	// checkForUpdates handles its own errors, but it returns a bool indicating if
 	// it succeeded, so we can schedule a re-attempt if it did not.
-	if succeeded := s.checkForUpdates(ctx, runningTime); !succeeded {
+	if succeeded := s.checkForUpdates(ctx); !succeeded {
 		return now.Add(updateCheckRetryFrequency)
 	}
 
@@ -163,23 +138,6 @@ func (s *Server) maybeCheckForUpdates(
 	}
 
 	return now.Add(updateCheckFrequency)
-}
-
-func addInfoToURL(ctx context.Context, url *url.URL, s *Server, n diagnosticspb.NodeInfo) {
-	internal := strings.Contains(sql.ClusterOrganization.Get(&s.st.SV), "Cockroach Labs")
-	q := url.Query()
-	b := n.Build
-	q.Set("version", b.Tag)
-	q.Set("platform", b.Platform)
-	q.Set("uuid", s.ClusterID().String())
-	q.Set("nodeid", strconv.Itoa(int(n.NodeID)))
-	q.Set("uptime", strconv.Itoa(int(n.Uptime)))
-	q.Set("insecure", strconv.FormatBool(s.cfg.Insecure))
-	q.Set("internal", strconv.FormatBool(internal))
-	q.Set("buildchannel", b.Channel)
-	q.Set("envchannel", b.EnvChannel)
-	q.Set("licensetype", n.LicenseType)
-	url.RawQuery = q.Encode()
 }
 
 func fillHardwareInfo(ctx context.Context, n *diagnosticspb.NodeInfo) {
@@ -217,20 +175,34 @@ func fillHardwareInfo(ctx context.Context, n *diagnosticspb.NodeInfo) {
 	n.Topology.Provider, n.Topology.Region = cloudinfo.GetInstanceRegion(ctx)
 }
 
+// CheckForUpdates is part of the TestServerInterface.
+func (s *Server) CheckForUpdates(ctx context.Context) {
+	s.checkForUpdates(ctx)
+}
+
 // checkForUpdates calls home to check for new versions for the current platform
 // and logs messages if it finds them, as well as if it encounters any errors.
 // The returned boolean indicates if the check succeeded (and thus does not need
 // to be re-attempted by the scheduler after a retry-interval).
-func (s *Server) checkForUpdates(ctx context.Context, runningTime time.Duration) bool {
-	if updatesURL == nil {
-		return true // don't bother with asking for retry -- we'll never succeed.
-	}
+func (s *Server) checkForUpdates(ctx context.Context) bool {
 	ctx, span := s.AnnotateCtxWithSpan(ctx, "checkForUpdates")
 	defer span.Finish()
 
 	nodeInfo := s.collectNodeInfo(ctx)
 
-	addInfoToURL(ctx, updatesURL, s, nodeInfo)
+	clusterInfo := diagnosticspb.ClusterInfo{
+		ClusterID:  s.ClusterID(),
+		IsInsecure: s.cfg.Insecure,
+		IsInternal: sql.ClusterIsInternal(&s.st.SV),
+	}
+	var knobs *diagnosticspb.TestingKnobs
+	if s.cfg.TestingKnobs.Server != nil {
+		knobs = &s.cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
+	}
+	updatesURL := diagnosticspb.BuildUpdatesURL(&clusterInfo, &nodeInfo, knobs)
+	if updatesURL == nil {
+		return true // don't bother with asking for retry -- we'll never succeed.
+	}
 
 	res, err := httputil.Get(ctx, updatesURL.String())
 	if err != nil {
@@ -270,9 +242,7 @@ func (s *Server) checkForUpdates(ctx context.Context, runningTime time.Duration)
 	return true
 }
 
-func (s *Server) maybeReportDiagnostics(
-	ctx context.Context, now, scheduled time.Time, running time.Duration,
-) time.Time {
+func (s *Server) maybeReportDiagnostics(ctx context.Context, now, scheduled time.Time) time.Time {
 	if scheduled.After(now) {
 		return scheduled
 	}
@@ -281,9 +251,8 @@ func (s *Server) maybeReportDiagnostics(
 	// Consider something like rand.Float() > resetFreq/reportFreq here to sample
 	// stat reset periods for reporting.
 	if log.DiagnosticsReportingEnabled.Get(&s.st.SV) {
-		s.reportDiagnostics(ctx)
+		s.ReportDiagnostics(ctx)
 	}
-	s.sqlServer.pgServer.SQLServer.ResetReportedStats(ctx)
 
 	return scheduled.Add(diagnosticReportFrequency.Get(&s.st.SV))
 }
@@ -444,22 +413,36 @@ func anonymizeZoneConfig(dst *zonepb.ZoneConfig, src zonepb.ZoneConfig, secret s
 	}
 }
 
-func (s *Server) reportDiagnostics(ctx context.Context) {
-	if reportingURL == nil {
-		return
-	}
+// ReportDiagnostics is part of the TestServerInterface.
+func (s *Server) ReportDiagnostics(ctx context.Context) {
 	ctx, span := s.AnnotateCtxWithSpan(ctx, "usageReport")
 	defer span.Finish()
 
 	report := s.getReportingInfo(ctx, telemetry.ResetCounts)
+
+	clusterInfo := diagnosticspb.ClusterInfo{
+		ClusterID:  s.ClusterID(),
+		IsInsecure: s.cfg.Insecure,
+		IsInternal: sql.ClusterIsInternal(&s.st.SV),
+	}
+	var knobs *diagnosticspb.TestingKnobs
+	if s.cfg.TestingKnobs.Server != nil {
+		knobs = &s.cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
+	}
+	reportingURL := diagnosticspb.BuildReportingURL(&clusterInfo, &report.Node, knobs)
+	if reportingURL == nil {
+		return
+	}
+
 	b, err := protoutil.Marshal(report)
 	if err != nil {
 		log.Warning(ctx, err)
 		return
 	}
-	addInfoToURL(ctx, reportingURL, s, report.Node)
 
-	res, err := httputil.Post(ctx, reportingURL.String(), "application/x-protobuf", bytes.NewReader(b))
+	res, err := httputil.Post(
+		ctx, reportingURL.String(), "application/x-protobuf", bytes.NewReader(b),
+	)
 	if err != nil {
 		if log.V(2) {
 			// This is probably going to be relatively common in production
@@ -473,7 +456,9 @@ func (s *Server) reportDiagnostics(ctx context.Context) {
 	if err != nil || res.StatusCode != http.StatusOK {
 		log.Warningf(ctx, "failed to report node usage metrics: status: %s, body: %s, "+
 			"error: %v", res.Status, b, err)
+		return
 	}
+	s.sqlServer.pgServer.SQLServer.ResetReportedStats(ctx)
 }
 
 func (s *Server) collectSchemaInfo(ctx context.Context) ([]sqlbase.TableDescriptor, error) {
