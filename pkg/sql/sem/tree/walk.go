@@ -1116,7 +1116,7 @@ func (stmt *SelectClause) copyNode() *SelectClause {
 		hCopy := *stmt.Having
 		stmtCopy.Having = &hCopy
 	}
-	stmt.Window = append(Window(nil), stmt.Window...)
+	stmtCopy.Window = append(Window(nil), stmt.Window...)
 	return &stmtCopy
 }
 
