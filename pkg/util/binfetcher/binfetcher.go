@@ -161,7 +161,6 @@ func Download(ctx context.Context, opts Options) (string, error) {
 			return "", err
 		}
 	} else if stat.Size() > 0 && opts.Version != "LATEST" {
-		log.Infof(ctx, "file already exists; skipping")
 		return destFileName, nil // cache hit
 	}
 
