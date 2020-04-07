@@ -70,6 +70,8 @@ type ClosureTxnConfig struct {
 // bread-and-butter kv operations such as Get/Put/Delete/etc. These can all be
 // run on a DB, a Txn, or a Batch.
 type ClientOperationConfig struct {
+	// Scan a random (nonempty) key range.
+	Scan int
 	// GetMissing is an operation that Gets a key that definitely doesn't exist.
 	GetMissing int
 	// GetExisting is an operation that Gets a key that likely exists.
@@ -130,8 +132,9 @@ type ChangeReplicasConfig struct {
 // yet pass (for example, if the new operation finds a kv bug or edge case).
 func newAllOperationsConfig() GeneratorConfig {
 	clientOpConfig := ClientOperationConfig{
-		GetMissing:  1,
-		GetExisting: 1,
+		Scan:        1,
+		GetMissing:  0, // HACK(tbg)
+		GetExisting: 0, // HACK(tbg)
 		PutMissing:  1,
 		PutExisting: 1,
 	}
@@ -351,6 +354,7 @@ func (g *generator) selectOp(rng *rand.Rand, contextuallyValid []opGen) Operatio
 func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig) {
 	addOpGen(allowed, randGetMissing, c.GetMissing)
 	addOpGen(allowed, randPutMissing, c.PutMissing)
+	addOpGen(allowed, randScan, c.Scan)
 	if len(g.keys) > 0 {
 		addOpGen(allowed, randGetExisting, c.GetExisting)
 		addOpGen(allowed, randPutExisting, c.PutExisting)
@@ -359,6 +363,17 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 
 func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
 	addOpGen(allowed, makeRandBatch(&c.Ops), c.Batch)
+}
+
+func randScan(g *generator, rng *rand.Rand) Operation {
+	from, to := randKey(rng), randKey(rng)
+	if to < from {
+		from, to = to, from
+	} else if from == to {
+		to += "\x00"
+	}
+	maxRows := rng.Intn(1 + len(g.keys)/2)
+	return scan(from, to, maxRows)
 }
 
 func randGetMissing(_ *generator, rng *rand.Rand) Operation {
@@ -546,6 +561,10 @@ func closureTxnCommitInBatch(commitInBatch []Operation, ops ...Operation) Operat
 		o.ClosureTxn.CommitInBatch = &BatchOperation{Ops: commitInBatch}
 	}
 	return o
+}
+
+func scan(from, to string, n int) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(from), EndKey: []byte(to), MaxRows: int64(n)}}
 }
 
 func get(key string) Operation {

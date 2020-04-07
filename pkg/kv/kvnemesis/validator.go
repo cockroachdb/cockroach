@@ -188,6 +188,9 @@ func makeValidator(kvs *Engine) (*validator, error) {
 
 func (v *validator) processOp(txnID *string, op Operation) {
 	switch t := op.GetValue().(type) {
+	case *ScanOperation:
+		v.failIfError(op, t.Result)
+		// TODO(tbg): fill this with life.
 	case *GetOperation:
 		v.failIfError(op, t.Result)
 		if txnID == nil {

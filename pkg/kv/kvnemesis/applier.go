@@ -69,7 +69,7 @@ func (a *Applier) getNextDBRoundRobin() (*kv.DB, int32) {
 
 func applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 	switch o := op.GetValue().(type) {
-	case *GetOperation, *PutOperation, *BatchOperation:
+	case *ScanOperation, *GetOperation, *PutOperation, *BatchOperation:
 		applyClientOp(ctx, db, op)
 	case *SplitOperation:
 		err := db.AdminSplit(ctx, o.Key, o.Key, hlc.MaxTimestamp)
@@ -121,6 +121,7 @@ func applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 }
 
 type clientI interface {
+	Scan(_ context.Context, _, _ interface{}, maxRows int64) ([]kv.KeyValue, error)
 	Get(context.Context, interface{}) (kv.KeyValue, error)
 	Put(context.Context, interface{}, interface{}) error
 	Run(context.Context, *kv.Batch) error
@@ -128,6 +129,18 @@ type clientI interface {
 
 func applyClientOp(ctx context.Context, db clientI, op *Operation) {
 	switch o := op.GetValue().(type) {
+	case *ScanOperation:
+		results, err := db.Scan(ctx, o.Key, o.EndKey, o.MaxRows)
+		if err != nil {
+			o.Result = resultError(ctx, err)
+		} else {
+			// TODO(tbg): need more than one value. For now just pretend there's
+			// at most one.
+			o.Result.Type = ResultType_Value
+			if len(results) != 0 {
+				o.Result.Value = results[0].Value.RawBytes
+			}
+		}
 	case *GetOperation:
 		result, err := db.Get(ctx, o.Key)
 		if err != nil {
@@ -154,6 +167,8 @@ func applyBatchOp(
 ) {
 	for i := range o.Ops {
 		switch subO := o.Ops[i].GetValue().(type) {
+		case *ScanOperation:
+			b.Scan(subO.Key, subO.EndKey) // can't use MaxRows here
 		case *GetOperation:
 			b.Get(subO.Key)
 		case *PutOperation:
@@ -166,6 +181,20 @@ func applyBatchOp(
 	o.Result = resultError(ctx, runErr)
 	for i := range o.Ops {
 		switch subO := o.Ops[i].GetValue().(type) {
+		case *ScanOperation:
+			if b.Results[i].Err != nil {
+				subO.Result = resultError(ctx, b.Results[i].Err)
+			} else {
+				// TODO(tbg): reflect fact that more than one result may have
+				// been returned. This just picks the first one.
+				subO.Result.Type = ResultType_Value
+				if len(b.Results[i].Rows) > 0 {
+					result := b.Results[i].Rows[0]
+					if result.Value != nil {
+						subO.Result.Value = result.Value.RawBytes
+					}
+				}
+			}
 		case *GetOperation:
 			if b.Results[i].Err != nil {
 				subO.Result = resultError(ctx, b.Results[i].Err)

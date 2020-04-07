@@ -38,6 +38,13 @@ message ClosureTxnOperation {
   roachpb.Transaction txn = 6;
 }
 
+message ScanOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  int64 max_rows = 3;
+  Result result = 4 [(gogoproto.nullable) = false];
+}
+
 message GetOperation {
   bytes key = 1;
   Result result = 2 [(gogoproto.nullable) = false];
@@ -77,6 +84,7 @@ message Operation {
   // queue, but it seems like it should be possible to bring it back somehow.
   ClosureTxnOperation closure_txn = 2;
 
+  ScanOperation scan = 12;
   GetOperation get = 7;
   PutOperation put = 8;
   SplitOperation split = 9;

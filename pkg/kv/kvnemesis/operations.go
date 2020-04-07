@@ -23,6 +23,8 @@ import (
 // Result returns the Result field of the given Operation.
 func (op Operation) Result() *Result {
 	switch o := op.GetValue().(type) {
+	case *ScanOperation:
+		return &o.Result
 	case *GetOperation:
 		return &o.Result
 	case *PutOperation:
@@ -90,6 +92,8 @@ func (op Operation) String() string {
 
 func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	switch o := op.GetValue().(type) {
+	case *ScanOperation:
+		o.format(w, fctx)
 	case *GetOperation:
 		o.format(w, fctx)
 	case *PutOperation:
@@ -151,6 +155,30 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 		}
 	default:
 		fmt.Fprintf(w, "%v", op.GetValue())
+	}
+}
+
+func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `%s.Scan(ctx, %s, %s, %d)`,
+		fctx.receiver,
+		roachpb.Key(op.Key),
+		roachpb.Key(op.EndKey),
+		op.MaxRows)
+	switch op.Result.Type {
+	case ResultType_Error:
+		err := errors.DecodeError(context.TODO(), *op.Result.Err)
+		fmt.Fprintf(w, ` // (nil, %s)`, err.Error())
+	case ResultType_Value:
+		v := `nil`
+		if len(op.Result.Value) > 0 {
+			value, err := roachpb.Value{RawBytes: op.Result.Value}.GetBytes()
+			if err != nil {
+				v = fmt.Sprintf(`<err:%s>`, err.Error())
+			} else {
+				v = `"` + string(value) + `"`
+			}
+		}
+		fmt.Fprintf(w, ` // (%s, nil)`, v)
 	}
 }
 

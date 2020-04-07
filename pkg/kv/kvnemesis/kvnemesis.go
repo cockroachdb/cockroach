@@ -31,7 +31,7 @@ func RunNemesis(
 	config GeneratorConfig,
 	dbs ...*kv.DB,
 ) ([]error, error) {
-	const concurrency, numSteps = 5, 30
+	const concurrency, numSteps = 5, 300
 
 	g, err := MakeGenerator(config, newGetReplicasFn(dbs...))
 	if err != nil {
