@@ -135,22 +135,22 @@ error (42P09): ORDER BY "x" is ambiguous
 build
 SELECT * FROM (SELECT x, x FROM onecolumn) AS a JOIN onecolumn AS b USING (x)
 ----
-error (42701): duplicate column name: "x"
+error (42701): common column name "x" appears more than once in left table
 
 build
 SELECT * FROM onecolumn AS a JOIN (SELECT x, x FROM onecolumn) AS b USING (x)
 ----
-error (42701): duplicate column name: "x"
+error (42701): common column name "x" appears more than once in right table
 
 build
 SELECT * FROM (SELECT x, x FROM onecolumn) AS a NATURAL JOIN onecolumn AS b
 ----
-error (42701): duplicate column name: "x"
+error (42701): common column name "x" appears more than once in left table
 
 build
 SELECT * FROM onecolumn AS a NATURAL JOIN (SELECT x, x FROM onecolumn) AS b
 ----
-error (42701): duplicate column name: "x"
+error (42701): common column name "x" appears more than once in right table
 
 build
 SELECT * FROM onecolumn AS a NATURAL LEFT OUTER JOIN onecolumn AS b
@@ -1010,7 +1010,7 @@ error (42703): column "y" specified in USING clause does not exist in left table
 build
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(x, x))
 ----
-error (42701): column "x" appears more than once in USING clause
+error (42701): column name "x" appears more than once in USING clause
 
 exec-ddl
 CREATE TABLE othertype (x TEXT)
@@ -2417,3 +2417,218 @@ project
       │    └── columns: y:3 b.rowid:4!null
       └── filters
            └── x:1 = y:3
+
+# Regression test for #46403.
+exec-ddl
+CREATE TABLE t0(c0 INT)
+----
+
+exec-ddl
+CREATE VIEW v0(c0, c1) AS SELECT DISTINCT c0, c0 FROM t0
+----
+
+build
+SELECT * FROM v0 NATURAL JOIN t0
+----
+project
+ ├── columns: c0:1!null c1:1!null
+ └── inner-join (hash)
+      ├── columns: c0:1!null c0:3!null rowid:4!null
+      ├── distinct-on
+      │    ├── columns: c0:1
+      │    ├── grouping columns: c0:1
+      │    └── project
+      │         ├── columns: c0:1
+      │         └── scan t0
+      │              └── columns: c0:1 rowid:2!null
+      ├── scan t0
+      │    └── columns: c0:3 rowid:4!null
+      └── filters
+           └── c0:1 = c0:3
+
+build
+SELECT * FROM t0 NATURAL JOIN v0
+----
+project
+ ├── columns: c0:1!null c1:3!null
+ └── inner-join (hash)
+      ├── columns: c0:1!null rowid:2!null c0:3!null
+      ├── scan t0
+      │    └── columns: c0:1 rowid:2!null
+      ├── distinct-on
+      │    ├── columns: c0:3
+      │    ├── grouping columns: c0:3
+      │    └── project
+      │         ├── columns: c0:3
+      │         └── scan t0
+      │              └── columns: c0:3 rowid:4!null
+      └── filters
+           └── c0:1 = c0:3
+
+build
+SELECT * FROM v0 NATURAL JOIN v0 AS v1
+----
+project
+ ├── columns: c0:1!null c1:1!null
+ └── inner-join (hash)
+      ├── columns: c0:1!null c0:3!null
+      ├── distinct-on
+      │    ├── columns: c0:1
+      │    ├── grouping columns: c0:1
+      │    └── project
+      │         ├── columns: c0:1
+      │         └── scan t0
+      │              └── columns: c0:1 rowid:2!null
+      ├── distinct-on
+      │    ├── columns: c0:3
+      │    ├── grouping columns: c0:3
+      │    └── project
+      │         ├── columns: c0:3
+      │         └── scan t0
+      │              └── columns: c0:3 rowid:4!null
+      └── filters
+           ├── c0:1 = c0:3
+           └── c0:1 = c0:3
+
+build
+SELECT * FROM v0 NATURAL LEFT JOIN v0 AS v1
+----
+project
+ ├── columns: c0:1 c1:1
+ └── left-join (hash)
+      ├── columns: c0:1 c0:3
+      ├── distinct-on
+      │    ├── columns: c0:1
+      │    ├── grouping columns: c0:1
+      │    └── project
+      │         ├── columns: c0:1
+      │         └── scan t0
+      │              └── columns: c0:1 rowid:2!null
+      ├── distinct-on
+      │    ├── columns: c0:3
+      │    ├── grouping columns: c0:3
+      │    └── project
+      │         ├── columns: c0:3
+      │         └── scan t0
+      │              └── columns: c0:3 rowid:4!null
+      └── filters
+           ├── c0:1 = c0:3
+           └── c0:1 = c0:3
+
+build
+SELECT * FROM v0 NATURAL RIGHT JOIN v0 AS v1
+----
+project
+ ├── columns: c0:3 c1:3
+ └── right-join (hash)
+      ├── columns: c0:1 c0:3
+      ├── distinct-on
+      │    ├── columns: c0:1
+      │    ├── grouping columns: c0:1
+      │    └── project
+      │         ├── columns: c0:1
+      │         └── scan t0
+      │              └── columns: c0:1 rowid:2!null
+      ├── distinct-on
+      │    ├── columns: c0:3
+      │    ├── grouping columns: c0:3
+      │    └── project
+      │         ├── columns: c0:3
+      │         └── scan t0
+      │              └── columns: c0:3 rowid:4!null
+      └── filters
+           ├── c0:1 = c0:3
+           └── c0:1 = c0:3
+
+build
+SELECT * FROM v0 NATURAL FULL OUTER JOIN v0 AS v1
+----
+project
+ ├── columns: c0:5 c1:6
+ └── project
+      ├── columns: c0:5 c1:6 t0.c0:1 t0.c0:3
+      ├── full-join (hash)
+      │    ├── columns: t0.c0:1 t0.c0:3
+      │    ├── distinct-on
+      │    │    ├── columns: t0.c0:1
+      │    │    ├── grouping columns: t0.c0:1
+      │    │    └── project
+      │    │         ├── columns: t0.c0:1
+      │    │         └── scan t0
+      │    │              └── columns: t0.c0:1 rowid:2!null
+      │    ├── distinct-on
+      │    │    ├── columns: t0.c0:3
+      │    │    ├── grouping columns: t0.c0:3
+      │    │    └── project
+      │    │         ├── columns: t0.c0:3
+      │    │         └── scan t0
+      │    │              └── columns: t0.c0:3 rowid:4!null
+      │    └── filters
+      │         ├── t0.c0:1 = t0.c0:3
+      │         └── t0.c0:1 = t0.c0:3
+      └── projections
+           ├── COALESCE(t0.c0:1, t0.c0:3) [as=c0:5]
+           └── COALESCE(t0.c0:1, t0.c0:3) [as=c1:6]
+
+build
+SELECT * FROM (SELECT DISTINCT c0, c0 FROM t0) AS v1(c0, c1) NATURAL JOIN t0
+----
+project
+ ├── columns: c0:1!null c1:1!null
+ └── inner-join (hash)
+      ├── columns: c0:1!null c0:3!null rowid:4!null
+      ├── distinct-on
+      │    ├── columns: c0:1
+      │    ├── grouping columns: c0:1
+      │    └── project
+      │         ├── columns: c0:1
+      │         └── scan t0
+      │              └── columns: c0:1 rowid:2!null
+      ├── scan t0
+      │    └── columns: c0:3 rowid:4!null
+      └── filters
+           └── c0:1 = c0:3
+
+build
+SELECT * FROM v0 JOIN v0 AS v1 USING (c0)
+----
+inner-join (hash)
+ ├── columns: c0:1!null c1:1!null c1:3!null
+ ├── distinct-on
+ │    ├── columns: c0:1
+ │    ├── grouping columns: c0:1
+ │    └── project
+ │         ├── columns: c0:1
+ │         └── scan t0
+ │              └── columns: c0:1 rowid:2!null
+ ├── distinct-on
+ │    ├── columns: c0:3
+ │    ├── grouping columns: c0:3
+ │    └── project
+ │         ├── columns: c0:3
+ │         └── scan t0
+ │              └── columns: c0:3 rowid:4!null
+ └── filters
+      └── c0:1 = c0:3
+
+build
+SELECT * FROM v0 JOIN v0 AS v1 USING (c1)
+----
+inner-join (hash)
+ ├── columns: c1:1!null c0:1!null c0:3!null
+ ├── distinct-on
+ │    ├── columns: c0:1
+ │    ├── grouping columns: c0:1
+ │    └── project
+ │         ├── columns: c0:1
+ │         └── scan t0
+ │              └── columns: c0:1 rowid:2!null
+ ├── distinct-on
+ │    ├── columns: c0:3
+ │    ├── grouping columns: c0:3
+ │    └── project
+ │         ├── columns: c0:3
+ │         └── scan t0
+ │              └── columns: c0:3 rowid:4!null
+ └── filters
+      └── c0:1 = c0:3
