@@ -94,6 +94,9 @@ func registerAutoUpgrade(r *testRegistry) {
 			return version, nil
 		}
 
+		// oldVersion was a patch-level version, such as v19.1.4, but cluster version upgrades only
+		// ever deal in <major>.<minor>, which we load from the current value of the cluster setting.
+		// Overwrite oldVersion to prevent confusion.
 		oldVersion, err = clusterVersion()
 		if err != nil {
 			t.Fatal(err)
@@ -118,7 +121,8 @@ func registerAutoUpgrade(r *testRegistry) {
 			return nil
 		}
 
-		// Now perform a rolling restart into the new binary, except the last node.
+		// Now perform a rolling restart into the new binary (i.e. the one this roachtest
+		// is testing, i.e. the branch we're running on), except the last node.
 		for i := 1; i < nodes; i++ {
 			t.WorkerStatus("upgrading ", i)
 			if err := c.StopCockroachGracefullyOnNode(ctx, i); err != nil {
@@ -158,9 +162,11 @@ func registerAutoUpgrade(r *testRegistry) {
 			t.Fatal("cluster setting version shouldn't be upgraded before all non-decommissioned nodes are alive")
 		}
 
-		// Now decommission and stop n3.
-		// The decommissioned nodes should not prevent auto upgrade.
-		if err := decommissionAndStop(nodes - 2); err != nil {
+		// Now decommission and stop n3, to test that the auto upgrade happens
+		// regardless (a decommissioned node is regarded as not being part of
+		// the cluster any more).
+		nodeDecommissioned := nodes - 2
+		if err := decommissionAndStop(nodeDecommissioned); err != nil {
 			t.Fatal(err)
 		}
 		if err := sleep(timeUntilStoreDead + buff); err != nil {
@@ -241,7 +247,7 @@ func registerAutoUpgrade(r *testRegistry) {
 		}
 
 		// Start n3 again to satisfy the dead node detector.
-		c.Start(ctx, t, c.Node(nodes-2))
+		c.Start(ctx, t, c.Node(nodeDecommissioned))
 	}
 
 	r.Add(testSpec{
