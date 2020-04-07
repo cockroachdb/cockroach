@@ -335,34 +335,101 @@ message ClusterResponse {
   bool enterprise_enabled = 3;
 }
 
-enum DrainMode {
-    // CLIENT instructs the server to refuse new SQL clients.
-    // TODO(tschottdorf): also terminate existing clients in a graceful manner.
-    CLIENT = 0;
-    // LEADERSHIP instructs the server to gracefully let all its Replicas'
-    // range leases expire.
-    LEASES = 1;
-}
-
 // DrainRequest requests the server to enter the specified draining mode. The
 // server first deactivates all the modes specified in 'off' and then activates
 // all those in 'on'.
 message DrainRequest {
-  // These are actually of type DrainMode, but grpc-gateway does not support
-  // proxying enum fields (yet:
-  // https://github.com/grpc-ecosystem/grpc-gateway/issues/5) and it fails in
-  // pretty dramatic ways (panics the server).
-  repeated int32 on = 1;
-  repeated int32 off = 2;
-  // When true, terminates the process after the given drain modes have been
-  // activated.
+  // deprecated_probe_indicator works as follows:
+  // - if nil, it indicates that the request is a probe only and
+  //   the server should not actually drain. This indicator
+  //   is supported for pre-20.1 RPC clients which do not know
+  //   about the skip_drain field below.
+  // - if non-nil, it must be exactly equal to the slice [0, 1].
+  //   Other values result in an error. When non-nil,
+  //   it implies do_drain = true regardless of the value of the
+  //   other field (pre-20.1 clients don't populate the other field).
+  //
+  // This field will be removed in 20.2 in favor of
+  // do_drain below.
+  repeated int32 deprecated_probe_indicator = 1;
+  reserved 2;
+  // When true, terminates the process after the server has started draining.
+  // Setting both shutdown and do_drain to false causes
+  // the request to only operate as a probe.
+  // Setting do_drain to false and shutdown to true causes
+  // the server to shut down immediately without
+  // first draining.
   bool shutdown = 3;
+  // When true, perform the drain phase. See the comment above on
+  // shutdown for an explanation of the interaction between the two.
+  // do_drain is also implied by a non-nil deprecated_probe_indicator.
+  bool do_drain = 4;
 }
 
-// DrainResponse is the response to a successful DrainRequest and lists the
-// modes which are activated after having processing the request.
+// DrainResponse is the response to a successful DrainRequest.
 message DrainResponse {
-  repeated int32 on = 1;
+  // deprecated_drain_status works as follows:
+  // - if the server is NOT currently draining,
+  //   it will be set to an empty or nil slice.
+  // - a non-nil slice indicates the server is currently
+  //   draining.
+  //
+  // This field exists for the benefit of 19.x clients
+  // and will be removed in 20.2.
+  repeated int32 deprecated_drain_status = 1;
+  // is_draining is set to true iff the server is currently draining.
+  // This is set to true in response to a request where skip_drain
+  // is false; but it can also be set to true in response
+  // to a probe request (!shutdown && skip_drain) if another
+  // drain request has been issued prior or asynchronously.
+  bool is_draining = 2;
+  // drain_remaining_indicator measures, at the time of starting to
+  // process the corresponding drain request, how many actions to
+  // fully drain the node were deemed to be necessary. Some, but not
+  // all, of these actions may already have been carried out by the
+  // time this indicator is received by the client. The client should
+  // issue requests until this indicator first reaches zero, which
+  // indicates that the node is fully drained.
+  //
+  // The API contract is the following:
+  //
+  // - upon a first Drain call with do_drain set, the remaining
+  //   indicator will have some value >=0. If >0, it indicates that
+  //   drain is pushing state away from the node. (What this state
+  //   precisely means is left unspecified for this field. See below
+  //   for details.)
+  //
+  // - upon a subsequent Drain call with do_drain set, the remaining
+  //   indicator should have reduced in value. The drain process does best
+  //   effort at shedding state away from the node; hopefully, all the
+  //   state is shed away upon the first call and the progress
+  //   indicator can be zero as early as the second call. However,
+  //   if there was a lot of state to shed, it is possible for
+  //   timeout to be encountered upon the first call. In that case, the
+  //   second call will do some more work and return a non-zero value
+  //   as well.
+  //
+  // - eventually, in an iterated sequence of DrainRequests with
+  //   do_drain set, the remaining indicator should reduce to zero. At
+  //   that point the client can conclude that no state is left to
+  //   shed, and it should be safe to shut down the node with a
+  //   DrainRequest with shutdown = true.
+  //
+  // Note that this field is left unpopulated (and thus remains at
+  // zero) for pre-20.1 nodes. A client can recognize this by
+  // observing is_draining to be false after a request with do_drain =
+  // true: the is_draining field is also left unpopulated by pre-20.1
+  // nodes.
+  uint64 drain_remaining_indicator = 3;
+
+  // drain_remaining_description is an informal (= not
+  // machine-parsable) string that explains the progress of the drain
+  // process to human eyes. This is intended for use mainly for
+  // troubleshooting.
+  //
+  // The field is only populated if do_drain is true in the
+  // request.
+  string drain_remaining_description = 4;
 }
 
 // DecommissionStatusRequest requests the decommissioning status for the

@@ -105,23 +105,6 @@ var (
 	// Allocation pool for gzipResponseWriters.
 	gzipResponseWriterPool sync.Pool
 
-	// GracefulDrainModes is the standard succession of drain modes entered
-	// for a graceful shutdown.
-	GracefulDrainModes = []serverpb.DrainMode{serverpb.DrainMode_CLIENT, serverpb.DrainMode_LEASES}
-
-	queryWait = settings.RegisterPublicDurationSetting(
-		"server.shutdown.query_wait",
-		"the server will wait for at least this amount of time for active queries to finish",
-		10*time.Second,
-	)
-
-	drainWait = settings.RegisterPublicDurationSetting(
-		"server.shutdown.drain_wait",
-		"the amount of time a server waits in an unready state before proceeding with the rest "+
-			"of the shutdown process",
-		0*time.Second,
-	)
-
 	forwardClockJumpCheckEnabled = settings.RegisterPublicBoolSetting(
 		"server.clock.forward_jump_check_enabled",
 		"if enabled, forward clock jumps > max_offset/2 will cause a panic",
@@ -2124,85 +2107,6 @@ func (s *Server) startServeSQL(
 		})
 	}
 	return nil
-}
-
-func (s *Server) doDrain(
-	ctx context.Context, modes []serverpb.DrainMode, setTo bool,
-) ([]serverpb.DrainMode, error) {
-	for _, mode := range modes {
-		switch mode {
-		case serverpb.DrainMode_CLIENT:
-			if setTo {
-				s.grpc.setMode(modeDraining)
-				// Wait for drainUnreadyWait. This will fail load balancer checks and
-				// delay draining so that client traffic can move off this node.
-				time.Sleep(drainWait.Get(&s.st.SV))
-			}
-			if err := func() error {
-				if !setTo {
-					// Execute this last.
-					defer func() { s.grpc.setMode(modeOperational) }()
-				}
-				// Since enabling the lease manager's draining mode will prevent
-				// the acquisition of new leases, the switch must be made after
-				// the pgServer has given sessions a chance to finish ongoing
-				// work.
-				defer s.leaseMgr.SetDraining(setTo)
-
-				if !setTo {
-					s.distSQLServer.Undrain(ctx)
-					s.pgServer.Undrain()
-					return nil
-				}
-
-				drainMaxWait := queryWait.Get(&s.st.SV)
-				if err := s.pgServer.Drain(drainMaxWait); err != nil {
-					return err
-				}
-				s.distSQLServer.Drain(ctx, drainMaxWait)
-				return nil
-			}(); err != nil {
-				return nil, err
-			}
-		case serverpb.DrainMode_LEASES:
-			s.nodeLiveness.SetDraining(ctx, setTo)
-			if err := s.node.SetDraining(setTo); err != nil {
-				return nil, err
-			}
-		default:
-			return nil, errors.Errorf("unknown drain mode: %s", mode)
-		}
-	}
-	var nowOn []serverpb.DrainMode
-	if s.pgServer.IsDraining() {
-		nowOn = append(nowOn, serverpb.DrainMode_CLIENT)
-	}
-	if s.node.IsDraining() {
-		nowOn = append(nowOn, serverpb.DrainMode_LEASES)
-	}
-	return nowOn, nil
-}
-
-// Drain idempotently activates the given DrainModes on the Server in the order
-// in which they are supplied.
-// For example, Drain is typically called with [CLIENT,LEADERSHIP] before
-// terminating the process for graceful shutdown.
-// On success, returns all active drain modes after carrying out the request.
-// On failure, the system may be in a partially drained state and should be
-// recovered by calling Undrain() with the same (or a larger) slice of modes.
-func (s *Server) Drain(ctx context.Context, on []serverpb.DrainMode) ([]serverpb.DrainMode, error) {
-	return s.doDrain(ctx, on, true /* setTo */)
-}
-
-// Undrain idempotently deactivates the given DrainModes on the Server in the
-// order in which they are supplied.
-// On success, returns any remaining active drain modes.
-func (s *Server) Undrain(ctx context.Context, off []serverpb.DrainMode) []serverpb.DrainMode {
-	nowActive, err := s.doDrain(ctx, off, false)
-	if err != nil {
-		panic(fmt.Sprintf("error returned to Undrain: %s", err))
-	}
-	return nowActive
 }
 
 // Decommission idempotently sets the decommissioning flag for specified nodes.

@@ -499,9 +499,13 @@ func (n *Node) IsDraining() bool {
 }
 
 // SetDraining sets the draining mode on all of the node's underlying stores.
-func (n *Node) SetDraining(drain bool) error {
+// The reporter callback, if non-nil, is called on a best effort basis
+// to report work that needed to be done and which may or may not have
+// been done by the time this call returns. See the explanation in
+// pkg/server/drain.go for details.
+func (n *Node) SetDraining(drain bool, reporter func(int, string)) error {
 	return n.stores.VisitStores(func(s *kvserver.Store) error {
-		s.SetDraining(drain)
+		s.SetDraining(drain, reporter)
 		return nil
 	})
 }

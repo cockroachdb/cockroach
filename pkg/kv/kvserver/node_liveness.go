@@ -226,16 +226,26 @@ func (nl *NodeLiveness) sem(nodeID roachpb.NodeID) chan struct{} {
 
 // SetDraining attempts to update this node's liveness record to put itself
 // into the draining state.
-func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool) {
+//
+// The reporter callback, if non-nil, is called on a best effort basis
+// to report work that needed to be done and which may or may not have
+// been done by the time this call returns. See the explanation in
+// pkg/server/drain.go for details.
+func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool, reporter func(int, string)) {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		liveness, err := nl.Self()
 		if err != nil && err != ErrNoLivenessRecord {
 			log.Errorf(ctx, "unexpected error getting liveness: %+v", err)
 		}
-		if err := nl.setDrainingInternal(ctx, liveness, drain); err == nil {
-			return
+		err = nl.setDrainingInternal(ctx, liveness, drain, reporter)
+		if err != nil {
+			if log.V(1) {
+				log.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
+			}
+			continue
 		}
+		return
 	}
 }
 
@@ -316,7 +326,7 @@ func (nl *NodeLiveness) SetDecommissioning(
 }
 
 func (nl *NodeLiveness) setDrainingInternal(
-	ctx context.Context, liveness storagepb.Liveness, drain bool,
+	ctx context.Context, liveness storagepb.Liveness, drain bool, reporter func(int, string),
 ) error {
 	nodeID := nl.gossip.NodeID.Get()
 	sem := nl.sem(nodeID)
@@ -339,6 +349,10 @@ func (nl *NodeLiveness) setDrainingInternal(
 	if liveness != (storagepb.Liveness{}) {
 		update.Liveness = liveness
 	}
+	if reporter != nil && drain && !update.Draining {
+		// Report progress to the Drain RPC.
+		reporter(1, "liveness record")
+	}
 	update.Draining = drain
 	update.ignoreCache = true
 
@@ -349,6 +363,9 @@ func (nl *NodeLiveness) setDrainingInternal(
 		}
 		return errors.New("failed to update liveness record")
 	}); err != nil {
+		if log.V(1) {
+			log.Infof(ctx, "updating liveness record: %v", err)
+		}
 		if err == errNodeDrainingSet {
 			return nil
 		}
@@ -819,7 +836,11 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	// First check the existing liveness map to avoid known conditional
 	// put failures.
 	if !update.ignoreCache {
-		if l, err := nl.GetLiveness(update.NodeID); err == nil && l != oldLiveness {
+		l, err := nl.GetLiveness(update.NodeID)
+		if err != nil && err != ErrNoLivenessRecord {
+			return err
+		}
+		if err == nil && l != oldLiveness {
 			return handleCondFailed(l)
 		}
 	}
