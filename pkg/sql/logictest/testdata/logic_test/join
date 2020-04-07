@@ -443,7 +443,7 @@ SELECT a.x AS s, b.x, c.x, a.y, b.y, c.y FROM (twocolumn AS a JOIN twocolumn AS 
 query error pgcode 42703 column "y" specified in USING clause does not exist
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(y))
 
-query error pgcode 42701 column "x" appears more than once in USING clause
+query error pgcode 42701 column name "x" appears more than once in USING clause
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(x, x))
 
 statement ok
