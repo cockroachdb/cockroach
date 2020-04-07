@@ -247,7 +247,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 		evalCtx.ExecCfg.LeaseHolderCache,
 		txn,
 		func(ts hlc.Timestamp) {
-			_ = evalCtx.ExecCfg.Clock.Update(ts)
+			evalCtx.ExecCfg.Clock.Update(ts)
 		},
 		evalCtx.Tracing,
 	)

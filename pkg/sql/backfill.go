@@ -860,7 +860,7 @@ func (sc *SchemaChanger) distBackfill(
 				sc.leaseHolderCache,
 				nil, /* txn - the flow does not run wholly in a txn */
 				func(ts hlc.Timestamp) {
-					_ = sc.clock.Update(ts)
+					sc.clock.Update(ts)
 				},
 				evalCtx.Tracing,
 			)
