@@ -43,9 +43,7 @@ func registerAutoUpgrade(r *testRegistry) {
 
 		c.Put(ctx, b, "./cockroach", c.Range(1, nodes))
 
-		// NB: remove startArgsDontEncrypt across this file once we're not running
-		// roachtest against v2.1 any more (which would start a v2.0 cluster here).
-		c.Start(ctx, t, c.Range(1, nodes), startArgsDontEncrypt)
+		c.Start(ctx, t, c.Range(1, nodes))
 
 		const stageDuration = 30 * time.Second
 		const timeUntilStoreDead = 90 * time.Second
@@ -254,7 +252,7 @@ func registerAutoUpgrade(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("upgrade"),
 		Owner:      OwnerKV,
-		MinVersion: "v2.1.0",
+		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			pred, err := PredecessorVersion(r.buildVersion)
