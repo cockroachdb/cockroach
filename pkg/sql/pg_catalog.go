@@ -406,9 +406,9 @@ CREATE TABLE pg_catalog.pg_attrdef (
 						defSrc = tree.NewDString(ctx.String())
 					}
 					return addRow(
-						h.ColumnOid(table.ID, column.ID),                // oid
-						defaultOid(table.ID),                            // adrelid
-						tree.NewDInt(tree.DInt(column.LogicalColumnID)), // adnum
+						h.ColumnOid(table.ID, column.ID),                     // oid
+						defaultOid(table.ID),                                 // adrelid
+						tree.NewDInt(tree.DInt(column.GetLogicalColumnID())), // adnum
 						defSrc, // adbin
 						defSrc, // adsrc
 					)
@@ -495,7 +495,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 			// Columns for table.
 			if err := forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
 				tableID := defaultOid(table.ID)
-				return addColumn(column, tableID, column.LogicalColumnID)
+				return addColumn(column, tableID, column.GetLogicalColumnID())
 			}); err != nil {
 				return err
 			}
@@ -505,7 +505,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 				return forEachColumnInIndex(table, index,
 					func(column *sqlbase.ColumnDescriptor) error {
 						idxID := h.IndexOid(table.ID, index.ID)
-						return addColumn(column, idxID, column.LogicalColumnID)
+						return addColumn(column, idxID, column.GetLogicalColumnID())
 					},
 				)
 			})

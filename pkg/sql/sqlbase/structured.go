@@ -4096,3 +4096,13 @@ func GenerateUniqueConstraintName(prefix string, nameExistsFunc func(name string
 	}
 	return name
 }
+
+// GetLogicalColumnID returns the LogicalColumnID if it has one, otherwise
+// returns the ID. The regular ColumnID is used for backwards compatibility.
+func (desc *ColumnDescriptor) GetLogicalColumnID() ColumnID {
+	if desc.LogicalColumnID != 0 {
+		return desc.LogicalColumnID
+	}
+
+	return desc.ID
+}
