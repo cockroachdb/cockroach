@@ -71,6 +71,12 @@ var ClusterOrganization = settings.RegisterPublicStringSetting(
 	"",
 )
 
+// ClusterIsInternal returns true if the cluster organization contains
+// "Cockroach Labs", indicating an internal cluster.
+func ClusterIsInternal(sv *settings.Values) bool {
+	return strings.Contains(ClusterOrganization.Get(sv), "Cockroach Labs")
+}
+
 // ClusterSecret is a cluster specific secret. This setting is
 // non-reportable.
 var ClusterSecret = func() *settings.StringSetting {
