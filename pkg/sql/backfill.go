@@ -1358,7 +1358,8 @@ func runSchemaChangesInTxn(
 					fk := t.Constraint.ForeignKey
 					var referencedTableDesc *sqlbase.MutableTableDescriptor
 					// We don't want to lookup/edit a second copy of the same table.
-					if tableDesc.ID == fk.ReferencedTableID {
+					selfReference := tableDesc.ID == fk.ReferencedTableID
+					if selfReference {
 						referencedTableDesc = tableDesc
 					} else {
 						lookup, err := planner.Tables().getMutableTableVersionByID(ctx, fk.ReferencedTableID, planner.Txn())
@@ -1368,13 +1369,18 @@ func runSchemaChangesInTxn(
 						referencedTableDesc = lookup
 					}
 					referencedTableDesc.InboundFKs = append(referencedTableDesc.InboundFKs, fk)
-					// TODO (lucy): Have more consistent/informative names for dependent jobs.
-					if err := planner.writeSchemaChange(
-						ctx, referencedTableDesc, sqlbase.InvalidMutationID, "updating referenced table",
-					); err != nil {
-						return err
-					}
 					tableDesc.OutboundFKs = append(tableDesc.OutboundFKs, fk)
+
+					// Write the other table descriptor here if it's not the current table
+					// we're already modifying.
+					if !selfReference {
+						// TODO (lucy): Have more consistent/informative names for dependent jobs.
+						if err := planner.writeSchemaChange(
+							ctx, referencedTableDesc, sqlbase.InvalidMutationID, "updating referenced table",
+						); err != nil {
+							return err
+						}
+					}
 				default:
 					return errors.AssertionFailedf(
 						"unsupported constraint type: %d", errors.Safe(t.Constraint.ConstraintType))
