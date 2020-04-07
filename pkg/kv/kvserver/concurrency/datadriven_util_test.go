@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -56,6 +57,20 @@ func scanTimestampWithName(t *testing.T, d *datadriven.TestData, name string) hl
 	}
 	ts.Logical = int32(tsL)
 	return ts
+}
+
+func scanLockDurability(t *testing.T, d *datadriven.TestData) lock.Durability {
+	var durS string
+	d.ScanArgs(t, "dur", &durS)
+	switch durS {
+	case "r":
+		return lock.Replicated
+	case "u":
+		return lock.Unreplicated
+	default:
+		d.Fatalf(t, "unknown lock durability: %s", durS)
+		return 0
+	}
 }
 
 func scanSingleRequest(
