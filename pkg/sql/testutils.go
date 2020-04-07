@@ -111,7 +111,7 @@ func (dsp *DistSQLPlanner) Exec(
 		execCfg.LeaseHolderCache,
 		p.txn,
 		func(ts hlc.Timestamp) {
-			_ = execCfg.Clock.Update(ts)
+			execCfg.Clock.Update(ts)
 		},
 		p.ExtendedEvalContext().Tracing,
 	)

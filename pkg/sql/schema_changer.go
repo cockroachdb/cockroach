@@ -253,7 +253,7 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 			sc.execCfg.LeaseHolderCache,
 			txn,
 			func(ts hlc.Timestamp) {
-				_ = sc.clock.Update(ts)
+				sc.clock.Update(ts)
 			},
 			// Make a session tracing object on-the-fly. This is OK
 			// because it sets "enabled: false" and thus none of the
