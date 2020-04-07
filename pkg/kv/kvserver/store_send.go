@@ -98,16 +98,16 @@ func (s *Store) Send(
 	// this point in (absolute) time.
 	var now hlc.Timestamp
 	if s.cfg.TestingKnobs.DisableMaxOffsetCheck {
-		now = s.cfg.Clock.Update(ba.Timestamp)
+		s.cfg.Clock.Update(ba.Timestamp)
 	} else {
 		// If the command appears to come from a node with a bad clock,
 		// reject it now before we reach that point.
 		var err error
-		if now, err = s.cfg.Clock.UpdateAndCheckMaxOffset(ba.Timestamp); err != nil {
+		if err = s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, ba.Timestamp); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
-
+	now = s.cfg.Clock.Now()
 	defer func() {
 		if r := recover(); r != nil {
 			// On panic, don't run the defer. It's probably just going to panic

@@ -56,6 +56,10 @@ type Clock struct {
 	// TODO(tamird): make this dynamic in the distant future.
 	maxOffset time.Duration
 
+	// lastPhysicalTime reports the last measured physical time. This
+	// is used to detect clock jumps. It is accessed using atomic primitives.
+	lastPhysicalTime int64
+
 	mu struct {
 		syncutil.Mutex
 		timestamp Timestamp
@@ -63,9 +67,6 @@ type Clock struct {
 		// monotonicityErrorsCount indicate how often this clock was
 		// observed to jump backwards.
 		monotonicityErrorsCount int32
-		// lastPhysicalTime reports the last measured physical time. This
-		// is used to detect clock jumps.
-		lastPhysicalTime int64
 
 		// forwardClockJumpCheckEnabled specifies whether to panic on forward
 		// clock jumps
@@ -162,6 +163,7 @@ func (c *Clock) toleratedForwardClockJump() time.Duration {
 // tickCallback is called whenever maxForwardClockJumpCh or a ticker tick is
 // processed
 func (c *Clock) StartMonitoringForwardClockJumps(
+	ctx context.Context,
 	forwardClockJumpCheckEnabledCh <-chan bool,
 	tickerFn func(d time.Duration) *time.Ticker,
 	tickCallback func(),
@@ -192,11 +194,11 @@ func (c *Clock) StartMonitoringForwardClockJumps(
 					// jumps. Otherwise the gap between the previous call to
 					// Now() and the time of the first tick would look like a
 					// forward jump.
-					c.getPhysicalClockAndCheck()
+					c.getPhysicalClockAndCheck(ctx)
 				}
 				c.setForwardJumpCheckEnabled(forwardClockJumpEnabled)
 			case <-ticker.C:
-				c.getPhysicalClockAndCheck()
+				c.getPhysicalClockAndCheck(ctx)
 			}
 
 			if tickCallback != nil {
@@ -217,29 +219,41 @@ func (c *Clock) MaxOffset() time.Duration {
 
 // getPhysicalClockAndCheck locks mu in order to access the physical clock, check for
 // time jumps and update the internal jump checking state.
-func (c *Clock) getPhysicalClockAndCheck() int64 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.getPhysicalClockAndCheckLocked()
+func (c *Clock) getPhysicalClockAndCheck(ctx context.Context) int64 {
+	oldTime := atomic.LoadInt64(&c.lastPhysicalTime)
+	newTime := c.physicalClock()
+	lastPhysTime := oldTime
+	for {
+		atomic.CompareAndSwapInt64(&c.lastPhysicalTime, lastPhysTime, newTime)
+		lastPhysTime = atomic.LoadInt64(&c.lastPhysicalTime)
+		if lastPhysTime >= newTime {
+			// Either we did a successful update or someone else updated to a
+			// later time than ours. Either way - we are done.
+			break
+		}
+		// Someone else did an update to an earlier time than what we got in newTime.
+		// So try one more time to update.
+	}
+	c.checkPhysicalClock(ctx, oldTime, newTime)
+	return newTime
 }
 
-// getPhysicalClockAndCheckLocked returns the current physical clock and checks for
-// time jumps.
-func (c *Clock) getPhysicalClockAndCheckLocked() int64 {
-	newTime := c.physicalClock()
-
-	if c.mu.lastPhysicalTime != 0 {
-		interval := c.mu.lastPhysicalTime - newTime
+// checkPhysicalClock checks for time jumps.
+// oldTime is the lastPhysicalTime before the call to get a new time.
+// newTime is the result of the call to get a new time.
+func (c *Clock) checkPhysicalClock(ctx context.Context, oldTime, newTime int64) {
+	if oldTime != 0 {
+		interval := oldTime - newTime
 		if interval > int64(c.maxOffset/10) {
-			c.mu.monotonicityErrorsCount++
-			log.Warningf(context.TODO(), "backward time jump detected (%f seconds)", float64(-interval)/1e9)
+			atomic.AddInt32(&c.mu.monotonicityErrorsCount, 1)
+			log.Warningf(ctx, "backward time jump detected (%f seconds)", float64(-interval)/1e9)
 		}
 
 		if c.mu.forwardClockJumpCheckEnabled {
 			toleratedForwardClockJump := c.toleratedForwardClockJump()
 			if int64(toleratedForwardClockJump) <= -interval {
 				log.Fatalf(
-					context.TODO(),
+					ctx,
 					"detected forward time jump of %f seconds is not allowed with tolerance of %f seconds",
 					float64(-interval)/1e9,
 					float64(toleratedForwardClockJump)/1e9,
@@ -247,9 +261,6 @@ func (c *Clock) getPhysicalClockAndCheckLocked() int64 {
 			}
 		}
 	}
-
-	c.mu.lastPhysicalTime = newTime
-	return newTime
 }
 
 // Now returns a timestamp associated with an event from
@@ -258,9 +269,10 @@ func (c *Clock) getPhysicalClockAndCheckLocked() int64 {
 // of Update, which is passed a timestamp received from
 // another member of the distributed network.
 func (c *Clock) Now() Timestamp {
+	physicalClock := c.getPhysicalClockAndCheck(context.TODO())
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if physicalClock := c.getPhysicalClockAndCheckLocked(); c.mu.timestamp.WallTime >= physicalClock {
+	if c.mu.timestamp.WallTime >= physicalClock {
 		// The wall time is ahead, so the logical clock ticks.
 		c.mu.timestamp.Logical++
 	} else {
@@ -303,82 +315,53 @@ func (c *Clock) PhysicalTime() time.Time {
 
 // Update takes a hybrid timestamp, usually originating from an event
 // received from another member of a distributed system. The clock is
-// updated and the clock's updated hybrid timestamp is returned. If
-// the remote timestamp exceeds the wall clock time by more than the
-// maximum clock offset, the update is still processed, but a warning
-// is logged. To receive an error response instead of forcing the
+// updated to reflect the later of the two. The update does not check
+// the maximum clock offset. To receive an error response instead of forcing the
 // update in case the remote timestamp is too far into the future, use
 // UpdateAndCheckMaxOffset() instead.
-func (c *Clock) Update(rt Timestamp) Timestamp {
+func (c *Clock) Update(rt Timestamp) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	updateT, err := c.updateLocked(rt, true)
-	if err != nil {
-		log.Warningf(context.TODO(), "%s - updating anyway", err)
+
+	// There is nothing to do if the remote wall time is behind ours. We just keep ours.
+	if rt.WallTime > c.mu.timestamp.WallTime {
+		// The remote clock is ahead of ours, and we update
+		// our own logical clock with theirs.
+		c.mu.timestamp.WallTime = rt.WallTime
+		c.mu.timestamp.Logical = rt.Logical
+	} else if rt.WallTime == c.mu.timestamp.WallTime {
+		// Both wall times are equal, and the larger logical
+		// clock is used for the update.
+		if rt.Logical > c.mu.timestamp.Logical {
+			c.mu.timestamp.Logical = rt.Logical
+		}
 	}
-	return updateT
+
+	c.enforceWallTimeWithinBoundLocked()
 }
 
-func (c *Clock) updateLocked(rt Timestamp, updateIfMaxOffsetExceeded bool) (Timestamp, error) {
+// UpdateAndCheckMaxOffset is like Update, but also takes the wall time into account and
+// returns an error in the event that the supplied remote timestamp exceeds
+// the wall clock time by more than the maximum clock offset.
+func (c *Clock) UpdateAndCheckMaxOffset(ctx context.Context, rt Timestamp) error {
 	var err error
-	physicalClock := c.getPhysicalClockAndCheckLocked()
+	physicalClock := c.getPhysicalClockAndCheck(ctx)
 
 	if physicalClock > c.mu.timestamp.WallTime && physicalClock > rt.WallTime {
 		// Our physical clock is ahead of both wall times. It is used
 		// as the new wall time and the logical clock is reset.
 		c.mu.timestamp.WallTime = physicalClock
 		c.mu.timestamp.Logical = 0
-		return c.mu.timestamp, nil
+		return nil
 	}
 
 	offset := time.Duration(rt.WallTime - physicalClock)
 	if c.maxOffset > 0 && offset > c.maxOffset {
 		err = fmt.Errorf("remote wall time is too far ahead (%s) to be trustworthy", offset)
-		if !updateIfMaxOffsetExceeded {
-			return Timestamp{}, err
-		}
+		return err
 	}
-
-	// In the remaining cases, our physical clock plays no role
-	// as it is behind the local or remote wall times. Instead,
-	// the logical clock comes into play.
-	if rt.WallTime > c.mu.timestamp.WallTime {
-		// The remote clock is ahead of ours, and we update
-		// our own logical clock with theirs.
-		c.mu.timestamp.WallTime = rt.WallTime
-		c.mu.timestamp.Logical = rt.Logical + 1
-	} else if c.mu.timestamp.WallTime > rt.WallTime {
-		// Our wall time is larger, so it remains but we tick
-		// the logical clock.
-		c.mu.timestamp.Logical++
-	} else {
-		// Both wall times are equal, and the larger logical
-		// clock is used for the update.
-		if rt.Logical > c.mu.timestamp.Logical {
-			c.mu.timestamp.Logical = rt.Logical
-		}
-		c.mu.timestamp.Logical++
-	}
-
-	c.enforceWallTimeWithinBoundLocked()
-	return c.mu.timestamp, err
-}
-
-// UpdateAndCheckMaxOffset is similar to Update, except it returns an
-// error instead of logging a warning and updating the clock's
-// timestamp, in the event that the supplied remote timestamp exceeds
-// the wall clock time by more than the maximum clock offset.
-func (c *Clock) UpdateAndCheckMaxOffset(rt Timestamp) (Timestamp, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.updateLocked(rt, false)
-}
-
-// lastPhysicalTime returns the last physical time
-func (c *Clock) lastPhysicalTime() int64 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.mu.lastPhysicalTime
+	c.Update(rt)
+	return nil
 }
 
 // setForwardJumpCheckEnabled atomically sets forwardClockJumpCheckEnabled
