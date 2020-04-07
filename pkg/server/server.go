@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -173,14 +172,10 @@ type Server struct {
 	admin          *adminServer
 	status         *statusServer
 	authentication *authenticationServer
-	// initServer receives requests to bootstrap a new cluster (via the
-	// Bootstrap RPC). This server will never accept requests if any of the
-	// stores is already initialized.
-	initServer    *initServer
-	tsDB          *ts.DB
-	tsServer      *ts.Server
-	raftTransport *kvserver.RaftTransport
-	stopper       *stop.Stopper
+	tsDB           *ts.DB
+	tsServer       *ts.Server
+	raftTransport  *kvserver.RaftTransport
+	stopper        *stop.Stopper
 
 	debug *debug.Server
 
@@ -309,22 +304,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		&cfg.DefaultZoneConfig,
 	)
 	nodeDialer := nodedialer.New(rpcContext, gossip.AddressResolver(g))
-
-	bootstrapVersion := cfg.Settings.Version.BinaryVersion()
-	if knobs := cfg.TestingKnobs.Server; knobs != nil {
-		if ov := knobs.(*TestingKnobs).BootstrapVersionOverride; ov != (roachpb.Version{}) {
-			bootstrapVersion = ov
-		}
-	}
-
-	initServer := newInitServer(
-		cfg.Settings.Version.BinaryVersion(),
-		cfg.Settings.Version.BinaryMinSupportedVersion(),
-		clusterversion.ClusterVersion{Version: bootstrapVersion},
-		&cfg.DefaultZoneConfig,
-		&cfg.DefaultSystemZoneConfig,
-	)
-	serverpb.RegisterInitServer(grpcServer.Server, initServer)
 
 	runtimeSampler := status.NewRuntimeStatSampler(context.TODO(), clock)
 	registry.AddMetricStruct(runtimeSampler)
@@ -618,7 +597,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		admin:                 adminServer,
 		status:                statusServer,
 		authentication:        authenticationServer,
-		initServer:            initServer,
 		tsDB:                  tsDB,
 		tsServer:              &tsServer,
 		raftTransport:         raftTransport,
@@ -1482,6 +1460,39 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
+	s.engines, err = s.cfg.CreateEngines(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to create engines")
+	}
+	s.stopper.AddCloser(&s.engines)
+
+	bootstrapVersion := s.cfg.Settings.Version.BinaryVersion()
+	if knobs := s.cfg.TestingKnobs.Server; knobs != nil {
+		if ov := knobs.(*TestingKnobs).BootstrapVersionOverride; ov != (roachpb.Version{}) {
+			bootstrapVersion = ov
+		}
+	}
+
+	initServer, err := setupInitServer(
+		ctx,
+		s.cfg.Settings.Version.BinaryVersion(),
+		s.cfg.Settings.Version.BinaryMinSupportedVersion(),
+		bootstrapVersion,
+		&s.cfg.DefaultZoneConfig,
+		&s.cfg.DefaultSystemZoneConfig,
+		s.engines,
+	)
+	if err != nil {
+		return err
+	}
+
+	// We cannot register a server after grpc.Serve has been called (it will
+	// panic otherwise). This will happen when startRPCServer is called or when
+	// we serve the UI, both of which happen relatively early.
+	serverpb.RegisterInitServer(s.grpc.Server, initServer)
+
+	s.node.startAssertEngineHealth(ctx, s.engines)
+
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
@@ -1580,14 +1591,6 @@ func (s *Server) Start(ctx context.Context) error {
 	// monitoring tools which operate without authentication.
 	s.mux.Handle("/health", gwMux)
 
-	s.engines, err = s.cfg.CreateEngines(ctx)
-	if err != nil {
-		return errors.Wrap(err, "failed to create engines")
-	}
-	s.stopper.AddCloser(&s.engines)
-
-	s.node.startAssertEngineHealth(ctx, s.engines)
-
 	// Write listener info files early in the startup sequence. `listenerInfo` has a comment.
 	listenerFiles := listenerInfo{
 		listenRPC:    s.cfg.Addr,
@@ -1623,25 +1626,6 @@ func (s *Server) Start(ctx context.Context) error {
 		defer time.AfterFunc(30*time.Second, s.cfg.DelayedBootstrapFn).Stop()
 	}
 
-	if len(s.cfg.GossipBootstrapResolvers) == 0 {
-		// If the node is started without join flags, attempt self-bootstrap.
-		// Note that we're not checking whether the node is already bootstrapped;
-		// if this is the case, Bootstrap will simply fail.
-		_ = s.stopper.RunAsyncTask(ctx, "bootstrap", func(ctx context.Context) {
-			_, err := s.initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{})
-			switch err {
-			case nil:
-				log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
-			case ErrClusterInitialized:
-			default:
-				// Process is shutting down.
-			}
-		})
-	}
-
-	// This opens the main listener.
-	startRPCServer(workersCtx)
-
 	// The start cli command wants to print helpful information if it looks as
 	// though this node didn't immediately manage to connect to the cluster.
 	// This isn't the prettiest way to achieve this, but it gets the job done.
@@ -1668,7 +1652,26 @@ func (s *Server) Start(ctx context.Context) error {
 		})
 	}
 
-	state, err := s.initServer.ServeAndWait(ctx, s.stopper, s.engines, s.gossip)
+	// This opens the main listener.
+	startRPCServer(workersCtx)
+
+	if len(s.cfg.GossipBootstrapResolvers) == 0 {
+		// If the node is started without join flags, attempt self-bootstrap.
+		// Note that we're not checking whether the node is already bootstrapped;
+		// if this is the case, Bootstrap will simply fail.
+		_ = s.stopper.RunAsyncTask(ctx, "bootstrap", func(ctx context.Context) {
+			_, err := initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{})
+			switch err {
+			case nil:
+				log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
+			case ErrClusterInitialized:
+			default:
+				// Process is shutting down.
+			}
+		})
+	}
+
+	state, err := initServer.ServeAndWait(ctx, s.stopper, s.gossip)
 	if err != nil {
 		return errors.Wrap(err, "during init")
 	}
@@ -1971,15 +1974,17 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 
-	// Run startup migrations (note: these depend on jobs subsystem running).
-	var bootstrapVersion roachpb.Version
-	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
-	}); err != nil {
-		return err
-	}
-	if err := migMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
-		return errors.Wrap(err, "ensuring SQL migrations")
+	{
+		// Run startup migrations (note: these depend on jobs subsystem running).
+		var bootstrapVersion roachpb.Version
+		if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
+		}); err != nil {
+			return err
+		}
+		if err := migMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
+			return errors.Wrap(err, "ensuring SQL migrations")
+		}
 	}
 	log.Infof(ctx, "done ensuring all necessary migrations have run")
 
@@ -2136,16 +2141,16 @@ func (s *Server) startListenRPCAndSQL(
 		})
 	})
 
-	// Serve the gRPC endpoint.
-	s.stopper.RunWorker(workersCtx, func(context.Context) {
-		netutil.FatalIfUnexpected(s.grpc.Serve(anyL))
-	})
-
 	// startRPCServer starts the RPC server. We do not do this
 	// immediately because we want the cluster to be ready (or ready to
 	// initialize) before we accept RPC requests. The caller
 	// (Server.Start) will call this at the right moment.
 	startRPCServer = func(ctx context.Context) {
+		// Serve the gRPC endpoint.
+		s.stopper.RunWorker(workersCtx, func(context.Context) {
+			netutil.FatalIfUnexpected(s.grpc.Serve(anyL))
+		})
+
 		s.stopper.RunWorker(ctx, func(context.Context) {
 			serveOnMux.Do(func() {
 				netutil.FatalIfUnexpected(m.Serve())
