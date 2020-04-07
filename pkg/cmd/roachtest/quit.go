@@ -25,8 +25,9 @@ import (
 )
 
 type quitTest struct {
-	t *test
-	c *cluster
+	t       *test
+	c       *cluster
+	cleanup func()
 }
 
 // runQuitTransfersLeases performs rolling restarts on a
@@ -46,36 +47,27 @@ func runQuitTransfersLeases(
 	)
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t, args)
-	defer func() {
-		// If the test below fails after shutting down node 1,
-		// just restart node 1, otherwise `debug zip` will fail
-		// and we won't get artifacts.
-		c.Stop(ctx, c.Node(1), roachprodArgOption{"--sig", "9", "--wait"})
-		_ = c.StartE(ctx, c.Node(1))
 
-		// We use a panic-based test failure protocol, so as to ensure
-		// that this defer is guaranteed to run. (The (*test).Fatal
-		// method uses runtime.Goexit() which does not guarantee this.)
-		if r := recover(); r != nil {
-			if qe, ok := r.(*quitErr); ok {
-				t.failWithMsg(qe.msg)
-			}
-		}
-	}()
+	q := quitTest{
+		t, c, func() {
+			// If the test fails after shutting down node 1,
+			// just restart node 1, otherwise `debug zip` will fail
+			// and we won't get artifacts.
+			c.Stop(ctx, c.Node(1), roachprodArgOption{"--sig", "9", "--wait"})
+			_ = c.StartE(ctx, c.Node(1))
+		}}
 
-	q := quitTest{t, c}
 	q.runTest(ctx, args, method)
 }
 
 func (q *quitTest) Fatal(args ...interface{}) {
-	panic(&quitErr{q.t.decorate(1, fmt.Sprint(args...))})
-}
-func (q *quitTest) Fatalf(format string, args ...interface{}) {
-	panic(&quitErr{q.t.decorate(1, fmt.Sprintf(format, args...))})
+	q.cleanup()
+	q.t.Fatal(args...)
 }
 
-type quitErr struct {
-	msg string
+func (q *quitTest) Fatalf(format string, args ...interface{}) {
+	q.cleanup()
+	q.t.Fatalf(format, args...)
 }
 
 func (q *quitTest) runTest(
@@ -89,16 +81,20 @@ func (q *quitTest) runTest(
 
 	// runTest iterates through the cluster two times and restarts each
 	// node in turn. After each node shutdown it verifies that there are
-	// no orphan ranges.
+	// no leases held by the down node. (See the comments inside
+	// checkNoLeases() for details.)
 	//
-	// The shutdown method can be customized; the different
-	// methods are exercised below.
+	// The shutdown method is passed in via the 'method' parameter, used
+	// below.
 	q.t.l.Printf("now running restart loop\n")
 	for i := 0; i < 3; i++ {
 		q.t.l.Printf("iteration %d\n", i)
 		for nodeID := 1; nodeID <= q.c.spec.NodeCount; nodeID++ {
 			q.t.l.Printf("stopping node %d\n", nodeID)
 			q.runWithTimeout(ctx, func(ctx context.Context) { method(ctx, q.t, q.c, nodeID) })
+
+			q.Fatal("wo")
+
 			q.runWithTimeout(ctx, func(ctx context.Context) { q.checkNoLeases(ctx, nodeID) })
 			q.t.l.Printf("restarting node %d\n", nodeID)
 			q.runWithTimeout(ctx, func(ctx context.Context) { q.restartNode(ctx, args, nodeID) })
@@ -128,7 +124,7 @@ func (q *quitTest) waitForUpReplication(ctx context.Context) {
 	db := q.c.Conn(ctx, 1)
 	defer db.Close()
 
-	// We'll want rebalancing to be a bit fast than normal, so
+	// We'll want rebalancing to be a bit faster than normal, so
 	// that the up-replication does not take ages.
 	if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING	kv.snapshot_rebalance.max_rate = '128MiB'`); err != nil {
 		q.Fatal(err)
@@ -401,6 +397,18 @@ func registerQuitTransfersLeases(r *testRegistry) {
 		c.Stop(ctx, c.Node(nodeID),
 			roachprodArgOption{"--sig", "1"},
 		)
+		// We use SIGKILL to terminate nodes here. Of course, an operator
+		// should not do this and instead terminate with SIGTERM even
+		// after a complete graceful drain. However, what this test is
+		// asserting is that a graceful drain is *sufficient* to make
+		// everything look smooth from the perspective of other nodes,
+		// even if the node goes "kaput" after the drain.
+		//
+		// (This also ensures that the test exercises separate code; if we
+		// used SIGTERM here we'd be combining the graceful drain by 'node
+		// drain' with the graceful drain by the signal handler. If either
+		// becomes broken, the test wouldn't help identify which one needs
+		// attention.)
 		c.Stop(ctx, c.Node(nodeID),
 			roachprodArgOption{"--sig", "9", "--wait"})
 	})
