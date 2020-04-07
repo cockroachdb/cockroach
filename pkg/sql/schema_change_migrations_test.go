@@ -835,3 +835,50 @@ func TestMigrateSchemaChanges(t *testing.T) {
 		}
 	}
 }
+
+// TestGCJobCreated tests that a table descriptor in the DROP state with no
+// running job has a GC job created for it.
+func TestGCJobCreated(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer setTestJobsAdoptInterval()()
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLMigrationManager = &sqlmigrations.MigrationManagerTestingKnobs{
+		AlwaysRunJobMigration: true,
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	ctx := context.Background()
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create a table and then force it to be in the DROP state.
+	if _, err := sqlDB.Exec(`CREATE DATABASE t; CREATE TABLE t.test();`); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tableDesc.State = sqlbase.TableDescriptor_DROP
+	tableDesc.Version++
+	tableDesc.DropTime = 1
+	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
+		if err := sqlbase.RemoveObjectNamespaceEntry(ctx, txn, tableDesc.ID, tableDesc.ParentID, tableDesc.Name, false /* kvTrace */); err != nil {
+			return err
+		}
+		return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc))
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run the migration.
+	migMgr := s.MigrationManager().(*sqlmigrations.Manager)
+	if err := migMgr.StartSchemaChangeJobMigration(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that a GC job was created and completed successfully.
+	sqlRunner.CheckQueryResultsRetry(t,
+		"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND status = 'succeeded'",
+		[][]string{{"1"}},
+	)
+}
