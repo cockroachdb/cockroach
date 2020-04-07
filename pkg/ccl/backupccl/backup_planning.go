@@ -12,6 +12,7 @@ import (
 	"context"
 	"net/url"
 	"sort"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -394,6 +396,7 @@ func backupPlanHook(
 
 		var encryption *roachpb.FileEncryptionOptions
 		var prevBackups []BackupManifest
+		g := ctxgroup.WithContext(ctx)
 		if len(incrementalFrom) > 0 {
 			if encryptionPassphrase != nil {
 				exportStore, err := makeCloudStorage(ctx, incrementalFrom[0])
@@ -410,21 +413,30 @@ func backupPlanHook(
 				}
 			}
 			prevBackups = make([]BackupManifest, len(incrementalFrom))
+			var wg sync.WaitGroup
+			wg.Add(len(incrementalFrom))
 			for i, uri := range incrementalFrom {
-				// TODO(lucy): We may want to upgrade the table descs to the newer
-				// foreign key representation here, in case there are backups from an
-				// older cluster. Keeping the descriptors as they are works for now
-				// since all we need to do is get the past backups' table/index spans,
-				// but it will be safer for future code to avoid having older-style
-				// descriptors around.
-				desc, err := ReadBackupManifestFromURI(
-					ctx, uri, makeCloudStorage, encryption,
-				)
-				if err != nil {
-					return errors.Wrapf(err, "failed to read backup from %q", uri)
-				}
-				prevBackups[i] = desc
+				j := i
+				uriFile := uri
+				g.GoCtx(func(ctx context.Context) error {
+					defer wg.Done()
+					// TODO(lucy): We may want to upgrade the table descs to the newer
+					// foreign key representation here, in case there are backups from an
+					// older cluster. Keeping the descriptors as they are works for now
+					// since all we need to do is get the past backups' table/index spans,
+					// but it will be safer for future code to avoid having older-style
+					// descriptors around.
+					desc, err := ReadBackupManifestFromURI(
+						ctx, uriFile, makeCloudStorage, encryption,
+					)
+					if err != nil {
+						return errors.Wrapf(err, "failed to read backup from %q", uri)
+					}
+					prevBackups[j] = desc
+					return nil
+				})
 			}
+			wg.Wait()
 		} else {
 			exists, err := containsManifest(ctx, defaultStore)
 			if err != nil {
@@ -445,26 +457,35 @@ func backupPlanHook(
 				if err != nil {
 					return errors.Wrapf(err, "determining base for incremental backup")
 				}
-				prevBackups = make([]BackupManifest, 0, len(prev)+1)
+				prevBackups = make([]BackupManifest, len(prev)+1)
 
 				m, err := readBackupManifestFromStore(ctx, defaultStore, encryption)
 				if err != nil {
 					return errors.Wrap(err, "loading base backup manifest")
 				}
-				prevBackups = append(prevBackups, m)
+				prevBackups[0] = m
 
 				if m.DescriptorCoverage == tree.AllDescriptors &&
 					backupStmt.DescriptorCoverage != tree.AllDescriptors {
 					return errors.Errorf("cannot append a backup of specific tables or databases to a full-cluster backup")
 				}
 
-				for _, inc := range prev {
-					m, err := readBackupManifest(ctx, defaultStore, inc, encryption)
-					if err != nil {
-						return errors.Wrapf(err, "loading prior backup part manifest %q", inc)
-					}
-					prevBackups = append(prevBackups, m)
+				var wg sync.WaitGroup
+				wg.Add(len(prev))
+				for i, inc := range prev {
+					j := i
+					incFile := inc
+					g.GoCtx(func(ctx context.Context) error {
+						defer wg.Done()
+						m, err := readBackupManifest(ctx, defaultStore, incFile, encryption)
+						if err != nil {
+							return errors.Wrapf(err, "loading prior backup part manifest %q", inc)
+						}
+						prevBackups[j+1] = m
+						return nil
+					})
 				}
+				wg.Wait()
 
 				// Pick a piece-specific suffix and update the destination path(s).
 				partName := endTime.GoTime().Format("/20060102/150405.00")
