@@ -68,7 +68,7 @@ func registerTPCHVec(r *testRegistry) {
 	// the noise.
 	slownessThresholdByVersion := map[crdbVersion]float64{
 		version19_2: 1.5,
-		version20_1: 1.15,
+		version20_1: 1.2,
 	}
 
 	TPCHTables := []string{
