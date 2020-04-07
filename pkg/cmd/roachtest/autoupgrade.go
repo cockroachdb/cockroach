@@ -251,7 +251,7 @@ func registerAutoUpgrade(r *testRegistry) {
 	}
 
 	r.Add(testSpec{
-		Name:       fmt.Sprintf("upgrade"),
+		Name:       `autoupgrade`,
 		Owner:      OwnerKV,
 		MinVersion: "v19.1.0",
 		Cluster:    makeClusterSpec(5),
