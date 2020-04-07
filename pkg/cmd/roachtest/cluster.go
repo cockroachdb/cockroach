@@ -1376,14 +1376,24 @@ func (c *cluster) FetchDebugZip(ctx context.Context) error {
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
 		}
-		// `./cockroach debug zip` is noisy. Suppress the output unless it fails.
-		output, err := execCmdWithBuffer(ctx, c.l, roachprod, "ssh", c.name+":1", "--",
-			"./cockroach", "debug", "zip", "--url", "{pgurl:1}", zipName)
-		if err != nil {
-			c.l.Printf("./cockroach debug zip failed: %s", output)
-			return err
+		// Some nodes might be down, so try to find one that works. We make the
+		// assumption that a down node will refuse the connection, so it won't
+		// waste our time.
+		for i := 1; i <= c.spec.NodeCount; i++ {
+			// `./cockroach debug zip` is noisy. Suppress the output unless it fails.
+			si := strconv.Itoa(i)
+			output, err := execCmdWithBuffer(ctx, c.l, roachprod, "ssh", c.name+":"+si, "--",
+				"./cockroach", "debug", "zip", "--url", "{pgurl:"+si+"}", zipName)
+			if err != nil {
+				c.l.Printf("./cockroach debug zip failed: %s", output)
+				if i < c.spec.NodeCount {
+					continue
+				}
+				return err
+			}
+			return execCmd(ctx, c.l, roachprod, "get", c.name+":"+si, zipName /* src */, path /* dest */)
 		}
-		return execCmd(ctx, c.l, roachprod, "get", c.name+":1", zipName /* src */, path /* dest */)
+		return nil
 	})
 }
 
