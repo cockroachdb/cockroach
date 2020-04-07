@@ -79,7 +79,7 @@ INSERT INTO skip_unneeded_cols VALUES ('63616665-6630-3064-6465-616462656562', 1
 statement ok
 SET vectorize=experimental_always
 
-statement error pq: unable to vectorize execution plan: unhandled type int\[\]
+statement error .*(unhandled|unsupported) type int\[\]
 SELECT _unsupported1 FROM skip_unneeded_cols
 
 query IBB
