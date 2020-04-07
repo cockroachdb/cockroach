@@ -207,7 +207,7 @@ func bootstrapCluster(
 	bootstrapVersion clusterversion.ClusterVersion,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
-) (uuid.UUID, error) {
+) (*initState, error) {
 	clusterID := uuid.MakeV4()
 	// TODO(andrei): It'd be cool if this method wouldn't do anything to engines
 	// other than the first one, and let regular node startup code deal with them.
@@ -221,7 +221,7 @@ func bootstrapCluster(
 		// Initialize the engine backing the store with the store ident and cluster
 		// version.
 		if err := kvserver.InitEngine(ctx, eng, sIdent, bootstrapVersion); err != nil {
-			return uuid.UUID{}, err
+			return nil, err
 		}
 
 		// Create first range, writing directly to engine. Note this does
@@ -240,11 +240,21 @@ func bootstrapCluster(
 				bootstrapVersion.Version, len(engines), splits,
 				hlc.UnixNano(),
 			); err != nil {
-				return uuid.UUID{}, err
+				return nil, err
 			}
 		}
 	}
-	return clusterID, nil
+
+	state := &initState{
+		initDiskState: initDiskState{
+			nodeID:             FirstNodeID,
+			clusterID:          clusterID,
+			clusterVersion:     bootstrapVersion,
+			initializedEngines: engines,
+		},
+		joined: true,
+	}
+	return state, nil
 }
 
 // NewNode returns a new instance of Node.
@@ -304,27 +314,6 @@ func (n *Node) AnnotateCtxWithSpan(
 	return n.storeCfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 
-func (n *Node) bootstrapCluster(
-	ctx context.Context,
-	engines []storage.Engine,
-	bootstrapVersion clusterversion.ClusterVersion,
-	defaultZoneConfig *zonepb.ZoneConfig,
-	defaultSystemZoneConfig *zonepb.ZoneConfig,
-) error {
-	if n.initialBoot || n.clusterID.Get() != uuid.Nil {
-		return fmt.Errorf("cluster has already been initialized with ID %s", n.clusterID.Get())
-	}
-	n.initialBoot = true
-	clusterID, err := bootstrapCluster(ctx, engines, bootstrapVersion, defaultZoneConfig, defaultSystemZoneConfig)
-	if err != nil {
-		return err
-	}
-	n.clusterID.Set(ctx, clusterID)
-
-	log.Infof(ctx, "**** cluster %s has been created", clusterID)
-	return nil
-}
-
 func (n *Node) onClusterVersionChange(ctx context.Context, cv clusterversion.ClusterVersion) {
 	if err := n.stores.OnClusterVersionChange(ctx, cv); err != nil {
 		log.Fatal(ctx, errors.Wrapf(err, "updating cluster version to %v", cv))
@@ -339,37 +328,33 @@ func (n *Node) onClusterVersionChange(ctx context.Context, cv clusterversion.Clu
 func (n *Node) start(
 	ctx context.Context,
 	addr, sqlAddr net.Addr,
-	initializedEngines, emptyEngines []storage.Engine,
+	state initState,
 	clusterName string,
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
-	cv clusterversion.ClusterVersion,
 	localityAddress []roachpb.LocalityAddress,
 	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
-	if err := clusterversion.Initialize(ctx, cv.Version, &n.storeCfg.Settings.SV); err != nil {
+	if err := clusterversion.Initialize(ctx, state.clusterVersion.Version, &n.storeCfg.Settings.SV); err != nil {
 		return err
 	}
 
 	// Obtaining the NodeID requires a dance of sorts. If the node has initialized
 	// stores, the NodeID is persisted in each of them. If not, then we'll need to
 	// use the KV store to get a NodeID assigned.
-	var nodeID roachpb.NodeID
-	if len(initializedEngines) > 0 {
-		firstIdent, err := kvserver.ReadStoreIdent(ctx, initializedEngines[0])
-		if err != nil {
-			return err
+	n.initialBoot = state.joined
+	nodeID := state.nodeID
+	if nodeID == 0 {
+		if !state.joined {
+			log.Fatalf(ctx, "node has no NodeID, but claims to not be joining cluster")
 		}
-		nodeID = firstIdent.NodeID
-	} else {
-		n.initialBoot = true
-		// Wait until Gossip is connected before trying to allocate a NodeID.
-		// This isn't strictly necessary but avoids trying to use the KV store
-		// before it can possibly work.
-		if err := n.connectGossip(ctx); err != nil {
-			return err
+		// Allocate NodeID. Note that Gossip is already connected because if there's
+		// no NodeID yet, this means that we had to connect Gossip to learn the ClusterID.
+		select {
+		case <-n.storeCfg.Gossip.Connected:
+		default:
+			log.Fatalf(ctx, "Gossip is not connected yet")
 		}
-		// If no NodeID has been assigned yet, allocate a new node ID.
 		ctxWithSpan, span := n.AnnotateCtxWithSpan(ctx, "alloc-node-id")
 		newID, err := allocateNodeID(ctxWithSpan, n.storeCfg.DB)
 		if err != nil {
@@ -413,7 +398,7 @@ func (n *Node) start(
 	n.storeCfg.ClosedTimestamp.Start(n.Descriptor.NodeID)
 
 	// Create stores from the engines that were already bootstrapped.
-	for _, e := range initializedEngines {
+	for _, e := range state.initializedEngines {
 		s := kvserver.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
 		if err := s.Start(ctx, n.stopper); err != nil {
 			return errors.Errorf("failed to start store: %s", err)
@@ -464,22 +449,12 @@ func (n *Node) start(
 		return err
 	}
 
-	if len(initializedEngines) != 0 {
-		// Connect gossip before starting bootstrap. This will be necessary
-		// to bootstrap new stores. We do it before initializing the NodeID
-		// as well (if needed) to avoid awkward error messages until Gossip
-		// has connected.
-		//
-		// NB: if we have no bootstrapped engines, then we've done this above
-		// already.
-		if err := n.connectGossip(ctx); err != nil {
-			return err
-		}
-	}
-
 	// Bootstrap any uninitialized stores.
-	if len(emptyEngines) > 0 {
-		if err := n.bootstrapStores(ctx, emptyEngines, n.stopper); err != nil {
+	//
+	// TODO(tbg): address https://github.com/cockroachdb/cockroach/issues/39415.
+	// Should be easy enough. Writing the test is probably most of the work.
+	if len(state.newEngines) > 0 {
+		if err := n.bootstrapStores(ctx, state.newEngines, n.stopper); err != nil {
 			return err
 		}
 	}
@@ -504,8 +479,8 @@ func (n *Node) start(
 	// bumped immediately, which would be possible if gossip got started earlier).
 	n.startGossip(ctx, n.stopper)
 
-	allEngines := append([]storage.Engine(nil), initializedEngines...)
-	allEngines = append(allEngines, emptyEngines...)
+	allEngines := append([]storage.Engine(nil), state.initializedEngines...)
+	allEngines = append(allEngines, state.newEngines...)
 	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, allEngines, attrs.Attrs)
 	return nil
 }
@@ -556,6 +531,8 @@ func (n *Node) addStore(store *kvserver.Store) {
 // validateStores iterates over all stores, verifying they agree on node ID.
 // The node's ident is initialized based on the agreed-upon node ID. Note that
 // cluster ID consistency is checked elsewhere in inspectEngines.
+//
+// TODO(tbg): remove this, we already validate everything in inspectEngines now.
 func (n *Node) validateStores(ctx context.Context) error {
 	return n.stores.VisitStores(func(s *kvserver.Store) error {
 		if n.Descriptor.NodeID != s.Ident.NodeID {
@@ -634,51 +611,24 @@ func (n *Node) bootstrapStores(
 	return nil
 }
 
-// connectGossip connects to gossip network and reads cluster ID. If
-// this node is already part of a cluster, the cluster ID is verified
-// for a match. If not part of a cluster, the cluster ID is set. The
-// node's address is gossiped with node ID as the gossip key.
-func (n *Node) connectGossip(ctx context.Context) error {
-	log.Infof(ctx, "connecting to gossip network to verify cluster ID...")
-	select {
-	case <-n.stopper.ShouldStop():
-		return errors.New("stop called before we could connect to gossip")
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-n.storeCfg.Gossip.Connected:
-	}
-
-	gossipClusterID, err := n.storeCfg.Gossip.GetClusterID()
-	if err != nil {
-		return err
-	}
-	clusterID := n.clusterID.Get()
-	if clusterID == uuid.Nil {
-		n.clusterID.Set(ctx, gossipClusterID)
-	} else if clusterID != gossipClusterID {
-		return errors.Errorf("node %d belongs to cluster %q but is attempting to connect to a gossip network for cluster %q",
-			n.Descriptor.NodeID, clusterID, gossipClusterID)
-	}
-	log.Infof(ctx, "node connected via gossip and verified as part of cluster %q", gossipClusterID)
-	return nil
-}
-
 // startGossip loops on a periodic ticker to gossip node-related
 // information. Starts a goroutine to loop until the node is closed.
 func (n *Node) startGossip(ctx context.Context, stopper *stop.Stopper) {
 	ctx = n.AnnotateCtx(ctx)
 	stopper.RunWorker(ctx, func(ctx context.Context) {
-		// This should always return immediately and acts as a sanity check that we
-		// don't try to gossip before we're connected.
-		select {
-		case <-n.storeCfg.Gossip.Connected:
-		default:
-			panic(fmt.Sprintf("%s: not connected to gossip", n))
-		}
 		// Verify we've already gossiped our node descriptor.
+		//
+		// TODO(tbg): see if we really needed to do this earlier already. We
+		// probably needed to (this call has to come late for ... reasons I
+		// still need to look into) and nobody can talk to this node until
+		// the descriptor is in Gossip.
 		if _, err := n.storeCfg.Gossip.GetNodeDescriptor(n.Descriptor.NodeID); err != nil {
 			panic(err)
 		}
+
+		// NB: Gossip may not be connected at this point. That's fine though,
+		// we can still gossip something; Gossip sends it out reactively once
+		// it can.
 
 		statusTicker := time.NewTicker(gossipStatusInterval)
 		storesTicker := time.NewTicker(gossip.StoresInterval)

@@ -1733,13 +1733,6 @@ func (s *Store) asyncGossipStore(ctx context.Context, reason string, useCached b
 
 // GossipStore broadcasts the store on the gossip network.
 func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
-	select {
-	case <-s.cfg.Gossip.Connected:
-	default:
-		// Nothing to do if gossip is not connected.
-		return nil
-	}
-
 	// Temporarily indicate that we're gossiping the store capacity to avoid
 	// recursively triggering a gossip of the store capacity.
 	syncutil.StoreFloat64(&s.gossipQueriesPerSecondVal, -1)
