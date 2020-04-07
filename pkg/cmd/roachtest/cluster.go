@@ -2489,6 +2489,7 @@ func (m *monitor) wait(args ...string) error {
 }
 
 func waitForFullReplication(t *test, db *gosql.DB) {
+	t.l.Printf("waiting for up-replication...\n")
 	tStart := timeutil.Now()
 	for ok := false; !ok; time.Sleep(time.Second) {
 		if err := db.QueryRow(
