@@ -72,7 +72,9 @@
     $filters:[
         ...
         $item:(FiltersItem (Or $left:* $right:*)) &
-            ^(ColsAreEqual (ExprOuterCols $left) (ExprOuterCols $right))
+            ^(ColsAreEqual (ExprOuterCols $left) (ExprOuterCols $right)) &
+            (CanMaybeConstrainIndexWithExpr $scanPrivate $left) &
+            (CanMaybeConstrainIndexWithExpr $scanPrivate $right)
         ...
     ]
 )

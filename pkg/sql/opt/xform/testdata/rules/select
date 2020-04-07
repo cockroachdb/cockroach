@@ -43,6 +43,18 @@ CREATE TABLE d
 )
 ----
 
+exec-ddl
+CREATE TABLE e
+(
+    k INT PRIMARY KEY,
+    u INT,
+    v INT,
+    w INT,
+    INDEX uw(u, w),
+    INDEX vw(v, w)
+)
+----
+
 # --------------------------------------------------
 # GenerateConstrainedScans
 # --------------------------------------------------
@@ -1315,6 +1327,95 @@ project
            │         └── ordering: +6
            └── filters
                 └── a.u:6 = w:4 [outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
+
+# Apply when outer columns of both sides of OR are a subset of index columns.
+opt expect=GenerateUnionSelects
+SELECT k, u, v FROM e WHERE u = 1 OR v = 1
+----
+union
+ ├── columns: k:1!null u:2 v:3
+ ├── left columns: k:1!null u:2 v:3
+ ├── right columns: k:5 u:6 v:7
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join e
+ │    ├── columns: k:1!null u:2!null v:3
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3)
+ │    └── scan e@uw
+ │         ├── columns: k:1!null u:2!null
+ │         ├── constraint: /2/4/1: [/1 - /1]
+ │         ├── key: (1)
+ │         └── fd: ()-->(2)
+ └── index-join e
+      ├── columns: k:5!null u:6 v:7!null
+      ├── key: (5)
+      ├── fd: ()-->(7), (5)-->(6)
+      └── scan e@vw
+           ├── columns: k:5!null v:7!null
+           ├── constraint: /7/8/5: [/1 - /1]
+           ├── key: (5)
+           └── fd: ()-->(7)
+
+# Apply when outer columns of both sides of OR are a superset of index columns.
+opt expect=GenerateUnionSelects
+SELECT k, u, v FROM d WHERE (u = 1 AND w = 2) OR (v = 1 AND w = 3)
+----
+project
+ ├── columns: k:1!null u:2 v:3
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── union
+      ├── columns: k:1!null u:2 v:3 w:4!null
+      ├── left columns: k:1!null u:2 v:3 w:4!null
+      ├── right columns: k:5 u:6 v:7 w:8
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── select
+      │    ├── columns: k:1!null u:2!null v:3 w:4!null
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2,4), (1)-->(3)
+      │    ├── index-join d
+      │    │    ├── columns: k:1!null u:2 v:3 w:4
+      │    │    ├── key: (1)
+      │    │    ├── fd: ()-->(2), (1)-->(3,4)
+      │    │    └── scan d@u
+      │    │         ├── columns: k:1!null u:2!null
+      │    │         ├── constraint: /2/1: [/1 - /1]
+      │    │         ├── key: (1)
+      │    │         └── fd: ()-->(2)
+      │    └── filters
+      │         └── w:4 = 2 [outer=(4), constraints=(/4: [/2 - /2]; tight), fd=()-->(4)]
+      └── select
+           ├── columns: k:5!null u:6 v:7!null w:8!null
+           ├── key: (5)
+           ├── fd: ()-->(7,8), (5)-->(6)
+           ├── index-join d
+           │    ├── columns: k:5!null u:6 v:7 w:8
+           │    ├── key: (5)
+           │    ├── fd: ()-->(7), (5)-->(6,8)
+           │    └── scan d@v
+           │         ├── columns: k:5!null v:7!null
+           │         ├── constraint: /7/5: [/1 - /1]
+           │         ├── key: (5)
+           │         └── fd: ()-->(7)
+           └── filters
+                └── w:8 = 3 [outer=(8), constraints=(/8: [/3 - /3]; tight), fd=()-->(8)]
+
+# Don't apply when outer columns of both sides of OR do not intersect with index columns.
+opt expect-not=GenerateUnionSelects
+SELECT k, u, w FROM d WHERE u = 1 OR w = 1
+----
+select
+ ├── columns: k:1!null u:2 w:4
+ ├── key: (1)
+ ├── fd: (1)-->(2,4)
+ ├── scan d
+ │    ├── columns: k:1!null u:2 w:4
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,4)
+ └── filters
+      └── (u:2 = 1) OR (w:4 = 1) [outer=(2,4)]
 
 # Don't apply to queries without strict keys.
 opt expect-not=GenerateUnionSelects
