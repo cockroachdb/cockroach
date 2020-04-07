@@ -906,6 +906,16 @@ func applyColumnMutation(
 				col.Type.SQLString(), typ.SQLString())
 		case schemachange.ColumnConversionTrivial:
 			col.Type = *typ
+		case schemachange.ColumnConversionGeneral:
+			return unimplemented.NewWithIssueDetail(
+				9851,
+				fmt.Sprintf("%s->%s", col.Type.SQLString(), typ.SQLString()),
+				fmt.Sprintf(
+					"type conversion from %s to %s requires overwriting existing values which is not yet implemented",
+					col.Type.SQLString(),
+					typ.SQLString(),
+				),
+			)
 		default:
 			return unimplemented.NewWithIssueDetail(9851,
 				fmt.Sprintf("%s->%s", col.Type.SQLString(), typ.SQLString()),
