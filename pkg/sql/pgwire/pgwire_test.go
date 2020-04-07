@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -96,19 +95,13 @@ func TestPGWireDrainClient(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	on := []serverpb.DrainMode{serverpb.DrainMode_CLIENT}
 	// Draining runs in a separate goroutine since it won't return until the
 	// connection with an ongoing transaction finishes.
 	errChan := make(chan error)
 	go func() {
 		defer close(errChan)
 		errChan <- func() error {
-			if now, err := s.(*server.TestServer).Drain(ctx, on); err != nil {
-				return err
-			} else if !reflect.DeepEqual(on, now) {
-				return errors.Errorf("expected drain modes %v, got %v", on, now)
-			}
-			return nil
+			return s.(*server.TestServer).DrainClients(ctx)
 		}()
 	}()
 
@@ -133,8 +126,8 @@ func TestPGWireDrainClient(t *testing.T) {
 		}
 	}
 
-	if now := s.(*server.TestServer).Undrain(ctx, on); len(now) != 0 {
-		t.Fatalf("unexpected active drain modes: %v", now)
+	if !s.(*server.TestServer).PGServer().IsDraining() {
+		t.Fatal("server should be draining, but is not")
 	}
 }
 

@@ -317,8 +317,13 @@ func (s *Server) Metrics() (res []interface{}) {
 // The RFC on drain modes has more information regarding the specifics of
 // what will happen to connections in different states:
 // https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160425_drain_modes.md
-func (s *Server) Drain(drainWait time.Duration) error {
-	return s.drainImpl(drainWait, cancelMaxWait)
+//
+// The reporter callback, if non-nil, is called on a best effort basis
+// to report work that needed to be done and which may or may not have
+// been done by the time this call returns. See the explanation in
+// pkg/server/drain.go for details.
+func (s *Server) Drain(drainWait time.Duration, reporter func(int, string)) error {
+	return s.drainImpl(drainWait, cancelMaxWait, reporter)
 }
 
 // Undrain switches the server back to the normal mode of operation in which
@@ -339,7 +344,21 @@ func (s *Server) setDrainingLocked(drain bool) bool {
 	return true
 }
 
-func (s *Server) drainImpl(drainWait time.Duration, cancelWait time.Duration) error {
+// drainImpl drains the SQL clients.
+//
+// The drainWait duration is used to wait on clients to
+// self-disconnect after their session has been canceled. The
+// cancelWait is used to wait after the drainWait timer has expired
+// and there are still clients connected, and their context.Context is
+// canceled.
+//
+// The reporter callback, if non-nil, is called on a best effort basis
+// to report work that needed to be done and which may or may not have
+// been done by the time this call returns. See the explanation in
+// pkg/server/drain.go for details.
+func (s *Server) drainImpl(
+	drainWait time.Duration, cancelWait time.Duration, reporter func(int, string),
+) error {
 	// This anonymous function returns a copy of s.mu.connCancelMap if there are
 	// any active connections to cancel. We will only attempt to cancel
 	// connections that were active at the moment the draining switch happened.
@@ -365,6 +384,10 @@ func (s *Server) drainImpl(drainWait time.Duration, cancelWait time.Duration) er
 	}()
 	if len(connCancelMap) == 0 {
 		return nil
+	}
+	if reporter != nil {
+		// Report progress to the Drain RPC.
+		reporter(len(connCancelMap), "SQL clients")
 	}
 
 	// Spin off a goroutine that waits for all connections to signal that they

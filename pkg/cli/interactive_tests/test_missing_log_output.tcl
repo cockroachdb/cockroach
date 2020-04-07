@@ -99,7 +99,7 @@ start_test "Test that quit does not show INFO by default with --logtostderr"
 # that the default logging level is WARNING, so that no INFO messages
 # are printed between the marker and the (first line) error message
 # from quit. Quit will error out because the server is already stopped.
-send "echo marker; $argv quit --logtostderr 2>&1 | grep -vE '^\[WEF\]\[0-9\]+'\r"
+send "echo marker; $argv quit --logtostderr 2>&1 | grep -vE '^\[WEF\]\[0-9\]+|^node is draining'\r"
 eexpect "marker\r\nok"
 eexpect ":/# "
 end_test

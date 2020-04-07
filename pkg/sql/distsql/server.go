@@ -105,7 +105,9 @@ func (ds *ServerImpl) Start() {
 
 // Drain changes the node's draining state through gossip and drains the
 // server's flowRegistry. See flowRegistry.Drain for more details.
-func (ds *ServerImpl) Drain(ctx context.Context, flowDrainWait time.Duration) {
+func (ds *ServerImpl) Drain(
+	ctx context.Context, flowDrainWait time.Duration, reporter func(int, string),
+) {
 	if err := ds.setDraining(true); err != nil {
 		log.Warningf(ctx, "unable to gossip distsql draining state: %s", err)
 	}
@@ -120,16 +122,7 @@ func (ds *ServerImpl) Drain(ctx context.Context, flowDrainWait time.Duration) {
 		// wait a minimum time for the draining state to be gossiped.
 		minWait = 0
 	}
-	ds.flowRegistry.Drain(flowWait, minWait)
-}
-
-// Undrain changes the node's draining state through gossip and undrains the
-// server's flowRegistry. See flowRegistry.Undrain for more details.
-func (ds *ServerImpl) Undrain(ctx context.Context) {
-	ds.flowRegistry.Undrain()
-	if err := ds.setDraining(false); err != nil {
-		log.Warningf(ctx, "unable to gossip distsql draining state: %s", err)
-	}
+	ds.flowRegistry.Drain(flowWait, minWait, reporter)
 }
 
 // setDraining changes the node's draining state through gossip to the provided

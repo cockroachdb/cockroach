@@ -646,7 +646,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mtc.nodeLivenesses[drainingNodeIdx].SetDraining(ctx, true)
+	mtc.nodeLivenesses[drainingNodeIdx].SetDraining(ctx, true /* drain */, nil /* reporter */)
 
 	// Draining node disappears from store lists.
 	{

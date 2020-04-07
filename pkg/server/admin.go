@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -1621,74 +1620,6 @@ func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.R
 	)
 
 	_, _ = io.Copy(w, &bundle)
-}
-
-// Drain puts the node into the specified drain mode(s) and optionally
-// instructs the process to terminate.
-func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer) error {
-	on := make([]serverpb.DrainMode, len(req.On))
-	for i := range req.On {
-		on[i] = serverpb.DrainMode(req.On[i])
-	}
-	off := make([]serverpb.DrainMode, len(req.Off))
-	for i := range req.Off {
-		off[i] = serverpb.DrainMode(req.Off[i])
-	}
-
-	ctx := stream.Context()
-	_ = s.server.Undrain(ctx, off)
-
-	nowOn, err := s.server.Drain(ctx, on)
-	if err != nil {
-		return err
-	}
-
-	res := serverpb.DrainResponse{
-		On: make([]int32, len(nowOn)),
-	}
-	for i := range nowOn {
-		res.On[i] = int32(nowOn[i])
-	}
-	if err := stream.Send(&res); err != nil {
-		return err
-	}
-
-	if !req.Shutdown {
-		return nil
-	}
-
-	go func() {
-		// TODO(tbg): why don't we stop the stopper first? Stopping the stopper
-		// first seems more reasonable since grpc.Stop closes the listener right
-		// away (and who knows whether gRPC-goroutines are tied up in some
-		// stopper task somewhere).
-		s.server.grpc.Stop()
-		s.server.stopper.Stop(ctx)
-	}()
-
-	select {
-	case <-s.server.stopper.IsStopped():
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(10 * time.Second):
-		// This is a hack to work around the problem in
-		// https://github.com/cockroachdb/cockroach/issues/37425#issuecomment-494336131
-		//
-		// There appear to be deadlock scenarios in which we don't manage to
-		// fully stop the grpc server (which implies closing the listener, i.e.
-		// seeming dead to the outside world) or don't manage to shut down the
-		// stopper (the evidence in #37425 is inconclusive which one it is).
-		//
-		// Other problems in this area are known, such as
-		// https://github.com/cockroachdb/cockroach/pull/31692
-		//
-		// The signal-based shutdown path uses a similar time-based escape hatch.
-		// Until we spend (potentially lots of time to) understand and fix this
-		// issue, this will serve us well.
-		os.Exit(1)
-		return errors.New("unreachable")
-	}
 }
 
 // DecommissionStatus returns the DecommissionStatus for all or the given nodes.
