@@ -61,11 +61,6 @@ func registerAutoUpgrade(r *testRegistry) {
 
 		db := c.Conn(ctx, 1)
 		defer db.Close()
-		// Without this line, the test reliably fails (at least on OSX), presumably
-		// because a connection to a node that gets restarted somehow sticks around
-		// in the pool and throws an error at the next client using it (instead of
-		// transparently reconnecting).
-		db.SetMaxIdleConns(0)
 
 		if _, err := db.ExecContext(ctx,
 			"SET CLUSTER SETTING server.time_until_store_dead = $1", timeUntilStoreDead.String(),
