@@ -39,7 +39,9 @@ case "${1-}" in
       XGOARCH=amd64
       XCMAKE_SYSTEM_NAME=Linux
       TARGET_TRIPLE=x86_64-unknown-linux-gnu
-      LDFLAGS="-static-libgcc -static-libstdc++"
+# -lrt is needed as clock_gettime isn't part of glibc prior to 2.17
+# once we update - the -lrt can be removed
+      LDFLAGS="-static-libgcc -static-libstdc++ -lrt"
       SUFFIX=-linux-2.6.32-gnu-amd64
     ) ;;
 

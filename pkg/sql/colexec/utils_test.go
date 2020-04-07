@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -1348,16 +1349,22 @@ func (c *chunkingBatchSource) reset() {
 // joinTestCase is a helper struct shared by the hash and merge join unit
 // tests. Not all fields have to be filled in, but init() method *must* be
 // called.
+// NOTE: either logical or physical types *must* be filled in for both inputs.
+// Note, however, that if physical types are provided, we will be using lossful
+// type conversion during init(). If you want to use specific logical types,
+// you should set logical types then.
 type joinTestCase struct {
 	description           string
 	joinType              sqlbase.JoinType
 	leftTuples            tuples
-	leftTypes             []coltypes.T
+	leftLogTypes          []types.T
+	leftPhysTypes         []coltypes.T
 	leftOutCols           []uint32
 	leftEqCols            []uint32
 	leftDirections        []execinfrapb.Ordering_Column_Direction
 	rightTuples           tuples
-	rightTypes            []coltypes.T
+	rightLogTypes         []types.T
+	rightPhysTypes        []coltypes.T
 	rightOutCols          []uint32
 	rightEqCols           []uint32
 	rightDirections       []execinfrapb.Ordering_Column_Direction
@@ -1375,24 +1382,76 @@ func (tc *joinTestCase) init() {
 	}
 
 	if len(tc.leftDirections) == 0 {
-		tc.leftDirections = make([]execinfrapb.Ordering_Column_Direction, len(tc.leftTypes))
+		tc.leftDirections = make([]execinfrapb.Ordering_Column_Direction, len(tc.leftPhysTypes))
 		for i := range tc.leftDirections {
 			tc.leftDirections[i] = execinfrapb.Ordering_Column_ASC
 		}
 	}
 
 	if len(tc.rightDirections) == 0 {
-		tc.rightDirections = make([]execinfrapb.Ordering_Column_Direction, len(tc.rightTypes))
+		tc.rightDirections = make([]execinfrapb.Ordering_Column_Direction, len(tc.rightPhysTypes))
 		for i := range tc.rightDirections {
 			tc.rightDirections[i] = execinfrapb.Ordering_Column_ASC
 		}
+	}
+
+	toLogType := func(t coltypes.T) *types.T {
+		switch t {
+		case coltypes.Bool:
+			return types.Bool
+		case coltypes.Bytes:
+			return types.Bytes
+		case coltypes.Decimal:
+			return types.Decimal
+		case coltypes.Int16:
+			return types.Int2
+		case coltypes.Int32:
+			return types.Int4
+		case coltypes.Int64:
+			return types.Int
+		case coltypes.Float64:
+			return types.Float
+		case coltypes.Timestamp:
+			return types.Timestamp
+		case coltypes.Interval:
+			return types.Interval
+		}
+		execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected coltype %s", t.String()))
+		return nil
+	}
+	toLogTypes := func(typs []coltypes.T) []types.T {
+		cts := make([]types.T, len(typs))
+		for i := range cts {
+			t := toLogType(typs[i])
+			cts[i] = *t
+		}
+		return cts
+	}
+	var err error
+	if tc.leftPhysTypes == nil {
+		tc.leftPhysTypes, err = typeconv.FromColumnTypes(tc.leftLogTypes)
+		if err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+	}
+	if tc.leftLogTypes == nil {
+		tc.leftLogTypes = toLogTypes(tc.leftPhysTypes)
+	}
+	if tc.rightPhysTypes == nil {
+		tc.rightPhysTypes, err = typeconv.FromColumnTypes(tc.rightLogTypes)
+		if err != nil {
+			execerror.VectorizedInternalPanic(err)
+		}
+	}
+	if tc.rightLogTypes == nil {
+		tc.rightLogTypes = toLogTypes(tc.rightPhysTypes)
 	}
 }
 
 // mutateTypes returns a slice of joinTestCases with varied types. Assumes
 // the input is made up of just int64s. Calling this
-func (tc *joinTestCase) mutateTypes() []joinTestCase {
-	ret := []joinTestCase{*tc}
+func (tc *joinTestCase) mutateTypes() []*joinTestCase {
+	ret := []*joinTestCase{tc}
 
 	for _, typ := range []coltypes.T{coltypes.Decimal, coltypes.Bytes} {
 		if typ == coltypes.Bytes {
@@ -1403,11 +1462,13 @@ func (tc *joinTestCase) mutateTypes() []joinTestCase {
 			}
 		}
 		newTc := *tc
-		newTc.leftTypes = make([]coltypes.T, len(tc.leftTypes))
-		newTc.rightTypes = make([]coltypes.T, len(tc.rightTypes))
-		copy(newTc.leftTypes, tc.leftTypes)
-		copy(newTc.rightTypes, tc.rightTypes)
-		for _, typs := range [][]coltypes.T{newTc.leftTypes, newTc.rightTypes} {
+		newTc.leftPhysTypes = make([]coltypes.T, len(tc.leftPhysTypes))
+		newTc.rightPhysTypes = make([]coltypes.T, len(tc.rightPhysTypes))
+		newTc.leftLogTypes = nil
+		newTc.rightLogTypes = nil
+		copy(newTc.leftPhysTypes, tc.leftPhysTypes)
+		copy(newTc.rightPhysTypes, tc.rightPhysTypes)
+		for _, typs := range [][]coltypes.T{newTc.leftPhysTypes, newTc.rightPhysTypes} {
 			for i := range typs {
 				if typs[i] != coltypes.Int64 {
 					// We currently can only mutate test cases that are made up of int64
@@ -1438,7 +1499,7 @@ func (tc *joinTestCase) mutateTypes() []joinTestCase {
 				}
 			}
 		}
-		ret = append(ret, newTc)
+		ret = append(ret, &newTc)
 	}
 	return ret
 }
