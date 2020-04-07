@@ -457,7 +457,7 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 		// one otherwise (unless they ask for it, which adds latency).
 		r.EmitMLAI()
 
-		if log.V(1) {
+		if leaseChangingHands && log.V(1) {
 			// This logging is useful to troubleshoot incomplete drains.
 			log.Info(ctx, "is now leaseholder")
 		}
