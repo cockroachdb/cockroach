@@ -206,7 +206,8 @@ func doDrainNoTimeout(
 		if !remainingWork {
 			break
 		}
-		// Avoid a busy wait if something gets stuck.
+		// Avoid a busy wait with high CPU/network usage if the server
+		// replies with an incomplete drain too quickly.
 		time.Sleep(200 * time.Millisecond)
 	}
 	return false, remainingWork, nil
