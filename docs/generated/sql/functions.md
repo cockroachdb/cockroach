@@ -1030,8 +1030,12 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="split_part"></a><code>split_part(input: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>, return_index_pos: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Splits <code>input</code> on <code>delimiter</code> and return the value in the <code>return_index_pos</code>  position (starting at 1).</p>
 <p>For example, <code>split_part('123.456.789.0','.',3)</code>returns <code>789</code>.</p>
 </span></td></tr>
+<tr><td><a name="strpos"></a><code>strpos(input: <a href="bytes.html">bytes</a>, find: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the position where the byte subarray <code>find</code> begins in <code>input</code>.</p>
+</span></td></tr>
 <tr><td><a name="strpos"></a><code>strpos(input: <a href="string.html">string</a>, find: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the position where the string <code>find</code> begins in <code>input</code>.</p>
 <p>For example, <code>strpos('doggie', 'gie')</code> returns <code>4</code>.</p>
+</span></td></tr>
+<tr><td><a name="strpos"></a><code>strpos(input: varbit, find: varbit) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the position where the bit subarray <code>find</code> begins in <code>input</code>.</p>
 </span></td></tr>
 <tr><td><a name="substr"></a><code>substr(input: <a href="bytes.html">bytes</a>, start_pos: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns a byte subarray of <code>input</code> starting at <code>start_pos</code> (count starts at 1).</p>
 </span></td></tr>

@@ -975,7 +975,23 @@ var builtins = map[string]builtinDefinition{
 
 			return tree.NewDInt(tree.DInt(utf8.RuneCountInString(s[:index]) + 1)), nil
 		}, types.Int, "Calculates the position where the string `find` begins in `input`. \n\nFor"+
-			" example, `strpos('doggie', 'gie')` returns `4`.")),
+			" example, `strpos('doggie', 'gie')` returns `4`."),
+		bitsOverload2("input", "find",
+			func(_ *tree.EvalContext, bitString, bitSubstring *tree.DBitArray) (tree.Datum, error) {
+				index := strings.Index(bitString.BitArray.String(), bitSubstring.BitArray.String())
+				if index < 0 {
+					return tree.DZero, nil
+				}
+				return tree.NewDInt(tree.DInt(index + 1)), nil
+			}, types.Int, "Calculates the position where the bit subarray `find` begins in `input`."),
+		bytesOverload2("input", "find",
+			func(_ *tree.EvalContext, byteString, byteSubstring string) (tree.Datum, error) {
+				index := strings.Index(byteString, byteSubstring)
+				if index < 0 {
+					return tree.DZero, nil
+				}
+				return tree.NewDInt(tree.DInt(index + 1)), nil
+			}, types.Int, "Calculates the position where the byte subarray `find` begins in `input`.")),
 
 	"overlay": makeBuiltin(defProps(),
 		tree.Overload{
@@ -4714,6 +4730,22 @@ func bytesOverload1(
 	}
 }
 
+func bytesOverload2(
+	a, b string,
+	f func(*tree.EvalContext, string, string) (tree.Datum, error),
+	returnType *types.T,
+	info string,
+) tree.Overload {
+	return tree.Overload{
+		Types:      tree.ArgTypes{{a, types.Bytes}, {b, types.Bytes}},
+		ReturnType: tree.FixedReturnType(returnType),
+		Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			return f(evalCtx, string(*args[0].(*tree.DBytes)), string(*args[1].(*tree.DBytes)))
+		},
+		Info: info,
+	}
+}
+
 func bitsOverload1(
 	f func(*tree.EvalContext, *tree.DBitArray) (tree.Datum, error), returnType *types.T, info string,
 ) tree.Overload {
@@ -4722,6 +4754,22 @@ func bitsOverload1(
 		ReturnType: tree.FixedReturnType(returnType),
 		Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			return f(evalCtx, args[0].(*tree.DBitArray))
+		},
+		Info: info,
+	}
+}
+
+func bitsOverload2(
+	a, b string,
+	f func(*tree.EvalContext, *tree.DBitArray, *tree.DBitArray) (tree.Datum, error),
+	returnType *types.T,
+	info string,
+) tree.Overload {
+	return tree.Overload{
+		Types:      tree.ArgTypes{{a, types.VarBit}, {b, types.VarBit}},
+		ReturnType: tree.FixedReturnType(returnType),
+		Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			return f(evalCtx, args[0].(*tree.DBitArray), args[1].(*tree.DBitArray))
 		},
 		Info: info,
 	}

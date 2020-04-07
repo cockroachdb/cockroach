@@ -459,6 +459,31 @@ SELECT strpos('💩high', 'ig')
 ----
 3
 
+query III
+SELECT strpos(B'00001111', B'1111'), strpos(B'', B''), strpos(B'0000111', B'1111')
+----
+5 1 0
+
+query I
+SELECT strpos('000001'::varbit, '1'::varbit)
+----
+6
+
+query I
+SELECT position(B'100' in B'100101')
+----
+1
+
+query III
+SELECT strpos(b'\x61\145aabc', b'abc'), strpos(b'', b''), strpos(b'ttt\x61\x61c', b'abc')
+----
+4 1 0
+
+query I
+SELECT position('\x616263'::bytea in 'abc'::bytea)
+----
+1
+
 query I
 SELECT position('ig' in 'high')
 ----
