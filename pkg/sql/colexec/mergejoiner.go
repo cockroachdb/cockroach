@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
 
@@ -251,10 +252,8 @@ func newMergeJoinOp(
 	case sqlbase.JoinType_LEFT_ANTI:
 		return &mergeJoinLeftAntiOp{base}, err
 	default:
-		execerror.VectorizedInternalPanic("unsupported join type")
+		return nil, errors.AssertionFailedf("merge join of type %s not supported", joinType)
 	}
-	// This code is unreachable, but the compiler cannot infer that.
-	return nil, nil
 }
 
 // Const declarations for the merge joiner cross product (MJCP) zero state.
