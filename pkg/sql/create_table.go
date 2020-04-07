@@ -112,6 +112,21 @@ var storageParamExpectedTypes = map[string]storageParamType{
 	`user_catalog_table`:                          storageParamUnimplemented,
 }
 
+// minimumTypeUsageVersions defines the minimum version needed for a new
+// data type.
+var minimumTypeUsageVersions = map[types.Family]clusterversion.VersionKey{
+	types.TimeTZFamily: clusterversion.VersionTimeTZType,
+}
+
+// isTypeSupportedInVersion returns whether a given type is supported in the given version.
+func isTypeSupportedInVersion(v clusterversion.ClusterVersion, t *types.T) bool {
+	minVersion, ok := minimumTypeUsageVersions[t.Family()]
+	if !ok {
+		return true
+	}
+	return v.IsActive(minVersion)
+}
+
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
 // This is because CREATE TABLE performs multiple KV operations on descriptors
 // and expects to see its own writes.
@@ -1237,6 +1252,13 @@ func MakeTableDesc(
 						"VECTOR column types are unsupported",
 					)
 				}
+			}
+			if !isTypeSupportedInVersion(version, d.Type) {
+				return desc, pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"type %s is not supported until version upgrade is finalized",
+					d.Type.SQLString(),
+				)
 			}
 			if d.PrimaryKey.Sharded {
 				// This function can sometimes be called when `st` is nil,
