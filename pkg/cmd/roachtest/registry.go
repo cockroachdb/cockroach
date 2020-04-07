@@ -60,6 +60,7 @@ func registerTests(r *testRegistry) {
 	registerPgx(r)
 	registerPsycopg(r)
 	registerQueue(r)
+	registerQuitAllNodes(r)
 	registerQuitTransfersLeases(r)
 	registerRebalanceLoad(r)
 	registerReplicaGC(r)
