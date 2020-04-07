@@ -103,7 +103,7 @@ func (s *Store) Send(
 		// If the command appears to come from a node with a bad clock,
 		// reject it now before we reach that point.
 		var err error
-		if now, err = s.cfg.Clock.UpdateAndCheckMaxOffset(ba.Timestamp); err != nil {
+		if now, err = s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, ba.Timestamp); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}

@@ -185,7 +185,7 @@ func TestHLCPhysicalClockJump(t *testing.T) {
 			isFatal:    false,
 		},
 	}
-
+	ctx := context.Background()
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			a := assert.New(t)
@@ -199,6 +199,7 @@ func TestHLCPhysicalClockJump(t *testing.T) {
 			defer close(forwardJumpCheckEnabledCh)
 
 			if err := c.StartMonitoringForwardClockJumps(
+				ctx,
 				forwardJumpCheckEnabledCh,
 				func(d time.Duration) *time.Ticker {
 					tickerDuration = d
@@ -216,6 +217,7 @@ func TestHLCPhysicalClockJump(t *testing.T) {
 			}
 
 			if err := c.StartMonitoringForwardClockJumps(
+				ctx,
 				forwardJumpCheckEnabledCh,
 				time.NewTicker,
 				nil, /* tick callback */
@@ -248,7 +250,7 @@ func TestHLCPhysicalClockJump(t *testing.T) {
 			// This should not fatal as tickerCh has ticked
 			a.Equal(false, fatal)
 			// After ticker ticks, last physical time should be equal to physical now
-			lastPhysicalTime := c.lastPhysicalTime()
+			lastPhysicalTime := c.lastPhysicalTime
 			physicalNow := c.PhysicalNow()
 			a.Equal(lastPhysicalTime, physicalNow)
 
@@ -469,6 +471,7 @@ func TestHLCEnforceWallTimeWithinBoundsInUpdate(t *testing.T) {
 		},
 	}
 
+	ctx := context.Background()
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			a := assert.New(t)
@@ -476,7 +479,7 @@ func TestHLCEnforceWallTimeWithinBoundsInUpdate(t *testing.T) {
 			c := NewClock(m.UnixNano, time.Nanosecond)
 			c.mu.wallTimeUpperBound = test.wallTimeUpperBound
 			fatal = false
-			_, err := c.updateLocked(Timestamp{WallTime: test.messageWallTime}, true)
+			_, err := c.UpdateAndCheckMaxOffset(ctx, Timestamp{WallTime: test.messageWallTime})
 			a.Nil(err)
 			a.Equal(test.isFatal, fatal)
 		})
@@ -573,7 +576,8 @@ func TestLateStartForwardClockJump(t *testing.T) {
 	ticked := func() {
 		tickedCh <- struct{}{}
 	}
-	if err := c.StartMonitoringForwardClockJumps(activeCh, time.NewTicker, ticked); err != nil {
+	ctx := context.Background()
+	if err := c.StartMonitoringForwardClockJumps(ctx, activeCh, time.NewTicker, ticked); err != nil {
 		t.Fatal(err)
 	}
 	<-tickedCh
