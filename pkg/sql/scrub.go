@@ -469,7 +469,7 @@ func scrubRunDistSQL(
 		p.ExecCfg().LeaseHolderCache,
 		p.txn,
 		func(ts hlc.Timestamp) {
-			_ = p.ExecCfg().Clock.Update(ts)
+			p.ExecCfg().Clock.Update(ts)
 		},
 		p.extendedEvalCtx.Tracing,
 	)

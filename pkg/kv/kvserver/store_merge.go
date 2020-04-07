@@ -103,7 +103,7 @@ func (s *Store) MergeRange(
 		// invariant that our clock is always greater than or equal to any
 		// timestamps in the timestamp cache. For a full discussion, see the comment
 		// on TestStoreRangeMergeTimestampCacheCausality.
-		_ = s.Clock().Update(freezeStart)
+		s.Clock().Update(freezeStart)
 		setTimestampCacheLowWaterMark(s.tsCache, &rightDesc, freezeStart)
 	}
 
