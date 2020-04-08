@@ -25,6 +25,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
@@ -80,6 +81,7 @@ const (
 	bitArrayDataDescTerminator = 0xff
 
 	timeTZMarker = bitArrayDescMarker + 1
+	geoMarker    = timeTZMarker + 1
 
 	// IntMin is chosen such that the range of int tags does not overlap the
 	// ascii character set that is frequently used in testing.
@@ -1274,6 +1276,7 @@ const (
 	BitArray     Type = 17
 	BitArrayDesc Type = 18 // BitArray encoded descendingly
 	TimeTZ       Type = 19
+	Geo          Type = 20
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -1318,6 +1321,8 @@ func slowPeekType(b []byte) Type {
 			return Time
 		case m == timeTZMarker:
 			return TimeTZ
+		case m == geoMarker:
+			return Geo
 		case m == byte(Array):
 			return Array
 		case m == byte(True):
@@ -1920,6 +1925,19 @@ func EncodeUntaggedTimeTZValue(appendTo []byte, t timetz.TimeTZ) []byte {
 	return EncodeNonsortingStdlibVarint(appendTo, int64(t.OffsetSecs))
 }
 
+// EncodeGeoValue encodes a geopb.EWKB value with its value tag, appends it to
+// the supplied buffer, and returns the final buffer.
+func EncodeGeoValue(appendTo []byte, colID uint32, ewkb geopb.EWKB) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, Geo)
+	return EncodeUntaggedGeoValue(appendTo, ewkb)
+}
+
+// EncodeUntaggedGeoValue encodes a geopb.EWKB value, appends it to the supplied buffer,
+// and returns the final buffer.
+func EncodeUntaggedGeoValue(appendTo []byte, ewkb geopb.EWKB) []byte {
+	return EncodeUntaggedBytesValue(appendTo, ewkb)
+}
+
 // EncodeDecimalValue encodes an apd.Decimal value with its value tag, appends
 // it to the supplied buffer, and returns the final buffer.
 func EncodeDecimalValue(appendTo []byte, colID uint32, d *apd.Decimal) []byte {
@@ -2187,6 +2205,16 @@ func DecodeDecimalValue(b []byte) (remaining []byte, d apd.Decimal, err error) {
 	return DecodeUntaggedDecimalValue(b)
 }
 
+// DecodeUntaggedGeoValue decodes a value encoded by EncodeUntaggedGeoValue.
+func DecodeUntaggedGeoValue(b []byte) (remaining []byte, ewkb geopb.EWKB, err error) {
+	var data []byte
+	remaining, data, err = DecodeUntaggedBytesValue(b)
+	if err != nil {
+		return b, nil, err
+	}
+	return remaining, geopb.EWKB(data), err
+}
+
 // DecodeUntaggedDecimalValue decodes a value encoded by EncodeUntaggedDecimalValue.
 func DecodeUntaggedDecimalValue(b []byte) (remaining []byte, d apd.Decimal, err error) {
 	var i uint64
@@ -2356,7 +2384,7 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 		return dataOffset + n, err
 	case Float:
 		return dataOffset + floatValueEncodedLength, nil
-	case Bytes, Array, JSON:
+	case Bytes, Array, JSON, Geo:
 		_, n, i, err := DecodeNonsortingUvarint(b)
 		return dataOffset + n + int(i), err
 	case BitArray:

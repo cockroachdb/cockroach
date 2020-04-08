@@ -25,6 +25,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -152,6 +153,20 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		default:
 			panic(fmt.Sprintf("float with an unexpected width %d", typ.Width()))
 		}
+	case types.GeographyFamily:
+		// TODO(otan): make this actually generate random data
+		ret, err := tree.ParseDGeography("POINT(1.0 1.0)")
+		if err != nil {
+			return nil
+		}
+		return ret
+	case types.GeometryFamily:
+		// TODO(otan): make this actually generate random data
+		ret, err := tree.ParseDGeometry("POINT(1.0 1.0)")
+		if err != nil {
+			return nil
+		}
+		return ret
 	case types.DecimalFamily:
 		d := &tree.DDecimal{}
 		// int64(rng.Uint64()) to get negative numbers, too
@@ -513,6 +528,14 @@ var (
 			&tree.DInterval{Duration: duration.MakeDuration(1, 1, 1)},
 			// TODO(mjibson): fix intervals to stop overflowing then this can be larger.
 			&tree.DInterval{Duration: duration.MakeDuration(0, 0, 290*12)},
+		},
+		types.GeographyFamily: {
+			// TODO(otan): more interesting datums
+			&tree.DGeography{Geography: geo.NewGeography([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))},
+		},
+		types.GeometryFamily: {
+			// TODO(otan): more interesting datums
+			&tree.DGeometry{Geometry: geo.NewGeometry([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))},
 		},
 		types.StringFamily: {
 			tree.NewDString(""),

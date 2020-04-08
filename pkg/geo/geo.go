@@ -12,24 +12,47 @@
 package geo
 
 import (
+	"encoding/binary"
+	"encoding/hex"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/golang/geo/s2"
 	"github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/encoding/ewkb"
-	// Force these into vendor until they're used.
-	_ "github.com/twpayne/go-geom/encoding/ewkbhex"
-	_ "github.com/twpayne/go-geom/encoding/geojson"
-	_ "github.com/twpayne/go-geom/encoding/kml"
-	_ "github.com/twpayne/go-geom/encoding/wkb"
-	_ "github.com/twpayne/go-geom/encoding/wkbhex"
-	_ "github.com/twpayne/go-geom/encoding/wkt"
+	"github.com/twpayne/go-geom/encoding/ewkbhex"
 )
+
+var ewkbEncodingFormat = binary.LittleEndian
 
 // spatialObjectBase is the base for spatial objects.
 type spatialObjectBase struct {
 	ewkb geopb.EWKB
-	// TODO: denormalize SRID from EWKB.
+	// TODO(otan): denormalize SRID from EWKB.
+}
+
+// EWKB returns the EWKB form of the data type.
+func (b *spatialObjectBase) EWKB() geopb.EWKB {
+	return b.ewkb
+}
+
+// EWKBHex returns the EWKB-hex version of this data type
+func (b *spatialObjectBase) EWKBHex() string {
+	return strings.ToUpper(hex.EncodeToString(b.ewkb))
+}
+
+// makeSpatialObjectBase creates a spatialObjectBase from an unvalidated EWKB.
+func makeSpatialObjectBase(in geopb.UnvalidatedEWKB) (spatialObjectBase, error) {
+	t, err := ewkb.Unmarshal(in)
+	if err != nil {
+		return spatialObjectBase{}, err
+	}
+	ret, err := ewkb.Marshal(t, ewkbEncodingFormat)
+	if err != nil {
+		return spatialObjectBase{}, err
+	}
+	return spatialObjectBase{ewkb: geopb.EWKB(ret)}, nil
 }
 
 // Geometry is planar spatial object.
@@ -37,18 +60,33 @@ type Geometry struct {
 	spatialObjectBase
 }
 
-// NewGeometry returns a new Geometry.
+// NewGeometry returns a new Geometry. Assumes the input Geometry is validated and in little endian.
 func NewGeometry(ewkb geopb.EWKB) *Geometry {
 	return &Geometry{spatialObjectBase{ewkb: ewkb}}
 }
 
-// ParseGeometry parses a Geometry from a given text.
-func ParseGeometry(str geopb.WKT) (*Geometry, error) {
-	wkb, err := geos.WKTToWKB(str)
+// NewGeometryFromUnvalidatedEWKB returns a new Geometry from an unvalidated EWKB.
+func NewGeometryFromUnvalidatedEWKB(ewkb geopb.UnvalidatedEWKB) (*Geometry, error) {
+	base, err := makeSpatialObjectBase(ewkb)
 	if err != nil {
 		return nil, err
 	}
-	return NewGeometry(geopb.EWKB(wkb)), nil
+	return &Geometry{base}, nil
+}
+
+// ParseGeometry parses a Geometry from a given text.
+func ParseGeometry(str string) (*Geometry, error) {
+	// TODO(otan): check for SRID=x at the beginning.
+	ewkb, err := parseAmbiguousTextToEWKB(str)
+	if err != nil {
+		return nil, err
+	}
+	return NewGeometry(ewkb), nil
+}
+
+// AsGeography converts a given Geometry to it's Geography form.
+func (g *Geometry) AsGeography() *Geography {
+	return NewGeography(g.ewkb)
 }
 
 // Geography is a spherical spatial object.
@@ -56,20 +94,66 @@ type Geography struct {
 	spatialObjectBase
 }
 
-// NewGeography returns a new Geography.
+// NewGeography returns a new Geography. Assumes the input EWKB is validated and in little endian.
 func NewGeography(ewkb geopb.EWKB) *Geography {
 	return &Geography{spatialObjectBase{ewkb: ewkb}}
 }
 
-// ParseGeography parses a Geography from a given text.
-// TODO(otan): when we have our own WKT parser, move this to geo.
-func ParseGeography(str geopb.WKT) (*Geography, error) {
-	// TODO(otan): set SRID of EWKB to 4326.
-	wkb, err := geos.WKTToWKB(str)
+// NewGeographyFromUnvalidatedEWKB returns a new Geography from an unvalidated EWKB.
+func NewGeographyFromUnvalidatedEWKB(ewkb geopb.UnvalidatedEWKB) (*Geography, error) {
+	base, err := makeSpatialObjectBase(ewkb)
 	if err != nil {
 		return nil, err
 	}
-	return NewGeography(geopb.EWKB(wkb)), nil
+	return &Geography{base}, nil
+}
+
+// parseAmbiguousTextToEWKB parses a text as a number of different options
+// that is available in the geospatial world using the first character as
+// a heuristic.
+// This matches the PostGIS direct cast from a string to GEOGRAPHY/GEOMETRY.
+// See: https://github.com/postgis/postgis/blob/master/postgis/lwgeom_inout.c#L85.
+func parseAmbiguousTextToEWKB(str string) (geopb.EWKB, error) {
+	// TODO(otan): check for SRID=x at the beginning.
+	if len(str) > 0 {
+		// Parse as EWKB hex.
+		if str[0] == '0' {
+			t, err := ewkbhex.Decode(str)
+			if err != nil {
+				return nil, err
+			}
+			return ewkb.Marshal(t, ewkbEncodingFormat)
+		}
+		// Parse as EWKB if it's a byte start.
+		if str[0] == 0x00 || str[0] == 0x01 {
+			t, err := ewkb.Unmarshal([]byte(str))
+			if err != nil {
+				return nil, err
+			}
+			return ewkb.Marshal(t, ewkbEncodingFormat)
+		}
+	}
+	wkb, err := geos.WKTToWKB(geopb.WKT(str))
+	if err != nil {
+		return nil, err
+	}
+	return geopb.EWKB(wkb), nil
+}
+
+// ParseGeography parses a Geography from a given text.
+// TODO(otan): when we have our own WKT parser, move this to geo.
+func ParseGeography(str string) (*Geography, error) {
+	// TODO(otan): set SRID of EWKB to 4326.
+	ewkb, err := parseAmbiguousTextToEWKB(str)
+	if err != nil {
+		return nil, err
+	}
+	return NewGeography(ewkb), nil
+}
+
+// AsGeometry converts a given Geography to it's Geometry form.
+func (g *Geography) AsGeometry() *Geometry {
+	return NewGeometry(g.ewkb)
 }
 
 // AsS2 converts a given Geography into it's S2 form.
