@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -32,8 +33,8 @@ func (p *planner) LookupNamespaceID(
 		tableName   string
 		extraClause string
 	}{
-		{"system.namespace", `AND "parentSchemaID" IN (0, 29)`},
-		{"system.namespace_deprecated", ""},
+		{fmt.Sprintf("[%d AS namespace]", keys.NamespaceTableID), `AND "parentSchemaID" IN (0, 29)`},
+		{fmt.Sprintf("[%d AS namespace]", keys.DeprecatedNamespaceTableID), ""},
 	} {
 		query := fmt.Sprintf(
 			`SELECT id FROM %s WHERE "parentID" = $1 AND name = $2 %s`,

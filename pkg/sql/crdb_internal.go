@@ -2282,7 +2282,7 @@ func getAllNames(
 	// TODO(sqlexec): In 20.2, this can be removed.
 	deprecatedRows, err := executor.Query(
 		ctx, "get-all-names-deprecated-namespace", txn,
-		`SELECT id, "parentID", name FROM [2 as namespace_deprecated]`,
+		fmt.Sprintf(`SELECT id, "parentID", name FROM [%d as namespace]`, keys.DeprecatedNamespaceTableID),
 	)
 	if err != nil {
 		return nil, err
