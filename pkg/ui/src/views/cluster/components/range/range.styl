@@ -41,7 +41,7 @@
   top: 45px
   background-color white
   box-shadow 0 0 4px 0 rgba(154, 161, 171, 0.33)
-  border solid 0.5px #e7ecf3
+  border solid 0.5px $colors--neutral-2
   border-radius 4px
   display flex
   flex-direction row
@@ -60,7 +60,7 @@
     flex-direction column
   ._title
     color $body-color
-    font-family Lato-Bold
+    font-family $font-family--bold
     font-size 12px
     margin-bottom 7.5px
     letter-spacing 0.1px
@@ -82,7 +82,7 @@
       vertical-align middle
     &.active
       .__option-label
-        font-family Lato-Regular
+        font-family $font-family--base
         color $colors--primary-blue-3
 
 .trigger
@@ -99,7 +99,7 @@
     text-transform initial
   ._label-time
     font-size: 13.5px
-    font-family Lato-Bold
+    font-family $font-family--bold
 
 .ant-calendar-today-btn
   color $link-color
@@ -123,12 +123,12 @@
 .range-calendar
   width 248px
   border-radius 4px
-  border solid 1px #e5e5e5
+  border solid 1px $colors--neutral-3
   margin-bottom 20px
   .calendar-today-btn
     width 100%
     height 40px
-    border-top solid 1px #e5e5e5
+    border-top solid 1px $colors--neutral-3
     display flex
     justify-content center
     align-items center
@@ -138,7 +138,7 @@
     align-items center
     height 40px
     span
-      font-family Lato-Bold
+      font-family $font-family--bold
       color $colors--neutral-7
       font-size 14px
       letter-spacing 0.1px
@@ -166,7 +166,7 @@
   .ant-fullcalendar-calendar-body
     padding 8px 16px
     .ant-fullcalendar-column-header
-      font-family Lato-Bold
+      font-family $font-family--bold
       font-size 12px
       line-height 2
       letter-spacing 0.1px
@@ -179,7 +179,7 @@
           justify-content center
           align-items center
           padding 1.5px 4.95px
-          font-family Lato-Regular
+          font-family $font-family--base
           font-size 12px
           line-height 1.83
           letter-spacing 0.1px
@@ -213,7 +213,7 @@
             border 1px solid $colors--primary-blue-3
             color $colors--primary-blue-3
             &:hover
-              font-family Lato-Bold
+              font-family $font-family--bold
               background $colors--primary-blue-1
           &.ant-fullcalendar-selected-day
             .ant-fullcalendar-value
@@ -224,7 +224,7 @@
             &:hover
               background $background-color
             .ant-fullcalendar-value
-                font-family Lato-Bold
+                font-family $font-family--bold
                 color $colors--neutral-5
                 background $background-color
                 border 1px solid $colors--neutral-5

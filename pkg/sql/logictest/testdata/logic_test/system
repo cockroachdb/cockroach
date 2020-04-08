@@ -16,7 +16,7 @@ public  jobs                             table
 public  lease                            table
 public  locations                        table
 public  namespace                        table
-public  namespace_deprecated             table
+public  namespace2                       table
 public  protected_ts_meta                table
 public  protected_ts_records             table
 public  rangelog                         table
@@ -240,10 +240,10 @@ system  public  namespace                        admin   GRANT
 system  public  namespace                        admin   SELECT
 system  public  namespace                        root    GRANT
 system  public  namespace                        root    SELECT
-system  public  namespace_deprecated             admin   GRANT
-system  public  namespace_deprecated             admin   SELECT
-system  public  namespace_deprecated             root    GRANT
-system  public  namespace_deprecated             root    SELECT
+system  public  namespace2                       admin   GRANT
+system  public  namespace2                       admin   SELECT
+system  public  namespace2                       root    GRANT
+system  public  namespace2                       root    SELECT
 system  public  protected_ts_meta                admin   GRANT
 system  public  protected_ts_meta                admin   SELECT
 system  public  protected_ts_meta                root    GRANT

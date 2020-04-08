@@ -23,6 +23,7 @@ import { JobDescriptionCell } from "oss/src/views/jobs/jobDescriptionCell";
 import { trackDocsLink } from "src/util/analytics";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
+import { paginationPageCount } from "oss/src/components/pagination/pagination";
 
 class JobsSortedTable extends SortedTable<Job> {}
 
@@ -154,7 +155,7 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
       <React.Fragment>
         <div className="cl-table-statistic">
           <h4 className="cl-count-title">
-            {this.renderCounts()}
+            {paginationPageCount({ ...pagination, total: jobs.length }, "jobs")}
           </h4>
         </div>
         <section className="cl-table-wrapper">
