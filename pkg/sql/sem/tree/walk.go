@@ -635,6 +635,12 @@ func (expr *DInt) Walk(_ Visitor) Expr { return expr }
 func (expr *DInterval) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
+func (expr *DGeography) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr *DGeometry) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
 func (expr *DJSON) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.

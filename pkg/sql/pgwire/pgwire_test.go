@@ -753,6 +753,12 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SELECT $1::TIMETZ", []preparedQueryTest{
 			baseTest.SetArgs("12:00:00+0330").Results("0000-01-01T12:00:00+03:30"),
 		}},
+		{"SELECT $1::GEOGRAPHY", []preparedQueryTest{
+			baseTest.SetArgs("POINT(1.0 1.0)").Results("0101000000000000000000F03F000000000000F03F"),
+		}},
+		{"SELECT $1::GEOMETRY", []preparedQueryTest{
+			baseTest.SetArgs("POINT(1.0 1.0)").Results("0101000000000000000000F03F000000000000F03F"),
+		}},
 		{"SELECT $1:::FLOAT[]", []preparedQueryTest{
 			baseTest.SetArgs("{}").Results("{}"),
 			baseTest.SetArgs("{1.0,2.0,3.0}").Results("{1.0,2.0,3.0}"),
