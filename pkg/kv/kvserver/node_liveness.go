@@ -169,7 +169,9 @@ type NodeLiveness struct {
 		callbacks         []IsLiveCallback
 		nodes             map[roachpb.NodeID]storagepb.Liveness
 		heartbeatCallback HeartbeatCallback
-		engines           []storage.Engine
+		// Before heartbeating, we write to each of these engines to avoid
+		// maintaining liveness when a local disks is stalled.
+		engines []storage.Engine
 	}
 }
 
@@ -430,9 +432,11 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 	return liveness.IsLive(nl.clock.Now().GoTime()), nil
 }
 
-// StartHeartbeat starts a periodic heartbeat to refresh this node's
-// last heartbeat in the node liveness table. The optionally provided
-// HeartbeatCallback will be invoked whenever this node updates its own liveness.
+// StartHeartbeat starts a periodic heartbeat to refresh this node's last
+// heartbeat in the node liveness table. The optionally provided
+// HeartbeatCallback will be invoked whenever this node updates its own
+// liveness. The slice of engines will be written to before each heartbeat to
+// avoid maintaining liveness in the presence of disk stalls.
 func (nl *NodeLiveness) StartHeartbeat(
 	ctx context.Context, stopper *stop.Stopper, alive HeartbeatCallback, engines []storage.Engine,
 ) {
