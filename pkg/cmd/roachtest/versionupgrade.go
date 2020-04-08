@@ -103,6 +103,9 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 		binaryUpgradeStep("19.2.1"),
 		waitForUpgradeStep(),
 
+		binaryUpgradeStep("19.2.5"),
+		waitForUpgradeStep(),
+
 		// Each new release has to be added here. When adding a new release,
 		// you'll probably need to use a release candidate binary. You may also
 		// want to bake in the last step above, i.e. run this test with
@@ -283,6 +286,7 @@ type versionStep func(ctx context.Context, t *test, u *versionUpgradeTest)
 
 func uploadAndStartFromCheckpointFixture(version string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		t.l.Printf("Upload and start from checkpoint fixture step\n")
 		nodes := u.c.All()
 		u.c.Run(ctx, nodes, "mkdir", "-p", "{store-dir}")
 		name := checkpointName(version)
@@ -313,6 +317,7 @@ func uploadAndstartStep(v string) versionStep {
 // Use a waitForUpgradeStep() for that.
 func binaryUpgradeStep(newVersion string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		t.l.Printf("Upgrading to binary version %s step\n", newVersion)
 		c := u.c
 		nodes := c.All()
 		t.l.Printf("%s: binary\n", newVersion)
@@ -363,6 +368,7 @@ func binaryUpgradeStep(newVersion string) versionStep {
 
 func preventAutoUpgradeStep() versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		t.l.Printf("Prevent autoupgrade step\n")
 		db := u.conn(ctx, t, 1)
 		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING cluster.preserve_downgrade_option = $1`, u.binaryVersion(ctx, t, 1).String())
 		if err != nil {
@@ -373,6 +379,7 @@ func preventAutoUpgradeStep() versionStep {
 
 func allowAutoUpgradeStep() versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		t.l.Printf("Allow autoupgrade step\n")
 		db := u.conn(ctx, t, 1)
 		_, err := db.ExecContext(ctx, `RESET CLUSTER SETTING cluster.preserve_downgrade_option`)
 		if err != nil {
@@ -394,7 +401,7 @@ func waitForUpgradeStep() versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		c := u.c
 		newVersion := u.binaryVersion(ctx, t, 1).String()
-		t.l.Printf("%s: waiting for cluster to auto-upgrade\n", newVersion)
+		t.l.Printf("%s: waiting for cluster to auto-upgrade step\n", newVersion)
 
 		for i := 1; i <= c.spec.NodeCount; i++ {
 			err := retry.ForDuration(30*time.Second, func() error {
