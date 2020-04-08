@@ -4,6 +4,9 @@
   "main": "index.tsx",
   "repository": "github.com/cockroachdb/cockroach",
   "license": "MIT",
+  "scripts": {
+    "storybook": "start-storybook -p 9009"
+  },
   "dependencies": {
     "analytics-node": "^3.4.0-beta.1",
     "antd": "^3.25.2",
