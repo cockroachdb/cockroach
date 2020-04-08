@@ -2137,6 +2137,11 @@ func init() {
 			typNameLiterals[name] = t
 		}
 	}
+	for name, t := range unreservedTypeTokens {
+		if _, ok := typNameLiterals[name]; !ok {
+			typNameLiterals[name] = t
+		}
+	}
 }
 
 // TypeForNonKeywordTypeName returns the column type for the string name of a
@@ -2151,6 +2156,64 @@ func TypeForNonKeywordTypeName(name string) (*T, bool, int) {
 		return t, ok, 0
 	}
 	return nil, false, postgresPredefinedTypeIssues[name]
+}
+
+// The SERIAL types are pseudo-types that are only used during parsing. After
+// that, they should behave identically to INT columns. They are declared
+// as INT types, but using different instances than types.Int, types.Int2, etc.
+// so that they can be compared by pointer to differentiate them from the
+// singleton INT types. While the usual requirement is that == is never used to
+// compare types, this is one case where it's allowed.
+var (
+	Serial2Type = *Int2
+	Serial4Type = *Int4
+	Serial8Type = *Int
+)
+
+// IsSerialType returns whether or not the input type is a SERIAL type.
+// This function should only be used during parsing.
+func IsSerialType(typ *T) bool {
+	// This is a special case where == is used to compare types, since the SERIAL
+	// types are pseudo-types.
+	return typ == &Serial2Type || typ == &Serial4Type || typ == &Serial8Type
+}
+
+// unreservedTypeTokens contain type alias that we resolve during parsing.
+// Instead of adding a new token to the parser, add the type here.
+var unreservedTypeTokens = map[string]*T{
+	"blob":       Bytes,
+	"bool":       Bool,
+	"bytea":      Bytes,
+	"bytes":      Bytes,
+	"date":       Date,
+	"float4":     Float,
+	"float8":     Float,
+	"inet":       INet,
+	"int2":       Int2,
+	"int4":       Int4,
+	"int8":       Int,
+	"int64":      Int,
+	"int2vector": Int2Vector,
+	"json":       Jsonb,
+	"jsonb":      Jsonb,
+	"name":       Name,
+	"oid":        Oid,
+	"oidvector":  OidVector,
+	// Postgres OID pseudo-types. See https://www.postgresql.org/docs/9.4/static/datatype-oid.html.
+	"regclass":     RegClass,
+	"regproc":      RegProc,
+	"regprocedure": RegProcedure,
+	"regnamespace": RegNamespace,
+	"regtype":      RegType,
+
+	"serial2":     &Serial2Type,
+	"serial4":     &Serial4Type,
+	"serial8":     &Serial8Type,
+	"smallserial": &Serial2Type,
+	"bigserial":   &Serial8Type,
+
+	"string": String,
+	"uuid":   Uuid,
 }
 
 // The following map must include all types predefined in PostgreSQL
