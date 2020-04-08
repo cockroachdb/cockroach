@@ -16,8 +16,8 @@ SELECT * FROM system.namespace
 1  jobs                             15
 1  lease                            11
 1  locations                        21
-1  namespace                        30
-1  namespace_deprecated             2
+1  namespace                        2
+1  namespace2                       30
 1  protected_ts_meta                31
 1  protected_ts_records             32
 1  rangelog                         13
@@ -42,6 +42,5 @@ query TTBTTTB
 SHOW COLUMNS FROM system.namespace
 ----
 parentID        INT8    false  NULL  ·  {primary}  false
-parentSchemaID  INT8    false  NULL  ·  {primary}  false
 name            STRING  false  NULL  ·  {primary}  false
 id              INT8    true   NULL  ·  {}         false
