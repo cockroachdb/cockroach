@@ -544,7 +544,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		gw.RegisterService(grpcServer.Server)
 	}
 
-	flowDB := kv.NewDB(cfg.AmbientCtx, tcsFactory, clock)
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		Config:                    &cfg, // NB: s.cfg has a populated AmbientContext.
 		stopper:                   stopper,
@@ -563,7 +562,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		registry:                  registry,
 		lateBoundInternalExecutor: internalExecutor,
 		nodeIDContainer:           nodeIDContainer,
-		flowDB:                    flowDB,
 		externalStorage:           externalStorage,
 		externalStorageFromURI:    externalStorageFromURI,
 		jobRegistry:               jobRegistry,
@@ -649,11 +647,8 @@ type sqlServerArgs struct {
 	// samplerProcessor.
 	runtime *status.RuntimeStatSampler
 
-	// SQL needs to use KV. There's one regular DB and one for DistSQL.
-	//
-	// TODO(tbg): why can't it be the same?
-	db     *kv.DB
-	flowDB *kv.DB // for DistSQL
+	// SQL uses KV, both for non-DistSQL and DistSQL execution.
+	db *kv.DB
 
 	// Various components want to register themselves with metrics.
 	registry *metric.Registry
@@ -799,7 +794,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		RuntimeStats:   cfg.runtime,
 		DB:             cfg.db,
 		Executor:       cfg.lateBoundInternalExecutor,
-		FlowDB:         cfg.flowDB,
+		FlowDB:         cfg.db,
 		RPCContext:     cfg.rpcContext,
 		Stopper:        cfg.stopper,
 		NodeID:         cfg.nodeIDContainer,
