@@ -18,7 +18,7 @@
   .btn__now.active, .btn__now button
     width 60px
     height 40px
-    border 1px solid #c8cbd4
+    border 1px solid $colors--neutral-4
     background-color transparent
     margin-left 8px
     color $colors--neutral-7
@@ -29,7 +29,7 @@
     letter-spacing 0.1px
     border-radius 4px
     &:hover
-      background-color #ededed
+      background-color $colors--white
   .btn__now.disabled button
     color rgba($colors--neutral-7, 0.5)
   .disabled
@@ -39,7 +39,7 @@
     display flex
     ._action, ._action > button
       margin-right 0px
-      border-color #c8cbd4
+      border-color $colors--neutral-4
       background-color transparent
       width 40px
       height 40px
@@ -50,9 +50,9 @@
       &:first-child
         margin-left 0px
       &:hover
-        background-color #ededed
+        background-color $colors--white
       .anticon
-          color #b8bbbc
+          color $colors--neutral-5
       &.active
         .anticon
-          color #3a7ce1
+          color $colors--primary-blue-3

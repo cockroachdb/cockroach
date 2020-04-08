@@ -10,10 +10,11 @@
 
 @require '~styl/base/palette.styl'
 @require '~src/views/shared/util/table.styl'
+@require '~src/components/core/index'
 
 .statements-table
   &__col-query-text
-    font-family monospace
+    font-family $font-family--monospace
     white-space pre-wrap
 
 .statements
@@ -35,8 +36,8 @@
   line-height 1.57
   letter-spacing 0.1px
   .label
-    font-family Lato-Bold
-    color #394455
+    font-family $font-family--bold
+    color $colors--neutral-7
 
 .last-cleared-tooltip, .numeric-stats-table, .plan-view-table
   &__tooltip
@@ -210,13 +211,7 @@
       height 3px
       background-color $colors--primary-blue-3
 
-$plan-node-line-color = #DADADA                                 // connecting line: light gray
-$plan-node-warning-color = #b26000                              // dark orange
 $plan-node-warning-background-color = rgba(209, 135, 55, 0.06)  // light orange
-$plan-node-warning-border-color = rgba(209, 135, 55, 0.3)       // dark orange 2
-$plan-node-details-background-color = #F6F6F6                   // grayish-white
-$plan-node-details-border-color = #ACB8CB                       // dark gray
-$plan-node-attribute-key-color = #37a806                        // light green
 
 .plan-view-table
   @extend $table-base
@@ -266,12 +261,12 @@ $plan-node-attribute-key-color = #37a806                        // light green
     position relative
     top 3px
     path
-      fill $plan-node-warning-color
+      fill $colors--functional-orange-4
 
   .warn
     position relative
     left -5px
-    color $plan-node-warning-color
+    color $colors--functional-orange-4
     background-color $plan-node-warning-background-color
     border-radius 2px
     padding 2px
@@ -299,7 +294,7 @@ $plan-node-attribute-key-color = #37a806                        // light green
     line-height 1.83
 
     .nodeAttributeKey
-      color $plan-node-attribute-key-color
+      color $colors--primary-green-3
 
   ul
     padding 0
@@ -389,7 +384,7 @@ $plan-node-attribute-key-color = #37a806                        // light green
     top 50%
     left 50%
     transform: translate(-50%, -50%)
-    color #b8bbbc
+    color $colors--neutral-5
     font-size 14px
     letter-spacing 1.5px
   .anticon

@@ -8,10 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+@require '~src/components/core/index'
+
 .Legend
   display flex
   max-width 713px
-  background-color #ffffff
+  background-color $colors--white
   border-radius 3px
   box-shadow 0 0 1px 0 rgba(67, 90, 111, 0.41)
   padding 20px 24px 12px
@@ -28,12 +30,12 @@
         text-transform uppercase
         font-family SourceSansPro-SemiBold
         font-size 12px
-        color #5f6c87
+        color $colors--neutral-6
         line-height 1.17
         letter-spacing 1.5px
         margin 0
       .info-icon
-        color #7e89a9
+        color $colors--neutral-5
         font-size 16px
         margin-left 7px
     &__body
@@ -48,7 +50,7 @@
           text-transform uppercase
           font-family SourceSansPro-SemiBold
           font-size 12px
-          color #5f6c87
+          color $colors--neutral-6
           line-height 1.17
           letter-spacing 1.5px
 
@@ -56,13 +58,13 @@
   width 100%
   td, th
     padding 11px 20px
-    font-family Lato-Bold
+    font-family $font-family--bold
     font-size 12px
     line-height 2
     letter-spacing 0.1px
-    color #5f6c87
+    color $colors--neutral-6
     &:nth-child(3)
-      border-left 1px solid #e7ecf3
+      border-left 1px solid $colors--neutral-2
   &--item
     td
       padding 16px 20px
@@ -76,5 +78,4 @@
     &__normal
       font-family SourceSansPro-Regular
   &--item:nth-child(2n)
-    background #f6f6f6
- 
+    background $colors--background

@@ -10,6 +10,7 @@
 
 @require '~styl/base/palette.styl'
 @require '~styl/base/layout-vars.styl'
+@require "~src/components/core/index.styl"
 
 // ---- Navigation ----
 $navbar-bg            = white
@@ -45,7 +46,7 @@ $subnav-underline-height = 3px
     width 100%
     padding 0
     border 0
-    font-family Lato-Bold
+    font-family $font-family--bold
     font-size 8px
     text-transform uppercase
     float left
@@ -69,7 +70,7 @@ $subnav-underline-height = 3px
       text-align center
 
       &--insecure
-        font-family Lato-Bold
+        font-family $font-family--bold
         font-size 8px
         text-transform uppercase
         text-align center
@@ -146,7 +147,7 @@ $subnav-underline-height = 3px
     list-style-type none
     line-height $subnav-height - $subnav-underline-height
 
-    font-family Lato-Bold
+    font-family $font-family--bold
     font-size 9px
     max-width calc(100vw - 80px)
     @media (min-width: 1300px)
@@ -204,7 +205,7 @@ $subnav-underline-height = 3px
 ul.pagination
   letter-spacing 2.17px
   text-transform uppercase
-  font-family Lato-Bold
+  font-family $font-family--bold
   font-size 1.1rem
   color $tooltip-color
   list-style-type none
