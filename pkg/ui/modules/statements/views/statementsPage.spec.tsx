@@ -17,7 +17,7 @@ import StatementsPageConnected, {
   StatementsPage,
   StatementsPageProps,
   StatementsPageState,
-} from "src/views/statements/statementsPage";
+} from "./statementsPage";
 
 describe("StatementsPage", () => {
   describe("Statements table", () => {

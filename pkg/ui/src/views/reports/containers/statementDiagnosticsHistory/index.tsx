@@ -28,7 +28,7 @@ import {
   invalidateStatementDiagnosticsRequests,
   refreshStatementDiagnosticsRequests,
 } from "src/redux/apiReducers";
-import { DiagnosticStatusBadge } from "src/views/statements/diagnostics/diagnosticStatusBadge";
+import { DiagnosticStatusBadge } from "modules/statements/views/diagnostics/diagnosticStatusBadge";
 import "./statementDiagnosticsHistoryView.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -38,7 +38,7 @@ import {
   sortByCompletedField,
   sortByRequestedAtField,
   sortByStatementFingerprintField,
-} from "src/views/statements/diagnostics";
+} from "modules/statements/views/diagnostics";
 import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
 
 type StatementDiagnosticsHistoryViewProps = MapStateToProps & MapDispatchToProps;

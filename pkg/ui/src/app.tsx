@@ -47,8 +47,8 @@ import Range from "src/views/reports/containers/range";
 import ReduxDebug from "src/views/reports/containers/redux";
 import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
-import StatementDetails from "src/views/statements/statementDetails";
-import StatementsPage from "src/views/statements/statementsPage";
+import StatementDetails from "modules/statements/views/statementDetails";
+import StatementsPage from "modules/statements/views/statementsPage";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import "styl/app.styl";
 

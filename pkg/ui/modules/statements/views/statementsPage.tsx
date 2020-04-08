@@ -32,11 +32,10 @@ import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
-import Empty from "../app/components/empty";
-import { Search } from "../app/components/Search";
+import Empty from "src/views/app/components/empty";
+import { Search } from "src/views/app/components/Search";
 import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
-import ActivateDiagnosticsModal, { ActivateDiagnosticsModalRef } from "src/views/statements/diagnostics/activateDiagnosticsModal";
-import "./statements.styl";
+import ActivateDiagnosticsModal, { ActivateDiagnosticsModalRef } from "./diagnostics/activateDiagnosticsModal";
 import {
   selectLastDiagnosticsReportPerStatement,
 } from "src/redux/statements/statementsSelectors";
@@ -44,7 +43,7 @@ import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
 import { trackPaginate, trackSearch } from "src/util/analytics";
 
-import "./statements.styl";
+import styles from  "./statements.styl";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 

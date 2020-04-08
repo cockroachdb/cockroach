@@ -32,8 +32,8 @@ import {
 } from "src/views/databases/containers/databases";
 import { TableMain } from "src/views/databases/containers/tableDetails";
 import { DataDistributionPage } from "src/views/cluster/containers/dataDistribution";
-import { StatementsPage } from "src/views/statements/statementsPage";
-import { StatementDetails } from "src/views/statements/statementDetails";
+import { StatementsPage } from "modules/statements/views/statementsPage";
+import { StatementDetails } from "modules/statements/views/statementDetails";
 import Debug from "src/views/reports/containers/debug";
 import { ReduxDebug } from "src/views/reports/containers/redux";
 import { CustomChart } from "src/views/reports/containers/customChart";
