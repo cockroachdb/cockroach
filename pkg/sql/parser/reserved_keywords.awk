@@ -3,7 +3,7 @@
   next
 }
 
-/^(cockroachdb_extra_)?type_func_name_keyword:/ {
+/^type_func_name_(no_crdb_extra|crdb_extra)?_keyword:/ {
   reserved_keyword = 1
   next
 }
