@@ -90,6 +90,7 @@ var categories = map[string]string{
 	"col_name_keyword:":                         "C",
 	"unreserved_keyword:":                       "U",
 	"type_func_name_keyword:":                   "T",
+	"pg_type_func_name_keyword:":                "T",
 	"cockroachdb_extra_type_func_name_keyword:": "T",
 	"reserved_keyword:":                         "R",
 	"cockroachdb_extra_reserved_keyword:":       "R",

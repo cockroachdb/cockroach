@@ -3,7 +3,7 @@
   next
 }
 
-/^(cockroachdb_extra_)?type_func_name_keyword:/ {
+/^(cockroachdb_extra_|pg_)?type_func_name_keyword:/ {
   reserved_keyword = 1
   next
 }
