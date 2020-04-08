@@ -305,7 +305,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	nodeDialer := nodedialer.New(rpcContext, gossip.AddressResolver(g))
 
-	runtimeSampler := status.NewRuntimeStatSampler(context.TODO(), clock)
+	runtimeSampler := status.NewRuntimeStatSampler(ctx, clock)
 	registry.AddMetricStruct(runtimeSampler)
 
 	// A custom RetryOptions is created which uses stopper.ShouldQuiesce() as
@@ -546,7 +546,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	flowDB := kv.NewDB(cfg.AmbientCtx, tcsFactory, clock)
-	sqlServer, err := newSQLServer(sqlServerArgs{
+	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		Config:                    &cfg, // NB: s.cfg has a populated AmbientContext.
 		stopper:                   stopper,
 		clock:                     clock,
@@ -670,7 +670,7 @@ type sqlServerArgs struct {
 	jobRegistry *jobs.Registry
 }
 
-func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
+func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	sessionRegistry := cfg.status.sessionRegistry
 	execCfg := &sql.ExecutorConfig{}
 	var jobAdoptionStopFile string
@@ -756,7 +756,7 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 	// Set up the DistSQL temp engine.
 
 	useStoreSpec := cfg.Stores.Specs[cfg.TempStorageConfig.SpecIdx]
-	tempEngine, tempFS, err := storage.NewTempEngine(context.TODO(), cfg.StorageEngine, cfg.TempStorageConfig, useStoreSpec)
+	tempEngine, tempFS, err := storage.NewTempEngine(ctx, cfg.StorageEngine, cfg.TempStorageConfig, useStoreSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating temp storage")
 	}
@@ -778,7 +778,7 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 			err = storage.CleanupTempDirs(recordPath)
 		}
 		if err != nil {
-			log.Errorf(context.TODO(), "could not remove temporary store directory: %v", err.Error())
+			log.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
 		}
 	}))
 
@@ -835,9 +835,7 @@ func newSQLServer(cfg sqlServerArgs) (*sqlServer, error) {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)
 	}
 
-	ctx := context.TODO()
-
-	distSQLServer := distsql.NewServer(context.TODO(), distSQLCfg)
+	distSQLServer := distsql.NewServer(ctx, distSQLCfg)
 	execinfrapb.RegisterDistSQLServer(cfg.grpcServer, distSQLServer)
 
 	virtualSchemas, err := sql.NewVirtualSchemaHolder(ctx, cfg.Settings)
@@ -1365,6 +1363,7 @@ func periodicallyPersistHLCUpperBound(
 // tickCallback is called whenever persistHLCUpperBoundCh or a ticker tick is
 // processed
 func (s *Server) startPersistingHLCUpperBound(
+	ctx context.Context,
 	hlcUpperBoundExists bool,
 	persistHLCUpperBoundFn func(int64) error,
 	tickerFn func(d time.Duration) *time.Ticker,
@@ -1388,7 +1387,7 @@ func (s *Server) startPersistingHLCUpperBound(
 	}
 
 	s.stopper.RunWorker(
-		context.TODO(),
+		ctx,
 		func(context.Context) {
 			periodicallyPersistHLCUpperBound(
 				s.clock,
@@ -1775,6 +1774,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	log.Event(ctx, "started node")
 	if err := s.startPersistingHLCUpperBound(
+		ctx,
 		hlcUpperBound > 0,
 		func(t int64) error { /* function to persist upper bound of HLC to all stores */
 			return s.node.SetHLCUpperBound(context.Background(), t)
@@ -2404,7 +2404,7 @@ func (s *Server) startSampleEnvironment(ctx context.Context, frequency time.Dura
 
 // Stop stops the server.
 func (s *Server) Stop() {
-	s.stopper.Stop(context.TODO())
+	s.stopper.Stop(context.Background())
 }
 
 // ServeHTTP is necessary to implement the http.Handler interface.
