@@ -262,8 +262,18 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newDescriptorIDs:    staticIDs(keys.ProtectedTimestampsRecordsTableID),
 	},
 	{
-		// Introduced in v20.1.
-		name:                "create new system.namespace table",
+		// Introduced in v20.1. Note that this migration
+		// has v2 appended to it because in 20.1 betas, the migration edited the old
+		// system.namespace descriptor to change its Name. This wrought havoc,
+		// causing #47167, which caused 19.2 nodes to fail to be able to read
+		// system.namespace from SQL queries. However, without changing the old
+		// descriptor's Name, backup would fail, since backup requires that no two
+		// descriptors have the same Name. So, in v2 of this migration, we edit
+		// the name of the new table's Descriptor, calling it
+		// namespace2, and re-edit the old descriptor's Name to
+		// be just "namespace" again, to try to help clusters that might have
+		// upgraded to the 20.1 betas with the problem.
+		name:                "create new system.namespace table v2",
 		workFn:              createNewSystemNamespaceDescriptor,
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionNamespaceTableWithSchemas),
 		newDescriptorIDs:    staticIDs(keys.NamespaceTableID),
@@ -1278,8 +1288,9 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 		b := txn.NewBatch()
 
 		// Retrieve the existing namespace table's descriptor and change its name to
-		// "namespace_deprecated". This prevents name collisions with the new
-		// namespace table, for instance during backup.
+		// "namespace". This corrects the behavior of this migration as it existed
+		// in 20.1 betas. The old namespace table cannot be edited without breaking
+		// explicit selects from system.namespace in 19.2.
 		deprecatedKey := sqlbase.MakeDescMetadataKey(keys.DeprecatedNamespaceTableID)
 		deprecatedDesc := &sqlbase.Descriptor{}
 		ts, err := txn.GetProtoTs(ctx, deprecatedKey, deprecatedDesc)
@@ -1301,7 +1312,7 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 		//    the correct ID in the new system.namespace table after all tables are
 		//    copied over.
 		nameKey := sqlbase.NewPublicTableKey(
-			sqlbase.NamespaceTable.GetParentID(), sqlbase.NamespaceTable.GetName())
+			sqlbase.NamespaceTable.GetParentID(), sqlbase.NamespaceTableName)
 		b.Put(nameKey.Key(), sqlbase.NamespaceTable.GetID())
 		b.Put(sqlbase.MakeDescMetadataKey(
 			sqlbase.NamespaceTable.GetID()), sqlbase.WrapDescriptor(&sqlbase.NamespaceTable))

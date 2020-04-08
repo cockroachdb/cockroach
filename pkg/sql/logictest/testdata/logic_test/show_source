@@ -176,7 +176,7 @@ query TTT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system]
 ----
 schema_name  table_name                       type
-public       namespace_deprecated             table
+public       namespace                        table
 public       descriptor                       table
 public       users                            table
 public       zones                            table
@@ -195,7 +195,7 @@ public       replication_constraint_stats     table
 public       replication_critical_localities  table
 public       replication_stats                table
 public       reports_meta                     table
-public       namespace                        table
+public       namespace2                       table
 public       protected_ts_meta                table
 public       protected_ts_records             table
 public       role_options                     table
@@ -207,7 +207,7 @@ query TTTT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
 schema_name  table_name                       type   comment
-public       namespace_deprecated             table  ·
+public       namespace                        table  ·
 public       descriptor                       table  ·
 public       users                            table  ·
 public       zones                            table  ·
@@ -226,7 +226,7 @@ public       replication_constraint_stats     table  ·
 public       replication_critical_localities  table  ·
 public       replication_stats                table  ·
 public       reports_meta                     table  ·
-public       namespace                        table  ·
+public       namespace2                       table  ·
 public       protected_ts_meta                table  ·
 public       protected_ts_records             table  ·
 public       role_options                     table  ·

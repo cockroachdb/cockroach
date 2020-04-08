@@ -59,13 +59,13 @@ func getDescriptorFromDB(
 		tableName   string
 		extraClause string
 	}{
-		{"system.namespace", `AND n."parentSchemaID" = 0`},
-		{"system.namespace_deprecated", ""},
+		{fmt.Sprintf("[%d AS n]", keys.NamespaceTableID), `AND "parentSchemaID" = 0`},
+		{fmt.Sprintf("[%d AS n]", keys.DeprecatedNamespaceTableID), ""},
 	} {
 		if err := db.QueryRow(
 			fmt.Sprintf(`SELECT
 			d.descriptor
-		FROM %s n INNER JOIN system.descriptor d ON n.id = d.id
+		FROM %s INNER JOIN system.descriptor d ON n.id = d.id
 		WHERE n."parentID" = $1 %s
 		AND n.name = $2`,
 				t.tableName,

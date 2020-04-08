@@ -243,6 +243,19 @@ var systemTableIDCache = func() map[string]ID {
 		cache[t.Name] = t.ID
 	}
 
+	// This special case exists so that we resolve "namespace" to the new
+	// namespace table ID (30) in 20.1, while the Name in the "namespace"
+	// descriptor is still set to "namespace2" during the
+	// 20.1 cycle. We couldn't set the new namespace table's Name to "namespace"
+	// in 20.1, because it had to co-exist with the old namespace table, whose
+	// name must *remain* "namespace" - and you can't have duplicate descriptor
+	// Name fields.
+	//
+	// This can be removed in 20.2, when we add a migration to change the new
+	// namespace table's Name to "namespace" again.
+	// TODO(solon): remove this in 20.2.
+	cache[NamespaceTableName] = keys.NamespaceTableID
+
 	return cache
 }()
 
@@ -257,7 +270,7 @@ func LookupSystemTableDescriptorID(
 
 	if settings != nil &&
 		!settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) &&
-		tableName == NamespaceTable.Name {
+		tableName == NamespaceTableName {
 		return DeprecatedNamespaceTable.ID
 	}
 	dbID, ok := systemTableIDCache[tableName]

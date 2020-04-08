@@ -51,7 +51,7 @@ func ShouldSplitAtID(id uint32, rawDesc *roachpb.Value) bool {
 // These system tables are part of the system config.
 const (
 	NamespaceTableSchema = `
-CREATE TABLE system.namespace (
+CREATE TABLE system.namespace2 (
   "parentID" INT8,
   "parentSchemaID" INT8,
   name       STRING,
@@ -365,9 +365,14 @@ var (
 	// SystemDB is the descriptor for the system database.
 	SystemDB = MakeSystemDatabaseDesc()
 
+	// NamespaceTableName is "namespace", which is always and forever the
+	// user-visible name of the system.namespace table. Tautological, but
+	// important.
+	NamespaceTableName = "namespace"
+
 	// DeprecatedNamespaceTable is the descriptor for the deprecated namespace table.
 	DeprecatedNamespaceTable = TableDescriptor{
-		Name:                    "namespace_deprecated",
+		Name:                    NamespaceTableName,
 		ID:                      keys.DeprecatedNamespaceTableID,
 		ParentID:                keys.SystemDatabaseID,
 		UnexposedParentSchemaID: keys.PublicSchemaID,
@@ -402,8 +407,16 @@ var (
 	// table should only be written to via KV puts, not via the SQL layer. Some
 	// code assumes that it only has KV entries for column family 4, not the
 	// "sentinel" column family 0 which would be written by SQL.
+	//
+	// Note that the Descriptor.Name of this table is not "namespace", but
+	// something else. This is because, in 20.1, we moved the representation of
+	// namespaces to a new place, and for various reasons, we can't have two
+	// descriptors with the same Name at once.
+	//
+	// TODO(solon): in 20.2, we should change the Name of this descriptor
+	// back to "namespace".
 	NamespaceTable = TableDescriptor{
-		Name:                    "namespace",
+		Name:                    "namespace2",
 		ID:                      keys.NamespaceTableID,
 		ParentID:                keys.SystemDatabaseID,
 		UnexposedParentSchemaID: keys.PublicSchemaID,
