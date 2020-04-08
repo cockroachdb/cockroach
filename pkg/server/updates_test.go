@@ -145,7 +145,7 @@ func TestUsageQuantization(t *testing.T) {
 	}
 
 	// Flush the SQL stat pool.
-	ts.Server.pgServer.SQLServer.ResetSQLStats(ctx)
+	ts.Server.sqlServer.pgServer.SQLServer.ResetSQLStats(ctx)
 
 	// Collect a round of statistics.
 	ts.reportDiagnostics(ctx)
@@ -565,7 +565,7 @@ func TestReportUsage(t *testing.T) {
 
 		node := ts.node.recorder.GenerateNodeStatus(ctx)
 		// Clear the SQL stat pool before getting diagnostics.
-		ts.pgServer.SQLServer.ResetSQLStats(ctx)
+		ts.sqlServer.pgServer.SQLServer.ResetSQLStats(ctx)
 		ts.reportDiagnostics(ctx)
 
 		keyCounts := make(map[roachpb.StoreID]int64)

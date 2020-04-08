@@ -67,7 +67,7 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 			// `cluster.preserve_downgrade_option` statement in a transaction until
 			// success.
 			for ur := retry.StartWithCtx(ctx, upgradeRetryOpts); ur.Next(); {
-				if _, err := s.internalExecutor.ExecEx(
+				if _, err := s.sqlServer.internalExecutor.ExecEx(
 					ctx, "set-version", nil, /* txn */
 					sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 					"SET CLUSTER SETTING version = crdb_internal.node_executable_version();",
@@ -130,7 +130,7 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 	// Check if auto upgrade is enabled at current version. This is read from
 	// the KV store so that it's in effect on all nodes immediately following a
 	// SET CLUSTER SETTING.
-	datums, err := s.internalExecutor.QueryEx(
+	datums, err := s.sqlServer.internalExecutor.QueryEx(
 		ctx, "read-downgrade", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		"SELECT value FROM system.settings WHERE name = 'cluster.preserve_downgrade_option';",
@@ -155,7 +155,7 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 // (which returns the version from the KV store as opposed to the possibly
 // lagging settings subsystem).
 func (s *Server) clusterVersion(ctx context.Context) (string, error) {
-	datums, err := s.internalExecutor.QueryEx(
+	datums, err := s.sqlServer.internalExecutor.QueryEx(
 		ctx, "show-version", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		"SHOW CLUSTER SETTING version;",

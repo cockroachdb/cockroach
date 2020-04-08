@@ -95,7 +95,8 @@ func registerSQLAlchemy(r *testRegistry) {
 			c,
 			node,
 			"install pytest",
-			`sudo pip3 install --upgrade --force-reinstall setuptools pytest pytest-xdist psycopg2`,
+			// Unpin pytest once sqlalchemy rel_1_3_16 is released (https://github.com/sqlalchemy/sqlalchemy/issues/5201)
+			`sudo pip3 install --upgrade --force-reinstall setuptools pytest==5.3.5 pytest-xdist psycopg2`,
 		); err != nil {
 			t.Fatal(err)
 		}

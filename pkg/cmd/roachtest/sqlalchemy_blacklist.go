@@ -160,5 +160,6 @@ var sqlAlchemyBlacklist = blacklist{
 var sqlAlchemyIgnoreList20_1 = sqlAlchemyIgnoreList
 
 var sqlAlchemyIgnoreList = blacklist{
-	"test/dialect/test_suite.py::TableDDLTest_cockroachdb+psycopg2_9_5_0::test_create_table": "flaky",
+	"test/dialect/test_suite.py::ExceptionTest_cockroachdb+psycopg2_9_5_0::test_integrity_error": "passes, but can't parse result",
+	"test/dialect/test_suite.py::TableDDLTest_cockroachdb+psycopg2_9_5_0::test_create_table":     "flaky",
 }

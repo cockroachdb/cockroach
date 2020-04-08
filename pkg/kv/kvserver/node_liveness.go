@@ -151,7 +151,6 @@ type NodeLiveness struct {
 	ambientCtx        log.AmbientContext
 	clock             *hlc.Clock
 	db                *kv.DB
-	engines           []storage.Engine
 	gossip            *gossip.Gossip
 	livenessThreshold time.Duration
 	heartbeatInterval time.Duration
@@ -170,6 +169,9 @@ type NodeLiveness struct {
 		callbacks         []IsLiveCallback
 		nodes             map[roachpb.NodeID]storagepb.Liveness
 		heartbeatCallback HeartbeatCallback
+		// Before heartbeating, we write to each of these engines to avoid
+		// maintaining liveness when a local disks is stalled.
+		engines []storage.Engine
 	}
 }
 
@@ -179,7 +181,6 @@ func NewNodeLiveness(
 	ambient log.AmbientContext,
 	clock *hlc.Clock,
 	db *kv.DB,
-	engines []storage.Engine,
 	g *gossip.Gossip,
 	livenessThreshold time.Duration,
 	renewalDuration time.Duration,
@@ -190,7 +191,6 @@ func NewNodeLiveness(
 		ambientCtx:        ambient,
 		clock:             clock,
 		db:                db,
-		engines:           engines,
 		gossip:            g,
 		livenessThreshold: livenessThreshold,
 		heartbeatInterval: livenessThreshold - renewalDuration,
@@ -432,19 +432,27 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 	return liveness.IsLive(nl.clock.Now().GoTime()), nil
 }
 
-// StartHeartbeat starts a periodic heartbeat to refresh this node's
-// last heartbeat in the node liveness table. The optionally provided
-// HeartbeatCallback will be invoked whenever this node updates its own liveness.
+// StartHeartbeat starts a periodic heartbeat to refresh this node's last
+// heartbeat in the node liveness table. The optionally provided
+// HeartbeatCallback will be invoked whenever this node updates its own
+// liveness. The slice of engines will be written to before each heartbeat to
+// avoid maintaining liveness in the presence of disk stalls.
 func (nl *NodeLiveness) StartHeartbeat(
-	ctx context.Context, stopper *stop.Stopper, alive HeartbeatCallback,
+	ctx context.Context, stopper *stop.Stopper, alive HeartbeatCallback, engines []storage.Engine,
 ) {
 	log.VEventf(ctx, 1, "starting liveness heartbeat")
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 
-	nl.mu.RLock()
+	if len(engines) == 0 {
+		// Avoid silently forgetting to pass the engines. It happened before.
+		log.Fatalf(ctx, "must supply at least one engine")
+	}
+
+	nl.mu.Lock()
 	nl.mu.heartbeatCallback = alive
-	nl.mu.RUnlock()
+	nl.mu.engines = engines
+	nl.mu.Unlock()
 
 	stopper.RunWorker(ctx, func(context.Context) {
 		ambient := nl.ambientCtx
@@ -806,7 +814,10 @@ func (nl *NodeLiveness) updateLiveness(
 			return err
 		}
 
-		for _, eng := range nl.engines {
+		nl.mu.RLock()
+		engines := nl.mu.engines
+		nl.mu.RUnlock()
+		for _, eng := range engines {
 			// We synchronously write to all disks before updating liveness because we
 			// don't want any excessively slow disks to prevent leases from being
 			// shifted to other nodes. A slow/stalled disk would block here and cause

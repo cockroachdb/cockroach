@@ -283,7 +283,7 @@ func (s *Server) maybeReportDiagnostics(
 	if log.DiagnosticsReportingEnabled.Get(&s.st.SV) {
 		s.reportDiagnostics(ctx)
 	}
-	s.pgServer.SQLServer.ResetReportedStats(ctx)
+	s.sqlServer.pgServer.SQLServer.ResetReportedStats(ctx)
 
 	return scheduled.Add(diagnosticReportFrequency.Get(&s.st.SV))
 }
@@ -351,7 +351,7 @@ func (s *Server) getReportingInfo(
 	// Read the system.settings table to determine the settings for which we have
 	// explicitly set values -- the in-memory SV has the set and default values
 	// flattened for quick reads, but we'd rather only report the non-defaults.
-	if datums, err := s.internalExecutor.QueryEx(
+	if datums, err := s.sqlServer.internalExecutor.QueryEx(
 		ctx, "read-setting", nil, /* txn */
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		"SELECT name FROM system.settings",
@@ -365,7 +365,7 @@ func (s *Server) getReportingInfo(
 		}
 	}
 
-	if datums, err := s.internalExecutor.QueryEx(
+	if datums, err := s.sqlServer.internalExecutor.QueryEx(
 		ctx,
 		"read-zone-configs",
 		nil, /* txn */
@@ -392,7 +392,7 @@ func (s *Server) getReportingInfo(
 		}
 	}
 
-	info.SqlStats = s.pgServer.SQLServer.GetScrubbedReportingStats()
+	info.SqlStats = s.sqlServer.pgServer.SQLServer.GetScrubbedReportingStats()
 	return &info
 }
 

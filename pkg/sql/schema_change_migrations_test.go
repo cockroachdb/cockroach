@@ -698,7 +698,7 @@ func verifySchemaChangeJobRan(
 		} else {
 			expected = [][]string{{"new_table"}, {"test"}}
 		}
-		rows := runner.QueryStr(t, "SHOW TABLES FROM t")
+		rows := runner.QueryStr(t, "SELECT table_name FROM [SHOW TABLES FROM t] ORDER BY table_name")
 		require.Equal(t, expected, rows)
 	case TruncateTable:
 		if didCancel {
@@ -711,7 +711,7 @@ func verifySchemaChangeJobRan(
 	case DropTable:
 		// Canceling after the backfill has no effect.
 		expected = [][]string{}
-		rows := runner.QueryStr(t, "SHOW TABLES FROM t")
+		rows := runner.QueryStr(t, "SELECT table_name FROM [SHOW TABLES FROM t] ORDER BY table_name")
 		require.Equal(t, expected, rows)
 	}
 }

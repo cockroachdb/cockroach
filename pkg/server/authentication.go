@@ -57,16 +57,14 @@ var webSessionTimeout = settings.RegisterPublicNonNegativeDurationSetting(
 )
 
 type authenticationServer struct {
-	server     *Server
-	memMetrics *sql.MemoryMetrics
+	server *Server
 }
 
 // newAuthenticationServer allocates and returns a new REST server for
 // authentication APIs.
 func newAuthenticationServer(s *Server) *authenticationServer {
 	return &authenticationServer{
-		server:     s,
-		memMetrics: &s.adminMemMetrics,
+		server: s,
 	}
 }
 
@@ -167,7 +165,7 @@ func (s *authenticationServer) UserLogout(
 	}
 
 	// Revoke the session.
-	if n, err := s.server.internalExecutor.ExecEx(
+	if n, err := s.server.sqlServer.internalExecutor.ExecEx(
 		ctx,
 		"revoke-auth-session",
 		nil, /* txn */
@@ -215,7 +213,7 @@ WHERE id = $1`
 		isRevoked    bool
 	)
 
-	row, err := s.server.internalExecutor.QueryRowEx(
+	row, err := s.server.sqlServer.internalExecutor.QueryRowEx(
 		ctx,
 		"lookup-auth-session",
 		nil, /* txn */
@@ -264,7 +262,7 @@ func (s *authenticationServer) verifyPassword(
 	ctx context.Context, username string, password string,
 ) (valid bool, expired bool, err error) {
 	exists, canLogin, pwRetrieveFn, validUntilFn, err := sql.GetUserHashedPassword(
-		ctx, s.server.execCfg.InternalExecutor, username,
+		ctx, s.server.sqlServer.execCfg.InternalExecutor, username,
 	)
 	if err != nil {
 		return false, false, err
@@ -322,7 +320,7 @@ RETURNING id
 `
 	var id int64
 
-	row, err := s.server.internalExecutor.QueryRowEx(
+	row, err := s.server.sqlServer.internalExecutor.QueryRowEx(
 		ctx,
 		"create-auth-session",
 		nil, /* txn */
