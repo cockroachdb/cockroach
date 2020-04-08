@@ -443,6 +443,11 @@ func registerQuitAllNodes(r *testRegistry) {
 			// also expect the node to exit successfully.
 			q.runWithTimeout(ctx, func(ctx context.Context) { expectHardShutdown(ctx, q.t, runQuit(ctx, q.t, q.c, 2, "--drain-wait=4s")) })
 			q.runWithTimeout(ctx, func(ctx context.Context) { expectHardShutdown(ctx, q.t, runQuit(ctx, q.t, q.c, 1, "--drain-wait=4s")) })
+
+			// At the end, restart all nodes. We do this to check that
+			// the cluster can indeed restart, and also to please
+			// the dead node detection check at the end of each test.
+			q.c.Start(ctx, q.t, q.args)
 		},
 	})
 }
