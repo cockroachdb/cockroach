@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 // ErrClusterInitialized is reported when the Boostrap RPC is ran on
@@ -206,6 +207,8 @@ func (s *initServer) ServeAndWait(
 	}
 }
 
+var errInternalBootstrapError = errors.New("unable to bootstrap due to internal error")
+
 // Bootstrap implements the serverpb.Init service. Users set up a new
 // CockroachDB server by calling this endpoint on *exactly one node* in the
 // cluster (retrying only on that node).
@@ -216,27 +219,32 @@ func (s *initServer) ServeAndWait(
 // nodes. In that case, they end up with more than one cluster, and nodes
 // panicking or refusing to connect to each other.
 func (s *initServer) Bootstrap(
-	ctx context.Context, request *serverpb.BootstrapRequest,
+	ctx context.Context, _ *serverpb.BootstrapRequest,
 ) (*serverpb.BootstrapResponse, error) {
+	// Bootstrap() only responds once. Everyone else gets an error, either
+	// ErrClusterInitialized (in the success case) or errInternalBootstrapError.
+
 	s.mu.Lock()
-	err := s.mu.rejectErr
+	defer s.mu.Unlock()
+
+	if s.mu.rejectErr != nil {
+		return nil, s.mu.rejectErr
+	}
+
+	state, err := s.tryBootstrap(ctx)
+	if err != nil {
+		log.Errorf(ctx, "bootstrap: %v", err)
+		s.mu.rejectErr = errInternalBootstrapError
+		return nil, s.mu.rejectErr
+	}
 	s.mu.rejectErr = ErrClusterInitialized
-	s.mu.Unlock()
-
-	// NB: this isn't necessary since bootstrapCluster would fail, but this is
-	// cleaner.
-	if err != nil {
-		return nil, err
-	}
-
-	cv := clusterversion.ClusterVersion{Version: s.bootstrapVersion}
-	state, err := bootstrapCluster(
-		ctx, s.inspectState.newEngines, cv, s.bootstrapZoneConfig, s.bootstrapSystemZoneConfig,
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	s.bootstrapReqCh <- state
 	return &serverpb.BootstrapResponse{}, nil
+}
+
+func (s *initServer) tryBootstrap(ctx context.Context) (*initState, error) {
+	cv := clusterversion.ClusterVersion{Version: s.bootstrapVersion}
+	return bootstrapCluster(
+		ctx, s.inspectState.newEngines, cv, s.bootstrapZoneConfig, s.bootstrapSystemZoneConfig,
+	)
 }
