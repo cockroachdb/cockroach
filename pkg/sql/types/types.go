@@ -1722,11 +1722,10 @@ func (t *T) upgradeType() error {
 		if t.Width() != 0 {
 			return errors.AssertionFailedf("name type cannot have non-zero width: %d", t.Width())
 		}
+	}
 
-	default:
-		if t.InternalType.Oid == 0 {
-			t.InternalType.Oid = familyToOid[t.Family()]
-		}
+	if t.InternalType.Oid == 0 {
+		t.InternalType.Oid = familyToOid[t.Family()]
 	}
 
 	// Clear the deprecated visible types, since they are now handled by the
