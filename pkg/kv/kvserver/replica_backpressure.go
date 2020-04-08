@@ -69,7 +69,7 @@ var backpressureByteTolerance = settings.RegisterByteSizeSetting(
 	"defines the number of bytes above the product of "+
 		"backpressure_range_size_multiplier and the range_max_size at which "+
 		"backpressure will not apply",
-	2<<20 /* 2 MiB */)
+	32<<20 /* 32 MiB */)
 
 // backpressurableSpans contains spans of keys where write backpressuring
 // is permitted. Writes to any keys within these spans may cause a batch
