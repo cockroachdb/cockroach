@@ -545,27 +545,27 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
-		Config:                    &cfg, // NB: s.cfg has a populated AmbientContext.
-		stopper:                   stopper,
-		clock:                     clock,
-		rpcContext:                rpcContext,
-		distSender:                distSender,
-		status:                    statusServer,
-		nodeLiveness:              nodeLiveness,
-		protectedtsProvider:       protectedtsProvider,
-		gossip:                    g,
-		nodeDialer:                nodeDialer,
-		grpcServer:                grpcServer.Server,
-		recorder:                  recorder,
-		runtime:                   runtimeSampler,
-		db:                        db,
-		registry:                  registry,
-		lateBoundInternalExecutor: internalExecutor,
-		nodeIDContainer:           nodeIDContainer,
-		externalStorage:           externalStorage,
-		externalStorageFromURI:    externalStorageFromURI,
-		jobRegistry:               jobRegistry,
-		isMeta1Leaseholder:        node.stores.IsMeta1Leaseholder,
+		Config:                   &cfg, // NB: s.cfg has a populated AmbientContext.
+		stopper:                  stopper,
+		clock:                    clock,
+		rpcContext:               rpcContext,
+		distSender:               distSender,
+		status:                   statusServer,
+		nodeLiveness:             nodeLiveness,
+		protectedtsProvider:      protectedtsProvider,
+		gossip:                   g,
+		nodeDialer:               nodeDialer,
+		grpcServer:               grpcServer.Server,
+		recorder:                 recorder,
+		runtime:                  runtimeSampler,
+		db:                       db,
+		registry:                 registry,
+		circularInternalExecutor: internalExecutor,
+		nodeIDContainer:          nodeIDContainer,
+		externalStorage:          externalStorage,
+		externalStorageFromURI:   externalStorageFromURI,
+		jobRegistry:              jobRegistry,
+		isMeta1Leaseholder:       node.stores.IsMeta1Leaseholder,
 	})
 	if err != nil {
 		return nil, err
@@ -653,9 +653,11 @@ type sqlServerArgs struct {
 	// Various components want to register themselves with metrics.
 	registry *metric.Registry
 
-	// KV depends on the internal executor, so it is early bound but only filled
-	// in newSQLServer.
-	lateBoundInternalExecutor *sql.InternalExecutor // empty initially
+	// KV depends on the internal executor, so we pass a pointer to an empty
+	// struct in this configuration, which newSQLServer fills.
+	//
+	// TODO(tbg): make this less hacky.
+	circularInternalExecutor *sql.InternalExecutor // empty initially
 	// DistSQL, lease management, and others want to know the node they're on.
 	//
 	// TODO(tbg): reasonable ask, but a SQL tenant process has no NodeID.
@@ -695,7 +697,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		cfg.stopper,
 		cfg.clock,
 		cfg.db,
-		cfg.lateBoundInternalExecutor,
+		cfg.circularInternalExecutor,
 		cfg.nodeIDContainer,
 		cfg.Settings,
 		cfg.HistogramWindowInterval(),
@@ -721,7 +723,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		cfg.nodeIDContainer,
 		cfg.db,
 		cfg.clock,
-		cfg.lateBoundInternalExecutor,
+		cfg.circularInternalExecutor,
 		cfg.Settings,
 		lmKnobs,
 		cfg.stopper,
@@ -793,7 +795,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		Settings:       cfg.Settings,
 		RuntimeStats:   cfg.runtime,
 		DB:             cfg.db,
-		Executor:       cfg.lateBoundInternalExecutor,
+		Executor:       cfg.circularInternalExecutor,
 		FlowDB:         cfg.db,
 		RPCContext:     cfg.rpcContext,
 		Stopper:        cfg.stopper,
@@ -905,7 +907,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.SQLTableStatCacheSize,
 			cfg.gossip,
 			cfg.db,
-			cfg.lateBoundInternalExecutor,
+			cfg.circularInternalExecutor,
 		),
 
 		// Note: don't forget to add the secondary loggers as closers
@@ -974,7 +976,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 
 	statsRefresher := stats.MakeRefresher(
 		cfg.Settings,
-		cfg.lateBoundInternalExecutor,
+		cfg.circularInternalExecutor,
 		execCfg.TableStatsCache,
 		stats.DefaultAsOfTime,
 	)
@@ -1017,12 +1019,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	for _, m := range pgServer.Metrics() {
 		cfg.registry.AddMetricStruct(m)
 	}
-	*cfg.lateBoundInternalExecutor = sql.MakeInternalExecutor(
+	*cfg.circularInternalExecutor = sql.MakeInternalExecutor(
 		ctx, pgServer.SQLServer, internalMemMetrics, cfg.Settings,
 	)
-	execCfg.InternalExecutor = cfg.lateBoundInternalExecutor
+	execCfg.InternalExecutor = cfg.circularInternalExecutor
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
-		cfg.lateBoundInternalExecutor, cfg.db, cfg.gossip, cfg.Settings)
+		cfg.circularInternalExecutor, cfg.db, cfg.gossip, cfg.Settings)
 	cfg.status.setStmtDiagnosticsRequester(stmtDiagnosticsRegistry)
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
@@ -1042,7 +1044,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		pgServer:                pgServer,
 		distSQLServer:           distSQLServer,
 		execCfg:                 execCfg,
-		internalExecutor:        cfg.lateBoundInternalExecutor,
+		internalExecutor:        cfg.circularInternalExecutor,
 		leaseMgr:                leaseMgr,
 		blobService:             blobService,
 		sessionRegistry:         sessionRegistry,
