@@ -699,7 +699,11 @@ func (d *diskQueue) Dequeue(ctx context.Context, b coldata.Batch) (bool, error) 
 		b.SetLength(0)
 	} else {
 		if d.deserializerState.curBatch == 0 {
-			vecs := b.ColVecs()
+			// It is possible that the caller has appended more columns to the
+			// batch than it provided types during diskQueue's creation. We
+			// will only be touching the prefix of the batch that we have been
+			// told about.
+			vecs := b.ColVecs()[:len(d.typs)]
 			for i := range vecs {
 				// When we deserialize a new memory region, we create new memory that
 				// the batch to deserialize into will point to. This is due to
