@@ -37,6 +37,8 @@ typedef struct {
   size_t len;
 } CR_GEOS_String;
 
+typedef CR_GEOS_String CR_GEOS_Status;
+
 // CR_GEOS contains all the functions loaded by GEOS.
 typedef struct CR_GEOS CR_GEOS;
 
@@ -49,11 +51,11 @@ CR_GEOS_Slice CR_GEOS_Init(CR_GEOS_Slice loc, CR_GEOS **lib);
 
 // CR_GEOS_WKTToWKB converts a given WKT into it's WKB form. The wkt slice must be
 // convertible to a NUL character terminated C string.
-CR_GEOS_String CR_GEOS_WKTToWKB(CR_GEOS *lib, CR_GEOS_Slice wkt);
+CR_GEOS_Status CR_GEOS_WKTToWKB(CR_GEOS *lib, CR_GEOS_Slice wkt, CR_GEOS_String* wkb);
 
 // CR_GEOS_ClipWKBByRect clips a given WKB by the given rectangle.
-CR_GEOS_String CR_GEOS_ClipWKBByRect(
-  CR_GEOS *lib, CR_GEOS_Slice wkb, double xmin, double ymin, double xmax, double ymax);
+CR_GEOS_Status CR_GEOS_ClipWKBByRect(CR_GEOS *lib, CR_GEOS_Slice wkb, double xmin, double ymin,
+                                     double xmax, double ymax, CR_GEOS_String* clipped_wkb);
 
 #ifdef __cplusplus
 } // extern "C"
