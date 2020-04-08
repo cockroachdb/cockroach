@@ -9,3 +9,7 @@ clip xmin=10 ymin=10 xmax=20 ymax=20
 clip xmin=0 ymin=0 xmax=10 ymax=10
 ----
 51 => 51
+
+clip xmin=10 ymin=0 xmax=0 ymax=10
+----
+geos error: IllegalArgumentException: Clipping rectangle must be non-empty

@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+#include <cstdarg>
 #include <cstring>
 #include <dlfcn.h>
 #include <memory>
@@ -20,13 +21,17 @@ namespace {
 
 // Data Types adapted from `capi/geos_c.h.in` in GEOS.
 typedef void* CR_GEOS_Handle;
+typedef void (*CR_GEOS_MessageHandler)(const char*, void*);
 typedef void* CR_GEOS_WKTReader;
-typedef void *CR_GEOS_WKBReader;
+typedef void* CR_GEOS_WKBReader;
 typedef void* CR_GEOS_WKBWriter;
 
 // Function declarations from `capi/geos_c.h.in` in GEOS.
 typedef CR_GEOS_Handle (*CR_GEOS_init_r)();
 typedef void (*CR_GEOS_finish_r)(CR_GEOS_Handle);
+typedef CR_GEOS_MessageHandler (*CR_GEOS_Context_setErrorMessageHandler_r)(CR_GEOS_Handle,
+                                                                           CR_GEOS_MessageHandler,
+                                                                           void*);
 
 typedef void (*CR_GEOS_Geom_destroy_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 
@@ -36,9 +41,8 @@ typedef CR_GEOS_Geometry (*CR_GEOS_WKTReader_read_r)(CR_GEOS_Handle, CR_GEOS_WKT
 typedef void (*CR_GEOS_WKTReader_destroy_r)(CR_GEOS_Handle, CR_GEOS_WKTReader);
 
 typedef CR_GEOS_WKBReader (*CR_GEOS_WKBReader_create_r)(CR_GEOS_Handle);
-typedef CR_GEOS_Geometry (*CR_GEOS_WKBReader_read_r)(CR_GEOS_Handle,
-                                                     CR_GEOS_WKBReader,
-                                                     const char *, size_t);
+typedef CR_GEOS_Geometry (*CR_GEOS_WKBReader_read_r)(CR_GEOS_Handle, CR_GEOS_WKBReader, const char*,
+                                                     size_t);
 typedef void (*CR_GEOS_WKBReader_destroy_r)(CR_GEOS_Handle, CR_GEOS_WKBReader);
 
 typedef CR_GEOS_WKBWriter (*CR_GEOS_WKBWriter_create_r)(CR_GEOS_Handle);
@@ -47,8 +51,8 @@ typedef char* (*CR_GEOS_WKBWriter_write_r)(CR_GEOS_Handle, CR_GEOS_WKBWriter, CR
 typedef void (*CR_GEOS_WKBWriter_setByteOrder_r)(CR_GEOS_Handle, CR_GEOS_WKBWriter, int);
 typedef void (*CR_GEOS_WKBWriter_destroy_r)(CR_GEOS_Handle, CR_GEOS_WKBWriter);
 
-typedef CR_GEOS_Geometry (*CR_GEOS_ClipByRect_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
-                                                 double, double, double, double);
+typedef CR_GEOS_Geometry (*CR_GEOS_ClipByRect_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double, double,
+                                                 double, double);
 
 std::string ToString(CR_GEOS_Slice slice) { return std::string(slice.data, slice.len); }
 
@@ -61,6 +65,7 @@ struct CR_GEOS {
 
   CR_GEOS_init_r GEOS_init_r;
   CR_GEOS_finish_r GEOS_finish_r;
+  CR_GEOS_Context_setErrorMessageHandler_r GEOSContext_setErrorMessageHandler_r;
 
   CR_GEOS_Geom_destroy_r GEOSGeom_destroy_r;
 
@@ -98,6 +103,7 @@ struct CR_GEOS {
 
     INIT(GEOS_init_r);
     INIT(GEOS_finish_r);
+    INIT(GEOSContext_setErrorMessageHandler_r);
     INIT(GEOSGeom_destroy_r);
     INIT(GEOSWKTReader_create_r);
     INIT(GEOSWKTReader_destroy_r);
@@ -121,32 +127,55 @@ struct CR_GEOS {
   }
 };
 
-CR_GEOS_Slice cstringToSlice(char* cstr) {
+CR_GEOS_Slice cStringToSlice(char* cstr) {
   CR_GEOS_Slice slice = {.data = cstr, .len = strlen(cstr)};
   return slice;
+}
+
+// Given data that will be deallocated on return, with length
+// equal to len, returns a CR_GEOS_String to return to Go.
+CR_GEOS_String toGEOSString(const char* data, size_t len) {
+  CR_GEOS_String result = {.data = nullptr, .len = len};
+  if (len == 0) {
+    return result;
+  }
+  result.data = static_cast<char*>(malloc(len));
+  memcpy(result.data, data, len);
+  return result;
 }
 
 CR_GEOS_Slice CR_GEOS_Init(CR_GEOS_Slice loc, CR_GEOS** lib) {
   auto locStr = ToString(loc);
   void* dlHandle = dlopen(locStr.c_str(), RTLD_LAZY);
   if (!dlHandle) {
-    return cstringToSlice((char*)dlopenFailError);
+    return cStringToSlice((char*)dlopenFailError);
   }
 
   std::unique_ptr<CR_GEOS> ret(new CR_GEOS(dlHandle));
   auto error = ret->Init();
   if (error != nullptr) {
-    return cstringToSlice(error);
+    return cStringToSlice(error);
   }
 
   *lib = ret.release();
   return CR_GEOS_Slice{.data = NULL, .len = 0};
 }
 
-CR_GEOS_String CR_GEOS_WKTToWKB(CR_GEOS* lib, CR_GEOS_Slice wkt) {
-  CR_GEOS_String result = {.data = NULL, .len = 0};
+void errorHandler(const char* msg, void* buffer) {
+  std::string* str = static_cast<std::string*>(buffer);
+  *str = std::string("geos error: ") + msg;
+}
 
+CR_GEOS_Handle initHandleWithErrorBuffer(CR_GEOS* lib, std::string* buffer) {
   auto handle = lib->GEOS_init_r();
+  lib->GEOSContext_setErrorMessageHandler_r(handle, errorHandler, buffer);
+  return handle;
+}
+
+CR_GEOS_Status CR_GEOS_WKTToWKB(CR_GEOS* lib, CR_GEOS_Slice wkt, CR_GEOS_String* wkb) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+
   auto wktReader = lib->GEOSWKTReader_create_r(handle);
   auto wktStr = ToString(wkt);
   auto geom = lib->GEOSWKTReader_read_r(handle, wktReader, wktStr.c_str());
@@ -155,26 +184,21 @@ CR_GEOS_String CR_GEOS_WKTToWKB(CR_GEOS* lib, CR_GEOS_Slice wkt) {
   if (geom != NULL) {
     auto wkbWriter = lib->GEOSWKBWriter_create_r(handle);
     lib->GEOSWKBWriter_setByteOrder_r(handle, wkbWriter, 1);
-    result.data = lib->GEOSWKBWriter_write_r(handle, wkbWriter, geom, &result.len);
+    wkb->data = lib->GEOSWKBWriter_write_r(handle, wkbWriter, geom, &wkb->len);
     lib->GEOSWKBWriter_destroy_r(handle, wkbWriter);
     lib->GEOSGeom_destroy_r(handle, geom);
   }
 
   lib->GEOS_finish_r(handle);
-  return result;
+  return toGEOSString(error.data(), error.length());
 }
 
-// TODO(sumeer): return an error string when there is an error.
-// The GEOS methods pass errors to the handle -- this is based on reading
-// https://sourcegraph.com/github.com/libgeos/geos/-/blob/capi/geos_ts_c.cpp#L2459
-// which calls execute() https://sourcegraph.com/github.com/libgeos/geos@312c085bdc9606896281c7d0610c1a1b3931e014/-/blob/capi/geos_ts_c.cpp#L365
-// which calls a GEOSMessageHandler https://sourcegraph.com/github.com/libgeos/geos/-/blob/capi/geos_ts_c.cpp#L259.
-// We should set the message handler, and return the error in a CR_GEOS_String.
-CR_GEOS_String CR_GEOS_ClipWKBByRect(
-  CR_GEOS *lib, CR_GEOS_Slice wkb, double xmin, double ymin, double xmax, double ymax) {
-  CR_GEOS_String result = {.data = NULL, .len = 0};
+CR_GEOS_Status CR_GEOS_ClipWKBByRect(CR_GEOS* lib, CR_GEOS_Slice wkb, double xmin, double ymin,
+                                     double xmax, double ymax, CR_GEOS_String* clipped_wkb) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  *clipped_wkb = {.data = NULL, .len = 0};
 
-  auto handle = lib->GEOS_init_r();
   auto wkbReader = lib->GEOSWKBReader_create_r(handle);
   auto geom = lib->GEOSWKBReader_read_r(handle, wkbReader, wkb.data, wkb.len);
   lib->GEOSWKBReader_destroy_r(handle, wkbReader);
@@ -183,13 +207,14 @@ CR_GEOS_String CR_GEOS_ClipWKBByRect(
     if (clippedGeom != nullptr) {
       auto wkbWriter = lib->GEOSWKBWriter_create_r(handle);
       lib->GEOSWKBWriter_setByteOrder_r(handle, wkbWriter, 1);
-      result.data =
-        lib->GEOSWKBWriter_write_r(handle, wkbWriter, clippedGeom, &result.len);
+      clipped_wkb->data =
+          lib->GEOSWKBWriter_write_r(handle, wkbWriter, clippedGeom, &clipped_wkb->len);
       lib->GEOSWKBWriter_destroy_r(handle, wkbWriter);
       lib->GEOSGeom_destroy_r(handle, clippedGeom);
     }
     lib->GEOSGeom_destroy_r(handle, geom);
   }
+
   lib->GEOS_finish_r(handle);
-  return result;
+  return toGEOSString(error.data(), error.length());
 }

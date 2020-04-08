@@ -171,30 +171,30 @@ func TestParseGeometry(t *testing.T) {
 	testCases := []struct {
 		wkt         geopb.WKT
 		expected    *Geometry
-		expectedErr bool
+		expectedErr string
 	}{
 		{
 			"POINT(1.0 1.0)",
 			NewGeometry(geopb.EWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
-			false,
+			"",
 		},
 		{
 			"invalid",
 			nil,
-			true,
+			"geos error: ParseException: Unknown type: 'INVALID'",
 		},
 		{
 			"",
 			nil,
-			true,
+			"geos error: ParseException: Expected word but encountered end of stream",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(string(tc.wkt), func(t *testing.T) {
 			g, err := ParseGeometry(tc.wkt)
-			if tc.expectedErr {
-				require.Error(t, err)
+			if len(tc.expectedErr) > 0 {
+				require.Equal(t, tc.expectedErr, err.Error())
 			} else {
 				require.NoError(t, err)
 				require.Equal(t, tc.expected, g)
@@ -207,30 +207,30 @@ func TestParseGeography(t *testing.T) {
 	testCases := []struct {
 		wkt         geopb.WKT
 		expected    *Geography
-		expectedErr bool
+		expectedErr string
 	}{
 		{
 			"POINT(1.0 1.0)",
 			NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
-			false,
+			"",
 		},
 		{
 			"invalid",
 			nil,
-			true,
+			"geos error: ParseException: Unknown type: 'INVALID'",
 		},
 		{
 			"",
 			nil,
-			true,
+			"geos error: ParseException: Expected word but encountered end of stream",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(string(tc.wkt), func(t *testing.T) {
 			g, err := ParseGeography(tc.wkt)
-			if tc.expectedErr {
-				require.Error(t, err)
+			if len(tc.expectedErr) > 0 {
+				require.Equal(t, tc.expectedErr, err.Error())
 			} else {
 				require.NoError(t, err)
 				require.Equal(t, tc.expected, g)
