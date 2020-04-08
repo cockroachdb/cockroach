@@ -515,8 +515,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	registry.AddMetricStruct(protectedtsReconciler.Metrics())
 
 	lateBoundServer := &Server{}
-	// TODO(tbg): don't pass the whole Server into lateBoundServer to avoid this
-	// hack.
+	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
 	adminServer := newAdminServer(lateBoundServer)
 	sessionRegistry := sql.NewSessionRegistry()
 
@@ -612,8 +611,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 type sqlServerArgs struct {
 	*Config
-	stopper    *stop.Stopper
-	clock      *hlc.Clock
+	stopper *stop.Stopper
+
+	// SQL uses the clock to assign timestamps to transactions, among many
+	// others.
+	clock *hlc.Clock
+
+	// DistSQL uses rpcContext to set up flows. Less centrally, the executor
+	// also uses rpcContext in a number of places to learn whether the server
+	// is running insecure, and to read the cluster name.
 	rpcContext *rpc.Context
 
 	// SQL mostly uses the DistSender "wrapped" under a *kv.DB, but SQL also
