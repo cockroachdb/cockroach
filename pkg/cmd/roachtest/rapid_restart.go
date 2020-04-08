@@ -80,7 +80,7 @@ func runRapidRestart(ctx context.Context, t *test, c *cluster) {
 				case -1:
 					// Received SIGINT before setting up our own signal handlers or
 					// SIGKILL.
-				case 30:
+				case 20:
 					// Exit code from a SIGINT received by our signal handlers.
 				default:
 					t.Fatalf("unexpected exit status %d", status)
