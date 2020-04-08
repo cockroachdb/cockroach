@@ -64,8 +64,7 @@ func StageRemoteBinary(c *SyncedCluster, applicationName, binaryPath, SHA, arch 
 		`curl -sfSL -o %s "%s" && chmod 755 ./%s`, applicationName, binURL, applicationName,
 	)
 	return c.Run(
-		os.Stdout, os.Stderr, c.Nodes, OtherCmd,
-		fmt.Sprintf("staging binary (%s)", applicationName), cmdStr,
+		os.Stdout, os.Stderr, c.Nodes, fmt.Sprintf("staging binary (%s)", applicationName), cmdStr,
 	)
 }
 
@@ -96,6 +95,6 @@ mv ${tmpdir}/cockroach ./cockroach && \
 chmod 755 ./cockroach
 `, binURL)
 	return c.Run(
-		os.Stdout, os.Stderr, c.Nodes, OtherCmd, "staging cockroach release binary", cmdStr,
+		os.Stdout, os.Stderr, c.Nodes, "staging cockroach release binary", cmdStr,
 	)
 }
