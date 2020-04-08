@@ -25,13 +25,13 @@ import {
   DownloadFileRef,
 } from "src/components";
 import { AdminUIState } from "src/redux/state";
-import { getStatementDiagnostics } from "src/util/api";
+import { getStatementDiagnostics } from "../../api";
 import { SummaryCard } from "src/views/shared/components/summaryCard";
 import {
   selectDiagnosticsReportsByStatementFingerprint,
   selectDiagnosticsReportsCountByStatementFingerprint,
-} from "src/redux/statements/statementsSelectors";
-import { createStatementDiagnosticsReportAction } from "src/redux/statements";
+} from "oss/modules/statements/store/selectors/statementsSelectors";
+import { createStatementDiagnosticsReportAction } from "../../store";
 import { trustIcon } from "src/util/trust";
 
 import { DiagnosticStatusBadge } from "./diagnosticStatusBadge";

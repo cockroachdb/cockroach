@@ -19,10 +19,13 @@ import {
   KeyedCachedDataReducerState,
 } from "./cachedDataReducer";
 import * as api from "src/util/api";
+import * as statementsApi from "modules/statements/api";
 import { VersionList } from "src/interfaces/cockroachlabs";
 import { versionCheck } from "src/util/cockroachlabsAPI";
 import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
 import * as protos from "src/js/protos";
+import {statementDiagnosticsReportsReducerObj} from "oss/modules/statements/store/reducers/statementDiagnosticsReportsReducer";
+import {statementsReducerObj} from "oss/modules/statements/store/reducers/statementsReducer";
 
 // The primary export of this file are the "refresh" functions of the various
 // reducers, which are used by many react components to request fresh data.
@@ -238,23 +241,6 @@ const storesReducerObj = new KeyedCachedDataReducer(
 );
 export const refreshStores = storesReducerObj.refresh;
 
-const queriesReducerObj = new CachedDataReducer(
-  api.getStatements,
-  "statements",
-  moment.duration(5, "m"),
-  moment.duration(1, "m"),
-);
-export const refreshStatements = queriesReducerObj.refresh;
-
-const statementDiagnosticsReportsReducerObj = new CachedDataReducer(
-  api.getStatementDiagnosticsReports,
-  "statementDiagnosticsReports",
-  moment.duration(5, "m"),
-  moment.duration(1, "m"),
-);
-export const refreshStatementDiagnosticsRequests = statementDiagnosticsReportsReducerObj.refresh;
-export const invalidateStatementDiagnosticsRequests = statementDiagnosticsReportsReducerObj.invalidateData;
-
 const dataDistributionReducerObj = new CachedDataReducer(
   api.getDataDistribution,
   "dataDistribution",
@@ -289,10 +275,10 @@ export interface APIReducersState {
   rangeLog: KeyedCachedDataReducerState<api.RangeLogResponseMessage>;
   settings: CachedDataReducerState<api.SettingsResponseMessage>;
   stores: KeyedCachedDataReducerState<api.StoresResponseMessage>;
-  statements: CachedDataReducerState<api.StatementsResponseMessage>;
+  statements: CachedDataReducerState<statementsApi.StatementsResponseMessage>;
   dataDistribution: CachedDataReducerState<api.DataDistributionResponseMessage>;
   metricMetadata: CachedDataReducerState<api.MetricMetadataResponseMessage>;
-  statementDiagnosticsReports: CachedDataReducerState<api.StatementDiagnosticsReportsResponseMessage>;
+  statementDiagnosticsReports: CachedDataReducerState<statementsApi.StatementDiagnosticsReportsResponseMessage>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -319,7 +305,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [rangeLogReducerObj.actionNamespace]: rangeLogReducerObj.reducer,
   [settingsReducerObj.actionNamespace]: settingsReducerObj.reducer,
   [storesReducerObj.actionNamespace]: storesReducerObj.reducer,
-  [queriesReducerObj.actionNamespace]: queriesReducerObj.reducer,
+  [statementsReducerObj.actionNamespace]: statementsReducerObj.reducer,
   [dataDistributionReducerObj.actionNamespace]: dataDistributionReducerObj.reducer,
   [metricMetadataReducerObj.actionNamespace]: metricMetadataReducerObj.reducer,
   [statementDiagnosticsReportsReducerObj.actionNamespace]: statementDiagnosticsReportsReducerObj.reducer,

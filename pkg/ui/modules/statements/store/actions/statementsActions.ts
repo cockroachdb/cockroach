@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { Action } from "redux";
-import { PayloadAction } from "src/interfaces/action";
+import { PayloadAction } from "oss/src/interfaces/action";
 
 export const CREATE_STATEMENT_DIAGNOSTICS_REPORT = "cockroachui/statements/CREATE_STATEMENT_DIAGNOSTICS_REPORT";
 export const CREATE_STATEMENT_DIAGNOSTICS_COMPLETE = "cockroachui/statements/CREATE_STATEMENT_DIAGNOSTICS_COMPLETE";

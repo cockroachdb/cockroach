@@ -9,21 +9,21 @@
 // licenses/APL.txt.
 
 import { all, call, put, takeEvery } from "redux-saga/effects";
-import { PayloadAction } from "src/interfaces/action";
+import { PayloadAction } from "oss/src/interfaces/action";
 
-import { createStatementDiagnosticsReport } from "src/util/api";
+import { createStatementDiagnosticsReport } from "../../api";
 import {
   CREATE_STATEMENT_DIAGNOSTICS_REPORT,
   DiagnosticsReportPayload,
   createStatementDiagnosticsReportCompleteAction,
   createStatementDiagnosticsReportFailedAction,
-} from "./statementsActions";
-import { cockroach } from "src/js/protos";
+} from "../actions/statementsActions";
+import { cockroach } from "oss/src/js/protos";
 import CreateStatementDiagnosticsReportRequest = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
-import { invalidateStatementDiagnosticsRequests, refreshStatementDiagnosticsRequests } from "src/redux/apiReducers";
+import { invalidateStatementDiagnosticsRequests, refreshStatementDiagnosticsRequests } from "../reducers";
 import {
   createStatementDiagnosticsAlertLocalSetting,
-} from "src/redux/alerts";
+} from "oss/src/redux/alerts";
 
 export function* createDiagnosticsReportSaga(action: PayloadAction<DiagnosticsReportPayload>) {
   const { statementFingerprint } = action.payload;

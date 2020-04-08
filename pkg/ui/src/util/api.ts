@@ -100,8 +100,6 @@ export type StoresResponseMessage = protos.cockroach.server.serverpb.StoresRespo
 
 export type UserLogoutResponseMessage = protos.cockroach.server.serverpb.UserLogoutResponse;
 
-export type StatementsResponseMessage = protos.cockroach.server.serverpb.StatementsResponse;
-
 export type DataDistributionResponseMessage = protos.cockroach.server.serverpb.DataDistributionResponse;
 
 export type EnqueueRangeRequestMessage = protos.cockroach.server.serverpb.EnqueueRangeRequest;
@@ -109,15 +107,6 @@ export type EnqueueRangeResponseMessage = protos.cockroach.server.serverpb.Enque
 
 export type MetricMetadataRequestMessage = protos.cockroach.server.serverpb.MetricMetadataRequest;
 export type MetricMetadataResponseMessage = protos.cockroach.server.serverpb.MetricMetadataResponse;
-
-export type StatementDiagnosticsReportsRequestMessage = protos.cockroach.server.serverpb.StatementDiagnosticsReportsRequest;
-export type StatementDiagnosticsReportsResponseMessage = protos.cockroach.server.serverpb.StatementDiagnosticsReportsResponse;
-
-export type CreateStatementDiagnosticsReportRequestMessage = protos.cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
-export type CreateStatementDiagnosticsReportResponseMessage = protos.cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse;
-
-export type StatementDiagnosticsRequestMessage = protos.cockroach.server.serverpb.StatementDiagnosticsRequest;
-export type StatementDiagnosticsResponseMessage = protos.cockroach.server.serverpb.StatementDiagnosticsResponse;
 
 // API constants
 
@@ -169,7 +158,7 @@ export class RequestError extends Error {
 // are generated interfaces which are implemented by the protocol buffer
 // objects themselves. TResponseBuilder is an interface implemented by
 // the builder objects provided at runtime by protobuf.js.
-function timeoutFetch<TResponse$Properties, TResponse, TResponseBuilder extends {
+export function timeoutFetch<TResponse$Properties, TResponse, TResponseBuilder extends {
   new(properties?: TResponse$Properties): TResponse
   encode(message: TResponse$Properties, writer?: protobuf.Writer): protobuf.Writer
   decode(reader: (protobuf.Reader | Uint8Array), length?: number): TResponse;
@@ -362,22 +351,6 @@ export function getStores(req: StoresRequestMessage, timeout?: moment.Duration):
   return timeoutFetch(serverpb.StoresResponse, `${STATUS_PREFIX}/stores/${req.node_id}`, null, timeout);
 }
 
-// getStatements returns statements the cluster has recently executed, and some stats about them.
-export function getStatements(timeout?: moment.Duration): Promise<StatementsResponseMessage> {
-  return timeoutFetch(serverpb.StatementsResponse, `${STATUS_PREFIX}/statements`, null, timeout);
-}
-
-export function getStatementDiagnosticsReports(timeout?: moment.Duration): Promise<StatementDiagnosticsReportsResponseMessage> {
-  return timeoutFetch(serverpb.StatementDiagnosticsReportsResponse, `${STATUS_PREFIX}/stmtdiagreports`, null, timeout);
-}
-
-export function createStatementDiagnosticsReport(req: CreateStatementDiagnosticsReportRequestMessage, timeout?: moment.Duration): Promise<CreateStatementDiagnosticsReportResponseMessage> {
-  return timeoutFetch(serverpb.CreateStatementDiagnosticsReportResponse, `${STATUS_PREFIX}/stmtdiagreports`, req as any, timeout);
-}
-
-export function getStatementDiagnostics(req: StatementDiagnosticsRequestMessage, timeout?: moment.Duration): Promise<StatementDiagnosticsResponseMessage> {
-  return timeoutFetch(serverpb.StatementDiagnosticsResponse, `${STATUS_PREFIX}/stmtdiag/${req.statement_diagnostics_id}`, null, timeout);
-}
 
 // getDataDistribution returns information about how replicas are distributed across nodes.
 export function getDataDistribution(timeout?: moment.Duration): Promise<DataDistributionResponseMessage> {

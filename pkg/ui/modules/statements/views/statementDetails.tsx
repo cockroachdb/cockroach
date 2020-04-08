@@ -16,7 +16,7 @@ import { connect } from "react-redux";
 import { Link, RouteComponentProps, match as Match, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 
-import { refreshStatementDiagnosticsRequests, refreshStatements } from "src/redux/apiReducers";
+import { refreshStatementDiagnosticsRequests, refreshStatements } from "../store";
 import { nodeDisplayNameByIDSelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import {
@@ -46,7 +46,7 @@ import DiagnosticsView from "./diagnostics";
 import classNames from "classnames";
 import {
   selectDiagnosticsReportsCountByStatementFingerprint,
-} from "src/redux/statements/statementsSelectors";
+} from "oss/modules/statements/store/selectors/statementsSelectors";
 import { Button, BackIcon } from "oss/src/components/button";
 import { trackSubnavSelection } from "src/util/analytics";
 

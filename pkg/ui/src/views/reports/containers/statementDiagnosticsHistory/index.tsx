@@ -18,16 +18,16 @@ import Long from "long";
 import { Button, ColumnsConfig, DownloadFile, DownloadFileRef, Table, Text, TextTypes } from "src/components";
 import HeaderSection from "src/views/shared/components/headerSection";
 import { AdminUIState } from "src/redux/state";
-import { getStatementDiagnostics } from "src/util/api";
 import { trustIcon } from "src/util/trust";
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import {
   selectStatementDiagnosticsReports,
-} from "src/redux/statements/statementsSelectors";
+} from "oss/modules/statements/store/selectors/statementsSelectors";
 import {
   invalidateStatementDiagnosticsRequests,
   refreshStatementDiagnosticsRequests,
-} from "src/redux/apiReducers";
+  getStatementDiagnostics
+} from "modules/statements";
 import { DiagnosticStatusBadge } from "modules/statements/views/diagnostics/diagnosticStatusBadge";
 import "./statementDiagnosticsHistoryView.styl";
 import { cockroach } from "src/js/protos";

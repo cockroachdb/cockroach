@@ -13,9 +13,8 @@ import { connect } from "react-redux";
 import { Action, Dispatch } from "redux";
 
 import { Anchor, Modal, Text } from "src/components";
-import { createStatementDiagnosticsReportAction } from "src/redux/statements";
+import { createStatementDiagnosticsReportAction, invalidateStatementDiagnosticsRequests, refreshStatementDiagnosticsRequests } from "../../store";
 import { AdminUIState } from "src/redux/state";
-import { invalidateStatementDiagnosticsRequests, refreshStatementDiagnosticsRequests } from "src/redux/apiReducers";
 import { statementDiagnostics } from "src/util/docs";
 import { trackActivateDiagnostics, trackDiagnosticsModalOpen } from "src/util/analytics";
 export type ActivateDiagnosticsModalProps = MapDispatchToProps;

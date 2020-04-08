@@ -10,8 +10,8 @@
 
 import { chain, sortBy, last } from "lodash";
 import { createSelector } from "reselect";
-import { AdminUIState } from "src/redux/state";
-import { cockroach } from "src/js/protos";
+import { AdminUIState } from "oss/src/redux/state";
+import { cockroach } from "oss/src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 export const selectStatementByFingerprint = createSelector(

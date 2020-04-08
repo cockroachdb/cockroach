@@ -16,9 +16,9 @@ import {
   createStatementDiagnosticsReportCompleteAction,
   createStatementDiagnosticsReportFailedAction,
   createStatementDiagnosticsReportAction,
-} from "./statementsActions";
-import { createStatementDiagnosticsReport } from "src/util/api";
-import { cockroach } from "src/js/protos";
+} from "../actions/statementsActions";
+import { createStatementDiagnosticsReport } from "../../api";
+import { cockroach } from "oss/src/js/protos";
 import CreateStatementDiagnosticsReportRequest = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
 import { throwError } from "redux-saga-test-plan/providers";
 

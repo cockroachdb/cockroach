@@ -19,10 +19,10 @@ import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import * as protos from "src/js/protos";
-import { refreshStatementDiagnosticsRequests, refreshStatements } from "src/redux/apiReducers";
+import { refreshStatements, refreshStatementDiagnosticsRequests } from "../store/reducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
-import { StatementsResponseMessage } from "src/util/api";
+import { StatementsResponseMessage } from "../api";
 import { aggregateStatementStats, combineStatementStats, ExecutionStatistics, flattenStatementStats, StatementStatistics } from "src/util/appStats";
 import { appAttr } from "src/util/constants";
 import { TimestampToMoment } from "src/util/convert";
@@ -38,12 +38,12 @@ import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } fro
 import ActivateDiagnosticsModal, { ActivateDiagnosticsModalRef } from "./diagnostics/activateDiagnosticsModal";
 import {
   selectLastDiagnosticsReportPerStatement,
-} from "src/redux/statements/statementsSelectors";
+} from "oss/modules/statements/store/selectors/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
 import { trackPaginate, trackSearch } from "src/util/analytics";
 
-import styles from  "./statements.styl";
+import "./statements.styl";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 

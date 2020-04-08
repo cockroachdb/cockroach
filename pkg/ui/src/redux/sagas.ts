@@ -13,7 +13,7 @@ import { all, fork } from "redux-saga/effects";
 import { queryMetricsSaga } from "./metrics";
 import { localSettingsSaga } from "./localsettings";
 import { customAnalyticsSaga } from "./customAnalytics";
-import { statementsSaga } from "./statements";
+import { statementsSaga } from "modules/statements/store";
 
 export default function* rootSaga() {
   yield all([
