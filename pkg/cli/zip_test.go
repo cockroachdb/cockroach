@@ -51,22 +51,24 @@ func TestZipContainsAllInternalTables(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	rows, err := db.Query(`
-SELECT concat('crdb_internal.', table_name) as name FROM [ SHOW TABLES FROM crdb_internal ] WHERE
-    table_name NOT IN (
--- whitelisted tables that don't need to be in debug zip
-'backward_dependencies',
-'builtin_functions',
-'create_statements',
-'forward_dependencies',
-'index_columns',
-'table_columns',
-'table_indexes',
-'ranges',
-'ranges_no_leases',
-'predefined_comments',
-'session_trace',
-'session_variables',
-'tables'
+SELECT concat('crdb_internal.', table_name) as name
+FROM [ SELECT table_name FROM [ SHOW TABLES FROM crdb_internal ] ]
+WHERE
+table_name NOT IN (
+	-- whitelisted tables that don't need to be in debug zip
+	'backward_dependencies',
+	'builtin_functions',
+	'create_statements',
+	'forward_dependencies',
+	'index_columns',
+	'table_columns',
+	'table_indexes',
+	'ranges',
+	'ranges_no_leases',
+	'predefined_comments',
+	'session_trace',
+	'session_variables',
+	'tables'
 )
 ORDER BY name ASC`)
 	assert.NoError(t, err)

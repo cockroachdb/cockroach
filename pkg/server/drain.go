@@ -196,7 +196,7 @@ func (s *Server) doDrain(ctx context.Context, reporter func(int, string)) error 
 // isDraining returns true if either clients are being drained
 // or one of the stores on the node is not accepting replicas.
 func (s *Server) isDraining() bool {
-	return s.pgServer.IsDraining() || s.node.IsDraining()
+	return s.sqlServer.pgServer.IsDraining() || s.node.IsDraining()
 }
 
 // drainClients starts draining the SQL layer.
@@ -210,15 +210,15 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, string)) e
 
 	// Disable incoming SQL clients up to the queryWait timeout.
 	drainMaxWait := queryWait.Get(&s.st.SV)
-	if err := s.pgServer.Drain(drainMaxWait, reporter); err != nil {
+	if err := s.sqlServer.pgServer.Drain(drainMaxWait, reporter); err != nil {
 		return err
 	}
 	// Stop ongoing SQL execution up to the queryWait timeout.
-	s.distSQLServer.Drain(ctx, drainMaxWait, reporter)
+	s.sqlServer.distSQLServer.Drain(ctx, drainMaxWait, reporter)
 
 	// Drain the SQL leases. This must be done after the pgServer has
 	// given sessions a chance to finish ongoing work.
-	s.leaseMgr.SetDraining(true /* drain */, reporter)
+	s.sqlServer.leaseMgr.SetDraining(true /* drain */, reporter)
 
 	// Done. This executes the defers set above to drain SQL leases.
 	return nil

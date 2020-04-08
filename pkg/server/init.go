@@ -31,39 +31,67 @@ import (
 // a node already part of an initialized cluster.
 var ErrClusterInitialized = fmt.Errorf("cluster has already been initialized")
 
-// initServer manages the temporary init server used during
-// bootstrapping.
+// initServer handles the bootstrapping process. It is instantiated early in the
+// server startup sequence to determine whether a NodeID and ClusterID are
+// available (true if and only if an initialized store is present). If all
+// engines are empty, either a new cluster needs to be started (via incoming
+// Bootstrap RPC) or an existing one joined. Either way, the goal is to learn a
+// ClusterID and NodeID (and initialize at least one store). All of this
+// subtlety is encapsulated by the initServer, which offers a primitive
+// ServeAndWait() after which point the startup code can assume that the
+// Node/ClusterIDs are known.
+//
+// TODO(tbg): at the time of writing, when joining an existing cluster for the
+// first time, the initServer provides only the clusterID. Fix this by giving
+// the initServer a *kv.DB that it can use to assign a NodeID and StoreID, and
+// later by switching to the connect RPC (#32574).
 type initServer struct {
 	mu struct {
 		syncutil.Mutex
 		// If set, a Bootstrap() call is rejected with this error.
 		rejectErr error
 	}
-	bootstrapBlockCh chan struct{} // blocks Bootstrap() until ServeAndWait() is invoked
-	bootstrapReqCh   chan *initState
-
-	engs []storage.Engine // late-bound in ServeAndWait
-
-	binaryVersion, binaryMinSupportedVersion       roachpb.Version
-	bootstrapVersion                               clusterversion.ClusterVersion
+	// The version at which to bootstrap the cluster in Bootstrap().
+	bootstrapVersion roachpb.Version
+	// The zone configs to bootstrap with.
 	bootstrapZoneConfig, bootstrapSystemZoneConfig *zonepb.ZoneConfig
+	// The state of the engines. This tells us whether the node is already
+	// bootstrapped. The goal of the initServer is to complete this by the
+	// time ServeAndWait returns.
+	inspectState *initDiskState
+
+	// If Bootstrap() succeeds, resulting initState will go here (to be consumed
+	// by ServeAndWait).
+	bootstrapReqCh chan *initState
 }
 
-func newInitServer(
+func setupInitServer(
+	ctx context.Context,
 	binaryVersion, binaryMinSupportedVersion roachpb.Version,
-	bootstrapVersion clusterversion.ClusterVersion,
+	bootstrapVersion roachpb.Version,
 	bootstrapZoneConfig, bootstrapSystemZoneConfig *zonepb.ZoneConfig,
-) *initServer {
-	return &initServer{
-		bootstrapReqCh:   make(chan *initState, 1),
-		bootstrapBlockCh: make(chan struct{}),
+	engines []storage.Engine,
+) (*initServer, error) {
+	inspectState, err := inspectEngines(ctx, engines, binaryVersion, binaryMinSupportedVersion)
+	if err != nil {
+		return nil, err
+	}
 
-		binaryVersion:             binaryVersion,
-		binaryMinSupportedVersion: binaryMinSupportedVersion,
+	s := &initServer{
+		bootstrapReqCh: make(chan *initState, 1),
+
+		inspectState:              inspectState,
 		bootstrapVersion:          bootstrapVersion,
 		bootstrapZoneConfig:       bootstrapZoneConfig,
 		bootstrapSystemZoneConfig: bootstrapSystemZoneConfig,
 	}
+
+	if len(inspectState.initializedEngines) > 0 {
+		// We have a NodeID/ClusterID, so don't allow bootstrap.
+		s.mu.rejectErr = ErrClusterInitialized
+	}
+
+	return s, nil
 }
 
 // initDiskState contains the part of initState that is read from stable
@@ -109,51 +137,32 @@ type initState struct {
 	bootstrapped bool
 }
 
-// ServeAndWait sets up the initServer to accept Bootstrap requests (which will
-// block until then). It uses the provided engines and gossip to block until
-// either a new cluster was bootstrapped or Gossip connected to an existing
-// cluster.
+// ServeAndWait waits until the server is ready to bootstrap. In the common case
+// of restarting an existing node, this immediately returns. When starting with
+// a blank slate (i.e. only empty engines), it waits for incoming Bootstrap
+// request or for Gossip to connect (whichever happens earlier).
+//
+// The returned initState may not reflect a bootstrapped cluster yet, but it
+// is guaranteed to have a ClusterID set.
 //
 // This method must be called only once.
+//
+// TODO(tbg): give this a KV client and thus initialize at least one store in
+// all cases.
 func (s *initServer) ServeAndWait(
-	ctx context.Context, stopper *stop.Stopper, engs []storage.Engine, g *gossip.Gossip,
+	ctx context.Context, stopper *stop.Stopper, g *gossip.Gossip,
 ) (*initState, error) {
-	if s.engs != nil {
-		return nil, errors.New("cannot call ServeAndWait twice")
-	}
-
-	s.engs = engs // Bootstrap() is still blocked, so no data race here
-
-	inspectState, err := inspectEngines(ctx, engs, s.binaryVersion, s.binaryMinSupportedVersion)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(inspectState.initializedEngines) != 0 {
-		// We have a NodeID/ClusterID, so don't allow bootstrap.
-		if err := s.testOrSetRejectErr(ErrClusterInitialized); err != nil {
-			return nil, errors.Wrap(err, "error unexpectedly set previously")
-		}
-		// If anyone mistakenly tried to bootstrap, unblock them so they can get
-		// the above error.
-		close(s.bootstrapBlockCh)
-
-		// In fact, it's crucial that we return early. This is because Gossip
-		// won't necessarily connect until a leaseholder for range 1 gossips the
-		// cluster ID, and all nodes in the cluster might be starting up right
-		// now. Without this return, we could have all nodes in the cluster
-		// deadlocked on g.Connected below. For similar reasons, we can't ever
-		// hope to initialize the newEngines below, for which we would need to
-		// increment a KV counter.
+	if len(s.inspectState.initializedEngines) != 0 {
+		// If already bootstrapped, return early.
 		return &initState{
-			initDiskState: *inspectState,
+			initDiskState: *s.inspectState,
 			joined:        false,
 			bootstrapped:  false,
 		}, nil
 	}
 
-	log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command or join with an already initialized node.")
-	close(s.bootstrapBlockCh)
+	log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting "+
+		"init command or join with an already initialized node.")
 
 	select {
 	case <-stopper.ShouldQuiesce():
@@ -175,32 +184,30 @@ func (s *initServer) ServeAndWait(
 		// (It's also so much simpler to think about). The RPC will also tell us
 		// a cluster version to use instead of the lowest possible one (reducing
 		// the short amount of time until the Gossip hook bumps the version);
-		// this doesn't fix anything but again, is simpler to think about.
+		// this doesn't fix anything but again, is simpler to think about. A
+		// gotcha that may not immediately be obvious is that we can never hope
+		// to have all stores initialized by the time ServeAndWait returns. This
+		// is because *if this server is already bootstrapped*, it might hold a
+		// replica of the range backing the StoreID allocating counter, and
+		// letting this server start may be necessary to restore quorum to that
+		// range. So in general, after this TODO, we will always leave this
+		// method with *at least one* store initialized, but not necessarily
+		// all. This is fine, since initializing additional stores later is
+		// easy.
 		clusterID, err := g.GetClusterID()
 		if err != nil {
 			return nil, err
 		}
-		inspectState.clusterID = clusterID
+		s.inspectState.clusterID = clusterID
 		return &initState{
-			initDiskState: *inspectState,
+			initDiskState: *s.inspectState,
 			joined:        true,
 			bootstrapped:  false,
 		}, nil
 	}
 }
 
-// testOrSetRejectErr set the reject error unless a reject error was already
-// set, in which case it returns the one that was already set. If no error had
-// previously been set, returns nil.
-func (s *initServer) testOrSetRejectErr(err error) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.mu.rejectErr != nil {
-		return s.mu.rejectErr
-	}
-	s.mu.rejectErr = err
-	return nil
-}
+var errInternalBootstrapError = errors.New("unable to bootstrap due to internal error")
 
 // Bootstrap implements the serverpb.Init service. Users set up a new
 // CockroachDB server by calling this endpoint on *exactly one node* in the
@@ -212,18 +219,32 @@ func (s *initServer) testOrSetRejectErr(err error) error {
 // nodes. In that case, they end up with more than one cluster, and nodes
 // panicking or refusing to connect to each other.
 func (s *initServer) Bootstrap(
-	ctx context.Context, request *serverpb.BootstrapRequest,
-) (response *serverpb.BootstrapResponse, err error) {
-	<-s.bootstrapBlockCh // block until ServeAndWait() is active
-	// NB: this isn't necessary since bootstrapCluster would fail, but this is
-	// cleaner.
-	if err := s.testOrSetRejectErr(ErrClusterInitialized); err != nil {
-		return nil, err
+	ctx context.Context, _ *serverpb.BootstrapRequest,
+) (*serverpb.BootstrapResponse, error) {
+	// Bootstrap() only responds once. Everyone else gets an error, either
+	// ErrClusterInitialized (in the success case) or errInternalBootstrapError.
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.mu.rejectErr != nil {
+		return nil, s.mu.rejectErr
 	}
-	state, err := bootstrapCluster(ctx, s.engs, s.bootstrapVersion, s.bootstrapZoneConfig, s.bootstrapSystemZoneConfig)
+
+	state, err := s.tryBootstrap(ctx)
 	if err != nil {
-		return nil, err
+		log.Errorf(ctx, "bootstrap: %v", err)
+		s.mu.rejectErr = errInternalBootstrapError
+		return nil, s.mu.rejectErr
 	}
+	s.mu.rejectErr = ErrClusterInitialized
 	s.bootstrapReqCh <- state
 	return &serverpb.BootstrapResponse{}, nil
+}
+
+func (s *initServer) tryBootstrap(ctx context.Context) (*initState, error) {
+	cv := clusterversion.ClusterVersion{Version: s.bootstrapVersion}
+	return bootstrapCluster(
+		ctx, s.inspectState.newEngines, cv, s.bootstrapZoneConfig, s.bootstrapSystemZoneConfig,
+	)
 }

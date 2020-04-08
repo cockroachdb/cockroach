@@ -870,7 +870,7 @@ func (m *multiTestContext) addStore(idx int) {
 	m.populateDB(idx, cfg.Settings, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[idx] = kvserver.NewNodeLiveness(
-		ambient, m.clocks[idx], m.dbs[idx], m.engines, m.gossips[idx],
+		ambient, m.clocks[idx], m.dbs[idx], m.gossips[idx],
 		nlActive, nlRenewal, cfg.Settings, metric.TestSampleInterval,
 	)
 	m.populateStorePool(idx, cfg, m.nodeLivenesses[idx])
@@ -980,7 +980,7 @@ func (m *multiTestContext) addStore(idx int) {
 		ran.Do(func() {
 			close(ran.ch)
 		})
-	})
+	}, []storage.Engine{m.engines[idx]})
 
 	store.WaitForInit()
 
@@ -1050,7 +1050,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	m.populateDB(i, m.storeConfig.Settings, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[i] = kvserver.NewNodeLiveness(
-		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i], m.engines,
+		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i],
 		m.gossips[i], nlActive, nlRenewal, cfg.Settings, metric.TestSampleInterval,
 	)
 	m.populateStorePool(i, cfg, m.nodeLivenesses[i])
@@ -1074,7 +1074,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
 			log.Warning(ctx, err)
 		}
-	})
+	}, []storage.Engine{m.engines[i]})
 }
 
 // restartStore restarts a store previously stopped with StopStore.

@@ -11,30 +11,30 @@ CREATE TABLE information_schema.t (x INT)
 query error database "information_schema" does not exist
 DROP DATABASE information_schema
 
-query T
+query TTT
 SHOW TABLES FROM information_schema
 ----
-administrable_role_authorizations
-applicable_roles
-check_constraints
-column_privileges
-columns
-constraint_column_usage
-enabled_roles
-key_column_usage
-parameters
-referential_constraints
-role_table_grants
-routines
-schema_privileges
-schemata
-sequences
-statistics
-table_constraints
-table_privileges
-tables
-user_privileges
-views
+information_schema  administrable_role_authorizations  table
+information_schema  applicable_roles                   table
+information_schema  check_constraints                  table
+information_schema  column_privileges                  table
+information_schema  columns                            table
+information_schema  constraint_column_usage            table
+information_schema  enabled_roles                      table
+information_schema  key_column_usage                   table
+information_schema  parameters                         table
+information_schema  referential_constraints            table
+information_schema  role_table_grants                  table
+information_schema  routines                           table
+information_schema  schema_privileges                  table
+information_schema  schemata                           table
+information_schema  sequences                          table
+information_schema  statistics                         table
+information_schema  table_constraints                  table
+information_schema  table_privileges                   table
+information_schema  tables                             table
+information_schema  user_privileges                    table
+information_schema  views                              table
 
 # Verify that the name is not special for databases.
 
@@ -118,30 +118,30 @@ postgres
 system
 test
 
-query T
+query TTT
 SHOW TABLES FROM test.information_schema
 ----
-administrable_role_authorizations
-applicable_roles
-check_constraints
-column_privileges
-columns
-constraint_column_usage
-enabled_roles
-key_column_usage
-parameters
-referential_constraints
-role_table_grants
-routines
-schema_privileges
-schemata
-sequences
-statistics
-table_constraints
-table_privileges
-tables
-user_privileges
-views
+information_schema  administrable_role_authorizations  table
+information_schema  applicable_roles                   table
+information_schema  check_constraints                  table
+information_schema  column_privileges                  table
+information_schema  columns                            table
+information_schema  constraint_column_usage            table
+information_schema  enabled_roles                      table
+information_schema  key_column_usage                   table
+information_schema  parameters                         table
+information_schema  referential_constraints            table
+information_schema  role_table_grants                  table
+information_schema  routines                           table
+information_schema  schema_privileges                  table
+information_schema  schemata                           table
+information_schema  sequences                          table
+information_schema  statistics                         table
+information_schema  table_constraints                  table
+information_schema  table_privileges                   table
+information_schema  tables                             table
+information_schema  user_privileges                    table
+information_schema  views                              table
 
 query TT colnames
 SHOW CREATE TABLE information_schema.tables

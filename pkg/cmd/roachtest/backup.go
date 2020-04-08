@@ -194,7 +194,10 @@ func registerBackup(r *testRegistry) {
 					var b strings.Builder
 
 					var tables []string
-					rows, err := conn.QueryContext(ctx, fmt.Sprintf("SHOW TABLES FROM %s", db))
+					rows, err := conn.QueryContext(
+						ctx,
+						fmt.Sprintf("SELECT table_name FROM [SHOW TABLES FROM %s] ORDER BY table_name", db),
+					)
 					if err != nil {
 						return "", err
 					}
