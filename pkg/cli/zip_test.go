@@ -82,7 +82,7 @@ ORDER BY name ASC`)
 		"system.jobs",
 		"system.descriptor",
 		"system.namespace",
-		"system.namespace_deprecated",
+		"system.namespace_with_parent_schema",
 	)
 	sort.Strings(tables)
 
@@ -142,7 +142,7 @@ retrieving SQL data for crdb_internal.jobs... writing: debug/crdb_internal.jobs.
 retrieving SQL data for system.jobs... writing: debug/system.jobs.txt
 retrieving SQL data for system.descriptor... writing: debug/system.descriptor.txt
 retrieving SQL data for system.namespace... writing: debug/system.namespace.txt
-retrieving SQL data for system.namespace_deprecated... writing: debug/system.namespace_deprecated.txt
+retrieving SQL data for system.namespace_with_parent_schema... writing: debug/system.namespace_with_parent_schema.txt
 retrieving SQL data for crdb_internal.kv_node_status... writing: debug/crdb_internal.kv_node_status.txt
 retrieving SQL data for crdb_internal.kv_store_status... writing: debug/crdb_internal.kv_store_status.txt
 retrieving SQL data for crdb_internal.schema_changes... writing: debug/crdb_internal.schema_changes.txt
@@ -220,7 +220,7 @@ requesting table details for system.jobs... writing: debug/schema/system/jobs.js
 requesting table details for system.lease... writing: debug/schema/system/lease.json
 requesting table details for system.locations... writing: debug/schema/system/locations.json
 requesting table details for system.namespace... writing: debug/schema/system/namespace.json
-requesting table details for system.namespace_deprecated... writing: debug/schema/system/namespace_deprecated.json
+requesting table details for system.namespace_with_parent_schema... writing: debug/schema/system/namespace_with_parent_schema.json
 requesting table details for system.protected_ts_meta... writing: debug/schema/system/protected_ts_meta.json
 requesting table details for system.protected_ts_records... writing: debug/schema/system/protected_ts_records.json
 requesting table details for system.rangelog... writing: debug/schema/system/rangelog.json
@@ -307,7 +307,7 @@ requesting table details for system.jobs... writing: debug/schema/system-1/jobs.
 requesting table details for system.lease... writing: debug/schema/system-1/lease.json
 requesting table details for system.locations... writing: debug/schema/system-1/locations.json
 requesting table details for system.namespace... writing: debug/schema/system-1/namespace.json
-requesting table details for system.namespace_deprecated... writing: debug/schema/system-1/namespace_deprecated.json
+requesting table details for system.namespace_with_parent_schema... writing: debug/schema/system-1/namespace_with_parent_schema.json
 requesting table details for system.protected_ts_meta... writing: debug/schema/system-1/protected_ts_meta.json
 requesting table details for system.protected_ts_records... writing: debug/schema/system-1/protected_ts_records.json
 requesting table details for system.rangelog... writing: debug/schema/system-1/rangelog.json
@@ -438,7 +438,7 @@ retrieving SQL data for system.descriptor... writing: debug/system.descriptor.tx
   ^- resulted in ...
 retrieving SQL data for system.namespace... writing: debug/system.namespace.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for system.namespace_deprecated... writing: debug/system.namespace_deprecated.txt.err.txt
+retrieving SQL data for system.namespace_with_parent_schema... writing: debug/system.namespace_with_parent_schema.txt.err.txt
   ^- resulted in ...
 retrieving SQL data for crdb_internal.kv_node_status... writing: debug/crdb_internal.kv_node_status.txt.err.txt
   ^- resulted in ...
@@ -556,7 +556,7 @@ retrieving SQL data for crdb_internal.jobs... writing: debug/crdb_internal.jobs.
 retrieving SQL data for system.jobs... writing: debug/system.jobs.txt
 retrieving SQL data for system.descriptor... writing: debug/system.descriptor.txt
 retrieving SQL data for system.namespace... writing: debug/system.namespace.txt
-retrieving SQL data for system.namespace_deprecated... writing: debug/system.namespace_deprecated.txt
+retrieving SQL data for system.namespace_with_parent_schema... writing: debug/system.namespace_with_parent_schema.txt
 retrieving SQL data for crdb_internal.kv_node_status... writing: debug/crdb_internal.kv_node_status.txt
 retrieving SQL data for crdb_internal.kv_store_status... writing: debug/crdb_internal.kv_store_status.txt
 retrieving SQL data for crdb_internal.schema_changes... writing: debug/crdb_internal.schema_changes.txt
@@ -746,7 +746,7 @@ requesting table details for system.jobs... writing: debug/schema/system/jobs.js
 requesting table details for system.lease... writing: debug/schema/system/lease.json
 requesting table details for system.locations... writing: debug/schema/system/locations.json
 requesting table details for system.namespace... writing: debug/schema/system/namespace.json
-requesting table details for system.namespace_deprecated... writing: debug/schema/system/namespace_deprecated.json
+requesting table details for system.namespace_with_parent_schema... writing: debug/schema/system/namespace_with_parent_schema.json
 requesting table details for system.protected_ts_meta... writing: debug/schema/system/protected_ts_meta.json
 requesting table details for system.protected_ts_records... writing: debug/schema/system/protected_ts_records.json
 requesting table details for system.rangelog... writing: debug/schema/system/rangelog.json

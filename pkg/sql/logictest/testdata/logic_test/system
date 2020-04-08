@@ -16,7 +16,7 @@ jobs
 lease
 locations
 namespace
-namespace_deprecated
+namespace_with_parent_schema
 protected_ts_meta
 protected_ts_records
 rangelog
@@ -240,10 +240,10 @@ system  public  namespace                        admin   GRANT
 system  public  namespace                        admin   SELECT
 system  public  namespace                        root    GRANT
 system  public  namespace                        root    SELECT
-system  public  namespace_deprecated             admin   GRANT
-system  public  namespace_deprecated             admin   SELECT
-system  public  namespace_deprecated             root    GRANT
-system  public  namespace_deprecated             root    SELECT
+system  public  namespace_with_parent_schema     admin   GRANT
+system  public  namespace_with_parent_schema     admin   SELECT
+system  public  namespace_with_parent_schema     root    GRANT
+system  public  namespace_with_parent_schema     root    SELECT
 system  public  protected_ts_meta                admin   GRANT
 system  public  protected_ts_meta                admin   SELECT
 system  public  protected_ts_meta                root    GRANT

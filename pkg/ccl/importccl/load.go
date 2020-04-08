@@ -59,8 +59,8 @@ func getDescriptorFromDB(
 		tableName   string
 		extraClause string
 	}{
-		{"system.namespace", `AND n."parentSchemaID" = 0`},
-		{"system.namespace_deprecated", ""},
+		{fmt.Sprintf("[%d AS namespace]", keys.NamespaceTableID), `AND "parentSchemaID" = 0`},
+		{fmt.Sprintf("[%d AS namespace]", keys.DeprecatedNamespaceTableID), ""},
 	} {
 		if err := db.QueryRow(
 			fmt.Sprintf(`SELECT
