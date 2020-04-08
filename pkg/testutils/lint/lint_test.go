@@ -1412,6 +1412,10 @@ func TestLint(t *testing.T) {
 			"-nE",
 			fmt.Sprintf(`panic\(.*\)`),
 			"--",
+			// NOTE: if you're adding a new package to the list here because it
+			// uses "panic-catch" error propagation mechanism of the vectorized
+			// engine, don't forget to "register" the newly added package in
+			// sql/colexec/execerror/error.go file.
 			"sql/colexec",
 			"sql/colflow",
 			"sql/colcontainer",
