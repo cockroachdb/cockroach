@@ -660,8 +660,8 @@ type sqlServerArgs struct {
 	circularInternalExecutor *sql.InternalExecutor // empty initially
 	// DistSQL, lease management, and others want to know the node they're on.
 	//
-	// TODO(tbg): reasonable ask, but a SQL tenant process has no NodeID.
-	// Replace this with a method that can refuse to return a result.
+	// TODO(tbg): replace this with a method that can refuse to return a result
+	// because once we have multi-tenancy, a NodeID will not be available.
 	nodeIDContainer *base.NodeIDContainer
 
 	// Used by backup/restore.
