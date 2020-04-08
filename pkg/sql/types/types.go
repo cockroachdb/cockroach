@@ -1630,6 +1630,7 @@ func (t *T) upgradeType() error {
 		if t.InternalType.Precision > 0 {
 			t.InternalType.TimePrecisionIsSet = true
 		}
+		t.InternalType.Oid = familyToOid[t.Family()]
 	case IntervalFamily:
 		// Fill in the IntervalDurationField here.
 		if t.InternalType.IntervalDurationField == nil {
