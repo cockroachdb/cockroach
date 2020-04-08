@@ -1238,7 +1238,7 @@ var runCmd = &cobra.Command{
 		if len(title) > 30 {
 			title = title[:27] + "..."
 		}
-		return c.Run(os.Stdout, os.Stderr, c.Nodes, install.CockroachCmd, title, cmd)
+		return c.Run(os.Stdout, os.Stderr, c.Nodes, install.OtherCmd, title, cmd)
 	}),
 }
 
