@@ -23,7 +23,8 @@ import (
 )
 
 // runNetworkSanity is just a sanity check to make sure we're setting up toxiproxy
-// correctly.
+// correctly. It injects latency between the nodes and verifies that we're not
+// seeing the latency on the client connection running `SELECT 1` on each node.
 func runNetworkSanity(ctx context.Context, t *test, origC *cluster, nodes int) {
 	origC.Put(ctx, cockroach, "./cockroach", origC.All())
 	c, err := Toxify(ctx, origC, origC.All())
@@ -41,8 +42,6 @@ func runNetworkSanity(ctx context.Context, t *test, origC *cluster, nodes int) {
 	// the upstream connections aren't affected by latency below, but the fixed
 	// cost of starting the binary and processing the query is already close to
 	// 100ms.
-	//
-	// NB: last node gets no latency injected, but first node gets cut off below.
 	const latency = 300 * time.Millisecond
 	for i := 1; i <= nodes; i++ {
 		// NB: note that these latencies only apply to connections *to* the node
@@ -84,7 +83,7 @@ insert into test.commit values(3,1000), (1,1000), (2,1000);
 select age, message from [ show trace for session ];
 `)
 
-		for i := 1; i < origC.spec.NodeCount; i++ {
+		for i := 1; i <= origC.spec.NodeCount; i++ {
 			if dur := c.Measure(ctx, i, `SELECT 1`); dur > latency {
 				t.Fatalf("node %d unexpectedly affected by latency: select 1 took %.2fs", i, dur.Seconds())
 			}
