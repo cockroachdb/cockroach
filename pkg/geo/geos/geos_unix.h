@@ -15,7 +15,7 @@ extern "C" {
 #endif
 
 // Data Types adapted from `capi/geos_c.h.in` in GEOS.
-typedef void *CR_GEOS_Geometry;
+typedef void* CR_GEOS_Geometry;
 
 // NB: Both CR_GEOS_Slice and CR_GEOS_String can contain non-printable
 // data, so neither is necessarily compatible with a NUL character
@@ -27,15 +27,17 @@ typedef void *CR_GEOS_Geometry;
 // can be either a Go or C pointer (which indicates who allocated the
 // memory).
 typedef struct {
-  char *data;
+  char* data;
   size_t len;
 } CR_GEOS_Slice;
 
 // CR_GEOS_String contains a C pointer that needs to be freed.
 typedef struct {
-  char *data;
+  char* data;
   size_t len;
 } CR_GEOS_String;
+
+typedef CR_GEOS_String CR_GEOS_Status;
 
 // CR_GEOS contains all the functions loaded by GEOS.
 typedef struct CR_GEOS CR_GEOS;
@@ -45,16 +47,16 @@ typedef struct CR_GEOS CR_GEOS;
 // must be convertible to a NUL character terminated C string.
 // The CR_GEOS object will be stored in lib.
 // The error returned does not need to be freed (see comment for CR_GEOS_Slice).
-CR_GEOS_Slice CR_GEOS_Init(CR_GEOS_Slice loc, CR_GEOS **lib);
+CR_GEOS_Slice CR_GEOS_Init(CR_GEOS_Slice loc, CR_GEOS** lib);
 
 // CR_GEOS_WKTToWKB converts a given WKT into it's WKB form. The wkt slice must be
 // convertible to a NUL character terminated C string.
-CR_GEOS_String CR_GEOS_WKTToWKB(CR_GEOS *lib, CR_GEOS_Slice wkt);
+CR_GEOS_Status CR_GEOS_WKTToWKB(CR_GEOS* lib, CR_GEOS_Slice wkt, CR_GEOS_String* wkb);
 
 // CR_GEOS_ClipWKBByRect clips a given WKB by the given rectangle.
-CR_GEOS_String CR_GEOS_ClipWKBByRect(
-  CR_GEOS *lib, CR_GEOS_Slice wkb, double xmin, double ymin, double xmax, double ymax);
+CR_GEOS_Status CR_GEOS_ClipWKBByRect(CR_GEOS* lib, CR_GEOS_Slice wkb, double xmin, double ymin,
+                                     double xmax, double ymax, CR_GEOS_String* clipped_wkb);
 
 #ifdef __cplusplus
-} // extern "C"
+}  // extern "C"
 #endif
