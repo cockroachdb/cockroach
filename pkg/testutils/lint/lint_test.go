@@ -852,7 +852,7 @@ func TestLint(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
-			stream.GrepNot(`(json|yaml|protoutil|xml|\.Field)\.Marshal\(`),
+			stream.GrepNot(`(json|yaml|protoutil|xml|\.Field|ewkb|wkb)\.Marshal\(`),
 		), func(s string) {
 			t.Errorf("\n%s <- forbidden; use 'protoutil.Marshal' instead", s)
 		}); err != nil {
@@ -1341,6 +1341,7 @@ func TestLint(t *testing.T) {
 				filter,
 				stream.GrepNot("sql/.*exported func .* returns unexported type sql.planNode"),
 				stream.GrepNot("pkg/sql/types/types.go.* var Uuid should be UUID"),
+				stream.GrepNot("pkg/sql/oidext/oidext.go.*don't use underscores in Go names; const T_"),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {
