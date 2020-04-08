@@ -77,6 +77,7 @@ DROP TABLE test.t;
 }
 
 const (
+	baseVersion = "19.1.5"
 	headVersion = "HEAD"
 )
 
@@ -87,7 +88,6 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 	// TODO(tbg): revisit as old versions are aged out of this test.
 	c.encryptDefault = false
 
-	const baseVersion = "19.1.5"
 	u := newVersionUpgradeTest(c, versionUpgradeTestFeatures,
 		// Load baseVersion fixture. That fixture's cluster version may be
 		// at the predecessor version, so add a waitForUpgradeStep to make
@@ -119,14 +119,14 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 		// (automatically).
 		preventAutoUpgradeStep(),
 		// Roll nodes forward.
-		binaryUpgradeStep("HEAD"),
+		binaryUpgradeStep(headVersion),
 		// Roll back again. Note that bad things would happen if the cluster had
 		// ignored our request to not auto-upgrade. The `autoupgrade` roachtest
 		// exercises this in more detail, so here we just rely on things working
 		// as they ought to.
 		binaryUpgradeStep("19.2.1"),
 		// Roll nodes forward, this time allowing them to upgrade.
-		binaryUpgradeStep("HEAD"),
+		binaryUpgradeStep(headVersion),
 		allowAutoUpgradeStep(),
 		waitForUpgradeStep(),
 	)
@@ -358,7 +358,7 @@ func binaryUpgradeStep(newVersion string) versionStep {
 			// compatible).
 			name := checkpointName(newVersion)
 			c.Stop(ctx, nodes)
-			c.Run(ctx, c.All(), "./cockroach-HEAD", "debug", "rocksdb", "--db={store-dir}",
+			c.Run(ctx, c.All(), "./cockroach-" + headVersion, "debug", "rocksdb", "--db={store-dir}",
 				"checkpoint", "--checkpoint_dir={store-dir}/"+name)
 			c.Run(ctx, c.All(), "tar", "-C", "{store-dir}/"+name, "-czf", "{log-dir}/"+name+".tgz", ".")
 			c.Start(ctx, t, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
