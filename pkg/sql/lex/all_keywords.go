@@ -89,6 +89,8 @@ func main() {
 var categories = map[string]string{
 	"col_name_keyword:":                         "C",
 	"unreserved_keyword:":                       "U",
+	"unreserved_type_keyword:":                  "U",
+	"unreserved_non_type_keyword:":              "U",
 	"type_func_name_keyword:":                   "T",
 	"cockroachdb_extra_type_func_name_keyword:": "T",
 	"reserved_keyword:":                         "R",

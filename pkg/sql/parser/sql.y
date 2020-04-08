@@ -1007,8 +1007,10 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> string_or_placeholder
 %type <tree.Expr> string_or_placeholder_list
 
-%type <str> unreserved_keyword type_func_name_keyword cockroachdb_extra_type_func_name_keyword
+%type <str> unreserved_keyword unreserved_non_type_keyword unreserved_type_keyword type_func_name_keyword cockroachdb_extra_type_func_name_keyword
 %type <str> col_name_keyword reserved_keyword cockroachdb_extra_reserved_keyword extra_var_value
+
+%type <str> complex_type_name general_type_name
 
 %type <tree.ConstraintTableDef> table_constraint constraint_elem create_as_constraint_def create_as_constraint_elem
 %type <tree.TableDef> index_def
@@ -7255,8 +7257,33 @@ const_json:
   JSON
 | JSONB
 
+// general_type_name mirrors the name rule but doesn't include keywords
+// that are processed as specific types.
+// TODO (rohany): We aren't including col_name_keyword because it also
+//  contains some types that cause conflicts. They could be separated
+//  out like what was done for the unreserved_keyword.
+general_type_name:
+  IDENT
+| unreserved_non_type_keyword
+
+// complex_type_name mirrors the rule for complex_db_object_name, but uses
+// general_type_name rather than db_object_name_component to avoid conflicts.
+complex_type_name:
+  general_type_name '.' unrestricted_name
+  {
+    return unimplemented(sqllex, "qualified types")
+  }
+| general_type_name '.' unrestricted_name '.' unrestricted_name
+  {
+    return unimplemented(sqllex, "qualified types")
+  }
+
 simple_typename:
-  const_typename
+  complex_type_name
+  {
+    return unimplemented(sqllex, "qualified types")
+  }
+| const_typename
 | bit_with_length
 | character_with_length
 | interval_type
@@ -9822,6 +9849,50 @@ unrestricted_name:
 | type_func_name_keyword
 | reserved_keyword
 
+unreserved_keyword:
+  unreserved_type_keyword
+| unreserved_non_type_keyword
+
+// Why do we need these? The Postgres grammar doesn't include these either.
+// We don't run into any conflicts when removing these from unreserved_keyword.
+// TODO (rohany): Comment this.
+unreserved_type_keyword:
+  BIGSERIAL
+| BLOB
+| BOOL
+| BYTEA
+| BYTES
+| DATE
+| DOUBLE
+| FLOAT4
+| FLOAT8
+| INET
+| INT2
+| INT2VECTOR
+| INT4
+| INT8
+| INT64
+| JSON
+| JSONB
+| NAME
+| OID
+| OIDVECTOR
+| REGCLASS
+| REGPROC
+| REGPROCEDURE
+| REGNAMESPACE
+| REGTYPE
+| SERIAL
+| SERIAL2
+| SERIAL4
+| SERIAL8
+| SMALLSERIAL
+| STRING
+| TEXT
+| UUID
+
+
+
 // Keyword category lists. Generally, every keyword present in the Postgres
 // grammar should appear in exactly one of these lists.
 //
@@ -9830,7 +9901,7 @@ unrestricted_name:
 // categories of keywords.
 //
 // "Unreserved" keywords --- available for use as any kind of name.
-unreserved_keyword:
+unreserved_non_type_keyword:
   ABORT
 | ACTION
 | ADD
@@ -9842,14 +9913,9 @@ unreserved_keyword:
 | AUTHORIZATION
 | BACKUP
 | BEGIN
-| BIGSERIAL
-| BLOB
-| BOOL
 | BUCKET_COUNT
 | BUNDLE
 | BY
-| BYTEA
-| BYTES
 | CACHE
 | CANCEL
 | CASCADE
@@ -9877,7 +9943,6 @@ unreserved_keyword:
 | DATA
 | DATABASE
 | DATABASES
-| DATE
 | DAY
 | DEALLOCATE
 | DECLARE
@@ -9885,7 +9950,6 @@ unreserved_keyword:
 | DEFERRED
 | DISCARD
 | DOMAIN
-| DOUBLE
 | DROP
 | ENCODING
 | ENUM
@@ -9904,8 +9968,6 @@ unreserved_keyword:
 | FILES
 | FILTER
 | FIRST
-| FLOAT4
-| FLOAT8
 | FOLLOWING
 | FORCE_INDEX
 | FUNCTION
@@ -9922,21 +9984,13 @@ unreserved_keyword:
 | INCREMENT
 | INCREMENTAL
 | INDEXES
-| INET
 | INJECT
 | INSERT
-| INT2
-| INT2VECTOR
-| INT4
-| INT8
-| INT64
 | INTERLEAVE
 | INVERTED
 | ISOLATION
 | JOB
 | JOBS
-| JSON
-| JSONB
 | KEY
 | KEYS
 | KV
@@ -9962,7 +10016,6 @@ unreserved_keyword:
 | MONTH
 | NAMES
 | NAN
-| NAME
 | NEXT
 | NO
 | NORMAL
@@ -9974,9 +10027,7 @@ unreserved_keyword:
 | IGNORE_FOREIGN_KEYS
 | OF
 | OFF
-| OID
 | OIDS
-| OIDVECTOR
 | OPERATOR
 | OPT
 | OPTION
@@ -10007,11 +10058,6 @@ unreserved_keyword:
 | READ
 | RECURSIVE
 | REF
-| REGCLASS
-| REGPROC
-| REGPROCEDURE
-| REGNAMESPACE
-| REGTYPE
 | REINDEX
 | RELEASE
 | RENAME
@@ -10038,11 +10084,7 @@ unreserved_keyword:
 | SCRUB
 | SEARCH
 | SECOND
-| SERIAL
 | SERIALIZABLE
-| SERIAL2
-| SERIAL4
-| SERIAL8
 | SEQUENCE
 | SEQUENCES
 | SERVER
@@ -10053,7 +10095,6 @@ unreserved_keyword:
 | SHOW
 | SIMPLE
 | SKIP
-| SMALLSERIAL
 | SNAPSHOT
 | SPLIT
 | SQL
@@ -10064,7 +10105,6 @@ unreserved_keyword:
 | STORED
 | STORING
 | STRICT
-| STRING
 | SUBSCRIPTION
 | SYNTAX
 | SYSTEM
@@ -10073,7 +10113,6 @@ unreserved_keyword:
 | TEMPLATE
 | TEMPORARY
 | TESTING_RELOCATE
-| TEXT
 | TIES
 | TRACE
 | TRANSACTION
@@ -10090,7 +10129,6 @@ unreserved_keyword:
 | UNTIL
 | UPDATE
 | UPSERT
-| UUID
 | USE
 | USERS
 | VALID
@@ -10113,6 +10151,8 @@ unreserved_keyword:
 // The type names appearing here are not usable as function names because they
 // can be followed by '(' in typename productions, which looks too much like a
 // function call for an LR(1) parser.
+// TODO (rohany): I'm not sure if i want to separate these again into type names
+//  like the unreserved keywords.
 col_name_keyword:
   ANNOTATE_TYPE
 | BETWEEN

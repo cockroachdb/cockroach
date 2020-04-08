@@ -2623,17 +2623,17 @@ HINT: try \h ALTER TABLE`,
 		},
 		{
 			`SELECT CAST(1.2+2.3 AS notatype)`,
-			`at or near "notatype": syntax error: type does not exist
+			`at or near ")": syntax error: type does not exist
 DETAIL: source SQL:
 SELECT CAST(1.2+2.3 AS notatype)
-                       ^`,
+                               ^`,
 		},
 		{
 			`SELECT ANNOTATE_TYPE(1.2+2.3, notatype)`,
-			`at or near "notatype": syntax error: type does not exist
+			`at or near ")": syntax error: type does not exist
 DETAIL: source SQL:
 SELECT ANNOTATE_TYPE(1.2+2.3, notatype)
-                              ^`,
+                                      ^`,
 		},
 		{
 			`CREATE USER foo WITH PASSWORD`,
@@ -2703,10 +2703,10 @@ SELECT 1 + ANY ARRAY[1, 2, 3]
 		},
 		{
 			`SELECT 'f'::"blah"`,
-			`at or near "blah": syntax error: type does not exist
+			`at or near "EOF": syntax error: type does not exist
 DETAIL: source SQL:
 SELECT 'f'::"blah"
-            ^`,
+                  ^`,
 		},
 		// Ensure that the support for ON ROLE <namelist> doesn't leak
 		// where it should not be recognized.
@@ -3245,6 +3245,10 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT a(b, c, VARIADIC b)`, 0, `variadic`, ``},
 		{`SELECT TREAT (a AS INT8)`, 0, `treat`, ``},
 		{`SELECT a(b) WITHIN GROUP (ORDER BY c)`, 0, `within group`, ``},
+
+		{`SELECT 1::schem.typ`, 0, `qualified types`, ``},
+		{`SELECT 1::db.schem.typ`, 0, `qualified types`, ``},
+		{`CREATE TABLE t (x special.type)`, 0, `qualified types`, ``},
 
 		{`SELECT a FROM t ORDER BY a NULLS LAST`, 6224, ``, ``},
 		{`SELECT a FROM t ORDER BY a ASC NULLS LAST`, 6224, ``, ``},
