@@ -396,7 +396,7 @@ func waitForUpgradeStep() versionStep {
 		newVersion := u.binaryVersion(ctx, t, 1).String()
 		t.l.Printf("%s: waiting for cluster to auto-upgrade\n", newVersion)
 
-		for i := 1; i < c.spec.NodeCount; i++ {
+		for i := 1; i <= c.spec.NodeCount; i++ {
 			err := retry.ForDuration(30*time.Second, func() error {
 				db := u.conn(ctx, t, i)
 
