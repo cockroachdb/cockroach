@@ -983,13 +983,14 @@ func (c *CustomFuncs) allInvIndexConstraints(
 	return constraints, true
 }
 
-// canMaybeConstrainIndex performs two checks that can quickly rule out the
-// possibility that the given index can be constrained by the specified filter:
+// canMaybeConstrainIndex can quickly rule out the possibility that the given
+// index can be constrained by the specified filter. If any of the three
+// following statements are true, then it is possible that the index can be
+// constrained:
 //
-//   1. If the filter does not reference the first index column, then no
-//      constraint can be generated.
-//   2. If none of the filter's constraints start with the first index column,
-//      then no constraint can be generated.
+//   1. The filter references the first index column.
+//   2. The constraints are not tight (see Scalar.TightConstraints).
+//   3. Any of the filter's constraints start with the first index column.
 //
 func (c *CustomFuncs) canMaybeConstrainIndex(
 	filters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
