@@ -1,0 +1,12 @@
+# LogicTest: local-mixed-19.2-20.1
+
+# These tests test problems around the namespace migration.
+# See issue https://github.com/cockroachdb/cockroach/issues/47167
+
+query TTT colnames
+SELECT * FROM system.namespace LIMIT 0
+----
+parentID name id
+
+statement ok
+SELECT * FROM crdb_internal.zones
