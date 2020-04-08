@@ -719,17 +719,15 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 	mt.start(t, base.TestServerArgs{})
 
 	// Since we're already on 20.1, mimic the beginning state by deleting the
-	// new namespace descriptor and changing the old one's name to "namespace".
+	// new namespace descriptor.
 	key := sqlbase.MakeDescMetadataKey(keys.NamespaceTableID)
 	require.NoError(t, mt.kvDB.Del(ctx, key))
 
 	deprecatedKey := sqlbase.MakeDescMetadataKey(keys.DeprecatedNamespaceTableID)
 	desc := &sqlbase.Descriptor{}
 	require.NoError(t, mt.kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		ts, err := txn.GetProtoTs(ctx, deprecatedKey, desc)
-		require.NoError(t, err)
-		desc.Table(ts).Name = sqlbase.NamespaceTable.Name
-		return txn.Put(ctx, deprecatedKey, desc)
+		_, err := txn.GetProtoTs(ctx, deprecatedKey, desc)
+		return err
 	}))
 
 	// Run the migration.

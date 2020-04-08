@@ -176,7 +176,7 @@ query T colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system]
 ----
 table_name
-namespace_deprecated
+namespace
 descriptor
 users
 zones
@@ -195,7 +195,7 @@ replication_constraint_stats
 replication_critical_localities
 replication_stats
 reports_meta
-namespace
+namespace2
 protected_ts_meta
 protected_ts_records
 statement_bundle_chunks
@@ -207,7 +207,7 @@ query TT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
 table_name                       comment
-namespace_deprecated             ·
+namespace                        ·
 descriptor                       ·
 users                            ·
 zones                            ·
@@ -226,7 +226,7 @@ replication_constraint_stats     ·
 replication_critical_localities  ·
 replication_stats                ·
 reports_meta                     ·
-namespace                        ·
+namespace2                       ·
 protected_ts_meta                ·
 protected_ts_records             ·
 statement_bundle_chunks          ·

@@ -150,7 +150,6 @@ SET
 
 	expectedRows := [][]string{
 		{`parentID`, `INT8`, `false`, `NULL`, ``, `{primary}`, `false`},
-		{`parentSchemaID`, `INT8`, `false`, `NULL`, ``, `{primary}`, `false`},
 		{`name`, `STRING`, `false`, `NULL`, ``, `{primary}`, `false`},
 		{`id`, `INT8`, `true`, `NULL`, ``, `{}`, `false`},
 	}
@@ -164,13 +163,12 @@ SET
 	}
 
 	expected = `
-   column_name   | data_type | is_nullable | column_default | generation_expression |  indices  | is_hidden
------------------+-----------+-------------+----------------+-----------------------+-----------+------------
-  parentID       | INT8      |    false    | NULL           |                       | {primary} |   false
-  parentSchemaID | INT8      |    false    | NULL           |                       | {primary} |   false
-  name           | STRING    |    false    | NULL           |                       | {primary} |   false
-  id             | INT8      |    true     | NULL           |                       | {}        |   false
-(4 rows)
+  column_name | data_type | is_nullable | column_default | generation_expression |  indices  | is_hidden
+--------------+-----------+-------------+----------------+-----------------------+-----------+------------
+  parentID    | INT8      |    false    | NULL           |                       | {primary} |   false
+  name        | STRING    |    false    | NULL           |                       | {primary} |   false
+  id          | INT8      |    true     | NULL           |                       | {}        |   false
+(3 rows)
 `
 
 	if a, e := b.String(), expected[1:]; a != e {
