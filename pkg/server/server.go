@@ -1652,9 +1652,6 @@ func (s *Server) Start(ctx context.Context) error {
 		})
 	}
 
-	// This opens the main listener.
-	startRPCServer(workersCtx)
-
 	if len(s.cfg.GossipBootstrapResolvers) == 0 {
 		// If the node is started without join flags, attempt self-bootstrap.
 		// Note that we're not checking whether the node is already bootstrapped;
@@ -1668,6 +1665,9 @@ func (s *Server) Start(ctx context.Context) error {
 			// Process is shutting down.
 		}
 	}
+
+	// This opens the main listener.
+	startRPCServer(workersCtx)
 
 	state, err := initServer.ServeAndWait(ctx, s.stopper, s.gossip)
 	if err != nil {
