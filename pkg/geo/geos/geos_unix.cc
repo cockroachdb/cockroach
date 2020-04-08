@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+#include <cstring>
 #include <dlfcn.h>
 #include <memory>
 #include <stdlib.h>
@@ -49,7 +50,7 @@ typedef void (*CR_GEOS_WKBWriter_destroy_r)(CR_GEOS_Handle, CR_GEOS_WKBWriter);
 typedef CR_GEOS_Geometry (*CR_GEOS_ClipByRect_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
                                                  double, double, double, double);
 
-std::string ToString(CR_GEOS_String goStr) { return std::string(goStr.data, goStr.len); }
+std::string ToString(CR_GEOS_Slice slice) { return std::string(slice.data, slice.len); }
 
 const char* dlopenFailError = "failed to execute dlopen";
 
@@ -120,29 +121,34 @@ struct CR_GEOS {
   }
 };
 
-char* CR_GEOS_Init(CR_GEOS_String loc, CR_GEOS** lib) {
+CR_GEOS_Slice cstringToSlice(char* cstr) {
+  CR_GEOS_Slice slice = {.data = cstr, .len = strlen(cstr)};
+  return slice;
+}
+
+CR_GEOS_Slice CR_GEOS_Init(CR_GEOS_Slice loc, CR_GEOS** lib) {
   auto locStr = ToString(loc);
   void* dlHandle = dlopen(locStr.c_str(), RTLD_LAZY);
   if (!dlHandle) {
-    return (char*)dlopenFailError;
+    return cstringToSlice((char*)dlopenFailError);
   }
 
   std::unique_ptr<CR_GEOS> ret(new CR_GEOS(dlHandle));
   auto error = ret->Init();
   if (error != nullptr) {
-    return error;
+    return cstringToSlice(error);
   }
 
   *lib = ret.release();
-  return NULL;
+  return CR_GEOS_Slice{.data = NULL, .len = 0};
 }
 
-CR_GEOS_String CR_GEOS_WKTToWKB(CR_GEOS* lib, CR_GEOS_String wktString) {
+CR_GEOS_String CR_GEOS_WKTToWKB(CR_GEOS* lib, CR_GEOS_Slice wkt) {
   CR_GEOS_String result = {.data = NULL, .len = 0};
 
   auto handle = lib->GEOS_init_r();
   auto wktReader = lib->GEOSWKTReader_create_r(handle);
-  auto wktStr = ToString(wktString);
+  auto wktStr = ToString(wkt);
   auto geom = lib->GEOSWKTReader_read_r(handle, wktReader, wktStr.c_str());
   lib->GEOSWKTReader_destroy_r(handle, wktReader);
 
