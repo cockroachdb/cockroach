@@ -13,12 +13,14 @@
 package geos
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -81,25 +83,15 @@ func init() {
 func initCRGEOS(locs []string) *C.CR_GEOS {
 	for _, loc := range locs {
 		var ret *C.CR_GEOS
-		errStr := C.CR_GEOS_Init(goToCString(loc), &ret)
-		if errStr == nil {
+		errStr := C.CR_GEOS_Init(goToCSlice([]byte(loc)), &ret)
+		if errStr.data == nil {
 			return ret
 		}
-		// TODO(otan): thread the error message somewhere.
+		// TODO(otan): thread the error message somewhere and remove Printf.
+		log.Infof(context.TODO(), "cannot load GEOS from %s: %s\n", loc,
+			string(cSliceToUnsafeGoBytes(errStr)))
 	}
 	return nil
-}
-
-// goToCString returns a CR_GEOS_String from a given Go string.
-func goToCString(str string) C.CR_GEOS_String {
-	if len(str) == 0 {
-		return C.CR_GEOS_String{data: nil, len: 0}
-	}
-	b := []byte(str)
-	return C.CR_GEOS_String{
-		data: (*C.char)(unsafe.Pointer(&b[0])),
-		len:  C.size_t(len(b)),
-	}
 }
 
 // goToCSlice returns a CR_GEOS_Slice from a given Go byte slice.
@@ -113,20 +105,28 @@ func goToCSlice(b []byte) C.CR_GEOS_Slice {
 	}
 }
 
-// cSliceToUnsafeGoBytes converts a CR_GEOS_Slice to a Go byte slice that
-// refer to the underlying C memory.
+// c{String,Slice}ToUnsafeGoBytes convert a CR_GEOS_{String,Slice} to a Go
+// byte slice that refer to the underlying C memory.
+func cStringToUnsafeGoBytes(s C.CR_GEOS_String) []byte {
+	return cToUnsafeGoBytes(s.data, s.len)
+}
+
 func cSliceToUnsafeGoBytes(s C.CR_GEOS_Slice) []byte {
-	if s.data == nil {
+	return cToUnsafeGoBytes(s.data, s.len)
+}
+
+func cToUnsafeGoBytes(data *C.char, len C.size_t) []byte {
+	if data == nil {
 		return nil
 	}
 	// Interpret the C pointer as a pointer to a Go array, then slice.
-	return (*[maxArrayLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
+	return (*[maxArrayLen]byte)(unsafe.Pointer(data))[:len:len]
 }
 
-// cSliceToSafeGoBytes converts a CR_GEOS_Slice to a Go byte slice.
-// Additionally, it frees the memory in the C slice.
-func cSliceToSafeGoBytes(s C.CR_GEOS_Slice) []byte {
-	unsafeBytes := cSliceToUnsafeGoBytes(s)
+// cStringToSafeGoBytes converts a CR_GEOS_String to a Go byte slice.
+// Additionally, it frees the C memory.
+func cStringToSafeGoBytes(s C.CR_GEOS_Slice) []byte {
+	unsafeBytes := cStringToUnsafeGoBytes(s)
 	b := make([]byte, len(unsafeBytes))
 	copy(b, unsafeBytes)
 	C.free(unsafe.Pointer(s.data))
@@ -140,12 +140,12 @@ func WKTToWKB(wkt geopb.WKT) (geopb.WKB, error) {
 	}
 	cWKB := C.CR_GEOS_WKTToWKB(
 		crGEOS,
-		goToCString(string(wkt)),
+		goToCSlice([]byte(wkt)),
 	)
 	if cWKB.data == nil {
 		return nil, errors.Newf("error decoding WKT: %s", wkt)
 	}
-	return cSliceToSafeGoBytes(cWKB), nil
+	return cStringToSafeGoBytes(cWKB), nil
 }
 
 // ClipWKBByRect clips a WKB to the specified rectangle.
@@ -160,5 +160,5 @@ func ClipWKBByRect(
 	if cWKB.data == nil {
 		return nil, nil
 	}
-	return cSliceToSafeGoBytes(cWKB), nil
+	return cStringToSafeGoBytes(cWKB), nil
 }
