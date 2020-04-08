@@ -1475,6 +1475,9 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 
+	// Set up the init server. We have to do this relatively early because we
+	// can't call RegisterInitServer() after `grpc.Serve`, which is called in
+	// startRPCServer (and for the loopback grpc-gw connection).
 	initServer, err := setupInitServer(
 		ctx,
 		s.cfg.Settings.Version.BinaryVersion(),
@@ -1488,9 +1491,6 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
-	// We cannot register a server after grpc.Serve has been called (it will
-	// panic otherwise). This will happen when startRPCServer is called or when
-	// we serve the UI, both of which happen relatively early.
 	serverpb.RegisterInitServer(s.grpc.Server, initServer)
 
 	s.node.startAssertEngineHealth(ctx, s.engines)
