@@ -159,3 +159,17 @@ ALTER TABLE t RENAME COLUMN b TO c
 
 statement error schema change cannot be initiated in this version until the version upgrade is finalized
 ALTER TABLE t RENAME TO s
+
+subtest regression_47110
+
+statement error type TIMETZ is not supported until version upgrade is finalized
+CREATE TABLE regression_47110(a TIMETZ)
+
+statement ok
+CREATE TABLE regression_47110(a TIME)
+
+statement error type TIMETZ is not supported until version upgrade is finalized
+ALTER TABLE regression_47110 ADD COLUMN b TIMETZ
+
+statement error type TIMETZ is not supported until version upgrade is finalized
+ALTER TABLE regression_47110 ALTER a SET DATA TYPE timetz

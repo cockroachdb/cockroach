@@ -57,6 +57,7 @@ const (
 	VersionStatementDiagnosticsSystemTables
 	VersionSchemaChangeJob
 	VersionSavepoints
+	VersionTimeTZType
 
 	// Add new versions here (step one of two).
 )
@@ -443,6 +444,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// records.
 		Key:     VersionSavepoints,
 		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 16},
+	},
+	{
+		// VersionTimeTZType enables the use of the TimeTZ data type.
+		Key:     VersionTimeTZType,
+		Version: roachpb.Version{Major: 19, Minor: 2, Unstable: 17},
 	},
 	// Add new versions here (step two of two).
 
