@@ -1,3 +1,3 @@
 show_backup_stmt ::=
-	'SHOW' 'BACKUP' location opt_with_options
-	| 'SHOW' 'BACKUP' 'SCHEMAS' location opt_with_options
+	'SHOW' 'BACKUP' location ( | 'WITH' privileges )
+	| 'SHOW' 'BACKUP' 'SCHEMAS' location ( | 'WITH' privileges )
