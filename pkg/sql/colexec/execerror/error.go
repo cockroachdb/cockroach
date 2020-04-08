@@ -98,6 +98,7 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 
 const (
 	colPackagePrefix          = "github.com/cockroachdb/cockroach/pkg/col"
+	colcontainerPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	colexecPackagePrefix      = "github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	colflowsetupPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	execinfraPackagePrefix    = "github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -118,6 +119,7 @@ func isPanicFromVectorizedEngine(panicEmittedFrom string) bool {
 		return false
 	}
 	return strings.HasPrefix(panicEmittedFrom, colPackagePrefix) ||
+		strings.HasPrefix(panicEmittedFrom, colcontainerPackagePrefix) ||
 		strings.HasPrefix(panicEmittedFrom, colexecPackagePrefix) ||
 		strings.HasPrefix(panicEmittedFrom, colflowsetupPackagePrefix) ||
 		strings.HasPrefix(panicEmittedFrom, execinfraPackagePrefix) ||
