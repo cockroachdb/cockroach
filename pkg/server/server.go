@@ -1659,16 +1659,14 @@ func (s *Server) Start(ctx context.Context) error {
 		// If the node is started without join flags, attempt self-bootstrap.
 		// Note that we're not checking whether the node is already bootstrapped;
 		// if this is the case, Bootstrap will simply fail.
-		_ = s.stopper.RunAsyncTask(ctx, "bootstrap", func(ctx context.Context) {
-			_, err := initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{})
-			switch err {
-			case nil:
-				log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
-			case ErrClusterInitialized:
-			default:
-				// Process is shutting down.
-			}
-		})
+		_, err := initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{})
+		switch err {
+		case nil:
+			log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
+		case ErrClusterInitialized:
+		default:
+			// Process is shutting down.
+		}
 	}
 
 	state, err := initServer.ServeAndWait(ctx, s.stopper, s.gossip)
