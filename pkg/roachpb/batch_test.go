@@ -88,6 +88,9 @@ func TestBatchSplit(t *testing.T) {
 		sizes      []int
 		canSplitET bool
 	}{
+		// Uh oh, see https://github.com/cockroachdb/cockroach/pull/47120#issuecomment-610886687
+		{[]Request{scan, scan, et}, []int{2, 1}, true},
+
 		{[]Request{get, put}, []int{1, 1}, true},
 		{[]Request{put, et}, []int{1, 1}, true},
 		{[]Request{get, get, get, put, put, get, get}, []int{3, 2, 2}, true},

@@ -696,8 +696,8 @@ func (ds *DistSender) Send(
 	if len(parts) > 1 && (ba.MaxSpanRequestKeys != 0 || ba.TargetBytes != 0) {
 		// We already verified above that the batch contains only scan requests of the same type.
 		// Such a batch should never need splitting.
-		log.Fatalf(ctx, "batch with MaxSpanRequestKeys=%d, TargetBytes=%d needs splitting",
-			log.Safe(ba.MaxSpanRequestKeys), log.Safe(ba.TargetBytes))
+		log.Fatalf(ctx, "batch with MaxSpanRequestKeys=%d, TargetBytes=%d needs splitting: %s",
+			log.Safe(ba.MaxSpanRequestKeys), log.Safe(ba.TargetBytes), ba.Summary())
 	}
 
 	errIdxOffset := 0

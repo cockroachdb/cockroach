@@ -148,7 +148,7 @@ func newAllOperationsConfig() GeneratorConfig {
 		ClosureTxn: ClosureTxnConfig{
 			Commit:         5,
 			Rollback:       5,
-			CommitInBatch:  5,
+			CommitInBatch:  0, // HACK to avoid https://github.com/cockroachdb/cockroach/pull/47120#issuecomment-610882086
 			TxnClientOps:   clientOpConfig,
 			TxnBatchOps:    batchOpConfig,
 			CommitBatchOps: clientOpConfig,
@@ -373,7 +373,8 @@ func randScan(g *generator, rng *rand.Rand) Operation {
 		to += "\x00"
 	}
 	maxRows := rng.Intn(1 + len(g.keys)/2)
-	return scan(from, to, maxRows)
+	rev := rng.Intn(2) == 0
+	return scan(from, to, maxRows, rev)
 }
 
 func randGetMissing(_ *generator, rng *rand.Rand) Operation {
@@ -465,11 +466,21 @@ func makeAddReplicaFn(key string, current []roachpb.ReplicationTarget, atomicSwa
 
 func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
+		scans := rand.Intn(2) == 0
+		c := *c
+		if scans {
+			// Can't mix limited scans with other ops in a batch, so do only
+			// scans.
+			c = ClientOperationConfig{Scan: 1}
+		} else {
+			c.Scan = 0
+		}
 		var allowed []opGen
-		g.registerClientOps(&allowed, c)
+		g.registerClientOps(&allowed, &c)
 
 		numOps := rng.Intn(4)
 		ops := make([]Operation, numOps)
+
 		for i := range ops {
 			ops[i] = g.selectOp(rng, allowed)
 		}
@@ -563,8 +574,8 @@ func closureTxnCommitInBatch(commitInBatch []Operation, ops ...Operation) Operat
 	return o
 }
 
-func scan(from, to string, n int) Operation {
-	return Operation{Scan: &ScanOperation{Key: []byte(from), EndKey: []byte(to), MaxRows: int64(n)}}
+func scan(from, to string, n int, rev bool) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(from), EndKey: []byte(to), MaxRows: int64(n), Reverse: rev}}
 }
 
 func get(key string) Operation {

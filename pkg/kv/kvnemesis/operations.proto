@@ -42,7 +42,8 @@ message ScanOperation {
   bytes key = 1;
   bytes end_key = 2;
   int64 max_rows = 3;
-  Result result = 4 [(gogoproto.nullable) = false];
+  bool reverse = 4;
+  Result result = 5 [(gogoproto.nullable) = false];
 }
 
 message GetOperation {

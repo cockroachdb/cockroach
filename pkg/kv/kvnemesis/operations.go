@@ -159,8 +159,13 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.Scan(ctx, %s, %s, %d)`,
+	rev := ""
+	if op.Reverse {
+		rev = "Reverse"
+	}
+	fmt.Fprintf(w, `%s.%sScan(ctx, %s, %s, %d)`,
 		fctx.receiver,
+		rev,
 		roachpb.Key(op.Key),
 		roachpb.Key(op.EndKey),
 		op.MaxRows)

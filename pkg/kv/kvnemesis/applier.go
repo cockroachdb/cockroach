@@ -122,6 +122,7 @@ func applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 
 type clientI interface {
 	Scan(_ context.Context, _, _ interface{}, maxRows int64) ([]kv.KeyValue, error)
+	ReverseScan(_ context.Context, _, _ interface{}, maxRows int64) ([]kv.KeyValue, error)
 	Get(context.Context, interface{}) (kv.KeyValue, error)
 	Put(context.Context, interface{}, interface{}) error
 	Run(context.Context, *kv.Batch) error
@@ -130,7 +131,13 @@ type clientI interface {
 func applyClientOp(ctx context.Context, db clientI, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *ScanOperation:
-		results, err := db.Scan(ctx, o.Key, o.EndKey, o.MaxRows)
+		var results []kv.KeyValue
+		var err error
+		if o.Reverse {
+			results, err = db.ReverseScan(ctx, o.Key, o.EndKey, o.MaxRows)
+		} else {
+			results, err = db.Scan(ctx, o.Key, o.EndKey, o.MaxRows)
+		}
 		if err != nil {
 			o.Result = resultError(ctx, err)
 		} else {
@@ -165,10 +172,29 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation) {
 func applyBatchOp(
 	ctx context.Context, b *kv.Batch, runFn func(context.Context, *kv.Batch) error, o *BatchOperation,
 ) {
+	var maxRows int64
+	var scanDir int // -1 reverse, +1 forward
 	for i := range o.Ops {
 		switch subO := o.Ops[i].GetValue().(type) {
 		case *ScanOperation:
-			b.Scan(subO.Key, subO.EndKey) // can't use MaxRows here
+			if n := subO.MaxRows; n > 0 {
+				// HACK(tbg): using the last limit we see for the whole batch.
+				maxRows = n
+			}
+			// Can't mix forward and reverse scans in a batch, so just stick with
+			// whatever shows up first.
+			if scanDir == 0 {
+				if subO.Reverse {
+					scanDir = -1
+				} else {
+					scanDir = 1
+				}
+			}
+			if scanDir < 0 {
+				b.ReverseScan(subO.Key, subO.EndKey)
+			} else {
+				b.Scan(subO.Key, subO.EndKey)
+			}
 		case *GetOperation:
 			b.Get(subO.Key)
 		case *PutOperation:
@@ -177,6 +203,7 @@ func applyBatchOp(
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}
 	}
+	b.Header.MaxSpanRequestKeys = maxRows
 	runErr := runFn(ctx, b)
 	o.Result = resultError(ctx, runErr)
 	for i := range o.Ops {
