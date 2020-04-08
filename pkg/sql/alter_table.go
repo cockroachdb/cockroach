@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -449,6 +450,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
+			}
+
+			// We cannot remove this column if there are computed columns that use it.
+			if err := checkColumnHasNoComputedColDependencies(n.tableDesc, col); err != nil {
+				return err
 			}
 
 			if n.tableDesc.PrimaryIndex.ContainsColumnID(col.ID) {
@@ -1048,6 +1054,47 @@ func applyColumnMutation(
 				"column %q is not a computed column", col.Name)
 		}
 		col.ComputeExpr = nil
+	}
+	return nil
+}
+
+func checkColumnHasNoComputedColDependencies(
+	desc *sqlbase.MutableTableDescriptor, col *sqlbase.ColumnDescriptor,
+) error {
+	checkComputed := func(c *sqlbase.ColumnDescriptor) error {
+		if !c.IsComputed() {
+			return nil
+		}
+		expr, err := parser.ParseExpr(*c.ComputeExpr)
+		if err != nil {
+			// At this point, we should be able to parse the computed expression.
+			return errors.WithAssertionFailure(err)
+		}
+		return iterColDescriptorsInExpr(desc, expr, func(colVar *sqlbase.ColumnDescriptor) error {
+			if colVar.ID == col.ID {
+				return pgerror.Newf(
+					pgcode.InvalidColumnReference,
+					"column %q is referenced by computed column %q",
+					col.Name,
+					c.Name,
+				)
+			}
+			return nil
+		})
+	}
+	for i := range desc.Columns {
+		if err := checkComputed(&desc.Columns[i]); err != nil {
+			return err
+		}
+	}
+	for i := range desc.Mutations {
+		mut := &desc.Mutations[i]
+		mutCol := mut.GetColumn()
+		if mut.Direction == sqlbase.DescriptorMutation_ADD && mutCol != nil {
+			if err := checkComputed(mutCol); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
