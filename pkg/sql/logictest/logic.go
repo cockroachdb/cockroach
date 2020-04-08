@@ -1273,7 +1273,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		); err != nil {
 			t.Fatal(err)
 		}
-		t.t().Log(fmt.Sprintf("randomize batchSize to %d\n", t.randomizedVectorizedBatchSize))
+		t.t().Log(fmt.Sprintf("randomize batchSize to %d", t.randomizedVectorizedBatchSize))
 	}
 
 	if cfg.overrideAutoStats != "" {
