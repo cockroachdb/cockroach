@@ -357,7 +357,7 @@ func GetSelectionOperator(
 			// {{range $overloads}}
 			case tree._NAME:
 				return &_OP_NAME{selOpBase: selOpBase}, nil
-				// {{end }}
+				// {{end}}
 			default:
 				return nil, errors.Errorf("unhandled comparison operator: %s", cmpOp)
 			}

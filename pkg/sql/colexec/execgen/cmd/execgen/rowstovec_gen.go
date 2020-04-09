@@ -63,7 +63,7 @@ func genRowsToVec(wr io.Writer) error {
 	s = strings.Replace(s, "_WIDTH", "{{.Width}}", -1)
 
 	rowsToVecRe := makeFunctionRegex("_ROWS_TO_COL_VEC", 4)
-	s = rowsToVecRe.ReplaceAllString(s, `{{ template "rowsToColVec" . }}`)
+	s = rowsToVecRe.ReplaceAllString(s, `{{template "rowsToColVec" .}}`)
 
 	s = replaceManipulationFuncs(".ExecType", s)
 
