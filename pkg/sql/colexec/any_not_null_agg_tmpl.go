@@ -195,11 +195,11 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 		a.foundNonNullForCurrentGroup = false
 	}
 	var isNull bool
-	// {{ if .HasNulls }}
+	// {{if .HasNulls}}
 	isNull = nulls.NullAt(i)
-	// {{ else }}
+	// {{else}}
 	isNull = false
-	// {{ end }}
+	// {{end}}
 	if !a.foundNonNullForCurrentGroup && !isNull {
 		// If we haven't seen any non-nulls for the current group yet, and the
 		// current value is non-null, then we can pick the current value to be the

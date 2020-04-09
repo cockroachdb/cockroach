@@ -99,7 +99,7 @@ type windowPeerGrouperInitFields struct {
 	outputColIdx int
 }
 
-// {{range . }}
+// {{range .}}
 
 type _PEER_GROUPER_STRINGOp struct {
 	windowPeerGrouperInitFields

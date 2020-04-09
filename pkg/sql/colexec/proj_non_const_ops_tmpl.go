@@ -206,7 +206,7 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 		arg1 := _L_UNSAFEGET(col1, i)
 		arg2 := _R_UNSAFEGET(col2, i)
 		_ASSIGN(projCol[i], arg1, arg2)
-		// {{if _HAS_NULLS }}
+		// {{if _HAS_NULLS}}
 	}
 	// {{end}}
 	// {{end}}

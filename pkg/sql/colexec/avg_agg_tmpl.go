@@ -206,16 +206,16 @@ func _ACCUMULATE_AVG(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bo
 		// We only need to reset this flag if there are nulls. If there are no
 		// nulls, this will be updated unconditionally below.
 		// */}}
-		// {{ if .HasNulls }}
+		// {{if .HasNulls}}
 		a.scratch.foundNonNullForCurrentGroup = false
-		// {{ end }}
+		// {{end}}
 	}
 	var isNull bool
-	// {{ if .HasNulls }}
+	// {{if .HasNulls}}
 	isNull = nulls.NullAt(i)
-	// {{ else }}
+	// {{else}}
 	isNull = false
-	// {{ end }}
+	// {{end}}
 	if !isNull {
 		_ASSIGN_ADD(a.scratch.curSum, a.scratch.curSum, col[i])
 		a.scratch.curCount++
