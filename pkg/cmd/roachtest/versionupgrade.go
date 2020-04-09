@@ -266,14 +266,8 @@ func uploadAndStartFromCheckpointFixture(version string) versionStep {
 		// Extract fixture. Fail if there's already an LSM in the store dir.
 		u.c.Run(ctx, nodes, "cd {store-dir} && [ ! -f {store-dir}/CURRENT ] && tar -xf fixture.tgz")
 
-		// Start the binary.
-		uploadAndstartStep(version)(ctx, t, u)
-	}
-}
-
-func uploadAndstartStep(v string) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		args := u.uploadVersion(ctx, t, v)
+		// Put and start the binary.
+		args := u.uploadVersion(ctx, t, version)
 		// NB: can't start sequentially since cluster already bootstrapped.
 		u.c.Start(ctx, t, u.c.All(), args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
 	}
