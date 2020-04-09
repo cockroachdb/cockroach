@@ -93,6 +93,7 @@ func (s *SSTSnapshotStorageScratch) NewFile(
 ) (*SSTSnapshotStorageFile, error) {
 	id := len(s.ssts)
 	filename := s.filename(id)
+	s.ssts = append(s.ssts, filename)
 	f := &SSTSnapshotStorageFile{
 		scratch:   s,
 		filename:  filename,
@@ -164,7 +165,6 @@ func (f *SSTSnapshotStorageFile) openFile() error {
 	}
 	f.file = file
 	f.created = true
-	f.scratch.ssts = append(f.scratch.ssts, f.filename)
 	return nil
 }
 
