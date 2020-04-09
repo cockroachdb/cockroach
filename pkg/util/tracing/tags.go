@@ -23,6 +23,10 @@ type logTagsOption logtags.Buffer
 var _ opentracing.StartSpanOption = &logTagsOption{}
 
 // Apply is part of the opentracing.StartSpanOption interface.
+//
+// Note that our tracer does not call Apply() for this options. Instead, it
+// recognizes it as a special case and treats it more efficiently, avoiding
+// allocations for each tag. The Apply() is still used by shadow tracers.
 func (lt *logTagsOption) Apply(o *opentracing.StartSpanOptions) {
 	if lt == nil {
 		return
@@ -40,7 +44,8 @@ func (lt *logTagsOption) Apply(o *opentracing.StartSpanOptions) {
 }
 
 // LogTags returns a StartSpanOption that sets the span tags to the given log
-// tags.
+// tags. When applied, the returned option will apply any logtag name->span tag
+// name remapping that has been registered via RegisterTagRemapping.
 func LogTags(tags *logtags.Buffer) opentracing.StartSpanOption {
 	return (*logTagsOption)(tags)
 }

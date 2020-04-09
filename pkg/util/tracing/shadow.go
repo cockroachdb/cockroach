@@ -76,7 +76,7 @@ func (st *shadowTracer) Close() {
 // The Shadow span will have a parent if parentShadowCtx is not nil.
 // parentType is ignored if parentShadowCtx is nil.
 //
-// The tags from s are copied to the Shadow span.
+// The tags (including logTags) from s are copied to the Shadow span.
 func linkShadowSpan(
 	s *span,
 	shadowTr *shadowTracer,
@@ -87,14 +87,8 @@ func linkShadowSpan(
 	var opts []opentracing.StartSpanOption
 	// Replicate the options, using the lightstep context in the reference.
 	opts = append(opts, opentracing.StartTime(s.startTime))
-	if s.startTags != nil {
-		startTags := make(opentracing.Tags)
-		tags := s.startTags.Get()
-		for i := range tags {
-			tag := &tags[i]
-			startTags[tag.Key()] = tag.Value()
-		}
-		opts = append(opts, startTags)
+	if s.logTags != nil {
+		opts = append(opts, LogTags(s.logTags))
 	}
 	if s.mu.tags != nil {
 		opts = append(opts, s.mu.tags)
