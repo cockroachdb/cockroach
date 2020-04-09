@@ -132,11 +132,16 @@ type TableMeta struct {
 	// the consistency of foreign keys.
 	IgnoreForeignKeys bool
 
-	// Constraints stores the list of validated check constraints on the table
-	// stored in the ScalarExpr form so they can possibly be used as filters
-	// in certain queries. See comment above GenerateConstrainedScans for more
-	// detail.
-	Constraints []ScalarExpr
+	// Constraints stores a *FiltersExpr containing filters that are known to
+	// evaluate to true on the table data. This list is extracted from validated
+	// check constraints; specifically, those check constraints that we can prove
+	// never evaluate to NULL (as NULL is treated differently in check constraints
+	// and filters).
+	//
+	// If nil, there are no check constraints.
+	//
+	// See comment above GenerateConstrainedScans for more detail.
+	Constraints ScalarExpr
 
 	// ComputedCols stores ScalarExprs for each computed column on the table,
 	// indexed by ColumnID. These will be used when building mutation statements
@@ -183,9 +188,10 @@ func (tm *TableMeta) IndexKeyColumns(indexOrd int) ColSet {
 	return indexCols
 }
 
-// AddConstraint adds a valid table constraint to the table's metadata.
-func (tm *TableMeta) AddConstraint(constraint ScalarExpr) {
-	tm.Constraints = append(tm.Constraints, constraint)
+// SetConstraints sets the filters derived from check constraints; see
+// TableMeta.Constraint. The argument must be a *FiltersExpr.
+func (tm *TableMeta) SetConstraints(constraints ScalarExpr) {
+	tm.Constraints = constraints
 }
 
 // AddComputedCol adds a computed column expression to the table's metadata.

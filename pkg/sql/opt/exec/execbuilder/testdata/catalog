@@ -33,7 +33,7 @@ CREATE TABLE abcdef (
     c INT DEFAULT (10),
     d INT AS (abcdef.b + c + 1) STORED,
     e INT AS (a) STORED,
-    f INT CHECK (test.abcdef.f > 2),
+    f INT NOT NULL CHECK (test.abcdef.f > 2),
     FAMILY "primary" (a, b, c, d, e, f, rowid)
 )
 
@@ -46,7 +46,7 @@ TABLE abcdef
  ├── c int default (10:::INT8)
  ├── d int as ((b + c) + 1) stored
  ├── e int as (a) stored
- ├── f int
+ ├── f int not null
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── CHECK (f > 2)
  └── INDEX primary
