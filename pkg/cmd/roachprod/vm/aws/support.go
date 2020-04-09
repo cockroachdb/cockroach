@@ -96,7 +96,7 @@ sudo service sshd restart
 # increase the default maximum number of open file descriptors for
 # root and non-root users. Load generators running a lot of concurrent
 # workers bump into this often.
-sudo sh -c 'echo "root - nofile 65536\n* - nofile 65536" > /etc/security/limits.d/10-roachprod-nofiles.conf'
+sudo sh -c 'echo "root - nofile 1048576\n* - nofile 1048576" > /etc/security/limits.d/10-roachprod-nofiles.conf'
 
 # Enable core dumps
 cat <<EOF > /etc/security/limits.d/core_unlimited.conf
