@@ -396,22 +396,62 @@ func execCmd(ctx context.Context, l *logger, args ...string) error {
 		// Context errors opaquely appear as "signal killed" when manifested.
 		// We surface this error explicitly.
 		if ctx.Err() != nil {
-			err = ctx.Err()
+			err = errors.CombineErrors(ctx.Err(), err)
 		}
 
 		// Synchronize access to ring buffers before using them to create an
 		// error to return.
 		cancel()
 		wg.Wait()
-		return errors.Wrapf(
-			err,
-			"%s returned:\nstderr:\n%s\nstdout:\n%s",
-			strings.Join(args, " "),
-			debugStderrBuffer.String(),
-			debugStdoutBuffer.String(),
-		)
+		if err != nil {
+			err = &withCommandDetails{
+				cause:  err,
+				cmd:    strings.Join(args, " "),
+				stderr: debugStderrBuffer.String(),
+				stdout: debugStdoutBuffer.String(),
+			}
+		}
+		return err
 	}
 	return nil
+}
+
+type withCommandDetails struct {
+	cause  error
+	cmd    string
+	stderr string
+	stdout string
+}
+
+var _ error = (*withCommandDetails)(nil)
+var _ errors.Formatter = (*withCommandDetails)(nil)
+
+// Error implements error.
+func (e *withCommandDetails) Error() string { return e.cause.Error() }
+
+// Cause implements causer.
+func (e *withCommandDetails) Cause() error { return e.cause }
+
+// Format implements fmt.Formatter.
+func (e *withCommandDetails) Format(s fmt.State, verb rune) { errors.FormatError(e, s, verb) }
+
+// FormatError implements errors.Formatter.
+func (e *withCommandDetails) FormatError(p errors.Printer) error {
+	p.Printf("%s returned", e.cmd)
+	if p.Detail() {
+		p.Printf("stderr:\n%s\nstdout:\n%s", e.stderr, e.stdout)
+	}
+	return e.cause
+}
+
+// GetStderr retrieves the stderr output of a command that
+// returned with an error, or the empty string if there was no stderr.
+func GetStderr(err error) string {
+	var c *withCommandDetails
+	if errors.As(err, &c) {
+		return c.stderr
+	}
+	return ""
 }
 
 // execCmdWithBuffer executes the given command and returns its stdout/stderr
@@ -1117,7 +1157,7 @@ func (f *clusterFactory) newCluster(
 			break
 		}
 		l.PrintfCtx(ctx, "Failed to create cluster.")
-		if !strings.Contains(err.Error(), "already exists") {
+		if !strings.Contains(GetStderr(err), "already exists") {
 			l.PrintfCtx(ctx, "Cleaning up in case it was partially created.")
 			c.Destroy(ctx, closeLogger, l)
 		} else {
