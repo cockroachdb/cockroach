@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -382,6 +383,10 @@ func EncodeTableValue(
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
 	case *tree.DDate:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), t.UnixEpochDaysWithOrig()), nil
+	case *tree.DGeography:
+		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.EWKB()), nil
+	case *tree.DGeometry:
+		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.EWKB()), nil
 	case *tree.DTime:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
 	case *tree.DTimeTZ:
@@ -500,6 +505,18 @@ func decodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 			return nil, b, err
 		}
 		return a.NewDDate(tree.MakeDDate(pgdate.MakeCompatibleDateFromDisk(data))), b, nil
+	case types.GeographyFamily:
+		b, data, err := encoding.DecodeUntaggedGeoValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDGeography(tree.DGeography{Geography: geo.NewGeography(data)}), b, nil
+	case types.GeometryFamily:
+		b, data, err := encoding.DecodeUntaggedGeoValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDGeometry(tree.DGeometry{Geometry: geo.NewGeometry(data)}), b, nil
 	case types.TimeFamily:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		if err != nil {
@@ -609,6 +626,16 @@ func MarshalColumnValue(col *ColumnDescriptor, val tree.Datum) (roachpb.Value, e
 	case types.DateFamily:
 		if v, ok := val.(*tree.DDate); ok {
 			r.SetInt(v.UnixEpochDaysWithOrig())
+			return r, nil
+		}
+	case types.GeographyFamily:
+		if v, ok := val.(*tree.DGeography); ok {
+			r.SetGeo(v.EWKB())
+			return r, nil
+		}
+	case types.GeometryFamily:
+		if v, ok := val.(*tree.DGeometry); ok {
+			r.SetGeo(v.EWKB())
 			return r, nil
 		}
 	case types.TimeFamily:
@@ -756,6 +783,18 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 			return nil, err
 		}
 		return a.NewDDate(tree.MakeDDate(pgdate.MakeCompatibleDateFromDisk(v))), nil
+	case types.GeographyFamily:
+		v, err := value.GetGeo()
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDGeography(tree.DGeography{Geography: geo.NewGeography(v)}), nil
+	case types.GeometryFamily:
+		v, err := value.GetGeo()
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDGeometry(tree.DGeometry{Geometry: geo.NewGeometry(v)}), nil
 	case types.TimeFamily:
 		v, err := value.GetInt()
 		if err != nil {
@@ -1069,6 +1108,10 @@ func datumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 		return encoding.Int, nil
 	case types.FloatFamily:
 		return encoding.Float, nil
+	case types.GeometryFamily:
+		return encoding.Geo, nil
+	case types.GeographyFamily:
+		return encoding.Geo, nil
 	case types.DecimalFamily:
 		return encoding.Decimal, nil
 	case types.BytesFamily, types.StringFamily, types.CollatedStringFamily:
@@ -1135,6 +1178,10 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedDecimalValue(b, &t.Decimal), nil
 	case *tree.DDate:
 		return encoding.EncodeUntaggedIntValue(b, t.UnixEpochDaysWithOrig()), nil
+	case *tree.DGeography:
+		return encoding.EncodeUntaggedGeoValue(b, t.EWKB()), nil
+	case *tree.DGeometry:
+		return encoding.EncodeUntaggedGeoValue(b, t.EWKB()), nil
 	case *tree.DTime:
 		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
 	case *tree.DTimeTZ:

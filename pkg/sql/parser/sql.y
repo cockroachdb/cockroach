@@ -29,6 +29,7 @@ import (
 
     "go/constant"
 
+    "github.com/cockroachdb/cockroach/pkg/geo/geopb"
     "github.com/cockroachdb/cockroach/pkg/sql/lex"
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
     "github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -501,6 +502,9 @@ func (u *sqlSymUnion) partitionedBackup() tree.PartitionedBackup {
 func (u *sqlSymUnion) partitionedBackups() []tree.PartitionedBackup {
     return u.val.([]tree.PartitionedBackup)
 }
+func (u *sqlSymUnion) geoFigure() geopb.Shape {
+  return u.val.(geopb.Shape)
+}
 func newNameFromStr(s string) *tree.Name {
     return (*tree.Name)(&s)
 }
@@ -554,6 +558,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> FILES FILTER
 %token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE_INDEX FOREIGN FROM FULL FUNCTION
 
+%token <str> GEOGRAPHY GEOMETRY GEOMETRYCOLLECTION
 %token <str> GLOBAL GRANT GRANTS GREATEST GROUP GROUPING GROUPS
 
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
@@ -569,10 +574,11 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> KEY KEYS KV
 
 %token <str> LANGUAGE LAST LATERAL LC_CTYPE LC_COLLATE
-%token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
+%token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT LINESTRING LIST LOCAL
 %token <str> LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
+%token <str> MULTILINESTRING MULTIPOINT MULTIPOLYGON
 
 %token <str> NAN NAME NAMES NATURAL NEXT NO NOCREATEROLE NOLOGIN NO_INDEX_JOIN
 %token <str> NONE NORMAL NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
@@ -581,7 +587,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OPERATOR
 
 %token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PHYSICAL PLACING
-%token <str> PLAN PLANS POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY
+%token <str> PLAN PLANS POINT POLYGON POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY
 %token <str> PROCEDURAL PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY
@@ -987,8 +993,10 @@ func newNameFromStr(s string) *tree.Name {
 %type <*types.T> const_datetime interval_type
 %type <*types.T> bit_with_length bit_without_length
 %type <*types.T> character_base
+%type <*types.T> geo_shape
 %type <*types.T> postgres_oid
 %type <*types.T> cast_target
+%type <*types.T> const_geo
 %type <str> extract_arg
 %type <bool> opt_varying
 
@@ -7261,6 +7269,38 @@ simple_typename:
 | character_with_length
 | interval_type
 | postgres_oid
+| POINT error { return unimplementedWithIssueDetail(sqllex, 21286, "point") } // needed or else it generates a syntax error.
+| POLYGON error { return unimplementedWithIssueDetail(sqllex, 21286, "polygon") } // needed or else it generates a syntax error.
+
+geo_shape:
+  POINT { $$.val = geopb.Shape_Point }
+| LINESTRING { $$.val = geopb.Shape_LineString }
+| POLYGON { $$.val = geopb.Shape_Polygon }
+| GEOMETRYCOLLECTION { $$.val = geopb.Shape_GeometryCollection }
+| MULTIPOLYGON { $$.val = geopb.Shape_MultiPolygon }
+| MULTILINESTRING { $$.val = geopb.Shape_MultiLineString }
+| MULTIPOINT { $$.val = geopb.Shape_MultiPoint }
+| GEOMETRY { $$.val = geopb.Shape_Geometry }
+
+const_geo:
+  GEOGRAPHY { $$.val = types.Geography }
+| GEOMETRY  { $$.val = types.Geometry }
+| GEOMETRY '(' geo_shape ')'
+  {
+    $$.val = types.MakeGeometry($3.geoFigure(), geopb.DefaultGeometrySRID)
+  }
+| GEOGRAPHY '(' geo_shape ')'
+  {
+    $$.val = types.MakeGeography($3.geoFigure(), geopb.DefaultGeographySRID)
+  }
+| GEOMETRY '(' geo_shape ',' iconst32 ')'
+  {
+    $$.val = types.MakeGeometry($3.geoFigure(), geopb.SRID($5.int32()))
+  }
+| GEOGRAPHY '(' geo_shape ',' iconst32 ')'
+  {
+    $$.val = types.MakeGeography($3.geoFigure(), geopb.SRID($5.int32()))
+  }
 
 // We have a separate const_typename to allow defaulting fixed-length types
 // such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
@@ -7276,6 +7316,7 @@ const_typename:
 | bit_without_length
 | character_without_length
 | const_datetime
+| const_geo
 | const_json
   {
     $$.val = types.Jsonb
@@ -9909,6 +9950,7 @@ unreserved_keyword:
 | FOLLOWING
 | FORCE_INDEX
 | FUNCTION
+| GEOMETRYCOLLECTION
 | GLOBAL
 | GRANTS
 | GROUPS
@@ -9947,6 +9989,7 @@ unreserved_keyword:
 | LEASE
 | LESS
 | LEVEL
+| LINESTRING
 | LIST
 | LOCAL
 | LOCKED
@@ -9959,6 +10002,9 @@ unreserved_keyword:
 | MERGE
 | MINUTE
 | MINVALUE
+| MULTILINESTRING
+| MULTIPOINT
+| MULTIPOLYGON
 | MONTH
 | NAMES
 | NAN
@@ -10129,6 +10175,8 @@ col_name_keyword:
 | EXTRACT
 | EXTRACT_DURATION
 | FLOAT
+| GEOGRAPHY
+| GEOMETRY
 | GREATEST
 | GROUPING
 | IF
@@ -10143,6 +10191,8 @@ col_name_keyword:
 | NUMERIC
 | OUT
 | OVERLAY
+| POINT
+| POLYGON
 | POSITION
 | PRECISION
 | REAL

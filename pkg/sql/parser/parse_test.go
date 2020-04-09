@@ -118,6 +118,10 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b TIMETZ)`},
 		{`CREATE TABLE a (b TIME(3))`},
 		{`CREATE TABLE a (b TIMETZ(3))`},
+		{`CREATE TABLE a (b GEOGRAPHY(POINT,4326))`},
+		{`CREATE TABLE a (b GEOMETRY)`},
+		{`CREATE TABLE a (b GEOMETRY(POINT))`},
+		{`CREATE TABLE a (b GEOMETRY(POINT,4326))`},
 		{`CREATE TABLE a (b UUID)`},
 		{`CREATE TABLE a (b INET)`},
 		{`CREATE TABLE a (b "char")`},
@@ -747,6 +751,11 @@ func TestParse(t *testing.T) {
 		{`SELECT 'foo'::TIMESTAMPTZ(6)`},
 		{`SELECT 'foo'::TIME(6)`},
 		{`SELECT '0'::INTERVAL`},
+
+		{`SELECT 'foo'::GEOGRAPHY(POINT,4326)`},
+		{`SELECT 'foo'::GEOMETRY`},
+		{`SELECT 'foo'::GEOMETRY(POINT)`},
+		{`SELECT 'foo'::GEOMETRY(POINT,4326)`},
 
 		{`SELECT '192.168.0.1'::INET`},
 		{`SELECT '192.168.0.1':::INET`},
@@ -1486,6 +1495,8 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b VARCHAR, c VARCHAR(3))`},
 		{`CREATE TABLE a (b BIT VARYING(2), c BIT(1))`,
 			`CREATE TABLE a (b VARBIT(2), c BIT)`},
+		{`CREATE TABLE a (b GEOGRAPHY(POINT))`, `CREATE TABLE a (b GEOGRAPHY(POINT,4326))`},
+		{`CREATE TABLE a (b GEOGRAPHY)`, `CREATE TABLE a (b GEOGRAPHY(GEOMETRY,4326))`},
 
 		{`CREATE STATISTICS a ON col1 FROM t AS OF SYSTEM TIME '2016-01-01'`,
 			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '2016-01-01'`},
@@ -1496,6 +1507,9 @@ func TestParse2(t *testing.T) {
 		{`SELECT CAST(1 AS _int8)`, `SELECT CAST(1 AS INT8[])`},
 		{`SELECT CAST(1 AS "_int8")`, `SELECT CAST(1 AS INT8[])`},
 		{`SELECT SERIAL8 'foo', 'foo'::SERIAL8`, `SELECT INT8 'foo', 'foo'::INT8`},
+
+		{`SELECT 'foo'::GEOGRAPHY`, `SELECT 'foo'::GEOGRAPHY(GEOMETRY,4326)`},
+		{`SELECT 'foo'::GEOGRAPHY(POINT)`, `SELECT 'foo'::GEOGRAPHY(POINT,4326)`},
 
 		{`SELECT 'a'::TIMESTAMP(3)`, `SELECT 'a'::TIMESTAMP(3)`},
 		{`SELECT 'a'::TIMESTAMP(3) WITHOUT TIME ZONE`, `SELECT 'a'::TIMESTAMP(3)`},
