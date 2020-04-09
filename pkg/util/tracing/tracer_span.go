@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/logtags"
 	proto "github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
@@ -655,15 +656,21 @@ func (s *span) getRecording() RecordedSpan {
 		StartTime:    s.startTime,
 		Duration:     s.mu.duration,
 	}
+
+	addTag := func(k, v string) {
+		if rs.Tags == nil {
+			rs.Tags = make(map[string]string)
+		}
+		rs.Tags[k] = v
+	}
+
 	switch rs.Duration {
 	case -1:
-		// -1 indicates an unfinished span.
-		// TODO(radu): depending how recording of in-progress spans is used, we
-		// may want to set this to (Now - StartTime).
-		rs.Duration = 0
-	case 0:
-		// 0 is a special value for unfinished spans. Change to 1ns.
-		rs.Duration = time.Nanosecond
+		// -1 indicates an unfinished span. For a recording it's better to put some
+		// duration in it, otherwise tools get confused. For example, we export
+		// recordings to Jaeger, and spans with a zero duration don't look nice.
+		rs.Duration = timeutil.Now().Sub(rs.StartTime)
+		addTag("unfinished", "")
 	}
 
 	if s.mu.stats != nil {
@@ -681,20 +688,16 @@ func (s *span) getRecording() RecordedSpan {
 		}
 	}
 	if s.logTags != nil {
-		rs.Tags = make(map[string]string)
 		tags := s.logTags.Get()
 		for i := range tags {
 			tag := &tags[i]
-			rs.Tags[tagName(tag.Key())] = tag.ValueStr()
+			addTag(tagName(tag.Key()), tag.ValueStr())
 		}
 	}
 	if len(s.mu.tags) > 0 {
-		if rs.Tags == nil {
-			rs.Tags = make(map[string]string)
-		}
 		for k, v := range s.mu.tags {
 			// We encode the tag values as strings.
-			rs.Tags[k] = fmt.Sprint(v)
+			addTag(k, fmt.Sprint(v))
 		}
 	}
 	rs.Logs = make([]LogRecord, len(s.mu.recordedLogs))

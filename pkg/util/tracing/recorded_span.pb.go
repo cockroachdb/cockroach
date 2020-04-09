@@ -39,7 +39,7 @@ func (m *LogRecord) Reset()         { *m = LogRecord{} }
 func (m *LogRecord) String() string { return proto.CompactTextString(m) }
 func (*LogRecord) ProtoMessage()    {}
 func (*LogRecord) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_2278c97c583fd31c, []int{0}
+	return fileDescriptor_recorded_span_ec83bd4619f89f60, []int{0}
 }
 func (m *LogRecord) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -73,7 +73,7 @@ func (m *LogRecord_Field) Reset()         { *m = LogRecord_Field{} }
 func (m *LogRecord_Field) String() string { return proto.CompactTextString(m) }
 func (*LogRecord_Field) ProtoMessage()    {}
 func (*LogRecord_Field) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_2278c97c583fd31c, []int{0, 0}
+	return fileDescriptor_recorded_span_ec83bd4619f89f60, []int{0, 0}
 }
 func (m *LogRecord_Field) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -117,7 +117,11 @@ type RecordedSpan struct {
 	Tags map[string]string `protobuf:"bytes,6,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	// Time when the span was started.
 	StartTime time.Time `protobuf:"bytes,7,opt,name=start_time,json=startTime,proto3,stdtime" json:"start_time"`
-	// Duration in nanoseconds; 0 if the span is not finished.
+	// Duration is the span's duration, measured from start to Finish().
+	//
+	// A spans whose recording is collected before it's finished will have the
+	// duration set as the time of collection - start_time. Such a span will have
+	// an "unfinished" tag.
 	Duration time.Duration `protobuf:"bytes,8,opt,name=duration,proto3,stdduration" json:"duration"`
 	// Events logged in the span.
 	Logs []LogRecord `protobuf:"bytes,9,rep,name=logs,proto3" json:"logs"`
@@ -128,7 +132,7 @@ type RecordedSpan struct {
 func (m *RecordedSpan) Reset()      { *m = RecordedSpan{} }
 func (*RecordedSpan) ProtoMessage() {}
 func (*RecordedSpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_2278c97c583fd31c, []int{1}
+	return fileDescriptor_recorded_span_ec83bd4619f89f60, []int{1}
 }
 func (m *RecordedSpan) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -171,7 +175,7 @@ func (m *NormalizedSpan) Reset()         { *m = NormalizedSpan{} }
 func (m *NormalizedSpan) String() string { return proto.CompactTextString(m) }
 func (*NormalizedSpan) ProtoMessage()    {}
 func (*NormalizedSpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_2278c97c583fd31c, []int{2}
+	return fileDescriptor_recorded_span_ec83bd4619f89f60, []int{2}
 }
 func (m *NormalizedSpan) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1765,10 +1769,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/tracing/recorded_span.proto", fileDescriptor_recorded_span_2278c97c583fd31c)
+	proto.RegisterFile("util/tracing/recorded_span.proto", fileDescriptor_recorded_span_ec83bd4619f89f60)
 }
 
-var fileDescriptor_recorded_span_2278c97c583fd31c = []byte{
+var fileDescriptor_recorded_span_ec83bd4619f89f60 = []byte{
 	// 623 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x53, 0xcd, 0x6e, 0xd3, 0x4c,
 	0x14, 0x8d, 0x13, 0xe7, 0xef, 0x36, 0xaa, 0xaa, 0x51, 0xf5, 0xc9, 0xb5, 0x3e, 0xd9, 0xa5, 0x48,
