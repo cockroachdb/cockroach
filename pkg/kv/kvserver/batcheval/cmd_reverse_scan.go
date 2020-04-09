@@ -76,7 +76,11 @@ func ReverseScan(
 	}
 
 	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {
-		reply.IntentRows, err = CollectIntentRows(ctx, reader, cArgs, scanRes.Intents)
+		// NOTE: MVCCScan doesn't use a Prefix iterator, so we don't want to use
+		// one in CollectIntentRows either so that we're guaranteed to use the
+		// same cached iterator and observe a consistent snapshot of the engine.
+		const usePrefixIter = false
+		reply.IntentRows, err = CollectIntentRows(ctx, reader, usePrefixIter, scanRes.Intents)
 		if err != nil {
 			return result.Result{}, err
 		}
