@@ -231,6 +231,11 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 
 	// Check orderings within operators.
 	checkExprOrdering(e)
+
+	// Check for overlapping column IDs in child relational expressions.
+	if opt.IsRelationalOp(e) {
+		checkOutputCols(e)
+	}
 }
 
 func (m *Memo) checkColListLen(colList opt.ColList, expectedLen int, listName string) {
@@ -292,5 +297,26 @@ func checkErrorOnDup(e RelExpr) {
 	// Only UpsertDistinctOn should set the ErrorOnDup field to true.
 	if e.Op() != opt.UpsertDistinctOnOp && e.Private().(*GroupingPrivate).ErrorOnDup {
 		panic(errors.AssertionFailedf("%s should never set ErrorOnDup to true", log.Safe(e.Op())))
+	}
+}
+
+func checkOutputCols(e opt.Expr) {
+	set := opt.ColSet{}
+
+	for i := 0; i < e.ChildCount(); i++ {
+		rel, ok := e.Child(i).(RelExpr)
+		if !ok {
+			continue
+		}
+
+		// The output columns of child expressions cannot overlap.
+		cols := rel.Relational().OutputCols
+		if set.Intersects(cols) {
+			panic(errors.AssertionFailedf(
+				"%s RelExpr children have intersecting columns", log.Safe(e.Op()),
+			))
+		}
+
+		set.UnionWith(cols)
 	}
 }
