@@ -227,6 +227,18 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			}
 			checkFilters(*e.Child(2).(*FiltersExpr))
 		}
+
+		if opt.IsSetOp(e) || opt.IsJoinOp(e) {
+			left := e.Child(0).(RelExpr)
+			right := e.Child(1).(RelExpr)
+
+			// The output columns on the left and right cannot overlap.
+			if left.Relational().OutputCols.Intersects(right.Relational().OutputCols) {
+				panic(errors.AssertionFailedf(
+					"%s left and right sides have intersecting columns", log.Safe(e.Op()),
+				))
+			}
+		}
 	}
 
 	// Check orderings within operators.
