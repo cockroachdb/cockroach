@@ -109,11 +109,14 @@ type span struct {
 	operation string
 	startTime time.Time
 
-	// startTags are set to the log tags that were available when this span was
-	// created, so that there's no need to eagerly copy all of those log tags
-	// into this span's tags. If the span's tags are actually requested, these
-	// startTags will be copied out at that point.
-	startTags *logtags.Buffer
+	// logTags are set to the log tags that were available when this span was
+	// created, so that there's no need to eagerly copy all of those log tags into
+	// this span's tags. If the span's tags are actually requested, these logTags
+	// will be copied out at that point.
+	// Note that these tags have not gone through the log tag -> span tag
+	// remapping procedure; tagName() needs to be called before exposing each
+	// tag's key to a user.
+	logTags *logtags.Buffer
 
 	// Atomic flag used to avoid taking the mutex in the hot path.
 	recording int32
@@ -127,7 +130,7 @@ type span struct {
 		recordingType  RecordingType
 		recordedLogs   []opentracing.LogRecord
 		// tags are only set when recording. These are tags that have been added to
-		// this span, and will be appended to the tags in startTags when someone
+		// this span, and will be appended to the tags in logTags when someone
 		// needs to actually observe the total set of tags that is a part of this
 		// span.
 		// TODO(radu): perhaps we want a recording to capture all the tags (even
@@ -677,12 +680,12 @@ func (s *span) getRecording() RecordedSpan {
 			rs.Baggage[k] = v
 		}
 	}
-	if s.startTags != nil {
+	if s.logTags != nil {
 		rs.Tags = make(map[string]string)
-		tags := s.startTags.Get()
+		tags := s.logTags.Get()
 		for i := range tags {
 			tag := &tags[i]
-			rs.Tags[tag.Key()] = tag.ValueStr()
+			rs.Tags[tagName(tag.Key())] = tag.ValueStr()
 		}
 	}
 	if len(s.mu.tags) > 0 {
