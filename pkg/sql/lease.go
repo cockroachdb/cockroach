@@ -1715,10 +1715,22 @@ func (m *LeaseManager) Release(desc *sqlbase.ImmutableTableDescriptor) error {
 	return nil
 }
 
+// removeOnceDereferenced is added to deal with de-flaking a roachtest
+// which can hang due to leases not being properly released when a new
+// version is picked up due to periodically refreshing a lease as opposed
+// to gossip.
+//
+// TODO(ajwerner): Fix this bug and remove this cluster setting.
+var removeOnceDereferenced = settings.RegisterBoolSetting(
+	"sql.lease_manager.remove_lease_once_deferenced",
+	"contols whether leases should be retained when their reference count hits zero",
+	false)
+
 // removeOnceDereferenced returns true if the LeaseManager thinks
 // a tableVersionState can be removed after its refcount goes to 0.
 func (m *LeaseManager) removeOnceDereferenced() bool {
 	return m.LeaseStore.testingKnobs.RemoveOnceDereferenced ||
+			removeOnceDereferenced.Get(&m.settings.SV) ||
 		// Release from the store if the LeaseManager is draining.
 		m.isDraining()
 }
