@@ -83,9 +83,6 @@ func (q *quitTest) runTest(
 		for nodeID := 1; nodeID <= q.c.spec.NodeCount; nodeID++ {
 			q.t.l.Printf("stopping node %d\n", nodeID)
 			q.runWithTimeout(ctx, func(ctx context.Context) { method(ctx, q.t, q.c, nodeID) })
-
-			q.Fatal("wo")
-
 			q.runWithTimeout(ctx, func(ctx context.Context) { q.checkNoLeases(ctx, nodeID) })
 			q.t.l.Printf("restarting node %d\n", nodeID)
 			q.runWithTimeout(ctx, func(ctx context.Context) { q.restartNode(ctx, nodeID) })
