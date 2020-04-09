@@ -137,8 +137,8 @@ func (g *memoGroups) depthFirstSearch(
 		if scan, ok := expr.(*memo.ScanExpr); ok {
 			md := scan.Memo().Metadata()
 			meta := md.TableMeta(scan.Table)
-			for i := 0; i < len(meta.Constraints); i++ {
-				if r := g.depthFirstSearch(meta.Constraints[i], target, visited, nextPath); r != nil {
+			if meta.Constraints != nil {
+				if r := g.depthFirstSearch(meta.Constraints, target, visited, nextPath); r != nil {
 					return r
 				}
 			}

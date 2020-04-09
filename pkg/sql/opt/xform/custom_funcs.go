@@ -406,27 +406,13 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 // will be added to the memo group.
 func (c *CustomFuncs) checkConstraintFilters(tabID opt.TableID) memo.FiltersExpr {
 	md := c.e.mem.Metadata()
-	tab := md.Table(tabID)
 	tabMeta := md.TableMeta(tabID)
-
-	// Maintain a ColSet of non-nullable columns.
-	var notNullCols opt.ColSet
-	for i := 0; i < tab.ColumnCount(); i++ {
-		if !tab.Column(i).IsNullable() {
-			notNullCols.Add(tabID.ColumnID(i))
-		}
+	if tabMeta.Constraints == nil {
+		return memo.FiltersExpr{}
 	}
-
-	checkFilters := make(memo.FiltersExpr, 0, len(tabMeta.Constraints))
-	for _, checkConstraint := range tabMeta.Constraints {
-		// Check constraints that are guaranteed to not evaluate to NULL
-		// are the only ones converted into filters.
-		if memo.ExprIsNeverNull(checkConstraint, notNullCols) {
-			checkFilters = append(checkFilters, c.e.f.ConstructFiltersItem(checkConstraint))
-		}
-	}
-
-	return checkFilters
+	filters := *tabMeta.Constraints.(*memo.FiltersExpr)
+	// Limit slice capacity to allow the caller to append if necessary.
+	return filters[:len(filters):len(filters)]
 }
 
 // computedColFilters generates all filters that can be derived from the list of
