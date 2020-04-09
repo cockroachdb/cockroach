@@ -75,9 +75,19 @@ func TestWindowFunctions(t *testing.T) {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 		for _, tc := range []windowFnTestCase{
 			// With PARTITION BY, no ORDER BY.
-			//
-			// Without ORDER BY, the output of row_number is non-deterministic, so we
-			// skip such a case for rowNumberFn.
+			{
+				tuples:   tuples{{1}, {1}, {1}, {2}, {2}, {3}},
+				expected: tuples{{1, 1}, {1, 2}, {1, 3}, {2, 1}, {2, 2}, {3, 1}},
+				windowerSpec: execinfrapb.WindowerSpec{
+					PartitionBy: []uint32{0},
+					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
+						{
+							Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &rowNumberFn},
+							OutputColIdx: 1,
+						},
+					},
+				},
+			},
 			{
 				tuples:   tuples{{3}, {1}, {2}, {nil}, {1}, {nil}, {3}},
 				expected: tuples{{nil, 1}, {nil, 1}, {1, 1}, {1, 1}, {2, 1}, {3, 1}, {3, 1}},
