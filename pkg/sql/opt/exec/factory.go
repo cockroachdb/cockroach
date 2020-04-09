@@ -50,12 +50,10 @@ type Factory interface {
 	//   - Only the given set of needed columns are part of the result.
 	//   - If indexConstraint is not nil, the scan is restricted to the spans in
 	//     in the constraint.
-	//   - If hardLimit > 0, then only up to hardLimit rows can be returned from
-	//     the scan. If hardLimit > 0, softLimit must be 0.
+	//   - If hardLimit > 0, then the scan returns only up to hardLimit rows.
 	//   - If softLimit > 0, then the scan may be required to return up to all
-	//     of its rows, but can be optimized under the assumption that only
-	//     softLimit rows will be needed. If softLimit > 0, then hardLimit must
-	//     be 0.
+	//     of its rows (or up to the hardLimit if it is set), but can be optimized
+	//     under the assumption that only softLimit rows will be needed.
 	//   - If maxResults > 0, the scan is guaranteed to return at most maxResults
 	//     rows.
 	//   - If locking is provided, the scan should use the specified row-level
