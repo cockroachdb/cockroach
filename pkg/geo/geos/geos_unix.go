@@ -125,7 +125,7 @@ func cToUnsafeGoBytes(data *C.char, len C.size_t) []byte {
 
 // cStringToSafeGoBytes converts a CR_GEOS_String to a Go byte slice.
 // Additionally, it frees the C memory.
-func cStringToSafeGoBytes(s C.CR_GEOS_Slice) []byte {
+func cStringToSafeGoBytes(s C.CR_GEOS_String) []byte {
 	unsafeBytes := cStringToUnsafeGoBytes(s)
 	b := make([]byte, len(unsafeBytes))
 	copy(b, unsafeBytes)
@@ -133,17 +133,31 @@ func cStringToSafeGoBytes(s C.CR_GEOS_Slice) []byte {
 	return b
 }
 
+// A Error wraps an error returned from a GEOS operation.
+type Error struct {
+	msg string
+}
+
+// Error implements the error interface.
+func (err *Error) Error() string {
+	return err.msg
+}
+
+func statusToError(s C.CR_GEOS_Status) error {
+	if s.data == nil {
+		return nil
+	}
+	return &Error{msg: string(cStringToSafeGoBytes(s))}
+}
+
 // WKTToWKB parses a WKT into WKB using the GEOS library.
 func WKTToWKB(wkt geopb.WKT) (geopb.WKB, error) {
 	if err := validOrError(crGEOS); err != nil {
 		return nil, err
 	}
-	cWKB := C.CR_GEOS_WKTToWKB(
-		crGEOS,
-		goToCSlice([]byte(wkt)),
-	)
-	if cWKB.data == nil {
-		return nil, errors.Newf("error decoding WKT: %s", wkt)
+	var cWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_WKTToWKB(crGEOS, goToCSlice([]byte(wkt)), &cWKB)); err != nil {
+		return nil, err
 	}
 	return cStringToSafeGoBytes(cWKB), nil
 }
@@ -155,10 +169,10 @@ func ClipWKBByRect(
 	if err := validOrError(crGEOS); err != nil {
 		return nil, err
 	}
-	cWKB := C.CR_GEOS_ClipWKBByRect(
-		crGEOS, goToCSlice(wkb), C.double(xMin), C.double(yMin), C.double(xMax), C.double(yMax))
-	if cWKB.data == nil {
-		return nil, nil
+	var cWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_ClipWKBByRect(crGEOS, goToCSlice(wkb), C.double(xMin),
+		C.double(yMin), C.double(xMax), C.double(yMax), &cWKB)); err != nil {
+		return nil, err
 	}
 	return cStringToSafeGoBytes(cWKB), nil
 }
