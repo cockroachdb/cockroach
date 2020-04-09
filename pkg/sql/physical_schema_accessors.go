@@ -234,7 +234,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 		// As this table can not be renamed by users, it is okay that the first
 		// check fails.
 		if desc.Name == name.Table() ||
-			name.Table() == sqlbase.NamespaceTable.Name && name.Catalog() == sqlbase.SystemDB.Name {
+			name.Table() == sqlbase.NamespaceTableName && name.Catalog() == sqlbase.SystemDB.Name {
 			if flags.RequireMutable {
 				return sqlbase.NewMutableExistingTableDescriptor(*desc), nil
 			}

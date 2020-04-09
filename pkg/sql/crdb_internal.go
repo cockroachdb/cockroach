@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -2257,19 +2258,21 @@ func getAllNames(
 	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
 ) (map[sqlbase.ID]NamespaceKey, error) {
 	namespace := map[sqlbase.ID]NamespaceKey{}
-	rows, err := executor.Query(
-		ctx, "get-all-names", txn,
-		`SELECT id, "parentID", "parentSchemaID", name FROM system.namespace`,
-	)
-	if err != nil {
-		return nil, err
-	}
-	for _, r := range rows {
-		id, parentID, parentSchemaID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDInt(r[2]), tree.MustBeDString(r[3])
-		namespace[sqlbase.ID(id)] = NamespaceKey{
-			ParentID:       sqlbase.ID(parentID),
-			ParentSchemaID: sqlbase.ID(parentSchemaID),
-			Name:           string(name),
+	if executor.s.cfg.Settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
+		rows, err := executor.Query(
+			ctx, "get-all-names", txn,
+			`SELECT id, "parentID", "parentSchemaID", name FROM system.namespace`,
+		)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range rows {
+			id, parentID, parentSchemaID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDInt(r[2]), tree.MustBeDString(r[3])
+			namespace[sqlbase.ID(id)] = NamespaceKey{
+				ParentID:       sqlbase.ID(parentID),
+				ParentSchemaID: sqlbase.ID(parentSchemaID),
+				Name:           string(name),
+			}
 		}
 	}
 
@@ -2279,7 +2282,7 @@ func getAllNames(
 	// TODO(sqlexec): In 20.2, this can be removed.
 	deprecatedRows, err := executor.Query(
 		ctx, "get-all-names-deprecated-namespace", txn,
-		`SELECT id, "parentID", name FROM system.namespace_deprecated`,
+		fmt.Sprintf(`SELECT id, "parentID", name FROM [%d as namespace]`, keys.DeprecatedNamespaceTableID),
 	)
 	if err != nil {
 		return nil, err

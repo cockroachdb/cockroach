@@ -166,10 +166,10 @@ SELECT * FROM [SHOW GRANTS]
 ORDER BY 1,2,3
 ----
 database_name  schema_name  table_name                       grantee    privilege_type
-system         public       namespace_deprecated             admin      GRANT
-system         public       namespace_deprecated             admin      SELECT
-system         public       namespace_deprecated             root       GRANT
-system         public       namespace_deprecated             root       SELECT
+system         public       namespace2                       admin      GRANT
+system         public       namespace2                       admin      SELECT
+system         public       namespace2                       root       GRANT
+system         public       namespace2                       root       SELECT
 system         public       descriptor                       admin      GRANT
 system         public       descriptor                       admin      SELECT
 system         public       descriptor                       root       GRANT
@@ -464,8 +464,8 @@ system         public              locations                        root     SEL
 system         public              locations                        root     UPDATE
 system         public              namespace                        root     GRANT
 system         public              namespace                        root     SELECT
-system         public              namespace_deprecated             root     GRANT
-system         public              namespace_deprecated             root     SELECT
+system         public              namespace2                       root     GRANT
+system         public              namespace2                       root     SELECT
 system         public              protected_ts_meta                root     GRANT
 system         public              protected_ts_meta                root     SELECT
 system         public              protected_ts_records             root     GRANT
