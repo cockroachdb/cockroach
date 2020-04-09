@@ -690,6 +690,7 @@ unreserved_keyword ::=
 	| 'FOLLOWING'
 	| 'FORCE_INDEX'
 	| 'FUNCTION'
+	| 'GEOMETRYCOLLECTION'
 	| 'GLOBAL'
 	| 'GRANTS'
 	| 'GROUPS'
@@ -728,6 +729,7 @@ unreserved_keyword ::=
 	| 'LEASE'
 	| 'LESS'
 	| 'LEVEL'
+	| 'LINESTRING'
 	| 'LIST'
 	| 'LOCAL'
 	| 'LOCKED'
@@ -740,6 +742,9 @@ unreserved_keyword ::=
 	| 'MERGE'
 	| 'MINUTE'
 	| 'MINVALUE'
+	| 'MULTILINESTRING'
+	| 'MULTIPOINT'
+	| 'MULTIPOLYGON'
 	| 'MONTH'
 	| 'NAMES'
 	| 'NAN'
@@ -901,6 +906,8 @@ col_name_keyword ::=
 	| 'EXTRACT'
 	| 'EXTRACT_DURATION'
 	| 'FLOAT'
+	| 'GEOGRAPHY'
+	| 'GEOMETRY'
 	| 'GREATEST'
 	| 'GROUPING'
 	| 'IF'
@@ -915,6 +922,8 @@ col_name_keyword ::=
 	| 'NUMERIC'
 	| 'OUT'
 	| 'OVERLAY'
+	| 'POINT'
+	| 'POLYGON'
 	| 'POSITION'
 	| 'PRECISION'
 	| 'REAL'
@@ -1857,6 +1866,7 @@ const_typename ::=
 	| bit_without_length
 	| character_without_length
 	| const_datetime
+	| const_geo
 	| const_json
 	| 'BLOB'
 	| 'BYTES'
@@ -2159,6 +2169,14 @@ const_datetime ::=
 	| 'TIMESTAMPTZ'
 	| 'TIMESTAMPTZ' '(' iconst32 ')'
 
+const_geo ::=
+	'GEOGRAPHY'
+	| 'GEOMETRY'
+	| 'GEOMETRY' '(' geo_shape ')'
+	| 'GEOGRAPHY' '(' geo_shape ')'
+	| 'GEOMETRY' '(' geo_shape ',' iconst32 ')'
+	| 'GEOGRAPHY' '(' geo_shape ',' iconst32 ')'
+
 const_json ::=
 	'JSON'
 	| 'JSONB'
@@ -2370,6 +2388,16 @@ opt_timezone ::=
 	'WITH' 'TIME' 'ZONE'
 	| 'WITHOUT' 'TIME' 'ZONE'
 	| 
+
+geo_shape ::=
+	'POINT'
+	| 'LINESTRING'
+	| 'POLYGON'
+	| 'GEOMETRYCOLLECTION'
+	| 'MULTIPOLYGON'
+	| 'MULTILINESTRING'
+	| 'MULTIPOINT'
+	| 'GEOMETRY'
 
 func_name ::=
 	type_function_name

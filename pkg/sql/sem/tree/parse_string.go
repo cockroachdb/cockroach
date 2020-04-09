@@ -43,6 +43,10 @@ func ParseAndRequireString(t *types.T, s string, ctx ParseTimeContext) (Datum, e
 			return nil, err
 		}
 		return ParseDIntervalWithTypeMetadata(s, itm)
+	case types.GeographyFamily:
+		return ParseDGeography(s)
+	case types.GeometryFamily:
+		return ParseDGeometry(s)
 	case types.JsonFamily:
 		return ParseDJSON(s)
 	case types.OidFamily:

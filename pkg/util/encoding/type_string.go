@@ -28,11 +28,12 @@ func _() {
 	_ = x[BitArray-17]
 	_ = x[BitArrayDesc-18]
 	_ = x[TimeTZ-19]
+	_ = x[Geo-20]
 }
 
-const _Type_name = "UnknownNullNotNullIntFloatDecimalBytesBytesDescTimeDurationTrueFalseUUIDArrayIPAddrJSONTupleBitArrayBitArrayDescTimeTZ"
+const _Type_name = "UnknownNullNotNullIntFloatDecimalBytesBytesDescTimeDurationTrueFalseUUIDArrayIPAddrJSONTupleBitArrayBitArrayDescTimeTZGeo"
 
-var _Type_index = [...]uint8{0, 7, 11, 18, 21, 26, 33, 38, 47, 51, 59, 63, 68, 72, 77, 83, 87, 92, 100, 112, 118}
+var _Type_index = [...]uint8{0, 7, 11, 18, 21, 26, 33, 38, 47, 51, 59, 63, 68, 72, 77, 83, 87, 92, 100, 112, 118, 121}
 
 func (i Type) String() string {
 	if i < 0 || i >= Type(len(_Type_index)-1) {

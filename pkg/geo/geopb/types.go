@@ -10,6 +10,26 @@
 
 package geopb
 
+// The following are the common standard SRIDs that we support.
+const (
+	// UnknownSRID is the default SRID if none is provided.
+	UnknownSRID = SRID(0)
+	// DefaultGeometrySRID is the same as being unknown.
+	DefaultGeometrySRID = UnknownSRID
+	// DefaultGeographySRID (aka 4326) is the GPS lat/lng we all know and love.
+	// In this system, (long, lat) corresponds to (X, Y), bounded by
+	// ([-180, 180], [-90 90]).
+	DefaultGeographySRID = SRID(4326)
+)
+
+// SRID is a Spatial Reference Identifer. All geometry and geography shapes are
+// stored and represented as using coordinates that are bare floats. SRIDs tie these
+// floats to the planar or spherical coordinate system, allowing them to be interpreted
+// and compared.
+//
+// The zero value is special and means an unknown coordinate system.
+type SRID int32
+
 // WKT is the Well Known Text form of a spatial object.
 type WKT string
 
@@ -18,3 +38,6 @@ type WKB []byte
 
 // EWKB is the Extended Well Known Bytes form of a spatial object.
 type EWKB []byte
+
+// UnvalidatedEWKB is the unvalidated Extended Well Known Bytes form of a spatial object.
+type UnvalidatedEWKB []byte

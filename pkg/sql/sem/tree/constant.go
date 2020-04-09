@@ -454,6 +454,8 @@ var (
 		types.Date,
 		types.StringArray,
 		types.IntArray,
+		types.Geography,
+		types.Geometry,
 		types.DecimalArray,
 		types.Time,
 		types.TimeTZ,

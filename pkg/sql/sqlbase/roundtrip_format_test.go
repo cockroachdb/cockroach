@@ -189,6 +189,12 @@ func TestParseDatumStringAs(t *testing.T) {
 			"abc\x00",
 			"ab⚣ cd",
 		},
+		types.Geography: {
+			"0101000020E6100000000000000000F03F000000000000F03F",
+		},
+		types.Geometry: {
+			"0101000020E6100000000000000000F03F000000000000F03F",
+		},
 		types.Timestamp: {
 			"2001-01-01 01:02:03+00:00",
 			"2001-01-01 02:03:04.123456+00:00",

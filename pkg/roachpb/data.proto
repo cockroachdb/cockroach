@@ -55,6 +55,7 @@ enum ValueType {
   DELIMITED_DECIMAL = 9;
   DURATION = 6;
   TIMETZ = 12;
+  GEO = 13;
 
   // TUPLE represents a DTuple, encoded as repeated pairs of varint field number
   // followed by a value encoded Datum.

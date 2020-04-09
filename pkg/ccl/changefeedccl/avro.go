@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -172,6 +174,30 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		}
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(x.(float64))), nil
+		}
+	case types.GeographyFamily:
+		avroType = avroSchemaBytes
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return []byte(d.(*tree.DGeography).EWKB()), nil
+		}
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			g, err := geo.NewGeographyFromUnvalidatedEWKB(geopb.UnvalidatedEWKB(x.([]byte)))
+			if err != nil {
+				return nil, err
+			}
+			return &tree.DGeography{Geography: g}, nil
+		}
+	case types.GeometryFamily:
+		avroType = avroSchemaBytes
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return []byte(d.(*tree.DGeometry).EWKB()), nil
+		}
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			g, err := geo.NewGeometryFromUnvalidatedEWKB(geopb.UnvalidatedEWKB(x.([]byte)))
+			if err != nil {
+				return nil, err
+			}
+			return &tree.DGeometry{Geometry: g}, nil
 		}
 	case types.StringFamily:
 		avroType = avroSchemaString

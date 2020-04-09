@@ -11,6 +11,7 @@
 package types
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -89,6 +90,9 @@ var OidToType = map[oid.Oid]*T{
 	oid.T_uuid:         Uuid,
 	oid.T_varbit:       VarBit,
 	oid.T_varchar:      VarChar,
+
+	oidext.T_geometry:  Geometry,
+	oidext.T_geography: Geography,
 }
 
 // oidToArrayOid maps scalar type Oids to their corresponding array type Oid.
@@ -127,6 +131,9 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oid.T_uuid:         oid.T__uuid,
 	oid.T_varbit:       oid.T__varbit,
 	oid.T_varchar:      oid.T__varchar,
+
+	oidext.T_geometry:  oidext.T__geometry,
+	oidext.T_geography: oidext.T__geography,
 }
 
 // familyToOid maps each type family to a default OID value that is used when
@@ -155,6 +162,9 @@ var familyToOid = map[Family]oid.Oid{
 	TupleFamily:          oid.T_record,
 	BitFamily:            oid.T_bit,
 	AnyFamily:            oid.T_anyelement,
+
+	GeometryFamily:  oidext.T_geometry,
+	GeographyFamily: oidext.T_geography,
 }
 
 // ArrayOids is a set of all oids which correspond to an array type.
