@@ -281,7 +281,7 @@ func (r *testRunner) Run(
 				l,
 			); err != nil {
 				// A worker returned an error. Let's shut down.
-				msg := fmt.Sprintf("Worker %d returned with error. Quiescing. Error: %s", i, err)
+				msg := fmt.Sprintf("Worker %d returned with error. Quiescing. Error: %+v", i, err)
 				shout(ctx, l, lopt.stdout, msg)
 				errs.AddErr(err)
 				// Quiesce the stopper. This will cause all workers to not pick up more
@@ -479,7 +479,7 @@ func (r *testRunner) runWorker(
 		if err != nil || t.Failed() {
 			failureMsg := fmt.Sprintf("%s (%d) - ", testToRun.spec.Name, testToRun.runNum)
 			if err != nil {
-				failureMsg += err.Error()
+				failureMsg += fmt.Sprintf("%+v", err)
 			} else {
 				failureMsg += t.FailureMsg()
 			}
