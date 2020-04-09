@@ -849,6 +849,7 @@ func TestNextRowInterleaved(t *testing.T) {
 	ggc1idx.indexName = "ggc1_unique_idx"
 	ggc1idx.indexIdx = 1
 	// Last column v (idx 4) is not stored in this index.
+	ggc1idx.valNeededForCol = ggc1idx.valNeededForCol.Copy()
 	ggc1idx.valNeededForCol.Remove(4)
 	ggc1idx.nVals = 4
 
