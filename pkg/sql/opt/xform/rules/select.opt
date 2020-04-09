@@ -12,8 +12,8 @@
 # and examples.
 [GenerateConstrainedScans, Explore]
 (Select
-  (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
-  $filters:*
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+    $filters:*
 )
 =>
 (GenerateConstrainedScans $scanPrivate $filters)
@@ -22,8 +22,73 @@
 # be serviced by an inverted index.
 [GenerateInvertedIndexScans, Explore]
 (Select
-  (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate) & (HasInvertedIndexes $scanPrivate))
-  $filters:*
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate) & (HasInvertedIndexes $scanPrivate))
+    $filters:*
 )
 =>
 (GenerateInvertedIndexScans $scanPrivate $filters)
+
+# GenerateUnionSelects splits disjunctions (Or expressions) into a Union of two
+# Select expressions, the first containing the left sub-expression of the Or
+# expression and the second containing the right sub-expression. All other
+# filter items in the original expression are preserved in the new Select
+# expressions.
+#
+# This can produce better query plans in cases where indexes cover both sides of
+# the Or expression. The execution plan can use both indexes to satisfy both
+# sides of the disjunction and union the results together.
+#
+# Note that this rule only matches Selects with canonical scans. Therefore scan
+# constraints do not need to be duplicated in the left and right scans of the
+# union.
+#
+# Also note that this rule only matches Selects that have strict keys. This is
+# required to prevent the generated Union from de-duplicating rows that have
+# the same selected values. For example, consider the following:
+#
+#     CREATE TABLE t (k INT PRIMARY KEY, a INT, b INT)
+#     INSERT INTO t VALUES (1, 1, 3)
+#     INSERT INTO t VALUES (2, 1, 3)
+#
+# The expected result of the following Select query is 2 rows, with values
+# (1, 3).
+#
+#     SELECT a, b FROM t WHERE a = 1 OR b = 3
+#
+# However, Union de-duplicates all tuples with the same set of values. So, the
+# query below returns only a single row.
+#
+#     SELECT a, b FROM t WHERE a = 1
+#     UNION
+#     SELECT a, b FROM t WHERE b = 3
+#
+# With a key in the output columns, each input row to the Union is guaranteed to
+# be unique, and therefore will not be incorrectly de-duplicated.
+[GenerateUnionSelects, Explore]
+(Select
+    $input:(Scan
+        $scanPrivate:* & (IsCanonicalScan $scanPrivate)
+    ) & (HasStrictKey $input)
+    $filters:[
+        ...
+        $item:(FiltersItem (Or $left:* $right:*)) &
+            ^(ColsAreEqual (ExprOuterCols $left) (ExprOuterCols $right))
+        ...
+    ]
+)
+=>
+(Union
+    (Select
+        $input
+        (ReplaceFiltersItem $filters $item $left)
+    )
+    (Select
+        (Scan $rightScan:(DuplicateScanPrivate $scanPrivate))
+        (MapScanFilterCols
+            (ReplaceFiltersItem $filters $item $right)
+            $scanPrivate
+            $rightScan
+        )
+    )
+    (MakeSetPrivateForUnionSelects $scanPrivate $rightScan $scanPrivate)
+)

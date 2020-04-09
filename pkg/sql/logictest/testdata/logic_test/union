@@ -343,3 +343,8 @@ query T rowsort
 {2}
 NULL
 {3}
+
+# Allow UNION of hidden and non-hidden columns.
+statement ok
+CREATE TABLE ab (a INT, b INT);
+SELECT a, b, rowid FROM ab UNION VALUES (1, 2, 3);

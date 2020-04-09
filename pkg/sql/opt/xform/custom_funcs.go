@@ -2257,6 +2257,99 @@ func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
 	return oc
 }
 
+// DuplicateScanPrivate constructs a new ScanPrivate that is identical to the
+// input, but has new table and column IDs.
+//
+// DuplicateScanPrivate can only be called on canonical ScanPrivates because not
+// all scan properties are copied to the new ScanPrivate, e.g. constraints.
+func (c *CustomFuncs) DuplicateScanPrivate(sp *memo.ScanPrivate) *memo.ScanPrivate {
+	if !c.IsCanonicalScan(sp) {
+		panic(errors.AssertionFailedf("input ScanPrivate must be canonical: %v", sp))
+	}
+
+	md := c.e.mem.Metadata()
+	tabMeta := md.TableMeta(sp.Table)
+	dupTabID := md.AddTable(tabMeta.Table, &tabMeta.Alias)
+
+	var dupTabColIDs opt.ColSet
+	cols := sp.Cols
+	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
+		ord := tabMeta.MetaID.ColumnOrdinal(i)
+		dupColID := dupTabID.ColumnID(ord)
+		dupTabColIDs.Add(dupColID)
+	}
+
+	return &memo.ScanPrivate{
+		Table:   dupTabID,
+		Cols:    dupTabColIDs,
+		Flags:   sp.Flags,
+		Locking: sp.Locking,
+	}
+}
+
+// MapScanFilterCols returns a new FiltersExpr with all the src column IDs in
+// the input expression replaced with column IDs in dst.
+//
+// NOTE: Every ColumnID in src must map to the a ColumnID in dst with the same
+// relative position in the ColSets. For example, if src and dst are (1, 5, 6)
+// and (7, 12, 15), then the following mapping would be applied:
+//
+//   1 => 7
+//   5 => 12
+//   6 => 15
+func (c *CustomFuncs) MapScanFilterCols(
+	filters memo.FiltersExpr, src *memo.ScanPrivate, dst *memo.ScanPrivate,
+) memo.FiltersExpr {
+	if src.Cols.Len() != dst.Cols.Len() {
+		panic(errors.AssertionFailedf(
+			"src and dst must have the same number of columns, src.Cols: %v, dst.Cols: %v",
+			src.Cols,
+			dst.Cols,
+		))
+	}
+
+	// Map each column in src to a column in dst based on the relative position
+	// of both the src and dst ColumnIDs in the ColSet.
+	var colMap util.FastIntMap
+	dstCol, _ := dst.Cols.Next(0)
+	for srcCol, ok := src.Cols.Next(0); ok; srcCol, ok = src.Cols.Next(srcCol + 1) {
+		colMap.Set(int(srcCol), int(dstCol))
+		dstCol, _ = dst.Cols.Next(dstCol + 1)
+	}
+
+	// Map the columns of each filter in the FiltersExpr.
+	newFilters := make([]memo.FiltersItem, 0, len(filters))
+	for i := range filters {
+		expr := c.MapFiltersItemCols(&filters[i], colMap)
+		newFilters = append(newFilters, c.e.f.ConstructFiltersItem(expr))
+	}
+
+	return newFilters
+}
+
+// ExprOuterCols returns the outer columns of the given expression.
+//
+// Note that ExprOuterCols traverses the Expr tree rather than returning the
+// ColSet from cached shared properties. This is because shared properties are
+// not cached for all Expr types.
+func (c *CustomFuncs) ExprOuterCols(expr opt.Expr) opt.ColSet {
+	var p props.Shared
+	memo.BuildSharedProps(expr, &p)
+	return p.OuterCols
+}
+
+// MakeSetPrivateForUnionSelects constructs a new SetPrivate with column sets
+// from the left, right, and output of the operation.
+func (c *CustomFuncs) MakeSetPrivateForUnionSelects(
+	left, right, out *memo.ScanPrivate,
+) *memo.SetPrivate {
+	return &memo.SetPrivate{
+		LeftCols:  opt.ColSetToList(left.Cols),
+		RightCols: opt.ColSetToList(right.Cols),
+		OutCols:   opt.ColSetToList(out.Cols),
+	}
+}
+
 // scanIndexIter is a helper struct that supports iteration over the indexes
 // of a Scan operator table. For example:
 //
