@@ -46,7 +46,11 @@ func Get(
 	reply.Value = val
 	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {
 		var intentVals []roachpb.KeyValue
-		intentVals, err = CollectIntentRows(ctx, reader, cArgs, intents)
+		// NOTE: MVCCGet uses a Prefix iterator, so we want to use one in
+		// CollectIntentRows as well so that we're guaranteed to use the same
+		// cached iterator and observe a consistent snapshot of the engine.
+		const usePrefixIter = true
+		intentVals, err = CollectIntentRows(ctx, reader, usePrefixIter, intents)
 		if err == nil {
 			switch len(intentVals) {
 			case 0:
