@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"math"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -457,9 +458,7 @@ func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
 	// If there are no output columns, then the operator is for a COUNT query,
 	// in which case we treat the output batch size as the max int.
 	if o.output.Width() == 0 {
-		// TODO(yuzefovich): evaluate whether we can increase this now that
-		// coldata.Batch operates with 'int' length.
-		o.outputBatchSize = 1<<16 - 1
+		o.outputBatchSize = math.MaxInt64
 	}
 
 	o.proberState.lBufferedGroup.spillingQueue = newSpillingQueue(
