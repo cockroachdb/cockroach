@@ -398,15 +398,11 @@ func waitForUpgradeStep() versionStep {
 
 		for i := 1; i <= c.spec.NodeCount; i++ {
 			err := retry.ForDuration(30*time.Second, func() error {
-				db := u.conn(ctx, t, i)
-
-				var currentVersion string
-				if err := db.QueryRow("SHOW CLUSTER SETTING version").Scan(&currentVersion); err != nil {
-					t.Fatalf("%d: %s", i, err)
-				}
+				currentVersion := u.clusterVersion(ctx, t, i).String()
 				if currentVersion != newVersion {
 					return fmt.Errorf("%d: expected version %s, got %s", i, newVersion, currentVersion)
 				}
+				t.l.Printf("%s: acked by n%d", currentVersion, i)
 				return nil
 			})
 			if err != nil {
