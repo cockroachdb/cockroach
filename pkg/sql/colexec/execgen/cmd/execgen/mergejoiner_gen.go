@@ -20,16 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// mjOverload contains the overloads for all needed comparisons.
-type mjOverload struct {
-	// The embedded overload has the shared type information for both of the
-	// overloads, so that you can reference that information inside of . without
-	// needing to pick Eq or Lt.
-	overload
-	Eq *overload
-	Lt *overload
-}
-
 // selPermutation contains information about which permutation of selection
 // vector state the template is materializing.
 type selPermutation struct {
@@ -72,7 +62,7 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 	s = strings.Replace(s, "_SEL_ARG", "$sel", -1)
 	s = strings.Replace(s, "_JOIN_TYPE_STRING", "{{$.JoinType.String}}", -1)
 	s = strings.Replace(s, "_JOIN_TYPE", "$.JoinType", -1)
-	s = strings.Replace(s, "_MJ_OVERLOAD", "$mjOverload", -1)
+	s = strings.Replace(s, "_OVERLOAD", "$overload", -1)
 	s = strings.Replace(s, "_L_HAS_NULLS", "$.lHasNulls", -1)
 	s = strings.Replace(s, "_R_HAS_NULLS", "$.rHasNulls", -1)
 	s = strings.Replace(s, "_HAS_NULLS", "$.HasNulls", -1)
@@ -92,10 +82,10 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 	s = nullFromRightSwitch.ReplaceAllString(s, `{{template "nullFromRightSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
 	incrementLeftSwitch := makeFunctionRegex("_INCREMENT_LEFT_SWITCH", 4)
-	s = incrementLeftSwitch.ReplaceAllString(s, `{{template "incrementLeftSwitch" buildDict "Global" $ "LTyp" .LTyp "JoinType" $1 "SelPermutation" $2 "MJOverload" $3 "lHasNulls" $4}}`)
+	s = incrementLeftSwitch.ReplaceAllString(s, `{{template "incrementLeftSwitch" buildDict "Global" $ "LTyp" .LTyp "JoinType" $1 "SelPermutation" $2 "Overload" $3 "lHasNulls" $4}}`)
 
 	incrementRightSwitch := makeFunctionRegex("_INCREMENT_RIGHT_SWITCH", 4)
-	s = incrementRightSwitch.ReplaceAllString(s, `{{template "incrementRightSwitch" buildDict "Global" $ "LTyp" .LTyp "JoinType" $1 "SelPermutation" $2 "MJOverload" $3 "rHasNulls" $4}}`)
+	s = incrementRightSwitch.ReplaceAllString(s, `{{template "incrementRightSwitch" buildDict "Global" $ "LTyp" .LTyp "JoinType" $1 "SelPermutation" $2 "Overload" $3 "rHasNulls" $4}}`)
 
 	processNotLastGroupInColumnSwitch := makeFunctionRegex("_PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH", 1)
 	s = processNotLastGroupInColumnSwitch.ReplaceAllString(s, `{{template "processNotLastGroupInColumnSwitch" buildDict "Global" $ "JoinType" $1}}`)
@@ -107,16 +97,16 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 	s = sourceFinishedSwitch.ReplaceAllString(s, `{{template "sourceFinishedSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
 	leftSwitch := makeFunctionRegex("_LEFT_SWITCH", 3)
-	s = leftSwitch.ReplaceAllString(s, `{{template "leftSwitch" buildDict "Global" $ "JoinType" $1 "HasSelection" $2 "HasNulls" $3 }}`)
+	s = leftSwitch.ReplaceAllString(s, `{{template "leftSwitch" buildDict "Global" $ "JoinType" $1 "HasSelection" $2 "HasNulls" $3}}`)
 
 	rightSwitch := makeFunctionRegex("_RIGHT_SWITCH", 3)
-	s = rightSwitch.ReplaceAllString(s, `{{template "rightSwitch" buildDict "Global" $ "JoinType" $1 "HasSelection" $2  "HasNulls" $3 }}`)
+	s = rightSwitch.ReplaceAllString(s, `{{template "rightSwitch" buildDict "Global" $ "JoinType" $1 "HasSelection" $2  "HasNulls" $3}}`)
 
 	assignEqRe := makeFunctionRegex("_ASSIGN_EQ", 3)
-	s = assignEqRe.ReplaceAllString(s, makeTemplateFunctionCall("Eq.Assign", 3))
+	s = assignEqRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 3))
 
-	assignLtRe := makeFunctionRegex("_ASSIGN_LT", 3)
-	s = assignLtRe.ReplaceAllString(s, makeTemplateFunctionCall("Lt.Assign", 3))
+	assignLtRe := makeFunctionRegex("_ASSIGN_CMP", 3)
+	s = assignLtRe.ReplaceAllString(s, makeTemplateFunctionCall("Compare", 3))
 
 	s = replaceManipulationFuncs(".LTyp", s)
 
@@ -124,19 +114,6 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 	tmpl, err := template.New("mergejoin_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
-	}
-
-	allOverloads := intersectOverloads(sameTypeComparisonOpToOverloads[tree.EQ], sameTypeComparisonOpToOverloads[tree.LT])
-
-	// Create an mjOverload for each overload combining three overloads so that
-	// the template code can access all of EQ, LT, and GT in the same range loop.
-	mjOverloads := make([]mjOverload, len(allOverloads[0]))
-	for i := range allOverloads[0] {
-		mjOverloads[i] = mjOverload{
-			overload: *allOverloads[0][i],
-			Eq:       allOverloads[0][i],
-			Lt:       allOverloads[1][i],
-		}
 	}
 
 	// Create each permutation of selection vector state.
@@ -168,11 +145,11 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 	}
 
 	return tmpl.Execute(wr, struct {
-		MJOverloads     interface{}
+		Overloads       interface{}
 		SelPermutations interface{}
 		JoinType        interface{}
 	}{
-		MJOverloads:     mjOverloads,
+		Overloads:       sameTypeComparisonOpToOverloads[tree.EQ],
 		SelPermutations: selPermutations,
 		JoinType:        jti,
 	})

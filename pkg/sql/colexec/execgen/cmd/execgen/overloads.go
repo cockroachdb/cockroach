@@ -1411,6 +1411,9 @@ func buildDict(values ...interface{}) (map[string]interface{}, error) {
 	return dict, nil
 }
 
+// Although unused right now, this function might be helpful later.
+var _ = intersectOverloads
+
 // intersectOverloads takes in a slice of overloads and returns a new slice of
 // overloads the corresponding intersected overloads at each position. The
 // intersection is determined to be the maximum common set of LTyp types shared
