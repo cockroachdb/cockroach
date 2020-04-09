@@ -84,7 +84,9 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVers
 	// 20.1; run the test (on 20.1) with the bool flipped to create the fixture.
 	// Check it in (instructions are on the 'checkpointer' struct) and off we
 	// go.
-	cp := checkpointer{on: false}
+	cp := checkpointer{on: false, nodes: c.All()}
+
+	testFeaturesStep := versionUpgradeTestFeatures.step(c.All())
 
 	// The steps below start a cluster at predecessorVersion (from a fixture),
 	// then start an upgrade that is rolled back, and finally start and finalize
@@ -98,9 +100,9 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVers
 		// moving on.
 		//
 		// See the comment on createCheckpoints for details on fixtures.
-		uploadAndStartFromCheckpointFixture(predecessorVersion),
-		waitForUpgradeStep(),
-		versionUpgradeTestFeatures.step,
+		uploadAndStartFromCheckpointFixture(c.All(), predecessorVersion),
+		waitForUpgradeStep(c.All()),
+		testFeaturesStep,
 
 		// NB: at this point, cluster and binary version equal predecessorVersion,
 		// and auto-upgrades are on.
@@ -111,23 +113,23 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVers
 		// coverage by first rolling the cluster into the new version with
 		// auto-upgrade disabled, then rolling back, and then rolling forward
 		// and finalizing on the auto-upgrade path.
-		preventAutoUpgradeStep(),
+		preventAutoUpgradeStep(1),
 		// Roll nodes forward.
-		binaryUpgradeStep(""),
-		versionUpgradeTestFeatures.step,
+		binaryUpgradeStep(c.All(), ""),
+		testFeaturesStep,
 		// Roll back again. Note that bad things would happen if the cluster had
 		// ignored our request to not auto-upgrade. The `autoupgrade` roachtest
 		// exercises this in more detail, so here we just rely on things working
 		// as they ought to.
-		binaryUpgradeStep(predecessorVersion),
-		versionUpgradeTestFeatures.step,
+		binaryUpgradeStep(c.All(), predecessorVersion),
+		testFeaturesStep,
 		// Roll nodes forward, this time allowing them to upgrade, and waiting
 		// for it to happen.
-		binaryUpgradeStep(""),
-		allowAutoUpgradeStep(),
-		versionUpgradeTestFeatures.step,
-		waitForUpgradeStep(),
-		versionUpgradeTestFeatures.step,
+		binaryUpgradeStep(c.All(), ""),
+		allowAutoUpgradeStep(1),
+		testFeaturesStep,
+		waitForUpgradeStep(c.All()),
+		testFeaturesStep,
 
 		// This is usually a noop, but if cp.on was set above, this is where we
 		// create fixtures. This is last so that we're creating the fixtures for
@@ -165,7 +167,7 @@ type versionUpgradeTest struct {
 func newVersionUpgradeTest(c *cluster, steps ...versionStep) *versionUpgradeTest {
 	return &versionUpgradeTest{
 		goOS:  ifLocal(runtime.GOOS, "linux"),
-		c:     c, // all nodes are CRDB nodes
+		c:     c,
 		steps: steps,
 	}
 }
@@ -183,7 +185,9 @@ func (u *versionUpgradeTest) conn(ctx context.Context, t *test, i int) *gosql.DB
 	return u.conns[i-1]
 }
 
-func (u *versionUpgradeTest) uploadVersion(ctx context.Context, t *test, newVersion string) option {
+func (u *versionUpgradeTest) uploadVersion(
+	ctx context.Context, t *test, nodes nodeListOption, newVersion string,
+) option {
 	var binary string
 	if newVersion == "" {
 		binary = cockroach
@@ -204,7 +208,7 @@ func (u *versionUpgradeTest) uploadVersion(ctx context.Context, t *test, newVers
 	if newVersion != "" {
 		target += "-" + newVersion
 	}
-	u.c.Put(ctx, binary, target, u.c.All())
+	u.c.Put(ctx, binary, target, nodes)
 	return startArgs("--binary=" + target)
 }
 
@@ -252,9 +256,8 @@ func (u *versionUpgradeTest) clusterVersion(ctx context.Context, t *test, i int)
 // versionStep is an isolated version migration on a running cluster.
 type versionStep func(ctx context.Context, t *test, u *versionUpgradeTest)
 
-func uploadAndStartFromCheckpointFixture(version string) versionStep {
+func uploadAndStartFromCheckpointFixture(nodes nodeListOption, version string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		nodes := u.c.All()
 		u.c.Run(ctx, nodes, "mkdir", "-p", "{store-dir}")
 		name := checkpointName(version)
 		for _, i := range nodes {
@@ -267,20 +270,19 @@ func uploadAndStartFromCheckpointFixture(version string) versionStep {
 		u.c.Run(ctx, nodes, "cd {store-dir} && [ ! -f {store-dir}/CURRENT ] && tar -xf fixture.tgz")
 
 		// Put and start the binary.
-		args := u.uploadVersion(ctx, t, version)
+		args := u.uploadVersion(ctx, t, nodes, version)
 		// NB: can't start sequentially since cluster already bootstrapped.
-		u.c.Start(ctx, t, u.c.All(), args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
+		u.c.Start(ctx, t, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
 	}
 }
 
 // binaryUpgradeStep rolling-restarts the given nodes into the new binary
 // version. Note that this does *not* wait for the cluster version to upgrade.
 // Use a waitForUpgradeStep() for that.
-func binaryUpgradeStep(newVersion string) versionStep {
+func binaryUpgradeStep(nodes nodeListOption, newVersion string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		c := u.c
-		nodes := c.All()
-		args := u.uploadVersion(ctx, t, newVersion)
+		args := u.uploadVersion(ctx, t, nodes, newVersion)
 
 		// Restart nodes in a random order; otherwise node 1 would be running all
 		// the migrations and it probably also has all the leases.
@@ -300,19 +302,19 @@ func binaryUpgradeStep(newVersion string) versionStep {
 	}
 }
 
-func preventAutoUpgradeStep() versionStep {
+func preventAutoUpgradeStep(node int) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		db := u.conn(ctx, t, 1)
-		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING cluster.preserve_downgrade_option = $1`, u.binaryVersion(ctx, t, 1).String())
+		db := u.conn(ctx, t, node)
+		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING cluster.preserve_downgrade_option = $1`, u.binaryVersion(ctx, t, node).String())
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 }
 
-func allowAutoUpgradeStep() versionStep {
+func allowAutoUpgradeStep(node int) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		db := u.conn(ctx, t, 1)
+		db := u.conn(ctx, t, node)
 		_, err := db.ExecContext(ctx, `RESET CLUSTER SETTING cluster.preserve_downgrade_option`)
 		if err != nil {
 			t.Fatal(err)
@@ -329,13 +331,12 @@ func allowAutoUpgradeStep() versionStep {
 // heuristically) to the real-world situation in which some nodes have already
 // learned of a cluster version bump (from Gossip) where others haven't. This
 // situation tends to exhibit unexpected behavior.
-func waitForUpgradeStep() versionStep {
+func waitForUpgradeStep(nodes nodeListOption) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		c := u.c
-		newVersion := u.binaryVersion(ctx, t, 1).String()
+		newVersion := u.binaryVersion(ctx, t, nodes[0]).String()
 		t.l.Printf("%s: waiting for cluster to auto-upgrade\n", newVersion)
 
-		for i := 1; i <= c.spec.NodeCount; i++ {
+		for _, i := range nodes {
 			err := retry.ForDuration(30*time.Second, func() error {
 				currentVersion := u.clusterVersion(ctx, t, i).String()
 				if currentVersion != newVersion {
@@ -349,28 +350,9 @@ func waitForUpgradeStep() versionStep {
 			}
 		}
 
-		t.l.Printf("%s: cluster is upgraded\n", newVersion)
+		t.l.Printf("%s: nodes %v are upgraded\n", newVersion)
 
 		// TODO(nvanbenschoten): add upgrade qualification step.
-	}
-}
-
-func stmtFeatureTest(
-	name string, minVersion roachpb.Version, stmt string, args ...interface{},
-) versionFeatureTest {
-	return versionFeatureTest{
-		name: name,
-		fn: func(ctx context.Context, t *test, u *versionUpgradeTest) (skipped bool) {
-			i := u.c.All().randNode()[0]
-			if u.clusterVersion(ctx, t, i).Less(minVersion) {
-				return true // skipped
-			}
-			db := u.conn(ctx, t, i)
-			if _, err := db.ExecContext(ctx, stmt, args...); err != nil {
-				t.Fatal(err)
-			}
-			return false
-		},
 	}
 }
 
@@ -391,7 +373,8 @@ func stmtFeatureTest(
 //     pkg/cmd/roachtest/fixtures/${i}/
 // done
 type checkpointer struct {
-	on bool
+	on    bool
+	nodes nodeListOption
 }
 
 func (cp *checkpointer) createCheckpointsAndFail(
@@ -401,7 +384,6 @@ func (cp *checkpointer) createCheckpointsAndFail(
 		return
 	}
 	c := u.c
-	nodes := u.c.All()
 	// If we're taking checkpoints, momentarily stop the cluster (we
 	// need to do that to get the checkpoints to reflect a
 	// consistent cluster state). The binary at this point will be
@@ -419,30 +401,51 @@ func (cp *checkpointer) createCheckpointsAndFail(
 	// 2.1 binary, but not the 19.1 binary (as 19.1 and 2.0 are not
 	// compatible).
 	name := checkpointName(u.binaryVersion(ctx, t, 1).String())
-	c.Stop(ctx, nodes)
-	c.Run(ctx, c.All(), "./cockroach", "debug", "rocksdb", "--db={store-dir}",
+	c.Stop(ctx, cp.nodes)
+	c.Run(ctx, cp.nodes, "./cockroach", "debug", "rocksdb", "--db={store-dir}",
 		"checkpoint", "--checkpoint_dir={store-dir}/"+name)
-	c.Run(ctx, c.All(), "tar", "-C", "{store-dir}/"+name, "-czf", "{log-dir}/"+name+".tgz", ".")
+	c.Run(ctx, cp.nodes, "tar", "-C", "{store-dir}/"+name, "-czf", "{log-dir}/"+name+".tgz", ".")
 	t.Fatalf("successfully created checkpoints; failing test on purpose")
 }
 
 type versionFeatureTest struct {
 	name string
-	fn   func(context.Context, *test, *versionUpgradeTest) (skipped bool)
+	fn   func(context.Context, *test, *versionUpgradeTest, nodeListOption) (skipped bool)
 }
 
 type versionFeatureStep []versionFeatureTest
 
-func (vs versionFeatureStep) step(ctx context.Context, t *test, u *versionUpgradeTest) {
-	for _, feature := range vs {
-		t.l.Printf("checking %s", feature.name)
-		tBegin := timeutil.Now()
-		skipped := feature.fn(ctx, t, u)
-		dur := fmt.Sprintf("%.2fs", timeutil.Since(tBegin).Seconds())
-		if skipped {
-			t.l.Printf("^-- skip (%s)", dur)
-		} else {
-			t.l.Printf("^-- ok (%s)", dur)
+func (vs versionFeatureStep) step(nodes nodeListOption) versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		for _, feature := range vs {
+			t.l.Printf("checking %s", feature.name)
+			tBegin := timeutil.Now()
+			skipped := feature.fn(ctx, t, u, nodes)
+			dur := fmt.Sprintf("%.2fs", timeutil.Since(tBegin).Seconds())
+			if skipped {
+				t.l.Printf("^-- skip (%s)", dur)
+			} else {
+				t.l.Printf("^-- ok (%s)", dur)
+			}
 		}
+	}
+}
+
+func stmtFeatureTest(
+	name string, minVersion roachpb.Version, stmt string, args ...interface{},
+) versionFeatureTest {
+	return versionFeatureTest{
+		name: name,
+		fn: func(ctx context.Context, t *test, u *versionUpgradeTest, nodes nodeListOption) (skipped bool) {
+			i := nodes.randNode()[0]
+			if u.clusterVersion(ctx, t, i).Less(minVersion) {
+				return true // skipped
+			}
+			db := u.conn(ctx, t, i)
+			if _, err := db.ExecContext(ctx, stmt, args...); err != nil {
+				t.Fatal(err)
+			}
+			return false
+		},
 	}
 }
