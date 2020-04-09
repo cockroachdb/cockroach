@@ -2539,6 +2539,28 @@ func MVCCScanToBytes(
 	return mvccScanToBytes(ctx, iter, key, endKey, timestamp, opts)
 }
 
+// MVCCScanAsTxn constructs a temporary transaction from the given transaction
+// metadata and calls MVCCScan as that transaction. This method is required only
+// for reading intents of a transaction when only its metadata is known and
+// should rarely be used.
+//
+// The read is carried out without the chance of uncertainty restarts.
+func MVCCScanAsTxn(
+	ctx context.Context,
+	reader Reader,
+	key, endKey roachpb.Key,
+	timestamp hlc.Timestamp,
+	txnMeta enginepb.TxnMeta,
+) (MVCCScanResult, error) {
+	return MVCCScan(ctx, reader, key, endKey, timestamp, MVCCScanOptions{
+		Txn: &roachpb.Transaction{
+			TxnMeta:       txnMeta,
+			Status:        roachpb.PENDING,
+			ReadTimestamp: txnMeta.WriteTimestamp,
+			MaxTimestamp:  txnMeta.WriteTimestamp,
+		}})
+}
+
 // MVCCIterate iterates over the key range [start,end). At each step of the
 // iteration, f() is invoked with the current key/value pair. If f returns
 // true (done) or an error, the iteration stops and the error is propagated.

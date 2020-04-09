@@ -4,6 +4,9 @@
   "main": "index.tsx",
   "repository": "github.com/cockroachdb/cockroach",
   "license": "MIT",
+  "scripts": {
+    "storybook": "start-storybook -p 9009"
+  },
   "dependencies": {
     "analytics-node": "^3.4.0-beta.1",
     "antd": "^3.25.2",
@@ -41,6 +44,7 @@
     "@babel/core": "^7.7.7",
     "@babel/preset-env": "^7.7.7",
     "@babel/preset-react": "^7.7.4",
+    "@storybook/react": "5.0.6",
     "@types/analytics-node": "^0.0.32",
     "@types/assert": "^1.4.0",
     "@types/bytebuffer": "^5.0.33",
@@ -57,6 +61,7 @@
     "@types/highlight.js": "^9.1.9",
     "@types/lodash": "^4.14.149",
     "@types/mocha": "^2.2.40",
+    "@types/node": "^13.7.0",
     "@types/nvd3": "^1.8.36",
     "@types/prop-types": "^15.5.1",
     "@types/react": "^16.9.17",
@@ -71,6 +76,7 @@
     "@types/redux-saga": "^0.10.5",
     "@types/redux-thunk": "^2.1.0",
     "@types/sinon": "^7.5.1",
+    "@types/storybook__react": "^4.0.2",
     "babel-loader": "^8.0.6",
     "babel-plugin-import": "^1.12.2",
     "bytebuffer": "^5.0.1",
