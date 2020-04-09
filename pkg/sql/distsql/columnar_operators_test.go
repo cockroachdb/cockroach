@@ -534,13 +534,17 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 									},
 								}
 								args := verifyColOperatorArgs{
-									anyOrder:              true,
-									inputTypes:            [][]types.T{lInputTypes, rInputTypes},
-									inputs:                []sqlbase.EncDatumRows{lRows, rRows},
-									outputTypes:           outputTypes,
-									pspec:                 pspec,
-									forceDiskSpill:        spillForced,
-									numForcedRepartitions: 2,
+									anyOrder:       true,
+									inputTypes:     [][]types.T{lInputTypes, rInputTypes},
+									inputs:         []sqlbase.EncDatumRows{lRows, rRows},
+									outputTypes:    outputTypes,
+									pspec:          pspec,
+									forceDiskSpill: spillForced,
+									// It is possible that we have a filter that is always false, and this
+									// will allow us to plan a zero operator which always returns a zero
+									// batch. In such case, the spilling might not occur and that's ok.
+									forcedDiskSpillMightNotOccur: !filter.Empty() || !onExpr.Empty(),
+									numForcedRepartitions:        2,
 								}
 								if err := verifyColOperator(args); err != nil {
 									fmt.Printf("--- spillForced = %t join type = %s onExpr = %q"+
