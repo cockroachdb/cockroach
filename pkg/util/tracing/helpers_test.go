@@ -87,9 +87,7 @@ type mockSpan struct {
 
 var _ opentracing.Span = &mockSpan{}
 
-func (m *mockSpan) Finish() {
-	panic("unimplemented")
-}
+func (m *mockSpan) Finish() {}
 
 func (m *mockSpan) FinishWithOptions(opts opentracing.FinishOptions) {
 	panic("unimplemented")
