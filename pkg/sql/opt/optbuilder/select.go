@@ -523,10 +523,11 @@ func (b *Builder) buildScan(
 		if locking.isSet() {
 			private.Locking = locking.get()
 		}
-		outScope.expr = b.factory.ConstructScan(&private)
 
 		b.addCheckConstraintsForTable(tabMeta)
 		b.addComputedColsForTable(tabMeta)
+
+		outScope.expr = b.factory.ConstructScan(&private)
 
 		if b.trackViewDeps {
 			dep := opt.ViewDep{DataSource: tab}
