@@ -14,6 +14,7 @@ package cockroach.sql.sem.types;
 option go_package = "types";
 
 import "gogoproto/gogo.proto";
+import "geo/geopb/geopb.proto";
 
 // See the comment header for the T.Family method for more details.
 enum Family {
@@ -324,6 +325,30 @@ enum Family {
     //
     BitFamily = 21;
 
+    // GeometryFamily is a family that supports the Geometry geospatial type,
+    // which is compatible with PostGIS's Geometry implementation.
+    //
+    //   Canonical: types.Geometry
+    //   Oid      : oidext.T_geometry
+    //
+    // Examples:
+    //   GEOMETRY
+    //   GEOMETRY(LINESTRING)
+    //   GEOMETRY(LINESTRING, SRID)
+    GeometryFamily = 22;
+
+    // GeographyFamily is a family that supports the Geography geospatial type,
+    // which is compatible with PostGIS's Geography implementation.
+    //
+    //   Canonical: types.Geography
+    //   Oid      : oidext.T_geography
+    //
+    // Examples:
+    //   GEOGRAPHY
+    //   GEOGRAPHY(LINESTRING)
+    //   GEOGRAPHY(LINESTRING, SRID)
+    GeographyFamily = 23;
+
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and
     // tuple types. Execution-time values should never have this type. As an
@@ -378,6 +403,12 @@ message IntervalDurationField {
   // i.e. in the `DurationType_1 TO DurationType_2` syntax, this represents `DurationType_1`.
   // Note this is ignored, see https://www.postgresql.org/message-id/20110510040219.GD5617%40tornado.gateway.2wire.net.
   optional IntervalDurationType from_duration_type = 2 [(gogoproto.nullable) = false];
+}
+
+// GeoMetadata contains metadata associated with Geospatial data types.
+message GeoMetadata {
+  optional int32 srid = 1 [(gogoproto.nullable)=false,(gogoproto.customname)="SRID",(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/geo/geopb.SRID"];
+  optional geopb.Shape shape = 2 [(gogoproto.nullable)=false];
 }
 
 // InternalType is the protobuf encoding for SQL types. It is always wrapped by
@@ -451,4 +482,7 @@ message InternalType {
     // IntervalDurationField is populated for intervals, representing extra
     // typmod or precision data that may be required.
     optional IntervalDurationField interval_duration_field = 13;
+
+    // GeoMetadata is populated for geospatial types.
+    optional GeoMetadata geo_metadata = 14;
 }
