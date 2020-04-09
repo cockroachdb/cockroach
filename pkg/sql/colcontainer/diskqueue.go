@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -425,11 +424,14 @@ func (d *diskQueue) Close(ctx context.Context) error {
 	for _, file := range d.files[leftOverFileIdx : d.writeFileIdx+1] {
 		totalSize += int64(file.totalSize)
 	}
+	if totalSize > d.diskAcc.Used() {
+		totalSize = d.diskAcc.Used()
+	}
 	d.diskAcc.Shrink(ctx, totalSize)
 	return nil
 }
 
-// rotateFile performs file rotation for the diskQueue. i.e. it creates a new
+// rotateFile performs file rotation for the diskQueue, i.e. it creates a new
 // file to write to and sets the diskQueue state up to write to that file when
 // Enqueue is called.
 // It is valid to call rotateFile when the diskQueue is not currently writing to
@@ -489,7 +491,7 @@ func (d *diskQueue) writeFooterAndFlush(ctx context.Context) error {
 	d.numBufferedBatches = 0
 	d.files[d.writeFileIdx].totalSize += written
 	if err := d.diskAcc.Grow(ctx, int64(written)); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		return err
 	}
 	// Append offset for the readers.
 	d.files[d.writeFileIdx].offsets = append(d.files[d.writeFileIdx].offsets, d.files[d.writeFileIdx].totalSize)
@@ -661,10 +663,7 @@ func (d *diskQueue) maybeInitDeserializer(ctx context.Context) (bool, error) {
 // deserialized batch is only valid until the next call to Dequeue.
 func (d *diskQueue) Dequeue(ctx context.Context, b coldata.Batch) (bool, error) {
 	if d.serializer != nil && d.numBufferedBatches > 0 {
-		if err := d.writeFooterAndFlush(ctx); err != nil {
-			return false, err
-		}
-		if err := d.resetWriters(d.writeFile); err != nil {
+		if err := d.rotateFile(ctx); err != nil {
 			return false, err
 		}
 	}
