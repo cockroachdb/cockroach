@@ -1054,6 +1054,14 @@
   version = "v3.6.2"
 
 [[projects]]
+  digest = "1:ddcd5a47f37b0a26a3c9eb898ee7bd8109b944d79877e0001f3401f1c61ec0ac"
+  name = "github.com/jaegertracing/jaeger"
+  packages = ["model/json"]
+  pruneopts = "UT"
+  revision = "3b34ac6bcdeb22e09a81c6244bfeed20503a383b"
+  version = "v1.17.1"
+
+[[projects]]
   digest = "1:dcb3e2ad17349c0cc89ffc16692d05195e6a67b4924fe81760fba9a307a7271d"
   name = "github.com/jmank88/nuts"
   packages = ["."]
@@ -2125,6 +2133,7 @@
     "github.com/jackc/pgx",
     "github.com/jackc/pgx/pgproto3",
     "github.com/jackc/pgx/pgtype",
+    "github.com/jaegertracing/jaeger/model/json",
     "github.com/kevinburke/go-bindata/go-bindata",
     "github.com/kisielk/errcheck",
     "github.com/kisielk/gotool",

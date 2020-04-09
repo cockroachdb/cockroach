@@ -12,9 +12,11 @@ package tracing
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	proto "github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
+	jaegerjson "github.com/jaegertracing/jaeger/model/json"
 	opentracing "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
@@ -409,6 +412,125 @@ func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 	}
 
 	return mergedLogs
+}
+
+// ToJaegerJSON returns the trace as a JSON that can be imported into Jaeger for
+// visualization.
+//
+// The format is described here: https://github.com/jaegertracing/jaeger-ui/issues/381#issuecomment-494150826
+//
+// The statement is passed in so it can be included in the trace.
+func (r Recording) ToJaegerJSON(stmt string) (string, error) {
+	if len(r) == 0 {
+		return "", nil
+	}
+
+	cpy := make(Recording, len(r))
+	copy(cpy, r)
+	r = cpy
+	tagsCopy := make(map[string]string)
+	for k, v := range r[0].Tags {
+		tagsCopy[k] = v
+	}
+	tagsCopy["statement"] = stmt
+	r[0].Tags = tagsCopy
+
+	toJaegerSpanID := func(spanID uint64) jaegerjson.SpanID {
+		return jaegerjson.SpanID(strconv.FormatUint(spanID, 10))
+	}
+
+	// Each span in Jaeger belongs to a "process" that generated it. Spans
+	// belonging to different colors are colored differently in Jaeger. We're
+	// going to map our different nodes to different processes.
+	processes := make(map[jaegerjson.ProcessID]jaegerjson.Process)
+	// getProcessID figures out what "process" a span belongs to. It looks for an
+	// "node: <node id>" tag. The processes map is populated with an entry for every
+	// node present in the trace.
+	getProcessID := func(sp RecordedSpan) jaegerjson.ProcessID {
+		node := "unknown node"
+		for k, v := range sp.Tags {
+			if k == "node" {
+				node = fmt.Sprintf("node %s", v)
+				break
+			}
+		}
+		pid := jaegerjson.ProcessID(node)
+		if _, ok := processes[pid]; !ok {
+			processes[pid] = jaegerjson.Process{
+				ServiceName: node,
+				Tags:        nil,
+			}
+		}
+		return pid
+	}
+
+	var t jaegerjson.Trace
+	t.TraceID = jaegerjson.TraceID(strconv.FormatUint(r[0].TraceID, 10))
+	t.Processes = processes
+
+	for _, sp := range r {
+		var s jaegerjson.Span
+
+		s.TraceID = t.TraceID
+		s.Duration = uint64(sp.Duration.Microseconds())
+		s.StartTime = uint64(sp.StartTime.UnixNano() / 1000)
+		s.SpanID = toJaegerSpanID(sp.SpanID)
+		s.OperationName = sp.Operation
+		s.ProcessID = getProcessID(sp)
+
+		if sp.ParentSpanID != 0 {
+			s.References = []jaegerjson.Reference{{
+				RefType: jaegerjson.ChildOf,
+				TraceID: s.TraceID,
+				SpanID:  toJaegerSpanID(sp.ParentSpanID),
+			}}
+		}
+
+		for k, v := range sp.Tags {
+			s.Tags = append(s.Tags, jaegerjson.KeyValue{
+				Key:   k,
+				Value: v,
+				Type:  "STRING",
+			})
+		}
+		for _, l := range sp.Logs {
+			jl := jaegerjson.Log{Timestamp: uint64(l.Time.UnixNano() / 1000)}
+			for _, field := range l.Fields {
+				jl.Fields = append(jl.Fields, jaegerjson.KeyValue{
+					Key:   field.Key,
+					Value: field.Value,
+					Type:  "STRING",
+				})
+			}
+			s.Logs = append(s.Logs, jl)
+		}
+		t.Spans = append(t.Spans, s)
+	}
+
+	data := TraceCollection{
+		Data: []jaegerjson.Trace{t},
+		// Add a comment that will show-up at the top of the JSON file, is someone opens the file.
+		// NOTE: This comment is scarce on newlines because they appear as \n in the
+		// generated file doing more harm than good.
+		Comment: fmt.Sprintf(`This is a trace for SQL statement: %s
+This trace can be imported into Jaeger for visualization. From the Jaeger Search screen, select JSON File.
+Jaeger can be started using docker with: docker run -d --name jaeger -p 16686:16686 jaegertracing/all-in-one:1.17
+The UI can then be accessed at http://localhost:16686/search`,
+			stmt),
+	}
+	json, err := json.MarshalIndent(data, "" /* prefix */, "\t" /* indent */)
+	if err != nil {
+		return "", err
+	}
+	return string(json), nil
+}
+
+// TraceCollection is the format accepted by the Jaegar upload feature, as per
+// https://github.com/jaegertracing/jaeger-ui/issues/381#issuecomment-494150826
+type TraceCollection struct {
+	// Comment is a dummy field we use to put instructions on how to load the trace.
+	Comment string             `json:"_comment"`
+	Data    []jaegerjson.Trace `json:"data"`
 }
 
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given span;
