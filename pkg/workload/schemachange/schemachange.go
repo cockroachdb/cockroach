@@ -218,7 +218,7 @@ func (s *schemaChange) initSeqNum(pool *workload.MultiConnPool) (*int64, error) 
 
 	const q = `
 SELECT max(regexp_extract(name, '[0-9]+$')::int)
-  FROM ((SELECT * FROM [SHOW TABLES]) UNION (SELECT * FROM [SHOW SEQUENCES])) AS obj(name)
+  FROM ((SELECT table_name FROM [SHOW TABLES]) UNION (SELECT sequence_name FROM [SHOW SEQUENCES])) AS obj(name)
  WHERE name ~ '^(table|view|seq)[0-9]+$';
 `
 	var max gosql.NullInt64
