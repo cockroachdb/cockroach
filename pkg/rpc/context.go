@@ -690,12 +690,23 @@ func (ctx *Context) grpcDialOptions(
 	var unaryInterceptors []grpc.UnaryClientInterceptor
 
 	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
-		// We use a SpanInclusionFunc to circumvent the interceptor's work when
-		// tracing is disabled. Otherwise, the interceptor causes an increase in
-		// the number of packets (even with an empty context!). See #17177.
 		unaryInterceptors = append(unaryInterceptors,
 			otgrpc.OpenTracingClientInterceptor(tracer,
-				otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFuncForClient))))
+				// We use a SpanInclusionFunc to circumvent the interceptor's work when
+				// tracing is disabled. Otherwise, the interceptor causes an increase in
+				// the number of packets (even with an empty context!). See #17177.
+				otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFuncForClient)),
+				// We use a decorator to set the "node" tag. All other spans get the
+				// node tag from context log tags.
+				//
+				// Unfortunately we cannot use the corresponding interceptor on the
+				// server-side of gRPC to set this tag on server spans because that
+				// interceptor runs too late - after a traced RPC's recording had
+				// already been collected. So, on the server-side, the equivalent code
+				// is in setupSpanForIncomingRPC().
+				otgrpc.SpanDecorator(func(span opentracing.Span, _ string, _, _ interface{}, _ error) {
+					span.SetTag("node", ctx.NodeID.String())
+				})))
 	}
 	if ctx.testingKnobs.UnaryClientInterceptor != nil {
 		testingUnaryInterceptor := ctx.testingKnobs.UnaryClientInterceptor(target, class)
