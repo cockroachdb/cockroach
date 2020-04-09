@@ -98,7 +98,7 @@ func init() {
 // this file for a list of replacements done.
 func replaceManipulationFuncs(typeIdent string, body string) string {
 	for _, dmri := range dataManipulationReplacementInfos {
-		body = dmri.re.ReplaceAllString(body, fmt.Sprintf("{{ %s.%s }}", typeIdent, dmri.replaceWith))
+		body = dmri.re.ReplaceAllString(body, fmt.Sprintf("{{%s.%s}}", typeIdent, dmri.replaceWith))
 	}
 	return body
 }

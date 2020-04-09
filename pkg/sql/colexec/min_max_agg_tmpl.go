@@ -234,11 +234,11 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 		a.foundNonNullForCurrentGroup = false
 	}
 	var isNull bool
-	// {{ if .HasNulls }}
+	// {{if .HasNulls}}
 	isNull = nulls.NullAt(i)
-	// {{ else }}
+	// {{else}}
 	isNull = false
-	// {{ end }}
+	// {{end}}
 	if !isNull {
 		if !a.foundNonNullForCurrentGroup {
 			val := execgen.UNSAFEGET(col, i)
