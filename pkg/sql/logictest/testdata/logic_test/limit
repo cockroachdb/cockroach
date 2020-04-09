@@ -161,3 +161,16 @@ SELECT * FROM (select * from generate_series(1,10) a LIMIT 5) OFFSET 3
 query I
 SELECT * FROM (select * from generate_series(1,10) a LIMIT 5) OFFSET 6
 ----
+
+# Regression test for #47283: scan with both hard limit and soft limit.
+statement ok
+CREATE TABLE t_47283(k INT PRIMARY KEY, a INT)
+
+statement ok
+INSERT INTO t_47283 VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)
+
+# This should return no results; if it does, we incorrectly removed the hard
+# limit in the scan.
+query II
+SELECT * FROM (SELECT * FROM t_47283 ORDER BY k LIMIT 4) WHERE a > 5 LIMIT 1
+----
