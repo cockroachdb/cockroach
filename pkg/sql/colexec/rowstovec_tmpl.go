@@ -104,7 +104,7 @@ func EncDatumRowsToColVec(
 			switch typ.Family() {
 			// {{range .}}
 			case _FAMILY:
-				// {{ if .Widths }}
+				// {{if .Widths}}
 				switch typ.Width() {
 				// {{range .Widths}}
 				case _WIDTH:
@@ -113,7 +113,7 @@ func EncDatumRowsToColVec(
 				default:
 					colexecerror.InternalError(fmt.Sprintf("unsupported width %d for type %s", typ.Width(), typ.String()))
 				}
-				// {{ else }}
+				// {{else}}
 				_ROWS_TO_COL_VEC(rows, vec, columnIdx, typ, alloc)
 				// {{end}}
 			// {{end}}

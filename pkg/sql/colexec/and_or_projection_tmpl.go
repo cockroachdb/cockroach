@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 )
 
-// {{ range .}}
+// {{range .}}
 
 type _OP_LOWERProjOp struct {
 	allocator *colmem.Allocator
@@ -131,11 +131,11 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	//
 	// knownResult indicates the boolean value which if present on the left side
 	// fully determines the result of the logical operation.
-	// {{ if _IS_OR_OP }}
+	// {{if _IS_OR_OP}}
 	knownResult := true
-	// {{ else }}
+	// {{else}}
 	knownResult := false
-	// {{ end }}
+	// {{end}}
 	leftCol := batch.ColVec(o.leftIdx)
 	leftColVals := leftCol.Bool()
 	var curIdx int
@@ -224,7 +224,7 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-// {{ end }}
+// {{end}}
 
 // {{/*
 // This code snippet decides whether to include the tuple with index i into
@@ -254,7 +254,7 @@ func _ADD_TUPLE_FOR_RIGHT(_L_HAS_NULLS bool) { // */}}
 // This code snippet sets the result of applying a logical operation AND or OR
 // to two boolean vectors while paying attention to null values.
 func _SET_VALUES(_IS_OR_OP bool, _L_HAS_NULLS bool, _R_HAS_NULLS bool) { // */}}
-	// {{ define "setValues" -}}
+	// {{define "setValues" -}}
 	if sel := batch.Selection(); sel != nil {
 		for _, idx := range sel[:origLen] {
 			_SET_SINGLE_VALUE(_IS_OR_OP, _L_HAS_NULLS, _R_HAS_NULLS)
@@ -268,7 +268,7 @@ func _SET_VALUES(_IS_OR_OP bool, _L_HAS_NULLS bool, _R_HAS_NULLS bool) { // */}}
 			_SET_SINGLE_VALUE(_IS_OR_OP, _L_HAS_NULLS, _R_HAS_NULLS)
 		}
 	}
-	// {{ end }}
+	// {{end}}
 	// {{/*
 }
 
@@ -278,23 +278,23 @@ func _SET_VALUES(_IS_OR_OP bool, _L_HAS_NULLS bool, _R_HAS_NULLS bool) { // */}}
 // This code snippet sets the result of applying a logical operation AND or OR
 // to two boolean values which can be null.
 func _SET_SINGLE_VALUE(_IS_OR_OP bool, _L_HAS_NULLS bool, _R_HAS_NULLS bool) { // */}}
-	// {{ define "setSingleValue" -}}
-	// {{ if _L_HAS_NULLS }}
+	// {{define "setSingleValue" -}}
+	// {{if _L_HAS_NULLS}}
 	isLeftNull := leftNulls.NullAt(idx)
-	// {{ else }}
+	// {{else}}
 	isLeftNull := false
-	// {{ end }}
+	// {{end}}
 	leftVal := leftColVals[idx]
 	if !isLeftNull && leftVal == knownResult {
 		outputColVals[idx] = leftVal
 	} else {
-		// {{ if _R_HAS_NULLS }}
+		// {{if _R_HAS_NULLS}}
 		isRightNull := rightNulls.NullAt(idx)
-		// {{ else }}
+		// {{else}}
 		isRightNull := false
-		// {{ end }}
+		// {{end}}
 		rightVal := rightColVals[idx]
-		// {{ if _IS_OR_OP }}
+		// {{if _IS_OR_OP}}
 		// The rules for OR'ing two booleans are:
 		// 1. if at least one of the values is TRUE, then the result is also TRUE
 		// 2. if both values are FALSE, then the result is also FALSE
@@ -310,7 +310,7 @@ func _SET_SINGLE_VALUE(_IS_OR_OP bool, _L_HAS_NULLS bool, _R_HAS_NULLS bool) { /
 			// Rule 3.
 			outputNulls.SetNull(idx)
 		}
-		// {{ else }}
+		// {{else}}
 		// The rules for AND'ing two booleans are:
 		// 1. if at least one of the values is FALSE, then the result is also FALSE
 		// 2. if both values are TRUE, then the result is also TRUE
@@ -326,9 +326,9 @@ func _SET_SINGLE_VALUE(_IS_OR_OP bool, _L_HAS_NULLS bool, _R_HAS_NULLS bool) { /
 			// Rule 3.
 			outputNulls.SetNull(idx)
 		}
-		// {{ end }}
+		// {{end}}
 	}
-	// {{ end }}
+	// {{end}}
 	// {{/*
 }
 
