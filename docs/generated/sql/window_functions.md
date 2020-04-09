@@ -31,6 +31,10 @@
 </span></td></tr>
 <tr><td><a name="first_value"></a><code>first_value(val: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the first row of the window frame.</p>
 </span></td></tr>
+<tr><td><a name="first_value"></a><code>first_value(val: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the first row of the window frame.</p>
+</span></td></tr>
+<tr><td><a name="first_value"></a><code>first_value(val: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the first row of the window frame.</p>
+</span></td></tr>
 <tr><td><a name="first_value"></a><code>first_value(val: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the first row of the window frame.</p>
 </span></td></tr>
 <tr><td><a name="first_value"></a><code>first_value(val: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the first row of the window frame.</p>
@@ -117,6 +121,18 @@
 </span></td></tr>
 <tr><td><a name="lag"></a><code>lag(val: <a href="uuid.html">uuid</a>, n: <a href="int.html">int</a>, default: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows before the current row within its partition; if there is no such, row, instead returns <code>default</code> (which must be of the same type as <code>val</code>). Both <code>n</code> and <code>default</code> are evaluated with respect to the current row.</p>
 </span></td></tr>
+<tr><td><a name="lag"></a><code>lag(val: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the previous row within current row’s partition; if there is no such row, instead returns null.</p>
+</span></td></tr>
+<tr><td><a name="lag"></a><code>lag(val: geography, n: <a href="int.html">int</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows before the current row within its partition; if there is no such row, instead returns null. <code>n</code> is evaluated with respect to the current row.</p>
+</span></td></tr>
+<tr><td><a name="lag"></a><code>lag(val: geography, n: <a href="int.html">int</a>, default: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows before the current row within its partition; if there is no such, row, instead returns <code>default</code> (which must be of the same type as <code>val</code>). Both <code>n</code> and <code>default</code> are evaluated with respect to the current row.</p>
+</span></td></tr>
+<tr><td><a name="lag"></a><code>lag(val: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the previous row within current row’s partition; if there is no such row, instead returns null.</p>
+</span></td></tr>
+<tr><td><a name="lag"></a><code>lag(val: geometry, n: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows before the current row within its partition; if there is no such row, instead returns null. <code>n</code> is evaluated with respect to the current row.</p>
+</span></td></tr>
+<tr><td><a name="lag"></a><code>lag(val: geometry, n: <a href="int.html">int</a>, default: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows before the current row within its partition; if there is no such, row, instead returns <code>default</code> (which must be of the same type as <code>val</code>). Both <code>n</code> and <code>default</code> are evaluated with respect to the current row.</p>
+</span></td></tr>
 <tr><td><a name="lag"></a><code>lag(val: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the previous row within current row’s partition; if there is no such row, instead returns null.</p>
 </span></td></tr>
 <tr><td><a name="lag"></a><code>lag(val: jsonb, n: <a href="int.html">int</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows before the current row within its partition; if there is no such row, instead returns null. <code>n</code> is evaluated with respect to the current row.</p>
@@ -166,6 +182,10 @@
 <tr><td><a name="last_value"></a><code>last_value(val: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the last row of the window frame.</p>
 </span></td></tr>
 <tr><td><a name="last_value"></a><code>last_value(val: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the last row of the window frame.</p>
+</span></td></tr>
+<tr><td><a name="last_value"></a><code>last_value(val: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the last row of the window frame.</p>
+</span></td></tr>
+<tr><td><a name="last_value"></a><code>last_value(val: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the last row of the window frame.</p>
 </span></td></tr>
 <tr><td><a name="last_value"></a><code>last_value(val: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the last row of the window frame.</p>
 </span></td></tr>
@@ -253,6 +273,18 @@
 </span></td></tr>
 <tr><td><a name="lead"></a><code>lead(val: <a href="uuid.html">uuid</a>, n: <a href="int.html">int</a>, default: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows after the current row within its partition; if there is no such, row, instead returns <code>default</code> (which must be of the same type as <code>val</code>). Both <code>n</code> and <code>default</code> are evaluated with respect to the current row.</p>
 </span></td></tr>
+<tr><td><a name="lead"></a><code>lead(val: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the following row within current row’s partition; if there is no such row, instead returns null.</p>
+</span></td></tr>
+<tr><td><a name="lead"></a><code>lead(val: geography, n: <a href="int.html">int</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows after the current row within its partition; if there is no such row, instead returns null. <code>n</code> is evaluated with respect to the current row.</p>
+</span></td></tr>
+<tr><td><a name="lead"></a><code>lead(val: geography, n: <a href="int.html">int</a>, default: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows after the current row within its partition; if there is no such, row, instead returns <code>default</code> (which must be of the same type as <code>val</code>). Both <code>n</code> and <code>default</code> are evaluated with respect to the current row.</p>
+</span></td></tr>
+<tr><td><a name="lead"></a><code>lead(val: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the following row within current row’s partition; if there is no such row, instead returns null.</p>
+</span></td></tr>
+<tr><td><a name="lead"></a><code>lead(val: geometry, n: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows after the current row within its partition; if there is no such row, instead returns null. <code>n</code> is evaluated with respect to the current row.</p>
+</span></td></tr>
+<tr><td><a name="lead"></a><code>lead(val: geometry, n: <a href="int.html">int</a>, default: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows after the current row within its partition; if there is no such, row, instead returns <code>default</code> (which must be of the same type as <code>val</code>). Both <code>n</code> and <code>default</code> are evaluated with respect to the current row.</p>
+</span></td></tr>
 <tr><td><a name="lead"></a><code>lead(val: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the following row within current row’s partition; if there is no such row, instead returns null.</p>
 </span></td></tr>
 <tr><td><a name="lead"></a><code>lead(val: jsonb, n: <a href="int.html">int</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows after the current row within its partition; if there is no such row, instead returns null. <code>n</code> is evaluated with respect to the current row.</p>
@@ -302,6 +334,10 @@
 <tr><td><a name="nth_value"></a><code>nth_value(val: <a href="timestamp.html">timestamptz</a>, n: <a href="int.html">int</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the <code>n</code>th row of the window frame (counting from 1); null if no such row.</p>
 </span></td></tr>
 <tr><td><a name="nth_value"></a><code>nth_value(val: <a href="uuid.html">uuid</a>, n: <a href="int.html">int</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the <code>n</code>th row of the window frame (counting from 1); null if no such row.</p>
+</span></td></tr>
+<tr><td><a name="nth_value"></a><code>nth_value(val: geography, n: <a href="int.html">int</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the <code>n</code>th row of the window frame (counting from 1); null if no such row.</p>
+</span></td></tr>
+<tr><td><a name="nth_value"></a><code>nth_value(val: geometry, n: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the <code>n</code>th row of the window frame (counting from 1); null if no such row.</p>
 </span></td></tr>
 <tr><td><a name="nth_value"></a><code>nth_value(val: jsonb, n: <a href="int.html">int</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the <code>n</code>th row of the window frame (counting from 1); null if no such row.</p>
 </span></td></tr>

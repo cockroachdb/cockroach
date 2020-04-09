@@ -1,0 +1,60 @@
+statement ok
+CREATE TABLE geo_table(
+  id int primary key,
+  geog geography(geometry, 4326),
+  geom geometry(point, 4326),
+  orphan geography,
+  FAMILY f (orphan)
+)
+
+statement ok
+INSERT INTO geo_table VALUES
+  (1, 'POINT(1.0 1.0)', 'POINT(2.0 2.0)', 'POINT(3.0 3.0)'),
+  (2, 'LINESTRING(1.0 1.0, 2.0 2.0)', 'POINT(1.0 1.0)', 'POINT(3.0 3.0)')
+
+query ITTT rowsort
+SELECT * FROM geo_table
+----
+1  0101000000000000000000F03F000000000000F03F                                          010100000000000000000000400000000000000040  010100000000000000000008400000000000000840
+2  010200000002000000000000000000F03F000000000000F03F00000000000000400000000000000040  0101000000000000000000F03F000000000000F03F  010100000000000000000008400000000000000840
+
+query T rowsort
+SELECT orphan FROM geo_table
+----
+010100000000000000000008400000000000000840
+010100000000000000000008400000000000000840
+
+query TTBTTTB rowsort
+SHOW COLUMNS FROM geo_table
+----
+id      INT8                      false  NULL  ·  {primary}  false
+geog    GEOGRAPHY(GEOMETRY,4326)  true   NULL  ·  {}         false
+geom    GEOMETRY(POINT,4326)      true   NULL  ·  {}         false
+orphan  GEOGRAPHY(GEOMETRY,4326)  true   NULL  ·  {}         false
+
+statement error column bad_pk is of type geography and thus is not indexable
+CREATE TABLE bad_geog_table(bad_pk geography primary key)
+
+statement error column bad_pk is of type geometry and thus is not indexable
+CREATE TABLE bad_geom_table(bad_pk geometry primary key)
+
+statement error column geog is of type geography and thus is not indexable
+CREATE INDEX geog_idx ON geo_table(geog)
+
+statement error column geom is of type geometry and thus is not indexable
+CREATE INDEX geom_idx ON geo_table(geom)
+
+statement ok
+CREATE TABLE geo_array_table(id int, geog geography array, geom geometry array)
+
+statement ok
+INSERT INTO geo_array_table VALUES (
+  1,
+  array['POINT(1.0 1.0)'::geography, 'LINESTRING(2.0 2.0, 3.0 3.0)'::geography],
+  array['POINT(1.0 1.0)'::geometry, 'LINESTRING(2.0 2.0, 3.0 3.0)'::geometry]
+)
+
+query ITT
+SELECT * FROM geo_array_table
+----
+1  {0101000000000000000000F03F000000000000F03F,0102000000020000000000000000000040000000000000004000000000000008400000000000000840}  {0101000000000000000000F03F000000000000F03F,0102000000020000000000000000000040000000000000004000000000000008400000000000000840}

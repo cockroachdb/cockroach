@@ -25,6 +25,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -2634,6 +2635,174 @@ func (d *DInterval) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
+// DGeography is the Geometry Datum.
+type DGeography struct {
+	*geo.Geography
+}
+
+// NewDGeography returns a new Geography Datum.
+func NewDGeography(g *geo.Geography) *DGeography {
+	return &DGeography{Geography: g}
+}
+
+// ParseDGeography attempts to pass `str` as a Geography type.
+func ParseDGeography(str string) (*DGeography, error) {
+	g, err := geo.ParseGeography(str)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not parse geography")
+	}
+	return &DGeography{Geography: g}, nil
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DGeography) ResolvedType() *types.T {
+	return types.Geography
+}
+
+// Compare implements the Datum interface.
+func (d *DGeography) Compare(ctx *EvalContext, other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	return bytes.Compare(d.EWKB(), other.(*DGeography).EWKB())
+}
+
+// Prev implements the Datum interface.
+func (d *DGeography) Prev(ctx *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DGeography) Next(ctx *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (d *DGeography) IsMax(_ *EvalContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DGeography) IsMin(_ *EvalContext) bool {
+	return false
+}
+
+// Max implements the Datum interface.
+func (d *DGeography) Max(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Min implements the Datum interface.
+func (d *DGeography) Min(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DGeography) AmbiguousFormat() bool { return true }
+
+// Format implements the NodeFormatter interface.
+func (d *DGeography) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+	ctx.WriteString(d.Geography.EWKBHex())
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DGeography) Size() uintptr {
+	return unsafe.Sizeof(*d)
+}
+
+// DGeometry is the Geometry Datum.
+type DGeometry struct {
+	*geo.Geometry
+}
+
+// NewDGeometry returns a new Geometry Datum.
+func NewDGeometry(g *geo.Geometry) *DGeometry {
+	return &DGeometry{Geometry: g}
+}
+
+// ParseDGeometry attempts to pass `str` as a Geometry type.
+func ParseDGeometry(str string) (*DGeometry, error) {
+	g, err := geo.ParseGeometry(str)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not parse geometry")
+	}
+	return &DGeometry{Geometry: g}, nil
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DGeometry) ResolvedType() *types.T {
+	return types.Geometry
+}
+
+// Compare implements the Datum interface.
+func (d *DGeometry) Compare(ctx *EvalContext, other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	return bytes.Compare(d.EWKB(), other.(*DGeometry).EWKB())
+}
+
+// Prev implements the Datum interface.
+func (d *DGeometry) Prev(ctx *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DGeometry) Next(ctx *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (d *DGeometry) IsMax(_ *EvalContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DGeometry) IsMin(_ *EvalContext) bool {
+	return false
+}
+
+// Max implements the Datum interface.
+func (d *DGeometry) Max(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Min implements the Datum interface.
+func (d *DGeometry) Min(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DGeometry) AmbiguousFormat() bool { return true }
+
+// Format implements the NodeFormatter interface.
+func (d *DGeometry) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+	ctx.WriteString(d.Geometry.EWKBHex())
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DGeometry) Size() uintptr {
+	return unsafe.Sizeof(*d)
+}
+
 // DJSON is the JSON Datum.
 type DJSON struct{ json.JSON }
 
@@ -2750,7 +2919,8 @@ func AsJSON(d Datum, loc *time.Location) (json.JSON, error) {
 	case *DTimestamp:
 		// This is RFC3339Nano, but without the TZ fields.
 		return json.FromString(t.UTC().Format("2006-01-02T15:04:05.999999999")), nil
-	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray:
+	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray,
+		*DGeography, *DGeometry:
 		return json.FromString(AsStringWithFlags(t, FmtBareStrings)), nil
 	default:
 		if d == DNull {
@@ -3891,6 +4061,14 @@ func NewDefaultDatum(evalCtx *EvalContext, t *types.T) (d Datum, err error) {
 		return dNullJSON, nil
 	case types.TimeTZFamily:
 		return dZeroTimeTZ, nil
+	case types.GeometryFamily, types.GeographyFamily:
+		// TODO(otan): force Geometry/Geography to not allow `NOT NULL` columns to
+		// make this impossible.
+		return nil, pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"%s must be set or be NULL",
+			t.Name(),
+		)
 	case types.TupleFamily:
 		contents := t.TupleContents()
 		datums := make([]Datum, len(contents))
@@ -3963,6 +4141,8 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.CollatedStringFamily: {unsafe.Sizeof(DCollatedString{"", "", nil}), variableSize},
 	types.BytesFamily:          {unsafe.Sizeof(DBytes("")), variableSize},
 	types.DateFamily:           {unsafe.Sizeof(DDate{}), fixedSize},
+	types.GeographyFamily:      {unsafe.Sizeof(DGeography{}), variableSize},
+	types.GeometryFamily:       {unsafe.Sizeof(DGeometry{}), variableSize},
 	types.TimeFamily:           {unsafe.Sizeof(DTime(0)), fixedSize},
 	types.TimeTZFamily:         {unsafe.Sizeof(DTimeTZ{}), fixedSize},
 	types.TimestampFamily:      {unsafe.Sizeof(DTimestamp{}), fixedSize},
