@@ -1,0 +1,32 @@
+excludes:
+  - pkg/ui/node_modules
+protoc:
+  version: 3.8.0
+  includes:
+   - pkg
+   - vendor/github.com/gogo/protobuf
+   - vendor/github.com/cockroachdb/errors
+   - vendor/go.etcd.io
+   - vendor/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis
+   - vendor/github.com
+lint:
+  group: uber2
+  ignores:
+    - id: FILE_OPTIONS_REQUIRE_PHP_NAMESPACE
+      files:
+        - pkg
+    - id: FILE_OPTIONS_REQUIRE_JAVA_PACKAGE
+      files:
+        - pkg
+    - id: FILE_OPTIONS_REQUIRE_JAVA_MULTIPLE_FILES
+      files:
+        - pkg
+    - id: FILE_OPTIONS_REQUIRE_JAVA_OUTER_CLASSNAME
+      files:
+        - pkg
+    - id: FILE_OPTIONS_REQUIRE_CSHARP_NAMESPACE
+      files:
+        - pkg
+    - id: FILE_OPTIONS_REQUIRE_OBJC_CLASS_PREFIX
+      files:
+        - pkg
