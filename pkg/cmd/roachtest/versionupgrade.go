@@ -80,21 +80,20 @@ const (
 	headVersion = "HEAD"
 )
 
-func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
+func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVersion string) {
 	// This is ugly, but we can't pass `--encrypt=false` to old versions of
 	// Cockroach.
 	//
 	// TODO(tbg): revisit as old versions are aged out of this test.
 	c.encryptDefault = false
 
-	const baseVersion = "19.1.5"
 	u := newVersionUpgradeTest(c, versionUpgradeTestFeatures,
 		// Load baseVersion fixture. That fixture's cluster version may be
 		// at the predecessor version, so add a waitForUpgradeStep to make
 		// sure we're actually running at baseVersion before moving on.
 		//
 		// See the comment on createCheckpoints for details on fixtures.
-		uploadAndStartFromCheckpointFixture(baseVersion),
+		uploadAndStartFromCheckpointFixture(predecessorVersion),
 		waitForUpgradeStep(),
 
 		// NB: before the next step, cluster and binary version equals baseVersion,
