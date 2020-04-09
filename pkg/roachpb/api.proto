@@ -129,6 +129,11 @@ message GetResponse {
   Value value = 2;
 
   // The intent seen, if any, when using the READ_UNCOMMITTED consistency level.
+  //
+  // NOTE: this field is not currently populated with intents for deletion
+  // tombstones. It probably should be because the value field may contain a
+  // value that is being deleted by a corresponding intent. We should revisit
+  // this decision if this ever becomes a problem.
   Value intent_value = 3;
 }
 
@@ -372,6 +377,11 @@ message ScanResponse {
   // The intent rows seen when performing a scan at the READ_UNCOMMITTED
   // consistency level. These rows do not count against the MaxSpanRequestKeys
   // count.
+  //
+  // NOTE: this field is not currently populated with intents for deletion
+  // tombstones. It probably should be because the rows field may contain
+  // key-values that are being deleted by corresponding intents. We should
+  // revisit this decision if this ever becomes a problem.
   repeated KeyValue intent_rows = 3 [(gogoproto.nullable) = false];
 
   // If set, each item in this repeated bytes field contains part of the results
@@ -419,6 +429,11 @@ message ReverseScanResponse {
   // The intent rows seen when performing a scan at the READ_UNCOMMITTED
   // consistency level. These rows do not count against the MaxSpanRequestKeys
   // count.
+  //
+  // NOTE: this field is not currently populated with intents for deletion
+  // tombstones. It probably should be because the rows field may contain
+  // key-values that are being deleted by corresponding intents. We should
+  // revisit this decision if this ever becomes a problem.
   repeated KeyValue intent_rows = 3 [(gogoproto.nullable) = false];
 
   // If set, each item in this repeated bytes field contains part of the results
