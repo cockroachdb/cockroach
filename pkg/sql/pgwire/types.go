@@ -137,6 +137,16 @@ func (b *writeBuffer) writeTextDatum(
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
+	case *tree.DGeography:
+		s := v.Geography.EWKBHex()
+		b.putInt32(int32(len(s)))
+		b.write([]byte(s))
+
+	case *tree.DGeometry:
+		s := v.Geometry.EWKBHex()
+		b.putInt32(int32(len(s)))
+		b.write([]byte(s))
+
 	case *tree.DTimestamp:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
 		s := formatTs(v.Time, nil, b.putbuf[4:4])
@@ -424,6 +434,14 @@ func (b *writeBuffer) writeBinaryDatum(
 			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, oid)
 		}
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
+
+	case *tree.DGeography:
+		b.putInt32(int32(len(v.EWKB())))
+		b.write(v.EWKB())
+
+	case *tree.DGeometry:
+		b.putInt32(int32(len(v.EWKB())))
+		b.write(v.EWKB())
 
 	case *tree.DArray:
 		if v.ParamTyp.Family() == types.ArrayFamily {

@@ -641,6 +641,16 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 						if err != nil {
 							return err
 						}
+					case types.GeographyFamily:
+						d, err = tree.ParseDGeography(string(t))
+						if err != nil {
+							return err
+						}
+					case types.GeometryFamily:
+						d, err = tree.ParseDGeometry(string(t))
+						if err != nil {
+							return err
+						}
 					case types.JsonFamily:
 						d, err = tree.ParseDJSON(string(t))
 						if err != nil {

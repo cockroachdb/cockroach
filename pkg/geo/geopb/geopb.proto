@@ -1,0 +1,33 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.geopb;
+option go_package = "geopb";
+
+// Shape is the type of a spatial shape. Each of these corresponds to a
+// different representation and serialization format. For example, a Point is a
+// pair of float64s (or more than that for geometries with Z or N), a LineString
+// is an ordered series of Points, etc.
+enum Shape {
+  Unset = 0;
+
+  Point = 1;
+  LineString = 2;
+  Polygon = 3;
+  MultiPoint = 4;
+  MultiLineString = 5;
+  MultiPolygon = 6;
+  // Geometry can contain any type.
+  Geometry = 7;
+  // GeometryCollection can contain any multi* type.
+  GeometryCollection = 8;
+}
+

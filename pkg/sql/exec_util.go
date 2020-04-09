@@ -892,6 +892,8 @@ func checkResultType(typ *types.T) error {
 	case types.FloatFamily:
 	case types.DecimalFamily:
 	case types.BytesFamily:
+	case types.GeographyFamily:
+	case types.GeometryFamily:
 	case types.StringFamily:
 	case types.CollatedStringFamily:
 	case types.DateFamily:

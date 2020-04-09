@@ -69,6 +69,8 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.Jsonb.Oid():       {},
 	types.Uuid.Oid():        {},
 	types.VarBit.Oid():      {},
+	types.Geometry.Oid():    {},
+	types.Geography.Oid():   {},
 	oid.T_bit:               {},
 	types.Timestamp.Oid():   {},
 	types.TimestampTZ.Oid(): {},

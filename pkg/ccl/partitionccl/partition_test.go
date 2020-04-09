@@ -862,7 +862,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 	const schemaFmt = `CREATE TABLE %%s (a %s PRIMARY KEY) PARTITION BY LIST (a) (PARTITION p VALUES IN (%s))`
 	for _, typ := range append(types.Scalar, types.AnyCollatedString) {
 		switch typ.Family() {
-		case types.JsonFamily:
+		case types.JsonFamily, types.GeographyFamily, types.GeometryFamily:
 			// Not indexable.
 			continue
 		case types.CollatedStringFamily:

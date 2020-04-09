@@ -102,7 +102,8 @@ func ValidateColumnDefType(t *types.T) error {
 
 	case types.BitFamily, types.IntFamily, types.FloatFamily, types.BoolFamily, types.BytesFamily, types.DateFamily,
 		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
-		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily, types.TimeTZFamily:
+		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily, types.TimeTZFamily,
+		types.GeographyFamily, types.GeometryFamily:
 		// These types are OK.
 
 	default:

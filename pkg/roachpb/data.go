@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -388,6 +389,14 @@ func (v *Value) SetFloat(f float64) {
 	v.setTag(ValueType_FLOAT)
 }
 
+// SetGeo encodes the specified geo value into the bytes field of the
+// receiver, sets the tag and clears the checksum.
+func (v *Value) SetGeo(ewkb geopb.EWKB) {
+	v.ensureRawBytes(headerSize + len(ewkb))
+	copy(v.dataBytes(), ewkb)
+	v.setTag(ValueType_GEO)
+}
+
 // SetBool encodes the specified bool value into the bytes field of the
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetBool(b bool) {
@@ -513,6 +522,15 @@ func (v Value) GetFloat() (float64, error) {
 		return 0, err
 	}
 	return math.Float64frombits(u), nil
+}
+
+// GetGeo decodes a geo value from the bytes field of the receiver. If the
+// tag is not GEO an error will be returned.
+func (v Value) GetGeo() (geopb.EWKB, error) {
+	if tag := v.GetTag(); tag != ValueType_GEO {
+		return nil, fmt.Errorf("value type is not %s: %s", ValueType_GEO, tag)
+	}
+	return geopb.EWKB(v.dataBytes()), nil
 }
 
 // GetBool decodes a bool value from the bytes field of the receiver. If the

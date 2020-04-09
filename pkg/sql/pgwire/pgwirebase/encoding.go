@@ -22,6 +22,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -250,6 +251,18 @@ func DecodeOidDatum(
 				return nil, err
 			}
 			return tree.NewDFloat(tree.DFloat(f)), nil
+		case oidext.T_geography:
+			d, err := tree.ParseDGeography(string(b))
+			if err != nil {
+				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as geography", b)
+			}
+			return d, nil
+		case oidext.T_geometry:
+			d, err := tree.ParseDGeometry(string(b))
+			if err != nil {
+				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as geometry", b)
+			}
+			return d, nil
 		case oid.T_numeric:
 			d, err := tree.ParseDDecimal(string(b))
 			if err != nil {

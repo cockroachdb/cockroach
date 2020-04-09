@@ -1842,6 +1842,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEqFn(types.Decimal, types.Decimal),
 		makeEqFn(types.AnyCollatedString, types.AnyCollatedString),
 		makeEqFn(types.Float, types.Float),
+		makeEqFn(types.Geography, types.Geography),
+		makeEqFn(types.Geometry, types.Geometry),
 		makeEqFn(types.INet, types.INet),
 		makeEqFn(types.Int, types.Int),
 		makeEqFn(types.Interval, types.Interval),
@@ -1889,6 +1891,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.Decimal, types.Decimal),
 		makeLtFn(types.AnyCollatedString, types.AnyCollatedString),
 		makeLtFn(types.Float, types.Float),
+		makeLtFn(types.Geography, types.Geography),
+		makeLtFn(types.Geometry, types.Geometry),
 		makeLtFn(types.INet, types.INet),
 		makeLtFn(types.Int, types.Int),
 		makeLtFn(types.Interval, types.Interval),
@@ -1935,6 +1939,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLeFn(types.Decimal, types.Decimal),
 		makeLeFn(types.AnyCollatedString, types.AnyCollatedString),
 		makeLeFn(types.Float, types.Float),
+		makeLeFn(types.Geography, types.Geography),
+		makeLeFn(types.Geometry, types.Geometry),
 		makeLeFn(types.INet, types.INet),
 		makeLeFn(types.Int, types.Int),
 		makeLeFn(types.Interval, types.Interval),
@@ -1989,6 +1995,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeIsFn(types.Decimal, types.Decimal),
 		makeIsFn(types.AnyCollatedString, types.AnyCollatedString),
 		makeIsFn(types.Float, types.Float),
+		makeIsFn(types.Geography, types.Geography),
+		makeIsFn(types.Geometry, types.Geometry),
 		makeIsFn(types.INet, types.INet),
 		makeIsFn(types.Int, types.Int),
 		makeIsFn(types.Interval, types.Interval),
@@ -2040,6 +2048,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(types.AnyCollatedString),
 		makeEvalTupleIn(types.AnyTuple),
 		makeEvalTupleIn(types.Float),
+		makeEvalTupleIn(types.Geography),
+		makeEvalTupleIn(types.Geometry),
 		makeEvalTupleIn(types.INet),
 		makeEvalTupleIn(types.Int),
 		makeEvalTupleIn(types.Interval),
@@ -3498,7 +3508,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				ctx.SessionData.DataConversion.GetFloatPrec(), 64)
 		case *DBool, *DInt, *DDecimal:
 			s = d.String()
-		case *DTimestamp, *DDate, *DTime, *DTimeTZ:
+		case *DTimestamp, *DDate, *DTime, *DTimeTZ, *DGeography, *DGeometry:
 			s = AsStringWithFlags(d, FmtBareStrings)
 		case *DTimestampTZ:
 			// Convert to context timezone for correct display.
@@ -3584,6 +3594,34 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return ParseDIPAddrFromINetString(t.Contents)
 		case *DIPAddr:
 			return d, nil
+		}
+
+	case types.GeographyFamily:
+		switch d := d.(type) {
+		case *DString:
+			return ParseDGeography(string(*d))
+		case *DCollatedString:
+			return ParseDGeography(d.Contents)
+		case *DGeography:
+			// TODO(otan): check SRIDs.
+			return d, nil
+		case *DGeometry:
+			// TODO(otan): check SRIDs.
+			return &DGeography{d.AsGeography()}, nil
+		}
+
+	case types.GeometryFamily:
+		switch d := d.(type) {
+		case *DString:
+			return ParseDGeometry(string(*d))
+		case *DCollatedString:
+			return ParseDGeometry(d.Contents)
+		case *DGeometry:
+			// TODO(otan): check SRIDs.
+			return d, nil
+		case *DGeography:
+			// TODO(otan): check SRIDs.
+			return &DGeometry{d.AsGeometry()}, nil
 		}
 
 	case types.DateFamily:
@@ -4399,6 +4437,16 @@ func (t *DInt) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DInterval) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DGeography) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DGeometry) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 

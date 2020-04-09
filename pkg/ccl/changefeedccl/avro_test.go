@@ -288,20 +288,22 @@ func TestAvroSchema(t *testing.T) {
 	// reference.
 	t.Run("type_goldens", func(t *testing.T) {
 		goldens := map[string]string{
-			`BOOL`:         `["null","boolean"]`,
-			`BYTES`:        `["null","bytes"]`,
-			`DATE`:         `["null",{"type":"int","logicalType":"date"}]`,
-			`FLOAT8`:       `["null","double"]`,
-			`INET`:         `["null","string"]`,
-			`INT8`:         `["null","long"]`,
-			`JSONB`:        `["null","string"]`,
-			`STRING`:       `["null","string"]`,
-			`TIME`:         `["null",{"type":"long","logicalType":"time-micros"}]`,
-			`TIMETZ`:       `["null","string"]`,
-			`TIMESTAMP`:    `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
-			`TIMESTAMPTZ`:  `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
-			`UUID`:         `["null","string"]`,
-			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
+			`BOOL`:                     `["null","boolean"]`,
+			`BYTES`:                    `["null","bytes"]`,
+			`DATE`:                     `["null",{"type":"int","logicalType":"date"}]`,
+			`FLOAT8`:                   `["null","double"]`,
+			`GEOGRAPHY(GEOMETRY,4326)`: `["null","bytes"]`,
+			`GEOMETRY`:                 `["null","bytes"]`,
+			`INET`:                     `["null","string"]`,
+			`INT8`:                     `["null","long"]`,
+			`JSONB`:                    `["null","string"]`,
+			`STRING`:                   `["null","string"]`,
+			`TIME`:                     `["null",{"type":"long","logicalType":"time-micros"}]`,
+			`TIMETZ`:                   `["null","string"]`,
+			`TIMESTAMP`:                `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
+			`TIMESTAMPTZ`:              `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
+			`UUID`:                     `["null","string"]`,
+			`DECIMAL(3,2)`:             `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
 		}
 
 		for _, typ := range types.Scalar {
@@ -352,6 +354,15 @@ func TestAvroSchema(t *testing.T) {
 			{sqlType: `FLOAT`,
 				sql:  `1.2`,
 				avro: `{"double":1.2}`},
+
+			{sqlType: `GEOGRAPHY`, sql: `NULL`, avro: `null`},
+			{sqlType: `GEOGRAPHY`,
+				sql:  "'POINT(1.0 1.0)'",
+				avro: `{"bytes":"\u0001\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u00F0?\u0000\u0000\u0000\u0000\u0000\u0000\u00F0?"}`},
+			{sqlType: `GEOMETRY`, sql: `NULL`, avro: `null`},
+			{sqlType: `GEOMETRY`,
+				sql:  "'POINT(1.0 1.0)'",
+				avro: `{"bytes":"\u0001\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u00F0?\u0000\u0000\u0000\u0000\u0000\u0000\u00F0?"}`},
 
 			{sqlType: `STRING`, sql: `NULL`, avro: `null`},
 			{sqlType: `STRING`,
