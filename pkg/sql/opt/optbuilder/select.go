@@ -523,10 +523,11 @@ func (b *Builder) buildScan(
 		if locking.isSet() {
 			private.Locking = locking.get()
 		}
-		outScope.expr = b.factory.ConstructScan(&private)
 
 		b.addCheckConstraintsForTable(tabMeta)
 		b.addComputedColsForTable(tabMeta)
+
+		outScope.expr = b.factory.ConstructScan(&private)
 
 		if b.trackViewDeps {
 			dep := opt.ViewDep{DataSource: tab}
@@ -543,17 +544,42 @@ func (b *Builder) buildScan(
 	return outScope
 }
 
-// addCheckConstraintsForTable finds all the check constraints that apply to the
-// table and adds them to the table metadata. To do this, the scalar expression
-// of the check constraints are built here.
+// addCheckConstraintsForTable extracts filters from the check constraints that
+// apply to the table and adds them to the table metadata (see
+// TableMeta.Constraints). To do this, the scalar expressions of the check
+// constraints are built here.
 func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
-	// Find all the check constraints that apply to the table and add them
-	// to the table meta data. To do this, we must build them into scalar
-	// expressions.
-	var tableScope *scope
 	tab := tabMeta.Table
-	for i, n := 0, tab.CheckCount(); i < n; i++ {
-		checkConstraint := tab.Check(i)
+
+	// Check if we have any validated check constraints. Only validated
+	// constraints are known to hold on existing table data.
+	numChecks := tab.CheckCount()
+	chkIdx := 0
+	for ; chkIdx < numChecks; chkIdx++ {
+		if tab.Check(chkIdx).Validated {
+			break
+		}
+	}
+	if chkIdx == numChecks {
+		return
+	}
+
+	// Create a scope that can be used for building the scalar expressions.
+	tableScope := b.allocScope()
+	tableScope.appendColumnsFromTable(tabMeta, &tabMeta.Alias)
+
+	// Find the non-nullable table columns.
+	var notNullCols opt.ColSet
+	for i := 0; i < tab.ColumnCount(); i++ {
+		if !tab.Column(i).IsNullable() {
+			notNullCols.Add(tabMeta.MetaID.ColumnID(i))
+		}
+	}
+
+	var filters memo.FiltersExpr
+	// Skip to the first validated constraint we found above.
+	for ; chkIdx < numChecks; chkIdx++ {
+		checkConstraint := tab.Check(chkIdx)
 
 		// Only add validated check constraints to the table's metadata.
 		if !checkConstraint.Validated {
@@ -564,15 +590,17 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 			panic(err)
 		}
 
-		if tableScope == nil {
-			tableScope = b.allocScope()
-			tableScope.appendColumnsFromTable(tabMeta, &tabMeta.Alias)
+		texpr := tableScope.resolveAndRequireType(expr, types.Bool)
+		condition := b.buildScalar(texpr, tableScope, nil, nil, nil)
+		// Check constraints that are guaranteed to not evaluate to NULL
+		// are the only ones converted into filters. This is because a NULL
+		// constraint is interpreted as passing, whereas a NULL filter is not.
+		if memo.ExprIsNeverNull(condition, notNullCols) {
+			filters = append(filters, b.factory.ConstructFiltersItem(condition))
 		}
-
-		if texpr := tableScope.resolveAndRequireType(expr, types.Bool); texpr != nil {
-			scalar := b.buildScalar(texpr, tableScope, nil, nil, nil)
-			tabMeta.AddConstraint(scalar)
-		}
+	}
+	if len(filters) > 0 {
+		tabMeta.SetConstraints(&filters)
 	}
 }
 
