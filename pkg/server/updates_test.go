@@ -13,16 +13,12 @@ package server
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"runtime"
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -37,83 +33,105 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 )
 
-func stubURL(target **url.URL, stubURL *url.URL) func() {
-	realURL := *target
-	*target = stubURL
-	return func() {
-		*target = realURL
-	}
-}
-
 func TestCheckVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
-
-	r := makeMockRecorder(t)
-	defer r.Close()
-	defer stubURL(&updatesURL, r.url)()
-
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	s.(*TestServer).checkForUpdates(ctx, time.Minute)
-	r.Close()
-	s.Stopper().Stop(ctx)
+	ctx := context.Background()
 
 	t.Run("expected-reporting", func(t *testing.T) {
-		r.Lock()
-		defer r.Unlock()
+		r := diagutils.NewServer()
+		defer r.Close()
 
-		if expected, actual := 1, r.requests; actual != expected {
+		url := r.URL()
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &TestingKnobs{
+					DiagnosticsTestingKnobs: diagnosticspb.TestingKnobs{
+						OverrideUpdatesURL: &url,
+					},
+				},
+			},
+		})
+		defer s.Stopper().Stop(ctx)
+		s.CheckForUpdates(ctx)
+		r.Close()
+
+		if expected, actual := 1, r.NumRequests(); actual != expected {
 			t.Fatalf("expected %v update checks, got %v", expected, actual)
 		}
 
-		if expected, actual := s.(*TestServer).ClusterID().String(), r.last.uuid; expected != actual {
+		last := r.LastRequestData()
+		if expected, actual := s.(*TestServer).ClusterID().String(), last.UUID; expected != actual {
 			t.Errorf("expected uuid %v, got %v", expected, actual)
 		}
 
-		if expected, actual := build.GetInfo().Tag, r.last.version; expected != actual {
+		if expected, actual := build.GetInfo().Tag, last.Version; expected != actual {
 			t.Errorf("expected version tag %v, got %v", expected, actual)
 		}
 
-		if expected, actual := "OSS", r.last.licenseType; expected != actual {
+		if expected, actual := "OSS", last.LicenseType; expected != actual {
 			t.Errorf("expected license type %v, got %v", expected, actual)
 		}
 
-		if expected, actual := "false", r.last.internal; expected != actual {
+		if expected, actual := "false", last.Internal; expected != actual {
 			t.Errorf("expected internal to be %v, got %v", expected, actual)
 		}
 	})
 
 	t.Run("npe", func(t *testing.T) {
-		// ensure nil, which happens when an empty env override URL is used, does not
-		// cause a crash. We've deferred a cleanup of the original pointer above.
-		updatesURL = nil
-		s.(*TestServer).checkForUpdates(ctx, time.Minute)
+		// Ensure nil, which happens when an empty env override URL is used, does not
+		// cause a crash.
+		var nilURL *url.URL
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &TestingKnobs{
+					DiagnosticsTestingKnobs: diagnosticspb.TestingKnobs{
+						OverrideUpdatesURL:   &nilURL,
+						OverrideReportingURL: &nilURL,
+					},
+				},
+			},
+		})
+		defer s.Stopper().Stop(ctx)
+		s.CheckForUpdates(ctx)
+		s.ReportDiagnostics(ctx)
 	})
 }
 
 func TestUsageQuantization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	r := makeMockRecorder(t)
-	defer stubURL(&reportingURL, r.url)()
+	r := diagutils.NewServer()
 	defer r.Close()
 
 	st := cluster.MakeTestingClusterSettings()
 	ctx := context.TODO()
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+	url := r.URL()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: st,
+		Knobs: base.TestingKnobs{
+			Server: &TestingKnobs{
+				DiagnosticsTestingKnobs: diagnosticspb.TestingKnobs{
+					OverrideReportingURL: &url,
+				},
+			},
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 	ts := s.(*TestServer)
+
+	// Disable periodic reporting so it doesn't interfere with the test.
+	if _, err := db.Exec(`SET CLUSTER SETTING diagnostics.reporting.enabled = false`); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := db.Exec(`SET application_name = 'test'`); err != nil {
 		t.Fatal(err)
@@ -148,7 +166,7 @@ func TestUsageQuantization(t *testing.T) {
 	ts.Server.sqlServer.pgServer.SQLServer.ResetSQLStats(ctx)
 
 	// Collect a round of statistics.
-	ts.reportDiagnostics(ctx)
+	ts.ReportDiagnostics(ctx)
 
 	// The stats "hide" the application name by hashing it. To find the
 	// test app name, we need to hash the ref string too prior to the
@@ -169,9 +187,10 @@ func TestUsageQuantization(t *testing.T) {
 		{`SHOW application_name`, 10000},
 	}
 
+	last := r.LastRequestData()
 	for _, test := range testData {
 		found := false
-		for _, s := range r.last.SqlStats {
+		for _, s := range last.SqlStats {
 			if s.Key.App == hashedAppName && s.Key.Query == test.query {
 				if s.Stats.Count != test.expectedCount {
 					t.Errorf("quantization incorrect for query %q: expected %d, got %d",
@@ -187,147 +206,6 @@ func TestUsageQuantization(t *testing.T) {
 	}
 }
 
-func TestCBOReportUsage(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	const elemName = "somestring"
-	ctx := context.TODO()
-
-	r := makeMockRecorder(t)
-	defer stubURL(&reportingURL, r.url)()
-	defer r.Close()
-
-	st := cluster.MakeTestingClusterSettings()
-
-	storeSpec := base.DefaultTestStoreSpec
-	storeSpec.Attributes = roachpb.Attributes{Attrs: []string{elemName}}
-	params := base.TestServerArgs{
-		StoreSpecs: []base.StoreSpec{
-			storeSpec,
-			base.DefaultTestStoreSpec,
-		},
-		Settings: st,
-		Locality: roachpb.Locality{
-			Tiers: []roachpb.Tier{
-				{Key: "region", Value: "east"},
-				{Key: "zone", Value: elemName},
-				{Key: "state", Value: "ny"},
-				{Key: "city", Value: "nyc"},
-			},
-		},
-		Knobs: base.TestingKnobs{
-			SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
-				// Disable SELECT called for delete orphaned leases to keep
-				// query stats stable.
-				DisableDeleteOrphanedLeases: true,
-			},
-		},
-	}
-
-	s, db, _ := serverutils.StartServer(t, params)
-	// Stopper will wait for the update/report loop to finish too.
-	defer s.Stopper().Stop(context.TODO())
-	defer db.Close()
-	ts := s.(*TestServer)
-
-	// make sure the test's generated activity is the only activity we measure.
-	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
-
-	sqlDB := sqlutils.MakeSQLRunner(db)
-
-	sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s`, elemName))
-	sqlDB.Exec(t, `CREATE TABLE x (a INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `CREATE STATISTICS stats FROM x`)
-	// Run a variety of hinted queries.
-	sqlDB.Exec(t, `SELECT * FROM x@primary`)
-	sqlDB.Exec(t, `EXPLAIN SELECT * FROM x`)
-	sqlDB.Exec(t, `EXPLAIN (distsql) SELECT * FROM x`)
-	sqlDB.Exec(t, `EXPLAIN ANALYZE SELECT * FROM x`)
-	sqlDB.Exec(t, `EXPLAIN ANALYZE (DEBUG) SELECT * FROM x`)
-	sqlDB.Exec(t, `EXPLAIN (opt) SELECT * FROM x`)
-	sqlDB.Exec(t, `EXPLAIN (opt, verbose) SELECT * FROM x`)
-	// Do joins different numbers of times to disambiguate them in the expected,
-	// output but make sure the query strings are different each time so that the
-	// plan cache doesn't affect our results.
-	sqlDB.Exec(
-		t,
-		`SELECT x FROM (VALUES (1)) AS a(x) INNER HASH JOIN (VALUES (1)) AS b(y) ON x = y`,
-	)
-	for i := 0; i < 2; i++ {
-		sqlDB.Exec(
-			t,
-			fmt.Sprintf(
-				`SELECT x FROM (VALUES (%d)) AS a(x) INNER MERGE JOIN (VALUES (1)) AS b(y) ON x = y`,
-				i,
-			),
-		)
-	}
-	for i := 0; i < 3; i++ {
-		sqlDB.Exec(
-			t,
-			fmt.Sprintf(
-				`SELECT a FROM (VALUES (%d)) AS b(y) INNER LOOKUP JOIN x ON y = a`,
-				i,
-			),
-		)
-	}
-
-	for i := 0; i < 20; i += 3 {
-		sqlDB.Exec(
-			t,
-			fmt.Sprintf(
-				`SET CLUSTER SETTING sql.defaults.reorder_joins_limit = %d`,
-				i,
-			),
-		)
-	}
-
-	sqlDB.Exec(
-		t,
-		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = on`,
-	)
-
-	sqlDB.Exec(
-		t,
-		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off`,
-	)
-
-	if _, err := db.Exec(`RESET CLUSTER SETTING sql.stats.automatic_collection.enabled`); err != nil {
-		t.Fatal(err)
-	}
-
-	ts.reportDiagnostics(ctx)
-
-	expectedFeatureUsage := map[string]int32{
-		"sql.plan.hints.hash-join":              1,
-		"sql.plan.hints.merge-join":             2,
-		"sql.plan.hints.lookup-join":            3,
-		"sql.plan.hints.index":                  1,
-		"sql.plan.reorder-joins.set-limit-0":    1,
-		"sql.plan.reorder-joins.set-limit-3":    1,
-		"sql.plan.reorder-joins.set-limit-6":    1,
-		"sql.plan.reorder-joins.set-limit-9":    1,
-		"sql.plan.reorder-joins.set-limit-more": 3,
-		"sql.plan.automatic-stats.enabled":      2,
-		"sql.plan.automatic-stats.disabled":     1,
-		"sql.plan.stats.created":                1,
-		"sql.plan.explain":                      1,
-		"sql.plan.explain-analyze":              1,
-		"sql.plan.explain-analyze-debug":        1,
-		"sql.plan.explain-opt":                  1,
-		"sql.plan.explain-opt-verbose":          1,
-		"sql.plan.explain-distsql":              1,
-	}
-
-	for key, expected := range expectedFeatureUsage {
-		if got, ok := r.last.FeatureUsage[key]; !ok {
-			t.Fatalf("expected report of feature %q", key)
-		} else if got != expected {
-			t.Fatalf("expected reported value of feature %q to be %d not %d", key, expected, got)
-		}
-	}
-}
-
 func TestReportUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -335,12 +213,12 @@ func TestReportUsage(t *testing.T) {
 	const internalAppName = sqlbase.ReportableAppNamePrefix + "foo"
 	ctx := context.TODO()
 
-	r := makeMockRecorder(t)
-	defer stubURL(&reportingURL, r.url)()
+	r := diagutils.NewServer()
 	defer r.Close()
 
 	st := cluster.MakeTestingClusterSettings()
 
+	url := r.URL()
 	storeSpec := base.DefaultTestStoreSpec
 	storeSpec.Attributes = roachpb.Attributes{Attrs: []string{elemName}}
 	params := base.TestServerArgs{
@@ -362,6 +240,11 @@ func TestReportUsage(t *testing.T) {
 				// Disable SELECT called for delete orphaned leases to keep
 				// query stats stable.
 				DisableDeleteOrphanedLeases: true,
+			},
+			Server: &TestingKnobs{
+				DiagnosticsTestingKnobs: diagnosticspb.TestingKnobs{
+					OverrideReportingURL: &url,
+				},
 			},
 		},
 	}
@@ -379,6 +262,11 @@ func TestReportUsage(t *testing.T) {
 	if _, err := db.Exec(`SET CLUSTER SETTING server.time_until_store_dead = '90s'`); err != nil {
 		t.Fatal(err)
 	}
+	// Disable periodic reporting so it doesn't interfere with the test.
+	if _, err := db.Exec(`SET CLUSTER SETTING diagnostics.reporting.enabled = false`); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := db.Exec(`SET CLUSTER SETTING diagnostics.reporting.send_crash_reports = false`); err != nil {
 		t.Fatal(err)
 	}
@@ -566,7 +454,7 @@ func TestReportUsage(t *testing.T) {
 		node := ts.node.recorder.GenerateNodeStatus(ctx)
 		// Clear the SQL stat pool before getting diagnostics.
 		ts.sqlServer.pgServer.SQLServer.ResetSQLStats(ctx)
-		ts.reportDiagnostics(ctx)
+		ts.ReportDiagnostics(ctx)
 
 		keyCounts := make(map[roachpb.StoreID]int64)
 		rangeCounts := make(map[roachpb.StoreID]int64)
@@ -588,65 +476,63 @@ func TestReportUsage(t *testing.T) {
 			}
 		}
 
-		r.Lock()
-		defer r.Unlock()
-
-		if expected, actual := expectedUsageReports, r.requests; expected != actual {
+		if expected, actual := expectedUsageReports, r.NumRequests(); expected != actual {
 			t.Fatalf("expected %v reports, got %v", expected, actual)
 		}
-		if expected, actual := ts.ClusterID().String(), r.last.uuid; expected != actual {
+		last := r.LastRequestData()
+		if expected, actual := ts.ClusterID().String(), last.UUID; expected != actual {
 			return errors.Errorf("expected cluster id %v got %v", expected, actual)
 		}
-		if expected, actual := ts.node.Descriptor.NodeID, r.last.Node.NodeID; expected != actual {
+		if expected, actual := ts.node.Descriptor.NodeID, last.Node.NodeID; expected != actual {
 			return errors.Errorf("expected node id %v got %v", expected, actual)
 		}
 
-		if r.last.Node.Hardware.Mem.Total == 0 {
+		if last.Node.Hardware.Mem.Total == 0 {
 			return errors.Errorf("expected non-zero total mem")
 		}
-		if r.last.Node.Hardware.Mem.Available == 0 {
+		if last.Node.Hardware.Mem.Available == 0 {
 			return errors.Errorf("expected non-zero available mem")
 		}
-		if actual, expected := r.last.Node.Hardware.Cpu.Numcpu, runtime.NumCPU(); int(actual) != expected {
+		if actual, expected := last.Node.Hardware.Cpu.Numcpu, runtime.NumCPU(); int(actual) != expected {
 			return errors.Errorf("expected %d num cpu, got %d", expected, actual)
 		}
-		if r.last.Node.Hardware.Cpu.Sockets == 0 {
+		if last.Node.Hardware.Cpu.Sockets == 0 {
 			return errors.Errorf("expected non-zero sockets")
 		}
-		if r.last.Node.Hardware.Cpu.Mhz == 0.0 {
+		if last.Node.Hardware.Cpu.Mhz == 0.0 {
 			return errors.Errorf("expected non-zero speed")
 		}
-		if r.last.Node.Os.Platform == "" {
+		if last.Node.Os.Platform == "" {
 			return errors.Errorf("expected non-empty OS")
 		}
 
-		if minExpected, actual := totalKeys, r.last.Node.KeyCount; minExpected > actual {
+		if minExpected, actual := totalKeys, last.Node.KeyCount; minExpected > actual {
 			return errors.Errorf("expected node keys at least %v got %v", minExpected, actual)
 		}
-		if minExpected, actual := totalRanges, r.last.Node.RangeCount; minExpected > actual {
+		if minExpected, actual := totalRanges, last.Node.RangeCount; minExpected > actual {
 			return errors.Errorf("expected node ranges at least %v got %v", minExpected, actual)
 		}
-		if minExpected, actual := len(params.StoreSpecs), len(r.last.Stores); minExpected > actual {
+		if minExpected, actual := len(params.StoreSpecs), len(last.Stores); minExpected > actual {
 			return errors.Errorf("expected at least %v stores got %v", minExpected, actual)
 		}
-		if expected, actual := "true", r.last.internal; expected != actual {
+		if expected, actual := "true", last.Internal; expected != actual {
 			t.Errorf("expected internal to be %v, got %v", expected, actual)
 		}
-		if expected, actual := len(params.Locality.Tiers), len(r.last.Node.Locality.Tiers); expected != actual {
+		if expected, actual := len(params.Locality.Tiers), len(last.Node.Locality.Tiers); expected != actual {
 			t.Errorf("expected locality to have %d tier, got %d", expected, actual)
 		}
 		for i := range params.Locality.Tiers {
 			if expected, actual := sql.HashForReporting(clusterSecret, params.Locality.Tiers[i].Key),
-				r.last.Node.Locality.Tiers[i].Key; expected != actual {
+				last.Node.Locality.Tiers[i].Key; expected != actual {
 				t.Errorf("expected locality tier %d key to be %s, got %s", i, expected, actual)
 			}
 			if expected, actual := sql.HashForReporting(clusterSecret, params.Locality.Tiers[i].Value),
-				r.last.Node.Locality.Tiers[i].Value; expected != actual {
+				last.Node.Locality.Tiers[i].Value; expected != actual {
 				t.Errorf("expected locality tier %d value to be %s, got %s", i, expected, actual)
 			}
 		}
 
-		for _, store := range r.last.Stores {
+		for _, store := range last.Stores {
 			if minExpected, actual := keyCounts[store.StoreID], store.KeyCount; minExpected > actual {
 				return errors.Errorf("expected at least %v keys in store %v got %v", minExpected, store.StoreID, actual)
 			}
@@ -657,18 +543,19 @@ func TestReportUsage(t *testing.T) {
 		return nil
 	})
 
+	last := r.LastRequestData()
 	// This check isn't clean, since the body is a raw proto binary and thus could
 	// easily contain some encoded form of elemName, but *if* it ever does fail,
 	// that is probably very interesting.
-	if strings.Contains(r.last.rawReportBody, elemName) {
-		t.Fatalf("%q should not appear in %q", elemName, r.last.rawReportBody)
+	if strings.Contains(last.RawReportBody, elemName) {
+		t.Fatalf("%q should not appear in %q", elemName, last.RawReportBody)
 	}
 
-	if expected, actual := len(tables), len(r.last.Schema); expected != actual {
+	if expected, actual := len(tables), len(last.Schema); expected != actual {
 		t.Fatalf("expected %d tables in schema, got %d", expected, actual)
 	}
 	reportedByID := make(map[sqlbase.ID]sqlbase.TableDescriptor, len(tables))
-	for _, tbl := range r.last.Schema {
+	for _, tbl := range last.Schema {
 		reportedByID[tbl.ID] = tbl
 	}
 	for _, tbl := range tables {
@@ -685,10 +572,10 @@ func TestReportUsage(t *testing.T) {
 	// edit to the Go code that changed the line number of the trace
 	// produced by force_error, so just scrub the trace
 	// here.
-	for k := range r.last.FeatureUsage {
+	for k := range last.FeatureUsage {
 		if strings.HasPrefix(k, "othererror.builtins.go") {
-			r.last.FeatureUsage["othererror.builtins.go"] = r.last.FeatureUsage[k]
-			delete(r.last.FeatureUsage, k)
+			last.FeatureUsage["othererror.builtins.go"] = last.FeatureUsage[k]
+			delete(last.FeatureUsage, k)
 			break
 		}
 	}
@@ -737,12 +624,12 @@ func TestReportUsage(t *testing.T) {
 		"errorcodes." + pgcode.DivisionByZero:      10,
 	}
 
-	if expected, actual := len(expectedFeatureUsage), len(r.last.FeatureUsage); actual < expected {
-		t.Fatalf("expected at least %d feature usage counts, got %d: %v", expected, actual, r.last.FeatureUsage)
+	if expected, actual := len(expectedFeatureUsage), len(last.FeatureUsage); actual < expected {
+		t.Fatalf("expected at least %d feature usage counts, got %d: %v", expected, actual, last.FeatureUsage)
 	}
-	t.Logf("%# v", pretty.Formatter(r.last.FeatureUsage))
+	t.Logf("%# v", pretty.Formatter(last.FeatureUsage))
 	for key, expected := range expectedFeatureUsage {
-		if got, ok := r.last.FeatureUsage[key]; !ok {
+		if got, ok := last.FeatureUsage[key]; !ok {
 			t.Fatalf("expected report of feature %q", key)
 		} else if got != expected {
 			t.Fatalf("expected reported value of feature %q to be %d not %d", key, expected, got)
@@ -752,18 +639,17 @@ func TestReportUsage(t *testing.T) {
 	// 3 + 3 = 6: set 3 initially and org is set mid-test for 3 altered settings,
 	// plus version, reporting and secret settings are set in startup
 	// migrations.
-	if expected, actual := 6, len(r.last.AlteredSettings); expected != actual {
-		t.Fatalf("expected %d changed settings, got %d: %v", expected, actual, r.last.AlteredSettings)
+	if expected, actual := 6, len(last.AlteredSettings); expected != actual {
+		t.Fatalf("expected %d changed settings, got %d: %v", expected, actual, last.AlteredSettings)
 	}
 	for key, expected := range map[string]string{
 		"cluster.organization":                     "<redacted>",
-		"diagnostics.reporting.enabled":            "true",
 		"diagnostics.reporting.send_crash_reports": "false",
 		"server.time_until_store_dead":             "1m30s",
 		"version":                                  clusterversion.TestingBinaryVersion.String(),
 		"cluster.secret":                           "<redacted>",
 	} {
-		if got, ok := r.last.AlteredSettings[key]; !ok {
+		if got, ok := last.AlteredSettings[key]; !ok {
 			t.Fatalf("expected report of altered setting %q", key)
 		} else if got != expected {
 			t.Fatalf("expected reported value of setting %q to be %q not %q", key, expected, got)
@@ -779,14 +665,14 @@ func TestReportUsage(t *testing.T) {
 		keys.RangeEventTableID,
 		keys.SystemDatabaseID,
 	} {
-		if _, ok := r.last.ZoneConfigs[expectedID]; !ok {
+		if _, ok := last.ZoneConfigs[expectedID]; !ok {
 			t.Errorf("didn't find expected ID %d in reported ZoneConfigs: %+v",
-				expectedID, r.last.ZoneConfigs)
+				expectedID, last.ZoneConfigs)
 		}
 	}
 	hashedElemName := sql.HashForReporting(clusterSecret, elemName)
 	hashedZone := sql.HashForReporting(clusterSecret, "zone")
-	for id, zone := range r.last.ZoneConfigs {
+	for id, zone := range last.ZoneConfigs {
 		if id == keys.RootNamespaceID {
 			if defZone := ts.Cfg.DefaultZoneConfig; !reflect.DeepEqual(zone, defZone) {
 				t.Errorf("default zone config does not match: expected\n%+v got\n%+v", defZone, zone)
@@ -840,7 +726,7 @@ func TestReportUsage(t *testing.T) {
 	}
 
 	var foundKeys []string
-	for _, s := range r.last.SqlStats {
+	for _, s := range last.SqlStats {
 		if strings.HasPrefix(s.Key.App, sqlbase.InternalAppNamePrefix) {
 			// Let's ignore all internal queries for this test.
 			continue
@@ -870,6 +756,7 @@ func TestReportUsage(t *testing.T) {
 		`[opt,nodist,ok] ALTER TABLE _ CONFIGURE ZONE = _`,
 		`[opt,nodist,ok] CREATE DATABASE _`,
 		`[opt,nodist,ok] SET CLUSTER SETTING "cluster.organization" = _`,
+		`[opt,nodist,ok] SET CLUSTER SETTING "diagnostics.reporting.enabled" = _`,
 		`[opt,nodist,ok] SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
 		`[opt,nodist,ok] SET CLUSTER SETTING "server.time_until_store_dead" = _`,
 		`[opt,nodist,ok] SET application_name = $1`,
@@ -914,7 +801,7 @@ func TestReportUsage(t *testing.T) {
 	}
 
 	bucketByApp := make(map[string][]roachpb.CollectedStatementStatistics)
-	for _, s := range r.last.SqlStats {
+	for _, s := range last.SqlStats {
 		if strings.HasPrefix(s.Key.App, sqlbase.InternalAppNamePrefix) {
 			// Let's ignore all internal queries for this test.
 			continue
@@ -949,6 +836,7 @@ func TestReportUsage(t *testing.T) {
 			`SELECT crdb_internal.force_error(_, $1)`,
 			`SELECT crdb_internal.set_vmodule(_)`,
 			`SET CLUSTER SETTING "server.time_until_store_dead" = _`,
+			`SET CLUSTER SETTING "diagnostics.reporting.enabled" = _`,
 			`SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
 			`SET application_name = _`,
 			`WITH _ AS (SELECT _) SELECT * FROM _`,
@@ -994,54 +882,4 @@ func TestReportUsage(t *testing.T) {
 			}
 		}
 	}
-}
-
-type mockRecorder struct {
-	*httptest.Server
-	url *url.URL
-
-	syncutil.Mutex
-	requests int
-	last     struct {
-		uuid        string
-		version     string
-		licenseType string
-		internal    string
-		diagnosticspb.DiagnosticReport
-		rawReportBody string
-	}
-}
-
-func makeMockRecorder(t *testing.T) *mockRecorder {
-	rec := &mockRecorder{}
-
-	rec.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
-
-		rec.Lock()
-		defer rec.Unlock()
-
-		rec.requests++
-		rec.last.uuid = r.URL.Query().Get("uuid")
-		rec.last.version = r.URL.Query().Get("version")
-		rec.last.licenseType = r.URL.Query().Get("licensetype")
-		rec.last.internal = r.URL.Query().Get("internal")
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			panic(err)
-		}
-		rec.last.rawReportBody = string(body)
-		// TODO(dt): switch on the request path to handle different request types.
-		if err := protoutil.Unmarshal(body, &rec.last.DiagnosticReport); err != nil {
-			panic(err)
-		}
-	}))
-
-	u, err := url.Parse(rec.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rec.url = u
-
-	return rec
 }

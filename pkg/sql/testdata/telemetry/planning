@@ -1,0 +1,143 @@
+exec
+CREATE TABLE x (a INT PRIMARY KEY)
+----
+
+# Tests for EXPLAIN counters.
+
+feature-whitelist
+sql.plan.explain
+sql.plan.explain-analyze
+sql.plan.explain-opt
+sql.plan.explain-opt-verbose
+sql.plan.explain-distsql
+----
+
+feature-usage
+EXPLAIN SELECT * FROM x
+----
+sql.plan.explain
+
+feature-usage
+EXPLAIN (DISTSQL) SELECT * FROM x
+----
+sql.plan.explain-distsql
+
+feature-usage
+EXPLAIN ANALYZE SELECT * FROM x
+----
+sql.plan.explain-analyze
+
+feature-usage
+EXPLAIN ANALYZE (DEBUG) SELECT * FROM x
+----
+
+feature-usage
+EXPLAIN (OPT) SELECT * FROM x
+----
+sql.plan.explain-opt
+
+feature-usage
+EXPLAIN (OPT, VERBOSE) SELECT * FROM x
+----
+sql.plan.explain-opt-verbose
+
+# Tests for hints.
+
+feature-whitelist
+sql.plan.hints.hash-join
+sql.plan.hints.merge-join
+sql.plan.hints.lookup-join
+sql.plan.hints.index
+sql.plan.hints.index.select
+sql.plan.hints.index.update
+sql.plan.hints.index.delete
+----
+
+feature-usage
+SELECT x FROM (VALUES (1)) AS a(x) INNER HASH JOIN (VALUES (1)) AS b(y) ON x = y
+----
+sql.plan.hints.hash-join
+
+feature-usage
+SELECT x FROM (VALUES (1)) AS a(x) INNER MERGE JOIN (VALUES (1)) AS b(y) ON x = y
+----
+sql.plan.hints.merge-join
+
+feature-usage
+SELECT a FROM (VALUES (1)) AS b(y) INNER LOOKUP JOIN x ON y = a
+----
+sql.plan.hints.lookup-join
+
+feature-usage
+SELECT * FROM x@primary
+----
+sql.plan.hints.index
+sql.plan.hints.index.select
+
+feature-usage
+UPDATE x@primary SET a=1 WHERE a>1
+----
+sql.plan.hints.index
+sql.plan.hints.index.update
+
+feature-usage
+DELETE FROM x@primary WHERE a>1
+----
+sql.plan.hints.index
+sql.plan.hints.index.delete
+
+# Tests for tracking important setting changes.
+
+feature-whitelist
+sql.plan.reorder-joins.set-limit-0
+sql.plan.reorder-joins.set-limit-3
+sql.plan.reorder-joins.set-limit-6
+sql.plan.reorder-joins.set-limit-more
+sql.plan.automatic-stats.enabled
+sql.plan.automatic-stats.disabled
+----
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 0
+----
+sql.plan.reorder-joins.set-limit-0
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 3
+----
+sql.plan.reorder-joins.set-limit-3
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 6
+----
+sql.plan.reorder-joins.set-limit-6
+
+feature-usage
+SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 20 
+----
+sql.plan.reorder-joins.set-limit-more
+
+feature-usage
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = on
+----
+sql.plan.automatic-stats.enabled
+
+feature-usage
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off
+----
+sql.plan.automatic-stats.disabled
+
+feature-usage
+RESET CLUSTER SETTING sql.stats.automatic_collection.enabled
+----
+sql.plan.automatic-stats.enabled
+
+# Test telemetry for manual statistics creation.
+feature-whitelist
+sql.plan.stats.created
+----
+
+feature-usage
+CREATE STATISTICS stats FROM x
+----
+sql.plan.stats.created

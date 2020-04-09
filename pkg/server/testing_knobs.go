@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 )
 
 // TestingKnobs groups testing knobs for the Server.
@@ -35,6 +36,8 @@ type TestingKnobs struct {
 	SignalAfterGettingRPCAddress chan struct{}
 	// ContextTestingKnobs allows customization of the RPC context testing knobs.
 	ContextTestingKnobs rpc.ContextTestingKnobs
+	// DiagnosticsTestingKnobs allows customization of diagnostics testing knobs.
+	DiagnosticsTestingKnobs diagnosticspb.TestingKnobs
 
 	// If set, use this listener for RPC (and possibly SQL, depending on
 	// the SplitListenSQL setting), instead of binding a new listener.

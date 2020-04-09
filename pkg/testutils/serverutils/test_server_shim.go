@@ -176,6 +176,24 @@ type TestServerInterface interface {
 	// An error will be returned if the same table name exists in multiple schemas
 	// inside the specified database.
 	ForceTableGC(ctx context.Context, database, table string, timestamp hlc.Timestamp) error
+
+	// CheckForUpdates phones home to check for updates and report usage.
+	//
+	// When using this for testing, consider setting DiagnosticsReportingEnabled
+	// to false so the periodic check doesn't interfere with the test.
+	//
+	// This can be slow because of cloud detection; use cloudinfo.Disable() in
+	// tests to avoid that.
+	CheckForUpdates(ctx context.Context)
+
+	// ReportDiagnostics phones home to report diagnostics.
+	//
+	// If using this for testing, consider setting DiagnosticsReportingEnabled to
+	// false so the periodic reporting doesn't interfere with the test.
+	//
+	// This can be slow because of cloud detection; use cloudinfo.Disable() in
+	// tests to avoid that.
+	ReportDiagnostics(ctx context.Context)
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
