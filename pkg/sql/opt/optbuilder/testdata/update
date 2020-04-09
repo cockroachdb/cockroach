@@ -1492,7 +1492,6 @@ update checks
       │    │    ├── scan checks
       │    │    │    ├── columns: a:5!null b:6 c:7 d:8
       │    │    │    ├── check constraint expressions
-      │    │    │    │    ├── b:6 < d:8
       │    │    │    │    └── a:5 > 0
       │    │    │    └── computed column expressions
       │    │    │         └── d:8
@@ -1527,7 +1526,6 @@ update checks
       │    │    ├── scan checks
       │    │    │    ├── columns: a:5!null b:6 c:7 d:8
       │    │    │    ├── check constraint expressions
-      │    │    │    │    ├── b:6 < d:8
       │    │    │    │    └── a:5 > 0
       │    │    │    └── computed column expressions
       │    │    │         └── d:8
@@ -1560,7 +1558,6 @@ update checks
       │    │    ├── scan checks
       │    │    │    ├── columns: a:5!null b:6 c:7 d:8
       │    │    │    ├── check constraint expressions
-      │    │    │    │    ├── b:6 < d:8
       │    │    │    │    └── a:5 > 0
       │    │    │    └── computed column expressions
       │    │    │         └── d:8
@@ -1594,7 +1591,6 @@ update checks
       │    │    ├── scan checks
       │    │    │    ├── columns: checks.a:5!null checks.b:6 checks.c:7 checks.d:8
       │    │    │    ├── check constraint expressions
-      │    │    │    │    ├── checks.b:6 < checks.d:8
       │    │    │    │    └── checks.a:5 > 0
       │    │    │    └── computed column expressions
       │    │    │         └── checks.d:8
@@ -1642,9 +1638,6 @@ update decimals
       │    ├── columns: a:11 b:12 decimals.a:5!null decimals.b:6 c:7 decimals.d:8
       │    ├── scan decimals
       │    │    ├── columns: decimals.a:5!null decimals.b:6 c:7 decimals.d:8
-      │    │    ├── check constraint expressions
-      │    │    │    ├── decimals.a:5 = round(decimals.a:5)
-      │    │    │    └── decimals.b:6[0] > 1
       │    │    └── computed column expressions
       │    │         └── decimals.d:8
       │    │              └── decimals.a:5 + c:7

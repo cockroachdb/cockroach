@@ -326,10 +326,10 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if t.IsCanonical() {
 			// For the canonical scan, show the expressions attached to the TableMeta.
 			tab := md.TableMeta(t.Table)
-			if len(tab.Constraints) > 0 {
+			if tab.Constraints != nil {
 				c := tp.Childf("check constraint expressions")
-				for i := 0; i < len(tab.Constraints); i++ {
-					f.formatExpr(tab.Constraints[i], c)
+				for i := 0; i < tab.Constraints.ChildCount(); i++ {
+					f.formatExpr(tab.Constraints.Child(i), c)
 				}
 			}
 			if len(tab.ComputedCols) > 0 {

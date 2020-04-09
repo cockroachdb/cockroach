@@ -101,6 +101,9 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 		if scan.Constraint != nil {
 			rel.FuncDeps.AddConstants(scan.Constraint.ExtractConstCols(b.evalCtx))
 		}
+		if tabMeta := md.TableMeta(scan.Table); tabMeta.Constraints != nil {
+			b.addFiltersToFuncDep(*tabMeta.Constraints.(*FiltersExpr), &rel.FuncDeps)
+		}
 		rel.FuncDeps.MakeNotNull(rel.NotNullCols)
 		rel.FuncDeps.ProjectCols(rel.OutputCols)
 	}

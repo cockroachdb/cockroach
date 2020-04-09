@@ -1159,7 +1159,6 @@ upsert checks
       │    │    ├── scan checks
       │    │    │    ├── columns: a:9!null b:10 c:11 d:12
       │    │    │    ├── check constraint expressions
-      │    │    │    │    ├── b:10 < d:12
       │    │    │    │    └── a:9 > 0
       │    │    │    └── computed column expressions
       │    │    │         └── d:12
@@ -1348,7 +1347,6 @@ upsert checks
       │    │    │    │    ├── scan checks
       │    │    │    │    │    ├── columns: a:9!null b:10 c:11 d:12
       │    │    │    │    │    ├── check constraint expressions
-      │    │    │    │    │    │    ├── b:10 < d:12
       │    │    │    │    │    │    └── a:9 > 0
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d:12
@@ -1406,7 +1404,6 @@ insert checks
       │    │         │    ├── scan checks
       │    │         │    │    ├── columns: a:9!null b:10 c:11 d:12
       │    │         │    │    ├── check constraint expressions
-      │    │         │    │    │    ├── b:10 < d:12
       │    │         │    │    │    └── a:9 > 0
       │    │         │    │    └── computed column expressions
       │    │         │    │         └── d:12
@@ -1475,7 +1472,6 @@ upsert checks
       │    │    │    ├── scan checks
       │    │    │    │    ├── columns: a:9!null b:10 c:11 d:12
       │    │    │    │    ├── check constraint expressions
-      │    │    │    │    │    ├── b:10 < d:12
       │    │    │    │    │    └── a:9 > 0
       │    │    │    │    └── computed column expressions
       │    │    │    │         └── d:12
@@ -1550,7 +1546,6 @@ upsert checks
       │    │    │    │    ├── scan checks
       │    │    │    │    │    ├── columns: checks.a:11!null checks.b:12 checks.c:13 d:14
       │    │    │    │    │    ├── check constraint expressions
-      │    │    │    │    │    │    ├── checks.b:12 < d:14
       │    │    │    │    │    │    └── checks.a:11 > 0
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── d:14

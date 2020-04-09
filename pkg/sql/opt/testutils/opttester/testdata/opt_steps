@@ -157,7 +157,7 @@ Initial expression
    ├── scan orders
    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
    │    ├── check constraint expressions
-   │    │    └── in [type=bool]
+   │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
    │    │         ├── variable: status:3 [type=string]
    │    │         └── tuple [type=tuple{string, string, string}]
    │    │              ├── const: 'open' [type=string]
@@ -184,7 +184,7 @@ NormalizeInConst
     ├── scan orders
     │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
     │    ├── check constraint expressions
-    │    │    └── in [type=bool]
+    │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
     │    │         ├── variable: status:3 [type=string]
     │    │         └── tuple [type=tuple{string, string, string}]
   - │    │              ├── const: 'open' [type=string]
@@ -223,7 +223,7 @@ CommuteLeftJoin (higher cost)
     ├── scan orders
     │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
     │    ├── check constraint expressions
-    │    │    └── in [type=bool]
+    │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
     │    │         ├── variable: status:3 [type=string]
     │    │         └── tuple [type=tuple{string, string, string}]
     │    │              ├── const: 'cancelled' [type=string]
@@ -255,7 +255,7 @@ GenerateLookupJoins (higher cost)
     ├── scan orders
     │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
     │    ├── check constraint expressions
-    │    │    └── in [type=bool]
+    │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
     │    │         ├── variable: status:3 [type=string]
     │    │         └── tuple [type=tuple{string, string, string}]
     │    │              ├── const: 'cancelled' [type=string]
@@ -293,7 +293,7 @@ GenerateMergeJoins (higher cost)
   + ├── sort
     │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
   - │    ├── check constraint expressions
-  - │    │    └── in [type=bool]
+  - │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
   - │    │         ├── variable: status:3 [type=string]
   - │    │         └── tuple [type=tuple{string, string, string}]
   - │    │              ├── const: 'cancelled' [type=string]
@@ -306,7 +306,7 @@ GenerateMergeJoins (higher cost)
   + │    └── scan orders
   + │         ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
   + │         ├── check constraint expressions
-  + │         │    └── in [type=bool]
+  + │         │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
   + │         │         ├── variable: status:3 [type=string]
   + │         │         └── tuple [type=tuple{string, string, string}]
   + │         │              ├── const: 'cancelled' [type=string]
@@ -326,7 +326,7 @@ Final best expression
    ├── scan orders
    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
    │    ├── check constraint expressions
-   │    │    └── in [type=bool]
+   │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
    │    │         ├── variable: status:3 [type=string]
    │    │         └── tuple [type=tuple{string, string, string}]
    │    │              ├── const: 'cancelled' [type=string]

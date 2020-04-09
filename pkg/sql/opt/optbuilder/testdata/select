@@ -14,7 +14,7 @@ CREATE TABLE tab54 (x INT, y INT)
 ----
 
 exec-ddl
-CREATE TABLE tab55 (a INT PRIMARY KEY, b INT, CONSTRAINT foo CHECK (a+b < 10))
+CREATE TABLE tab55 (a INT PRIMARY KEY, b INT NOT NULL, CONSTRAINT foo CHECK (a+b < 10))
 ----
 
 # SELECT with no table.
