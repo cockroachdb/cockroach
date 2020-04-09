@@ -834,6 +834,19 @@ func TestUpgradeType(t *testing.T) {
 				},
 			}},
 		},
+		{
+			desc: "varbit types are not assigned the default family Oid value",
+			input: &T{InternalType: InternalType{
+				Family:      BitFamily,
+				VisibleType: visibleVARBIT,
+				Locale:      &emptyLocale,
+			}},
+			expected: &T{InternalType: InternalType{
+				Family: BitFamily,
+				Oid:    oid.T_varbit,
+				Locale: &emptyLocale,
+			}},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -841,6 +854,26 @@ func TestUpgradeType(t *testing.T) {
 			err := tc.input.upgradeType()
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expected, tc.input)
+		})
+	}
+}
+
+func TestOidSetDuringUpgrade(t *testing.T) {
+	for family, Oid := range familyToOid {
+		t.Run(fmt.Sprintf("family-%s", Family_name[int32(family)]), func(t *testing.T) {
+			input := &T{InternalType: InternalType{
+				Family: family,
+			}}
+			if family == ArrayFamily {
+				// This is not material to this test, but needs to be set to avoid
+				// panic.
+				input.InternalType.ArrayContents = &T{InternalType{
+					Family: BoolFamily,
+				}}
+			}
+			err := input.upgradeType()
+			assert.NoError(t, err)
+			assert.Equal(t, Oid, input.Oid())
 		})
 	}
 }
