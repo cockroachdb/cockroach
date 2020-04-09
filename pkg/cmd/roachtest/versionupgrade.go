@@ -149,7 +149,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 //   mv artifacts/acceptance/version-upgrade/run_1/${i}.logs/checkpoint-*.tgz \
 //     pkg/cmd/roachtest/fixtures/${i}/
 // done
-const createCheckpoints = false
+const createCheckpoints = true
 
 func (u *versionUpgradeTest) run(ctx context.Context, t *test) {
 	if createCheckpoints {
