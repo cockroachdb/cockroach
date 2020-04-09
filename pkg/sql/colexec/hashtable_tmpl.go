@@ -93,7 +93,7 @@ func _CHECK_COL_BODY(
 			// {{else}}
 			probeIdx := int(toCheck)
 			// {{end}}
-			/* {{if .ProbeHasNulls }} */
+			/* {{if .ProbeHasNulls}} */
 			probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 			/* {{end}} */
 
@@ -103,7 +103,7 @@ func _CHECK_COL_BODY(
 			buildIdx := int(keyID - 1)
 			// {{end}}
 
-			/* {{if .BuildHasNulls }} */
+			/* {{if .BuildHasNulls}} */
 			buildIsNull = buildVec.Nulls().NullAt(buildIdx)
 			/* {{end}} */
 

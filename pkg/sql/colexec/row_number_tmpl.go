@@ -65,7 +65,7 @@ func (r *rowNumberBase) Init() {
 	r.Input().Init()
 }
 
-// {{ range . }}
+// {{range .}}
 
 type _ROW_NUMBER_STRINGOp struct {
 	rowNumberBase
@@ -79,9 +79,9 @@ func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 
-	// {{ if .HasPartition }}
+	// {{if .HasPartition}}
 	partitionCol := batch.ColVec(r.partitionColIdx).Bool()
-	// {{ end }}
+	// {{end}}
 	rowNumberVec := batch.ColVec(r.outputColIdx)
 	if rowNumberVec.MaybeHasNulls() {
 		// We need to make sure that there are no left over null values in the
@@ -92,21 +92,21 @@ func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	if sel != nil {
 		for i := 0; i < batch.Length(); i++ {
-			// {{ if .HasPartition }}
+			// {{if .HasPartition}}
 			if partitionCol[sel[i]] {
 				r.rowNumber = 1
 			}
-			// {{ end }}
+			// {{end}}
 			r.rowNumber++
 			rowNumberCol[sel[i]] = r.rowNumber
 		}
 	} else {
 		for i := 0; i < batch.Length(); i++ {
-			// {{ if .HasPartition }}
+			// {{if .HasPartition}}
 			if partitionCol[i] {
 				r.rowNumber = 0
 			}
-			// {{ end }}
+			// {{end}}
 			r.rowNumber++
 			rowNumberCol[i] = r.rowNumber
 		}
@@ -114,4 +114,4 @@ func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-// {{ end }}
+// {{end}}

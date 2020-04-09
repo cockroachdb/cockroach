@@ -145,7 +145,7 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	// TODO(yuzefovich): template out sel vs non-sel cases.
 	if sel != nil {
 		for _, i := range sel[:n] {
-			// {{ if .HasPartition }}
+			// {{if .HasPartition}}
 			if partitionCol[i] {
 				r.rank = 1
 				r.rankIncrement = 1
@@ -163,7 +163,7 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 		}
 	} else {
 		for i := range rankCol[:n] {
-			// {{ if .HasPartition }}
+			// {{if .HasPartition}}
 			if partitionCol[i] {
 				r.rank = 1
 				r.rankIncrement = 1
