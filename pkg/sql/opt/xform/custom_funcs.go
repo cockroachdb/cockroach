@@ -969,13 +969,16 @@ func (c *CustomFuncs) allInvIndexConstraints(
 	return constraints, true
 }
 
-// canMaybeConstrainIndex performs two checks that can quickly rule out the
-// possibility that the given index can be constrained by the specified filter:
+// canMaybeConstrainIndex returns true if we should try to constrain a given
+// index by the given filter. It returns false if it is impossible for the
+// filter can constrain the scan.
 //
-//   1. If the filter does not reference the first index column, then no
-//      constraint can be generated.
-//   2. If none of the filter's constraints start with the first index column,
-//      then no constraint can be generated.
+// If any of the three following statements are true, then it is
+// possible that the index can be constrained:
+//
+//   1. The filter references the first index column.
+//   2. The constraints are not tight (see props.Scalar.TightConstraints).
+//   3. Any of the filter's constraints start with the first index column.
 //
 func (c *CustomFuncs) canMaybeConstrainIndex(
 	filters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
