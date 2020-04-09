@@ -195,8 +195,6 @@ func (s *zeroOperator) Init() {
 }
 
 func (s *zeroOperator) Next(ctx context.Context) coldata.Batch {
-	// TODO(solon): Can we avoid calling Next on the input at all?
-	s.input.Next(ctx)
 	return coldata.ZeroBatch
 }
 

@@ -50,13 +50,10 @@ func wrapRowSources(
 	inputs []colexecbase.Operator,
 	inputTypes [][]types.T,
 	acc *mon.BoundAccount,
+	processorID int32,
 	newToWrap func([]execinfra.RowSource) (execinfra.RowSource, error),
 ) (*Columnarizer, error) {
-	var (
-		toWrapInputs []execinfra.RowSource
-		// TODO(asubiotto): Plumb proper processorIDs once we have stats.
-		processorID int32
-	)
+	var toWrapInputs []execinfra.RowSource
 	for i, input := range inputs {
 		// Optimization: if the input is a Columnarizer, its input is necessarily a
 		// execinfra.RowSource, so remove the unnecessary conversion.
@@ -360,10 +357,14 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 			colmem.NewAllocator(ctx, sortChunksMemAccount), input, inputTypes,
 			ordering.Columns, int(matchLen),
 		)
-	} else if post.Limit != 0 && post.Filter.Empty() && post.Limit+post.Offset < math.MaxUint16 {
+	} else if post.Limit != 0 && post.Filter.Empty() && int(post.Limit+post.Offset) > 0 {
 		// There is a limit specified with no post-process filter, so we know
-		// exactly how many rows the sorter should output. Choose a top K sorter,
-		// which uses a heap to avoid storing more rows than necessary.
+		// exactly how many rows the sorter should output. The last part of the
+		// condition is making sure there is no overflow when converting from
+		// the sum of two uint64s to int.
+		//
+		// Choose a top K sorter, which uses a heap to avoid storing more rows
+		// than necessary.
 		sorterMemMonitorName = fmt.Sprintf("%stopk-sort-%d", memMonitorNamePrefix, processorID)
 		var topKSorterMemAccount *mon.BoundAccount
 		if useStreamingMemAccountForBuffering {
@@ -373,7 +374,7 @@ func (r *NewColOperatorResult) createDiskBackedSort(
 				ctx, flowCtx, sorterMemMonitorName,
 			)
 		}
-		k := uint16(post.Limit + post.Offset)
+		k := int(post.Limit + post.Offset)
 		inMemorySorter = NewTopKSorter(
 			colmem.NewAllocator(ctx, topKSorterMemAccount), input, inputTypes,
 			ordering.Columns, k,
@@ -475,6 +476,7 @@ func (r *NewColOperatorResult) createAndWrapRowSource(
 		inputs,
 		inputTypes,
 		streamingMemAccount,
+		spec.ProcessorID,
 		func(inputs []execinfra.RowSource) (execinfra.RowSource, error) {
 			// We provide a slice with a single nil as 'outputs' parameter because
 			// all processors expect a single output. Passing nil is ok here
