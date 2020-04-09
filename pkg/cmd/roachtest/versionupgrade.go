@@ -49,7 +49,7 @@ var versionUpgradeTestFeatures = []versionFeatureTest{
 	runWorkLoadFeature(
 		"schemachange workload",
 		v192,
-		"schemachange --concurrency 2 --max-ops 150 --verbose=true",
+		"schemachange --concurrency 2 --max-ops 15 --verbose=true",
 	),
 }
 

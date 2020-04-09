@@ -47,7 +47,6 @@ func registerAcceptance(r *testRegistry) {
 		{
 			name: "version-upgrade",
 			fn:   runVersionUpgrade,
-			skip: "skipped due to flakiness",
 			// This test doesn't like running on old versions because it upgrades to
 			// the latest released version and then it tries to "head", where head is
 			// the cockroach binary built from the branch on which the test is
