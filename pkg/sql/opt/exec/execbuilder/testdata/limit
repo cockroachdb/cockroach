@@ -192,3 +192,22 @@ render               ·            ·                        (k, w)     ·
 ·                    table        t@primary                ·          ·
 ·                    spans        FULL SCAN                ·          ·
 ·                    filter       (v >= 1) AND (v <= 100)  ·          ·
+
+# Regression test for #47283: scan with both hard limit and soft limit.
+statement ok
+CREATE TABLE t_47283(k INT PRIMARY KEY, a INT)
+
+# The scan should have a hard limit.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM t_47283 ORDER BY k LIMIT 4) WHERE a > 5 LIMIT 1
+----
+·               distributed  false            ·       ·
+·               vectorized   true             ·       ·
+limit           ·            ·                (k, a)  ·
+ │              count        1                ·       ·
+ └── filter     ·            ·                (k, a)  ·
+      │         filter       a > 5            ·       ·
+      └── scan  ·            ·                (k, a)  ·
+·               table        t_47283@primary  ·       ·
+·               spans        LIMITED SCAN     ·       ·
+·               limit        4                ·       ·
