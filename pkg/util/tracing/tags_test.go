@@ -26,12 +26,11 @@ func TestLogTags(t *testing.T) {
 	l = l.Add("tag2", "val2")
 	sp1 := tr.StartSpan("foo", Recordable, LogTags(l))
 	StartRecording(sp1, SingleNodeRecording)
-
+	sp1.Finish()
 	require.NoError(t, TestingCheckRecordedSpans(GetRecording(sp1), `
 		span foo:
 		  tags: tag1=val1 tag2=val2
 	`))
-
 	require.NoError(t, shadowTracer.expectSingleSpanWithTags("tag1", "tag2"))
 	shadowTracer.clear()
 
@@ -40,7 +39,7 @@ func TestLogTags(t *testing.T) {
 
 	sp2 := tr.StartSpan("bar", Recordable, LogTags(l))
 	StartRecording(sp2, SingleNodeRecording)
-
+	sp2.Finish()
 	require.NoError(t, TestingCheckRecordedSpans(GetRecording(sp2), `
 		span bar:
 			tags: one=val1 two=val2
@@ -50,6 +49,7 @@ func TestLogTags(t *testing.T) {
 
 	sp3 := tr.StartRootSpan("baz", l, RecordableSpan)
 	StartRecording(sp3, SingleNodeRecording)
+	sp3.Finish()
 	require.NoError(t, TestingCheckRecordedSpans(GetRecording(sp3), `
 		span baz:
 			tags: one=val1 two=val2
