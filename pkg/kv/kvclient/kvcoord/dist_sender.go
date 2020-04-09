@@ -13,8 +13,10 @@ package kvcoord
 import (
 	"context"
 	"fmt"
+	"math"
 	"runtime"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
@@ -1320,6 +1323,12 @@ func (ds *DistSender) sendPartialBatchAsync(
 	return true
 }
 
+func slowRangeRPCWarningStr(
+	dur time.Duration, attempts int64, desc *roachpb.RangeDescriptor, pErr *roachpb.Error,
+) string {
+	return fmt.Sprintf("have been waiting %.2fs (%d attempts) to send to %s: %s", dur.Seconds(), attempts, desc, pErr)
+}
+
 // sendPartialBatch sends the supplied batch to the range specified by
 // desc. The batch request is first truncated so that it contains only
 // requests which intersect the range descriptor and keys for each
@@ -1372,7 +1381,9 @@ func (ds *DistSender) sendPartialBatch(
 	}
 
 	// Start a retry loop for sending the batch to the range.
+	tBegin, attempts := timeutil.Now(), int64(0) // for slow log message
 	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
+		attempts++
 		// If we've cleared the descriptor on a send failure, re-lookup.
 		if desc == nil {
 			var descKey roachpb.RKey
@@ -1404,6 +1415,11 @@ func (ds *DistSender) sendPartialBatch(
 			pErr.Index.Index = int32(positions[pErr.Index.Index])
 		}
 
+		const slowDistSenderThreshold = time.Minute
+		if dur := timeutil.Since(tBegin); dur > slowDistSenderThreshold && attempts >= 0 {
+			log.Warning(ctx, slowRangeRPCWarningStr(dur, attempts, desc, pErr))
+			attempts = math.MinInt64 // avoid logging over and over for this request
+		}
 		log.VErrEventf(ctx, 2, "reply error %s: %s", ba, pErr)
 
 		// Error handling: If the error indicates that our range

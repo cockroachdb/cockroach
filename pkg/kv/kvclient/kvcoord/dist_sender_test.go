@@ -3479,3 +3479,16 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 	go putFn("c", "c")
 	batchWaitGroup.Wait()
 }
+
+func TestDistSenderSlowLogMessage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	act := slowRangeRPCWarningStr(
+		8158*time.Millisecond,
+		120,
+		&roachpb.RangeDescriptor{RangeID: 9, StartKey: roachpb.RKey("x")},
+		roachpb.NewError(errors.New("boom")))
+	exp := `have been waiting 8.16s (120 attempts) to send to` +
+		` r9:{-} [<no replicas>, next=0, gen=0?]: boom`
+
+	require.Equal(t, exp, act)
+}
