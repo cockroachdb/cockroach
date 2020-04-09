@@ -364,10 +364,23 @@ type Engine interface {
 	// this engine. Batched engines accumulate all mutations and apply
 	// them atomically on a call to Commit().
 	NewBatch() Batch
-	// NewReadOnly returns a new instance of a ReadWriter that wraps
-	// this engine. This wrapper panics when unexpected operations (e.g., write
+	// NewReadOnly returns a new instance of a ReadWriter that wraps this
+	// engine. This wrapper panics when unexpected operations (e.g., write
 	// operations) are executed on it and caches iterators to avoid the overhead
 	// of creating multiple iterators for batched reads.
+	//
+	// All iterators created from a read-only engine with the same "Prefix"
+	// option are guaranteed to provide a consistent snapshot of the underlying
+	// engine. For instance, two prefix iterators created from a read-only
+	// engine will provide a consistent snapshot. Similarly, two non-prefix
+	// iterators created from a read-only engine will provide a consistent
+	// snapshot. However, a prefix iterator and a non-prefix iterator created
+	// from a read-only engine are not guaranteed to provide a consistent view
+	// of the underlying engine.
+	//
+	// TODO(nvanbenschoten): remove this complexity when we're fully on Pebble
+	// and can guarantee that all iterators created from a read-only engine are
+	// consistent. To do this, we will want to add an Iterator.Clone method.
 	NewReadOnly() ReadWriter
 	// NewWriteOnlyBatch returns a new instance of a batched engine which wraps
 	// this engine. A write-only batch accumulates all mutations and applies them
