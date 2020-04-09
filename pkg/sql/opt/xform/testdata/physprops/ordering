@@ -2038,3 +2038,39 @@ distinct-on
       │    └── projections
       │         └── 1 [as="project_const_col_@5":8]
       └── filters (true)
+
+# Regression test for #47041: factor check constraints into the (canonical)
+# scan FDs; otherwise operators above won't always be able to remap a provided
+# ordering.
+exec-ddl
+CREATE TABLE t47041 (
+  k INT8 PRIMARY KEY,
+  a INT8 NOT NULL,
+  b INT8 NOT NULL CHECK (b = 0),
+  INDEX ba (b, a)
+)
+----
+
+opt
+SELECT 1 FROM t47041 WHERE a > 1 AND k > 0 GROUP BY b, a ORDER BY b
+----
+project
+ ├── columns: "?column?":4!null
+ ├── fd: ()-->(4)
+ ├── distinct-on
+ │    ├── columns: a:2!null
+ │    ├── grouping columns: a:2!null
+ │    ├── key: (2)
+ │    └── select
+ │         ├── columns: k:1!null a:2!null
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2)
+ │         ├── scan t47041@ba
+ │         │    ├── columns: k:1!null a:2!null
+ │         │    ├── constraint: /3/2/1: [/0/2/1 - /0]
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2)
+ │         └── filters
+ │              └── k:1 > 0 [outer=(1)]
+ └── projections
+      └── 1 [as="?column?":4]
