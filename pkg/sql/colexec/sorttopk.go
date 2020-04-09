@@ -37,7 +37,7 @@ func NewTopKSorter(
 	input colexecbase.Operator,
 	inputTypes []types.T,
 	orderingCols []execinfrapb.Ordering_Column,
-	k uint16,
+	k int,
 ) colexecbase.Operator {
 	return &topKSorter{
 		allocator:    allocator,
@@ -68,7 +68,7 @@ type topKSorter struct {
 	allocator    *colmem.Allocator
 	orderingCols []execinfrapb.Ordering_Column
 	inputTypes   []types.T
-	k            uint16 // TODO(solon): support larger k values
+	k            int
 
 	// state is the current state of the sort.
 	state topKSortState
@@ -134,7 +134,7 @@ func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
 func (t *topKSorter) spool(ctx context.Context) {
 	// Fill up t.topK by spooling up to K rows from the input.
 	t.inputBatch = t.input.Next(ctx)
-	remainingRows := int(t.k)
+	remainingRows := t.k
 	for remainingRows > 0 && t.inputBatch.Length() > 0 {
 		fromLength := t.inputBatch.Length()
 		if remainingRows < t.inputBatch.Length() {
