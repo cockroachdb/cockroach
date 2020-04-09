@@ -259,6 +259,25 @@ func (b *stmtBundleBuilder) addTrace() tree.Datum {
 	}
 	// The JSON is not very human-readable, so we include another format too.
 	b.z.AddFile("trace.txt", b.trace.String())
+
+	cfg := tree.DefaultPrettyCfg()
+	cfg.UseTabs = false
+	cfg.LineWidth = 100
+	cfg.TabWidth = 2
+	cfg.Simplify = true
+	cfg.Align = tree.PrettyNoAlign
+	cfg.JSONFmt = true
+	stmt := cfg.Pretty(b.plan.stmt.AST)
+
+	// Note that we're going to include the non-anonymized statement in the trace.
+	// But then again, nothing in the trace is anonymized.
+	jaegerJSON, err := b.trace.ToJaegerJSON(stmt)
+	if err != nil {
+		b.z.AddFile("trace-jaegar.txt", err.Error())
+	} else {
+		b.z.AddFile("trace-jaegar.json", jaegerJSON)
+	}
+
 	return traceJSON
 }
 
