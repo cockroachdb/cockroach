@@ -446,62 +446,82 @@ func newHashRouterWithOutputs(
 // output calculated by hashing columns. Cancel the given context to terminate
 // early.
 func (r *HashRouter) Run(ctx context.Context) {
-	r.input.Init()
-	cancelOutputs := func(err error) {
-		if err != nil {
-			r.mu.Lock()
-			r.mu.bufferedMeta = append(r.mu.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
-			r.mu.Unlock()
-		}
-		for _, o := range r.outputs {
-			o.cancel(ctx)
-		}
+	bufferErr := func(err error) {
+		r.mu.Lock()
+		r.mu.bufferedMeta = append(r.mu.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
+		r.mu.Unlock()
 	}
-	var done bool
-	processNextBatch := func() {
-		done = r.processNextBatch(ctx)
-	}
-	for {
-		// Check for cancellation.
-		select {
-		case <-ctx.Done():
-			cancelOutputs(ctx.Err())
-			return
-		default:
-		}
-
-		// Read all the routerOutput state changes that have happened since the
-		// last iteration.
-		for moreToRead := true; moreToRead; {
-			select {
-			case <-r.unblockedEventsChan:
-				r.numBlockedOutputs--
-			default:
-				// No more routerOutput state changes to read without blocking.
-				moreToRead = false
+	// Since HashRouter runs in a separate goroutine, we want to be safe and
+	// make sure that we catch errors in all code paths, so we wrap the whole
+	// method with a catcher. Note that we also have "internal" catchers as
+	// well for more fine-grained control of error propagation.
+	if err := execerror.CatchVectorizedRuntimeError(func() {
+		r.input.Init()
+		// cancelOutputs buffers non-nil error as metadata, cancels all of the
+		// outputs additionally buffering any error if such occurs during the
+		// outputs' cancellation as metadata as well. Note that it attempts to
+		// cancel every output regardless of whether "previous" output's
+		// cancellation succeeds.
+		cancelOutputs := func(err error) {
+			if err != nil {
+				bufferErr(err)
+			}
+			for _, o := range r.outputs {
+				if err := execerror.CatchVectorizedRuntimeError(func() {
+					o.cancel(ctx)
+				}); err != nil {
+					bufferErr(err)
+				}
 			}
 		}
-
-		if r.numBlockedOutputs == len(r.outputs) {
-			// All outputs are blocked, wait until at least one output is unblocked.
+		var done bool
+		processNextBatch := func() {
+			done = r.processNextBatch(ctx)
+		}
+		for {
+			// Check for cancellation.
 			select {
-			case <-r.unblockedEventsChan:
-				r.numBlockedOutputs--
 			case <-ctx.Done():
 				cancelOutputs(ctx.Err())
 				return
+			default:
+			}
+
+			// Read all the routerOutput state changes that have happened since the
+			// last iteration.
+			for moreToRead := true; moreToRead; {
+				select {
+				case <-r.unblockedEventsChan:
+					r.numBlockedOutputs--
+				default:
+					// No more routerOutput state changes to read without blocking.
+					moreToRead = false
+				}
+			}
+
+			if r.numBlockedOutputs == len(r.outputs) {
+				// All outputs are blocked, wait until at least one output is unblocked.
+				select {
+				case <-r.unblockedEventsChan:
+					r.numBlockedOutputs--
+				case <-ctx.Done():
+					cancelOutputs(ctx.Err())
+					return
+				}
+			}
+
+			if err := execerror.CatchVectorizedRuntimeError(processNextBatch); err != nil {
+				cancelOutputs(err)
+				return
+			}
+			if done {
+				// The input was done and we have notified the routerOutputs that there
+				// is no more data.
+				return
 			}
 		}
-
-		if err := execerror.CatchVectorizedRuntimeError(processNextBatch); err != nil {
-			cancelOutputs(err)
-			return
-		}
-		if done {
-			// The input was done and we have notified the routerOutputs that there
-			// is no more data.
-			return
-		}
+	}); err != nil {
+		bufferErr(err)
 	}
 }
 
