@@ -673,7 +673,9 @@ func (s *vectorizedFlowCreator) setupRouter(
 	)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		logtags.AddTag(ctx, "hashRouterID", mmName)
-		router.Run(ctx)
+		if err := router.Run(ctx); err != nil {
+			log.VErrEventf(ctx, 2, "error while canceling hash router outputs: %+v", err)
+		}
 	}
 	s.accumulateAsyncComponent(runRouter)
 

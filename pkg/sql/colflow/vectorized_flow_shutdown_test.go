@@ -247,7 +247,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 
 				wg.Add(1)
 				go func() {
-					hashRouter.Run(ctxRemote)
+					require.NoError(t, hashRouter.Run(ctxRemote))
 					wg.Done()
 				}()
 				for i := 0; i < numInboxes; i++ {

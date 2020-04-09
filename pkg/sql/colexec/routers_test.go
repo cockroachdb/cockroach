@@ -629,7 +629,7 @@ func TestHashRouterCancellation(t *testing.T) {
 	t.Run("BeforeRun", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		r.Run(ctx)
+		require.NoError(t, r.Run(ctx))
 
 		if numCancels != int64(len(outputs)) {
 			t.Fatalf("expected %d canceled outputs, actual %d", len(outputs), numCancels)
@@ -674,7 +674,7 @@ func TestHashRouterCancellation(t *testing.T) {
 
 			routerMeta := make(chan []execinfrapb.ProducerMetadata)
 			go func() {
-				r.Run(ctx)
+				require.NoError(t, r.Run(ctx))
 				routerMeta <- r.DrainMeta(ctx)
 				close(routerMeta)
 			}()
@@ -747,7 +747,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 			var wg sync.WaitGroup
 			wg.Add(1)
 			go func() {
-				r.Run(ctx)
+				require.NoError(t, r.Run(ctx))
 				wg.Done()
 			}()
 
@@ -873,7 +873,7 @@ func TestHashRouterRandom(t *testing.T) {
 				ctx, cancelFunc := context.WithCancel(context.Background())
 				wg.Add(1)
 				go func() {
-					r.Run(ctx)
+					require.NoError(t, r.Run(ctx))
 					wg.Done()
 				}()
 
@@ -974,7 +974,7 @@ func BenchmarkHashRouter(b *testing.B) {
 							wg.Done()
 						}(j)
 					}
-					r.Run(ctx)
+					require.NoError(b, r.Run(ctx))
 					wg.Wait()
 					// sum sanity checks that we are actually pushing as many values as we
 					// expect.

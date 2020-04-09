@@ -444,18 +444,23 @@ func newHashRouterWithOutputs(
 
 // Run runs the HashRouter. Batches are read from the input and pushed to an
 // output calculated by hashing columns. Cancel the given context to terminate
-// early.
-func (r *HashRouter) Run(ctx context.Context) {
+// early. It returns any error that occurs during the outputs' cancellation.
+func (r *HashRouter) Run(ctx context.Context) error {
 	r.input.Init()
-	cancelOutputs := func(err error) {
+	// cancelOutputs buffers non-nil error as metadata, cancels all of the
+	// outputs and returns any error if such occurs during the outputs'
+	// cancellation.
+	cancelOutputs := func(err error) error {
 		if err != nil {
 			r.mu.Lock()
 			r.mu.bufferedMeta = append(r.mu.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
 			r.mu.Unlock()
 		}
-		for _, o := range r.outputs {
-			o.cancel(ctx)
-		}
+		return execerror.CatchVectorizedRuntimeError(func() {
+			for _, o := range r.outputs {
+				o.cancel(ctx)
+			}
+		})
 	}
 	var done bool
 	processNextBatch := func() {
@@ -465,8 +470,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 		// Check for cancellation.
 		select {
 		case <-ctx.Done():
-			cancelOutputs(ctx.Err())
-			return
+			return cancelOutputs(ctx.Err())
 		default:
 		}
 
@@ -488,19 +492,17 @@ func (r *HashRouter) Run(ctx context.Context) {
 			case <-r.unblockedEventsChan:
 				r.numBlockedOutputs--
 			case <-ctx.Done():
-				cancelOutputs(ctx.Err())
-				return
+				return cancelOutputs(ctx.Err())
 			}
 		}
 
 		if err := execerror.CatchVectorizedRuntimeError(processNextBatch); err != nil {
-			cancelOutputs(err)
-			return
+			return cancelOutputs(err)
 		}
 		if done {
 			// The input was done and we have notified the routerOutputs that there
 			// is no more data.
-			return
+			return nil
 		}
 	}
 }
