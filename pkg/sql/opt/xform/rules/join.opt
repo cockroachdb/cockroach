@@ -58,8 +58,8 @@
 # the LHS, we only commute a SemiJoin into an InnerJoin when the On conditions
 # are only composed of equalities.
 #
-# Note: We only consier the columns of the RHS that are used in the On conditions
-# (B* in the example above). And so we can be certain that
+# Note: We only consider the columns of the RHS that are used in the On
+# conditions (B* in the example above). And so we can be certain that
 # ((Distinct(RHS*) InnerJoin LHS) will have at most 1 matching row for each row
 # in the LHS if the On conditions are simple equalities.
 #
