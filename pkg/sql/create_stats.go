@@ -204,9 +204,10 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			columnIDs[i] = columns[i].ID
 		}
 		colStats = []jobspb.CreateStatsDetails_ColStat{{ColumnIDs: columnIDs, HasHistogram: false}}
-		if len(columnIDs) == 1 {
+		if len(columnIDs) == 1 && columns[0].Type.Family() != types.ArrayFamily {
 			// By default, create histograms on all explicitly requested column stats
-			// with a single column.
+			// with a single column. (We cannot create histograms on array columns
+			// because we do not support key encoding arrays.)
 			colStats[0].HasHistogram = true
 		}
 	}
