@@ -26,7 +26,8 @@ sudo apt-get install -y --no-install-recommends \
   git \
   nodejs \
   yarn \
-  bison
+  bison \
+  sqlite3
 
 sudo adduser "${USER}" docker
 
