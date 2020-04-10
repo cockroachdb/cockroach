@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1926,13 +1925,11 @@ func TestAsLockUpdates(t *testing.T) {
 	txn.Status = COMMITTED
 	txn.IgnoredSeqNums = []enginepb.IgnoredSeqNumRange{{Start: 0, End: 0}}
 
-	dur := lock.Unreplicated
 	spans := []Span{{Key: Key("a"), EndKey: Key("b")}}
-	for _, intent := range AsLockUpdates(&txn, spans, dur) {
+	for _, intent := range AsLockUpdates(&txn, spans) {
 		require.Equal(t, txn.Status, intent.Status)
 		require.Equal(t, txn.IgnoredSeqNums, intent.IgnoredSeqNums)
 		require.Equal(t, txn.TxnMeta, intent.Txn)
-		require.Equal(t, dur, intent.Durability)
 	}
 }
 

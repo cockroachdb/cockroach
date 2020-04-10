@@ -34,7 +34,7 @@ type LocalResult struct {
 	// resolve them is made.
 	EncounteredIntents []roachpb.Intent
 	// AcquiredLocks stores any newly acquired or re-acquired locks.
-	AcquiredLocks []roachpb.LockUpdate
+	AcquiredLocks []roachpb.LockAcquisition
 	// ResolvedLocks stores any resolved lock spans, either with finalized or
 	// pending statuses. Unlike AcquiredLocks and EncounteredIntents, values in
 	// this slice will represent spans of locks that were resolved.
