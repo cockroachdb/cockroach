@@ -1843,15 +1843,12 @@ func makeShardColumnDesc(colNames []string, buckets int) (*sqlbase.ColumnDescrip
 //    mod(fnv32(colNames[0]::STRING)+fnv32(colNames[1])+...,buckets)
 //
 func makeHashShardComputeExpr(colNames []string, buckets int) *string {
-	unresolvedName := func(name string) *tree.UnresolvedName {
-		return &tree.UnresolvedName{
-			NumParts: 1,
-			Parts:    tree.NameParts{name},
-		}
-	}
 	unresolvedFunc := func(funcName string) tree.ResolvableFunctionReference {
 		return tree.ResolvableFunctionReference{
-			FunctionReference: unresolvedName(funcName),
+			FunctionReference: &tree.UnresolvedName{
+				NumParts: 1,
+				Parts:    tree.NameParts{funcName},
+			},
 		}
 	}
 	hashedColumnExpr := func(colName string) tree.Expr {
@@ -1870,7 +1867,7 @@ func makeHashShardComputeExpr(colNames []string, buckets int) *string {
 					Exprs: tree.Exprs{
 						&tree.CastExpr{
 							Type: types.String,
-							Expr: unresolvedName(colName),
+							Expr: &tree.ColumnItem{ColumnName: tree.Name(colName)},
 						},
 						tree.NewDString(""),
 					},
@@ -1966,8 +1963,10 @@ func makeShardCheckConstraintDef(
 	return &tree.CheckConstraintTableDef{
 		Expr: &tree.ComparisonExpr{
 			Operator: tree.In,
-			Left:     &tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{shardCol.Name}},
-			Right:    values,
+			Left: &tree.ColumnItem{
+				ColumnName: tree.Name(shardCol.Name),
+			},
+			Right: values,
 		},
 		Hidden: true,
 	}, nil

@@ -2030,6 +2030,10 @@ func (desc *TableDescriptor) validateTableIndexes(columnNames map[string]ColumnI
 			if err := desc.ensureShardedIndexNotComputed(index); err != nil {
 				return err
 			}
+			if _, exists := columnNames[index.Sharded.Name]; !exists {
+				return fmt.Errorf("index %q refers to non-existent shard column %q",
+					index.Name, index.Sharded.Name)
+			}
 		}
 	}
 
@@ -3981,6 +3985,17 @@ func (desc *ImmutableTableDescriptor) DeleteOnlyIndexes() []IndexDescriptor {
 // TableDesc implements the ObjectDescriptor interface.
 func (desc *MutableTableDescriptor) TableDesc() *TableDescriptor {
 	return &desc.TableDescriptor
+}
+
+// IsShardColumn returns true if col corresponds to a non-dropped hash sharded
+// index. This method assumes that col is currently a member of desc.
+func (desc *MutableTableDescriptor) IsShardColumn(col *ColumnDescriptor) bool {
+	for _, idx := range desc.AllNonDropIndexes() {
+		if idx.Sharded.IsSharded && idx.Sharded.Name == col.Name {
+			return true
+		}
+	}
+	return false
 }
 
 // TableDesc implements the ObjectDescriptor interface.

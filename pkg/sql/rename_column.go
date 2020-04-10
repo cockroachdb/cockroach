@@ -60,7 +60,9 @@ func (n *renameColumnNode) startExec(params runParams) error {
 	ctx := params.ctx
 	tableDesc := n.tableDesc
 
-	descChanged, err := params.p.renameColumn(params.ctx, tableDesc, &n.n.Name, &n.n.NewName)
+	const allowRenameOfShardColumn = false
+	descChanged, err := params.p.renameColumn(params.ctx, tableDesc, &n.n.Name,
+		&n.n.NewName, allowRenameOfShardColumn)
 	if err != nil {
 		return err
 	}
@@ -77,9 +79,15 @@ func (n *renameColumnNode) startExec(params runParams) error {
 		ctx, tableDesc, sqlbase.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()))
 }
 
+// renameColumn will rename the column in tableDesc from oldName to newName.
+// If allowRenameOfShardColumn is false, this method will return an error if
+// the column being renamed is a generated column for a hash sharded index.
 func (p *planner) renameColumn(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, oldName, newName *tree.Name,
-) (bool, error) {
+	ctx context.Context,
+	tableDesc *sqlbase.MutableTableDescriptor,
+	oldName, newName *tree.Name,
+	allowRenameOfShardColumn bool,
+) (changed bool, err error) {
 	if *newName == "" {
 		return false, errEmptyColumnName
 	}
@@ -101,10 +109,13 @@ func (p *planner) renameColumn(
 				ctx, "column", oldName.String(), tableDesc.ParentID, tableRef.ID)
 		}
 	}
-
 	if *oldName == *newName {
 		// Noop.
 		return false, nil
+	}
+	isShardColumn := tableDesc.IsShardColumn(col)
+	if isShardColumn && !allowRenameOfShardColumn {
+		return false, pgerror.Newf(pgcode.ReservedName, "cannot rename shard column")
 	}
 
 	if _, _, err := tableDesc.FindColumnByName(*newName); err == nil {
@@ -153,17 +164,62 @@ func (p *planner) renameColumn(
 
 	// Rename the column in computed columns.
 	for i := range tableDesc.Columns {
-		if tableDesc.Columns[i].IsComputed() {
-			newExpr, err := renameIn(*tableDesc.Columns[i].ComputeExpr)
+		if otherCol := &tableDesc.Columns[i]; otherCol.IsComputed() {
+			newExpr, err := renameIn(*otherCol.ComputeExpr)
 			if err != nil {
 				return false, err
 			}
-			tableDesc.Columns[i].ComputeExpr = &newExpr
+			otherCol.ComputeExpr = &newExpr
 		}
+	}
+
+	// Rename the column in hash-sharded index descriptors. Potentially rename the
+	// shard column too if we haven't already done it.
+	shardColumnsToRename := make(map[tree.Name]tree.Name) // map[oldShardColName]newShardColName
+	maybeUpdateShardedDesc := func(shardedDesc *sqlbase.ShardedDescriptor) {
+		if !shardedDesc.IsSharded {
+			return
+		}
+		oldShardColName := tree.Name(sqlbase.GetShardColumnName(
+			shardedDesc.ColumnNames, shardedDesc.ShardBuckets))
+		var changed bool
+		for i, c := range shardedDesc.ColumnNames {
+			if c == string(*oldName) {
+				changed = true
+				shardedDesc.ColumnNames[i] = string(*newName)
+			}
+		}
+		if !changed {
+			return
+		}
+		newName, alreadyRenamed := shardColumnsToRename[oldShardColName]
+		if !alreadyRenamed {
+			newName = tree.Name(sqlbase.GetShardColumnName(
+				shardedDesc.ColumnNames, shardedDesc.ShardBuckets))
+			shardColumnsToRename[oldShardColName] = newName
+		}
+		// Keep the shardedDesc name in sync with the column name.
+		shardedDesc.Name = string(newName)
+	}
+	for _, idx := range tableDesc.AllNonDropIndexes() {
+		maybeUpdateShardedDesc(&idx.Sharded)
 	}
 
 	// Rename the column in the indexes.
 	tableDesc.RenameColumnDescriptor(col, string(*newName))
+
+	// Rename any shard columns which need to be renamed because their name was
+	// based on this column.
+	for oldShardColName, newShardColName := range shardColumnsToRename {
+		// Recursively call p.renameColumn. We don't need to worry about deeper than
+		// one recursive call because shard columns cannot refer to each other.
+		const allowRenameOfShardColumn = true
+		_, err = p.renameColumn(ctx, tableDesc, &oldShardColName, &newShardColName,
+			allowRenameOfShardColumn)
+		if err != nil {
+			return false, err
+		}
+	}
 
 	return true, nil
 }

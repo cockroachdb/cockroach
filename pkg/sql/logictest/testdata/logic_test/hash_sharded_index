@@ -477,3 +477,86 @@ INSERT INTO sharded_index_with_nulls VALUES (1, NULL);
 
 statement ok
 DROP TABLE sharded_index_with_nulls;
+
+# Test that renaming a column which is a member of a hash sharded index works.
+subtest rename_column
+
+statement ok
+CREATE TABLE rename_column (
+    c0 INT,
+    c1 INT,
+    c2 INT,
+    PRIMARY KEY (c0, c1) USING HASH WITH BUCKET_COUNT = 8,
+    INDEX (c2) USING HASH WITH BUCKET_COUNT = 8,
+    FAMILY "primary" (c0, c1, c2)
+);
+
+statement ok
+INSERT INTO rename_column VALUES (1, 2, 3);
+
+query TT
+SHOW CREATE TABLE rename_column
+----
+rename_column  CREATE TABLE rename_column (
+               c0 INT8 NOT NULL,
+               c1 INT8 NOT NULL,
+               c2 INT8 NULL,
+               CONSTRAINT "primary" PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH BUCKET_COUNT = 8,
+               INDEX rename_column_crdb_internal_c2_shard_8_c2_idx (c2 ASC) USING HASH WITH BUCKET_COUNT = 8,
+               FAMILY "primary" (c0, c1, c2, crdb_internal_c0_c1_shard_8, crdb_internal_c2_shard_8)
+)
+
+statement ok
+ALTER TABLE rename_column RENAME c2 TO c3;
+
+# Test mucking with primary key columns.
+statement ok
+ALTER TABLE rename_column RENAME c1 TO c2;
+
+statement ok
+ALTER TABLE rename_column RENAME c0 TO c1;
+
+query TT
+SHOW CREATE TABLE rename_column
+----
+rename_column  CREATE TABLE rename_column (
+               c1 INT8 NOT NULL,
+               c2 INT8 NOT NULL,
+               c3 INT8 NULL,
+               CONSTRAINT "primary" PRIMARY KEY (c1 ASC, c2 ASC) USING HASH WITH BUCKET_COUNT = 8,
+               INDEX rename_column_crdb_internal_c2_shard_8_c2_idx (c3 ASC) USING HASH WITH BUCKET_COUNT = 8,
+               FAMILY "primary" (c1, c2, c3, crdb_internal_c1_c2_shard_8, crdb_internal_c3_shard_8)
+)
+
+query III
+SELECT c3, c2, c1 FROM rename_column
+----
+3 2 1
+
+# Test both at the same time.
+statement ok
+ALTER TABLE rename_column RENAME c1 TO c0, RENAME c2 TO c1, RENAME c3 TO c2;
+
+query TT
+SHOW CREATE TABLE rename_column
+----
+rename_column  CREATE TABLE rename_column (
+               c0 INT8 NOT NULL,
+               c1 INT8 NOT NULL,
+               c2 INT8 NULL,
+               CONSTRAINT "primary" PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH BUCKET_COUNT = 8,
+               INDEX rename_column_crdb_internal_c2_shard_8_c2_idx (c2 ASC) USING HASH WITH BUCKET_COUNT = 8,
+               FAMILY "primary" (c0, c1, c2, crdb_internal_c0_c1_shard_8, crdb_internal_c2_shard_8)
+)
+
+query III
+SELECT c2, c1, c0 FROM rename_column
+----
+3 2 1
+
+# Ensure that renaming a shard column fails.
+statement error cannot rename shard column
+ALTER TABLE rename_column RENAME crdb_internal_c2_shard_8 TO foo;
+
+statement ok
+DROP TABLE rename_column;

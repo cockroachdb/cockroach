@@ -729,7 +729,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableRenameColumn:
-			descChanged, err := params.p.renameColumn(params.ctx, n.tableDesc, &t.Column, &t.NewName)
+			const allowRenameOfShardColumn = false
+			descChanged, err := params.p.renameColumn(params.ctx, n.tableDesc,
+				&t.Column, &t.NewName, allowRenameOfShardColumn)
 			if err != nil {
 				return err
 			}
