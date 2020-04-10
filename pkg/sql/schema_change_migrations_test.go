@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -423,18 +422,9 @@ func migrateGCJobToOldFormat(
 		return nil
 
 	case DropIndex:
-		// Since we write the GC job in a separate transaction from finalizing the
-		// mutations on the table descriptor, there's a chance that we might see the
-		// table descriptor before it's even been updated with the new GCMutations.
-		// This seems like a potential problem. For now, we'll just hackily retry
-		// until the new descriptor appears.
-		// TODO (lucy): Update this after we fix GC job creation.
-		var tableDesc *sql.TableDescriptor
-		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-			tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
-			if l := len(tableDesc.GCMutations); l == 1 {
-				break
-			}
+		tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+		if l := len(tableDesc.GCMutations); l != 1 {
+			return errors.AssertionFailedf("expected exactly 1 GCMutation, found %d", l)
 		}
 
 		// Update the table descriptor.
