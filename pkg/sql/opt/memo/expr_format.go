@@ -496,6 +496,15 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
 
+	case *WithExpr:
+		if t.Mtr.Set {
+			if t.Mtr.Materialize {
+				tp.Child("materialized")
+			} else {
+				tp.Child("not-materialized")
+			}
+		}
+
 	case *WithScanExpr:
 		if !f.HasFlags(ExprFmtHideColumns) {
 			child := tp.Child("mapping:")

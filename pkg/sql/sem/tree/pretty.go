@@ -621,9 +621,16 @@ func (node *With) docRow(p *PrettyCfg) pretty.TableRow {
 	}
 	d := make([]pretty.Doc, len(node.CTEList))
 	for i, cte := range node.CTEList {
+		asString := "AS"
+		if cte.Mtr.Set {
+			if !cte.Mtr.Materialize {
+				asString += " NOT"
+			}
+			asString += " MATERIALIZED"
+		}
 		d[i] = p.nestUnder(
 			p.Doc(&cte.Name),
-			p.bracketKeyword("AS", " (", p.Doc(cte.Stmt), ")", ""),
+			p.bracketKeyword(asString, " (", p.Doc(cte.Stmt), ")", ""),
 		)
 	}
 	kw := "WITH"
