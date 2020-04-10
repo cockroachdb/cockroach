@@ -43,7 +43,7 @@ union                    ·            ·
  │                       size         1 column, 1 row
  └── render              ·            ·
       └── virtual table  ·            ·
-·                        source       ·
+·                        source       node_build_info@primary
 
 statement ok
 CREATE TABLE abc (a INT, b INT, c INT)

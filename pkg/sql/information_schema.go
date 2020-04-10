@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -29,8 +30,7 @@ import (
 )
 
 const (
-	informationSchemaName = "information_schema"
-	pgCatalogName         = sessiondata.PgCatalogName
+	pgCatalogName = sessiondata.PgCatalogName
 )
 
 var pgCatalogNameDString = tree.NewDString(pgCatalogName)
@@ -38,7 +38,7 @@ var pgCatalogNameDString = tree.NewDString(pgCatalogName)
 // informationSchema lists all the table definitions for
 // information_schema.
 var informationSchema = virtualSchema{
-	name: informationSchemaName,
+	name: sessiondata.InformationSchemaName,
 	allTableNames: buildStringSet(
 		// Generated with:
 		// select distinct '"'||table_name||'",' from information_schema.tables
@@ -316,7 +316,7 @@ https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 				// uses the format <namespace_oid>_<table_oid>_<col_idx>_not_null.
 				// We might as well do the same.
 				conNameStr := tree.NewDString(fmt.Sprintf(
-					"%s_%s_%d_not_null", h.NamespaceOid(db, scName), defaultOid(table.ID), colNum,
+					"%s_%s_%d_not_null", h.NamespaceOid(db, scName), tableOid(table.ID), colNum,
 				))
 				chkExprStr := tree.NewDString(fmt.Sprintf(
 					"%s IS NOT NULL", column.Name,
@@ -1237,7 +1237,7 @@ CREATE TABLE information_schema.table_constraints (
 					colNum++
 					// NOT NULL column constraints are implemented as a CHECK in postgres.
 					conNameStr := tree.NewDString(fmt.Sprintf(
-						"%s_%s_%d_not_null", h.NamespaceOid(db, scName), defaultOid(table.ID), colNum,
+						"%s_%s_%d_not_null", h.NamespaceOid(db, scName), tableOid(table.ID), colNum,
 					))
 					if !col.Nullable {
 						if err := addRow(
@@ -1356,35 +1356,60 @@ var informationSchemaTablesTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 	schema: vtable.InformationSchemaTables,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, dbContext, virtualMany,
-			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
-				if table.IsSequence() {
-					return nil
-				}
-				tableType := tableTypeBaseTable
-				insertable := yesString
-				if table.IsVirtualTable() {
-					tableType = tableTypeSystemView
-					insertable = noString
-				} else if table.IsView() {
-					tableType = tableTypeView
-					insertable = noString
-				} else if table.Temporary {
-					tableType = tableTypeTemporary
-				}
-				dbNameStr := tree.NewDString(db.Name)
-				scNameStr := tree.NewDString(scName)
-				tbNameStr := tree.NewDString(table.Name)
-				return addRow(
-					dbNameStr,                              // table_catalog
-					scNameStr,                              // table_schema
-					tbNameStr,                              // table_name
-					tableType,                              // table_type
-					insertable,                             // is_insertable_into
-					tree.NewDInt(tree.DInt(table.Version)), // version
-				)
-			})
+		return forEachTableDesc(ctx, p, dbContext, virtualMany, addTablesTableRow(addRow))
 	},
+	indexes: []virtualIndex{
+		{
+			populate: func(ctx context.Context, constraint tree.Datum, p *planner, db *DatabaseDescriptor,
+				addRow func(...tree.Datum) error) (bool, error) {
+				// This index is on the TABLE_NAME column.
+				name := tree.MustBeDString(constraint)
+				desc, err := ResolveExistingObject(ctx, p, tree.NewUnqualifiedTableName(tree.Name(name)),
+					tree.ObjectLookupFlags{}, ResolveAnyDescType)
+				if err != nil || desc == nil {
+					return false, err
+				}
+				schemaName, err := schema.ResolveNameByID(ctx, p.txn, db.ID, desc.GetParentSchemaID())
+				if err != nil {
+					return false, err
+				}
+				return true, addTablesTableRow(addRow)(db, schemaName, desc.TableDesc())
+			},
+		},
+	},
+}
+
+func addTablesTableRow(
+	addRow func(...tree.Datum) error,
+) func(db *sqlbase.DatabaseDescriptor, scName string,
+	table *sqlbase.TableDescriptor) error {
+	return func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+		if table.IsSequence() {
+			return nil
+		}
+		tableType := tableTypeBaseTable
+		insertable := yesString
+		if table.IsVirtualTable() {
+			tableType = tableTypeSystemView
+			insertable = noString
+		} else if table.IsView() {
+			tableType = tableTypeView
+			insertable = noString
+		} else if table.Temporary {
+			tableType = tableTypeTemporary
+		}
+		dbNameStr := tree.NewDString(db.Name)
+		scNameStr := tree.NewDString(scName)
+		tbNameStr := tree.NewDString(table.Name)
+		return addRow(
+			dbNameStr,                              // table_catalog
+			scNameStr,                              // table_schema
+			tbNameStr,                              // table_name
+			tableType,                              // table_type
+			insertable,                             // is_insertable_into
+			tree.NewDInt(tree.DInt(table.Version)), // version
+		)
+	}
 }
 
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-views.html
