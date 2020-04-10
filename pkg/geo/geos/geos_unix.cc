@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// +build !windows
+
 #include <cstdarg>
 #include <cstring>
 #include <dlfcn.h>
