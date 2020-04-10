@@ -8,9 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package geos is a wrapper around the spatial data types in the geo package
-// and the GEOS C library. The GEOS library is dynamically loaded at init time.
-// Operations will error if the GEOS library was not found.
+// +build !windows
+
 package geos
 
 import (
