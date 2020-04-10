@@ -120,6 +120,11 @@ class IntentDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<Intent>
       _instance;
 } _Intent_default_instance_;
+class LockAcquisitionDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<LockAcquisition>
+      _instance;
+} _LockAcquisition_default_instance_;
 class LockUpdateDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<LockUpdate>
@@ -392,6 +397,22 @@ static void InitDefaultsIntent() {
       &protobuf_roachpb_2fdata_2eproto::scc_info_Intent_SingleKeySpan.base,
       &protobuf_storage_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,}};
 
+static void InitDefaultsLockAcquisition() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_LockAcquisition_default_instance_;
+    new (ptr) ::cockroach::roachpb::LockAcquisition();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::roachpb::LockAcquisition::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<2> scc_info_LockAcquisition =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsLockAcquisition}, {
+      &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,
+      &protobuf_storage_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,}};
+
 static void InitDefaultsLockUpdate() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -502,6 +523,7 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_TransactionRecord.base);
   ::google::protobuf::internal::InitSCC(&scc_info_Intent_SingleKeySpan.base);
   ::google::protobuf::internal::InitSCC(&scc_info_Intent.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_LockAcquisition.base);
   ::google::protobuf::internal::InitSCC(&scc_info_LockUpdate.base);
   ::google::protobuf::internal::InitSCC(&scc_info_SequencedWrite.base);
   ::google::protobuf::internal::InitSCC(&scc_info_Lease.base);
@@ -4926,6 +4948,274 @@ void Intent::InternalSwap(Intent* other) {
 
 // ===================================================================
 
+void LockAcquisition::InitAsDefaultInstance() {
+  ::cockroach::roachpb::_LockAcquisition_default_instance_._instance.get_mutable()->span_ = const_cast< ::cockroach::roachpb::Span*>(
+      ::cockroach::roachpb::Span::internal_default_instance());
+  ::cockroach::roachpb::_LockAcquisition_default_instance_._instance.get_mutable()->txn_ = const_cast< ::cockroach::storage::enginepb::TxnMeta*>(
+      ::cockroach::storage::enginepb::TxnMeta::internal_default_instance());
+}
+void LockAcquisition::clear_txn() {
+  if (GetArenaNoVirtual() == NULL && txn_ != NULL) {
+    delete txn_;
+  }
+  txn_ = NULL;
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int LockAcquisition::kSpanFieldNumber;
+const int LockAcquisition::kTxnFieldNumber;
+const int LockAcquisition::kDurabilityFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+LockAcquisition::LockAcquisition()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_roachpb_2fdata_2eproto::scc_info_LockAcquisition.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.LockAcquisition)
+}
+LockAcquisition::LockAcquisition(const LockAcquisition& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  if (from.has_span()) {
+    span_ = new ::cockroach::roachpb::Span(*from.span_);
+  } else {
+    span_ = NULL;
+  }
+  if (from.has_txn()) {
+    txn_ = new ::cockroach::storage::enginepb::TxnMeta(*from.txn_);
+  } else {
+    txn_ = NULL;
+  }
+  durability_ = from.durability_;
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.LockAcquisition)
+}
+
+void LockAcquisition::SharedCtor() {
+  ::memset(&span_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&durability_) -
+      reinterpret_cast<char*>(&span_)) + sizeof(durability_));
+}
+
+LockAcquisition::~LockAcquisition() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.LockAcquisition)
+  SharedDtor();
+}
+
+void LockAcquisition::SharedDtor() {
+  if (this != internal_default_instance()) delete span_;
+  if (this != internal_default_instance()) delete txn_;
+}
+
+void LockAcquisition::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const LockAcquisition& LockAcquisition::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fdata_2eproto::scc_info_LockAcquisition.base);
+  return *internal_default_instance();
+}
+
+
+void LockAcquisition::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.LockAcquisition)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  if (GetArenaNoVirtual() == NULL && span_ != NULL) {
+    delete span_;
+  }
+  span_ = NULL;
+  if (GetArenaNoVirtual() == NULL && txn_ != NULL) {
+    delete txn_;
+  }
+  txn_ = NULL;
+  durability_ = 0;
+  _internal_metadata_.Clear();
+}
+
+bool LockAcquisition::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.LockAcquisition)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_span()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_txn()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // .cockroach.kv.kvserver.concurrency.lock.Durability durability = 3;
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(24u /* 24 & 0xFF */)) {
+          int value;
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
+                 input, &value)));
+          set_durability(static_cast< ::cockroach::kv::kvserver::concurrency::lock::Durability >(value));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.LockAcquisition)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.LockAcquisition)
+  return false;
+#undef DO_
+}
+
+void LockAcquisition::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.LockAcquisition)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (this->has_span()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      1, this->_internal_span(), output);
+  }
+
+  if (this->has_txn()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      2, this->_internal_txn(), output);
+  }
+
+  // .cockroach.kv.kvserver.concurrency.lock.Durability durability = 3;
+  if (this->durability() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteEnum(
+      3, this->durability(), output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.LockAcquisition)
+}
+
+size_t LockAcquisition::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.LockAcquisition)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  if (this->has_span()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *span_);
+  }
+
+  if (this->has_txn()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *txn_);
+  }
+
+  // .cockroach.kv.kvserver.concurrency.lock.Durability durability = 3;
+  if (this->durability() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::EnumSize(this->durability());
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void LockAcquisition::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const LockAcquisition*>(&from));
+}
+
+void LockAcquisition::MergeFrom(const LockAcquisition& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.LockAcquisition)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.has_span()) {
+    mutable_span()->::cockroach::roachpb::Span::MergeFrom(from.span());
+  }
+  if (from.has_txn()) {
+    mutable_txn()->::cockroach::storage::enginepb::TxnMeta::MergeFrom(from.txn());
+  }
+  if (from.durability() != 0) {
+    set_durability(from.durability());
+  }
+}
+
+void LockAcquisition::CopyFrom(const LockAcquisition& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.LockAcquisition)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool LockAcquisition::IsInitialized() const {
+  return true;
+}
+
+void LockAcquisition::Swap(LockAcquisition* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void LockAcquisition::InternalSwap(LockAcquisition* other) {
+  using std::swap;
+  swap(span_, other->span_);
+  swap(txn_, other->txn_);
+  swap(durability_, other->durability_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string LockAcquisition::GetTypeName() const {
+  return "cockroach.roachpb.LockAcquisition";
+}
+
+
+// ===================================================================
+
 void LockUpdate::InitAsDefaultInstance() {
   ::cockroach::roachpb::_LockUpdate_default_instance_._instance.get_mutable()->span_ = const_cast< ::cockroach::roachpb::Span*>(
       ::cockroach::roachpb::Span::internal_default_instance());
@@ -4946,7 +5236,6 @@ const int LockUpdate::kSpanFieldNumber;
 const int LockUpdate::kTxnFieldNumber;
 const int LockUpdate::kStatusFieldNumber;
 const int LockUpdate::kIgnoredSeqnumsFieldNumber;
-const int LockUpdate::kDurabilityFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 LockUpdate::LockUpdate()
@@ -4971,16 +5260,14 @@ LockUpdate::LockUpdate(const LockUpdate& from)
   } else {
     txn_ = NULL;
   }
-  ::memcpy(&status_, &from.status_,
-    static_cast<size_t>(reinterpret_cast<char*>(&durability_) -
-    reinterpret_cast<char*>(&status_)) + sizeof(durability_));
+  status_ = from.status_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.LockUpdate)
 }
 
 void LockUpdate::SharedCtor() {
   ::memset(&span_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&durability_) -
-      reinterpret_cast<char*>(&span_)) + sizeof(durability_));
+      reinterpret_cast<char*>(&status_) -
+      reinterpret_cast<char*>(&span_)) + sizeof(status_));
 }
 
 LockUpdate::~LockUpdate() {
@@ -5017,9 +5304,7 @@ void LockUpdate::Clear() {
     delete txn_;
   }
   txn_ = NULL;
-  ::memset(&status_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&durability_) -
-      reinterpret_cast<char*>(&status_)) + sizeof(durability_));
+  status_ = 0;
   _internal_metadata_.Clear();
 }
 
@@ -5087,21 +5372,6 @@ bool LockUpdate::MergePartialFromCodedStream(
         break;
       }
 
-      // .cockroach.kv.kvserver.concurrency.lock.Durability durability = 5;
-      case 5: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(40u /* 40 & 0xFF */)) {
-          int value;
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
-                 input, &value)));
-          set_durability(static_cast< ::cockroach::kv::kvserver::concurrency::lock::Durability >(value));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -5152,12 +5422,6 @@ void LockUpdate::SerializeWithCachedSizes(
       output);
   }
 
-  // .cockroach.kv.kvserver.concurrency.lock.Durability durability = 5;
-  if (this->durability() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteEnum(
-      5, this->durability(), output);
-  }
-
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.LockUpdate)
@@ -5197,12 +5461,6 @@ size_t LockUpdate::ByteSizeLong() const {
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->status());
   }
 
-  // .cockroach.kv.kvserver.concurrency.lock.Durability durability = 5;
-  if (this->durability() != 0) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::EnumSize(this->durability());
-  }
-
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -5230,9 +5488,6 @@ void LockUpdate::MergeFrom(const LockUpdate& from) {
   if (from.status() != 0) {
     set_status(from.status());
   }
-  if (from.durability() != 0) {
-    set_durability(from.durability());
-  }
 }
 
 void LockUpdate::CopyFrom(const LockUpdate& from) {
@@ -5256,7 +5511,6 @@ void LockUpdate::InternalSwap(LockUpdate* other) {
   swap(span_, other->span_);
   swap(txn_, other->txn_);
   swap(status_, other->status_);
-  swap(durability_, other->durability_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
@@ -6833,6 +7087,9 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::Intent_Singl
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::Intent* Arena::CreateMaybeMessage< ::cockroach::roachpb::Intent >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::Intent >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::LockAcquisition* Arena::CreateMaybeMessage< ::cockroach::roachpb::LockAcquisition >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::LockAcquisition >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::LockUpdate* Arena::CreateMaybeMessage< ::cockroach::roachpb::LockUpdate >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::LockUpdate >(arena);

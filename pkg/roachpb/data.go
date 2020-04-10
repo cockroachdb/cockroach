@@ -1875,27 +1875,25 @@ func AsIntents(txn *enginepb.TxnMeta, keys []Key) []Intent {
 	return ret
 }
 
-// MakeLockUpdate makes a lock update from the given span and txn.
-// The function assumes that the lock has a replicated durability.
+// MakeLockAcquisition makes a lock acquisition message from the given
+// txn, key, and durability level.
+func MakeLockAcquisition(txn *Transaction, key Key, dur lock.Durability) LockAcquisition {
+	return LockAcquisition{Span: Span{Key: key}, Txn: txn.TxnMeta, Durability: dur}
+}
+
+// MakeLockUpdate makes a lock update from the given txn and span.
 func MakeLockUpdate(txn *Transaction, span Span) LockUpdate {
-	return MakeLockUpdateWithDur(txn, span, lock.Replicated)
+	u := LockUpdate{Span: span}
+	u.SetTxn(txn)
+	return u
 }
 
-// MakeLockUpdateWithDur makes a lock update from the given span,
-// txn, and lock durability.
-func MakeLockUpdateWithDur(txn *Transaction, span Span, dur lock.Durability) LockUpdate {
-	update := LockUpdate{Span: span}
-	update.SetTxn(txn)
-	update.Durability = dur
-	return update
-}
-
-// AsLockUpdates takes a slice of spans and returns it as a slice
-// of lock updates for the given transaction and lock durability.
-func AsLockUpdates(txn *Transaction, spans []Span, dur lock.Durability) []LockUpdate {
+// AsLockUpdates takes a slice of spans and returns it as a slice of
+// lock updates.
+func AsLockUpdates(txn *Transaction, spans []Span) []LockUpdate {
 	ret := make([]LockUpdate, len(spans))
 	for i := range spans {
-		ret[i] = MakeLockUpdateWithDur(txn, spans[i], dur)
+		ret[i] = MakeLockUpdate(txn, spans[i])
 	}
 	return ret
 }

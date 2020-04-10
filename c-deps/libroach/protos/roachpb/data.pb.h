@@ -43,7 +43,7 @@ namespace protobuf_roachpb_2fdata_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[21];
+  static const ::google::protobuf::internal::ParseTable schema[22];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -78,6 +78,9 @@ extern LeafTxnInputStateDefaultTypeInternal _LeafTxnInputState_default_instance_
 class Lease;
 class LeaseDefaultTypeInternal;
 extern LeaseDefaultTypeInternal _Lease_default_instance_;
+class LockAcquisition;
+class LockAcquisitionDefaultTypeInternal;
+extern LockAcquisitionDefaultTypeInternal _LockAcquisition_default_instance_;
 class LockUpdate;
 class LockUpdateDefaultTypeInternal;
 extern LockUpdateDefaultTypeInternal _LockUpdate_default_instance_;
@@ -127,6 +130,7 @@ template<> ::cockroach::roachpb::KeyValue* Arena::CreateMaybeMessage<::cockroach
 template<> ::cockroach::roachpb::LeafTxnFinalState* Arena::CreateMaybeMessage<::cockroach::roachpb::LeafTxnFinalState>(Arena*);
 template<> ::cockroach::roachpb::LeafTxnInputState* Arena::CreateMaybeMessage<::cockroach::roachpb::LeafTxnInputState>(Arena*);
 template<> ::cockroach::roachpb::Lease* Arena::CreateMaybeMessage<::cockroach::roachpb::Lease>(Arena*);
+template<> ::cockroach::roachpb::LockAcquisition* Arena::CreateMaybeMessage<::cockroach::roachpb::LockAcquisition>(Arena*);
 template<> ::cockroach::roachpb::LockUpdate* Arena::CreateMaybeMessage<::cockroach::roachpb::LockUpdate>(Arena*);
 template<> ::cockroach::roachpb::MergeTrigger* Arena::CreateMaybeMessage<::cockroach::roachpb::MergeTrigger>(Arena*);
 template<> ::cockroach::roachpb::ModifiedSpanTrigger* Arena::CreateMaybeMessage<::cockroach::roachpb::ModifiedSpanTrigger>(Arena*);
@@ -2222,6 +2226,131 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
 };
 // -------------------------------------------------------------------
 
+class LockAcquisition : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.LockAcquisition) */ {
+ public:
+  LockAcquisition();
+  virtual ~LockAcquisition();
+
+  LockAcquisition(const LockAcquisition& from);
+
+  inline LockAcquisition& operator=(const LockAcquisition& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  LockAcquisition(LockAcquisition&& from) noexcept
+    : LockAcquisition() {
+    *this = ::std::move(from);
+  }
+
+  inline LockAcquisition& operator=(LockAcquisition&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const LockAcquisition& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const LockAcquisition* internal_default_instance() {
+    return reinterpret_cast<const LockAcquisition*>(
+               &_LockAcquisition_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    15;
+
+  void Swap(LockAcquisition* other);
+  friend void swap(LockAcquisition& a, LockAcquisition& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline LockAcquisition* New() const final {
+    return CreateMaybeMessage<LockAcquisition>(NULL);
+  }
+
+  LockAcquisition* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<LockAcquisition>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const LockAcquisition& from);
+  void MergeFrom(const LockAcquisition& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(LockAcquisition* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  bool has_span() const;
+  void clear_span();
+  static const int kSpanFieldNumber = 1;
+  private:
+  const ::cockroach::roachpb::Span& _internal_span() const;
+  public:
+  const ::cockroach::roachpb::Span& span() const;
+  ::cockroach::roachpb::Span* release_span();
+  ::cockroach::roachpb::Span* mutable_span();
+  void set_allocated_span(::cockroach::roachpb::Span* span);
+
+  bool has_txn() const;
+  void clear_txn();
+  static const int kTxnFieldNumber = 2;
+  private:
+  const ::cockroach::storage::enginepb::TxnMeta& _internal_txn() const;
+  public:
+  const ::cockroach::storage::enginepb::TxnMeta& txn() const;
+  ::cockroach::storage::enginepb::TxnMeta* release_txn();
+  ::cockroach::storage::enginepb::TxnMeta* mutable_txn();
+  void set_allocated_txn(::cockroach::storage::enginepb::TxnMeta* txn);
+
+  // .cockroach.kv.kvserver.concurrency.lock.Durability durability = 3;
+  void clear_durability();
+  static const int kDurabilityFieldNumber = 3;
+  ::cockroach::kv::kvserver::concurrency::lock::Durability durability() const;
+  void set_durability(::cockroach::kv::kvserver::concurrency::lock::Durability value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.LockAcquisition)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::cockroach::roachpb::Span* span_;
+  ::cockroach::storage::enginepb::TxnMeta* txn_;
+  int durability_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
 class LockUpdate : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.LockUpdate) */ {
  public:
   LockUpdate();
@@ -2256,7 +2385,7 @@ class LockUpdate : public ::google::protobuf::MessageLite /* @@protoc_insertion_
                &_LockUpdate_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    15;
+    16;
 
   void Swap(LockUpdate* other);
   friend void swap(LockUpdate& a, LockUpdate& b) {
@@ -2346,12 +2475,6 @@ class LockUpdate : public ::google::protobuf::MessageLite /* @@protoc_insertion_
   ::cockroach::roachpb::TransactionStatus status() const;
   void set_status(::cockroach::roachpb::TransactionStatus value);
 
-  // .cockroach.kv.kvserver.concurrency.lock.Durability durability = 5;
-  void clear_durability();
-  static const int kDurabilityFieldNumber = 5;
-  ::cockroach::kv::kvserver::concurrency::lock::Durability durability() const;
-  void set_durability(::cockroach::kv::kvserver::concurrency::lock::Durability value);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.LockUpdate)
  private:
 
@@ -2360,7 +2483,6 @@ class LockUpdate : public ::google::protobuf::MessageLite /* @@protoc_insertion_
   ::cockroach::roachpb::Span* span_;
   ::cockroach::storage::enginepb::TxnMeta* txn_;
   int status_;
-  int durability_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
 };
@@ -2400,7 +2522,7 @@ class SequencedWrite : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_SequencedWrite_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    16;
+    17;
 
   void Swap(SequencedWrite* other);
   friend void swap(SequencedWrite& a, SequencedWrite& b) {
@@ -2514,7 +2636,7 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
                &_Lease_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    17;
+    18;
 
   void Swap(Lease* other);
   friend void swap(Lease& a, Lease& b) {
@@ -2681,7 +2803,7 @@ class AbortSpanEntry : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_AbortSpanEntry_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    18;
+    19;
 
   void Swap(AbortSpanEntry* other);
   friend void swap(AbortSpanEntry& a, AbortSpanEntry& b) {
@@ -2807,7 +2929,7 @@ class LeafTxnInputState : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_LeafTxnInputState_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    19;
+    20;
 
   void Swap(LeafTxnInputState* other);
   friend void swap(LeafTxnInputState& a, LeafTxnInputState& b) {
@@ -2945,7 +3067,7 @@ class LeafTxnFinalState : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_LeafTxnFinalState_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    20;
+    21;
 
   void Swap(LeafTxnFinalState* other);
   friend void swap(LeafTxnFinalState& a, LeafTxnFinalState& b) {
@@ -5211,6 +5333,124 @@ inline void Intent::set_allocated_txn(::cockroach::storage::enginepb::TxnMeta* t
 
 // -------------------------------------------------------------------
 
+// LockAcquisition
+
+inline bool LockAcquisition::has_span() const {
+  return this != internal_default_instance() && span_ != NULL;
+}
+inline void LockAcquisition::clear_span() {
+  if (GetArenaNoVirtual() == NULL && span_ != NULL) {
+    delete span_;
+  }
+  span_ = NULL;
+}
+inline const ::cockroach::roachpb::Span& LockAcquisition::_internal_span() const {
+  return *span_;
+}
+inline const ::cockroach::roachpb::Span& LockAcquisition::span() const {
+  const ::cockroach::roachpb::Span* p = span_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LockAcquisition.span)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::Span*>(
+      &::cockroach::roachpb::_Span_default_instance_);
+}
+inline ::cockroach::roachpb::Span* LockAcquisition::release_span() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.LockAcquisition.span)
+  
+  ::cockroach::roachpb::Span* temp = span_;
+  span_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::Span* LockAcquisition::mutable_span() {
+  
+  if (span_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::Span>(GetArenaNoVirtual());
+    span_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LockAcquisition.span)
+  return span_;
+}
+inline void LockAcquisition::set_allocated_span(::cockroach::roachpb::Span* span) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete span_;
+  }
+  if (span) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      span = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, span, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  span_ = span;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LockAcquisition.span)
+}
+
+inline bool LockAcquisition::has_txn() const {
+  return this != internal_default_instance() && txn_ != NULL;
+}
+inline const ::cockroach::storage::enginepb::TxnMeta& LockAcquisition::_internal_txn() const {
+  return *txn_;
+}
+inline const ::cockroach::storage::enginepb::TxnMeta& LockAcquisition::txn() const {
+  const ::cockroach::storage::enginepb::TxnMeta* p = txn_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LockAcquisition.txn)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::enginepb::TxnMeta*>(
+      &::cockroach::storage::enginepb::_TxnMeta_default_instance_);
+}
+inline ::cockroach::storage::enginepb::TxnMeta* LockAcquisition::release_txn() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.LockAcquisition.txn)
+  
+  ::cockroach::storage::enginepb::TxnMeta* temp = txn_;
+  txn_ = NULL;
+  return temp;
+}
+inline ::cockroach::storage::enginepb::TxnMeta* LockAcquisition::mutable_txn() {
+  
+  if (txn_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::storage::enginepb::TxnMeta>(GetArenaNoVirtual());
+    txn_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.LockAcquisition.txn)
+  return txn_;
+}
+inline void LockAcquisition::set_allocated_txn(::cockroach::storage::enginepb::TxnMeta* txn) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(txn_);
+  }
+  if (txn) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      txn = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, txn, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  txn_ = txn;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.LockAcquisition.txn)
+}
+
+// .cockroach.kv.kvserver.concurrency.lock.Durability durability = 3;
+inline void LockAcquisition::clear_durability() {
+  durability_ = 0;
+}
+inline ::cockroach::kv::kvserver::concurrency::lock::Durability LockAcquisition::durability() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.LockAcquisition.durability)
+  return static_cast< ::cockroach::kv::kvserver::concurrency::lock::Durability >(durability_);
+}
+inline void LockAcquisition::set_durability(::cockroach::kv::kvserver::concurrency::lock::Durability value) {
+  
+  durability_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.LockAcquisition.durability)
+}
+
+// -------------------------------------------------------------------
+
 // LockUpdate
 
 inline bool LockUpdate::has_span() const {
@@ -5351,20 +5591,6 @@ inline const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::enginep
 LockUpdate::ignored_seqnums() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.LockUpdate.ignored_seqnums)
   return ignored_seqnums_;
-}
-
-// .cockroach.kv.kvserver.concurrency.lock.Durability durability = 5;
-inline void LockUpdate::clear_durability() {
-  durability_ = 0;
-}
-inline ::cockroach::kv::kvserver::concurrency::lock::Durability LockUpdate::durability() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.LockUpdate.durability)
-  return static_cast< ::cockroach::kv::kvserver::concurrency::lock::Durability >(durability_);
-}
-inline void LockUpdate::set_durability(::cockroach::kv::kvserver::concurrency::lock::Durability value) {
-  
-  durability_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.LockUpdate.durability)
 }
 
 // -------------------------------------------------------------------
@@ -6062,6 +6288,8 @@ inline void LeafTxnFinalState::set_refresh_invalid(bool value) {
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
