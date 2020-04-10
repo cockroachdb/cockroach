@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -42,9 +43,9 @@ import (
 //
 //  - feature-whitelist
 //
-//    The input for this command is not SQL, but just a list of counter values.
+//    The input for this command is not SQL, but a list of regular expressions.
 //    Tests that follow (until the next feature-whitelist command) will only
-//    output counters in this white list.
+//    output counters that match a regexp in this white list.
 //
 //  - feature-usage, feature-counters
 //
@@ -89,7 +90,7 @@ func TestTelemetry(t *testing.T) {
 		// issued multiple times.
 		runner.Exec(t, "SET CLUSTER SETTING sql.query_cache.enabled = false")
 
-		var featureKeyWhitelist map[string]struct{}
+		var whitelist featureWhitelist
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 			switch td.Cmd {
 			case "exec":
@@ -103,9 +104,10 @@ func TestTelemetry(t *testing.T) {
 				return ""
 
 			case "feature-whitelist":
-				featureKeyWhitelist = make(map[string]struct{})
-				for _, k := range strings.Split(td.Input, "\n") {
-					featureKeyWhitelist[k] = struct{}{}
+				var err error
+				whitelist, err = makeWhitelist(strings.Split(td.Input, "\n"))
+				if err != nil {
+					td.Fatalf(t, "error parsing feature regex: %s", err)
 				}
 				return ""
 
@@ -126,11 +128,9 @@ func TestTelemetry(t *testing.T) {
 						// Ignore zero values (shouldn't happen in practice)
 						continue
 					}
-					if featureKeyWhitelist != nil {
-						if _, ok := featureKeyWhitelist[k]; !ok {
-							// Feature key not in whitelist.
-							continue
-						}
+					if !whitelist.Match(k) {
+						// Feature key not in whitelist.
+						continue
 					}
 					keys = append(keys, k)
 				}
@@ -153,4 +153,31 @@ func TestTelemetry(t *testing.T) {
 			}
 		})
 	})
+}
+
+type featureWhitelist []*regexp.Regexp
+
+func makeWhitelist(strings []string) (featureWhitelist, error) {
+	w := make(featureWhitelist, len(strings))
+	for i := range strings {
+		var err error
+		w[i], err = regexp.Compile("^" + strings[i] + "$")
+		if err != nil {
+			return nil, err
+		}
+	}
+	return w, nil
+}
+
+func (w featureWhitelist) Match(feature string) bool {
+	if w == nil {
+		// Unset whitelist matches all counters.
+		return true
+	}
+	for _, r := range w {
+		if r.MatchString(feature) {
+			return true
+		}
+	}
+	return false
 }
