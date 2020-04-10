@@ -54,6 +54,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func getAdminJSONProto(
@@ -401,7 +402,7 @@ func TestAdminAPINonTableStats(t *testing.T) {
 			NodeCount:    3,
 		},
 		InternalUseStats: &serverpb.TableStatsResponse{
-			RangeCount:   8,
+			RangeCount:   9,
 			ReplicaCount: 12,
 			NodeCount:    3,
 		},
@@ -422,12 +423,11 @@ func TestAdminAPINonTableStats(t *testing.T) {
 	assertExpectedStatsResponse(expectedResponse.InternalUseStats, resp.InternalUseStats)
 }
 
-// TODO(celia): I expect all the ranges listed on the Database page to equal
-// the RangeCount returned from doing a span on [LocalMax, MaxKey). For a cluster
-// with no user data, all the ranges on the Databases page consist of:
+// Verify that for a cluster with no user data, all the ranges on the Databases
+// page consist of:
 // 1) the total ranges listed for the system database
 // 2) the total ranges listed for the Non-Table data
-func TestRangeCount_MissingTwoRanges(t *testing.T) {
+func TestRangeCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
@@ -435,18 +435,18 @@ func TestRangeCount_MissingTwoRanges(t *testing.T) {
 
 	// Sum up ranges for non-table parts of the system returned
 	// from the "nontablestats" enpoint.
-	getNonTableRangeCount := func() int64 {
+	getNonTableRangeCount := func() (ts, internal int64) {
 		var resp serverpb.NonTableStatsResponse
 		if err := getAdminJSONProto(s, "nontablestats", &resp); err != nil {
 			t.Fatal(err)
 		}
-		return resp.TimeSeriesStats.RangeCount + resp.InternalUseStats.RangeCount
+		return resp.TimeSeriesStats.RangeCount, resp.InternalUseStats.RangeCount
 	}
 
-	// Sum up ranges from system database tables returned
-	// from the "databases/system/tables/{table}" endpoints.
-	getSystemTableRangeCount := func() int64 {
-		var systemTableRangeCount int64
+	// Return map tablename=>count obtained from the
+	// "databases/system/tables/{table}" endpoints.
+	getSystemTableRangeCount := func() map[string]int64 {
+		m := map[string]int64{}
 		var dbResp serverpb.DatabaseDetailsResponse
 		if err := getAdminJSONProto(s, "databases/system", &dbResp); err != nil {
 			t.Fatal(err)
@@ -457,9 +457,9 @@ func TestRangeCount_MissingTwoRanges(t *testing.T) {
 			if err := getAdminJSONProto(s, path, &tblResp); err != nil {
 				t.Fatal(err)
 			}
-			systemTableRangeCount += tblResp.RangeCount
+			m[tableName] = tblResp.RangeCount
 		}
-		return systemTableRangeCount
+		return m
 	}
 
 	getRangeCountFromFullSpan := func() int64 {
@@ -474,23 +474,50 @@ func TestRangeCount_MissingTwoRanges(t *testing.T) {
 		return stats.RangeCount
 	}
 
-	totalRangeCount := getRangeCountFromFullSpan()
-	nonTableRangeCount := getNonTableRangeCount()
-	systemTableRangeCount := getSystemTableRangeCount()
+	exp := getRangeCountFromFullSpan()
 
-	// expected: expectedRangeCount == nonTableRangeCount+systemTableRangeCount
-	// actual: expectedRangeCount > nonTableRangeCount+systemTableRangeCount
-	if totalRangeCount == nonTableRangeCount+systemTableRangeCount {
-		t.Fail()
+	sysDBMap := getSystemTableRangeCount()
+	{
+		// The tables below sit on the SystemConfigRange. For technical reason,
+		// their range count comes back as zero. Let's just use the descriptor
+		// table to count this range as they're not picked up by the "non-table
+		// data" neither.
+		for _, table := range []string{"descriptor", "settings", "namespace", "zones"} {
+			n, ok := sysDBMap[table]
+			require.True(t, ok, table)
+			require.Zero(t, n, table)
+		}
+
+		sysDBMap["descriptor"] = 1
+
+	}
+	var systemTableRangeCount int64
+	for _, n := range sysDBMap {
+		systemTableRangeCount += n
 	}
 
-	// TODO(celia): We're missing 1 range -- where is it?
-	// TODO(arul): We're missing 2 ranges after moving system.namespace out from
-	//  the gossip range -- where are they?
-	expectedMissingRangeCount := int64(2)
-	assert.Equal(t,
-		totalRangeCount,
-		nonTableRangeCount+systemTableRangeCount+expectedMissingRangeCount)
+	tsCount, internalCount := getNonTableRangeCount()
+
+	act := tsCount + internalCount + systemTableRangeCount
+
+	if !assert.Equal(t,
+		exp,
+		act,
+	) {
+		t.Log("did nonTableDescriptorRangeCount() change?")
+		t.Logf(
+			"claimed numbers:\ntime series = %d\ninternal = %d\nsystemdb = %d (%v)",
+			tsCount, internalCount, systemTableRangeCount, sysDBMap,
+		)
+		db := testCluster.ServerConn(0)
+		defer db.Close()
+
+		runner := sqlutils.MakeSQLRunner(db)
+		s := sqlutils.MatrixToStr(runner.QueryStr(t, `
+select range_id, database_name, table_name, start_pretty, end_pretty from crdb_internal.ranges order by range_id asc`,
+		))
+		t.Logf("actual ranges:\n%s", s)
+	}
 }
 
 func TestAdminAPITableDoesNotExist(t *testing.T) {
