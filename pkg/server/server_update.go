@@ -103,11 +103,17 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 	}
 
 	var newVersion string
+	var notRunningErr error
 	for nodeID, st := range nodesWithLiveness {
 		if st.livenessStatus != storagepb.NodeLivenessStatus_LIVE &&
 			st.livenessStatus != storagepb.NodeLivenessStatus_DECOMMISSIONING {
-			return false, errors.Errorf("node %d not running (%s), cannot determine version",
-				nodeID, st.livenessStatus)
+			// We definitely won't be able to upgrade, but defer this error as
+			// we may find out that we are already at the latest version (the
+			// cluster may be up to date, but a node is down).
+			if notRunningErr == nil {
+				notRunningErr = errors.Errorf("node %d not running (%s), cannot determine version", nodeID, st.livenessStatus)
+			}
+			continue
 		}
 
 		version := st.NodeStatus.Desc.ServerVersion.String()
@@ -125,6 +131,10 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 	// Check if we really need to upgrade cluster version.
 	if newVersion == clusterVersion {
 		return true, nil
+	}
+
+	if notRunningErr != nil {
+		return false, notRunningErr
 	}
 
 	// Check if auto upgrade is enabled at current version. This is read from
