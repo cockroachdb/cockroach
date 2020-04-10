@@ -343,14 +343,15 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	f.Release()
 }
 
-// wrapWithVectorizedStatsCollector creates a new exec.VectorizedStatsCollector
-// that wraps op and connects the newly created wrapper with those
-// corresponding to operators in inputs (the latter must have already been
-// wrapped).
-func wrapWithVectorizedStatsCollector(
+// wrapWithVectorizedStatsCollector creates a new
+// colexec.VectorizedStatsCollector that wraps op and connects the newly
+// created wrapper with those corresponding to operators in inputs (the latter
+// must have already been wrapped).
+func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollector(
 	op colexecbase.Operator,
 	inputs []colexecbase.Operator,
-	pspec *execinfrapb.ProcessorSpec,
+	id int32,
+	idTagKey string,
 	monitors []*mon.BytesMonitor,
 ) (*colexec.VectorizedStatsCollector, error) {
 	inputWatch := timeutil.NewStopWatch()
@@ -362,8 +363,9 @@ func wrapWithVectorizedStatsCollector(
 			memMonitors = append(memMonitors, m)
 		}
 	}
-	vsc :=
-		colexec.NewVectorizedStatsCollector(op, pspec.ProcessorID, len(inputs) == 0, inputWatch, memMonitors, diskMonitors)
+	vsc := colexec.NewVectorizedStatsCollector(
+		op, id, idTagKey, len(inputs) == 0, inputWatch, memMonitors, diskMonitors,
+	)
 	for _, input := range inputs {
 		sc, ok := input.(*colexec.VectorizedStatsCollector)
 		if !ok {
@@ -371,6 +373,7 @@ func wrapWithVectorizedStatsCollector(
 		}
 		sc.SetOutputWatch(inputWatch)
 	}
+	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, vsc)
 	return vsc, nil
 }
 
@@ -381,39 +384,10 @@ func finishVectorizedStatsCollectors(
 	flowID execinfrapb.FlowID,
 	deterministicStats bool,
 	vectorizedStatsCollectors []*colexec.VectorizedStatsCollector,
-	procIDs []int32,
 ) {
-	spansByProcID := make(map[int32]opentracing.Span)
-	for _, pid := range procIDs {
-		// We're creating a new span for every processor setting the
-		// appropriate tag so that it is displayed correctly on the flow
-		// diagram.
-		// TODO(yuzefovich): these spans are created and finished right
-		// away which is not the way they are supposed to be used, so this
-		// should be fixed.
-		_, spansByProcID[pid] = tracing.ChildSpan(ctx, fmt.Sprintf("operator for processor %d", pid))
-		spansByProcID[pid].SetTag(execinfrapb.FlowIDTagKey, flowID.String())
-		spansByProcID[pid].SetTag(execinfrapb.ProcessorIDTagKey, pid)
-	}
+	flowIDString := flowID.String()
 	for _, vsc := range vectorizedStatsCollectors {
-		// TODO(yuzefovich): I'm not sure whether there are cases when
-		// multiple operators correspond to a single processor. We might
-		// need to do some aggregation here in that case.
-		vsc.FinalizeStats()
-		if deterministicStats {
-			vsc.VectorizedStats.Time = 0
-			vsc.MaxAllocatedMem = 0
-			vsc.MaxAllocatedDisk = 0
-			vsc.NumBatches = 0
-		}
-		if vsc.ID < 0 {
-			// Ignore stats collectors not associated with a processor.
-			continue
-		}
-		tracing.SetSpanStats(spansByProcID[vsc.ID], &vsc.VectorizedStats)
-	}
-	for _, sp := range spansByProcID {
-		sp.Finish()
+		vsc.OutputStats(ctx, flowIDString, deterministicStats)
 	}
 }
 
@@ -488,7 +462,6 @@ type vectorizedFlowCreator struct {
 	streamIDToInputOp              map[execinfrapb.StreamID]opDAGWithMetaSources
 	recordingStats                 bool
 	vectorizedStatsCollectorsQueue []*colexec.VectorizedStatsCollector
-	procIDs                        []int32
 	waitGroup                      *sync.WaitGroup
 	syncFlowConsumer               execinfra.RowReceiver
 	nodeDialer                     *nodedialer.Dialer
@@ -535,7 +508,6 @@ func newVectorizedFlowCreator(
 		streamIDToInputOp:              make(map[execinfrapb.StreamID]opDAGWithMetaSources),
 		recordingStats:                 recordingStats,
 		vectorizedStatsCollectorsQueue: make([]*colexec.VectorizedStatsCollector, 0, 2),
-		procIDs:                        make([]int32, 0, 2),
 		waitGroup:                      waitGroup,
 		syncFlowConsumer:               syncFlowConsumer,
 		nodeDialer:                     nodeDialer,
@@ -701,8 +673,9 @@ func (s *vectorizedFlowCreator) setupRouter(
 				// stats. This is mostly for compatibility but will provide some useful
 				// information (e.g. output stall time).
 				var err error
-				op, err = wrapWithVectorizedStatsCollector(
-					op, nil /* inputs */, &execinfrapb.ProcessorSpec{ProcessorID: -1}, mons,
+				op, err = s.wrapWithVectorizedStatsCollector(
+					op, nil /* inputs */, int32(stream.StreamID),
+					execinfrapb.StreamIDTagKey, mons,
 				)
 				if err != nil {
 					return err
@@ -765,16 +738,9 @@ func (s *vectorizedFlowCreator) setupInput(
 			metaSources = append(metaSources, inbox)
 			op = inbox
 			if s.recordingStats {
-				op, err = wrapWithVectorizedStatsCollector(
-					inbox,
-					nil, /* inputs */
-					// TODO(asubiotto): Vectorized stats collectors currently expect a
-					// processor ID. These stats will not be shown until we extend stats
-					// collectors to take in a stream ID.
-					&execinfrapb.ProcessorSpec{
-						ProcessorID: -1,
-					},
-					nil, /* monitors */
+				op, err = s.wrapWithVectorizedStatsCollector(
+					inbox, nil /* inputs */, int32(inputStream.StreamID),
+					execinfrapb.StreamIDTagKey, nil, /* monitors */
 				)
 				if err != nil {
 					return nil, nil, err
@@ -815,8 +781,9 @@ func (s *vectorizedFlowCreator) setupInput(
 		if s.recordingStats {
 			// TODO(asubiotto): Once we have IDs for synchronizers, plumb them into
 			// this stats collector to display stats.
-			var err error
-			op, err = wrapWithVectorizedStatsCollector(op, statsInputs, &execinfrapb.ProcessorSpec{ProcessorID: -1}, nil /* monitors */)
+			op, err = s.wrapWithVectorizedStatsCollector(
+				op, statsInputs, -1 /* id */, "" /* idTagKey */, nil, /* monitors */
+			)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -881,7 +848,9 @@ func (s *vectorizedFlowCreator) setupOutput(
 						// Start a separate recording so that GetRecording will return
 						// the recordings for only the child spans containing stats.
 						ctx, span := tracing.ChildSpanSeparateRecording(ctx, "")
-						finishVectorizedStatsCollectors(ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscs, s.procIDs)
+						finishVectorizedStatsCollectors(
+							ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscs,
+						)
 						return []execinfrapb.ProducerMetadata{{TraceData: tracing.GetRecording(span)}}
 					},
 				},
@@ -910,7 +879,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			vscq := append([]*colexec.VectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
 			outputStatsToTrace = func() {
 				finishVectorizedStatsCollectors(
-					ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscq, s.procIDs,
+					ctx, flowCtx.ID, flowCtx.Cfg.TestingKnobs.DeterministicStats, vscq,
 				)
 			}
 		}
@@ -1032,13 +1001,12 @@ func (s *vectorizedFlowCreator) setupFlow(
 
 		op := result.Op
 		if s.recordingStats {
-			vsc, err := wrapWithVectorizedStatsCollector(op, inputs, pspec, result.OpMonitors)
+			op, err = s.wrapWithVectorizedStatsCollector(
+				op, inputs, pspec.ProcessorID, execinfrapb.ProcessorIDTagKey, result.OpMonitors,
+			)
 			if err != nil {
 				return nil, err
 			}
-			s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, vsc)
-			s.procIDs = append(s.procIDs, pspec.ProcessorID)
-			op = vsc
 		}
 
 		if (flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto) &&
