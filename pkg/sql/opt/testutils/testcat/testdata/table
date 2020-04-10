@@ -88,18 +88,6 @@ TABLE a
       └── rowid int not null default (unique_rowid()) [hidden] (storing)
 
 exec-ddl
-CREATE TABLE system.vtable (a INT, b INT)
-----
-
-exec-ddl
-SHOW CREATE system.vtable
-----
-TABLE vtable
- ├── virtual table
- ├── a int
- └── b int
-
-exec-ddl
 CREATE TABLE part1 (a INT PRIMARY KEY, b INT) PARTITION BY LIST (a) (
   PARTITION p1 VALUES IN (1),
   PARTITION p2 VALUES IN (3, 4, 5),

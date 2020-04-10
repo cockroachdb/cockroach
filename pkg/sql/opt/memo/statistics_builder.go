@@ -206,9 +206,6 @@ func (sb *statisticsBuilder) availabilityFromInput(e RelExpr) bool {
 	case *ScanExpr:
 		return sb.makeTableStatistics(t.Table).Available
 
-	case *VirtualScanExpr:
-		return sb.makeTableStatistics(t.Table).Available
-
 	case *LookupJoinExpr:
 		ensureLookupJoinInputProps(t, sb)
 		return t.lookupProps.Stats.Available && t.Input.Relational().Stats.Available
@@ -243,9 +240,6 @@ func (sb *statisticsBuilder) colStatFromInput(
 
 	switch t := e.(type) {
 	case *ScanExpr:
-		return sb.colStatTable(t.Table, colSet), sb.makeTableStatistics(t.Table)
-
-	case *VirtualScanExpr:
 		return sb.colStatTable(t.Table, colSet), sb.makeTableStatistics(t.Table)
 
 	case *SelectExpr:
@@ -336,9 +330,6 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	switch e.Op() {
 	case opt.ScanOp:
 		return sb.colStatScan(colSet, e.(*ScanExpr))
-
-	case opt.VirtualScanOp:
-		return sb.colStatVirtualScan(colSet, e.(*VirtualScanExpr))
 
 	case opt.SelectOp:
 		return sb.colStatSelect(colSet, e.(*SelectExpr))
@@ -623,33 +614,6 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *pro
 		colStat.NullCount = 0
 	}
 
-	sb.finalizeFromRowCount(colStat, s.RowCount)
-	return colStat
-}
-
-// +-------------+
-// | VirtualScan |
-// +-------------+
-
-func (sb *statisticsBuilder) buildVirtualScan(scan *VirtualScanExpr, relProps *props.Relational) {
-	s := &relProps.Stats
-	if zeroCardinality := s.Init(relProps); zeroCardinality {
-		// Short cut if cardinality is 0.
-		return
-	}
-	s.Available = sb.availabilityFromInput(scan)
-
-	inputStats := sb.makeTableStatistics(scan.Table)
-
-	s.RowCount = inputStats.RowCount
-	sb.finalizeFromCardinality(relProps)
-}
-
-func (sb *statisticsBuilder) colStatVirtualScan(
-	colSet opt.ColSet, scan *VirtualScanExpr,
-) *props.ColumnStatistic {
-	s := &scan.Relational().Stats
-	colStat := sb.copyColStat(colSet, s, sb.colStatTable(scan.Table, colSet))
 	sb.finalizeFromRowCount(colStat, s.RowCount)
 	return colStat
 }

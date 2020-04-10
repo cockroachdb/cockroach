@@ -157,9 +157,6 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	case opt.ScanOp:
 		cost = c.computeScanCost(candidate.(*memo.ScanExpr), required)
 
-	case opt.VirtualScanOp:
-		cost = c.computeVirtualScanCost(candidate.(*memo.VirtualScanExpr))
-
 	case opt.SelectOp:
 		cost = c.computeSelectCost(candidate.(*memo.SelectExpr))
 
@@ -308,13 +305,6 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		preferConstrainedScanCost = cpuCostFactor
 	}
 	return memo.Cost(rowCount)*(seqIOCostFactor+perRowCost) + preferConstrainedScanCost
-}
-
-func (c *coster) computeVirtualScanCost(scan *memo.VirtualScanExpr) memo.Cost {
-	// Virtual tables are generated on-the-fly according to system metadata that
-	// is assumed to be in memory.
-	rowCount := memo.Cost(scan.Relational().Stats.RowCount)
-	return rowCount * cpuCostFactor
 }
 
 func (c *coster) computeSelectCost(sel *memo.SelectExpr) memo.Cost {

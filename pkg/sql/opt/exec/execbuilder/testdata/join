@@ -368,38 +368,79 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 9   ·              equality     (attrelid) = (oid)
 10  cross-join     ·            ·
 10  ·              type         cross
-11  virtual table  ·            ·
-11  ·              source       ·
-11  filter         ·            ·
-11  ·              filter       nspname = 'public'
+11  render         ·            ·
+11  ·              render 0     attrelid
+11  ·              render 1     attname
+11  ·              render 2     attnum
 12  virtual table  ·            ·
 12  ·              source       ·
+11  filter         ·            ·
+11  ·              filter       nspname = 'public'
+12  render         ·            ·
+12  ·              render 0     oid
+12  ·              render 1     nspname
+13  virtual table  ·            ·
+13  ·              source       ·
 10  hash-join      ·            ·
 10  ·              type         inner
 10  ·              equality     (oid) = (relnamespace)
-11  virtual table  ·            ·
-11  ·              source       ·
-11  virtual table  ·            ·
-11  ·              source       ·
+11  render         ·            ·
+11  ·              render 0     oid
+11  ·              render 1     nspname
+12  virtual table  ·            ·
+12  ·              source       ·
+11  render         ·            ·
+11  ·              render 0     oid
+11  ·              render 1     relname
+11  ·              render 2     relnamespace
+12  virtual table  ·            ·
+12  ·              source       ·
 9   filter         ·            ·
 9   ·              filter       relname = 'orders'
-10  virtual table  ·            ·
-10  ·              source       ·
-8   virtual table  ·            ·
-8   ·              source       ·
+10  render         ·            ·
+10  ·              render 0     oid
+10  ·              render 1     relname
+10  ·              render 2     relnamespace
+11  virtual table  ·            ·
+11  ·              source       ·
+8   render         ·            ·
+8   ·              render 0     attrelid
+8   ·              render 1     attname
+8   ·              render 2     attnum
+9   virtual table  ·            ·
+9   ·              source       ·
 7   filter         ·            ·
 7   ·              filter       contype = 'f'
-8   virtual table  ·            ·
-8   ·              source       ·
+8   render         ·            ·
+8   ·              render 0     oid
+8   ·              render 1     conname
+8   ·              render 2     contype
+8   ·              render 3     condeferrable
+8   ·              render 4     condeferred
+8   ·              render 5     conrelid
+8   ·              render 6     confrelid
+8   ·              render 7     confupdtype
+8   ·              render 8     confdeltype
+8   ·              render 9     conkey
+8   ·              render 10    confkey
+9   virtual table  ·            ·
+9   ·              source       ·
 6   project set    ·            ·
 6   ·              render 0     generate_series(1, 32)
 7   emptyrow       ·            ·
-5   virtual table  ·            ·
-5   ·              source       ·
+5   render         ·            ·
+5   ·              render 0     objid
+5   ·              render 1     refobjid
+6   virtual table  ·            ·
+6   ·              source       ·
 4   filter         ·            ·
 4   ·              filter       relkind = 'i'
-5   virtual table  ·            ·
-5   ·              source       ·
+5   render         ·            ·
+5   ·              render 0     oid
+5   ·              render 1     relname
+5   ·              render 2     relkind
+6   virtual table  ·            ·
+6   ·              source       ·
 
 # Ensure that left joins on non-null foreign keys turn into inner joins
 statement ok
