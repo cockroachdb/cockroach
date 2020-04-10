@@ -309,7 +309,6 @@ func (w *lockTableWaiterImpl) WaitOnLock(
 	return w.pushLockTxn(ctx, req, waitingState{
 		stateKind:   waitFor,
 		txn:         &intent.Txn,
-		ts:          intent.Txn.WriteTimestamp,
 		key:         intent.Key,
 		held:        true,
 		guardAccess: sa,
