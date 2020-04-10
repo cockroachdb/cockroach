@@ -341,7 +341,12 @@ export class NodeList extends React.Component<LiveNodeListProps> {
           id={`nodes-overview__live-nodes`}
           title={`Nodes (${nodesCount})`}
           className="embedded-table">
-          <Table dataSource={dataSource} columns={columns} tableLayout="fixed" />
+          <Table
+            dataSource={dataSource}
+            columns={columns}
+            tableLayout="fixed"
+            className="nodes-overview__live-nodes-table"
+          />
         </TableSection>
       </div>
     );
@@ -399,7 +404,11 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
           footer={<Link to={`/reports/nodes/history`}>View all decommissioned nodes </Link>}
           isCollapsible={isCollapsible}
           className="embedded-table embedded-table--dense">
-          <Table dataSource={dataSource} columns={this.columns} />
+          <Table
+            dataSource={dataSource}
+            columns={this.columns}
+            className="nodes-overview__decommissioned-nodes-table"
+          />
         </TableSection>
       </div>
     );
