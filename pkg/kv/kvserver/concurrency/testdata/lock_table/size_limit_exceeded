@@ -120,7 +120,7 @@ local: num=0
 
 guard-state r=req2
 ----
-new: state=waitForDistinguished txn=txn1 ts=10 key="b" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="b" held=true guard-access=write
 
 guard-state r=req3
 ----
@@ -236,7 +236,7 @@ new: state=doneWaiting
 
 guard-state r=req6
 ----
-new: state=waitElsewhere txn=txn1 ts=10 key="c" held=true guard-access=write
+new: state=waitElsewhere txn=txn1 key="c" held=true guard-access=write
 
 scan r=req7
 ----
@@ -244,4 +244,4 @@ start-waiting: true
 
 guard-state r=req7
 ----
-new: state=waitForDistinguished txn=txn1 ts=10 key="d" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="d" held=true guard-access=write
