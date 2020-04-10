@@ -11,7 +11,7 @@
 import React from "react";
 import heroBannerLp from "assets/heroBannerLp.png";
 import "./styles.styl";
-import { Button } from "oss/src/components/button";
+import { Button } from "src/components/button";
 
 export interface IEmptyProps {
   title?: string;
