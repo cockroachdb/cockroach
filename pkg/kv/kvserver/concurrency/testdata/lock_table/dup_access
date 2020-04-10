@@ -47,7 +47,7 @@ start-waiting: true
 
 guard-state r=req2
 ----
-new: state=waitForDistinguished txn=txn1 ts=10 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=write
 
 print
 ----
@@ -134,7 +134,7 @@ start-waiting: true
 
 guard-state r=req4
 ----
-new: state=waitForDistinguished txn=txn1 ts=10 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=write
 
 new-request r=req5 txn=txn3 ts=10 spans=w@b+w@c+r@b
 ----
@@ -145,7 +145,7 @@ start-waiting: true
 
 guard-state r=req5
 ----
-new: state=waitForDistinguished txn=txn1 ts=10 key="b" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="b" held=true guard-access=write
 
 print
 ----
@@ -182,7 +182,7 @@ local: num=0
 
 guard-state r=req5
 ----
-new: state=waitForDistinguished txn=txn1 ts=10 key="c" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="c" held=true guard-access=write
 
 print
 ----
@@ -354,7 +354,7 @@ start-waiting: true
 
 guard-state r=req7
 ----
-new: state=waitForDistinguished txn=txn1 ts=10 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=write
 
 new-request r=req8 txn=none ts=10 spans=w@b+w@c+r@b
 ----
@@ -365,7 +365,7 @@ start-waiting: true
 
 guard-state r=req8
 ----
-new: state=waitForDistinguished txn=txn1 ts=10 key="b" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="b" held=true guard-access=write
 
 # req9 is just to prevent the lock for "b" from being gc'd and then a new one
 # created when req7 acquires "b", which due to the old snapshot held by req8
@@ -379,7 +379,7 @@ start-waiting: true
 
 guard-state r=req9
 ----
-new: state=waitFor txn=txn1 ts=10 key="b" held=true guard-access=write
+new: state=waitFor txn=txn1 key="b" held=true guard-access=write
 
 print
 ----
@@ -417,7 +417,7 @@ local: num=0
 
 guard-state r=req8
 ----
-new: state=waitForDistinguished txn=txn1 ts=10 key="c" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="c" held=true guard-access=write
 
 print
 ----
@@ -502,7 +502,7 @@ local: num=0
 
 guard-state r=req8
 ----
-new: state=waitForDistinguished txn=txn2 ts=10 key="b" held=true guard-access=read
+new: state=waitForDistinguished txn=txn2 key="b" held=true guard-access=read
 
 print
 ----
@@ -585,7 +585,7 @@ start-waiting: true
 
 guard-state r=req11
 ----
-new: state=waitForDistinguished txn=txn1 ts=10 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=write
 
 new-request r=req12 txn=txn3 ts=10 spans=w@b+r@b
 ----
@@ -596,7 +596,7 @@ start-waiting: true
 
 guard-state r=req12
 ----
-new: state=waitForDistinguished txn=txn1 ts=10 key="b" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="b" held=true guard-access=write
 
 print
 ----
@@ -681,7 +681,7 @@ start-waiting: true
 
 guard-state r=req12
 ----
-new: state=waitForDistinguished txn=txn2 ts=10 key="b" held=true guard-access=write
+new: state=waitForDistinguished txn=txn2 key="b" held=true guard-access=write
 
 dequeue r=req11
 ----

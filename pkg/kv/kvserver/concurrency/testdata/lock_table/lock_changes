@@ -111,7 +111,7 @@ start-waiting: true
 
 guard-state r=req5
 ----
-new: state=waitForDistinguished txn=txn1 ts=8 key="a" held=true guard-access=read
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
 
 print
 ----
@@ -141,7 +141,7 @@ local: num=0
 
 guard-state r=req5
 ----
-old: state=waitForDistinguished txn=txn1 ts=8 key="a" held=true guard-access=read
+old: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
 
 acquire r=req6 k=a durability=u
 ----
@@ -170,7 +170,7 @@ start-waiting: true
 
 guard-state r=req7
 ----
-new: state=waitForDistinguished txn=txn1 ts=14 key="a" held=true guard-access=read
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
 
 add-discovered r=req7 k=a txn=txn1
 ----
@@ -184,4 +184,4 @@ local: num=0
 
 guard-state r=req7
 ----
-new: state=waitForDistinguished txn=txn1 ts=14 key="a" held=true guard-access=read
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
