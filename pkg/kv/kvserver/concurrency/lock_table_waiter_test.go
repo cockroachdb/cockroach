@@ -237,7 +237,6 @@ func testWaitPush(t *testing.T, k stateKind, makeReq func() Request, expPushTS h
 				ts:          pusheeTxn.WriteTimestamp,
 				key:         keyA,
 				held:        lockHeld,
-				access:      spanset.SpanReadWrite,
 				guardAccess: spanset.SpanReadOnly,
 			}
 			if waitAsWrite {
@@ -364,7 +363,6 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 			ts:          pusheeTxn.WriteTimestamp,
 			key:         keyA,
 			held:        lockHeld,
-			access:      spanset.SpanReadWrite,
 			guardAccess: spanset.SpanReadWrite,
 		}
 
