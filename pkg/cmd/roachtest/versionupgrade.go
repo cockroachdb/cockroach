@@ -87,6 +87,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVers
 	cp := checkpointer{on: false, nodes: c.All()}
 
 	testFeaturesStep := versionUpgradeTestFeatures.step(c.All())
+	schemaChangeStep := runSchemaChangeWorkloadStep(10 /* maxOps */)
 
 	// The steps below start a cluster at predecessorVersion (from a fixture),
 	// then start an upgrade that is rolled back, and finally start and finalize
@@ -101,6 +102,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVers
 		//
 		// See the comment on createCheckpoints for details on fixtures.
 		uploadAndStartFromCheckpointFixture(c.All(), predecessorVersion),
+		uploadAndInitSchemaChangeWorkload(),
 		waitForUpgradeStep(c.All()),
 		testFeaturesStep,
 
@@ -117,19 +119,25 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVers
 		// Roll nodes forward.
 		binaryUpgradeStep(c.All(), ""),
 		testFeaturesStep,
+		// Run a quick schemachange workload in between each upgrade.
+		// The maxOps is 10 to keep the test runtime under 1-2 minutes.
+		schemaChangeStep,
 		// Roll back again. Note that bad things would happen if the cluster had
 		// ignored our request to not auto-upgrade. The `autoupgrade` roachtest
 		// exercises this in more detail, so here we just rely on things working
 		// as they ought to.
 		binaryUpgradeStep(c.All(), predecessorVersion),
 		testFeaturesStep,
+		schemaChangeStep,
 		// Roll nodes forward, this time allowing them to upgrade, and waiting
 		// for it to happen.
 		binaryUpgradeStep(c.All(), ""),
 		allowAutoUpgradeStep(1),
 		testFeaturesStep,
+		schemaChangeStep,
 		waitForUpgradeStep(c.All()),
 		testFeaturesStep,
+		schemaChangeStep,
 
 		// This is usually a noop, but if cp.on was set above, this is where we
 		// create fixtures. This is last so that we're creating the fixtures for
@@ -350,7 +358,7 @@ func waitForUpgradeStep(nodes nodeListOption) versionStep {
 			}
 		}
 
-		t.l.Printf("%s: nodes %v are upgraded\n", newVersion)
+		t.l.Printf("%s: nodes %v are upgraded\n", newVersion, nodes)
 
 		// TODO(nvanbenschoten): add upgrade qualification step.
 	}
