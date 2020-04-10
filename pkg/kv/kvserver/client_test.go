@@ -141,9 +141,7 @@ func createTestStoreWithOpts(
 		nodeDesc.NodeID, rpcContext, server, stopper, metric.NewRegistry(), storeCfg.DefaultZoneConfig,
 	)
 	storeCfg.ScanMaxIdleTime = 1 * time.Second
-	stores := kvserver.NewStores(
-		ac, storeCfg.Clock,
-		clusterversion.TestingBinaryVersion, clusterversion.TestingBinaryMinSupportedVersion)
+	stores := kvserver.NewStores(ac, storeCfg.Clock)
 
 	if err := storeCfg.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatal(err)
@@ -177,8 +175,9 @@ func createTestStoreWithOpts(
 	// TODO(bdarnell): arrange to have the transport closed.
 	ctx := context.Background()
 	if !opts.dontBootstrap {
+		require.NoError(t, kvserver.WriteClusterVersion(ctx, eng, clusterversion.TestingClusterVersion))
 		if err := kvserver.InitEngine(
-			ctx, eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1}, clusterversion.TestingClusterVersion,
+			ctx, eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1},
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -880,10 +879,11 @@ func (m *multiTestContext) addStore(idx int) {
 
 	ctx := context.Background()
 	if needBootstrap {
+		require.NoError(m.t, kvserver.WriteClusterVersion(ctx, eng, clusterversion.TestingClusterVersion))
 		if err := kvserver.InitEngine(ctx, eng, roachpb.StoreIdent{
 			NodeID:  roachpb.NodeID(idx + 1),
 			StoreID: roachpb.StoreID(idx + 1),
-		}, clusterversion.TestingClusterVersion); err != nil {
+		}); err != nil {
 			m.t.Fatal(err)
 		}
 	}
@@ -914,9 +914,7 @@ func (m *multiTestContext) addStore(idx int) {
 		m.t.Fatal(err)
 	}
 
-	sender := kvserver.NewStores(ambient, clock,
-		clusterversion.TestingBinaryVersion, clusterversion.TestingBinaryMinSupportedVersion,
-	)
+	sender := kvserver.NewStores(ambient, clock)
 	sender.AddStore(store)
 	perReplicaServer := kvserver.MakeServer(&roachpb.NodeDescriptor{NodeID: nodeID}, sender)
 	kvserver.RegisterPerReplicaServer(grpcServer, perReplicaServer)

@@ -72,10 +72,7 @@ DROP TABLE test.t;
 }
 
 func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVersion string) {
-	// This is ugly, but we can't pass `--encrypt=false` to old versions of
-	// Cockroach.
-	//
-	// TODO(tbg): revisit as old versions are aged out of this test.
+	// This test uses fixtures and we do not have encrypted fixtures right now.
 	c.encryptDefault = false
 
 	// Set the bool within to true to create a new fixture for this test. This
@@ -103,6 +100,18 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVers
 		uploadAndStartFromCheckpointFixture(c.All(), predecessorVersion),
 		waitForUpgradeStep(c.All()),
 		testFeaturesStep,
+
+		// Work around a bug in <= 20.1 that exists at the time of writing. The
+		// bug would sometimes cause the cluster version (predecessorVersion)
+		// to not be persisted on the engines. In that case, moving to the next
+		// version would fail. For details, see:
+		//
+		// https://github.com/cockroachdb/cockroach/pull/47358
+		//
+		// TODO(tbg): remove this when we stop running this test against 20.1
+		// or any earlier release. Or, make sure the <=20.1 fixtures all have
+		// the bumped cluster version on all stores.
+		binaryUpgradeStep(c.All(), predecessorVersion),
 
 		// NB: at this point, cluster and binary version equal predecessorVersion,
 		// and auto-upgrades are on.
@@ -350,7 +359,7 @@ func waitForUpgradeStep(nodes nodeListOption) versionStep {
 			}
 		}
 
-		t.l.Printf("%s: nodes %v are upgraded\n", newVersion)
+		t.l.Printf("%s: nodes %v are upgraded\n", newVersion, nodes)
 
 		// TODO(nvanbenschoten): add upgrade qualification step.
 	}

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func formatKeys(keys []roachpb.Key) string {
@@ -58,8 +59,9 @@ func TestBootstrapCluster(t *testing.T) {
 	ctx := context.Background()
 	e := storage.NewDefaultInMem()
 	defer e.Close()
+	require.NoError(t, kvserver.WriteClusterVersion(ctx, e, clusterversion.TestingClusterVersion))
 	if _, err := bootstrapCluster(
-		ctx, []storage.Engine{e}, clusterversion.TestingClusterVersion, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+		ctx, []storage.Engine{e}, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -231,8 +233,9 @@ func TestCorruptedClusterID(t *testing.T) {
 
 	cv := clusterversion.TestingClusterVersion
 
+	require.NoError(t, kvserver.WriteClusterVersion(ctx, e, cv))
 	if _, err := bootstrapCluster(
-		ctx, []storage.Engine{e}, cv, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+		ctx, []storage.Engine{e}, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	); err != nil {
 		t.Fatal(err)
 	}
