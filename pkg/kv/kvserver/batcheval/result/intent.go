@@ -33,14 +33,9 @@ func FromAcquiredLocks(txn *roachpb.Transaction, keys ...roachpb.Key) Result {
 	if txn == nil {
 		return pd
 	}
-	pd.Local.AcquiredLocks = make([]roachpb.LockUpdate, len(keys))
+	pd.Local.AcquiredLocks = make([]roachpb.LockAcquisition, len(keys))
 	for i := range pd.Local.AcquiredLocks {
-		pd.Local.AcquiredLocks[i] = roachpb.LockUpdate{
-			Span:       roachpb.Span{Key: keys[i]},
-			Txn:        txn.TxnMeta,
-			Status:     roachpb.PENDING,
-			Durability: lock.Replicated,
-		}
+		pd.Local.AcquiredLocks[i] = roachpb.MakeLockAcquisition(txn, keys[i], lock.Replicated)
 	}
 	return pd
 }

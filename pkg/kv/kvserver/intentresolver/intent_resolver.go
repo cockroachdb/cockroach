@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -263,7 +262,7 @@ func updateIntentTxnStatus(
 			// It must have been skipped.
 			continue
 		}
-		up := roachpb.MakeLockUpdateWithDur(&pushee, roachpb.Span{Key: intent.Key}, lock.Replicated)
+		up := roachpb.MakeLockUpdate(&pushee, roachpb.Span{Key: intent.Key})
 		results = append(results, up)
 	}
 	return results
@@ -534,7 +533,7 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 				return
 			}
 			defer release()
-			intents := roachpb.AsLockUpdates(et.Txn, et.Txn.LockSpans, lock.Replicated)
+			intents := roachpb.AsLockUpdates(et.Txn, et.Txn.LockSpans)
 			if err := ir.cleanupFinishedTxnIntents(ctx, rangeID, et.Txn, intents, now, et.Poison, nil); err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %v", err)

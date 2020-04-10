@@ -112,29 +112,18 @@ func acquireUnreplicatedLocksOnKeys(
 	scanFmt roachpb.ScanFormat,
 	scanRes *storage.MVCCScanResult,
 ) error {
+	res.Local.AcquiredLocks = make([]roachpb.LockAcquisition, scanRes.NumKeys)
 	switch scanFmt {
 	case roachpb.BATCH_RESPONSE:
-		res.Local.AcquiredLocks = make([]roachpb.LockUpdate, scanRes.NumKeys)
 		var i int
 		return storage.MVCCScanDecodeKeyValues(scanRes.KVData, func(key storage.MVCCKey, _ []byte) error {
-			res.Local.AcquiredLocks[i] = roachpb.LockUpdate{
-				Span:       roachpb.Span{Key: key.Key},
-				Txn:        txn.TxnMeta,
-				Status:     roachpb.PENDING,
-				Durability: lock.Unreplicated,
-			}
+			res.Local.AcquiredLocks[i] = roachpb.MakeLockAcquisition(txn, key.Key, lock.Unreplicated)
 			i++
 			return nil
 		})
 	case roachpb.KEY_VALUES:
-		res.Local.AcquiredLocks = make([]roachpb.LockUpdate, scanRes.NumKeys)
 		for i, row := range scanRes.KVs {
-			res.Local.AcquiredLocks[i] = roachpb.LockUpdate{
-				Span:       roachpb.Span{Key: row.Key},
-				Txn:        txn.TxnMeta,
-				Status:     roachpb.PENDING,
-				Durability: lock.Unreplicated,
-			}
+			res.Local.AcquiredLocks[i] = roachpb.MakeLockAcquisition(txn, row.Key, lock.Unreplicated)
 		}
 		return nil
 	default:
