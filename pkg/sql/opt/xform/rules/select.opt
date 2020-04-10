@@ -51,10 +51,10 @@
     ) & (HasStrictKey $input)
     $filters:[
         ...
-        $item:(FiltersItem (Or $left:* $right:*)) &
-            ^(ColsAreEqual (OuterCols $left) (OuterCols $right)) &
-            (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols $left)) &
-            (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols $right))
+        $item:(FiltersItem $or:(Or)) &
+            (ExprPairSucceeded $pair:(ExprPairForSplitDisjunction $or)) &
+            (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols (ExprPairLeft $pair))) &
+            (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols (ExprPairRight $pair)))
         ...
     ]
 )
@@ -62,17 +62,17 @@
 (Union
     (Select
         $input
-        (ReplaceFiltersItem $filters $item $left)
+        (ReplaceFiltersItem $filters $item (ExprPairLeft $pair))
     )
     (Select
         (Scan $rightScanPrivate:(DuplicateScanPrivate $scanPrivate))
         (MapScanFilterCols
-            (ReplaceFiltersItem $filters $item $right)
+            (ReplaceFiltersItem $filters $item (ExprPairRight $pair))
             $scanPrivate
             $rightScanPrivate
         )
     )
-    (MakeSetPrivateForUnionSelects $scanPrivate $rightScanPrivate)
+    (MakeSetPrivateForSplitDisjunction $scanPrivate $rightScanPrivate)
 )
 
 # SplitDisjunctionAddKey performs a transformation similar to
@@ -112,10 +112,10 @@
     ) & ^(HasStrictKey $input)
     $filters:[
         ...
-        $item:(FiltersItem (Or $left:* $right:*)) &
-            ^(ColsAreEqual (OuterCols $left) (OuterCols $right)) &
-            (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols $left)) &
-            (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols $right))
+        $item:(FiltersItem $or:(Or)) &
+            (ExprPairSucceeded $pair:(ExprPairForSplitDisjunction $or)) &
+            (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols (ExprPairLeft $pair))) &
+            (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols (ExprPairRight $pair)))
         ...
     ]
 )
@@ -124,17 +124,17 @@
     (Union
         (Select
             (Scan $leftScanPrivate:(AddPrimaryKeyColsToScanPrivate $scanPrivate))
-            (ReplaceFiltersItem $filters $item $left)
+            (ReplaceFiltersItem $filters $item (ExprPairLeft $pair))
         )
         (Select
             (Scan $rightScanPrivate:(DuplicateScanPrivate $leftScanPrivate))
             (MapScanFilterCols
-                (ReplaceFiltersItem $filters $item $right)
+                (ReplaceFiltersItem $filters $item (ExprPairRight $pair))
                 $leftScanPrivate
                 $rightScanPrivate
             )
         )
-        (MakeSetPrivateForUnionSelects $leftScanPrivate $rightScanPrivate)
+        (MakeSetPrivateForSplitDisjunction $leftScanPrivate $rightScanPrivate)
     )
     []
     (OutputCols $input)
