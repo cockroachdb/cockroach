@@ -8,25 +8,42 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package geos is a wrapper around the spatial data types in the geo package
-// and the GEOS C library. The GEOS library is dynamically loaded at init time.
-// Operations will error if the GEOS library was not found.
+// +build !windows
+
 package geos
 
 import (
+	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInitCockroachGEOSLib(t *testing.T) {
 	t.Run("test invalid initCRGEOS paths", func(t *testing.T) {
-		ret := initCRGEOS([]string{"/invalid/path"})
-		assert.Error(t, validOrError(ret))
+		_, err := initCRGEOS([]string{"/invalid/path"})
+		require.Error(t, err)
 	})
 
 	t.Run("test valid initCRGEOS paths", func(t *testing.T) {
-		ret := initCRGEOS(defaultGEOSLocations)
-		assert.NoError(t, validOrError(ret))
+		ret, err := initCRGEOS(defaultGEOSLocations)
+		require.NoError(t, err)
+		require.NotNil(t, ret)
 	})
+}
+
+func TestFetchGEOSOrError(t *testing.T) {
+	// Fetch at least once.
+	_, err := FetchGEOSOrError(FetchGEOSOrErrorDisplayPublic)
+	require.NoError(t, err)
+
+	fakeErr := fmt.Errorf("contain path info do not display me")
+	defer func() { crGEOS.err = nil }()
+
+	crGEOS.err = fakeErr
+	_, err = FetchGEOSOrError(FetchGEOSOrErrorDisplayPrivate)
+	require.Equal(t, fakeErr, err)
+
+	_, err = FetchGEOSOrError(FetchGEOSOrErrorDisplayPublic)
+	require.Equal(t, fmt.Errorf("geos: this operation is not available"), err)
 }
