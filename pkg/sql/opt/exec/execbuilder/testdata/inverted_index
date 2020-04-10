@@ -150,6 +150,17 @@ INSERT INTO f VALUES(2, NULL)
 ----
 CPut /Table/55/1/2/0 -> /TUPLE/
 
+# Test that updating a row that edits inverted index entries doesn't delete and
+# re-put things that exist both in the old and in the new value.
+# This case adds 15 and removes 1, so we should just see those commands.
+query T kvtrace
+UPDATE f SET b = ARRAY[0,15,7,10] WHERE a = 0
+----
+Scan /Table/55/1/0{-/#}
+Put /Table/55/1/0/0 -> /TUPLE/
+Del /Table/55/2/1/0/0
+InitPut /Table/55/2/15/0/0 -> /BYTES/
+
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
 ----
