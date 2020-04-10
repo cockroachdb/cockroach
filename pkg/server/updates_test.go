@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
@@ -327,59 +326,6 @@ func TestReportUsage(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if _, err := db.Exec(`some non-parsing garbage`); !testutils.IsError(
-			err, "syntax",
-		) {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(`SELECT crdb_internal.force_error('blah', $1)`, elemName); !testutils.IsError(
-			err, elemName,
-		) {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(`SELECT crdb_internal.force_error('', $1)`, elemName); !testutils.IsError(
-			err, elemName,
-		) {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(`SELECT crdb_internal.set_vmodule('invalid')`); !testutils.IsError(
-			err, "comma-separated list",
-		) {
-			t.Fatal(err)
-		}
-		// If the function ever gets supported, change to pick one that is not supported yet.
-		if _, err := db.Exec(`SELECT json_object_agg()`); !testutils.IsError(
-			err, "this function is not supported",
-		) {
-			t.Fatal(err)
-		}
-		// If the vtable ever gets supported, change to pick one that is not supported yet.
-		if _, err := db.Exec(`SELECT * FROM pg_catalog.pg_stat_wal_receiver`); !testutils.IsError(
-			err, "virtual schema table not implemented",
-		) {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(`SELECT 2/0`); !testutils.IsError(
-			err, "division by zero",
-		) {
-			t.Fatal(err)
-		}
-		// pass args to force a prepare/exec path as that may differ.
-		if _, err := db.Exec(`SELECT 2/$1`, 0); !testutils.IsError(
-			err, "division by zero",
-		) {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(`SELECT crdb_internal.force_assertion_error('woo')`); !testutils.IsError(
-			err, "internal error",
-		) {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(`CREATE TABLE somestring.foo (a INT8 PRIMARY KEY, b INT8, INDEX (b) INTERLEAVE IN PARENT foo (b))`); !testutils.IsError(
-			err, "unimplemented: use CREATE INDEX to make interleaved indexes",
-		) {
-			t.Fatal(err)
-		}
 		// Even queries that don't use placeholders and contain literal strings
 		// should still not cause those strings to appear in reports.
 		for _, q := range []string{
@@ -405,29 +351,6 @@ func TestReportUsage(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, err := db.Exec(`RESET application_name`); err != nil {
-			t.Fatal(err)
-		}
-		// Try some esoteric operators unlikely to be executed in background activity.
-		if _, err := db.Exec(`SELECT '1.2.3.4'::STRING::INET, '{"a":"b","c":123}'::JSON - 'a', ARRAY (SELECT 1)[1]`); err != nil {
-			t.Fatal(err)
-		}
-		// Try a CTE to check CTE feature reporting.
-		if _, err := db.Exec(`WITH a AS (SELECT 1) SELECT * FROM a`); err != nil {
-			t.Fatal(err)
-		}
-		// Try a recursive CTE to check recursive CTE feature reporting.
-		if _, err := db.Exec(`WITH RECURSIVE a AS (SELECT 1 UNION ALL SELECT * FROM a WHERE false) SELECT * FROM a`); err != nil {
-			t.Fatal(err)
-		}
-		// Try a correlated subquery to check that feature reporting.
-		if _, err := db.Exec(`SELECT x FROM (VALUES (1)) AS b(x) WHERE EXISTS(SELECT * FROM (VALUES (1)) AS a(x) WHERE a.x = b.x)`); err != nil {
-			t.Fatal(err)
-		}
-		// Try queries that use LATERAL.
-		if _, err := db.Exec(`SELECT * FROM (VALUES (1), (2)) AS a(x), LATERAL (SELECT a.x+1)`); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(`SELECT * FROM (VALUES (1), (2)) AS a(x) JOIN LATERAL (SELECT a.x+1 AS x) AS b ON a.x < b.x`); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -568,18 +491,6 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	// This test would be infuriating if it had to be updated on every
-	// edit to the Go code that changed the line number of the trace
-	// produced by force_error, so just scrub the trace
-	// here.
-	for k := range last.FeatureUsage {
-		if strings.HasPrefix(k, "othererror.builtins.go") {
-			last.FeatureUsage["othererror.builtins.go"] = last.FeatureUsage[k]
-			delete(last.FeatureUsage, k)
-			break
-		}
-	}
-
 	expectedFeatureUsage := map[string]int32{
 		"test.a": 1,
 		"test.b": 2,
@@ -587,41 +498,6 @@ func TestReportUsage(t *testing.T) {
 
 		// SERIAL normalization.
 		"sql.schema.serial.rowid.int2": 1,
-
-		// Although the query is executed 10 times, due to plan caching
-		// keyed by the SQL text, the planning only occurs once.
-		// TODO(radu): fix this (#39361).
-		"sql.plan.ops.cast.string::inet":                                            1,
-		"sql.plan.ops.bin.jsonb - string":                                           1,
-		"sql.plan.builtins.crdb_internal.force_assertion_error(msg: string) -> int": 1,
-		"sql.plan.ops.array.ind":                                                    1,
-		"sql.plan.ops.array.cons":                                                   1,
-		"sql.plan.ops.array.flatten":                                                1,
-		// The CTE counter is exercised by `WITH a AS (SELECT 1) ...` and
-		// `WITH RECURSIVE a AS ...` queries.
-		"sql.plan.cte":           2,
-		"sql.plan.cte.recursive": 1,
-
-		// The lateral join counter is exercised by the two queries that use the
-		// LATERAL keyword.
-		"sql.plan.lateral-join": 2,
-
-		// The subquery counter is exercised by `(1, 20, 30, 40) = (SELECT ...)`.
-		"sql.plan.subquery": 1,
-		// The correlated sq counter is exercised by `WHERE EXISTS ( ... )` above.
-		"sql.plan.subquery.correlated": 1,
-
-		"unimplemented.#33285.json_object_agg":          10,
-		"unimplemented.pg_catalog.pg_stat_wal_receiver": 10,
-		"unimplemented.#9148":                           10,
-		"othererror." +
-			pgcode.Uncategorized +
-			".crdb_internal.set_vmodule()": 10,
-		"errorcodes.blah":                          10,
-		"errorcodes." + pgcode.Internal:            10,
-		"errorcodes." + pgcode.Syntax:              10,
-		"errorcodes." + pgcode.FeatureNotSupported: 10,
-		"errorcodes." + pgcode.DivisionByZero:      10,
 	}
 
 	if expected, actual := len(expectedFeatureUsage), len(last.FeatureUsage); actual < expected {
@@ -769,19 +645,7 @@ func TestReportUsage(t *testing.T) {
 		`[opt,nodist,ok] INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
 		`[opt,nodist,ok] INSERT INTO _(_, _) VALUES (_, _)`,
 		`[opt,nodist,ok] SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
-		`[opt,nodist,ok] SELECT _ FROM (VALUES (_)) AS _ (_) WHERE EXISTS (SELECT * FROM (VALUES (_)) AS _ (_) WHERE _._ = _._)`,
-		"[opt,nodist,ok] SELECT _::STRING::INET, _::JSONB - _, ARRAY (SELECT _)[_]",
 		`[opt,nodist,ok] UPDATE _ SET _ = _ + _`,
-		"[opt,nodist,ok] WITH _ AS (SELECT _) SELECT * FROM _",
-		`[opt,nodist,ok] WITH RECURSIVE _ AS (SELECT _ UNION ALL SELECT * FROM _ WHERE _) SELECT * FROM _`,
-		`[opt,nodist,ok] SELECT * FROM (VALUES (_), (__more1__)) AS _ (_), LATERAL (SELECT _._ + _)`,
-		`[opt,nodist,ok] SELECT * FROM (VALUES (_), (__more1__)) AS _ (_) JOIN LATERAL (SELECT _._ + _ AS _) AS _ ON _._ < _._`,
-		`[opt,nodist,failed] CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
-		`[opt,nodist,failed] SELECT _ / $1`,
-		`[opt,nodist,failed] SELECT _ / _`,
-		`[opt,nodist,failed] SELECT crdb_internal.force_assertion_error(_)`,
-		`[opt,nodist,failed] SELECT crdb_internal.force_error(_, $1)`,
-		`[opt,nodist,failed] SELECT crdb_internal.set_vmodule(_)`,
 		`[opt,dist,ok] SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
 		`[opt,dist,ok] SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
 		`[opt,dist,ok] SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
@@ -820,29 +684,17 @@ func TestReportUsage(t *testing.T) {
 			`CREATE DATABASE _`,
 			`CREATE TABLE _ (_ INT8, CONSTRAINT _ CHECK (_ > _))`,
 			`CREATE TABLE _ (_ INT8 NOT NULL DEFAULT unique_rowid())`,
-			`CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
 			`INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
 			`INSERT INTO _ VALUES (_), (__more2__)`,
 			`INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
 			`INSERT INTO _(_, _) VALUES (_, _)`,
 			`SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
-			`SELECT _ FROM (VALUES (_)) AS _ (_) WHERE EXISTS (SELECT * FROM (VALUES (_)) AS _ (_) WHERE _._ = _._)`,
-			`SELECT _::STRING::INET, _::JSONB - _, ARRAY (SELECT _)[_]`,
 			`SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
 			`SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
-			`SELECT _ / $1`,
-			`SELECT _ / _`,
-			`SELECT crdb_internal.force_assertion_error(_)`,
-			`SELECT crdb_internal.force_error(_, $1)`,
-			`SELECT crdb_internal.set_vmodule(_)`,
 			`SET CLUSTER SETTING "server.time_until_store_dead" = _`,
 			`SET CLUSTER SETTING "diagnostics.reporting.enabled" = _`,
 			`SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
 			`SET application_name = _`,
-			`WITH _ AS (SELECT _) SELECT * FROM _`,
-			`WITH RECURSIVE _ AS (SELECT _ UNION ALL SELECT * FROM _ WHERE _) SELECT * FROM _`,
-			`SELECT * FROM (VALUES (_), (__more1__)) AS _ (_), LATERAL (SELECT _._ + _)`,
-			`SELECT * FROM (VALUES (_), (__more1__)) AS _ (_) JOIN LATERAL (SELECT _._ + _ AS _) AS _ ON _._ < _._`,
 		},
 		elemName: {
 			`SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,

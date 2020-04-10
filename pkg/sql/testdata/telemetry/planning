@@ -1,3 +1,5 @@
+# This file contains telemetry tests for sql.plan.* counters.
+
 exec
 CREATE TABLE x (a INT PRIMARY KEY)
 ----
@@ -44,13 +46,7 @@ sql.plan.explain-opt-verbose
 # Tests for hints.
 
 feature-whitelist
-sql.plan.hints.hash-join
-sql.plan.hints.merge-join
-sql.plan.hints.lookup-join
-sql.plan.hints.index
-sql.plan.hints.index.select
-sql.plan.hints.index.update
-sql.plan.hints.index.delete
+sql.plan.hints.*
 ----
 
 feature-usage
@@ -89,12 +85,8 @@ sql.plan.hints.index.delete
 # Tests for tracking important setting changes.
 
 feature-whitelist
-sql.plan.reorder-joins.set-limit-0
-sql.plan.reorder-joins.set-limit-3
-sql.plan.reorder-joins.set-limit-6
-sql.plan.reorder-joins.set-limit-more
-sql.plan.automatic-stats.enabled
-sql.plan.automatic-stats.disabled
+sql.plan.reorder-joins.*
+sql.plan.automatic-stats.*
 ----
 
 feature-usage
@@ -141,3 +133,70 @@ feature-usage
 CREATE STATISTICS stats FROM x
 ----
 sql.plan.stats.created
+
+# Test various planning counters.
+feature-whitelist
+sql.plan.cte.*
+sql.plan.lateral-join
+sql.plan.subquery.*
+----
+
+feature-usage
+WITH a AS (SELECT 1) SELECT * FROM a
+----
+sql.plan.cte
+
+feature-usage
+WITH RECURSIVE a AS (SELECT 1 UNION ALL SELECT * FROM a WHERE false) SELECT * FROM a
+----
+sql.plan.cte
+sql.plan.cte.recursive
+
+feature-usage
+SELECT * FROM (VALUES (1), (2)) AS a(x), LATERAL (SELECT a.x+1)
+----
+sql.plan.lateral-join
+
+feature-usage
+SELECT * FROM (VALUES (1), (2)) AS a(x) JOIN LATERAL (SELECT a.x+1 AS x) AS b ON a.x < b.x
+----
+sql.plan.lateral-join
+
+feature-usage
+SELECT 1 = (SELECT a FROM x LIMIT 1)
+----
+sql.plan.subquery
+
+feature-usage
+SELECT x FROM (VALUES (1)) AS b(x) WHERE EXISTS(SELECT * FROM (VALUES (1)) AS a(x) WHERE a.x = b.x)
+----
+sql.plan.subquery.correlated
+
+# Test some sql.plan.ops counters, using some esoteric operators unlikely to be
+# executed in background activity).
+feature-whitelist
+sql.plan.ops.cast.string::inet
+sql.plan.ops.bin.jsonb - string
+sql.plan.ops.array.*
+----
+
+feature-usage
+SELECT '1.2.3.4'::STRING::INET
+----
+sql.plan.ops.cast.string::inet
+
+feature-usage
+SELECT '{"a":"b","c":123}'::JSON - 'a'
+----
+sql.plan.ops.bin.jsonb - string
+
+feature-usage
+SELECT ARRAY (SELECT 1)[1]
+----
+sql.plan.ops.array.flatten
+sql.plan.ops.array.ind
+
+feature-usage
+INSERT INTO x SELECT unnest(ARRAY[9, 10, 11, 12])
+----
+sql.plan.ops.array.cons
