@@ -138,7 +138,7 @@ func showForeignKeyConstraint(
 	dbPrefix string,
 	originTable *sqlbase.TableDescriptor,
 	fk *sqlbase.ForeignKeyConstraint,
-	lCtx *internalLookupCtx,
+	lCtx simpleSchemaResolver,
 ) error {
 	var refNames []string
 	var originNames []string
@@ -245,7 +245,7 @@ func showFamilyClause(desc *sqlbase.TableDescriptor, f *tree.FmtCtx) {
 // it is equal to the given dbPrefix. This allows us to elide the prefix
 // when the given index is interleaved in a table of the current database.
 func showCreateInterleave(
-	idx *sqlbase.IndexDescriptor, buf *bytes.Buffer, dbPrefix string, lCtx *internalLookupCtx,
+	idx *sqlbase.IndexDescriptor, buf *bytes.Buffer, dbPrefix string, lCtx simpleSchemaResolver,
 ) error {
 	if len(idx.Interleave.Ancestors) == 0 {
 		return nil
@@ -255,7 +255,7 @@ func showCreateInterleave(
 	var err error
 	var parentName tree.TableName
 	if lCtx != nil {
-		parentName, err = lCtx.getParentAsTableName(parentTableID, dbPrefix)
+		parentName, err = getParentAsTableName(lCtx, parentTableID, dbPrefix)
 		if err != nil {
 			return err
 		}

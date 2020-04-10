@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -49,7 +50,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const crdbInternalName = "crdb_internal"
+const crdbInternalName = sessiondata.CRDBInternalSchemaName
 
 // Naming convention:
 // - if the response is served from memory, prefix with node_
@@ -1574,7 +1575,7 @@ func showAlterStatementWithInterleave(
 			var err error
 			var parentName tree.TableName
 			if lCtx != nil {
-				parentName, err = lCtx.getParentAsTableName(parentTableID, contextName)
+				parentName, err = getParentAsTableName(lCtx, parentTableID, contextName)
 				if err != nil {
 					return err
 				}
@@ -1586,7 +1587,7 @@ func showAlterStatementWithInterleave(
 
 			var tableName tree.TableName
 			if lCtx != nil {
-				tableName, err = lCtx.getTableAsTableName(table, contextName)
+				tableName, err = getTableAsTableName(lCtx, table, contextName)
 				if err != nil {
 					return err
 				}
