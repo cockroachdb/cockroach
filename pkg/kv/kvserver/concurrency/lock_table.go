@@ -32,33 +32,59 @@ import (
 // Default upper bound on the number of locks in a lockTable.
 const defaultLockTableSize = 10000
 
-// The kind of waiting that the request is subject to. See the detailed comment
-// above for the meaning of each kind.
-type stateKind int
+// The kind of waiting that the request is subject to.
+type waitKind int
 
 const (
-	waitForDistinguished stateKind = iota
+	_ waitKind = iota
+
+	// waitFor indicates that the request is waiting on another transaction to
+	// to release its locks or complete its own request. waitingStates with this
+	// waitKind will provide information on who the request is waiting on. The
+	// request will likely want to eventually push the conflicting transaction.
 	waitFor
+
+	// waitForDistinguished is a sub-case of waitFor. It implies everything that
+	// waitFor does and additionally indicates that the request is currently the
+	// "distinguished waiter". A distinguished waiter is responsible for taking
+	// extra actions, e.g. immediately pushing the transaction it is waiting
+	// for. If there are multiple requests in the waitFor state waiting on the
+	// same transaction, at least one will be a distinguished waiter.
+	waitForDistinguished
+
+	// waitElsewhere is used when the lockTable is under memory pressure and is
+	// clearing its internal queue state. Like the waitFor* states, it informs
+	// the request who it is waiting for so that deadlock detection works.
+	// However, sequencing information inside the lockTable is mostly discarded.
 	waitElsewhere
+
+	// waitSelf indicates that a different requests from the same transaction
+	// has a conflicting reservation. See the comment about "Reservations" in
+	// lockState. This request should sit tight and wait for a new notification
+	// without pushing anyone.
 	waitSelf
+
+	// doneWaiting indicates that the request is done waiting on this pass
+	// through the lockTable and should make another call to ScanAndEnqueue.
 	doneWaiting
 )
 
-// The current waiting state of the request. See the detailed comment above.
+// The current waiting state of the request.
+//
+// See the detailed comment about "Waiting logic" on lockTableGuardImpl.
 type waitingState struct {
-	stateKind stateKind
-
-	// Populated for waitFor* and waitElsewhere type, and represents who the
-	// request is waiting for.
-	txn         *enginepb.TxnMeta  // always non-nil
-	key         roachpb.Key        // the key of the lock that is causing the wait
-	held        bool               // is the lock currently held?
+	kind        waitKind
 	guardAccess spanset.SpanAccess // the access method of the guard
+
+	// Populated for waitFor* and waitElsewhere kinds. Represents who
+	// the request is waiting for.
+	txn  *enginepb.TxnMeta // always non-nil
+	key  roachpb.Key       // the key of the lock that is causing the wait
+	held bool              // is the lock currently held?
 }
 
 // Implementation
 // TODO(sbhola):
-// - proper error strings and give better explanation to all panics.
 // - metrics about lockTable state to export to observability debug pages:
 //   number of locks, number of waiting requests, wait time?, ...
 // - test cases where guard.readTS != guard.writeTS.
@@ -436,7 +462,7 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.mu.state.stateKind = doneWaiting
+	g.mu.state.kind = doneWaiting
 	if notify {
 		g.notify()
 	}
@@ -807,12 +833,12 @@ func (l *lockState) informActiveWaiters() {
 		}
 	}
 	waitForState := waitingState{
-		stateKind: waitFor,
-		txn:       waitForTxn,
-		key:       l.key,
-		held:      l.holder.locked,
+		kind: waitFor,
+		txn:  waitForTxn,
+		key:  l.key,
+		held: l.holder.locked,
 	}
-	waitSelfState := waitingState{stateKind: waitSelf}
+	waitSelfState := waitingState{kind: waitSelf}
 
 	for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
 		state := waitForState
@@ -828,7 +854,7 @@ func (l *lockState) informActiveWaiters() {
 		g.mu.Lock()
 		g.mu.state = state
 		if l.distinguishedWaiter == g {
-			g.mu.state.stateKind = waitForDistinguished
+			g.mu.state.kind = waitForDistinguished
 		}
 		g.notify()
 		g.mu.Unlock()
@@ -853,7 +879,7 @@ func (l *lockState) informActiveWaiters() {
 		g.mu.Lock()
 		g.mu.state = state
 		if l.distinguishedWaiter == g {
-			g.mu.state.stateKind = waitForDistinguished
+			g.mu.state.kind = waitForDistinguished
 		}
 		g.notify()
 		g.mu.Unlock()
@@ -905,7 +931,7 @@ func (l *lockState) tryMakeNewDistinguished() {
 	if g != nil {
 		l.distinguishedWaiter = g
 		g.mu.Lock()
-		g.mu.state.stateKind = waitForDistinguished
+		g.mu.state.kind = waitForDistinguished
 		// The rest of g.state is already up-to-date.
 		g.notify()
 		g.mu.Unlock()
@@ -1094,7 +1120,7 @@ func (l *lockState) tryActiveWait(g *lockTableGuardImpl, sa spanset.SpanAccess, 
 	g.key = l.key
 	g.mu.startWait = true
 	if reservedBySelfTxn {
-		g.mu.state = waitingState{stateKind: waitSelf}
+		g.mu.state = waitingState{kind: waitSelf}
 	} else {
 		stateType := waitFor
 		if l.distinguishedWaiter == nil {
@@ -1102,7 +1128,7 @@ func (l *lockState) tryActiveWait(g *lockTableGuardImpl, sa spanset.SpanAccess, 
 			stateType = waitForDistinguished
 		}
 		g.mu.state = waitingState{
-			stateKind:   stateType,
+			kind:        stateType,
 			txn:         waitForTxn,
 			key:         l.key,
 			held:        l.holder.locked,
@@ -1356,7 +1382,7 @@ func (l *lockState) tryClearLock(force bool) bool {
 		// Note that none of the current waiters can be requests
 		// from holderTxn.
 		waitState = waitingState{
-			stateKind:   waitElsewhere,
+			kind:        waitElsewhere,
 			txn:         holderTxn,
 			key:         l.key,
 			held:        true,
@@ -1364,7 +1390,7 @@ func (l *lockState) tryClearLock(force bool) bool {
 		}
 	} else {
 		l.holder.locked = false
-		waitState = waitingState{stateKind: doneWaiting}
+		waitState = waitingState{kind: doneWaiting}
 	}
 
 	l.distinguishedWaiter = nil
