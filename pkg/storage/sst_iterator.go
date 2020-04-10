@@ -84,7 +84,10 @@ func (r *sstIterator) SeekGE(key MVCCKey) {
 	}
 	if r.iter == nil {
 		// Iterator creation happens on the first Seek as it involves I/O.
-		r.iter = r.sst.NewIter(nil /* lower */, nil /* upper */)
+		r.iter, r.err = r.sst.NewIter(nil /* lower */, nil /* upper */)
+		if r.err != nil {
+			return
+		}
 	}
 	var iKey *sstable.InternalKey
 	iKey, r.value = r.iter.SeekGE(EncodeKey(key))
