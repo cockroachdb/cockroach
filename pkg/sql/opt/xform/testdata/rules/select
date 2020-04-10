@@ -1449,8 +1449,41 @@ project
            └── filters
                 └── w:8 = 3 [outer=(8), constraints=(/8: [/3 - /3]; tight), fd=()-->(8)]
 
+# Group sub-expr with the same columns together.
+opt expect=SplitDisjunction
+SELECT k, u, v FROM d WHERE (u = 1 OR v = 2) OR (u = 3 OR v = 4)
+----
+union
+ ├── columns: k:1!null u:2 v:3
+ ├── left columns: k:1!null u:2 v:3
+ ├── right columns: k:5 u:6 v:7
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join d
+ │    ├── columns: k:1!null u:2!null v:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan d@u
+ │         ├── columns: k:1!null u:2!null
+ │         ├── constraint: /2/1
+ │         │    ├── [/1 - /1]
+ │         │    └── [/3 - /3]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── index-join d
+      ├── columns: k:5!null u:6 v:7!null
+      ├── key: (5)
+      ├── fd: (5)-->(6,7)
+      └── scan d@v
+           ├── columns: k:5!null v:7!null
+           ├── constraint: /7/5
+           │    ├── [/2 - /2]
+           │    └── [/4 - /4]
+           ├── key: (5)
+           └── fd: (5)-->(7)
+
 # Group sub-expr with the same columns together. Output should have a single union expr.
-opt expect=GenerateUnionSelects
+opt expect=SplitDisjunction
 SELECT k, u, v FROM d WHERE u = 1 OR u = 3 OR v = 2 OR v = 4 OR u = 5 OR v = 6
 ----
 union
@@ -1485,7 +1518,7 @@ union
            └── fd: (5)-->(7)
 
 # Group sub-expr with the same columns together. Output should have a single union expr.
-opt expect=GenerateUnionSelects
+opt expect=SplitDisjunction
 SELECT k, u, v FROM d WHERE (u = 3 OR v = 2) OR (u = 5 OR v = 4) OR v = 6
 ----
 union
@@ -1998,8 +2031,42 @@ project
                 └── filters
                      └── w:8 = 3 [outer=(8), constraints=(/8: [/3 - /3]; tight), fd=()-->(8)]
 
+# Group sub-expr with the same columns together.
+opt expect=SplitDisjunctionAddKey
+SELECT u, v FROM d WHERE (u = 1 OR v = 2) OR (u = 3 OR v = 4)
+----
+project
+ ├── columns: u:2 v:3
+ └── union
+      ├── columns: k:1!null u:2 v:3
+      ├── left columns: k:1!null u:2 v:3
+      ├── right columns: k:5 u:6 v:7
+      ├── key: (1-3)
+      ├── index-join d
+      │    ├── columns: k:1!null u:2!null v:3
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── scan d@u
+      │         ├── columns: k:1!null u:2!null
+      │         ├── constraint: /2/1
+      │         │    ├── [/1 - /1]
+      │         │    └── [/3 - /3]
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2)
+      └── index-join d
+           ├── columns: k:5!null u:6 v:7!null
+           ├── key: (5)
+           ├── fd: (5)-->(6,7)
+           └── scan d@v
+                ├── columns: k:5!null v:7!null
+                ├── constraint: /7/5
+                │    ├── [/2 - /2]
+                │    └── [/4 - /4]
+                ├── key: (5)
+                └── fd: (5)-->(7)
+
 # Group sub-expr with the same columns together. Output should have a single union expr.
-opt expect=GenerateUnionSelectsAddKey
+opt expect=SplitDisjunctionAddKey
 SELECT u, v FROM d WHERE u = 1 OR u = 3 OR v = 2 OR v = 4 OR u = 5 OR v = 6
 ----
 project
@@ -2035,7 +2102,7 @@ project
                 └── fd: (5)-->(7)
 
 # Group sub-expr with the same columns together. Output should have a single union expr.
-opt expect=GenerateUnionSelectsAddKey
+opt expect=SplitDisjunctionAddKey
 SELECT u, v FROM d WHERE (u = 3 OR v = 2) OR (u = 5 OR v = 4) OR v = 6
 ----
 project

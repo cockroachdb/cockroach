@@ -51,7 +51,9 @@
     ) & (HasStrictKey $input)
     $filters:[
         ...
-        $item:(FiltersItem $or:(Or $left:* $right:*)) &
+        $item:(FiltersItem $or:(Or)) &
+            (Succeeded $left:(LeftExprForUnionSelects $or)) &
+            (Succeeded $right:(RightExprForUnionSelects $or)) &
             ^(ColsAreEqual (OuterCols $left) (OuterCols $right)) &
             (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols $left)) &
             (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols $right))
@@ -62,12 +64,12 @@
 (Union
     (Select
         $input
-        (ReplaceFiltersItem $filters $item (LeftExprForUnionSelects $or))
+        (ReplaceFiltersItem $filters $item $left)
     )
     (Select
         (Scan $rightScanPrivate:(DuplicateScanPrivate $scanPrivate))
         (MapScanFilterCols
-            (ReplaceFiltersItem $filters $item (RightExprForUnionSelects $or))
+            (ReplaceFiltersItem $filters $item $right)
             $scanPrivate
             $rightScanPrivate
         )
@@ -112,7 +114,9 @@
     ) & ^(HasStrictKey $input)
     $filters:[
         ...
-        $item:(FiltersItem $or:(Or $left:* $right:*)) &
+        $item:(FiltersItem $or:(Or)) &
+            (Succeeded $left:(LeftExprForUnionSelects $or)) &
+            (Succeeded $right:(RightExprForUnionSelects $or)) &
             ^(ColsAreEqual (OuterCols $left) (OuterCols $right)) &
             (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols $left)) &
             (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols $right))
@@ -124,12 +128,12 @@
     (Union
         (Select
             (Scan $leftScanPrivate:(AddPrimaryKeyColsToScanPrivate $scanPrivate))
-            (ReplaceFiltersItem $filters $item (LeftExprForUnionSelects $or))
+            (ReplaceFiltersItem $filters $item $left)
         )
         (Select
             (Scan $rightScanPrivate:(DuplicateScanPrivate $leftScanPrivate))
             (MapScanFilterCols
-                (ReplaceFiltersItem $filters $item (RightExprForUnionSelects $or))
+                (ReplaceFiltersItem $filters $item $right)
                 $leftScanPrivate
                 $rightScanPrivate
             )
