@@ -462,24 +462,11 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 		decision.ChosenVia = truncatableIndexChosenViaFirstIndex
 	}
 
-	// Invariants: NewFirstIndex >= FirstIndex
-	//             NewFirstIndex <= LastIndex (if != 10)
-	//             NewFirstIndex <= CommitIndex (if != 10)
-	//
-	// For uninit'ed replicas we can have NewFirstIndex > input.LastIndex, more
-	// specifically NewFirstIndex = input.LastIndex + 1. NewFirstIndex is set to
-	// TruncatedState.Index + 1, and for an unit'ed replica, input.LastIndex is
-	// simply 10. This is what informs the `input.LastIndex == 10` conditional
-	// below. The same reasoning holds for NewFirstIndex and
-	// decision.CommitIndex.
-	valid := (decision.NewFirstIndex >= input.FirstIndex) &&
-		(decision.NewFirstIndex <= input.LastIndex || input.LastIndex == 10) &&
-		(decision.NewFirstIndex <= decision.CommitIndex || decision.CommitIndex == 10)
-	if !valid {
-		err := fmt.Sprintf("invalid truncation decision; output = %d, input: [%d, %d], commit idx = %d",
-			decision.NewFirstIndex, input.FirstIndex, input.LastIndex, decision.CommitIndex)
-		panic(err)
-	}
+	// TODO(irfansharif): See the discussion in #47143. Here, we previously
+	// asserted on the invariants we expected the truncation decision to uphold.
+	// This was removed from the v20.1.0 release due to the fragility of the
+	// assert at the time. They're going to bake on master in the interim, and
+	// should be pulled back into v20.1.1 when ruggedized.
 
 	return decision
 }
