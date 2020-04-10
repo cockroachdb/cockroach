@@ -141,3 +141,74 @@ feature-usage
 CREATE STATISTICS stats FROM x
 ----
 sql.plan.stats.created
+
+# Test various planning counters.
+feature-whitelist
+sql.plan.cte
+sql.plan.cte.recursive
+sql.plan.lateral-join
+sql.plan.subquery
+sql.plan.subquery.correlated
+----
+
+feature-usage
+WITH a AS (SELECT 1) SELECT * FROM a
+----
+sql.plan.cte
+
+feature-usage
+WITH RECURSIVE a AS (SELECT 1 UNION ALL SELECT * FROM a WHERE false) SELECT * FROM a
+----
+sql.plan.cte
+sql.plan.cte.recursive
+
+feature-usage
+SELECT * FROM (VALUES (1), (2)) AS a(x), LATERAL (SELECT a.x+1)
+----
+sql.plan.lateral-join
+
+feature-usage
+SELECT * FROM (VALUES (1), (2)) AS a(x) JOIN LATERAL (SELECT a.x+1 AS x) AS b ON a.x < b.x
+----
+sql.plan.lateral-join
+
+feature-usage
+SELECT 1 = (SELECT a FROM x LIMIT 1)
+----
+sql.plan.subquery
+
+feature-usage
+SELECT x FROM (VALUES (1)) AS b(x) WHERE EXISTS(SELECT * FROM (VALUES (1)) AS a(x) WHERE a.x = b.x)
+----
+sql.plan.subquery.correlated
+
+# Test some sql.plan.ops counters, using some esoteric operators unlikely to be
+# executed in background activity).
+feature-whitelist
+sql.plan.ops.cast.string::inet
+sql.plan.ops.bin.jsonb - string
+sql.plan.ops.array.ind
+sql.plan.ops.array.cons
+sql.plan.ops.array.flatten
+----
+
+feature-usage
+SELECT '1.2.3.4'::STRING::INET
+----
+sql.plan.ops.cast.string::inet
+
+feature-usage
+SELECT '{"a":"b","c":123}'::JSON - 'a'
+----
+sql.plan.ops.bin.jsonb - string
+
+feature-usage
+SELECT ARRAY (SELECT 1)[1]
+----
+sql.plan.ops.array.flatten
+sql.plan.ops.array.ind
+
+feature-usage
+INSERT INTO x SELECT unnest(ARRAY[9, 10, 11, 12])
+----
+sql.plan.ops.array.cons
