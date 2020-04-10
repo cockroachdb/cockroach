@@ -44,6 +44,12 @@ func registerAcceptance(r *testRegistry) {
 		{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
 		{name: "rapid-restart", fn: runRapidRestart},
 		{name: "many-splits", fn: runManySplits},
+		{
+			name:       "mixed-version-schemachange",
+			fn:         runMixedVersionSchemaChange,
+			minVersion: "v19.2.5",
+			timeout:    30 * time.Minute,
+		},
 		{name: "status-server", fn: runStatusServer},
 		{
 			name: "version-upgrade",
