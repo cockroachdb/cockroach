@@ -2193,3 +2193,19 @@ query TTTTTT
 select * from pg_indexes where indexname = 'regression_46450_idx'
 ----
 3047862654  public  regression_46450  regression_46450_idx  NULL  CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)
+
+# Make sure that selecting from vtables with indexes in other dbs properly
+# hides descriptors that should be hidden.
+
+statement ok
+CREATE TABLE hidden_in_vtable_index_test(a int)
+
+let $testid
+SELECT oid FROM pg_class WHERE relname='hidden_in_vtable_index_test'
+
+statement ok
+CREATE DATABASE other_db; SET DATABASE = other_db
+
+query O
+SELECT oid FROM pg_class WHERE oid=$testid
+----

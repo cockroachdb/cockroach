@@ -151,17 +151,23 @@ func (ef *execFactory) constructVirtualScan(
 	if err != nil {
 		return nil, err
 	}
-	columns, constructor := virtual.getPlanInfo()
+	indexDesc := index.(*optVirtualIndex).desc
+	columns, constructor := virtual.getPlanInfo(
+		table.(*optVirtualTable).desc.TableDesc(),
+		indexDesc, indexConstraint)
 
 	var n exec.Node
 	n = &delayedNode{
-		columns: columns,
+		name:            fmt.Sprintf("%s@%s", table.Name(), index.Name()),
+		columns:         columns,
+		indexConstraint: indexConstraint,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			return constructor(ctx, p, tn.Catalog())
 		},
 	}
+
 	// Check for explicit use of the dummy column.
-	if needed.Contains(0) || indexConstraint != nil || len(reqOrdering) > 0 || reverse {
+	if needed.Contains(0) {
 		return nil, errors.Errorf("use of %s column not allowed.", table.Column(0).ColName())
 	}
 	if locking != nil {
@@ -183,6 +189,16 @@ func (ef *execFactory) constructVirtualScan(
 	}
 	if hardLimit != 0 {
 		n, err = ef.ConstructLimit(n, tree.NewDInt(tree.DInt(hardLimit)), nil /* offset */)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// reqOrdering will be set if the optimizer expects that the output of the
+	// exec.Node that we're returning will actually have a legitimate ordering.
+	// Virtual indexes never provide a legitimate ordering, so we have to make
+	// sure to sort if we have a required ordering.
+	if len(reqOrdering) != 0 {
+		n, err = ef.ConstructSort(n, sqlbase.ColumnOrdering(reqOrdering), 0)
 		if err != nil {
 			return nil, err
 		}

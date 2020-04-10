@@ -18,10 +18,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
+
+var staticSchemaIDMap = map[sqlbase.ID]string{
+	keys.PublicSchemaID:         tree.PublicSchema,
+	sqlbase.PgCatalogID:         sessiondata.PgCatalogName,
+	sqlbase.InformationSchemaID: sessiondata.InformationSchemaName,
+	sqlbase.CrdbInternalID:      sessiondata.CRDBInternalSchemaName,
+}
 
 // ResolveNameByID resolves a schema's name based on db and schema id.
 // TODO(sqlexec): this should return the descriptor instead if given an ID.
@@ -30,9 +38,11 @@ import (
 func ResolveNameByID(
 	ctx context.Context, txn *kv.Txn, dbID sqlbase.ID, schemaID sqlbase.ID,
 ) (string, error) {
-	// Fast-path for public schema, to avoid hot lookups.
-	if schemaID == keys.PublicSchemaID {
-		return string(tree.PublicSchemaName), nil
+	// Fast-path for public schema and virtual schemas, to avoid hot lookups.
+	for id, schemaName := range staticSchemaIDMap {
+		if id == schemaID {
+			return schemaName, nil
+		}
 	}
 	schemas, err := GetForDatabase(ctx, txn, dbID)
 	if err != nil {
