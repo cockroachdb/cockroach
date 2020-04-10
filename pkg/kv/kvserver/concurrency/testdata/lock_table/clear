@@ -85,7 +85,7 @@ start-waiting: true
 
 guard-state r=req3
 ----
-new: state=waitForDistinguished txn=txn1 ts=10,1 key="a" held=true guard-access=read
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
 
 # Similarly, a non-transactional write at a arrives and blocks.
 
@@ -98,7 +98,7 @@ start-waiting: true
 
 guard-state r=req4
 ----
-new: state=waitFor txn=txn1 ts=10,1 key="a" held=true guard-access=write
+new: state=waitFor txn=txn1 key="a" held=true guard-access=write
 
 # txn3 tries to write to b which also has a lock held, so txn3 has to wait.
 
@@ -111,7 +111,7 @@ start-waiting: true
 
 guard-state r=req5
 ----
-new: state=waitForDistinguished txn=txn1 ts=10,1 key="b" held=true guard-access=write
+new: state=waitForDistinguished txn=txn1 key="b" held=true guard-access=write
 
 print
 ----

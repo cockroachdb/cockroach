@@ -398,12 +398,8 @@ func TestLockTableBasic(t *testing.T) {
 				if txnS == "" {
 					txnS = fmt.Sprintf("unknown txn with ID: %v", state.txn.ID)
 				}
-				tsS := fmt.Sprintf("%d", state.ts.WallTime)
-				if state.ts.Logical != 0 {
-					tsS += fmt.Sprintf(",%d", state.ts.Logical)
-				}
-				return fmt.Sprintf("%sstate=%s txn=%s ts=%s key=%s held=%t guard-access=%s",
-					str, typeStr, txnS, tsS, state.key, state.held, state.guardAccess)
+				return fmt.Sprintf("%sstate=%s txn=%s key=%s held=%t guard-access=%s",
+					str, typeStr, txnS, state.key, state.held, state.guardAccess)
 
 			case "enable":
 				lt.Enable()

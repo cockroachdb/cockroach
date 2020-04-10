@@ -234,7 +234,6 @@ func testWaitPush(t *testing.T, k stateKind, makeReq func() Request, expPushTS h
 			g.state = waitingState{
 				stateKind:   k,
 				txn:         &pusheeTxn.TxnMeta,
-				ts:          pusheeTxn.WriteTimestamp,
 				key:         keyA,
 				held:        lockHeld,
 				guardAccess: spanset.SpanReadOnly,
@@ -360,7 +359,6 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 		g.state = waitingState{
 			stateKind:   waitForDistinguished,
 			txn:         &pusheeTxn.TxnMeta,
-			ts:          pusheeTxn.WriteTimestamp,
 			key:         keyA,
 			held:        lockHeld,
 			guardAccess: spanset.SpanReadWrite,

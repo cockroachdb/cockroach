@@ -51,7 +51,6 @@ type waitingState struct {
 	// Populated for waitFor* and waitElsewhere type, and represents who the
 	// request is waiting for.
 	txn         *enginepb.TxnMeta  // always non-nil
-	ts          hlc.Timestamp      // the timestamp of the transaction that is causing the wait
 	key         roachpb.Key        // the key of the lock that is causing the wait
 	held        bool               // is the lock currently held?
 	guardAccess spanset.SpanAccess // the access method of the guard
@@ -796,13 +795,12 @@ func (l *lockState) tryBreakReservation(seqNum uint64) bool {
 // waitForDistinguished states.
 // REQUIRES: l.mu is locked.
 func (l *lockState) informActiveWaiters() {
-	waitForTxn, waitForTs := l.getLockerInfo()
-	var checkForWaitSelf bool
+	waitForTxn, _ := l.getLockerInfo()
+	checkForWaitSelf := false
 	findDistinguished := l.distinguishedWaiter == nil
 	if waitForTxn == nil {
 		checkForWaitSelf = true
 		waitForTxn = l.reservation.txn
-		waitForTs = l.reservation.writeTS
 		if !findDistinguished && l.distinguishedWaiter.isTxn(waitForTxn) {
 			findDistinguished = true
 			l.distinguishedWaiter = nil
@@ -811,7 +809,6 @@ func (l *lockState) informActiveWaiters() {
 	waitForState := waitingState{
 		stateKind: waitFor,
 		txn:       waitForTxn,
-		ts:        waitForTs,
 		key:       l.key,
 		held:      l.holder.locked,
 	}
@@ -1107,7 +1104,6 @@ func (l *lockState) tryActiveWait(g *lockTableGuardImpl, sa spanset.SpanAccess, 
 		g.mu.state = waitingState{
 			stateKind:   stateType,
 			txn:         waitForTxn,
-			ts:          waitForTs,
 			key:         l.key,
 			held:        l.holder.locked,
 			guardAccess: sa,
@@ -1356,13 +1352,12 @@ func (l *lockState) tryClearLock(force bool) bool {
 	l.holder.holder[lock.Unreplicated] = lockHolderInfo{}
 	var waitState waitingState
 	if replicatedHeld && !force {
-		holderTxn, holderTs := l.getLockerInfo()
+		holderTxn, _ := l.getLockerInfo()
 		// Note that none of the current waiters can be requests
 		// from holderTxn.
 		waitState = waitingState{
 			stateKind:   waitElsewhere,
 			txn:         holderTxn,
-			ts:          holderTs,
 			key:         l.key,
 			held:        true,
 			guardAccess: spanset.SpanReadOnly,
