@@ -65,12 +65,21 @@ const (
 	// defaultAPIEventLimit is the default maximum number of events returned by any
 	// endpoints returning events.
 	defaultAPIEventLimit = 1000
-
-	// Number of empty ranges for table descriptors that aren't actually tables,
-	// e.g. descriptors 17, 18, 19, and 22 which correspond to MetaRangesID,
-	// SystemRangesID, TimeseriesRangesID, and LivenessRangesID in pkg/keys.
-	nonTableDescriptorRangeCount = 4
 )
+
+// Number of empty ranges for table descriptors that aren't actually tables. These
+// cause special cases in range count computations because we split along them anyway,
+// but they're not SQL tables.
+func nonTableDescriptorRangeCount() int64 {
+	// NB: explicitly reference them for IDE usage.
+	return int64(len([]int{
+		keys.MetaRangesID,
+		keys.SystemRangesID,
+		keys.TimeseriesRangesID,
+		keys.LivenessRangesID,
+		keys.PublicSchemaID,
+	}))
+}
 
 // apiServerMessage is the standard body for all HTTP 500 responses.
 var errAdminAPIError = status.Errorf(codes.Internal, "An internal server error "+
@@ -699,7 +708,7 @@ func (s *adminServer) NonTableStats(
 	// ranges, but it may be more trouble than it's worth. In the meantime,
 	// sweeping them under the general-purpose "Internal use" label in
 	// the "Non-Table" section of the Databases page.
-	response.InternalUseStats.RangeCount += nonTableDescriptorRangeCount
+	response.InternalUseStats.RangeCount += nonTableDescriptorRangeCount()
 
 	return &response, nil
 }
