@@ -57,9 +57,7 @@ func TestCopyNullInfNaN(t *testing.T) {
 			e DECIMAL NULL,
 			u UUID NULL,
 			ip INET NULL,
-			tz TIMESTAMPTZ NULL,
-			geography GEOGRAPHY NULL,
-			geometry GEOMETRY NULL
+			tz TIMESTAMPTZ NULL
 		);
 	`); err != nil {
 		t.Fatal(err)
@@ -72,16 +70,16 @@ func TestCopyNullInfNaN(t *testing.T) {
 
 	stmt, err := txn.Prepare(pq.CopyIn(
 		"t", "i", "f", "s", "b", "d", "t", "ttz",
-		"ts", "n", "o", "e", "u", "ip", "tz", "geography", "geometry"))
+		"ts", "n", "o", "e", "u", "ip", "tz"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	input := [][]interface{}{
-		{nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
-		{nil, math.Inf(1), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
-		{nil, math.Inf(-1), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
-		{nil, math.NaN(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
+		{nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
+		{nil, math.Inf(1), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
+		{nil, math.Inf(-1), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
+		{nil, math.NaN(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
 	}
 
 	for _, in := range input {
@@ -155,9 +153,7 @@ func TestCopyRandom(t *testing.T) {
 			b BYTES,
 			u UUID,
 			ip INET,
-			tz TIMESTAMPTZ,
-			geography GEOGRAPHY NULL,
-			geometry GEOMETRY NULL
+			tz TIMESTAMPTZ
 		);
 		SET extra_float_digits = 3; -- to preserve floats entirely
 	`); err != nil {
@@ -169,7 +165,7 @@ func TestCopyRandom(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stmt, err := txn.Prepare(pq.CopyInSchema("d", "t", "id", "n", "o", "i", "f", "e", "t", "ttz", "ts", "s", "b", "u", "ip", "tz", "geography", "geometry"))
+	stmt, err := txn.Prepare(pq.CopyInSchema("d", "t", "id", "n", "o", "i", "f", "e", "t", "ttz", "ts", "s", "b", "u", "ip", "tz"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,8 +186,6 @@ func TestCopyRandom(t *testing.T) {
 		types.Uuid,
 		types.INet,
 		types.TimestampTZ,
-		types.Geography,
-		types.Geometry,
 	}
 
 	var inputs [][]interface{}

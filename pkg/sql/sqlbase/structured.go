@@ -1299,9 +1299,7 @@ func DatumTypeHasCompositeKeyEncoding(typ *types.T) bool {
 func MustBeValueEncoded(semanticType types.Family) bool {
 	return semanticType == types.ArrayFamily ||
 		semanticType == types.JsonFamily ||
-		semanticType == types.TupleFamily ||
-		semanticType == types.GeometryFamily ||
-		semanticType == types.GeographyFamily
+		semanticType == types.TupleFamily
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
