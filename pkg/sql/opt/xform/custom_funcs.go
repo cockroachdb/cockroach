@@ -2257,6 +2257,56 @@ func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
 	return oc
 }
 
+// CanMaybeConstrainIndexWithExpr returns true if any indexes on the
+// ScanPrivate's table could be constrained by expr. It is a fast check for
+// GenerateUnionSelects to avoid matching a large number of queries that won't
+// obviously be improved by the rule.
+//
+// CanMaybeConstrainIndexWithExpr checks for an intersection between the outer
+// columns of expr and an index's columns. An intersection between column sets
+// implies that the expression could constrain a scan on that index. For
+// example, the expression "a = 1" would constrain a scan on an index over
+// columns "a, b", because the outer columns are a subset of the index columns.
+// Likewise, the expresson "a = 1 AND b = 2" would constrain a scan on an index
+// over column "a", because the outer columns are a superset of the index
+// columns.
+//
+// Notice that this function can return both false positives and false
+// negatives. As an example of a false negative, consider the following table
+// and query.
+//
+//   CREATE TABLE t (
+//     k PRIMARY KEY,
+//     a INT,
+//     hash INT AS (a % 4) STORED,
+//     INDEX hash (hash)
+//   )
+//
+//   SELECT * FROM t WHERE a = 5
+//
+// The expression "a = 5" can constrain a scan over the hash index: The columns
+// "hash" must be a constant value of 1 because it is dependent on column "a"
+// with a constant value of 5. However, CanMaybeConstrainIndexWithExpr will
+// return false in this case because the outer column of the expression, "a",
+// does not intersect with the index column, "hash".
+func (c *CustomFuncs) CanMaybeConstrainIndexWithExpr(sp *memo.ScanPrivate, expr opt.Expr) bool {
+	md := c.e.mem.Metadata()
+	tabMeta := md.TableMeta(sp.Table)
+
+	var iter scanIndexIter
+	iter.init(c.e.mem, sp)
+	for iter.next() {
+		// Iterate through all indexes of the table and return true if any columns
+		// in expr intersect with the index's columns.
+		indexColumns := tabMeta.IndexKeyColumns(iter.indexOrdinal)
+		if c.ExprOuterCols(expr).Intersects(indexColumns) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // DuplicateScanPrivate constructs a new ScanPrivate that is identical to the
 // input, but has new table and column IDs.
 //
