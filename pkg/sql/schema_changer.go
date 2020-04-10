@@ -1420,6 +1420,8 @@ func CreateGCJobRecord(
 // dependencies.
 type GCJobTestingKnobs struct {
 	RunBeforeResume func(jobID int64) error
+	// Disable disables the GC Job from running altogether.
+	Disable bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

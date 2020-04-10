@@ -86,6 +86,9 @@ func (r schemaChangeGCResumer) Resume(
 	p := phs.(sql.PlanHookState)
 	// TODO(pbardea): Wait for no versions.
 	execCfg := p.ExecCfg()
+	if execCfg.GCJobTestingKnobs.Disable {
+		return nil
+	}
 	if fn := execCfg.GCJobTestingKnobs.RunBeforeResume; fn != nil {
 		if err := fn(r.jobID); err != nil {
 			return err

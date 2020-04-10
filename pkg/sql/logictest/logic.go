@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -1140,6 +1141,10 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 				Store: &kvserver.StoreTestingKnobs{
 					// The consistency queue makes a lot of noisy logs during logic tests.
 					DisableConsistencyQueue: true,
+				},
+				GCJob: &sql.GCJobTestingKnobs{
+					// Disable the GC Job for tests, as it's costly.
+					Disable: true,
 				},
 				SQLEvalContext: &tree.EvalContextTestingKnobs{
 					AssertBinaryExprReturnTypes:     true,
