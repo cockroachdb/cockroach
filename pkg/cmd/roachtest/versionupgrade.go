@@ -16,13 +16,12 @@ import (
 	"fmt"
 	"math/rand"
 	"runtime"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	_ "github.com/lib/pq"
 )
 
@@ -37,39 +36,6 @@ var v201 = roachpb.Version{Major: 20, Minor: 1}
 // already been bumped, but not all nodes are aware). This should be considered
 // a feature of this test, and feature tests that flake because of it need to
 // be fixed.
-var versionUpgradeTestFeatures = versionFeatureStep{
-	// NB: the next four tests are ancient and supported since v2.0. However,
-	// in 19.2 -> 20.1 we had a migration that disallowed most DDL in the
-	// mixed version state, and so for convenience we gate them on v20.1.
-	stmtFeatureTest("Object Access", v201, `
--- We should be able to successfully select from objects created in ancient
--- versions of CRDB using their FQNs. Prevents bugs such as #43141, where
--- databases created before a migration were inaccessible after the
--- migration.
---
--- NB: the data has been baked into the fixtures. Originally created via:
---   create database persistent_db
---   create table persistent_db.persistent_table(a int)"))
--- on CRDB v1.0
-select * from persistent_db.persistent_table;
-show tables from persistent_db;
-`),
-	stmtFeatureTest("JSONB", v201, `
-CREATE DATABASE IF NOT EXISTS test;
-CREATE TABLE test.t (j JSONB);
-DROP TABLE test.t;
-	`),
-	stmtFeatureTest("Sequences", v201, `
-CREATE DATABASE IF NOT EXISTS test;
-CREATE SEQUENCE test.test_sequence;
-DROP SEQUENCE test.test_sequence;
-	`),
-	stmtFeatureTest("Computed Columns", v201, `
-CREATE DATABASE IF NOT EXISTS test;
-CREATE TABLE test.t (x INT AS (3) STORED);
-DROP TABLE test.t;
-	`),
-}
 
 func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVersion string) {
 	// This is ugly, but we can't pass `--encrypt=false` to old versions of
@@ -78,15 +44,22 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVers
 	// TODO(tbg): revisit as old versions are aged out of this test.
 	c.encryptDefault = false
 
-	// Set the bool within to true to create a new fixture for this test. This
-	// is necessary after every release. For example, when day `master` becomes
-	// the 20.2 release, this test will fail because it is missing a fixture for
-	// 20.1; run the test (on 20.1) with the bool flipped to create the fixture.
-	// Check it in (instructions are on the 'checkpointer' struct) and off we
-	// go.
-	cp := checkpointer{on: false, nodes: c.All()}
+	testFeaturesStep := func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		loadNode := u.c.All().randNode()[0]
+		u.c.Run(ctx, u.c.Node(loadNode), "./workload init schemachange")
+		runCmd := []string{
+			"./workload run",
+			"schemachange --concurrency 2 --max-ops 10 --verbose=1",
+			fmt.Sprintf("{pgurl:1-%d}", u.c.spec.NodeCount),
+		}
+		t.l.Printf("running workload %s", strings.Join(runCmd, " "))
 
-	testFeaturesStep := versionUpgradeTestFeatures.step(c.All())
+		err := u.c.RunE(ctx, u.c.Node(loadNode), runCmd...)
+		if err != nil {
+			t.l.Printf("running workload %s failed with %v", strings.Join(runCmd, " "), err)
+			c.t.Fatal(err)
+		}
+	}
 
 	// The steps below start a cluster at predecessorVersion (from a fixture),
 	// then start an upgrade that is rolled back, and finally start and finalize
@@ -102,7 +75,6 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVers
 		// See the comment on createCheckpoints for details on fixtures.
 		uploadAndStartFromCheckpointFixture(c.All(), predecessorVersion),
 		waitForUpgradeStep(c.All()),
-		testFeaturesStep,
 
 		// NB: at this point, cluster and binary version equal predecessorVersion,
 		// and auto-upgrades are on.
@@ -114,28 +86,42 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVers
 		// auto-upgrade disabled, then rolling back, and then rolling forward
 		// and finalizing on the auto-upgrade path.
 		preventAutoUpgradeStep(1),
+		testFeaturesStep,
 		// Roll nodes forward.
-		binaryUpgradeStep(c.All(), ""),
+		binaryUpgradeStep(c.Node(3), ""),
+		preventDeadlock(3),
+		testFeaturesStep,
+		binaryUpgradeStep(c.Node(2), ""),
+		testFeaturesStep,
+		binaryUpgradeStep(c.Node(1), ""),
+		testFeaturesStep,
+		binaryUpgradeStep(c.Node(4), ""),
 		testFeaturesStep,
 		// Roll back again. Note that bad things would happen if the cluster had
 		// ignored our request to not auto-upgrade. The `autoupgrade` roachtest
 		// exercises this in more detail, so here we just rely on things working
 		// as they ought to.
-		binaryUpgradeStep(c.All(), predecessorVersion),
+		binaryUpgradeStep(c.Node(2), predecessorVersion),
+		testFeaturesStep,
+		binaryUpgradeStep(c.Node(4), predecessorVersion),
+		testFeaturesStep,
+		binaryUpgradeStep(c.Node(3), predecessorVersion),
+		testFeaturesStep,
+		binaryUpgradeStep(c.Node(1), predecessorVersion),
 		testFeaturesStep,
 		// Roll nodes forward, this time allowing them to upgrade, and waiting
 		// for it to happen.
-		binaryUpgradeStep(c.All(), ""),
-		allowAutoUpgradeStep(1),
+		binaryUpgradeStep(c.Node(4), ""),
 		testFeaturesStep,
+		binaryUpgradeStep(c.Node(3), ""),
+		testFeaturesStep,
+		binaryUpgradeStep(c.Node(1), ""),
+		testFeaturesStep,
+		binaryUpgradeStep(c.Node(2), ""),
+		testFeaturesStep,
+		allowAutoUpgradeStep(1),
 		waitForUpgradeStep(c.All()),
 		testFeaturesStep,
-
-		// This is usually a noop, but if cp.on was set above, this is where we
-		// create fixtures. This is last so that we're creating the fixtures for
-		// the binary we're testing (i.e. if this run is on release-20.1, we'll
-		// create a 20.1 fixture).
-		cp.createCheckpointsAndFail,
 	)
 
 	u.run(ctx, t)
@@ -258,19 +244,11 @@ type versionStep func(ctx context.Context, t *test, u *versionUpgradeTest)
 
 func uploadAndStartFromCheckpointFixture(nodes nodeListOption, version string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		u.c.Run(ctx, nodes, "mkdir", "-p", "{store-dir}")
-		name := checkpointName(version)
-		for _, i := range nodes {
-			u.c.Put(ctx,
-				"pkg/cmd/roachtest/fixtures/"+strconv.Itoa(i)+"/"+name+".tgz",
-				"{store-dir}/fixture.tgz", u.c.Node(i),
-			)
-		}
-		// Extract fixture. Fail if there's already an LSM in the store dir.
-		u.c.Run(ctx, nodes, "cd {store-dir} && [ ! -f {store-dir}/CURRENT ] && tar -xf fixture.tgz")
-
 		// Put and start the binary.
 		args := u.uploadVersion(ctx, t, nodes, version)
+		// Stage workload on all nodes as the load node to run workload is chosen
+		// randomly.
+		u.c.Put(ctx, workload, "./workload", u.c.All())
 		// NB: can't start sequentially since cluster already bootstrapped.
 		u.c.Start(ctx, t, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
 	}
@@ -306,6 +284,16 @@ func preventAutoUpgradeStep(node int) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		db := u.conn(ctx, t, node)
 		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING cluster.preserve_downgrade_option = $1`, u.binaryVersion(ctx, t, node).String())
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func preventDeadlock(node int) versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		db := u.conn(ctx, t, node)
+		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING sql.lease_manager.remove_lease_once_deferenced = true;`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -350,102 +338,8 @@ func waitForUpgradeStep(nodes nodeListOption) versionStep {
 			}
 		}
 
-		t.l.Printf("%s: nodes %v are upgraded\n", newVersion)
+		t.l.Printf("%s: nodes %v are upgraded\n", newVersion, nodes)
 
 		// TODO(nvanbenschoten): add upgrade qualification step.
-	}
-}
-
-// checkpointer creates fixtures to "age out" old versions of CockroachDB. We
-// want to test data that was created at v1.0, but we don't actually want to run
-// a long chain of binaries starting all the way at v1.0. Instead, we
-// periodically bake a set of store directories that originally started out on
-// v1.0 and maintain it as a fixture for this test.
-//
-// The checkpoints will be created in the log directories downloaded as part of
-// the artifacts. The test will fail on purpose when it's done. After, manually
-// invoke the following to move the archives to the right place and commit the
-// result:
-//
-// for i in 1 2 3 4; do
-//   mkdir -p pkg/cmd/roachtest/fixtures/${i} && \
-//   mv artifacts/acceptance/version-upgrade/run_1/${i}.logs/checkpoint-*.tgz \
-//     pkg/cmd/roachtest/fixtures/${i}/
-// done
-type checkpointer struct {
-	on    bool
-	nodes nodeListOption
-}
-
-func (cp *checkpointer) createCheckpointsAndFail(
-	ctx context.Context, t *test, u *versionUpgradeTest,
-) {
-	if !cp.on {
-		return
-	}
-	c := u.c
-	// If we're taking checkpoints, momentarily stop the cluster (we
-	// need to do that to get the checkpoints to reflect a
-	// consistent cluster state). The binary at this point will be
-	// the new one, but the cluster version was not explicitly
-	// bumped, though auto-update may have taken place already.
-	// For example, if newVersion is 2.1, the cluster version in
-	// the store directories may be 2.0 on some stores and 2.1 on
-	// the others (though if any are on 2.1, then that's what's
-	// stored in system.settings).
-	// This means that when we restart from that version, we're
-	// going to want to use the binary mentioned in the checkpoint,
-	// or at least one compatible with the *predecessor* of the
-	// checkpoint version. For example, for checkpoint-2.1, the
-	// cluster version might be 2.0, so we can only use the 2.0 or
-	// 2.1 binary, but not the 19.1 binary (as 19.1 and 2.0 are not
-	// compatible).
-	name := checkpointName(u.binaryVersion(ctx, t, 1).String())
-	c.Stop(ctx, cp.nodes)
-	c.Run(ctx, cp.nodes, "./cockroach", "debug", "rocksdb", "--db={store-dir}",
-		"checkpoint", "--checkpoint_dir={store-dir}/"+name)
-	c.Run(ctx, cp.nodes, "tar", "-C", "{store-dir}/"+name, "-czf", "{log-dir}/"+name+".tgz", ".")
-	t.Fatalf("successfully created checkpoints; failing test on purpose")
-}
-
-type versionFeatureTest struct {
-	name string
-	fn   func(context.Context, *test, *versionUpgradeTest, nodeListOption) (skipped bool)
-}
-
-type versionFeatureStep []versionFeatureTest
-
-func (vs versionFeatureStep) step(nodes nodeListOption) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		for _, feature := range vs {
-			t.l.Printf("checking %s", feature.name)
-			tBegin := timeutil.Now()
-			skipped := feature.fn(ctx, t, u, nodes)
-			dur := fmt.Sprintf("%.2fs", timeutil.Since(tBegin).Seconds())
-			if skipped {
-				t.l.Printf("^-- skip (%s)", dur)
-			} else {
-				t.l.Printf("^-- ok (%s)", dur)
-			}
-		}
-	}
-}
-
-func stmtFeatureTest(
-	name string, minVersion roachpb.Version, stmt string, args ...interface{},
-) versionFeatureTest {
-	return versionFeatureTest{
-		name: name,
-		fn: func(ctx context.Context, t *test, u *versionUpgradeTest, nodes nodeListOption) (skipped bool) {
-			i := nodes.randNode()[0]
-			if u.clusterVersion(ctx, t, i).Less(minVersion) {
-				return true // skipped
-			}
-			db := u.conn(ctx, t, i)
-			if _, err := db.ExecContext(ctx, stmt, args...); err != nil {
-				t.Fatal(err)
-			}
-			return false
-		},
 	}
 }
