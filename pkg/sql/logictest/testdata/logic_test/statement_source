@@ -88,3 +88,8 @@ query III
 SELECT * FROM [INSERT INTO b VALUES(2,3) RETURNING b] JOIN [INSERT INTO b VALUES(4,5) RETURNING b, a] ON true;
 ----
 3 5 4
+
+subtest unsupported_47333
+
+query error unimplemented: cannot use SHOW SAVEPOINT STATUS as a statement source
+SELECT * FROM [SHOW SAVEPOINT STATUS]
