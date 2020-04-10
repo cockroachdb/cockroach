@@ -2257,19 +2257,18 @@ func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
 	return oc
 }
 
-// CanMaybeConstrainIndexWithExpr returns true if any indexes on the
-// ScanPrivate's table could be constrained by expr. It is a fast check for
-// GenerateUnionSelects to avoid matching a large number of queries that won't
+// CanMaybeConstrainIndexWithCols returns true if any indexes on the
+// ScanPrivate's table could be constrained by cols. It is a fast check for
+// SplitDisjunction to avoid matching a large number of queries that won't
 // obviously be improved by the rule.
 //
-// CanMaybeConstrainIndexWithExpr checks for an intersection between the outer
-// columns of expr and an index's columns. An intersection between column sets
-// implies that the expression could constrain a scan on that index. For
-// example, the expression "a = 1" would constrain a scan on an index over
-// columns "a, b", because the outer columns are a subset of the index columns.
-// Likewise, the expresson "a = 1 AND b = 2" would constrain a scan on an index
-// over column "a", because the outer columns are a superset of the index
-// columns.
+// CanMaybeConstrainIndexWithCols checks for an intersection between the input
+// columns and an index's columns. An intersection between column sets implies
+// that cols could constrain a scan on that index. For example, the columns "a"
+// would constrain a scan on an index over columns "a, b", because the "a" is a
+// subset of the index columns. Likewise, the columns "a" and "b" would
+// constrain a scan on an index over column "a", because "a" and "b" are a
+// superset of the index columns.
 //
 // Notice that this function can return both false positives and false
 // negatives. As an example of a false negative, consider the following table
@@ -2286,20 +2285,20 @@ func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
 //
 // The expression "a = 5" can constrain a scan over the hash index: The columns
 // "hash" must be a constant value of 1 because it is dependent on column "a"
-// with a constant value of 5. However, CanMaybeConstrainIndexWithExpr will
-// return false in this case because the outer column of the expression, "a",
-// does not intersect with the index column, "hash".
-func (c *CustomFuncs) CanMaybeConstrainIndexWithExpr(sp *memo.ScanPrivate, expr opt.Expr) bool {
+// with a constant value of 5. However, CanMaybeConstrainIndexWithCols will
+// return false in this case because "a" does not intersect with the index
+// column, "hash".
+func (c *CustomFuncs) CanMaybeConstrainIndexWithCols(sp *memo.ScanPrivate, cols opt.ColSet) bool {
 	md := c.e.mem.Metadata()
 	tabMeta := md.TableMeta(sp.Table)
 
 	var iter scanIndexIter
 	iter.init(c.e.mem, sp)
 	for iter.next() {
-		// Iterate through all indexes of the table and return true if any columns
-		// in expr intersect with the index's columns.
+		// Iterate through all indexes of the table and return true if cols
+		// intersect with the index's columns.
 		indexColumns := tabMeta.IndexKeyColumns(iter.indexOrdinal)
-		if c.ExprOuterCols(expr).Intersects(indexColumns) {
+		if cols.Intersects(indexColumns) {
 			return true
 		}
 	}
@@ -2377,26 +2376,31 @@ func (c *CustomFuncs) MapScanFilterCols(
 	return newFilters
 }
 
-// ExprOuterCols returns the outer columns of the given expression.
-//
-// Note that ExprOuterCols traverses the Expr tree rather than returning the
-// ColSet from cached shared properties. This is because shared properties are
-// not cached for all Expr types.
-func (c *CustomFuncs) ExprOuterCols(expr opt.Expr) opt.ColSet {
-	var p props.Shared
-	memo.BuildSharedProps(expr, &p)
-	return p.OuterCols
+// MakeSetPrivateForUnionSelects constructs a new SetPrivate with column sets
+// from the left and right ScanPrivate. We use the same ColList for the
+// LeftCols and OutCols of the SetPrivate because we've used the original
+// ScanPrivate column IDs for the left ScanPrivate and those are safe to use as
+// output column IDs of the Union expression.
+func (c *CustomFuncs) MakeSetPrivateForUnionSelects(
+	left, right *memo.ScanPrivate,
+) *memo.SetPrivate {
+	leftAndOutCols := opt.ColSetToList(left.Cols)
+	return &memo.SetPrivate{
+		LeftCols:  leftAndOutCols,
+		RightCols: opt.ColSetToList(right.Cols),
+		OutCols:   leftAndOutCols,
+	}
 }
 
-// MakeSetPrivateForUnionSelects constructs a new SetPrivate with column sets
-// from the left, right, and output of the operation.
-func (c *CustomFuncs) MakeSetPrivateForUnionSelects(
-	left, right, out *memo.ScanPrivate,
-) *memo.SetPrivate {
-	return &memo.SetPrivate{
-		LeftCols:  opt.ColSetToList(left.Cols),
-		RightCols: opt.ColSetToList(right.Cols),
-		OutCols:   opt.ColSetToList(out.Cols),
+// AddPrimaryKeyColsToScanPrivate creates a new ScanPrivate that is the same as
+// the input ScanPrivate, but has primary keys added to the ColSet.
+func (c *CustomFuncs) AddPrimaryKeyColsToScanPrivate(sp *memo.ScanPrivate) *memo.ScanPrivate {
+	keyCols := c.PrimaryKeyCols(sp.Table)
+	return &memo.ScanPrivate{
+		Table:   sp.Table,
+		Cols:    sp.Cols.Union(keyCols),
+		Flags:   sp.Flags,
+		Locking: sp.Locking,
 	}
 }
 
