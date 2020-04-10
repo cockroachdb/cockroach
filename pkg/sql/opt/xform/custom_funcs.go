@@ -2389,14 +2389,30 @@ func (c *CustomFuncs) ExprOuterCols(expr opt.Expr) opt.ColSet {
 }
 
 // MakeSetPrivateForUnionSelects constructs a new SetPrivate with column sets
-// from the left, right, and output of the operation.
+// from the left and right ScanPrivate. We use the same ColList for the
+// LeftCols and OutCols of the SetPrivate because we've used the original
+// ScanPrivate column IDs for the left ScanPrivate and those are safe to use as
+// output column IDs of the Union expression.
 func (c *CustomFuncs) MakeSetPrivateForUnionSelects(
-	left, right, out *memo.ScanPrivate,
+	left, right *memo.ScanPrivate,
 ) *memo.SetPrivate {
+	leftAndOutCols := opt.ColSetToList(left.Cols)
 	return &memo.SetPrivate{
-		LeftCols:  opt.ColSetToList(left.Cols),
+		LeftCols:  leftAndOutCols,
 		RightCols: opt.ColSetToList(right.Cols),
-		OutCols:   opt.ColSetToList(out.Cols),
+		OutCols:   leftAndOutCols,
+	}
+}
+
+// AddPrimaryKeyColsToScanPrivate creates a new ScanPrivate that is the same as
+// the input ScanPrivate, but has primary keys added to the ColSet.
+func (c *CustomFuncs) AddPrimaryKeyColsToScanPrivate(sp *memo.ScanPrivate) *memo.ScanPrivate {
+	keyCols := c.PrimaryKeyCols(sp.Table)
+	return &memo.ScanPrivate{
+		Table:   sp.Table,
+		Cols:    sp.Cols.Union(keyCols),
+		Flags:   sp.Flags,
+		Locking: sp.Locking,
 	}
 }
 
