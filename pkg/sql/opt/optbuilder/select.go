@@ -701,6 +701,7 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 			expr:         cteExpr,
 			bindingProps: cteExpr.Relational(),
 			id:           id,
+			mtr:          cte.Mtr,
 		}
 		cte := &addedCTEs[i]
 		outScope.ctes[cte.name.Alias.String()] = cte
@@ -755,6 +756,7 @@ func (b *Builder) flushCTEs(expr memo.RelExpr) memo.RelExpr {
 			&memo.WithPrivate{
 				ID:           ctes[i].id,
 				Name:         string(ctes[i].name.Alias),
+				Mtr:          ctes[i].mtr,
 				OriginalExpr: ctes[i].originalExpr,
 			},
 		)

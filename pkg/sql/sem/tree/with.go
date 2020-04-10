@@ -19,7 +19,14 @@ type With struct {
 // CTE represents a common table expression inside of a WITH clause.
 type CTE struct {
 	Name AliasClause
+	Mtr  MaterializeClause
 	Stmt Statement
+}
+
+// MaterializeClause represents a materialize clause inside of a WITH clause.
+type MaterializeClause struct {
+	Materialize bool
+	Set         bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -36,7 +43,14 @@ func (node *With) Format(ctx *FmtCtx) {
 			ctx.WriteString(", ")
 		}
 		ctx.FormatNode(&cte.Name)
-		ctx.WriteString(" AS (")
+		ctx.WriteString(" AS ")
+		if cte.Mtr.Set {
+			if !cte.Mtr.Materialize {
+				ctx.WriteString("NOT ")
+			}
+			ctx.WriteString("MATERIALIZED ")
+		}
+		ctx.WriteString("(")
 		ctx.FormatNode(cte.Stmt)
 		ctx.WriteString(")")
 	}

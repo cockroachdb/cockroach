@@ -218,6 +218,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if t.Name != "" {
 			fmt.Fprintf(f.Buffer, " (%s)", t.Name)
 		}
+		if t.Mtr.Set {
+			if !t.Mtr.Materialize {
+				fmt.Fprint(f.Buffer, " NOT")
+			}
+			fmt.Fprint(f.Buffer, " MATERIALIZED")
+		}
 
 	case *WithScanExpr:
 		fmt.Fprintf(f.Buffer, "%v &%d", e.Op(), t.With)
