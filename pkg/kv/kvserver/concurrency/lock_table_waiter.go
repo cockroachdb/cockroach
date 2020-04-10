@@ -120,7 +120,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 		case <-newStateC:
 			timerC = nil
 			state := guard.CurState()
-			switch state.stateKind {
+			switch state.kind {
 			case waitFor, waitForDistinguished:
 				// waitFor indicates that the request is waiting on another
 				// transaction. This transaction may be the lock holder of a
@@ -141,7 +141,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// had a cache of aborted transaction IDs that allowed us to notice
 				// and quickly resolve abandoned intents then we might be able to
 				// get rid of this state.
-				livenessPush := state.stateKind == waitForDistinguished
+				livenessPush := state.kind == waitForDistinguished
 				deadlockPush := true
 
 				// If the conflict is a reservation holder and not a held lock then
@@ -307,7 +307,7 @@ func (w *lockTableWaiterImpl) WaitOnLock(
 		return roachpb.NewError(err)
 	}
 	return w.pushLockTxn(ctx, req, waitingState{
-		stateKind:   waitFor,
+		kind:        waitFor,
 		txn:         &intent.Txn,
 		key:         intent.Key,
 		held:        true,
