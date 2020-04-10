@@ -1858,7 +1858,23 @@ func makeHashShardComputeExpr(colNames []string, buckets int) *string {
 		return &tree.FuncExpr{
 			Func: unresolvedFunc("fnv32"),
 			Exprs: tree.Exprs{
-				&tree.CastExpr{Expr: unresolvedName(colName), Type: types.String},
+				// NB: We have created the hash shard column as NOT NULL so we need
+				// to coalesce NULLs into something else. There's a variety of different
+				// reasonable choices here. We could pick some outlandish value, we
+				// could pick a zero value for each type, or we can do the simple thing
+				// we do here, however the empty string seems pretty reasonable. At worst
+				// we'll have a collision for every combination of NULLable string
+				// columns. That seems just fine.
+				&tree.CoalesceExpr{
+					Name: "COALESCE",
+					Exprs: tree.Exprs{
+						&tree.CastExpr{
+							Type: types.String,
+							Expr: unresolvedName(colName),
+						},
+						tree.NewDString(""),
+					},
+				},
 			},
 		}
 	}
@@ -1872,7 +1888,9 @@ func makeHashShardComputeExpr(colNames []string, buckets int) *string {
 			expr = hashedColumnExpr(c)
 		} else {
 			expr = &tree.BinaryExpr{
-				Operator: tree.Plus, Left: hashedColumnExpr(c), Right: expr,
+				Left:     hashedColumnExpr(c),
+				Operator: tree.Plus,
+				Right:    expr,
 			}
 		}
 	}
@@ -1880,10 +1898,7 @@ func makeHashShardComputeExpr(colNames []string, buckets int) *string {
 		Func: unresolvedFunc("mod"),
 		Exprs: tree.Exprs{
 			expr,
-			tree.NewNumVal(
-				constant.MakeInt64(int64(buckets)),
-				strconv.Itoa(buckets),
-				false /* negative */),
+			tree.NewDInt(tree.DInt(buckets)),
 		},
 	})
 	return &str
