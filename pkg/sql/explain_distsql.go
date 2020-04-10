@@ -98,7 +98,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			execCfg.LeaseHolderCache,
 			params.p.txn,
 			func(ts hlc.Timestamp) {
-				_ = execCfg.Clock.Update(ts)
+				execCfg.Clock.Update(ts)
 			},
 			params.extendedEvalCtx.Tracing,
 		)
@@ -172,7 +172,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			execCfg.LeaseHolderCache,
 			newParams.p.txn,
 			func(ts hlc.Timestamp) {
-				_ = execCfg.Clock.Update(ts)
+				execCfg.Clock.Update(ts)
 			},
 			newParams.extendedEvalCtx.Tracing,
 		)
@@ -225,7 +225,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			execCfg.LeaseHolderCache,
 			params.p.txn,
 			func(ts hlc.Timestamp) {
-				_ = execCfg.Clock.Update(ts)
+				execCfg.Clock.Update(ts)
 			},
 			params.extendedEvalCtx.Tracing,
 		)
