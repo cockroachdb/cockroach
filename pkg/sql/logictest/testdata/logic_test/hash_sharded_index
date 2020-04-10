@@ -483,3 +483,36 @@ INSERT INTO sharded_index_with_nulls VALUES (1, NULL);
 
 statement ok
 DROP TABLE sharded_index_with_nulls;
+
+# Test that renaming a column which is a member of a hash sharded index works.
+subtest rename_column
+
+statement ok
+CREATE TABLE rename_column (
+    c0 INT,
+    c1 INT,
+    c2 INT,
+    PRIMARY KEY (c0, c1) USING HASH WITH BUCKET_COUNT = 8,
+    INDEX (c2) USING HASH WITH BUCKET_COUNT = 8
+);
+
+statement ok
+ALTER TABLE rename_column RENAME c2 TO c3;
+
+# Test mucking with primary key columns.
+statement ok
+ALTER TABLE rename_column RENAME c1 TO c2;
+
+statement ok
+ALTER TABLE rename_column RENAME c0 TO c1;
+
+# Test both at the same time.
+statement ok
+ALTER TABLE rename_column RENAME c1 TO c0, RENAME c2 TO c1, RENAME c3 TO c2;
+
+# Ensure that renaming a shard column fails.
+statement error cannot rename shard column
+ALTER TABLE rename_column RENAME crdb_internal_c2_shard_8 TO foo;
+
+statement ok
+DROP TABLE rename_column;
