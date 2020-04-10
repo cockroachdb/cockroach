@@ -1,3 +1,5 @@
+# This file contains telemetry tests for sql.plan.* counters.
+
 exec
 CREATE TABLE x (a INT PRIMARY KEY)
 ----
