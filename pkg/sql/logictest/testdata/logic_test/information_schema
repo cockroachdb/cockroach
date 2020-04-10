@@ -153,7 +153,8 @@ information_schema.tables  CREATE TABLE tables (
                            table_name STRING NOT NULL,
                            table_type STRING NOT NULL,
                            is_insertable_into STRING NOT NULL,
-                           version INT8 NULL
+                           version INT8 NULL,
+                           INDEX tables_table_name_idx (table_name ASC) STORING (table_catalog, table_schema, table_type, is_insertable_into, version)
 )
 
 query TTBTTTB colnames

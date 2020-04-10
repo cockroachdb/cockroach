@@ -51,7 +51,7 @@ func ShowCreateTable(
 	tn *tree.Name,
 	dbPrefix string,
 	desc *sqlbase.TableDescriptor,
-	lCtx *internalLookupCtx,
+	lCtx simpleSchemaResolver,
 	fkDisplayMode shouldOmitFKClausesFromCreate,
 ) (string, error) {
 	a := &sqlbase.DatumAlloc{}
