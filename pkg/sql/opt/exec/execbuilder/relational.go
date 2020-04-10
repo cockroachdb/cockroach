@@ -189,9 +189,6 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.ScanExpr:
 		ep, err = b.buildScan(t)
 
-	case *memo.VirtualScanExpr:
-		ep, err = b.buildVirtualScan(t)
-
 	case *memo.SelectExpr:
 		ep, err = b.buildSelect(t)
 
@@ -501,21 +498,6 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		rowCount,
 		locking,
 	)
-	if err != nil {
-		return execPlan{}, err
-	}
-	res.root = root
-	return res, nil
-}
-
-func (b *Builder) buildVirtualScan(scan *memo.VirtualScanExpr) (execPlan, error) {
-	md := b.mem.Metadata()
-	tab := md.Table(scan.Table)
-
-	_, output := b.getColumns(scan.Cols, scan.Table)
-	res := execPlan{outputCols: output}
-
-	root, err := b.factory.ConstructVirtualScan(tab)
 	if err != nil {
 		return execPlan{}, err
 	}

@@ -79,35 +79,6 @@ define ScanPrivate {
     PartitionConstrainedScan bool
 }
 
-# VirtualScan returns a result set containing every row in a virtual table.
-# Virtual tables are system tables that are populated "on the fly" with rows
-# synthesized from system metadata and other state. An example is the
-# "information_schema.tables" virtual table which returns one row for each
-# accessible system or user table.
-#
-# VirtualScan has many of the same characteristics as the Scan operator.
-# However, virtual tables do not have indexes or keys, and the physical operator
-# used to scan virtual tables does not support limits or constraints. Therefore,
-# nearly all the rules that apply to Scan do not apply to VirtualScan, so it
-# makes sense to have a separate operator.
-[Relational]
-define VirtualScan {
-    _ VirtualScanPrivate
-}
-
-[Private]
-define VirtualScanPrivate {
-    # Table identifies the virtual table to synthesize and scan. It is an id
-    # that can be passed to the Metadata.Table method in order to fetch
-    # cat.Table metadata.
-    Table TableID
-
-    # Cols specifies the set of columns that the VirtualScan operator projects.
-    # This is always every column in the virtual table (i.e. never a subset even
-    # if all columns are not needed).
-    Cols ColSet
-}
-
 # SequenceSelect represents a read from a sequence as a data source. It always returns
 # three columns, last_value, log_cnt, and is_called, with a single row. last_value is
 # the most recent value returned from the sequence and log_cnt and is_called are

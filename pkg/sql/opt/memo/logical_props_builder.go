@@ -132,34 +132,6 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	}
 }
 
-func (b *logicalPropsBuilder) buildVirtualScanProps(scan *VirtualScanExpr, rel *props.Relational) {
-	// Output Columns
-	// --------------
-	// VirtualScan output columns are stored in the definition.
-	rel.OutputCols = scan.Cols
-
-	// Not Null Columns
-	// ----------------
-	// All columns are assumed to be nullable.
-
-	// Outer Columns
-	// -------------
-	// VirtualScan operator never has outer columns.
-
-	// Functional Dependencies
-	// -----------------------
-	// VirtualScan operator has an empty FD set.
-
-	// Cardinality
-	// -----------
-	// Don't make any assumptions about cardinality of output.
-	rel.Cardinality = props.AnyCardinality
-
-	// Statistics
-	// ----------
-	b.sb.buildVirtualScan(scan, rel)
-}
-
 func (b *logicalPropsBuilder) buildSequenceSelectProps(
 	seq *SequenceSelectExpr, rel *props.Relational,
 ) {
