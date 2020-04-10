@@ -21,23 +21,30 @@ import (
 
 func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Create)
+
 	const showCreateQuery = `
+    WITH zone_configs AS (
+      SELECT string_agg(raw_config_sql, e';\n') FROM crdb_internal.zones
+      WHERE database_name = %[1]s
+      AND table_name = %[2]s 
+      AND raw_config_yaml IS NOT NULL
+      AND raw_config_sql IS NOT NULL
+    )
     SELECT
 			%[3]s AS table_name,
-			array_to_string(
-				array_cat(
-					ARRAY[create_statement],
-					zone_configuration_statements
-				),
-				e';\n'
-			)
-				AS create_statement
+      concat(create_statement,
+             CASE
+               WHEN NOT has_partitions
+               THEN NULL
+               WHEN (SELECT * FROM zone_configs) IS NULL
+               THEN e'\n-- Warning: Partitioned table with no zone configurations.'
+               ELSE concat(e';\n', (SELECT * FROM zone_configs))
+             END
+			) AS create_statement
 		FROM
 			%[4]s.crdb_internal.create_statements
 		WHERE
-			(database_name IS NULL OR database_name = %[1]s)
-			AND schema_name = %[5]s
-			AND descriptor_name = %[2]s
+      descriptor_id = %[6]d
 	`
 
 	return d.showTableDetails(n.Name, showCreateQuery)
@@ -164,6 +171,7 @@ func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.State
 //   %[3]s the given table name as SQL string literal.
 //   %[4]s the database name as SQL identifier.
 //   %[5]s the schema name as SQL string literal.
+//   %[6]s the table ID.
 func (d *delegator) showTableDetails(
 	name *tree.UnresolvedObjectName, query string,
 ) (tree.Statement, error) {
@@ -185,7 +193,7 @@ func (d *delegator) showTableDetails(
 		lex.EscapeSQLString(resName.String()),
 		resName.CatalogName.String(), // note: CatalogName.String() != Catalog()
 		lex.EscapeSQLString(resName.Schema()),
-		dataSource.ID(),
+		dataSource.PostgresDescriptorID(),
 	)
 
 	return parse(fullQuery)
