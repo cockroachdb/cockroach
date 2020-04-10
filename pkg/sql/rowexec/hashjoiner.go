@@ -128,6 +128,9 @@ var _ execinfra.OpNode = &hashJoiner{}
 
 const hashJoinerProcName = "hash joiner"
 
+// newHashJoiner creates a new hash join processor.
+// - disableTempStorage determines whether the hash joiner is allowed to spill
+// to disk. It should only be set to 'true' in tests.
 func newHashJoiner(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -136,6 +139,7 @@ func newHashJoiner(
 	rightSource execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
+	disableTempStorage bool,
 ) (*hashJoiner, error) {
 	h := &hashJoiner{
 		initialBufferSize: hashJoinerInitialBufferSize,
@@ -171,12 +175,12 @@ func newHashJoiner(
 		return nil, err
 	}
 
-	st := h.FlowCtx.Cfg.Settings
 	ctx := h.FlowCtx.EvalCtx.Ctx()
-	h.useTempStorage = execinfra.SettingUseTempStorageJoins.Get(&st.SV) ||
-		h.FlowCtx.Cfg.TestingKnobs.ForceDiskSpill ||
-		h.FlowCtx.Cfg.TestingKnobs.MemoryLimitBytes > 0 ||
-		h.testingKnobMemFailPoint != hjStateUnknown
+	if !disableTempStorage {
+		h.useTempStorage = h.FlowCtx.Cfg.TestingKnobs.ForceDiskSpill ||
+			h.FlowCtx.Cfg.TestingKnobs.MemoryLimitBytes > 0 ||
+			h.testingKnobMemFailPoint != hjStateUnknown
+	}
 	if h.useTempStorage {
 		// Limit the memory use by creating a child monitor with a hard limit.
 		// The hashJoiner will overflow to disk if this limit is not enough.
