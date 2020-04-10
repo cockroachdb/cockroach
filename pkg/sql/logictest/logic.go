@@ -1273,7 +1273,6 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		); err != nil {
 			t.Fatal(err)
 		}
-		t.t().Log(fmt.Sprintf("randomize batchSize to %d\n", t.randomizedVectorizedBatchSize))
 	}
 
 	if cfg.overrideAutoStats != "" {
@@ -2493,7 +2492,7 @@ func RunLogicTest(t *testing.T, globs ...string) {
 		}
 	}
 
-	// Determining whether or not to randomize vectorize batch size.
+	// Determining whether or not to randomize vectorized batch size.
 	rng, _ := randutil.NewPseudoRand()
 	randVal := rng.Float64()
 	randomizedVectorizedBatchSize := coldata.BatchSize()
@@ -2503,6 +2502,9 @@ func RunLogicTest(t *testing.T, globs ...string) {
 		randomizedVectorizedBatchSize = 2
 	} else if randVal < 0.5 {
 		randomizedVectorizedBatchSize = 3
+	}
+	if randomizedVectorizedBatchSize != coldata.BatchSize() {
+		t.Log(fmt.Sprintf("randomize batchSize to %d", randomizedVectorizedBatchSize))
 	}
 
 	// The tests below are likely to run concurrently; `log` is shared
