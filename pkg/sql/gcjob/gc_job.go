@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -95,7 +96,7 @@ func (r schemaChangeGCResumer) Resume(
 	if err != nil {
 		return err
 	}
-	_, gossipUpdateC := setupConfigWatcher(execCfg)
+	zoneCfgFilter, gossipUpdateC := setupConfigWatcher(execCfg)
 	tableDropTimes, indexDropTimes := getDropTimes(details)
 
 	allTables := getAllTablesWaitingForGC(details, progress)
@@ -125,6 +126,15 @@ func (r schemaChangeGCResumer) Resume(
 			// TTL whenever we get an update on one of the tables/indexes (or the db)
 			// that this job is responsible for, and computing the earliest deadline
 			// from our set of cached TTL values.
+			cfg := execCfg.Gossip.GetSystemConfig()
+			zoneConfigUpdated := false
+			zoneCfgFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
+				zoneConfigUpdated = true
+			})
+			if !zoneConfigUpdated {
+				log.VEventf(ctx, 2, "no zone config updates, continuing")
+				continue
+			}
 			remainingTables := getAllTablesWaitingForGC(details, progress)
 			if len(remainingTables) == 0 {
 				return nil
