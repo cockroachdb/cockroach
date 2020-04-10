@@ -2115,10 +2115,14 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 		t.outf("%s;", stmt.sql)
 	}
 	execSQL, changed := mutations.ApplyString(t.rng, stmt.sql, mutations.ColumnFamilyMutator)
+	n := time.Now()
+	res, err := t.db.Exec(execSQL)
+	if *showSQL {
+		t.outf("%s; -- %s", stmt.sql, time.Since(n))
+	}
 	if changed {
 		t.outf("rewrote:\n%s\n", execSQL)
 	}
-	res, err := t.db.Exec(execSQL)
 	if err == nil {
 		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), stmt.sql)
 	}
