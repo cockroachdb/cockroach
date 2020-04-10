@@ -436,10 +436,6 @@ func (w *schemaChangeWorker) createIndex(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	if len(columnNames) <= 0 {
-		return "", errors.Errorf("table %s has no columns", tableName)
-	}
-
 	indexName, err := w.randIndex(tx, tableName, w.existingPct)
 	if err != nil {
 		return "", err
@@ -863,7 +859,7 @@ ORDER BY random()
 func (w *schemaChangeWorker) tableColumnsShuffled(tx *pgx.Tx, tableName string) ([]string, error) {
 	q := fmt.Sprintf(`
 SELECT column_name
-  FROM [SHOW COLUMNS FROM "%s"];
+FROM [SHOW COLUMNS FROM "%s"];
 `, tableName)
 
 	rows, err := tx.Query(q)
@@ -882,6 +878,9 @@ SELECT column_name
 	}
 	if rows.Err() != nil {
 		return nil, err
+	}
+	if len(columnNames) <= 0 {
+		return nil, errors.Errorf("table %s has no columns", tableName)
 	}
 
 	w.rng.Shuffle(len(columnNames), func(i, j int) {
