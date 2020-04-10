@@ -34,12 +34,8 @@ postgres
 system
 test
 
-# The "updating privileges" clause in the SELECT statement is for excluding jobs
-# run by an unrelated startup migration.
-# TODO (lucy): Update this if/when we decide to change how these jobs queued by
-# the startup migration are handled.
 query TT
-SELECT job_type, status FROM [SHOW JOBS] WHERE description != 'updating privileges'
+SELECT job_type, status FROM [SHOW JOBS]
 ----
 SCHEMA CHANGE       succeeded
 SCHEMA CHANGE GC    running
@@ -251,3 +247,15 @@ DROP DATABASE defaultdb; DROP DATABASE postgres
 
 statement ok
 CREATE DATABASE defaultdb; CREATE DATABASE postgres
+
+# Test that an empty database doesn't get a GC job.
+statement ok
+CREATE DATABASE empty
+
+statement ok
+DROP DATABASE empty
+
+query TT
+SELECT job_type, status FROM [SHOW JOBS] WHERE description LIKE '%empty%'
+----
+SCHEMA CHANGE       succeeded
