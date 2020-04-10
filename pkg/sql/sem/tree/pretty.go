@@ -1544,6 +1544,20 @@ func (node *FamilyTableDef) doc(p *PrettyCfg) pretty.Doc {
 	return pretty.ConcatSpace(d, p.bracket("(", p.Doc(&node.Columns), ")"))
 }
 
+func (node *LikeTableDef) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.Keyword("LIKE")
+	d = pretty.ConcatSpace(d, p.Doc(&node.Name))
+	for _, opt := range node.Options {
+		word := "INCLUDING"
+		if opt.Excluded {
+			word = "EXCLUDING"
+		}
+		d = pretty.ConcatSpace(d, pretty.Keyword(word))
+		d = pretty.ConcatSpace(d, pretty.Keyword(opt.Opt.String()))
+	}
+	return d
+}
+
 func (node *IndexElem) doc(p *PrettyCfg) pretty.Doc {
 	d := p.Doc(&node.Column)
 	if node.Direction != DefaultDirection {

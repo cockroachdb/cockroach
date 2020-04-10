@@ -129,7 +129,7 @@ func ValidateColumnDefType(t *types.T) error {
 // The DEFAULT expression is returned in TypedExpr form for analysis (e.g. recording
 // sequence dependencies).
 func MakeColumnDefDescs(
-	d *tree.ColumnTableDef, semaCtx *tree.SemaContext,
+	d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
 ) (*ColumnDescriptor, *IndexDescriptor, tree.TypedExpr, error) {
 	if d.IsSerial {
 		// To the reader of this code: if control arrives here, this means
@@ -197,7 +197,7 @@ func MakeColumnDefDescs(
 				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 			}
 		} else {
-			buckets, err := tree.EvalShardBucketCount(d.PrimaryKey.ShardBuckets)
+			buckets, err := EvalShardBucketCount(semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -220,6 +220,29 @@ func MakeColumnDefDescs(
 	}
 
 	return col, idx, typedExpr, nil
+}
+
+// EvalShardBucketCount evaluates and checks the integer argument to a `USING HASH WITH
+// BUCKET_COUNT` index creation query.
+func EvalShardBucketCount(
+	semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, shardBuckets tree.Expr,
+) (int32, error) {
+	const invalidBucketCountMsg = `BUCKET_COUNT must be an integer greater than 1`
+	typedExpr, err := SanitizeVarFreeExpr(
+		shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, true, /* allowImpure */
+	)
+	if err != nil {
+		return 0, err
+	}
+	d, err := typedExpr.Eval(evalCtx)
+	if err != nil {
+		return 0, pgerror.Wrap(err, pgcode.InvalidParameterValue, invalidBucketCountMsg)
+	}
+	buckets := tree.MustBeDInt(d)
+	if buckets < 2 {
+		return 0, pgerror.New(pgcode.InvalidParameterValue, invalidBucketCountMsg)
+	}
+	return int32(buckets), nil
 }
 
 // GetShardColumnName generates a name for the hidden shard column to be used to create a

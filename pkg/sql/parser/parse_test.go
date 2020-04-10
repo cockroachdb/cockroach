@@ -287,6 +287,11 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b STRING[] COLLATE de)`},
 		{`CREATE TABLE a (b STRING(3)[] COLLATE de)`},
 
+		{`CREATE TABLE a (LIKE b)`},
+		{`CREATE TABLE a (LIKE b, c INT8)`},
+		{`CREATE TABLE a (LIKE b EXCLUDING INDEXES INCLUDING INDEXES)`},
+		{`CREATE TABLE a (LIKE b INCLUDING ALL EXCLUDING INDEXES, c INT8)`},
+
 		{`CREATE VIEW a AS SELECT * FROM b`},
 		{`EXPLAIN CREATE VIEW a AS SELECT * FROM b`},
 		{`CREATE VIEW a AS SELECT b.* FROM b LIMIT 5`},
@@ -3201,8 +3206,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(x INT[1][2])`, 32552, ``, ``},
 		{`CREATE TABLE a(x INT ARRAY[1][2])`, 32552, ``, ``},
 
-		{`CREATE TABLE a(LIKE b)`, 30840, ``, ``},
-
 		{`CREATE TABLE a(b INT8) WITH OIDS`, 0, `create table with oids`, ``},
 
 		{`CREATE TABLE a AS SELECT b WITH NO DATA`, 0, `create table as with no data`, ``},
@@ -3218,6 +3221,11 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) DEFERRABLE INITIALLY IMMEDIATE)`, 31632, `initially immediate`, ``},
 		{`CREATE TABLE a(b INT8, UNIQUE (b) DEFERRABLE)`, 31632, `deferrable`, ``},
 		{`CREATE TABLE a(b INT8, CHECK (b > 0) DEFERRABLE)`, 31632, `deferrable`, ``},
+
+		{`CREATE TABLE a (LIKE b INCLUDING COMMENTS)`, 47071, `like table`, ``},
+		{`CREATE TABLE a (LIKE b INCLUDING IDENTITY)`, 47071, `like table`, ``},
+		{`CREATE TABLE a (LIKE b INCLUDING STATISTICS)`, 47071, `like table`, ``},
+		{`CREATE TABLE a (LIKE b INCLUDING STORAGE)`, 47071, `like table`, ``},
 
 		{`CREATE TEMP TABLE a (a int) ON COMMIT DROP`, 46556, `drop`, ``},
 		{`CREATE TEMP TABLE a (a int) ON COMMIT DELETE ROWS`, 46556, `delete rows`, ``},

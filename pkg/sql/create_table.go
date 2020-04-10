@@ -1282,7 +1282,7 @@ func MakeTableDesc(
 				if n.Interleave != nil {
 					return desc, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
 				}
-				buckets, err := tree.EvalShardBucketCount(d.PrimaryKey.ShardBuckets)
+				buckets, err := sqlbase.EvalShardBucketCount(semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)
 				if err != nil {
 					return desc, err
 				}
@@ -1302,7 +1302,7 @@ func MakeTableDesc(
 				n.Defs = append(n.Defs, checkConstraint)
 				columnDefaultExprs = append(columnDefaultExprs, nil)
 			}
-			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, semaCtx)
+			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, semaCtx, evalCtx)
 			if err != nil {
 				return desc, err
 			}
@@ -1364,7 +1364,8 @@ func MakeTableDesc(
 		}
 		shardCol, newColumn, err := setupShardedIndex(
 			ctx,
-			st,
+			evalCtx,
+			semaCtx,
 			sessionData.HashShardedIndexesEnabled,
 			&d.Columns,
 			d.Sharded.ShardBuckets,
@@ -1375,7 +1376,7 @@ func MakeTableDesc(
 			return err
 		}
 		if newColumn {
-			buckets, err := tree.EvalShardBucketCount(d.Sharded.ShardBuckets)
+			buckets, err := sqlbase.EvalShardBucketCount(semaCtx, evalCtx, d.Sharded.ShardBuckets)
 			if err != nil {
 				return err
 			}
@@ -1390,7 +1391,7 @@ func MakeTableDesc(
 	}
 	for _, def := range n.Defs {
 		switch d := def.(type) {
-		case *tree.ColumnTableDef:
+		case *tree.ColumnTableDef, *tree.LikeTableDef:
 			// pass, handled above.
 
 		case *tree.IndexTableDef:
@@ -1613,7 +1614,7 @@ func MakeTableDesc(
 		case *tree.ColumnTableDef:
 			// Check after all ResolveFK calls.
 
-		case *tree.IndexTableDef, *tree.UniqueConstraintTableDef, *tree.FamilyTableDef:
+		case *tree.IndexTableDef, *tree.UniqueConstraintTableDef, *tree.FamilyTableDef, *tree.LikeTableDef:
 			// Pass, handled above.
 
 		case *tree.CheckConstraintTableDef:
@@ -1719,6 +1720,18 @@ func makeTableDesc(
 			createStmt = &newCreateStmt
 		}
 	}
+	newDefs, err := replaceLikeTableOpts(n, params)
+	if err != nil {
+		return ret, err
+	}
+
+	if newDefs != nil {
+		// If we found any LIKE table defs, we actually modified the list of
+		// defs during iteration, so we re-assign the resultant list back to
+		// n.Defs.
+		n.Defs = newDefs
+	}
+
 	for i, def := range n.Defs {
 		d, ok := def.(*tree.ColumnTableDef)
 		if !ok {
@@ -1777,6 +1790,139 @@ func makeTableDesc(
 		)
 	})
 	return ret, err
+}
+
+// replaceLikeTableOps processes the TableDefs in the input CreateTableNode,
+// searching for LikeTableDefs. If any are found, each LikeTableDef will be
+// replaced in the output tree.TableDefs (which will be a copy of the input
+// node's TableDefs) by an equivalent set of TableDefs pulled from the
+// LikeTableDef's target table.
+// If no LikeTableDefs are found, the output tree.TableDefs will be nil.
+func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs, error) {
+	var newDefs tree.TableDefs
+	for i, def := range n.Defs {
+		d, ok := def.(*tree.LikeTableDef)
+		if !ok {
+			if newDefs != nil {
+				newDefs = append(newDefs, def)
+			}
+			continue
+		}
+		// We're definitely going to be editing n.Defs now, so make a copy of it.
+		if newDefs == nil {
+			newDefs = make(tree.TableDefs, 0, len(n.Defs))
+			newDefs = append(newDefs, n.Defs[:i]...)
+		}
+		td, err := params.p.ResolveMutableTableDescriptor(params.ctx, &d.Name, true, ResolveRequireTableDesc)
+		if err != nil {
+			return nil, err
+		}
+		opts := tree.LikeTableOpt(0)
+		// Process ons / offs.
+		for _, opt := range d.Options {
+			if opt.Excluded {
+				opts &^= opt.Opt
+			} else {
+				opts |= opt.Opt
+			}
+		}
+
+		defs := make(tree.TableDefs, 0)
+		// Add all columns. Columns are always added.
+		for i := range td.Columns {
+			c := &td.Columns[i]
+			if c.Hidden {
+				// Hidden columns automatically get added by the system; we don't need
+				// to add them ourselves here.
+				continue
+			}
+			def := tree.ColumnTableDef{
+				Name: tree.Name(c.Name),
+				Type: c.DatumType(),
+			}
+			if c.Nullable {
+				def.Nullable.Nullability = tree.Null
+			} else {
+				def.Nullable.Nullability = tree.NotNull
+			}
+			if c.DefaultExpr != nil {
+				if opts.Has(tree.LikeTableOptDefaults) {
+					def.DefaultExpr.Expr, err = parser.ParseExpr(*c.DefaultExpr)
+					if err != nil {
+						return nil, err
+					}
+				}
+			}
+			if c.ComputeExpr != nil {
+				if opts.Has(tree.LikeTableOptGenerated) {
+					def.Computed.Computed = true
+					def.Computed.Expr, err = parser.ParseExpr(*c.ComputeExpr)
+					if err != nil {
+						return nil, err
+					}
+				}
+			}
+			defs = append(defs, &def)
+		}
+		if opts.Has(tree.LikeTableOptConstraints) {
+			for _, c := range td.Checks {
+				def := tree.CheckConstraintTableDef{
+					Name:   tree.Name(c.Name),
+					Hidden: c.Hidden,
+				}
+				def.Expr, err = parser.ParseExpr(c.Expr)
+				if err != nil {
+					return nil, err
+				}
+				defs = append(defs, &def)
+			}
+		}
+		if opts.Has(tree.LikeTableOptIndexes) {
+			for _, idx := range td.AllNonDropIndexes() {
+				indexDef := tree.IndexTableDef{
+					Name:     tree.Name(idx.Name),
+					Inverted: idx.Type == sqlbase.IndexDescriptor_INVERTED,
+					Storing:  make(tree.NameList, 0, len(idx.StoreColumnNames)),
+					Columns:  make(tree.IndexElemList, 0, len(idx.ColumnNames)),
+				}
+				columnNames := idx.ColumnNames
+				if idx.IsSharded() {
+					indexDef.Sharded = &tree.ShardedIndexDef{
+						ShardBuckets: tree.NewDInt(tree.DInt(idx.Sharded.ShardBuckets)),
+					}
+					columnNames = idx.Sharded.ColumnNames
+				}
+				for i, name := range columnNames {
+					elem := tree.IndexElem{
+						Column:    tree.Name(name),
+						Direction: tree.Ascending,
+					}
+					if idx.ColumnDirections[i] == sqlbase.IndexDescriptor_DESC {
+						elem.Direction = tree.Descending
+					}
+					indexDef.Columns = append(indexDef.Columns, elem)
+				}
+				for _, name := range idx.StoreColumnNames {
+					indexDef.Storing = append(indexDef.Storing, tree.Name(name))
+				}
+				var def tree.TableDef = &indexDef
+				if idx.Unique {
+					isPK := idx.ID == td.PrimaryIndex.ID
+					if isPK && td.IsPrimaryIndexDefaultRowID() {
+						continue
+					}
+
+					def = &tree.UniqueConstraintTableDef{
+						IndexTableDef: indexDef,
+						PrimaryKey:    isPK,
+					}
+				}
+				defs = append(defs, def)
+			}
+		}
+		newDefs = append(newDefs, defs...)
+	}
+	return newDefs, nil
 }
 
 // dummyColumnItem is used in MakeCheckConstraint to construct an expression

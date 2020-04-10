@@ -102,6 +102,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		params.creationTimeForNewTableDescriptor(),
 		privs,
 		&params.p.semaCtx,
+		params.EvalContext(),
 		isTemporary,
 	)
 	if err != nil {
@@ -188,6 +189,7 @@ func makeViewTableDesc(
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
 	temporary bool,
 ) (sqlbase.MutableTableDescriptor, error) {
 	desc := InitTableDescriptor(
@@ -204,7 +206,7 @@ func makeViewTableDesc(
 		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
 		// The new types in the CREATE VIEW column specs never use
 		// SERIAL so we need not process SERIAL types here.
-		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx)
+		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx, evalCtx)
 		if err != nil {
 			return desc, err
 		}

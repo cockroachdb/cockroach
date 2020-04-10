@@ -110,3 +110,209 @@ WHERE feature_name IN (
 ----
 sql.schema.inverted_index
 sql.schema.hash_sharded_index
+
+subtest like_table
+
+# Test the CREATE TABLE LIKE functionality.
+
+statement ok
+CREATE TABLE like_table (
+  a INT CHECK (a > 3),
+  b STRING DEFAULT 'foo' NOT NULL,
+  c DECIMAL AS (a+3) STORED,
+  h INT,
+  j JSON,
+  PRIMARY KEY (a, b),
+  UNIQUE INDEX foo (b DESC, c),
+  INDEX (c) STORING (j),
+  INVERTED INDEX (j)
+)
+
+statement ok
+CREATE TABLE like_none (LIKE like_table)
+
+query TT
+SHOW CREATE TABLE like_none
+----
+like_none  CREATE TABLE like_none (
+           a INT8 NOT NULL,
+           b STRING NOT NULL,
+           c DECIMAL NULL,
+           h INT8 NULL,
+           j JSONB NULL,
+           FAMILY "primary" (a, b, c, h, j, rowid)
+)
+
+statement ok
+CREATE TABLE like_constraints (LIKE like_table INCLUDING CONSTRAINTS)
+
+query TT
+SHOW CREATE TABLE like_constraints
+----
+like_constraints  CREATE TABLE like_constraints (
+                  a INT8 NOT NULL,
+                  b STRING NOT NULL,
+                  c DECIMAL NULL,
+                  h INT8 NULL,
+                  j JSONB NULL,
+                  FAMILY "primary" (a, b, c, h, j, rowid),
+                  CONSTRAINT check_a CHECK (a > 3)
+)
+
+statement ok
+CREATE TABLE like_indexes (LIKE like_table INCLUDING INDEXES)
+
+query TT
+SHOW CREATE TABLE like_indexes
+----
+like_indexes  CREATE TABLE like_indexes (
+              a INT8 NOT NULL,
+              b STRING NOT NULL,
+              c DECIMAL NULL,
+              h INT8 NULL,
+              j JSONB NULL,
+              CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+              UNIQUE INDEX foo (b DESC, c ASC),
+              INDEX like_table_c_idx (c ASC) STORING (j),
+              INVERTED INDEX like_table_j_idx (j),
+              FAMILY "primary" (a, b, c, h, j)
+)
+
+# INCLUDING GENERATED adds "generated columns", aka stored columns.
+statement ok
+CREATE TABLE like_generated (LIKE like_table INCLUDING GENERATED)
+
+query TT
+SHOW CREATE TABLE like_generated
+----
+like_generated  CREATE TABLE like_generated (
+                a INT8 NOT NULL,
+                b STRING NOT NULL,
+                c DECIMAL NULL AS (a + 3) STORED,
+                h INT8 NULL,
+                j JSONB NULL,
+                FAMILY "primary" (a, b, c, h, j, rowid)
+)
+
+statement ok
+CREATE TABLE like_defaults (LIKE like_table INCLUDING DEFAULTS)
+
+query TT
+SHOW CREATE TABLE like_defaults
+----
+like_defaults  CREATE TABLE like_defaults (
+               a INT8 NOT NULL,
+               b STRING NOT NULL DEFAULT 'foo':::STRING,
+               c DECIMAL NULL,
+               h INT8 NULL,
+               j JSONB NULL,
+               FAMILY "primary" (a, b, c, h, j, rowid)
+)
+
+statement ok
+CREATE TABLE like_all (LIKE like_table INCLUDING ALL)
+
+query TT
+SHOW CREATE TABLE like_all
+----
+like_all  CREATE TABLE like_all (
+          a INT8 NOT NULL,
+          b STRING NOT NULL DEFAULT 'foo':::STRING,
+          c DECIMAL NULL AS (a + 3) STORED,
+          h INT8 NULL,
+          j JSONB NULL,
+          CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+          UNIQUE INDEX foo (b DESC, c ASC),
+          INDEX like_table_c_idx (c ASC) STORING (j),
+          INVERTED INDEX like_table_j_idx (j),
+          FAMILY "primary" (a, b, c, h, j),
+          CONSTRAINT check_a CHECK (a > 3)
+)
+
+statement ok
+CREATE TABLE like_mixed (LIKE like_table INCLUDING ALL EXCLUDING GENERATED EXCLUDING CONSTRAINTS INCLUDING GENERATED)
+
+# We expect that this table will be missing the check constraint from the first
+# table, but will include everything else.
+query TT
+SHOW CREATE TABLE like_mixed
+----
+like_mixed  CREATE TABLE like_mixed (
+            a INT8 NOT NULL,
+            b STRING NOT NULL DEFAULT 'foo':::STRING,
+            c DECIMAL NULL AS (a + 3) STORED,
+            h INT8 NULL,
+            j JSONB NULL,
+            CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+            UNIQUE INDEX foo (b DESC, c ASC),
+            INDEX like_table_c_idx (c ASC) STORING (j),
+            INVERTED INDEX like_table_j_idx (j),
+            FAMILY "primary" (a, b, c, h, j)
+)
+
+statement ok
+CREATE TABLE like_no_pk_table (
+  a INT, b INT
+)
+
+statement ok
+CREATE TABLE like_no_pk_rowid_hidden (LIKE like_no_pk_table INCLUDING INDEXES)
+
+query TT
+SHOW CREATE TABLE like_no_pk_rowid_hidden
+----
+like_no_pk_rowid_hidden  CREATE TABLE like_no_pk_rowid_hidden (
+                         a INT8 NULL,
+                         b INT8 NULL,
+                         FAMILY "primary" (a, b, rowid)
+)
+
+statement error duplicate column name
+CREATE TABLE duplicate_column (LIKE like_table, c DECIMAL)
+
+statement ok
+CREATE TABLE other_table (blah INT)
+
+# Test that mixing normal specifiers and LIKE specifiers works as expected. We
+# expect that the column ordering depends on the order of the LIKE specifiers.
+statement ok
+CREATE TABLE like_more_specifiers (LIKE like_table, z DECIMAL, INDEX(a,blah,z), LIKE other_table)
+
+query TT
+SHOW CREATE TABLE like_more_specifiers
+----
+like_more_specifiers  CREATE TABLE like_more_specifiers (
+                      a INT8 NOT NULL,
+                      b STRING NOT NULL,
+                      c DECIMAL NULL,
+                      h INT8 NULL,
+                      j JSONB NULL,
+                      z DECIMAL NULL,
+                      blah INT8 NULL,
+                      INDEX like_more_specifiers_a_blah_z_idx (a ASC, blah ASC, z ASC),
+                      FAMILY "primary" (a, b, c, h, j, z, blah, rowid)
+)
+
+statement ok
+CREATE TABLE like_hash_base (a INT, INDEX (a) USING HASH WITH BUCKET_COUNT=4)
+
+statement ok
+CREATE TABLE like_hash (LIKE like_hash_base INCLUDING INDEXES)
+
+query TT
+SHOW CREATE TABLE like_hash
+----
+like_hash  CREATE TABLE like_hash (
+           a INT8 NULL,
+           INDEX like_hash_base_crdb_internal_a_shard_4_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
+           FAMILY "primary" (a, crdb_internal_a_shard_4, rowid)
+)
+
+statement error unimplemented
+CREATE TABLE error (LIKE like_hash_base INCLUDING COMMENTS)
+
+statement error unimplemented
+CREATE TABLE error (LIKE like_hash_base INCLUDING STATISTICS)
+
+statement error unimplemented
+CREATE TABLE error (LIKE like_hash_base INCLUDING STORAGE)
