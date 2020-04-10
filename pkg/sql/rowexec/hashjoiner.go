@@ -76,6 +76,8 @@ type hashJoiner struct {
 	// initialBufferSize is the maximum amount of data we buffer from each stream
 	// as part of the initial buffering phase. Normally
 	// hashJoinerInitialBufferSize, can be tweaked for tests.
+	// TODO(yuzefovich): remove buffering stage from the hash joiner and always
+	// build from the right stream.
 	initialBufferSize int64
 
 	// We read a portion of both streams, in the hope that one is small. One of
@@ -91,8 +93,8 @@ type hashJoiner struct {
 	// INTERSECT and EXCEPT.
 	nullEquality bool
 
-	useTempStorage bool
-	storedRows     rowcontainer.HashRowContainer
+	disableTempStorage bool
+	storedRows         rowcontainer.HashRowContainer
 
 	// Used by tests to force a storedSide.
 	forcedStoredSide *joinSide
@@ -114,10 +116,6 @@ type hashJoiner struct {
 		iter rowcontainer.RowIterator
 	}
 
-	// testingKnobMemFailPoint specifies a state in which the hashJoiner will
-	// fail at a random point during this phase.
-	testingKnobMemFailPoint hashJoinerState
-
 	// Context cancellation checker.
 	cancelChecker *sqlbase.CancelChecker
 }
@@ -128,6 +126,9 @@ var _ execinfra.OpNode = &hashJoiner{}
 
 const hashJoinerProcName = "hash joiner"
 
+// newHashJoiner creates a new hash join processor.
+// - disableTempStorage determines whether the hash joiner is allowed to spill
+// to disk. It should only be set to 'true' in tests.
 func newHashJoiner(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -136,6 +137,7 @@ func newHashJoiner(
 	rightSource execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
+	disableTempStorage bool,
 ) (*hashJoiner, error) {
 	h := &hashJoiner{
 		initialBufferSize: hashJoinerInitialBufferSize,
@@ -171,13 +173,9 @@ func newHashJoiner(
 		return nil, err
 	}
 
-	st := h.FlowCtx.Cfg.Settings
 	ctx := h.FlowCtx.EvalCtx.Ctx()
-	h.useTempStorage = execinfra.SettingUseTempStorageJoins.Get(&st.SV) ||
-		h.FlowCtx.Cfg.TestingKnobs.ForceDiskSpill ||
-		h.FlowCtx.Cfg.TestingKnobs.MemoryLimitBytes > 0 ||
-		h.testingKnobMemFailPoint != hjStateUnknown
-	if h.useTempStorage {
+	h.disableTempStorage = disableTempStorage
+	if !h.disableTempStorage {
 		// Limit the memory use by creating a child monitor with a hard limit.
 		// The hashJoiner will overflow to disk if this limit is not enough.
 		limit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
@@ -334,7 +332,7 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *execinfrapb
 			// If this error is a memory limit error, move to hjConsumingStoredSide.
 			h.storedSide = side
 			if sqlbase.IsOutOfMemoryError(err) {
-				if !h.useTempStorage {
+				if h.disableTempStorage {
 					err = pgerror.Wrapf(err, pgcode.OutOfMemory,
 						"error while attempting hashJoiner disk spill: temp storage disabled")
 				} else {
@@ -384,7 +382,7 @@ func (h *hashJoiner) consumeStoredSide() (
 			// If storedRows is in-memory, pre-reserve the memory needed to mark.
 			if rc, ok := h.storedRows.(*rowcontainer.HashMemRowContainer); ok {
 				// h.storedRows is hashMemRowContainer and not a disk backed one, so
-				// h.useTempStorage is false and we cannot spill to disk, so we simply
+				// h.disableTempStorage is true and we cannot spill to disk, so we simply
 				// will return an error if it occurs.
 				err = rc.ReserveMarkMemoryMaybe(h.Ctx)
 			} else if hdbrc, ok := h.storedRows.(*rowcontainer.HashDiskBackedRowContainer); ok {
@@ -736,7 +734,7 @@ func (h *hashJoiner) shouldEmitUnmatched(
 
 // initStoredRows initializes a hashRowContainer and sets h.storedRows.
 func (h *hashJoiner) initStoredRows() error {
-	if h.useTempStorage {
+	if !h.disableTempStorage {
 		hrc := rowcontainer.NewHashDiskBackedRowContainer(
 			&h.rows[h.storedSide],
 			h.EvalCtx,
