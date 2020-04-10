@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -93,17 +92,14 @@ func (s *Store) Send(
 
 	// Update our clock with the incoming request timestamp. This advances the
 	// local node's clock to a high water mark from all nodes with which it has
-	// interacted. We hold on to the resulting timestamp - we know that any
-	// write with a higher timestamp we run into later must have started after
-	// this point in (absolute) time.
-	var now hlc.Timestamp
+	// interacted.
 	if s.cfg.TestingKnobs.DisableMaxOffsetCheck {
-		now = s.cfg.Clock.Update(ba.Timestamp)
+		s.cfg.Clock.Update(ba.Timestamp)
 	} else {
 		// If the command appears to come from a node with a bad clock,
 		// reject it now before we reach that point.
 		var err error
-		if now, err = s.cfg.Clock.UpdateAndCheckMaxOffset(ba.Timestamp); err != nil {
+		if err = s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, ba.Timestamp); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
@@ -144,6 +140,10 @@ func (s *Store) Send(
 			}
 		}
 
+		// We get the latest timestamp - we know that any
+		// write with a higher timestamp we run into later must
+		// have started after this point in (absolute) time.
+		now := s.cfg.Clock.Now()
 		if pErr != nil {
 			pErr.Now = now
 		} else {
@@ -160,7 +160,7 @@ func (s *Store) Send(
 		// this node, in which case the following is a no-op).
 		if _, ok := ba.Txn.GetObservedTimestamp(ba.Replica.NodeID); !ok {
 			txnClone := ba.Txn.Clone()
-			txnClone.UpdateObservedTimestamp(ba.Replica.NodeID, now)
+			txnClone.UpdateObservedTimestamp(ba.Replica.NodeID, s.cfg.Clock.Now())
 			ba.Txn = txnClone
 		}
 	}

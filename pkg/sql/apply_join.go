@@ -309,7 +309,7 @@ func runPlanInsidePlan(
 		params.extendedEvalCtx.ExecCfg.LeaseHolderCache,
 		params.p.Txn(),
 		func(ts hlc.Timestamp) {
-			_ = params.extendedEvalCtx.ExecCfg.Clock.Update(ts)
+			params.extendedEvalCtx.ExecCfg.Clock.Update(ts)
 		},
 		params.p.extendedEvalCtx.Tracing,
 	)

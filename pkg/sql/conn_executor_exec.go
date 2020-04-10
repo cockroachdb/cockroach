@@ -829,7 +829,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		ex.server.cfg.RangeDescriptorCache, ex.server.cfg.LeaseHolderCache,
 		planner.txn,
 		func(ts hlc.Timestamp) {
-			_ = ex.server.cfg.Clock.Update(ts)
+			ex.server.cfg.Clock.Update(ts)
 		},
 		&ex.sessionTracing,
 	)

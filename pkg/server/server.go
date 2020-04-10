@@ -1211,6 +1211,7 @@ func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) error {
 	})
 
 	if err := s.clock.StartMonitoringForwardClockJumps(
+		ctx,
 		forwardJumpCheckEnabled,
 		time.NewTicker,
 		nil, /* tick callback */

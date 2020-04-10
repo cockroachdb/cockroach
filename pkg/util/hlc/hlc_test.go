@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -185,7 +186,7 @@ func TestHLCPhysicalClockJump(t *testing.T) {
 			isFatal:    false,
 		},
 	}
-
+	ctx := context.Background()
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			a := assert.New(t)
@@ -199,6 +200,7 @@ func TestHLCPhysicalClockJump(t *testing.T) {
 			defer close(forwardJumpCheckEnabledCh)
 
 			if err := c.StartMonitoringForwardClockJumps(
+				ctx,
 				forwardJumpCheckEnabledCh,
 				func(d time.Duration) *time.Ticker {
 					tickerDuration = d
@@ -216,6 +218,7 @@ func TestHLCPhysicalClockJump(t *testing.T) {
 			}
 
 			if err := c.StartMonitoringForwardClockJumps(
+				ctx,
 				forwardJumpCheckEnabledCh,
 				time.NewTicker,
 				nil, /* tick callback */
@@ -248,7 +251,7 @@ func TestHLCPhysicalClockJump(t *testing.T) {
 			// This should not fatal as tickerCh has ticked
 			a.Equal(false, fatal)
 			// After ticker ticks, last physical time should be equal to physical now
-			lastPhysicalTime := c.lastPhysicalTime()
+			lastPhysicalTime := c.lastPhysicalTime
 			physicalNow := c.PhysicalNow()
 			a.Equal(lastPhysicalTime, physicalNow)
 
@@ -326,7 +329,8 @@ func TestHLCClock(t *testing.T) {
 			fallthrough
 		default:
 			previous := c.Now()
-			current = c.Update(*step.input)
+			c.Update(*step.input)
+			current = c.Now()
 			if current == previous {
 				t.Errorf("%d: clock not updated", i)
 			}
@@ -361,9 +365,7 @@ func TestHLCMonotonicityCheck(t *testing.T) {
 	secondTime := c.Now()
 
 	{
-		c.mu.Lock()
-		errCount := c.mu.monotonicityErrorsCount
-		c.mu.Unlock()
+		errCount := atomic.LoadInt32(&c.monotonicityErrorsCount)
 
 		if errCount != 1 {
 			t.Fatalf("clock backward jump was not detected by the monotonicity checker (from %s to %s)", firstTime, secondTime)
@@ -374,9 +376,7 @@ func TestHLCMonotonicityCheck(t *testing.T) {
 	thirdTime := c.Now()
 
 	{
-		c.mu.Lock()
-		errCount := c.mu.monotonicityErrorsCount
-		c.mu.Unlock()
+		errCount := atomic.LoadInt32(&c.monotonicityErrorsCount)
 
 		if errCount != 1 {
 			t.Fatalf("clock backward jump below threshold was incorrectly detected by the monotonicity checker (from %s to %s)", secondTime, thirdTime)
@@ -469,6 +469,7 @@ func TestHLCEnforceWallTimeWithinBoundsInUpdate(t *testing.T) {
 		},
 	}
 
+	ctx := context.Background()
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			a := assert.New(t)
@@ -476,7 +477,7 @@ func TestHLCEnforceWallTimeWithinBoundsInUpdate(t *testing.T) {
 			c := NewClock(m.UnixNano, time.Nanosecond)
 			c.mu.wallTimeUpperBound = test.wallTimeUpperBound
 			fatal = false
-			_, err := c.updateLocked(Timestamp{WallTime: test.messageWallTime}, true)
+			err := c.UpdateAndCheckMaxOffset(ctx, Timestamp{WallTime: test.messageWallTime})
 			a.Nil(err)
 			a.Equal(test.isFatal, fatal)
 		})
@@ -573,7 +574,8 @@ func TestLateStartForwardClockJump(t *testing.T) {
 	ticked := func() {
 		tickedCh <- struct{}{}
 	}
-	if err := c.StartMonitoringForwardClockJumps(activeCh, time.NewTicker, ticked); err != nil {
+	ctx := context.Background()
+	if err := c.StartMonitoringForwardClockJumps(ctx, activeCh, time.NewTicker, ticked); err != nil {
 		t.Fatal(err)
 	}
 	<-tickedCh
