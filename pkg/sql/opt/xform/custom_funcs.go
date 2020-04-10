@@ -2306,6 +2306,61 @@ func (c *CustomFuncs) CanMaybeConstrainIndexWithCols(sp *memo.ScanPrivate, cols 
 	return false
 }
 
+// LeftExprForUnionSelects returns the ScalarExpr that should replace the
+// original OrExpr on the left side of the generated Union.
+func (c *CustomFuncs) LeftExprForUnionSelects(or opt.ScalarExpr) opt.ScalarExpr {
+	return c.collectExprGroupForUnionSelects(or, true /* leftGroup */)
+}
+
+// RightExprForUnionSelects returns the ScalarExpr that should replace the
+// original OrExpr on the right side of the generated Union.
+func (c *CustomFuncs) RightExprForUnionSelects(or opt.ScalarExpr) opt.ScalarExpr {
+	return c.collectExprGroupForUnionSelects(or, false /* leftGroup */)
+}
+
+// collectExprGroupForUnionSelects returns an OrExpr that groups all
+// sub-expressions adjacent to the input OrExpr that should either be on the
+// left or right side of the generated Union.
+//
+// If the leftGroup argument is true, it returns an OrExpr with all
+// sub-expressions that have the same ColSet as the left-most sub-expression in
+// the original tree. If leftGroup is false, it returns an OrExpr with all
+// sub-expressions that do not have the same ColSet as the left-most
+// sub-expression.
+func (c *CustomFuncs) collectExprGroupForUnionSelects(
+	or opt.ScalarExpr, leftGroup bool,
+) opt.ScalarExpr {
+	var exprs memo.ScalarListExpr
+	var leftColSet opt.ColSet
+
+	// Traverse all adjacent OrExpr.
+	var collect func(opt.ScalarExpr)
+	collect = func(expr opt.ScalarExpr) {
+		switch t := expr.(type) {
+		case *memo.OrExpr:
+			collect(t.Left)
+			collect(t.Right)
+			return
+		}
+
+		cols := c.OuterCols(expr)
+
+		// Set the left-most non-Or expression as the left ColSet to match (or
+		// not match) on.
+		if leftColSet.Empty() {
+			leftColSet = cols
+		}
+
+		// Collect the expr if its ColSet matches leftColSet.
+		if leftGroup == c.ColsAreEqual(leftColSet, cols) {
+			exprs = append(exprs, expr)
+		}
+	}
+	collect(or)
+
+	return c.constructOr(exprs)
+}
+
 // DuplicateScanPrivate constructs a new ScanPrivate that is identical to the
 // input, but has new table and column IDs.
 //

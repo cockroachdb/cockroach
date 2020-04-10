@@ -51,7 +51,7 @@
     ) & (HasStrictKey $input)
     $filters:[
         ...
-        $item:(FiltersItem (Or $left:* $right:*)) &
+        $item:(FiltersItem $or:(Or $left:* $right:*)) &
             ^(ColsAreEqual (OuterCols $left) (OuterCols $right)) &
             (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols $left)) &
             (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols $right))
@@ -62,12 +62,12 @@
 (Union
     (Select
         $input
-        (ReplaceFiltersItem $filters $item $left)
+        (ReplaceFiltersItem $filters $item (LeftExprForUnionSelects $or))
     )
     (Select
         (Scan $rightScanPrivate:(DuplicateScanPrivate $scanPrivate))
         (MapScanFilterCols
-            (ReplaceFiltersItem $filters $item $right)
+            (ReplaceFiltersItem $filters $item (RightExprForUnionSelects $or))
             $scanPrivate
             $rightScanPrivate
         )
@@ -112,7 +112,7 @@
     ) & ^(HasStrictKey $input)
     $filters:[
         ...
-        $item:(FiltersItem (Or $left:* $right:*)) &
+        $item:(FiltersItem $or:(Or $left:* $right:*)) &
             ^(ColsAreEqual (OuterCols $left) (OuterCols $right)) &
             (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols $left)) &
             (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols $right))
@@ -124,12 +124,12 @@
     (Union
         (Select
             (Scan $leftScanPrivate:(AddPrimaryKeyColsToScanPrivate $scanPrivate))
-            (ReplaceFiltersItem $filters $item $left)
+            (ReplaceFiltersItem $filters $item (LeftExprForUnionSelects $or))
         )
         (Select
             (Scan $rightScanPrivate:(DuplicateScanPrivate $leftScanPrivate))
             (MapScanFilterCols
-                (ReplaceFiltersItem $filters $item $right)
+                (ReplaceFiltersItem $filters $item (RightExprForUnionSelects $or))
                 $leftScanPrivate
                 $rightScanPrivate
             )
