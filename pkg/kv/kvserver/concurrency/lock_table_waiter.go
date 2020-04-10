@@ -15,7 +15,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -311,10 +310,8 @@ func (w *lockTableWaiterImpl) WaitOnLock(
 		stateKind:   waitFor,
 		txn:         &intent.Txn,
 		ts:          intent.Txn.WriteTimestamp,
-		dur:         lock.Replicated,
 		key:         intent.Key,
 		held:        true,
-		access:      spanset.SpanReadWrite,
 		guardAccess: sa,
 	})
 }

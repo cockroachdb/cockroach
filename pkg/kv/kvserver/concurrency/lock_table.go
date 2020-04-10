@@ -52,10 +52,8 @@ type waitingState struct {
 	// request is waiting for.
 	txn         *enginepb.TxnMeta  // always non-nil
 	ts          hlc.Timestamp      // the timestamp of the transaction that is causing the wait
-	dur         lock.Durability    // the durability of the lock that is causing the wait
 	key         roachpb.Key        // the key of the lock that is causing the wait
 	held        bool               // is the lock currently held?
-	access      spanset.SpanAccess // currently only SpanReadWrite
 	guardAccess spanset.SpanAccess // the access method of the guard
 }
 
@@ -739,7 +737,7 @@ func (l *lockState) Format(buf *strings.Builder) {
 		}
 		fmt.Fprintln(b, "")
 	}
-	txn, ts, _ := l.getLockerInfo()
+	txn, ts := l.getLockerInfo()
 	if txn == nil {
 		fmt.Fprintf(buf, "  res: req: %d, ", l.reservation.seqNum)
 		writeResInfo(buf, l.reservation.txn, l.reservation.writeTS)
@@ -798,7 +796,7 @@ func (l *lockState) tryBreakReservation(seqNum uint64) bool {
 // waitForDistinguished states.
 // REQUIRES: l.mu is locked.
 func (l *lockState) informActiveWaiters() {
-	waitForTxn, waitForTs, waitForDur := l.getLockerInfo()
+	waitForTxn, waitForTs := l.getLockerInfo()
 	var checkForWaitSelf bool
 	findDistinguished := l.distinguishedWaiter == nil
 	if waitForTxn == nil {
@@ -814,10 +812,8 @@ func (l *lockState) informActiveWaiters() {
 		stateKind: waitFor,
 		txn:       waitForTxn,
 		ts:        waitForTs,
-		dur:       waitForDur,
 		key:       l.key,
 		held:      l.holder.locked,
-		access:    spanset.SpanReadWrite,
 	}
 	waitSelfState := waitingState{stateKind: waitSelf}
 
@@ -938,9 +934,9 @@ func (l *lockState) isLockedBy(id uuid.UUID) bool {
 // Returns information about the current lock holder if the lock is held, else
 // returns nil.
 // REQUIRES: l.mu is locked.
-func (l *lockState) getLockerInfo() (*enginepb.TxnMeta, hlc.Timestamp, lock.Durability) {
+func (l *lockState) getLockerInfo() (*enginepb.TxnMeta, hlc.Timestamp) {
 	if !l.holder.locked {
-		return nil, hlc.Timestamp{}, 0
+		return nil, hlc.Timestamp{}
 	}
 
 	// If the lock is held as both replicated and unreplicated we want to
@@ -957,7 +953,7 @@ func (l *lockState) getLockerInfo() (*enginepb.TxnMeta, hlc.Timestamp, lock.Dura
 		l.holder.holder[lock.Unreplicated].ts.Less(l.holder.holder[lock.Replicated].ts)) {
 		index = lock.Unreplicated
 	}
-	return l.holder.holder[index].txn, l.holder.holder[index].ts, index
+	return l.holder.holder[index].txn, l.holder.holder[index].ts
 }
 
 // Decides whether the request g with access sa should actively wait at this
@@ -979,7 +975,7 @@ func (l *lockState) tryActiveWait(g *lockTableGuardImpl, sa spanset.SpanAccess, 
 	}
 
 	// Lock is not empty.
-	waitForTxn, waitForTs, waitForDur := l.getLockerInfo()
+	waitForTxn, waitForTs := l.getLockerInfo()
 	if waitForTxn != nil && g.isTxn(waitForTxn) {
 		// Already locked by this txn.
 		return false
@@ -1112,10 +1108,8 @@ func (l *lockState) tryActiveWait(g *lockTableGuardImpl, sa spanset.SpanAccess, 
 			stateKind:   stateType,
 			txn:         waitForTxn,
 			ts:          waitForTs,
-			dur:         waitForDur,
 			key:         l.key,
 			held:        l.holder.locked,
-			access:      spanset.SpanReadWrite,
 			guardAccess: sa,
 		}
 	}
@@ -1136,7 +1130,7 @@ func (l *lockState) acquireLock(
 	defer l.mu.Unlock()
 	if l.holder.locked {
 		// Already held.
-		beforeTxn, beforeTs, _ := l.getLockerInfo()
+		beforeTxn, beforeTs := l.getLockerInfo()
 		if txn.ID != beforeTxn.ID {
 			return errors.Errorf("caller violated contract: " +
 				"existing lock cannot be acquired by different transaction")
@@ -1206,7 +1200,7 @@ func (l *lockState) acquireLock(
 		l.holder.holder[durability].ts.Forward(ts)
 		l.holder.holder[durability].seqs = append(seqs, txn.Sequence)
 
-		_, afterTs, _ := l.getLockerInfo()
+		_, afterTs := l.getLockerInfo()
 		if beforeTs.Less(afterTs) {
 			l.increasedLockTs(afterTs)
 		}
@@ -1362,17 +1356,15 @@ func (l *lockState) tryClearLock(force bool) bool {
 	l.holder.holder[lock.Unreplicated] = lockHolderInfo{}
 	var waitState waitingState
 	if replicatedHeld && !force {
-		holderTxn, holderTs, holderDur := l.getLockerInfo()
+		holderTxn, holderTs := l.getLockerInfo()
 		// Note that none of the current waiters can be requests
 		// from holderTxn.
 		waitState = waitingState{
 			stateKind:   waitElsewhere,
 			txn:         holderTxn,
 			ts:          holderTs,
-			dur:         holderDur,
 			key:         l.key,
 			held:        true,
-			access:      spanset.SpanReadWrite,
 			guardAccess: spanset.SpanReadOnly,
 		}
 	} else {
@@ -1473,7 +1465,7 @@ func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (gc bool, err error) {
 
 	txn := &up.Txn
 	ts := up.Txn.WriteTimestamp
-	_, beforeTs, _ := l.getLockerInfo()
+	_, beforeTs := l.getLockerInfo()
 	advancedTs := beforeTs.Less(ts)
 	isLocked := false
 	for i := range l.holder.holder {
