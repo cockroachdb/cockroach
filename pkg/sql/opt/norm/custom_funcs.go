@@ -391,8 +391,11 @@ func (c *CustomFuncs) sharedProps(e opt.Expr) *props.Shared {
 		return &t.Relational().Shared
 	case memo.ScalarPropsExpr:
 		return &t.ScalarProps().Shared
+	default:
+		var p props.Shared
+		memo.BuildSharedProps(e, &p)
+		return &p
 	}
-	panic(errors.AssertionFailedf("no logical properties available for node: %v", e))
 }
 
 // MutationTable returns the table upon which the mutation is applied.
