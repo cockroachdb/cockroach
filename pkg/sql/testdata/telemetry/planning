@@ -44,13 +44,7 @@ sql.plan.explain-opt-verbose
 # Tests for hints.
 
 feature-whitelist
-sql.plan.hints.hash-join
-sql.plan.hints.merge-join
-sql.plan.hints.lookup-join
-sql.plan.hints.index
-sql.plan.hints.index.select
-sql.plan.hints.index.update
-sql.plan.hints.index.delete
+sql.plan.hints.*
 ----
 
 feature-usage
@@ -89,12 +83,8 @@ sql.plan.hints.index.delete
 # Tests for tracking important setting changes.
 
 feature-whitelist
-sql.plan.reorder-joins.set-limit-0
-sql.plan.reorder-joins.set-limit-3
-sql.plan.reorder-joins.set-limit-6
-sql.plan.reorder-joins.set-limit-more
-sql.plan.automatic-stats.enabled
-sql.plan.automatic-stats.disabled
+sql.plan.reorder-joins.*
+sql.plan.automatic-stats.*
 ----
 
 feature-usage
@@ -144,11 +134,9 @@ sql.plan.stats.created
 
 # Test various planning counters.
 feature-whitelist
-sql.plan.cte
-sql.plan.cte.recursive
+sql.plan.cte.*
 sql.plan.lateral-join
-sql.plan.subquery
-sql.plan.subquery.correlated
+sql.plan.subquery.*
 ----
 
 feature-usage
@@ -187,9 +175,7 @@ sql.plan.subquery.correlated
 feature-whitelist
 sql.plan.ops.cast.string::inet
 sql.plan.ops.bin.jsonb - string
-sql.plan.ops.array.ind
-sql.plan.ops.array.cons
-sql.plan.ops.array.flatten
+sql.plan.ops.array.*
 ----
 
 feature-usage
