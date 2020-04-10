@@ -677,8 +677,8 @@ func (l *internalLookupCtx) getParentName(table *TableDescriptor) string {
 // getParentAsTableName returns a TreeTable object of the parent table for a
 // given table ID. Used to get the parent table of a table with interleaved
 // indexes.
-func (l *internalLookupCtx) getParentAsTableName(
-	parentTableID sqlbase.ID, dbPrefix string,
+func getParentAsTableName(
+	l simpleSchemaResolver, parentTableID sqlbase.ID, dbPrefix string,
 ) (tree.TableName, error) {
 	var parentName tree.TableName
 	parentTable, err := l.getTableByID(parentTableID)
@@ -695,8 +695,8 @@ func (l *internalLookupCtx) getParentAsTableName(
 }
 
 // getTableAsTableName returns a TableName object fot a given TableDescriptor.
-func (l *internalLookupCtx) getTableAsTableName(
-	table *sqlbase.TableDescriptor, dbPrefix string,
+func getTableAsTableName(
+	l simpleSchemaResolver, table *sqlbase.TableDescriptor, dbPrefix string,
 ) (tree.TableName, error) {
 	var tableName tree.TableName
 	tableDbDesc, err := l.getDatabaseByID(table.ParentID)
@@ -783,4 +783,9 @@ func (p *planner) ResolveExistingObjectEx(
 // ResolvedName is a convenience wrapper for UnresolvedObjectName.Resolved.
 func (p *planner) ResolvedName(u *tree.UnresolvedObjectName) *tree.TableName {
 	return u.Resolved(&p.semaCtx.Annotations)
+}
+
+type simpleSchemaResolver interface {
+	getDatabaseByID(id sqlbase.ID) (*DatabaseDescriptor, error)
+	getTableByID(id sqlbase.ID) (*TableDescriptor, error)
 }

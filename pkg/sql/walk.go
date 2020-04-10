@@ -633,6 +633,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *delayedNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "source", n.name)
+			if n.indexConstraint != nil {
+				v.observer.attr(name, "constraint", n.indexConstraint.String())
+			}
 		}
 		if n.plan != nil {
 			n.plan = v.visit(n.plan)

@@ -36,7 +36,7 @@ func TestDefaultOid(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		oid := defaultOid(tc.id)
+		oid := tableOid(tc.id)
 		if tc.oid.DInt != oid.DInt {
 			t.Fatalf("expected oid %d(%32b), got %d(%32b)", tc.oid.DInt, tc.oid.DInt, oid.DInt, oid.DInt)
 		}

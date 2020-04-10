@@ -1513,7 +1513,7 @@ func showAlterStatementWithInterleave(
 			var err error
 			var parentName tree.TableName
 			if lCtx != nil {
-				parentName, err = lCtx.getParentAsTableName(parentTableID, contextName)
+				parentName, err = getParentAsTableName(lCtx, parentTableID, contextName)
 				if err != nil {
 					return err
 				}
@@ -1525,7 +1525,7 @@ func showAlterStatementWithInterleave(
 
 			var tableName tree.TableName
 			if lCtx != nil {
-				tableName, err = lCtx.getTableAsTableName(table, contextName)
+				tableName, err = getTableAsTableName(lCtx, table, contextName)
 				if err != nil {
 					return err
 				}

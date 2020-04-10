@@ -120,6 +120,28 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 	}
 }
 
+// IsCanonicalVirtualScan returns true if the given VirtualScanPrivate is an original
+// unaltered primary index VirtualScan operator (i.e. unconstrained and not limited).
+func (c *CustomFuncs) IsCanonicalVirtualScan(scan *memo.VirtualScanPrivate) bool {
+	return scan.Index == cat.PrimaryIndex &&
+		scan.Constraint == nil
+}
+
+// GenerateVirtualTableIndexScans enumerates all secondary indexes on the given VirtualScan
+// operator's table and generates an alternate VirtualScan operator for each index.
+func (c *CustomFuncs) GenerateVirtualTableIndexScans(
+	grp memo.RelExpr, virtualScanPrivate *memo.VirtualScanPrivate,
+) {
+	// Iterate over all secondary indexes.
+	tab := c.e.mem.Metadata().Table(virtualScanPrivate.Table)
+	// Starting at 1 skips the 0th, primary index.
+	for i := 1; i < tab.IndexCount(); i++ {
+		virtualScan := memo.VirtualScanExpr{VirtualScanPrivate: *virtualScanPrivate}
+		virtualScan.Index = i
+		c.e.mem.AddVirtualScanToGroup(&virtualScan, grp)
+	}
+}
+
 // ----------------------------------------------------------------------
 //
 // Select Rules
@@ -359,6 +381,63 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		sb.addSelect(remainingFilters)
 
 		sb.build(grp)
+	}
+}
+
+// GenerateConstrainedVirtualScans enumerates all secondary indexes on the VirtualScan
+// operator's table and tries to push the given Select filter into new
+// constrained VirtualScan operators using those indexes. Since this only needs to be
+// done once per table, GenerateConstrainedVirtualScans should only be called on the
+// original unaltered primary index VirtualScan operator (i.e. not constrained or
+// limited).
+//
+// For each secondary index, there are two cases:
+//
+//  - a filter that can be partially or completely converted to a constraint
+//    over that index generates a constrained VirtualScan operator in a new memo
+//    group, wrapped in a Select operator with the original filter (to be added
+//    to the same group as the original Select operator):
+//
+//      (VirtualScan $scanDef)
+//      (Select (VirtualScan $scanDef) $filter)
+//
+//    Unlike ordinary scans, constrained VirtualScans can produce rows that
+//    don't actually match their constraints - the constraints are more like
+//    hints. So, the filter must remain no matter what.
+//
+//  - a filter that cannot be converted to a constraint generates nothing
+func (c *CustomFuncs) GenerateConstrainedVirtualScans(
+	grp memo.RelExpr, virtualScanPrivate *memo.VirtualScanPrivate, explicitFilters memo.FiltersExpr,
+) {
+	var sb indexScanBuilder
+	sb.init(c, virtualScanPrivate.Table)
+
+	// Generate implicit filters from constraints and computed columns and add
+	// them to the list of explicit filters provided in the query.
+	optionalFilters := c.checkConstraintFilters(virtualScanPrivate.Table)
+	computedColFilters := c.computedColFilters(virtualScanPrivate.Table, explicitFilters, optionalFilters)
+	optionalFilters = append(optionalFilters, computedColFilters...)
+
+	// Iterate over all indexes but the "primary" index, which is fake in virtual
+	// tables, and can't be used to constrain a scan.
+	md := c.e.mem.Metadata()
+	tabMeta := md.TableMeta(virtualScanPrivate.Table)
+	// Start at 1 to skip the primary index.
+	for i := 1; i < tabMeta.Table.IndexCount(); i++ {
+		// Check whether the filter can constrain the index.
+		constraint, _, ok := c.tryConstrainIndex(
+			explicitFilters, optionalFilters, virtualScanPrivate.Table, i, false /* isInverted */)
+		if !ok {
+			continue
+		}
+
+		// Construct new constrained ScanPrivate.
+		newVirtualScanPrivate := *virtualScanPrivate
+		newVirtualScanPrivate.Index = i
+		newVirtualScanPrivate.Constraint = constraint
+
+		input := c.e.f.ConstructVirtualScan(&newVirtualScanPrivate)
+		c.e.mem.AddSelectToGroup(&memo.SelectExpr{Input: input, Filters: explicitFilters}, grp)
 	}
 }
 

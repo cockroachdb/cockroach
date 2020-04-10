@@ -32,7 +32,7 @@ type virtualTableNode struct {
 	currentRow tree.Datums
 }
 
-func (p *planner) newContainerVirtualTableNode(
+func (p *planner) newVirtualTableNode(
 	columns sqlbase.ResultColumns, capacity int, next virtualTableGenerator,
 ) *virtualTableNode {
 	return &virtualTableNode{

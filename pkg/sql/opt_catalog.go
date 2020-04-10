@@ -1236,6 +1236,8 @@ func (fk *optForeignKeyConstraint) UpdateReferenceAction() tree.ReferenceAction 
 type optVirtualTable struct {
 	desc *sqlbase.ImmutableTableDescriptor
 
+	indexes []optVirtualIndex
+
 	// A virtual table can effectively have multiple instances, with different
 	// contents. For example `db1.pg_catalog.pg_sequence` contains info about
 	// sequences in db1, whereas `db2.pg_catalog.pg_sequence` contains info about
@@ -1255,6 +1257,10 @@ type optVirtualTable struct {
 
 	// family is a synthesized primary family.
 	family optVirtualFamily
+
+	// colMap is a mapping from unique ColumnID to column ordinal within the
+	// table. This is a common lookup that needs to be fast.
+	colMap map[sqlbase.ColumnID]int
 }
 
 var _ cat.Table = &optVirtualTable{}
@@ -1296,10 +1302,59 @@ func newOptVirtualTable(
 		name: *name,
 	}
 
+	// Create the table's column mapping from sqlbase.ColumnID to column ordinal.
+	ot.colMap = make(map[sqlbase.ColumnID]int, ot.DeletableColumnCount())
+	for i, n := 0, ot.DeletableColumnCount(); i < n; i++ {
+		ot.colMap[sqlbase.ColumnID(ot.Column(i).ColID())] = i
+	}
+
 	ot.name.ExplicitSchema = true
 	ot.name.ExplicitCatalog = true
 
 	ot.family.init(ot)
+
+	// Build the indexes (add 1 to account for lack of primary index in
+	// indexes slice).
+	ot.indexes = make([]optVirtualIndex, 1+len(ot.desc.Indexes))
+
+	for i := range ot.indexes {
+		var idxDesc *sqlbase.IndexDescriptor
+		if i == 0 {
+			idxDesc = &desc.PrimaryIndex
+		} else {
+			idxDesc = &ot.desc.Indexes[i-1]
+		}
+
+		ot.indexes[i] = optVirtualIndex{
+			tab:          ot,
+			desc:         idxDesc,
+			indexOrdinal: i,
+			numCols:      ot.ColumnCount(),
+			// Non-unique index: extra primary key columns are always added to the row
+			// key. There is no separate lax key.
+			numLaxKeyCols: len(idxDesc.ColumnIDs),
+			numKeyCols:    len(idxDesc.ColumnIDs),
+		}
+		oi := &ot.indexes[i]
+		if i == 0 {
+			// Although the primary index contains all columns in the table, the index
+			// descriptor does not contain columns that are not explicitly part of the
+			// primary key. Retrieve those columns from the table descriptor.
+			oi.storedCols = make([]sqlbase.ColumnID, 0, ot.DeletableColumnCount()-len(idxDesc.ColumnIDs))
+			var pkCols util.FastIntSet
+			for i := range idxDesc.ColumnIDs {
+				pkCols.Add(int(idxDesc.ColumnIDs[i]))
+			}
+			for i, n := 0, ot.DeletableColumnCount(); i < n; i++ {
+				id := ot.Column(i).ColID()
+				if !pkCols.Contains(int(id)) {
+					oi.storedCols = append(oi.storedCols, sqlbase.ColumnID(id))
+				}
+			}
+		} else {
+			oi.storedCols = idxDesc.StoreColumnIDs
+		}
+	}
 
 	return ot, nil
 }
@@ -1368,22 +1423,25 @@ func (ot *optVirtualTable) Column(i int) cat.Column {
 
 // IndexCount is part of the cat.Table interface.
 func (ot *optVirtualTable) IndexCount() int {
-	return 0
+	// Primary index is always present, so count is always >= 1.
+	return 1 + len(ot.desc.Indexes)
 }
 
 // WritableIndexCount is part of the cat.Table interface.
 func (ot *optVirtualTable) WritableIndexCount() int {
-	return 0
+	// Primary index is always present, so count is always >= 1.
+	return 1 + len(ot.desc.WritableIndexes())
 }
 
 // DeletableIndexCount is part of the cat.Table interface.
 func (ot *optVirtualTable) DeletableIndexCount() int {
-	return 0
+	// Primary index is always present, so count is always >= 1.
+	return 1 + len(ot.desc.DeletableIndexes())
 }
 
 // Index is part of the cat.Table interface.
-func (ot *optVirtualTable) Index(i int) cat.Index {
-	panic("no indexes")
+func (ot *optVirtualTable) Index(i cat.IndexOrdinal) cat.Index {
+	return &ot.indexes[i]
 }
 
 // StatisticCount is part of the cat.Table interface.
@@ -1438,6 +1496,112 @@ func (ot *optVirtualTable) InboundForeignKeyCount() int {
 // InboundForeignKey is part of the cat.Table interface.
 func (ot *optVirtualTable) InboundForeignKey(i int) cat.ForeignKeyConstraint {
 	panic("no FKs")
+}
+
+type optVirtualIndex struct {
+	tab  *optVirtualTable
+	desc *sqlbase.IndexDescriptor
+
+	indexOrdinal  int
+	numCols       int
+	numKeyCols    int
+	numLaxKeyCols int
+	storedCols    []sqlbase.ColumnID
+}
+
+// ID is part of the cat.Index interface.
+func (oi *optVirtualIndex) ID() cat.StableID {
+	return cat.StableID(oi.desc.ID)
+}
+
+// Name is part of the cat.Index interface.
+func (oi *optVirtualIndex) Name() tree.Name {
+	return tree.Name(oi.desc.Name)
+}
+
+// IsUnique is part of the cat.Index interface.
+func (oi *optVirtualIndex) IsUnique() bool {
+	return oi.desc.Unique
+}
+
+// IsInverted is part of the cat.Index interface.
+func (oi *optVirtualIndex) IsInverted() bool {
+	return false
+}
+
+// ColumnCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) ColumnCount() int {
+	return oi.numCols
+}
+
+// KeyColumnCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) KeyColumnCount() int {
+	return oi.numKeyCols
+}
+
+// LaxKeyColumnCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) LaxKeyColumnCount() int {
+	return oi.numLaxKeyCols
+}
+
+// lookupColumnOrdinal returns the ordinal of the column with the given ID. A
+// cache makes the lookup O(1).
+func (ot *optVirtualTable) lookupColumnOrdinal(colID sqlbase.ColumnID) (int, error) {
+	col, ok := ot.colMap[colID]
+	if ok {
+		return col, nil
+	}
+	return col, pgerror.Newf(pgcode.UndefinedColumn,
+		"column [%d] does not exist", colID)
+}
+
+// Column is part of the cat.Index interface.
+func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
+	length := len(oi.desc.ColumnIDs)
+	if i < length {
+		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
+		return cat.IndexColumn{
+			Column:     oi.tab.Column(ord),
+			Ordinal:    ord,
+			Descending: oi.desc.ColumnDirections[i] == sqlbase.IndexDescriptor_DESC,
+		}
+	}
+
+	i -= length
+	length = len(oi.desc.ExtraColumnIDs)
+	if i < length {
+		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ExtraColumnIDs[i])
+		return cat.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+	}
+
+	i -= length
+	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
+	return cat.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+}
+
+// Zone is part of the cat.Index interface.
+func (oi *optVirtualIndex) Zone() cat.Zone {
+	panic("no zone")
+}
+
+// Span is part of the cat.Index interface.
+func (oi *optVirtualIndex) Span() roachpb.Span {
+	panic("no span")
+}
+
+// Table is part of the cat.Index interface.
+func (oi *optVirtualIndex) Table() cat.Table {
+	return oi.tab
+}
+
+// Ordinal is part of the cat.Index interface.
+func (oi *optVirtualIndex) Ordinal() int {
+	return oi.indexOrdinal
+}
+
+// PartitionByListPrefixes is part of the cat.Index interface.
+func (oi *optVirtualIndex) PartitionByListPrefixes() []tree.Datums {
+	panic("no partition")
 }
 
 // optVirtualFamily is a dummy implementation of cat.Family for the only family

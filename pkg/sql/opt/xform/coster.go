@@ -314,7 +314,15 @@ func (c *coster) computeVirtualScanCost(scan *memo.VirtualScanExpr) memo.Cost {
 	// Virtual tables are generated on-the-fly according to system metadata that
 	// is assumed to be in memory.
 	rowCount := memo.Cost(scan.Relational().Stats.RowCount)
-	return rowCount * cpuCostFactor
+
+	// Add a small cost if the scan is unconstrained, so all else being equal, we
+	// will prefer a constrained scan. This is important if our row count
+	// estimate turns out to be smaller than the actual row count.
+	var preferConstrainedScanCost memo.Cost
+	if scan.Constraint == nil || scan.Constraint.IsUnconstrained() {
+		preferConstrainedScanCost = cpuCostFactor
+	}
+	return rowCount*cpuCostFactor + preferConstrainedScanCost
 }
 
 func (c *coster) computeSelectCost(sel *memo.SelectExpr) memo.Cost {

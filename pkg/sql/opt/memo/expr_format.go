@@ -406,6 +406,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			tp.Childf("locking: %s%s", strength, wait)
 		}
 
+	case *VirtualScanExpr:
+		if t.Constraint != nil {
+			tp.Childf("constraint: %s", t.Constraint)
+		}
+
 	case *LookupJoinExpr:
 		if !t.Flags.Empty() {
 			tp.Childf("flags: %s", t.Flags.String())
@@ -1148,7 +1153,13 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		}
 
 	case *VirtualScanPrivate:
-		fmt.Fprintf(f.Buffer, " %s", tableAlias(f, t.Table))
+		// Don't output name of index if it's the primary index.
+		tab := f.Memo.metadata.Table(t.Table)
+		if t.Index == cat.PrimaryIndex {
+			fmt.Fprintf(f.Buffer, " %s", tableAlias(f, t.Table))
+		} else {
+			fmt.Fprintf(f.Buffer, " %s@%s", tableAlias(f, t.Table), tab.Index(t.Index).Name())
+		}
 
 	case *SequenceSelectPrivate:
 		seq := f.Memo.metadata.Sequence(t.Sequence)

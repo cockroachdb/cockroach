@@ -1,0 +1,34 @@
+query TTT
+EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE oid = 50
+----
+·                   distributed  false
+·                   vectorized   false
+filter              ·            ·
+ │                  filter       oid = 50
+ └── virtual table  ·            ·
+·                   source       pg_class
+·                   constraint   /1: [/50 - /50]
+
+query TTT
+EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE relname = 'blah'
+----
+·                   distributed  false
+·                   vectorized   false
+filter              ·            ·
+ │                  filter       relname = 'blah'
+ └── virtual table  ·            ·
+·                   source       pg_class
+
+
+# We can push the filter into information_schema.tables, which has an index
+# on the table_name field.
+query TTT
+EXPLAIN SELECT * FROM information_schema.tables WHERE table_name = 'blah'
+----
+·                   distributed  false
+·                   vectorized   false
+filter              ·            ·
+ │                  filter       table_name = 'blah'
+ └── virtual table  ·            ·
+·                   source       tables
+·                   constraint   /3: [/'blah' - /'blah']
