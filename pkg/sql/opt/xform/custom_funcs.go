@@ -2258,6 +2258,84 @@ func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
 	return oc
 }
 
+// ExprPair stores a left and right ScalarExpr. ExprPairForSplitDisjunction
+// returns ExprPair, which can be deconstructed later, to avoid extra
+// computation in determining the left and right expression groups.
+type ExprPair struct {
+	left  opt.ScalarExpr
+	right opt.ScalarExpr
+}
+
+// ExprPairLeft returns the left ScalarExpr in an ExprPair.
+func (c *CustomFuncs) ExprPairLeft(ep ExprPair) opt.ScalarExpr {
+	return ep.left
+}
+
+// ExprPairRight returns the right ScalarExpr in an ExprPair.
+func (c *CustomFuncs) ExprPairRight(ep ExprPair) opt.ScalarExpr {
+	return ep.right
+}
+
+// ExprPairSucceeded returns true if the ExprPair is not nil.
+func (c *CustomFuncs) ExprPairSucceeded(ep ExprPair) bool {
+	return ep != ExprPair{}
+}
+
+// ExprPairForSplitDisjunction returns an ExprPair that groups all
+// sub-expressions adjacent to the input OrExpr into left and right expression
+// groups. These two groups form the new filter expressions on the left and
+// right side of the generated Union.
+//
+// All sub-expressions with the same columns as the left-most sub-expression
+// are grouped in the left group. All other sub-expressions are grouped in the
+// right group.
+//
+// ExprPairForSplitDisjunction returns nil if all sub-expressions have the same
+// columns.
+func (c *CustomFuncs) ExprPairForSplitDisjunction(or opt.ScalarExpr) ExprPair {
+	var leftExprs memo.ScalarListExpr
+	var rightExprs memo.ScalarListExpr
+	var leftColSet opt.ColSet
+
+	// Traverse all adjacent OrExpr.
+	var collect func(opt.ScalarExpr)
+	collect = func(expr opt.ScalarExpr) {
+		switch t := expr.(type) {
+		case *memo.OrExpr:
+			collect(t.Left)
+			collect(t.Right)
+			return
+		}
+
+		cols := c.OuterCols(expr)
+
+		// Set the left-most non-Or expression as the left ColSet to match (or
+		// not match) on.
+		if leftColSet.Empty() {
+			leftColSet = cols
+		}
+
+		// If the current expression ColSet matches leftColSet, add the expr to
+		// the left group. Otherwise, add it to the right group.
+		if c.ColsAreEqual(leftColSet, cols) {
+			leftExprs = append(leftExprs, expr)
+		} else {
+			rightExprs = append(rightExprs, expr)
+		}
+	}
+	collect(or)
+
+	// Return an empty pair if one of the groups has no expressions.
+	if len(leftExprs) == 0 || len(rightExprs) == 0 {
+		return ExprPair{}
+	}
+
+	return ExprPair{
+		left:  c.constructOr(leftExprs),
+		right: c.constructOr(rightExprs),
+	}
+}
+
 // CanMaybeConstrainIndexWithCols returns true if any indexes on the
 // ScanPrivate's table could be constrained by cols. It is a fast check for
 // SplitDisjunction to avoid matching a large number of queries that won't
@@ -2377,12 +2455,12 @@ func (c *CustomFuncs) MapScanFilterCols(
 	return newFilters
 }
 
-// MakeSetPrivateForUnionSelects constructs a new SetPrivate with column sets
+// MakeSetPrivateForSplitDisjunction constructs a new SetPrivate with column sets
 // from the left and right ScanPrivate. We use the same ColList for the
 // LeftCols and OutCols of the SetPrivate because we've used the original
 // ScanPrivate column IDs for the left ScanPrivate and those are safe to use as
 // output column IDs of the Union expression.
-func (c *CustomFuncs) MakeSetPrivateForUnionSelects(
+func (c *CustomFuncs) MakeSetPrivateForSplitDisjunction(
 	left, right *memo.ScanPrivate,
 ) *memo.SetPrivate {
 	leftAndOutCols := opt.ColSetToList(left.Cols)
