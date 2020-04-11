@@ -49,6 +49,9 @@ type SemaContext struct {
 	// already.
 	SearchPath sessiondata.SearchPath
 
+	// Doing this so that we can resolve stuff with a nil semaCtx?
+	TypeReferenceResolver
+
 	// AsOfTimestamp denotes the explicit AS OF SYSTEM TIME timestamp for the
 	// query, if any. If the query is not an AS OF SYSTEM TIME query,
 	// AsOfTimestamp is nil.
@@ -428,6 +431,19 @@ func isEmptyArray(expr Expr) bool {
 	return ok && len(a.Exprs) == 0
 }
 
+func (expr *UnresolvedCastExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
+	castType, err := expr.Type.Resolve(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resolvedCast := &CastExpr{
+		Expr:       expr.Expr,
+		Type:       castType,
+		SyntaxMode: expr.SyntaxMode,
+	}
+	return resolvedCast.TypeCheck(ctx, desired)
+}
+
 // TypeCheck implements the Expr interface.
 func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ *types.T) (TypedExpr, error) {
 	// The desired type provided to a CastExpr is ignored. Instead,
@@ -513,6 +529,21 @@ func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Type
 
 	telemetry.Inc(sqltelemetry.ArraySubscriptCounter)
 	return expr, nil
+}
+
+func (expr *UnresolvedAnnotateTypeExpr) TypeCheck(
+	ctx *SemaContext, desired *types.T,
+) (TypedExpr, error) {
+	annotateType, err := expr.Type.Resolve(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resolvedAnnotate := &AnnotateTypeExpr{
+		Expr:       expr.Expr,
+		Type:       annotateType,
+		SyntaxMode: expr.SyntaxMode,
+	}
+	return resolvedAnnotate.TypeCheck(ctx, desired)
 }
 
 // TypeCheck implements the Expr interface.
@@ -1035,6 +1066,27 @@ func (expr *IfExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, er
 	expr.True, expr.Else = typedSubExprs[0], typedSubExprs[1]
 	expr.typ = retType
 	return expr, nil
+}
+
+// TypeCheck implements the Expr interface.
+func (expr *UnresolvedIsOfTypeExpr) TypeCheck(
+	ctx *SemaContext, desired *types.T,
+) (TypedExpr, error) {
+	// Resolve all types within this expression.
+	resTypes := make([]*types.T, len(expr.Types))
+	for i := range expr.Types {
+		resType, err := expr.Types[i].Resolve(ctx)
+		if err != nil {
+			return nil, err
+		}
+		resTypes[i] = resType
+	}
+	resolvedIsOf := &IsOfTypeExpr{
+		Types: resTypes,
+		Expr:  expr.Expr,
+		Not:   expr.Not,
+	}
+	return resolvedIsOf.TypeCheck(ctx, desired)
 }
 
 // TypeCheck implements the Expr interface.
@@ -2220,6 +2272,43 @@ func (v *placeholderAnnotationVisitor) setErr(idx PlaceholderIdx, err error) {
 
 func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	switch t := expr.(type) {
+	case *UnresolvedAnnotateTypeExpr:
+		if arg, ok := t.Expr.(*Placeholder); ok {
+			// TODO (rohany): This function needs access to a semaContext.
+			// TODO (rohany): Call into the case for an annotateExpr.
+			tType := GetKnownTypeOrPanic(t.Type)
+			switch v.state[arg.Idx] {
+			case noType, typeFromCast, conflictingCasts:
+				// An annotation overrides casts.
+				v.types[arg.Idx] = tType
+				v.state[arg.Idx] = typeFromAnnotation
+
+			case typeFromAnnotation:
+				// Verify that the annotations are consistent.
+				if !tType.Equivalent(v.types[arg.Idx]) {
+					v.setErr(arg.Idx, pgerror.Newf(
+						pgcode.DatatypeMismatch,
+						"multiple conflicting type annotations around %s",
+						arg.Idx,
+					))
+				}
+
+			case typeFromHint:
+				// Verify that the annotation is consistent with the type hint.
+				if prevType := v.types[arg.Idx]; !tType.Equivalent(prevType) {
+					v.setErr(arg.Idx, pgerror.Newf(
+						pgcode.DatatypeMismatch,
+						"type annotation around %s conflicts with specified type %s",
+						arg.Idx, v.types[arg.Idx],
+					))
+				}
+
+			default:
+				panic(errors.AssertionFailedf("unhandled state: %v", errors.Safe(v.state[arg.Idx])))
+			}
+			return false, expr
+		}
+
 	case *AnnotateTypeExpr:
 		if arg, ok := t.Expr.(*Placeholder); ok {
 			switch v.state[arg.Idx] {
@@ -2250,6 +2339,36 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 
 			default:
 				panic(errors.AssertionFailedf("unhandled state: %v", errors.Safe(v.state[arg.Idx])))
+			}
+			return false, expr
+		}
+
+	case *UnresolvedCastExpr:
+		if arg, ok := t.Expr.(*Placeholder); ok {
+			// TODO (rohany): This function needs access to a semaContext.
+			// TODO (rohany): Call into the case for an annotateExpr.
+			tType := GetKnownTypeOrPanic(t.Type)
+			switch v.state[arg.Idx] {
+			case noType:
+				v.types[arg.Idx] = tType
+				v.state[arg.Idx] = typeFromCast
+
+			case typeFromCast:
+				// Verify that the casts are consistent.
+				if !tType.Equivalent(v.types[arg.Idx]) {
+					v.state[arg.Idx] = conflictingCasts
+					v.types[arg.Idx] = nil
+				}
+
+			case typeFromHint, typeFromAnnotation:
+				// A cast never overrides a hinted or annotated type.
+
+			case conflictingCasts:
+				// We already saw inconsistent casts, or a "bare" placeholder; ignore
+				// this cast.
+
+			default:
+				panic(errors.AssertionFailedf("unhandled state: %v", v.state[arg.Idx]))
 			}
 			return false, expr
 		}

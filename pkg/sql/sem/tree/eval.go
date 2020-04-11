@@ -2822,6 +2822,8 @@ type EvalContext struct {
 	// need to restore once we finish evaluating it.
 	iVarContainerStack []IndexedVarContainer
 
+	TypeResolver TypeReferenceResolver
+
 	// Context holds the context in which the expression is evaluated.
 	Context context.Context
 

@@ -296,18 +296,23 @@ func ParseExpr(sql string) (tree.Expr, error) {
 }
 
 // ParseType parses a column type.
-func ParseType(sql string) (*types.T, error) {
+func ParseType(sql string) (tree.ResolvableTypeReference, error) {
 	expr, err := ParseExpr(fmt.Sprintf("1::%s", sql))
 	if err != nil {
 		return nil, err
 	}
 
-	cast, ok := expr.(*tree.CastExpr)
-	if !ok {
-		return nil, errors.AssertionFailedf("expected a tree.CastExpr, but found %T", expr)
+	switch t := expr.(type) {
+	case *tree.CastExpr:
+		return tree.MakeKnownType(t.Type), nil
+	case *tree.UnresolvedCastExpr:
+		return t.Type, nil
+	default:
+		return nil, errors.AssertionFailedf(
+			"expected a tree.CastExpr or a tree.UnresolvedCastExpr, but found %T",
+			expr,
+		)
 	}
-
-	return cast.Type, nil
 }
 
 var errBitLengthNotPositive = pgerror.WithCandidateCode(
@@ -355,12 +360,18 @@ func newDecimal(prec, scale int32) (*types.T, error) {
 }
 
 // ArrayOf creates a type alias for an array of the given element type and fixed
-// bounds.
-func arrayOf(colType *types.T, bounds []int32) (*types.T, error) {
-	if err := types.CheckArrayElementType(colType); err != nil {
-		return nil, err
+// bounds. The bounds are currently ignored.
+// TODO (rohany): It is unclear how much of this work needs to be done
+//  at parse time and how much we need to shift to type resolution time.
+func arrayOf(
+	ref tree.ResolvableTypeReference, bounds []int32,
+) (tree.ResolvableTypeReference, error) {
+	// If we know the internal type, then try and keep it resolved.
+	if typ := tree.GetKnownType(ref); typ != nil {
+		if err := types.CheckArrayElementType(typ); err != nil {
+			return nil, err
+		}
+		return tree.MakeKnownType(types.MakeArray(typ)), nil
 	}
-
-	// Currently bounds are ignored.
-	return types.MakeArray(colType), nil
+	return &tree.ArrayTypeReference{InternalType: ref}, nil
 }

@@ -135,7 +135,6 @@ import (
 // | TupleContents   | Contains tuple field types (can be recursively defined) |
 // | TupleLabels     | Contains labels for each tuple field                    |
 //
-// Array types
 // -----------
 //
 // | Field           | Description                                             |

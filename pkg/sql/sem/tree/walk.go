@@ -53,6 +53,17 @@ func (expr *AndExpr) Walk(v Visitor) Expr {
 }
 
 // Walk implements the Expr interface.
+func (expr *UnresolvedAnnotateTypeExpr) Walk(v Visitor) Expr {
+	e, changed := WalkExpr(v, expr.Expr)
+	if changed {
+		exprCopy := *expr
+		exprCopy.Expr = e
+		return &exprCopy
+	}
+	return expr
+}
+
+// Walk implements the Expr interface.
 func (expr *AnnotateTypeExpr) Walk(v Visitor) Expr {
 	e, changed := WalkExpr(v, expr.Expr)
 	if changed {
@@ -120,6 +131,17 @@ func (expr *CaseExpr) Walk(v Visitor) Expr {
 		}
 	}
 	return ret
+}
+
+// Walk implements the Expr interface.
+func (expr *UnresolvedCastExpr) Walk(v Visitor) Expr {
+	e, changed := WalkExpr(v, expr.Expr)
+	if changed {
+		exprCopy := *expr
+		exprCopy.Expr = e
+		return &exprCopy
+	}
+	return expr
 }
 
 // Walk implements the Expr interface.
@@ -408,6 +430,17 @@ func (expr *IndirectionExpr) Walk(v Visitor) Expr {
 	}
 
 	return ret
+}
+
+// Walk implements the Expr interface.
+func (expr *UnresolvedIsOfTypeExpr) Walk(v Visitor) Expr {
+	e, changed := WalkExpr(v, expr.Expr)
+	if changed {
+		exprCopy := *expr
+		exprCopy.Expr = e
+		return &exprCopy
+	}
+	return expr
 }
 
 // Walk implements the Expr interface.

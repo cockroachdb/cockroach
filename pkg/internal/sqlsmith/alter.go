@@ -122,7 +122,7 @@ func makeAlterColumnType(s *Smither) (tree.Statement, bool) {
 		Cmds: tree.AlterTableCmds{
 			&tree.AlterTableAlterColumnType{
 				Column: col.Name,
-				ToType: typ,
+				ToType: tree.MakeKnownType(typ),
 			},
 		},
 	}, true
@@ -135,7 +135,12 @@ func makeAddColumn(s *Smither) (tree.Statement, bool) {
 	}
 	colRefs.stripTableName()
 	t := sqlbase.RandColumnType(s.rnd)
-	col, err := tree.NewColumnTableDef(s.name("col"), t, false /* isSerial */, nil)
+	col, err := tree.NewColumnTableDef(
+		s.name("col"),
+		tree.MakeKnownType(t),
+		false, /* isSerial */
+		nil,
+	)
 	if err != nil {
 		return nil, false
 	}
@@ -183,7 +188,12 @@ func makeJSONComputedColumn(s *Smither) (tree.Statement, bool) {
 	if ref == nil {
 		return nil, false
 	}
-	col, err := tree.NewColumnTableDef(s.name("col"), types.Jsonb, false /* isSerial */, nil)
+	col, err := tree.NewColumnTableDef(
+		s.name("col"),
+		tree.MakeKnownType(types.Jsonb),
+		false, /* isSerial */
+		nil,
+	)
 	if err != nil {
 		return nil, false
 	}
@@ -268,7 +278,8 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		}
 		seen[col.Name] = true
 		// If this is the first column and it's invertable (i.e., JSONB), make an inverted index.
-		if len(cols) == 0 && sqlbase.ColumnTypeIsInvertedIndexable(col.Type) {
+		if len(cols) == 0 &&
+			sqlbase.ColumnTypeIsInvertedIndexable(tree.GetKnownTypeOrPanic(col.Type)) {
 			inverted = true
 			unique = false
 			cols = append(cols, tree.IndexElem{
@@ -276,7 +287,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 			})
 			break
 		}
-		if sqlbase.ColumnTypeIsIndexable(col.Type) {
+		if sqlbase.ColumnTypeIsIndexable(tree.GetKnownTypeOrPanic(col.Type)) {
 			cols = append(cols, tree.IndexElem{
 				Column:    col.Name,
 				Direction: s.randDirection(),

@@ -327,7 +327,8 @@ func (p *PrettyCfg) peelAndOrOperand(e Expr) Expr {
 	stripped := StripParens(e)
 	switch stripped.(type) {
 	case *BinaryExpr, *ComparisonExpr, *RangeCond, *FuncExpr, *IndirectionExpr,
-		*UnaryExpr, *AnnotateTypeExpr, *CastExpr, *ColumnItem, *UnresolvedName:
+		*UnaryExpr, *AnnotateTypeExpr, *UnresolvedAnnotateTypeExpr, *CastExpr,
+		*UnresolvedCastExpr, *ColumnItem, *UnresolvedName:
 		// All these expressions have higher precedence than binary
 		// expressions.
 		return stripped
@@ -418,8 +419,8 @@ func (p *PrettyCfg) peelBinaryOperand(e Expr, sameLevel bool, parenPrio int) Exp
 		if childPrio < parenPrio || (sameLevel && childPrio == parenPrio) {
 			return stripped
 		}
-	case *FuncExpr, *UnaryExpr, *AnnotateTypeExpr, *IndirectionExpr,
-		*CastExpr, *ColumnItem, *UnresolvedName:
+	case *FuncExpr, *UnaryExpr, *AnnotateTypeExpr, *UnresolvedAnnotateTypeExpr, *IndirectionExpr,
+		*CastExpr, *UnresolvedCastExpr, *ColumnItem, *UnresolvedName:
 		// All these expressions have higher precedence than binary expressions.
 		return stripped
 	}
@@ -839,7 +840,8 @@ func (p *PrettyCfg) peelCompOperand(e Expr) Expr {
 	stripped := StripParens(e)
 	switch stripped.(type) {
 	case *FuncExpr, *IndirectionExpr, *UnaryExpr,
-		*AnnotateTypeExpr, *CastExpr, *ColumnItem, *UnresolvedName:
+		*AnnotateTypeExpr, *UnresolvedAnnotateTypeExpr, *CastExpr,
+		*UnresolvedCastExpr, *ColumnItem, *UnresolvedName:
 		return stripped
 	}
 	return e
@@ -2119,7 +2121,7 @@ func (node *Prepare) docTable(p *PrettyCfg) []pretty.TableRow {
 	if len(node.Types) > 0 {
 		typs := make([]pretty.Doc, len(node.Types))
 		for i, t := range node.Types {
-			typs[i] = pretty.Text(t.SQLString())
+			typs[i] = pretty.Text(t.String())
 		}
 		name = pretty.ConcatSpace(name,
 			p.bracket("(", p.commaSeparated(typs...), ")"),
