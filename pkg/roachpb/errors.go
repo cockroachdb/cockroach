@@ -865,10 +865,5 @@ var _ ErrorDetailInterface = &IndeterminateCommitError{}
 
 // IsRangeNotFoundError returns true if err contains a *RangeNotFoundError.
 func IsRangeNotFoundError(err error) bool {
-	// TODO(ajwerner): adopt errors.IsType once the pull request to add it merges.
-	_, isRangeNotFound := errors.If(err, func(err error) (interface{}, bool) {
-		_, isRangeNotFound := err.(*RangeNotFoundError)
-		return err, isRangeNotFound
-	})
-	return isRangeNotFound
+	return errors.HasType(err, (*RangeNotFoundError)(nil))
 }

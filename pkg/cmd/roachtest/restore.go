@@ -130,7 +130,7 @@ func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
 
 		if elapsed := timeutil.Since(tBegin); elapsed > 10*time.Second {
 			err := errors.Errorf("health check against node %d took %s", nodeIdx, elapsed)
-			logger.Printf(err.Error() + "\n")
+			logger.Printf("%+v", err)
 			// TODO(tschottdorf): see method comment.
 			// return err
 		}

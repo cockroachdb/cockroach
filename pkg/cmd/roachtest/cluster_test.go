@@ -173,14 +173,9 @@ func TestClusterMonitor(t *testing.T) {
 			time.Sleep(30 * time.Millisecond)
 			return execCmd(ctx, logger, "/bin/bash", "-c", "echo hi && notthere")
 		})
-		expectedErr := regexp.QuoteMeta(`/bin/bash -c echo hi && notthere returned:
-stderr:
-/bin/bash: notthere: command not found
-
-stdout:
-hi
-: exit status 127`)
+		expectedErr := regexp.QuoteMeta(`exit status 127`)
 		if err := m.wait("sleep", "100"); !testutils.IsError(err, expectedErr) {
+			t.Logf("error details: %+v", err)
 			t.Error(err)
 		}
 	})
@@ -202,6 +197,7 @@ hi
 		})
 		expectedErr := regexp.QuoteMeta(`Goexit() was called`)
 		if err := m.wait("sleep", "100"); !testutils.IsError(err, expectedErr) {
+			t.Logf("error details: %+v", err)
 			t.Error(err)
 		}
 	})

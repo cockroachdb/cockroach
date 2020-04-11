@@ -39,7 +39,7 @@ func TestUnexpectedWithIssueErrorf(t *testing.T) {
 	}
 
 	// Check that the issue number is present in the safe details.
-	exp = "safe details: issue #%d\n    -- arg 1: 1234"
+	exp = "4 safe details enclosed"
 	if !strings.Contains(safeMsg, exp) {
 		t.Errorf("expected substring in error\n%s\ngot:\n%s", exp, safeMsg)
 	}
