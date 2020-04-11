@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
+	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -1040,6 +1041,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		cfg.isMeta1Leaseholder,
 		sqlExecutorTestingKnobs,
 	)
+
+	if err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate); err != nil {
+		log.Infof(ctx, "could not initialize GEOS - geospatial functions may not be available: %v", err)
+	}
+
 	return &sqlServer{
 		pgServer:                pgServer,
 		distSQLServer:           distSQLServer,
