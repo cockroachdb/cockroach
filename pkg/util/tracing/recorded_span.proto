@@ -52,7 +52,11 @@ message RecordedSpan {
   // Time when the span was started.
   google.protobuf.Timestamp start_time = 7 [(gogoproto.nullable) = false,
                                             (gogoproto.stdtime) = true];
-  // Duration in nanoseconds; 0 if the span is not finished.
+  // Duration is the span's duration, measured from start to Finish().
+  //
+  // A spans whose recording is collected before it's finished will have the
+  // duration set as the time of collection - start_time. Such a span will have
+  // an "unfinished" tag.
   google.protobuf.Duration duration = 8 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
 
