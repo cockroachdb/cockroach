@@ -29,7 +29,7 @@ import (
 // See the comments in logic.go for more details.
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	RunLogicTest(t, "testdata/logic_test/[^.]*")
+	RunLogicTest(t, TestServerArgs{}, "testdata/logic_test/[^.]*")
 }
 
 // TestSqlLiteLogic runs the supported SqlLite logic tests. See the comments
@@ -105,5 +105,12 @@ func runSQLLiteLogicTest(t *testing.T, globs ...string) {
 		prefixedGlobs[i] = logicTestPath + glob
 	}
 
-	RunLogicTest(t, prefixedGlobs...)
+	// SQLLite logic tests can be very memory and disk (with '-disk' configs)
+	// intensive, so we give them larger cluster limits than other logic tests
+	// get.
+	serverArgs := TestServerArgs{
+		sqlMemoryPoolSize:    192 * 1 << 20, // 192 MiB
+		tempStorageDiskLimit: 100 * 1 << 20, // 100 MiB
+	}
+	RunLogicTest(t, serverArgs, prefixedGlobs...)
 }
