@@ -1445,11 +1445,16 @@ type CreateView struct {
 	AsSource    *Select
 	IfNotExists bool
 	Temporary   bool
+	Replace     bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *CreateView) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE ")
+
+	if node.Replace {
+		ctx.WriteString("OR REPLACE ")
+	}
 
 	if node.Temporary {
 		ctx.WriteString("TEMPORARY ")

@@ -293,6 +293,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (LIKE b INCLUDING ALL EXCLUDING INDEXES, c INT8)`},
 
 		{`CREATE VIEW a AS SELECT * FROM b`},
+		{`CREATE OR REPLACE VIEW a AS SELECT * FROM b`},
 		{`EXPLAIN CREATE VIEW a AS SELECT * FROM b`},
 		{`CREATE VIEW a AS SELECT b.* FROM b LIMIT 5`},
 		{`CREATE VIEW a AS (SELECT c, d FROM b WHERE c > 0 ORDER BY c)`},
@@ -3252,7 +3253,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`CREATE SEQUENCE a AS DOUBLE PRECISION`, 25110, `FLOAT8`, ``},
 
-		{`CREATE OR REPLACE VIEW a AS SELECT b`, 24897, ``, ``},
 		{`CREATE RECURSIVE VIEW a AS SELECT b`, 0, `create recursive view`, ``},
 
 		{`CREATE TYPE a AS (b)`, 27792, ``, ``},
