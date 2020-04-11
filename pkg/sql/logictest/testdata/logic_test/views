@@ -567,3 +567,102 @@ SELECT * FROM v1
 1  1  false
 2  2  true
 3  3  true
+
+subtest create_or_replace
+
+user root
+
+statement ok
+DROP TABLE IF EXISTS t, t2;
+CREATE TABLE t (x INT);
+INSERT INTO t VALUES (1), (2);
+CREATE TABLE t2 (x INT);
+INSERT INTO t2 VALUES (3), (4);
+
+# Test some error cases.
+
+statement error pq: \"t\" is not a view
+CREATE OR REPLACE VIEW t AS VALUES (1)
+
+statement ok
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2 FROM t
+
+# Test cases where new columns don't line up.
+
+statement error pq: cannot drop columns from view
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1 FROM t
+
+statement error pq: cannot change name of view column \"x\" to \"xy\"
+CREATE OR REPLACE VIEW tview AS SELECT x AS xy, x+1 AS x1, x+2 AS x2 FROM t
+
+statement error pq: cannot change type of view column "x1" from int to string
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, (x+1)::STRING AS x1, x+2 AS x2 FROM t
+
+statement ok
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t
+
+query IIII rowsort
+SELECT * FROM tview
+----
+1 2 3 4
+2 3 4 5
+
+# Test cases where back references get updated.
+statement ok
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t2
+
+query IIII rowsort
+SELECT * FROM tview
+----
+3 4 5 6
+4 5 6 7
+
+# After remaking tview, it no longer depends on t.
+statement ok
+DROP TABLE t
+
+# However, we now depend on t2.
+statement error cannot drop relation "t2" because view "tview" depends on it
+DROP TABLE t2
+
+# Test that if we add a reference to something in t2 and use it when replacing
+# the view that we now reference that object as well.
+statement ok
+CREATE INDEX i ON t2 (x);
+CREATE INDEX i2 ON t2 (x);
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t2@i
+
+statement error pq: cannot drop index \"i\" because view \"tview\" depends on it
+DROP INDEX t2@i
+
+# However, if we change the view, we should be able to drop i.
+statement ok
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t2@i2;
+DROP INDEX t2@i
+
+# ... and not i2.
+statement error pq: cannot drop index \"i2\" because view \"tview\" depends on it
+DROP INDEX t2@i2
+
+# Ensure that users can't replace views they don't have privilege to.
+statement ok
+GRANT CREATE ON DATABASE test TO testuser;
+GRANT CREATE, SELECT ON TABLE tview, t2 TO testuser
+
+user testuser
+
+statement error pq: user testuser does not have DROP privilege on relation tview
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t2
+
+# Give privilege now.
+user root
+
+statement ok
+GRANT DROP ON TABLE tview TO testuser
+
+user testuser
+
+statement ok
+CREATE OR REPLACE VIEW tview AS SELECT x AS x, x+1 AS x1, x+2 AS x2, x+3 AS x3 FROM t2
+
+user root
