@@ -952,6 +952,8 @@ func (n *Node) setupSpanForIncomingRPC(
 				opName, n.storeCfg.AmbientCtx.LogTags(), tracing.NonRecordableSpan,
 			)
 			ctx = opentracing.ContextWithSpan(ctx, newSpan)
+		} else {
+			grpcSpan.SetTag("node", n.Descriptor.NodeID)
 		}
 	}
 

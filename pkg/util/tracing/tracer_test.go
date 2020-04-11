@@ -60,8 +60,10 @@ func TestTracerRecording(t *testing.T) {
 
 	if err := TestingCheckRecordedSpans(GetRecording(s1), `
 		span a:
+			tags: unfinished=
 			x: 2
 		span b:
+			tags: unfinished=
 			x: 3
 	`); err != nil {
 		t.Fatal(err)
@@ -69,8 +71,10 @@ func TestTracerRecording(t *testing.T) {
 
 	if err := TestingCheckRecordedSpans(GetRecording(s2), `
 		span a:
+			tags: unfinished=
 			x: 2
 		span b:
+			tags: unfinished=
 			x: 3
 	`); err != nil {
 		t.Fatal(err)
@@ -84,11 +88,12 @@ func TestTracerRecording(t *testing.T) {
 
 	if err := TestingCheckRecordedSpans(GetRecording(s1), `
 		span a:
+			tags: unfinished=
 			x: 2
 		span b:
 			x: 3
 		span c:
-			tags: tag=val
+			tags: tag=val unfinished=
 			x: 4
 	`); err != nil {
 		t.Fatal(err)
@@ -96,6 +101,7 @@ func TestTracerRecording(t *testing.T) {
 	s3.Finish()
 	if err := TestingCheckRecordedSpans(GetRecording(s1), `
 		span a:
+      tags: unfinished=
 			x: 2
 		span b:
 			x: 3
@@ -115,6 +121,7 @@ func TestTracerRecording(t *testing.T) {
 	s3.LogKV("x", 5)
 	if err := TestingCheckRecordedSpans(GetRecording(s3), `
 		span a:
+			tags: unfinished=
 			x: 2
 		span b:
 			x: 3
@@ -230,6 +237,7 @@ func TestTracerInjectExtract(t *testing.T) {
 		t.Errorf("TraceID doesn't match: parent %d child %d", trace1, trace2)
 	}
 	s2.LogKV("x", 1)
+	s2.Finish()
 
 	// Verify that recording was started automatically.
 	rec := GetRecording(s2)
@@ -243,7 +251,7 @@ func TestTracerInjectExtract(t *testing.T) {
 
 	if err := TestingCheckRecordedSpans(GetRecording(s1), `
 		span a:
-			tags: sb=1
+			tags: sb=1 unfinished=
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -251,6 +259,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	if err := ImportRemoteSpans(s1, rec); err != nil {
 		t.Fatal(err)
 	}
+	s1.Finish()
 
 	if err := TestingCheckRecordedSpans(GetRecording(s1), `
 		span a:
