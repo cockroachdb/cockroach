@@ -23,11 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 )
@@ -55,6 +57,10 @@ import (
 //    variant outputs the counts as well. It is necessary to use
 //    feature-whitelist before these commands to avoid test flakes (e.g. because
 //    of counters that are changed by looking up descriptors)
+//
+//  - schema
+//
+//    Outputs reported schema information.
 //
 func TestTelemetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -102,6 +108,15 @@ func TestTelemetry(t *testing.T) {
 					return fmt.Sprintf("error: %v\n", err)
 				}
 				return ""
+
+			case "schema":
+				s.ReportDiagnostics(ctx)
+				last := diagSrv.LastRequestData()
+				var buf bytes.Buffer
+				for i := range last.Schema {
+					formatTableDescriptor(&buf, &last.Schema[i])
+				}
+				return buf.String()
 
 			case "feature-whitelist":
 				var err error
@@ -180,4 +195,28 @@ func (w featureWhitelist) Match(feature string) bool {
 		}
 	}
 	return false
+}
+
+func formatTableDescriptor(buf *bytes.Buffer, desc *sqlbase.TableDescriptor) {
+	tp := treeprinter.New()
+	n := tp.Childf("table:%s", desc.Name)
+	cols := n.Child("columns")
+	for _, col := range desc.Columns {
+		var colBuf bytes.Buffer
+		fmt.Fprintf(&colBuf, "%s:%s", col.Name, col.Type.String())
+		if col.DefaultExpr != nil {
+			fmt.Fprintf(&colBuf, " default: %s", *col.DefaultExpr)
+		}
+		if col.ComputeExpr != nil {
+			fmt.Fprintf(&colBuf, " computed: %s", *col.ComputeExpr)
+		}
+		cols.Child(colBuf.String())
+	}
+	if len(desc.Checks) > 0 {
+		checks := n.Child("checks")
+		for _, chk := range desc.Checks {
+			checks.Childf("%s: %s", chk.Name, chk.Expr)
+		}
+	}
+	buf.WriteString(tp.String())
 }

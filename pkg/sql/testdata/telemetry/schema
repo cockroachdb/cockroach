@@ -1,0 +1,67 @@
+# This file contains tests for reported schema information.
+# All names should be hidden.
+
+exec
+CREATE TABLE x (a INT PRIMARY KEY)
+----
+
+schema
+----
+table:_
+ └── columns
+      └── _:int
+
+exec
+CREATE TABLE t (
+  a INT UNIQUE PRIMARY KEY,
+  b STRING DEFAULT ('foo'),
+  c STRING AS (concat(b, 'bar')) STORED,
+  d DECIMAL DEFAULT 42 CHECK (d != 1),
+  CONSTRAINT foo CHECK (b != 'baz')
+)
+----
+
+schema
+----
+table:_
+ └── columns
+      └── _:int
+table:_
+ ├── columns
+ │    ├── _:int
+ │    ├── _:string default: _
+ │    ├── _:string computed: _
+ │    └── _:decimal default: _
+ └── checks
+      ├── _: _
+      └── _: _
+
+feature-whitelist
+sql.schema.*
+----
+
+feature-usage
+CREATE TABLE y (a SERIAL2)
+----
+sql.schema.create_table
+sql.schema.new_column_type.int2
+sql.schema.serial.rowid.int2
+
+schema
+----
+table:_
+ └── columns
+      └── _:int
+table:_
+ ├── columns
+ │    ├── _:int
+ │    ├── _:string default: _
+ │    ├── _:string computed: _
+ │    └── _:decimal default: _
+ └── checks
+      ├── _: _
+      └── _: _
+table:_
+ └── columns
+      ├── _:int default: _
+      └── _:int default: _
