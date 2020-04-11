@@ -212,7 +212,7 @@ const (
 // statement.
 type ColumnTableDef struct {
 	Name     Name
-	Type     *types.T
+	Type     ResolvableTypeReference
 	IsSerial bool
 	Nullable struct {
 		Nullability    Nullability
@@ -276,11 +276,14 @@ func processCollationOnType(name Name, typ *types.T, c ColumnCollation) (*types.
 
 // NewColumnTableDef constructs a column definition for a CreateTable statement.
 func NewColumnTableDef(
-	name Name, typ *types.T, isSerial bool, qualifications []NamedColumnQualification,
+	name Name,
+	typRef ResolvableTypeReference,
+	isSerial bool,
+	qualifications []NamedColumnQualification,
 ) (*ColumnTableDef, error) {
 	d := &ColumnTableDef{
 		Name:     name,
-		Type:     typ,
+		Type:     typRef,
 		IsSerial: isSerial,
 	}
 	d.Nullable.Nullability = SilentNull
@@ -292,10 +295,19 @@ func NewColumnTableDef(
 			if err != nil {
 				return nil, pgerror.Wrapf(err, pgcode.Syntax, "invalid locale %s", locale)
 			}
-			d.Type, err = processCollationOnType(name, d.Type, t)
+			// TODO (rohany): I'm not sure what should be done here if we have
+			//  a user defined type. This feels like something that should be
+			//  pushed from parsing to later in the system, or there should be
+			//  a semaCtx given to this function.
+			typ := GetKnownType(d.Type)
+			if typ == nil {
+				return nil, errors.New("Cannot collate on this type")
+			}
+			collatedTyp, err := processCollationOnType(name, typ, t)
 			if err != nil {
 				return nil, err
 			}
+			d.Type = MakeKnownType(collatedTyp)
 		case *ColumnDefault:
 			if d.HasDefaultExpr() {
 				return nil, pgerror.Newf(pgcode.Syntax,
@@ -476,7 +488,10 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 func (node *ColumnTableDef) columnTypeString() string {
 	if node.IsSerial {
 		// Map INT types to SERIAL keyword.
-		switch node.Type.Width() {
+		// TODO (rohany): This maybe should be pushed until type resolution occurs.
+		//  However, the argument is that we deal with serial only at parse time
+		//  currently, so we know we have a known type if that is the case.
+		switch GetKnownType(node.Type).Width() {
 		case 16:
 			return "SERIAL2"
 		case 32:

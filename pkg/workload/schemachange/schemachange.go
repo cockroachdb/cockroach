@@ -401,7 +401,7 @@ func (w *schemaChangeWorker) addColumn(tx *pgx.Tx) (string, error) {
 
 	def := &tree.ColumnTableDef{
 		Name: tree.Name(columnName),
-		Type: sqlbase.RandSortingType(w.rng),
+		Type: tree.MakeKnownType(sqlbase.RandSortingType(w.rng)),
 	}
 	def.Nullable.Nullability = tree.Nullability(rand.Intn(1 + int(tree.SilentNull)))
 	return fmt.Sprintf(`ALTER TABLE "%s" ADD COLUMN %s`, tableName, tree.Serialize(def)), nil

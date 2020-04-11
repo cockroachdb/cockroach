@@ -1136,7 +1136,7 @@ func makeTableDescIfAs(
 		var d *tree.ColumnTableDef
 		var ok bool
 		if d, ok = defs.(*tree.ColumnTableDef); ok {
-			d.Type = resultColumns[colResIndex].Typ
+			d.Type = tree.MakeKnownType(resultColumns[colResIndex].Typ)
 			colResIndex++
 		}
 	}
@@ -1147,7 +1147,10 @@ func makeTableDescIfAs(
 		for _, colRes := range resultColumns {
 			var d *tree.ColumnTableDef
 			var ok bool
-			var tableDef tree.TableDef = &tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
+			var tableDef tree.TableDef = &tree.ColumnTableDef{
+				Name: tree.Name(colRes.Name),
+				Type: tree.MakeKnownType(colRes.Typ),
+			}
 			if d, ok = tableDef.(*tree.ColumnTableDef); !ok {
 				return desc, errors.Errorf("failed to cast type to ColumnTableDef\n")
 			}
@@ -1261,8 +1264,12 @@ func MakeTableDesc(
 
 	for i, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
+			defType, err := d.Type.Resolve(semaCtx)
+			if err != nil {
+				return sqlbase.MutableTableDescriptor{}, err
+			}
 			if !desc.IsVirtualTable() {
-				switch d.Type.Oid() {
+				switch defType.Oid() {
 				case oid.T_int2vector, oid.T_oidvector:
 					return desc, pgerror.Newf(
 						pgcode.FeatureNotSupported,
@@ -1270,13 +1277,13 @@ func MakeTableDesc(
 					)
 				}
 			}
-			if supported, err := isTypeSupportedInVersion(version, d.Type); err != nil {
+			if supported, err := isTypeSupportedInVersion(version, defType); err != nil {
 				return desc, err
 			} else if !supported {
 				return desc, pgerror.Newf(
 					pgcode.FeatureNotSupported,
 					"type %s is not supported until version upgrade is finalized",
-					d.Type.SQLString(),
+					defType.SQLString(),
 				)
 			}
 			if d.PrimaryKey.Sharded {
@@ -1758,7 +1765,9 @@ func makeTableDesc(
 		}
 		// Do not include virtual tables in these statistics.
 		if !sqlbase.IsVirtualTable(id) {
-			incTelemetryForNewColumn(d)
+			if err := incTelemetryForNewColumn(&params.p.semaCtx, d); err != nil {
+				return ret, err
+			}
 		}
 		newDef, seqDbDesc, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, &n.Table)
 		if err != nil {
@@ -1857,7 +1866,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			}
 			def := tree.ColumnTableDef{
 				Name: tree.Name(c.Name),
-				Type: c.DatumType(),
+				Type: tree.MakeKnownType(c.DatumType()),
 			}
 			if c.Nullable {
 				def.Nullable.Nullability = tree.Null
@@ -2225,8 +2234,12 @@ func validateComputedColumn(
 		return err
 	}
 
+	defType, err := d.Type.Resolve(semaCtx)
+	if err != nil {
+		return err
+	}
 	if _, err := sqlbase.SanitizeVarFreeExpr(
-		replacedExpr, d.Type, "computed column", semaCtx, false, /* allowImpure */
+		replacedExpr, defType, "computed column", semaCtx, false, /* allowImpure */
 	); err != nil {
 		return err
 	}
@@ -2326,8 +2339,12 @@ func MakeCheckConstraint(
 
 // incTelemetryForNewColumn increments relevant telemetry every time a new column
 // is added to a table.
-func incTelemetryForNewColumn(d *tree.ColumnTableDef) {
-	telemetry.Inc(sqltelemetry.SchemaNewTypeCounter(d.Type.TelemetryName()))
+func incTelemetryForNewColumn(semaCtx *tree.SemaContext, d *tree.ColumnTableDef) error {
+	defType, err := d.Type.Resolve(semaCtx)
+	if err != nil {
+		return err
+	}
+	telemetry.Inc(sqltelemetry.SchemaNewTypeCounter(defType.TelemetryName()))
 	if d.IsComputed() {
 		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("computed"))
 	}
@@ -2337,4 +2354,5 @@ func incTelemetryForNewColumn(d *tree.ColumnTableDef) {
 	if d.Unique {
 		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("unique"))
 	}
+	return nil
 }

@@ -146,13 +146,17 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"adding a REFERENCES constraint while also adding a column via ALTER not supported")
 			}
 			version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
-			if supported, err := isTypeSupportedInVersion(version, d.Type); err != nil {
+			toType, err := d.Type.Resolve(&params.p.semaCtx)
+			if err != nil {
+				return err
+			}
+			if supported, err := isTypeSupportedInVersion(version, toType); err != nil {
 				return err
 			} else if !supported {
 				return pgerror.Newf(
 					pgcode.FeatureNotSupported,
 					"type %s is not supported until version upgrade is finalized",
-					d.Type.SQLString(),
+					toType.SQLString(),
 				)
 			}
 
@@ -175,7 +179,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 			d = newDef
-			incTelemetryForNewColumn(d)
+			if err := incTelemetryForNewColumn(&params.p.semaCtx, d); err != nil {
+				return err
+			}
 
 			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, params.EvalContext())
 			if err != nil {
@@ -884,7 +890,10 @@ func applyColumnMutation(
 ) error {
 	switch t := mut.(type) {
 	case *tree.AlterTableAlterColumnType:
-		typ := t.ToType
+		typ, err := t.ToType.Resolve(&params.p.semaCtx)
+		if err != nil {
+			return err
+		}
 
 		version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
 		if supported, err := isTypeSupportedInVersion(version, typ); err != nil {
@@ -906,7 +915,7 @@ func applyColumnMutation(
 			}
 		}
 
-		err := sqlbase.ValidateColumnDefType(typ)
+		err = sqlbase.ValidateColumnDefType(typ)
 		if err != nil {
 			return err
 		}

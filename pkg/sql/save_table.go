@@ -64,7 +64,7 @@ func (n *saveTableNode) startExec(params runParams) error {
 	for i := 0; i < len(cols); i++ {
 		def := &tree.ColumnTableDef{
 			Name: tree.Name(n.colNames[i]),
-			Type: cols[i].Typ,
+			Type: tree.MakeKnownType(cols[i].Typ),
 		}
 		def.Nullable.Nullability = tree.SilentNull
 		create.Defs = append(create.Defs, def)

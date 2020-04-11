@@ -31,7 +31,7 @@ type customFuncs struct {
 
 // NewColumn creates a new column in the metadata.
 func (c *customFuncs) NewColumn(name, typeStr string) opt.ColumnID {
-	typ, err := ParseType(typeStr)
+	typ, err := ParseType(c.cat, typeStr)
 	if err != nil {
 		panic(exprGenErr{err})
 	}

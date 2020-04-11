@@ -598,70 +598,70 @@ func mysqlColToCockroach(
 	switch typ := col.SQLType(); typ {
 
 	case mysqltypes.Char:
-		def.Type = types.MakeChar(int32(length))
+		def.Type = tree.MakeKnownType(types.MakeChar(int32(length)))
 	case mysqltypes.VarChar:
-		def.Type = types.MakeVarChar(int32(length))
+		def.Type = tree.MakeKnownType(types.MakeVarChar(int32(length)))
 	case mysqltypes.Text:
-		def.Type = types.MakeString(int32(length))
+		def.Type = tree.MakeKnownType(types.MakeString(int32(length)))
 
 	case mysqltypes.Blob:
-		def.Type = types.Bytes
+		def.Type = tree.MakeKnownType(types.Bytes)
 	case mysqltypes.VarBinary:
-		def.Type = types.Bytes
+		def.Type = tree.MakeKnownType(types.Bytes)
 	case mysqltypes.Binary:
-		def.Type = types.Bytes
+		def.Type = tree.MakeKnownType(types.Bytes)
 
 	case mysqltypes.Int8:
-		def.Type = types.Int2
+		def.Type = tree.MakeKnownType(types.Int2)
 	case mysqltypes.Uint8:
-		def.Type = types.Int2
+		def.Type = tree.MakeKnownType(types.Int2)
 	case mysqltypes.Int16:
-		def.Type = types.Int2
+		def.Type = tree.MakeKnownType(types.Int2)
 	case mysqltypes.Uint16:
-		def.Type = types.Int4
+		def.Type = tree.MakeKnownType(types.Int4)
 	case mysqltypes.Int24:
-		def.Type = types.Int4
+		def.Type = tree.MakeKnownType(types.Int4)
 	case mysqltypes.Uint24:
-		def.Type = types.Int4
+		def.Type = tree.MakeKnownType(types.Int4)
 	case mysqltypes.Int32:
-		def.Type = types.Int4
+		def.Type = tree.MakeKnownType(types.Int4)
 	case mysqltypes.Uint32:
-		def.Type = types.Int
+		def.Type = tree.MakeKnownType(types.Int)
 	case mysqltypes.Int64:
-		def.Type = types.Int
+		def.Type = tree.MakeKnownType(types.Int)
 	case mysqltypes.Uint64:
-		def.Type = types.Int
+		def.Type = tree.MakeKnownType(types.Int)
 
 	case mysqltypes.Float32:
-		def.Type = types.Float4
+		def.Type = tree.MakeKnownType(types.Float4)
 	case mysqltypes.Float64:
-		def.Type = types.Float
+		def.Type = tree.MakeKnownType(types.Float)
 
 	case mysqltypes.Decimal:
-		def.Type = types.MakeDecimal(int32(length), int32(scale))
+		def.Type = tree.MakeKnownType(types.MakeDecimal(int32(length), int32(scale)))
 
 	case mysqltypes.Date:
-		def.Type = types.Date
+		def.Type = tree.MakeKnownType(types.Date)
 		if col.Default != nil && bytes.Equal(col.Default.Val, []byte(zeroDate)) {
 			col.Default = nil
 		}
 	case mysqltypes.Time:
-		def.Type = types.Time
+		def.Type = tree.MakeKnownType(types.Time)
 	case mysqltypes.Timestamp:
-		def.Type = types.TimestampTZ
+		def.Type = tree.MakeKnownType(types.TimestampTZ)
 		if col.Default != nil && bytes.Equal(col.Default.Val, []byte(zeroTime)) {
 			col.Default = nil
 		}
 	case mysqltypes.Datetime:
-		def.Type = types.TimestampTZ
+		def.Type = tree.MakeKnownType(types.TimestampTZ)
 		if col.Default != nil && bytes.Equal(col.Default.Val, []byte(zeroTime)) {
 			col.Default = nil
 		}
 	case mysqltypes.Year:
-		def.Type = types.Int2
+		def.Type = tree.MakeKnownType(types.Int2)
 
 	case mysqltypes.Enum:
-		def.Type = types.String
+		def.Type = tree.MakeKnownType(types.String)
 
 		expr, err := parser.ParseExpr(fmt.Sprintf("%s in (%s)", name, strings.Join(col.EnumValues, ",")))
 		if err != nil {
@@ -673,7 +673,7 @@ func mysqlColToCockroach(
 		}
 
 	case mysqltypes.TypeJSON:
-		def.Type = types.Jsonb
+		def.Type = tree.MakeKnownType(types.Jsonb)
 
 	case mysqltypes.Set:
 		return nil, unimplemented.NewWithIssueHint(32560,
