@@ -539,7 +539,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
 %token <str> BUCKET_COUNT
-%token <str> BLOB BOOL BOOLEAN BOTH BUNDLE BY BYTEA BYTES
+%token <str> BOOLEAN BOTH BUNDLE BY
 
 %token <str> CACHE CANCEL CASCADE CASE CAST CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
@@ -573,7 +573,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE INCLUDING INCREMENT INCREMENTAL
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
-%token <str> INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
+%token <str> INNER INSERT INT INTEGER
 %token <str> INTERSECT INTERVAL INTO INVERTED IS ISERROR ISNULL ISOLATION
 
 %token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
@@ -606,7 +606,6 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE
 
 %token <str> SAVEPOINT SCATTER SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
-%token <str> SERIAL SERIAL2 SERIAL4 SERIAL8
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
@@ -861,7 +860,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <str> privilege savepoint_name
 %type <tree.KVOption> role_option password_clause valid_until_clause
 %type <tree.Operator> subquery_op
-%type <*tree.UnresolvedName> func_name
+%type <*tree.UnresolvedName> func_name func_name_no_crdb_extra
 %type <str> opt_collate
 
 %type <str> cursor_name database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
@@ -962,7 +961,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.IndexFlags> opt_index_flags
 %type <*tree.IndexFlags> index_flags_param
 %type <*tree.IndexFlags> index_flags_param_list
-%type <tree.Expr> a_expr b_expr c_expr d_expr
+%type <tree.Expr> a_expr b_expr c_expr d_expr typed_literal
 %type <tree.Expr> substr_from substr_for
 %type <tree.Expr> in_expr
 %type <tree.Expr> having_clause
@@ -1003,7 +1002,6 @@ func newNameFromStr(s string) *tree.Name {
 %type <*types.T> bit_with_length bit_without_length
 %type <*types.T> character_base
 %type <*types.T> geo_shape
-%type <*types.T> postgres_oid
 %type <*types.T> cast_target
 %type <*types.T> const_geo
 %type <str> extract_arg
@@ -1017,15 +1015,17 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> var_value
 %type <tree.Exprs> var_list
 %type <tree.NameList> var_name
-%type <str> unrestricted_name type_function_name
+%type <str> unrestricted_name type_function_name type_function_name_no_crdb_extra
 %type <str> non_reserved_word
 %type <str> non_reserved_word_or_sconst
 %type <tree.Expr> zone_value
 %type <tree.Expr> string_or_placeholder
 %type <tree.Expr> string_or_placeholder_list
 
-%type <str> unreserved_keyword type_func_name_keyword cockroachdb_extra_type_func_name_keyword
+%type <str> unreserved_keyword type_func_name_keyword type_func_name_no_crdb_extra_keyword type_func_name_crdb_extra_keyword
 %type <str> col_name_keyword reserved_keyword cockroachdb_extra_reserved_keyword extra_var_value
+
+%type <str> complex_type_name general_type_name
 
 %type <tree.ConstraintTableDef> table_constraint constraint_elem create_as_constraint_def create_as_constraint_elem
 %type <tree.TableDef> index_def
@@ -4695,7 +4695,7 @@ column_def:
   column_name typename col_qual_list
   {
     typ := $2.colType()
-    tableDef, err := tree.NewColumnTableDef(tree.Name($1), typ, isSerialType(typ), $3.colQuals())
+    tableDef, err := tree.NewColumnTableDef(tree.Name($1), typ, types.IsSerialType(typ), $3.colQuals())
     if err != nil {
       return setErr(sqllex, err)
     }
@@ -7308,16 +7308,69 @@ opt_array_bounds:
 | '[' ICONST ']' '[' error { return unimplementedWithIssue(sqllex, 32552) }
 | /* EMPTY */ { $$.val = []int32(nil) }
 
-const_json:
-  JSON
-| JSONB
+// general_type_name is a variant of type_or_function_name but does not
+// include some extra keywords (like FAMILY) which cause ambiguity with
+// parsing of typenames in certain contexts.
+general_type_name:
+  type_function_name_no_crdb_extra
+
+// complex_type_name mirrors the rule for complex_db_object_name, but uses
+// general_type_name rather than db_object_name_component to avoid conflicts.
+complex_type_name:
+  general_type_name '.' unrestricted_name
+  {
+    return unimplemented(sqllex, "qualified types")
+  }
+| general_type_name '.' unrestricted_name '.' unrestricted_name
+  {
+    return unimplemented(sqllex, "qualified types")
+  }
 
 simple_typename:
-  const_typename
+  general_type_name
+  {
+    /* FORCE DOC */
+    // See https://www.postgresql.org/docs/9.1/static/datatype-character.html
+    // Postgres supports a special character type named "char" (with the quotes)
+    // that is a single-character column type. It's used by system tables.
+    // Eventually this clause will be used to parse user-defined types as well,
+    // since their names can be quoted.
+    if $1 == "char" {
+      $$.val = types.MakeQChar(0)
+    } else if $1 == "serial" {
+        switch sqllex.(*lexer).nakedIntType.Width() {
+        case 32:
+          $$.val = &types.Serial4Type
+        default:
+          $$.val = &types.Serial8Type
+        }
+    } else {
+      var ok bool
+      var unimp int
+      $$.val, ok, unimp = types.TypeForNonKeywordTypeName($1)
+      if !ok {
+        switch unimp {
+          case 0:
+            // Note: we can only report an unimplemented error for specific
+            // known type names. Anything else may return sensitive info.
+            sqllex.Error(fmt.Sprintf("type %q does not exist", $1))
+            return 1
+          case -1:
+            return unimplemented(sqllex, "type name " + $1)
+          default:
+            return unimplementedWithIssueDetail(sqllex, unimp, $1)
+        }
+      }
+    }
+  }
+| complex_type_name
+  {
+    return unimplemented(sqllex, "qualified types")
+  }
+| const_typename
 | bit_with_length
 | character_with_length
 | interval_type
-| postgres_oid
 | POINT error { return unimplementedWithIssueDetail(sqllex, 21286, "point") } // needed or else it generates a syntax error.
 | POLYGON error { return unimplementedWithIssueDetail(sqllex, 21286, "polygon") } // needed or else it generates a syntax error.
 
@@ -7366,108 +7419,6 @@ const_typename:
 | character_without_length
 | const_datetime
 | const_geo
-| const_json
-  {
-    $$.val = types.Jsonb
-  }
-| BLOB
-  {
-    $$.val = types.Bytes
-  }
-| BYTES
-  {
-    $$.val = types.Bytes
-  }
-| BYTEA
-  {
-    $$.val = types.Bytes
-  }
-| TEXT
-  {
-    $$.val = types.String
-  }
-| NAME
-  {
-    $$.val = types.Name
-  }
-| SERIAL
-  {
-    switch sqllex.(*lexer).nakedIntType.Width() {
-    case 32:
-      $$.val = &serial4Type
-    default:
-      $$.val = &serial8Type
-    }
-  }
-| SERIAL2
-  {
-    $$.val = &serial2Type
-  }
-| SMALLSERIAL
-  {
-    $$.val = &serial2Type
-  }
-| SERIAL4
-  {
-    $$.val = &serial4Type
-  }
-| SERIAL8
-  {
-    $$.val = &serial8Type
-  }
-| BIGSERIAL
-  {
-    $$.val = &serial8Type
-  }
-| UUID
-  {
-    $$.val = types.Uuid
-  }
-| INET
-  {
-    $$.val = types.INet
-  }
-| OID
-  {
-    $$.val = types.Oid
-  }
-| OIDVECTOR
-  {
-    $$.val = types.OidVector
-  }
-| INT2VECTOR
-  {
-    $$.val = types.Int2Vector
-  }
-| IDENT
-  {
-    /* FORCE DOC */
-    // See https://www.postgresql.org/docs/9.1/static/datatype-character.html
-    // Postgres supports a special character type named "char" (with the quotes)
-    // that is a single-character column type. It's used by system tables.
-    // Eventually this clause will be used to parse user-defined types as well,
-    // since their names can be quoted.
-    if $1 == "char" {
-      $$.val = types.MakeQChar(0)
-    } else {
-      var ok bool
-      var unimp int
-      $$.val, ok, unimp = types.TypeForNonKeywordTypeName($1)
-      if !ok {
-          switch unimp {
-              case 0:
-                // Note: we can only report an unimplemented error for specific
-                // known type names. Anything else may return PII.
-                sqllex.Error("type does not exist")
-                return 1
-              case -1:
-                return unimplemented(sqllex, "type name " + $1)
-              default:
-                return unimplementedWithIssueDetail(sqllex, unimp, $1)
-          }
-      }
-    }
-  }
 
 opt_numeric_modifiers:
   '(' iconst32 ')'
@@ -7501,25 +7452,9 @@ numeric:
   {
     $$.val = sqllex.(*lexer).nakedIntType
   }
-| INT2
-  {
-    $$.val = types.Int2
-  }
 | SMALLINT
   {
     $$.val = types.Int2
-  }
-| INT4
-  {
-    $$.val = types.Int4
-  }
-| INT8
-  {
-    $$.val = types.Int
-  }
-| INT64
-  {
-    $$.val = types.Int
   }
 | BIGINT
   {
@@ -7529,14 +7464,6 @@ numeric:
   {
     $$.val = types.Float4
   }
-| FLOAT4
-    {
-      $$.val = types.Float4
-    }
-| FLOAT8
-    {
-      $$.val = types.Float
-    }
 | FLOAT opt_float
   {
     $$.val = $2.colType()
@@ -7572,33 +7499,6 @@ numeric:
 | BOOLEAN
   {
     $$.val = types.Bool
-  }
-| BOOL
-  {
-    $$.val = types.Bool
-  }
-
-// Postgres OID pseudo-types. See https://www.postgresql.org/docs/9.4/static/datatype-oid.html.
-postgres_oid:
-  REGPROC
-  {
-    $$.val = types.RegProc
-  }
-| REGPROCEDURE
-  {
-    $$.val = types.RegProcedure
-  }
-| REGCLASS
-  {
-    $$.val = types.RegClass
-  }
-| REGTYPE
-  {
-    $$.val = types.RegType
-  }
-| REGNAMESPACE
-  {
-    $$.val = types.RegNamespace
   }
 
 opt_float:
@@ -8500,9 +8400,9 @@ d_expr:
     $$.val = d
   }
 | func_name '(' expr_list opt_sort_clause ')' SCONST { return unimplemented(sqllex, $1.unresolvedName().String() + "(...) SCONST") }
-| const_typename SCONST
+| typed_literal
   {
-    $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: $1.colType(), SyntaxMode: tree.CastPrepend}
+    $$.val = $1.expr()
   }
 | interval_value
   {
@@ -8607,6 +8507,58 @@ func_application:
     $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Exprs: tree.Exprs{tree.StarExpr()}}
   }
 | func_name '(' error { return helpWithFunction(sqllex, $1.resolvableFuncRefFromName()) }
+
+// typed_literal represents expressions like INT '4', or generally <TYPE> SCONST.
+// This rule handles both the case of qualified and non-qualified typenames.
+typed_literal:
+  // The key here is that none of the keywords in the func_name_no_crdb_extra
+  // production can overlap with the type rules in const_typename, otherwise
+  // we will have conflicts between this rule and the one below.
+  func_name_no_crdb_extra SCONST
+  {
+    name := $1.unresolvedName()
+    if name.NumParts == 1 {
+      typName := name.Parts[0]
+      /* FORCE DOC */
+      // See https://www.postgresql.org/docs/9.1/static/datatype-character.html
+      // Postgres supports a special character type named "char" (with the quotes)
+      // that is a single-character column type. It's used by system tables.
+      // Eventually this clause will be used to parse user-defined types as well,
+      // since their names can be quoted.
+      if typName == "char" {
+        $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: types.MakeQChar(0), SyntaxMode: tree.CastPrepend}
+      } else if typName == "serial" {
+        switch sqllex.(*lexer).nakedIntType.Width() {
+        case 32:
+          $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: &types.Serial4Type, SyntaxMode: tree.CastPrepend}
+        default:
+          $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: &types.Serial8Type, SyntaxMode: tree.CastPrepend}
+        }
+      } else {
+        typ, ok, unimp := types.TypeForNonKeywordTypeName(typName)
+        if !ok {
+          switch unimp {
+            case 0:
+              // Note: we can only report an unimplemented error for specific
+              // known type names. Anything else may return PII.
+              sqllex.Error(fmt.Sprintf("type %q does not exist", typName))
+              return 1
+            case -1:
+              return unimplemented(sqllex, "type name " + typName)
+            default:
+              return unimplementedWithIssueDetail(sqllex, unimp, typName)
+          }
+        }
+      $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: typ, SyntaxMode: tree.CastPrepend}
+      }
+    } else {
+      return unimplemented(sqllex, "generic-type-name prepended casts")
+    }
+  }
+| const_typename SCONST
+  {
+    $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: $1.colType(), SyntaxMode: tree.CastPrepend}
+  }
 
 // func_expr and its cousin func_expr_windowless are split out from c_expr just
 // so that we have classifications for "everything that is a function call or
@@ -9810,6 +9762,15 @@ func_name:
   }
 | prefixed_column_path
 
+// func_name_no_crdb_extra is the same rule as func_name, but does not
+// contain some CRDB specific keywords like FAMILY.
+func_name_no_crdb_extra:
+  type_function_name_no_crdb_extra
+  {
+    $$.val = &tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}
+  }
+| prefixed_column_path
+
 // Names for database objects (tables, sequences, views, stored functions).
 // Accepted patterns:
 // <table>
@@ -9856,7 +9817,7 @@ complex_db_object_name:
 // trying to gain them back here.
 db_object_name_component:
   name
-| cockroachdb_extra_type_func_name_keyword
+| type_func_name_crdb_extra_keyword
 | cockroachdb_extra_reserved_keyword
 
 // General name --- names that can be column, table, etc names.
@@ -9894,6 +9855,12 @@ type_function_name:
   IDENT
 | unreserved_keyword
 | type_func_name_keyword
+
+// Type/function identifier without CRDB extra reserved keywords.
+type_function_name_no_crdb_extra:
+  IDENT
+| unreserved_keyword
+| type_func_name_no_crdb_extra_keyword
 
 // Any not-fully-reserved word --- these names can be, eg, variable names.
 non_reserved_word:
@@ -9933,14 +9900,9 @@ unreserved_keyword:
 | AUTHORIZATION
 | BACKUP
 | BEGIN
-| BIGSERIAL
-| BLOB
-| BOOL
 | BUCKET_COUNT
 | BUNDLE
 | BY
-| BYTEA
-| BYTES
 | CACHE
 | CANCEL
 | CASCADE
@@ -9969,7 +9931,6 @@ unreserved_keyword:
 | DATA
 | DATABASE
 | DATABASES
-| DATE
 | DAY
 | DEALLOCATE
 | DECLARE
@@ -9998,8 +9959,6 @@ unreserved_keyword:
 | FILES
 | FILTER
 | FIRST
-| FLOAT4
-| FLOAT8
 | FOLLOWING
 | FORCE_INDEX
 | FUNCTION
@@ -10020,21 +9979,14 @@ unreserved_keyword:
 | INCREMENT
 | INCREMENTAL
 | INDEXES
-| INET
 | INJECT
 | INSERT
-| INT2
-| INT2VECTOR
-| INT4
-| INT8
-| INT64
 | INTERLEAVE
 | INVERTED
 | ISOLATION
 | JOB
 | JOBS
 | JSON
-| JSONB
 | KEY
 | KEYS
 | KV
@@ -10064,7 +10016,6 @@ unreserved_keyword:
 | MONTH
 | NAMES
 | NAN
-| NAME
 | NEXT
 | NO
 | NORMAL
@@ -10076,9 +10027,7 @@ unreserved_keyword:
 | IGNORE_FOREIGN_KEYS
 | OF
 | OFF
-| OID
 | OIDS
-| OIDVECTOR
 | OPERATOR
 | OPT
 | OPTION
@@ -10109,11 +10058,6 @@ unreserved_keyword:
 | READ
 | RECURSIVE
 | REF
-| REGCLASS
-| REGPROC
-| REGPROCEDURE
-| REGNAMESPACE
-| REGTYPE
 | REINDEX
 | RELEASE
 | RENAME
@@ -10140,11 +10084,7 @@ unreserved_keyword:
 | SCRUB
 | SEARCH
 | SECOND
-| SERIAL
 | SERIALIZABLE
-| SERIAL2
-| SERIAL4
-| SERIAL8
 | SEQUENCE
 | SEQUENCES
 | SERVER
@@ -10155,7 +10095,6 @@ unreserved_keyword:
 | SHOW
 | SIMPLE
 | SKIP
-| SMALLSERIAL
 | SNAPSHOT
 | SPLIT
 | SQL
@@ -10167,7 +10106,6 @@ unreserved_keyword:
 | STORED
 | STORING
 | STRICT
-| STRING
 | SUBSCRIPTION
 | SYNTAX
 | SYSTEM
@@ -10193,7 +10131,6 @@ unreserved_keyword:
 | UNTIL
 | UPDATE
 | UPSERT
-| UUID
 | USE
 | USERS
 | VALID
@@ -10255,6 +10192,7 @@ col_name_keyword:
 | REAL
 | ROW
 | SMALLINT
+| STRING
 | SUBSTRING
 | TIME
 | TIMETZ
@@ -10268,6 +10206,12 @@ col_name_keyword:
 | VIRTUAL
 | WORK
 
+// type_func_name_keyword contains both the standard set of
+// type_func_name_keyword's along with the set of CRDB extensions.
+type_func_name_keyword:
+  type_func_name_no_crdb_extra_keyword
+| type_func_name_crdb_extra_keyword
+
 // Type/function identifier --- keywords that can be type or function names.
 //
 // Most of these are keywords that are used as operators in expressions; in
@@ -10280,8 +10224,8 @@ col_name_keyword:
 //
 // *** DO NOT ADD COCKROACHDB-SPECIFIC KEYWORDS HERE ***
 //
-// See cockroachdb_extra_type_func_name_keyword below.
-type_func_name_keyword:
+// See type_func_name_crdb_extra_keyword below.
+type_func_name_no_crdb_extra_keyword:
   COLLATION
 | CROSS
 | FULL
@@ -10299,7 +10243,6 @@ type_func_name_keyword:
 | OVERLAPS
 | RIGHT
 | SIMILAR
-| cockroachdb_extra_type_func_name_keyword
 
 // CockroachDB-specific keywords that can be used in type/function
 // identifiers.
@@ -10309,7 +10252,7 @@ type_func_name_keyword:
 // Adding keywords here creates non-resolvable incompatibilities with
 // postgres clients.
 //
-cockroachdb_extra_type_func_name_keyword:
+type_func_name_crdb_extra_keyword:
   FAMILY
 
 // Reserved keyword --- these keywords are usable only as a unrestricted_name.

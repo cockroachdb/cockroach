@@ -364,21 +364,3 @@ func arrayOf(colType *types.T, bounds []int32) (*types.T, error) {
 	// Currently bounds are ignored.
 	return types.MakeArray(colType), nil
 }
-
-// The SERIAL types are pseudo-types that are only used during parsing. After
-// that, they should behave identically to INT columns. They are declared
-// as INT types, but using different instances than types.Int, types.Int2, etc.
-// so that they can be compared by pointer to differentiate them from the
-// singleton INT types. While the usual requirement is that == is never used to
-// compare types, this is one case where it's allowed.
-var (
-	serial2Type = *types.Int2
-	serial4Type = *types.Int4
-	serial8Type = *types.Int
-)
-
-func isSerialType(typ *types.T) bool {
-	// This is a special case where == is used to compare types, since the SERIAL
-	// types are pseudo-types.
-	return typ == &serial2Type || typ == &serial4Type || typ == &serial8Type
-}
