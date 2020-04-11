@@ -88,8 +88,12 @@ func (p *planner) processSerialInColumnDef(
 	// Clear the IsSerial bit now that it's been remapped.
 	newSpec.IsSerial = false
 
+	defType, err := tree.ResolveType(d.Type, &p.semaCtx)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
 	telemetry.Inc(sqltelemetry.SerialColumnNormalizationCounter(
-		d.Type.Name(), serialNormalizationMode.String()))
+		defType.Name(), serialNormalizationMode.String()))
 
 	if serialNormalizationMode == sessiondata.SerialUsesRowID {
 		// We're not constructing a sequence for this SERIAL column.

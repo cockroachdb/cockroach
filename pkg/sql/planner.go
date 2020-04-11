@@ -425,7 +425,11 @@ func (p *planner) DistSQLPlanner() *DistSQLPlanner {
 // ParseType implements the tree.EvalPlanner interface.
 // We define this here to break the dependency from eval.go to the parser.
 func (p *planner) ParseType(sql string) (*types.T, error) {
-	return parser.ParseType(sql)
+	ref, err := parser.ParseType(sql)
+	if err != nil {
+		return nil, err
+	}
+	return tree.ResolveType(ref, p.semaCtx)
 }
 
 // ParseQualifiedTableName implements the tree.EvalDatabase interface.

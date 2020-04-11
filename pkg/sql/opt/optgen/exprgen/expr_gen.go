@@ -279,7 +279,7 @@ func (eg *exprGen) castToDesiredType(arg interface{}, desiredType reflect.Type) 
 	if str, ok := arg.(string); ok {
 		// String to type.
 		if desiredType == reflect.TypeOf((*types.T)(nil)) {
-			typ, err := ParseType(str)
+			typ, err := ParseType(eg.cat, str)
 			if err != nil {
 				panic(exprGenErr{err})
 			}

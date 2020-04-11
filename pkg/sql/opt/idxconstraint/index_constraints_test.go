@@ -86,7 +86,7 @@ func TestIndexConstraints(t *testing.T) {
 				key, vals := arg.Key, arg.Vals
 				switch key {
 				case "vars":
-					varTypes, err = exprgen.ParseTypes(vals)
+					varTypes, err = exprgen.ParseTypes(&semaCtx, vals)
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
@@ -222,7 +222,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
-			varTypes, err := exprgen.ParseTypes(strings.Split(tc.varTypes, ", "))
+			varTypes, err := exprgen.ParseTypes(&semaCtx, strings.Split(tc.varTypes, ", "))
 			if err != nil {
 				b.Fatal(err)
 			}

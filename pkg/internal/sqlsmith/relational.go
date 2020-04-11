@@ -79,7 +79,7 @@ func (s *Smither) tableExpr(table *tableRef, name *tree.TableName) (tree.TableEx
 	refs := make(colRefs, len(table.Columns))
 	for i, c := range table.Columns {
 		refs[i] = &colRef{
-			typ: c.Type,
+			typ: tree.MustBeStaticallyKnownType(c.Type),
 			item: tree.NewColumnItem(
 				name,
 				c.Name,
@@ -289,16 +289,16 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 					if rightColElem.Direction != leftColElem.Direction {
 						break
 					}
-					if !rightCol.Type.Equivalent(leftCol.Type) {
+					if !tree.MustBeStaticallyKnownType(rightCol.Type).Equivalent(tree.MustBeStaticallyKnownType(leftCol.Type)) {
 						break
 					}
 					cols = append(cols, [2]colRef{
 						{
-							typ:  leftCol.Type,
+							typ:  tree.MustBeStaticallyKnownType(leftCol.Type),
 							item: tree.NewColumnItem(leftAliasName, leftColElem.Column),
 						},
 						{
-							typ:  rightCol.Type,
+							typ:  tree.MustBeStaticallyKnownType(rightCol.Type),
 							item: tree.NewColumnItem(rightAliasName, rightColElem.Column),
 						},
 					})
@@ -386,7 +386,12 @@ func (s *Smither) makeWith() (*tree.With, tableRefs) {
 		for i, r := range stmtRefs {
 			var err error
 			cols[i] = r.item.ColumnName
-			defs[i], err = tree.NewColumnTableDef(r.item.ColumnName, r.typ, false /* isSerial */, nil)
+			defs[i], err = tree.NewColumnTableDef(
+				r.item.ColumnName,
+				r.typ,
+				false, /* isSerial */
+				nil,
+			)
 			if err != nil {
 				panic(err)
 			}
@@ -946,7 +951,7 @@ func (s *Smither) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 				continue
 			}
 			if unnamed || c.Nullable.Nullability == tree.NotNull || s.coin() {
-				desiredTypes = append(desiredTypes, c.Type)
+				desiredTypes = append(desiredTypes, tree.MustBeStaticallyKnownType(c.Type))
 				names = append(names, c.Name)
 			}
 		}
@@ -1130,7 +1135,7 @@ func (s *Smither) makeReturning(table *tableRef) (*tree.ReturningExprs, colRefs)
 	refs := make(colRefs, len(table.Columns))
 	for i, c := range table.Columns {
 		refs[i] = &colRef{
-			typ:  c.Type,
+			typ:  tree.MustBeStaticallyKnownType(c.Type),
 			item: &tree.ColumnItem{ColumnName: c.Name},
 		}
 	}

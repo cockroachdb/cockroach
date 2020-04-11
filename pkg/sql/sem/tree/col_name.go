@@ -90,6 +90,35 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 		}
 		return strength, s, nil
 
+	case *UnresolvedCastExpr:
+		strength, s, err := ComputeColNameInternal(sp, e.Expr)
+		if err != nil {
+			return 0, "", err
+		}
+		if strength <= 1 {
+			// TODO (rohany): What to do here?
+			if typ := GetStaticallyKnownType(e.Type); typ != nil {
+				return 0, computeCastName(typ), nil
+			}
+			return 1, e.Type.SQLString(), nil
+		}
+		return strength, s, nil
+
+	case *UnresolvedAnnotateTypeExpr:
+		// Ditto CastExpr.
+		strength, s, err := ComputeColNameInternal(sp, e.Expr)
+		if err != nil {
+			return 0, "", err
+		}
+		if strength <= 1 {
+			// TODO (rohany): What to do here?
+			if typ := GetStaticallyKnownType(e.Type); typ != nil {
+				return 0, computeCastName(typ), nil
+			}
+			return 1, e.Type.SQLString(), nil
+		}
+		return strength, s, nil
+
 	case *AnnotateTypeExpr:
 		// Ditto CastExpr.
 		strength, s, err := ComputeColNameInternal(sp, e.Expr)

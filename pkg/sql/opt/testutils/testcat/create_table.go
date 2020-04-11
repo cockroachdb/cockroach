@@ -380,12 +380,14 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	nullable := !def.PrimaryKey.IsPrimaryKey && def.Nullable.Nullability != tree.NotNull
 	col := &Column{
-		Ordinal:  tt.ColumnCount(),
-		Name:     string(def.Name),
-		Type:     def.Type,
+		Ordinal: tt.ColumnCount(),
+		Name:    string(def.Name),
+		// TODO (rohany): Can the test catalog have unresolved types?
+		Type:     tree.MustBeStaticallyKnownType(def.Type),
 		Nullable: nullable,
 	}
-	col.ColType = *def.Type
+	// TODO (rohany): Can the test catalog have unresolved types?
+	col.ColType = *tree.MustBeStaticallyKnownType(def.Type)
 
 	// Look for name suffixes indicating this is a mutation column.
 	if name, ok := extractWriteOnlyColumn(def); ok {

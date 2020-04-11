@@ -62,7 +62,7 @@ func TestExprIsNeverNull(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var varTypes []*types.T
 			var err error
-
+			semaCtx := tree.MakeSemaContext()
 			tester := opttester.New(catalog, d.Input)
 			switch d.Cmd {
 			case "scalar-is-not-nullable":
@@ -77,7 +77,7 @@ func TestExprIsNeverNull(t *testing.T) {
 								notNullCols.Add(opt.ColumnID(i + 1))
 							}
 						}
-						varTypes, err = exprgen.ParseTypes(vals)
+						varTypes, err = exprgen.ParseTypes(&semaCtx, vals)
 						if err != nil {
 							d.Fatalf(t, "%v", err)
 						}

@@ -776,6 +776,7 @@ func TestParse(t *testing.T) {
 
 		{`SELECT 1:::REGTYPE`},
 		{`SELECT 1:::REGPROC`},
+		{`SELECT 1:::REGPROCEDURE`},
 		{`SELECT 1:::REGCLASS`},
 		{`SELECT 1:::REGNAMESPACE`},
 

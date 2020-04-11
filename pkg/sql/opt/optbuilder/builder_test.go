@@ -60,6 +60,7 @@ func TestBuilder(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var varTypes []*types.T
 			var err error
+			semaCtx := tree.MakeSemaContext()
 
 			tester := opttester.New(catalog, d.Input)
 			tester.Flags.ExprFormat = memo.ExprFmtHideMiscProps |
@@ -80,7 +81,7 @@ func TestBuilder(t *testing.T) {
 					key, vals := arg.Key, arg.Vals
 					switch key {
 					case "vars":
-						varTypes, err = exprgen.ParseTypes(vals)
+						varTypes, err = exprgen.ParseTypes(&semaCtx, vals)
 						if err != nil {
 							d.Fatalf(t, "%v", err)
 						}

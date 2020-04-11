@@ -23,7 +23,7 @@ import (
 // ParseType parses a string describing a type.
 // It supports tuples using the syntax "tuple{<type>, <type>, ...}" but does not
 // support tuples of tuples.
-func ParseType(typeStr string) (*types.T, error) {
+func ParseType(resolver tree.TypeReferenceResolver, typeStr string) (*types.T, error) {
 	// Special case for tuples for which there is no SQL syntax.
 	if strings.HasPrefix(typeStr, "tuple{") && strings.HasSuffix(typeStr, "}") {
 		s := strings.TrimPrefix(typeStr, "tuple{")
@@ -35,22 +35,30 @@ func ParseType(typeStr string) (*types.T, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "cannot parse %s as a type", typeStr)
 		}
-		colTypes := parsed.AST.(*tree.Prepare).Types
-		contents := make([]types.T, len(colTypes))
-		for i := range colTypes {
-			contents[i] = *colTypes[i]
+		colTypesRefs := parsed.AST.(*tree.Prepare).Types
+		colTypes := make([]types.T, len(colTypesRefs))
+		for i := range colTypesRefs {
+			res, err := tree.ResolveType(colTypesRefs[i], resolver)
+			if err != nil {
+				return nil, err
+			}
+			colTypes[i] = *res
 		}
-		return types.MakeTuple(contents), nil
+		return types.MakeTuple(colTypes), nil
 	}
-	return parser.ParseType(typeStr)
+	typ, err := parser.ParseType(typeStr)
+	if err != nil {
+		return nil, err
+	}
+	return tree.ResolveType(typ, resolver)
 }
 
 // ParseTypes parses a list of types.
-func ParseTypes(colStrs []string) ([]*types.T, error) {
+func ParseTypes(resolver tree.TypeReferenceResolver, colStrs []string) ([]*types.T, error) {
 	res := make([]*types.T, len(colStrs))
 	for i, s := range colStrs {
 		var err error
-		res[i], err = ParseType(s)
+		res[i], err = ParseType(resolver, s)
 		if err != nil {
 			return nil, err
 		}

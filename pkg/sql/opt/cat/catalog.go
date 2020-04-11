@@ -67,6 +67,7 @@ type Flags struct {
 // returned by the Resolve methods (schemas and data sources) *must* be
 // immutable after construction, and therefore also thread-safe.
 type Catalog interface {
+	tree.TypeReferenceResolver
 	// ResolveSchema locates a schema with the given name and returns it along
 	// with the resolved SchemaName (which has all components filled in).
 	// If the SchemaName is empty, returns the current database/schema (if one is

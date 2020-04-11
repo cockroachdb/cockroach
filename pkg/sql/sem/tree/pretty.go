@@ -327,7 +327,8 @@ func (p *PrettyCfg) peelAndOrOperand(e Expr) Expr {
 	stripped := StripParens(e)
 	switch stripped.(type) {
 	case *BinaryExpr, *ComparisonExpr, *RangeCond, *FuncExpr, *IndirectionExpr,
-		*UnaryExpr, *AnnotateTypeExpr, *CastExpr, *ColumnItem, *UnresolvedName:
+		*UnaryExpr, *AnnotateTypeExpr, *UnresolvedAnnotateTypeExpr, *CastExpr,
+		*UnresolvedCastExpr, *ColumnItem, *UnresolvedName:
 		// All these expressions have higher precedence than binary
 		// expressions.
 		return stripped
@@ -418,8 +419,8 @@ func (p *PrettyCfg) peelBinaryOperand(e Expr, sameLevel bool, parenPrio int) Exp
 		if childPrio < parenPrio || (sameLevel && childPrio == parenPrio) {
 			return stripped
 		}
-	case *FuncExpr, *UnaryExpr, *AnnotateTypeExpr, *IndirectionExpr,
-		*CastExpr, *ColumnItem, *UnresolvedName:
+	case *FuncExpr, *UnaryExpr, *AnnotateTypeExpr, *UnresolvedAnnotateTypeExpr, *IndirectionExpr,
+		*CastExpr, *UnresolvedCastExpr, *ColumnItem, *UnresolvedName:
 		// All these expressions have higher precedence than binary expressions.
 		return stripped
 	}
@@ -839,7 +840,8 @@ func (p *PrettyCfg) peelCompOperand(e Expr) Expr {
 	stripped := StripParens(e)
 	switch stripped.(type) {
 	case *FuncExpr, *IndirectionExpr, *UnaryExpr,
-		*AnnotateTypeExpr, *CastExpr, *ColumnItem, *UnresolvedName:
+		*AnnotateTypeExpr, *UnresolvedAnnotateTypeExpr, *CastExpr,
+		*UnresolvedCastExpr, *ColumnItem, *UnresolvedName:
 		return stripped
 	}
 	return e
@@ -960,6 +962,17 @@ func (node *NameList) doc(p *PrettyCfg) pretty.Doc {
 		d[i] = p.Doc(&n)
 	}
 	return p.commaSeparated(d...)
+}
+
+func (node *UnresolvedCastExpr) doc(p *PrettyCfg) pretty.Doc {
+	if typ := GetStaticallyKnownType(node.Type); typ != nil {
+		return (&CastExpr{
+			Type:       typ,
+			Expr:       node.Expr,
+			SyntaxMode: node.SyntaxMode,
+		}).doc(p)
+	}
+	return p.docAsString(node)
 }
 
 func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
@@ -2148,6 +2161,17 @@ func (node *Execute) docTable(p *PrettyCfg) []pretty.TableRow {
 		rows = append(rows, p.row("", pretty.Keyword("DISCARD ROWS")))
 	}
 	return rows
+}
+
+func (node *UnresolvedAnnotateTypeExpr) doc(p *PrettyCfg) pretty.Doc {
+	if typ := GetStaticallyKnownType(node.Type); typ != nil {
+		return (&AnnotateTypeExpr{
+			Type:       typ,
+			Expr:       node.Expr,
+			SyntaxMode: node.SyntaxMode,
+		}).doc(p)
+	}
+	return p.docAsString(node)
 }
 
 func (node *AnnotateTypeExpr) doc(p *PrettyCfg) pretty.Doc {

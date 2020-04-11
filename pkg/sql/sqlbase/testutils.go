@@ -1318,7 +1318,8 @@ func randIndexTableDefFromCols(
 
 	indexElemList := make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
-		semType := cols[i].Type.Family()
+		// TODO (rohany): Will we have to resolve types here?
+		semType := tree.GetStaticallyKnownType(cols[i].Type).Family()
 		if MustBeValueEncoded(semType) {
 			continue
 		}

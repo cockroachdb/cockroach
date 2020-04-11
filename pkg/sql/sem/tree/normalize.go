@@ -579,6 +579,8 @@ func (expr *ParenExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	return expr.TypedInnerExpr()
 }
 
+// TODO (rohany): Does the untyped annotate expr need a normalize visitor?
+
 func (expr *AnnotateTypeExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	// Type annotations have no runtime effect, so they can be removed after
 	// semantic analysis.
