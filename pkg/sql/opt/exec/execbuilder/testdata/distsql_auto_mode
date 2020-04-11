@@ -64,10 +64,11 @@ SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv LIMIT 1]
 true
 
 # Soft limit in scan - don't distribute.
+# TODO(yuzefovich): soft limits are currently ignored in scans.
 query B
 SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv UNION SELECT * FROM kv LIMIT 1]
 ----
-false
+true
 
 # Limit after sort - distribute.
 query B
