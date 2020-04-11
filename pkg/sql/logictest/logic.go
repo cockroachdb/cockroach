@@ -1123,7 +1123,7 @@ func (t *logicTest) setUser(user string) func() {
 	return cleanupFunc
 }
 
-func (t *logicTest) setup(cfg testClusterConfig) {
+func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 	t.cfg = cfg
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
@@ -1131,11 +1131,24 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 	// it installs detects a transaction that doesn't have
 	// modifiedSystemConfigSpan set even though it should, for
 	// "testdata/rename_table". Figure out what's up with that.
+	st := cluster.MakeClusterSettings()
+	sqlMemoryPoolSize := serverArgs.sqlMemoryPoolSize
+	if sqlMemoryPoolSize == 0 {
+		// Specify a fixed memory limit (some test cases verify OOM conditions;
+		// we don't want those to take long on large machines).
+		sqlMemoryPoolSize = 192 * 1024 * 1024
+	}
+	var tempStorageConfig base.TempStorageConfig
+	if serverArgs.tempStorageDiskLimit == 0 {
+		tempStorageConfig = base.DefaultTestTempStorageConfig(st)
+	} else {
+		tempStorageConfig = base.DefaultTestTempStorageConfigWithSize(st, serverArgs.tempStorageDiskLimit)
+	}
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Specify a fixed memory limit (some test cases verify OOM conditions; we
-			// don't want those to take long on large machines).
-			SQLMemoryPoolSize: 192 * 1024 * 1024,
+			Settings:          st,
+			SQLMemoryPoolSize: sqlMemoryPoolSize,
+			TempStorageConfig: tempStorageConfig,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// The consistency queue makes a lot of noisy logs during logic tests.
@@ -2428,9 +2441,22 @@ var skipLogicTests = envutil.EnvOrDefaultBool("COCKROACH_LOGIC_TESTS_SKIP", fals
 var logicTestsConfigExclude = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_SKIP_CONFIG", "")
 var logicTestsConfigFilter = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_CONFIG", "")
 
+// TestServerArgs contains the parameters that callers of RunLogicTest might
+// want to specify for the test clusters to be created with.
+type TestServerArgs struct {
+	// sqlMemoryPoolSize determines the budget of the root SQL memory monitor
+	// (i.e. equivalent --max-sql-memory flag). If it is unset, then the
+	// default pool size of 192MB will be used.
+	sqlMemoryPoolSize int64
+	// tempStorageDiskLimit determines the limit for the temp storage (that is
+	// actually in-memory). If it is unset, then the default limit of 100MB
+	// will be used.
+	tempStorageDiskLimit int64
+}
+
 // RunLogicTest is the main entry point for the logic test. The globs parameter
 // specifies the default sets of files to run.
-func RunLogicTest(t *testing.T, globs ...string) {
+func RunLogicTest(t *testing.T, serverArgs TestServerArgs, globs ...string) {
 	// Note: there is special code in teamcity-trigger/main.go to run this package
 	// with less concurrency in the nightly stress runs. If you see problems
 	// please make adjustments there.
@@ -2558,7 +2584,7 @@ func RunLogicTest(t *testing.T, globs ...string) {
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
 					}
-					lt.setup(cfg)
+					lt.setup(cfg, serverArgs)
 					lt.runFile(path, cfg)
 
 					progress.Lock()
