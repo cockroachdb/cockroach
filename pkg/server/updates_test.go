@@ -270,14 +270,6 @@ func TestReportUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	telemetry.Count("test.a")
-	telemetry.Count("test.b")
-	telemetry.Count("test.b")
-	c := telemetry.GetCounter("test.c")
-	telemetry.Inc(c)
-	telemetry.Inc(c)
-	telemetry.Inc(c)
-
 	for _, cmd := range []struct {
 		resource string
 		config   string
@@ -304,12 +296,6 @@ func TestReportUsage(t *testing.T) {
 
 	if _, err := db.Exec(
 		fmt.Sprintf(`CREATE TABLE %[1]s.%[1]s (%[1]s INT8 CONSTRAINT %[1]s CHECK (%[1]s > 1))`, elemName),
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := db.Exec(
-		fmt.Sprintf(`CREATE TABLE %[1]s.%[1]s_s (%[1]s SERIAL2)`, elemName),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -352,19 +338,6 @@ func TestReportUsage(t *testing.T) {
 		}
 		if _, err := db.Exec(`RESET application_name`); err != nil {
 			t.Fatal(err)
-		}
-	}
-
-	tables, err := ts.collectSchemaInfo(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if actual := len(tables); actual != 2 {
-		t.Fatalf("unexpected table count %d", actual)
-	}
-	for _, table := range tables {
-		if expected, actual := "_", table.Name; expected != actual {
-			t.Fatalf("unexpected table name, expected %q got %q", expected, actual)
 		}
 	}
 
@@ -472,44 +445,6 @@ func TestReportUsage(t *testing.T) {
 	// that is probably very interesting.
 	if strings.Contains(last.RawReportBody, elemName) {
 		t.Fatalf("%q should not appear in %q", elemName, last.RawReportBody)
-	}
-
-	if expected, actual := len(tables), len(last.Schema); expected != actual {
-		t.Fatalf("expected %d tables in schema, got %d", expected, actual)
-	}
-	reportedByID := make(map[sqlbase.ID]sqlbase.TableDescriptor, len(tables))
-	for _, tbl := range last.Schema {
-		reportedByID[tbl.ID] = tbl
-	}
-	for _, tbl := range tables {
-		r, ok := reportedByID[tbl.ID]
-		if !ok {
-			t.Fatalf("expected table %d to be in reported schema", tbl.ID)
-		}
-		if !reflect.DeepEqual(r, tbl) {
-			t.Fatalf("reported table %d does not match: expected\n%+v got\n%+v", tbl.ID, tbl, r)
-		}
-	}
-
-	expectedFeatureUsage := map[string]int32{
-		"test.a": 1,
-		"test.b": 2,
-		"test.c": 3,
-
-		// SERIAL normalization.
-		"sql.schema.serial.rowid.int2": 1,
-	}
-
-	if expected, actual := len(expectedFeatureUsage), len(last.FeatureUsage); actual < expected {
-		t.Fatalf("expected at least %d feature usage counts, got %d: %v", expected, actual, last.FeatureUsage)
-	}
-	t.Logf("%# v", pretty.Formatter(last.FeatureUsage))
-	for key, expected := range expectedFeatureUsage {
-		if got, ok := last.FeatureUsage[key]; !ok {
-			t.Fatalf("expected report of feature %q", key)
-		} else if got != expected {
-			t.Fatalf("expected reported value of feature %q to be %d not %d", key, expected, got)
-		}
 	}
 
 	// 3 + 3 = 6: set 3 initially and org is set mid-test for 3 altered settings,
@@ -638,7 +573,6 @@ func TestReportUsage(t *testing.T) {
 		`[opt,nodist,ok] SET application_name = $1`,
 		`[opt,nodist,ok] SET application_name = DEFAULT`,
 		`[opt,nodist,ok] SET application_name = _`,
-		`[opt,nodist,ok] CREATE TABLE _ (_ INT8 NOT NULL DEFAULT unique_rowid())`,
 		`[opt,nodist,ok] CREATE TABLE _ (_ INT8, CONSTRAINT _ CHECK (_ > _))`,
 		`[opt,nodist,ok] INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
 		`[opt,nodist,ok] INSERT INTO _ VALUES (_), (__more2__)`,
@@ -683,7 +617,6 @@ func TestReportUsage(t *testing.T) {
 			`ALTER TABLE _ CONFIGURE ZONE = _`,
 			`CREATE DATABASE _`,
 			`CREATE TABLE _ (_ INT8, CONSTRAINT _ CHECK (_ > _))`,
-			`CREATE TABLE _ (_ INT8 NOT NULL DEFAULT unique_rowid())`,
 			`INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
 			`INSERT INTO _ VALUES (_), (__more2__)`,
 			`INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
