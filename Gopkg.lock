@@ -378,11 +378,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:5a75ff130630f57609ffca00d6a76dc31bb50ad6a03809848e0f9e13add31987"
+  digest = "1:18044aa13c09481d9e028ee7dda27902822ea65a8afbfac263959bb30c8e9671"
   name = "github.com/cockroachdb/cockroach-go"
   packages = ["crdb"]
   pruneopts = "UT"
-  revision = "e0a95dfd547cc9c3ebaaba1a12c2afe4bf621ac5"
+  revision = "73ffeee90b625e57147b7d6542fa2ee5c4f5b5f9"
 
 [[projects]]
   branch = "master"

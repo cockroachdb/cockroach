@@ -12,7 +12,6 @@ package workload
 
 import (
 	"context"
-	gosql "database/sql"
 	"sync"
 	"sync/atomic"
 
@@ -158,27 +157,26 @@ func (m *MultiConnPool) Close() {
 }
 
 // PgxTx is a thin wrapper that implements the crdb.Tx interface, allowing pgx
-// transactions to be used with ExecuteInTx.
+// transactions to be used with ExecuteInTx. The cockroach-go library has native
+// support for pgx in crdb/pgx, but only for pgx v4. CRDB is stuck for now using
+// pgx v3, as v4 needs Go modules.
 type PgxTx pgx.Tx
 
 var _ crdb.Tx = &PgxTx{}
 
-// ExecContext is part of the crdb.Tx interface.
-func (tx *PgxTx) ExecContext(
-	ctx context.Context, sql string, args ...interface{},
-) (gosql.Result, error) {
+// Exec is part of the crdb.Tx interface.
+func (tx *PgxTx) Exec(ctx context.Context, sql string, args ...interface{}) error {
 	_, err := (*pgx.Tx)(tx).ExecEx(ctx, sql, nil /* QueryExOptions */, args...)
-	// crdb.ExecuteInTx doesn't actually care about the Result, just the error.
-	return nil, err
+	return err
 }
 
 // Commit is part of the crdb.Tx interface.
-func (tx *PgxTx) Commit() error {
+func (tx *PgxTx) Commit(context.Context) error {
 	return (*pgx.Tx)(tx).Commit()
 }
 
 // Rollback is part of the crdb.Tx interface.
-func (tx *PgxTx) Rollback() error {
+func (tx *PgxTx) Rollback(context.Context) error {
 	return (*pgx.Tx)(tx).Rollback()
 }
 
