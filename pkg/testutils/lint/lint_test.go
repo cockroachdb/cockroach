@@ -221,6 +221,8 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`_string\.go`),
 			stream.GrepNot(`_generated\.go`),
 			stream.GrepNot(`/embedded.go`),
+			stream.GrepNot(`geo/geographiclib/geodesic\.c$`),
+			stream.GrepNot(`geo/geographiclib/geodesic\.h$`),
 		), func(filename string) {
 			isCCL := strings.Contains(filename, "ccl/")
 			var expHeader *regexp.Regexp
