@@ -243,6 +243,8 @@ func (n *scanNode) limitHint() int64 {
 		}
 	} else {
 		// Like above, read a multiple of the limit when the limit is "soft".
+		// TODO(yuzefovich): shouldn't soft limit already account for the
+		// selectivity of any filter and whatnot?
 		limitHint = n.softLimit * 2
 	}
 	return limitHint

@@ -430,13 +430,13 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 			return cannotDistribute, cannotDistributeRowLevelLockingErr
 		}
 
+		// Although we don't yet recommend distributing plans where soft limits
+		// propagate to scan nodes because we don't have infrastructure to only
+		// plan for a few ranges at a time, the propagation of the soft limits
+		// to scan nodes has been added in 20.1 release, so to keep the
+		// previous behavior we continue to ignore the soft limits for now.
+		// TODO(yuzefovich): pay attention to the soft limits.
 		rec := canDistribute
-		if n.softLimit != 0 {
-			// We don't yet recommend distributing plans where soft limits propagate
-			// to scan nodes; we don't have infrastructure to only plan for a few
-			// ranges at a time.
-			rec = shouldNotDistribute
-		}
 		// We recommend running scans distributed if we have a filtering
 		// expression or if we have a full table scan.
 		if n.filter != nil {
@@ -1082,18 +1082,19 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	var spanPartitions []SpanPartition
 	if planCtx.isLocal {
 		spanPartitions = []SpanPartition{{dsp.nodeDesc.NodeID, n.spans}}
-	} else if n.hardLimit == 0 && n.softLimit == 0 {
-		// No limit - plan all table readers where their data live.
+	} else if n.hardLimit == 0 {
+		// No hard limit - plan all table readers where their data live. Note
+		// that we're ignoring soft limits for now since the TableReader will
+		// still read too eagerly in the soft limit case. To prevent this we'll
+		// need a new mechanism on the execution side to modulate table reads.
+		// TODO(yuzefovich): add that mechanism.
 		spanPartitions, err = dsp.PartitionSpans(planCtx, n.spans)
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
 	} else {
-		// If the scan is limited, use a single TableReader to avoid reading more
-		// rows than necessary. Note that distsql is currently only enabled for hard
-		// limits since the TableReader will still read too eagerly in the soft
-		// limit case. To prevent this we'll need a new mechanism on the execution
-		// side to modulate table reads.
+		// If the scan has a hard limit, use a single TableReader to avoid
+		// reading more rows than necessary.
 		nodeID, err := dsp.getNodeIDForScan(planCtx, n.spans, n.reverse)
 		if err != nil {
 			return PhysicalPlan{}, err
