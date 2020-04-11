@@ -95,12 +95,18 @@ func (js *JSONStatistic) DecodeAndSetHistogram(datum tree.Datum) error {
 }
 
 // GetHistogram converts the json histogram into HistogramData.
-func (js *JSONStatistic) GetHistogram(evalCtx *tree.EvalContext) (*HistogramData, error) {
+func (js *JSONStatistic) GetHistogram(
+	semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
+) (*HistogramData, error) {
 	if len(js.HistogramBuckets) == 0 {
 		return nil, nil
 	}
 	h := &HistogramData{}
-	colType, err := parser.ParseType(js.HistogramColumnType)
+	colTypeRef, err := parser.ParseType(js.HistogramColumnType)
+	if err != nil {
+		return nil, err
+	}
+	colType, err := tree.ResolveType(colTypeRef, semaCtx.GetTypeResolver())
 	if err != nil {
 		return nil, err
 	}

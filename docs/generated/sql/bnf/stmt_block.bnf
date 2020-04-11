@@ -1570,6 +1570,7 @@ case_expr ::=
 
 simple_typename ::=
 	general_type_name
+	| complex_type_name
 	| const_typename
 	| bit_with_length
 	| character_with_length
@@ -1906,6 +1907,10 @@ case_default ::=
 
 general_type_name ::=
 	type_function_name_no_crdb_extra
+
+complex_type_name ::=
+	general_type_name '.' unrestricted_name
+	| general_type_name '.' unrestricted_name '.' unrestricted_name
 
 const_typename ::=
 	numeric

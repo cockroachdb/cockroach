@@ -792,6 +792,7 @@ func TestParse(t *testing.T) {
 
 		{`SELECT 1:::REGTYPE`},
 		{`SELECT 1:::REGPROC`},
+		{`SELECT 1:::REGPROCEDURE`},
 		{`SELECT 1:::REGCLASS`},
 		{`SELECT 1:::REGNAMESPACE`},
 
@@ -802,6 +803,23 @@ func TestParse(t *testing.T) {
 
 		{`SELECT 0xf0 FROM t`},
 		{`SELECT 0xF0 FROM t`},
+
+		// Test various cases of qualified and not statically known types.
+		{`SELECT 1::notatype`},
+		{`SELECT 1::schem.typ`},
+		{`SELECT 1::int4.typ`},
+		{`SELECT 1::db.schem.typ`},
+		{`SELECT 1::db.int4.typ[]`},
+		{`CREATE TABLE t (x special.type)`},
+		{`CREATE TABLE t (x int4.type)`},
+		{`CREATE TABLE t (x notatype)`},
+		{`SELECT 1 IS OF (my.type, int4.type)`},
+		{`SELECT my.type ''`},
+		{`SELECT int4.type ''`},
+		{`SELECT foo ''`},
+		{`SELECT CAST(1.2 + 2.3 AS notatype)`},
+		{`SELECT ANNOTATE_TYPE(1.2 + 2.3, notatype)`},
+		{`SELECT 'f'::blah`},
 
 		// Escaping may change since the scanning process loses information
 		// (you can write e'\'' or ''''), but these are the idempotent cases.
@@ -2329,6 +2347,11 @@ $function$`,
 		{`SELECT '{}'::JSONB ?& 'a' = false`, `SELECT ('{}'::JSONB ?& 'a') = false`},
 		{`SELECT '{}'::JSONB @> '{}'::JSONB = false`, `SELECT ('{}'::JSONB @> '{}'::JSONB) = false`},
 		{`SELECT '{}'::JSONB <@ '{}'::JSONB = false`, `SELECT ('{}'::JSONB <@ '{}'::JSONB) = false`},
+
+		{`SELECT 1::db.int4.typ array [1]`, `SELECT 1::db.int4.typ[]`},
+		{`SELECT 1::int4.typ array [1]`, `SELECT 1::int4.typ[]`},
+		{`SELECT 1::db.int4.typ array`, `SELECT 1::db.int4.typ[]`},
+		{`CREATE TABLE t (x int4.type array [1])`, `CREATE TABLE t (x int4.type[])`},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
@@ -2558,11 +2581,6 @@ DETAIL: source SQL:
 SELECT 1e-
        ^
 HINT: try \h SELECT`},
-		{"SELECT foo''",
-			`at or near "": syntax error: type "foo" does not exist
-DETAIL: source SQL:
-SELECT foo''
-          ^`},
 		{
 			`SELECT 0x FROM t`,
 			`lexical error: invalid hexadecimal numeric literal
@@ -2670,20 +2688,6 @@ ALTER TABLE t RENAME COLUMN x TO family
 HINT: try \h ALTER TABLE`,
 		},
 		{
-			`SELECT CAST(1.2+2.3 AS notatype)`,
-			`at or near ")": syntax error: type "notatype" does not exist
-DETAIL: source SQL:
-SELECT CAST(1.2+2.3 AS notatype)
-                               ^`,
-		},
-		{
-			`SELECT ANNOTATE_TYPE(1.2+2.3, notatype)`,
-			`at or near ")": syntax error: type "notatype" does not exist
-DETAIL: source SQL:
-SELECT ANNOTATE_TYPE(1.2+2.3, notatype)
-                                      ^`,
-		},
-		{
 			`CREATE USER foo WITH PASSWORD`,
 			`at or near "EOF": syntax error
 DETAIL: source SQL:
@@ -2748,27 +2752,6 @@ SELECT EXISTS(SELECT 1)[1]
 DETAIL: source SQL:
 SELECT 1 + ANY ARRAY[1, 2, 3]
                              ^`,
-		},
-		{
-			`SELECT 'f'::"blah"`,
-			`at or near "EOF": syntax error: type "blah" does not exist
-DETAIL: source SQL:
-SELECT 'f'::"blah"
-                  ^`,
-		},
-		{
-			`SELECT 1::notatype`,
-			`at or near "EOF": syntax error: type "notatype" does not exist
-DETAIL: source SQL:
-SELECT 1::notatype
-                  ^`,
-		},
-		{
-			`CREATE TABLE t (x notatype)`,
-			`at or near ")": syntax error: type "notatype" does not exist
-DETAIL: source SQL:
-CREATE TABLE t (x notatype)
-                          ^`,
 		},
 		// Ensure that the support for ON ROLE <namelist> doesn't leak
 		// where it should not be recognized.
@@ -3307,20 +3290,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT a(b, c, VARIADIC b)`, 0, `variadic`, ``},
 		{`SELECT TREAT (a AS INT8)`, 0, `treat`, ``},
 		{`SELECT a(b) WITHIN GROUP (ORDER BY c)`, 0, `within group`, ``},
-
-		{`SELECT 1::schem.typ`, 0, `qualified types`, ``},
-		{`SELECT 1::int4.typ`, 0, `qualified types`, ``},
-		{`SELECT 1::db.schem.typ`, 0, `qualified types`, ``},
-		{`SELECT 1::db.int4.typ[]`, 0, `qualified types`, ``},
-		{`SELECT 1::db.int4.typ array [1]`, 0, `qualified types`, ``},
-		{`SELECT 1::int4.typ array [1]`, 0, `qualified types`, ``},
-		{`SELECT 1::db.int4.typ array`, 0, `qualified types`, ``},
-		{`CREATE TABLE t (x special.type)`, 0, `qualified types`, ``},
-		{`CREATE TABLE t (x int4.type)`, 0, `qualified types`, ``},
-		{`CREATE TABLE t (x int4.type array [1])`, 0, `qualified types`, ``},
-		{"SELECT my.type ''", 0, `generic-type-name prepended casts`, ``},
-		{"SELECT int4.type ''", 0, `generic-type-name prepended casts`, ``},
-		{"SELECT 1 IS OF (my.type, int4.type)", 0, `qualified types`, ``},
 
 		{`SELECT a FROM t ORDER BY a NULLS LAST`, 6224, ``, ``},
 		{`SELECT a FROM t ORDER BY a ASC NULLS LAST`, 6224, ``, ``},
