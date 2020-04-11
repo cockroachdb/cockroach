@@ -22,6 +22,12 @@ import (
 	"github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/encoding/ewkb"
 	"github.com/twpayne/go-geom/encoding/ewkbhex"
+	// Force imports until they are used.
+	_ "github.com/twpayne/go-geom/encoding/geojson"
+	_ "github.com/twpayne/go-geom/encoding/kml"
+	_ "github.com/twpayne/go-geom/encoding/wkb"
+	_ "github.com/twpayne/go-geom/encoding/wkbhex"
+	_ "github.com/twpayne/go-geom/encoding/wkt"
 )
 
 var ewkbEncodingFormat = binary.LittleEndian
