@@ -130,10 +130,7 @@ func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Exp
 		}
 		var newExpr tree.Expr = val
 		if _, isTuple := val.(*tree.DTuple); !isTuple && expr.ResolvedType().Family() != types.UnknownFamily {
-			newExpr = &tree.CastExpr{
-				Expr: val,
-				Type: expr.ResolvedType(),
-			}
+			newExpr = tree.NewTypedCastExpr(val, expr.ResolvedType())
 		}
 		return false, newExpr
 	default:

@@ -296,7 +296,7 @@ func ParseExpr(sql string) (tree.Expr, error) {
 }
 
 // ParseType parses a column type.
-func ParseType(sql string) (*types.T, error) {
+func ParseType(sql string) (tree.ResolvableTypeReference, error) {
 	expr, err := ParseExpr(fmt.Sprintf("1::%s", sql))
 	if err != nil {
 		return nil, err
@@ -354,13 +354,18 @@ func newDecimal(prec, scale int32) (*types.T, error) {
 	return types.MakeDecimal(prec, scale), nil
 }
 
-// ArrayOf creates a type alias for an array of the given element type and fixed
-// bounds.
-func arrayOf(colType *types.T, bounds []int32) (*types.T, error) {
-	if err := types.CheckArrayElementType(colType); err != nil {
-		return nil, err
+// arrayOf creates a type alias for an array of the given element type and fixed
+// bounds. The bounds are currently ignored.
+func arrayOf(
+	ref tree.ResolvableTypeReference, bounds []int32,
+) (tree.ResolvableTypeReference, error) {
+	// If the reference is a statically known type, then return an array type,
+	// rather than an array type reference.
+	if typ, ok := tree.GetStaticallyKnownType(ref); ok {
+		if err := types.CheckArrayElementType(typ); err != nil {
+			return nil, err
+		}
+		return types.MakeArray(typ), nil
 	}
-
-	// Currently bounds are ignored.
-	return types.MakeArray(colType), nil
+	return &tree.ArrayTypeReference{ElementType: ref}, nil
 }

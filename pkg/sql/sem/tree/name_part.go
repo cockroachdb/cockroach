@@ -10,7 +10,11 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/lex"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+)
 
 // A Name is an SQL identifier.
 //
@@ -200,4 +204,16 @@ func MakeUnresolvedName(args ...string) UnresolvedName {
 		n.Parts[i] = args[len(args)-1-i]
 	}
 	return n
+}
+
+// ToUnresolvedObjectName converts an UnresolvedName to an UnresolvedObjectName.
+func (u *UnresolvedName) ToUnresolvedObjectName(idx AnnotationIdx) (*UnresolvedObjectName, error) {
+	if u.NumParts == 4 {
+		return nil, pgerror.Newf(pgcode.Syntax, "improper qualified name (too many dotted names): %s", u)
+	}
+	return NewUnresolvedObjectName(
+		u.NumParts,
+		[3]string{u.Parts[0], u.Parts[1], u.Parts[2]},
+		idx,
+	)
 }

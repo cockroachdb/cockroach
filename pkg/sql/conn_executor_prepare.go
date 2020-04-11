@@ -157,7 +157,7 @@ func (ex *connExecutor) prepare(
 	// preparation.
 	stmt.Prepared = prepared
 
-	if err := tree.ProcessPlaceholderAnnotations(stmt.AST, placeholderHints); err != nil {
+	if err := tree.ProcessPlaceholderAnnotations(&ex.planner.semaCtx, stmt.AST, placeholderHints); err != nil {
 		return nil, err
 	}
 

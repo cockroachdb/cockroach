@@ -251,7 +251,7 @@ func (b *Builder) buildScalar(
 	case *tree.CastExpr:
 		texpr := t.Expr.(tree.TypedExpr)
 		arg := b.buildScalar(texpr, inScope, nil, nil, colRefs)
-		out = b.factory.ConstructCast(arg, t.Type)
+		out = b.factory.ConstructCast(arg, t.ResolvedType())
 
 	case *tree.CoalesceExpr:
 		args := make(memo.ScalarListExpr, len(t.Exprs))
@@ -387,7 +387,7 @@ func (b *Builder) buildScalar(
 		actualType := t.Expr.(tree.TypedExpr).ResolvedType()
 
 		found := false
-		for _, typ := range t.Types {
+		for _, typ := range t.ResolvedTypes() {
 			if actualType.Equivalent(typ) {
 				found = true
 				break

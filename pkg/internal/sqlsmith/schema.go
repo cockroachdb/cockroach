@@ -104,7 +104,7 @@ func (s *Smither) getRandTableIndex(
 	defer s.lock.RUnlock()
 	for _, col := range idx.Columns {
 		refs = append(refs, &colRef{
-			typ:  s.columns[table][col.Column].Type,
+			typ:  tree.MustBeStaticallyKnownType(s.columns[table][col.Column].Type),
 			item: tree.NewColumnItem(&alias, col.Column),
 		})
 	}

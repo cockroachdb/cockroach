@@ -85,9 +85,10 @@ func TestParseColumnType(t *testing.T) {
 			if !ok2 {
 				t.Fatalf("%d: expected tree.ColumnTableDef, but got %T", i, createTable.Defs[0])
 			}
-			if !reflect.DeepEqual(d.expectedType, columnDef.Type) {
+			colType := tree.MustBeStaticallyKnownType(columnDef.Type)
+			if !reflect.DeepEqual(d.expectedType, colType) {
 				t.Fatalf("%d: expected %s, but got %s",
-					i, d.expectedType.DebugString(), columnDef.Type.DebugString())
+					i, d.expectedType.DebugString(), colType.DebugString())
 			}
 		})
 	}
@@ -124,8 +125,9 @@ func TestParseColumnTypeAliases(t *testing.T) {
 			if !ok2 {
 				t.Fatalf("%d: expected tree.ColumnTableDef, but got %T", i, createTable.Defs[0])
 			}
-			if !reflect.DeepEqual(*d.expectedType, *columnDef.Type) {
-				t.Fatalf("%d: expected %s, but got %s", i, d.expectedType.DebugString(), columnDef.Type.DebugString())
+			colType := tree.MustBeStaticallyKnownType(columnDef.Type)
+			if !reflect.DeepEqual(*d.expectedType, *colType) {
+				t.Fatalf("%d: expected %s, but got %s", i, d.expectedType.DebugString(), colType.DebugString())
 			}
 		})
 	}

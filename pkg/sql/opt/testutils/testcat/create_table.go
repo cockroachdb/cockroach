@@ -382,10 +382,10 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	col := &Column{
 		Ordinal:  tt.ColumnCount(),
 		Name:     string(def.Name),
-		Type:     def.Type,
+		Type:     tree.MustBeStaticallyKnownType(def.Type),
 		Nullable: nullable,
 	}
-	col.ColType = *def.Type
+	col.ColType = *tree.MustBeStaticallyKnownType(def.Type)
 
 	// Look for name suffixes indicating this is a mutation column.
 	if name, ok := extractWriteOnlyColumn(def); ok {

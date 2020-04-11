@@ -145,10 +145,7 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) opt.ScalarExp
 	}
 
 	datum := memo.ExtractConstDatum(input)
-	texpr, err := tree.NewTypedCastExpr(datum, typ)
-	if err != nil {
-		return nil
-	}
+	texpr := tree.NewTypedCastExpr(datum, typ)
 
 	result, err := texpr.Eval(c.f.evalCtx)
 	if err != nil {
