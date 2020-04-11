@@ -517,6 +517,12 @@ func (u *sqlSymUnion) geoFigure() geopb.Shape {
 func newNameFromStr(s string) *tree.Name {
     return (*tree.Name)(&s)
 }
+func (u *sqlSymUnion) typeReference() tree.ResolvableTypeReference {
+    return u.val.(tree.ResolvableTypeReference)
+}
+func (u *sqlSymUnion) typeReferences() []tree.ResolvableTypeReference {
+    return u.val.([]tree.ResolvableTypeReference)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -972,7 +978,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> having_clause
 %type <tree.Expr> array_expr
 %type <tree.Expr> interval_value
-%type <[]*types.T> type_list prep_type_clause
+%type <[]tree.ResolvableTypeReference> type_list prep_type_clause
 %type <tree.Exprs> array_expr_list
 %type <*tree.Tuple> row labeled_row
 %type <tree.Expr> case_expr case_arg case_default
@@ -998,7 +1004,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <str> explain_option_name
 %type <[]string> explain_option_list opt_enum_val_list enum_val_list
 
-%type <*types.T> typename simple_typename const_typename
+%type <tree.ResolvableTypeReference> typename simple_typename cast_target
+%type <*types.T> const_typename
 %type <bool> opt_timezone
 %type <*types.T> numeric opt_numeric_modifiers
 %type <*types.T> opt_float
@@ -1007,7 +1014,6 @@ func newNameFromStr(s string) *tree.Name {
 %type <*types.T> bit_with_length bit_without_length
 %type <*types.T> character_base
 %type <*types.T> geo_shape
-%type <*types.T> cast_target
 %type <*types.T> const_geo
 %type <str> extract_arg
 %type <bool> opt_varying
@@ -1030,7 +1036,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <str> unreserved_keyword type_func_name_keyword type_func_name_no_crdb_extra_keyword type_func_name_crdb_extra_keyword
 %type <str> col_name_keyword reserved_keyword cockroachdb_extra_reserved_keyword extra_var_value
 
-%type <str> complex_type_name general_type_name
+%type <tree.ResolvableTypeReference> complex_type_name
+%type <str> general_type_name
 
 %type <tree.ConstraintTableDef> table_constraint constraint_elem create_as_constraint_def create_as_constraint_elem
 %type <tree.TableDef> index_def
@@ -1722,7 +1729,7 @@ alter_table_cmd:
   {
     $$.val = &tree.AlterTableAlterColumnType{
       Column: tree.Name($3),
-      ToType: $6.colType(),
+      ToType: $6.typeReference(),
       Collation: $7,
       Using: $8.expr(),
     }
@@ -2839,7 +2846,7 @@ prepare_stmt:
   {
     $$.val = &tree.Prepare{
       Name: tree.Name($2),
-      Types: $3.colTypes(),
+      Types: $3.typeReferences(),
       Statement: $5.stmt(),
     }
   }
@@ -2848,7 +2855,7 @@ prepare_stmt:
     /* SKIP DOC */
     $$.val = &tree.Prepare{
       Name: tree.Name($2),
-      Types: $3.colTypes(),
+      Types: $3.typeReferences(),
       Statement: &tree.CannedOptPlan{Plan: $7},
     }
   }
@@ -2857,11 +2864,11 @@ prepare_stmt:
 prep_type_clause:
   '(' type_list ')'
   {
-    $$.val = $2.colTypes();
+    $$.val = $2.typeReferences();
   }
 | /* EMPTY */
   {
-    $$.val = []*types.T(nil)
+    $$.val = []tree.ResolvableTypeReference(nil)
   }
 
 // %Help: EXECUTE - execute a statement prepared previously
@@ -4734,8 +4741,8 @@ range_partition:
 column_def:
   column_name typename col_qual_list
   {
-    typ := $2.colType()
-    tableDef, err := tree.NewColumnTableDef(tree.Name($1), typ, types.IsSerialType(typ), $3.colQuals())
+    typ := $2.typeReference()
+    tableDef, err := tree.NewColumnTableDef(tree.Name($1), typ, tree.IsReferenceSerialType(typ), $3.colQuals())
     if err != nil {
       return setErr(sqllex, err)
     }
@@ -5251,7 +5258,7 @@ sequence_option_list:
 | sequence_option_list sequence_option_elem  { $$.val = append($1.seqOpts(), $2.seqOpt()) }
 
 sequence_option_elem:
-  AS typename                  { return unimplementedWithIssueDetail(sqllex, 25110, $2.colType().SQLString()) }
+  AS typename                  { return unimplementedWithIssueDetail(sqllex, 25110, $2.typeReference().SQLString()) }
 | CYCLE                        { /* SKIP DOC */
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptCycle} }
 | NO CYCLE                     { $$.val = tree.SequenceOption{Name: tree.SeqOptNoCycle} }
@@ -7344,12 +7351,12 @@ typename:
   {
     if bounds := $2.int32s(); bounds != nil {
       var err error
-      $$.val, err = arrayOf($1.colType(), bounds)
+      $$.val, err = arrayOf($1.typeReference(), bounds)
       if err != nil {
         return setErr(sqllex, err)
       }
     } else {
-      $$.val = $1.colType()
+      $$.val = $1.typeReference()
     }
   }
   // SQL standard syntax, currently only one-dimensional
@@ -7357,7 +7364,7 @@ typename:
 | simple_typename ARRAY '[' ICONST ']' {
     /* SKIP DOC */
     var err error
-    $$.val, err = arrayOf($1.colType(), nil)
+    $$.val, err = arrayOf($1.typeReference(), nil)
     if err != nil {
       return setErr(sqllex, err)
     }
@@ -7365,7 +7372,7 @@ typename:
 | simple_typename ARRAY '[' ICONST ']' '[' error { return unimplementedWithIssue(sqllex, 32552) }
 | simple_typename ARRAY {
     var err error
-    $$.val, err = arrayOf($1.colType(), nil)
+    $$.val, err = arrayOf($1.typeReference(), nil)
     if err != nil {
       return setErr(sqllex, err)
     }
@@ -7374,7 +7381,7 @@ typename:
 cast_target:
   typename
   {
-    $$.val = $1.colType()
+    $$.val = $1.typeReference()
   }
 
 opt_array_bounds:
@@ -7405,11 +7412,17 @@ general_type_name:
 complex_type_name:
   general_type_name '.' unrestricted_name
   {
-    return unimplemented(sqllex, "qualified types")
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    res, err := tree.NewUnresolvedObjectName(2, [3]string{$3, $1}, aIdx)
+    if err != nil { return setErr(sqllex, err) }
+    $$.val = res
   }
 | general_type_name '.' unrestricted_name '.' unrestricted_name
   {
-    return unimplemented(sqllex, "qualified types")
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    res, err := tree.NewUnresolvedObjectName(3, [3]string{$5, $3, $1}, aIdx)
+    if err != nil { return setErr(sqllex, err) }
+    $$.val = res
   }
 
 simple_typename:
@@ -7431,16 +7444,20 @@ simple_typename:
           $$.val = &types.Serial8Type
         }
     } else {
+      // Check the the type is one of our "non-keyword" type names.
+      // Otherwise, package it up as a type reference for later.
       var ok bool
+      var err error
       var unimp int
       $$.val, ok, unimp = types.TypeForNonKeywordTypeName($1)
       if !ok {
         switch unimp {
           case 0:
-            // Note: we can only report an unimplemented error for specific
-            // known type names. Anything else may return sensitive info.
-            sqllex.Error(fmt.Sprintf("type %q does not exist", $1))
-            return 1
+            // In this case, we don't think this type is one of our
+            // known unsupported types, so make a type reference for it.
+            aIdx := sqllex.(*lexer).NewAnnotation()
+            $$.val, err = tree.NewUnresolvedObjectName(1, [3]string{$1}, aIdx)
+            if err != nil { return setErr(sqllex, err) }
           case -1:
             return unimplemented(sqllex, "type name " + $1)
           default:
@@ -7451,7 +7468,7 @@ simple_typename:
   }
 | complex_type_name
   {
-    return unimplemented(sqllex, "qualified types")
+    $$.val = $1.typeReference()
   }
 | const_typename
 | bit_with_length
@@ -7932,11 +7949,11 @@ a_expr:
   c_expr
 | a_expr TYPECAST cast_target
   {
-    $$.val = &tree.CastExpr{Expr: $1.expr(), Type: $3.colType(), SyntaxMode: tree.CastShort}
+    $$.val = &tree.CastExpr{Expr: $1.expr(), Type: $3.typeReference(), SyntaxMode: tree.CastShort}
   }
 | a_expr TYPEANNOTATE typename
   {
-    $$.val = &tree.AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType(), SyntaxMode: tree.AnnotateShort}
+    $$.val = &tree.AnnotateTypeExpr{Expr: $1.expr(), Type: $3.typeReference(), SyntaxMode: tree.AnnotateShort}
   }
 | a_expr COLLATE collation_name
   {
@@ -8241,11 +8258,11 @@ a_expr:
   }
 | a_expr IS OF '(' type_list ')' %prec IS
   {
-    $$.val = &tree.IsOfTypeExpr{Expr: $1.expr(), Types: $5.colTypes()}
+    $$.val = &tree.IsOfTypeExpr{Expr: $1.expr(), Types: $5.typeReferences()}
   }
 | a_expr IS NOT OF '(' type_list ')' %prec IS
   {
-    $$.val = &tree.IsOfTypeExpr{Not: true, Expr: $1.expr(), Types: $6.colTypes()}
+    $$.val = &tree.IsOfTypeExpr{Not: true, Expr: $1.expr(), Types: $6.typeReferences()}
   }
 | a_expr BETWEEN opt_asymmetric b_expr AND a_expr %prec BETWEEN
   {
@@ -8307,11 +8324,11 @@ b_expr:
   c_expr
 | b_expr TYPECAST cast_target
   {
-    $$.val = &tree.CastExpr{Expr: $1.expr(), Type: $3.colType(), SyntaxMode: tree.CastShort}
+    $$.val = &tree.CastExpr{Expr: $1.expr(), Type: $3.typeReference(), SyntaxMode: tree.CastShort}
   }
 | b_expr TYPEANNOTATE typename
   {
-    $$.val = &tree.AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType(), SyntaxMode: tree.AnnotateShort}
+    $$.val = &tree.AnnotateTypeExpr{Expr: $1.expr(), Type: $3.typeReference(), SyntaxMode: tree.AnnotateShort}
   }
 | '+' b_expr %prec UMINUS
   {
@@ -8411,11 +8428,11 @@ b_expr:
   }
 | b_expr IS OF '(' type_list ')' %prec IS
   {
-    $$.val = &tree.IsOfTypeExpr{Expr: $1.expr(), Types: $5.colTypes()}
+    $$.val = &tree.IsOfTypeExpr{Expr: $1.expr(), Types: $5.typeReferences()}
   }
 | b_expr IS NOT OF '(' type_list ')' %prec IS
   {
-    $$.val = &tree.IsOfTypeExpr{Not: true, Expr: $1.expr(), Types: $6.colTypes()}
+    $$.val = &tree.IsOfTypeExpr{Not: true, Expr: $1.expr(), Types: $6.typeReferences()}
   }
 
 // Productions that can be used in both a_expr and b_expr.
@@ -8629,14 +8646,23 @@ typed_literal:
           $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: &types.Serial8Type, SyntaxMode: tree.CastPrepend}
         }
       } else {
-        typ, ok, unimp := types.TypeForNonKeywordTypeName(typName)
+        // Check the the type is one of our "non-keyword" type names.
+        // Otherwise, package it up as a type reference for later.
+        // However, if the type name is one of our known unsupported
+        // types, return an unimplemented error message.
+        var typ tree.ResolvableTypeReference
+        var ok bool
+        var err error
+        var unimp int
+        typ, ok, unimp = types.TypeForNonKeywordTypeName(typName)
         if !ok {
           switch unimp {
             case 0:
-              // Note: we can only report an unimplemented error for specific
-              // known type names. Anything else may return PII.
-              sqllex.Error(fmt.Sprintf("type %q does not exist", typName))
-              return 1
+              // In this case, we don't think this type is one of our
+              // known unsupported types, so make a type reference for it.
+              aIdx := sqllex.(*lexer).NewAnnotation()
+              typ, err = name.ToUnresolvedObjectName(aIdx)
+              if err != nil { return setErr(sqllex, err) }
             case -1:
               return unimplemented(sqllex, "type name " + typName)
             default:
@@ -8646,7 +8672,10 @@ typed_literal:
       $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: typ, SyntaxMode: tree.CastPrepend}
       }
     } else {
-      return unimplemented(sqllex, "generic-type-name prepended casts")
+      aIdx := sqllex.(*lexer).NewAnnotation()
+      res, err := name.ToUnresolvedObjectName(aIdx)
+      if err != nil { return setErr(sqllex, err) }
+      $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: res, SyntaxMode: tree.CastPrepend}
     }
   }
 | const_typename SCONST
@@ -8738,11 +8767,11 @@ func_expr_common_subexpr:
   }
 | CAST '(' a_expr AS cast_target ')'
   {
-    $$.val = &tree.CastExpr{Expr: $3.expr(), Type: $5.colType(), SyntaxMode: tree.CastExplicit}
+    $$.val = &tree.CastExpr{Expr: $3.expr(), Type: $5.typeReference(), SyntaxMode: tree.CastExplicit}
   }
 | ANNOTATE_TYPE '(' a_expr ',' typename ')'
   {
-    $$.val = &tree.AnnotateTypeExpr{Expr: $3.expr(), Type: $5.colType(), SyntaxMode: tree.AnnotateExplicit}
+    $$.val = &tree.AnnotateTypeExpr{Expr: $3.expr(), Type: $5.typeReference(), SyntaxMode: tree.AnnotateExplicit}
   }
 | IF '(' a_expr ',' a_expr ',' a_expr ')'
   {
@@ -9257,11 +9286,11 @@ expr_list:
 type_list:
   typename
   {
-    $$.val = []*types.T{$1.colType()}
+    $$.val = []tree.ResolvableTypeReference{$1.typeReference()}
   }
 | type_list ',' typename
   {
-    $$.val = append($1.colTypes(), $3.colType())
+    $$.val = append($1.typeReferences(), $3.typeReference())
   }
 
 array_expr:

@@ -219,7 +219,9 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 		v.err = newQueryNotSupportedError("OID expressions are not supported by distsql")
 		return false, expr
 	case *tree.CastExpr:
-		if t.Type.Family() == types.OidFamily {
+		// TODO (rohany): I'm not sure why this CastExpr doesn't have a type
+		//  annotation at this stage of processing...
+		if typ := tree.GetStaticallyKnownType(t.Type); typ != nil && typ.Family() == types.OidFamily {
 			v.err = newQueryNotSupportedErrorf("cast to %s is not supported by distsql", t.Type)
 			return false, expr
 		}

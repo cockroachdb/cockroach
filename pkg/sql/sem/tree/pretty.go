@@ -979,10 +979,12 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 		}
 		fallthrough
 	case CastShort:
-		switch node.Type.Family() {
-		case types.JsonFamily:
-			if sv, ok := node.Expr.(*StrVal); ok && p.JSONFmt {
-				return p.jsonCast(sv, "::", node.Type)
+		if typ := GetStaticallyKnownType(node.Type); typ != nil {
+			switch typ.Family() {
+			case types.JsonFamily:
+				if sv, ok := node.Expr.(*StrVal); ok && p.JSONFmt {
+					return p.jsonCast(sv, "::", typ)
+				}
 			}
 		}
 		return pretty.Fold(pretty.Concat,
@@ -991,15 +993,15 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 			typ,
 		)
 	default:
-		if node.Type.Family() == types.CollatedStringFamily {
+		if nTyp := GetStaticallyKnownType(node.Type); nTyp != nil && nTyp.Family() == types.CollatedStringFamily {
 			// COLLATE clause needs to go after CAST expression, so create
 			// equivalent string type without the locale to get name of string
 			// type without the COLLATE.
 			strTyp := types.MakeScalar(
 				types.StringFamily,
-				node.Type.Oid(),
-				node.Type.Precision(),
-				node.Type.Width(),
+				nTyp.Oid(),
+				nTyp.Precision(),
+				nTyp.Width(),
 				"", /* locale */
 			)
 			typ = pretty.Text(strTyp.SQLString())
@@ -1020,11 +1022,11 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 			),
 		)
 
-		if node.Type.Family() == types.CollatedStringFamily {
+		if nTyp := GetStaticallyKnownType(node.Type); nTyp != nil && nTyp.Family() == types.CollatedStringFamily {
 			ret = pretty.Fold(pretty.ConcatSpace,
 				ret,
 				pretty.Keyword("COLLATE"),
-				pretty.Text(node.Type.Locale()))
+				pretty.Text(nTyp.Locale()))
 		}
 		return ret
 	}
@@ -2152,10 +2154,12 @@ func (node *Execute) docTable(p *PrettyCfg) []pretty.TableRow {
 
 func (node *AnnotateTypeExpr) doc(p *PrettyCfg) pretty.Doc {
 	if node.SyntaxMode == AnnotateShort {
-		switch node.Type.Family() {
-		case types.JsonFamily:
-			if sv, ok := node.Expr.(*StrVal); ok && p.JSONFmt {
-				return p.jsonCast(sv, ":::", node.Type)
+		if typ := GetStaticallyKnownType(node.Type); typ != nil {
+			switch typ.Family() {
+			case types.JsonFamily:
+				if sv, ok := node.Expr.(*StrVal); ok && p.JSONFmt {
+					return p.jsonCast(sv, ":::", typ)
+				}
 			}
 		}
 	}

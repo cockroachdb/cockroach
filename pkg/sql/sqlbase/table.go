@@ -124,7 +124,7 @@ func ValidateColumnDefType(t *types.T) error {
 // expression.
 //
 // semaCtx can be nil if no default expression is used for the
-// column.
+// column or during cluster bootstrapping.
 //
 // The DEFAULT expression is returned in TypedExpr form for analysis (e.g. recording
 // sequence dependencies).
@@ -156,11 +156,14 @@ func MakeColumnDefDescs(
 	}
 
 	// Validate and assign column type.
-	err := ValidateColumnDefType(d.Type)
+	resType, err := tree.ResolveType(d.Type, semaCtx.GetTypeResolver())
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	col.Type = *d.Type
+	if err := ValidateColumnDefType(resType); err != nil {
+		return nil, nil, nil, err
+	}
+	col.Type = *resType
 
 	var typedExpr tree.TypedExpr
 	if d.HasDefaultExpr() {
@@ -168,7 +171,7 @@ func MakeColumnDefDescs(
 		// and does not contain invalid functions.
 		var err error
 		if typedExpr, err = SanitizeVarFreeExpr(
-			d.DefaultExpr.Expr, d.Type, "DEFAULT", semaCtx, true, /* allowImpure */
+			d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, true, /* allowImpure */
 		); err != nil {
 			return nil, nil, nil, err
 		}

@@ -86,7 +86,10 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 			return 0, "", err
 		}
 		if strength <= 1 {
-			return 1, computeCastName(e.Type), nil
+			if typ := GetStaticallyKnownType(e.Type); typ != nil {
+				return 0, computeCastName(typ), nil
+			}
+			return 1, e.Type.SQLString(), nil
 		}
 		return strength, s, nil
 
@@ -97,7 +100,10 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 			return 0, "", err
 		}
 		if strength <= 1 {
-			return 1, computeCastName(e.Type), nil
+			if typ := GetStaticallyKnownType(e.Type); typ != nil {
+				return 0, computeCastName(typ), nil
+			}
+			return 1, e.Type.SQLString(), nil
 		}
 		return strength, s, nil
 

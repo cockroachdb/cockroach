@@ -178,7 +178,7 @@ func (regclassRewriter) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Exp
 			if len(t.Exprs) > 0 {
 				switch e := t.Exprs[0].(type) {
 				case *tree.CastExpr:
-					if e.Type.Oid() == oid.T_regclass {
+					if typ := tree.GetStaticallyKnownType(e.Type); typ != nil && typ.Oid() == oid.T_regclass {
 						// tree.Visitor says we should make a copy, but since copyNode is unexported
 						// and there's no planner here, I think it's safe to directly modify the
 						// statement here.

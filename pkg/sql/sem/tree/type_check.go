@@ -49,6 +49,9 @@ type SemaContext struct {
 	// already.
 	SearchPath sessiondata.SearchPath
 
+	// TypeResolver manages resolving type names into *types.T's.
+	TypeResolver TypeReferenceResolver
+
 	// AsOfTimestamp denotes the explicit AS OF SYSTEM TIME timestamp for the
 	// query, if any. If the query is not an AS OF SYSTEM TIME query,
 	// AsOfTimestamp is nil.
@@ -210,6 +213,14 @@ func (sc *SemaContext) GetLocation() *time.Location {
 // GetRelativeParseTime implements ParseTimeContext.
 func (sc *SemaContext) GetRelativeParseTime() time.Time {
 	return timeutil.Now().In(sc.GetLocation())
+}
+
+// GetTypeResolver returns the TypeReferenceResolver.
+func (sc *SemaContext) GetTypeResolver() TypeReferenceResolver {
+	if sc == nil {
+		return nil
+	}
+	return sc.TypeResolver
 }
 
 func placeholderTypeAmbiguityError(idx PlaceholderIdx) error {
@@ -434,20 +445,24 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ *types.T) (TypedExpr, error)
 	// types.Any is passed to the child of the cast. There are two
 	// exceptions, described below.
 	desired := types.Any
+	exprType, err := ResolveType(expr.Type, ctx.GetTypeResolver())
+	if err != nil {
+		return nil, err
+	}
 	switch {
 	case isConstant(expr.Expr):
-		if canConstantBecome(expr.Expr.(Constant), expr.Type) {
+		if canConstantBecome(expr.Expr.(Constant), exprType) {
 			// If a Constant is subject to a cast which it can naturally become (which
 			// is in its resolvable type set), we desire the cast's type for the Constant,
 			// which will result in the CastExpr becoming an identity cast.
-			desired = expr.Type
+			desired = exprType
 
 			// If the type doesn't have any possible parameters (like length,
 			// precision), the CastExpr becomes a no-op and can be elided.
-			switch expr.Type.Family() {
+			switch exprType.Family() {
 			case types.BoolFamily, types.DateFamily, types.TimeFamily, types.TimestampFamily, types.TimestampTZFamily,
 				types.IntervalFamily, types.BytesFamily:
-				return expr.Expr.TypeCheck(ctx, expr.Type)
+				return expr.Expr.TypeCheck(ctx, exprType)
 			}
 		}
 	case ctx.isUnresolvedPlaceholder(expr.Expr):
@@ -461,8 +476,8 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ *types.T) (TypedExpr, error)
 		// types.Any. If we're going to cast to another array type, which is a
 		// common pattern in SQL (select array[]::int[]), use the cast type as the
 		// the desired type.
-		if expr.Type.Family() == types.ArrayFamily {
-			desired = expr.Type
+		if exprType.Family() == types.ArrayFamily {
+			desired = exprType
 		}
 	}
 
@@ -473,14 +488,14 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ *types.T) (TypedExpr, error)
 
 	castFrom := typedSubExpr.ResolvedType()
 
-	if ok, c := isCastDeepValid(castFrom, expr.Type); ok {
+	if ok, c := isCastDeepValid(castFrom, exprType); ok {
 		telemetry.Inc(c)
 		expr.Expr = typedSubExpr
-		expr.typ = expr.Type
+		expr.typ = exprType
 		return expr, nil
 	}
 
-	return nil, pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, expr.Type)
+	return nil, pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, exprType)
 }
 
 // TypeCheck implements the Expr interface.
@@ -517,8 +532,20 @@ func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Type
 
 // TypeCheck implements the Expr interface.
 func (expr *AnnotateTypeExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
-	subExpr, err := typeCheckAndRequire(ctx, expr.Expr, expr.Type,
-		fmt.Sprintf("type annotation for %v as %s, found", expr.Expr, expr.Type))
+	annotateType, err := ResolveType(expr.Type, ctx.GetTypeResolver())
+	if err != nil {
+		return nil, err
+	}
+	subExpr, err := typeCheckAndRequire(
+		ctx,
+		expr.Expr,
+		annotateType,
+		fmt.Sprintf(
+			"type annotation for %v as %s, found",
+			expr.Expr,
+			annotateType,
+		),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -872,11 +899,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 
 					// Cast the expression to a string so the execution engine will find
 					// the correct overload.
-					e, err := NewTypedCastExpr(typedSubExprs[i], types.String)
-					if err != nil {
-						return nil, err
-					}
-					typedSubExprs[i] = e
+					typedSubExprs[i] = NewTypedCastExpr(typedSubExprs[i], types.String)
 				}
 			}
 		}
@@ -1042,6 +1065,14 @@ func (expr *IsOfTypeExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedEx
 	exprTyped, err := expr.Expr.TypeCheck(ctx, types.Any)
 	if err != nil {
 		return nil, err
+	}
+	expr.resolvedTypes = make([]*types.T, len(expr.Types))
+	for i := range expr.Types {
+		typ, err := ResolveType(expr.Types[i], ctx.GetTypeResolver())
+		if err != nil {
+			return nil, err
+		}
+		expr.resolvedTypes[i] = typ
 	}
 	expr.Expr = exprTyped
 	expr.typ = types.Bool
@@ -2179,6 +2210,7 @@ type placeholderAnnotationVisitor struct {
 	types PlaceholderTypes
 	state []annotationState
 	err   error
+	ctx   *SemaContext
 	// errIdx stores the placeholder to which err applies. Used to select the
 	// error for the smallest index.
 	errIdx PlaceholderIdx
@@ -2222,15 +2254,20 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 	switch t := expr.(type) {
 	case *AnnotateTypeExpr:
 		if arg, ok := t.Expr.(*Placeholder); ok {
+			tType, err := ResolveType(t.Type, v.ctx.GetTypeResolver())
+			if err != nil {
+				v.setErr(arg.Idx, err)
+				return false, expr
+			}
 			switch v.state[arg.Idx] {
 			case noType, typeFromCast, conflictingCasts:
 				// An annotation overrides casts.
-				v.types[arg.Idx] = t.Type
+				v.types[arg.Idx] = tType
 				v.state[arg.Idx] = typeFromAnnotation
 
 			case typeFromAnnotation:
 				// Verify that the annotations are consistent.
-				if !t.Type.Equivalent(v.types[arg.Idx]) {
+				if !tType.Equivalent(v.types[arg.Idx]) {
 					v.setErr(arg.Idx, pgerror.Newf(
 						pgcode.DatatypeMismatch,
 						"multiple conflicting type annotations around %s",
@@ -2240,7 +2277,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 
 			case typeFromHint:
 				// Verify that the annotation is consistent with the type hint.
-				if prevType := v.types[arg.Idx]; !t.Type.Equivalent(prevType) {
+				if prevType := v.types[arg.Idx]; !tType.Equivalent(prevType) {
 					v.setErr(arg.Idx, pgerror.Newf(
 						pgcode.DatatypeMismatch,
 						"type annotation around %s conflicts with specified type %s",
@@ -2256,14 +2293,19 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 
 	case *CastExpr:
 		if arg, ok := t.Expr.(*Placeholder); ok {
+			tType, err := ResolveType(t.Type, v.ctx.GetTypeResolver())
+			if err != nil {
+				v.setErr(arg.Idx, err)
+				return false, expr
+			}
 			switch v.state[arg.Idx] {
 			case noType:
-				v.types[arg.Idx] = t.Type
+				v.types[arg.Idx] = tType
 				v.state[arg.Idx] = typeFromCast
 
 			case typeFromCast:
 				// Verify that the casts are consistent.
-				if !t.Type.Equivalent(v.types[arg.Idx]) {
+				if !tType.Equivalent(v.types[arg.Idx]) {
 					v.state[arg.Idx] = conflictingCasts
 					v.types[arg.Idx] = nil
 				}
@@ -2327,10 +2369,13 @@ func (*placeholderAnnotationVisitor) VisitPost(expr Expr) Expr { return expr }
 // placeholders in the statement and is populated accordingly.
 //
 // TODO(nvanbenschoten): Can this visitor and map be preallocated (like normalizeVisitor)?
-func ProcessPlaceholderAnnotations(stmt Statement, typeHints PlaceholderTypes) error {
+func ProcessPlaceholderAnnotations(
+	semaCtx *SemaContext, stmt Statement, typeHints PlaceholderTypes,
+) error {
 	v := placeholderAnnotationVisitor{
 		types: typeHints,
 		state: make([]annotationState, len(typeHints)),
+		ctx:   semaCtx,
 	}
 
 	for placeholder := range typeHints {
