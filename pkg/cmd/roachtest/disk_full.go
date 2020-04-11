@@ -68,7 +68,7 @@ func registerDiskFull(r *testRegistry) {
 					m.ExpectDeath()
 					if err := c.StartE(ctx, c.Node(n)); err == nil {
 						t.Fatalf("node successfully started unexpectedly")
-					} else if strings.Contains(err.Error(), "a panic has occurred") {
+					} else if strings.Contains(GetStderr(err), "a panic has occurred") {
 						t.Fatal(err)
 					}
 				}
