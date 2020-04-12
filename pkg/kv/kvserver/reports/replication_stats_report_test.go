@@ -310,7 +310,7 @@ func TestReplicationStatsReport(t *testing.T) {
 					{id: 2, stores: []store{{id: 2}}},
 					{id: 3, stores: []store{{id: 3}}},
 					{id: 4, stores: []store{{id: 4}}, dead: true},
-					{id: 5, stores: []store{{id: 3}}, dead: true},
+					{id: 5, stores: []store{{id: 5}}, dead: true},
 				},
 			},
 			exp: []replicationStatsEntry{
