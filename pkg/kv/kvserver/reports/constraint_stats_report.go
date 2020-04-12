@@ -119,19 +119,6 @@ func (k ConstraintStatusKey) Less(other ConstraintStatusKey) bool {
 	return k.Constraint.Less(other.Constraint)
 }
 
-// MakeConstraintRepr creates a canonical string representation for a
-// constraint. The constraint is identified by the group it belongs to and the
-// index within the group.
-func MakeConstraintRepr(
-	constraintGroup zonepb.ConstraintsConjunction, constraintIdx int,
-) ConstraintRepr {
-	cstr := constraintGroup.Constraints[constraintIdx].String()
-	if constraintGroup.NumReplicas == 0 {
-		return ConstraintRepr(cstr)
-	}
-	return ConstraintRepr(fmt.Sprintf("%q:%d", cstr, constraintGroup.NumReplicas))
-}
-
 // AddViolation add a constraint that is being violated for a given range. Each call
 // will increase the number of ranges that failed.
 func (r *replicationConstraintStatsReportSaver) AddViolation(
@@ -167,10 +154,8 @@ func (r *replicationConstraintStatsReportSaver) EnsureEntry(
 func (r *replicationConstraintStatsReportSaver) ensureEntries(
 	key ZoneKey, zone *zonepb.ZoneConfig,
 ) {
-	for _, group := range zone.Constraints {
-		for i := range group.Constraints {
-			r.EnsureEntry(key, Constraint, MakeConstraintRepr(group, i))
-		}
+	for _, conjunction := range zone.Constraints {
+		r.EnsureEntry(key, Constraint, ConstraintRepr(conjunction.String()))
 	}
 	for i, sz := range zone.Subzones {
 		szKey := ZoneKey{ZoneID: key.ZoneID, SubzoneID: base.SubzoneIDFromIndex(i)}
@@ -482,18 +467,19 @@ func (v *constraintConformanceVisitor) countRange(
 func getViolations(
 	ctx context.Context,
 	storeDescs []roachpb.StoreDescriptor,
-	constraintGroups []zonepb.ConstraintsConjunction,
+	constraintConjunctions []zonepb.ConstraintsConjunction,
 ) []ConstraintRepr {
 	var res []ConstraintRepr
 	// Evaluate all zone constraints for the stores (i.e. replicas) of the given range.
-	for _, constraintGroup := range constraintGroups {
-		for i, c := range constraintGroup.Constraints {
-			replicasRequiredToMatch := int(constraintGroup.NumReplicas)
-			if replicasRequiredToMatch == 0 {
-				replicasRequiredToMatch = len(storeDescs)
-			}
+	for _, conjunction := range constraintConjunctions {
+		replicasRequiredToMatch := int(conjunction.NumReplicas)
+		if replicasRequiredToMatch == 0 {
+			replicasRequiredToMatch = len(storeDescs)
+		}
+		for _, c := range conjunction.Constraints {
 			if !constraintSatisfied(c, replicasRequiredToMatch, storeDescs) {
-				res = append(res, MakeConstraintRepr(constraintGroup, i))
+				res = append(res, ConstraintRepr(conjunction.String()))
+				break
 			}
 		}
 	}

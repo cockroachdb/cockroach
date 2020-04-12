@@ -623,6 +623,20 @@ func (l *LeasePreference) Constraint(i int) cat.Constraint {
 	return &l.Constraints[i]
 }
 
+func (c ConstraintsConjunction) String() string {
+	var sb strings.Builder
+	for i, cons := range c.Constraints {
+		if i > 0 {
+			sb.WriteRune(',')
+		}
+		sb.WriteString(cons.String())
+	}
+	if c.NumReplicas == 0 {
+		return sb.String()
+	}
+	return fmt.Sprintf("%s:%d", sb.String(), c.NumReplicas)
+}
+
 // ReplicaCount is part of the cat.ReplicaConstraints interface.
 func (c *ConstraintsConjunction) ReplicaCount() int32 {
 	return c.NumReplicas
