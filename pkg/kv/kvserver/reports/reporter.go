@@ -52,8 +52,6 @@ var ReporterInterval = settings.RegisterPublicNonNegativeDurationSetting(
 type Reporter struct {
 	// Contains the list of the stores of the current node
 	localStores *kvserver.Stores
-	// Constraints constructed from the locality information
-	localityConstraints []zonepb.ConstraintsConjunction
 	// The store that is the current meta 1 leaseholder
 	meta1LeaseHolder *kvserver.Store
 	// Latest zone config
@@ -176,7 +174,7 @@ func (stats *Reporter) update(
 		return nil
 	}
 
-	stats.updateLocalityConstraints()
+	localityConstraints := stats.computeLocalityConstraints()
 
 	allStores := stats.storePool.GetStores()
 	var getStoresFromGossip StoreResolver = func(
@@ -203,7 +201,7 @@ func (stats *Reporter) update(
 	constraintConfVisitor := makeConstraintConformanceVisitor(
 		ctx, stats.latestConfig, getStoresFromGossip, constraintsSaver)
 	localityStatsVisitor := makeLocalityStatsVisitor(
-		ctx, stats.localityConstraints, stats.latestConfig,
+		ctx, localityConstraints, stats.latestConfig,
 		getStoresFromGossip, isNodeLive, locSaver)
 	statusVisitor := makeReplicationStatsVisitor(
 		ctx, stats.latestConfig, isNodeLive, replStatsSaver)
@@ -267,12 +265,16 @@ func (stats *Reporter) updateLatestConfig() {
 	stats.latestConfig = stats.meta1LeaseHolder.Gossip().GetSystemConfig()
 }
 
-// updateLocalityConstraints recomputes the locality constraints.
-func (stats *Reporter) updateLocalityConstraints() {
+// computeLocalityConstraints returns a set of synthetic constraints for all the
+// localities in the cluster. They will be used to check whether any locality is
+// critical.
+func (stats *Reporter) computeLocalityConstraints() []zonepb.ConstraintsConjunction {
 	// localityConstraintsByName de-duplicates localities across nodes.
 	localityConstraintsByName := make(map[string]zonepb.ConstraintsConjunction, 16)
 	for _, sd := range stats.storePool.GetStores() {
 		var c zonepb.ConstraintsConjunction
+		// For each tier t, return a constraint covering all the higher-order tiers
+		// up to and including t.
 		for _, t := range sd.Node.Locality.Tiers {
 			c.Constraints = append(
 				c.Constraints,
@@ -280,12 +282,13 @@ func (stats *Reporter) updateLocalityConstraints() {
 			localityConstraintsByName[c.String()] = c
 		}
 	}
-	stats.localityConstraints = make([]zonepb.ConstraintsConjunction, len(localityConstraintsByName))
+	res := make([]zonepb.ConstraintsConjunction, len(localityConstraintsByName))
 	i := 0
 	for _, c := range localityConstraintsByName {
-		stats.localityConstraints[i] = c
+		res[i] = c
 		i++
 	}
+	return res
 }
 
 // nodeChecker checks whether a node is to be considered alive or not.
