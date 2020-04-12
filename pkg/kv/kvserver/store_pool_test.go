@@ -148,7 +148,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 // verifyStoreList ensures that the returned list of stores is correct.
 func verifyStoreList(
 	sp *StorePool,
-	constraints []zonepb.Constraints,
+	constraints []zonepb.ConstraintsConjunction,
 	storeIDs roachpb.StoreIDSlice, // optional
 	rangeID roachpb.RangeID,
 	filter storeFilter,
@@ -197,7 +197,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		storagepb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(context.TODO())
 	sg := gossiputil.NewStoreGossiper(g)
-	constraints := []zonepb.Constraints{
+	constraints := []zonepb.ConstraintsConjunction{
 		{
 			Constraints: []zonepb.Constraint{
 				{Type: zonepb.Constraint_REQUIRED, Value: "ssd"},
@@ -354,7 +354,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 func TestStoreListFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	constraints := []zonepb.Constraints{
+	constraints := []zonepb.ConstraintsConjunction{
 		{
 			Constraints: []zonepb.Constraint{
 				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "us-west"},

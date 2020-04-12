@@ -53,7 +53,7 @@ type Reporter struct {
 	// Contains the list of the stores of the current node
 	localStores *kvserver.Stores
 	// Constraints constructed from the locality information
-	localityConstraints []zonepb.Constraints
+	localityConstraints []zonepb.ConstraintsConjunction
 	// The store that is the current meta 1 leaseholder
 	meta1LeaseHolder *kvserver.Store
 	// Latest zone config
@@ -270,9 +270,9 @@ func (stats *Reporter) updateLatestConfig() {
 }
 
 func (stats *Reporter) updateLocalityConstraints() error {
-	localityConstraintsByName := make(map[string]zonepb.Constraints, 16)
+	localityConstraintsByName := make(map[string]zonepb.ConstraintsConjunction, 16)
 	for _, sd := range stats.storePool.GetStores() {
-		c := zonepb.Constraints{
+		c := zonepb.ConstraintsConjunction{
 			Constraints: make([]zonepb.Constraint, 0),
 		}
 		for _, t := range sd.Node.Locality.Tiers {
@@ -282,7 +282,7 @@ func (stats *Reporter) updateLocalityConstraints() error {
 			localityConstraintsByName[c.String()] = c
 		}
 	}
-	stats.localityConstraints = make([]zonepb.Constraints, 0, len(localityConstraintsByName))
+	stats.localityConstraints = make([]zonepb.ConstraintsConjunction, 0, len(localityConstraintsByName))
 	for _, c := range localityConstraintsByName {
 		stats.localityConstraints = append(stats.localityConstraints, c)
 	}
@@ -511,7 +511,9 @@ func getZoneByID(id uint32, cfg *config.SystemConfig) (*zonepb.ZoneConfig, error
 // processRange returns the list of constraints violated by a range. The range
 // is represented by the descriptors of the replicas' stores.
 func processRange(
-	ctx context.Context, storeDescs []roachpb.StoreDescriptor, constraintGroups []zonepb.Constraints,
+	ctx context.Context,
+	storeDescs []roachpb.StoreDescriptor,
+	constraintGroups []zonepb.ConstraintsConjunction,
 ) []ConstraintRepr {
 	var res []ConstraintRepr
 	// Evaluate all zone constraints for the stores (i.e. replicas) of the given range.

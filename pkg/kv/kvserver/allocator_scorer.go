@@ -928,7 +928,7 @@ func allocateConstraintsCheck(
 	}
 
 	for i, constraints := range analyzed.Constraints {
-		if constraintsOK := constraint.SubConstraintsCheck(
+		if constraintsOK := constraint.ConjunctionsCheck(
 			store, constraints.Constraints,
 		); constraintsOK {
 			valid = true
@@ -1005,7 +1005,7 @@ func rebalanceFromConstraintsCheck(
 	// of constraints with NumReplicas set to 0. This is meant to be enforced in
 	// the config package.
 	for i, constraints := range analyzed.Constraints {
-		if constraintsOK := constraint.SubConstraintsCheck(
+		if constraintsOK := constraint.ConjunctionsCheck(
 			store, constraints.Constraints,
 		); constraintsOK {
 			valid = true
@@ -1037,13 +1037,15 @@ func containsStore(stores []roachpb.StoreID, target roachpb.StoreID) bool {
 
 // constraintsCheck returns true iff the provided store would be a valid in a
 // range with the provided constraints.
-func constraintsCheck(store roachpb.StoreDescriptor, constraints []zonepb.Constraints) bool {
+func constraintsCheck(
+	store roachpb.StoreDescriptor, constraints []zonepb.ConstraintsConjunction,
+) bool {
 	if len(constraints) == 0 {
 		return true
 	}
 
 	for _, subConstraints := range constraints {
-		if constraintsOK := constraint.SubConstraintsCheck(
+		if constraintsOK := constraint.ConjunctionsCheck(
 			store, subConstraints.Constraints,
 		); constraintsOK {
 			return true
