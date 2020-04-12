@@ -56,6 +56,7 @@ message Constraint {
 // together by a replica (i.e. by the replica's store).
 message ConstraintsConjunction {
   option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
   option (gogoproto.populate) = true;
 
   // The number of replicas that should abide by the constraints below. If left

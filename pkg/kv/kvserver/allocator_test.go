@@ -44,6 +44,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/tracker"
@@ -5144,25 +5145,23 @@ func TestAllocatorError(t *testing.T) {
 			"0 of 2 live stores are able to take a new replica for the range (1 throttled, 1 already has a replica)"},
 		{allocatorError{constraints: constraint, existingReplicas: 1, aliveStores: 1},
 			`0 of 1 live stores are able to take a new replica for the range (1 already has a replica); ` +
-				`must match constraints [{num_replicas:0 constraints:<type:REQUIRED key:"" value:"one" > }]`},
+				`must match constraints [{+one}]`},
 		{allocatorError{constraints: constraint, existingReplicas: 1, aliveStores: 2},
 			`0 of 2 live stores are able to take a new replica for the range (1 already has a replica); ` +
-				`must match constraints [{num_replicas:0 constraints:<type:REQUIRED key:"" value:"one" > }]`},
+				`must match constraints [{+one}]`},
 		{allocatorError{constraints: constraints, existingReplicas: 1, aliveStores: 1},
 			`0 of 1 live stores are able to take a new replica for the range (1 already has a replica); ` +
-				`must match constraints [{num_replicas:0 constraints:<type:REQUIRED key:"" value:"one" > constraints:<type:REQUIRED key:"" value:"two" > }]`},
+				`must match constraints [{+one,+two}]`},
 		{allocatorError{constraints: constraints, existingReplicas: 1, aliveStores: 2},
 			`0 of 2 live stores are able to take a new replica for the range (1 already has a replica); ` +
-				`must match constraints [{num_replicas:0 constraints:<type:REQUIRED key:"" value:"one" > constraints:<type:REQUIRED key:"" value:"two" > }]`},
+				`must match constraints [{+one,+two}]`},
 		{allocatorError{constraints: constraint, existingReplicas: 1, aliveStores: 2, throttledStores: 1},
 			`0 of 2 live stores are able to take a new replica for the range (1 throttled, 1 already has a replica); ` +
-				`must match constraints [{num_replicas:0 constraints:<type:REQUIRED key:"" value:"one" > }]`},
+				`must match constraints [{+one}]`},
 	}
 
 	for i, testCase := range testCases {
-		if actual := testCase.ae.Error(); testCase.expected != actual {
-			t.Errorf("%d: actual error message \"%s\" does not match expected \"%s\"", i, actual, testCase.expected)
-		}
+		assert.EqualErrorf(t, &testCase.ae, testCase.expected, "test case: %d", i)
 	}
 }
 
