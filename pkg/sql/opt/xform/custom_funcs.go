@@ -1330,20 +1330,12 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	var iter scanIndexIter
 	iter.init(c.e.mem, scanPrivate)
 	for iter.next() {
-		idxCols := iter.indexCols()
-
 		// Find the longest prefix of index key columns that are constrained by
 		// an equality with another column or a constant.
 		numIndexKeyCols := iter.index.LaxKeyColumnCount()
-		constValMap := memo.ExtractValuesFromFilter(on, idxCols)
-		constFilterMap := memo.ExtractConstantFilter(on, idxCols)
 
 		var projections memo.ProjectionsExpr
 		var constFilters memo.FiltersExpr
-		if len(constValMap) > 0 {
-			projections = make(memo.ProjectionsExpr, 0, numIndexKeyCols)
-			constFilters = make(memo.FiltersExpr, 0, numIndexKeyCols)
-		}
 
 		// Check if the first column in the index has an equality constraint, or if
 		// it is constrained to a constant value. This check doesn't guarantee that
@@ -1351,7 +1343,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// in most cases.
 		firstIdxCol := scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)
 		if _, ok := rightEq.Find(firstIdxCol); !ok {
-			if _, ok := constValMap[firstIdxCol]; !ok {
+			if _, _, ok := c.findConstantFilter(on, firstIdxCol); !ok {
 				continue
 			}
 		}
@@ -1376,28 +1368,34 @@ func (c *CustomFuncs) GenerateLookupJoins(
 				continue
 			}
 
-			// Project a new column with a constant value if that allows the
-			// index column to be constrained and used by the lookup joiner.
-			filter, ok := constFilterMap[idxCol]
-			if !ok {
+			// Try to find a filter that constrains this column to a non-NULL constant
+			// value. We cannot use a NULL value because the lookup join implements
+			// logic equivalent to simple equality between columns (where NULL never
+			// equals anything).
+			foundVal, onIdx, ok := c.findConstantFilter(on, idxCol)
+			if !ok || foundVal == tree.DNull {
 				break
 			}
-			condition, ok := filter.Condition.(*memo.EqExpr)
-			if !ok {
-				break
+
+			// We will project this constant value in the input to make it an equality
+			// column.
+			if projections == nil {
+				projections = make(memo.ProjectionsExpr, 0, numIndexKeyCols-j)
+				constFilters = make(memo.FiltersExpr, 0, numIndexKeyCols-j)
 			}
+
 			constColID := c.e.f.Metadata().AddColumn(
 				fmt.Sprintf("project_const_col_@%d", idxCol),
-				condition.Right.DataType())
+				foundVal.ResolvedType())
 			projections = append(projections, c.e.f.ConstructProjectionsItem(
-				c.e.f.ConstructConst(constValMap[idxCol]),
+				c.e.f.ConstructConst(foundVal),
 				constColID,
 			))
 
 			needProjection = true
 			lookupJoin.KeyCols = append(lookupJoin.KeyCols, constColID)
 			rightSideCols = append(rightSideCols, idxCol)
-			constFilters = append(constFilters, filter)
+			constFilters = append(constFilters, on[onIdx])
 		}
 
 		if len(lookupJoin.KeyCols) == 0 {
@@ -1501,6 +1499,24 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	}
 }
 
+// findConstantFilter tries to find a filter that is exactly equivalent to
+// constraining the given column to a constant value. Note that the constant
+// value can be NULL (for an `x IS NULL` filter).
+func (c *CustomFuncs) findConstantFilter(
+	filters memo.FiltersExpr, col opt.ColumnID,
+) (value tree.Datum, filterIdx int, ok bool) {
+	for filterIdx := range filters {
+		props := filters[filterIdx].ScalarProps()
+		if props.TightConstraints {
+			constCol, constVal, ok := props.Constraints.IsSingleColumnConstValue(c.e.evalCtx)
+			if ok && constCol == col {
+				return constVal, filterIdx, true
+			}
+		}
+	}
+	return nil, -1, false
+}
+
 // eqColsForZigzag is a helper function to generate eqCol lists for the zigzag
 // joiner. The zigzag joiner requires that the equality columns immediately
 // follow the fixed columns in the index. Fixed here refers to columns that
@@ -1584,24 +1600,25 @@ func eqColsForZigzag(
 }
 
 // fixedColsForZigzag is a helper function to generate FixedCols lists for the
-// zigzag join expression. It takes in a fixedValMap mapping column IDs to
-// constant values they are constrained to. This function iterates through
-// the columns of the specified index in order until it comes across the first
-// column ID not in fixedValMap.
+// zigzag join expression. This function iterates through the columns of the
+// specified index in order until it comes across the first column ID that is
+// not constrained to a constant.
 func (c *CustomFuncs) fixedColsForZigzag(
-	index cat.Index, tabID opt.TableID, fixedValMap map[opt.ColumnID]tree.Datum,
-) (opt.ColList, memo.ScalarListExpr, []types.T) {
-	vals := make(memo.ScalarListExpr, 0, len(fixedValMap))
-	typs := make([]types.T, 0, len(fixedValMap))
-	fixedCols := make(opt.ColList, 0, len(fixedValMap))
-
+	index cat.Index, tabID opt.TableID, filters memo.FiltersExpr,
+) (fixedCols opt.ColList, vals memo.ScalarListExpr, typs []types.T) {
 	for i, cnt := 0, index.ColumnCount(); i < cnt; i++ {
 		colID := tabID.ColumnID(index.Column(i).Ordinal)
-		val, ok := fixedValMap[colID]
+		val, _, ok := c.findConstantFilter(filters, colID)
 		if !ok {
 			break
 		}
-		dt := index.Column(i).DatumType()
+		if vals == nil {
+			vals = make(memo.ScalarListExpr, 0, cnt-i)
+			typs = make([]types.T, 0, cnt-i)
+			fixedCols = make(opt.ColList, 0, cnt-i)
+		}
+
+		dt := val.ResolvedType()
 		vals = append(vals, c.e.f.ConstructConstVal(val, dt))
 		typs = append(typs, *dt)
 		fixedCols = append(fixedCols, colID)
@@ -1752,27 +1769,11 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 				},
 			}
 
-			// Fixed values are represented as tuples consisting of the
-			// fixed segment of that side's index.
-			fixedValMap := memo.ExtractValuesFromFilter(filters, fixedCols)
-
-			if len(fixedValMap) != fixedCols.Len() {
-				if util.RaceEnabled {
-					panic(errors.AssertionFailedf(
-						"we inferred constant columns whose value we couldn't extract",
-					))
-				}
-
-				// This is a bug, but we don't want to block queries from running because of it.
-				// TODO(justin): remove this when we fix extractConstEquality.
-				continue
-			}
-
 			leftFixedCols, leftVals, leftTypes := c.fixedColsForZigzag(
-				iter.index, scanPrivate.Table, fixedValMap,
+				iter.index, scanPrivate.Table, filters,
 			)
 			rightFixedCols, rightVals, rightTypes := c.fixedColsForZigzag(
-				iter2.index, scanPrivate.Table, fixedValMap,
+				iter2.index, scanPrivate.Table, filters,
 			)
 
 			zigzagJoin.LeftFixedCols = leftFixedCols

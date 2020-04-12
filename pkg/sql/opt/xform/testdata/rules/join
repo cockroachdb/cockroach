@@ -1463,6 +1463,52 @@ inner-join (lookup bool_col)
  │    └── filters (true)
  └── filters (true)
 
+opt
+SELECT * FROM small INNER JOIN bool_col ON a=m AND b=10 AND c
+----
+inner-join (lookup bool_col)
+ ├── columns: m:1!null n:2 a:4!null b:5!null c:6!null d:7 e:8
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── fd: ()-->(5,6), (1)==(4), (4)==(1)
+ ├── inner-join (lookup bool_col@secondary)
+ │    ├── columns: m:1!null n:2 a:4!null b:5!null c:6!null bool_col.rowid:9!null
+ │    ├── key columns: [1 10 11] = [4 5 6]
+ │    ├── fd: ()-->(5,6), (9)-->(4), (1)==(4), (4)==(1)
+ │    ├── project
+ │    │    ├── columns: "project_const_col_@5":10!null "project_const_col_@6":11!null m:1 n:2
+ │    │    ├── fd: ()-->(10,11)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1 n:2
+ │    │    └── projections
+ │    │         ├── 10 [as="project_const_col_@5":10]
+ │    │         └── true [as="project_const_col_@6":11]
+ │    └── filters (true)
+ └── filters (true)
+
+opt
+SELECT * FROM small INNER JOIN bool_col ON a=m AND b=10 AND NOT c
+----
+inner-join (lookup bool_col)
+ ├── columns: m:1!null n:2 a:4!null b:5!null c:6!null d:7 e:8
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── fd: ()-->(5,6), (1)==(4), (4)==(1)
+ ├── inner-join (lookup bool_col@secondary)
+ │    ├── columns: m:1!null n:2 a:4!null b:5!null c:6!null bool_col.rowid:9!null
+ │    ├── key columns: [1 10 11] = [4 5 6]
+ │    ├── fd: ()-->(5,6), (9)-->(4), (1)==(4), (4)==(1)
+ │    ├── project
+ │    │    ├── columns: "project_const_col_@5":10!null "project_const_col_@6":11!null m:1 n:2
+ │    │    ├── fd: ()-->(10,11)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1 n:2
+ │    │    └── projections
+ │    │         ├── 10 [as="project_const_col_@5":10]
+ │    │         └── false [as="project_const_col_@6":11]
+ │    └── filters (true)
+ └── filters (true)
+
 exec-ddl
 CREATE TABLE t(pk INT PRIMARY KEY, col0 INT, col1 INT, col2 INT, col4 INT, UNIQUE INDEX (col2))
 ----
