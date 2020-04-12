@@ -542,12 +542,12 @@ func TestConstraintsCheck(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		constraints []zonepb.Constraints
+		constraints []zonepb.ConstraintsConjunction
 		expected    map[roachpb.StoreID]bool
 	}{
 		{
 			name: "required constraint",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "b", Type: zonepb.Constraint_REQUIRED},
@@ -561,7 +561,7 @@ func TestConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "required locality constraints",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Key: "datacenter", Value: "us", Type: zonepb.Constraint_REQUIRED},
@@ -577,7 +577,7 @@ func TestConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "prohibited constraints",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "b", Type: zonepb.Constraint_PROHIBITED},
@@ -592,7 +592,7 @@ func TestConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "prohibited locality constraints",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Key: "datacenter", Value: "us", Type: zonepb.Constraint_PROHIBITED},
@@ -605,7 +605,7 @@ func TestConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "positive constraints are ignored",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "a", Type: zonepb.Constraint_DEPRECATED_POSITIVE},
@@ -624,7 +624,7 @@ func TestConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "positive locality constraints are ignored",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Key: "datacenter", Value: "eur", Type: zonepb.Constraint_DEPRECATED_POSITIVE},
@@ -641,7 +641,7 @@ func TestConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "NumReplicas doesn't affect constraint checking",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Key: "datacenter", Value: "eur", Type: zonepb.Constraint_REQUIRED},
@@ -655,7 +655,7 @@ func TestConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "multiple per-replica constraints are respected",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Key: "datacenter", Value: "eur", Type: zonepb.Constraint_REQUIRED},
@@ -696,7 +696,7 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 
 	testCases := []struct {
 		name              string
-		constraints       []zonepb.Constraints
+		constraints       []zonepb.ConstraintsConjunction
 		zoneNumReplicas   int32
 		existing          []roachpb.StoreID
 		expectedValid     map[roachpb.StoreID]bool
@@ -704,7 +704,7 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 	}{
 		{
 			name: "prohibited constraint",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "b", Type: zonepb.Constraint_PROHIBITED},
@@ -721,7 +721,7 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "required constraint",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "b", Type: zonepb.Constraint_REQUIRED},
@@ -737,7 +737,7 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "required constraint with NumReplicas",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "b", Type: zonepb.Constraint_REQUIRED},
@@ -757,7 +757,7 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "multiple required constraints with NumReplicas",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "a", Type: zonepb.Constraint_REQUIRED},
@@ -787,7 +787,7 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "multiple required constraints with NumReplicas and existing replicas",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "a", Type: zonepb.Constraint_REQUIRED},
@@ -812,7 +812,7 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "multiple required constraints with NumReplicas and not enough existing replicas",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "a", Type: zonepb.Constraint_REQUIRED},
@@ -840,7 +840,7 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "multiple required constraints with NumReplicas and sum(NumReplicas) < zone.NumReplicas",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "a", Type: zonepb.Constraint_REQUIRED},
@@ -872,7 +872,7 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "multiple required constraints with sum(NumReplicas) < zone.NumReplicas and not enough existing replicas",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "a", Type: zonepb.Constraint_REQUIRED},
@@ -933,13 +933,13 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 	}
 	testCases := []struct {
 		name            string
-		constraints     []zonepb.Constraints
+		constraints     []zonepb.ConstraintsConjunction
 		zoneNumReplicas int32
 		expected        map[roachpb.StoreID]expected
 	}{
 		{
 			name: "prohibited constraint",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "b", Type: zonepb.Constraint_PROHIBITED},
@@ -955,7 +955,7 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "required constraint",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "b", Type: zonepb.Constraint_REQUIRED},
@@ -971,7 +971,7 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "required constraint with NumReplicas",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "b", Type: zonepb.Constraint_REQUIRED},
@@ -988,7 +988,7 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "multiple required constraints with NumReplicas",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "a", Type: zonepb.Constraint_REQUIRED},
@@ -1010,7 +1010,7 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 		},
 		{
 			name: "required constraint with NumReplicas and sum(NumReplicas) < zone.NumReplicas",
-			constraints: []zonepb.Constraints{
+			constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "b", Type: zonepb.Constraint_REQUIRED},

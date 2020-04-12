@@ -49,17 +49,17 @@ func (l *LeasePreference) UnmarshalYAML(unmarshal func(interface{}) error) error
 	return nil
 }
 
-var _ yaml.Marshaler = Constraints{}
-var _ yaml.Unmarshaler = &Constraints{}
+var _ yaml.Marshaler = ConstraintsConjunction{}
+var _ yaml.Unmarshaler = &ConstraintsConjunction{}
 
 // MarshalYAML implements yaml.Marshaler.
-func (c Constraints) MarshalYAML() (interface{}, error) {
+func (c ConstraintsConjunction) MarshalYAML() (interface{}, error) {
 	return nil, fmt.Errorf(
 		"MarshalYAML should never be called directly on Constraints (%v): %v", c, debug.Stack())
 }
 
 // UnmarshalYAML implements yaml.Marshaler.
-func (c *Constraints) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (c *ConstraintsConjunction) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return fmt.Errorf(
 		"UnmarshalYAML should never be called directly on Constraints: %v", debug.Stack())
 }
@@ -67,7 +67,7 @@ func (c *Constraints) UnmarshalYAML(unmarshal func(interface{}) error) error {
 // ConstraintsList is an alias for a slice of Constraints that can be
 // properly marshaled to/from YAML.
 type ConstraintsList struct {
-	Constraints []Constraints
+	Constraints []ConstraintsConjunction
 	Inherited   bool
 }
 
@@ -124,10 +124,10 @@ func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error
 			}
 		}
 		if len(constraints) == 0 {
-			c.Constraints = []Constraints{}
+			c.Constraints = []ConstraintsConjunction{}
 			c.Inherited = false
 		} else {
-			c.Constraints = []Constraints{
+			c.Constraints = []ConstraintsConjunction{
 				{
 					Constraints: constraints,
 					NumReplicas: 0,
@@ -146,7 +146,7 @@ func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error
 			"invalid constraints format. expected an array of strings or a map of strings to ints")
 	}
 
-	constraintsList := make([]Constraints, 0, len(constraintsMap))
+	constraintsList := make([]ConstraintsConjunction, 0, len(constraintsMap))
 	for constraintsStr, numReplicas := range constraintsMap {
 		shortConstraints := strings.Split(constraintsStr, ",")
 		constraints := make([]Constraint, len(shortConstraints))
@@ -155,7 +155,7 @@ func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error
 				return err
 			}
 		}
-		constraintsList = append(constraintsList, Constraints{
+		constraintsList = append(constraintsList, ConstraintsConjunction{
 			Constraints: constraints,
 			NumReplicas: numReplicas,
 		})

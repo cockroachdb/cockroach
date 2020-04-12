@@ -378,7 +378,7 @@ func anonymizeZoneConfig(dst *zonepb.ZoneConfig, src zonepb.ZoneConfig, secret s
 	if src.NumReplicas != nil {
 		dst.NumReplicas = proto.Int32(*src.NumReplicas)
 	}
-	dst.Constraints = make([]zonepb.Constraints, len(src.Constraints))
+	dst.Constraints = make([]zonepb.ConstraintsConjunction, len(src.Constraints))
 	for i := range src.Constraints {
 		dst.Constraints[i].NumReplicas = src.Constraints[i].NumReplicas
 		dst.Constraints[i].Constraints = make([]zonepb.Constraint, len(src.Constraints[i].Constraints))

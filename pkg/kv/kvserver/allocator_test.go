@@ -53,7 +53,7 @@ const firstRangeID = roachpb.RangeID(1)
 
 var simpleZoneConfig = zonepb.ZoneConfig{
 	NumReplicas: proto.Int32(1),
-	Constraints: []zonepb.Constraints{
+	Constraints: []zonepb.ConstraintsConjunction{
 		{
 			Constraints: []zonepb.Constraint{
 				{Value: "a", Type: zonepb.Constraint_REQUIRED},
@@ -65,7 +65,7 @@ var simpleZoneConfig = zonepb.ZoneConfig{
 
 var multiDCConfig = zonepb.ZoneConfig{
 	NumReplicas: proto.Int32(2),
-	Constraints: []zonepb.Constraints{
+	Constraints: []zonepb.ConstraintsConjunction{
 		{Constraints: []zonepb.Constraint{{Value: "ssd", Type: zonepb.Constraint_REQUIRED}}},
 	},
 }
@@ -484,7 +484,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 		context.Background(),
 		&zonepb.ZoneConfig{
 			NumReplicas: proto.Int32(0),
-			Constraints: []zonepb.Constraints{
+			Constraints: []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Value: "a", Type: zonepb.Constraint_REQUIRED},
@@ -2236,7 +2236,7 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 }
 
 var (
-	threeSpecificLocalities = []zonepb.Constraints{
+	threeSpecificLocalities = []zonepb.ConstraintsConjunction{
 		{
 			Constraints: []zonepb.Constraint{
 				{Key: "datacenter", Value: "a", Type: zonepb.Constraint_REQUIRED},
@@ -2257,7 +2257,7 @@ var (
 		},
 	}
 
-	twoAndOneLocalities = []zonepb.Constraints{
+	twoAndOneLocalities = []zonepb.ConstraintsConjunction{
 		{
 			Constraints: []zonepb.Constraint{
 				{Key: "datacenter", Value: "a", Type: zonepb.Constraint_REQUIRED},
@@ -2272,7 +2272,7 @@ var (
 		},
 	}
 
-	threeInOneLocality = []zonepb.Constraints{
+	threeInOneLocality = []zonepb.ConstraintsConjunction{
 		{
 			Constraints: []zonepb.Constraint{
 				{Key: "datacenter", Value: "a", Type: zonepb.Constraint_REQUIRED},
@@ -2281,7 +2281,7 @@ var (
 		},
 	}
 
-	twoAndOneNodeAttrs = []zonepb.Constraints{
+	twoAndOneNodeAttrs = []zonepb.ConstraintsConjunction{
 		{
 			Constraints: []zonepb.Constraint{
 				{Value: "ssd", Type: zonepb.Constraint_REQUIRED},
@@ -2296,7 +2296,7 @@ var (
 		},
 	}
 
-	twoAndOneStoreAttrs = []zonepb.Constraints{
+	twoAndOneStoreAttrs = []zonepb.ConstraintsConjunction{
 		{
 			Constraints: []zonepb.Constraint{
 				{Value: "odd", Type: zonepb.Constraint_REQUIRED},
@@ -2311,7 +2311,7 @@ var (
 		},
 	}
 
-	mixLocalityAndAttrs = []zonepb.Constraints{
+	mixLocalityAndAttrs = []zonepb.ConstraintsConjunction{
 		{
 			Constraints: []zonepb.Constraint{
 				{Key: "datacenter", Value: "a", Type: zonepb.Constraint_REQUIRED},
@@ -2334,7 +2334,7 @@ var (
 		},
 	}
 
-	twoSpecificLocalities = []zonepb.Constraints{
+	twoSpecificLocalities = []zonepb.ConstraintsConjunction{
 		{
 			Constraints: []zonepb.Constraint{
 				{Key: "datacenter", Value: "a", Type: zonepb.Constraint_REQUIRED},
@@ -2363,7 +2363,7 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 	// stores from multiDiversityDCStores would be the best addition to the range
 	// purely on the basis of constraint satisfaction and locality diversity.
 	testCases := []struct {
-		constraints []zonepb.Constraints
+		constraints []zonepb.ConstraintsConjunction
 		existing    []roachpb.StoreID
 		expected    []roachpb.StoreID
 	}{
@@ -2601,7 +2601,7 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 	// stores would be best to remove if we had to remove one purely on the basis
 	// of constraint-matching and locality diversity.
 	testCases := []struct {
-		constraints []zonepb.Constraints
+		constraints []zonepb.ConstraintsConjunction
 		existing    []roachpb.StoreID
 		expected    []roachpb.StoreID
 	}{
@@ -2828,7 +2828,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 		candidates []roachpb.StoreID
 	}
 	testCases := []struct {
-		constraints     []zonepb.Constraints
+		constraints     []zonepb.ConstraintsConjunction
 		zoneNumReplicas int32
 		existing        []roachpb.StoreID
 		expected        []rebalanceStoreIDs
@@ -4008,7 +4008,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4037,7 +4037,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(5),
-				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4076,7 +4076,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4100,7 +4100,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(5),
-				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4134,7 +4134,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(5),
-				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4168,7 +4168,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4202,7 +4202,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(5),
-				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4246,7 +4246,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4285,7 +4285,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4319,7 +4319,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4360,7 +4360,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4389,7 +4389,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -4418,7 +4418,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: zonepb.ZoneConfig{
 				NumReplicas:   proto.Int32(3),
-				Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
+				Constraints:   []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: proto.Int64(0),
 				RangeMaxBytes: proto.Int64(64000),
 			},
@@ -5122,10 +5122,10 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 func TestAllocatorError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	constraint := []zonepb.Constraints{
+	constraint := []zonepb.ConstraintsConjunction{
 		{Constraints: []zonepb.Constraint{{Value: "one", Type: zonepb.Constraint_REQUIRED}}},
 	}
-	constraints := []zonepb.Constraints{
+	constraints := []zonepb.ConstraintsConjunction{
 		{
 			Constraints: []zonepb.Constraint{
 				{Value: "one", Type: zonepb.Constraint_REQUIRED},
@@ -5523,7 +5523,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.constraint.String(), func(t *testing.T) {
-			constraints := zonepb.Constraints{
+			constraints := zonepb.ConstraintsConjunction{
 				Constraints: []zonepb.Constraint{
 					tc.constraint,
 				},
@@ -5532,7 +5532,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 			var rangeUsageInfo RangeUsageInfo
 			actual, _, _, ok := a.RebalanceTarget(
 				ctx,
-				&zonepb.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: []zonepb.Constraints{constraints}},
+				&zonepb.ZoneConfig{NumReplicas: proto.Int32(0), Constraints: []zonepb.ConstraintsConjunction{constraints}},
 				nil,
 				firstRangeID,
 				existingReplicas,

@@ -122,7 +122,9 @@ func (k ConstraintStatusKey) Less(other ConstraintStatusKey) bool {
 // MakeConstraintRepr creates a canonical string representation for a
 // constraint. The constraint is identified by the group it belongs to and the
 // index within the group.
-func MakeConstraintRepr(constraintGroup zonepb.Constraints, constraintIdx int) ConstraintRepr {
+func MakeConstraintRepr(
+	constraintGroup zonepb.ConstraintsConjunction, constraintIdx int,
+) ConstraintRepr {
 	cstr := constraintGroup.Constraints[constraintIdx].String()
 	if constraintGroup.NumReplicas == 0 {
 		return ConstraintRepr(cstr)
@@ -372,7 +374,7 @@ type constraintConformanceVisitor struct {
 	// This state can be reused when a range is covered by the same zone config as
 	// the previous one. Reusing it speeds up the report generation.
 	prevZoneKey     ZoneKey
-	prevConstraints []zonepb.Constraints
+	prevConstraints []zonepb.ConstraintsConjunction
 }
 
 var _ rangeVisitor = &constraintConformanceVisitor{}
@@ -434,7 +436,7 @@ func (v *constraintConformanceVisitor) visitNewZone(
 	}()
 
 	// Find the applicable constraints, which may be inherited.
-	var constraints []zonepb.Constraints
+	var constraints []zonepb.ConstraintsConjunction
 	var zKey ZoneKey
 	_, err := visitZones(ctx, r, v.cfg, ignoreSubzonePlaceholders,
 		func(_ context.Context, zone *zonepb.ZoneConfig, key ZoneKey) bool {
@@ -463,7 +465,10 @@ func (v *constraintConformanceVisitor) visitSameZone(
 }
 
 func (v *constraintConformanceVisitor) countRange(
-	ctx context.Context, r *roachpb.RangeDescriptor, key ZoneKey, constraints []zonepb.Constraints,
+	ctx context.Context,
+	r *roachpb.RangeDescriptor,
+	key ZoneKey,
+	constraints []zonepb.ConstraintsConjunction,
 ) {
 	storeDescs := v.storeResolver(r)
 	violated := processRange(ctx, storeDescs, constraints)

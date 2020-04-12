@@ -252,7 +252,7 @@ func (r *replicationCriticalLocalitiesReportSaver) upsertLocality(
 // criticalLocalitiesVisitor is a visitor that, when passed to visitRanges(), builds
 // a LocalityReport.
 type criticalLocalitiesVisitor struct {
-	localityConstraints []zonepb.Constraints
+	localityConstraints []zonepb.ConstraintsConjunction
 	cfg                 *config.SystemConfig
 	storeResolver       StoreResolver
 	nodeChecker         nodeChecker
@@ -270,7 +270,7 @@ var _ rangeVisitor = &criticalLocalitiesVisitor{}
 
 func makeLocalityStatsVisitor(
 	ctx context.Context,
-	localityConstraints []zonepb.Constraints,
+	localityConstraints []zonepb.ConstraintsConjunction,
 	cfg *config.SystemConfig,
 	storeResolver StoreResolver,
 	nodeChecker nodeChecker,
@@ -360,7 +360,7 @@ func processLocalityForRange(
 	r *roachpb.RangeDescriptor,
 	zoneKey ZoneKey,
 	rep *replicationCriticalLocalitiesReportSaver,
-	c *zonepb.Constraints,
+	c *zonepb.ConstraintsConjunction,
 	cfg *config.SystemConfig,
 	nodeChecker nodeChecker,
 	storeDescs []roachpb.StoreDescriptor,

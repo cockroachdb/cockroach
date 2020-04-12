@@ -624,17 +624,17 @@ func (l *LeasePreference) Constraint(i int) cat.Constraint {
 }
 
 // ReplicaCount is part of the cat.ReplicaConstraints interface.
-func (c *Constraints) ReplicaCount() int32 {
+func (c *ConstraintsConjunction) ReplicaCount() int32 {
 	return c.NumReplicas
 }
 
 // ConstraintCount is part of the cat.ReplicaConstraints interface.
-func (c *Constraints) ConstraintCount() int {
+func (c *ConstraintsConjunction) ConstraintCount() int {
 	return len(c.Constraints)
 }
 
 // Constraint is part of the cat.ReplicaConstraints interface.
-func (c *Constraints) Constraint(i int) cat.Constraint {
+func (c *ConstraintsConjunction) Constraint(i int) cat.Constraint {
 	return &c.Constraints[i]
 }
 

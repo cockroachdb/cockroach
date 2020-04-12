@@ -142,7 +142,7 @@ const (
 // can be retried quickly as soon as new stores come online, or additional
 // space frees up.
 type allocatorError struct {
-	constraints      []zonepb.Constraints
+	constraints      []zonepb.ConstraintsConjunction
 	existingReplicas int
 	aliveStores      int
 	throttledStores  int
@@ -1243,7 +1243,7 @@ func (a Allocator) preferredLeaseholders(
 			if !ok {
 				continue
 			}
-			if constraint.SubConstraintsCheck(storeDesc, preference.Constraints) {
+			if constraint.ConjunctionsCheck(storeDesc, preference.Constraints) {
 				preferred = append(preferred, repl)
 			}
 		}
