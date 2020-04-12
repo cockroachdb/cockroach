@@ -92,7 +92,11 @@ This snapshot was built and is managed using `dep` and we manage `vendor` as a
 submodule.
 
 Use the version of `dep` in `bin` (may need to `make` first): import your new
-dependency from the Go source you're working on, then run `./bin/dep ensure`.
+dependency from the Go source you're working on, then run `./bin/dep ensure -v`.
+The tool will add the newly-imported packages into the `vendor` directory; see
+instructions below about how to commit the changes in the `vendor` submodule. To
+update an existing dependency, use `./bin/dep ensure -v -update <pkg import
+path>`.
 
 ### Working with Submodules
 
