@@ -13,6 +13,7 @@ package row
 import (
 	"bytes"
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
 
@@ -395,6 +397,40 @@ func (ru *Updater) UpdateRow(
 		if err != nil {
 			return nil, err
 		}
+		if ru.Helper.Indexes[i].Type == sqlbase.IndexDescriptor_INVERTED {
+			// Deduplicate the keys we're adding and removing if we're updating an
+			// inverted index. For example, imagine a table with an inverted index on j:
+			//
+			// a | j
+			// --+----------------
+			// 1 | {"foo": "bar"}
+			//
+			// If we update the json value to be {"foo": "bar", "baz": "qux"}, we don't
+			// want to delete the /foo/bar key and re-add it, that would be wasted work.
+			// So, we are going to remove keys from both the new and old index entry
+			// array if they're identical.
+			newIndexEntries := ru.newIndexEntries[i]
+			oldIndexEntries := ru.oldIndexEntries[i]
+			sort.Slice(oldIndexEntries, func(i, j int) bool {
+				return compareIndexEntries(oldIndexEntries[i], oldIndexEntries[j]) < 0
+			})
+			sort.Slice(newIndexEntries, func(i, j int) bool {
+				return compareIndexEntries(newIndexEntries[i], newIndexEntries[j]) < 0
+			})
+			oldLen, newLen := unique.UniquifyAcrossSlices(
+				oldIndexEntries, newIndexEntries,
+				func(l, r int) int {
+					return compareIndexEntries(oldIndexEntries[l], newIndexEntries[r])
+				},
+				func(i, j int) {
+					oldIndexEntries[i] = oldIndexEntries[j]
+				},
+				func(i, j int) {
+					newIndexEntries[i] = newIndexEntries[j]
+				})
+			ru.oldIndexEntries[i] = oldIndexEntries[:oldLen]
+			ru.newIndexEntries[i] = newIndexEntries[:newLen]
+		}
 	}
 
 	if rowPrimaryKeyChanged {
@@ -638,6 +674,15 @@ func (ru *Updater) UpdateRow(
 	}
 
 	return ru.newValues, nil
+}
+
+func compareIndexEntries(left, right sqlbase.IndexEntry) int {
+	cmp := bytes.Compare(left.Key, right.Key)
+	if cmp != 0 {
+		return cmp
+	}
+
+	return bytes.Compare(left.Value.RawBytes, right.Value.RawBytes)
 }
 
 // IsColumnOnlyUpdate returns true if this Updater is only updating column
