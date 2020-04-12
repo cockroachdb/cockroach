@@ -471,8 +471,60 @@ func (v *constraintConformanceVisitor) countRange(
 	constraints []zonepb.ConstraintsConjunction,
 ) {
 	storeDescs := v.storeResolver(r)
-	violated := processRange(ctx, storeDescs, constraints)
+	violated := getViolations(ctx, storeDescs, constraints)
 	for _, c := range violated {
 		v.report.AddViolation(key, Constraint, c)
 	}
+}
+
+// getViolations returns the list of constraints violated by a range. The range
+// is represented by the descriptors of the replicas' stores.
+func getViolations(
+	ctx context.Context,
+	storeDescs []roachpb.StoreDescriptor,
+	constraintGroups []zonepb.ConstraintsConjunction,
+) []ConstraintRepr {
+	var res []ConstraintRepr
+	// Evaluate all zone constraints for the stores (i.e. replicas) of the given range.
+	for _, constraintGroup := range constraintGroups {
+		for i, c := range constraintGroup.Constraints {
+			replicasRequiredToMatch := int(constraintGroup.NumReplicas)
+			if replicasRequiredToMatch == 0 {
+				replicasRequiredToMatch = len(storeDescs)
+			}
+			if !constraintSatisfied(c, replicasRequiredToMatch, storeDescs) {
+				res = append(res, MakeConstraintRepr(constraintGroup, i))
+			}
+		}
+	}
+	return res
+}
+
+// constraintSatisfied checks that a range (represented by its replicas' stores)
+// satisfies a constraint.
+func constraintSatisfied(
+	c zonepb.Constraint, replicasRequiredToMatch int, storeDescs []roachpb.StoreDescriptor,
+) bool {
+	passCount := 0
+	for _, storeDesc := range storeDescs {
+		// Consider stores for which we have no information to pass everything.
+		if storeDesc.StoreID == 0 {
+			passCount++
+			continue
+		}
+
+		storeMatches := true
+		match := zonepb.StoreMatchesConstraint(storeDesc, c)
+		if c.Type == zonepb.Constraint_REQUIRED && !match {
+			storeMatches = false
+		}
+		if c.Type == zonepb.Constraint_PROHIBITED && match {
+			storeMatches = false
+		}
+
+		if storeMatches {
+			passCount++
+		}
+	}
+	return replicasRequiredToMatch <= passCount
 }
