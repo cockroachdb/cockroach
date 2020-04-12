@@ -176,9 +176,7 @@ func (stats *Reporter) update(
 		return nil
 	}
 
-	if err := stats.updateLocalityConstraints(); err != nil {
-		log.Errorf(ctx, "unable to update the locality constraints: %s", err)
-	}
+	stats.updateLocalityConstraints()
 
 	allStores := stats.storePool.GetStores()
 	var getStoresFromGossip StoreResolver = func(
@@ -269,12 +267,12 @@ func (stats *Reporter) updateLatestConfig() {
 	stats.latestConfig = stats.meta1LeaseHolder.Gossip().GetSystemConfig()
 }
 
-func (stats *Reporter) updateLocalityConstraints() error {
+// updateLocalityConstraints recomputes the locality constraints.
+func (stats *Reporter) updateLocalityConstraints() {
+	// localityConstraintsByName de-duplicates localities across nodes.
 	localityConstraintsByName := make(map[string]zonepb.ConstraintsConjunction, 16)
 	for _, sd := range stats.storePool.GetStores() {
-		c := zonepb.ConstraintsConjunction{
-			Constraints: make([]zonepb.Constraint, 0),
-		}
+		var c zonepb.ConstraintsConjunction
 		for _, t := range sd.Node.Locality.Tiers {
 			c.Constraints = append(
 				c.Constraints,
@@ -286,7 +284,6 @@ func (stats *Reporter) updateLocalityConstraints() error {
 	for _, c := range localityConstraintsByName {
 		stats.localityConstraints = append(stats.localityConstraints, c)
 	}
-	return nil
 }
 
 // nodeChecker checks whether a node is to be considered alive or not.
