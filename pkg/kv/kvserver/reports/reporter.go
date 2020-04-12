@@ -267,18 +267,23 @@ func (stats *Reporter) updateLatestConfig() {
 
 // computeLocalityConstraints returns a set of synthetic constraints for all the
 // localities in the cluster. They will be used to check whether any locality is
-// critical.
+// critical. If a node has a tiered locality like "region:us-east,dc:new-york",
+// we'll return constraints {"region:us-east", "region:us-east,dc:new-york"}.
 func (stats *Reporter) computeLocalityConstraints() []zonepb.ConstraintsConjunction {
 	// localityConstraintsByName de-duplicates localities across nodes.
 	localityConstraintsByName := make(map[string]zonepb.ConstraintsConjunction, 16)
 	for _, sd := range stats.storePool.GetStores() {
-		var c zonepb.ConstraintsConjunction
 		// For each tier t, return a constraint covering all the higher-order tiers
 		// up to and including t.
-		for _, t := range sd.Node.Locality.Tiers {
-			c.Constraints = append(
-				c.Constraints,
-				zonepb.Constraint{Type: zonepb.Constraint_REQUIRED, Key: t.Key, Value: t.Value})
+		for i := range sd.Node.Locality.Tiers {
+			c := zonepb.ConstraintsConjunction{
+				Constraints: make([]zonepb.Constraint, 0, i+1),
+			}
+			for _, highTier := range sd.Node.Locality.Tiers[:i+1] {
+				c.Constraints = append(c.Constraints, zonepb.Constraint{
+					Type: zonepb.Constraint_REQUIRED, Key: highTier.Key, Value: highTier.Value,
+				})
+			}
 			localityConstraintsByName[c.String()] = c
 		}
 	}
