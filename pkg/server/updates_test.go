@@ -558,7 +558,7 @@ func TestReportUsage(t *testing.T) {
 			if a, e := zone.GC.TTLSeconds, int32(1); a != e {
 				t.Errorf("expected zone %d GC.TTLSeconds = %d; got %d", id, e, a)
 			}
-			if a, e := zone.Constraints, []zonepb.Constraints{
+			if a, e := zone.Constraints, []zonepb.ConstraintsConjunction{
 				{
 					Constraints: []zonepb.Constraint{
 						{Key: hashedZone, Value: hashedElemName, Type: zonepb.Constraint_REQUIRED},
@@ -570,7 +570,7 @@ func TestReportUsage(t *testing.T) {
 			}
 		}
 		if id == keys.SystemDatabaseID {
-			if a, e := zone.Constraints, []zonepb.Constraints{
+			if a, e := zone.Constraints, []zonepb.ConstraintsConjunction{
 				{
 					NumReplicas: 1,
 					Constraints: []zonepb.Constraint{{Value: hashedElemName, Type: zonepb.Constraint_REQUIRED}},
