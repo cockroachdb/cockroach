@@ -345,7 +345,7 @@ func (v *criticalLocalitiesVisitor) countRange(
 	stores := v.storeResolver(r)
 	for _, c := range v.localityConstraints {
 		if err := processLocalityForRange(
-			ctx, r, zoneKey, v.report, &c, v.cfg, v.nodeChecker, stores,
+			ctx, r, zoneKey, v.report, &c, v.nodeChecker, stores,
 		); err != nil {
 			return err
 		}
@@ -361,7 +361,6 @@ func processLocalityForRange(
 	zoneKey ZoneKey,
 	rep *replicationCriticalLocalitiesReportSaver,
 	c *zonepb.ConstraintsConjunction,
-	cfg *config.SystemConfig,
 	nodeChecker nodeChecker,
 	storeDescs []roachpb.StoreDescriptor,
 ) error {
