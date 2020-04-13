@@ -13,35 +13,6 @@ else
   echo "Assuming that you've run \`gcloud auth login\` from inside the builder." >&2
 fi
 
-set -x
-
-if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
-  ssh-keygen -q -N "" -f ~/.ssh/id_rsa
-fi
-
-
-# The artifacts dir should match up with that supplied by TC.
-artifacts=$PWD/artifacts
-mkdir -p "$artifacts"
-chmod o+rwx "${artifacts}"
-
-# We do, however, want to write the stats files with datestamps before uploading
-stats_artifacts="${artifacts}"/$(date +"%%Y%%m%%d")-${TC_BUILD_ID}
-mkdir -p "${stats_artifacts}"
-chmod o+rwx "${stats_artifacts}"
-
-export PATH=$PATH:$(go env GOPATH)/bin
-
-make bin/workload bin/roachtest bin/roachprod > "${artifacts}/build.txt" 2>&1 || cat "${artifacts}/build.txt"
-
-# release-2.0 names the cockroach binary differently.
-if [[ -f cockroach-linux-2.6.32-gnu-amd64 ]]; then
-  mv cockroach-linux-2.6.32-gnu-amd64 cockroach.linux-2.6.32-gnu-amd64
-fi
-
-chmod +x cockroach.linux-2.6.32-gnu-amd64
-
-
 # NB: Teamcity has a 1300 minute timeout that, when reached,
 # kills the process without a stack trace (probably SIGKILL).
 # We'd love to see a stack trace though, so after 1200 minutes,
