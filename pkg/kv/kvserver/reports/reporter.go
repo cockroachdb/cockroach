@@ -174,7 +174,7 @@ func (stats *Reporter) update(
 		return nil
 	}
 
-	localityConstraints := stats.computeLocalityConstraints()
+	localityConstraints := stats.clusterLocalities()
 
 	allStores := stats.storePool.GetStores()
 	var getStoresFromGossip StoreResolver = func(
@@ -200,7 +200,7 @@ func (stats *Reporter) update(
 	// Create the visitors that we're going to pass to visitRanges() below.
 	constraintConfVisitor := makeConstraintConformanceVisitor(
 		ctx, stats.latestConfig, getStoresFromGossip, constraintsSaver)
-	localityStatsVisitor := makeLocalityStatsVisitor(
+	localityStatsVisitor := makeCriticalLocalitiesVisitor(
 		ctx, localityConstraints, stats.latestConfig,
 		getStoresFromGossip, isNodeLive, locSaver)
 	statusVisitor := makeReplicationStatsVisitor(
@@ -265,30 +265,25 @@ func (stats *Reporter) updateLatestConfig() {
 	stats.latestConfig = stats.meta1LeaseHolder.Gossip().GetSystemConfig()
 }
 
-// computeLocalityConstraints returns a set of synthetic constraints for all the
-// localities in the cluster. They will be used to check whether any locality is
-// critical. If a node has a tiered locality like "region:us-east,dc:new-york",
-// we'll return constraints {"region:us-east", "region:us-east,dc:new-york"}.
-func (stats *Reporter) computeLocalityConstraints() []zonepb.ConstraintsConjunction {
+// clusterLocalities returns all the localities in the cluster. Localities of
+// all granularities are returned: if a node has a tiered locality like
+// "region:us-east,dc:new-york", we'll return ["region:us-east",
+// "region:us-east,dc:new-york"].
+func (stats *Reporter) clusterLocalities() []roachpb.Locality {
 	// localityConstraintsByName de-duplicates localities across nodes.
-	localityConstraintsByName := make(map[string]zonepb.ConstraintsConjunction, 16)
+	localityConstraintsByName := make(map[string]roachpb.Locality, 16)
 	for _, sd := range stats.storePool.GetStores() {
 		// For each tier t, return a constraint covering all the higher-order tiers
 		// up to and including t.
 		for i := range sd.Node.Locality.Tiers {
-			c := zonepb.ConstraintsConjunction{
-				Constraints: make([]zonepb.Constraint, i+1),
-			}
+			loc := roachpb.Locality{Tiers: make([]roachpb.Tier, i+1)}
 			for j := 0; j <= i; j++ {
-				highTier := sd.Node.Locality.Tiers[j]
-				c.Constraints[j] = zonepb.Constraint{
-					Type: zonepb.Constraint_REQUIRED, Key: highTier.Key, Value: highTier.Value,
-				}
+				loc.Tiers[j] = sd.Node.Locality.Tiers[j]
 			}
-			localityConstraintsByName[c.String()] = c
+			localityConstraintsByName[loc.String()] = loc
 		}
 	}
-	res := make([]zonepb.ConstraintsConjunction, len(localityConstraintsByName))
+	res := make([]roachpb.Locality, len(localityConstraintsByName))
 	i := 0
 	for _, c := range localityConstraintsByName {
 		res[i] = c

@@ -397,7 +397,8 @@ func (v *replicationStatsVisitor) countRange(
 ) {
 	// This functions handles regular, or joint-consensus replica groups. In the
 	// joint-consensus case, we'll independently consider the health of the
-	// outgoing group ("old") and the incoming group ("new").
+	// outgoing group ("old") and the incoming group ("new"). In the regular case,
+	// the two groups will be identical.
 
 	predVoterOldGroup := func(rDesc roachpb.ReplicaDescriptor) bool {
 		switch rDesc.GetType() {

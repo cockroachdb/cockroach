@@ -497,6 +497,22 @@ func computeReplicationStatsReport(
 	return v.report, err
 }
 
+// computeCriticalLocalitiesReport iterates through all the ranges and generates
+// the critical localities report.
+func computeCriticalLocalitiesReport(
+	ctx context.Context,
+	allLocalities []roachpb.Locality,
+	rangeStore RangeIterator,
+	checker nodeChecker,
+	cfg *config.SystemConfig,
+	storeResolver StoreResolver,
+) (*replicationCriticalLocalitiesReportSaver, error) {
+	saver := makeReplicationCriticalLocalitiesReportSaver()
+	v := makeCriticalLocalitiesVisitor(ctx, allLocalities, cfg, storeResolver, checker, &saver)
+	err := visitRanges(ctx, rangeStore, cfg, &v)
+	return v.report, err
+}
+
 func TestZoneChecker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
