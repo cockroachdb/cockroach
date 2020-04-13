@@ -2317,7 +2317,7 @@ func (c *CustomFuncs) ExprPairForSplitDisjunction(or opt.ScalarExpr) ExprPair {
 
 		// If the current expression ColSet matches leftColSet, add the expr to
 		// the left group. Otherwise, add it to the right group.
-		if c.ColsAreEqual(leftColSet, cols) {
+		if leftColSet.Equals(cols) {
 			leftExprs = append(leftExprs, expr)
 		} else {
 			rightExprs = append(rightExprs, expr)
