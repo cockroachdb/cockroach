@@ -20,9 +20,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-func registerSchemaChangeKV(r *testRegistry) {
+func registerSchemaChangeDuringKV(r *testRegistry) {
 	r.Add(testSpec{
-		Name:    `schemachange/mixed/kv`,
+		Name:    `schemachange/during/kv`,
 		Owner:   OwnerSQLSchema,
 		Cluster: makeClusterSpec(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -402,13 +402,13 @@ func makeSchemaChangeBulkIngestTest(numNodes, numRows int, length time.Duration)
 	}
 }
 
-func registerMixedSchemaChangesTPCC1000(r *testRegistry) {
-	r.Add(makeMixedSchemaChanges(makeClusterSpec(5, cpu(16)), 1000, time.Hour*3))
+func registerSchemaChangeDuringTPCC1000(r *testRegistry) {
+	r.Add(makeSchemaChangeDuringTPCC(makeClusterSpec(5, cpu(16)), 1000, time.Hour*3))
 }
 
-func makeMixedSchemaChanges(spec clusterSpec, warehouses int, length time.Duration) testSpec {
+func makeSchemaChangeDuringTPCC(spec clusterSpec, warehouses int, length time.Duration) testSpec {
 	return testSpec{
-		Name:    "schemachange/mixed/tpcc",
+		Name:    "schemachange/during/tpcc",
 		Owner:   OwnerSQLSchema,
 		Cluster: spec,
 		Timeout: length * 3,
@@ -420,14 +420,14 @@ func makeMixedSchemaChanges(spec clusterSpec, warehouses int, length time.Durati
 				Extra: fmt.Sprintf("--wait=false --tolerate-errors --workers=%d", warehouses),
 				During: func(ctx context.Context) error {
 					if t.IsBuildVersion(`v19.2.0`) {
-						if err := runAndLogStmts(ctx, t, c, "mixed-schema-changes-19.2", []string{
+						if err := runAndLogStmts(ctx, t, c, "during-schema-changes-19.2", []string{
 							// CREATE TABLE AS with a specified primary key was added in 19.2.
 							`CREATE TABLE tpcc.orderpks (o_w_id, o_d_id, o_id, PRIMARY KEY(o_w_id, o_d_id, o_id)) AS select o_w_id, o_d_id, o_id FROM tpcc.order;`,
 						}); err != nil {
 							return err
 						}
 					} else {
-						if err := runAndLogStmts(ctx, t, c, "mixed-schema-changes-19.1", []string{
+						if err := runAndLogStmts(ctx, t, c, "during-schema-changes-19.1", []string{
 							`CREATE TABLE tpcc.orderpks (o_w_id INT, o_d_id INT, o_id INT, PRIMARY KEY(o_w_id, o_d_id, o_id));`,
 							// We can't populate the table with CREATE TABLE AS, so just
 							// insert the rows. The limit exists to reduce contention.
@@ -436,7 +436,7 @@ func makeMixedSchemaChanges(spec clusterSpec, warehouses int, length time.Durati
 							return err
 						}
 					}
-					return runAndLogStmts(ctx, t, c, "mixed-schema-changes", []string{
+					return runAndLogStmts(ctx, t, c, "during-schema-changes", []string{
 						`CREATE INDEX ON tpcc.order (o_carrier_id);`,
 
 						`CREATE TABLE tpcc.customerpks (c_w_id INT, c_d_id INT, c_id INT, FOREIGN KEY (c_w_id, c_d_id, c_id) REFERENCES tpcc.customer (c_w_id, c_d_id, c_id));`,
