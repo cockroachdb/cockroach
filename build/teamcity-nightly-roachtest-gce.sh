@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Note that when this script is called, the cockroach binary to be tested
-# already exist in the current directory.
+# already exists in the current directory.
 
 if [[ "$GOOGLE_EPHEMERAL_CREDENTIALS" ]]; then
   echo "$GOOGLE_EPHEMERAL_CREDENTIALS" > creds.json
@@ -25,6 +25,11 @@ artifacts=$PWD/artifacts
 mkdir -p "$artifacts"
 chmod o+rwx "${artifacts}"
 
+# We do, however, want to write the stats files with datestamps before uploading
+stats_artifacts="${artifacts}"/$(date +"%%Y%%m%%d")-${TC_BUILD_ID}
+mkdir -p "${stats_artifacts}"
+chmod o+rwx "${stats_artifacts}"
+
 export PATH=$PATH:$(go env GOPATH)/bin
 
 build_tag=$(git describe --abbrev=0 --tags --match=v[0-9]*)
@@ -42,9 +47,9 @@ fi
 chmod +x cockroach.linux-2.6.32-gnu-amd64
 
 
-# NB: Teamcity has a 1080 minute timeout that, when reached,
+# NB: Teamcity has a 1300 minute timeout that, when reached,
 # kills the process without a stack trace (probably SIGKILL).
-# We'd love to see a stack trace though, so after 1000 minutes,
+# We'd love to see a stack trace though, so after 1200 minutes,
 # kill with SIGINT which will allow roachtest to fail tests and
 # cleanup.
 #
@@ -52,7 +57,7 @@ chmod +x cockroach.linux-2.6.32-gnu-amd64
 # by default. This reserves us-east1-b (the roachprod default zone) for use
 # by manually created clusters.
 exit_status=0
-if ! timeout -s INT $((1000*60)) bin/roachtest run \
+if ! timeout -s INT $((1200*60)) bin/roachtest run \
   --count="${COUNT-1}" \
   --debug="${DEBUG-false}" \
   --build-tag="${build_tag}" \
@@ -62,7 +67,7 @@ if ! timeout -s INT $((1000*60)) bin/roachtest run \
   --cockroach="$PWD/cockroach.linux-2.6.32-gnu-amd64" \
   --roachprod="$PWD/bin/roachprod" \
   --workload="$PWD/bin/workload" \
-  --artifacts="$artifacts" \
+  --artifacts="$stats_artifacts" \
   --parallelism=16 \
   --cpu-quota=1024 \
   --teamcity=true \
