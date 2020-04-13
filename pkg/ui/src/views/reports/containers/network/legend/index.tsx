@@ -11,6 +11,7 @@
 import { Divider, Icon, Tooltip } from "antd";
 import { Chip } from "oss/src/views/app/components/chip";
 import Modal from "oss/src/views/app/components/modal";
+import { getDisplayName } from "src/redux/nodes";
 import React from "react";
 import { NoConnection } from "..";
 import "./legend.styl";
@@ -98,12 +99,12 @@ export const Legend: React.SFC <ILegendProps> = ({
               {noConnections.map(value => (
                 <tr className="noConnections__table--item">
                   <td>
-                    <span className="noConnections__table--item__bold">{`N${value.from.nodeID}: `}</span>
+                    <span className="noConnections__table--item__bold">{getDisplayName(value)}</span>
                     <span className="noConnections__table--item__normal">{value.from.address}</span>
                   </td>
                   <td><span className="noConnections__table--item__normal">{value.from.locality}</span></td>
                   <td>
-                    <span className="noConnections__table--item__bold">{`N${value.to.nodeID}: `}</span>
+                    <span className="noConnections__table--item__bold">{getDisplayName(value)}</span>
                     <span className="noConnections__table--item__normal">{value.to.address}</span>
                   </td>
                   <td><span className="noConnections__table--item__normal">{value.to.locality}</span></td>

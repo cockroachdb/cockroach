@@ -14,6 +14,7 @@ import { createSelector } from "reselect";
 import * as protos from "src/js/protos";
 import { AdminUIState } from "./state";
 import { Pick } from "src/util/pick";
+import { NoConnection } from "src/views/reports/containers/network";
 import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
 import { nullOfReturnType } from "src/util/types";
 
@@ -233,11 +234,20 @@ export function nodeCapacityStats(n: INodeStatus): CapacityStats {
   };
 }
 
-export function getDisplayName(node: INodeStatus, livenessStatus = LivenessStatus.LIVE) {
+export function getDisplayName(node: INodeStatus | NoConnection, livenessStatus = LivenessStatus.LIVE) {
   const decommissionedString = livenessStatus === LivenessStatus.DECOMMISSIONED
     ? "[decommissioned] "
     : "";
+
+  if (isNoConnection(node)) {
+    return `${decommissionedString} (n${node.from.nodeID})`;
+  }
+  // as the only other type possible right now is INodeStatus we don't have a type guard for that
   return `${decommissionedString}${node.desc.address.address_field} (n${node.desc.node_id})`;
+}
+
+function isNoConnection(node: INodeStatus | NoConnection): node is NoConnection {
+  return (node as NoConnection).to !== undefined && (node as NoConnection).from !== undefined;
 }
 
 // nodeDisplayNameByIDSelector provides a unique, human-readable display name
