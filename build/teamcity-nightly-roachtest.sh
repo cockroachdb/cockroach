@@ -3,7 +3,7 @@
 # appropriate secrets for the ${CLOUD} parameter (along with other things,
 # apologies, you're going to have to dig around for them below or even better
 # yet, look at the job).
-t
+
 # Note that when this script is called, the cockroach binary to be tested
 # already exists in the current directory.
 
@@ -58,9 +58,32 @@ function upload_stats {
 # Upload any stats.json we can find, no matter what happens.
 trap upload_stats EXIT
 
-# NB: Teamcity has a 1300 minute timeout that, when reached,
-# kills the process without a stack trace (probably SIGKILL).
-# We'd love to see a stack trace though, so after 1200 minutes,
-# kill with SIGINT which will allow roachtest to fail tests and
-# cleanup.
-timeout -s INT $((1200*60)) "build/teamcity-nightly-roachtest-${CLOUD}.sh"
+ARTIFACTS="${stats_artifacts}"
+PARALLELISM=16
+CPUQUOTA=1024
+ZONES=""
+case "${CLOUD}" in
+  gce)
+    # We specify --zones below so that nodes are created in us-central1-b by
+    # default. This reserves us-east1-b (the roachprod default zone) for use by
+    # manually created clusters.
+    ZONES="us-central1-b,us-west1-b,europe-west2-b"
+    ;;
+  aws)
+    PARALLELISM=3
+    CPUQUOTA=384
+    if [ -z "${TESTS}" ]; then
+      TESTS="kv(0|95)|ycsb|tpcc/(headroom/n4cpu16)|tpccbench/(nodes=3/cpu=16)"
+    fi
+    ;;
+  *)
+    echo "unknown cloud ${CLOUD}"
+    exit 1
+    ;;
+esac
+
+# Teamcity has a 1300 minute timeout that, when reached, kills the process
+# without a stack trace (probably SIGKILL).  We'd love to see a stack trace
+# though, so after 1200 minutes, kill with SIGINT which will allow roachtest to
+# fail tests and cleanup.
+timeout -s INT $((1200*60)) "build/teamcity-nightly-roachtest-invoke.sh"
