@@ -486,3 +486,22 @@ FROM [SHOW STATISTICS FOR TABLE arr] ORDER BY statistics_name, column_names::STR
 statistics_name  column_names  row_count  distinct_count  null_count
 arr_stats        {rowid}       4          4               0
 arr_stats        {x}           4          3               1
+
+# Regression test for #46964. Do not try to create a histogram on the array column.
+statement ok
+CREATE STATISTICS arr_stats_x ON x FROM arr
+
+query TTIIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  distinct_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE arr]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+arr_stats        {rowid}       4          4               0           true
+arr_stats_x      {x}           4          3               1           false
