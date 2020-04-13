@@ -218,86 +218,93 @@ CREATE TABLE crdb_internal.tables (
   audit_mode               STRING NOT NULL,
   schema_name              STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
-		if err != nil {
-			return err
-		}
-		dbNames := make(map[sqlbase.ID]string)
-		// Record database descriptors for name lookups.
-		for _, desc := range descs {
-			db, ok := desc.(*sqlbase.DatabaseDescriptor)
-			if ok {
-				dbNames[db.ID] = db.Name
-			}
-		}
-
-		addDesc := func(table *sqlbase.TableDescriptor, dbName tree.Datum, scName string) error {
-			leaseNodeDatum := tree.DNull
-			leaseExpDatum := tree.DNull
-			if table.Lease != nil {
-				leaseNodeDatum = tree.NewDInt(tree.DInt(int64(table.Lease.NodeID)))
-				leaseExpDatum = tree.MakeDTimestamp(
-					timeutil.Unix(0, table.Lease.ExpirationTime), time.Nanosecond,
-				)
-			}
-			dropTimeDatum := tree.DNull
-			if table.DropTime != 0 {
-				dropTimeDatum = tree.MakeDTimestamp(
-					timeutil.Unix(0, table.DropTime), time.Nanosecond,
-				)
-			}
-			return addRow(
-				tree.NewDInt(tree.DInt(int64(table.ID))),
-				tree.NewDInt(tree.DInt(int64(table.GetParentID()))),
-				tree.NewDString(table.Name),
-				dbName,
-				tree.NewDInt(tree.DInt(int64(table.Version))),
-				tree.TimestampToInexactDTimestamp(table.ModificationTime),
-				tree.TimestampToDecimal(table.ModificationTime),
-				tree.NewDString(table.FormatVersion.String()),
-				tree.NewDString(table.State.String()),
-				leaseNodeDatum,
-				leaseExpDatum,
-				dropTimeDatum,
-				tree.NewDString(table.AuditMode.String()),
-				tree.NewDString(scName))
-		}
-
-		// Note: we do not use forEachTableDesc() here because we want to
-		// include added and dropped descriptors.
-		for _, desc := range descs {
-			table, ok := desc.(*sqlbase.TableDescriptor)
-			if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
-				continue
-			}
-			dbName := dbNames[table.GetParentID()]
-			if dbName == "" {
-				// The parent database was deleted. This is possible e.g. when
-				// a database is dropped with CASCADE, and someone queries
-				// this virtual table before the dropped table descriptors are
-				// effectively deleted.
-				dbName = fmt.Sprintf("[%d]", table.GetParentID())
-			}
-			if err := addDesc(table, tree.NewDString(dbName), "public"); err != nil {
+	generator: func(ctx context.Context, p *planner, dbDesc *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, 14)
+		worker := func(pusher rowPusher) error {
+			descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
+			if err != nil {
 				return err
 			}
-		}
+			dbNames := make(map[sqlbase.ID]string)
+			// Record database descriptors for name lookups.
+			for _, desc := range descs {
+				db, ok := desc.(*sqlbase.DatabaseDescriptor)
+				if ok {
+					dbNames[db.ID] = db.Name
+				}
+			}
 
-		// Also add all the virtual descriptors.
-		vt := p.getVirtualTabler()
-		vEntries := vt.getEntries()
-		for _, virtSchemaName := range vt.getSchemaNames() {
-			e := vEntries[virtSchemaName]
-			for _, tName := range e.orderedDefNames {
-				vTableEntry := e.defs[tName]
-				if err := addDesc(vTableEntry.desc, tree.DNull, virtSchemaName); err != nil {
+			addDesc := func(table *sqlbase.TableDescriptor, dbName tree.Datum, scName string) error {
+				leaseNodeDatum := tree.DNull
+				leaseExpDatum := tree.DNull
+				if table.Lease != nil {
+					leaseNodeDatum = tree.NewDInt(tree.DInt(int64(table.Lease.NodeID)))
+					leaseExpDatum = tree.MakeDTimestamp(
+						timeutil.Unix(0, table.Lease.ExpirationTime), time.Nanosecond,
+					)
+				}
+				dropTimeDatum := tree.DNull
+				if table.DropTime != 0 {
+					dropTimeDatum = tree.MakeDTimestamp(
+						timeutil.Unix(0, table.DropTime), time.Nanosecond,
+					)
+				}
+				row = row[:0]
+				row = append(row,
+					tree.NewDInt(tree.DInt(int64(table.ID))),
+					tree.NewDInt(tree.DInt(int64(table.GetParentID()))),
+					tree.NewDString(table.Name),
+					dbName,
+					tree.NewDInt(tree.DInt(int64(table.Version))),
+					tree.TimestampToInexactDTimestamp(table.ModificationTime),
+					tree.TimestampToDecimal(table.ModificationTime),
+					tree.NewDString(table.FormatVersion.String()),
+					tree.NewDString(table.State.String()),
+					leaseNodeDatum,
+					leaseExpDatum,
+					dropTimeDatum,
+					tree.NewDString(table.AuditMode.String()),
+					tree.NewDString(scName),
+				)
+				return pusher.pushRow(row...)
+			}
+
+			// Note: we do not use forEachTableDesc() here because we want to
+			// include added and dropped descriptors.
+			for _, desc := range descs {
+				table, ok := desc.(*sqlbase.TableDescriptor)
+				if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
+					continue
+				}
+				dbName := dbNames[table.GetParentID()]
+				if dbName == "" {
+					// The parent database was deleted. This is possible e.g. when
+					// a database is dropped with CASCADE, and someone queries
+					// this virtual table before the dropped table descriptors are
+					// effectively deleted.
+					dbName = fmt.Sprintf("[%d]", table.GetParentID())
+				}
+				if err := addDesc(table, tree.NewDString(dbName), "public"); err != nil {
 					return err
 				}
 			}
-		}
 
-		return nil
+			// Also add all the virtual descriptors.
+			vt := p.getVirtualTabler()
+			vEntries := vt.getEntries()
+			for _, virtSchemaName := range vt.getSchemaNames() {
+				e := vEntries[virtSchemaName]
+				for _, tName := range e.orderedDefNames {
+					vTableEntry := e.defs[tName]
+					if err := addDesc(vTableEntry.desc, tree.DNull, virtSchemaName); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -456,11 +463,11 @@ CREATE TABLE crdb_internal.jobs (
 	coordinator_id     		INT
 )`,
 	comment: `decoded job metadata from system.jobs (KV scan)`,
-	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
+	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
 		currentUser := p.SessionData().User
 		isAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// Beware: we're querying system.jobs as root; we need to be careful to filter
@@ -471,7 +478,7 @@ CREATE TABLE crdb_internal.jobs (
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			query)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// Attempt to account for the memory of the retrieved rows and the data
@@ -491,7 +498,7 @@ CREATE TABLE crdb_internal.jobs (
 			}
 		}
 		if err := ba.Grow(ctx, totalMem); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// We'll reuse this container on each loop.
@@ -598,7 +605,7 @@ CREATE TABLE crdb_internal.jobs (
 				)
 				return container, nil
 			}
-		}, nil
+		}, nil, nil
 	},
 }
 
@@ -1587,32 +1594,40 @@ CREATE TABLE crdb_internal.table_columns (
   hidden           BOOL NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
-				tableID := tree.NewDInt(tree.DInt(table.ID))
-				tableName := tree.NewDString(table.Name)
-				for i := range table.Columns {
-					col := &table.Columns[i]
-					defStr := tree.DNull
-					if col.DefaultExpr != nil {
-						defStr = tree.NewDString(*col.DefaultExpr)
+	generator: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, 8)
+		worker := func(pusher rowPusher) error {
+			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
+				func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
+					tableID := tree.NewDInt(tree.DInt(table.ID))
+					tableName := tree.NewDString(table.Name)
+					for i := range table.Columns {
+						col := &table.Columns[i]
+						defStr := tree.DNull
+						if col.DefaultExpr != nil {
+							defStr = tree.NewDString(*col.DefaultExpr)
+						}
+						row = row[:0]
+						row = append(row,
+							tableID,
+							tableName,
+							tree.NewDInt(tree.DInt(col.ID)),
+							tree.NewDString(col.Name),
+							tree.NewDString(col.Type.DebugString()),
+							tree.MakeDBool(tree.DBool(col.Nullable)),
+							defStr,
+							tree.MakeDBool(tree.DBool(col.Hidden)),
+						)
+						if err := pusher.pushRow(row...); err != nil {
+							return err
+						}
 					}
-					if err := addRow(
-						tableID,
-						tableName,
-						tree.NewDInt(tree.DInt(col.ID)),
-						tree.NewDString(col.Name),
-						tree.NewDString(col.Type.DebugString()),
-						tree.MakeDBool(tree.DBool(col.Nullable)),
-						defStr,
-						tree.MakeDBool(tree.DBool(col.Hidden)),
-					); err != nil {
-						return err
-					}
-				}
-				return nil
-			})
+					return nil
+				},
+			)
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -1632,39 +1647,49 @@ CREATE TABLE crdb_internal.table_indexes (
   is_inverted      BOOL NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	generator: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
 		primary := tree.NewDString("primary")
 		secondary := tree.NewDString("secondary")
-		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
-				tableID := tree.NewDInt(tree.DInt(table.ID))
-				tableName := tree.NewDString(table.Name)
-				if err := addRow(
-					tableID,
-					tableName,
-					tree.NewDInt(tree.DInt(table.PrimaryIndex.ID)),
-					tree.NewDString(table.PrimaryIndex.Name),
-					primary,
-					tree.MakeDBool(tree.DBool(table.PrimaryIndex.Unique)),
-					tree.MakeDBool(table.PrimaryIndex.Type == sqlbase.IndexDescriptor_INVERTED),
-				); err != nil {
-					return err
-				}
-				for _, idx := range table.Indexes {
-					if err := addRow(
+		row := make(tree.Datums, 7)
+		worker := func(pusher rowPusher) error {
+			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
+				func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
+					tableID := tree.NewDInt(tree.DInt(table.ID))
+					tableName := tree.NewDString(table.Name)
+					row = row[:0]
+					row = append(row,
 						tableID,
 						tableName,
-						tree.NewDInt(tree.DInt(idx.ID)),
-						tree.NewDString(idx.Name),
-						secondary,
-						tree.MakeDBool(tree.DBool(idx.Unique)),
-						tree.MakeDBool(idx.Type == sqlbase.IndexDescriptor_INVERTED),
-					); err != nil {
+						tree.NewDInt(tree.DInt(table.PrimaryIndex.ID)),
+						tree.NewDString(table.PrimaryIndex.Name),
+						primary,
+						tree.MakeDBool(tree.DBool(table.PrimaryIndex.Unique)),
+						tree.MakeDBool(table.PrimaryIndex.Type == sqlbase.IndexDescriptor_INVERTED),
+					)
+					if err := pusher.pushRow(row...); err != nil {
 						return err
 					}
-				}
-				return nil
-			})
+					for _, idx := range table.Indexes {
+						row = row[:0]
+						row = append(row,
+							tableID,
+							tableName,
+							tree.NewDInt(tree.DInt(idx.ID)),
+							tree.NewDString(idx.Name),
+							secondary,
+							tree.MakeDBool(tree.DBool(idx.Unique)),
+							tree.MakeDBool(idx.Type == sqlbase.IndexDescriptor_INVERTED),
+						)
+						if err := pusher.pushRow(row...); err != nil {
+							return err
+						}
+					}
+					return nil
+				},
+			)
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -2102,13 +2127,13 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 	split_enforced_until TIMESTAMP
 )
 `,
-	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
+	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.ranges_no_leases"); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		// TODO(knz): maybe this could use internalLookupCtx.
 		dbNames := make(map[uint64]string)
@@ -2134,13 +2159,13 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			EndKey: keys.MaxKey,
 		})
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// Map node descriptors to localities
 		descriptors, err := getAllNodeDescriptors(p)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		nodeIDToLocality := make(map[roachpb.NodeID]roachpb.Locality)
 		for _, desc := range descriptors {
@@ -2226,7 +2251,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				learnersArr,
 				splitEnforcedUntil,
 			}, nil
-		}, nil
+		}, nil, nil
 	},
 }
 
@@ -2971,18 +2996,22 @@ CREATE TABLE crdb_internal.partitions (
 	subzone_id INT -- references a subzone id in the crdb_internal.zones table
 )
 	`,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	generator: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
 		dbName := ""
 		if dbContext != nil {
 			dbName = dbContext.Name
 		}
-		return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
-			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
-				return table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
-					return addPartitioningRows(ctx, p, dbName, table, index, &index.Partitioning,
-						tree.DNull /* parentName */, 0 /* colOffset */, addRow)
+		worker := func(pusher rowPusher) error {
+			return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
+				func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
+					return table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+						return addPartitioningRows(ctx, p, dbName, table, index, &index.Partitioning,
+							tree.DNull /* parentName */, 0 /* colOffset */, pusher.pushRow)
+					})
 				})
-			})
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
