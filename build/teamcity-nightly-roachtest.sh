@@ -43,4 +43,24 @@ else
   echo "Assuming that you've run \`gcloud auth login\` from inside the builder." >&2
 fi
 
-. "build/teamcity-nightly-roachtest-${CLOUD}.sh"
+function upload_stats {
+  # Upload any stats.json files to the cockroach-nightly bucket.
+  if [[ "${TC_BUILD_BRANCH}" == "master" ]]; then
+      bucket="cockroach-nightly-${CLOUD}"
+      if [[ "${CLOUD}" == "gce" ]]; then
+	  # GCE, having been there first, gets an exemption.
+          bucket="cockroach-nightly"
+      fi
+      find ${artifacts#${PWD}/} -name stats.json -exec gsutil cp "${file}" "gs://${bucket}/${file}" ';'
+  fi
+}
+
+# Upload any stats.json we can find, no matter what happens.
+trap upload_stats EXIT
+
+# NB: Teamcity has a 1300 minute timeout that, when reached,
+# kills the process without a stack trace (probably SIGKILL).
+# We'd love to see a stack trace though, so after 1200 minutes,
+# kill with SIGINT which will allow roachtest to fail tests and
+# cleanup.
+timeout -s INT $((1200*60)) "build/teamcity-nightly-roachtest-${CLOUD}.sh"
