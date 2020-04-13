@@ -799,7 +799,9 @@ func TestServerJoinSettings(t *testing.T) {
 			t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
 		}
 
-		extraClientFlagInit()
+		if err := extraClientFlagInit(); err != nil {
+			t.Fatal(err)
+		}
 
 		var actual []string
 		myHostname, _ := os.Hostname()
@@ -861,7 +863,9 @@ func TestClientConnSettings(t *testing.T) {
 			t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
 		}
 
-		extraClientFlagInit()
+		if err := extraClientFlagInit(); err != nil {
+			t.Fatal(err)
+		}
 		if td.expectedAddr != serverCfg.Addr {
 			t.Errorf("%d. serverCfg.Addr expected '%s', but got '%s'. td.args was '%#v'.",
 				i, td.expectedAddr, serverCfg.Addr, td.args)
