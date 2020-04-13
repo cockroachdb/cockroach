@@ -154,13 +154,13 @@ subtest non_backfill_schema_changes
 statement ok
 CREATE TABLE IF NOT EXISTS t (a INT PRIMARY KEY, b INT, INDEX (b), FAMILY (a, b))
 
+subtest regression_47110
+
 statement error schema change cannot be initiated in this version until the version upgrade is finalized
 ALTER TABLE t RENAME COLUMN b TO c
 
 statement error schema change cannot be initiated in this version until the version upgrade is finalized
 ALTER TABLE t RENAME TO s
-
-subtest regression_47110
 
 statement error type TIMETZ is not supported until version upgrade is finalized
 CREATE TABLE regression_47110(a TIMETZ)
@@ -173,3 +173,34 @@ ALTER TABLE regression_47110 ADD COLUMN b TIMETZ
 
 statement error type TIMETZ is not supported until version upgrade is finalized
 ALTER TABLE regression_47110 ALTER a SET DATA TYPE timetz
+
+# test precision as well
+
+# default statements ok
+statement ok
+CREATE TABLE regression_47110_tt(tt_ok TIMESTAMP)
+
+statement ok
+CREATE TABLE regression_47110_ttz(ttz_ok TIMESTAMPTZ)
+
+statement ok
+CREATE TABLE regression_47110_t(ttz_ok TIME)
+
+statement ok
+CREATE TABLE regression_47110_interval_ok(interval_ok INTERVAL)
+
+# but precision is not ok
+statement error type TIMESTAMP\(3\) is not supported until version upgrade is finalized
+CREATE TABLE regression_47110_not_ok(tt_not_ok TIMESTAMP(3))
+
+statement error type TIMESTAMPTZ\(3\) is not supported until version upgrade is finalized
+CREATE TABLE regression_47110_not_ok(ttz_not_ok TIMESTAMPTZ(3))
+
+statement error type TIME\(3\) is not supported until version upgrade is finalized
+CREATE TABLE regression_47110_not_ok(t_not_ok TIME(3))
+
+statement error type INTERVAL\(3\) is not supported until version upgrade is finalized
+CREATE TABLE regression_47110_not_ok(interval_not_ok INTERVAL(3))
+
+statement error type INTERVAL DAY is not supported until version upgrade is finalized
+CREATE TABLE regression_47110_not_ok(interval_not_ok INTERVAL DAY)
