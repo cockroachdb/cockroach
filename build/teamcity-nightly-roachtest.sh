@@ -10,7 +10,7 @@
 set -euo pipefail
 
 if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
-  ssh-keygen -q -N "" -f ~/.ssh/id_rsa
+  ssh-keygen -q -C "roachtest-nightly $(date)" -N "" -f ~/.ssh/id_rsa
 fi
 
 # The artifacts dir should match up with that supplied by TC.
