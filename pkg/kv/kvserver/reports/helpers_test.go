@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // computeConstraintConformanceReport iterates through all the ranges and
@@ -35,6 +36,21 @@ func computeReplicationStatsReport(
 	ctx context.Context, rangeStore RangeIterator, checker nodeChecker, cfg *config.SystemConfig,
 ) (RangeReport, error) {
 	v := makeReplicationStatsVisitor(ctx, cfg, checker)
+	err := visitRanges(ctx, rangeStore, cfg, &v)
+	return v.Report(), err
+}
+
+// computeCriticalLocalitiesReport iterates through all the ranges and generates
+// the critical localities report.
+func computeCriticalLocalitiesReport(
+	ctx context.Context,
+	nodeLocalities map[roachpb.NodeID]roachpb.Locality,
+	rangeStore RangeIterator,
+	checker nodeChecker,
+	cfg *config.SystemConfig,
+	storeResolver StoreResolver,
+) (LocalityReport, error) {
+	v := makeCriticalLocalitiesVisitor(ctx, nodeLocalities, cfg, storeResolver, checker)
 	err := visitRanges(ctx, rangeStore, cfg, &v)
 	return v.Report(), err
 }
