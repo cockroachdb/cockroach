@@ -991,7 +991,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> opt_changefeed_sink
 
 %type <str> explain_option_name
-%type <[]string> explain_option_list
+%type <[]string> explain_option_list opt_enum_val_list enum_val_list
 
 %type <*types.T> typename simple_typename const_typename
 %type <bool> opt_timezone
@@ -5418,7 +5418,14 @@ create_type_stmt:
   // Record/Composite types.
   CREATE TYPE type_name AS '(' error      { return unimplementedWithIssue(sqllex, 27792) }
   // Enum types.
-| CREATE TYPE type_name AS ENUM '(' error { return unimplementedWithIssue(sqllex, 24873) }
+| CREATE TYPE type_name AS ENUM '(' opt_enum_val_list ')'
+  {
+    $$.val = &tree.CreateType{
+      TypeName: $3.unresolvedObjectName(),
+      Variety: tree.Enum,
+      EnumLabels: $7.strs(),
+    }
+  }
   // Range types.
 | CREATE TYPE type_name AS RANGE error    { return unimplementedWithIssue(sqllex, 27791) }
   // Base (primitive) types.
@@ -5427,6 +5434,26 @@ create_type_stmt:
 | CREATE TYPE type_name                   { return unimplementedWithIssueDetail(sqllex, 27793, "shell") }
   // Domain types.
 | CREATE DOMAIN type_name error           { return unimplementedWithIssueDetail(sqllex, 27796, "create") }
+
+opt_enum_val_list:
+  enum_val_list
+  {
+    $$.val = $1.strs()
+  }
+| /* EMPTY */
+  {
+    $$.val = []string(nil)
+  }
+
+enum_val_list:
+  SCONST
+  {
+    $$.val = []string{$1}
+  }
+| enum_val_list ',' SCONST
+  {
+    $$.val = append($1.strs(), $3)
+  }
 
 // %Help: CREATE INDEX - create a new index
 // %Category: DDL
