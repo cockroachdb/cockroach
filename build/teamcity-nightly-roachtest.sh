@@ -17,10 +17,6 @@ fi
 artifacts=$PWD/artifacts
 mkdir -p "$artifacts"
 chmod o+rwx "${artifacts}"
-# We do, however, want to write the stats files with datestamps before uploading
-stats_artifacts="${artifacts}"/$(date +"%%Y%%m%%d")-${TC_BUILD_ID}
-mkdir -p "${stats_artifacts}"
-chmod o+rwx "${stats_artifacts}"
 
 export PATH=$PATH:$(go env GOPATH)/bin
 
@@ -37,22 +33,36 @@ else
   echo "Assuming that you've run \`gcloud auth login\` from inside the builder." >&2
 fi
 
+# Early bind the stats dir. Roachtest invocations can take ages, and we want the
+# date at the time of the start of the run (which identifies the version of the
+# code run best).
+stats_dir="$(date +"%%Y%%m%%d")-${TC_BUILD_ID}"
+
+# Set up a function we'll invoke at the end.
 function upload_stats {
-  # Upload any stats.json files to the cockroach-nightly bucket.
-  if [[ "${TC_BUILD_BRANCH}" == "master" ]]; then
+ if [[ "${TC_BUILD_BRANCH}" == "master" ]]; then
       bucket="cockroach-nightly-${CLOUD}"
       if [[ "${CLOUD}" == "gce" ]]; then
 	  # GCE, having been there first, gets an exemption.
           bucket="cockroach-nightly"
       fi
-      find ${artifacts#${PWD}/} -name stats.json -exec gsutil cp "${file}" "gs://${bucket}/${file}" ';'
+      # The stats.json files need some path translation:
+      #     ${artifacts}/path/to/test/stats.json
+      # to
+      #     gs://${bucket}/artifacts/${stats_dir}/path/to/test/stats.json
+      #
+      # `find` below will expand "{}" as ./path/to/test/stats.json.
+      (cd "${artifacts}" && find . -name stats.json -exec \
+        gsutil cp "{}" "gs://${bucket}/artifacts/${stats_dir}/{}" ';')
   fi
 }
 
 # Upload any stats.json we can find, no matter what happens.
 trap upload_stats EXIT
 
-ARTIFACTS="${stats_artifacts}"
+# Set up the parameters for the roachtest invocation.
+
+ARTIFACTS="${artifacts}"
 PARALLELISM=16
 CPUQUOTA=1024
 ZONES=""
