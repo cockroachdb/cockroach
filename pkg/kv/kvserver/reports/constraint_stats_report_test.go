@@ -14,7 +14,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -69,17 +71,17 @@ func TestConformanceReport(t *testing.T) {
 					},
 				},
 				splits: []split{
-					{key: "/Table/t1", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/1", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/2", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/3", stores: []int{1, 2, 3}},
-					{key: "/Table/t2", stores: []int{1, 2, 3}},
-					{key: "/Table/t2/pk", stores: []int{1, 2, 3}},
+					{key: "/Table/t1", stores: "1 2 3"},
+					{key: "/Table/t1/pk", stores: "1 2 3"},
+					{key: "/Table/t1/pk/1", stores: "1 2 3"},
+					{key: "/Table/t1/pk/2", stores: "1 2 3"},
+					{key: "/Table/t1/pk/3", stores: "1 2 3"},
+					{key: "/Table/t2", stores: "1 2 3"},
+					{key: "/Table/t2/pk", stores: "1 2 3"},
 					{
 						// This range is not covered by the db1's zone config and so it won't
 						// be counted.
-						key: "/Table/sentinel", stores: []int{1, 2, 3},
+						key: "/Table/sentinel", stores: "1 2 3",
 					},
 				},
 				nodes: []node{
@@ -147,20 +149,20 @@ func TestConformanceReport(t *testing.T) {
 					},
 				},
 				splits: []split{
-					{key: "/Table/t1", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/1", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/2", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/3", stores: []int{1, 2, 3}},
-					{key: "/Table/t2", stores: []int{1, 2, 3}},
-					{key: "/Table/t2/pk", stores: []int{1, 2, 3}},
-					{key: "/Table/sentinel", stores: []int{1, 2, 3}},
-					{key: "/Table/t3", stores: []int{1, 2, 3}},
-					{key: "/Table/t3/pk/100", stores: []int{1, 2, 3}},
-					{key: "/Table/t3/pk/101", stores: []int{1, 2, 3}},
-					{key: "/Table/t3/pk/199", stores: []int{1, 2, 3}},
-					{key: "/Table/t3/pk/200", stores: []int{1, 2, 3}},
-					{key: "/Table/t4", stores: []int{1, 2, 3}},
+					{key: "/Table/t1", stores: "1 2 3"},
+					{key: "/Table/t1/pk", stores: "1 2 3"},
+					{key: "/Table/t1/pk/1", stores: "1 2 3"},
+					{key: "/Table/t1/pk/2", stores: "1 2 3"},
+					{key: "/Table/t1/pk/3", stores: "1 2 3"},
+					{key: "/Table/t2", stores: "1 2 3"},
+					{key: "/Table/t2/pk", stores: "1 2 3"},
+					{key: "/Table/sentinel", stores: "1 2 3"},
+					{key: "/Table/t3", stores: "1 2 3"},
+					{key: "/Table/t3/pk/100", stores: "1 2 3"},
+					{key: "/Table/t3/pk/101", stores: "1 2 3"},
+					{key: "/Table/t3/pk/199", stores: "1 2 3"},
+					{key: "/Table/t3/pk/200", stores: "1 2 3"},
+					{key: "/Table/t4", stores: "1 2 3"},
 				},
 				// None of the stores have any attributes.
 				nodes: []node{
@@ -232,7 +234,7 @@ func TestConformanceReport(t *testing.T) {
 					},
 				},
 				splits: []split{
-					{key: "/Table/t1", stores: []int{1, 2}},
+					{key: "/Table/t1", stores: "1 2"},
 				},
 				nodes: []node{
 					{id: 1, locality: "region=us,dc=dc1", stores: []store{{id: 1}}},
@@ -466,8 +468,13 @@ func (c constraintEntry) toReportEntry(
 }
 
 type split struct {
-	key    string
-	stores []int
+	key string
+	// stores lists the stores that are gonna have replicas for a particular range. It's a space-separated
+	// list of store ids, with an optional replica type. If the type of replica is missing, it will
+	// be a voter-full.
+	// The format is a space-separated list of <storeID><?replica type>. For example:
+	// "1 2 3 4v 5i 6o 7d 8l" (1,2,3,4 are voter-full, then incoming, outgoing, demoting, learner).
+	stores string
 }
 
 type store struct {
@@ -897,13 +904,52 @@ func processSplits(
 		}
 
 		rd := roachpb.RangeDescriptor{
-			RangeID:  roachpb.RangeID(i + 1), // IDs start at 1
-			StartKey: keys.MustAddr(startKey),
-			EndKey:   keys.MustAddr(endKey),
+			RangeID:       roachpb.RangeID(i + 1), // IDs start at 1
+			StartKey:      keys.MustAddr(startKey),
+			EndKey:        keys.MustAddr(endKey),
+			NextReplicaID: roachpb.ReplicaID(1), // IDs start at 1
 		}
-		for _, storeID := range split.stores {
-			rd.AddReplica(roachpb.NodeID(storeID), roachpb.StoreID(storeID), roachpb.VOTER_FULL)
+
+		reps := strings.Split(split.stores, " ")
+		for _, rep := range reps {
+			if rep == "" {
+				continue
+			}
+			// The format is a numeric storeID, optionally followed by a single character
+			// indicating the replica type.
+			re := regexp.MustCompile("([0-9]+)(.?)")
+			spec := re.FindStringSubmatch(rep)
+			if len(spec) != 3 {
+				return nil, errors.Errorf("bad replica spec: %s", rep)
+			}
+			storeID, err := strconv.Atoi(spec[1])
+			if err != nil {
+				return nil, err
+			}
+			// Figure out the type of the replica. It's VOTER_FULL by default, unless
+			// another option was specified.
+			typ := roachpb.VOTER_FULL
+			if spec[2] != "" {
+				replicaType := spec[2]
+				switch replicaType {
+				case "v":
+					typ = roachpb.VOTER_FULL
+				case "i":
+					typ = roachpb.VOTER_INCOMING
+				case "o":
+					typ = roachpb.VOTER_OUTGOING
+				case "d":
+					typ = roachpb.VOTER_DEMOTING
+				case "l":
+					typ = roachpb.LEARNER
+				default:
+					return nil, errors.Errorf("bad replica type: %s", replicaType)
+				}
+			}
+
+			rd.AddReplica(roachpb.NodeID(storeID), roachpb.StoreID(storeID), typ)
 		}
+
 		ranges[i] = rd
 	}
 	return ranges, nil

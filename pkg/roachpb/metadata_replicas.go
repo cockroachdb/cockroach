@@ -324,26 +324,43 @@ func (d ReplicaDescriptors) ConfState() raftpb.ConfState {
 	return cs
 }
 
-// CanMakeProgress reports whether the given descriptors can make progress at the
-// replication layer. This is more complicated than just counting the number
+// CanMakeProgress reports whether the given descriptors can make progress at
+// the replication layer. This is more complicated than just counting the number
 // of replicas due to the existence of joint quorums.
 func (d ReplicaDescriptors) CanMakeProgress(liveFunc func(descriptor ReplicaDescriptor) bool) bool {
-	isVoterOldConfig := func(rDesc ReplicaDescriptor) bool {
-		switch rDesc.GetType() {
-		case VOTER_FULL, VOTER_OUTGOING, VOTER_DEMOTING:
-			return true
-		default:
-			return false
-		}
-	}
-	isVoterNewConfig := func(rDesc ReplicaDescriptor) bool {
-		switch rDesc.GetType() {
-		case VOTER_FULL, VOTER_INCOMING:
-			return true
-		default:
-			return false
-		}
-	}
+	return d.ReplicationStatus(liveFunc, -1 /* replicationFactor */).Available
+}
+
+// RangeStatusReport contains info about a range's replication status. Returned
+// by ReplicaDescriptors.ReplicationStatus.
+type RangeStatusReport struct {
+	// Available is set if the range can make progress, based on replica liveness
+	// info passed to ReplicationStatus().
+	Available bool
+	// UnderReplicated is set if the range is considered under-replicated
+	// according to the desired replication factor and the replica liveness info
+	// passed to ReplicationStatus. Dead replicas are considered to be missing.
+	UnderReplicated bool
+	// UnderReplicated is set if the range is considered under-replicated
+	// according to the desired replication factor passed to ReplicationStatus.
+	// Replica livenss is not considered.
+	//
+	// Note that a range can be under-replicated and over-replicated at the same
+	// time if it has many replicas, but sufficiently many of them are on dead
+	// nodes.
+	OverReplicated bool
+}
+
+// ReplicationStatus returns availability and over/under-replication
+// determinations for the range.
+//
+// replicationFactor is the replica's desired replication for purposes of
+// determining over/under-replication. If -1 is passed, the returned report will
+// not have the respective fields populated.
+func (d ReplicaDescriptors) ReplicationStatus(
+	liveFunc func(descriptor ReplicaDescriptor) bool, replicationFactor int,
+) RangeStatusReport {
+	var res RangeStatusReport
 	// isBoth takes two replica predicates and returns their conjunction.
 	isBoth := func(
 		pred1 func(rDesc ReplicaDescriptor) bool,
@@ -353,18 +370,36 @@ func (d ReplicaDescriptors) CanMakeProgress(liveFunc func(descriptor ReplicaDesc
 		}
 	}
 
-	votersOldGroup := d.Filter(isVoterOldConfig)
-	liveVotersOldGroup := d.Filter(isBoth(isVoterOldConfig, liveFunc))
+	// This functions handles regular, or joint-consensus replica groups. In the
+	// joint-consensus case, we'll independently consider the health of the
+	// outgoing group ("old") and the incoming group ("new"). In the regular case,
+	// the two groups will be identical.
+
+	votersOldGroup := d.Filter(ReplicaDescriptor.IsVoterOldConfig)
+	liveVotersOldGroup := d.Filter(isBoth(ReplicaDescriptor.IsVoterOldConfig, liveFunc))
 
 	n := len(votersOldGroup)
 	// Empty groups succeed by default, to match the Raft implementation.
-	if n > 0 && len(liveVotersOldGroup) < n/2+1 {
-		return false
-	}
+	availableOutgoingGroup := (n == 0) || (len(liveVotersOldGroup) >= n/2+1)
 
-	votersNewGroup := d.Filter(isVoterNewConfig)
-	liveVotersNewGroup := d.Filter(isBoth(isVoterNewConfig, liveFunc))
+	votersNewGroup := d.Filter(ReplicaDescriptor.IsVoterNewConfig)
+	liveVotersNewGroup := d.Filter(isBoth(ReplicaDescriptor.IsVoterNewConfig, liveFunc))
 
 	n = len(votersNewGroup)
-	return len(liveVotersNewGroup) >= n/2+1
+	availableIncomingGroup := len(liveVotersNewGroup) >= n/2+1
+
+	res.Available = availableIncomingGroup && availableOutgoingGroup
+
+	if replicationFactor == -1 {
+		return res
+	}
+
+	// Determine over/under-replication. Note that learners don't matter.
+	underReplicatedOldGroup := len(liveVotersOldGroup) < replicationFactor
+	underReplicatedNewGroup := len(liveVotersNewGroup) < replicationFactor
+	overReplicatedOldGroup := len(votersOldGroup) > replicationFactor
+	overReplicatedNewGroup := len(votersNewGroup) > replicationFactor
+	res.UnderReplicated = underReplicatedOldGroup || underReplicatedNewGroup
+	res.OverReplicated = overReplicatedOldGroup || overReplicatedNewGroup
+	return res
 }

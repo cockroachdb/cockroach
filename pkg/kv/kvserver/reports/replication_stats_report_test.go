@@ -218,20 +218,20 @@ func TestReplicationStatsReport(t *testing.T) {
 					},
 				},
 				splits: []split{
-					{key: "/Table/t1", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/1", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/2", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/3", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/100", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/150", stores: []int{1, 2, 3}},
-					{key: "/Table/t1/pk/200", stores: []int{1, 2, 3}},
-					{key: "/Table/t2", stores: []int{1, 2, 3}},
-					{key: "/Table/t2/pk", stores: []int{1, 2, 3}},
+					{key: "/Table/t1", stores: "1 2 3"},
+					{key: "/Table/t1/pk", stores: "1 2 3"},
+					{key: "/Table/t1/pk/1", stores: "1 2 3"},
+					{key: "/Table/t1/pk/2", stores: "1 2 3"},
+					{key: "/Table/t1/pk/3", stores: "1 2 3"},
+					{key: "/Table/t1/pk/100", stores: "1 2 3"},
+					{key: "/Table/t1/pk/150", stores: "1 2 3"},
+					{key: "/Table/t1/pk/200", stores: "1 2 3"},
+					{key: "/Table/t2", stores: "1 2 3"},
+					{key: "/Table/t2/pk", stores: "1 2 3"},
 					{
 						// This range is not covered by the db1's zone config; it'll be
 						// counted for the default zone.
-						key: "/Table/sentinel", stores: []int{1, 2, 3},
+						key: "/Table/sentinel", stores: "1 2 3",
 					},
 				},
 				nodes: []node{
@@ -291,19 +291,19 @@ func TestReplicationStatsReport(t *testing.T) {
 				},
 				splits: []split{
 					// No problem.
-					{key: "/Table/t1/pk/100", stores: []int{1, 2, 3}},
+					{key: "/Table/t1/pk/100", stores: "1 2 3"},
 					// Under-replicated.
-					{key: "/Table/t1/pk/101", stores: []int{1}},
+					{key: "/Table/t1/pk/101", stores: "1"},
 					// Under-replicated.
-					{key: "/Table/t1/pk/102", stores: []int{1, 2}},
+					{key: "/Table/t1/pk/102", stores: "1 2"},
 					// Under-replicated because 4 is dead.
-					{key: "/Table/t1/pk/103", stores: []int{1, 2, 4}},
+					{key: "/Table/t1/pk/103", stores: "1 2 4"},
 					// Under-replicated and unavailable.
-					{key: "/Table/t1/pk/104", stores: []int{3}},
+					{key: "/Table/t1/pk/104", stores: "3"},
 					// Over-replicated.
-					{key: "/Table/t1/pk/105", stores: []int{1, 2, 3, 4}},
+					{key: "/Table/t1/pk/105", stores: "1 2 3 4"},
 					// Under-replicated and over-replicated.
-					{key: "/Table/t1/pk/106", stores: []int{1, 2, 4, 5}},
+					{key: "/Table/t1/pk/106", stores: "1 2 4 5"},
 				},
 				nodes: []node{
 					{id: 1, stores: []store{{id: 1}}},
@@ -325,7 +325,58 @@ func TestReplicationStatsReport(t *testing.T) {
 				},
 			},
 		},
-	}
+		{
+			name: "joint consensus",
+			baseReportTestCase: baseReportTestCase{
+				defaultZone: zone{replicas: 3},
+				schema: []database{
+					{
+						name: "db1",
+						tables: []table{
+							{name: "t1"},
+						},
+					},
+				},
+				splits: []split{
+					// No problem.
+					{key: "/Table/t1/pk/100", stores: "1v 2v 3v"},
+					// Under-replication in the "old group".
+					{key: "/Table/t1/pk/101", stores: "1v 2v 3i"},
+					// Under-replication in the "new group".
+					{key: "/Table/t1/pk/102", stores: "1v 2v 3o"},
+					// Under-replicated in the old group because 4 is dead.
+					{key: "/Table/t1/pk/103", stores: "1v 2v 4o 3i"},
+					// Unavailable in the new group (and also under-replicated), and also
+					// over-replicated in the new group.
+					{key: "/Table/t1/pk/104", stores: "1v 2v 3o 4i 5i"},
+					// Over-replicated in the new group.
+					{key: "/Table/t1/pk/105", stores: "1v 2v 3o 5i 6i"},
+					// Many learners. No problems, since learners don't count.
+					{key: "/Table/t1/pk/106", stores: "1v 2v 3v 4l 5l 6l"},
+					// Underreplicated. Learners don't count.
+					{key: "/Table/t1/pk/107", stores: "1v 2v 3l"},
+				},
+				nodes: []node{
+					{id: 1, stores: []store{{id: 1}}},
+					{id: 2, stores: []store{{id: 2}}},
+					{id: 3, stores: []store{{id: 3}}},
+					{id: 4, stores: []store{{id: 4}}, dead: true},
+					{id: 5, stores: []store{{id: 5}}, dead: true},
+					{id: 6, stores: []store{{id: 6}}},
+				},
+			},
+			exp: []replicationStatsEntry{
+				{
+					object: "default",
+					zoneRangeStatus: zoneRangeStatus{
+						numRanges:       8,
+						unavailable:     1,
+						underReplicated: 5,
+						overReplicated:  2,
+					},
+				},
+			},
+		}}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			runReplicationStatsTest(t, tc)
