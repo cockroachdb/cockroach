@@ -255,6 +255,31 @@ func (b *stmtBundleBuilder) addTrace() tree.Datum {
 	if err != nil {
 		b.z.AddFile("trace.txt", err.Error())
 	} else {
+		const traceReadme = `# Viewing the trace using Jaeger
+
+The file trace.json contains a trace in Jaeger format. To view it locally, use
+
+docker run -d --name jaeger \
+    -e COLLECTOR_ZIPKIN_HTTP_PORT=9411 \
+    -p 5775:5775/udp \
+    -p 6831:6831/udp \
+    -p 6832:6832/udp \
+    -p 5778:5778 \
+    -p 16686:16686 \
+    -p 14268:14268 \
+    -p 14250:14250 \
+    -p 9411:9411 \
+    jaegertracing/all-in-one1.17 && \
+open http://localhost:16686
+
+and upload the file in the UI.
+See
+
+    https://www.jaegertracing.io/docs/1.17/getting-started/
+
+for more information.
+`
+		b.z.AddFile("trace.README.txt", traceReadme)
 		b.z.AddFile("trace.json", traceJSONStr)
 	}
 	// The JSON is not very human-readable, so we include another format too.
