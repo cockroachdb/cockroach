@@ -50,6 +50,20 @@ func NewS2GeometryIndex(cfg S2GeometryConfig) GeometryIndex {
 	}
 }
 
+// DefaultGeometryIndexConfig returns a default config for a geometry index.
+func DefaultGeometryIndexConfig() *Config {
+	return &Config{
+		S2Geometry: &S2GeometryConfig{
+			// Arbitrary bounding box.
+			// TODO(sumeer): replace with parameters specified by CREATE INDEX.
+			MinX:     0,
+			MaxX:     10000,
+			MinY:     0,
+			MaxY:     10000,
+			S2Config: defaultS2Config()},
+	}
+}
+
 // A cell id unused by S2. We use it to index geometries that exceed the
 // configured bounds.
 const exceedsBoundsCellID = s2.CellID(^uint64(0))

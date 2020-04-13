@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -147,6 +149,16 @@ func MakeIndexDescriptor(
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique")
 		}
 		indexDesc.Type = sqlbase.IndexDescriptor_INVERTED
+		columnDesc, _, err := tableDesc.FindColumnByName(n.Columns[0].Column)
+		if err != nil {
+			return nil, err
+		}
+		if columnDesc.Type.InternalType.Family == types.GeometryFamily {
+			indexDesc.GeoConfig = *geoindex.DefaultGeometryIndexConfig()
+		}
+		if columnDesc.Type.InternalType.Family == types.GeographyFamily {
+			indexDesc.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
+		}
 		telemetry.Inc(sqltelemetry.InvertedIndexCounter)
 	}
 

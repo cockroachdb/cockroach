@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1107,13 +1108,20 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 
 			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
 				ie := evalCtx.InternalExecutor.(*InternalExecutor)
-				row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn,
-					sqlbase.InternalExecutorSessionDataOverride{},
-					fmt.Sprintf(
+				var stmt string
+				if geoindex.IsEmptyConfig(&idx.GeoConfig) {
+					stmt = fmt.Sprintf(
 						`SELECT coalesce(sum_int(crdb_internal.num_inverted_index_entries(%q)), 0) FROM [%d AS t]`,
 						col, tableDesc.ID,
-					),
-				)
+					)
+				} else {
+					stmt = fmt.Sprintf(
+						`SELECT coalesce(sum_int(crdb_internal.num_geo_inverted_index_entries(%d, %d, %q)), 0) FROM [%d AS t]`,
+						tableDesc.ID, idx.ID, col, tableDesc.ID,
+					)
+				}
+				row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn,
+					sqlbase.InternalExecutorSessionDataOverride{}, stmt)
 				if err != nil {
 					return err
 				}
