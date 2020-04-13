@@ -47,10 +47,11 @@ import (
 //
 // TODO(ajwerner): add metrics to go with these stats.
 type applyCommittedEntriesStats struct {
-	batchesProcessed int
-	entriesProcessed int
-	stateAssertions  int
-	numEmptyEntries  int
+	batchesProcessed     int
+	entriesProcessed     int
+	stateAssertions      int
+	numEmptyEntries      int
+	numConfChangeEntries int
 }
 
 // nonDeterministicFailure is an error type that indicates that a state machine
@@ -1169,13 +1170,14 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 		}
 		return nil
 	case raftpb.EntryConfChange, raftpb.EntryConfChangeV2:
+		sm.stats.numConfChangeEntries++
 		if cmd.replicatedResult().ChangeReplicas == nil {
 			// The command was rejected. There is no need to report a ConfChange
 			// to raft.
 			return nil
 		}
-		return sm.r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
-			raftGroup.ApplyConfChange(cmd.confChange.ConfChangeI)
+		return sm.r.withRaftGroup(true, func(rn *raft.RawNode) (bool, error) {
+			rn.ApplyConfChange(cmd.confChange.ConfChangeI)
 			return true, nil
 		})
 	default:
