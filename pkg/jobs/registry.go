@@ -769,11 +769,17 @@ func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer,
 
 type retryJobError string
 
+// retryJobErrorSentinel exists so the errors returned from NewRetryJobError can
+// be marked with it, allowing more robust detection of retry errors even if
+// they are wrapped, etc. This was originally introduced to deal with injected
+// retry errors from testing knobs.
+var retryJobErrorSentinel = retryJobError("")
+
 // NewRetryJobError creates a new error that, if returned by a Resumer,
 // indicates to the jobs registry that the job should be restarted in the
 // background.
 func NewRetryJobError(s string) error {
-	return retryJobError(s)
+	return errors.Mark(retryJobError(s), retryJobErrorSentinel)
 }
 
 func (r retryJobError) Error() string {
@@ -817,8 +823,8 @@ func (r *Registry) stepThroughStateMachine(
 		// TODO(spaskob): enforce a limit on retries.
 		// TODO(spaskob,lucy): Add metrics on job retries. Consider having a backoff
 		// mechanism (possibly combined with a retry limit).
-		if e, ok := err.(retryJobError); ok {
-			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), e)
+		if errors.Is(err, retryJobErrorSentinel) {
+			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), err)
 		}
 		if err, ok := errors.Cause(err).(*InvalidStatusError); ok {
 			if err.status != StatusCancelRequested && err.status != StatusPauseRequested {
@@ -878,8 +884,8 @@ func (r *Registry) stepThroughStateMachine(
 			// mark the job as failed because it can be resumed by another node.
 			return errors.Errorf("job %d: node liveness error: restarting in background", *job.ID())
 		}
-		if e, ok := err.(retryJobError); ok {
-			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), e)
+		if errors.Is(err, retryJobErrorSentinel) {
+			return errors.Errorf("job %d: %s: restarting in background", *job.ID(), err)
 		}
 		if err, ok := errors.Cause(err).(*InvalidStatusError); ok {
 			if err.status != StatusPauseRequested {
