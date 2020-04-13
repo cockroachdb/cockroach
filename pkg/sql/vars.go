@@ -92,15 +92,24 @@ func formatBoolAsPostgresSetting(b bool) string {
 	return "off"
 }
 
-func parsePostgresBool(s string) (bool, error) {
-	s = strings.ToLower(s)
-	switch s {
+func parseBoolVar(varName, val string) (bool, error) {
+	val = strings.ToLower(val)
+	switch val {
 	case "on":
-		s = "true"
+		return true, nil
 	case "off":
-		s = "false"
+		return false, nil
+	case "yes":
+		return true, nil
+	case "no":
+		return false, nil
 	}
-	return strconv.ParseBool(s)
+	b, err := strconv.ParseBool(val)
+	if err != nil {
+		return false, pgerror.Newf(pgcode.InvalidParameterValue,
+			"parameter \"%s\" requires a Boolean value", varName)
+	}
+	return b, nil
 }
 
 // varGen is the main definition array for all session variables.
@@ -294,7 +303,7 @@ var varGen = map[string]sessionVar{
 	`default_transaction_read_only`: {
 		GetStringVal: makePostgresBoolGetStringValFn("default_transaction_read_only"),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			b, err := parsePostgresBool(s)
+			b, err := parseBoolVar("default_transaction_read_only", s)
 			if err != nil {
 				return err
 			}
@@ -329,7 +338,7 @@ var varGen = map[string]sessionVar{
 	`enable_zigzag_join`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`enable_zigzag_join`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			b, err := parsePostgresBool(s)
+			b, err := parseBoolVar("enable_zigzag_join", s)
 			if err != nil {
 				return err
 			}
@@ -371,7 +380,7 @@ var varGen = map[string]sessionVar{
 	`require_explicit_primary_keys`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`require_explicit_primary_keys`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			b, err := parsePostgresBool(s)
+			b, err := parseBoolVar("require_explicit_primary_key", s)
 			if err != nil {
 				return err
 			}
@@ -450,7 +459,7 @@ var varGen = map[string]sessionVar{
 	`optimizer_foreign_keys`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_foreign_keys`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			b, err := parsePostgresBool(s)
+			b, err := parseBoolVar("optimizer_foreign_keys", s)
 			if err != nil {
 				return err
 			}
@@ -469,7 +478,7 @@ var varGen = map[string]sessionVar{
 	`enable_implicit_select_for_update`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`enable_implicit_select_for_update`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			b, err := parsePostgresBool(s)
+			b, err := parseBoolVar("enabled_implicit_select_for_update", s)
 			if err != nil {
 				return err
 			}
@@ -488,7 +497,7 @@ var varGen = map[string]sessionVar{
 	`enable_insert_fast_path`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`enable_insert_fast_path`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			b, err := parsePostgresBool(s)
+			b, err := parseBoolVar("enable_insert_fast_path", s)
 			if err != nil {
 				return err
 			}
@@ -556,7 +565,7 @@ var varGen = map[string]sessionVar{
 		},
 		GetStringVal: makePostgresBoolGetStringValFn("force_savepoint_restart"),
 		Set: func(_ context.Context, m *sessionDataMutator, val string) error {
-			b, err := parsePostgresBool(val)
+			b, err := parseBoolVar("force_savepoint_restart", val)
 			if err != nil {
 				return err
 			}
@@ -620,7 +629,7 @@ var varGen = map[string]sessionVar{
 		},
 		GetStringVal: makePostgresBoolGetStringValFn("sql_safe_updates"),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			b, err := parsePostgresBool(s)
+			b, err := parseBoolVar("sql_safe_updates", s)
 			if err != nil {
 				return err
 			}
@@ -789,7 +798,7 @@ var varGen = map[string]sessionVar{
 	`transaction_read_only`: {
 		GetStringVal: makePostgresBoolGetStringValFn("transaction_read_only"),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			b, err := parsePostgresBool(s)
+			b, err := parseBoolVar("transaction_read_only", s)
 			if err != nil {
 				return err
 			}
@@ -828,7 +837,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData.AllowPrepareAsOptPlan)
 		},
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			b, err := parsePostgresBool(s)
+			b, err := parseBoolVar("allow_prepare_as_opt_plan", s)
 			if err != nil {
 				return err
 			}
@@ -855,7 +864,7 @@ var varGen = map[string]sessionVar{
 	`experimental_enable_temp_tables`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_temp_tables`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			b, err := parsePostgresBool(s)
+			b, err := parseBoolVar("experimental_enable_temp_tables", s)
 			if err != nil {
 				return err
 			}
@@ -874,7 +883,7 @@ var varGen = map[string]sessionVar{
 	`experimental_enable_hash_sharded_indexes`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_hash_sharded_indexes`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			b, err := parsePostgresBool(s)
+			b, err := parseBoolVar("experimental_enable_hash_sharded_indexes", s)
 			if err != nil {
 				return err
 			}
@@ -957,9 +966,9 @@ func makeCompatBoolVar(varName string, displayValue, anyValAllowed bool) session
 	return sessionVar{
 		Get: func(_ *extendedEvalContext) string { return displayValStr },
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			b, err := parsePostgresBool(s)
+			b, err := parseBoolVar(varName, s)
 			if err != nil {
-				return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+				return err
 			}
 			if anyValAllowed || b == displayValue {
 				return nil
