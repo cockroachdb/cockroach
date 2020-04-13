@@ -354,9 +354,18 @@ func (d ReplicaDescriptors) CanMakeProgress(liveFunc func(descriptor ReplicaDesc
 	if err != nil {
 		panic(err)
 	}
+	// Simulate a voting round in which the live replicas vote affirmatively and
+	// the dead replicas don't vote at all. We'll then check if the live votes are
+	// enough to commit commands (an outcome of VoteWon) or not (an outcome of
+	// VotePending).
 	votes := make(map[uint64]bool, len(d.wrapped))
 	for _, rDesc := range d.wrapped {
-		votes[uint64(rDesc.ReplicaID)] = liveFunc(rDesc)
+		// NB: it doesn't matter for the outcome whether we count unavailable
+		// replicas as abstaining or rejecting, as we're checking only for VoteWon
+		// below.
+		if liveFunc(rDesc) {
+			votes[uint64(rDesc.ReplicaID)] = true
+		}
 	}
 	return cfg.Voters.VoteResult(votes) == quorum.VoteWon
 }
