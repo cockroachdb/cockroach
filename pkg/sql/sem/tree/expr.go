@@ -1485,8 +1485,8 @@ var (
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Oid, types.VarBit})
 	floatCastTypes = annotateCast(types.Float, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval})
-	geographyCastTypes = annotateCast(types.Geography, []*types.T{types.String, types.Geography, types.Geometry})
-	geometryCastTypes  = annotateCast(types.Geometry, []*types.T{types.String, types.Geography, types.Geometry})
+	geographyCastTypes = annotateCast(types.Geography, []*types.T{types.Unknown, types.String, types.Geography, types.Geometry})
+	geometryCastTypes  = annotateCast(types.Geometry, []*types.T{types.Unknown, types.String, types.Geography, types.Geometry})
 	decimalCastTypes   = annotateCast(types.Decimal, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval})
 	stringCastTypes = annotateCast(types.String, []*types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.AnyCollatedString,
