@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 // TestUnresolvedNameString tests the string representation of tree.UnresolvedName and thus tree.Name.
@@ -51,6 +52,17 @@ func TestUnresolvedNameString(t *testing.T) {
 		if q.String() != tc.out {
 			t.Errorf("expected q.String() == %q, got %q", tc.out, q.String())
 		}
+	}
+}
+
+// TestCastFromNull checks every type can be cast from NULL.
+func TestCastFromNull(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for _, typ := range types.Scalar {
+		castExpr := tree.CastExpr{Expr: tree.DNull, Type: typ}
+		res, err := castExpr.Eval(nil)
+		require.NoError(t, err)
+		require.Equal(t, tree.DNull, res)
 	}
 }
 
