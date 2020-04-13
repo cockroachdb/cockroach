@@ -167,99 +167,7 @@ func TestGeographyAsS2(t *testing.T) {
 	}
 }
 
-func TestParseGeometry(t *testing.T) {
-	testCases := []struct {
-		str         string
-		expected    *Geometry
-		expectedErr string
-	}{
-		{
-			"0101000000000000000000F03F000000000000F03F",
-			NewGeometry(geopb.EWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
-			"",
-		},
-		{
-			"POINT(1.0 1.0)",
-			NewGeometry(geopb.EWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
-			"",
-		},
-		{
-			"\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f",
-			NewGeometry(geopb.EWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
-			"",
-		},
-		{
-			"invalid",
-			nil,
-			"geos error: ParseException: Unknown type: 'INVALID'",
-		},
-		{
-			"",
-			nil,
-			"geos error: ParseException: Expected word but encountered end of stream",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.str, func(t *testing.T) {
-			g, err := ParseGeometry(tc.str)
-			if len(tc.expectedErr) > 0 {
-				require.Equal(t, tc.expectedErr, err.Error())
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, tc.expected, g)
-			}
-		})
-	}
-}
-
-func TestParseGeography(t *testing.T) {
-	testCases := []struct {
-		str         string
-		expected    *Geography
-		expectedErr string
-	}{
-		{
-			"0101000000000000000000F03F000000000000F03F",
-			NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
-			"",
-		},
-		{
-			"POINT(1.0 1.0)",
-			NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
-			"",
-		},
-		{
-			"\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f",
-			NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
-			"",
-		},
-		{
-			"invalid",
-			nil,
-			"geos error: ParseException: Unknown type: 'INVALID'",
-		},
-		{
-			"",
-			nil,
-			"geos error: ParseException: Expected word but encountered end of stream",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.str, func(t *testing.T) {
-			g, err := ParseGeography(tc.str)
-			if len(tc.expectedErr) > 0 {
-				require.Equal(t, tc.expectedErr, err.Error())
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, tc.expected, g)
-			}
-		})
-	}
-}
-
-func TestClipWKBByRect(t *testing.T) {
+func TestClipEWKBByRect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var g *Geometry
@@ -278,7 +186,7 @@ func TestClipWKBByRect(t *testing.T) {
 			d.ScanArgs(t, "ymin", &yMin)
 			d.ScanArgs(t, "xmax", &xMax)
 			d.ScanArgs(t, "ymax", &yMax)
-			wkb, err := geos.ClipWKBByRect(
+			ewkb, err := geos.ClipEWKBByRect(
 				geopb.WKB(g.ewkb), float64(xMin), float64(yMin), float64(xMax), float64(yMax))
 			if err != nil {
 				return err.Error()
@@ -286,7 +194,12 @@ func TestClipWKBByRect(t *testing.T) {
 			// TODO(sumeer):
 			// - add WKB to WKT and print exact output
 			// - expand test with more inputs
-			return fmt.Sprintf("%d => %d", len(g.ewkb), len(wkb))
+			return fmt.Sprintf(
+				"%d => %d (srid: %d)",
+				len(g.ewkb),
+				len(ewkb),
+				(&spatialObjectBase{ewkb: ewkb}).SRID(),
+			)
 		default:
 			return fmt.Sprintf("unknown command: %s", d.Cmd)
 		}
