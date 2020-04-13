@@ -59,20 +59,26 @@
     ]
 )
 =>
-(Union
-    (Select
-        $input
-        (ReplaceFiltersItem $filters $item (ExprPairLeft $pair))
-    )
-    (Select
-        (Scan $rightScanPrivate:(DuplicateScanPrivate $scanPrivate))
-        (MapScanFilterCols
-            (ReplaceFiltersItem $filters $item (ExprPairRight $pair))
-            $scanPrivate
-            $rightScanPrivate
+(DistinctOn
+    (UnionAll
+        (Select
+            $input
+            (ReplaceFiltersItem $filters $item (ExprPairLeft $pair))
         )
+        (Select
+            (Scan $rightScanPrivate:(DuplicateScanPrivate $scanPrivate))
+            (MapScanFilterCols
+                (ReplaceFiltersItem $filters $item (ExprPairRight $pair))
+                $scanPrivate
+                $rightScanPrivate
+            )
+        )
+        (MakeSetPrivateForSplitDisjunction $scanPrivate $rightScanPrivate)
     )
-    (MakeSetPrivateForSplitDisjunction $scanPrivate $rightScanPrivate)
+    (MakeAggCols
+        ConstAgg (NonKeyCols $input)
+    )
+    (MakeGrouping (KeyCols $input))
 )
 
 # SplitDisjunctionAddKey performs a transformation similar to
@@ -121,20 +127,26 @@
 )
 =>
 (Project
-    (Union
-        (Select
-            (Scan $leftScanPrivate:(AddPrimaryKeyColsToScanPrivate $scanPrivate))
-            (ReplaceFiltersItem $filters $item (ExprPairLeft $pair))
-        )
-        (Select
-            (Scan $rightScanPrivate:(DuplicateScanPrivate $leftScanPrivate))
-            (MapScanFilterCols
-                (ReplaceFiltersItem $filters $item (ExprPairRight $pair))
-                $leftScanPrivate
-                $rightScanPrivate
+    (DistinctOn
+        (UnionAll
+            (Select
+                $leftScan:(Scan $leftScanPrivate:(AddPrimaryKeyColsToScanPrivate $scanPrivate))
+                (ReplaceFiltersItem $filters $item (ExprPairLeft $pair))
             )
+            (Select
+                (Scan $rightScanPrivate:(DuplicateScanPrivate $leftScanPrivate))
+                (MapScanFilterCols
+                    (ReplaceFiltersItem $filters $item (ExprPairRight $pair))
+                    $leftScanPrivate
+                    $rightScanPrivate
+                )
+            )
+            (MakeSetPrivateForSplitDisjunction $leftScanPrivate $rightScanPrivate)
         )
-        (MakeSetPrivateForSplitDisjunction $leftScanPrivate $rightScanPrivate)
+        (MakeAggCols
+            ConstAgg (NonKeyCols $leftScan)
+        )
+        (MakeGrouping (KeyCols $leftScan))
     )
     []
     (OutputCols $input)

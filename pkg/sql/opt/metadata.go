@@ -36,23 +36,14 @@ type SchemaID int32
 type privilegeBitmap uint32
 
 // Metadata assigns unique ids to the columns, tables, and other metadata used
-// within the scope of a particular query. Because it is specific to one query,
-// the ids tend to be small integers that can be efficiently stored and
-// manipulated.
+// for global identification within the scope of a particular query. These ids
+// tend to be small integers that can be efficiently stored and manipulated.
 //
-// Within a query, every unique column and every projection (that is more than
-// just a pass through of a column) is assigned a unique column id.
-// Additionally, every separate reference to a table in the query gets a new
-// set of output column ids. Consider the query:
+// Within a query, every unique column and every projection should be assigned a
+// unique column id. Additionally, every separate reference to a table in the
+// query should get a new set of output column ids.
 //
-//   SELECT * FROM a AS l JOIN a AS r ON (l.x = r.y)
-//
-// In this query, `l.x` is not equivalent to `r.x` and `l.y` is not equivalent
-// to `r.y`. In order to achieve this, we need to give these columns different
-// ids.
-//
-// In all cases, the column ids are global to the query. For example, consider
-// the query:
+// For example, consider the query:
 //
 //   SELECT x FROM a WHERE y > 0
 //
@@ -62,6 +53,56 @@ type privilegeBitmap uint32
 //   SELECT [0] FROM a WHERE [1] > 0
 //   -- [0] -> x
 //   -- [1] -> y
+//
+// Reusing column ids is dangerous and should be avoided in most cases. From the
+// optimizer's perspective, any column with the same id is the same column.
+// Therefore, using the same column id to represent two different columns can
+// produce inaccurate plan costs, plans that are semantically inequivalent to
+// the original plan, or errors. Columns of different types must never use the
+// same id. Additionally, column ids cannot be overloaded within two relational
+// expressions that interact with each other.
+//
+// Consider the query:
+//
+//   SELECT * FROM a AS l JOIN a AS r ON (l.x = r.y)
+//
+// In this query, `l.x` is not equivalent to `r.x` and `l.y` is not equivalent
+// to `r.y`. Therefore, we need to give these columns different ids.
+//
+// There are a handful of exceptional cases in which column ids are reused. This
+// is safe only in cases where a column is passed-through to the parent
+// expression without being operated on or mutated. In these cases, the reduced
+// overhead of not generating new column and table ids outweighs the risks of
+// using non-unique ids.
+//
+// The known places where column ids are reused are:
+//
+//  - Aggregation functions
+//
+//    This is safe when columns are passed-through, like in ConstAgg and
+//    FirstAgg.
+//
+//  - Project
+//
+//    This is safe for pass-through columns.
+//
+//  - Select
+//
+//    This is safe because select only filters rows and does not mutate columns.
+//
+//  - SplitDisjunction and SplitDisjunctionAddKey
+//
+//    Column ids in the left and output of the generated UnionAll are reused
+//    from the original input expression. This is safe because the columns from
+//    the left side of the union are essentially passed-through to the parent
+//    expression.
+//
+//  - Uncorrelated sub-expressions
+//
+//    This is safe because columns within uncorrelated sub-expressions cannot
+//    interact with outer columns.
+//
+// NOTE: Please add new rules that reuse column ids to this list.
 type Metadata struct {
 	// schemas stores each schema used in the query, indexed by SchemaID.
 	schemas []cat.Schema
