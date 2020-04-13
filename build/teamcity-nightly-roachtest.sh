@@ -26,12 +26,6 @@ export PATH=$PATH:$(go env GOPATH)/bin
 
 make bin/workload bin/roachtest bin/roachprod > "${artifacts}/build.txt" 2>&1 || cat "${artifacts}/build.txt"
 
-# release-2.0 names the cockroach binary differently.
-if [[ -f cockroach-linux-2.6.32-gnu-amd64 ]]; then
-  mv cockroach-linux-2.6.32-gnu-amd64 cockroach.linux-2.6.32-gnu-amd64
-fi
-chmod +x cockroach.linux-2.6.32-gnu-amd64
-
 # Set up Google credentials. Note that we need this for all clouds since we upload
 # perf artifacts to Google Storage at the end.
 if [[ "$GOOGLE_EPHEMERAL_CREDENTIALS" ]]; then
