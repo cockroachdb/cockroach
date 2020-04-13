@@ -22,6 +22,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+// TODO(tbg): remove this test. Use the harness in versionupgrade.go
+// to make a much better one, much more easily.
 func registerVersion(r *testRegistry) {
 	runVersion := func(ctx context.Context, t *test, c *cluster, version string) {
 		nodes := c.spec.NodeCount - 1
