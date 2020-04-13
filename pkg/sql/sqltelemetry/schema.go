@@ -56,6 +56,11 @@ var (
 	// InvertedIndexCounter is to be incremented every time an inverted
 	// index is created.
 	InvertedIndexCounter = telemetry.GetCounterOnce("sql.schema.inverted_index")
+
+	// GeospatialInvertedIndexCounter is to be incremented every time a
+	// geospatial inverted index is created. These are a subset of the
+	// indexes counted in InvertedIndexCounter.
+	GeospatialInvertedIndexCounter = telemetry.GetCounterOnce("sql.schema.geospatial_inverted_index")
 )
 
 var (

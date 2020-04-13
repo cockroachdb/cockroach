@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -1432,6 +1433,18 @@ func MakeTableDesc(
 			}
 			if err := idx.FillColumns(d.Columns); err != nil {
 				return desc, err
+			}
+			if d.Inverted {
+				columnDesc, _, err := desc.FindColumnByName(tree.Name(idx.ColumnNames[0]))
+				if err != nil {
+					return desc, err
+				}
+				if columnDesc.Type.InternalType.Family == types.GeometryFamily {
+					idx.GeoConfig = *geoindex.DefaultGeometryIndexConfig()
+				}
+				if columnDesc.Type.InternalType.Family == types.GeographyFamily {
+					idx.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
+				}
 			}
 			if d.PartitionBy != nil {
 				partitioning, err := CreatePartitioning(ctx, st, evalCtx, &desc, &idx, d.PartitionBy)
