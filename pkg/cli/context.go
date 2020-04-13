@@ -93,6 +93,7 @@ func initCLIDefaults() {
 
 	dumpCtx.dumpMode = dumpBoth
 	dumpCtx.asOf = ""
+	dumpCtx.dumpAll = false
 
 	debugCtx.startKey = storage.NilKey
 	debugCtx.endKey = storage.MVCCKeyMax
@@ -269,6 +270,9 @@ var dumpCtx struct {
 
 	// asOf determines the time stamp at which the dump should be taken.
 	asOf string
+
+	// dumpAll determines whenever we going to dump all databases
+	dumpAll bool
 }
 
 // authCtx captures the command-line parameters of the `auth-session`
