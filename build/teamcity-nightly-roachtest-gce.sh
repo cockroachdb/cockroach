@@ -32,11 +32,6 @@ chmod o+rwx "${stats_artifacts}"
 
 export PATH=$PATH:$(go env GOPATH)/bin
 
-build_tag=$(git describe --abbrev=0 --tags --match=v[0-9]*)
-git checkout master
-git pull origin master
-
-git rev-parse HEAD
 make bin/workload bin/roachtest bin/roachprod > "${artifacts}/build.txt" 2>&1 || cat "${artifacts}/build.txt"
 
 # release-2.0 names the cockroach binary differently.
@@ -60,7 +55,7 @@ exit_status=0
 if ! timeout -s INT $((1200*60)) bin/roachtest run \
   --count="${COUNT-1}" \
   --debug="${DEBUG-false}" \
-  --build-tag="${build_tag}" \
+  --build-tag="${BUILD_TAG}" \
   --slack-token="${SLACK_TOKEN}" \
   --cluster-id="${TC_BUILD_ID}" \
   --zones="us-central1-b,us-west1-b,europe-west2-b" \

@@ -23,11 +23,6 @@ fi
 
 export PATH=$PATH:$(go env GOPATH)/bin
 
-build_tag=$(git describe --abbrev=0 --tags --match=v[0-9]*)
-git checkout master
-git pull origin master
-
-git rev-parse HEAD
 make bin/workload bin/roachtest bin/roachprod
 
 # release-2.0 names the cockroach binary differently.
@@ -58,7 +53,7 @@ chmod o+rwx "${stats_artifacts}"
 # by manually created clusters.
 exit_status=0
 if ! timeout -s INT $((1000*60)) bin/roachtest run \
-  --build-tag "${build_tag}" \
+  --build-tag "${BUILD_TAG}" \
   --slack-token "${SLACK_TOKEN}" \
   --cluster-id "${TC_BUILD_ID}" \
   --cloud "aws" \

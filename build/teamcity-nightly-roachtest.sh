@@ -6,4 +6,4 @@
 
 set -euo pipefail
 
-"build/teamcity-nightly-roachtest-${CLOUD}.sh"
+. "build/teamcity-nightly-roachtest-${CLOUD}.sh"
