@@ -150,29 +150,29 @@ func statusToError(s C.CR_GEOS_Status) error {
 	return &Error{msg: string(cStringToSafeGoBytes(s))}
 }
 
-// WKTToWKB parses a WKT into WKB using the GEOS library.
-func WKTToWKB(wkt geopb.WKT) (geopb.WKB, error) {
+// WKTToEWKB parses a WKT into WKB using the GEOS library.
+func WKTToEWKB(wkt geopb.WKT, srid geopb.SRID) (geopb.EWKB, error) {
 	if err := validOrError(crGEOS); err != nil {
 		return nil, err
 	}
-	var cWKB C.CR_GEOS_String
-	if err := statusToError(C.CR_GEOS_WKTToWKB(crGEOS, goToCSlice([]byte(wkt)), &cWKB)); err != nil {
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_WKTToEWKB(crGEOS, goToCSlice([]byte(wkt)), C.int(srid), &cEWKB)); err != nil {
 		return nil, err
 	}
-	return cStringToSafeGoBytes(cWKB), nil
+	return cStringToSafeGoBytes(cEWKB), nil
 }
 
-// ClipWKBByRect clips a WKB to the specified rectangle.
-func ClipWKBByRect(
+// ClipEWKBByRect clips a WKB to the specified rectangle.
+func ClipEWKBByRect(
 	wkb geopb.WKB, xMin float64, yMin float64, xMax float64, yMax float64,
 ) (geopb.WKB, error) {
 	if err := validOrError(crGEOS); err != nil {
 		return nil, err
 	}
-	var cWKB C.CR_GEOS_String
-	if err := statusToError(C.CR_GEOS_ClipWKBByRect(crGEOS, goToCSlice(wkb), C.double(xMin),
-		C.double(yMin), C.double(xMax), C.double(yMax), &cWKB)); err != nil {
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(C.CR_GEOS_ClipEWKBByRect(crGEOS, goToCSlice(wkb), C.double(xMin),
+		C.double(yMin), C.double(xMax), C.double(yMax), &cEWKB)); err != nil {
 		return nil, err
 	}
-	return cStringToSafeGoBytes(cWKB), nil
+	return cStringToSafeGoBytes(cEWKB), nil
 }

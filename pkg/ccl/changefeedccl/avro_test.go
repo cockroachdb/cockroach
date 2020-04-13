@@ -358,7 +358,7 @@ func TestAvroSchema(t *testing.T) {
 			{sqlType: `GEOGRAPHY`, sql: `NULL`, avro: `null`},
 			{sqlType: `GEOGRAPHY`,
 				sql:  "'POINT(1.0 1.0)'",
-				avro: `{"bytes":"\u0001\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u00F0?\u0000\u0000\u0000\u0000\u0000\u0000\u00F0?"}`},
+				avro: `{"bytes":"\u0001\u0001\u0000\u0000 \u00E6\u0010\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u00F0?\u0000\u0000\u0000\u0000\u0000\u0000\u00F0?"}`},
 			{sqlType: `GEOMETRY`, sql: `NULL`, avro: `null`},
 			{sqlType: `GEOMETRY`,
 				sql:  "'POINT(1.0 1.0)'",
