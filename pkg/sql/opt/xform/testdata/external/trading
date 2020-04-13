@@ -130,7 +130,8 @@ ALTER TABLE CardsInfo INJECT STATISTICS '[
     "histo_col_type": "decimal",
     "histo_buckets": [
       {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "1426741777604892000"},
-      {"num_eq": 0, "num_range": 350000, "distinct_range": 350000, "upper_bound": "1584421693935036000"}
+      {"num_eq": 0, "num_range": 350000, "distinct_range": 350000, "upper_bound": "1505581778104892000"},
+      {"num_eq": 0, "num_range": 350000, "distinct_range": 350000, "upper_bound": "1584421778604892000"}
     ]
   },
   {
@@ -553,20 +554,21 @@ FROM CardsView WHERE Version > 1584421773604892000.0000000000
 ----
 project
  ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null buyprice:9!null sellprice:10!null desiredinventory:12!null actualinventory:13!null version:15!null discount:11!null maxinventory:14!null
- ├── stats: [rows=0.3325]
+ ├── stats: [rows=1]
  ├── key: (15)
  ├── fd: (1)-->(2-6,9-15), (2,4,5)~~>(1,3,6), (15)-->(1-6,9-14)
  └── inner-join (lookup cards)
       ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null dealerid:7!null cardid:8!null buyprice:9!null sellprice:10!null discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null version:15!null
       ├── key columns: [8] = [1]
       ├── lookup columns are key
-      ├── stats: [rows=0.3325, distinct(1)=5.83333167e-06, null(1)=0, distinct(8)=5.83333167e-06, null(8)=0]
+      ├── stats: [rows=1, distinct(1)=0.00184973785, null(1)=0, distinct(8)=0.00184973785, null(8)=0]
       ├── key: (8)
       ├── fd: ()-->(7), (1)-->(2-6), (2,4,5)~~>(1,3,6), (8)-->(9-15), (15)-->(8-14), (1)==(8), (8)==(1)
       ├── select
       │    ├── columns: dealerid:7!null cardid:8!null buyprice:9!null sellprice:10!null discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null version:15!null
-      │    ├── stats: [rows=5.83333333e-06, distinct(7)=5.83333333e-06, null(7)=0, distinct(8)=5.83333167e-06, null(8)=0, distinct(9)=5.83333333e-06, null(9)=0, distinct(10)=5.83333333e-06, null(10)=0, distinct(11)=5.83333333e-06, null(11)=0, distinct(12)=5.83333333e-06, null(12)=0, distinct(13)=5.83333333e-06, null(13)=0, distinct(14)=5.83333333e-06, null(14)=0, distinct(15)=5.83333333e-06, null(15)=0]
-      │    │   histogram(15)=
+      │    ├── stats: [rows=0.00184973785, distinct(7)=0.00184973785, null(7)=0, distinct(8)=0.00184973785, null(8)=0, distinct(9)=0.00184973785, null(9)=0, distinct(10)=0.00184973785, null(10)=0, distinct(11)=0.00184973785, null(11)=0, distinct(12)=0.00184973785, null(12)=0, distinct(13)=0.00184973785, null(13)=0, distinct(14)=0.00184973785, null(14)=0, distinct(15)=0.00184973785, null(15)=0]
+      │    │   histogram(15)=  0                0                 0.0018497           0
+      │    │                 <--- 1584421773604892000.0000000000 ----------- 1584421778604892000
       │    ├── key: (8)
       │    ├── fd: ()-->(7), (8)-->(9-15), (15)-->(8-14)
       │    ├── scan cardsinfo
@@ -744,36 +746,132 @@ project
 # Show next page of 50 cards.
 #
 # Problems:
-#   1. This query will not compile, due to #46180.
-#   2. The TransactionDate comparisons should be the last 2 days from the
+#   1. The TransactionDate comparisons should be the last 2 days from the
 #      current timestamp. However, the current timestamp is not treated as a
 #      constant as it should be.
-#   3. Missing rule to push "LIMIT 50" into GroupBy->LeftJoin complex. This
+#   2. Missing rule to push "LIMIT 50" into GroupBy->LeftJoin complex. This
 #      would need to be an exploration rule since it involves an ordering.
 #      Or we could push down the "limit hint" into GroupBy->LeftJoin.
-#   4. Wrong join-type (probably due to #3 above). Should be LookupJoin.
+#   3. Wrong join-type (probably due to #2 above). Should be LookupJoin.
 #
-#opt format=show-stats
-#SELECT
-#  Id, Name, Rarity, SetName, Number, IsFoil, BuyPrice, SellPrice,
-#  DesiredInventory, ActualInventory, Version, Discount, MaxInventory, Value AS TwoDaySales
-#FROM
-#(
-#  SELECT *,
-#    coalesce((
-#      SELECT sum(Quantity)
-#      FROM TransactionDetailsView d
-#      WHERE
-#        d.CardId = c.Id AND
-#        d.IsBuy = FALSE AND
-#        d.TransactionDate BETWEEN '2020-03-01'::TIMESTAMPTZ - INTERVAL '2 days' AND '2020-03-01'::TIMESTAMPTZ
-#      ), 0) AS Value
-#  FROM CardsView c
-#) AS c
-#WHERE (Name, SetName, Number) > ('Shock', '7E', 248)
-#ORDER BY Name, SetName, Number
-#LIMIT 50
-#----
+opt format=show-stats
+SELECT
+  Id, Name, Rarity, SetName, Number, IsFoil, BuyPrice, SellPrice,
+  DesiredInventory, ActualInventory, Version, Discount, MaxInventory, Value AS TwoDaySales
+FROM
+(
+  SELECT *,
+    coalesce((
+      SELECT sum(Quantity)
+      FROM TransactionDetailsView d
+      WHERE
+        d.CardId = c.Id AND
+        d.IsBuy = FALSE AND
+        d.TransactionDate BETWEEN '2020-03-01'::TIMESTAMPTZ - INTERVAL '2 days' AND '2020-03-01'::TIMESTAMPTZ
+      ), 0) AS Value
+  FROM CardsView c
+) AS c
+WHERE (Name, SetName, Number) > ('Shock', '7E', 248)
+ORDER BY Name, SetName, Number
+LIMIT 50
+----
+project
+ ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null buyprice:9!null sellprice:10!null desiredinventory:12!null actualinventory:13!null version:15!null discount:11!null maxinventory:14!null twodaysales:25
+ ├── cardinality: [0 - 50]
+ ├── stats: [rows=50]
+ ├── key: (15,25)
+ ├── fd: (1)-->(2-6,9-15), (2,4,5)~~>(1,3,6), (15)-->(1-6,9-14)
+ ├── ordering: +2,+4,+5
+ ├── limit
+ │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.cardid:8!null cardsinfo.buyprice:9!null cardsinfo.sellprice:10!null discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null cardsinfo.version:15!null sum:24
+ │    ├── internal-ordering: +2,+4,+5
+ │    ├── cardinality: [0 - 50]
+ │    ├── stats: [rows=50]
+ │    ├── key: (8)
+ │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (8)-->(1-6,9-15,24), (15)-->(8-14), (1)==(8), (8)==(1)
+ │    ├── ordering: +2,+4,+5
+ │    ├── sort
+ │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.cardid:8!null cardsinfo.buyprice:9!null cardsinfo.sellprice:10!null discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null cardsinfo.version:15!null sum:24
+ │    │    ├── stats: [rows=19000, distinct(8)=19000, null(8)=0]
+ │    │    ├── key: (8)
+ │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (8)-->(1-6,9-15,24), (15)-->(8-14), (1)==(8), (8)==(1)
+ │    │    ├── ordering: +2,+4,+5
+ │    │    ├── limit hint: 50.00
+ │    │    └── group-by
+ │    │         ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.cardid:8!null cardsinfo.buyprice:9!null cardsinfo.sellprice:10!null discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null cardsinfo.version:15!null sum:24
+ │    │         ├── grouping columns: cardsinfo.cardid:8!null
+ │    │         ├── stats: [rows=19000, distinct(8)=19000, null(8)=0]
+ │    │         ├── key: (8)
+ │    │         ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (8)-->(1-6,9-15,24), (15)-->(8-14), (1)==(8), (8)==(1)
+ │    │         ├── right-join (hash)
+ │    │         │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.dealerid:7!null cardsinfo.cardid:8!null cardsinfo.buyprice:9!null cardsinfo.sellprice:10!null discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null cardsinfo.version:15!null transactiondetails.dealerid:16 isbuy:17 transactiondate:18 transactiondetails.cardid:19 quantity:20
+ │    │         │    ├── stats: [rows=519622.136, distinct(8)=19000, null(8)=0, distinct(19)=19000, null(19)=0]
+ │    │         │    ├── key: (8,18-20)
+ │    │         │    ├── fd: ()-->(7), (1)-->(2-6), (2,4,5)~~>(1,3,6), (8)-->(9-15), (15)-->(8-14), (1)==(8), (8)==(1), (8,18-20)-->(16,17)
+ │    │         │    ├── scan transactiondetails
+ │    │         │    │    ├── columns: transactiondetails.dealerid:16!null isbuy:17!null transactiondate:18!null transactiondetails.cardid:19!null quantity:20!null
+ │    │         │    │    ├── constraint: /16/17/18/19/20: [/1/false/'2020-02-28 00:00:00+00:00' - /1/false/'2020-03-01 00:00:00+00:00']
+ │    │         │    │    ├── stats: [rows=1000000, distinct(16)=1, null(16)=0, distinct(17)=1, null(17)=0, distinct(18)=1000000, null(18)=0, distinct(19)=56999.9987, null(19)=0]
+ │    │         │    │    ├── key: (18-20)
+ │    │         │    │    └── fd: ()-->(16,17)
+ │    │         │    ├── inner-join (hash)
+ │    │         │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.dealerid:7!null cardsinfo.cardid:8!null cardsinfo.buyprice:9!null cardsinfo.sellprice:10!null discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null cardsinfo.version:15!null
+ │    │         │    │    ├── stats: [rows=29618.4611, distinct(1)=19000, null(1)=0, distinct(2)=11668.1409, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5572.85686, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=19000, null(8)=0, distinct(9)=21037.9959, null(9)=0, distinct(10)=21037.9959, null(10)=0, distinct(11)=21037.9959, null(11)=0, distinct(12)=21037.9959, null(12)=0, distinct(13)=21037.9959, null(13)=0, distinct(14)=21037.9959, null(14)=0, distinct(15)=23225.5851, null(15)=0]
+ │    │         │    │    ├── key: (8)
+ │    │         │    │    ├── fd: ()-->(7), (1)-->(2-6), (2,4,5)~~>(1,3,6), (8)-->(9-15), (15)-->(8-14), (1)==(8), (8)==(1)
+ │    │         │    │    ├── scan cardsinfo
+ │    │         │    │    │    ├── columns: cardsinfo.dealerid:7!null cardsinfo.cardid:8!null cardsinfo.buyprice:9!null cardsinfo.sellprice:10!null discount:11!null desiredinventory:12!null actualinventory:13!null maxinventory:14!null cardsinfo.version:15!null
+ │    │         │    │    │    ├── constraint: /7/8: [/1 - /1]
+ │    │         │    │    │    ├── stats: [rows=58333.3333, distinct(7)=1, null(7)=0, distinct(8)=37420.3552, null(8)=0, distinct(9)=40676.7278, null(9)=0, distinct(10)=40676.7278, null(10)=0, distinct(11)=40676.7278, null(11)=0, distinct(12)=40676.7278, null(12)=0, distinct(13)=40676.7278, null(13)=0, distinct(14)=40676.7278, null(14)=0, distinct(15)=58333.3333, null(15)=0]
+ │    │         │    │    │    ├── key: (8)
+ │    │         │    │    │    └── fd: ()-->(7), (8)-->(9-15), (15)-->(8-14)
+ │    │         │    │    ├── index-join cards
+ │    │         │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
+ │    │         │    │    │    ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5601.15328, null(6)=0]
+ │    │         │    │    │    ├── key: (1)
+ │    │         │    │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6)
+ │    │         │    │    │    └── scan cards@cardsnamesetnumber
+ │    │         │    │    │         ├── columns: id:1!null name:2!null setname:4 number:5!null
+ │    │         │    │    │         ├── constraint: /2/4/5: [/'Shock'/'7E'/249 - ]
+ │    │         │    │    │         ├── stats: [rows=2111.11111, distinct(2)=2111.11111, null(2)=0, distinct(4)=54, null(4)=0, distinct(5)=276.333333, null(5)=0]
+ │    │         │    │    │         ├── key: (1)
+ │    │         │    │    │         └── fd: (1)-->(2,4,5), (2,4,5)~~>(1)
+ │    │         │    │    └── filters
+ │    │         │    │         └── id:1 = cardsinfo.cardid:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ │    │         │    └── filters
+ │    │         │         └── transactiondetails.cardid:19 = id:1 [outer=(1,19), constraints=(/1: (/NULL - ]; /19: (/NULL - ]), fd=(1)==(19), (19)==(1)]
+ │    │         └── aggregations
+ │    │              ├── sum [as=sum:24, outer=(20)]
+ │    │              │    └── quantity:20
+ │    │              ├── const-agg [as=id:1, outer=(1)]
+ │    │              │    └── id:1
+ │    │              ├── const-agg [as=name:2, outer=(2)]
+ │    │              │    └── name:2
+ │    │              ├── const-agg [as=rarity:3, outer=(3)]
+ │    │              │    └── rarity:3
+ │    │              ├── const-agg [as=setname:4, outer=(4)]
+ │    │              │    └── setname:4
+ │    │              ├── const-agg [as=number:5, outer=(5)]
+ │    │              │    └── number:5
+ │    │              ├── const-agg [as=isfoil:6, outer=(6)]
+ │    │              │    └── isfoil:6
+ │    │              ├── const-agg [as=cardsinfo.buyprice:9, outer=(9)]
+ │    │              │    └── cardsinfo.buyprice:9
+ │    │              ├── const-agg [as=cardsinfo.sellprice:10, outer=(10)]
+ │    │              │    └── cardsinfo.sellprice:10
+ │    │              ├── const-agg [as=discount:11, outer=(11)]
+ │    │              │    └── discount:11
+ │    │              ├── const-agg [as=desiredinventory:12, outer=(12)]
+ │    │              │    └── desiredinventory:12
+ │    │              ├── const-agg [as=actualinventory:13, outer=(13)]
+ │    │              │    └── actualinventory:13
+ │    │              ├── const-agg [as=maxinventory:14, outer=(14)]
+ │    │              │    └── maxinventory:14
+ │    │              └── const-agg [as=cardsinfo.version:15, outer=(15)]
+ │    │                   └── cardsinfo.version:15
+ │    └── 50
+ └── projections
+      └── COALESCE(sum:24, 0) [as=value:25, outer=(24)]
 
 # Daily transaction query.
 #
