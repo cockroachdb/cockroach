@@ -85,7 +85,29 @@ module.exports = (env, argv) => {
       rules: [
         { test: /\.css$/, use: [ "style-loader", "css-loader" ] },
         {
-          test: /\.styl$/,
+          test: /\.module\.styl$/,
+          use: [
+            "cache-loader",
+            "style-loader",
+            {
+              loader: "css-loader",
+              options: {
+                modules: {
+                  localIdentName: "[local]--[hash:base64:5]",
+                },
+                importLoaders: 1,
+              },
+            },
+            {
+              loader: "stylus-loader",
+              options: {
+                use: [require("nib")()],
+              },
+            },
+          ],
+        },
+        {
+          test: /(?<!\.module)\.styl$/,
           use: [
             "cache-loader",
             "style-loader",
