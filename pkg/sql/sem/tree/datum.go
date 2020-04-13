@@ -2645,6 +2645,30 @@ func NewDGeography(g *geo.Geography) *DGeography {
 	return &DGeography{Geography: g}
 }
 
+// AsDGeography attempts to retrieve a *DGeography from an Expr, returning a
+// *DGeography and a flag signifying whether the assertion was successful. The
+// function should be used instead of direct type assertions wherever a
+// *DGeography wrapped by a *DOidWrapper is possible.
+func AsDGeography(e Expr) (*DGeography, bool) {
+	switch t := e.(type) {
+	case *DGeography:
+		return t, true
+	case *DOidWrapper:
+		return AsDGeography(t.Wrapped)
+	}
+	return nil, false
+}
+
+// MustBeDGeography attempts to retrieve a *DGeography from an Expr, panicking
+// if the assertion fails.
+func MustBeDGeography(e Expr) *DGeography {
+	i, ok := AsDGeography(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DArray, found %T", e))
+	}
+	return i
+}
+
 // ParseDGeography attempts to pass `str` as a Geography type.
 func ParseDGeography(str string) (*DGeography, error) {
 	g, err := geo.ParseGeography(str)

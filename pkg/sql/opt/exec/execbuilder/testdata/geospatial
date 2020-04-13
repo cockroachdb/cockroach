@@ -1,0 +1,49 @@
+statement ok
+CREATE TABLE b(
+  a int primary key,
+  geog geography(geometry, 4326),
+  geom geometry(point, 4326),
+  FAMILY (a, geog, geom)
+)
+
+statement ok
+CREATE TABLE c(
+  a int primary key,
+  geog geography(geometry, 4326),
+  geom geometry(point, 4326),
+  FAMILY (a, geog, geom),
+  INVERTED INDEX (geog),
+  INVERTED INDEX (geom)
+)
+
+statement ok
+CREATE INVERTED INDEX geog_idx ON c(geog)
+
+statement ok
+CREATE INVERTED INDEX geom_idx ON c(geom)
+
+query T kvtrace
+INSERT INTO b VALUES
+  (1, 'POINT(1.0 1.0)', 'POINT(2.0 2.0)'),
+  (2, 'LINESTRING(1.0 1.0, 2.0 2.0)', 'POINT(1.0 1.0)')
+----
+CPut /Table/53/1/1/0 -> /TUPLE/
+CPut /Table/53/1/2/0 -> /TUPLE/
+
+# TODO: why is this /Table/54/2, /Table/54/3, /Table/54/4, /Table/54/5? Shouldn't
+# there be 2 inverted index "table" numbers instead of 4?
+query T kvtrace
+INSERT INTO c VALUES
+  (1, 'POINT(1.0 1.0)', 'POINT(2.0 2.0)'),
+  (2, 'LINESTRING(1.0 1.0, 2.0 2.0)', 'POINT(1.0 1.0)')
+----
+CPut /Table/54/1/1/0 -> /TUPLE/
+InitPut /Table/54/2/1/1/0 -> /BYTES/
+InitPut /Table/54/3/1/1/0 -> /BYTES/
+InitPut /Table/54/4/1153277837650709461/1/0 -> /BYTES/
+InitPut /Table/54/5/86978413889/1/0 -> /BYTES/
+CPut /Table/54/1/2/0 -> /TUPLE/
+InitPut /Table/54/2/1/2/0 -> /BYTES/
+InitPut /Table/54/3/1/2/0 -> /BYTES/
+InitPut /Table/54/4/1154047404513689600/2/0 -> /BYTES/
+InitPut /Table/54/5/21744603473/2/0 -> /BYTES/

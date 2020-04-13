@@ -42,6 +42,12 @@ func NewS2GGIndex(cfg S2GeographyConfig) GeographyIndex {
 	}
 }
 
+func DefaultGeographyIndexConfig() *Config {
+	return &Config{
+		S2Geography: &S2GeographyConfig{S2Config: defaultS2Config()},
+	}
+}
+
 // InvertedIndexKeys implements the GeographyIndex interface.
 func (i *s2GGIndex) InvertedIndexKeys(c context.Context, g *geo.Geography) ([]Key, error) {
 	r, err := g.AsS2()

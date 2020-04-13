@@ -11,9 +11,11 @@
 package sqlbase
 
 import (
+	"context"
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -852,8 +854,11 @@ func EncodeInvertedIndexKeys(
 	} else {
 		val = tree.DNull
 	}
-
-	return EncodeInvertedIndexTableKeys(val, keyPrefix)
+	if !geoindex.IsEmptyConfig(&index.GeoConfig) {
+		return encodeGeoInvertedIndexTableKeys(val, keyPrefix, index)
+	} else {
+		return EncodeInvertedIndexTableKeys(val, keyPrefix)
+	}
 }
 
 // EncodeInvertedIndexTableKeys produces one inverted index key per element in
@@ -873,6 +878,17 @@ func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, e
 		return json.EncodeInvertedIndexKeys(inKey, val.(*tree.DJSON).JSON)
 	case types.ArrayFamily:
 		return encodeArrayInvertedIndexTableKeys(val.(*tree.DArray), inKey)
+		// TODO: Temporary hack. Remove the following:
+		// - iiuc, the call from span_builder.go should not be using
+		//   EncodeInvertedIndexTableKeys since we are not executing
+		//   queries using geospatial indexes in the same manner as
+		//   other inverted indexes.
+		// - the call from builtins.go needs to have an IndexDescriptor
+		//   and should be changed to call encodeGeoInvertedIndexTableKeys.
+	case types.GeographyFamily:
+		return encodeGeoHack(inKey)
+	case types.GeometryFamily:
+		return encodeGeoHack(inKey)
 	}
 	return nil, errors.AssertionFailedf("trying to apply inverted index to unsupported type %s", datum.ResolvedType())
 }
@@ -901,6 +917,60 @@ func encodeArrayInvertedIndexTableKeys(val *tree.DArray, inKey []byte) (key [][]
 	}
 	outKeys = unique.UniquifyByteSlices(outKeys)
 	return outKeys, nil
+}
+
+func encodeGeoInvertedIndexTableKeys(
+	val tree.Datum, inKey []byte, index *IndexDescriptor,
+) (key [][]byte, err error) {
+	if val == tree.DNull {
+		return nil, nil
+	}
+	switch val.ResolvedType().Family() {
+	case types.GeographyFamily:
+		index := geoindex.NewS2GGIndex(*index.GeoConfig.S2Geography)
+		intKeys, err := index.InvertedIndexKeys(context.TODO(), val.(*tree.DGeography).Geography)
+		if err != nil {
+			return nil, err
+		}
+		return encodeGeoKeys(inKey, intKeys)
+	case types.GeometryFamily:
+		index := geoindex.NewS2GMIndex(*index.GeoConfig.S2Geometry)
+		intKeys, err := index.InvertedIndexKeys(context.TODO(), val.(*tree.DGeometry).Geometry)
+		if err != nil {
+			return nil, err
+		}
+		return encodeGeoKeys(inKey, intKeys)
+	default:
+		return nil, errors.Errorf("internal error: unexpected type: %s", val.ResolvedType().Family())
+	}
+}
+
+// TODO: remove
+func encodeGeoHack(inKey []byte) (keys [][]byte, err error) {
+	outKey := make([]byte, len(inKey))
+	copy(outKey, inKey)
+	d := (tree.DInt)(1)
+	newKey, err := EncodeTableKey(outKey, &d, encoding.Ascending)
+	if err != nil {
+		return nil, err
+	}
+	keys = append(keys, newKey)
+	return keys, nil
+}
+
+func encodeGeoKeys(inKey []byte, geoKeys []geoindex.Key) (keys [][]byte, err error) {
+	keys = make([][]byte, 0, len(geoKeys))
+	for _, k := range geoKeys {
+		outKey := make([]byte, len(inKey))
+		copy(outKey, inKey)
+		d := (tree.DInt)(k)
+		newKey, err := EncodeTableKey(outKey, &d, encoding.Ascending)
+		if err != nil {
+			return nil, err
+		}
+		keys = append(keys, newKey)
+	}
+	return keys, nil
 }
 
 // EncodePrimaryIndex constructs a list of k/v pairs for a

@@ -118,6 +118,13 @@ type GeometryIndex interface {
 	innerCovering(g *geo.Geometry) s2.CellUnion
 }
 
+func IsEmptyConfig(cfg *Config) bool {
+	if cfg == nil {
+		return true
+	}
+	return cfg.S2Geography == nil && cfg.S2Geometry == nil
+}
+
 // Key is one entry under which a geospatial shape is stored on behalf of an
 // Index. The index is of the form (Key, Primary Key).
 type Key uint64
@@ -480,4 +487,13 @@ func generateRPExprForTree(rootID s2.CellID, presentCells map[s2.CellID]struct{}
 		expr = append(expr, RPSetUnion)
 	}
 	return expr
+}
+
+func defaultS2Config() *S2Config {
+	return &S2Config{
+		MinLevel: 0,
+		MaxLevel: 30,
+		LevelMod: 1,
+		MaxCells: 1,
+	}
 }
