@@ -17,6 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
+func EnsureInit(errDisplay EnsureInitErrorDisplay) error {
+	return nil
+}
+
 func WKTToWKB(wkt geopb.WKT) (geopb.WKB, error) {
 	return nil, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
 }
