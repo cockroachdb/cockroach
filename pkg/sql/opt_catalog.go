@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -1253,6 +1254,9 @@ type optVirtualTable struct {
 	// virtual table.
 	name cat.DataSourceName
 
+	// index is a synthesized primary index.
+	index optVirtualIndex
+
 	// family is a synthesized primary family.
 	family optVirtualFamily
 }
@@ -1299,6 +1303,7 @@ func newOptVirtualTable(
 	ot.name.ExplicitSchema = true
 	ot.name.ExplicitCatalog = true
 
+	ot.index.init(ot)
 	ot.family.init(ot)
 
 	return ot, nil
@@ -1348,42 +1353,50 @@ func (ot *optVirtualTable) IsInterleaved() bool {
 
 // ColumnCount is part of the cat.Table interface.
 func (ot *optVirtualTable) ColumnCount() int {
-	return len(ot.desc.Columns)
+	// Virtual tables expose an extra (bogus) PK column.
+	return len(ot.desc.Columns) + 1
 }
 
 // WritableColumnCount is part of the cat.Table interface.
 func (ot *optVirtualTable) WritableColumnCount() int {
-	return len(ot.desc.WritableColumns())
+	return len(ot.desc.WritableColumns()) + 1
 }
 
 // DeletableColumnCount is part of the cat.Table interface.
 func (ot *optVirtualTable) DeletableColumnCount() int {
-	return len(ot.desc.DeletableColumns())
+	return len(ot.desc.DeletableColumns()) + 1
 }
 
 // Column is part of the cat.Table interface.
 func (ot *optVirtualTable) Column(i int) cat.Column {
-	return &ot.desc.DeletableColumns()[i]
+	if i == 0 {
+		// Column 0 is a dummy PK column.
+		return optDummyVirtualPKColumn{}
+	}
+	return &ot.desc.DeletableColumns()[i-1]
 }
 
 // IndexCount is part of the cat.Table interface.
 func (ot *optVirtualTable) IndexCount() int {
-	return 0
+	return 1
 }
 
 // WritableIndexCount is part of the cat.Table interface.
 func (ot *optVirtualTable) WritableIndexCount() int {
-	return 0
+	return 1
 }
 
 // DeletableIndexCount is part of the cat.Table interface.
 func (ot *optVirtualTable) DeletableIndexCount() int {
-	return 0
+	return 1
 }
 
 // Index is part of the cat.Table interface.
 func (ot *optVirtualTable) Index(i int) cat.Index {
-	panic("no indexes")
+	if i > 0 {
+		panic("invalid index")
+	}
+	return &ot.index
 }
 
 // StatisticCount is part of the cat.Table interface.
@@ -1438,6 +1451,148 @@ func (ot *optVirtualTable) InboundForeignKeyCount() int {
 // InboundForeignKey is part of the cat.Table interface.
 func (ot *optVirtualTable) InboundForeignKey(i int) cat.ForeignKeyConstraint {
 	panic("no FKs")
+}
+
+type optDummyVirtualPKColumn struct{}
+
+var _ cat.Column = optDummyVirtualPKColumn{}
+
+// ColID is part of the cat.Column interface.
+func (optDummyVirtualPKColumn) ColID() cat.StableID {
+	return math.MaxInt64
+}
+
+// ColName is part of the cat.Column interface.
+func (optDummyVirtualPKColumn) ColName() tree.Name {
+	return "crdb_internal_vtable_pk"
+}
+
+// DatumType is part of the cat.Column interface.
+func (optDummyVirtualPKColumn) DatumType() *types.T {
+	return types.Int
+}
+
+// ColTypePrecision is part of the cat.Column interface.
+func (optDummyVirtualPKColumn) ColTypePrecision() int {
+	return int(types.Int.Precision())
+}
+
+// ColTypeWidth is part of the cat.Column interface.
+func (optDummyVirtualPKColumn) ColTypeWidth() int {
+	return int(types.Int.Width())
+}
+
+// ColTypeStr is part of the cat.Column interface.
+func (optDummyVirtualPKColumn) ColTypeStr() string {
+	return types.Int.SQLString()
+}
+
+// IsNullable is part of the cat.Column interface.
+func (optDummyVirtualPKColumn) IsNullable() bool {
+	return false
+}
+
+// IsHidden is part of the cat.Column interface.
+func (optDummyVirtualPKColumn) IsHidden() bool {
+	return true
+}
+
+// HasDefault is part of the cat.Column interface.
+func (optDummyVirtualPKColumn) HasDefault() bool {
+	return false
+}
+
+// DefaultExprStr is part of the cat.Column interface.
+func (optDummyVirtualPKColumn) DefaultExprStr() string {
+	return ""
+}
+
+// IsComputed is part of the cat.Column interface.
+func (optDummyVirtualPKColumn) IsComputed() bool {
+	return false
+}
+
+// ComputedExprStr is part of the cat.Column interface.
+func (optDummyVirtualPKColumn) ComputedExprStr() string {
+	return ""
+}
+
+// optVirtualIndex is a dummy implementation of cat.Index for the only index
+// reported by a virtual table. The index assumes that table column 0 is a dummy
+// PK column.
+type optVirtualIndex struct {
+	tab *optVirtualTable
+}
+
+var _ cat.Index = &optIndex{}
+
+func (oi *optVirtualIndex) init(tab *optVirtualTable) {
+	oi.tab = tab
+}
+
+// ID is part of the cat.Index interface.
+func (oi *optVirtualIndex) ID() cat.StableID {
+	return 1
+}
+
+// Name is part of the cat.Index interface.
+func (oi *optVirtualIndex) Name() tree.Name {
+	return "primary"
+}
+
+// Table is part of the cat.Index interface.
+func (oi *optVirtualIndex) Table() cat.Table {
+	return oi.tab
+}
+
+// Ordinal is part of the cat.Index interface.
+func (oi *optVirtualIndex) Ordinal() int {
+	return 0
+}
+
+// IsUnique is part of the cat.Index interface.
+func (oi *optVirtualIndex) IsUnique() bool {
+	return true
+}
+
+// IsInverted is part of the cat.Index interface.
+func (oi *optVirtualIndex) IsInverted() bool {
+	return false
+}
+
+// ColumnCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) ColumnCount() int {
+	return oi.tab.ColumnCount()
+}
+
+// KeyColumnCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) KeyColumnCount() int {
+	return 1
+}
+
+// LaxKeyColumnCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) LaxKeyColumnCount() int {
+	return 1
+}
+
+// Column is part of the cat.Index interface.
+func (oi *optVirtualIndex) Column(ord int) cat.IndexColumn {
+	return cat.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+}
+
+// Zone is part of the cat.Index interface.
+func (oi *optVirtualIndex) Zone() cat.Zone {
+	return &zonepb.ZoneConfig{}
+}
+
+// Span is part of the cat.Index interface.
+func (oi *optVirtualIndex) Span() roachpb.Span {
+	panic("no span")
+}
+
+// PartitionByListPrefixes is part of the cat.Index interface.
+func (oi *optVirtualIndex) PartitionByListPrefixes() []tree.Datums {
+	return nil
 }
 
 // optVirtualFamily is a dummy implementation of cat.Family for the only family

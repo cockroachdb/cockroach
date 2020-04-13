@@ -51,13 +51,13 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// Update the table name to include catalog and schema if not provided.
 	tc.qualifyTableName(&stmt.Table)
 
-	tab := &Table{TabID: tc.nextStableID(), TabName: stmt.Table, Catalog: tc}
-
 	// Assume that every table in the "system" or "information_schema" catalog
 	// is a virtual table. This is a simplified assumption for testing purposes.
 	if stmt.Table.CatalogName == "system" || stmt.Table.SchemaName == "information_schema" {
-		tab.IsVirtual = true
+		return tc.createVirtualTable(stmt)
 	}
+
+	tab := &Table{TabID: tc.nextStableID(), TabName: stmt.Table, Catalog: tc}
 
 	// TODO(andyk): For now, just remember that the table was interleaved. In the
 	// future, it may be necessary to extract additional metadata.
@@ -77,31 +77,29 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 
 	// If there is no primary index, add the hidden rowid column.
 	hasPrimaryIndex := false
-	if !tab.IsVirtual {
-		for _, def := range stmt.Defs {
-			switch def := def.(type) {
-			case *tree.ColumnTableDef:
-				if def.PrimaryKey.IsPrimaryKey {
-					hasPrimaryIndex = true
-				}
+	for _, def := range stmt.Defs {
+		switch def := def.(type) {
+		case *tree.ColumnTableDef:
+			if def.PrimaryKey.IsPrimaryKey {
+				hasPrimaryIndex = true
+			}
 
-			case *tree.UniqueConstraintTableDef:
-				if def.PrimaryKey {
-					hasPrimaryIndex = true
-				}
+		case *tree.UniqueConstraintTableDef:
+			if def.PrimaryKey {
+				hasPrimaryIndex = true
 			}
 		}
+	}
 
-		if !hasPrimaryIndex {
-			rowid := &Column{
-				Ordinal:     tab.ColumnCount(),
-				Name:        "rowid",
-				Type:        types.Int,
-				Hidden:      true,
-				DefaultExpr: &uniqueRowIDString,
-			}
-			tab.Columns = append(tab.Columns, rowid)
+	if !hasPrimaryIndex {
+		rowid := &Column{
+			Ordinal:     tab.ColumnCount(),
+			Name:        "rowid",
+			Type:        types.Int,
+			Hidden:      true,
+			DefaultExpr: &uniqueRowIDString,
 		}
+		tab.Columns = append(tab.Columns, rowid)
 	}
 
 	// Add any mutation columns (after any hidden rowid column).
@@ -130,13 +128,10 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 				}
 			}
 		}
-	} else if !tab.IsVirtual {
+	} else {
 		tab.addPrimaryColumnIndex("rowid")
 	}
 	if stmt.PartitionBy != nil {
-		if len(tab.Indexes) == 0 {
-			panic("cannot partition virtual table")
-		}
 		tab.Indexes[0].partitionBy = stmt.PartitionBy
 	}
 
@@ -209,6 +204,41 @@ OuterLoop:
 	// Add the new table to the catalog.
 	tc.AddTable(tab)
 
+	return tab
+}
+
+func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
+	tab := &Table{
+		TabID:     tc.nextStableID(),
+		TabName:   stmt.Table,
+		Catalog:   tc,
+		IsVirtual: true,
+	}
+
+	// Add the dummy PK column.
+	tab.Columns = []*Column{{
+		Ordinal:  0,
+		Hidden:   true,
+		Nullable: false,
+		Name:     "crdb_internal_vtable_pk",
+		Type:     types.Int,
+		ColType:  *types.Int,
+	}}
+
+	for _, def := range stmt.Defs {
+		switch def := def.(type) {
+		case *tree.ColumnTableDef:
+			tab.addColumn(def)
+		}
+	}
+
+	tab.Families = []*Family{{FamName: "primary", Ordinal: 0, table: tab}}
+	for colOrd, col := range tab.Columns {
+		tab.Families[0].Columns = append(tab.Families[0].Columns,
+			cat.FamilyColumn{Column: col, Ordinal: colOrd})
+	}
+
+	tab.addPrimaryColumnIndex(tab.Columns[0].Name)
 	return tab
 }
 

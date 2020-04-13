@@ -78,6 +78,13 @@ func (ef *execFactory) ConstructScan(
 	rowCount float64,
 	locking *tree.LockingItem,
 ) (exec.Node, error) {
+	if table.IsVirtualTable() {
+		return ef.constructVirtualScan(
+			table, index, needed, indexConstraint, hardLimit, softLimit, reverse, maxResults,
+			reqOrdering, rowCount, locking,
+		)
+	}
+
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
 	// Create a scanNode.
@@ -128,8 +135,19 @@ func (ef *execFactory) ConstructScan(
 	return scan, nil
 }
 
-// ConstructVirtualScan is part of the exec.Factory interface.
-func (ef *execFactory) ConstructVirtualScan(table cat.Table) (exec.Node, error) {
+func (ef *execFactory) constructVirtualScan(
+	table cat.Table,
+	index cat.Index,
+	needed exec.ColumnOrdinalSet,
+	indexConstraint *constraint.Constraint,
+	hardLimit int64,
+	softLimit int64,
+	reverse bool,
+	maxResults uint64,
+	reqOrdering exec.OutputOrdering,
+	rowCount float64,
+	locking *tree.LockingItem,
+) (exec.Node, error) {
 	tn := &table.(*optVirtualTable).name
 	virtual, err := ef.planner.getVirtualTabler().getVirtualTableEntry(tn)
 	if err != nil {
@@ -137,12 +155,41 @@ func (ef *execFactory) ConstructVirtualScan(table cat.Table) (exec.Node, error) 
 	}
 	columns, constructor := virtual.getPlanInfo()
 
-	return &delayedNode{
+	var n exec.Node
+	n = &delayedNode{
 		columns: columns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			return constructor(ctx, p, tn.Catalog())
 		},
-	}, nil
+	}
+	// Check for explicit use of the dummy column.
+	if needed.Contains(0) || indexConstraint != nil || len(reqOrdering) > 0 || reverse {
+		return nil, errors.Errorf("use of %s column not allowed.", table.Column(0).ColName())
+	}
+	if locking != nil {
+		// We shouldn't have allowed SELECT FOR UPDATE for a virtual table.
+		return nil, errors.AssertionFailedf("locking cannot be used with virtual table")
+	}
+	if needed.Len() != len(columns) {
+		// We are selecting a subset of columns; we need a projection.
+		cols := make([]exec.ColumnOrdinal, 0, needed.Len())
+		colNames := make([]string, len(cols))
+		for ord, ok := needed.Next(0); ok; ord, ok = needed.Next(ord + 1) {
+			cols = append(cols, exec.ColumnOrdinal(ord-1))
+			colNames = append(colNames, columns[ord-1].Name)
+		}
+		n, err = ef.ConstructSimpleProject(n, cols, colNames, nil /* reqOrdering */)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if hardLimit != 0 {
+		n, err = ef.ConstructLimit(n, tree.NewDInt(tree.DInt(hardLimit)), nil /* offset */)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return n, nil
 }
 
 func asDataSource(n exec.Node) planDataSource {

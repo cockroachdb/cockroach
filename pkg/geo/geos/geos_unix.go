@@ -13,14 +13,13 @@
 package geos
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -33,23 +32,52 @@ import "C"
 // maxArrayLen is the maximum safe length for this architecture.
 const maxArrayLen = 1<<31 - 1
 
-// validOrError returns an error if the CR_GEOS  is not valid.
-func validOrError(c *C.CR_GEOS) error {
-	if c == nil {
-		// TODO(otan): be more helpful in this error message.
-		return errors.Newf("could not load GEOS library")
+// geosOnce contains the global instance of CR_GEOS, to be initialized
+// during at a maximum of once.
+// If it has failed to open, the error will be populated in "err".
+// This should only be touched by "fetchGEOSOrError".
+var geosOnce struct {
+	geos *C.CR_GEOS
+	err  error
+	once sync.Once
+}
+
+// EnsureInitErrorDisplay is used to control the error message displayed by
+// EnsureInit.
+type EnsureInitErrorDisplay int
+
+const (
+	// EnsureInitErrorDisplayPrivate displays the full error message, including
+	// path info. It is intended for log messages.
+	EnsureInitErrorDisplayPrivate EnsureInitErrorDisplay = iota
+	// EnsureInitErrorDisplayPublic displays a redacted error message, excluding
+	// path info. It is intended for errors to display for the client.
+	EnsureInitErrorDisplayPublic
+)
+
+// EnsureInit attempts to start GEOS if it has not been opened already
+// and returns an error if the CR_GEOS  is not valid.
+func EnsureInit(errDisplay EnsureInitErrorDisplay) error {
+	_, err := ensureInit(errDisplay)
+	return err
+}
+
+// ensureInit behaves as described in EnsureInit, but also returns the GEOS
+// C object which should be hidden from the public eye.
+func ensureInit(errDisplay EnsureInitErrorDisplay) (*C.CR_GEOS, error) {
+	geosOnce.once.Do(func() {
+		geosOnce.geos, geosOnce.err = initGEOS(defaultGEOSLocations)
+	})
+	if geosOnce.err != nil && errDisplay == EnsureInitErrorDisplayPublic {
+		return nil, errors.Newf("geos: this operation is not available")
 	}
-	return nil
+	return geosOnce.geos, geosOnce.err
 }
 
 // defaultGEOSLocations contains a list of locations where GEOS is expected to exist.
 // TODO(otan): make this configurable by flags.
 // TODO(otan): put mac / linux locations
 var defaultGEOSLocations []string
-
-// crGEOS contains the global instance of CR_GEOS, to be initialized
-// during init time.
-var crGEOS *C.CR_GEOS
 
 func init() {
 	// Add the CI path by trying to find all parenting paths and appending
@@ -75,23 +103,28 @@ func init() {
 		}
 		cwd = nextCWD
 	}
-	crGEOS = initCRGEOS(defaultGEOSLocations)
 }
 
-// initCRGEOS initializes the CR_GEOS by attempting to dlopen all
+// initGEOS initializes the CR_GEOS by attempting to dlopen all
 // the paths as parsed in by locs.
-func initCRGEOS(locs []string) *C.CR_GEOS {
+func initGEOS(locs []string) (*C.CR_GEOS, error) {
+	var err error
 	for _, loc := range locs {
 		var ret *C.CR_GEOS
 		errStr := C.CR_GEOS_Init(goToCSlice([]byte(loc)), &ret)
 		if errStr.data == nil {
-			return ret
+			return ret, nil
 		}
-		// TODO(otan): thread the error message somewhere and remove Printf.
-		log.Infof(context.TODO(), "cannot load GEOS from %s: %s\n", loc,
-			string(cSliceToUnsafeGoBytes(errStr)))
+		err = errors.CombineErrors(
+			err,
+			errors.Newf(
+				"geos: cannot load GEOS from %s: %s",
+				loc,
+				string(cSliceToUnsafeGoBytes(errStr)),
+			),
+		)
 	}
-	return nil
+	return nil, errors.Wrap(err, "geos: could not find location to init GEOS")
 }
 
 // goToCSlice returns a CR_GEOS_Slice from a given Go byte slice.
@@ -152,11 +185,12 @@ func statusToError(s C.CR_GEOS_Status) error {
 
 // WKTToWKB parses a WKT into WKB using the GEOS library.
 func WKTToWKB(wkt geopb.WKT) (geopb.WKB, error) {
-	if err := validOrError(crGEOS); err != nil {
+	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	if err != nil {
 		return nil, err
 	}
 	var cWKB C.CR_GEOS_String
-	if err := statusToError(C.CR_GEOS_WKTToWKB(crGEOS, goToCSlice([]byte(wkt)), &cWKB)); err != nil {
+	if err := statusToError(C.CR_GEOS_WKTToWKB(g, goToCSlice([]byte(wkt)), &cWKB)); err != nil {
 		return nil, err
 	}
 	return cStringToSafeGoBytes(cWKB), nil
@@ -166,11 +200,12 @@ func WKTToWKB(wkt geopb.WKT) (geopb.WKB, error) {
 func ClipWKBByRect(
 	wkb geopb.WKB, xMin float64, yMin float64, xMax float64, yMax float64,
 ) (geopb.WKB, error) {
-	if err := validOrError(crGEOS); err != nil {
+	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	if err != nil {
 		return nil, err
 	}
 	var cWKB C.CR_GEOS_String
-	if err := statusToError(C.CR_GEOS_ClipWKBByRect(crGEOS, goToCSlice(wkb), C.double(xMin),
+	if err := statusToError(C.CR_GEOS_ClipWKBByRect(g, goToCSlice(wkb), C.double(xMin),
 		C.double(yMin), C.double(xMax), C.double(yMax), &cWKB)); err != nil {
 		return nil, err
 	}

@@ -121,16 +121,17 @@ drop database  ·            ·
 query TTT
 SELECT * FROM [EXPLAIN SHOW JOBS] WHERE field != 'size'
 ----
-·                                  distributed  false
-·                                  vectorized   false
-render                             ·            ·
- └── sort                          ·            ·
-      │                            order        -column17,-started
-      └── render                   ·            ·
-           └── filter              ·            ·
-                │                  filter       ((job_type IS NULL) OR (job_type != 'AUTO CREATE STATS')) AND ((finished IS NULL) OR (finished > (now() - '12:00:00')))
-                └── virtual table  ·            ·
-·                                  source       ·
+·                                       distributed  false
+·                                       vectorized   false
+render                                  ·            ·
+ └── sort                               ·            ·
+      │                                 order        -column18,-started
+      └── render                        ·            ·
+           └── filter                   ·            ·
+                │                       filter       ((job_type IS NULL) OR (job_type != 'AUTO CREATE STATS')) AND ((finished IS NULL) OR (finished > (now() - '12:00:00')))
+                └── render              ·            ·
+                     └── virtual table  ·            ·
+·                                       source       ·
 
 statement ok
 CREATE INDEX a ON foo(x)
@@ -182,27 +183,6 @@ sort                          ·            ·
 query TTT
 SELECT * FROM [EXPLAIN SHOW TABLES] WHERE field != 'size'
 ----
-·                                       distributed  false
-·                                       vectorized   false
-render                                  ·            ·
- └── sort                               ·            ·
-      │                                 order        +nspname,+relname
-      └── render                        ·            ·
-           └── hash-join                ·            ·
-                │                       type         inner
-                │                       equality     (oid) = (relnamespace)
-                ├── filter              ·            ·
-                │    │                  filter       nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog')
-                │    └── virtual table  ·            ·
-                │                       source       ·
-                └── filter              ·            ·
-                     │                  filter       relkind IN ('S', 'r', 'v')
-                     └── virtual table  ·            ·
-·                                       source       ·
-
-query TTT
-SELECT * FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE field != 'size'
-----
 ·                                            distributed  false
 ·                                            vectorized   false
 render                                       ·            ·
@@ -210,110 +190,143 @@ render                                       ·            ·
       │                                      order        +nspname,+relname
       └── render                             ·            ·
            └── hash-join                     ·            ·
-                │                            type         left outer
-                │                            equality     (oid) = (objoid)
-                ├── hash-join                ·            ·
-                │    │                       type         inner
-                │    │                       equality     (oid) = (relnamespace)
-                │    ├── filter              ·            ·
-                │    │    │                  filter       nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog')
-                │    │    └── virtual table  ·            ·
-                │    │                       source       ·
-                │    └── filter              ·            ·
-                │         │                  filter       relkind IN ('S', 'r', 'v')
+                │                            type         inner
+                │                            equality     (oid) = (relnamespace)
+                ├── filter                   ·            ·
+                │    │                       filter       nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog')
+                │    └── render              ·            ·
                 │         └── virtual table  ·            ·
                 │                            source       ·
                 └── filter                   ·            ·
-                     │                       filter       objsubid = 0
-                     └── virtual table       ·            ·
+                     │                       filter       relkind IN ('S', 'r', 'v')
+                     └── render              ·            ·
+                          └── virtual table  ·            ·
 ·                                            source       ·
+
+query TTT
+SELECT * FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE field != 'size'
+----
+·                                                 distributed  false
+·                                                 vectorized   false
+render                                            ·            ·
+ └── sort                                         ·            ·
+      │                                           order        +nspname,+relname
+      └── render                                  ·            ·
+           └── hash-join                          ·            ·
+                │                                 type         left outer
+                │                                 equality     (oid) = (objoid)
+                ├── hash-join                     ·            ·
+                │    │                            type         inner
+                │    │                            equality     (oid) = (relnamespace)
+                │    ├── filter                   ·            ·
+                │    │    │                       filter       nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog')
+                │    │    └── render              ·            ·
+                │    │         └── virtual table  ·            ·
+                │    │                            source       ·
+                │    └── filter                   ·            ·
+                │         │                       filter       relkind IN ('S', 'r', 'v')
+                │         └── render              ·            ·
+                │              └── virtual table  ·            ·
+                │                                 source       ·
+                └── filter                        ·            ·
+                     │                            filter       objsubid = 0
+                     └── render                   ·            ·
+                          └── virtual table       ·            ·
+·                                                 source       ·
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW DATABASE] WHERE field != 'size'
 ----
-·                        distributed  false
-·                        vectorized   false
-render                   ·            ·
- └── filter              ·            ·
-      │                  filter       variable = 'database'
-      └── virtual table  ·            ·
-·                        source       ·
+·                             distributed  false
+·                             vectorized   false
+render                        ·            ·
+ └── filter                   ·            ·
+      │                       filter       variable = 'database'
+      └── render              ·            ·
+           └── virtual table  ·            ·
+·                             source       ·
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW TIME ZONE] WHERE field != 'size'
 ----
-·                        distributed  false
-·                        vectorized   false
-render                   ·            ·
- └── filter              ·            ·
-      │                  filter       variable = 'timezone'
-      └── virtual table  ·            ·
-·                        source       ·
+·                             distributed  false
+·                             vectorized   false
+render                        ·            ·
+ └── filter                   ·            ·
+      │                       filter       variable = 'timezone'
+      └── render              ·            ·
+           └── virtual table  ·            ·
+·                             source       ·
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION] WHERE field != 'size'
 ----
-·                        distributed  false
-·                        vectorized   false
-render                   ·            ·
- └── filter              ·            ·
-      │                  filter       variable = 'default_transaction_isolation'
-      └── virtual table  ·            ·
-·                        source       ·
+·                             distributed  false
+·                             vectorized   false
+render                        ·            ·
+ └── filter                   ·            ·
+      │                       filter       variable = 'default_transaction_isolation'
+      └── render              ·            ·
+           └── virtual table  ·            ·
+·                             source       ·
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW TRANSACTION ISOLATION LEVEL] WHERE field != 'size'
 ----
-·                        distributed  false
-·                        vectorized   false
-render                   ·            ·
- └── filter              ·            ·
-      │                  filter       variable = 'transaction_isolation'
-      └── virtual table  ·            ·
-·                        source       ·
+·                             distributed  false
+·                             vectorized   false
+render                        ·            ·
+ └── filter                   ·            ·
+      │                       filter       variable = 'transaction_isolation'
+      └── render              ·            ·
+           └── virtual table  ·            ·
+·                             source       ·
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW TRANSACTION PRIORITY] WHERE field != 'size'
 ----
-·                        distributed  false
-·                        vectorized   false
-render                   ·            ·
- └── filter              ·            ·
-      │                  filter       variable = 'transaction_priority'
-      └── virtual table  ·            ·
-·                        source       ·
+·                             distributed  false
+·                             vectorized   false
+render                        ·            ·
+ └── filter                   ·            ·
+      │                       filter       variable = 'transaction_priority'
+      └── render              ·            ·
+           └── virtual table  ·            ·
+·                             source       ·
 
 query TTT
 EXPLAIN SHOW COLUMNS FROM foo
 ----
-·                                            distributed  false
-·                                            vectorized   false
-render                                       ·            ·
- └── group                                   ·            ·
-      │                                      aggregate 0  column_name
-      │                                      aggregate 1  ordinal_position
-      │                                      aggregate 2  column_default
-      │                                      aggregate 3  is_nullable
-      │                                      aggregate 4  generation_expression
-      │                                      aggregate 5  is_hidden
-      │                                      aggregate 6  crdb_sql_type
-      │                                      aggregate 7  array_agg(index_name)
-      │                                      group by     column_name, ordinal_position, column_default, is_nullable, generation_expression, is_hidden, crdb_sql_type
-      │                                      ordered      +ordinal_position
-      └── render                             ·            ·
-           └── sort                          ·            ·
-                │                            order        +ordinal_position
-                └── hash-join                ·            ·
-                     │                       type         left outer
-                     │                       equality     (column_name) = (column_name)
-                     ├── filter              ·            ·
-                     │    │                  filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
-                     │    └── virtual table  ·            ·
-                     │                       source       ·
-                     └── filter              ·            ·
-                          │                  filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
-                          └── virtual table  ·            ·
-·                                            source       ·
+·                                                 distributed  false
+·                                                 vectorized   false
+render                                            ·            ·
+ └── group                                        ·            ·
+      │                                           aggregate 0  column_name
+      │                                           aggregate 1  ordinal_position
+      │                                           aggregate 2  column_default
+      │                                           aggregate 3  is_nullable
+      │                                           aggregate 4  generation_expression
+      │                                           aggregate 5  is_hidden
+      │                                           aggregate 6  crdb_sql_type
+      │                                           aggregate 7  array_agg(index_name)
+      │                                           group by     column_name, ordinal_position, column_default, is_nullable, generation_expression, is_hidden, crdb_sql_type
+      │                                           ordered      +ordinal_position
+      └── render                                  ·            ·
+           └── sort                               ·            ·
+                │                                 order        +ordinal_position
+                └── hash-join                     ·            ·
+                     │                            type         left outer
+                     │                            equality     (column_name) = (column_name)
+                     ├── filter                   ·            ·
+                     │    │                       filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+                     │    └── render              ·            ·
+                     │         └── virtual table  ·            ·
+                     │                            source       ·
+                     └── filter                   ·            ·
+                          │                       filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+                          └── render              ·            ·
+                               └── virtual table  ·            ·
+·                                                 source       ·
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW GRANTS ON foo] WHERE field != 'size'
@@ -323,48 +336,52 @@ SELECT * FROM [EXPLAIN SHOW GRANTS ON foo] WHERE field != 'size'
 render                             ·            ·
  └── sort                          ·            ·
       │                            order        +grantee,+privilege_type
-      └── render                   ·            ·
-           └── filter              ·            ·
-                │                  filter       (table_catalog, table_schema, table_name) IN (('test', 'public', 'foo'),)
+      └── filter                   ·            ·
+           │                       filter       (table_catalog, table_schema, table_name) IN (('test', 'public', 'foo'),)
+           └── render              ·            ·
                 └── virtual table  ·            ·
 ·                                  source       ·
 
 query TTT
 EXPLAIN SHOW INDEX FROM foo
 ----
-·                        distributed  false
-·                        vectorized   false
-render                   ·            ·
- └── filter              ·            ·
-      │                  filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
-      └── virtual table  ·            ·
-·                        source       ·
+·                             distributed  false
+·                             vectorized   false
+render                        ·            ·
+ └── filter                   ·            ·
+      │                       filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+      └── render              ·            ·
+           └── virtual table  ·            ·
+·                             source       ·
 
 query TTT
 EXPLAIN SHOW CONSTRAINTS FROM foo
 ----
-·                                            distributed  false
-·                                            vectorized   false
-render                                       ·            ·
- └── sort                                    ·            ·
-      │                                      order        +conname
-      └── render                             ·            ·
-           └── hash-join                     ·            ·
-                │                            type         inner
-                │                            equality     (conrelid) = (oid)
-                ├── virtual table            ·            ·
-                │                            source       ·
-                └── hash-join                ·            ·
-                     │                       type         inner
-                     │                       equality     (oid) = (relnamespace)
-                     ├── filter              ·            ·
-                     │    │                  filter       nspname = 'public'
-                     │    └── virtual table  ·            ·
-                     │                       source       ·
-                     └── filter              ·            ·
-                          │                  filter       relname = 'foo'
-                          └── virtual table  ·            ·
-·                                            source       ·
+·                                                 distributed  false
+·                                                 vectorized   false
+render                                            ·            ·
+ └── sort                                         ·            ·
+      │                                           order        +conname
+      └── render                                  ·            ·
+           └── hash-join                          ·            ·
+                │                                 type         inner
+                │                                 equality     (conrelid) = (oid)
+                ├── render                        ·            ·
+                │    └── virtual table            ·            ·
+                │                                 source       ·
+                └── hash-join                     ·            ·
+                     │                            type         inner
+                     │                            equality     (oid) = (relnamespace)
+                     ├── filter                   ·            ·
+                     │    │                       filter       nspname = 'public'
+                     │    └── render              ·            ·
+                     │         └── virtual table  ·            ·
+                     │                            source       ·
+                     └── filter                   ·            ·
+                          │                       filter       relname = 'foo'
+                          └── render              ·            ·
+                               └── virtual table  ·            ·
+·                                                 source       ·
 
 query TTT
 EXPLAIN SHOW USERS

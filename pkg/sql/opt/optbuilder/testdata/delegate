@@ -2,28 +2,28 @@ build
 SHOW DATABASES
 ----
 sort
- ├── columns: database_name:1
- ├── ordering: +1
+ ├── columns: database_name:2!null
+ ├── ordering: +2
  └── distinct-on
-      ├── columns: catalog_name:1
-      ├── grouping columns: catalog_name:1
+      ├── columns: catalog_name:2!null
+      ├── grouping columns: catalog_name:2!null
       └── project
-           ├── columns: catalog_name:1
-           └── virtual-scan "".information_schema.schemata
-                └── columns: catalog_name:1 schema_name:2 default_character_set_name:3 sql_path:4
+           ├── columns: catalog_name:2!null
+           └── scan "".information_schema.schemata
+                └── columns: crdb_internal_vtable_pk:1!null catalog_name:2!null schema_name:3!null default_character_set_name:4 sql_path:5
 
 # Note: t is the default database for the test catalog.
 build
 SHOW SCHEMAS FROM t
 ----
 sort
- ├── columns: schema_name:2
- ├── ordering: +2
+ ├── columns: schema_name:3!null
+ ├── ordering: +3
  └── project
-      ├── columns: schema_name:2
+      ├── columns: schema_name:3!null
       └── select
-           ├── columns: catalog_name:1!null schema_name:2 default_character_set_name:3 sql_path:4
-           ├── virtual-scan t.information_schema.schemata
-           │    └── columns: catalog_name:1 schema_name:2 default_character_set_name:3 sql_path:4
+           ├── columns: crdb_internal_vtable_pk:1!null catalog_name:2!null schema_name:3!null default_character_set_name:4 sql_path:5
+           ├── scan t.information_schema.schemata
+           │    └── columns: crdb_internal_vtable_pk:1!null catalog_name:2!null schema_name:3!null default_character_set_name:4 sql_path:5
            └── filters
-                └── catalog_name:1 = 't'
+                └── catalog_name:2 = 't'

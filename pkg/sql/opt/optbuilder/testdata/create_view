@@ -77,7 +77,7 @@ CREATE VIEW v1 AS SELECT a, table_schema FROM ab, information_schema.columns
 ----
 create-view t.public.v1
  ├── SELECT a, table_schema FROM t.public.ab, "".information_schema.columns
- ├── columns: a:1 table_schema:4
+ ├── columns: a:1 table_schema:5
  └── dependencies
       └── ab [columns: (0,1)]
 

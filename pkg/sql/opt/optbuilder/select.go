@@ -409,8 +409,7 @@ func (b *Builder) addTable(tab cat.Table, alias *tree.TableName) *opt.TableMeta 
 	return md.TableMeta(tabID)
 }
 
-// buildScan builds a memo group for a ScanOp or VirtualScanOp expression on the
-// given table.
+// buildScan builds a memo group for a ScanOp expression on the given table.
 //
 // If the ordinals slice is not nil, then only columns with ordinals in that
 // list are projected by the scan. Otherwise, all columns from the table are
@@ -489,8 +488,8 @@ func (b *Builder) buildScan(
 			panic(pgerror.Newf(pgcode.Syntax,
 				"%s not allowed with virtual tables", locking.get().Strength))
 		}
-		private := memo.VirtualScanPrivate{Table: tabID, Cols: tabColIDs}
-		outScope.expr = b.factory.ConstructVirtualScan(&private)
+		private := memo.ScanPrivate{Table: tabID, Cols: tabColIDs}
+		outScope.expr = b.factory.ConstructScan(&private)
 
 		// Virtual tables should not be collected as view dependencies.
 	} else {

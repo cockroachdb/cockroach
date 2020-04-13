@@ -2,13 +2,13 @@ opt
 SELECT * FROM information_schema.schemata WHERE SCHEMA_NAME='public'
 ----
 select
- ├── columns: catalog_name:1 schema_name:2!null default_character_set_name:3 sql_path:4
- ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- ├── cost: 20.02
- ├── fd: ()-->(2)
- ├── virtual-scan information_schema.schemata
- │    ├── columns: catalog_name:1 schema_name:2 default_character_set_name:3 sql_path:4
- │    ├── stats: [rows=1000, distinct(2)=100, null(2)=0]
- │    └── cost: 10.01
+ ├── columns: catalog_name:2!null schema_name:3!null default_character_set_name:4 sql_path:5
+ ├── stats: [rows=10, distinct(3)=1, null(3)=0]
+ ├── cost: 1100.03
+ ├── fd: ()-->(3)
+ ├── scan information_schema.schemata
+ │    ├── columns: catalog_name:2!null schema_name:3!null default_character_set_name:4 sql_path:5
+ │    ├── stats: [rows=1000, distinct(2)=100, null(2)=0, distinct(3)=100, null(3)=0]
+ │    └── cost: 1090.02
  └── filters
-      └── schema_name:2 = 'public' [outer=(2), constraints=(/2: [/'public' - /'public']; tight), fd=()-->(2)]
+      └── schema_name:3 = 'public' [outer=(3), constraints=(/3: [/'public' - /'public']; tight), fd=()-->(3)]
