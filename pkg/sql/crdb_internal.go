@@ -456,11 +456,11 @@ CREATE TABLE crdb_internal.jobs (
 	coordinator_id     		INT
 )`,
 	comment: `decoded job metadata from system.jobs (KV scan)`,
-	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
+	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, func(), error) {
 		currentUser := p.SessionData().User
 		isAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// Beware: we're querying system.jobs as root; we need to be careful to filter
@@ -471,7 +471,7 @@ CREATE TABLE crdb_internal.jobs (
 			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			query)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// Attempt to account for the memory of the retrieved rows and the data
@@ -491,7 +491,7 @@ CREATE TABLE crdb_internal.jobs (
 			}
 		}
 		if err := ba.Grow(ctx, totalMem); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// We'll reuse this container on each loop.
@@ -598,7 +598,7 @@ CREATE TABLE crdb_internal.jobs (
 				)
 				return container, nil
 			}
-		}, nil
+		}, nil, nil
 	},
 }
 
@@ -1587,32 +1587,38 @@ CREATE TABLE crdb_internal.table_columns (
   hidden           BOOL NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
-				tableID := tree.NewDInt(tree.DInt(table.ID))
-				tableName := tree.NewDString(table.Name)
-				for i := range table.Columns {
-					col := &table.Columns[i]
-					defStr := tree.DNull
-					if col.DefaultExpr != nil {
-						defStr = tree.NewDString(*col.DefaultExpr)
+	generator: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor) (virtualTableGenerator, func(), error) {
+		worker := func(addRow func(...tree.Datum) error) error {
+			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
+				func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
+					tableID := tree.NewDInt(tree.DInt(table.ID))
+					tableName := tree.NewDString(table.Name)
+					for i := range table.Columns {
+						col := &table.Columns[i]
+						defStr := tree.DNull
+						if col.DefaultExpr != nil {
+							defStr = tree.NewDString(*col.DefaultExpr)
+						}
+						if err := addRow(
+							tableID,
+							tableName,
+							tree.NewDInt(tree.DInt(col.ID)),
+							tree.NewDString(col.Name),
+							tree.NewDString(col.Type.DebugString()),
+							tree.MakeDBool(tree.DBool(col.Nullable)),
+							defStr,
+							tree.MakeDBool(tree.DBool(col.Hidden)),
+						); err != nil {
+							return err
+						}
 					}
-					if err := addRow(
-						tableID,
-						tableName,
-						tree.NewDInt(tree.DInt(col.ID)),
-						tree.NewDString(col.Name),
-						tree.NewDString(col.Type.DebugString()),
-						tree.MakeDBool(tree.DBool(col.Nullable)),
-						defStr,
-						tree.MakeDBool(tree.DBool(col.Hidden)),
-					); err != nil {
-						return err
-					}
-				}
-				return nil
-			})
+					return nil
+				},
+			)
+		}
+		cleanup, start, next := setupGenerator(worker)
+		go start()
+		return next, cleanup, nil
 	},
 }
 
@@ -1632,39 +1638,45 @@ CREATE TABLE crdb_internal.table_indexes (
   is_inverted      BOOL NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	generator: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor) (virtualTableGenerator, func(), error) {
 		primary := tree.NewDString("primary")
 		secondary := tree.NewDString("secondary")
-		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
-				tableID := tree.NewDInt(tree.DInt(table.ID))
-				tableName := tree.NewDString(table.Name)
-				if err := addRow(
-					tableID,
-					tableName,
-					tree.NewDInt(tree.DInt(table.PrimaryIndex.ID)),
-					tree.NewDString(table.PrimaryIndex.Name),
-					primary,
-					tree.MakeDBool(tree.DBool(table.PrimaryIndex.Unique)),
-					tree.MakeDBool(table.PrimaryIndex.Type == sqlbase.IndexDescriptor_INVERTED),
-				); err != nil {
-					return err
-				}
-				for _, idx := range table.Indexes {
+		worker := func(addRow func(...tree.Datum) error) error {
+			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
+				func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
+					tableID := tree.NewDInt(tree.DInt(table.ID))
+					tableName := tree.NewDString(table.Name)
 					if err := addRow(
 						tableID,
 						tableName,
-						tree.NewDInt(tree.DInt(idx.ID)),
-						tree.NewDString(idx.Name),
-						secondary,
-						tree.MakeDBool(tree.DBool(idx.Unique)),
-						tree.MakeDBool(idx.Type == sqlbase.IndexDescriptor_INVERTED),
+						tree.NewDInt(tree.DInt(table.PrimaryIndex.ID)),
+						tree.NewDString(table.PrimaryIndex.Name),
+						primary,
+						tree.MakeDBool(tree.DBool(table.PrimaryIndex.Unique)),
+						tree.MakeDBool(table.PrimaryIndex.Type == sqlbase.IndexDescriptor_INVERTED),
 					); err != nil {
 						return err
 					}
-				}
-				return nil
-			})
+					for _, idx := range table.Indexes {
+						if err := addRow(
+							tableID,
+							tableName,
+							tree.NewDInt(tree.DInt(idx.ID)),
+							tree.NewDString(idx.Name),
+							secondary,
+							tree.MakeDBool(tree.DBool(idx.Unique)),
+							tree.MakeDBool(idx.Type == sqlbase.IndexDescriptor_INVERTED),
+						); err != nil {
+							return err
+						}
+					}
+					return nil
+				},
+			)
+		}
+		cleanup, start, next := setupGenerator(worker)
+		go start()
+		return next, cleanup, nil
 	},
 }
 
@@ -2102,13 +2114,13 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 	split_enforced_until TIMESTAMP
 )
 `,
-	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
+	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, func(), error) {
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.ranges_no_leases"); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		// TODO(knz): maybe this could use internalLookupCtx.
 		dbNames := make(map[uint64]string)
@@ -2134,13 +2146,13 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			EndKey: keys.MaxKey,
 		})
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// Map node descriptors to localities
 		descriptors, err := getAllNodeDescriptors(p)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		nodeIDToLocality := make(map[roachpb.NodeID]roachpb.Locality)
 		for _, desc := range descriptors {
@@ -2226,7 +2238,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				learnersArr,
 				splitEnforcedUntil,
 			}, nil
-		}, nil
+		}, nil, nil
 	},
 }
 
