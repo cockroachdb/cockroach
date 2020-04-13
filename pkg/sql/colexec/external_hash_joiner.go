@@ -116,6 +116,9 @@ const (
 	//   has returned a zero batch, and thus the FD has been closed.
 	sortMergeNonSortMinFDsOpen = 2
 	externalHJMinPartitions    = sortMergeNonSortMinFDsOpen + (externalSorterMinPartitions * 2)
+	// externalHJMinimalMaxRightPartitionSize determines the minimum value for
+	// maxRightPartitionSizeToJoin variable of the external hash joiner.
+	externalHJMinimalMaxRightPartitionSize = 64 << 10 /* 64 KiB */
 )
 
 // externalHashJoiner is an operator that performs Grace hash join algorithm
@@ -389,6 +392,9 @@ func newExternalHashJoiner(
 	// output batch will be used, but that shouldn't matter in the grand scheme
 	// of things.
 	ehj.memState.maxRightPartitionSizeToJoin = memoryLimit - int64(diskQueuesMemUsed)
+	if ehj.memState.maxRightPartitionSizeToJoin < externalHJMinimalMaxRightPartitionSize {
+		ehj.memState.maxRightPartitionSizeToJoin = externalHJMinimalMaxRightPartitionSize
+	}
 	ehj.scratch.leftBatch = unlimitedAllocator.NewMemBatch(spec.left.sourceTypes)
 	ehj.recursiveScratch.leftBatch = unlimitedAllocator.NewMemBatchNoCols(spec.left.sourceTypes, 0 /* size */)
 	sameSourcesSchema := len(spec.left.sourceTypes) == len(spec.right.sourceTypes)

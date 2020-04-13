@@ -1812,14 +1812,18 @@ func planProjectionExpr(
 	// actualOutputType tracks the logical type of the output column of the
 	// projection operator. See the comment below for more details.
 	actualOutputType := outputType
-	if outputType.Equivalent(types.Int) {
+	if outputType.Identical(types.Int) {
 		// Currently, SQL type system does not respect the width of integers
 		// when figuring out the type of the output of a projection expression
 		// (for example, INT2 + INT2 will be typed as INT8); however,
-		// vectorized operators do respect the width. In order to go around
-		// this limitation, we explicitly check whether output type is INT8,
-		// and if so, we override the output physical types to be what the
-		// vectorized projection operators will actually output.
+		// vectorized operators do respect the width when both operands have
+		// the same width. In order to go around this limitation, we explicitly
+		// check whether output type is INT8, and if so, we override the output
+		// physical types to be what the vectorized projection operators will
+		// actually output.
+		//
+		// Note that in mixed-width scenarios (i.e. INT2 + INT4) the vectorized
+		// engine will output INT8, so no overriding is needed.
 		//
 		// We do, however, need to plan a cast to the expected logical type and
 		// we will do that below.
@@ -1828,9 +1832,7 @@ func planProjectionExpr(
 		if leftPhysType == coltypes.Int16 && rightPhysType == coltypes.Int16 {
 			actualOutputType = types.Int2
 			outputPhysType = coltypes.Int16
-		} else if (leftPhysType == coltypes.Int16 && rightPhysType == coltypes.Int32) ||
-			(leftPhysType == coltypes.Int32 && rightPhysType == coltypes.Int16) ||
-			(leftPhysType == coltypes.Int32 && rightPhysType == coltypes.Int32) {
+		} else if leftPhysType == coltypes.Int32 && rightPhysType == coltypes.Int32 {
 			actualOutputType = types.Int4
 			outputPhysType = coltypes.Int32
 		}
@@ -1932,7 +1934,7 @@ func planProjectionExpr(
 		internalMemUsed += sMem.InternalMemoryUsage()
 	}
 	ct = append(ct, *actualOutputType)
-	if !outputType.Equivalent(actualOutputType) {
+	if !outputType.Identical(actualOutputType) {
 		// The projection operator outputs a column of a different type than
 		// the expected logical type. In order to "synchronize" the reality and
 		// the expectations, we plan a cast.
