@@ -10,9 +10,9 @@ bin/roachtest run \
   --count="${COUNT-1}" \
   --debug="${DEBUG-false}" \
   --build-tag="${BUILD_TAG}" \
-  --cockroach="$PWD/cockroach.linux-2.6.32-gnu-amd64" \
-  --roachprod="$PWD/bin/roachprod" \
-  --workload="$PWD/bin/workload" \
+  --cockroach="${COCKROACH_BINARY}" \
+  --roachprod="${PWD}/bin/roachprod" \
+  --workload="${PWD}/bin/workload" \
   --teamcity=true \
   --slack-token="${SLACK_TOKEN}" \
   --cluster-id="${TC_BUILD_ID}" \

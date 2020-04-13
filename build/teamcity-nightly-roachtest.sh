@@ -6,6 +6,10 @@
 
 # Note that when this script is called, the cockroach binary to be tested
 # already exists in the current directory.
+COCKROACH_BINARY="$PWD/cockroach.linux-2.6.32-gnu-amd64"
+if [[ ! -x ./cockroach ]]; then
+  exit 1
+fi
 
 set -euo pipefail
 
