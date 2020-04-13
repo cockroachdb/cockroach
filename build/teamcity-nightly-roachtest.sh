@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+set -euxo pipefail
+
 # Entry point for the nightly roachtests. These are run from CI and require
 # appropriate secrets for the ${CLOUD} parameter (along with other things,
 # apologies, you're going to have to dig around for them below or even better
@@ -6,12 +8,8 @@
 
 # Note that when this script is called, the cockroach binary to be tested
 # already exists in the current directory.
-COCKROACH_BINARY="$PWD/cockroach.linux-2.6.32-gnu-amd64"
-if [[ ! -x ./cockroach ]]; then
-  exit 1
-fi
-
-set -euo pipefail
+COCKROACH_BINARY="${PWD}/cockroach.linux-2.6.32-gnu-amd64"
+chmod +x "${COCKROACH_BINARY}"
 
 if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -C "roachtest-nightly $(date)" -N "" -f ~/.ssh/id_rsa
@@ -19,7 +17,7 @@ fi
 
 # The artifacts dir should match up with that supplied by TC.
 artifacts=$PWD/artifacts
-mkdir -p "$artifacts"
+mkdir -p "${artifacts}"
 chmod o+rwx "${artifacts}"
 
 export PATH=$PATH:$(go env GOPATH)/bin
@@ -40,7 +38,7 @@ fi
 # Early bind the stats dir. Roachtest invocations can take ages, and we want the
 # date at the time of the start of the run (which identifies the version of the
 # code run best).
-stats_dir="$(date +"%%Y%%m%%d")-${TC_BUILD_ID}"
+stats_dir="$(date +"%Y%m%d")-${TC_BUILD_ID}"
 
 # Set up a function we'll invoke at the end.
 function upload_stats {
@@ -89,6 +87,20 @@ case "${CLOUD}" in
     exit 1
     ;;
 esac
+
+export \
+CLOUD="${CLOUD}" \
+ARTIFACTS="${ARTIFACTS}" \
+PARALLELISM="${PARALLELISM}" \
+CPUQUOTA="${CPUQUOTA}" \
+ZONES="${ZONES}" \
+COUNT="${COUNT-1}" \
+DEBUG="${DEBUG-false}" \
+BUILD_TAG="${BUILD_TAG}" \
+COCKROACH_BINARY="${COCKROACH_BINARY}" \
+SLACK_TOKEN="${SLACK_TOKEN}" \
+TC_BUILD_ID="${TC_BUILD_ID}" \
+TESTS="${TESTS}"
 
 # Teamcity has a 1300 minute timeout that, when reached, kills the process
 # without a stack trace (probably SIGKILL).  We'd love to see a stack trace
