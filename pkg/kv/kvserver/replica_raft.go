@@ -775,8 +775,17 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// the fact that we'll refuse to process messages intended for a higher
 	// replica ID ensures that our replica ID could not have changed.
 	const expl = "during advance"
-	err = r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
+
+	r.mu.Lock()
+	err = r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.Advance(rd)
+		if stats.numConfChangeEntries > 0 {
+			// If the raft leader got removed, campaign the first remaining voter.
+			//
+			// NB: this must be called after Advance() above since campaigning is
+			// a no-op in the presence of unapplied conf changes.
+			maybeCampaignAfterConfChange(ctx, r.store.StoreID(), r.descRLocked(), raftGroup)
+		}
 
 		// If the Raft group still has more to process then we immediately
 		// re-enqueue it for another round of processing. This is possible if
@@ -787,6 +796,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 		return true, nil
 	})
+	r.mu.Unlock()
 	if err != nil {
 		return stats, expl, errors.Wrap(err, expl)
 	}
@@ -1737,4 +1747,39 @@ func ComputeRaftLogSize(
 		}
 	}
 	return ms.SysBytes + totalSideloaded, nil
+}
+
+func maybeCampaignAfterConfChange(
+	ctx context.Context,
+	storeID roachpb.StoreID,
+	desc *roachpb.RangeDescriptor,
+	raftGroup *raft.RawNode,
+) {
+	// If a config change was carried out, it's possible that the Raft
+	// leader was removed. Verify that, and if so, campaign if we are
+	// the first remaining voter replica. Without this, the range will
+	// be leaderless (and thus unavailable) for a few seconds.
+	//
+	// We can't (or rather shouldn't) campaign on all remaining voters
+	// because that can lead to a stalemate. For example, three voters
+	// may all make it through PreVote and then reject each other.
+	st := raftGroup.BasicStatus()
+	if st.Lead == 0 {
+		// Leader unknown. This isn't what we expect in steady state, so we
+		// don't do anything.
+		return
+	}
+	if !desc.IsInitialized() {
+		// We don't have an initialized, so we can't figure out who is supposed
+		// to campaign. It's possible that it's us and we're waiting for the
+		// initial snapshot, but it's hard to tell. Don't do anything.
+		return
+	}
+	// If the leader is no longer in the descriptor but we are the first voter,
+	// campaign.
+	_, leaderStillThere := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(st.Lead))
+	if !leaderStillThere && storeID == desc.Replicas().Voters()[0].StoreID {
+		log.VEventf(ctx, 3, "leader got removed by conf change; campaigning")
+		_ = raftGroup.Campaign()
+	}
 }
