@@ -162,15 +162,12 @@ func TestPhysicalProps(t *testing.T) {
 //   ...
 func TestRuleProps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	datadriven.Walk(t, "testdata/ruleprops", func(t *testing.T, path string) {
-		catalog := testcat.New()
-		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			tester := opttester.New(catalog, d.Input)
-			tester.Flags.ExprFormat = memo.ExprFmtHideStats | memo.ExprFmtHideCost |
-				memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes
-			return tester.RunCommand(t, d)
-		})
-	})
+	runDataDrivenTest(
+		t,
+		"testdata/ruleprops/",
+		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideQualifications|
+			memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
+	)
 }
 
 // TestRules files can be run separately like this:
