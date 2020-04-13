@@ -41,6 +41,12 @@ chmod +x cockroach.linux-2.6.32-gnu-amd64
 artifacts=$PWD/artifacts
 mkdir -p "$artifacts"
 
+# We do, however, want to write the stats files with datestamps before uploading
+stats_artifacts="${artifacts}"/$(date +"%%Y%%m%%d")-${TC_BUILD_ID}
+mkdir -p "${stats_artifacts}"
+chmod o+rwx "${stats_artifacts}"
+
+
 # NB: Teamcity has a 1080 minute timeout that, when reached,
 # kills the process without a stack trace (probably SIGKILL).
 # We'd love to see a stack trace though, so after 1000 minutes,
@@ -59,7 +65,7 @@ if ! timeout -s INT $((1000*60)) bin/roachtest run \
   --cockroach "$PWD/cockroach.linux-2.6.32-gnu-amd64" \
   --roachprod "$PWD/bin/roachprod" \
   --workload "$PWD/bin/workload" \
-  --artifacts "$artifacts" \
+  --artifacts "$stats_artifacts" \
   --parallelism 3 \
   --teamcity \
   --cpu-quota=384 \
