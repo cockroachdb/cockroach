@@ -53,11 +53,11 @@ CR_GEOS_Slice CR_GEOS_Init(CR_GEOS_Slice loc, CR_GEOS** lib);
 
 // CR_GEOS_WKTToWKB converts a given WKT into it's WKB form. The wkt slice must be
 // convertible to a NUL character terminated C string.
-CR_GEOS_Status CR_GEOS_WKTToWKB(CR_GEOS* lib, CR_GEOS_Slice wkt, CR_GEOS_String* wkb);
+CR_GEOS_Status CR_GEOS_WKTToEWKB(CR_GEOS* lib, CR_GEOS_Slice wkt, int srid, CR_GEOS_String* ewkb);
 
-// CR_GEOS_ClipWKBByRect clips a given WKB by the given rectangle.
-CR_GEOS_Status CR_GEOS_ClipWKBByRect(CR_GEOS* lib, CR_GEOS_Slice wkb, double xmin, double ymin,
-                                     double xmax, double ymax, CR_GEOS_String* clipped_wkb);
+// CR_GEOS_ClipEWKBByRect clips a given WKB by the given rectangle.
+CR_GEOS_Status CR_GEOS_ClipEWKBByRect(CR_GEOS* lib, CR_GEOS_Slice wkb, double xmin, double ymin,
+                                      double xmax, double ymax, CR_GEOS_String* clippedEWKB);
 
 #ifdef __cplusplus
 }  // extern "C"

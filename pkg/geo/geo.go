@@ -17,11 +17,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/golang/geo/s2"
 	"github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/encoding/ewkb"
-	"github.com/twpayne/go-geom/encoding/ewkbhex"
 	// Force imports until they are used.
 	_ "github.com/twpayne/go-geom/encoding/geojson"
 	_ "github.com/twpayne/go-geom/encoding/kml"
@@ -35,12 +33,27 @@ var ewkbEncodingFormat = binary.LittleEndian
 // spatialObjectBase is the base for spatial objects.
 type spatialObjectBase struct {
 	ewkb geopb.EWKB
-	// TODO(otan): denormalize SRID from EWKB.
 }
 
 // EWKB returns the EWKB form of the data type.
 func (b *spatialObjectBase) EWKB() geopb.EWKB {
 	return b.ewkb
+}
+
+// SRID returns the SRID of the given spatial object.
+func (b *spatialObjectBase) SRID() geopb.SRID {
+	// We always assume EWKB is little endian and valid.
+	// Mask the 5th byte and check if it has the SRID bit set.
+	if b.ewkb[4]&0x20 == 0 {
+		return 0
+	}
+	// Read the next 4 bytes as little endian.
+	return geopb.SRID(
+		int32(b.ewkb[5]) +
+			(int32(b.ewkb[6]) << 8) +
+			(int32(b.ewkb[7]) << 16) +
+			(int32(b.ewkb[8]) << 24),
+	)
 }
 
 // EWKBHex returns the EWKB-hex version of this data type
@@ -66,7 +79,7 @@ type Geometry struct {
 	spatialObjectBase
 }
 
-// NewGeometry returns a new Geometry. Assumes the input Geometry is validated and in little endian.
+// NewGeometry returns a new Geometry. Assumes the input EWKB is validated and in little endian.
 func NewGeometry(ewkb geopb.EWKB) *Geometry {
 	return &Geometry{spatialObjectBase{ewkb: ewkb}}
 }
@@ -82,8 +95,7 @@ func NewGeometryFromUnvalidatedEWKB(ewkb geopb.UnvalidatedEWKB) (*Geometry, erro
 
 // ParseGeometry parses a Geometry from a given text.
 func ParseGeometry(str string) (*Geometry, error) {
-	// TODO(otan): check for SRID=x at the beginning.
-	ewkb, err := parseAmbiguousTextToEWKB(str)
+	ewkb, err := parseAmbiguousTextToEWKB(str, geopb.DefaultGeometrySRID)
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +103,23 @@ func ParseGeometry(str string) (*Geometry, error) {
 }
 
 // AsGeography converts a given Geometry to it's Geography form.
-func (g *Geometry) AsGeography() *Geography {
-	return NewGeography(g.ewkb)
+func (g *Geometry) AsGeography() (*Geography, error) {
+	if g.SRID() != 0 {
+		// TODO(otan): check SRID is latlng
+		return NewGeography(g.ewkb), nil
+	}
+
+	// Set a default SRID if one is not already set.
+	geom, err := ewkb.Unmarshal(g.ewkb)
+	if err != nil {
+		return nil, err
+	}
+	adjustGeomSRID(geom, geopb.DefaultGeographySRID)
+	ret, err := ewkb.Marshal(geom, ewkbEncodingFormat)
+	if err != nil {
+		return nil, err
+	}
+	return NewGeography(geopb.EWKB(ret)), nil
 }
 
 // Geography is a spherical spatial object.
@@ -114,43 +141,11 @@ func NewGeographyFromUnvalidatedEWKB(ewkb geopb.UnvalidatedEWKB) (*Geography, er
 	return &Geography{base}, nil
 }
 
-// parseAmbiguousTextToEWKB parses a text as a number of different options
-// that is available in the geospatial world using the first character as
-// a heuristic.
-// This matches the PostGIS direct cast from a string to GEOGRAPHY/GEOMETRY.
-// See: https://github.com/postgis/postgis/blob/master/postgis/lwgeom_inout.c#L85.
-func parseAmbiguousTextToEWKB(str string) (geopb.EWKB, error) {
-	// TODO(otan): check for SRID=x at the beginning.
-	if len(str) > 0 {
-		// Parse as EWKB hex.
-		if str[0] == '0' {
-			t, err := ewkbhex.Decode(str)
-			if err != nil {
-				return nil, err
-			}
-			return ewkb.Marshal(t, ewkbEncodingFormat)
-		}
-		// Parse as EWKB if it's a byte start.
-		if str[0] == 0x00 || str[0] == 0x01 {
-			t, err := ewkb.Unmarshal([]byte(str))
-			if err != nil {
-				return nil, err
-			}
-			return ewkb.Marshal(t, ewkbEncodingFormat)
-		}
-	}
-	wkb, err := geos.WKTToWKB(geopb.WKT(str))
-	if err != nil {
-		return nil, err
-	}
-	return geopb.EWKB(wkb), nil
-}
-
 // ParseGeography parses a Geography from a given text.
 // TODO(otan): when we have our own WKT parser, move this to geo.
 func ParseGeography(str string) (*Geography, error) {
 	// TODO(otan): set SRID of EWKB to 4326.
-	ewkb, err := parseAmbiguousTextToEWKB(str)
+	ewkb, err := parseAmbiguousTextToEWKB(str, geopb.DefaultGeographySRID)
 	if err != nil {
 		return nil, err
 	}
