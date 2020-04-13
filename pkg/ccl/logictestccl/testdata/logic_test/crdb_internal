@@ -153,3 +153,10 @@ RANGE default  ALTER RANGE default CONFIGURE ZONE USING
                num_replicas = 3,
                constraints = '[]',
                lease_preferences = '[]'
+
+# This test checks that generator backed tables do not concurrently
+# access transactions. It does this by scanning two virtual tables at a time.
+# If the background generator functions were performing work when not allowed
+# to, the background generators would conflict with an error.
+statement ok
+SELECT a.* FROM crdb_internal.partitions AS a JOIN crdb_internal.partitions AS b ON a.table_id = b.table_id
