@@ -1375,12 +1375,34 @@ func (c *CustomFuncs) ProjectColMapRight(set *memo.SetPrivate) memo.ProjectionsE
 // projectColMapSide implements the side-agnostic logic from ProjectColMapLeft
 // and ProjectColMapRight.
 func (c *CustomFuncs) projectColMapSide(toList, fromList opt.ColList) memo.ProjectionsExpr {
-	items := make(memo.ProjectionsExpr, len(toList))
+	items := make(memo.ProjectionsExpr, 0, len(toList))
 	for idx, fromCol := range fromList {
 		toCol := toList[idx]
-		items[idx] = c.f.ConstructProjectionsItem(c.f.ConstructVariable(fromCol), toCol)
+		if fromCol != toCol {
+			items = append(items, c.f.ConstructProjectionsItem(c.f.ConstructVariable(fromCol), toCol))
+		}
 	}
 	return items
+}
+
+// ProjectPassthroughLeft returns a ColSet that contains the columns that can
+// be passed-through from the left side in a SetPrivate when eliminating a set
+// operation, like in EliminateUnionAllLeft. Columns in both the output
+// ColList and the left ColList should be passed-through.
+func (c *CustomFuncs) ProjectPassthroughLeft(set *memo.SetPrivate) opt.ColSet {
+	out := set.OutCols.ToSet()
+	left := set.LeftCols.ToSet()
+	return out.Intersection(left)
+}
+
+// ProjectPassthroughRight returns a ColSet that contains the columns that can
+// be passed-through from the right side in a SetPrivate when eliminating a set
+// operation, like in EliminateUnionAllLeft. Columns in both the output
+// ColList and the right ColList should be passed-through.
+func (c *CustomFuncs) ProjectPassthroughRight(set *memo.SetPrivate) opt.ColSet {
+	out := set.OutCols.ToSet()
+	right := set.RightCols.ToSet()
+	return out.Intersection(right)
 }
 
 // PruneSetPrivate returns a SetPrivate based on the given SetPrivate, but with
