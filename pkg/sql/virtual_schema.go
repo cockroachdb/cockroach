@@ -74,7 +74,7 @@ type virtualSchemaTable struct {
 	// generator, if non-nil, is a function that is used when creating a
 	// virtualTableNode. This function returns a virtualTableGenerator function
 	// which generates the next row of the virtual table when called.
-	generator func(ctx context.Context, p *planner, db *DatabaseDescriptor) (virtualTableGenerator, error)
+	generator func(ctx context.Context, p *planner, db *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error)
 }
 
 // virtualSchemaView represents a view within a virtualSchema
@@ -264,11 +264,11 @@ func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConst
 			}
 
 			if def.generator != nil {
-				next, err := def.generator(ctx, p, dbDesc)
+				next, cleanup, err := def.generator(ctx, p, dbDesc)
 				if err != nil {
 					return nil, err
 				}
-				return p.newContainerVirtualTableNode(columns, 0, next), nil
+				return p.newContainerVirtualTableNode(columns, 0, next, cleanup), nil
 			}
 			v := p.newContainerValuesNode(columns, 0)
 
