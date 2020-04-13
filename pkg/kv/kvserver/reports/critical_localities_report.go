@@ -248,6 +248,9 @@ func (r *replicationCriticalLocalitiesReportSaver) upsertLocality(
 type criticalLocalitiesVisitor struct {
 	allLocalities map[roachpb.NodeID]map[string]roachpb.Locality
 	cfg           *config.SystemConfig
+	// storeResolver resolves a range to the store descriptors of all its
+	// replicas. Empty descriptors will be returned for stores that gossip
+	// doesn't have a descriptor for.
 	storeResolver StoreResolver
 	nodeChecker   nodeChecker
 
@@ -387,71 +390,70 @@ func (v *criticalLocalitiesVisitor) countRange(
 	// Any of the localities of any of the nodes could be critical. We'll check
 	// them one by one.
 	for _, loc := range dedupLocal {
-		processLocalityForRange(ctx, r, zoneKey, v.report, loc, v.nodeChecker, stores)
+		processLocalityForRange(ctx, r, zoneKey, loc, v.nodeChecker, stores, v.report)
 	}
 }
 
-// processLocalityForRange checks a single locality constraint against a
-// range with replicas in each of the stores given, contributing to rep.
+// processLocalityForRange checks whether a given locality loc is critical for
+// range r with replicas in each of the stores given. If the locality is found
+// to be critical, rep will be updated. A locality is critical if the range
+// cannot make progress if all the replicas in the locality were to become
+// unavailable (in addition to the replicas indicated by the nodeChecker to also
+// be unavailable).
+//
+// storeDescs are the descriptors for the stores of all the replicas, in order.
+// Empty descriptors are passed in for stores about which we're missing info;
+// such stores will not be considered to be in loc.
+//
+// Note that if a range is unavailable to begin with, the localities of all its
+// replicas are considered to be critical.
 func processLocalityForRange(
 	ctx context.Context,
 	r *roachpb.RangeDescriptor,
 	zoneKey ZoneKey,
-	rep LocalityReport,
 	loc roachpb.Locality,
 	nodeChecker nodeChecker,
 	storeDescs []roachpb.StoreDescriptor,
+	rep LocalityReport,
 ) {
-	// Compute the required quorum and the number of live nodes. If the number of
-	// live nodes gets lower than the required quorum then the range is already
-	// unavailable.
-	quorumCount := len(r.Replicas().Voters())/2 + 1
-	liveNodeCount := len(storeDescs)
-	for _, storeDesc := range storeDescs {
-		isStoreLive := nodeChecker(storeDesc.Node.NodeID)
-		if !isStoreLive {
-			if liveNodeCount >= quorumCount {
-				liveNodeCount--
-				if liveNodeCount < quorumCount {
-					break
-				}
+	// inLoc returns whether other is the same, or a sub-locality of loc.
+	inLoc := func(other roachpb.Locality) bool {
+		// If other is shorter, then it's either unrelated to loc, or more generic
+		// than loc. The "more generic" case shouldn't happen with nodes with
+		// properly-configured localities, since other comes from a node's locality
+		// which is supposed to be as specific as possible.
+		if len(other.Tiers) < len(loc.Tiers) {
+			return false
+		}
+		for i, locTier := range loc.Tiers {
+			otherTier := other.Tiers[i]
+			if !(locTier.Key == otherTier.Key && locTier.Value == otherTier.Value) {
+				return false
 			}
 		}
+		return true
 	}
 
-	localityToConstraints := func(loc roachpb.Locality) zonepb.ConstraintsConjunction {
-		c := zonepb.ConstraintsConjunction{
-			Constraints: make([]zonepb.Constraint, 0, len(loc.Tiers)),
-		}
-		for _, tier := range loc.Tiers {
-			c.Constraints = append(c.Constraints, zonepb.Constraint{
-				Type: zonepb.Constraint_REQUIRED, Key: tier.Key, Value: tier.Value,
-			})
-		}
-		return c
-	}
+	unavailableWithoutLoc := !r.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
+		alive := nodeChecker(rDesc.NodeID)
 
-	locStr := LocalityRepr(loc.String())
-	c := localityToConstraints(loc)
-	passCount := 0
-	for _, storeDesc := range storeDescs {
-		storeHasConstraint := true
-		for _, constraint := range c.Constraints {
-			// For required constraints - consider unavailable nodes as not matching.
-			if !zonepb.StoreMatchesConstraint(storeDesc, constraint) {
-				storeHasConstraint = false
+		var replicaInLoc bool
+		var sDesc roachpb.StoreDescriptor
+		for _, sd := range storeDescs {
+			if sd.StoreID == rDesc.StoreID {
+				sDesc = sd
 				break
 			}
 		}
-
-		if storeHasConstraint && nodeChecker(storeDesc.Node.NodeID) {
-			passCount++
+		if sDesc.StoreID == 0 {
+			replicaInLoc = false
+		} else {
+			replicaInLoc = inLoc(sDesc.Node.Locality)
 		}
-	}
+		return alive && !replicaInLoc
+	})
 
-	// If the live nodes outside of the given locality are not enough to
-	// form quorum then this locality is critical.
-	if quorumCount > liveNodeCount-passCount {
-		rep.CountRangeAtRisk(zoneKey, locStr)
+	if unavailableWithoutLoc {
+		rep.CountRangeAtRisk(zoneKey, LocalityRepr(loc.String()))
 	}
 }

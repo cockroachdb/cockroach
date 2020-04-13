@@ -742,6 +742,12 @@ type compiledTestCase struct {
 	objectToZone map[string]ZoneKey
 	// The inverse of objectToZone.
 	zoneToObject map[ZoneKey]string
+
+	// nodeLocalities maps from each node to its locality.
+	nodeLocalities map[roachpb.NodeID]roachpb.Locality
+	// allLocalities is the list of all localities in the cluster, at all
+	// granularities.
+	allLocalities map[roachpb.NodeID]map[string]roachpb.Locality
 }
 
 // compileTestCase takes the input schema and turns it into a compiledTestCase.
@@ -799,24 +805,41 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 		}
 	}
 
-	keyScanner := keysutils.MakePrettyScannerForNamedTables(tableToID, idxToID)
-	ranges, err := processSplits(keyScanner, tc.splits)
-	if err != nil {
-		return compiledTestCase{}, err
-	}
+	var allStores []roachpb.StoreDescriptor
+	for i, n := range tc.nodes {
+		// Ensure nodes are not defined more than once.
+		for j := 0; j < i; j++ {
+			if tc.nodes[j].id == n.id {
+				return compiledTestCase{}, errors.Errorf("duplicate node definition: %d", n.id)
+			}
+		}
 
-	var storeDescs []roachpb.StoreDescriptor
-	for _, n := range tc.nodes {
 		_ /* nodeDesc */, sds, err := n.toDescriptors()
 		if err != nil {
 			return compiledTestCase{}, err
 		}
-		storeDescs = append(storeDescs, sds...)
+		allStores = append(allStores, sds...)
 	}
+
+	keyScanner := keysutils.MakePrettyScannerForNamedTables(tableToID, idxToID)
+	ranges, err := processSplits(keyScanner, tc.splits, allStores)
+	if err != nil {
+		return compiledTestCase{}, err
+	}
+
+	nodeLocalities := make(map[roachpb.NodeID]roachpb.Locality, len(allStores))
+	for _, storeDesc := range allStores {
+		nodeDesc := storeDesc.Node
+		// Note: We might overwrite the node's localities here. We assume that all
+		// the stores for a node have the same node descriptor.
+		nodeLocalities[nodeDesc.NodeID] = nodeDesc.Locality
+	}
+	allLocalities := expandLocalities(nodeLocalities)
 	storeResolver := func(r *roachpb.RangeDescriptor) []roachpb.StoreDescriptor {
-		stores := make([]roachpb.StoreDescriptor, len(r.Replicas().Voters()))
-		for i, rep := range r.Replicas().Voters() {
-			for _, desc := range storeDescs {
+		replicas := r.Replicas().All()
+		stores := make([]roachpb.StoreDescriptor, len(replicas))
+		for i, rep := range replicas {
+			for _, desc := range allStores {
 				if rep.StoreID == desc.StoreID {
 					stores[i] = desc
 					break
@@ -840,12 +863,14 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 		objectToZone[v] = k
 	}
 	return compiledTestCase{
-		iter:         testRangeIter{ranges: ranges},
-		cfg:          cfg,
-		resolver:     storeResolver,
-		checker:      nodeChecker,
-		zoneToObject: zoneToObject,
-		objectToZone: objectToZone,
+		iter:           testRangeIter{ranges: ranges},
+		cfg:            cfg,
+		resolver:       storeResolver,
+		checker:        nodeChecker,
+		zoneToObject:   zoneToObject,
+		objectToZone:   objectToZone,
+		nodeLocalities: nodeLocalities,
+		allLocalities:  allLocalities,
 	}, nil
 }
 
@@ -877,8 +902,18 @@ func generateTableZone(t table, tableDesc descpb.TableDescriptor) (*zonepb.ZoneC
 }
 
 func processSplits(
-	keyScanner keysutil.PrettyScanner, splits []split,
+	keyScanner keysutil.PrettyScanner, splits []split, stores []roachpb.StoreDescriptor,
 ) ([]roachpb.RangeDescriptor, error) {
+
+	findStore := func(storeID int) (roachpb.StoreDescriptor, error) {
+		for _, s := range stores {
+			if s.StoreID == roachpb.StoreID(storeID) {
+				return s, nil
+			}
+		}
+		return roachpb.StoreDescriptor{}, errors.Errorf("store not found: %d", storeID)
+	}
+
 	ranges := make([]roachpb.RangeDescriptor, len(splits))
 	var lastKey roachpb.Key
 	for i, split := range splits {
@@ -926,6 +961,10 @@ func processSplits(
 			if err != nil {
 				return nil, err
 			}
+			storeDesc, err := findStore(storeID)
+			if err != nil {
+				return nil, err
+			}
 			// Figure out the type of the replica. It's VOTER_FULL by default, unless
 			// another option was specified.
 			typ := roachpb.VOTER_FULL
@@ -947,7 +986,7 @@ func processSplits(
 				}
 			}
 
-			rd.AddReplica(roachpb.NodeID(storeID), roachpb.StoreID(storeID), typ)
+			rd.AddReplica(storeDesc.Node.NodeID, storeDesc.StoreID, typ)
 		}
 
 		ranges[i] = rd
