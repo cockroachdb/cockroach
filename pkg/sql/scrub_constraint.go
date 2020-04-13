@@ -15,6 +15,7 @@ import (
 	"go/constant"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -96,8 +97,26 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 		}
 	}
 
-	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
-		ctx, "check-constraint", params.p.txn, tree.AsStringWithFlags(sel, tree.FmtParsable),
+	override := sqlbase.InternalExecutorSessionDataOverride{
+		User: security.RootUser,
+	}
+	isTempSchema, clusterWideID, err := temporarySchemaSessionID(tn.Schema())
+	if err != nil {
+		return err
+	}
+	if isTempSchema {
+		searchPath := sqlbase.DefaultSearchPath.WithTemporarySchemaName(
+			temporarySchemaName(clusterWideID),
+		)
+		override.SearchPath = &searchPath
+	}
+
+	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryEx(
+		ctx,
+		"check-constraint",
+		params.p.txn,
+		override,
+		tree.AsStringWithFlags(sel, tree.FmtParsable),
 	)
 	if err != nil {
 		return err

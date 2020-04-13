@@ -222,3 +222,11 @@ subtest table_with_on_commit
 
 statement error ON COMMIT can only be used on temporary tables
 CREATE TABLE a (a int) ON COMMIT PRESERVE ROWS
+
+subtest regression_47031
+
+statement ok
+CREATE TEMP TABLE regression_47031(c0 INT)
+
+statement ok
+EXPERIMENTAL SCRUB table regression_47031
