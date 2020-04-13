@@ -12,7 +12,6 @@ package main
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"runtime"
@@ -142,12 +141,6 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVers
 }
 
 func (u *versionUpgradeTest) run(ctx context.Context, t *test) {
-	defer func() {
-		for _, db := range u.conns {
-			_ = db.Close()
-		}
-	}()
-
 	for _, step := range u.steps {
 		step(ctx, t, u)
 
@@ -158,10 +151,6 @@ type versionUpgradeTest struct {
 	goOS  string
 	c     *cluster
 	steps []versionStep
-
-	// Cache conns because opening one takes hundreds of ms, and we do it quite
-	// a lot.
-	conns []*gosql.DB
 }
 
 func newVersionUpgradeTest(c *cluster, steps ...versionStep) *versionUpgradeTest {
@@ -173,17 +162,6 @@ func newVersionUpgradeTest(c *cluster, steps ...versionStep) *versionUpgradeTest
 }
 
 func checkpointName(binaryVersion string) string { return "checkpoint-v" + binaryVersion }
-
-// Return a cached conn to the given node. Don't call .Close(), the test harness
-// will do it.
-func (u *versionUpgradeTest) conn(ctx context.Context, t *test, i int) *gosql.DB {
-	if u.conns == nil {
-		for _, i := range u.c.All() {
-			u.conns = append(u.conns, u.c.Conn(ctx, i))
-		}
-	}
-	return u.conns[i-1]
-}
 
 func (u *versionUpgradeTest) uploadVersion(
 	ctx context.Context, t *test, nodes nodeListOption, newVersion string,
@@ -216,7 +194,7 @@ func (u *versionUpgradeTest) uploadVersion(
 // NB: version means major.minor[-unstable]; the patch level isn't returned. For example, a binary
 // of version 19.2.4 will return 19.2.
 func (u *versionUpgradeTest) binaryVersion(ctx context.Context, t *test, i int) roachpb.Version {
-	db := u.conn(ctx, t, i)
+	db := u.c.Conn(ctx, i)
 
 	var sv string
 	if err := db.QueryRow(`SELECT crdb_internal.node_executable_version();`).Scan(&sv); err != nil {
@@ -239,7 +217,7 @@ func (u *versionUpgradeTest) binaryVersion(ctx context.Context, t *test, i int) 
 // gossip asynchronicity.
 // NB: cluster versions are always major.minor[-unstable]; there isn't a patch level.
 func (u *versionUpgradeTest) clusterVersion(ctx context.Context, t *test, i int) roachpb.Version {
-	db := u.conn(ctx, t, i)
+	db := u.c.Conn(ctx, i)
 
 	var sv string
 	if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&sv); err != nil {
@@ -304,7 +282,7 @@ func binaryUpgradeStep(nodes nodeListOption, newVersion string) versionStep {
 
 func preventAutoUpgradeStep(node int) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		db := u.conn(ctx, t, node)
+		db := u.c.Conn(ctx, node)
 		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING cluster.preserve_downgrade_option = $1`, u.binaryVersion(ctx, t, node).String())
 		if err != nil {
 			t.Fatal(err)
@@ -314,7 +292,7 @@ func preventAutoUpgradeStep(node int) versionStep {
 
 func allowAutoUpgradeStep(node int) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		db := u.conn(ctx, t, node)
+		db := u.c.Conn(ctx, node)
 		_, err := db.ExecContext(ctx, `RESET CLUSTER SETTING cluster.preserve_downgrade_option`)
 		if err != nil {
 			t.Fatal(err)
@@ -441,7 +419,7 @@ func stmtFeatureTest(
 			if u.clusterVersion(ctx, t, i).Less(minVersion) {
 				return true // skipped
 			}
-			db := u.conn(ctx, t, i)
+			db := u.c.Conn(ctx, i)
 			if _, err := db.ExecContext(ctx, stmt, args...); err != nil {
 				t.Fatal(err)
 			}

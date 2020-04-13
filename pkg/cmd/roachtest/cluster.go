@@ -968,6 +968,13 @@ type cluster struct {
 
 	// destroyState contains state related to the cluster's destruction.
 	destroyState destroyState
+
+	// conns caches *DBs. Opening one takes hundreds of ms, and we do it quite
+	// a lot.
+	conns struct {
+		syncutil.Mutex
+		m map[int]*gosql.DB // 1-indexed (c.Node(i) -> conn)
+	}
 }
 
 func (c *cluster) String() string {
@@ -1658,6 +1665,7 @@ const (
 //
 // This method generally does not react to ctx cancelation.
 func (c *cluster) Destroy(ctx context.Context, lo closeLoggerOpt, l *logger) {
+	c.clearConnCache()
 	if ctx.Err() != nil {
 		return
 	}
@@ -1963,6 +1971,7 @@ func (c *cluster) WipeE(ctx context.Context, l *logger, opts ...option) error {
 		return nil
 	}
 	c.status("wiping cluster")
+	c.clearConnCache()
 	defer c.status()
 	return execCmd(ctx, l, roachprod, "wipe", c.makeNodes(opts...))
 }
@@ -2218,14 +2227,30 @@ func (c *cluster) ExternalIP(ctx context.Context, node nodeListOption) []string 
 // Silence unused warning.
 var _ = (&cluster{}).ExternalIP
 
-// Conn returns a SQL connection to the specified node.
+// Conn returns a SQL connection to the specified node. The *gosql.DB are cached
+// as instantiating a new one takes hundreds of ms.
 func (c *cluster) Conn(ctx context.Context, node int) *gosql.DB {
-	url := c.ExternalPGUrl(ctx, c.Node(node))[0]
-	db, err := gosql.Open("postgres", url)
-	if err != nil {
-		c.t.Fatal(err)
+	c.conns.Lock()
+	c.conns.Unlock()
+
+	if c.conns.m == nil {
+		c.conns.m = make(map[int]*gosql.DB)
 	}
-	return db
+	if _, ok := c.conns.m[node]; !ok {
+		url := c.ExternalPGUrl(ctx, c.Node(node))[0]
+		db, err := gosql.Open("postgres", url)
+		if err != nil {
+			c.t.Fatal(err)
+		}
+		c.conns.m[node] = db
+	}
+	return c.conns.m[node]
+}
+
+func (c *cluster) clearConnCache() {
+	c.conns.Lock()
+	defer c.conns.Unlock()
+	c.conns.m = nil
 }
 
 // ConnE returns a SQL connection to the specified node.
