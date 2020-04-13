@@ -42,19 +42,6 @@ var geosOnce struct {
 	once sync.Once
 }
 
-// EnsureInitErrorDisplay is used to control the error message displayed by
-// EnsureInit.
-type EnsureInitErrorDisplay int
-
-const (
-	// EnsureInitErrorDisplayPrivate displays the full error message, including
-	// path info. It is intended for log messages.
-	EnsureInitErrorDisplayPrivate EnsureInitErrorDisplay = iota
-	// EnsureInitErrorDisplayPublic displays a redacted error message, excluding
-	// path info. It is intended for errors to display for the client.
-	EnsureInitErrorDisplayPublic
-)
-
 // EnsureInit attempts to start GEOS if it has not been opened already
 // and returns an error if the CR_GEOS  is not valid.
 func EnsureInit(errDisplay EnsureInitErrorDisplay) error {
