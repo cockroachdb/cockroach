@@ -17,3 +17,12 @@ filter              ·            ·
  │                  filter       table_name = 'foo'
  └── virtual table  ·            ·
 ·                   source       ·
+
+statement error use of crdb_internal_vtable_pk column not allowed
+SELECT crdb_internal_vtable_pk FROM system.information_schema.schemata
+
+statement error use of crdb_internal_vtable_pk column not allowed
+SELECT schema_name FROM system.information_schema.schemata ORDER BY crdb_internal_vtable_pk
+
+statement error use of crdb_internal_vtable_pk column not allowed
+SELECT schema_name FROM system.information_schema.schemata WHERE crdb_internal_vtable_pk = 1

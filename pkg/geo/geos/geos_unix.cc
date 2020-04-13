@@ -125,7 +125,10 @@ struct CR_GEOS {
 
   template <typename T> char* InitSym(T* ptr, const char* symbol) {
     *ptr = reinterpret_cast<T>(dlsym(dlHandle, symbol));
-    return dlerror();
+    if (ptr == nullptr) {
+      return dlerror();
+    }
+    return nullptr;
   }
 };
 

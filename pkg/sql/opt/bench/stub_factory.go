@@ -48,10 +48,6 @@ func (f *stubFactory) ConstructScan(
 	return struct{}{}, nil
 }
 
-func (f *stubFactory) ConstructVirtualScan(table cat.Table) (exec.Node, error) {
-	return struct{}{}, nil
-}
-
 func (f *stubFactory) ConstructFilter(
 	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
