@@ -13,3 +13,16 @@
 // at init time.
 // Operations will error if the GEOS library was not found.
 package geos
+
+// EnsureInitErrorDisplay is used to control the error message displayed by
+// EnsureInit.
+type EnsureInitErrorDisplay int
+
+const (
+	// EnsureInitErrorDisplayPrivate displays the full error message, including
+	// path info. It is intended for log messages.
+	EnsureInitErrorDisplayPrivate EnsureInitErrorDisplay = iota
+	// EnsureInitErrorDisplayPublic displays a redacted error message, excluding
+	// path info. It is intended for errors to display for the client.
+	EnsureInitErrorDisplayPublic
+)
