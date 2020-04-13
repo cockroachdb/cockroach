@@ -85,7 +85,7 @@ func (kv keyedVersions) Validate() error {
 	// 2.1-12) and 2.0 is always-on. To avoid interfering with backports, we're
 	// a bit more lenient and allow one more release cycle until validation fails.
 	// In the above example, we would tolerate 2.1-x but not 2.0-x.
-	if n := len(byRelease) - 3; n >= 0 {
+	if n := len(byRelease) - 4; n >= 0 {
 		var buf strings.Builder
 		for i, mami := range byRelease[:n+1] {
 			s := "next release"
