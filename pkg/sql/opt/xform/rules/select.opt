@@ -61,20 +61,26 @@
     ]
 )
 =>
-(Union
-    (Select
-        $input
-        (ReplaceFiltersItem $filters $item $left)
-    )
-    (Select
-        (Scan $rightScanPrivate:(DuplicateScanPrivate $scanPrivate))
-        (MapScanFilterCols
-            (ReplaceFiltersItem $filters $item $right)
-            $scanPrivate
-            $rightScanPrivate
+(DistinctOn
+    (UnionAll
+        (Select
+            $input
+            (ReplaceFiltersItem $filters $item $left)
         )
+        (Select
+            (Scan $rightScanPrivate:(DuplicateScanPrivate $scanPrivate))
+            (MapScanFilterCols
+                (ReplaceFiltersItem $filters $item $right)
+                $scanPrivate
+                $rightScanPrivate
+            )
+        )
+        (MakeSetPrivateForUnionSelects $scanPrivate $rightScanPrivate)
     )
-    (MakeSetPrivateForUnionSelects $scanPrivate $rightScanPrivate)
+    (MakeAggCols
+        ConstAgg (NonKeyCols $input)
+    )
+    (MakeGrouping (KeyCols $input))
 )
 
 # SplitDisjunctionAddKey performs a transformation similar to
@@ -125,20 +131,26 @@
 )
 =>
 (Project
-    (Union
-        (Select
-            (Scan $leftScanPrivate:(AddPrimaryKeyColsToScanPrivate $scanPrivate))
-            (ReplaceFiltersItem $filters $item $left)
-        )
-        (Select
-            (Scan $rightScanPrivate:(DuplicateScanPrivate $leftScanPrivate))
-            (MapScanFilterCols
-                (ReplaceFiltersItem $filters $item $right)
-                $leftScanPrivate
-                $rightScanPrivate
+    (DistinctOn
+        (UnionAll
+            (Select
+                $leftScan:(Scan $leftScanPrivate:(AddPrimaryKeyColsToScanPrivate $scanPrivate))
+                (ReplaceFiltersItem $filters $item $left)
             )
+            (Select
+                (Scan $rightScanPrivate:(DuplicateScanPrivate $leftScanPrivate))
+                (MapScanFilterCols
+                    (ReplaceFiltersItem $filters $item $right)
+                    $leftScanPrivate
+                    $rightScanPrivate
+                )
+            )
+            (MakeSetPrivateForUnionSelects $leftScanPrivate $rightScanPrivate)
         )
-        (MakeSetPrivateForUnionSelects $leftScanPrivate $rightScanPrivate)
+        (MakeAggCols
+            ConstAgg (NonKeyCols $leftScan)
+        )
+        (MakeGrouping (KeyCols $leftScan))
     )
     []
     (OutputCols $input)
