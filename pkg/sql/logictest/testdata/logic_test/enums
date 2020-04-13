@@ -1,0 +1,2 @@
+statement error pq: unimplemented: CREATE TYPE
+CREATE TYPE mytype AS ENUM ('val1', 'val2')
