@@ -271,7 +271,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			return nil, err
 		}
 		cm.RegisterSignalHandler(stopper)
-		registry.AddMetricStruct(cm.Metrics())
+		s.registry.AddMetricStruct(cm.Metrics())
 	}
 
 	// Add a dynamic log tag value for the node ID.

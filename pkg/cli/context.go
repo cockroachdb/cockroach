@@ -77,6 +77,7 @@ func initCLIDefaults() {
 	cliCtx.cmdTimeout = 0 // no timeout
 	cliCtx.clientConnHost = ""
 	cliCtx.clientConnPort = base.DefaultPort
+	cliCtx.certPrincipalMap = nil
 	cliCtx.sqlConnURL = ""
 	cliCtx.sqlConnUser = ""
 	cliCtx.sqlConnPasswd = ""
@@ -171,8 +172,6 @@ func initCLIDefaults() {
 
 	authCtx.validityPeriod = 1 * time.Hour
 
-	certCtx.certPrincipalMap = nil
-
 	initPreFlagsDefaults()
 
 	// Clear the "Changed" state of all the registered command-line flags.
@@ -214,6 +213,9 @@ type cliContext struct {
 
 	// clientConnPort is the port name/number to use to connect to a server.
 	clientConnPort string
+
+	// certPrincipalMap is the cert-principal:db-principal map.
+	certPrincipalMap []string
 
 	// for CLI commands that use the SQL interface, these parameters
 	// determine how to connect to the server.
@@ -395,10 +397,4 @@ var demoCtx struct {
 	simulateLatency           bool
 	transientCluster          *transientCluster
 	insecure                  bool
-}
-
-// certCtx captures the command-line parameters of the `cert` command.
-// Defaults set by InitCLIDefaults() above.
-var certCtx struct {
-	certPrincipalMap []string
 }
