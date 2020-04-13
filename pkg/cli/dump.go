@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,13 +40,45 @@ var dumpCmd = &cobra.Command{
 Dump SQL tables of a cockroach database. If the table name
 is omitted, dump all tables in the database.
 `,
-	Args: cobra.MinimumNArgs(1),
 	RunE: MaybeDecorateGRPCError(runDump),
 }
 
 // We accept versions that are strictly newer than v2.1.0-alpha.20180416
 // (hence the "-0" at the end).
 var verDump = version.MustParse("v2.1.0-alpha.20180416-0")
+
+// databasesNamesExtractor extracts list of available databases to dump
+func databasesNamesExtractor(conn *sqlConn) ([]string, error) {
+	var dbNames []string
+
+	minUserDescID, err := driver.Int32.ConvertValue(keys.MinUserDescID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := conn.Query(`SELECT name FROM system.namespace WHERE id > $1 AND "parentID" = 0`, []driver.Value{minUserDescID})
+	if err != nil {
+		return nil, err
+	}
+
+	vals := make([]driver.Value, 1)
+	for {
+		if err := rows.Next(vals); err == io.EOF {
+			break
+		}
+
+		if name, ok := vals[0].(string); ok {
+			dbNames = append(dbNames, name)
+		} else {
+			return nil, fmt.Errorf("unexpected value: %T", name)
+		}
+	}
+
+	// sort to get deterministic output of ordered database names
+	sort.Strings(dbNames)
+
+	return dbNames, nil
+}
 
 // runDumps performs a dump of a table or database.
 //
@@ -62,99 +95,129 @@ func runDump(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	dbName := args[0]
+	var dbNames []string
+	if dumpCtx.dumpAll && len(args) != 0 {
+		all := "false"
+		if dumpCtx.dumpAll {
+			all = "true"
+		}
+		return fmt.Errorf("dump all while specifying database name at the same time is not supported, "+
+			"these are mutual exclusive parameters, arguments provided are %s, and --all flag is equal to %s", args, all)
+	}
+
+	if len(args) != 0 {
+		dbNames = append(dbNames, args[0])
+	} else if dumpCtx.dumpAll {
+		dbNames, err = databasesNamesExtractor(conn)
+		if err != nil {
+			return err
+		}
+	}
+
 	var tableNames []string
 	if len(args) > 1 {
 		tableNames = args[1:]
 	}
 
-	mds, ts, err := getDumpMetadata(conn, dbName, tableNames, dumpCtx.asOf)
-	if err != nil {
-		return err
-	}
+	for _, dbName := range dbNames {
+		mds, ts, err := getDumpMetadata(conn, dbName, tableNames, dumpCtx.asOf)
+		if err != nil {
+			return err
+		}
 
-	byID := make(map[int64]basicMetadata)
-	for _, md := range mds {
-		byID[md.ID] = md
-	}
+		if len(mds) == 0 {
+			continue
+		}
 
-	// First sort by name to guarantee stable output.
-	sort.Slice(mds, func(i, j int) bool {
-		return mds[i].name.String() < mds[j].name.String()
-	})
+		byID := make(map[int64]basicMetadata)
+		for _, md := range mds {
+			byID[md.ID] = md
+		}
 
-	// Collect transitive dependencies in topological order into collected.
-	var collected []int64
-	seen := make(map[int64]bool)
-	for _, md := range mds {
-		collect(md.ID, byID, seen, &collected)
-	}
-	// collectOrder maps a table ID to its collection index. This is needed
-	// instead of just using range over collected because collected may contain
-	// table IDs not present in the dump spec. It is simpler to sort mds correctly
-	// to skip over these referenced-but-not-dumped tables.
-	collectOrder := make(map[int64]int)
-	for i, id := range collected {
-		collectOrder[id] = i
-	}
+		// First sort by name to guarantee stable output.
+		sort.Slice(mds, func(i, j int) bool {
+			return mds[i].name.String() < mds[j].name.String()
+		})
 
-	// Second sort dumped tables by dependency order.
-	sort.SliceStable(mds, func(i, j int) bool {
-		return collectOrder[mds[i].ID] < collectOrder[mds[j].ID]
-	})
+		// Collect transitive dependencies in topological order into collected.
+		var collected []int64
+		seen := make(map[int64]bool)
+		for _, md := range mds {
+			collect(md.ID, byID, seen, &collected)
+		}
+		// collectOrder maps a table ID to its collection index. This is needed
+		// instead of just using range over collected because collected may contain
+		// table IDs not present in the dump spec. It is simpler to sort mds correctly
+		// to skip over these referenced-but-not-dumped tables.
+		collectOrder := make(map[int64]int)
+		for i, id := range collected {
+			collectOrder[id] = i
+		}
 
-	w := os.Stdout
+		// Second sort dumped tables by dependency order.
+		sort.SliceStable(mds, func(i, j int) bool {
+			return collectOrder[mds[i].ID] < collectOrder[mds[j].ID]
+		})
 
-	if dumpCtx.dumpMode != dumpDataOnly {
-		for i, md := range mds {
-			if i > 0 {
-				fmt.Fprintln(w)
-			}
-			if err := dumpCreateTable(w, md); err != nil {
+		w := os.Stdout
+
+		if dumpCtx.dumpAll && dumpCtx.dumpMode != dumpDataOnly {
+			if _, err := fmt.Fprintf(w, "\nCREATE DATABASE %s;\n\n", dbName); err != nil {
 				return err
 			}
 		}
-	}
-	if dumpCtx.dumpMode != dumpSchemaOnly {
-		for _, md := range mds {
-			switch md.kind {
-			case "table":
-				if err := dumpTableData(w, conn, ts, md); err != nil {
+
+		if dumpCtx.dumpMode != dumpDataOnly {
+			for i, md := range mds {
+				if i > 0 {
+					fmt.Fprintln(w)
+				}
+				if err := dumpCreateTable(w, md); err != nil {
 					return err
 				}
-			case "sequence":
-				if err := dumpSequenceData(w, conn, ts, md); err != nil {
-					return err
-				}
-			case "view":
-				continue
-			default:
-				panic("unknown descriptor type: " + md.kind)
 			}
 		}
-	}
-	// Put FK ALTERs at the end.
-	if dumpCtx.dumpMode != dumpDataOnly {
-		hasRefs := false
-		for _, md := range mds {
-			for _, alter := range md.alter {
-				if !hasRefs {
-					hasRefs = true
-					if _, err := w.Write([]byte("\n")); err != nil {
+		if dumpCtx.dumpMode != dumpSchemaOnly {
+			for _, md := range mds {
+				switch md.kind {
+				case "table":
+					if err := dumpTableData(w, conn, ts, md); err != nil {
 						return err
 					}
+				case "sequence":
+					if err := dumpSequenceData(w, conn, ts, md); err != nil {
+						return err
+					}
+				case "view":
+					continue
+				default:
+					panic("unknown descriptor type: " + md.kind)
 				}
-				fmt.Fprintf(w, "%s;\n", alter)
 			}
 		}
-		if hasRefs {
-			const alterValidateMessage = `-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.`
-			if _, err := w.Write([]byte("\n" + alterValidateMessage + "\n")); err != nil {
-				return err
-			}
+		// Put FK ALTERs at the end.
+		if dumpCtx.dumpMode != dumpDataOnly {
+			hasRefs := false
 			for _, md := range mds {
-				for _, validate := range md.validate {
-					fmt.Fprintf(w, "%s;\n", validate)
+				for _, alter := range md.alter {
+					if !hasRefs {
+						hasRefs = true
+						if _, err := w.Write([]byte("\n")); err != nil {
+							return err
+						}
+					}
+					fmt.Fprintf(w, "%s;\n", alter)
+				}
+			}
+			if hasRefs {
+				const alterValidateMessage = `-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.`
+				if _, err := w.Write([]byte("\n" + alterValidateMessage + "\n")); err != nil {
+					return err
+				}
+				for _, md := range mds {
+					for _, validate := range md.validate {
+						fmt.Fprintf(w, "%s;\n", validate)
+					}
 				}
 			}
 		}

@@ -490,3 +490,115 @@ ALTER TABLE orders VALIDATE CONSTRAINT fk_customer;
 		t.Fatalf("expected: %s\ngot: %s", want1, dump1)
 	}
 }
+
+func TestDumpAllTables(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		create   string
+		expected string
+	}{
+		{
+			name: " dump_all",
+			args: nil,
+			create: `
+CREATE DATABASE db1;
+USE db1;
+CREATE TABLE t1(id INT NOT NULL, pkey STRING PRIMARY KEY);
+
+INSERT INTO t1(id, pkey) VALUES(1, 'db1-aaaa');
+INSERT INTO t1(id, pkey) VALUES(2, 'db1-bbbb');
+
+CREATE DATABASE db2;
+USE db2;
+CREATE TABLE t2(id INT NOT NULL, pkey STRING PRIMARY KEY);
+
+INSERT INTO t2(id, pkey) VALUES(1, 'db2-aaaa');
+INSERT INTO t2(id, pkey) VALUES(2, 'db2-bbbb');
+`,
+			expected: `
+CREATE DATABASE db1;
+
+CREATE TABLE t1 (
+	id INT8 NOT NULL,
+	pkey STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (pkey ASC),
+	FAMILY "primary" (id, pkey)
+);
+
+INSERT INTO t1 (id, pkey) VALUES
+	(1, 'db1-aaaa'),
+	(2, 'db1-bbbb');
+
+CREATE DATABASE db2;
+
+CREATE TABLE t2 (
+	id INT8 NOT NULL,
+	pkey STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (pkey ASC),
+	FAMILY "primary" (id, pkey)
+);
+
+INSERT INTO t2 (id, pkey) VALUES
+	(1, 'db2-aaaa'),
+	(2, 'db2-bbbb');
+`,
+		},
+		{
+			name: " dump_all_only_data",
+			args: []string{"--dump-mode=data"},
+			create: `
+CREATE DATABASE db1;
+USE db1;
+CREATE TABLE t1(id INT NOT NULL, pkey STRING PRIMARY KEY);
+
+INSERT INTO t1(id, pkey) VALUES(1, 'db1-aaaa');
+INSERT INTO t1(id, pkey) VALUES(2, 'db1-bbbb');
+
+CREATE DATABASE db2;
+USE db2;
+CREATE TABLE t2(id INT NOT NULL, pkey STRING PRIMARY KEY);
+
+INSERT INTO t2(id, pkey) VALUES(1, 'db2-aaaa');
+INSERT INTO t2(id, pkey) VALUES(2, 'db2-bbbb');
+`,
+			expected: `
+INSERT INTO t1 (id, pkey) VALUES
+	(1, 'db1-aaaa'),
+	(2, 'db1-bbbb');
+
+INSERT INTO t2 (id, pkey) VALUES
+	(1, 'db2-aaaa'),
+	(2, 'db2-bbbb');
+`,
+		},
+	}
+	for _, test := range tests {
+		tt := test
+		t.Run(tt.name, func(t *testing.T) {
+			defer leaktest.AfterTest(t)()
+
+			c := newCLITest(cliTestParams{t: t})
+			c.omitArgs = true
+			defer c.cleanup()
+
+			_, err := c.RunWithCaptureArgs([]string{"sql", "-e", tt.create})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			args := []string{"dump", "--dump-all"}
+			args = append(args, tt.args...)
+			dump, err := c.RunWithCaptureArgs(args)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if dump != tt.expected {
+				t.Fatalf("expected: %s\ngot: %s", tt.expected, dump)
+			}
+
+		})
+	}
+
+}

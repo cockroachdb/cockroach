@@ -240,6 +240,12 @@ Dumps the data as of the specified timestamp. Formats supported are the same
 as the timestamp type.`,
 	}
 
+	DumpAll = FlagInfo{
+		Name: "dump-all",
+		Description: `
+Dumps all databases, for each non-system database provides dump of all available tables.`,
+	}
+
 	Execute = FlagInfo{
 		Name:      "execute",
 		Shorthand: "e",
