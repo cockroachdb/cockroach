@@ -19,6 +19,7 @@ import "gogoproto/gogo.proto";
 //
 // At the moment, only one major indexing strategy is implemented (S2 cells).
 message Config {
+  option (gogoproto.equal) = true;
   option (gogoproto.onlyone) = true;
   S2GeographyConfig s2_geography = 1;
   S2GeometryConfig s2_geometry = 2;
@@ -31,6 +32,7 @@ message Config {
 // TODO(sumeer): Based on experiments, reduce the knobs below by making the
 // covering self-tuning.
 message S2Config {
+  option (gogoproto.equal) = true;
   // MinLevel is the minimum cell level stored in the index. If left unset, it
   // defaults to 0.
   int32 min_level = 1;
@@ -46,10 +48,12 @@ message S2Config {
 }
 
 message S2GeographyConfig {
+  option (gogoproto.equal) = true;
   S2Config s2_config = 1;
 }
 
 message S2GeometryConfig {
+  option (gogoproto.equal) = true;
   // The rectangle bounds of the plane that will be efficiently indexed. Shapes
   // should rarely exceed these bounds.
   double min_x = 1;

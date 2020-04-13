@@ -145,6 +145,33 @@ func (gr RelationshipType) String() string {
 	return geoRelationshipTypeStr[gr]
 }
 
+// IsEmptyConfig returns whether the given config contains a geospatial index
+// configuration.
+func IsEmptyConfig(cfg *Config) bool {
+	if cfg == nil {
+		return true
+	}
+	return cfg.S2Geography == nil && cfg.S2Geometry == nil
+}
+
+// IsGeographyConfig returns whether the config is a geography geospatial
+// index configuration.
+func IsGeographyConfig(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
+	return cfg.S2Geography != nil
+}
+
+// IsGeometryConfig returns whether the config is a geometry geospatial
+// index configuration.
+func IsGeometryConfig(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
+	return cfg.S2Geometry != nil
+}
+
 // Key is one entry under which a geospatial shape is stored on behalf of an
 // Index. The index is of the form (Key, Primary Key).
 type Key uint64
@@ -553,4 +580,13 @@ func (b *stringBuilderWithWrap) tryWrap() {
 func (b *stringBuilderWithWrap) doWrap() {
 	fmt.Fprintln(b)
 	b.lastWrap = b.Len()
+}
+
+func defaultS2Config() *S2Config {
+	return &S2Config{
+		MinLevel: 0,
+		MaxLevel: 30,
+		LevelMod: 1,
+		MaxCells: 4,
+	}
 }
