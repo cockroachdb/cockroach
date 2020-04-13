@@ -24,7 +24,108 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLocalityReport(t *testing.T) {
+type criticalLocality struct {
+	object       string
+	locality     string
+	atRiskRanges int
+}
+
+type criticalLocalitiesTestCase struct {
+	baseReportTestCase
+	name string
+	exp  []criticalLocality
+}
+
+func TestCriticalLocalitiesReport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	tests := []criticalLocalitiesTestCase{
+		{
+			name: "simple",
+			baseReportTestCase: baseReportTestCase{
+				defaultZone: zone{replicas: 3},
+				schema: []database{
+					{
+						name: "db1",
+						tables: []table{
+							{name: "t1"},
+						},
+					},
+				},
+				splits: []split{
+					{key: "/Table/t1", stores: "1 2 3"},
+					{key: "/Table/t1/pk", stores: "1 2 3"},
+					{key: "/Table/t1/pk/1", stores: "1 2 3"},
+					{key: "/Table/t1/pk/2", stores: "1 2 3"},
+					{key: "/Table/t1/pk/3", stores: "1 2 3"},
+					{key: "/Table/t1/pk/100", stores: "1 2 3"},
+					{key: "/Table/t1/pk/150", stores: "1 2 3"},
+					{key: "/Table/t1/pk/200", stores: "1 2 3"},
+					{key: "/Table/t2", stores: "1 2 3"},
+					{key: "/Table/t2/pk", stores: "1 2 3"},
+					{
+						// This range is not covered by the db1's zone config; it'll be
+						// counted for the default zone.
+						key: "/Table/sentinel", stores: "1 2 3",
+					},
+				},
+				nodes: []node{
+					{id: 1, stores: []store{{id: 1}}},
+					{id: 2, stores: []store{{id: 2}}},
+					{id: 3, stores: []store{{id: 3}}},
+					{id: 4, stores: []store{{id: 4}}, dead: true},
+				},
+			},
+			exp: []criticalLocality{
+				{
+					object:       "default",
+					locality:     "region=reg1,az=az1",
+					atRiskRanges: 1,
+				},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			runCriticalLocalitiesTestCase(ctx, t, tc)
+		})
+	}
+}
+
+func runCriticalLocalitiesTestCase(
+	ctx context.Context, t *testing.T, tc criticalLocalitiesTestCase,
+) {
+	ctc, err := compileTestCase(tc.baseReportTestCase)
+	require.NoError(t, err)
+
+	rep, err := computeCriticalLocalitiesReport(ctx, ctc.allLocalities, &ctc.iter, ctc.checker, ctc.cfg, ctc.resolver)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// !!!
+	//// Sort the report's keys.
+	//gotRows := make([]criticalLocality, len(rep.localities))
+	//i := 0
+	//for zone, stats := range rep.localities{
+	//	object := ctc.zoneToObject[zone]
+	//	gotRows[i] = replicationStatsEntry{
+	//		zoneRangeStatus: stats,
+	//		object:          object,
+	//	}
+	//	i++
+	//}
+	//sort.Slice(gotRows, func(i, j int) bool {
+	//	return strings.Compare(gotRows[i].object, gotRows[j].object) < 0
+	//})
+	//sort.Slice(tc.exp, func(i, j int) bool {
+	//	return strings.Compare(tc.exp[i].object, tc.exp[j].object) < 0
+	//})
+	//
+	//require.Equal(t, tc.exp, gotRows)
+}
+
+func TestCriticalLocalitiesSaving(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()

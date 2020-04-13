@@ -737,6 +737,10 @@ type compiledTestCase struct {
 	objectToZone map[string]ZoneKey
 	// The inverse of objectToZone.
 	zoneToObject map[ZoneKey]string
+
+	// allLocalities is the list of all localities in the cluster, at all
+	// granularities.
+	allLocalities []roachpb.Locality
 }
 
 // compileTestCase takes the input schema and turns it into a compiledTestCase.
@@ -810,6 +814,7 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 		}
 		storeDescs = append(storeDescs, sds...)
 	}
+	allLocalities := clusterLocalities(storeDescs)
 	storeResolver := func(r *roachpb.RangeDescriptor) []roachpb.StoreDescriptor {
 		stores := make([]roachpb.StoreDescriptor, len(r.Replicas().Voters()))
 		for i, rep := range r.Replicas().Voters() {
@@ -837,12 +842,13 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 		objectToZone[v] = k
 	}
 	return compiledTestCase{
-		iter:         testRangeIter{ranges: ranges},
-		cfg:          cfg,
-		resolver:     storeResolver,
-		checker:      nodeChecker,
-		zoneToObject: zoneToObject,
-		objectToZone: objectToZone,
+		iter:          testRangeIter{ranges: ranges},
+		cfg:           cfg,
+		resolver:      storeResolver,
+		checker:       nodeChecker,
+		zoneToObject:  zoneToObject,
+		objectToZone:  objectToZone,
+		allLocalities: allLocalities,
 	}, nil
 }
 
