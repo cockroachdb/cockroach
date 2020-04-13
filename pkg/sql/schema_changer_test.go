@@ -16,6 +16,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"math/rand"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -5802,4 +5803,120 @@ ALTER TABLE t.public.test DROP COLUMN v;
 	require.Equal(t, [][]string{
 		{"1", "2"},
 	}, rows)
+}
+
+// TestRetriableErrorDuringRollback tests that a retriable error while rolling
+// back a schema change causes the rollback to retry and succeed.
+func TestRetriableErrorDuringRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer setTestJobsAdoptInterval()()
+	ctx := context.Background()
+
+	onFailOrCancelStarted := false
+	injectedError := false
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeOnFailOrCancel: func(_ int64) error {
+				onFailOrCancelStarted = true
+				return nil
+			},
+			RunBeforeBackfill: func() error {
+				// The first time through the backfiller in OnFailOrCancel, return a
+				// retriable error.
+				if !onFailOrCancelStarted || injectedError {
+					return nil
+				}
+				injectedError = true
+				// Return an artificial context canceled error.
+				return context.Canceled
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with addImmediateGCZoneConfig.
+	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
+INSERT INTO t.test VALUES (1, 2), (2, 2);
+`); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// Add a zone config for the table.
+	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Try to create a unique index which won't be valid and will need a rollback.
+	if _, err := sqlDB.Exec(`
+CREATE UNIQUE INDEX i ON t.test(v);
+`); !testutils.IsError(err, "violates unique constraint") {
+		t.Fatal(err)
+	}
+	// Verify that the index was cleaned up.
+	testutils.SucceedsSoon(t, func() error {
+		return checkTableKeyCountExact(ctx, kvDB, 2)
+	})
+}
+
+// TestPermanentErrorDuringRollback tests that a permanent error while rolling
+// back a schema change causes the job to fail, and that the appropriate error
+// is displayed in the jobs table.
+func TestPermanentErrorDuringRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer setTestJobsAdoptInterval()()
+	ctx := context.Background()
+
+	onFailOrCancelStarted := false
+	injectedError := false
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeOnFailOrCancel: func(_ int64) error {
+				onFailOrCancelStarted = true
+				return nil
+			},
+			RunBeforeBackfill: func() error {
+				// The first time through the backfiller in OnFailOrCancel, return a
+				// permanent error.
+				if !onFailOrCancelStarted || injectedError {
+					return nil
+				}
+				injectedError = true
+				// Any error not on the whitelist of retriable errors is considered permanent.
+				return errors.New("permanent error")
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
+INSERT INTO t.test VALUES (1, 2), (2, 2);
+`); err != nil {
+		t.Fatal(err)
+	}
+	// Try to create a unique index which won't be valid and will need a rollback.
+	if _, err := sqlDB.Exec(`
+CREATE UNIQUE INDEX i ON t.test(v);
+`); !testutils.IsError(err, "violates unique constraint") {
+		t.Fatal(err)
+	}
+	var jobErr string
+	row := sqlDB.QueryRow("SELECT error FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'")
+	if err := row.Scan(&jobErr); err != nil {
+		t.Fatal(err)
+	}
+	if matched, err := regexp.MatchString("cannot be reverted, manual cleanup may be required", jobErr); err != nil {
+		t.Fatal(err)
+	} else if !matched {
+		t.Fatalf("unexpected job error %s", jobErr)
+	}
 }
