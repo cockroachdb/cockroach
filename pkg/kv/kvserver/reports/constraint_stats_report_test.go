@@ -14,7 +14,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -462,8 +464,13 @@ func (c constraintEntry) toReportEntry(
 }
 
 type split struct {
-	key    string
+	key string
+	// stores is an array of storeID's that will have a VOTER_FULL replica.
 	stores []int
+	// storesEx is like stores, but allows control over they type of replicas. The
+	// format is a space-separated list of <storeID><replica type>. For example:
+	// "1V 2I 3O 4D 5L" (voter-full, incoming, outgoing, demoting, learner).
+	storesEx string
 }
 
 type store struct {
@@ -890,13 +897,50 @@ func processSplits(
 		}
 
 		rd := roachpb.RangeDescriptor{
-			RangeID:  roachpb.RangeID(i + 1), // IDs start at 1
-			StartKey: keys.MustAddr(startKey),
-			EndKey:   keys.MustAddr(endKey),
+			RangeID:       roachpb.RangeID(i + 1), // IDs start at 1
+			StartKey:      keys.MustAddr(startKey),
+			EndKey:        keys.MustAddr(endKey),
+			NextReplicaID: roachpb.ReplicaID(1), // IDs start at 1
 		}
 		for _, storeID := range split.stores {
 			rd.AddReplica(roachpb.NodeID(storeID), roachpb.StoreID(storeID), roachpb.VOTER_FULL)
 		}
+
+		if split.storesEx != "" {
+			reps := strings.Split(split.storesEx, " ")
+			for _, rep := range reps {
+				// We're looking for a numeric storeID followed by a single character
+				// indicating the replica type.
+				re := regexp.MustCompile("([0-9]+)(.)")
+				spec := re.FindStringSubmatch(rep)
+				if len(spec) != 3 {
+					return nil, errors.Errorf("bad replica spec: %s", rep)
+				}
+				storeID, err := strconv.Atoi(spec[1])
+				if err != nil {
+					return nil, err
+				}
+				replicaType := spec[2]
+				var typ roachpb.ReplicaType
+				switch replicaType {
+				case "V":
+					typ = roachpb.VOTER_FULL
+				case "I":
+					typ = roachpb.VOTER_INCOMING
+				case "O":
+					typ = roachpb.VOTER_OUTGOING
+				case "D":
+					typ = roachpb.VOTER_DEMOTING
+				case "L":
+					typ = roachpb.LEARNER
+				default:
+					return nil, errors.Errorf("bad replica type: %s", replicaType)
+				}
+
+				rd.AddReplica(roachpb.NodeID(storeID), roachpb.StoreID(storeID), typ)
+			}
+		}
+
 		ranges[i] = rd
 	}
 	return ranges, nil

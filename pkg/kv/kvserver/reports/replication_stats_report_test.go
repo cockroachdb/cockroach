@@ -318,7 +318,54 @@ func TestReplicationStatsReport(t *testing.T) {
 				},
 			},
 		},
-	}
+		{
+			name: "joint consensus",
+			baseReportTestCase: baseReportTestCase{
+				defaultZone: zone{replicas: 3},
+				schema: []database{
+					{
+						name: "db1",
+						tables: []table{
+							{name: "t1"},
+						},
+					},
+				},
+				splits: []split{
+					// No problem.
+					{key: "/Table/t1/pk/100", storesEx: "1V 2V 3V"},
+					// Under-replication in the "old group".
+					{key: "/Table/t1/pk/101", storesEx: "1V 2V 3I"},
+					// Under-replication in the "new group".
+					{key: "/Table/t1/pk/102", storesEx: "1V 2V 3O"},
+					// Under-replicated in the old group because 4 is dead.
+					{key: "/Table/t1/pk/103", storesEx: "1V 2V 4O 3I"},
+					// Unavailable in the new group (and also under-replicated), and also
+					// over-replicated in the new group.
+					{key: "/Table/t1/pk/104", storesEx: "1V 2V 3O 4I 5I"},
+					// Over-replicated in the new group.
+					{key: "/Table/t1/pk/105", storesEx: "1V 2V 3O 5I 6I"},
+				},
+				nodes: []node{
+					{id: 1, stores: []store{{id: 1}}},
+					{id: 2, stores: []store{{id: 2}}},
+					{id: 3, stores: []store{{id: 3}}},
+					{id: 4, stores: []store{{id: 4}}, dead: true},
+					{id: 5, stores: []store{{id: 5}}, dead: true},
+					{id: 6, stores: []store{{id: 6}}},
+				},
+			},
+			exp: []replicationStatsEntry{
+				{
+					object: "default",
+					zoneRangeStatus: zoneRangeStatus{
+						numRanges:       6,
+						unavailable:     1,
+						underReplicated: 4,
+						overReplicated:  2,
+					},
+				},
+			},
+		}}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			runReplicationStatsTest(t, tc)

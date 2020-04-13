@@ -380,7 +380,7 @@ func (v *replicationStatsVisitor) visitNewZone(
 			"no zone config with replication attributes found for range: %s", r)
 	}
 
-	v.countRange(zKey, numReplicas, r)
+	v.countRange(ctx, zKey, numReplicas, r)
 	return nil
 }
 
@@ -388,35 +388,69 @@ func (v *replicationStatsVisitor) visitNewZone(
 func (v *replicationStatsVisitor) visitSameZone(
 	ctx context.Context, r *roachpb.RangeDescriptor,
 ) error {
-	v.countRange(v.prevZoneKey, v.prevNumReplicas, r)
+	v.countRange(ctx, v.prevZoneKey, v.prevNumReplicas, r)
 	return nil
 }
 
 func (v *replicationStatsVisitor) countRange(
-	key ZoneKey, replicationFactor int, r *roachpb.RangeDescriptor,
+	ctx context.Context, key ZoneKey, replicationFactor int, r *roachpb.RangeDescriptor,
 ) {
-	voters := len(r.Replicas().Voters())
-	var liveVoters int
-	for _, rep := range r.Replicas().Voters() {
-		if v.nodeChecker(rep.NodeID) {
-			liveVoters++
+	// This functions handles regular, or joint-consensus replica groups. In the
+	// joint-consensus case, we'll independently consider the health of the
+	// outgoing group ("old") and the incoming group ("new").
+
+	predVoterOldGroup := func(rDesc roachpb.ReplicaDescriptor) bool {
+		switch rDesc.GetType() {
+		case roachpb.VOTER_FULL, roachpb.VOTER_OUTGOING, roachpb.VOTER_DEMOTING:
+			return true
+		default:
+			return false
 		}
 	}
+	predVoterNewGroup := func(rDesc roachpb.ReplicaDescriptor) bool {
+		switch rDesc.GetType() {
+		case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING:
+			return true
+		default:
+			return false
+		}
+	}
+	onlyLiveReplicas := func(rDesc roachpb.ReplicaDescriptor) bool {
+		return v.nodeChecker(rDesc.NodeID)
+	}
+	// combine takes two replica predicates and returns their conjunction.
+	combine := func(
+		pred1 func(rDesc roachpb.ReplicaDescriptor) bool,
+		pred2 func(rDesc roachpb.ReplicaDescriptor) bool) func(roachpb.ReplicaDescriptor) bool {
+		return func(rDesc roachpb.ReplicaDescriptor) bool {
+			return pred1(rDesc) && pred2(rDesc)
+		}
+	}
+	votersOldGroup := r.Replicas().Filter(predVoterOldGroup)
+	liveVotersOldGroup := r.Replicas().Filter(combine(predVoterOldGroup, onlyLiveReplicas))
+	votersNewGroup := r.Replicas().Filter(predVoterNewGroup)
+	liveVotersNewGroup := r.Replicas().Filter(combine(predVoterNewGroup, onlyLiveReplicas))
 
-	// TODO(andrei): This unavailability determination is naive. We need to take
-	// into account two different quorums when the range is in the joint-consensus
-	// state. See #43836.
-	unavailable := liveVoters < (voters/2 + 1)
-	// TODO(andrei): In the joint-consensus state, this under-replication also
-	// needs to consider the number of live replicas in each quorum. For example,
-	// with 2 VoterFulls, 1 VoterOutgoing, 1 VoterIncoming, if the outgoing voter
-	// is on a dead node, the range should be considered under-replicated.
-	underReplicated := replicationFactor > liveVoters
-	overReplicated := replicationFactor < voters
+	// We'll now figure out if the range is under- and over-replicated. Note that
+	// under-replication considers node liveness; over-replication doesn't. In the
+	// case of a joint-consensus state, we consider both the old groups and the
+	// new groups; if either has a problem, we'll consider the range to have a
+	// problem.
+
+	underReplicatedOldGroup := len(liveVotersOldGroup) < replicationFactor
+	underReplicatedNewGroup := len(liveVotersNewGroup) < replicationFactor
+	underReplicated := underReplicatedOldGroup || underReplicatedNewGroup
+	overReplicatedOldGroup := len(votersOldGroup) > replicationFactor
+	overReplicatedNewGroup := len(votersNewGroup) > replicationFactor
+	overReplicated := overReplicatedOldGroup || overReplicatedNewGroup
+
+	unavailable := !r.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
+		return v.nodeChecker(rDesc.NodeID)
+	})
+
 	// Note that a range can be under-replicated and over-replicated at the same
 	// time if it has many replicas, but sufficiently many of them are on dead
 	// nodes.
-
 	v.report.AddZoneRangeStatus(key, unavailable, underReplicated, overReplicated)
 }
 
