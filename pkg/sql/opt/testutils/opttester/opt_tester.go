@@ -259,6 +259,12 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    Builds an expression directly from an opt-gen-like string; see
 //    exprgen.Build.
 //
+//  - exprnorm
+//
+//    Builds an expression directly from an opt-gen-like string (see
+//    exprgen.Build), applies normalization optimizations, and outputs the tree
+//    without any exploration optimizations applied to it.
+//
 //  - save-tables [flags]
 //
 //    Fully optimizes the given query and saves the subexpressions as tables
