@@ -119,12 +119,27 @@ var minimumTypeUsageVersions = map[types.Family]clusterversion.VersionKey{
 }
 
 // isTypeSupportedInVersion returns whether a given type is supported in the given version.
-func isTypeSupportedInVersion(v clusterversion.ClusterVersion, t *types.T) bool {
+func isTypeSupportedInVersion(v clusterversion.ClusterVersion, t *types.T) (bool, error) {
+	switch t.Family() {
+	case types.TimeFamily, types.TimestampFamily, types.TimestampTZFamily, types.TimeTZFamily:
+		if t.Precision() != 6 && !v.IsActive(clusterversion.VersionTimePrecision) {
+			return false, nil
+		}
+	case types.IntervalFamily:
+		itm, err := t.IntervalTypeMetadata()
+		if err != nil {
+			return false, err
+		}
+		if (t.Precision() != 6 || itm.DurationField != types.IntervalDurationField{}) &&
+			!v.IsActive(clusterversion.VersionTimePrecision) {
+			return false, nil
+		}
+	}
 	minVersion, ok := minimumTypeUsageVersions[t.Family()]
 	if !ok {
-		return true
+		return true, nil
 	}
-	return v.IsActive(minVersion)
+	return v.IsActive(minVersion), nil
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -1255,7 +1270,9 @@ func MakeTableDesc(
 					)
 				}
 			}
-			if !isTypeSupportedInVersion(version, d.Type) {
+			if supported, err := isTypeSupportedInVersion(version, d.Type); err != nil {
+				return desc, err
+			} else if !supported {
 				return desc, pgerror.Newf(
 					pgcode.FeatureNotSupported,
 					"type %s is not supported until version upgrade is finalized",
