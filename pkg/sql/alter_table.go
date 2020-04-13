@@ -146,7 +146,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"adding a REFERENCES constraint while also adding a column via ALTER not supported")
 			}
 			version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
-			if !isTypeSupportedInVersion(version, d.Type) {
+			if supported, err := isTypeSupportedInVersion(version, d.Type); err != nil {
+				return err
+			} else if !supported {
 				return pgerror.Newf(
 					pgcode.FeatureNotSupported,
 					"type %s is not supported until version upgrade is finalized",
@@ -885,7 +887,9 @@ func applyColumnMutation(
 		typ := t.ToType
 
 		version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
-		if !isTypeSupportedInVersion(version, typ) {
+		if supported, err := isTypeSupportedInVersion(version, typ); err != nil {
+			return err
+		} else if !supported {
 			return pgerror.Newf(
 				pgcode.FeatureNotSupported,
 				"type %s is not supported until version upgrade is finalized",
