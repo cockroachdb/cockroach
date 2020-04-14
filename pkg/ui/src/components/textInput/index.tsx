@@ -43,7 +43,7 @@ interface TextInputState {
 export class TextInput extends React.Component<TextInputProps, TextInputState> {
   static defaultProps = {
     initialValue: "",
-    validate: () => true,
+    validate: () => undefined,
     autoComplete: "on",
   };
 
