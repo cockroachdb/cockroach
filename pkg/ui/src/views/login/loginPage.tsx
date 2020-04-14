@@ -30,7 +30,6 @@ interface LoginPageProps {
 interface LoginPageState {
   username?: string;
   password?: string;
-  canSubmit: boolean;
 }
 
 class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, LoginPageState> {
@@ -39,7 +38,6 @@ class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, Lo
     this.state = {
       username: "",
       password: "",
-      canSubmit: false,
     };
     // TODO(vilterp): focus username field on mount
   }
@@ -94,21 +92,6 @@ class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, Lo
     );
   }
 
-  handleRequiredField = (value: string) => {
-    const { username, password } = this.state;
-    const userNameLength = username.length > 0;
-    const passwordLength = password.length > 0;
-
-    this.setState({
-      canSubmit: userNameLength && passwordLength,
-    });
-
-    if (value.length > 0) {
-      return undefined;
-    }
-    return "Required Field";
-  }
-
   render() {
     const { username, password, canSubmit } = this.state;
     const { loginState } = this.props;
@@ -130,7 +113,6 @@ class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, Lo
                     placeholder="Username"
                     label="Username"
                     value={username}
-                    validate={this.handleRequiredField}
                   />
                   <TextInput
                     name="password"
@@ -139,9 +121,8 @@ class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, Lo
                     placeholder="Password"
                     label="Password"
                     value={password}
-                    validate={this.handleRequiredField}
                   />
-                  <Button buttonType="submit" className="submit-button" disabled={!canSubmit || loginState.inProgress}>
+                  <Button buttonType="submit" className="submit-button" disabled={loginState.inProgress}>
                     {loginState.inProgress ? "Logging in..." : "Log in"}
                   </Button>
                 </form>
