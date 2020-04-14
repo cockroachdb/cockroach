@@ -160,7 +160,7 @@ func TestDistinct(t *testing.T) {
 	for _, tc := range tcs {
 		for _, numOfBuckets := range []uint64{1, 3, 5, hashTableNumBuckets} {
 			t.Run(fmt.Sprintf("unordered/numOfBuckets=%d", numOfBuckets), func(t *testing.T) {
-				runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier,
+				runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
 					func(input []Operator) (Operator, error) {
 						return NewUnorderedDistinct(
 							testAllocator, input[0], tc.distinctCols, tc.colTypes,
@@ -175,7 +175,7 @@ func TestDistinct(t *testing.T) {
 					for i, j := range rng.Perm(len(tc.distinctCols))[:numOrderedCols] {
 						orderedCols[i] = tc.distinctCols[j]
 					}
-					runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier,
+					runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
 						func(input []Operator) (Operator, error) {
 							return newPartiallyOrderedDistinct(
 								testAllocator, input[0], tc.distinctCols,
