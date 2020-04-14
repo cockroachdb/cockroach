@@ -2392,3 +2392,12 @@ SELECT bit_or(x) FROM (VALUES ('100'::bit(3)), ('101010111'::varbit)) t(x)
 
 statement error cannot OR bit strings of different sizes
 SELECT bit_or(x) FROM (VALUES (''::varbit), ('1'::varbit)) t(x)
+
+# Regression test for #46981 (not propagating an error which occurs when
+# rendering the single output row of countRows aggregate).
+statement ok
+CREATE TABLE t46981_0(c0 INT);
+CREATE VIEW v46981_0(c0) AS SELECT count_rows() FROM t46981_0
+
+statement error parsing regexp: missing argument to repetition operator: `\+`
+SELECT * FROM v46981_0 WHERE '' !~ '+'

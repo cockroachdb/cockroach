@@ -69,6 +69,8 @@ func buildOpaque(
 		plan, err = p.CreateIndex(ctx, n)
 	case *tree.CreateSchema:
 		plan, err = p.CreateSchema(ctx, n)
+	case *tree.CreateType:
+		plan, err = p.CreateType(ctx, n)
 	case *tree.CreateRole:
 		plan, err = p.CreateRole(ctx, n)
 	case *tree.CreateSequence:
@@ -171,6 +173,7 @@ func init() {
 		&tree.CreateSchema{},
 		&tree.CreateSequence{},
 		&tree.CreateStats{},
+		&tree.CreateType{},
 		&tree.CreateRole{},
 		&tree.Deallocate{},
 		&tree.Discard{},
