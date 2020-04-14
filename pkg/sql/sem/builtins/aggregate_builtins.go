@@ -328,6 +328,47 @@ var aggregates = map[string]builtinDefinition{
 			newAnyNotNullAggregate,
 			"Returns an arbitrary not-NULL value, or NULL if none exists.",
 		))),
+
+	// Ordered-set aggregations.
+	"percentile_disc": makeBuiltin(aggProps(),
+		makeAggOverloadWithReturnType(
+			[]*types.T{types.Float},
+			func(args []tree.TypedExpr) *types.T { return tree.UnknownReturnType },
+			newPercentileDiscAggregate,
+			"Discrete percentile: returns the first input value whose position in the ordering equals or "+
+				"exceeds the specified fraction."),
+	),
+	"percentile_disc_impl": makePrivate(collectOverloads(aggProps(), types.Scalar,
+		func(t *types.T) tree.Overload {
+			return makeAggOverload([]*types.T{types.Float, t}, t, newPercentileDiscAggregate,
+				"Implementation of percentile_disc.")
+		})),
+	"percentile_cont": makeBuiltin(aggProps(),
+		makeAggOverload(
+			[]*types.T{types.Float},
+			types.Float,
+			newPercentileContAggregate,
+			"Continuous percentile: returns a float corresponding to the specified fraction in the ordering, "+
+				"interpolating between adjacent input floats if needed."),
+		makeAggOverload(
+			[]*types.T{types.Interval},
+			types.Interval,
+			newPercentileContAggregate,
+			"Continuous percentile: returns an interval corresponding to the specified fraction in the ordering, "+
+				"interpolating between adjacent input intervals if needed."),
+	),
+	"percentile_cont_impl": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload(
+			[]*types.T{types.Float, types.Float},
+			types.Float,
+			newPercentileContAggregate,
+			"Implementation of percentile_cont."),
+		makeAggOverload(
+			[]*types.T{types.Float, types.Interval},
+			types.Interval,
+			newPercentileContAggregate,
+			"Implementation of percentile_cont."),
+	)),
 }
 
 // AnyNotNull is the name of the aggregate returned by NewAnyNotNullAggregate.
@@ -452,6 +493,8 @@ var _ tree.AggregateFunc = &intBitAndAggregate{}
 var _ tree.AggregateFunc = &bitBitAndAggregate{}
 var _ tree.AggregateFunc = &intBitOrAggregate{}
 var _ tree.AggregateFunc = &bitBitOrAggregate{}
+var _ tree.AggregateFunc = &percentileDiscAggregate{}
+var _ tree.AggregateFunc = &percentileContAggregate{}
 
 const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
 const sizeOfAvgAggregate = int64(unsafe.Sizeof(avgAggregate{}))
@@ -485,6 +528,8 @@ const sizeOfIntBitAndAggregate = int64(unsafe.Sizeof(intBitAndAggregate{}))
 const sizeOfBitBitAndAggregate = int64(unsafe.Sizeof(bitBitAndAggregate{}))
 const sizeOfIntBitOrAggregate = int64(unsafe.Sizeof(intBitOrAggregate{}))
 const sizeOfBitBitOrAggregate = int64(unsafe.Sizeof(bitBitOrAggregate{}))
+const sizeOfPercentileDiscAggregate = int64(unsafe.Sizeof(percentileDiscAggregate{}))
+const sizeOfPercentileContAggregate = int64(unsafe.Sizeof(percentileContAggregate{}))
 
 // singleDatumAggregateBase is a utility struct that helps aggregate builtins
 // that store a single datum internally track their memory usage related to
@@ -2629,4 +2674,198 @@ func (a *jsonAggregate) Close(ctx context.Context) {
 // Size is part of the tree.AggregateFunc interface.
 func (a *jsonAggregate) Size() int64 {
 	return sizeOfJSONAggregate
+}
+
+// FractionUnset is used to specify an unset fraction so that we only set the
+// value once.
+const FractionUnset = -1.0
+
+type percentileDiscAggregate struct {
+	arr *tree.DArray
+	// Note that we do not embed singleDatumAggregateBase struct to help with
+	// memory accounting because percentileDiscAggregate stores multiple datums
+	// inside of arr.
+	acc      mon.BoundAccount
+	fraction float64
+}
+
+func newPercentileDiscAggregate(
+	params []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &percentileDiscAggregate{
+		arr:      tree.NewDArray(params[1]),
+		acc:      evalCtx.Mon.MakeBoundAccount(),
+		fraction: FractionUnset,
+	}
+}
+
+// Add stores the input percentile and all the values to calculate the discrete percentile.
+func (a *percentileDiscAggregate) Add(
+	ctx context.Context, datum tree.Datum, others ...tree.Datum,
+) error {
+	if a.fraction == FractionUnset && datum != tree.DNull {
+		fraction := float64(tree.MustBeDFloat(datum))
+		if fraction < 0 || fraction > 1.0 {
+			return pgerror.Newf(pgcode.NumericValueOutOfRange,
+				"percentile value %f is not between 0 and 1", fraction)
+		}
+		a.fraction = fraction
+	}
+
+	if len(others) == 1 && others[0] != tree.DNull {
+		if err := a.acc.Grow(ctx, int64(others[0].Size())); err != nil {
+			return err
+		}
+		return a.arr.Append(others[0])
+	} else if len(others) != 1 {
+		panic(fmt.Sprintf("unexpected number of other datums passed in, expected 1, got %d", len(others)))
+	}
+	return nil
+}
+
+// Result finds the discrete percentile.
+func (a *percentileDiscAggregate) Result() (tree.Datum, error) {
+	// Return null if there are no values.
+	if a.arr.Len() == 0 {
+		return tree.DNull, nil
+	}
+	// If zero fraction is specified then give the first index, otherwise account
+	// for row index which uses zero-based indexing.
+	if a.fraction == 0.0 {
+		return a.arr.Array[0], nil
+	}
+	// Use math.Ceil since we want the first value whose position equals or
+	// exceeds the specified fraction.
+	rowIndex := int(math.Ceil(a.fraction*float64(a.arr.Len()))) - 1
+
+	return a.arr.Array[rowIndex], nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *percentileDiscAggregate) Reset(ctx context.Context) {
+	a.arr = tree.NewDArray(a.arr.ParamTyp)
+	a.acc.Empty(ctx)
+	a.fraction = FractionUnset
+}
+
+// Close allows the aggregate to release the memory it requested during
+// operation.
+func (a *percentileDiscAggregate) Close(ctx context.Context) {
+	a.acc.Close(ctx)
+}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *percentileDiscAggregate) Size() int64 {
+	return sizeOfPercentileDiscAggregate
+}
+
+type percentileContAggregate struct {
+	arr *tree.DArray
+	// Note that we do not embed singleDatumAggregateBase struct to help with
+	// memory accounting because percentileContAggregate stores multiple datums
+	// inside of arr.
+	acc      mon.BoundAccount
+	fraction float64
+}
+
+func newPercentileContAggregate(
+	params []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &percentileContAggregate{
+		arr:      tree.NewDArray(params[1]),
+		acc:      evalCtx.Mon.MakeBoundAccount(),
+		fraction: FractionUnset,
+	}
+}
+
+// Add stores the input percentile and all the values to calculate the continuous percentile.
+func (a *percentileContAggregate) Add(
+	ctx context.Context, datum tree.Datum, others ...tree.Datum,
+) error {
+	if a.fraction == FractionUnset && datum != tree.DNull {
+		fraction := float64(tree.MustBeDFloat(datum))
+		if fraction < 0 || fraction > 1.0 {
+			return pgerror.Newf(pgcode.NumericValueOutOfRange,
+				"percentile value %f is not between 0 and 1", fraction)
+		}
+		a.fraction = fraction
+	}
+
+	if len(others) == 1 && others[0] != tree.DNull {
+		if err := a.acc.Grow(ctx, int64(others[0].Size())); err != nil {
+			return err
+		}
+		return a.arr.Append(others[0])
+	} else if len(others) != 1 {
+		panic(fmt.Sprintf("unexpected number of other datums passed in, expected 1, got %d", len(others)))
+	}
+	return nil
+}
+
+// Result finds the continuous percentile.
+func (a *percentileContAggregate) Result() (tree.Datum, error) {
+	// Return null if there are no values.
+	if a.arr.Len() == 0 {
+		return tree.DNull, nil
+	}
+	// The following is the formula for calculating the continuous percentile:
+	// RN = (1 + (fraction * (frameSize - 1))
+	// CRN = Ceil(RN)
+	// FRN = Floor(RN)
+	// If (CRN = FRN = RN) then the result is:
+	//   (value at row RN)
+	// Otherwise the result is:
+	//   (CRN - RN) * (value at row FRN) +
+	//   (RN - FRN) * (value at row CRN)
+	// Adapted from:
+	//   https://docs.oracle.com/cd/B19306_01/server.102/b14200/functions110.htm
+	rowNumber := 1.0 + (a.fraction * (float64(a.arr.Len()) - 1.0))
+	ceilRowNumber := int(math.Ceil(rowNumber))
+	floorRowNumber := int(math.Floor(rowNumber))
+
+	if a.arr.ParamTyp.Equal(types.Float) {
+		var target float64
+		if rowNumber == float64(ceilRowNumber) && rowNumber == float64(floorRowNumber) {
+			target = float64(tree.MustBeDFloat(a.arr.Array[int(rowNumber)-1]))
+		} else {
+			floorValue := float64(tree.MustBeDFloat(a.arr.Array[floorRowNumber-1]))
+			ceilValue := float64(tree.MustBeDFloat(a.arr.Array[ceilRowNumber-1]))
+			target = (float64(ceilRowNumber)-rowNumber)*floorValue +
+				(rowNumber-float64(floorRowNumber))*ceilValue
+		}
+		return tree.NewDFloat(tree.DFloat(target)), nil
+	} else if a.arr.ParamTyp.Equal(types.Interval) {
+		var target *tree.DInterval
+		if rowNumber == float64(ceilRowNumber) && rowNumber == float64(floorRowNumber) {
+			target = tree.MustBeDInterval(a.arr.Array[int(rowNumber)-1])
+		} else {
+			floorValue := tree.MustBeDInterval(a.arr.Array[floorRowNumber-1]).AsFloat64()
+			ceilValue := tree.MustBeDInterval(a.arr.Array[ceilRowNumber-1]).AsFloat64()
+			targetDuration := duration.FromFloat64(
+				(float64(ceilRowNumber)-rowNumber)*floorValue +
+					(rowNumber-float64(floorRowNumber))*ceilValue)
+			target = tree.NewDInterval(targetDuration, types.DefaultIntervalTypeMetadata)
+		}
+		return target, nil
+	} else {
+		panic(fmt.Sprintf("argument type must be float or interval, got %s", a.arr.ParamTyp.String()))
+	}
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *percentileContAggregate) Reset(ctx context.Context) {
+	a.arr = tree.NewDArray(a.arr.ParamTyp)
+	a.acc.Empty(ctx)
+	a.fraction = FractionUnset
+}
+
+// Close allows the aggregate to release the memory it requested during
+// operation.
+func (a *percentileContAggregate) Close(ctx context.Context) {
+	a.acc.Close(ctx)
+}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *percentileContAggregate) Size() int64 {
+	return sizeOfPercentileContAggregate
 }
