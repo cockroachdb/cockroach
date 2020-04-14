@@ -313,6 +313,8 @@ func evaluateBatch(
 				}
 
 				if baHeader.Txn != nil {
+					log.VEventf(ctx, 2, "setting WriteTooOld because of key: %s. wts: %s -> %s",
+						args.Header().Key, baHeader.Txn.WriteTimestamp, tErr.ActualTimestamp)
 					baHeader.Txn.WriteTimestamp.Forward(tErr.ActualTimestamp)
 					baHeader.Txn.WriteTooOld = true
 				} else {
