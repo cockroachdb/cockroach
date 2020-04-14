@@ -17,7 +17,6 @@ import {ReactNode} from "react";
 export const CapacityGraphTooltip: React.FunctionComponent<{tooltipSelection: ReactNode}> =
   ({tooltipSelection}) => (<div>
     <dl>
-      <dt>Capacity</dt>
       <dd>
         <p>
           Usage of disk space {tooltipSelection}.
@@ -34,7 +33,6 @@ export const CapacityGraphTooltip: React.FunctionComponent<{tooltipSelection: Re
 export const LogicalBytesGraphTooltip: React.FunctionComponent =
   () => (<div>
     <dl>
-      <dt>Logical Bytes per Store</dt>
       <dd>
         <p>
           Number of logical bytes stored in
