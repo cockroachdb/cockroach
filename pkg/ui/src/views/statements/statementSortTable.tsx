@@ -28,6 +28,7 @@ export interface StatementSortTableProps {
   lastReset: string;
   search?: string;
   activateDiagnosticsRef?: React.RefObject<ActivateDiagnosticsModalRef>;
+  selectedApp?: string;
 }
 
 interface PaginationSettings {
@@ -93,6 +94,9 @@ export class StatementSortTable extends React.Component<StatementSortTableProps 
     if (this.props.search && this.props.search !== prevProps.search) {
       trackSearch(this.filteredStatementsData().length);
     }
+    if (this.props.selectedApp && this.props.selectedApp !== prevProps.selectedApp) {
+      this.resetPagination();
+    }
   }
 
   changeSortSetting = (ss: SortSetting) => {
@@ -102,6 +106,17 @@ export class StatementSortTable extends React.Component<StatementSortTableProps 
     this.syncHistory({
       "sortKey": ss.sortKey,
       "ascending": Boolean(ss.ascending).toString(),
+    });
+  }
+
+  resetPagination = () => {
+    this.setState((prevState) => {
+      return {
+        pagination: {
+          current: 1,
+          pageSize: prevState.pagination.pageSize,
+        },
+      };
     });
   }
 

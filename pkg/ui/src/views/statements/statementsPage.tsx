@@ -15,7 +15,6 @@ import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { paginationPageCount } from "src/components/pagination/pagination";
 import * as protos from "src/js/protos";
 import { refreshStatementDiagnosticsRequests, refreshStatements } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -41,7 +40,6 @@ import { getMatchParamByName } from "src/util/query";
 import StatementSortTable from "./statementSortTable";
 
 import "./statements.styl";
-import { ISortedTablePagination } from "../shared/components/sortedtable";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
@@ -58,7 +56,6 @@ interface OwnProps {
 
 export interface StatementsPageState {
   search?: string;
-  pagination: ISortedTablePagination;
 }
 
 export type StatementsPageProps = OwnProps & RouteComponentProps<any>;
@@ -108,18 +105,6 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     const { history } = this.props;
     history.location.pathname = `/statements/${app.value}`;
     history.replace(history.location);
-    this.resetPagination();
-  }
-
-  resetPagination = () => {
-    this.setState((prevState) => {
-      return {
-        pagination: {
-          current: 1,
-          pageSize: prevState.pagination.pageSize,
-        },
-      };
-    });
   }
 
   componentDidMount() {
@@ -181,6 +166,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
             statements={statements}
             search={search}
             lastReset={lastReset}
+            selectedApp={selectedApp}
             activateDiagnosticsRef={this.activateDiagnosticsRef}
           />
         </div>
