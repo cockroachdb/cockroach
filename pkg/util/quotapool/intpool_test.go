@@ -305,6 +305,33 @@ func TestQuotaPoolCappedAcquisition(t *testing.T) {
 	}
 }
 
+// TestQuotaPoolZeroCapacity verifies that a non-noop acquisition request on a
+// pool with zero capacity is immediately rejected, regardless of whether the
+// request is permitted to wait or not.
+func TestQuotaPoolZeroCapacity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const quota = 0
+	qp := quotapool.NewIntPool("test", quota)
+	ctx := context.Background()
+
+	failed, err := qp.Acquire(ctx, 1)
+	require.Equal(t, quotapool.ErrNotEnoughQuota, err)
+	require.Nil(t, failed)
+
+	failed, err = qp.TryAcquire(ctx, 1)
+	require.Equal(t, quotapool.ErrNotEnoughQuota, err)
+	require.Nil(t, failed)
+
+	acq1, err := qp.Acquire(ctx, 0)
+	require.NoError(t, err)
+	acq1.Release()
+
+	acq2, err := qp.TryAcquire(ctx, 0)
+	require.NoError(t, err)
+	acq2.Release()
+}
+
 func TestOnAcquisition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
