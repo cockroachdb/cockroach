@@ -334,6 +334,52 @@ func TestExtractConstCols(t *testing.T) {
 	}
 }
 
+func TestIsSingleColumnConstValue(t *testing.T) {
+	type testCase struct {
+		constraints []string
+		col         opt.ColumnID
+		val         int
+	}
+	cases := []testCase{
+		{[]string{`/1: [/10 - /10]`}, 1, 10},
+		{[]string{`/-1: [/10 - /10]`}, 1, 10},
+		{[]string{`/1: [/10 - /11]`}, 0, 0},
+		{[]string{`/1: [/10 - /10] [/11 - /11]`}, 0, 0},
+		{[]string{`/1/2: [/10/2 - /10/4]`}, 0, 0},
+		{[]string{`/1/2: [/10/2 - /10/2]`}, 0, 0},
+		{
+			[]string{
+				`/1: [/10 - /10]`,
+				`/2: [/8 - /8]`,
+			},
+			0, 0,
+		},
+		{
+			[]string{
+				`/1: [/10 - /10]`,
+				`/1/2: [/10/8 - /10/8]`,
+			},
+			0, 0,
+		},
+	}
+	evalCtx := tree.NewTestingEvalContext(nil)
+	for _, tc := range cases {
+		cs := Unconstrained
+		for _, constraint := range tc.constraints {
+			constraint := ParseConstraint(evalCtx, constraint)
+			cs = cs.Intersect(evalCtx, SingleConstraint(&constraint))
+		}
+		col, val, ok := cs.IsSingleColumnConstValue(evalCtx)
+		intVal := 0
+		if ok {
+			intVal = int(*val.(*tree.DInt))
+		}
+		if tc.col != col || tc.val != intVal {
+			t.Errorf("%s: expected %d,%d got %d,%d", cs, tc.col, tc.val, col, intVal)
+		}
+	}
+}
+
 type spanTestData struct {
 	spEq10   Span // [/10 - /10]
 	spGt20   Span // (/20 - ]

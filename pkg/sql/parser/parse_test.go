@@ -335,6 +335,12 @@ func TestParse(t *testing.T) {
 		{`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '2016-01-01'`},
 		{`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 AS OF SYSTEM TIME '2016-01-01'`},
 
+		{`CREATE TYPE a AS ENUM ()`},
+		{`CREATE TYPE a AS ENUM ('a')`},
+		{`CREATE TYPE a AS ENUM ('a', 'b', 'c')`},
+		{`CREATE TYPE a.b AS ENUM ('a', 'b', 'c')`},
+		{`CREATE TYPE a.b.c AS ENUM ('a', 'b', 'c')`},
+
 		{`DELETE FROM a`},
 		{`EXPLAIN DELETE FROM a`},
 		{`DELETE FROM a.b`},
@@ -3256,7 +3262,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE RECURSIVE VIEW a AS SELECT b`, 0, `create recursive view`, ``},
 
 		{`CREATE TYPE a AS (b)`, 27792, ``, ``},
-		{`CREATE TYPE a AS ENUM (b)`, 24873, ``, ``},
 		{`CREATE TYPE a AS RANGE b`, 27791, ``, ``},
 		{`CREATE TYPE a (b)`, 27793, `base`, ``},
 		{`CREATE TYPE a`, 27793, `shell`, ``},

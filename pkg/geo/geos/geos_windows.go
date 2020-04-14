@@ -21,12 +21,12 @@ func EnsureInit(errDisplay EnsureInitErrorDisplay) error {
 	return nil
 }
 
-func WKTToEWKB(wkt geopb.WKT) (geopb.WKB, error) {
+func WKTToEWKB(wkt geopb.WKT, srid geopb.SRID) (geopb.EWKB, error) {
 	return nil, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
 }
 
 func ClipEWKBByRect(
 	wkb geopb.WKB, xmin float64, ymin float64, xmax float64, ymax float64,
-) (geopb.WKB, error) {
+) (geopb.EWKB, error) {
 	return nil, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
 }

@@ -238,6 +238,8 @@ func registerTPCC(r *testRegistry) {
 		},
 	})
 	mixedHeadroomSpec := makeClusterSpec(5, cpu(16))
+
+	// TODO(tbg): rewrite and extend this using the harness in versionupgrade.go.
 	r.Add(testSpec{
 		// mixed-headroom is similar to w=headroom, but with an additional node
 		// and on a mixed version cluster. It simulates a real production

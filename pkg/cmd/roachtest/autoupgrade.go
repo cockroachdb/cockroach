@@ -26,6 +26,10 @@ import (
 //
 // NB: if you're interested in mixed-version testing, don't look at this test
 // but check out acceptance/version-upgrade.
+//
+// NOTE: DO NOT USE THIS TEST AS A TEMPLATE FOR MIXED-VERSION TESTING.
+// You want to look at versionupgrade.go, which has a test harness you
+// can use.
 func registerAutoUpgrade(r *testRegistry) {
 	runAutoUpgrade := func(ctx context.Context, t *test, c *cluster, oldVersion string) {
 		nodes := c.spec.NodeCount

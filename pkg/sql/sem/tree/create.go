@@ -168,6 +168,58 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	}
 }
 
+// CreateTypeVariety represents a particular variety of user defined types.
+type CreateTypeVariety int
+
+//go:generate stringer -type=CreateTypeVariety
+const (
+	_ CreateTypeVariety = iota
+	// Enum represents an ENUM user defined type.
+	Enum
+	// Composite represents a composite user defined type.
+	Composite
+	// Range represents a RANGE user defined type.
+	Range
+	// Base represents a base user defined type.
+	Base
+	// Shell represents a shell user defined type.
+	Shell
+	// Domain represents a DOMAIN user defined type.
+	Domain
+)
+
+// CreateType represents a CREATE TYPE statement.
+type CreateType struct {
+	TypeName *UnresolvedObjectName
+	Variety  CreateTypeVariety
+	// EnumLabels is set when this represents a CREATE TYPE ... AS ENUM statement.
+	EnumLabels []string
+}
+
+var _ Statement = &CreateType{}
+
+// Format implements the NodeFormatter interface.
+func (node *CreateType) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE TYPE ")
+	ctx.WriteString(node.TypeName.String())
+	ctx.WriteString(" ")
+	switch node.Variety {
+	case Enum:
+		ctx.WriteString("AS ENUM (")
+		for i := range node.EnumLabels {
+			if i > 0 {
+				ctx.WriteString(", ")
+			}
+			lex.EncodeSQLString(&ctx.Buffer, node.EnumLabels[i])
+		}
+		ctx.WriteString(")")
+	}
+}
+
+func (node *CreateType) String() string {
+	return AsString(node)
+}
+
 // TableDef represents a column, index or constraint definition within a CREATE
 // TABLE statement.
 type TableDef interface {

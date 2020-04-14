@@ -333,6 +333,14 @@ func (n *CreateTable) StatementTag() string {
 func (*CreateTable) modifiesSchema() bool { return true }
 
 // StatementType implements the Statement interface.
+func (*CreateType) StatementType() StatementType { return DDL }
+
+// StatementTag implements the Statement interface.
+func (*CreateType) StatementTag() string { return "CREATE TYPE" }
+
+func (*CreateType) modifiesSchema() bool { return true }
+
+// StatementType implements the Statement interface.
 func (*CreateRole) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.

@@ -76,7 +76,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVers
 	c.encryptDefault = false
 
 	// Set the bool within to true to create a new fixture for this test. This
-	// is necessary after every release. For example, when day `master` becomes
+	// is necessary after every release. For example, the day `master` becomes
 	// the 20.2 release, this test will fail because it is missing a fixture for
 	// 20.1; run the test (on 20.1) with the bool flipped to create the fixture.
 	// Check it in (instructions are on the 'checkpointer' struct) and off we
