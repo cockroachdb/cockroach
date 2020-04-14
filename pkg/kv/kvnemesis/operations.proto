@@ -104,4 +104,5 @@ message Step {
   util.hlc.Timestamp before = 2 [(gogoproto.nullable) = false];
   util.hlc.Timestamp after = 3 [(gogoproto.nullable) = false];
   int32 db_id = 4 [(gogoproto.customname) = 'DBID'];
+  string recording = 5;
 }
