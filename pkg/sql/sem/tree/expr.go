@@ -1241,9 +1241,12 @@ type FuncExpr struct {
 	Filter    Expr
 	WindowDef *WindowDef
 
-	// OrderBy is used for aggregations that specify an order:
-	// array_agg(col1 ORDER BY col2)
+	// AggType is used to specify the type of aggregation.
+	AggType AggType
+	// OrderBy is used for aggregations which specify an order. This same field
+	// is used for any type of aggregation.
 	OrderBy OrderBy
+
 	typeAnnotation
 	fnProps *FunctionProperties
 	fn      *Overload
@@ -1324,6 +1327,18 @@ var funcTypeName = [...]string{
 	AllFuncType:      "ALL",
 }
 
+// AggType specifies the type of aggregation.
+type AggType int
+
+// FuncExpr.AggType
+const (
+	_ AggType = iota
+	// GeneralAgg is used for general-purpose aggregate functions.
+	GeneralAgg
+	// OrderedSetAgg is used for ordered-set aggregate functions.
+	OrderedSetAgg
+)
+
 // Format implements the NodeFormatter interface.
 func (node *FuncExpr) Format(ctx *FmtCtx) {
 	var typ string
@@ -1340,7 +1355,7 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.WriteString(typ)
 	ctx.FormatNode(&node.Exprs)
-	if len(node.OrderBy) > 0 {
+	if node.AggType == GeneralAgg && len(node.OrderBy) > 0 {
 		ctx.WriteByte(' ')
 		ctx.FormatNode(&node.OrderBy)
 	}
@@ -1355,6 +1370,11 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 				ctx.Buffer.WriteString(node.typ.SQLString())
 			}
 		}
+	}
+	if node.AggType == OrderedSetAgg && len(node.OrderBy) > 0 {
+		ctx.WriteString(" WITHIN GROUP (")
+		ctx.FormatNode(&node.OrderBy)
+		ctx.WriteString(")")
 	}
 	if node.Filter != nil {
 		ctx.WriteString(" FILTER (WHERE ")

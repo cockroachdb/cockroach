@@ -199,6 +199,8 @@ var AggregateOpReverseMap = map[Operator]string{
 	ConstAggOp:        "any_not_null",
 	ConstNotNullAggOp: "any_not_null",
 	AnyNotNullAggOp:   "any_not_null",
+	PercentileDiscOp:  "percentile_disc_impl",
+	PercentileContOp:  "percentile_cont_impl",
 }
 
 // WindowOpReverseMap maps from an optimizer operator type to the name of a
@@ -277,11 +279,11 @@ func AggregateIgnoresNulls(op Operator) bool {
 
 	case AnyNotNullAggOp, AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp,
 		ConstNotNullAggOp, CorrOp, CountOp, MaxOp, MinOp, SqrDiffOp, StdDevOp,
-		StringAggOp, SumOp, SumIntOp, VarianceOp, XorAggOp:
+		StringAggOp, SumOp, SumIntOp, VarianceOp, XorAggOp, PercentileContOp:
 		return true
 
 	case ArrayAggOp, ConcatAggOp, ConstAggOp, CountRowsOp, FirstAggOp, JsonAggOp,
-		JsonbAggOp:
+		JsonbAggOp, PercentileDiscOp:
 		return false
 
 	default:
@@ -299,7 +301,7 @@ func AggregateIsNullOnEmpty(op Operator) bool {
 		BitOrAggOp, BoolAndOp, BoolOrOp, ConcatAggOp, ConstAggOp,
 		ConstNotNullAggOp, CorrOp, FirstAggOp, JsonAggOp, JsonbAggOp,
 		MaxOp, MinOp, SqrDiffOp, StdDevOp, StringAggOp, SumOp, SumIntOp,
-		VarianceOp, XorAggOp:
+		VarianceOp, XorAggOp, PercentileDiscOp, PercentileContOp:
 		return true
 
 	case CountOp, CountRowsOp:
@@ -324,10 +326,10 @@ func AggregateIsNeverNullOnNonNullInput(op Operator) bool {
 		BitOrAggOp, BoolAndOp, BoolOrOp, ConcatAggOp, ConstAggOp,
 		ConstNotNullAggOp, CountOp, CountRowsOp, FirstAggOp,
 		JsonAggOp, JsonbAggOp, MaxOp, MinOp, SqrDiffOp,
-		StringAggOp, SumOp, SumIntOp, XorAggOp:
+		StringAggOp, SumOp, SumIntOp, XorAggOp, PercentileContOp:
 		return true
 
-	case VarianceOp, StdDevOp, CorrOp:
+	case VarianceOp, StdDevOp, CorrOp, PercentileDiscOp:
 		// These aggregations return NULL if they are given a single not-NULL input.
 		return false
 
