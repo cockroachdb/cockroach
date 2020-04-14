@@ -1729,6 +1729,13 @@ func mvccPutInternal(
 		var txnMeta *enginepb.TxnMeta
 		if txn != nil {
 			txnMeta = &txn.TxnMeta
+			// If we bumped the WriteTimestamp, we update both the TxnMeta and the
+			// MVCCMetadata.Timestamp.
+			if txnMeta.WriteTimestamp.Less(writeTimestamp) {
+				txnMetaCpy := *txnMeta
+				txnMetaCpy.WriteTimestamp.Forward(writeTimestamp)
+				txnMeta = &txnMetaCpy
+			}
 		}
 		buf.newMeta.Txn = txnMeta
 		buf.newMeta.Timestamp = hlc.LegacyTimestamp(writeTimestamp)
@@ -2798,6 +2805,10 @@ func mvccResolveWriteIntent(
 		return false, nil
 	}
 
+	// The intent might be committing at a higher timestamp, or it might be
+	// getting pushed.
+	newTimestamp := intent.Txn.WriteTimestamp
+
 	// If we're committing, or if the commit timestamp of the intent has been moved forward, and if
 	// the proposed epoch matches the existing epoch: update the meta.Txn. For commit, it's set to
 	// nil; otherwise, we update its value. We may have to update the actual version value (remove old
@@ -2810,7 +2821,8 @@ func mvccResolveWriteIntent(
 	if commit || pushed || rolledBackVal != nil {
 		buf.newMeta = *meta
 		// Set the timestamp for upcoming write (or at least the stats update).
-		buf.newMeta.Timestamp = hlc.LegacyTimestamp(intent.Txn.WriteTimestamp)
+		buf.newMeta.Timestamp = hlc.LegacyTimestamp(newTimestamp)
+		buf.newMeta.Txn.WriteTimestamp = newTimestamp
 
 		// Update or remove the metadata key.
 		var metaKeySize, metaValSize int64
@@ -2834,7 +2846,7 @@ func mvccResolveWriteIntent(
 		var prevValSize int64
 		if buf.newMeta.Timestamp != meta.Timestamp {
 			oldKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
-			newKey := MVCCKey{Key: intent.Key, Timestamp: intent.Txn.WriteTimestamp}
+			newKey := MVCCKey{Key: intent.Key, Timestamp: newTimestamp}
 
 			// Rewrite the versioned value at the new timestamp.
 			iter.SeekGE(oldKey)
