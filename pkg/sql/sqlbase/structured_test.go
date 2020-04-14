@@ -596,6 +596,47 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  3,
 			}},
+		{`index "foo_crdb_internal_bar_shard_5_bar_idx" refers to non-existent shard column "does not exist"`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: FamilyFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+					{ID: 2, Name: "crdb_internal_bar_shard_5"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary",
+						ColumnIDs:   []ColumnID{1, 2},
+						ColumnNames: []string{"bar", "crdb_internal_bar_shard_5"},
+					},
+				},
+				PrimaryIndex: IndexDescriptor{
+					ID: 1, Name: "primary",
+					Unique:           true,
+					ColumnIDs:        []ColumnID{1},
+					ColumnNames:      []string{"bar"},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+					StoreColumnNames: []string{"crdb_internal_bar_shard_5"},
+					StoreColumnIDs:   []ColumnID{2},
+				},
+				Indexes: []IndexDescriptor{
+					{ID: 2, Name: "foo_crdb_internal_bar_shard_5_bar_idx",
+						ColumnIDs:        []ColumnID{2, 1},
+						ColumnNames:      []string{"crdb_internal_bar_shard_5", "bar"},
+						ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+						Sharded: ShardedDescriptor{
+							IsSharded:    true,
+							Name:         "does not exist",
+							ShardBuckets: 5,
+						},
+					},
+				},
+				NextColumnID: 3,
+				NextFamilyID: 1,
+				NextIndexID:  3,
+			}},
 	}
 	for i, d := range testData {
 		if err := d.desc.ValidateTable(); err == nil {
