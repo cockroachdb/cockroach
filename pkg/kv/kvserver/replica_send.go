@@ -137,6 +137,11 @@ func (r *Replica) sendWithRangeID(
 //    their Raft entry has been committed but before it has been applied to
 //    the replicated state machine. In all of these cases, responsibility
 //    for releasing the concurrency guard is handed to Raft.
+//
+// However, this option is not permitted if the function returns a "server-side
+// concurrency retry error" (see isConcurrencyRetryError for more details). If
+// the function returns one of these errors, it must also pass ownership of the
+// concurrency guard back to the caller.
 type batchExecutionFn func(
 	*Replica, context.Context, *roachpb.BatchRequest, storagepb.LeaseStatus, *concurrency.Guard,
 ) (*roachpb.BatchResponse, *concurrency.Guard, *roachpb.Error)
@@ -240,49 +245,68 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		}
 
 		br, g, pErr = fn(r, ctx, ba, status, g)
-		switch t := pErr.GetDetail().(type) {
-		case nil:
+		if pErr == nil {
 			// Success.
 			return br, nil
+		} else if !isConcurrencyRetryError(pErr) {
+			// Propagate error.
+			return nil, pErr
+		}
+
+		// The batch execution func returned a server-side concurrency retry
+		// error. It must have also handed back ownership of the concurrency
+		// guard without having already released the guard's latches.
+		g.AssertLatches()
+		switch t := pErr.GetDetail().(type) {
 		case *roachpb.WriteIntentError:
 			// Drop latches, but retain lock wait-queues.
-			g.AssertLatches()
 			if g, pErr = r.handleWriteIntentError(ctx, ba, g, pErr, t); pErr != nil {
 				return nil, pErr
 			}
-			// Retry...
 		case *roachpb.TransactionPushError:
 			// Drop latches, but retain lock wait-queues.
-			g.AssertLatches()
 			if g, pErr = r.handleTransactionPushError(ctx, ba, g, pErr, t); pErr != nil {
 				return nil, pErr
 			}
-			// Retry...
 		case *roachpb.IndeterminateCommitError:
 			// Drop latches and lock wait-queues.
-			g.AssertLatches()
 			r.concMgr.FinishReq(g)
 			g = nil
 			// Then launch a task to handle the indeterminate commit error.
 			if pErr = r.handleIndeterminateCommitError(ctx, ba, pErr, t); pErr != nil {
 				return nil, pErr
 			}
-			// Retry...
 		case *roachpb.MergeInProgressError:
 			// Drop latches and lock wait-queues.
-			g.AssertLatches()
 			r.concMgr.FinishReq(g)
 			g = nil
 			// Then listen for the merge to complete.
 			if pErr = r.handleMergeInProgressError(ctx, ba, pErr, t); pErr != nil {
 				return nil, pErr
 			}
-			// Retry...
 		default:
-			// Propagate error.
-			return nil, pErr
+			log.Fatalf(ctx, "unexpected concurrency retry error %T", t)
 		}
+		// Retry...
 	}
+}
+
+// isConcurrencyRetryError returns whether or not the provided error is a
+// "server-side concurrency retry error" that will be captured and retried by
+// executeBatchWithConcurrencyRetries. Server-side concurrency retry errors are
+// handled by dropping a request's latches, waiting for and/or ensuring that the
+// condition which caused the error is handled, re-sequencing through the
+// concurrency manager, and executing the request again.
+func isConcurrencyRetryError(pErr *roachpb.Error) bool {
+	switch pErr.GetDetail().(type) {
+	case *roachpb.WriteIntentError:
+	case *roachpb.TransactionPushError:
+	case *roachpb.IndeterminateCommitError:
+	case *roachpb.MergeInProgressError:
+	default:
+		return false
+	}
+	return true
 }
 
 func (r *Replica) handleWriteIntentError(
