@@ -334,8 +334,7 @@ func evaluateBatch(
 		// of results from the limit going forward. Exhausting the limit results
 		// in a limit of -1. This makes sure that we still execute the rest of
 		// the batch, but with limit-aware operations returning no data.
-		if limit := baHeader.MaxSpanRequestKeys; limit > 0 {
-			retResults := reply.Header().NumKeys
+		if limit, retResults := baHeader.MaxSpanRequestKeys, reply.Header().NumKeys; limit > 0 {
 			if retResults > limit {
 				index, retResults, limit := index, retResults, limit // don't alloc unless branch taken
 				err := errorutil.UnexpectedWithIssueErrorf(46652,
@@ -354,6 +353,14 @@ func evaluateBatch(
 				// They were equal, so drop to -1 instead of zero (which would
 				// mean "no limit").
 				baHeader.MaxSpanRequestKeys = -1
+			}
+		} else if limit < 0 {
+			if retResults > 0 {
+				index, retResults := index, retResults // don't alloc unless branch taken
+				log.Fatalf(ctx,
+					"received %d results, limit was exhausted (original limit: %d, batch=%s idx=%d)",
+					errors.Safe(retResults), errors.Safe(ba.Header.MaxSpanRequestKeys),
+					errors.Safe(ba.Summary()), errors.Safe(index))
 			}
 		}
 		// Same as for MaxSpanRequestKeys above, keep track of the limit and

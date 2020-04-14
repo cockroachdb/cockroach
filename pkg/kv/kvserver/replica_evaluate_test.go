@@ -508,6 +508,55 @@ func TestEvaluateBatch(t *testing.T) {
 				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
 			},
 		},
+		//
+		// Test suite for ResolveIntentRange with and without limits.
+		//
+		{
+			// Three range intent resolutions that observe 3, 1, and 0 intent,
+			// respectively. All intents should be resolved.
+			name: "ranged intent resolution",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEFIntents(t, d, &txn)
+				d.ba.Add(resolveIntentRangeArgsString("a", "d", txn.TxnMeta, roachpb.COMMITTED))
+				d.ba.Add(resolveIntentRangeArgsString("e", "f", txn.TxnMeta, roachpb.COMMITTED))
+				d.ba.Add(resolveIntentRangeArgsString("h", "j", txn.TxnMeta, roachpb.COMMITTED))
+			},
+			check: func(t *testing.T, r resp) {
+				verifyNumKeys(t, r, 3, 1, 0)
+				verifyResumeSpans(t, r, "", "", "")
+			},
+		},
+		{
+			// Resolving intents with a giant limit should resolve everything.
+			name: "ranged intent resolution with giant MaxSpanRequestKeys",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEFIntents(t, d, &txn)
+				d.ba.Add(resolveIntentRangeArgsString("a", "d", txn.TxnMeta, roachpb.COMMITTED))
+				d.ba.Add(resolveIntentRangeArgsString("e", "f", txn.TxnMeta, roachpb.COMMITTED))
+				d.ba.Add(resolveIntentRangeArgsString("h", "j", txn.TxnMeta, roachpb.COMMITTED))
+				d.ba.MaxSpanRequestKeys = 100000
+			},
+			check: func(t *testing.T, r resp) {
+				verifyNumKeys(t, r, 3, 1, 0)
+				verifyResumeSpans(t, r, "", "", "")
+			},
+		},
+		{
+			// A batch limited to resolve only up to 3 keys should respect that
+			// limit. The limit is saturated by the first request in the batch.
+			name: "ranged intent resolution with MaxSpanRequestKeys=3",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEFIntents(t, d, &txn)
+				d.ba.Add(resolveIntentRangeArgsString("a", "d", txn.TxnMeta, roachpb.COMMITTED))
+				d.ba.Add(resolveIntentRangeArgsString("e", "f", txn.TxnMeta, roachpb.COMMITTED))
+				d.ba.Add(resolveIntentRangeArgsString("h", "j", txn.TxnMeta, roachpb.COMMITTED))
+				d.ba.MaxSpanRequestKeys = 3
+			},
+			check: func(t *testing.T, r resp) {
+				verifyNumKeys(t, r, 3, 0, 0)
+				verifyResumeSpans(t, r, "c\x00-d", "e-f", "h-j")
+			},
+		},
 	}
 
 	for _, tc := range tcs {
@@ -565,10 +614,14 @@ type testCase struct {
 }
 
 func writeABCDEF(t *testing.T, d *data) {
+	writeABCDEFIntents(t, d, nil /* txn */)
+}
+
+func writeABCDEFIntents(t *testing.T, d *data, txn *roachpb.Transaction) {
 	for _, k := range []string{"a", "b", "c", "d", "e", "f"} {
 		require.NoError(t, storage.MVCCPut(
 			context.Background(), d.eng, nil /* ms */, roachpb.Key(k), d.ba.Timestamp,
-			roachpb.MakeValueFromString("value-"+k), nil /* txn */))
+			roachpb.MakeValueFromString("value-"+k), txn))
 	}
 }
 
@@ -607,17 +660,26 @@ func verifyScanResult(t *testing.T, r resp, keysPerResp ...[]string) {
 	}
 }
 
+func verifyNumKeys(t *testing.T, r resp, keysPerResp ...int) {
+	require.Nil(t, r.pErr)
+	require.NotNil(t, r.br)
+	require.Len(t, r.br.Responses, len(keysPerResp))
+	for i, keys := range keysPerResp {
+		actKeys := int(r.br.Responses[i].GetInner().Header().NumKeys)
+		require.Equal(t, keys, actKeys, "in response #%i", i+1)
+	}
+}
+
 func verifyResumeSpans(t *testing.T, r resp, resumeSpans ...string) {
 	for i, span := range resumeSpans {
-		if span == "" {
-			continue // don't check request
-		}
 		rs := r.br.Responses[i].GetInner().Header().ResumeSpan
-		var act string
-		if rs != nil {
-			act = fmt.Sprintf("%s-%s", string(rs.Key), string(rs.EndKey))
+		if span == "" {
+			require.Nil(t, rs)
+		} else {
+			require.NotNil(t, rs)
+			act := fmt.Sprintf("%s-%s", string(rs.Key), string(rs.EndKey))
+			require.Equal(t, span, act, "#%d", i+1)
 		}
-		require.Equal(t, span, act, "#%d", i+1)
 	}
 }
 

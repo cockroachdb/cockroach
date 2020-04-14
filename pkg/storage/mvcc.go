@@ -3050,8 +3050,12 @@ func MVCCResolveWriteIntentRange(
 // MVCCResolveWriteIntentRangeUsingIter commits or aborts (rolls back)
 // the range of write intents specified by start and end keys for a
 // given txn. ResolveWriteIntentRange will skip write intents of other
-// txns. Returns the number of intents resolved and a resume span if
-// the max keys limit was exceeded. A max of zero means unbounded.
+// txns.
+//
+// Returns the number of intents resolved and a resume span if the max
+// keys limit was exceeded. A max of zero means unbounded. A max of -1
+// means resolve nothing and return the entire intent span as the resume
+// span.
 func MVCCResolveWriteIntentRangeUsingIter(
 	ctx context.Context,
 	rw ReadWriter,
@@ -3060,6 +3064,11 @@ func MVCCResolveWriteIntentRangeUsingIter(
 	intent roachpb.LockUpdate,
 	max int64,
 ) (int64, *roachpb.Span, error) {
+	if max < 0 {
+		resumeSpan := intent.Span // don't inline or `intent` would escape to heap
+		return 0, &resumeSpan, nil
+	}
+
 	encKey := MakeMVCCMetadataKey(intent.Key)
 	encEndKey := MakeMVCCMetadataKey(intent.EndKey)
 	nextKey := encKey
