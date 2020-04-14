@@ -189,8 +189,19 @@ func (p *planner) truncateTable(
 	//
 	// TODO(vivek): Fix properly along with #12123.
 	zoneKey := config.MakeZoneKey(uint32(tableDesc.ID))
-	nameKey := sqlbase.MakePublicTableNameKey(ctx, p.ExecCfg().Settings, tableDesc.ParentID, tableDesc.GetName()).Key()
-	key := sqlbase.MakePublicTableNameKey(ctx, p.ExecCfg().Settings, newTableDesc.ParentID, newTableDesc.Name).Key()
+	nameKey := sqlbase.MakeObjectNameKey(
+		ctx,
+		p.ExecCfg().Settings,
+		tableDesc.ParentID,
+		tableDesc.GetParentSchemaID(),
+		tableDesc.GetName(),
+	).Key()
+	key := sqlbase.MakeObjectNameKey(
+		ctx, p.ExecCfg().Settings,
+		newTableDesc.ParentID,
+		newTableDesc.GetParentSchemaID(),
+		newTableDesc.Name,
+	).Key()
 
 	b := &kv.Batch{}
 	// Use CPut because we want to remove a specific name -> id map.
