@@ -906,7 +906,7 @@ func (u *sqlSymUnion) typeReferences() []tree.ResolvableTypeReference {
 %type <bool> distinct_clause
 %type <tree.DistinctOn> distinct_on_clause
 %type <tree.NameList> opt_column_list insert_column_list opt_stats_columns
-%type <tree.OrderBy> sort_clause opt_sort_clause
+%type <tree.OrderBy> sort_clause single_sort_clause opt_sort_clause
 %type <[]*tree.Order> sortby_list
 %type <tree.IndexElemList> index_params create_as_params
 %type <tree.NameList> name_list privilege_list
@@ -1057,7 +1057,7 @@ func (u *sqlSymUnion) typeReferences() []tree.ResolvableTypeReference {
 %type <*tree.CTE> common_table_expr
 %type <bool> materialize_clause
 
-%type <empty> within_group_clause
+%type <tree.Expr> within_group_clause
 %type <tree.Expr> filter_clause
 %type <tree.Exprs> opt_partition_clause
 %type <tree.Window> window_clause window_definition_list
@@ -6655,6 +6655,17 @@ sort_clause:
     $$.val = tree.OrderBy($3.orders())
   }
 
+single_sort_clause:
+  ORDER BY sortby
+  {
+    $$.val = tree.OrderBy([]*tree.Order{$3.order()})
+  }
+| ORDER BY sortby ',' sortby_list
+  {
+    sqllex.Error("multiple ORDER BY clauses are not supported in this function")
+    return 1
+  }
+
 sortby_list:
   sortby
   {
@@ -8624,13 +8635,13 @@ func_application:
   }
 | func_name '(' expr_list opt_sort_clause ')'
   {
-    $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Exprs: $3.exprs(), OrderBy: $4.orderBy()}
+    $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Exprs: $3.exprs(), OrderBy: $4.orderBy(), AggType: tree.GeneralAgg}
   }
 | func_name '(' VARIADIC a_expr opt_sort_clause ')' { return unimplemented(sqllex, "variadic") }
 | func_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause ')' { return unimplemented(sqllex, "variadic") }
 | func_name '(' ALL expr_list opt_sort_clause ')'
   {
-    $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Type: tree.AllFuncType, Exprs: $4.exprs(), OrderBy: $5.orderBy()}
+    $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Type: tree.AllFuncType, Exprs: $4.exprs(), OrderBy: $5.orderBy(), AggType: tree.GeneralAgg}
   }
 // TODO(ridwanmsharif): Once DISTINCT is supported by window aggregates,
 // allow ordering to be specified below.
@@ -8719,6 +8730,11 @@ func_expr:
   func_application within_group_clause filter_clause over_clause
   {
     f := $1.expr().(*tree.FuncExpr)
+    w := $2.expr().(*tree.FuncExpr)
+    if w.AggType != 0 {
+      f.AggType = w.AggType
+      f.OrderBy = w.OrderBy
+    }
     f.Filter = $3.expr()
     f.WindowDef = $4.windowDef()
     $$.val = f
@@ -8939,8 +8955,14 @@ special_function:
 
 // Aggregate decoration clauses
 within_group_clause:
-WITHIN GROUP '(' sort_clause ')' { return unimplemented(sqllex, "within group") }
-| /* EMPTY */ {}
+  WITHIN GROUP '(' single_sort_clause ')'
+  {
+    $$.val = &tree.FuncExpr{OrderBy: $4.orderBy(), AggType: tree.OrderedSetAgg}
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.FuncExpr{}
+  }
 
 filter_clause:
   FILTER '(' WHERE a_expr ')'
