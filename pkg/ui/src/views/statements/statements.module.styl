@@ -12,6 +12,15 @@
 @require '~src/views/shared/util/table.styl'
 @require '~src/components/core/index'
 
+.root
+  background $colors--neutral-1
+
+.section
+  composes section from '~src/views/app/containers/layout/layout.styl'
+
+.base-heading
+  composes baseHeading from '~styl/base/typography.styl'
+
 .statements-table
   &__col-query-text
     font-family $font-family--monospace

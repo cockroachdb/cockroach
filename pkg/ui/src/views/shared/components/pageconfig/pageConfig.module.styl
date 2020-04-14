@@ -1,0 +1,37 @@
+
+@require '~styl/base/palette.styl'
+@require '~styl/base/layout-vars.styl'
+
+.page-config
+  padding-left 24px
+  // Stick to the top.
+  position sticky
+  position -webkit-sticky
+  top 0
+  // We want 10px of spacing above and below this div when
+  // it's fixed during scrolling, but not when the page
+  // is scrolled to the top. This combination of padding
+  // and negative margins achieves that.
+  padding-bottom 10px
+  padding-top 10px
+  margin-bottom -10px
+  margin-top -10px
+
+  z-index $z-index-page-config
+  background-color $background-color
+
+.page-config__list
+  display flex
+  justify-content flex-start
+  align-items center
+
+  .page-config__item
+    margin-right 24px
+
+.page-config__spread
+  display flex
+  justify-content space-between
+  align-items center
+
+.page-config__item
+  list-style none

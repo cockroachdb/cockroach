@@ -13,7 +13,7 @@ import { InputProps } from "antd/lib/input";
 import CancelIcon from "assets/cancel.svg";
 import SearchIcon from "assets/search.svg";
 import React from "react";
-import "./search.styl";
+import styles from  "./search.module.styl";
 
 interface ISearchProps {
   onSubmit: (value: string) => void;
@@ -62,33 +62,40 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
     const { value, submitted } = this.state;
     if (value.length > 0) {
       if (submitted) {
-        return <Button onClick={this.onClear} type="default" className="_clear-search"><img className="_suffix-icon" src={CancelIcon} /></Button>;
+        return (
+          <Button
+            onClick={this.onClear}
+            type="default"
+            className={styles._clearSearch}
+          >
+            <img className={styles._suffixIcon} src={CancelIcon} />
+          </Button>
+        );
       }
-      return <Button type="default" htmlType="submit" className="_submit-search">Enter</Button>;
+      return (
+        <Button
+          type="default"
+          htmlType="submit"
+          className={styles._submitSearch}
+        >
+          Enter
+        </Button>
+      );
     }
     return null;
   }
 
   render() {
     const { value, submitted } = this.state;
-    const className = submitted ? "_submitted" : "";
-
-    /*
-      current antdesign (3.25.3) has Input.d.ts incompatible with latest @types/react
-      temporary fix, remove as soon antd can be updated
-    */
-
-    // tslint:disable-next-line: variable-name
-    const MyInput = Input as any;
-
+    const className = submitted ? styles._submitted : "";
     return (
-      <Form onSubmit={this.onSubmit} className="_search-form">
+      <Form onSubmit={this.onSubmit} className={styles._searchForm}>
         <Form.Item>
-          <MyInput
+          <Input
             className={className}
             placeholder="Search Statement"
             onChange={this.onChange}
-            prefix={<img className="_prefix-icon" src={SearchIcon} />}
+            prefix={<img className={styles._prefixIcon} src={SearchIcon} />}
             suffix={this.renderSuffix()}
             value={value}
             {...this.props}

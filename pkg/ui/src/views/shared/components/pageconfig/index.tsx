@@ -10,6 +10,7 @@
 
 import classnames from "classnames";
 import React from "react";
+import styles from "./pageConfig.module.styl";
 
 export interface PageConfigProps {
   layout?: "list" | "spread";
@@ -18,12 +19,14 @@ export interface PageConfigProps {
 
 export function PageConfig(props: PageConfigProps) {
   const classes = classnames({
-    "page-config__list": props.layout !== "spread",
-    "page-config__spread": props.layout === "spread",
+    [styles.pageConfig__list]: props.layout !== "spread",
+    [styles.pageConfig__spread]: props.layout === "spread",
   });
 
+  console.log(styles)
+
   return (
-    <div className="page-config">
+    <div className={styles.pageConfig}>
       <ul className={ classes }>
         { props.children }
       </ul>
@@ -37,7 +40,7 @@ export interface PageConfigItemProps {
 
 export function PageConfigItem(props: PageConfigItemProps) {
   return (
-    <li className="page-config__item">
+    <li className={styles.pageConfig__item}>
       { props.children }
     </li>
   );

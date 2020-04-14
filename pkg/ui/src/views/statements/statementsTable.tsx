@@ -18,11 +18,11 @@ import { StatementSummary, summarize } from "src/util/sql/summarize";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { countBarChart, latencyBarChart, retryBarChart, rowsBarChart } from "./barCharts";
 import { Anchor, Tooltip } from "src/components";
-import "./statements.styl";
 import { DiagnosticStatusBadge } from "./diagnostics/diagnosticStatusBadge";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import { ActivateDiagnosticsModalRef } from "./diagnostics/activateDiagnosticsModal";
+import styles from "./statementsTable.module.styl";
 
 const longToInt = (d: number | Long) => FixLong(d).toInt();
 
@@ -43,7 +43,7 @@ function StatementLink(props: { statement: string, app: string, implicitTxn: boo
   const base = props.app && props.app.length > 0 ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
   return (
     <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
-      <div className="cl-table-link__tooltip">
+      <div className={styles.clTableLink__tooltip}>
         <Tooltip
           placement="bottom"
           title={<pre className="cl-table-link__description">
