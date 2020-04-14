@@ -3603,11 +3603,13 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DCollatedString:
 			return ParseDGeography(d.Contents)
 		case *DGeography:
-			// TODO(otan): check SRIDs.
 			return d, nil
 		case *DGeometry:
-			// TODO(otan): check SRIDs.
-			return &DGeography{d.AsGeography()}, nil
+			g, err := d.AsGeography()
+			if err != nil {
+				return nil, err
+			}
+			return &DGeography{g}, nil
 		}
 
 	case types.GeometryFamily:
@@ -3617,10 +3619,8 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DCollatedString:
 			return ParseDGeometry(d.Contents)
 		case *DGeometry:
-			// TODO(otan): check SRIDs.
 			return d, nil
 		case *DGeography:
-			// TODO(otan): check SRIDs.
 			return &DGeometry{d.AsGeometry()}, nil
 		}
 

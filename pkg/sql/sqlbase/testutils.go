@@ -157,7 +157,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 	case types.GeographyFamily:
 		// TODO(otan): generate fake data properly.
 		return tree.NewDGeography(
-			geo.NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			geo.NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
 		)
 	case types.GeometryFamily:
 		// TODO(otan): generate fake data properly.
@@ -528,7 +528,7 @@ var (
 		},
 		types.GeographyFamily: {
 			// TODO(otan): more interesting datums
-			&tree.DGeography{Geography: geo.NewGeography([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))},
+			&tree.DGeography{Geography: geo.NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f")))},
 		},
 		types.GeometryFamily: {
 			// TODO(otan): more interesting datums
