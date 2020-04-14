@@ -698,12 +698,16 @@ func (node *FuncExpr) doc(p *PrettyCfg) pretty.Doc {
 			)
 		}
 
-		if len(node.OrderBy) > 0 {
+		if node.AggType == GeneralAgg && len(node.OrderBy) > 0 {
 			args = pretty.ConcatSpace(args, node.OrderBy.doc(p))
 		}
 		d = pretty.Concat(d, p.bracket("(", args, ")"))
 	} else {
 		d = pretty.Concat(d, pretty.Text("()"))
+	}
+	if node.AggType == OrderedSetAgg && len(node.OrderBy) > 0 {
+		args := node.OrderBy.doc(p)
+		d = pretty.Concat(d, p.bracket("WITHIN GROUP (", args, ")"))
 	}
 	if node.Filter != nil {
 		d = pretty.Fold(pretty.ConcatSpace,

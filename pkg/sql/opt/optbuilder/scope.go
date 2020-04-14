@@ -1018,6 +1018,24 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 	return srf
 }
 
+// isOrderedSetAggregate returns if the input function definition is an
+// ordered-set aggregate, and the overridden function definition if so.
+func isOrderedSetAggregate(def *tree.FunctionDefinition) (*tree.FunctionDefinition, bool) {
+	// The impl functions are private because they should never be run directly.
+	// Thus, they need to be marked as non-private before using them.
+	switch def {
+	case tree.FunDefs["percentile_disc"]:
+		newDef := *tree.FunDefs["percentile_disc_impl"]
+		newDef.Private = false
+		return &newDef, true
+	case tree.FunDefs["percentile_cont"]:
+		newDef := *tree.FunDefs["percentile_cont_impl"]
+		newDef.Private = false
+		return &newDef, true
+	}
+	return def, false
+}
+
 // replaceAggregate returns an aggregateInfo that can be used to replace a raw
 // aggregate function. When an aggregateInfo is encountered during the build
 // process, it is replaced with a reference to the column returned by the
@@ -1040,7 +1058,24 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 	s.builder.semaCtx.Properties.Require("aggregate",
 		tree.RejectNestedAggregates|tree.RejectWindowApplications|tree.RejectGenerators)
 
-	expr := f.Walk(s)
+	// Make a copy of f so we can modify it if needed.
+	fCopy := *f
+	// Override ordered-set aggregates to use their impl counterparts.
+	if orderedSetDef, found := isOrderedSetAggregate(def); found {
+		// Override function definition.
+		def = orderedSetDef
+		fCopy.Func.FunctionReference = orderedSetDef
+
+		// Copy Exprs slice.
+		oldExprs := f.Exprs
+		fCopy.Exprs = make(tree.Exprs, len(oldExprs))
+		copy(fCopy.Exprs, oldExprs)
+
+		// Add implicit column to the input expressions.
+		fCopy.Exprs = append(fCopy.Exprs, fCopy.OrderBy[0].Expr.(tree.TypedExpr))
+	}
+
+	expr := fCopy.Walk(s)
 
 	// We need to do this check here to ensure that we check the usage of special
 	// functions with the right error message.

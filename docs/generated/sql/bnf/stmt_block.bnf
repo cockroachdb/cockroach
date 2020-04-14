@@ -1892,7 +1892,7 @@ column_path_with_star ::=
 	| db_object_name_component '.' '*'
 
 func_expr ::=
-	func_application filter_clause over_clause
+	func_application within_group_clause filter_clause over_clause
 	| func_expr_common_subexpr
 
 labeled_row ::=
@@ -2173,6 +2173,10 @@ func_application ::=
 	| func_name '(' 'DISTINCT' expr_list ')'
 	| func_name '(' '*' ')'
 
+within_group_clause ::=
+	'WITHIN' 'GROUP' '(' single_sort_clause ')'
+	| 
+
 filter_clause ::=
 	'FILTER' '(' 'WHERE' a_expr ')'
 	| 
@@ -2401,6 +2405,10 @@ reference_on_delete ::=
 func_name ::=
 	type_function_name
 	| prefixed_column_path
+
+single_sort_clause ::=
+	'ORDER' 'BY' sortby
+	| 'ORDER' 'BY' sortby ',' sortby_list
 
 window_specification ::=
 	'(' opt_existing_window_name opt_partition_clause opt_sort_clause opt_frame_clause ')'

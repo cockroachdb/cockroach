@@ -482,6 +482,10 @@ var (
 	IntArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: Int, Oid: oid.T__int8, Locale: &emptyLocale}}
 
+	// FloatArray is the type of an array value having Float-typed elements.
+	FloatArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Float, Oid: oid.T__float8, Locale: &emptyLocale}}
+
 	// DecimalArray is the type of an array value having Decimal-typed elements.
 	DecimalArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: Decimal, Oid: oid.T__numeric, Locale: &emptyLocale}}
