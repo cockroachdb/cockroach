@@ -2401,3 +2401,149 @@ CREATE VIEW v46981_0(c0) AS SELECT count_rows() FROM t46981_0
 
 statement error parsing regexp: missing argument to repetition operator: `\+`
 SELECT * FROM v46981_0 WHERE '' !~ '+'
+
+# Testing ordered-set aggregations.
+subtest ordered_set_aggregates
+
+statement ok
+DROP TABLE IF EXISTS osagg
+
+statement ok
+CREATE TABLE osagg (
+  f FLOAT,
+  s STRING,
+  i INTERVAL
+)
+
+statement ok
+INSERT INTO osagg VALUES
+(NULL, NULL, NULL),
+(0.00, NULL, '1 months'),
+(0.05, NULL, '1 months'),
+(1.0, 'v1', '1 year 1 months'),
+(3.0, 'v3', '1 year 3 months'),
+(5.0, 'v5', '1 year 5 months'),
+(2.0, 'v2', '1 year 2 months'),
+(4.0, 'v4', '1 year 4 months'),
+(6.0, 'v6', '1 year 6 months')
+
+# Test basic functionality.
+query R
+SELECT
+  percentile_disc(0.95) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+6
+
+query RT
+SELECT
+  percentile_disc(0.95) WITHIN GROUP (ORDER BY f),
+  percentile_disc(0.95) WITHIN GROUP (ORDER BY s)
+FROM osagg
+----
+6  v6
+
+query RRT
+SELECT
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY f),
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY f DESC),
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY i)
+FROM osagg
+----
+5.65  0.0175  1 year 5 mons 24 days 18:00:00
+
+# Test with null values.
+query TRR
+SELECT
+  percentile_disc(0.00) WITHIN GROUP (ORDER BY s),
+  percentile_disc(0.1) WITHIN GROUP (ORDER BY f),
+  percentile_disc(0.15) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+v1  0  0.05
+
+query RRTT
+SELECT
+  percentile_cont(0.05) WITHIN GROUP (ORDER BY f),
+  percentile_cont(0.05) WITHIN GROUP (ORDER BY f DESC),
+  percentile_cont(0.05) WITHIN GROUP (ORDER BY i),
+  percentile_cont(0.05) WITHIN GROUP (ORDER BY i DESC)
+FROM osagg
+----
+0.0175  5.65  1 mon  1 year 5 mons 24 days 18:00:00
+
+# Test with different percent values.
+query RRR
+SELECT
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY f),
+  percentile_disc(0.5) WITHIN GROUP (ORDER BY f),
+  percentile_disc(0.75) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+0.05  2  4
+
+query RRR
+SELECT
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY f),
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY f),
+  percentile_cont(0.75) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+0.7625  2.5  4.25
+
+# Test with arrays.
+query T
+SELECT
+  percentile_disc(ARRAY[0.25]::float[]) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+{0.05}
+
+query T
+SELECT
+  percentile_disc(ARRAY[0.25, 0.5, 0.75]::float[]) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+{0.05,2.0,4.0}
+
+query T
+SELECT
+  percentile_cont(ARRAY[0.25, 0.5, 0.75]::float[]) WITHIN GROUP (ORDER BY f)
+FROM osagg
+----
+{0.7625,2.5,4.25}
+
+query T
+SELECT
+  percentile_disc(ARRAY[0.25, 0.5, 0.75]::float[]) WITHIN GROUP (ORDER BY i)
+FROM osagg
+----
+{"1 mon","1 year 2 mons","1 year 4 mons"}
+
+statement error percentile value 1.250000 is not between 0 and 1
+SELECT
+  percentile_disc(ARRAY[1.25]::float[]) WITHIN GROUP (ORDER BY f)
+FROM osagg
+
+statement error percentile value 1.250000 is not between 0 and 1
+SELECT
+  percentile_disc(ARRAY[0.25, 0.50, 1.25]::float[]) WITHIN GROUP (ORDER BY f)
+FROM osagg
+
+query T
+SELECT
+  percentile_cont(ARRAY[0.25, 0.5, 0.75]::float[]) WITHIN GROUP (ORDER BY i)
+FROM osagg
+----
+{"10 mons 3 days 22:30:00","1 year 2 mons 20 days 06:00:00","1 year 4 mons 12 days 18:00:00"}
+
+# Test that the view query is not broken by the overriding logic in the optbuilder.
+statement ok
+CREATE VIEW osagg_view (disc, cont) AS
+  SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY f),
+         percentile_cont(0.50) WITHIN GROUP (ORDER BY f DESC) FROM osagg
+
+query TT
+SHOW CREATE osagg_view
+----
+osagg_view  CREATE VIEW osagg_view (disc, cont) AS SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY f), percentile_cont(0.50) WITHIN GROUP (ORDER BY f DESC) FROM test.public.osagg
