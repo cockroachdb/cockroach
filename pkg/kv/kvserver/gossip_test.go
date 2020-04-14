@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGossipFirstRange(t *testing.T) {
@@ -189,5 +190,64 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 		if err := kvClient.Put(ctx, fmt.Sprintf("%d", i), i); err != nil {
 			t.Errorf("failed Put to node %d: %+v", i, err)
 		}
+	}
+}
+
+// TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents tests
+// that failures to gossip the system config due to intents are rectified when
+// later intents are aborted.
+func TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	db := tc.Server(0).DB()
+
+	txA := db.NewTxn(ctx, "a")
+	txB := db.NewTxn(ctx, "b")
+
+	require.NoError(t, txA.SetSystemConfigTrigger())
+	require.NoError(t, txA.Put(ctx, keys.DescMetadataKey(1000), "foo"))
+
+	require.NoError(t, txB.SetSystemConfigTrigger())
+	require.NoError(t, txB.Put(ctx, keys.DescMetadataKey(2000), "bar"))
+
+	const someTime = 10 * time.Millisecond
+	clearNotifictions := func(ch <-chan struct{}) {
+		for {
+			select {
+			case <-ch:
+			case <-time.After(someTime):
+				return
+			}
+		}
+	}
+	systemConfChangeCh := tc.Server(0).GossipI().(*gossip.Gossip).RegisterSystemConfigChannel()
+	clearNotifictions(systemConfChangeCh)
+	require.NoError(t, txB.Commit(ctx))
+	select {
+	case <-systemConfChangeCh:
+		// This case is rare but happens sometimes. We gossip the node liveness
+		// in a bunch of cases so we just let the test finish here. The important
+		// thing is that sometimes we get to the next phase.
+		t.Log("got unexpected update. This can happen for a variety of " +
+			"reasons like lease transfers. The test is exiting without testing anything")
+		return
+	case <-time.After(someTime):
+		// Did not expect an update so this is the happy case
+	}
+	// Roll back the transaction which had laid down the intent which blocked the
+	// earlier gossip update, make sure we get a gossip notification now.
+	const aLongTime = 20 * someTime
+	require.NoError(t, txA.Rollback(ctx))
+	select {
+	case <-systemConfChangeCh:
+		// Got an update.
+	case <-time.After(aLongTime):
+		t.Fatal("expected update")
 	}
 }

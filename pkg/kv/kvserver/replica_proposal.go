@@ -667,6 +667,13 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 		lResult.MaybeGossipSystemConfig = false
 	}
 
+	if lResult.MaybeGossipSystemConfigIfHaveFailure {
+		if err := r.MaybeGossipSystemConfigIfHaveFailure(ctx); err != nil {
+			log.Error(ctx, err)
+		}
+		lResult.MaybeGossipSystemConfigIfHaveFailure = false
+	}
+
 	if lResult.MaybeGossipNodeLiveness != nil {
 		if err := r.MaybeGossipNodeLiveness(ctx, *lResult.MaybeGossipNodeLiveness); err != nil {
 			log.Error(ctx, err)

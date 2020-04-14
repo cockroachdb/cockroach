@@ -358,6 +358,20 @@ func EndTxn(
 		if err := pd.MergeAndDestroy(triggerResult); err != nil {
 			return result.Result{}, err
 		}
+	} else if reply.Txn.Status == roachpb.ABORTED {
+		// If this is the system config span and we're aborted, add a trigger to
+		// potentially gossip now that we've removed an intent. This is important
+		// to deal with cases where previously committed values were not gossipped
+		// due to an outstanding intent.
+		if cArgs.EvalCtx.ContainsKey(keys.SystemConfigSpan.Key) {
+			if err := pd.MergeAndDestroy(result.Result{
+				Local: result.LocalResult{
+					MaybeGossipSystemConfigIfHaveFailure: true,
+				},
+			}); err != nil {
+				return result.Result{}, err
+			}
+		}
 	}
 
 	// Note: there's no need to clear the AbortSpan state if we've successfully

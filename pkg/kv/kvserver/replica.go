@@ -478,6 +478,25 @@ type Replica struct {
 		// size drops below its current zone.MaxRangeBytes or if the
 		// zone.MaxRangeBytes increases to surpass the current value.
 		largestPreviousMaxRangeSizeBytes int64
+
+		// failureToGossipSystemConfig is set to true when the leaseholder of the
+		// range containing the system config span fails to gossip due to an
+		// outstanding intent (see MaybeGossipSystemConfig). It is reset when the
+		// system config is successfully gossiped or when the Replica loses the
+		// lease. It is read when handling a MaybeGossipSystemConfigIfHaveFailure
+		// local result trigger. That trigger is set when an EndTransaction with an
+		// ABORTED status is evaluated on a range containing the system config span.
+		//
+		// While the gossipping of the system config span is best-effort, the sql
+		// schema leasing mechanism degrades dramatically if changes are not
+		// gossiped. This degradation is due to the fact that schema changes, after
+		// writing intents, often need to ensure that there aren't outstanding
+		// leases on old versions and if there are, roll back and wait until there
+		// are not. The problem is that this waiting may take a long time if the
+		// current leaseholders are not notified. We deal with this by detecting the
+		// abort of a transaction which might have blocked the system config from
+		// being gossiped and attempting to gossip again.
+		failureToGossipSystemConfig bool
 	}
 
 	rangefeedMu struct {
@@ -1556,6 +1575,18 @@ func (r *Replica) GetExternalStorageFromURI(
 	ctx context.Context, uri string,
 ) (cloud.ExternalStorage, error) {
 	return r.store.cfg.ExternalStorageFromURI(ctx, uri)
+}
+
+func (r *Replica) markSystemConfigGossipSuccess() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.failureToGossipSystemConfig = false
+}
+
+func (r *Replica) markSystemConfigGossipFailed() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.failureToGossipSystemConfig = true
 }
 
 func init() {
