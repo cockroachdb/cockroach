@@ -100,7 +100,17 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 			break
 		}
 	}
-	return br, res, pErr
+
+	if pErr != nil {
+		// Failed read-only batches can't have any Result except for what's
+		// whitelisted here.
+		res.Local = result.LocalResult{
+			EncounteredIntents: res.Local.DetachEncounteredIntents(),
+			Metrics:            res.Local.Metrics,
+		}
+		return nil, res, pErr
+	}
+	return br, res, nil
 }
 
 func (r *Replica) handleReadOnlyLocalEvalResult(
