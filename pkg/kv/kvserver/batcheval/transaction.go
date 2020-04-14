@@ -160,8 +160,10 @@ func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transa
 	synthTxnRecord := roachpb.TransactionRecord{
 		TxnMeta: txn,
 		Status:  roachpb.PENDING,
-		// Set the LastHeartbeat timestamp to the intent's timestamp.
-		// We use this as an indication of client activity.
+		// Set the LastHeartbeat timestamp to the transactions's MinTimestamp. We
+		// use this as an indication of client activity. Note that we cannot use
+		// txn.WriteTimestamp for that purpose, as the WriteTimestamp could have
+		// been bumped by other pushers.
 		LastHeartbeat: txn.WriteTimestamp,
 	}
 
