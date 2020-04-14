@@ -42,5 +42,5 @@ with t=A
 ----
 get: "k" -> /BYTES/v2 @0.000000005,0
 >> at end:
-meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000003,0 min=0,0 seq=0} ts=0.000000005,0 del=false klen=12 vlen=7
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=1 ts=0.000000005,0 min=0,0 seq=0} ts=0.000000005,0 del=false klen=12 vlen=7
 data: "k"/0.000000005,0 -> /BYTES/v2
