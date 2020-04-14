@@ -740,11 +740,9 @@ func (r *Replica) evaluateProposal(
 
 		// Failed proposals can't have any Result except for what's
 		// whitelisted here.
-		intents := res.Local.DetachEncounteredIntents()
-		endTxns := res.Local.DetachEndTxns(true /* alwaysOnly */)
 		res.Local = result.LocalResult{
-			EncounteredIntents: intents,
-			EndTxns:            endTxns,
+			EncounteredIntents: res.Local.DetachEncounteredIntents(),
+			EndTxns:            res.Local.DetachEndTxns(true /* alwaysOnly */),
 			Metrics:            res.Local.Metrics,
 		}
 		res.Replicated.Reset()
