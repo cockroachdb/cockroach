@@ -18,8 +18,8 @@ type IStatementStatistics = protos.cockroach.sql.IStatementStatistics;
 const history = createMemoryHistory({ initialEntries: ["/statements"]});
 
 const statementStats: IStatementStatistics = {
-  "count": Long.fromNumber(3),
-  "first_attempt_count": Long.fromNumber(1),
+  "count": Long.fromNumber(180000),
+  "first_attempt_count": Long.fromNumber(50000),
   "max_retries": Long.fromNumber(10),
   "num_rows": {
     "mean": 1,
