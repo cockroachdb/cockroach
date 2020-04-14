@@ -13,7 +13,7 @@ import { storiesOf } from "@storybook/react";
 import { countBarChart, latencyBarChart, retryBarChart, rowsBarChart } from "./barCharts";
 import statementsPagePropsFixture from "./statementsPage.fixture";
 
-const { statements } = statementsPagePropsFixture
+const { statements } = statementsPagePropsFixture;
 
 storiesOf("BarCharts", module)
   .add("countBarChart", () => {

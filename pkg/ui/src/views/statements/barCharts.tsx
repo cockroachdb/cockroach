@@ -348,14 +348,14 @@ export function latencyBreakdown(s: StatementStatistics) {
             <div className={styles["bar-chart__label"]}>{ Duration(overheadMean * 1e9) }</div>
             <div className={styles["bar-chart__multiplebars"]}>
               <div
-                className={classNames([styles["bar-chart__overhead"], styles["bar-chart__bar"],])}
+                className={classNames([styles["bar-chart__overhead"], styles["bar-chart__bar"]])}
                 style={{ width: right + "%", position: "absolute", left: left + "%" }}
               />
               <div
                 className={classNames([
                   styles["bar-chart__overhead-dev"],
                   styles["bar-chart__bar"],
-                  styles["bar-chart__bar--dev"]
+                  styles["bar-chart__bar--dev"],
                 ])}
                 style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
               />
@@ -379,14 +379,14 @@ export function latencyBreakdown(s: StatementStatistics) {
             <div className={styles["bar-chart__label"]}>{ Duration(overallMean * 1e9) }</div>
             <div className={styles["bar-chart__multiplebars"]}>
               <div
-                className={classNames([styles["bar-chart__parse"], styles["bar-chart__bar"],])}
+                className={classNames([styles["bar-chart__parse"], styles["bar-chart__bar"]])}
                 style={{ width: parse + plan + run + overhead + "%", position: "absolute", left: 0 }}
               />
               <div
                 className={classNames([
                   styles["bar-chart__overall-dev"],
                   styles["bar-chart__bar"],
-                  styles["bar-chart__bar--dev"]
+                  styles["bar-chart__bar--dev"],
                 ])}
                 style={{ width: spread + "%", position: "absolute", left: width + "%" }}
               />
