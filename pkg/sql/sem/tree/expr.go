@@ -1225,9 +1225,17 @@ type FuncExpr struct {
 	Filter    Expr
 	WindowDef *WindowDef
 
-	// OrderBy is used for aggregations that specify an order:
-	// array_agg(col1 ORDER BY col2)
+	// OrderBy is used for aggregations which specify an order. This same field
+	// is used for any type of aggregation. See fields below for the types of
+	// aggregations.
 	OrderBy OrderBy
+	// AggOrder is used for general aggregations:
+	// array_agg(col1 ORDER BY col2)
+	AggOrder OrderBy
+	// WithinGroupOrder is used for ordered-set aggregations:
+	// percentile_disc(col1, 0.95) WITHIN GROUP (ORDER BY col1)
+	WithinGroupOrder OrderBy
+
 	typeAnnotation
 	fnProps *FunctionProperties
 	fn      *Overload
@@ -1294,6 +1302,16 @@ func (node *FuncExpr) CanHandleNulls() bool {
 	return node.fnProps != nil && node.fnProps.NullableArgs
 }
 
+// GetOrderBy returns the order that should be used for aggregations.
+func (node *FuncExpr) GetOrderBy() OrderBy {
+	if node.AggOrder != nil {
+		return node.AggOrder
+	} else if node.WithinGroupOrder != nil {
+		return node.WithinGroupOrder
+	}
+	return nil
+}
+
 type funcType int
 
 // FuncExpr.Type
@@ -1324,9 +1342,9 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.WriteString(typ)
 	ctx.FormatNode(&node.Exprs)
-	if len(node.OrderBy) > 0 {
+	if len(node.AggOrder) > 0 {
 		ctx.WriteByte(' ')
-		ctx.FormatNode(&node.OrderBy)
+		ctx.FormatNode(&node.AggOrder)
 	}
 	ctx.WriteByte(')')
 	if ctx.HasFlags(FmtParsable) && node.typ != nil {
@@ -1339,6 +1357,11 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 				ctx.Buffer.WriteString(node.typ.SQLString())
 			}
 		}
+	}
+	if len(node.WithinGroupOrder) > 0 {
+		ctx.WriteString(" WITHIN GROUP (")
+		ctx.FormatNode(&node.WithinGroupOrder)
+		ctx.WriteString(")")
 	}
 	if node.Filter != nil {
 		ctx.WriteString(" FILTER (WHERE ")

@@ -1042,6 +1042,9 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 	s.builder.semaCtx.Properties.Require("aggregate",
 		tree.RejectNestedAggregates|tree.RejectWindowApplications|tree.RejectGenerators)
 
+	// Set order for aggregations.
+	f.OrderBy = f.GetOrderBy()
+
 	expr := f.Walk(s)
 
 	// We need to do this check here to ensure that we check the usage of special

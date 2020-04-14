@@ -1011,6 +1011,8 @@ func TestParse(t *testing.T) {
 		{`SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE GROUP) FROM t`},
 		{`SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES) FROM t`},
 
+		{`SELECT percentile_disc(b) WITHIN GROUP (ORDER BY c) FROM t`},
+
 		{`SELECT avg(1) FILTER (WHERE a > b)`},
 		{`SELECT avg(1) FILTER (WHERE a > b) OVER (ORDER BY c)`},
 
@@ -3299,7 +3301,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT a(VARIADIC b)`, 0, `variadic`, ``},
 		{`SELECT a(b, c, VARIADIC b)`, 0, `variadic`, ``},
 		{`SELECT TREAT (a AS INT8)`, 0, `treat`, ``},
-		{`SELECT a(b) WITHIN GROUP (ORDER BY c)`, 0, `within group`, ``},
 
 		{`SELECT 1::schem.typ`, 0, `qualified types`, ``},
 		{`SELECT 1::int4.typ`, 0, `qualified types`, ``},

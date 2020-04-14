@@ -487,6 +487,8 @@ message AggregatorSpec {
     BIT_AND = 22;
     BIT_OR = 23;
     CORR = 24;
+    PERCENTILE_DISC = 25;
+    PERCENTILE_CONT = 26;
   }
 
   enum Type {

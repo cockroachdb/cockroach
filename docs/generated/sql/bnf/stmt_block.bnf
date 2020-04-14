@@ -1873,7 +1873,7 @@ column_path_with_star ::=
 	| db_object_name_component '.' '*'
 
 func_expr ::=
-	func_application filter_clause over_clause
+	func_application within_group_clause filter_clause over_clause
 	| func_expr_common_subexpr
 
 labeled_row ::=
@@ -2145,6 +2145,10 @@ func_application ::=
 	| func_name '(' 'ALL' expr_list opt_sort_clause ')'
 	| func_name '(' 'DISTINCT' expr_list ')'
 	| func_name '(' '*' ')'
+
+within_group_clause ::=
+	'WITHIN' 'GROUP' '(' sort_clause ')'
+	| 
 
 filter_clause ::=
 	'FILTER' '(' 'WHERE' a_expr ')'

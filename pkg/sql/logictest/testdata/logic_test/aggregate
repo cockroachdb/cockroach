@@ -2401,3 +2401,44 @@ CREATE VIEW v46981_0(c0) AS SELECT count_rows() FROM t46981_0
 
 statement error parsing regexp: missing argument to repetition operator: `\+`
 SELECT * FROM v46981_0 WHERE '' !~ '+'
+
+# Testing ordered-set aggregations.
+subtest ordered_set_aggregates
+
+statement ok
+DROP TABLE IF EXISTS osagg
+
+statement ok
+CREATE TABLE osagg (
+  f FLOAT,
+  s STRING
+)
+
+statement ok
+INSERT INTO osagg VALUES
+(1.0, 'v1'),
+(3.0, 'v3'),
+(5.0, 'v5'),
+(2.0, 'v2'),
+(4.0, 'v4'),
+(6.0, 'v6')
+
+query R
+SELECT percentile_disc(f, 0.95) WITHIN GROUP (ORDER BY f) FROM osagg
+----
+6
+
+query T
+SELECT percentile_disc(s, 0.95) WITHIN GROUP (ORDER BY s) FROM osagg
+----
+v6
+
+query R
+SELECT percentile_cont(f, 0.95) WITHIN GROUP (ORDER BY f) FROM osagg
+----
+5.75
+
+query R
+SELECT percentile_cont(f, 0.95) WITHIN GROUP (ORDER BY f DESC) FROM osagg
+----
+1.25

@@ -878,6 +878,22 @@ define FirstAgg {
     Input ScalarExpr
 }
 
+# PercentileDisc returns a value such that N% of values are below it
+# in a given window.
+[Scalar, Aggregate]
+define PercentileDisc {
+    Input ScalarExpr
+    Percentile ScalarExpr
+}
+
+# PercentileCont returns a value such that N% of values are below it
+# in a given window, interpolating values if needed.
+[Scalar, Aggregate]
+define PercentileCont {
+    Input ScalarExpr
+    Percentile ScalarExpr
+}
+
 # AggDistinct is used as a modifier that wraps an aggregate function. It causes
 # the respective aggregation to only process each distinct value once.
 [Scalar]

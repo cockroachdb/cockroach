@@ -236,6 +236,9 @@ func (a aggregateInfo) isOrderingSensitive() bool {
 	switch a.def.Name {
 	case "array_agg", "concat_agg", "string_agg", "json_agg", "jsonb_agg":
 		return true
+	// Ordered-set aggregations.
+	case "percentile_disc", "percentile_cont":
+		return true
 	default:
 		return false
 	}
@@ -786,6 +789,10 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructJsonbAgg(args[0])
 	case "string_agg":
 		return b.factory.ConstructStringAgg(args[0], args[1])
+	case "percentile_disc":
+		return b.factory.ConstructPercentileDisc(args[0], args[1])
+	case "percentile_cont":
+		return b.factory.ConstructPercentileCont(args[0], args[1])
 	}
 	panic(errors.AssertionFailedf("unhandled aggregate: %s", name))
 }

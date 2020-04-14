@@ -187,6 +187,7 @@ func init() {
 	typingFuncMap[opt.LagOp] = typeAsFirstArg
 	typingFuncMap[opt.LeadOp] = typeAsFirstArg
 	typingFuncMap[opt.NthValueOp] = typeAsFirstArg
+	typingFuncMap[opt.PercentileDiscOp] = typeAsFirstArg
 
 	// Modifiers for aggregations pass through their argument.
 	typingFuncMap[opt.AggDistinctOp] = typeAsFirstArg
