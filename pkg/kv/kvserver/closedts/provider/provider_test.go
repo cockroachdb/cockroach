@@ -286,3 +286,61 @@ func TestProviderSubscribeConcurrent(t *testing.T) {
 	stopper.Stop(context.Background())
 	wg.Wait()
 }
+
+// TestProviderTargetDurationSetting ensures that setting the target duration to
+// zero disables closing the timestamp and that setting it back to a positive
+// value re-enables it.
+func TestProviderTargetDurationSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	st := cluster.MakeTestingClusterSettings()
+	closedts.TargetDuration.Override(&st.SV, time.Millisecond)
+	closedts.CloseFraction.Override(&st.SV, 1.0)
+
+	stopper := stop.NewStopper()
+	storage := &providertestutils.TestStorage{}
+	defer stopper.Stop(context.Background())
+
+	var ts int64 // atomic
+	var called int
+	calledCh := make(chan struct{})
+	cfg := &provider.Config{
+		NodeID:   1,
+		Settings: st,
+		Stopper:  stopper,
+		Storage:  storage,
+		Clock: func(roachpb.NodeID) (hlc.Timestamp, ctpb.Epoch, error) {
+			return hlc.Timestamp{}, 1, nil
+		},
+		Close: func(next hlc.Timestamp, expCurEpoch ctpb.Epoch) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI, bool) {
+			if called++; called == 1 {
+				closedts.TargetDuration.Override(&st.SV, 0)
+			}
+			select {
+			case calledCh <- struct{}{}:
+			case <-stopper.ShouldQuiesce():
+			}
+			return hlc.Timestamp{
+					WallTime: atomic.AddInt64(&ts, 1),
+				}, map[roachpb.RangeID]ctpb.LAI{
+					1: ctpb.LAI(atomic.LoadInt64(&ts)),
+				}, true
+		},
+	}
+
+	p := provider.NewProvider(cfg)
+	p.Start()
+
+	// Get called once. While it's being called, we set the target duration to 0,
+	// disabling the updates. We wait someTime and ensure we don't get called
+	// again. Then we re-enable the setting and ensure we do get called.
+	<-calledCh
+	const someTime = 10 * time.Millisecond
+	select {
+	case <-calledCh:
+		t.Fatal("expected no updates to be sent")
+	case <-time.After(someTime):
+	}
+	closedts.TargetDuration.Override(&st.SV, time.Millisecond)
+	<-calledCh
+}

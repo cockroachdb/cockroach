@@ -131,8 +131,11 @@ func (p *Provider) runCloser(ctx context.Context) {
 	for {
 		closeFraction := closedts.CloseFraction.Get(&p.cfg.Settings.SV)
 		targetDuration := float64(closedts.TargetDuration.Get(&p.cfg.Settings.SV))
-		t.Reset(time.Duration(closeFraction * targetDuration))
-
+		if targetDuration > 0 {
+			t.Reset(time.Duration(closeFraction * targetDuration))
+		} else {
+			t.Stop() // disable closing when the target duration is non-positive
+		}
 		select {
 		case <-p.cfg.Stopper.ShouldQuiesce():
 			return
