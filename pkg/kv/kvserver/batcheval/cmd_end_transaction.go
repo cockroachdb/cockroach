@@ -223,6 +223,12 @@ func EndTxn(
 		// not suffered regression.
 		switch reply.Txn.Status {
 		case roachpb.COMMITTED:
+			// This can happen if the coordinator had left the transaction in the
+			// implicitly committed state, and is now coming to clean it up. Someone
+			// else must have performed the STAGING->COMMITTED transition in the
+			// meantime. The TransactionStatusError is going to be handled by the
+			// txnCommitter interceptor.
+			log.VEventf(ctx, 2, "transaction found to be already committed")
 			return result.Result{}, roachpb.NewTransactionCommittedStatusError()
 
 		case roachpb.ABORTED:
