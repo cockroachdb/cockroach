@@ -2506,6 +2506,16 @@ type DInterval struct {
 	duration.Duration
 }
 
+// MustBeDInterval attempts to retrieve a DInterval from an Expr, panicking if the
+// assertion fails.
+func MustBeDInterval(e Expr) *DInterval {
+	switch t := e.(type) {
+	case *DInterval:
+		return t
+	}
+	panic(errors.AssertionFailedf("expected *DInterval, found %T", e))
+}
+
 // NewDInterval creates a new DInterval.
 func NewDInterval(d duration.Duration, itm types.IntervalTypeMetadata) *DInterval {
 	ret := &DInterval{Duration: d}
