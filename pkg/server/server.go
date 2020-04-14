@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1498,6 +1499,83 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
+	{
+		// Set up the callback that persists gossiped version bumps to the
+		// engines. The invariant we uphold here is that the bump needs to be
+		// persisted on all engines before it becomes "visible" to the version
+		// setting. To this end,
+		//
+		// a) make sure Gossip is not started yet, and
+		// b) set up the BeforeChange callback on the version setting to persist
+		//    incoming updates to all engines.
+		// c) write back the disk-loaded cluster version to all engines,
+		// d) initialize the version setting (with the disk-loaded version).
+		//
+		// Note that "all engines" means "all engines", not "all initialized
+		// engines". We cannot initialize engines this early in the boot
+		// sequence.
+		s.gossip.AssertNotStarted(ctx)
+
+		// Serialize the callback through a mutex to make sure we're not
+		// clobbering the disk state if callback gets fired off concurrently.
+		var mu syncutil.Mutex
+		cb := func(ctx context.Context, newCV clusterversion.ClusterVersion) {
+			mu.Lock()
+			defer mu.Unlock()
+			v := s.cfg.Settings.Version
+			prevCV, err := kvserver.SynthesizeClusterVersionFromEngines(
+				ctx, s.engines, v.BinaryVersion(), v.BinaryMinSupportedVersion(),
+			)
+			if err != nil {
+				log.Fatal(ctx, err)
+			}
+			if !prevCV.Version.Less(newCV.Version) {
+				// If nothing needs to be updated, don't do anything. The
+				// callbacks fire async (or at least we want to assume the worst
+				// case in which they do) and so an old update might happen
+				// after a new one.
+				return
+			}
+			if err := kvserver.WriteClusterVersionToEngines(ctx, s.engines, newCV); err != nil {
+				log.Fatal(ctx, err)
+			}
+			log.Infof(ctx, "active cluster version is now %s (up from %s)", newCV, prevCV)
+		}
+		clusterversion.SetBeforeChange(ctx, &s.cfg.Settings.SV, cb)
+
+		diskClusterVersion := initServer.DiskClusterVersion()
+		// The version setting loaded from disk is the maximum cluster version
+		// seen on any engine. If new stores are being added to the server right
+		// now, or if the process crashed earlier half-way through the callback,
+		// that version won't be on all engines. For that reason, we backfill
+		// once.
+		if err := kvserver.WriteClusterVersionToEngines(
+			ctx, s.engines, diskClusterVersion,
+		); err != nil {
+			return err
+		}
+
+		// NB: if we bootstrap a new server (in initServer.ServeAndWait below)
+		// we will call Initialize a second time, to eagerly move it to the
+		// bootstrap version (from the min supported version). Initialize()
+		// tolerates that. Note that in that case we know that the callback
+		// has not fired yet, since Gossip won't connect (to itself) until
+		// the server starts and so the callback will never fire prior to
+		// that second Initialize() call. Note also that at this point in
+		// the code we don't know if we'll bootstrap or join an existing
+		// cluster, so we have to conservatively go with the version from
+		// disk, which in the case of no initialized engines is the binary
+		// min supported version.
+		if err := clusterversion.Initialize(ctx, diskClusterVersion.Version, &s.cfg.Settings.SV); err != nil {
+			return err
+		}
+
+		// At this point, we've established the invariant: all engines hold the
+		// version currently visible to the setting. And we have the callback in
+		// place that will persist an incoming updated version on all engines
+		// before making it visible to the setting.
+	}
+
 	serverpb.RegisterInitServer(s.grpc.Server, initServer)
 
 	s.node.startAssertEngineHealth(ctx, s.engines)
@@ -1678,7 +1756,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// This opens the main listener.
 	startRPCServer(workersCtx)
 
-	state, err := initServer.ServeAndWait(ctx, s.stopper, s.gossip)
+	state, err := initServer.ServeAndWait(ctx, s.stopper, &s.cfg.Settings.SV, s.gossip)
 	if err != nil {
 		return errors.Wrap(err, "during init")
 	}
