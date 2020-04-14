@@ -1031,6 +1031,10 @@ func TestParse(t *testing.T) {
 		{`SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE GROUP) FROM t`},
 		{`SELECT avg(1) OVER (ROWS UNBOUNDED PRECEDING EXCLUDE TIES) FROM t`},
 
+		{`SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY c) FROM t`},
+		{`SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY c DESC) FROM t`},
+		{`SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY c) FROM t`},
+
 		{`SELECT avg(1) FILTER (WHERE a > b)`},
 		{`SELECT avg(1) FILTER (WHERE a > b) OVER (ORDER BY c)`},
 
@@ -2920,6 +2924,13 @@ ALTER PARTITION p OF TABLE tbl@* CONFIGURE ZONE USING num_replicas = 1
                                  ^
 HINT: try ALTER PARTITION <partition> OF INDEX <tablename>@*`,
 		},
+		{
+			`SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY f, s) FROM x;`,
+			`at or near ")": syntax error: multiple order by clauses are not supported in this function
+DETAIL: source SQL:
+SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY f, s) FROM x
+                                                        ^`,
+		},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
@@ -3289,7 +3300,9 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT a(VARIADIC b)`, 0, `variadic`, ``},
 		{`SELECT a(b, c, VARIADIC b)`, 0, `variadic`, ``},
 		{`SELECT TREAT (a AS INT8)`, 0, `treat`, ``},
-		{`SELECT a(b) WITHIN GROUP (ORDER BY c)`, 0, `within group`, ``},
+
+		{`SELECT percentile_disc([0.95, 0.90]) WITHIN GROUP (ORDER BY c) FROM t`, 0, `array args`, ``},
+		{`SELECT percentile_cont([0.95, 0.90]) WITHIN GROUP (ORDER BY c) FROM t`, 0, `array args`, ``},
 
 		{`SELECT a FROM t ORDER BY a NULLS LAST`, 6224, ``, ``},
 		{`SELECT a FROM t ORDER BY a ASC NULLS LAST`, 6224, ``, ``},

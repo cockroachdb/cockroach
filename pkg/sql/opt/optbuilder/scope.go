@@ -1018,6 +1018,17 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 	return srf
 }
 
+// isOrderedSetAggregate returns if the input function definition is an
+// ordered-set aggregate, and the overridden function definition if so.
+func isOrderedSetAggregate(def *tree.FunctionDefinition) (*tree.FunctionDefinition, bool) {
+	if def == tree.FunDefs["percentile_disc"] {
+		return tree.FunDefs["percentile_disc_impl"], true
+	} else if def == tree.FunDefs["percentile_cont"] {
+		return tree.FunDefs["percentile_cont_impl"], true
+	}
+	return def, false
+}
+
 // replaceAggregate returns an aggregateInfo that can be used to replace a raw
 // aggregate function. When an aggregateInfo is encountered during the build
 // process, it is replaced with a reference to the column returned by the
@@ -1039,6 +1050,14 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 
 	s.builder.semaCtx.Properties.Require("aggregate",
 		tree.RejectNestedAggregates|tree.RejectWindowApplications|tree.RejectGenerators)
+
+	// Override ordered-set aggregates to use their impl counterparts, and
+	// add the order by as an implicit column if so.
+	if orderedSetDef, found := isOrderedSetAggregate(def); found {
+		def = orderedSetDef
+		f.Func.FunctionReference = orderedSetDef
+		f.Exprs = append(f.Exprs, f.OrderBy[0].Expr.(tree.TypedExpr))
+	}
 
 	expr := f.Walk(s)
 

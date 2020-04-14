@@ -229,10 +229,24 @@ func (a *aggregateInfo) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree
 	return a, nil
 }
 
+// isOrderedSetAggregate returns true if the given aggregate operator is an
+// ordered-set aggregate.
+func (a aggregateInfo) isOrderedSetAggregate() bool {
+	switch a.def.Name {
+	case "percentile_disc_impl", "percentile_cont_impl":
+		return true
+	default:
+		return false
+	}
+}
+
 // isOrderingSensitive returns true if the given aggregate operator is
 // ordering sensitive. That is, it can give different results based on the order
 // values are fed to it.
 func (a aggregateInfo) isOrderingSensitive() bool {
+	if a.isOrderedSetAggregate() {
+		return true
+	}
 	switch a.def.Name {
 	case "array_agg", "concat_agg", "string_agg", "json_agg", "jsonb_agg":
 		return true
@@ -786,6 +800,10 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructJsonbAgg(args[0])
 	case "string_agg":
 		return b.factory.ConstructStringAgg(args[0], args[1])
+	case "percentile_disc_impl":
+		return b.factory.ConstructPercentileDisc(args[0], args[1])
+	case "percentile_cont_impl":
+		return b.factory.ConstructPercentileCont(args[0], args[1])
 	}
 	panic(errors.AssertionFailedf("unhandled aggregate: %s", name))
 }
