@@ -10,13 +10,25 @@
 
 import { storiesOf } from "@storybook/react";
 
-import { countBarChart } from "./barCharts";
+import { countBarChart, latencyBarChart, retryBarChart, rowsBarChart } from "./barCharts";
 import statementsPagePropsFixture from "./statementsPage.fixture";
 
 const { statements } = statementsPagePropsFixture
 
 storiesOf("BarCharts", module)
   .add("countBarChart", () => {
-    const chartFactory = countBarChart();
+    const chartFactory = countBarChart(statements);
+    return chartFactory(statements[0]);
+  })
+  .add("latencyBarChart", () => {
+    const chartFactory = latencyBarChart(statements);
+    return chartFactory(statements[0]);
+  })
+  .add("retryBarChart", () => {
+    const chartFactory = retryBarChart(statements);
+    return chartFactory(statements[0]);
+  })
+  .add("rowsBarChart", () => {
+    const chartFactory = rowsBarChart(statements);
     return chartFactory(statements[0]);
   });
