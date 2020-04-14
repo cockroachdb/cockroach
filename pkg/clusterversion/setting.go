@@ -87,15 +87,24 @@ func (cv *clusterVersionSetting) initialize(
 	ctx context.Context, version roachpb.Version, sv *settings.Values,
 ) error {
 	if ver := cv.activeVersionOrEmpty(ctx, sv); ver != (ClusterVersion{}) {
-		// Allow initializing a second time as long as it's setting the version to
-		// what it was already set. This is useful in tests that use
-		// MakeTestingClusterSettings() which initializes the version, and the
-		// start a server which again initializes it.
+		// Allow initializing a second time as long as it's not regressing.
+		//
+		// This is useful in tests that use MakeTestingClusterSettings() which
+		// initializes the version, and the start a server which again
+		// initializes it once more.
+		//
+		// It's also used in production code during bootstrap, where the version
+		// is first initialized to BinaryMinSupportedVersion and then
+		// re-initialized to BootstrapVersion (=BinaryVersion).
+		if version.Less(ver.Version) {
+			return errors.AssertionFailedf("cannot initialize version to %s because already set to: %s",
+				version, ver)
+		}
 		if version == ver.Version {
+			// Don't trigger callbacks, etc, a second time.
 			return nil
 		}
-		return errors.AssertionFailedf("cannot initialize version to %s because already set to: %s",
-			version, ver)
+		// Now version > ver.Version.
 	}
 	if err := cv.validateSupportedVersionInner(ctx, version, sv); err != nil {
 		return err

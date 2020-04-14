@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -29,14 +28,10 @@ import (
 // InitEngine writes a new store ident to the underlying engine. To
 // ensure that no crufty data already exists in the engine, it scans
 // the engine contents before writing the new store ident. The engine
-// should be completely empty. It returns an error if called on a
-// non-empty engine.
-func InitEngine(
-	ctx context.Context,
-	eng storage.Engine,
-	ident roachpb.StoreIdent,
-	cv clusterversion.ClusterVersion,
-) error {
+// should be completely empty save for a cluster version, which must
+// already have been persisted to it. Returns an error if this is not
+// the case.
+func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIdent) error {
 	exIdent, err := ReadStoreIdent(ctx, eng)
 	if err == nil {
 		return errors.Errorf("engine %s is already bootstrapped with ident %s", eng, exIdent.String())
@@ -45,8 +40,8 @@ func InitEngine(
 		return err
 	}
 
-	if err := checkEngineEmpty(ctx, eng); err != nil {
-		return errors.Wrap(err, "cannot verify empty engine for bootstrap")
+	if err := checkCanInitializeEngine(ctx, eng); err != nil {
+		return errors.Wrap(err, "while trying to initialize store")
 	}
 
 	batch := eng.NewBatch()
@@ -61,10 +56,6 @@ func InitEngine(
 	); err != nil {
 		batch.Close()
 		return err
-	}
-	if err := WriteClusterVersion(ctx, batch, cv); err != nil {
-		batch.Close()
-		return errors.Wrap(err, "cannot write cluster version")
 	}
 	if err := batch.Commit(true /* sync */); err != nil {
 		return errors.Wrap(err, "persisting bootstrap data")
