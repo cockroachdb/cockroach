@@ -2983,6 +2983,11 @@ func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
 	val.Mul(val, big10E10)
 	val.Add(val, big.NewInt(int64(ts.Logical)))
 
+	// val must be positive. If it was set to a negative value above,
+	// transfer the sign to res.Negative.
+	res.Negative = val.Sign() < 0
+	val.Abs(val)
+
 	// Shift 10 decimals to the right, so that the logical
 	// field appears as fractional part.
 	res.Decimal.Exponent = -10
@@ -3494,6 +3499,12 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return nil, err
 		}
 		if !unset {
+			// dd.Coeff must be positive. If it was set to a negative value
+			// above, transfer the sign to dd.Negative.
+			if dd.Coeff.Sign() < 0 {
+				dd.Negative = true
+				dd.Coeff.Abs(&dd.Coeff)
+			}
 			err = LimitDecimalWidth(&dd.Decimal, int(t.Precision()), int(t.Scale()))
 			return &dd, err
 		}

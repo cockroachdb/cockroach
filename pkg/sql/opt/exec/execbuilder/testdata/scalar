@@ -751,3 +751,17 @@ root                      ·              ·                             ("array
                 └── scan  ·              ·                             (a, b)     ·
 ·                         table          t@primary                     ·          ·
 ·                         spans          FULL SCAN                     ·          ·
+
+# Regression test for #47327. The span should have an end value of -1.
+statement ok
+CREATE TABLE t0(c0 DECIMAL UNIQUE); INSERT INTO t0(c0) VALUES(0);
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT t0.c0 FROM t0 WHERE t0.c0 BETWEEN t0.c0 AND INTERVAL '-1'::DECIMAL
+----
+·     distributed  false                 ·     ·
+·     vectorized   true                  ·     ·
+scan  ·            ·                     (c0)  ·
+·     table        t0@t0_c0_key          ·     ·
+·     spans        /!NULL-/-1/PrefixEnd  ·     ·
+·     filter       c0 >= c0              ·     ·
