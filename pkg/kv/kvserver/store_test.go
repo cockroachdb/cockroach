@@ -231,8 +231,10 @@ func createTestStoreWithoutStart(
 	cfg.DB = kv.NewDB(cfg.AmbientCtx, factory, cfg.Clock)
 	store := NewStore(context.TODO(), *cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 	factory.setStore(store)
+
+	require.NoError(t, WriteClusterVersion(context.Background(), eng, clusterversion.TestingClusterVersion))
 	if err := InitEngine(
-		context.TODO(), eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1}, clusterversion.TestingClusterVersion,
+		context.TODO(), eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -436,8 +438,9 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 			t.Error("expected failure starting un-bootstrapped store")
 		}
 
+		require.NoError(t, WriteClusterVersion(context.Background(), eng, clusterversion.TestingClusterVersion))
 		// Bootstrap with a fake ident.
-		if err := InitEngine(ctx, eng, testIdent, clusterversion.TestingClusterVersion); err != nil {
+		if err := InitEngine(ctx, eng, testIdent); err != nil {
 			t.Fatalf("error bootstrapping store: %+v", err)
 		}
 
@@ -490,9 +493,9 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	}
 }
 
-// TestBootstrapOfNonEmptyStore verifies bootstrap failure if engine
+// TestInitializeEngineErrors verifies bootstrap failure if engine
 // is not empty.
-func TestBootstrapOfNonEmptyStore(t *testing.T) {
+func TestInitializeEngineErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	ctx := context.TODO()
@@ -500,10 +503,16 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	eng := storage.NewDefaultInMem()
 	stopper.AddCloser(eng)
 
-	// Put some random garbage into the engine.
-	if err := eng.Put(storage.MakeMVCCMetadataKey(roachpb.Key("foo")), []byte("bar")); err != nil {
-		t.Errorf("failure putting key foo into engine: %+v", err)
+	// Bootstrap should fail if engine has no cluster version yet.
+	if err := InitEngine(ctx, eng, testIdent); !testutils.IsError(err, `no cluster version`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
+
+	require.NoError(t, WriteClusterVersion(ctx, eng, clusterversion.TestingClusterVersion))
+
+	// Put some random garbage into the engine.
+	require.NoError(t, eng.Put(storage.MakeMVCCMetadataKey(roachpb.Key("foo")), []byte("bar")))
+
 	cfg := TestStoreConfig(nil)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
@@ -516,12 +525,8 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 
 	// Bootstrap should fail on non-empty engine.
-	switch err := errors.Cause(InitEngine(
-		ctx, eng, testIdent, clusterversion.TestingClusterVersion,
-	)); err.(type) {
-	case *NotBootstrappedError:
-	default:
-		t.Errorf("unexpected error bootstrapping non-empty store: %+v", err)
+	if err := InitEngine(ctx, eng, testIdent); !testutils.IsError(err, `cannot be bootstrapped`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

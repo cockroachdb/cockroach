@@ -218,6 +218,8 @@ type Storage interface {
 // During bootstrapping, the bootstrap list contains candidates for
 // entry to the gossip network.
 type Gossip struct {
+	started bool // for assertions
+
 	*server // Embedded gossip RPC server
 
 	Connected     chan struct{}       // Closed upon initial connection
@@ -382,6 +384,13 @@ func NewTestWithLocality(
 		n.Set(context.TODO(), nodeID)
 	}
 	return gossip
+}
+
+// AssertNotStarted fatals if the Gossip instance was already started.
+func (g *Gossip) AssertNotStarted(ctx context.Context) {
+	if g.started {
+		log.Fatalf(ctx, "Gossip instance was already started")
+	}
 }
 
 // GetNodeMetrics returns the gossip node metrics.
@@ -1244,6 +1253,8 @@ func (g *Gossip) MaxHops() uint32 {
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
 func (g *Gossip) Start(advertAddr net.Addr, resolvers []resolver.Resolver) {
+	g.AssertNotStarted(context.Background())
+	g.started = true
 	g.setResolvers(resolvers)
 	g.server.start(advertAddr) // serve gossip protocol
 	g.bootstrap()              // bootstrap gossip client

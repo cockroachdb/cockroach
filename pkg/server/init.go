@@ -17,8 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -150,7 +152,7 @@ type initState struct {
 // TODO(tbg): give this a KV client and thus initialize at least one store in
 // all cases.
 func (s *initServer) ServeAndWait(
-	ctx context.Context, stopper *stop.Stopper, g *gossip.Gossip,
+	ctx context.Context, stopper *stop.Stopper, sv *settings.Values, g *gossip.Gossip,
 ) (*initState, error) {
 	if len(s.inspectState.initializedEngines) != 0 {
 		// If already bootstrapped, return early.
@@ -168,7 +170,19 @@ func (s *initServer) ServeAndWait(
 	case <-stopper.ShouldQuiesce():
 		return nil, stop.ErrUnavailable
 	case state := <-s.bootstrapReqCh:
-		// Bootstrap() did its job.
+		// Bootstrap() did its job. At this point, we know that the cluster
+		// version will be bootstrapVersion (=state.clusterVersion.Version), but
+		// the version setting does not know yet (it was initialized as
+		// BinaryMinSupportedVersion because the engines were all
+		// uninitialized). We *could* just let the server start, and it would
+		// populate system.settings, which is then gossiped, and then the
+		// callback would update the version, but we take this shortcut to avoid
+		// having every freshly bootstrapped cluster spend time at an old
+		// cluster version.
+		if err := clusterversion.Initialize(ctx, state.clusterVersion.Version, sv); err != nil {
+			return nil, err
+		}
+
 		log.Infof(ctx, "**** cluster %s has been created", state.clusterID)
 		return state, nil
 	case <-g.Connected:
@@ -244,7 +258,16 @@ func (s *initServer) Bootstrap(
 
 func (s *initServer) tryBootstrap(ctx context.Context) (*initState, error) {
 	cv := clusterversion.ClusterVersion{Version: s.bootstrapVersion}
+	if err := kvserver.WriteClusterVersionToEngines(ctx, s.inspectState.newEngines, cv); err != nil {
+		return nil, err
+	}
 	return bootstrapCluster(
-		ctx, s.inspectState.newEngines, cv, s.bootstrapZoneConfig, s.bootstrapSystemZoneConfig,
+		ctx, s.inspectState.newEngines, s.bootstrapZoneConfig, s.bootstrapSystemZoneConfig,
 	)
+}
+
+// DiskClusterVersion returns the cluster version synthesized from disk. This
+// is always non-zero since it falls back to the BinaryMinSupportedVersion.
+func (s *initServer) DiskClusterVersion() clusterversion.ClusterVersion {
+	return s.inspectState.clusterVersion
 }

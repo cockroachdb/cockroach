@@ -240,12 +240,12 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 		factory := &testSenderFactory{}
 		cfg.DB = kv.NewDB(cfg.AmbientCtx, factory, cfg.Clock)
 
+		require.NoError(t, WriteClusterVersion(ctx, tc.engine, cv))
 		if err := InitEngine(ctx, tc.engine, roachpb.StoreIdent{
 			ClusterID: uuid.MakeV4(),
 			NodeID:    1,
 			StoreID:   1,
-		},
-			cv); err != nil {
+		}); err != nil {
 			t.Fatal(err)
 		}
 		if err := clusterversion.Initialize(ctx, cv.Version, &cfg.Settings.SV); err != nil {

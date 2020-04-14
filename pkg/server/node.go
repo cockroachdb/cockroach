@@ -204,14 +204,32 @@ func GetBootstrapSchema(
 func bootstrapCluster(
 	ctx context.Context,
 	engines []storage.Engine,
-	bootstrapVersion clusterversion.ClusterVersion,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) (*initState, error) {
 	clusterID := uuid.MakeV4()
 	// TODO(andrei): It'd be cool if this method wouldn't do anything to engines
 	// other than the first one, and let regular node startup code deal with them.
+	var bootstrapVersion clusterversion.ClusterVersion
 	for i, eng := range engines {
+		cv, err := kvserver.ReadClusterVersion(ctx, eng)
+		if err != nil {
+			return nil, errors.Wrapf(err, "reading cluster version of %s", eng)
+		}
+
+		// bootstrapCluster requires matching cluster versions on all engines.
+		if cv.Major == 0 {
+			return nil, errors.Errorf("missing bootstrap version")
+		}
+
+		if i == 0 {
+			bootstrapVersion = cv
+		}
+
+		if bootstrapVersion != cv {
+			return nil, errors.Wrapf(err, "found cluster versions %s and %s", bootstrapVersion, cv)
+		}
+
 		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,
 			NodeID:    FirstNodeID,
@@ -220,7 +238,7 @@ func bootstrapCluster(
 
 		// Initialize the engine backing the store with the store ident and cluster
 		// version.
-		if err := kvserver.InitEngine(ctx, eng, sIdent, bootstrapVersion); err != nil {
+		if err := kvserver.InitEngine(ctx, eng, sIdent); err != nil {
 			return nil, err
 		}
 
@@ -251,6 +269,7 @@ func bootstrapCluster(
 			clusterID:          clusterID,
 			clusterVersion:     bootstrapVersion,
 			initializedEngines: engines,
+			newEngines:         nil,
 		},
 		joined: true,
 	}
@@ -276,14 +295,11 @@ func NewNode(
 		eventLogger = sql.MakeEventLogger(execCfg)
 	}
 	n := &Node{
-		storeCfg: cfg,
-		stopper:  stopper,
-		recorder: recorder,
-		metrics:  makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores: kvserver.NewStores(
-			cfg.AmbientCtx, cfg.Clock,
-			cfg.Settings.Version.BinaryVersion(),
-			cfg.Settings.Version.BinaryMinSupportedVersion()),
+		storeCfg:    cfg,
+		stopper:     stopper,
+		recorder:    recorder,
+		metrics:     makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		stores:      kvserver.NewStores(cfg.AmbientCtx, cfg.Clock),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
 		clusterID:   clusterID,
@@ -314,12 +330,6 @@ func (n *Node) AnnotateCtxWithSpan(
 	return n.storeCfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 
-func (n *Node) onClusterVersionChange(ctx context.Context, cv clusterversion.ClusterVersion) {
-	if err := n.stores.OnClusterVersionChange(ctx, cv); err != nil {
-		log.Fatal(ctx, errors.Wrapf(err, "updating cluster version to %v", cv))
-	}
-}
-
 // start starts the node by registering the storage instance for the
 // RPC service "Node" and initializing stores for each specified
 // engine. Launches periodic store gossiping in a goroutine.
@@ -335,10 +345,6 @@ func (n *Node) start(
 	localityAddress []roachpb.LocalityAddress,
 	nodeDescriptorCallback func(descriptor roachpb.NodeDescriptor),
 ) error {
-	if err := clusterversion.Initialize(ctx, state.clusterVersion.Version, &n.storeCfg.Settings.SV); err != nil {
-		return err
-	}
-
 	// Obtaining the NodeID requires a dance of sorts. If the node has initialized
 	// stores, the NodeID is persisted in each of them. If not, then we'll need to
 	// use the KV store to get a NodeID assigned.
@@ -442,13 +448,6 @@ func (n *Node) start(
 		return fmt.Errorf("failed to initialize the gossip interface: %s", err)
 	}
 
-	// Read persisted ClusterVersion from each configured store to
-	// verify there are no stores with data too old or too new for this
-	// binary.
-	if _, err := n.stores.SynthesizeClusterVersion(ctx); err != nil {
-		return err
-	}
-
 	// Bootstrap any uninitialized stores.
 	//
 	// TODO(tbg): address https://github.com/cockroachdb/cockroach/issues/39415.
@@ -460,17 +459,6 @@ func (n *Node) start(
 	}
 
 	n.startComputePeriodicMetrics(n.stopper, DefaultMetricsSampleInterval)
-
-	// Now that we've created all our stores, install the gossip version update
-	// handler to write version updates to them.
-	// It's important that we persist new versions to the engines before the node
-	// starts using it, otherwise the node might regress the version after a
-	// crash.
-	clusterversion.SetBeforeChange(ctx, &n.storeCfg.Settings.SV, n.onClusterVersionChange)
-	// Invoke the callback manually once so that we persist the updated value that
-	// gossip might have already received.
-	clusterVersion := n.storeCfg.Settings.Version.ActiveVersion(ctx)
-	n.onClusterVersionChange(ctx, clusterVersion)
 
 	// Be careful about moving this line above `startStores`; store migrations rely
 	// on the fact that the cluster version has not been updated via Gossip (we
@@ -557,20 +545,6 @@ func (n *Node) bootstrapStores(
 		return errors.New("ClusterID missing during store bootstrap of auxiliary store")
 	}
 
-	// There's a bit of an awkward dance around cluster versions here. If this node
-	// is joining an existing cluster for the first time, it doesn't have any engines
-	// set up yet, and cv below will be the binary's minimum supported version.
-	// At the same time, the Gossip update which notifies us about the real
-	// cluster version won't persist it to any engines (because we haven't
-	// installed the gossip update handler yet and also because none of the
-	// stores are bootstrapped). So we just accept that we won't use the correct
-	// version here, but post-bootstrapping will invoke the callback manually,
-	// which will disseminate the correct version to all engines.
-	cv, err := n.stores.SynthesizeClusterVersion(ctx)
-	if err != nil {
-		return errors.Errorf("error retrieving cluster version for bootstrap: %s", err)
-	}
-
 	{
 		// Bootstrap all waiting stores by allocating a new store id for
 		// each and invoking storage.Bootstrap() to persist it and the cluster
@@ -586,7 +560,7 @@ func (n *Node) bootstrapStores(
 			StoreID:   firstID,
 		}
 		for _, eng := range emptyEngines {
-			if err := kvserver.InitEngine(ctx, eng, sIdent, cv); err != nil {
+			if err := kvserver.InitEngine(ctx, eng, sIdent); err != nil {
 				return err
 			}
 

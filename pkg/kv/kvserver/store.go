@@ -2019,23 +2019,40 @@ func ReadMaxHLCUpperBound(ctx context.Context, engines []storage.Engine) (int64,
 	return hlcUpperBound, nil
 }
 
-func checkEngineEmpty(ctx context.Context, eng storage.Engine) error {
+// checkCanInitializeEngine ensures that the engine is empty except for a
+// cluster version, which must be present.
+func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 	kvs, err := storage.Scan(eng, roachpb.KeyMin, roachpb.KeyMax, 10)
 	if err != nil {
 		return err
 	}
-	if len(kvs) > 0 {
-		// See if this is an already-bootstrapped store.
-		ident, err := ReadStoreIdent(ctx, eng)
-		if err != nil {
-			return errors.Wrap(err, "unable to read store ident")
-		}
-		keyVals := make([]string, len(kvs))
-		for i, kv := range kvs {
-			keyVals[i] = fmt.Sprintf("%s: %q", kv.Key, kv.Value)
-		}
-		return errors.Errorf("engine belongs to store %s, contains %s", ident.String(), keyVals)
+	// See if this is an already-bootstrapped store.
+	ident, err := ReadStoreIdent(ctx, eng)
+	if err == nil {
+		return errors.Errorf("engine already initialized as %s", ident.String())
+	} else if !errors.Is(errors.Cause(err), &NotBootstrappedError{}) {
+		return errors.Wrap(err, "unable to read store ident")
 	}
+
+	// Engine is not bootstrapped yet (i.e. no StoreIdent). Does it contain
+	// a cluster version and nothing else?
+
+	var sawClusterVersion bool
+	var keyVals []string
+	for _, kv := range kvs {
+		if kv.Key.Key.Equal(keys.StoreClusterVersionKey()) {
+			sawClusterVersion = true
+			continue
+		}
+		keyVals = append(keyVals, fmt.Sprintf("%s: %q", kv.Key, kv.Value))
+	}
+	if len(keyVals) > 0 {
+		return errors.Errorf("engine cannot be bootstrapped, contains:\n%s", keyVals)
+	}
+	if !sawClusterVersion {
+		return errors.New("no cluster version found on uninitialized engine")
+	}
+
 	return nil
 }
 
