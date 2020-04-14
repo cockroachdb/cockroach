@@ -410,6 +410,8 @@ func (ag *hashAggregator) close() {
 				ag.buckets[bucket].close(ag.Ctx)
 			}
 		}
+		// Make sure to release any remaining memory under 'buckets'.
+		ag.buckets = nil
 		// Note that we should be closing accounts only after closing all the
 		// buckets since the latter might be releasing some precisely tracked
 		// memory, and if we were to close the accounts first, there would be
@@ -657,7 +659,12 @@ func (ag *hashAggregator) emitRow() (
 	bucket := ag.bucketsIter[0]
 	ag.bucketsIter = ag.bucketsIter[1:]
 
-	return ag.getAggResults(ag.buckets[bucket])
+	// Once we get the results from the bucket, we can delete it from the map.
+	// This will allow us to return the memory to the system before the hash
+	// aggregator is fully done (which matters when we have many buckets).
+	state, row, meta := ag.getAggResults(ag.buckets[bucket])
+	delete(ag.buckets, bucket)
+	return state, row, meta
 }
 
 // emitRow constructs an output row from an accumulated bucket and returns it.
