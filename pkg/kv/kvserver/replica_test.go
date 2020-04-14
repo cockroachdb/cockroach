@@ -1756,6 +1756,16 @@ func queryIntentArgs(
 	}
 }
 
+func resolveIntentRangeArgsString(
+	s, e string, txn enginepb.TxnMeta, status roachpb.TransactionStatus,
+) *roachpb.ResolveIntentRangeRequest {
+	return &roachpb.ResolveIntentRangeRequest{
+		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(s), EndKey: roachpb.Key(e)},
+		IntentTxn:     txn,
+		Status:        status,
+	}
+}
+
 func internalMergeArgs(key []byte, value roachpb.Value) roachpb.MergeRequest {
 	return roachpb.MergeRequest{
 		RequestHeader: roachpb.RequestHeader{

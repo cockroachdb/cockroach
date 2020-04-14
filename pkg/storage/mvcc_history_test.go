@@ -378,7 +378,8 @@ var commands = map[string]cmd{
 	"txn_update":      {typTxnUpdate, cmdTxnUpdate},
 
 	"resolve_intent": {typDataUpdate, cmdResolveIntent},
-	"check_intent":   {typReadOnly, cmdCheckIntent},
+	// TODO(nvanbenschoten): test "resolve_intent_range".
+	"check_intent": {typReadOnly, cmdCheckIntent},
 
 	"clear_range": {typDataUpdate, cmdClearRange},
 	"cput":        {typDataUpdate, cmdCPut},
