@@ -1,3 +1,29 @@
 
+@require '~styl/base/palette.styl'
+@require '~src/views/shared/util/table.styl'
+@require '~src/components/core/index'
+
 .cl-table-link__tooltip
   composes clTableLink__tooltip from '~src/views/shared/components/sortabletable/sortabletable.styl'
+
+.cl-table-link__description
+  composes clTableLink__description from '~src/views/shared/components/sortabletable/sortabletable.styl'
+
+.cl-table__col-query-text a
+  font-family RobotoMono-Medium
+  font-size 12px
+  line-height 1.83
+  color $adminui-grey-1
+  width 400px
+  text-decoration none
+  cursor pointer
+  &:hover
+    color $colors--primary-blue-3
+    text-decoration underline
+  ._text-bold
+    font-family RobotoMono-Bold
+
+.cl-table-link__statement-tooltip--fixed-width
+  max-width max-content
+  .ant-tooltip-content
+    max-width 500px

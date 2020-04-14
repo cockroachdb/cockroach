@@ -25,7 +25,7 @@ storiesOf("StatementsTable", module)
       data={statements}
       sortSetting={{
         sortKey: 3,
-        ascending: false,
+        ascending: true,
       }}
     />
   ));
