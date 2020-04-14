@@ -659,7 +659,12 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 		lResult.MaybeAddToSplitQueue = false
 	}
-
+	if lResult.MaybeGossipSystemConfigIfHaveFailure {
+		if err := r.MaybeGossipSystemConfigIfHaveFailure(ctx); err != nil {
+			log.Error(ctx, err)
+		}
+		lResult.MaybeGossipSystemConfigIfHaveFailure = false
+	}
 	if lResult.MaybeGossipSystemConfig {
 		if err := r.MaybeGossipSystemConfig(ctx); err != nil {
 			log.Error(ctx, err)

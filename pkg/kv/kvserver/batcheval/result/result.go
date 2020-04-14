@@ -57,6 +57,8 @@ type LocalResult struct {
 	GossipFirstRange bool
 	// Call MaybeGossipSystemConfig.
 	MaybeGossipSystemConfig bool
+	// Call MaybeGossipSystemConfigIfHaveFailure
+	MaybeGossipSystemConfigIfHaveFailure bool
 	// Call MaybeAddToSplitQueue.
 	MaybeAddToSplitQueue bool
 	// Call MaybeGossipNodeLiveness with the specified Span, if set.
@@ -80,6 +82,7 @@ func (lResult *LocalResult) IsZero() bool {
 		lResult.EndTxns == nil &&
 		!lResult.GossipFirstRange &&
 		!lResult.MaybeGossipSystemConfig &&
+		!lResult.MaybeGossipSystemConfigIfHaveFailure &&
 		lResult.MaybeGossipNodeLiveness == nil &&
 		!lResult.MaybeWatchForMerge &&
 		lResult.Metrics == nil
@@ -332,6 +335,7 @@ func (p *Result) MergeAndDestroy(q Result) error {
 
 	coalesceBool(&p.Local.GossipFirstRange, &q.Local.GossipFirstRange)
 	coalesceBool(&p.Local.MaybeGossipSystemConfig, &q.Local.MaybeGossipSystemConfig)
+	coalesceBool(&p.Local.MaybeGossipSystemConfigIfHaveFailure, &q.Local.MaybeGossipSystemConfigIfHaveFailure)
 	coalesceBool(&p.Local.MaybeAddToSplitQueue, &q.Local.MaybeAddToSplitQueue)
 	coalesceBool(&p.Local.MaybeWatchForMerge, &q.Local.MaybeWatchForMerge)
 
