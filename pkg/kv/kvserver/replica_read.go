@@ -65,17 +65,50 @@ func (r *Replica) executeReadOnlyBatch(
 
 	var result result.Result
 	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, spans)
-	if err := r.handleReadOnlyLocalEvalResult(ctx, ba, result.Local); err != nil {
-		pErr = roachpb.NewError(err)
+
+	// If the request hit a server-side concurrency retry error, immediately
+	// proagate the error. Don't assume ownership of the concurrency guard.
+	if isConcurrencyRetryError(pErr) {
+		return nil, g, pErr
 	}
-	r.updateTimestampCache(ctx, ba, br, pErr)
+
+	// Handle any local (leaseholder-only) side-effects of the request.
+	intents := result.Local.DetachEncounteredIntents()
+	if pErr == nil {
+		pErr = r.handleReadOnlyLocalEvalResult(ctx, ba, result.Local)
+	}
+
+	// Otherwise, update the timestamp cache and release the concurrency guard.
+	ec, g := endCmds{repl: r, g: g}, nil
+	ec.done(ctx, ba, br, pErr)
+
+	// Semi-synchronously process any intents that need resolving here in
+	// order to apply back pressure on the client which generated them. The
+	// resolution is semi-synchronous in that there is a limited number of
+	// outstanding asynchronous resolution tasks allowed after which
+	// further calls will block.
+	if len(intents) > 0 {
+		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
+		// We only allow synchronous intent resolution for consistent requests.
+		// Intent resolution is async/best-effort for inconsistent requests.
+		//
+		// An important case where this logic is necessary is for RangeLookup
+		// requests. In their case, synchronous intent resolution can deadlock
+		// if the request originated from the local node which means the local
+		// range descriptor cache has an in-flight RangeLookup request which
+		// prohibits any concurrent requests for the same range. See #17760.
+		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT
+		if err := r.store.intentResolver.CleanupIntentsAsync(ctx, intents, allowSyncProcessing); err != nil {
+			log.Warning(ctx, err)
+		}
+	}
 
 	if pErr != nil {
 		log.VErrEvent(ctx, 3, pErr.String())
 	} else {
 		log.Event(ctx, "read completed")
 	}
-	return br, g, pErr
+	return br, nil, pErr
 }
 
 // executeReadOnlyBatchWithServersideRefreshes invokes evaluateBatch and retries
@@ -100,27 +133,27 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 			break
 		}
 	}
-	return br, res, pErr
+
+	if pErr != nil {
+		// Failed read-only batches can't have any Result except for what's
+		// whitelisted here.
+		res.Local = result.LocalResult{
+			EncounteredIntents: res.Local.DetachEncounteredIntents(),
+			Metrics:            res.Local.Metrics,
+		}
+		return nil, res, pErr
+	}
+	return br, res, nil
 }
 
 func (r *Replica) handleReadOnlyLocalEvalResult(
 	ctx context.Context, ba *roachpb.BatchRequest, lResult result.LocalResult,
-) error {
+) *roachpb.Error {
 	// Fields for which no action is taken in this method are zeroed so that
 	// they don't trigger an assertion at the end of the method (which checks
 	// that all fields were handled).
 	{
 		lResult.Reply = nil
-	}
-
-	if lResult.MaybeWatchForMerge {
-		// A merge is (likely) about to be carried out, and this replica needs
-		// to block all traffic until the merge either commits or aborts. See
-		// docs/tech-notes/range-merges.md.
-		if err := r.maybeWatchForMerge(ctx); err != nil {
-			return err
-		}
-		lResult.MaybeWatchForMerge = false
 	}
 
 	if lResult.AcquiredLocks != nil {
@@ -131,20 +164,14 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 		lResult.AcquiredLocks = nil
 	}
 
-	if intents := lResult.DetachEncounteredIntents(); len(intents) > 0 {
-		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
-		// We only allow synchronous intent resolution for consistent requests.
-		// Intent resolution is async/best-effort for inconsistent requests.
-		//
-		// An important case where this logic is necessary is for RangeLookup
-		// requests. In their case, synchronous intent resolution can deadlock
-		// if the request originated from the local node which means the local
-		// range descriptor cache has an in-flight RangeLookup request which
-		// prohibits any concurrent requests for the same range. See #17760.
-		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT
-		if err := r.store.intentResolver.CleanupIntentsAsync(ctx, intents, allowSyncProcessing); err != nil {
-			log.Warning(ctx, err)
+	if lResult.MaybeWatchForMerge {
+		// A merge is (likely) about to be carried out, and this replica needs
+		// to block all traffic until the merge either commits or aborts. See
+		// docs/tech-notes/range-merges.md.
+		if err := r.maybeWatchForMerge(ctx); err != nil {
+			return roachpb.NewError(err)
 		}
+		lResult.MaybeWatchForMerge = false
 	}
 
 	if !lResult.IsZero() {

@@ -25,9 +25,11 @@ type BatchEvalTestingKnobs struct {
 	// to one of the other filters. See #10493
 	// TODO(andrei): Provide guidance on what to use instead for trapping reads.
 	TestingEvalFilter ReplicaCommandFilter
+
 	// NumKeysEvaluatedForRangeIntentResolution is set by the stores to the
 	// number of keys evaluated for range intent resolution.
 	NumKeysEvaluatedForRangeIntentResolution *int64
+
 	// RecoverIndeterminateCommitsOnFailedPushes will propagate indeterminate
 	// commit errors to trigger transaction recovery even if the push that
 	// discovered the indeterminate commit was going to fail. This increases

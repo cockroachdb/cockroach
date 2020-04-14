@@ -137,6 +137,11 @@ func (r *Replica) sendWithRangeID(
 //    their Raft entry has been committed but before it has been applied to
 //    the replicated state machine. In all of these cases, responsibility
 //    for releasing the concurrency guard is handed to Raft.
+//
+// However, this option is not permitted if the function returns a "server-side
+// concurrency retry error" (see isConcurrencyRetryError for more details). If
+// the function returns one of these errors, it must also pass ownership of the
+// concurrency guard back to the caller.
 type batchExecutionFn func(
 	*Replica, context.Context, *roachpb.BatchRequest, storagepb.LeaseStatus, *concurrency.Guard,
 ) (*roachpb.BatchResponse, *concurrency.Guard, *roachpb.Error)
@@ -240,49 +245,86 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		}
 
 		br, g, pErr = fn(r, ctx, ba, status, g)
-		switch t := pErr.GetDetail().(type) {
-		case nil:
+		if pErr == nil {
 			// Success.
 			return br, nil
+		} else if !isConcurrencyRetryError(pErr) {
+			// Propagate error.
+			return nil, pErr
+		}
+
+		// The batch execution func returned a server-side concurrency retry
+		// error. It must have also handed back ownership of the concurrency
+		// guard without having already released the guard's latches.
+		g.AssertLatches()
+		switch t := pErr.GetDetail().(type) {
 		case *roachpb.WriteIntentError:
 			// Drop latches, but retain lock wait-queues.
-			g.AssertLatches()
 			if g, pErr = r.handleWriteIntentError(ctx, ba, g, pErr, t); pErr != nil {
 				return nil, pErr
 			}
-			// Retry...
 		case *roachpb.TransactionPushError:
 			// Drop latches, but retain lock wait-queues.
-			g.AssertLatches()
 			if g, pErr = r.handleTransactionPushError(ctx, ba, g, pErr, t); pErr != nil {
 				return nil, pErr
 			}
-			// Retry...
 		case *roachpb.IndeterminateCommitError:
 			// Drop latches and lock wait-queues.
-			g.AssertLatches()
 			r.concMgr.FinishReq(g)
 			g = nil
 			// Then launch a task to handle the indeterminate commit error.
 			if pErr = r.handleIndeterminateCommitError(ctx, ba, pErr, t); pErr != nil {
 				return nil, pErr
 			}
-			// Retry...
 		case *roachpb.MergeInProgressError:
 			// Drop latches and lock wait-queues.
-			g.AssertLatches()
 			r.concMgr.FinishReq(g)
 			g = nil
 			// Then listen for the merge to complete.
 			if pErr = r.handleMergeInProgressError(ctx, ba, pErr, t); pErr != nil {
 				return nil, pErr
 			}
-			// Retry...
 		default:
-			// Propagate error.
-			return nil, pErr
+			log.Fatalf(ctx, "unexpected concurrency retry error %T", t)
 		}
+		// Retry...
 	}
+}
+
+// isConcurrencyRetryError returns whether or not the provided error is a
+// "server-side concurrency retry error" that will be captured and retried by
+// executeBatchWithConcurrencyRetries. Server-side concurrency retry errors are
+// handled by dropping a request's latches, waiting for and/or ensuring that the
+// condition which caused the error is handled, re-sequencing through the
+// concurrency manager, and executing the request again.
+func isConcurrencyRetryError(pErr *roachpb.Error) bool {
+	switch pErr.GetDetail().(type) {
+	case *roachpb.WriteIntentError:
+		// If a request hits a WriteIntentError, it adds the conflicting intent
+		// to the lockTable through a process called "lock discovery". It then
+		// waits in the lock's wait-queue during its next sequencing pass.
+	case *roachpb.TransactionPushError:
+		// If a PushTxn request hits a TransactionPushError, it attempted to
+		// push another transactions record but did not succeed. It enqueues the
+		// pushee transaction in the txnWaitQueue and waits on the record to
+		// change or expire during its next sequencing pass.
+	case *roachpb.IndeterminateCommitError:
+		// If a PushTxn hits a IndeterminateCommitError, it attempted to push an
+		// expired transaction record in the STAGING state. It's unclear whether
+		// the pushee is aborted or committed, so the request must kick off the
+		// "transaction recovery procedure" to resolve this ambiguity before
+		// retrying.
+	case *roachpb.MergeInProgressError:
+		// If a request hits a MergeInProgressError, the replica it is being
+		// evaluted against is in the process of being merged into its left-hand
+		// neighbor. The request cannot proceed until the range merge completes,
+		// either successfully or unsuccessfully, so it waits before retrying.
+		// If the merge does complete successfully, the retry will be rejected
+		// with an error that will propagate back to the client.
+	default:
+		return false
+	}
+	return true
 }
 
 func (r *Replica) handleWriteIntentError(
