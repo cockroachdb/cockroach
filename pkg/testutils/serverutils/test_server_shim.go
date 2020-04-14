@@ -219,7 +219,7 @@ func StartServer(
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
 	server, err := StartServerRaw(params)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("%+v", err)
 	}
 
 	pgURL, cleanupGoDB := sqlutils.PGUrl(

@@ -39,11 +39,6 @@ type Stores struct {
 	log.AmbientContext
 	clock    *hlc.Clock
 	storeMap syncutil.IntMap // map[roachpb.StoreID]*Store
-	// These two versions are usually
-	// clusterversion.binary{,MinimumSupported}Version, respectively. They are
-	// changed in some tests.
-	binaryVersion             roachpb.Version
-	binaryMinSupportedVersion roachpb.Version
 
 	mu struct {
 		syncutil.Mutex
@@ -57,16 +52,10 @@ var _ gossip.Storage = &Stores{} // Stores implements the gossip.Storage interfa
 
 // NewStores returns a local-only sender which directly accesses
 // a collection of stores.
-func NewStores(
-	ambient log.AmbientContext,
-	clock *hlc.Clock,
-	binaryVersion, binaryMinSupportedVersion roachpb.Version,
-) *Stores {
+func NewStores(ambient log.AmbientContext, clock *hlc.Clock) *Stores {
 	return &Stores{
-		AmbientContext:            ambient,
-		clock:                     clock,
-		binaryVersion:             binaryVersion,
-		binaryMinSupportedVersion: binaryMinSupportedVersion,
+		AmbientContext: ambient,
+		clock:          clock,
 	}
 }
 
@@ -288,10 +277,10 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 // ReadVersionFromEngineOrZero reads the persisted cluster version from the
 // engine, falling back to the zero value.
 func ReadVersionFromEngineOrZero(
-	ctx context.Context, e storage.Engine,
+	ctx context.Context, reader storage.Reader,
 ) (clusterversion.ClusterVersion, error) {
 	var cv clusterversion.ClusterVersion
-	cv, err := ReadClusterVersion(ctx, e)
+	cv, err := ReadClusterVersion(ctx, reader)
 	if err != nil {
 		return clusterversion.ClusterVersion{}, err
 	}
@@ -299,7 +288,10 @@ func ReadVersionFromEngineOrZero(
 }
 
 // WriteClusterVersionToEngines writes the given version to the given engines,
-// without any sanity checks.
+// Returns nil on success; otherwise returns first error encountered writing to
+// the stores.
+//
+// WriteClusterVersion makes no attempt to validate the supplied version.
 func WriteClusterVersionToEngines(
 	ctx context.Context, engines []storage.Engine, cv clusterversion.ClusterVersion,
 ) error {
@@ -312,15 +304,18 @@ func WriteClusterVersionToEngines(
 }
 
 // SynthesizeClusterVersionFromEngines returns the cluster version that was read
-// from the engines or, if there's no bootstrapped engines, returns
-// binaryMinSupportedVersion.
+// from the engines or, if none are initialized, binaryMinSupportedVersion.
+// Typically all initialized engines will have the same version persisted,
+// though ill-timed crashes can result in situations where this is not the
+// case. Then, the largest version seen is returned.
 //
-// Args:
-// 	binaryMinSupportedVersion: The minimum version supported by this binary. An error
-// 	  is returned if any engine has a version lower that this. This version is
-// 	  written to the engines if no store has a version in it.
-// 	binaryVersion: The version of this binary. An error is returned if
-// 	  any engine has a higher version.
+// binaryVersion is the version of this binary. An error is returned if
+// any engine has a higher version, as this would indicate that this node
+// has previously acked the higher cluster version but is now running an
+// old binary, which is unsafe.
+//
+// binaryMinSupportedVersion is the minimum version supported by this binary. An
+// error is returned if any engine has a version lower that this.
 func SynthesizeClusterVersionFromEngines(
 	ctx context.Context,
 	engines []storage.Engine,
@@ -344,6 +339,7 @@ func SynthesizeClusterVersionFromEngines(
 	// constraints, which at the latest the second loop will achieve (because
 	// then minStoreVersion don't change any more).
 	for _, eng := range engines {
+		eng := eng.(storage.Reader) // we're read only
 		var cv clusterversion.ClusterVersion
 		cv, err := ReadVersionFromEngineOrZero(ctx, eng)
 		if err != nil {
@@ -399,50 +395,7 @@ func SynthesizeClusterVersionFromEngines(
 			"is too old for running version v%s (which requires data from v%s or later)",
 			minStoreVersion.origin, minStoreVersion.Version, binaryVersion, binaryMinSupportedVersion)
 	}
-
-	// Write the "actual" version back to all stores. This is almost always a
-	// no-op, but will backfill the information for 1.0.x clusters, and also
-	// smoothens out inconsistent state that can crop up during an ill-timed
-	// crash or when new stores are being added.
-	return cv, WriteClusterVersionToEngines(ctx, engines, cv)
-}
-
-// SynthesizeClusterVersion reads and returns the ClusterVersion protobuf
-// (written to any of the configured stores (all of which are bootstrapped)).
-// The returned value is also replicated to all stores for consistency, in case
-// a new store was added or an old store re-configured. In case of non-identical
-// versions across the stores, returns a version that carries the smallest
-// Version.
-//
-// If there aren't any stores, returns the minimum supported version of the binary.
-func (ls *Stores) SynthesizeClusterVersion(
-	ctx context.Context,
-) (clusterversion.ClusterVersion, error) {
-	var engines []storage.Engine
-	ls.storeMap.Range(func(_ int64, v unsafe.Pointer) bool {
-		engines = append(engines, (*Store)(v).engine)
-		return true // want more
-	})
-	cv, err := SynthesizeClusterVersionFromEngines(ctx, engines, ls.binaryVersion, ls.binaryMinSupportedVersion)
-	if err != nil {
-		return clusterversion.ClusterVersion{}, err
-	}
 	return cv, nil
-}
-
-// WriteClusterVersion persists the supplied ClusterVersion to every
-// configured store. Returns nil on success; otherwise returns first
-// error encountered writing to the stores.
-//
-// WriteClusterVersion makes no attempt to validate the supplied version.
-func (ls *Stores) WriteClusterVersion(ctx context.Context, cv clusterversion.ClusterVersion) error {
-	// Update all stores.
-	engines := ls.engines()
-	ls.storeMap.Range(func(_ int64, v unsafe.Pointer) bool {
-		engines = append(engines, (*Store)(v).Engine())
-		return true // want more
-	})
-	return WriteClusterVersionToEngines(ctx, engines, cv)
 }
 
 func (ls *Stores) engines() []storage.Engine {
@@ -452,44 +405,4 @@ func (ls *Stores) engines() []storage.Engine {
 		return true // want more
 	})
 	return engines
-}
-
-// OnClusterVersionChange is invoked when the running node receives a notification
-// indicating that the cluster version has changed. It checks the currently persisted
-// version and updates if it is older than the provided update.
-func (ls *Stores) OnClusterVersionChange(
-	ctx context.Context, cv clusterversion.ClusterVersion,
-) error {
-	// Grab a lock to make sure that there aren't two interleaved invocations of
-	// this method that result in clobbering of an update.
-	ls.mu.Lock()
-	defer ls.mu.Unlock()
-
-	// We're going to read the cluster version from any engine - all the engines
-	// are always kept in sync so it doesn't matter which one we read from.
-	var someEngine storage.Engine
-	ls.storeMap.Range(func(_ int64, v unsafe.Pointer) bool {
-		someEngine = (*Store)(v).engine
-		return false // don't iterate any more
-	})
-	if someEngine == nil {
-		// If we haven't bootstrapped any engines yet, there's nothing for us to do.
-		return nil
-	}
-	synthCV, err := ReadClusterVersion(ctx, someEngine)
-	if err != nil {
-		return errors.Wrap(err, "error reading persisted cluster version")
-	}
-	// If the update downgrades the version, ignore it. Must be a
-	// reordering (this method is called from multiple goroutines via
-	// `(*Node).onClusterVersionChange)`). Note that we do carry out the upgrade if
-	// the MinVersion is identical, to backfill the engines that may still need it.
-	if cv.Version.Less(synthCV.Version) {
-		return nil
-	}
-	if err := ls.WriteClusterVersion(ctx, cv); err != nil {
-		return errors.Wrap(err, "writing cluster version")
-	}
-
-	return nil
 }
