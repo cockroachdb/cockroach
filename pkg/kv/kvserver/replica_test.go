@@ -606,7 +606,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
 	exLease, _ := r.GetLease()
-	ch, _, _, _, pErr := r.evalAndPropose(context.TODO(), &ba, allSpansGuard(), &exLease)
+	ch, _, _, pErr := r.evalAndPropose(context.TODO(), &ba, allSpansGuard(), &exLease)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -1387,7 +1387,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
-	ch, _, _, _, pErr := tc.repl.evalAndPropose(context.Background(), &ba, allSpansGuard(), &exLease)
+	ch, _, _, pErr := tc.repl.evalAndPropose(context.Background(), &ba, allSpansGuard(), &exLease)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -4239,14 +4239,16 @@ func TestEndTxnWithErrors(t *testing.T) {
 			existTxn.Epoch = test.existEpoch
 			existTxnRecord := existTxn.AsRecord()
 			txnKey := keys.TransactionKey(test.key, txn.ID)
-			if err := storage.MVCCPutProto(ctx, tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{},
-				nil, &existTxnRecord); err != nil {
+			if err := storage.MVCCPutProto(
+				ctx, tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{}, nil, &existTxnRecord,
+			); err != nil {
 				t.Fatal(err)
 			}
 
 			// End the transaction, verify expected error.
 			txn.Key = test.key
 			args, h := endTxnArgs(txn, true)
+			args.LockSpans = []roachpb.Span{{Key: txn.Key}}
 			args.Sequence = 2
 
 			if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, test.expErrRegexp) {
@@ -4257,6 +4259,41 @@ func TestEndTxnWithErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestEndTxnWithErrorAndSyncIntentResolution verifies that an EndTransaction
+// request that hits an error and then is forced to perform intent resolution
+// synchronously does not deadlock on itself. This is a regression test against
+// #47187.
+func TestEndTxnWithErrorAndSyncIntentResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	cfg := TestStoreConfig(nil)
+	cfg.TestingKnobs.IntentResolverKnobs.ForceSyncIntentResolution = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
+
+	txn := newTransaction("test", roachpb.Key("a"), 1, tc.Clock())
+
+	// Establish existing txn state by writing directly to range engine.
+	existTxn := txn.Clone()
+	existTxn.Status = roachpb.ABORTED
+	existTxnRec := existTxn.AsRecord()
+	txnKey := keys.TransactionKey(txn.Key, txn.ID)
+	err := storage.MVCCPutProto(ctx, tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{}, nil, &existTxnRec)
+	require.NoError(t, err)
+
+	// End the transaction, verify expected error, shouldn't deadlock.
+	args, h := endTxnArgs(txn, true)
+	args.LockSpans = []roachpb.Span{{Key: txn.Key}}
+	args.Sequence = 2
+
+	_, pErr := tc.SendWrappedWith(h, &args)
+	require.Error(t, pErr.GetDetail(), "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)")
+	require.NotNil(t, pErr.GetTxn())
+	require.Equal(t, txn.ID, pErr.GetTxn().ID)
 }
 
 // TestEndTxnRollbackAbortedTransaction verifies that no error is returned when
@@ -7647,7 +7684,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 				Key: roachpb.Key(fmt.Sprintf("k%d", i)),
 			},
 		})
-		ch, _, idx, _, err := repl.evalAndPropose(ctx, &ba, allSpansGuard(), &lease)
+		ch, _, idx, err := repl.evalAndPropose(ctx, &ba, allSpansGuard(), &lease)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -7716,7 +7753,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 				Key: roachpb.Key(fmt.Sprintf("k%d", i)),
 			},
 		})
-		ch, _, idx, _, err := tc.repl.evalAndPropose(ctx, &ba, allSpansGuard(), &lease)
+		ch, _, idx, err := tc.repl.evalAndPropose(ctx, &ba, allSpansGuard(), &lease)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -9034,7 +9071,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	}
 
 	exLease, _ := repl.GetLease()
-	ch, _, _, _, pErr := repl.evalAndPropose(context.Background(), &ba, allSpansGuard(), &exLease)
+	ch, _, _, pErr := repl.evalAndPropose(context.Background(), &ba, allSpansGuard(), &exLease)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -9079,7 +9116,7 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 
 	atomic.StoreInt32(&filterActive, 1)
 	exLease, _ := repl.GetLease()
-	ch, _, _, _, pErr := repl.evalAndPropose(context.Background(), &ba, allSpansGuard(), &exLease)
+	ch, _, _, pErr := repl.evalAndPropose(context.Background(), &ba, allSpansGuard(), &exLease)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -9142,7 +9179,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 
 	atomic.StoreInt32(&filterActive, 1)
 	exLease, _ := repl.GetLease()
-	_, _, _, _, pErr := repl.evalAndPropose(ctx, &ba, allSpansGuard(), &exLease)
+	_, _, _, pErr := repl.evalAndPropose(ctx, &ba, allSpansGuard(), &exLease)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -9160,7 +9197,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 		ba2.Timestamp = tc.Clock().Now()
 
 		var pErr *roachpb.Error
-		ch, _, _, _, pErr = repl.evalAndPropose(ctx, &ba, allSpansGuard(), &exLease)
+		ch, _, _, pErr = repl.evalAndPropose(ctx, &ba, allSpansGuard(), &exLease)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -12050,7 +12087,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	// the proposal map. Entries are only removed from that map underneath raft.
 	tc.repl.RaftLock()
 	tracedCtx, cleanup := tracing.EnsureContext(ctx, cfg.AmbientCtx.Tracer, "replica send")
-	ch, _, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, allSpansGuard(), &lease)
+	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, allSpansGuard(), &lease)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -12146,7 +12183,7 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 	// Go out of our way to enable recording so that expensive logging is enabled
 	// for this context.
 	tracing.StartRecording(sp, tracing.SingleNodeRecording)
-	ch, _, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, allSpansGuard(), &lease)
+	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, allSpansGuard(), &lease)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
