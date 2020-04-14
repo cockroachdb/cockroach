@@ -161,11 +161,11 @@ with t=A
 meta: "k" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
 get: "k" -> /BYTES/b @0,0
 get: "k" -> /BYTES/b @0,0
-meta: "k" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000014,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
+meta: "k" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=20} ts=0.000000014,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
 get: "k" -> /BYTES/b @0.000000014,0
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=32} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0 isn=1
-meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000014,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=20} ts=0.000000014,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
 data: "k"/0.000000014,0 -> /BYTES/b
 meta: "k/10"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=10} ts=0.000000011,0 del=false klen=12 vlen=7
 data: "k/10"/0.000000011,0 -> /BYTES/10
@@ -225,7 +225,7 @@ with t=B
   txn_begin  ts=20
   get        k=k
 ----
-meta: "k" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} ts=0.000000014,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
+meta: "k" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000014,0 min=0,0 seq=20} ts=0.000000014,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}}
 get: "k" -> /BYTES/b @0.000000014,0
 >> at end:
 txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000020,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000020,0 wto=false max=0,0
@@ -394,7 +394,7 @@ with t=D
 ----
 meta: "n" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000040,0 min=0,0 seq=30} ts=0.000000040,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
 get: "n" -> /BYTES/c @0.000000040,0
-meta: "n" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000040,0 min=0,0 seq=30} ts=0.000000045,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+meta: "n" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000045,0 min=0,0 seq=30} ts=0.000000045,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
 get: "n" -> /BYTES/c @0.000000045,0
 >> at end:
 txn: "D" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000045,0 min=0,0 seq=30} lock=true stat=PENDING rts=0.000000040,0 wto=false max=0,0
@@ -406,7 +406,7 @@ data: "k/20"/0.000000011,0 -> /BYTES/20
 meta: "k/30"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=7
 data: "k/30"/0.000000011,0 -> /BYTES/30
 data: "m"/0.000000030,0 -> /BYTES/a
-meta: "n"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000040,0 min=0,0 seq=30} ts=0.000000045,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+meta: "n"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000045,0 min=0,0 seq=30} ts=0.000000045,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
 data: "n"/0.000000045,0 -> /BYTES/c
 
 # Ignore sequence numbers other than the current one, then commit. The value
@@ -421,7 +421,7 @@ with t=E
   txn_begin      ts=50
   get            k=n
 ----
-meta: "n" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000040,0 min=0,0 seq=30} ts=0.000000045,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+meta: "n" -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000045,0 min=0,0 seq=30} ts=0.000000045,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
 get: "n" -> /BYTES/c @0.000000045,0
 get: "n" -> /BYTES/c @0.000000045,0
 >> at end:
