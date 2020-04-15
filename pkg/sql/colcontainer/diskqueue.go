@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -425,6 +424,9 @@ func (d *diskQueue) Close(ctx context.Context) error {
 	for _, file := range d.files[leftOverFileIdx : d.writeFileIdx+1] {
 		totalSize += int64(file.totalSize)
 	}
+	if totalSize > d.diskAcc.Used() {
+		totalSize = d.diskAcc.Used()
+	}
 	d.diskAcc.Shrink(ctx, totalSize)
 	return nil
 }
@@ -489,7 +491,7 @@ func (d *diskQueue) writeFooterAndFlush(ctx context.Context) error {
 	d.numBufferedBatches = 0
 	d.files[d.writeFileIdx].totalSize += written
 	if err := d.diskAcc.Grow(ctx, int64(written)); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		return err
 	}
 	// Append offset for the readers.
 	d.files[d.writeFileIdx].offsets = append(d.files[d.writeFileIdx].offsets, d.files[d.writeFileIdx].totalSize)
@@ -578,7 +580,11 @@ func (d *diskQueue) maybeInitDeserializer(ctx context.Context) (bool, error) {
 				if err := d.cfg.FS.DeleteFile(d.files[d.readFileIdx].name); err != nil {
 					return false, err
 				}
-				d.diskAcc.Shrink(ctx, int64(d.files[d.readFileIdx].totalSize))
+				fileSize := int64(d.files[d.readFileIdx].totalSize)
+				if fileSize > d.diskAcc.Used() {
+					fileSize = d.diskAcc.Used()
+				}
+				d.diskAcc.Shrink(ctx, fileSize)
 			}
 			d.readFile = nil
 			// Read next file.
