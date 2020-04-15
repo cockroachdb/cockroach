@@ -27,7 +27,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={<CapacityGraphTooltip tooltipSelection={tooltipSelection} />}
     >
       <Axis units={AxisUnits.Bytes} label="capacity">
-        <Metric name="cr.store.capacity" title="Capacity" />
+        <Metric name="cr.store.capacity" title="Max" />
         <Metric name="cr.store.capacity.available" title="Available" />
         <Metric name="cr.store.capacity.used" title="Used" />
       </Axis>
@@ -37,7 +37,7 @@ export default function (props: GraphDashboardProps) {
       title="Live Bytes"
       sources={storeSources}
       tooltip={
-        `Amount of data that can be read by applications and CockroachDB ${tooltipSelection}`
+        `Amount of data that can be read by applications and CockroachDB across all ${tooltipSelection} / on node <node>.`
       }
     >
       <Axis units={AxisUnits.Bytes} label="live bytes">
