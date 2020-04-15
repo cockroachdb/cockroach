@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
@@ -187,7 +186,7 @@ func TestClipEWKBByRect(t *testing.T) {
 			d.ScanArgs(t, "xmax", &xMax)
 			d.ScanArgs(t, "ymax", &yMax)
 			ewkb, err := geos.ClipEWKBByRect(
-				geopb.WKB(g.ewkb), float64(xMin), float64(yMin), float64(xMax), float64(yMax))
+				g.ewkb, float64(xMin), float64(yMin), float64(xMax), float64(yMax))
 			if err != nil {
 				return err.Error()
 			}

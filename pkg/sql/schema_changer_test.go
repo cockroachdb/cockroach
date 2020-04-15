@@ -5803,3 +5803,113 @@ ALTER TABLE t.public.test DROP COLUMN v;
 		{"1", "2"},
 	}, rows)
 }
+
+// TestRetriableErrorDuringRollback tests that a retriable error while rolling
+// back a schema change causes the rollback to retry and succeed.
+func TestRetriableErrorDuringRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer setTestJobsAdoptInterval()()
+	ctx := context.Background()
+
+	onFailOrCancelStarted := false
+	injectedError := false
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeOnFailOrCancel: func(_ int64) error {
+				onFailOrCancelStarted = true
+				return nil
+			},
+			RunBeforeBackfill: func() error {
+				// The first time through the backfiller in OnFailOrCancel, return a
+				// retriable error.
+				if !onFailOrCancelStarted || injectedError {
+					return nil
+				}
+				injectedError = true
+				// Return an artificial context canceled error.
+				return context.Canceled
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with addImmediateGCZoneConfig.
+	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+
+	_, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
+INSERT INTO t.test VALUES (1, 2), (2, 2);
+`)
+	require.NoError(t, err)
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// Add a zone config for the table.
+	_, err = addImmediateGCZoneConfig(sqlDB, tableDesc.ID)
+	require.NoError(t, err)
+
+	// Try to create a unique index which won't be valid and will need a rollback.
+	_, err = sqlDB.Exec(`
+CREATE UNIQUE INDEX i ON t.test(v);
+`)
+	require.Error(t, err)
+	require.Regexp(t, "violates unique constraint", err.Error())
+	// Verify that the index was cleaned up.
+	testutils.SucceedsSoon(t, func() error {
+		return checkTableKeyCountExact(ctx, kvDB, 2)
+	})
+}
+
+// TestPermanentErrorDuringRollback tests that a permanent error while rolling
+// back a schema change causes the job to fail, and that the appropriate error
+// is displayed in the jobs table.
+func TestPermanentErrorDuringRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer setTestJobsAdoptInterval()()
+	ctx := context.Background()
+
+	onFailOrCancelStarted := false
+	injectedError := false
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeOnFailOrCancel: func(_ int64) error {
+				onFailOrCancelStarted = true
+				return nil
+			},
+			RunBeforeBackfill: func() error {
+				// The first time through the backfiller in OnFailOrCancel, return a
+				// permanent error.
+				if !onFailOrCancelStarted || injectedError {
+					return nil
+				}
+				injectedError = true
+				// Any error not on the whitelist of retriable errors is considered permanent.
+				return errors.New("permanent error")
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
+INSERT INTO t.test VALUES (1, 2), (2, 2);
+`)
+	require.NoError(t, err)
+
+	// Try to create a unique index which won't be valid and will need a rollback.
+	_, err = sqlDB.Exec(`
+CREATE UNIQUE INDEX i ON t.test(v);
+`)
+	require.Error(t, err)
+	require.Regexp(t, "violates unique constraint", err.Error())
+
+	var jobErr string
+	row := sqlDB.QueryRow("SELECT error FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'")
+	require.NoError(t, row.Scan(&jobErr))
+	require.Regexp(t, "cannot be reverted, manual cleanup may be required", jobErr)
+}
