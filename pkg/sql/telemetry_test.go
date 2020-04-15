@@ -21,8 +21,10 @@ import (
 	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -61,6 +63,11 @@ import (
 //  - schema
 //
 //    Outputs reported schema information.
+//
+//  - sql-stats
+//
+//    Executes SQL statements and then outputs information about reported sql
+//    statement statistics.
 //
 func TestTelemetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -114,7 +121,7 @@ func TestTelemetry(t *testing.T) {
 				last := diagSrv.LastRequestData()
 				var buf bytes.Buffer
 				for i := range last.Schema {
-					formatTableDescriptor(&buf, &last.Schema[i])
+					buf.WriteString(formatTableDescriptor(&last.Schema[i]))
 				}
 				return buf.String()
 
@@ -162,6 +169,22 @@ func TestTelemetry(t *testing.T) {
 				_ = tw.Flush()
 				return buf.String()
 
+			case "sql-stats":
+				// Report diagnostics once to reset the stats.
+				s.SQLServer().(*sql.Server).ResetSQLStats(ctx)
+				s.ReportDiagnostics(ctx)
+
+				_, err := sqlConn.Exec(td.Input)
+				var buf bytes.Buffer
+				if err != nil {
+					fmt.Fprintf(&buf, "error: %v\n", err)
+				}
+				s.SQLServer().(*sql.Server).ResetSQLStats(ctx)
+				s.ReportDiagnostics(ctx)
+				last := diagSrv.LastRequestData()
+				buf.WriteString(formatSQLStats(last.SqlStats))
+				return buf.String()
+
 			default:
 				td.Fatalf(t, "unknown command %s", td.Cmd)
 				return ""
@@ -197,7 +220,7 @@ func (w featureWhitelist) Match(feature string) bool {
 	return false
 }
 
-func formatTableDescriptor(buf *bytes.Buffer, desc *sqlbase.TableDescriptor) {
+func formatTableDescriptor(desc *sqlbase.TableDescriptor) string {
 	tp := treeprinter.New()
 	n := tp.Childf("table:%s", desc.Name)
 	cols := n.Child("columns")
@@ -218,5 +241,56 @@ func formatTableDescriptor(buf *bytes.Buffer, desc *sqlbase.TableDescriptor) {
 			checks.Childf("%s: %s", chk.Name, chk.Expr)
 		}
 	}
-	buf.WriteString(tp.String())
+	return tp.String()
+}
+
+func formatSQLStats(stats []roachpb.CollectedStatementStatistics) string {
+	bucketByApp := make(map[string][]roachpb.CollectedStatementStatistics)
+	for i := range stats {
+		s := &stats[i]
+
+		if strings.HasPrefix(s.Key.App, sqlbase.InternalAppNamePrefix) {
+			// Let's ignore all internal queries for this test.
+			continue
+		}
+		bucketByApp[s.Key.App] = append(bucketByApp[s.Key.App], *s)
+	}
+	var apps []string
+	for app, s := range bucketByApp {
+		apps = append(apps, app)
+		sort.Slice(s, func(i, j int) bool {
+			return s[i].Key.Query < s[j].Key.Query
+		})
+		bucketByApp[app] = s
+	}
+	sort.Strings(apps)
+	tp := treeprinter.New()
+	n := tp.Child("sql-stats")
+
+	for _, app := range apps {
+		nodeApp := n.Child(app)
+		for _, s := range bucketByApp[app] {
+			var flags []string
+			if s.Key.Failed {
+				flags = append(flags, "failed")
+			}
+			if !s.Key.DistSQL {
+				flags = append(flags, "nodist")
+			}
+			var buf bytes.Buffer
+			if len(flags) > 0 {
+				buf.WriteString("[")
+				for i := range flags {
+					if i > 0 {
+						buf.WriteByte(',')
+					}
+					buf.WriteString(flags[i])
+				}
+				buf.WriteString("] ")
+			}
+			buf.WriteString(s.Key.Query)
+			nodeApp.Child(buf.String())
+		}
+	}
+	return tp.String()
 }
