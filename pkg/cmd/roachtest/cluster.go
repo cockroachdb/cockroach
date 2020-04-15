@@ -323,7 +323,24 @@ func (r *clusterRegistry) destroyAllClusters(ctx context.Context, l *logger) {
 	}
 }
 
+// execCmd is like execCmdEx, but doesn't return the command's output.
 func execCmd(ctx context.Context, l *logger, args ...string) error {
+	return execCmdEx(ctx, l, args...).err
+}
+
+type cmdRes struct {
+	err error
+	// stdout and stderr are the commands output. Note that this is truncated and
+	// only a tail is returned.
+	stdout, stderr string
+}
+
+// execCmdEx runs a command and returns its error and output.
+//
+// Note that the output is truncated; only a tail is returned.
+// Also note that if the command exits with an error code, its output is also
+// included in cmdRes.err.
+func execCmdEx(ctx context.Context, l *logger, args ...string) cmdRes {
 	// NB: It is important that this waitgroup Waits after cancel() below.
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -348,14 +365,14 @@ func execCmd(ctx context.Context, l *logger, args ...string) error {
 	{
 		rOut, wOut, err := os.Pipe()
 		if err != nil {
-			return err
+			return cmdRes{err: err}
 		}
 		defer rOut.Close()
 		defer wOut.Close()
 
 		rErr, wErr, err := os.Pipe()
 		if err != nil {
-			return err
+			return cmdRes{err: err}
 		}
 		defer rErr.Close()
 		defer wErr.Close()
@@ -392,7 +409,8 @@ func execCmd(ctx context.Context, l *logger, args ...string) error {
 		}()
 	}
 
-	if err := cmd.Run(); err != nil {
+	err := cmd.Run()
+	if err != nil {
 		// Context errors opaquely appear as "signal killed" when manifested.
 		// We surface this error explicitly.
 		if ctx.Err() != nil {
@@ -411,9 +429,12 @@ func execCmd(ctx context.Context, l *logger, args ...string) error {
 				stdout: debugStdoutBuffer.String(),
 			}
 		}
-		return err
 	}
-	return nil
+	return cmdRes{
+		err:    err,
+		stdout: debugStdoutBuffer.String(),
+		stderr: debugStderrBuffer.String(),
+	}
 }
 
 type withCommandDetails struct {
@@ -2088,18 +2109,17 @@ func (c *cluster) RunWithBuffer(
 // and communication from a test driver to nodes in a cluster should use
 // external IPs.
 func (c *cluster) pgURL(ctx context.Context, node nodeListOption, external bool) []string {
-	args := []string{`pgurl`}
+	args := []string{roachprod, "pgurl"}
 	if external {
 		args = append(args, `--external`)
 	}
-	args = append(args, c.makeNodes(node))
-	cmd := exec.CommandContext(ctx, roachprod, args...)
-	output, err := cmd.Output()
-	if err != nil {
-		fmt.Println(strings.Join(cmd.Args, ` `))
-		c.t.Fatal(err)
+	nodes := c.makeNodes(node)
+	args = append(args, nodes)
+	cmd := execCmdEx(ctx, c.l, args...)
+	if cmd.err != nil {
+		c.t.Fatal(errors.Wrapf(cmd.err, "failed to get pgurl for nodes: %s", nodes))
 	}
-	urls := strings.Split(strings.TrimSpace(string(output)), " ")
+	urls := strings.Split(strings.TrimSpace(cmd.stdout), " ")
 	for i := range urls {
 		urls[i] = strings.Trim(urls[i], "'")
 	}
