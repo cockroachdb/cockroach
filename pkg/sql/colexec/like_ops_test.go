@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -90,7 +91,7 @@ func TestLikeOperators(t *testing.T) {
 	} {
 		runTests(
 			t, []tuples{tc.tups}, tc.expected, orderedVerifier,
-			func(input []Operator) (Operator, error) {
+			func(input []colbase.Operator) (colbase.Operator, error) {
 				ctx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 				return GetLikeOperator(&ctx, input[0], 0, tc.pattern, tc.negate)
 			})
@@ -118,7 +119,7 @@ func BenchmarkLikeOps(b *testing.B) {
 	}
 
 	batch.SetLength(coldata.BatchSize())
-	source := NewRepeatableBatchSource(testAllocator, batch)
+	source := colbase.NewRepeatableBatchSource(testAllocator, batch)
 	source.Init()
 
 	base := selConstOpBase{
@@ -141,7 +142,7 @@ func BenchmarkLikeOps(b *testing.B) {
 
 	testCases := []struct {
 		name string
-		op   Operator
+		op   colbase.Operator
 	}{
 		{name: "selPrefixBytesBytesConstOp", op: prefixOp},
 		{name: "selSuffixBytesBytesConstOp", op: suffixOp},

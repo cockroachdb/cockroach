@@ -16,16 +16,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 )
 
 type caseOp struct {
-	allocator *Allocator
+	allocator *colbase.Allocator
 	buffer    *bufferOp
 
-	caseOps []Operator
-	elseOp  Operator
+	caseOps []colbase.Operator
+	elseOp  colbase.Operator
 
 	thenIdxs  []int
 	outputIdx int
@@ -58,14 +59,14 @@ func (c *caseOp) Child(nth int, verbose bool) execinfra.OpNode {
 	} else if nth == 1+len(c.caseOps) {
 		return c.elseOp
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid idx %d", nth))
+	vecerror.InternalError(fmt.Sprintf("invalid idx %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
 
 func (c *caseOp) InternalMemoryUsage() int {
 	// We internally use two selection vectors, origSel and prevSel.
-	return 2 * sizeOfBatchSizeSelVector
+	return 2 * colbase.SizeOfBatchSizeSelVector
 }
 
 // NewCaseOp returns an operator that runs a case statement.
@@ -79,14 +80,14 @@ func (c *caseOp) InternalMemoryUsage() int {
 // thenCol is the index into the output batch to write to.
 // typ is the type of the CASE expression.
 func NewCaseOp(
-	allocator *Allocator,
-	buffer Operator,
-	caseOps []Operator,
-	elseOp Operator,
+	allocator *colbase.Allocator,
+	buffer colbase.Operator,
+	caseOps []colbase.Operator,
+	elseOp colbase.Operator,
 	thenIdxs []int,
 	outputIdx int,
 	typ coltypes.T,
-) Operator {
+) colbase.Operator {
 	return &caseOp{
 		allocator: allocator,
 		buffer:    buffer.(*bufferOp),

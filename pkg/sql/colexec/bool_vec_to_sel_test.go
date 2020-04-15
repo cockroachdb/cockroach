@@ -13,6 +13,7 @@ package colexec
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -30,7 +31,7 @@ func TestBoolVecToSelOp(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []Operator) (Operator, error) {
+		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colbase.Operator) (colbase.Operator, error) {
 			return NewBoolVecToSelOp(input[0], 0), nil
 		})
 	}

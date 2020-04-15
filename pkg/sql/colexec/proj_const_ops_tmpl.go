@@ -28,11 +28,12 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -66,13 +67,13 @@ var _ coltypes.T
 // _ASSIGN is the template function for assigning the first input to the result
 // of computation an operation on the second and the third inputs.
 func _ASSIGN(_, _, _ interface{}) {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // _RET_UNSAFEGET is the template function that will be replaced by
 // "execgen.UNSAFEGET" which uses _RET_TYP.
 func _RET_UNSAFEGET(_, _ interface{}) interface{} {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // */}}
@@ -200,16 +201,16 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 // GetProjection_CONST_SIDEConstOperator returns the appropriate constant
 // projection operator for the given left and right column types and operation.
 func GetProjection_CONST_SIDEConstOperator(
-	allocator *Allocator,
+	allocator *colbase.Allocator,
 	leftColType *types.T,
 	rightColType *types.T,
 	outputPhysType coltypes.T,
 	op tree.Operator,
-	input Operator,
+	input colbase.Operator,
 	colIdx int,
 	constArg tree.Datum,
 	outputIdx int,
-) (Operator, error) {
+) (colbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputPhysType, outputIdx)
 	projConstOpBase := projConstOpBase{
 		OneInputNode: NewOneInputNode(input),

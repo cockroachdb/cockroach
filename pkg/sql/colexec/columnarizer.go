@@ -16,8 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -37,7 +38,7 @@ type Columnarizer struct {
 	//  which will simplify this model.
 	mu syncutil.Mutex
 
-	allocator  *Allocator
+	allocator  *colbase.Allocator
 	input      execinfra.RowSource
 	da         sqlbase.DatumAlloc
 	initStatus OperatorInitStatus
@@ -49,12 +50,12 @@ type Columnarizer struct {
 	typs            []coltypes.T
 }
 
-var _ Operator = &Columnarizer{}
+var _ colbase.Operator = &Columnarizer{}
 
 // NewColumnarizer returns a new Columnarizer.
 func NewColumnarizer(
 	ctx context.Context,
-	allocator *Allocator,
+	allocator *colbase.Allocator,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
@@ -126,7 +127,7 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 	for idx, ct := range columnTypes {
 		err := EncDatumRowsToColVec(c.allocator, c.buffered[:nRows], c.batch.ColVec(idx), idx, &ct, &c.da)
 		if err != nil {
-			execerror.VectorizedInternalPanic(err)
+			vecerror.InternalError(err)
 		}
 	}
 	c.batch.SetLength(nRows)
@@ -138,10 +139,10 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 // Columnarizers are not expected to be Run, so we prohibit calling this method
 // on them.
 func (c *Columnarizer) Run(context.Context) {
-	execerror.VectorizedInternalPanic("Columnarizer should not be Run")
+	vecerror.InternalError("Columnarizer should not be Run")
 }
 
-var _ Operator = &Columnarizer{}
+var _ colbase.Operator = &Columnarizer{}
 var _ execinfrapb.MetadataSource = &Columnarizer{}
 
 // DrainMeta is part of the MetadataSource interface.
@@ -173,9 +174,9 @@ func (c *Columnarizer) Child(nth int, verbose bool) execinfra.OpNode {
 		if n, ok := c.input.(execinfra.OpNode); ok {
 			return n
 		}
-		execerror.VectorizedInternalPanic("input to Columnarizer is not an execinfra.OpNode")
+		vecerror.InternalError("input to Columnarizer is not an execinfra.OpNode")
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	vecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

@@ -17,7 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
@@ -30,12 +31,12 @@ const (
 // columns given in orderingCols and returns the first K rows. The inputTypes
 // must correspond 1-1 with the columns in the input operator.
 func NewTopKSorter(
-	allocator *Allocator,
-	input Operator,
+	allocator *colbase.Allocator,
+	input colbase.Operator,
 	inputTypes []coltypes.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	k uint16,
-) Operator {
+) colbase.Operator {
 	return &topKSorter{
 		allocator:    allocator,
 		OneInputNode: NewOneInputNode(input),
@@ -62,7 +63,7 @@ const (
 type topKSorter struct {
 	OneInputNode
 
-	allocator    *Allocator
+	allocator    *colbase.Allocator
 	orderingCols []execinfrapb.Ordering_Column
 	inputTypes   []coltypes.T
 	k            uint16 // TODO(solon): support larger k values
@@ -116,7 +117,7 @@ func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
 	case topKSortEmitting:
 		return t.emit()
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid sort state %v", t.state))
+	vecerror.InternalError(fmt.Sprintf("invalid sort state %v", t.state))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -249,7 +250,7 @@ func (t *topKSorter) compareRow(vecIdx1, vecIdx2 int, rowIdx1, rowIdx2 int) int 
 			case execinfrapb.Ordering_Column_DESC:
 				return -res
 			default:
-				execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected direction value %d", d))
+				vecerror.InternalError(fmt.Sprintf("unexpected direction value %d", d))
 			}
 		}
 	}
@@ -262,7 +263,7 @@ func (t *topKSorter) updateComparators(vecIdx int, batch coldata.Batch) {
 	}
 }
 
-func (t *topKSorter) ExportBuffered(Operator) coldata.Batch {
+func (t *topKSorter) ExportBuffered(colbase.Operator) coldata.Batch {
 	topKLen := t.topK.Length()
 	// First, we check whether we have exported all tuples from the topK vector.
 	if t.exportedFromTopK < topKLen {

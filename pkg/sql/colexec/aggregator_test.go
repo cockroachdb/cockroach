@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -57,14 +58,14 @@ type aggregatorTestCase struct {
 // hash aggregators at the same time.
 type aggType struct {
 	new func(
-		allocator *Allocator,
-		input Operator,
+		allocator *colbase.Allocator,
+		input colbase.Operator,
 		colTypes []coltypes.T,
 		aggFns []execinfrapb.AggregatorSpec_Func,
 		groupCols []uint32,
 		aggCols [][]uint32,
 		isScalar bool,
-	) (Operator, error)
+	) (colbase.Operator, error)
 	name string
 }
 
@@ -73,14 +74,14 @@ var aggTypes = []aggType{
 		// This is a wrapper around NewHashAggregator so its signature is compatible
 		// with orderedAggregator.
 		new: func(
-			allocator *Allocator,
-			input Operator,
+			allocator *colbase.Allocator,
+			input colbase.Operator,
 			colTypes []coltypes.T,
 			aggFns []execinfrapb.AggregatorSpec_Func,
 			groupCols []uint32,
 			aggCols [][]uint32,
 			_ bool,
-		) (Operator, error) {
+		) (colbase.Operator, error) {
 			return NewHashAggregator(
 				allocator, input, colTypes, aggFns, groupCols, aggCols)
 		},
@@ -328,7 +329,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 					}
 					t.Run(agg.name, func(t *testing.T) {
 						runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier,
-							func(input []Operator) (Operator, error) {
+							func(input []colbase.Operator) (colbase.Operator, error) {
 								return agg.new(
 									testAllocator,
 									input[0],
@@ -478,7 +479,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 					t.Fatal(err)
 				}
 				runTestsWithTyps(t, []tuples{tc.input}, [][]coltypes.T{tc.colTypes}, tc.expected, unorderedVerifier,
-					func(input []Operator) (Operator, error) {
+					func(input []colbase.Operator) (colbase.Operator, error) {
 						return agg.new(testAllocator, input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
 					})
 			})
@@ -570,7 +571,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 					[]tuples{tc.input},
 					tc.expected,
 					verifier,
-					func(input []Operator) (Operator, error) {
+					func(input []colbase.Operator) (colbase.Operator, error) {
 						return agg.new(testAllocator, input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
 					})
 			})
@@ -917,7 +918,7 @@ func TestHashAggregator(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Run(fmt.Sprintf("numOfHashBuckets=%d", numOfHashBuckets), func(t *testing.T) {
-				runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []Operator) (Operator, error) {
+				runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []colbase.Operator) (colbase.Operator, error) {
 					a, err := NewHashAggregator(testAllocator, sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
 					a.(*hashAggregator).testingKnobs.numOfHashBuckets = uint64(numOfHashBuckets)
 					return a, err

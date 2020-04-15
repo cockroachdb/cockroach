@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
@@ -36,13 +37,13 @@ import (
 //   'true' indicates the start of a new partition.
 // NOTE: the input *must* already be ordered on ordCols.
 func NewWindowPeerGrouper(
-	allocator *Allocator,
-	input Operator,
+	allocator *colbase.Allocator,
+	input colbase.Operator,
 	inputTyps []coltypes.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	partitionColIdx int,
 	outputColIdx int,
-) (op Operator, err error) {
+) (op colbase.Operator, err error) {
 	allPeers := len(orderingCols) == 0
 	var distinctCol []bool
 	if !allPeers {
@@ -88,7 +89,7 @@ func NewWindowPeerGrouper(
 type windowPeerGrouperInitFields struct {
 	OneInputNode
 
-	allocator       *Allocator
+	allocator       *colbase.Allocator
 	partitionColIdx int
 	// distinctCol is the output column of the chain of ordered distinct
 	// operators in which 'true' will indicate that a new peer group begins with
@@ -106,7 +107,7 @@ type _PEER_GROUPER_STRINGOp struct {
 	// {{end}}
 }
 
-var _ Operator = &_PEER_GROUPER_STRINGOp{}
+var _ colbase.Operator = &_PEER_GROUPER_STRINGOp{}
 
 func (p *_PEER_GROUPER_STRINGOp) Init() {
 	p.input.Init()

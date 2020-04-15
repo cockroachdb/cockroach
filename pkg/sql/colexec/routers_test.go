@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -141,7 +142,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/memoryLimit=%s", tc.name, humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
 				// Clear the testAllocator for use.
 				testAllocator.ReleaseMemory(testAllocator.Used())
-				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, []coltypes.T{coltypes.Int64}, unblockEventsChan, mtc.bytes, queueCfg, NewTestingSemaphore(2), tc.blockedThreshold, tc.outputBatchSize, testDiskAcc)
+				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, []coltypes.T{coltypes.Int64}, unblockEventsChan, mtc.bytes, queueCfg, colbase.NewTestingSemaphore(2), tc.blockedThreshold, tc.outputBatchSize, testDiskAcc)
 				in := newOpTestInput(tc.inputBatchSize, data, nil /* typs */)
 				out := newOpTestOutput(o, data[:len(tc.selection)])
 				in.Init()
@@ -179,14 +180,14 @@ func TestRouterOutputNext(t *testing.T) {
 	data, fullSelection := getDataAndFullSelection()
 
 	testCases := []struct {
-		unblockEvent func(in Operator, o *routerOutputOp)
+		unblockEvent func(in colbase.Operator, o *routerOutputOp)
 		expected     tuples
 		name         string
 	}{
 		{
 			// ReaderWaitsForData verifies that a reader blocks in Next(ctx) until there
 			// is data available.
-			unblockEvent: func(in Operator, o *routerOutputOp) {
+			unblockEvent: func(in colbase.Operator, o *routerOutputOp) {
 				for {
 					b := in.Next(ctx)
 					o.addBatch(ctx, b, fullSelection)
@@ -201,7 +202,7 @@ func TestRouterOutputNext(t *testing.T) {
 		{
 			// ReaderWaitsForZeroBatch verifies that a reader blocking on Next will
 			// also get unblocked with no data other than the zero batch.
-			unblockEvent: func(_ Operator, o *routerOutputOp) {
+			unblockEvent: func(_ colbase.Operator, o *routerOutputOp) {
 				o.addBatch(ctx, coldata.ZeroBatch, nil /* selection */)
 			},
 			expected: tuples{},
@@ -210,7 +211,7 @@ func TestRouterOutputNext(t *testing.T) {
 		{
 			// CancelUnblocksReader verifies that calling cancel on an output unblocks
 			// a reader.
-			unblockEvent: func(_ Operator, o *routerOutputOp) {
+			unblockEvent: func(_ colbase.Operator, o *routerOutputOp) {
 				o.cancel(ctx)
 			},
 			expected: tuples{},
@@ -234,7 +235,7 @@ func TestRouterOutputNext(t *testing.T) {
 				if queueCfg.FS == nil {
 					t.Fatal("FS was nil")
 				}
-				o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan, mtc.bytes, queueCfg, NewTestingSemaphore(2), testDiskAcc)
+				o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan, mtc.bytes, queueCfg, colbase.NewTestingSemaphore(2), testDiskAcc)
 				in := newOpTestInput(coldata.BatchSize(), data, nil /* typs */)
 				in.Init()
 				wg.Add(1)
@@ -261,7 +262,7 @@ func TestRouterOutputNext(t *testing.T) {
 				tc.unblockEvent(in, o)
 
 				// Should have data available, pushed by our reader goroutine.
-				batches := NewBatchBuffer()
+				batches := colbase.NewBatchBuffer()
 				out := newOpTestOutput(batches, tc.expected)
 				for {
 					b := <-batchChan
@@ -284,7 +285,7 @@ func TestRouterOutputNext(t *testing.T) {
 		}
 
 		t.Run(fmt.Sprintf("NextAfterZeroBatchDoesntBlock/memoryLimit=%s", humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
-			o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan, mtc.bytes, queueCfg, NewTestingSemaphore(2), testDiskAcc)
+			o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan, mtc.bytes, queueCfg, colbase.NewTestingSemaphore(2), testDiskAcc)
 			o.addBatch(ctx, coldata.ZeroBatch, fullSelection)
 			o.Next(ctx)
 			o.Next(ctx)
@@ -323,7 +324,7 @@ func TestRouterOutputNext(t *testing.T) {
 			}
 
 			ch := make(chan struct{}, 2)
-			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, []coltypes.T{coltypes.Int64}, ch, mtc.bytes, queueCfg, NewTestingSemaphore(2), blockThreshold, coldata.BatchSize(), testDiskAcc)
+			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, []coltypes.T{coltypes.Int64}, ch, mtc.bytes, queueCfg, colbase.NewTestingSemaphore(2), blockThreshold, coldata.BatchSize(), testDiskAcc)
 			in := newOpTestInput(smallBatchSize, data, nil /* typs */)
 			out := newOpTestOutput(o, expected)
 			in.Init()
@@ -394,10 +395,10 @@ func TestRouterOutputRandom(t *testing.T) {
 	)
 	for _, mtc := range memoryTestCases {
 		t.Run(fmt.Sprintf("%s/memoryLimit=%s", testName, humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
-			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []Operator) {
+			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []colbase.Operator) {
 				var wg sync.WaitGroup
 				unblockedEventsChans := make(chan struct{}, 2)
-				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, typs, unblockedEventsChans, mtc.bytes, queueCfg, NewTestingSemaphore(2), blockedThreshold, outputSize, testDiskAcc)
+				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, typs, unblockedEventsChans, mtc.bytes, queueCfg, colbase.NewTestingSemaphore(2), blockedThreshold, outputSize, testDiskAcc)
 				inputs[0].Init()
 
 				expected := make(tuples, 0, len(data))
@@ -416,7 +417,7 @@ func TestRouterOutputRandom(t *testing.T) {
 						b := inputs[0].Next(ctx)
 						selection := b.Selection()
 						if selection == nil {
-							selection = randomSel(rng, b.Length(), rng.Float64())
+							selection = colbase.RandomSel(rng, b.Length(), rng.Float64())
 						}
 
 						selection = selection[:b.Length()]
@@ -467,7 +468,7 @@ func TestRouterOutputRandom(t *testing.T) {
 					}
 				}()
 
-				actual := NewBatchBuffer()
+				actual := colbase.NewBatchBuffer()
 
 				// Consumer.
 				wg.Add(1)
@@ -476,11 +477,11 @@ func TestRouterOutputRandom(t *testing.T) {
 					// a separate allocator to testAllocator since this is a separate
 					// goroutine and allocators may not be used concurrently.
 					acc := testMemMonitor.MakeBoundAccount()
-					allocator := NewAllocator(ctx, &acc)
+					allocator := colbase.NewAllocator(ctx, &acc)
 					defer acc.Close(ctx)
 					for {
 						b := o.Next(ctx)
-						actual.Add(CopyBatch(allocator, b))
+						actual.Add(colbase.CopyBatch(allocator, b))
 						if b.Length() == 0 {
 							wg.Done()
 							return
@@ -507,7 +508,7 @@ func TestRouterOutputRandom(t *testing.T) {
 }
 
 type callbackRouterOutput struct {
-	ZeroInputNode
+	colbase.ZeroInputNode
 	addBatchCb func(coldata.Batch, []int) bool
 	cancelCb   func()
 }
@@ -621,7 +622,7 @@ func TestHashRouterCancellation(t *testing.T) {
 	// Never-ending input of 0s.
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
 	batch.SetLength(coldata.BatchSize())
-	in := NewRepeatableBatchSource(testAllocator, batch)
+	in := colbase.NewRepeatableBatchSource(testAllocator, batch)
 
 	unbufferedCh := make(chan struct{})
 	r := newHashRouterWithOutputs(in, []coltypes.T{coltypes.Int64}, []uint32{0}, unbufferedCh, outputs)
@@ -709,7 +710,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 
-	sel := randomSel(rng, coldata.BatchSize(), rng.Float64())
+	sel := colbase.RandomSel(rng, coldata.BatchSize(), rng.Float64())
 
 	data, _ := getDataAndFullSelection()
 	typs := []coltypes.T{coltypes.Int64}
@@ -729,8 +730,8 @@ func TestHashRouterOneOutput(t *testing.T) {
 			diskAcc := testDiskMonitor.MakeBoundAccount()
 			defer diskAcc.Close(ctx)
 			r, routerOutputs := NewHashRouter(
-				[]*Allocator{testAllocator}, newOpFixedSelTestInput(sel, len(sel), data),
-				typs, []uint32{0}, mtc.bytes, queueCfg, NewTestingSemaphore(2),
+				[]*colbase.Allocator{testAllocator}, newOpFixedSelTestInput(sel, len(sel), data),
+				typs, []uint32{0}, mtc.bytes, queueCfg, colbase.NewTestingSemaphore(2),
 				[]*mon.BoundAccount{&diskAcc},
 			)
 
@@ -827,10 +828,10 @@ func TestHashRouterRandom(t *testing.T) {
 	var expectedDistribution []int
 	for _, mtc := range memoryTestCases {
 		t.Run(fmt.Sprintf(testName+"/memoryLimit=%s", humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
-			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []Operator) {
+			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []colbase.Operator) {
 				unblockEventsChan := make(chan struct{}, 2*numOutputs)
 				outputs := make([]routerOutput, numOutputs)
-				outputsAsOps := make([]Operator, numOutputs)
+				outputsAsOps := make([]colbase.Operator, numOutputs)
 				memoryLimitPerOutput := mtc.bytes / int64(len(outputs))
 				for i := range outputs {
 					// Create separate monitoring infrastructure as well as
@@ -840,8 +841,8 @@ func TestHashRouterRandom(t *testing.T) {
 					defer acc.Close(ctx)
 					diskAcc := testDiskMonitor.MakeBoundAccount()
 					defer diskAcc.Close(ctx)
-					allocator := NewAllocator(ctx, &acc)
-					op := newRouterOutputOpWithBlockedThresholdAndBatchSize(allocator, typs, unblockEventsChan, memoryLimitPerOutput, queueCfg, NewTestingSemaphore(len(outputs)*2), blockedThreshold, outputSize, &diskAcc)
+					allocator := colbase.NewAllocator(ctx, &acc)
+					op := newRouterOutputOpWithBlockedThresholdAndBatchSize(allocator, typs, unblockEventsChan, memoryLimitPerOutput, queueCfg, colbase.NewTestingSemaphore(len(outputs)*2), blockedThreshold, outputSize, &diskAcc)
 					outputs[i] = op
 					outputsAsOps[i] = op
 				}
@@ -929,7 +930,7 @@ func BenchmarkHashRouter(b *testing.B) {
 	// numbers.
 	batch := testAllocator.NewMemBatch(types)
 	batch.SetLength(coldata.BatchSize())
-	input := NewRepeatableBatchSource(testAllocator, batch)
+	input := colbase.NewRepeatableBatchSource(testAllocator, batch)
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, true /* inMem */)
 	defer cleanup()
@@ -938,17 +939,17 @@ func BenchmarkHashRouter(b *testing.B) {
 	for _, numOutputs := range []int{2, 4, 8, 16} {
 		for _, numInputBatches := range []int{2, 4, 8, 16} {
 			b.Run(fmt.Sprintf("numOutputs=%d/numInputBatches=%d", numOutputs, numInputBatches), func(b *testing.B) {
-				allocators := make([]*Allocator, numOutputs)
+				allocators := make([]*colbase.Allocator, numOutputs)
 				diskAccounts := make([]*mon.BoundAccount, numOutputs)
 				for i := range allocators {
 					acc := testMemMonitor.MakeBoundAccount()
-					allocators[i] = NewAllocator(ctx, &acc)
+					allocators[i] = colbase.NewAllocator(ctx, &acc)
 					defer acc.Close(ctx)
 					diskAcc := testDiskMonitor.MakeBoundAccount()
 					diskAccounts[i] = &diskAcc
 					defer diskAcc.Close(ctx)
 				}
-				r, outputs := NewHashRouter(allocators, input, types, []uint32{0}, 64<<20, queueCfg, &TestingSemaphore{}, diskAccounts)
+				r, outputs := NewHashRouter(allocators, input, types, []uint32{0}, 64<<20, queueCfg, &colbase.TestingSemaphore{}, diskAccounts)
 				b.SetBytes(8 * int64(coldata.BatchSize()) * int64(numInputBatches))
 				// We expect distribution to not change. This is a sanity check that
 				// we're resetting properly.

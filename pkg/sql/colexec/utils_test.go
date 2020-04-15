@@ -24,8 +24,9 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -124,7 +125,7 @@ func (t tuple) less(other tuple) bool {
 		case "string":
 			return lhsVal.String() < rhsVal.String()
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("Unhandled comparison type: %s", typ))
+			vecerror.InternalError(fmt.Sprintf("Unhandled comparison type: %s", typ))
 		}
 	}
 	return false
@@ -205,7 +206,7 @@ func maybeHasNulls(b coldata.Batch) bool {
 	return false
 }
 
-type testRunner func(*testing.T, []tuples, [][]coltypes.T, tuples, interface{}, func([]Operator) (Operator, error))
+type testRunner func(*testing.T, []tuples, [][]coltypes.T, tuples, interface{}, func([]colbase.Operator) (colbase.Operator, error))
 
 // variableOutputBatchSizeInitializer is implemented by operators that can be
 // initialized with variable output size batches. This allows runTests to
@@ -225,7 +226,7 @@ func runTests(
 	tups []tuples,
 	expected tuples,
 	verifier interface{},
-	constructor func(inputs []Operator) (Operator, error),
+	constructor func(inputs []colbase.Operator) (colbase.Operator, error),
 ) {
 	runTestsWithTyps(t, tups, nil /* typs */, expected, verifier, constructor)
 }
@@ -241,7 +242,7 @@ func runTestsWithTyps(
 	typs [][]coltypes.T,
 	expected tuples,
 	verifier interface{},
-	constructor func(inputs []Operator) (Operator, error),
+	constructor func(inputs []colbase.Operator) (colbase.Operator, error),
 ) {
 	runTestsWithoutAllNullsInjection(t, tups, typs, expected, verifier, constructor)
 
@@ -261,8 +262,8 @@ func runTestsWithTyps(
 				}
 			}
 		}
-		opConstructor := func(injectAllNulls bool) Operator {
-			inputSources := make([]Operator, len(tups))
+		opConstructor := func(injectAllNulls bool) colbase.Operator {
+			inputSources := make([]colbase.Operator, len(tups))
 			var inputTypes []coltypes.T
 			for i, tup := range tups {
 				if typs != nil {
@@ -334,7 +335,7 @@ func runTestsWithoutAllNullsInjection(
 	typs [][]coltypes.T,
 	expected tuples,
 	verifier interface{},
-	constructor func(inputs []Operator) (Operator, error),
+	constructor func(inputs []colbase.Operator) (colbase.Operator, error),
 ) {
 	skipVerifySelAndNullsResets := true
 	var verifyFn verifierFn
@@ -350,12 +351,12 @@ func runTestsWithoutAllNullsInjection(
 		case unorderedVerifier:
 			verifyFn = (*opTestOutput).VerifyAnyOrder
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected verifierType %d", v))
+			vecerror.InternalError(fmt.Sprintf("unexpected verifierType %d", v))
 		}
 	case verifierFn:
 		verifyFn = v
 	}
-	runTestsWithFn(t, tups, typs, func(t *testing.T, inputs []Operator) {
+	runTestsWithFn(t, tups, typs, func(t *testing.T, inputs []colbase.Operator) {
 		op, err := constructor(inputs)
 		if err != nil {
 			t.Fatal(err)
@@ -383,7 +384,7 @@ func runTestsWithoutAllNullsInjection(
 				inputTypes                                   []coltypes.T
 			)
 			for round := 0; round < 2; round++ {
-				inputSources := make([]Operator, len(tups))
+				inputSources := make([]colbase.Operator, len(tups))
 				for i, tup := range tups {
 					if typs != nil {
 						inputTypes = typs[i]
@@ -453,7 +454,7 @@ func runTestsWithoutAllNullsInjection(
 	t.Run("randomNullsInjection", func(t *testing.T) {
 		// This test randomly injects nulls in the input tuples and ensures that
 		// the operator doesn't panic.
-		inputSources := make([]Operator, len(tups))
+		inputSources := make([]colbase.Operator, len(tups))
 		var inputTypes []coltypes.T
 		for i, tup := range tups {
 			if typs != nil {
@@ -489,7 +490,10 @@ func runTestsWithoutAllNullsInjection(
 // - test is a function that takes a list of input Operators and performs
 //   testing with t.
 func runTestsWithFn(
-	t *testing.T, tups []tuples, typs [][]coltypes.T, test func(t *testing.T, inputs []Operator),
+	t *testing.T,
+	tups []tuples,
+	typs [][]coltypes.T,
+	test func(t *testing.T, inputs []colbase.Operator),
 ) {
 	// Run tests over batchSizes of 1, (sometimes) a batch size that is small but
 	// greater than 1, and a full coldata.BatchSize().
@@ -504,7 +508,7 @@ func runTestsWithFn(
 	for _, batchSize := range batchSizes {
 		for _, useSel := range []bool{false, true} {
 			t.Run(fmt.Sprintf("batchSize=%d/sel=%t", batchSize, useSel), func(t *testing.T) {
-				inputSources := make([]Operator, len(tups))
+				inputSources := make([]colbase.Operator, len(tups))
 				var inputTypes []coltypes.T
 				if useSel {
 					for i, tup := range tups {
@@ -533,11 +537,11 @@ func runTestsWithFn(
 // function that takes a list of input Operators, which will give back the
 // tuples provided in batches.
 func runTestsWithFixedSel(
-	t *testing.T, tups []tuples, sel []int, test func(t *testing.T, inputs []Operator),
+	t *testing.T, tups []tuples, sel []int, test func(t *testing.T, inputs []colbase.Operator),
 ) {
 	for _, batchSize := range []int{1, 2, 3, 16, 1024} {
 		t.Run(fmt.Sprintf("batchSize=%d/fixedSel", batchSize), func(t *testing.T) {
-			inputSources := make([]Operator, len(tups))
+			inputSources := make([]colbase.Operator, len(tups))
 			for i, tup := range tups {
 				inputSources[i] = newOpFixedSelTestInput(sel, batchSize, tup)
 			}
@@ -568,7 +572,7 @@ func setColVal(vec coldata.Vec, idx int, val interface{}) {
 			floatVal := val.(float64)
 			decimalVal, _, err := apd.NewFromString(fmt.Sprintf("%f", floatVal))
 			if err != nil {
-				execerror.VectorizedInternalPanic(
+				vecerror.InternalError(
 					fmt.Sprintf("unable to set decimal %f: %v", floatVal, err))
 			}
 			// .Set is used here instead of assignment to ensure the pointer address
@@ -596,7 +600,7 @@ func setColVal(vec coldata.Vec, idx int, val interface{}) {
 //     t.Fatal(err)
 // }
 type opTestInput struct {
-	ZeroInputNode
+	colbase.ZeroInputNode
 
 	typs []coltypes.T
 
@@ -616,7 +620,7 @@ type opTestInput struct {
 	injectRandomNulls bool
 }
 
-var _ Operator = &opTestInput{}
+var _ colbase.Operator = &opTestInput{}
 
 // newOpTestInput returns a new opTestInput with the given input tuples and the
 // given type schema. If typs is nil, the input tuples are translated into
@@ -646,7 +650,7 @@ func newOpTestSelInput(
 func (s *opTestInput) Init() {
 	if s.typs == nil {
 		if len(s.tuples) == 0 {
-			execerror.VectorizedInternalPanic("empty tuple source with no specified types")
+			vecerror.InternalError("empty tuple source with no specified types")
 		}
 
 		// The type schema was not provided, so we need to determine it based on
@@ -687,7 +691,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 	tupleLen := len(tups[0])
 	for i := range tups {
 		if len(tups[i]) != tupleLen {
-			execerror.VectorizedInternalPanic(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
+			vecerror.InternalError(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
 				tups[i], tupleLen))
 		}
 	}
@@ -758,7 +762,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 						d := apd.Decimal{}
 						_, err := d.SetFloat64(rng.Float64())
 						if err != nil {
-							execerror.VectorizedInternalPanic(fmt.Sprintf("%v", err))
+							vecerror.InternalError(fmt.Sprintf("%v", err))
 						}
 						col.Index(outputIdx).Set(reflect.ValueOf(d))
 					} else if typ == coltypes.Bytes {
@@ -768,7 +772,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 					} else if val, ok := quick.Value(reflect.TypeOf(vec.Col()).Elem(), rng); ok {
 						setColVal(vec, outputIdx, val.Interface())
 					} else {
-						execerror.VectorizedInternalPanic(fmt.Sprintf("could not generate a random value of type %T\n.", vec.Type()))
+						vecerror.InternalError(fmt.Sprintf("could not generate a random value of type %T\n.", vec.Type()))
 					}
 				}
 			} else {
@@ -782,7 +786,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 }
 
 type opFixedSelTestInput struct {
-	ZeroInputNode
+	colbase.ZeroInputNode
 
 	typs []coltypes.T
 
@@ -796,7 +800,7 @@ type opFixedSelTestInput struct {
 	idx int
 }
 
-var _ Operator = &opFixedSelTestInput{}
+var _ colbase.Operator = &opFixedSelTestInput{}
 
 // newOpFixedSelTestInput returns a new opFixedSelTestInput with the given
 // input tuples and selection vector. The input tuples are translated into
@@ -812,7 +816,7 @@ func newOpFixedSelTestInput(sel []int, batchSize int, tuples tuples) *opFixedSel
 
 func (s *opFixedSelTestInput) Init() {
 	if len(s.tuples) == 0 {
-		execerror.VectorizedInternalPanic("empty tuple source")
+		vecerror.InternalError("empty tuple source")
 	}
 
 	typs := make([]coltypes.T, len(s.tuples[0]))
@@ -833,7 +837,7 @@ func (s *opFixedSelTestInput) Init() {
 	tupleLen := len(s.tuples[0])
 	for _, i := range s.sel {
 		if len(s.tuples[i]) != tupleLen {
-			execerror.VectorizedInternalPanic(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
+			vecerror.InternalError(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
 				s.tuples[i], tupleLen))
 		}
 	}
@@ -915,7 +919,7 @@ type opTestOutput struct {
 
 // newOpTestOutput returns a new opTestOutput, initialized with the given input
 // to verify that the output is exactly equal to the expected tuples.
-func newOpTestOutput(input Operator, expected tuples) *opTestOutput {
+func newOpTestOutput(input colbase.Operator, expected tuples) *opTestOutput {
 	input.Init()
 
 	return &opTestOutput{
@@ -1098,20 +1102,20 @@ func assertTuplesOrderedEqual(expected tuples, actual tuples) error {
 // finiteBatchSource is an Operator that returns the same batch a specified
 // number of times.
 type finiteBatchSource struct {
-	ZeroInputNode
+	colbase.ZeroInputNode
 
-	repeatableBatch *RepeatableBatchSource
+	repeatableBatch *colbase.RepeatableBatchSource
 
 	usableCount int
 }
 
-var _ Operator = &finiteBatchSource{}
+var _ colbase.Operator = &finiteBatchSource{}
 
 // newFiniteBatchSource returns a new Operator initialized to return its input
 // batch a specified number of times.
 func newFiniteBatchSource(batch coldata.Batch, usableCount int) *finiteBatchSource {
 	return &finiteBatchSource{
-		repeatableBatch: NewRepeatableBatchSource(testAllocator, batch),
+		repeatableBatch: colbase.NewRepeatableBatchSource(testAllocator, batch),
 		usableCount:     usableCount,
 	}
 }
@@ -1137,19 +1141,19 @@ func (f *finiteBatchSource) reset(usableCount int) {
 // (except for the first) the batch is returned to emulate source that is
 // already ordered on matchLen columns.
 type finiteChunksSource struct {
-	ZeroInputNode
-	repeatableBatch *RepeatableBatchSource
+	colbase.ZeroInputNode
+	repeatableBatch *colbase.RepeatableBatchSource
 
 	usableCount int
 	matchLen    int
 	adjustment  []int64
 }
 
-var _ Operator = &finiteChunksSource{}
+var _ colbase.Operator = &finiteChunksSource{}
 
 func newFiniteChunksSource(batch coldata.Batch, usableCount int, matchLen int) *finiteChunksSource {
 	return &finiteChunksSource{
-		repeatableBatch: NewRepeatableBatchSource(testAllocator, batch),
+		repeatableBatch: colbase.NewRepeatableBatchSource(testAllocator, batch),
 		usableCount:     usableCount,
 		matchLen:        matchLen,
 	}
@@ -1203,7 +1207,7 @@ func TestOpTestInputOutput(t *testing.T) {
 			{1, 5, 0},
 		},
 	}
-	runTestsWithFn(t, inputs, nil /* typs */, func(t *testing.T, sources []Operator) {
+	runTestsWithFn(t, inputs, nil /* typs */, func(t *testing.T, sources []colbase.Operator) {
 		out := newOpTestOutput(sources[0], inputs[0])
 
 		if err := out.Verify(); err != nil {
@@ -1220,7 +1224,7 @@ func TestRepeatableBatchSource(t *testing.T) {
 		batchLen = coldata.BatchSize()
 	}
 	batch.SetLength(batchLen)
-	input := NewRepeatableBatchSource(testAllocator, batch)
+	input := colbase.NewRepeatableBatchSource(testAllocator, batch)
 
 	b := input.Next(context.Background())
 	b.SetLength(0)
@@ -1243,12 +1247,12 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	if batchSize > coldata.BatchSize() {
 		batchSize = coldata.BatchSize()
 	}
-	sel := randomSel(rng, batchSize, 0 /* probOfOmitting */)
+	sel := colbase.RandomSel(rng, batchSize, 0 /* probOfOmitting */)
 	batchLen := len(sel)
 	batch.SetLength(batchLen)
 	batch.SetSelection(true)
 	copy(batch.Selection(), sel)
-	input := NewRepeatableBatchSource(testAllocator, batch)
+	input := colbase.NewRepeatableBatchSource(testAllocator, batch)
 	b := input.Next(context.Background())
 
 	b.SetLength(0)
@@ -1267,7 +1271,7 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 		}
 	}
 
-	newSel := randomSel(rng, 10 /* batchSize */, 0.2 /* probOfOmitting */)
+	newSel := colbase.RandomSel(rng, 10 /* batchSize */, 0.2 /* probOfOmitting */)
 	newBatchLen := len(sel)
 	b.SetLength(newBatchLen)
 	b.SetSelection(true)
@@ -1290,7 +1294,7 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 // chunkingBatchSource is a batch source that takes unlimited-size columns and
 // chunks them into BatchSize()-sized chunks when Nexted.
 type chunkingBatchSource struct {
-	ZeroInputNode
+	colbase.ZeroInputNode
 	typs []coltypes.T
 	cols []coldata.Vec
 	len  int
@@ -1299,7 +1303,7 @@ type chunkingBatchSource struct {
 	batch  coldata.Batch
 }
 
-var _ Operator = &chunkingBatchSource{}
+var _ colbase.Operator = &chunkingBatchSource{}
 
 // newChunkingBatchSource returns a new chunkingBatchSource with the given
 // column types, columns, and length.
@@ -1416,7 +1420,7 @@ func (tc *joinTestCase) init() {
 		case coltypes.Interval:
 			return types.Interval
 		}
-		execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected coltype %s", t.String()))
+		vecerror.InternalError(fmt.Sprintf("unexpected coltype %s", t.String()))
 		return nil
 	}
 	toLogTypes := func(typs []coltypes.T) []types.T {
@@ -1431,7 +1435,7 @@ func (tc *joinTestCase) init() {
 	if tc.leftPhysTypes == nil {
 		tc.leftPhysTypes, err = typeconv.FromColumnTypes(tc.leftLogTypes)
 		if err != nil {
-			execerror.VectorizedInternalPanic(err)
+			vecerror.InternalError(err)
 		}
 	}
 	if tc.leftLogTypes == nil {
@@ -1440,7 +1444,7 @@ func (tc *joinTestCase) init() {
 	if tc.rightPhysTypes == nil {
 		tc.rightPhysTypes, err = typeconv.FromColumnTypes(tc.rightLogTypes)
 		if err != nil {
-			execerror.VectorizedInternalPanic(err)
+			vecerror.InternalError(err)
 		}
 	}
 	if tc.rightLogTypes == nil {
@@ -1545,11 +1549,11 @@ func (p *mockTypeContext) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 func createTestProjectingOperator(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input Operator,
+	input colbase.Operator,
 	inputTypes []types.T,
 	projectingExpr string,
 	canFallbackToRowexec bool,
-) (Operator, error) {
+) (colbase.Operator, error) {
 	expr, err := parser.ParseExpr(projectingExpr)
 	if err != nil {
 		return nil, err
@@ -1575,7 +1579,7 @@ func createTestProjectingOperator(
 	}
 	args := NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []Operator{input},
+		Inputs:              []colbase.Operator{input},
 		StreamingMemAccount: testMemAcc,
 	}
 	if canFallbackToRowexec {
