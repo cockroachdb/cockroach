@@ -33,6 +33,9 @@ func (d *delegator) delegateShowRangeForRow(n *tree.ShowRangeForRow) (tree.State
 	if err := d.catalog.CheckPrivilege(d.ctx, idx.Table(), privilege.SELECT); err != nil {
 		return nil, err
 	}
+	if idx.Table().IsVirtualTable() {
+		return nil, errors.New("SHOW RANGE FOR ROW may not be called on a virtual table")
+	}
 	span := idx.Span()
 	table := idx.Table()
 
