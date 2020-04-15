@@ -62,6 +62,7 @@ const (
 	Version20_1
 	VersionStart20_2
 	VersionGeospatialType
+	VersionRangefeedLeases
 
 	// Add new versions here (step one of two).
 )
@@ -470,9 +471,20 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 1},
 	},
 	{
+
 		// VersionGeospatialType enables the use of Geospatial features.
 		Key:     VersionGeospatialType,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 2},
+	},
+	{
+
+		// VersionRangefeedLeases is the enablement of leases uses rangefeeds.
+		// All nodes with this versions will have rangefeeds enabled on all system
+		// ranges. Once this version is finalized, gossip is not needed in the
+		// schema lease subsystem. Nodes which start with this version finalized
+		// will not pass gossip to the SQL layer.
+		Key:     VersionRangefeedLeases,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 3},
 	},
 
 	// Add new versions here (step two of two).
