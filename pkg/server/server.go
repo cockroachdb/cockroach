@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -58,9 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/gcjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -1350,7 +1346,9 @@ func (s *Server) Start(ctx context.Context) error {
 	// Record a walltime that is lower than the lowest hlc timestamp this current
 	// instance of the node can use. We do not use startTime because it is lower
 	// than the timestamp used to create the bootstrap schema.
-	timeThreshold := s.clock.Now().WallTime
+	//
+	// TODO(tbg): clarify the contract here and move closer to usage if possible.
+	orphanedLeasesTimeThresholdNanos := s.clock.Now().WallTime
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
 	// init all the replicas. At this point *some* store has been bootstrapped or
@@ -1380,7 +1378,6 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	s.replicationReporter.Start(ctx, s.stopper)
-	s.sqlServer.temporaryObjectCleaner.Start(ctx, s.stopper)
 
 	s.refreshSettings()
 
@@ -1412,9 +1409,6 @@ func (s *Server) Start(ctx context.Context) error {
 			})
 		}
 	})
-
-	s.sqlServer.distSQLServer.Start()
-	s.sqlServer.pgServer.Start(ctx, s.stopper)
 
 	s.grpc.setMode(modeOperational)
 
@@ -1464,12 +1458,6 @@ func (s *Server) Start(ctx context.Context) error {
 	// Begin recording status summaries.
 	s.node.startWriteNodeStatus(DefaultMetricsSampleInterval)
 
-	// Start the background thread for periodically refreshing table statistics.
-	if err := s.sqlServer.statsRefresher.Start(ctx, s.stopper, stats.DefaultRefreshInterval); err != nil {
-		return err
-	}
-	s.sqlServer.stmtDiagnosticsRegistry.Start(ctx, s.stopper)
-
 	// Start the protected timestamp subsystem.
 	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {
 		return err
@@ -1478,40 +1466,12 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
-	// Before serving SQL requests, we have to make sure the database is
-	// in an acceptable form for this version of the software.
-	// We have to do this after actually starting up the server to be able to
-	// seamlessly use the kv client against other nodes in the cluster.
-	var mmKnobs sqlmigrations.MigrationManagerTestingKnobs
-	if migrationManagerTestingKnobs := s.cfg.TestingKnobs.SQLMigrationManager; migrationManagerTestingKnobs != nil {
-		mmKnobs = *migrationManagerTestingKnobs.(*sqlmigrations.MigrationManagerTestingKnobs)
-	}
-	migrationsExecutor := sql.MakeInternalExecutor(
-		ctx, s.sqlServer.pgServer.SQLServer, s.sqlServer.internalMemMetrics, s.ClusterSettings())
-	migrationsExecutor.SetSessionData(
-		&sessiondata.SessionData{
-			// Migrations need an executor with query distribution turned off. This is
-			// because the node crashes if migrations fail to execute, and query
-			// distribution introduces more moving parts. Local execution is more
-			// robust; for example, the DistSender has retries if it can't connect to
-			// another node, but DistSQL doesn't. Also see #44101 for why DistSQL is
-			// particularly fragile immediately after a node is started (i.e. the
-			// present situation).
-			DistSQLMode: sessiondata.DistSQLOff,
-		})
-	migMgr := sqlmigrations.NewManager(
-		s.stopper,
-		s.db,
-		&migrationsExecutor,
-		s.clock,
-		mmKnobs,
-		s.NodeID().String(),
-		s.ClusterSettings(),
-		s.sqlServer.jobRegistry,
-	)
-	s.sqlServer.migMgr = migMgr
-
 	// Start garbage collecting system events.
+	//
+	// NB: As written, this falls awkwardly between SQL and KV. KV is used only
+	// to make sure this runs only on one node. SQL is used to actually GC. We
+	// count it as a KV operation since it grooms cluster-wide data, not
+	// something associated to SQL tenants.
 	s.startSystemLogsGC(ctx)
 
 	// Serve UI assets.
@@ -1555,46 +1515,8 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	log.Event(ctx, "added http endpoints")
 
-	// Start the jobs subsystem.
-	{
-		var regLiveness jobs.NodeLiveness = s.nodeLiveness
-		if testingLiveness := s.cfg.TestingKnobs.RegistryLiveness; testingLiveness != nil {
-			regLiveness = testingLiveness.(*jobs.FakeNodeLiveness)
-		}
-		if err := s.sqlServer.jobRegistry.Start(
-			ctx, s.stopper, regLiveness, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
-		); err != nil {
-			return err
-		}
-	}
-
-	{
-		// Run startup migrations (note: these depend on jobs subsystem running).
-		var bootstrapVersion roachpb.Version
-		if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
-		}); err != nil {
-			return err
-		}
-		if err := migMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
-			return errors.Wrap(err, "ensuring SQL migrations")
-		}
-	}
-	log.Infof(ctx, "done ensuring all necessary migrations have run")
-
 	// Attempt to upgrade cluster version.
 	s.startAttemptUpgrade(ctx)
-
-	// Start serving SQL clients.
-	if err := s.startServeSQL(ctx, workersCtx, connManager, pgL); err != nil {
-		return err
-	}
-
-	// Start the async migration to upgrade 19.2-style jobs so they can be run by
-	// the job registry in 20.1.
-	if err := migMgr.StartSchemaChangeJobMigration(ctx); err != nil {
-		return err
-	}
 
 	// Record node start in telemetry. Get the right counter for this storage
 	// engine type as well as type of start (initial boot vs restart).
@@ -1620,9 +1542,18 @@ func (s *Server) Start(ctx context.Context) error {
 	// executes a SQL query, this must be done after the SQL layer is ready.
 	s.node.recordJoinEvent()
 
-	// Delete all orphaned table leases created by a prior instance of this
-	// node. This also uses SQL.
-	s.sqlServer.leaseMgr.DeleteOrphanedLeases(timeThreshold)
+	if err := s.sqlServer.start(
+		workersCtx,
+		s.stopper,
+		s.cfg.TestingKnobs,
+		s.nodeLiveness,
+		connManager,
+		pgL,
+		s.cfg.SocketFile,
+		orphanedLeasesTimeThresholdNanos,
+	); err != nil {
+		return err
+	}
 
 	log.Event(ctx, "server ready")
 
@@ -1813,49 +1744,54 @@ func (s *Server) startServeUI(
 	return nil
 }
 
-func (s *Server) startServeSQL(
-	ctx, workersCtx context.Context, connManager netutil.Server, pgL net.Listener,
+// TODO(tbg): move into server_sql.go.
+func (s *sqlServer) startServeSQL(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	connManager netutil.Server,
+	pgL net.Listener,
+	socketFile string,
 ) error {
 	log.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
 
-	pgCtx := s.sqlServer.pgServer.AmbientCtx.AnnotateCtx(context.Background())
+	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
 	tcpKeepAlive := tcpKeepAliveManager{
 		tcpKeepAlive: envutil.EnvOrDefaultDuration("COCKROACH_SQL_TCP_KEEP_ALIVE", time.Minute),
 	}
 
-	s.stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
-		netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, s.stopper, pgL, func(conn net.Conn) {
+	stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
+		netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, stopper, pgL, func(conn net.Conn) {
 			connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
 			tcpKeepAlive.configure(connCtx, conn)
 
-			if err := s.sqlServer.pgServer.ServeConn(connCtx, conn, pgwire.SocketTCP); err != nil {
+			if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketTCP); err != nil {
 				log.Errorf(connCtx, "serving SQL client conn: %v", err)
 			}
 		}))
 	})
 
 	// If a unix socket was requested, start serving there too.
-	if len(s.cfg.SocketFile) != 0 {
-		log.Infof(ctx, "starting postgres server at unix:%s", s.cfg.SocketFile)
+	if len(socketFile) != 0 {
+		log.Infof(ctx, "starting postgres server at unix:%s", socketFile)
 
 		// Unix socket enabled: postgres protocol only.
-		unixLn, err := net.Listen("unix", s.cfg.SocketFile)
+		unixLn, err := net.Listen("unix", socketFile)
 		if err != nil {
 			return err
 		}
 
-		s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
-			<-s.stopper.ShouldQuiesce()
+		stopper.RunWorker(ctx, func(workersCtx context.Context) {
+			<-stopper.ShouldQuiesce()
 			if err := unixLn.Close(); err != nil {
 				log.Fatal(workersCtx, err)
 			}
 		})
 
-		s.stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
-			netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, s.stopper, unixLn, func(conn net.Conn) {
+		stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
+			netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, stopper, unixLn, func(conn net.Conn) {
 				connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
-				if err := s.sqlServer.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
+				if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
 					log.Error(connCtx, err)
 				}
 			}))

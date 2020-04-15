@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net"
 	"os"
 	"path/filepath"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -53,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
@@ -534,4 +537,100 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		sqlMemMetrics:           sqlMemMetrics,
 		stmtDiagnosticsRegistry: stmtDiagnosticsRegistry,
 	}, nil
+}
+
+func (s *sqlServer) start(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	knobs base.TestingKnobs,
+	nl jobs.NodeLiveness,
+	connManager netutil.Server,
+	pgL net.Listener,
+	socketFile string,
+	orphanedLeasesTimeThresholdNanos int64,
+) error {
+	s.temporaryObjectCleaner.Start(ctx, stopper)
+	s.distSQLServer.Start()
+	s.pgServer.Start(ctx, stopper)
+	if err := s.statsRefresher.Start(ctx, stopper, stats.DefaultRefreshInterval); err != nil {
+		return err
+	}
+	s.stmtDiagnosticsRegistry.Start(ctx, stopper)
+
+	// Before serving SQL requests, we have to make sure the database is
+	// in an acceptable form for this version of the software.
+	// We have to do this after actually starting up the server to be able to
+	// seamlessly use the kv client against other nodes in the cluster.
+	var mmKnobs sqlmigrations.MigrationManagerTestingKnobs
+	if migrationManagerTestingKnobs := knobs.SQLMigrationManager; migrationManagerTestingKnobs != nil {
+		mmKnobs = *migrationManagerTestingKnobs.(*sqlmigrations.MigrationManagerTestingKnobs)
+	}
+	migrationsExecutor := sql.MakeInternalExecutor(
+		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.execCfg.Settings)
+	migrationsExecutor.SetSessionData(
+		&sessiondata.SessionData{
+			// Migrations need an executor with query distribution turned off. This is
+			// because the node crashes if migrations fail to execute, and query
+			// distribution introduces more moving parts. Local execution is more
+			// robust; for example, the DistSender has retries if it can't connect to
+			// another node, but DistSQL doesn't. Also see #44101 for why DistSQL is
+			// particularly fragile immediately after a node is started (i.e. the
+			// present situation).
+			DistSQLMode: sessiondata.DistSQLOff,
+		})
+	migMgr := sqlmigrations.NewManager(
+		stopper,
+		s.execCfg.DB,
+		&migrationsExecutor,
+		s.execCfg.Clock,
+		mmKnobs,
+		s.execCfg.NodeID.String(), // TODO(tbg): set yet?
+		s.execCfg.Settings,
+		s.jobRegistry,
+	)
+	s.migMgr = migMgr // only for testing via TestServer
+
+	{
+		regLiveness := nl
+		if testingLiveness := knobs.RegistryLiveness; testingLiveness != nil {
+			regLiveness = testingLiveness.(*jobs.FakeNodeLiveness)
+		}
+		if err := s.jobRegistry.Start(
+			ctx, stopper, regLiveness, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
+		); err != nil {
+			return err
+		}
+	}
+
+	{
+		// Run startup migrations (note: these depend on jobs subsystem running).
+		var bootstrapVersion roachpb.Version
+		if err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
+		}); err != nil {
+			return err
+		}
+		if err := migMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
+			return errors.Wrap(err, "ensuring SQL migrations")
+		}
+
+		log.Infof(ctx, "done ensuring all necessary migrations have run")
+	}
+
+	// Start serving SQL clients.
+	if err := s.startServeSQL(ctx, stopper, connManager, pgL, socketFile); err != nil {
+		return err
+	}
+
+	// Start the async migration to upgrade 19.2-style jobs so they can be run by
+	// the job registry in 20.1.
+	if err := migMgr.StartSchemaChangeJobMigration(ctx); err != nil {
+		return err
+	}
+
+	// Delete all orphaned table leases created by a prior instance of this
+	// node. This also uses SQL.
+	s.leaseMgr.DeleteOrphanedLeases(orphanedLeasesTimeThresholdNanos)
+
+	return nil
 }
