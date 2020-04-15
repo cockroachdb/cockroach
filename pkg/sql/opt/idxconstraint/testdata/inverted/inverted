@@ -1,0 +1,128 @@
+inverted-index-constraints vars=(jsonb) index-col=@1
+@1 @> '{"a": 1}'
+----
+[/'{"a": 1}' - /'{"a": 1}']
+
+inverted-index-constraints vars=(jsonb) index-col=@1
+@1 @> '{"a": 1, "b": 2}'
+----
+[/'{"a": 1}' - /'{"a": 1}']
+Remaining filter: @1 @> '{"a": 1, "b": 2}'
+
+inverted-index-constraints vars=(jsonb) index-col=@1
+@1 @> '{"a": {"b": 1}, "c": 2}'
+----
+[/'{"a": {"b": 1}}' - /'{"a": {"b": 1}}']
+Remaining filter: @1 @> '{"a": {"b": 1}, "c": 2}'
+
+inverted-index-constraints vars=(jsonb) index-col=@1
+@1 @> '{"a": {}, "c": 2}'
+----
+[/'{"c": 2}' - /'{"c": 2}']
+Remaining filter: @1 @> '{"a": {}, "c": 2}'
+
+inverted-index-constraints vars=(jsonb) index-col=@1
+'{"a": 1}' <@ @1
+----
+[/'{"a": 1}' - /'{"a": 1}']
+
+# Currently we only generate spans from one of the @> expressions.
+inverted-index-constraints vars=(jsonb) index-col=@1
+@1 @> '{"a": 1}' AND @1 @> '{"b": 1}'
+----
+[/'{"a": 1}' - /'{"a": 1}']
+Remaining filter: @1 @> '{"b": 1}'
+
+inverted-index-constraints vars=(jsonb) index-col=@1
+'{"a": 1}' <@ @1 AND '{"b": 1}' <@ @1
+----
+[/'{"a": 1}' - /'{"a": 1}']
+Remaining filter: @1 @> '{"b": 1}'
+
+inverted-index-constraints vars=(jsonb, int) index-col=@1
+@2 = 1 AND @1 @> '{"a": 1}' AND @1 @> '{"b": 1}'
+----
+[/'{"a": 1}' - /'{"a": 1}']
+Remaining filter: (@2 = 1) AND (@1 @> '{"b": 1}')
+
+inverted-index-constraints vars=(jsonb) index-col=@1
+@1 @> '{"a": 1}' OR @1 @> '{"b": 1}'
+----
+No contraints
+
+inverted-index-constraints vars=(jsonb, int) index-col=@1
+@2 = 1 AND (@1 @> '{"a": 1}' OR @1 @> '{"b": 1}')
+----
+No contraints
+
+inverted-index-constraints vars=(jsonb) index-col=@1
+@1 @> '{"a": {}}'
+----
+No contraints
+
+inverted-index-constraints vars=(jsonb) index-col=@1
+@1 @> '{}'
+----
+No contraints
+
+inverted-index-constraints vars=(jsonb) index-col=@1
+@1 @> '{"a": []}'
+----
+No contraints
+
+inverted-index-constraints vars=(jsonb) index-col=@1
+@1 @> '[]'
+----
+No contraints
+
+# inverted-index-constraints vars=(int[]) index-col=@1
+# @1 @> ARRAY[1]
+# ----
+# [/ARRAY[1] - /ARRAY[1]]
+#
+# inverted-index-constraints vars=(int[]) index-col=@1
+# ARRAY[1] <@ @1
+# ----
+# [/ARRAY[1] - /ARRAY[1]]
+#
+# inverted-index-constraints vars=(int[]) index-col=@1
+# @1 @> ARRAY[1,2]
+# ----
+# [/ARRAY[1] - /ARRAY[1]]
+# Remaining filter: @1 @> ARRAY[1,2]
+#
+# # Currently we only generate spans from one of the @> expressions.
+# inverted-index-constraints vars=(int[]) index-col=@1
+# @1 @> ARRAY[1] AND @1 @> ARRAY[2]
+# ----
+# [/ARRAY[1] - /ARRAY[1]]
+# Remaining filter: @1 @> ARRAY[2]
+#
+# # This could be better - @1 @> ARRAY[] is always true, but we currently
+# # don't remove the extra filter.
+# inverted-index-constraints vars=(int[]) index-col=@1
+# @1 @> ARRAY[]::INT[]
+# ----
+# [ - ]
+# Remaining filter: @1 @> ARRAY[]
+#
+# # Arrays never contain ARRAY[NULL,...]
+# inverted-index-constraints vars=(int[]) index-col=@1
+# @1 @> ARRAY[NULL]::INT[]
+# ----
+#
+# inverted-index-constraints vars=(int[]) index-col=@1
+# @1 @> ARRAY[1, NULL]::INT[]
+# ----
+#
+# inverted-index-constraints vars=(int[]) index-col=@1
+# @1 @> ARRAY[NULL, 1]::INT[]
+# ----
+#
+# # NOTE: this should be a contradiction, but the test harness strips the
+# # constraint out too early by accident, I think.
+# inverted-index-constraints vars=(int[]) index-col=@1
+# @1 @> NULL
+# ----
+# [ - ]
+# Remaining filter: NULL

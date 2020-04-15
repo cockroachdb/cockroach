@@ -45,6 +45,19 @@ index-constraints vars=(jsonb, int) inverted-index=@1
 [/'{"a": 1}' - /'{"a": 1}']
 Remaining filter: (@2 = 1) AND (@1 @> '{"b": 1}')
 
+
+index-constraints vars=(jsonb) inverted-index=@1
+@1 @> '{"a": 1}' OR @1 @> '{"b": 1}'
+----
+[ - ]
+Remaining filter: (@1 @> '{"a": 1}') OR (@1 @> '{"b": 1}')
+
+index-constraints vars=(jsonb, int) inverted-index=@1
+@2 = 1 AND (@1 @> '{"a": 1}' OR @1 @> '{"b": 1}')
+----
+[ - ]
+Remaining filter: (@2 = 1) AND ((@1 @> '{"a": 1}') OR (@1 @> '{"b": 1}'))
+
 index-constraints vars=(int[]) inverted-index=@1
 @1 @> ARRAY[1]
 ----
