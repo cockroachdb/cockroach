@@ -485,7 +485,7 @@ type tpchVecTestCase interface {
 	postQueryRunHook(t *test, output []byte, vectorized bool)
 	// postTestRunHook is called after all tpch queries are run. Can be used to
 	// perform teardown or general validation.
-	postTestRunHook(t *test, version crdbVersion)
+	postTestRunHook(t *test, conn *gosql.DB, version crdbVersion)
 }
 
 // tpchVecTestCaseBase is a default tpchVecTestCase implementation that can be
@@ -501,6 +501,10 @@ func (r tpchVecTestCaseBase) numRunsPerQuery() int {
 }
 
 func (r tpchVecTestCaseBase) preTestRunHook(t *test, conn *gosql.DB) {
+	t.Status("resetting sql.testing.vectorize.batch_size")
+	if _, err := conn.Exec("RESET CLUSTER SETTING sql.testing.vectorize.batch_size"); err != nil {
+		t.Fatal(err)
+	}
 	t.Status("resetting workmem to default")
 	if _, err := conn.Exec("RESET CLUSTER SETTING sql.distsql.temp_storage.workmem"); err != nil {
 		t.Fatal(err)
@@ -509,7 +513,7 @@ func (r tpchVecTestCaseBase) preTestRunHook(t *test, conn *gosql.DB) {
 
 func (r tpchVecTestCaseBase) postQueryRunHook(_ *test, _ []byte, _ bool) {}
 
-func (r tpchVecTestCaseBase) postTestRunHook(_ *test, _ crdbVersion) {}
+func (r tpchVecTestCaseBase) postTestRunHook(_ *test, _ *gosql.DB, _ crdbVersion) {}
 
 const (
 	tpchPerfTestNumRunsPerQuery = 3
@@ -564,7 +568,7 @@ func (p *tpchVecPerfTest) postQueryRunHook(t *test, output []byte, vectorized bo
 	}
 }
 
-func (p *tpchVecPerfTest) postTestRunHook(t *test, version crdbVersion) {
+func (p *tpchVecPerfTest) postTestRunHook(t *test, _ *gosql.DB, version crdbVersion) {
 	queriesToSkip := queriesToSkipByVersion[version]
 	// We are only interested in comparison with 'perf' run option.
 	t.Status("comparing the runtimes (only median values for each query are compared)")
@@ -617,6 +621,7 @@ type tpchVecDiskTest struct {
 }
 
 func (d tpchVecDiskTest) preTestRunHook(t *test, conn *gosql.DB) {
+	d.tpchVecTestCaseBase.preTestRunHook(t, conn)
 	// In order to stress the disk spilling of the vectorized
 	// engine, we will set workmem limit to a random value in range
 	// [16KiB, 256KiB).
@@ -625,6 +630,19 @@ func (d tpchVecDiskTest) preTestRunHook(t *test, conn *gosql.DB) {
 	workmem := fmt.Sprintf("%dKiB", workmemInKiB)
 	t.Status(fmt.Sprintf("setting workmem='%s'", workmem))
 	if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.distsql.temp_storage.workmem='%s'", workmem)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type tpchVecSmallBatchSizeTest struct {
+	tpchVecTestCaseBase
+}
+
+func (b tpchVecSmallBatchSizeTest) preTestRunHook(t *test, conn *gosql.DB) {
+	b.tpchVecTestCaseBase.preTestRunHook(t, conn)
+	const batchSize = 1
+	t.Status(fmt.Sprintf("setting sql.testing.vectorize.batch_size to %d", batchSize))
+	if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.testing.vectorize.batch_size=%d", batchSize)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -694,7 +712,7 @@ func runTPCHVec(ctx context.Context, t *test, c *cluster, testCase tpchVecTestCa
 			testCase.postQueryRunHook(t, workloadOutput, vectorize)
 		}
 	}
-	testCase.postTestRunHook(t, version)
+	testCase.postTestRunHook(t, conn, version)
 }
 
 func registerTPCHVec(r *testRegistry) {
@@ -717,6 +735,18 @@ func registerTPCHVec(r *testRegistry) {
 		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCHVec(ctx, t, c, tpchVecDiskTest{})
+		},
+	})
+
+	r.Add(testSpec{
+		Name:    "tpchvec/smallbatchsize",
+		Owner:   OwnerSQLExec,
+		Cluster: makeClusterSpec(nodeCount),
+		// 19.2 version doesn't have the testing cluster setting to change the batch
+		// size, so only run on versions >= 20.1.0.
+		MinVersion: "v20.1.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCHVec(ctx, t, c, tpchVecSmallBatchSizeTest{})
 		},
 	})
 }
