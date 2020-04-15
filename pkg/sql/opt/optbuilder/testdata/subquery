@@ -2225,3 +2225,9 @@ build
 SELECT 3::decimal IN (SELECT 1::int)
 ----
 error (22023): unsupported comparison operator: <decimal> IN <tuple{int}>
+
+# Regression test for #47467 - we weren't correctly identifying a.x as an outer column.
+build
+SELECT 1 FROM (VALUES (1)) AS a(x) HAVING (SELECT true FROM (VALUES (a.x)) AS b(y))
+----
+error (42803): subquery uses ungrouped column "x" from outer query
