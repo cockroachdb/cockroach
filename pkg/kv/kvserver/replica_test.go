@@ -5345,7 +5345,6 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		expTxn.Priority = enginepb.MaxTxnPriority - 1
 		expTxn.Epoch = pushee.Epoch // no change
 		expTxn.WriteTimestamp = test.expTS
-		expTxn.LastHeartbeat = test.expTS
 		expTxn.Status = roachpb.ABORTED
 
 		if !reflect.DeepEqual(expTxn, reply.PusheeTxn) {
@@ -10913,7 +10912,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
 				record := txn.AsRecord()
 				record.WriteTimestamp.Forward(pushTs)
-				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
 				record.Priority = pusher.Priority - 1
 				return record
 			},
@@ -10937,7 +10935,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
 				record := txnWithStatus(roachpb.ABORTED)(txn, pushTs)
 				record.WriteTimestamp = record.WriteTimestamp.Add(0, 1)
-				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
 				record.Priority = pusher.Priority - 1
 				return record
 			},
@@ -10963,7 +10960,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				record := txn.AsRecord()
 				record.Epoch = txn.Epoch + 1
 				record.WriteTimestamp.Forward(pushTs)
-				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
 				record.Priority = pusher.Priority - 1
 				return record
 			},
@@ -10988,7 +10984,6 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				record := txnWithStatus(roachpb.ABORTED)(txn, pushTs)
 				record.Epoch = txn.Epoch + 1
 				record.WriteTimestamp = record.WriteTimestamp.Add(0, 1)
-				record.LastHeartbeat = record.LastHeartbeat.Add(0, 1)
 				record.Priority = pusher.Priority - 1
 				return record
 			},

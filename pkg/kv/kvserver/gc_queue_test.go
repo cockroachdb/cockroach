@@ -907,8 +907,12 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	intentResolveTS := makeTS(now-gc.IntentAgeThreshold.Nanoseconds(), 0)
 	txns[0].ReadTimestamp = intentResolveTS
 	txns[0].WriteTimestamp = intentResolveTS
+	// The MinTimestamp is used by pushers that don't find a transaction record to
+	// infer when the coordinator was alive.
+	txns[0].MinTimestamp = intentResolveTS
 	txns[1].ReadTimestamp = intentResolveTS
 	txns[1].WriteTimestamp = intentResolveTS
+	txns[1].MinTimestamp = intentResolveTS
 
 	// Two transactions.
 	for i := 0; i < 2; i++ {

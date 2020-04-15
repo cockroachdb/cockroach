@@ -104,4 +104,7 @@ message Step {
   util.hlc.Timestamp before = 2 [(gogoproto.nullable) = false];
   util.hlc.Timestamp after = 3 [(gogoproto.nullable) = false];
   int32 db_id = 4 [(gogoproto.customname) = 'DBID'];
+  // Trace will contain the recording of the Step's execution. Used to print it
+  // out when the test fails.
+  string trace = 5;
 }
