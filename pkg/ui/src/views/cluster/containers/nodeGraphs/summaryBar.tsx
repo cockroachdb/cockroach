@@ -27,6 +27,8 @@ import {
   SummaryStatMessage,
   SummaryMetricsAggregator,
 } from "src/views/shared/components/summaryBar";
+import { Tooltip, Anchor } from "src/components";
+import { howAreCapacityMetricsCalculated } from "src/util/docs";
 
 interface ClusterSummaryProps {
   nodeSources: string[];
@@ -77,15 +79,31 @@ export default function(props: ClusterSummaryProps) {
   // Capacity math used in the summary status section.
   const { capacityUsed, capacityUsable } = props.nodesSummary.nodeSums;
   const capacityPercent = capacityUsable !== 0 ? (capacityUsed / capacityUsable) : null;
-
   return (
     <div>
       <SummaryBar>
         <SummaryLabel>Summary</SummaryLabel>
         <ClusterNodeTotals {...props}/>
-        <SummaryStat title="Capacity Used" value={capacityPercent} format={formatPercentage}>
-          <SummaryStatMessage message={`You are using ${Bytes(capacityUsed)} of ${Bytes(capacityUsable)}
-                                        usable storage capacity across all nodes.`} />
+        <SummaryStat title={
+          <Tooltip
+            placement="left"
+            title={(
+              <>
+                <p>Percentage of total usable disk space in use by CockroachDB data.</p>
+                <Anchor
+                  href={howAreCapacityMetricsCalculated}
+                >
+                  How is this metric calculated?
+                </Anchor>
+              </>
+            )}
+          >
+            Capacity Used
+          </Tooltip>
+        } value={capacityPercent} format={formatPercentage}>
+          <SummaryStatMessage
+            message={`You are using ${Bytes(capacityUsed)} of ${Bytes(capacityUsable)} usable disk capacity across all nodes.`}
+          />
         </SummaryStat>
         <SummaryStat title="Unavailable ranges" value={props.nodesSummary.nodeSums.unavailableRanges} />
         <SummaryMetricStat

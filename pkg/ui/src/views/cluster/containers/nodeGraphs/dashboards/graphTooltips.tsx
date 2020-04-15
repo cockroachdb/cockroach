@@ -20,7 +20,7 @@ export const CapacityGraphTooltip: React.FunctionComponent<{tooltipSelection: Re
       <dt>Capacity</dt>
       <dd>
         <p>
-          Usage of disk space {tooltipSelection}.
+          {`Usage of disk space across all ${tooltipSelection} / on node <node>.`}
         </p>
         <p>
           <Anchor href={docsURL.howAreCapacityMetricsCalculated}>
@@ -37,13 +37,11 @@ export const LogicalBytesGraphTooltip: React.FunctionComponent =
       <dt>Logical Bytes per Store</dt>
       <dd>
         <p>
-          Number of logical bytes stored in
-          {" "}
+          {"Number of logical bytes stored in "}
           <Anchor href={docsURL.keyValuePairs}>
             key-value pairs
           </Anchor>
-          {" "}
-          on each node.
+          {" on each node."}
         </p>
         <p>
           This includes historical and deleted data.
