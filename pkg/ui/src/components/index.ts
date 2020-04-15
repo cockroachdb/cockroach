@@ -16,7 +16,7 @@ export * from "./anchor";
 export * from "./sideNavigation";
 export * from "./pageHeader";
 export * from "./text";
-export * from "./textInput";
+export * from "./input";
 export * from "./table";
 export * from "./tooltip";
 export * from "./select";
