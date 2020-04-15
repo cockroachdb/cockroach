@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -161,7 +162,7 @@ func TestDistinct(t *testing.T) {
 		for _, numOfBuckets := range []uint64{1, 3, 5, hashTableNumBuckets} {
 			t.Run(fmt.Sprintf("unordered/numOfBuckets=%d", numOfBuckets), func(t *testing.T) {
 				runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
-					func(input []Operator) (Operator, error) {
+					func(input []colbase.Operator) (colbase.Operator, error) {
 						return NewUnorderedDistinct(
 							testAllocator, input[0], tc.distinctCols, tc.colTypes,
 							numOfBuckets), nil
@@ -176,7 +177,7 @@ func TestDistinct(t *testing.T) {
 						orderedCols[i] = tc.distinctCols[j]
 					}
 					runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
-						func(input []Operator) (Operator, error) {
+						func(input []colbase.Operator) (colbase.Operator, error) {
 							return newPartiallyOrderedDistinct(
 								testAllocator, input[0], tc.distinctCols,
 								orderedCols, tc.colTypes,
@@ -186,7 +187,7 @@ func TestDistinct(t *testing.T) {
 			}
 			t.Run("ordered", func(t *testing.T) {
 				runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
-					func(input []Operator) (Operator, error) {
+					func(input []colbase.Operator) (colbase.Operator, error) {
 						return NewOrderedDistinct(input[0], tc.distinctCols, tc.colTypes)
 					})
 			})
@@ -198,14 +199,14 @@ func BenchmarkDistinct(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	distinctConstructors := []func(*Allocator, Operator, []uint32, int, []coltypes.T) (Operator, error){
-		func(allocator *Allocator, input Operator, distinctCols []uint32, numOrderedCols int, typs []coltypes.T) (Operator, error) {
+	distinctConstructors := []func(*colbase.Allocator, colbase.Operator, []uint32, int, []coltypes.T) (colbase.Operator, error){
+		func(allocator *colbase.Allocator, input colbase.Operator, distinctCols []uint32, numOrderedCols int, typs []coltypes.T) (colbase.Operator, error) {
 			return NewUnorderedDistinct(allocator, input, distinctCols, typs, hashTableNumBuckets), nil
 		},
-		func(allocator *Allocator, input Operator, distinctCols []uint32, numOrderedCols int, typs []coltypes.T) (Operator, error) {
+		func(allocator *colbase.Allocator, input colbase.Operator, distinctCols []uint32, numOrderedCols int, typs []coltypes.T) (colbase.Operator, error) {
 			return newPartiallyOrderedDistinct(allocator, input, distinctCols, distinctCols[:numOrderedCols], typs)
 		},
-		func(allocator *Allocator, input Operator, distinctCols []uint32, numOrderedCols int, typs []coltypes.T) (Operator, error) {
+		func(allocator *colbase.Allocator, input colbase.Operator, distinctCols []uint32, numOrderedCols int, typs []coltypes.T) (colbase.Operator, error) {
 			return NewOrderedDistinct(input, distinctCols, typs)
 		},
 	}

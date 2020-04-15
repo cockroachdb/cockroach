@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
@@ -35,13 +36,13 @@ import (
 )
 
 type callbackRemoteComponentCreator struct {
-	newOutboxFn func(*colexec.Allocator, colexec.Operator, []coltypes.T, []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
-	newInboxFn  func(allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
+	newOutboxFn func(*colbase.Allocator, colbase.Operator, []coltypes.T, []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
+	newInboxFn  func(allocator *colbase.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
 
 func (c callbackRemoteComponentCreator) newOutbox(
-	allocator *colexec.Allocator,
-	input colexec.Operator,
+	allocator *colbase.Allocator,
+	input colbase.Operator,
 	typs []coltypes.T,
 	metadataSources []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
@@ -50,7 +51,7 @@ func (c callbackRemoteComponentCreator) newOutbox(
 }
 
 func (c callbackRemoteComponentCreator) newInbox(
-	allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID,
+	allocator *colbase.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID,
 ) (*colrpc.Inbox, error) {
 	return c.newInboxFn(allocator, typs, streamID)
 }
@@ -186,8 +187,8 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	outboxCreated := false
 	componentCreator := callbackRemoteComponentCreator{
 		newOutboxFn: func(
-			allocator *colexec.Allocator,
-			op colexec.Operator,
+			allocator *colbase.Allocator,
+			op colbase.Operator,
 			typs []coltypes.T,
 			sources []execinfrapb.MetadataSource,
 		) (*colrpc.Outbox, error) {
@@ -201,7 +202,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			require.Len(t, inboxToNumInputTypes[sources[0].(*colrpc.Inbox)], numInputTypesToOutbox)
 			return colrpc.NewOutbox(allocator, op, typs, sources, nil /* toClose */)
 		},
-		newInboxFn: func(allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
+		newInboxFn: func(allocator *colbase.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
 			inbox, err := colrpc.NewInbox(allocator, typs, streamID)
 			inboxToNumInputTypes[inbox] = typs
 			return inbox, err
@@ -254,7 +255,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 					Cfg: &execinfra.ServerConfig{
 						TempFS:          ngn,
 						TempStoragePath: tempPath,
-						VecFDSemaphore:  &colexec.TestingSemaphore{},
+						VecFDSemaphore:  &colbase.TestingSemaphore{},
 						Metrics:         &execinfra.DistSQLMetrics{},
 					},
 					EvalCtx: &evalCtx,

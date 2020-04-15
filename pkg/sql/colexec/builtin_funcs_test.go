@@ -19,7 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -73,7 +74,7 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			runTests(t, []tuples{tc.inputTuples}, tc.outputTuples, orderedVerifier,
-				func(input []Operator) (Operator, error) {
+				func(input []colbase.Operator) (colbase.Operator, error) {
 					return createTestProjectingOperator(
 						ctx, flowCtx, input[0], tc.inputTypes,
 						tc.expr, false, /* canFallbackToRowexec */
@@ -124,7 +125,7 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 		}
 	}
 
-	source := NewRepeatableBatchSource(testAllocator, batch)
+	source := colbase.NewRepeatableBatchSource(testAllocator, batch)
 	op, err := createTestProjectingOperator(
 		ctx, flowCtx, source, []types.T{*types.Int},
 		"abs(@1)" /* projectingExpr */, false, /* canFallbackToRowexec */
@@ -167,8 +168,8 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		eCol[i] = 4
 	}
 	batch.SetLength(coldata.BatchSize())
-	var source Operator
-	source = NewRepeatableBatchSource(testAllocator, batch)
+	var source colbase.Operator
+	source = colbase.NewRepeatableBatchSource(testAllocator, batch)
 	source = newVectorTypeEnforcer(testAllocator, source, coltypes.Bytes, outputIdx)
 
 	// Set up the default operator.

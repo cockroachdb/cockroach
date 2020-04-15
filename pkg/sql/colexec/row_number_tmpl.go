@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 )
 
 // TODO(yuzefovich): add benchmarks.
@@ -32,8 +33,8 @@ import (
 // ROW_NUMBER. outputColIdx specifies in which coldata.Vec the operator should
 // put its output (if there is no such column, a new column is appended).
 func NewRowNumberOperator(
-	allocator *Allocator, input Operator, outputColIdx int, partitionColIdx int,
-) Operator {
+	allocator *colbase.Allocator, input colbase.Operator, outputColIdx int, partitionColIdx int,
+) colbase.Operator {
 	input = newVectorTypeEnforcer(allocator, input, coltypes.Int64, outputColIdx)
 	base := rowNumberBase{
 		OneInputNode:    NewOneInputNode(input),
@@ -52,7 +53,7 @@ func NewRowNumberOperator(
 // and should not be used directly.
 type rowNumberBase struct {
 	OneInputNode
-	allocator       *Allocator
+	allocator       *colbase.Allocator
 	outputColIdx    int
 	partitionColIdx int
 
@@ -69,7 +70,7 @@ type _ROW_NUMBER_STRINGOp struct {
 	rowNumberBase
 }
 
-var _ Operator = &_ROW_NUMBER_STRINGOp{}
+var _ colbase.Operator = &_ROW_NUMBER_STRINGOp{}
 
 func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	batch := r.Input().Next(ctx)

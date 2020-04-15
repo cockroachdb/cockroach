@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -62,7 +63,7 @@ func TestDeselector(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		runTestsWithFixedSel(t, []tuples{tc.tuples}, tc.sel, func(t *testing.T, input []Operator) {
+		runTestsWithFixedSel(t, []tuples{tc.tuples}, tc.sel, func(t *testing.T, input []colbase.Operator) {
 			op := NewDeselectorOp(testAllocator, input[0], tc.colTypes)
 			out := newOpTestOutput(op, tc.expected)
 
@@ -93,7 +94,7 @@ func BenchmarkDeselector(b *testing.B) {
 		}
 	}
 	for _, probOfOmitting := range []float64{0.1, 0.9} {
-		sel := randomSel(rng, coldata.BatchSize(), probOfOmitting)
+		sel := colbase.RandomSel(rng, coldata.BatchSize(), probOfOmitting)
 		batchLen := len(sel)
 
 		for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8} {
@@ -103,7 +104,7 @@ func BenchmarkDeselector(b *testing.B) {
 				batch.SetSelection(true)
 				copy(batch.Selection(), sel)
 				batch.SetLength(batchLen)
-				input := NewRepeatableBatchSource(testAllocator, batch)
+				input := colbase.NewRepeatableBatchSource(testAllocator, batch)
 				op := NewDeselectorOp(testAllocator, input, inputTypes)
 				op.Init()
 				b.ResetTimer()

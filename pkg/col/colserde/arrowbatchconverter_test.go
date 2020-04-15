@@ -19,13 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
-func randomBatch(allocator *colexec.Allocator) ([]coltypes.T, coldata.Batch) {
+func randomBatch(allocator *colbase.Allocator) ([]coltypes.T, coldata.Batch) {
 	const maxTyps = 16
 	rng, _ := randutil.NewPseudoRand()
 
@@ -36,7 +36,7 @@ func randomBatch(allocator *colexec.Allocator) ([]coltypes.T, coldata.Batch) {
 
 	capacity := rng.Intn(coldata.BatchSize()) + 1
 	length := rng.Intn(capacity)
-	b := colexec.RandomBatch(allocator, rng, typs, capacity, length, rng.Float64())
+	b := colbase.RandomBatch(allocator, rng, typs, capacity, length, rng.Float64())
 	return typs, b
 }
 
@@ -59,7 +59,7 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 
 	// Make a copy of the original batch because the converter modifies and casts
 	// data without copying for performance reasons.
-	expected := colexec.CopyBatch(testAllocator, b)
+	expected := colbase.CopyBatch(testAllocator, b)
 
 	arrowData, err := c.BatchToArrow(b)
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 
 		// Make a copy of the original batch because the converter modifies and
 		// casts data without copying for performance reasons.
-		expected := colexec.CopyBatch(testAllocator, b)
+		expected := colbase.CopyBatch(testAllocator, b)
 		actual, err := roundTripBatch(b, c, r)
 		require.NoError(t, err)
 
@@ -143,7 +143,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	}
 	// Run a benchmark on every type we care about.
 	for typIdx, typ := range typs {
-		batch := colexec.RandomBatch(testAllocator, rng, []coltypes.T{typ}, coldata.BatchSize(), 0 /* length */, 0 /* nullProbability */)
+		batch := colbase.RandomBatch(testAllocator, rng, []coltypes.T{typ}, coldata.BatchSize(), 0 /* length */, 0 /* nullProbability */)
 		if batch.Width() != 1 {
 			b.Fatalf("unexpected batch width: %d", batch.Width())
 		}

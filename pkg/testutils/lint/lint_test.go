@@ -920,7 +920,7 @@ func TestLint(t *testing.T) {
 			":!*.pb.gw.go",
 			":!sql/pgwire/pgerror/severity.go",
 			":!sql/pgwire/pgerror/with_candidate_code.go",
-			":!sql/colexec/execerror/error.go",
+			":!sql/colbase/vecerror/error.go",
 			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
@@ -1421,11 +1421,9 @@ func TestLint(t *testing.T) {
 			// NOTE: if you're adding a new package to the list here because it
 			// uses "panic-catch" error propagation mechanism of the vectorized
 			// engine, don't forget to "register" the newly added package in
-			// sql/colexec/execerror/error.go file.
-			"sql/colexec",
-			"sql/colflow",
-			"sql/colcontainer",
-			":!sql/colexec/execerror/error.go",
+			// sql/colbase/vecerror/error.go file.
+			"sql/col*",
+			":!sql/colbase/vecerror/error.go",
 			":!sql/colexec/execpb/stats.pb.go",
 			":!sql/colflow/vectorized_panic_propagation_test.go",
 		)
@@ -1438,7 +1436,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use either execerror.VectorizedInternalPanic() or execerror.NonVectorizedPanic() instead", s)
+			t.Errorf("\n%s <- forbidden; use either vecerror.InternalError() or vecerror.ExpectedError() instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -1467,7 +1465,6 @@ func TestLint(t *testing.T) {
 			"--",
 			"sql/colexec",
 			"sql/colflow",
-			":!sql/colexec/allocator.go",
 			":!sql/colexec/simple_project.go",
 		)
 		if err != nil {
@@ -1479,7 +1476,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use colexec.Allocator object instead", s)
+			t.Errorf("\n%s <- forbidden; use colbase.Allocator object instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -1498,12 +1495,11 @@ func TestLint(t *testing.T) {
 			"git",
 			"grep",
 			"-nE",
-			// We prohibit usage of Allocator.maybeAppendColumn outside of
+			// We prohibit usage of Allocator.MaybeAppendColumn outside of
 			// vectorTypeEnforcer and batchSchemaPrefixEnforcer.
-			fmt.Sprintf(`(maybeAppendColumn)\(`),
+			fmt.Sprintf(`(MaybeAppendColumn)\(`),
 			"--",
 			"sql/colexec",
-			":!sql/colexec/allocator.go",
 			":!sql/colexec/operator.go",
 		)
 		if err != nil {

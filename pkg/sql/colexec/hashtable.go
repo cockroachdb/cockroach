@@ -16,7 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 )
 
 // TODO(yuzefovich): support rehashing instead of large fixed bucket size.
@@ -105,7 +106,7 @@ type hashTableProbeBuffer struct {
 // The table can then be probed in column batches to find at most one matching
 // row per column batch row.
 type hashTable struct {
-	allocator *Allocator
+	allocator *colbase.Allocator
 
 	// buildScratch contains the scratch buffers required for the build table.
 	buildScratch hashTableBuildBuffer
@@ -155,7 +156,7 @@ type hashTable struct {
 var _ resetter = &hashTable{}
 
 func newHashTable(
-	allocator *Allocator,
+	allocator *colbase.Allocator,
 	numBuckets uint64,
 	sourceTypes []coltypes.T,
 	eqCols []uint32,
@@ -206,7 +207,7 @@ func newHashTable(
 
 // build executes the entirety of the hash table build phase using the input
 // as the build source. The input is entirely consumed in the process.
-func (ht *hashTable) build(ctx context.Context, input Operator) {
+func (ht *hashTable) build(ctx context.Context, input colbase.Operator) {
 	nKeyCols := len(ht.keyCols)
 
 	switch ht.mode {
@@ -277,7 +278,7 @@ func (ht *hashTable) build(ctx context.Context, input Operator) {
 			ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, numBuffered+1, batch.Length())
 		}
 	default:
-		execerror.VectorizedInternalPanic(fmt.Sprintf("hashTable in unhandled state"))
+		vecerror.InternalError(fmt.Sprintf("hashTable in unhandled state"))
 	}
 }
 
