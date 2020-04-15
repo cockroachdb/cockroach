@@ -12,9 +12,7 @@ import React from "react";
 import cn from "classnames";
 
 import { Text, TextTypes } from "src/components";
-import "./textInput.styl";
-import Eye from "assets/eye.svg";
-import { Button } from "../button";
+import "./input.styl";
 
 interface TextInputProps {
   onChange: (value: string) => void;
@@ -23,12 +21,10 @@ interface TextInputProps {
   placeholder?: string;
   className?: string;
   name?: string;
-  type?: string;
   label?: string;
   // validate function returns validation message
   // in case validation failed or undefined if successful.
   validate?: (value: string) => string | undefined;
-  autoComplete?: string;
 }
 
 interface TextInputState {
@@ -37,14 +33,12 @@ interface TextInputState {
   isDirty: boolean;
   isTouched: boolean;
   needValidation: boolean;
-  showPassword?: boolean;
 }
 
 export class TextInput extends React.Component<TextInputProps, TextInputState> {
   static defaultProps = {
     initialValue: "",
-    validate: () => undefined,
-    autoComplete: "on",
+    validate: () => false,
   };
 
   constructor(props: TextInputProps) {
@@ -56,7 +50,6 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
       isDirty: false,
       isTouched: false,
       needValidation: false,
-      showPassword: false,
     };
   }
 
@@ -90,52 +83,38 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
     });
   }
 
-  togglePassword = () => {
-    this.setState({
-      showPassword: !this.state.showPassword,
-    });
-  }
-
-  renderPasswordIcon = () => (
-    <Button type="flat" onClick={this.togglePassword} className="crl-button__show-password">
-      <img src={Eye} alt="Show password" />
-    </Button>
-  )
-
   render() {
-    const { initialValue, placeholder, className, name, label, value, type, autoComplete } = this.props;
-    const { isDirty, isValid, validationMessage, showPassword } = this.state;
+    const { initialValue, placeholder, className, name, value, label } = this.props;
+    const { isDirty, isValid, validationMessage } = this.state;
     const textValue = isDirty ? value : initialValue;
-    const inputType = type === "password" ? showPassword ? "text" : "password" : type;
 
     const classes = cn(
       className,
-      "crl-text-input",
+      "crl-input",
+      "crl-input__text",
       {
-        "crl-text-input--invalid": !isValid,
+        "crl-input__text--invalid": !isValid,
       },
     );
     return (
-      <div className="crl-text-input__wrapper">
-        {label && <label htmlFor={name} className="crl-text-input__label">{label}</label>}
+      <div className="crl-input__wrapper">
+        {label && <label htmlFor={name} className="crl-input__label">{label}</label>}
         <input
-          id="name"
           name={name}
-          type={inputType}
+          type="text"
           value={textValue}
           placeholder={placeholder}
           className={classes}
           onChange={this.handleOnTextChange}
           onBlur={this.handleOnBlur}
-          autoComplete={autoComplete}
+          autoComplete="off"
         />
-        {type === "password" && this.renderPasswordIcon()}
         {
           !isValid && (
-            <div className="crl-text-input__validation-container">
+            <div className="crl-input__text--validation-container">
               <Text
                 textType={TextTypes.Caption}
-                className="crl-text-input__error-message"
+                className="crl-input__text--error-message"
               >
                 {validationMessage}
               </Text>
