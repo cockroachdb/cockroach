@@ -142,7 +142,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/memoryLimit=%s", tc.name, humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
 				// Clear the testAllocator for use.
 				testAllocator.ReleaseMemory(testAllocator.Used())
-				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, []coltypes.T{coltypes.Int64}, unblockEventsChan, mtc.bytes, queueCfg, NewTestingSemaphore(2), tc.blockedThreshold, tc.outputBatchSize, testDiskAcc)
+				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, []coltypes.T{coltypes.Int64}, unblockEventsChan, mtc.bytes, queueCfg, colbase.NewTestingSemaphore(2), tc.blockedThreshold, tc.outputBatchSize, testDiskAcc)
 				in := newOpTestInput(tc.inputBatchSize, data, nil /* typs */)
 				out := newOpTestOutput(o, data[:len(tc.selection)])
 				in.Init()
@@ -235,7 +235,7 @@ func TestRouterOutputNext(t *testing.T) {
 				if queueCfg.FS == nil {
 					t.Fatal("FS was nil")
 				}
-				o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan, mtc.bytes, queueCfg, NewTestingSemaphore(2), testDiskAcc)
+				o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan, mtc.bytes, queueCfg, colbase.NewTestingSemaphore(2), testDiskAcc)
 				in := newOpTestInput(coldata.BatchSize(), data, nil /* typs */)
 				in.Init()
 				wg.Add(1)
@@ -262,7 +262,7 @@ func TestRouterOutputNext(t *testing.T) {
 				tc.unblockEvent(in, o)
 
 				// Should have data available, pushed by our reader goroutine.
-				batches := NewBatchBuffer()
+				batches := colbase.NewBatchBuffer()
 				out := newOpTestOutput(batches, tc.expected)
 				for {
 					b := <-batchChan
@@ -285,7 +285,7 @@ func TestRouterOutputNext(t *testing.T) {
 		}
 
 		t.Run(fmt.Sprintf("NextAfterZeroBatchDoesntBlock/memoryLimit=%s", humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
-			o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan, mtc.bytes, queueCfg, NewTestingSemaphore(2), testDiskAcc)
+			o := newRouterOutputOp(testAllocator, []coltypes.T{coltypes.Int64}, unblockedEventsChan, mtc.bytes, queueCfg, colbase.NewTestingSemaphore(2), testDiskAcc)
 			o.addBatch(ctx, coldata.ZeroBatch, fullSelection)
 			o.Next(ctx)
 			o.Next(ctx)
@@ -324,7 +324,7 @@ func TestRouterOutputNext(t *testing.T) {
 			}
 
 			ch := make(chan struct{}, 2)
-			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, []coltypes.T{coltypes.Int64}, ch, mtc.bytes, queueCfg, NewTestingSemaphore(2), blockThreshold, coldata.BatchSize(), testDiskAcc)
+			o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, []coltypes.T{coltypes.Int64}, ch, mtc.bytes, queueCfg, colbase.NewTestingSemaphore(2), blockThreshold, coldata.BatchSize(), testDiskAcc)
 			in := newOpTestInput(smallBatchSize, data, nil /* typs */)
 			out := newOpTestOutput(o, expected)
 			in.Init()
@@ -398,7 +398,7 @@ func TestRouterOutputRandom(t *testing.T) {
 			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []colbase.Operator) {
 				var wg sync.WaitGroup
 				unblockedEventsChans := make(chan struct{}, 2)
-				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, typs, unblockedEventsChans, mtc.bytes, queueCfg, NewTestingSemaphore(2), blockedThreshold, outputSize, testDiskAcc)
+				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, typs, unblockedEventsChans, mtc.bytes, queueCfg, colbase.NewTestingSemaphore(2), blockedThreshold, outputSize, testDiskAcc)
 				inputs[0].Init()
 
 				expected := make(tuples, 0, len(data))
@@ -468,7 +468,7 @@ func TestRouterOutputRandom(t *testing.T) {
 					}
 				}()
 
-				actual := NewBatchBuffer()
+				actual := colbase.NewBatchBuffer()
 
 				// Consumer.
 				wg.Add(1)
@@ -508,7 +508,7 @@ func TestRouterOutputRandom(t *testing.T) {
 }
 
 type callbackRouterOutput struct {
-	ZeroInputNode
+	colbase.ZeroInputNode
 	addBatchCb func(coldata.Batch, []int) bool
 	cancelCb   func()
 }
@@ -622,7 +622,7 @@ func TestHashRouterCancellation(t *testing.T) {
 	// Never-ending input of 0s.
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
 	batch.SetLength(coldata.BatchSize())
-	in := NewRepeatableBatchSource(testAllocator, batch)
+	in := colbase.NewRepeatableBatchSource(testAllocator, batch)
 
 	unbufferedCh := make(chan struct{})
 	r := newHashRouterWithOutputs(in, []coltypes.T{coltypes.Int64}, []uint32{0}, unbufferedCh, outputs)
@@ -731,7 +731,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 			defer diskAcc.Close(ctx)
 			r, routerOutputs := NewHashRouter(
 				[]*colbase.Allocator{testAllocator}, newOpFixedSelTestInput(sel, len(sel), data),
-				typs, []uint32{0}, mtc.bytes, queueCfg, NewTestingSemaphore(2),
+				typs, []uint32{0}, mtc.bytes, queueCfg, colbase.NewTestingSemaphore(2),
 				[]*mon.BoundAccount{&diskAcc},
 			)
 
@@ -842,7 +842,7 @@ func TestHashRouterRandom(t *testing.T) {
 					diskAcc := testDiskMonitor.MakeBoundAccount()
 					defer diskAcc.Close(ctx)
 					allocator := colbase.NewAllocator(ctx, &acc)
-					op := newRouterOutputOpWithBlockedThresholdAndBatchSize(allocator, typs, unblockEventsChan, memoryLimitPerOutput, queueCfg, NewTestingSemaphore(len(outputs)*2), blockedThreshold, outputSize, &diskAcc)
+					op := newRouterOutputOpWithBlockedThresholdAndBatchSize(allocator, typs, unblockEventsChan, memoryLimitPerOutput, queueCfg, colbase.NewTestingSemaphore(len(outputs)*2), blockedThreshold, outputSize, &diskAcc)
 					outputs[i] = op
 					outputsAsOps[i] = op
 				}
@@ -930,7 +930,7 @@ func BenchmarkHashRouter(b *testing.B) {
 	// numbers.
 	batch := testAllocator.NewMemBatch(types)
 	batch.SetLength(coldata.BatchSize())
-	input := NewRepeatableBatchSource(testAllocator, batch)
+	input := colbase.NewRepeatableBatchSource(testAllocator, batch)
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, true /* inMem */)
 	defer cleanup()
@@ -949,7 +949,7 @@ func BenchmarkHashRouter(b *testing.B) {
 					diskAccounts[i] = &diskAcc
 					defer diskAcc.Close(ctx)
 				}
-				r, outputs := NewHashRouter(allocators, input, types, []uint32{0}, 64<<20, queueCfg, &TestingSemaphore{}, diskAccounts)
+				r, outputs := NewHashRouter(allocators, input, types, []uint32{0}, 64<<20, queueCfg, &colbase.TestingSemaphore{}, diskAccounts)
 				b.SetBytes(8 * int64(coldata.BatchSize()) * int64(numInputBatches))
 				// We expect distribution to not change. This is a sanity check that
 				// we're resetting properly.

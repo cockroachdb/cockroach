@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -157,7 +157,7 @@ func BenchmarkCastOp(b *testing.B) {
 							testAllocator, rng, []coltypes.T{fromType},
 							coldata.BatchSize(), nullProbability, selectivity,
 						)
-						source := NewRepeatableBatchSource(testAllocator, batch)
+						source := colbase.NewRepeatableBatchSource(testAllocator, batch)
 						op, err := createTestCastOperator(ctx, flowCtx, source, &typePair[0], &typePair[1])
 						require.NoError(b, err)
 						b.SetBytes(int64(8 * coldata.BatchSize()))

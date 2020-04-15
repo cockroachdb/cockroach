@@ -255,7 +255,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 					Cfg: &execinfra.ServerConfig{
 						TempFS:          ngn,
 						TempStoragePath: tempPath,
-						VecFDSemaphore:  &colexec.TestingSemaphore{},
+						VecFDSemaphore:  &colbase.TestingSemaphore{},
 						Metrics:         &execinfra.DistSQLMetrics{},
 					},
 					EvalCtx: &evalCtx,

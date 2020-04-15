@@ -202,9 +202,9 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 		for _, success := range []bool{true, false} {
 			expectNoMemoryError := success || tc.spillingSupported
 			t.Run(fmt.Sprintf("%s-success-expected-%t", tc.desc, expectNoMemoryError), func(t *testing.T) {
-				inputs := []colbase.Operator{colexec.NewRepeatableBatchSource(testAllocator, batch)}
+				inputs := []colbase.Operator{colbase.NewRepeatableBatchSource(testAllocator, batch)}
 				if len(tc.spec.Input) > 1 {
-					inputs = append(inputs, colexec.NewRepeatableBatchSource(testAllocator, batch))
+					inputs = append(inputs, colbase.NewRepeatableBatchSource(testAllocator, batch))
 				}
 				memMon := mon.MakeMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
 				flowCtx.Cfg.TestingKnobs = execinfra.TestingKnobs{}
@@ -228,7 +228,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					Spec:                tc.spec,
 					Inputs:              inputs,
 					StreamingMemAccount: &acc,
-					FDSemaphore:         colexec.NewTestingSemaphore(256),
+					FDSemaphore:         colbase.NewTestingSemaphore(256),
 				}
 				// The disk spilling infrastructure relies on different memory
 				// accounts, so if the spilling is supported, we do *not* want to use

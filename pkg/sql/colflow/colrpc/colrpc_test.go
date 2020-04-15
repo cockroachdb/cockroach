@@ -187,7 +187,7 @@ func TestOutboxInbox(t *testing.T) {
 	t.Run(fmt.Sprintf("cancellationScenario=%s", cancellationScenarioName), func(t *testing.T) {
 		var (
 			typs        = []coltypes.T{coltypes.Int64}
-			inputBuffer = colexec.NewBatchBuffer()
+			inputBuffer = colbase.NewBatchBuffer()
 			// Generate some random behavior before passing the random number
 			// generator to be used in the Outbox goroutine (to avoid races). These
 			// sleep variables enable a sleep for up to half a millisecond with a .25
@@ -269,7 +269,7 @@ func TestOutboxInbox(t *testing.T) {
 			colbase.NewAllocator(ctx, &deselectorMemAcc), inputBuffer, typs,
 		)
 		inputBatches.Init()
-		outputBatches := colexec.NewBatchBuffer()
+		outputBatches := colbase.NewBatchBuffer()
 		var readerErr error
 		for {
 			var outputBatch coldata.Batch
@@ -529,7 +529,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	batch := testAllocator.NewMemBatch(typs)
 	batch.SetLength(coldata.BatchSize())
 
-	input := colexec.NewRepeatableBatchSource(testAllocator, batch)
+	input := colbase.NewRepeatableBatchSource(testAllocator, batch)
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
@@ -587,7 +587,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	var inTags *logtags.Buffer
 
 	nextDone := make(chan struct{})
-	input := &colexec.CallbackOperator{NextCb: func(ctx context.Context) coldata.Batch {
+	input := &colbase.CallbackOperator{NextCb: func(ctx context.Context) coldata.Batch {
 		b := testAllocator.NewMemBatchWithSize(typs, 0)
 		b.SetLength(0)
 		inTags = logtags.FromContext(ctx)

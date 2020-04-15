@@ -36,7 +36,7 @@ import (
 // colBatchScan is the exec.Operator implementation of TableReader. It reads a table
 // from kv, presenting it as coldata.Batches via the exec.Operator interface.
 type colBatchScan struct {
-	ZeroInputNode
+	colbase.ZeroInputNode
 	spans     roachpb.Spans
 	flowCtx   *execinfra.FlowCtx
 	rf        *cFetcher

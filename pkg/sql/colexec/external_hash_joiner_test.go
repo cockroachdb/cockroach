@@ -76,7 +76,7 @@ func TestExternalHashJoiner(t *testing.T) {
 						tc.skipAllNullsInjection = true
 					}
 					runHashJoinTestCase(t, tc, func(sources []colbase.Operator) (colbase.Operator, error) {
-						sem := NewTestingSemaphore(externalHJMinPartitions)
+						sem := colbase.NewTestingSemaphore(externalHJMinPartitions)
 						semsToCheck = append(semsToCheck, sem)
 						spec := createSpecForHashJoiner(tc)
 						// TODO(asubiotto): Pass in the testing.T of the caller to this
@@ -154,7 +154,7 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	var spilled bool
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
-	sem := NewTestingSemaphore(externalHJMinPartitions)
+	sem := colbase.NewTestingSemaphore(externalHJMinPartitions)
 	// Ignore closers since the sorter should close itself when it is drained of
 	// all tuples. We assert this by checking that the semaphore reports a count
 	// of 0.
@@ -266,7 +266,7 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 							hj, accounts, monitors, _, err := createDiskBackedHashJoiner(
 								ctx, flowCtx, spec, []colbase.Operator{leftSource, rightSource},
 								func() {}, queueCfg, 0 /* numForcedRepartitions */, false, /* delegateFDAcquisitions */
-								NewTestingSemaphore(VecMaxOpenFDsLimit),
+								colbase.NewTestingSemaphore(VecMaxOpenFDsLimit),
 							)
 							memAccounts = append(memAccounts, accounts...)
 							memMonitors = append(memMonitors, monitors...)

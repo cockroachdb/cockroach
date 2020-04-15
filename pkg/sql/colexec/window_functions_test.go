@@ -284,7 +284,7 @@ func TestWindowFunctions(t *testing.T) {
 							Windower: &tc.windowerSpec,
 						},
 					}
-					sem := NewTestingSemaphore(maxNumberFDs)
+					sem := colbase.NewTestingSemaphore(maxNumberFDs)
 					args := NewColOperatorArgs{
 						Spec:                spec,
 						Inputs:              inputs,

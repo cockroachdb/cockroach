@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -79,7 +79,7 @@ func TestExternalSort(t *testing.T) {
 							// A sorter should never exceed externalSorterMinPartitions, even
 							// during repartitioning. A panic will happen if a sorter requests
 							// more than this number of file descriptors.
-							sem := NewTestingSemaphore(externalSorterMinPartitions)
+							sem := colbase.NewTestingSemaphore(externalSorterMinPartitions)
 							// If a limit is satisfied before the sorter is drained of all its
 							// tuples, the sorter will not close its partitioner. During a
 							// flow this will happen in a downstream materializer/outbox,
@@ -195,7 +195,7 @@ func TestExternalSortRandomized(t *testing.T) {
 						expected,
 						orderedVerifier,
 						func(input []colbase.Operator) (colbase.Operator, error) {
-							sem := NewTestingSemaphore(externalSorterMinPartitions)
+							sem := colbase.NewTestingSemaphore(externalSorterMinPartitions)
 							semsToCheck = append(semsToCheck, sem)
 							sorter, newAccounts, newMonitors, closers, err := createDiskBackedSorter(
 								ctx, flowCtx, input, logTypes[:nCols], ordCols,
@@ -281,7 +281,7 @@ func BenchmarkExternalSort(b *testing.B) {
 						sorter, accounts, monitors, _, err := createDiskBackedSorter(
 							ctx, flowCtx, []colbase.Operator{source}, logTypes, ordCols,
 							0 /* matchLen */, 0 /* k */, func() { spilled = true },
-							64 /* maxNumberPartitions */, false /* delegateFDAcquisitions */, queueCfg, &TestingSemaphore{},
+							64 /* maxNumberPartitions */, false /* delegateFDAcquisitions */, queueCfg, &colbase.TestingSemaphore{},
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)

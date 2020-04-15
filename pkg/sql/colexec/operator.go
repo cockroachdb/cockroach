@@ -70,21 +70,6 @@ func (n OneInputNode) Input() colbase.Operator {
 	return n.input
 }
 
-// ZeroInputNode is an execinfra.OpNode with no inputs.
-type ZeroInputNode struct{}
-
-// ChildCount implements the execinfra.OpNode interface.
-func (ZeroInputNode) ChildCount(verbose bool) int {
-	return 0
-}
-
-// Child implements the execinfra.OpNode interface.
-func (ZeroInputNode) Child(nth int, verbose bool) execinfra.OpNode {
-	vecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
-	// This code is unreachable, but the compiler cannot infer that.
-	return nil
-}
-
 // newTwoInputNode returns an execinfra.OpNode with two Operator inputs.
 func newTwoInputNode(inputOne, inputTwo colbase.Operator) twoInputNode {
 	return twoInputNode{inputOne: inputOne, inputTwo: inputTwo}
@@ -215,7 +200,7 @@ func (s *zeroOperator) Next(ctx context.Context) coldata.Batch {
 }
 
 type singleTupleNoInputOperator struct {
-	ZeroInputNode
+	colbase.ZeroInputNode
 	NonExplainable
 	batch  coldata.Batch
 	nexted bool
@@ -248,7 +233,7 @@ func (s *singleTupleNoInputOperator) Next(ctx context.Context) coldata.Batch {
 // feedOperator is used to feed an Operator chain with input by manually
 // setting the next batch.
 type feedOperator struct {
-	ZeroInputNode
+	colbase.ZeroInputNode
 	NonExplainable
 	batch coldata.Batch
 }

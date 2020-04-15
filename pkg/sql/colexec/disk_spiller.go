@@ -309,7 +309,7 @@ func (d *diskSpillerBase) Child(nth int, verbose bool) execinfra.OpNode {
 // initialized when bufferExportingOperator.Init() is called.
 // NOTE: it is assumed that secondSource is the input to firstSource.
 type bufferExportingOperator struct {
-	ZeroInputNode
+	colbase.ZeroInputNode
 	NonExplainable
 
 	firstSource     bufferingInMemoryOperator

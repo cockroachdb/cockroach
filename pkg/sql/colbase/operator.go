@@ -12,8 +12,10 @@ package colbase
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 )
 
@@ -42,4 +44,19 @@ type Operator interface {
 	Next(context.Context) coldata.Batch
 
 	execinfra.OpNode
+}
+
+// ZeroInputNode is an execinfra.OpNode with no inputs.
+type ZeroInputNode struct{}
+
+// ChildCount implements the execinfra.OpNode interface.
+func (ZeroInputNode) ChildCount(verbose bool) int {
+	return 0
+}
+
+// Child implements the execinfra.OpNode interface.
+func (ZeroInputNode) Child(nth int, verbose bool) execinfra.OpNode {
+	vecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }

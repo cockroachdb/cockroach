@@ -44,7 +44,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 
 	inputs := make([]colbase.Operator, numInputs)
 	for i := range inputs {
-		source := NewRepeatableBatchSource(
+		source := colbase.NewRepeatableBatchSource(
 			testAllocator,
 			colbase.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64()),
 		)
@@ -101,13 +101,13 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 	const expectedErr = "first input error"
 
 	inputs := make([]colbase.Operator, 6)
-	inputs[0] = &CallbackOperator{NextCb: func(context.Context) coldata.Batch {
+	inputs[0] = &colbase.CallbackOperator{NextCb: func(context.Context) coldata.Batch {
 		vecerror.InternalError(expectedErr)
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}}
 	for i := 1; i < len(inputs); i++ {
-		inputs[i] = &CallbackOperator{
+		inputs[i] = &colbase.CallbackOperator{
 			NextCb: func(ctx context.Context) coldata.Batch {
 				<-ctx.Done()
 				vecerror.InternalError(ctx.Err())
@@ -136,7 +136,7 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	for i := range inputs {
 		batch := testAllocator.NewMemBatchWithSize(typs, coldata.BatchSize())
 		batch.SetLength(coldata.BatchSize())
-		inputs[i] = NewRepeatableBatchSource(testAllocator, batch)
+		inputs[i] = colbase.NewRepeatableBatchSource(testAllocator, batch)
 	}
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())

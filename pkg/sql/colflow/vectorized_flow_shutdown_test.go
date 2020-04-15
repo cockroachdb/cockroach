@@ -180,7 +180,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				}
 				hashRouter, hashRouterOutputs := colexec.NewHashRouter(
 					allocators, hashRouterInput, typs, []uint32{0}, 64<<20, /* 64 MiB */
-					queueCfg, &colexec.TestingSemaphore{}, diskAccounts,
+					queueCfg, &colbase.TestingSemaphore{}, diskAccounts,
 				)
 				for i := 0; i < numInboxes; i++ {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
@@ -267,7 +267,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						remoteAllocator := colbase.NewAllocator(ctxRemote, &sourceMemAccount)
 						batch := remoteAllocator.NewMemBatch(typs)
 						batch.SetLength(coldata.BatchSize())
-						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colexec.NewRepeatableBatchSource(remoteAllocator, batch), inboxes[i], streamID, outboxMetadataSources)
+						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colbase.NewRepeatableBatchSource(remoteAllocator, batch), inboxes[i], streamID, outboxMetadataSources)
 					}
 					streamID++
 				}

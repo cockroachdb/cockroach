@@ -92,7 +92,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 
 		mergeJoiner, err := newMergeJoinOp(
 			testAllocator, defaultMemoryLimit, queueCfg,
-			NewTestingSemaphore(4), sqlbase.InnerJoin, leftInput, rightInput,
+			colbase.NewTestingSemaphore(4), sqlbase.InnerJoin, leftInput, rightInput,
 			[]coltypes.T{coltypes.Int64}, []coltypes.T{coltypes.Int64},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},

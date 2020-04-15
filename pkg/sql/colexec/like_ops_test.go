@@ -119,7 +119,7 @@ func BenchmarkLikeOps(b *testing.B) {
 	}
 
 	batch.SetLength(coldata.BatchSize())
-	source := NewRepeatableBatchSource(testAllocator, batch)
+	source := colbase.NewRepeatableBatchSource(testAllocator, batch)
 	source.Init()
 
 	base := selConstOpBase{

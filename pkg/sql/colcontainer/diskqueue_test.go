@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -202,7 +201,7 @@ func BenchmarkDiskQueue(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	typs := []coltypes.T{coltypes.Int64}
 	batch := colbase.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0, 0)
-	op := colexec.NewRepeatableBatchSource(testAllocator, batch)
+	op := colbase.NewRepeatableBatchSource(testAllocator, batch)
 	ctx := context.Background()
 	for i := 0; i < b.N; i++ {
 		op.ResetBatchesToReturn(numBatches)

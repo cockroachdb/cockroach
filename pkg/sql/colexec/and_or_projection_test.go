@@ -257,7 +257,7 @@ func benchmarkLogicalProjOp(
 			sel[i] = i
 		}
 	}
-	input := NewRepeatableBatchSource(testAllocator, batch)
+	input := colbase.NewRepeatableBatchSource(testAllocator, batch)
 	logicalProjOp, err := createTestProjectingOperator(
 		ctx, flowCtx, input, []types.T{*types.Bool, *types.Bool},
 		fmt.Sprintf("@1 %s @2", operation), false, /* canFallbackToRowexec */

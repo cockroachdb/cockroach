@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -28,7 +29,7 @@ func TestCancelChecker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx, cancel := context.WithCancel(context.Background())
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
-	op := NewCancelChecker(NewNoop(NewRepeatableBatchSource(testAllocator, batch)))
+	op := NewCancelChecker(NewNoop(colbase.NewRepeatableBatchSource(testAllocator, batch)))
 	cancel()
 	err := vecerror.CatchVectorizedRuntimeError(func() {
 		op.Next(ctx)

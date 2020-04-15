@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -31,7 +30,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	ctx := context.Background()
 
 	var (
-		input    = colexec.NewBatchBuffer()
+		input    = colbase.NewBatchBuffer()
 		typs     = []coltypes.T{coltypes.Int64}
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
@@ -81,7 +80,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 	ctx := context.Background()
 
 	var (
-		input = colexec.NewBatchBuffer()
+		input = colbase.NewBatchBuffer()
 		typs  = []coltypes.T{coltypes.Int64}
 	)
 

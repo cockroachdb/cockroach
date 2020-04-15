@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -125,7 +125,7 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 		}
 	}
 
-	source := NewRepeatableBatchSource(testAllocator, batch)
+	source := colbase.NewRepeatableBatchSource(testAllocator, batch)
 	op, err := createTestProjectingOperator(
 		ctx, flowCtx, source, []types.T{*types.Int},
 		"abs(@1)" /* projectingExpr */, false, /* canFallbackToRowexec */
@@ -169,7 +169,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	}
 	batch.SetLength(coldata.BatchSize())
 	var source colbase.Operator
-	source = NewRepeatableBatchSource(testAllocator, batch)
+	source = colbase.NewRepeatableBatchSource(testAllocator, batch)
 	source = newVectorTypeEnforcer(testAllocator, source, coltypes.Bytes, outputIdx)
 
 	// Set up the default operator.

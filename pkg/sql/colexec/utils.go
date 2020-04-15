@@ -95,7 +95,7 @@ func newPartitionerToOperator(
 // partition on every call to Next. It is a converter from filled in
 // PartitionedQueue to Operator.
 type partitionerToOperator struct {
-	ZeroInputNode
+	colbase.ZeroInputNode
 	NonExplainable
 
 	partitioner  colcontainer.PartitionedQueue

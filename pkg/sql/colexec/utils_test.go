@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -600,7 +600,7 @@ func setColVal(vec coldata.Vec, idx int, val interface{}) {
 //     t.Fatal(err)
 // }
 type opTestInput struct {
-	ZeroInputNode
+	colbase.ZeroInputNode
 
 	typs []coltypes.T
 
@@ -786,7 +786,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 }
 
 type opFixedSelTestInput struct {
-	ZeroInputNode
+	colbase.ZeroInputNode
 
 	typs []coltypes.T
 
@@ -1102,9 +1102,9 @@ func assertTuplesOrderedEqual(expected tuples, actual tuples) error {
 // finiteBatchSource is an Operator that returns the same batch a specified
 // number of times.
 type finiteBatchSource struct {
-	ZeroInputNode
+	colbase.ZeroInputNode
 
-	repeatableBatch *RepeatableBatchSource
+	repeatableBatch *colbase.RepeatableBatchSource
 
 	usableCount int
 }
@@ -1115,7 +1115,7 @@ var _ colbase.Operator = &finiteBatchSource{}
 // batch a specified number of times.
 func newFiniteBatchSource(batch coldata.Batch, usableCount int) *finiteBatchSource {
 	return &finiteBatchSource{
-		repeatableBatch: NewRepeatableBatchSource(testAllocator, batch),
+		repeatableBatch: colbase.NewRepeatableBatchSource(testAllocator, batch),
 		usableCount:     usableCount,
 	}
 }
@@ -1141,8 +1141,8 @@ func (f *finiteBatchSource) reset(usableCount int) {
 // (except for the first) the batch is returned to emulate source that is
 // already ordered on matchLen columns.
 type finiteChunksSource struct {
-	ZeroInputNode
-	repeatableBatch *RepeatableBatchSource
+	colbase.ZeroInputNode
+	repeatableBatch *colbase.RepeatableBatchSource
 
 	usableCount int
 	matchLen    int
@@ -1153,7 +1153,7 @@ var _ colbase.Operator = &finiteChunksSource{}
 
 func newFiniteChunksSource(batch coldata.Batch, usableCount int, matchLen int) *finiteChunksSource {
 	return &finiteChunksSource{
-		repeatableBatch: NewRepeatableBatchSource(testAllocator, batch),
+		repeatableBatch: colbase.NewRepeatableBatchSource(testAllocator, batch),
 		usableCount:     usableCount,
 		matchLen:        matchLen,
 	}
@@ -1224,7 +1224,7 @@ func TestRepeatableBatchSource(t *testing.T) {
 		batchLen = coldata.BatchSize()
 	}
 	batch.SetLength(batchLen)
-	input := NewRepeatableBatchSource(testAllocator, batch)
+	input := colbase.NewRepeatableBatchSource(testAllocator, batch)
 
 	b := input.Next(context.Background())
 	b.SetLength(0)
@@ -1252,7 +1252,7 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	batch.SetLength(batchLen)
 	batch.SetSelection(true)
 	copy(batch.Selection(), sel)
-	input := NewRepeatableBatchSource(testAllocator, batch)
+	input := colbase.NewRepeatableBatchSource(testAllocator, batch)
 	b := input.Next(context.Background())
 
 	b.SetLength(0)
@@ -1294,7 +1294,7 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 // chunkingBatchSource is a batch source that takes unlimited-size columns and
 // chunks them into BatchSize()-sized chunks when Nexted.
 type chunkingBatchSource struct {
-	ZeroInputNode
+	colbase.ZeroInputNode
 	typs []coltypes.T
 	cols []coldata.Vec
 	len  int

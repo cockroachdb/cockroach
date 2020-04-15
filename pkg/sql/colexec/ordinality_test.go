@@ -87,7 +87,7 @@ func BenchmarkOrdinality(b *testing.B) {
 
 	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
 	batch.SetLength(coldata.BatchSize())
-	source := NewRepeatableBatchSource(testAllocator, batch)
+	source := colbase.NewRepeatableBatchSource(testAllocator, batch)
 	ordinality, err := createTestOrdinalityOperator(ctx, flowCtx, source, []types.T{*types.Int, *types.Int, *types.Int})
 	require.NoError(b, err)
 	ordinality.Init()
