@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // RunNemesis generates and applies a series of Operations to exercise the KV
@@ -52,7 +53,13 @@ func RunNemesis(
 		var buf strings.Builder
 		for atomic.AddInt64(&stepsStartedAtomic, 1) <= numSteps {
 			step := g.RandStep(rng)
-			if err := a.Apply(ctx, &step); err != nil {
+
+			recCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "txn step")
+			err := a.Apply(recCtx, &step)
+			log.VEventf(recCtx, 2, "step: %v", step)
+			step.Trace = collect().String()
+			cancel()
+			if err != nil {
 				buf.Reset()
 				step.format(&buf, formatCtx{indent: `  ` + workerName + ` ERR `})
 				log.Infof(ctx, "error: %+v\n\n%s", err, buf.String())
@@ -116,6 +123,8 @@ func printRepro(stepsByWorker [][]Step) string {
 			buf.WriteString("\n")
 			buf.WriteString(fctx.indent)
 			step.Op.format(&buf, fctx)
+			buf.WriteString(step.Trace)
+			buf.WriteString("\n")
 		}
 		buf.WriteString("\n  return nil\n")
 		buf.WriteString("})\n")

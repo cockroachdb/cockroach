@@ -156,15 +156,6 @@ func CanCreateTxnRecord(rec EvalContext, txn *roachpb.Transaction) error {
 // information would cause a partial rollback, if any, to be reverted
 // and yield inconsistent data.
 func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transaction {
-	// Construct the transaction object.
-	synthTxnRecord := roachpb.TransactionRecord{
-		TxnMeta: txn,
-		Status:  roachpb.PENDING,
-		// Set the LastHeartbeat timestamp to the intent's timestamp.
-		// We use this as an indication of client activity.
-		LastHeartbeat: txn.WriteTimestamp,
-	}
-
 	// Determine whether the transaction record could ever actually be written
 	// in the future.
 	txnMinTS := txn.MinTimestamp
@@ -193,6 +184,18 @@ func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transa
 			log.Fatalf(context.TODO(), "no minimum transaction timestamp provided: %v", txn)
 		}
 	}
+
+	// Construct the transaction object.
+	synthTxnRecord := roachpb.TransactionRecord{
+		TxnMeta: txn,
+		Status:  roachpb.PENDING,
+		// Set the LastHeartbeat timestamp to the transactions's MinTimestamp. We
+		// use this as an indication of client activity. Note that we cannot use
+		// txn.WriteTimestamp for that purpose, as the WriteTimestamp could have
+		// been bumped by other pushers.
+		LastHeartbeat: txnMinTS,
+	}
+
 	ok, minCommitTS, _ := rec.CanCreateTxnRecord(txn.ID, txn.Key, txnMinTS)
 	if ok {
 		// Forward the provisional commit timestamp by the minimum timestamp that
