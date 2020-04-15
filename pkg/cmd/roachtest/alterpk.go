@@ -89,8 +89,7 @@ func registerAlterPK(r *testRegistry) {
 
 	// runAlterPKTPCC runs a primary key change while the TPCC workload runs.
 	runAlterPKTPCC := func(ctx context.Context, t *test, c *cluster) {
-		// TODO(yuzefovich): increase this back to 500 once #47205 is resolved.
-		const warehouses = 100
+		const warehouses = 500
 		const duration = 10 * time.Minute
 
 		roachNodes, loadNode := setupTest(ctx, t, c)
