@@ -139,19 +139,17 @@ WHERE
     OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27))
     AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
-·                     distributed  false            ·                                  ·
-·                     vectorized   false            ·                                  ·
-render                ·            ·                (col0)                             ·
- │                    render 0     col0             ·                                  ·
- └── union            ·            ·                (col0, col3, col4, rowid[hidden])  ·
-      ├── norows      ·            ·                (col0, col3, col4, rowid)          ·
-      └── index-join  ·            ·                (col0, col3, col4, rowid[hidden])  ·
-           │          table        tab4@primary     ·                                  ·
-           │          key columns  rowid            ·                                  ·
-           └── scan   ·            ·                (col0, col4, rowid[hidden])        ·
-·                     table        tab4@idx_tab4_0  ·                                  ·
-·                     spans        /!NULL-/5.38/1   ·                                  ·
-·                     filter       col0 <= 0        ·                                  ·
+·                distributed  false            ·                                  ·
+·                vectorized   true             ·                                  ·
+render           ·            ·                (col0)                             ·
+ │               render 0     col0             ·                                  ·
+ └── index-join  ·            ·                (col0, col3, col4, rowid[hidden])  ·
+      │          table        tab4@primary     ·                                  ·
+      │          key columns  rowid            ·                                  ·
+      └── scan   ·            ·                (col0, col4, rowid[hidden])        ·
+·                table        tab4@idx_tab4_0  ·                                  ·
+·                spans        /!NULL-/5.38/1   ·                                  ·
+·                filter       col0 <= 0        ·                                  ·
 
 # ------------------------------------------------------------------------------
 # Correlated subqueries.
