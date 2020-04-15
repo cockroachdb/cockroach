@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func init() {
@@ -96,6 +97,7 @@ func QueryIntent(
 				// The intent matched but was pushed to a later timestamp. Consider a
 				// pushed intent a missing intent.
 				curIntentPushed = true
+				log.VEventf(ctx, 2, "found pushed intent")
 				reply.FoundIntent = false
 
 				// If the request was querying an intent in its own transaction, update

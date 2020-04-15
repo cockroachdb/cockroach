@@ -1625,7 +1625,8 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 	storeCfg.TestingKnobs.DontRetryPushTxnFailures = true
 	storeCfg.TestingKnobs.DontRecoverIndeterminateCommits = true
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
 	store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &storeCfg)
 
 	testCases := []struct {
@@ -1700,12 +1701,21 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			expPusheeRetry:      false,
 		},
 	}
-	for _, tc := range testCases {
-		name := fmt.Sprintf("pusherWillWin=%t,pusheePushed=%t,pusheeStaging=%t",
-			tc.pusherWillWin, tc.pusheeAlreadyPushed, tc.pusheeStagingRecord)
+	for i, tc := range testCases {
+		name := fmt.Sprintf("%d-pusherWillWin=%t,pusheePushed=%t,pusheeStaging=%t",
+			i, tc.pusherWillWin, tc.pusheeAlreadyPushed, tc.pusheeStagingRecord)
 		t.Run(name, func(t *testing.T) {
-			ctx := context.Background()
 			key := roachpb.Key(fmt.Sprintf("key-%s", name))
+
+			// First, write original value. We use this value as a sentinel; we'll
+			// check that we can read it later.
+			{
+				args := putArgs(key, []byte("value1"))
+				if _, pErr := kv.SendWrapped(ctx, store.TestSender(), &args); pErr != nil {
+					t.Fatal(pErr)
+				}
+			}
+
 			pusher := newTransaction("pusher", key, 1, store.cfg.Clock)
 			pushee := newTransaction("pushee", key, 1, store.cfg.Clock)
 
@@ -1716,14 +1726,6 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			} else {
 				pushee.Priority = enginepb.MaxTxnPriority
 				pusher.Priority = enginepb.MinTxnPriority // Pusher will lose.
-			}
-
-			// First, write original value.
-			{
-				args := putArgs(key, []byte("value1"))
-				if _, pErr := kv.SendWrapped(ctx, store.TestSender(), &args); pErr != nil {
-					t.Fatal(pErr)
-				}
 			}
 
 			// Second, lay down intent using the pushee's txn.

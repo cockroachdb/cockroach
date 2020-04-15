@@ -93,7 +93,7 @@ message TxnMeta {
   // began its first epoch. This is the earliest timestamp that the transaction
   // could have written any of its intents at.
   //
-  // The timestamp is currently used in two places:
+  // The timestamp is currently used in three places:
   // 1. by the transaction itself and by concurrent transactions when
   //    determining whether this transaction's record can be initially
   //    written. The timestamp is compared against the transaction's
@@ -103,6 +103,10 @@ message TxnMeta {
   // 2. by intent resolution to efficiently scan for intents while
   //    using a time-bound iterator - i.e. there can be intents to
   //    resolve up to the timestamp that the txn started with.
+  // 3. by would-be pushers, when they run into an intent but the corresponding
+  //    txn record was not yet written. In that case, the pusher uses this field
+  //    as an indication of a timestamp when the pushee's coordinator is known
+  //    to have been alive.
   util.hlc.Timestamp min_timestamp = 9 [(gogoproto.nullable) = false];
   // The transaction's priority, ratcheted on transaction pushes.
   int32 priority = 6 [(gogoproto.casttype) = "TxnPriority"];

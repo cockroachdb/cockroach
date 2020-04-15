@@ -178,11 +178,6 @@ func PushTxn(
 	} else {
 		// Start with the persisted transaction record.
 		reply.PusheeTxn = existTxn
-
-		// Forward the last heartbeat time of the transaction record by
-		// the timestamp of the intent. This is another indication of
-		// client activity.
-		reply.PusheeTxn.LastHeartbeat.Forward(args.PusheeTxn.WriteTimestamp)
 	}
 
 	// If already committed or aborted, return success.
