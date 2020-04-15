@@ -99,9 +99,16 @@ type routerOutputOp struct {
 		// one.
 		pendingBatch coldata.Batch
 		// data is a spillingQueue, a circular buffer backed by a disk queue.
-		data      *spillingQueue
-		numUnread int
-		blocked   bool
+		data *spillingQueue
+		// dataDequeueErr stores any error (if such occurs) when dequeueing
+		// from data (one possible error could be hitting disk usage limit).
+		// Once such error occurs, all calls to Next will be returning a
+		// zero-length batch. The error, however, will not be propagated right
+		// away - in order to prevent double reporting of the error by the hash
+		// router, it will be returned on the next call to addBatch.
+		dataDequeueErr error
+		numUnread      int
+		blocked        bool
 	}
 
 	testingKnobs struct {
@@ -201,10 +208,12 @@ func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 		o.mu.unlimitedAllocator.ReleaseBatch(b)
 		o.mu.pendingBatch = nil
 	} else {
-		var err error
-		b, err = o.mu.data.dequeue(ctx)
-		if err != nil {
-			execerror.VectorizedInternalPanic(err)
+		if o.mu.dataDequeueErr != nil {
+			return coldata.ZeroBatch
+		}
+		b, o.mu.dataDequeueErr = o.mu.data.dequeue(ctx)
+		if o.mu.dataDequeueErr != nil {
+			return coldata.ZeroBatch
 		}
 	}
 	o.mu.numUnread -= b.Length()
@@ -262,6 +271,12 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	if o.mu.dataDequeueErr != nil {
+		// We have encountered an error in Next() but have not yet propagated
+		// it, so we do so now - the error will get to the hash router which
+		// will cancel all of its outputs.
+		execerror.VectorizedInternalPanic(o.mu.dataDequeueErr)
+	}
 	if batch.Length() == 0 {
 		if o.mu.pendingBatch != nil {
 			if err := o.mu.data.enqueue(ctx, o.mu.pendingBatch); err != nil {
@@ -344,6 +359,7 @@ func (o *routerOutputOp) reset(ctx context.Context) {
 	o.mu.Lock()
 	o.mu.done = false
 	o.mu.data.reset(ctx)
+	o.mu.dataDequeueErr = nil
 	o.mu.numUnread = 0
 	o.mu.blocked = false
 	o.mu.Unlock()
