@@ -11,7 +11,12 @@
 import { assert } from "chai";
 
 import { cockroach } from "src/js/protos";
-import { FlatPlanNode, FlatPlanNodeAttribute, flattenTree, flattenAttributes } from "src/views/statements/planView";
+import {
+  FlatPlanNode,
+  FlatPlanNodeAttribute,
+  flattenTree,
+  flattenAttributes,
+} from "src/views/statements/planView";
 import IAttr = cockroach.sql.ExplainTreePlanNode.IAttr;
 import IExplainTreePlanNode = cockroach.sql.IExplainTreePlanNode;
 

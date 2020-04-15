@@ -12,17 +12,18 @@ import _ from "lodash";
 import React, { Fragment } from "react";
 import { cockroach } from "src/js/protos";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import styles from "./planView.module.styl";
 
 import IAttr = cockroach.sql.ExplainTreePlanNode.IAttr;
 import IExplainTreePlanNode = cockroach.sql.IExplainTreePlanNode;
 
 const WARNING_ICON = (
-  <svg className="warning-icon" width="17" height="17" viewBox="0 0 24 22" xmlns="http://www.w3.org/2000/svg">
+  <svg className={styles["warning-icon"]} width="17" height="17" viewBox="0 0 24 22" xmlns="http://www.w3.org/2000/svg">
     <path fill-rule="evenodd" clip-rule="evenodd" d="M15.7798 2.18656L23.4186 15.5005C25.0821 18.4005 22.9761 21.9972 19.6387 21.9972H4.3619C1.02395 21.9972 -1.08272 18.4009 0.582041 15.5005M0.582041 15.5005L8.21987 2.18656C9.89189 -0.728869 14.1077 -0.728837 15.7798 2.18656M13.4002 7.07075C13.4002 6.47901 12.863 5.99932 12.2002 5.99932C11.5375 5.99932 11.0002 6.47901 11.0002 7.07075V13.4993C11.0002 14.0911 11.5375 14.5707 12.2002 14.5707C12.863 14.5707 13.4002 14.0911 13.4002 13.4993V7.07075ZM13.5717 17.2774C13.5717 16.5709 12.996 15.9981 12.286 15.9981C11.5759 15.9981 11.0002 16.5709 11.0002 17.2774V17.2902C11.0002 17.9967 11.5759 18.5695 12.286 18.5695C12.996 18.5695 13.5717 17.9967 13.5717 17.2902V17.2774Z"/>
   </svg>
 );
 const NODE_ICON = (
-  <span className="node-icon">&#x26AC;</span>
+  <span className={styles["node-icon"]}>&#x26AC;</span>
 );
 
 // FlatPlanNodeAttribute contains a flattened representation of IAttr[].
@@ -203,9 +204,9 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps> {
       keyClassName = "";
     }
     return (
-      <div key={attr.key} className={attrClassName}>
+      <div key={attr.key} className={styles[attrClassName]}>
         {attr.warn && WARNING_ICON}
-        <span className={keyClassName}>{attr.key}</span>
+        <span className={styles[keyClassName]}>{attr.key}</span>
         {this.renderAttributeValues(attr.values)}
       </div>
     );
@@ -215,7 +216,7 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps> {
     const node = this.props.node;
     if (node.attrs && node.attrs.length > 0) {
       return (
-        <div className="nodeAttributes">
+        <div className={styles[`nodeAttributes`]}>
           {node.attrs.map( (attr) => this.renderAttribute(attr))}
         </div>
       );
@@ -225,7 +226,7 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps> {
   render() {
     const node = this.props.node;
     return (
-      <div className="nodeDetails">
+      <div className={styles[`nodeDetails`]}>
         {NODE_ICON} <b>{_.capitalize(node.name)}</b>
         {this.renderNodeDetails()}
       </div>
@@ -326,16 +327,16 @@ export class PlanView extends React.Component<PlanViewProps, PlanViewState> {
     );
 
     return (
-      <table className="plan-view-table">
+      <table className={styles["plan-view-table"]}>
         <thead>
-        <tr className="plan-view-table__row--header">
-          <th className="plan-view-table__cell">
-            <h2 className="base-heading summary--card__title">{this.props.title}</h2>
-            <div className="plan-view-table__tooltip">
+        <tr className={styles["plan-view-table__row--header"]}>
+          <th className={styles["plan-view-table__cell"]}>
+            <h2 className={`${styles["base-heading"]} ${styles["summary--card__title"]}`}>{this.props.title}</h2>
+            <div className={styles["plan-view-table__tooltip"]}>
               <ToolTipWrapper
                 text={lastSampledHelpText}>
-                <div className="plan-view-table__tooltip-hover-area">
-                  <div className="plan-view-table__info-icon">i</div>
+                <div className={styles["plan-view-table__tooltip-hover-area"]}>
+                  <div className={styles["plan-view-table__info-icon"]}>i</div>
                 </div>
               </ToolTipWrapper>
             </div>
@@ -343,9 +344,9 @@ export class PlanView extends React.Component<PlanViewProps, PlanViewState> {
         </tr>
         </thead>
         <tbody>
-        <tr className="plan-view-table__row--body">
-          <td className="plan-view plan-view-table__cell" style={{ textAlign: "left" }}>
-            <div className="plan-view-container">
+        <tr className={styles["plan-view-table__row--body"]}>
+          <td className={`${styles["plan-view"]} ${styles["plan-view-table__cell"]}`} style={{ textAlign: "left" }}>
+            <div className={styles["plan-view-container"]}>
               <div
                 id="plan-view-inner-container"
                 ref={this.innerContainer}
