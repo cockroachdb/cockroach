@@ -160,6 +160,9 @@ func (u *sqlSymUnion) unresolvedName() *tree.UnresolvedName {
 func (u *sqlSymUnion) unresolvedObjectName() *tree.UnresolvedObjectName {
     return u.val.(*tree.UnresolvedObjectName)
 }
+func (u *sqlSymUnion) unresolvedObjectNames() []*tree.UnresolvedObjectName {
+    return u.val.([]*tree.UnresolvedObjectName)
+}
 func (u *sqlSymUnion) functionReference() tree.FunctionReference {
     return u.val.(tree.FunctionReference)
 }
@@ -743,6 +746,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> drop_index_stmt
 %type <tree.Statement> drop_role_stmt
 %type <tree.Statement> drop_table_stmt
+%type <tree.Statement> drop_type_stmt
 %type <tree.Statement> drop_view_stmt
 %type <tree.Statement> drop_sequence_stmt
 
@@ -867,6 +871,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
 %type <str> db_object_name_component
 %type <*tree.UnresolvedObjectName> table_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
+%type <[]*tree.UnresolvedObjectName> type_name_list
 %type <str> schema_name
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
@@ -2268,7 +2273,7 @@ comment_text:
 // %Text:
 // CREATE DATABASE, CREATE TABLE, CREATE INDEX, CREATE TABLE AS,
 // CREATE USER, CREATE VIEW, CREATE SEQUENCE, CREATE STATISTICS,
-// CREATE ROLE
+// CREATE ROLE, CREATE TYPE
 create_stmt:
   create_role_stmt     // EXTEND WITH HELP: CREATE ROLE
 | create_ddl_stmt      // help texts in sub-rule
@@ -2329,7 +2334,6 @@ drop_unsupported:
 | DROP SERVER error { return unimplemented(sqllex, "drop server") }
 | DROP SUBSCRIPTION error { return unimplemented(sqllex, "drop subscription") }
 | DROP TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "drop text") }
-| DROP TYPE error { return unimplementedWithIssueDetail(sqllex, 27793, "drop type") }
 | DROP TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "drop") }
 
 create_ddl_stmt:
@@ -2341,7 +2345,7 @@ create_ddl_stmt:
 | create_table_as_stmt // EXTEND WITH HELP: CREATE TABLE
 // Error case for both CREATE TABLE and CREATE TABLE ... AS in one
 | CREATE opt_temp_create_table TABLE error   // SHOW HELP: CREATE TABLE
-| create_type_stmt     { /* SKIP DOC */ }
+| create_type_stmt     // EXTEND WITH HELP: CREATE TYPE
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
 | create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
 
@@ -2534,7 +2538,7 @@ discard_stmt:
 // %Category: Group
 // %Text:
 // DROP DATABASE, DROP INDEX, DROP TABLE, DROP VIEW, DROP SEQUENCE,
-// DROP USER, DROP ROLE
+// DROP USER, DROP ROLE, DROP TYPE
 drop_stmt:
   drop_ddl_stmt      // help texts in sub-rule
 | drop_role_stmt     // EXTEND WITH HELP: DROP ROLE
@@ -2547,6 +2551,7 @@ drop_ddl_stmt:
 | drop_table_stmt    // EXTEND WITH HELP: DROP TABLE
 | drop_view_stmt     // EXTEND WITH HELP: DROP VIEW
 | drop_sequence_stmt // EXTEND WITH HELP: DROP SEQUENCE
+| drop_type_stmt     // EXTEND WITH HELP: DROP TYPE
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL
@@ -2640,6 +2645,41 @@ drop_database_stmt:
     }
   }
 | DROP DATABASE error // SHOW HELP: DROP DATABASE
+
+// %Help: DROP TYPE - remove a type
+// %Category: DDL
+// %Text: DROP TYPE [IF EXISTS] <type_name> [, ...] [CASCASE | RESTRICT]
+// %SeeAlso: WEBDOCS/drop-type.html
+drop_type_stmt:
+  DROP TYPE type_name_list opt_drop_behavior
+  {
+    $$.val = &tree.DropType{
+      Names: $3.unresolvedObjectNames(),
+      IfExists: false,
+      DropBehavior: $4.dropBehavior(),
+    }
+  }
+| DROP TYPE IF EXISTS type_name_list opt_drop_behavior
+  {
+    $$.val = &tree.DropType{
+      Names: $5.unresolvedObjectNames(),
+      IfExists: true,
+      DropBehavior: $6.dropBehavior(),
+    }
+  }
+| DROP TYPE error // SHOW HELP: DROP TYPE
+
+
+type_name_list:
+  type_name
+  {
+    $$.val = []*tree.UnresolvedObjectName{$1.unresolvedObjectName()}
+  }
+| type_name_list ',' type_name
+  {
+    $$.val = append($1.unresolvedObjectNames(), $3.unresolvedObjectName())
+  }
+
 
 // %Help: DROP ROLE - remove a user
 // %Category: Priv
@@ -5412,13 +5452,14 @@ opt_view_recursive:
   /* EMPTY */ { /* no error */ }
 | RECURSIVE { return unimplemented(sqllex, "create recursive view") }
 
-// CREATE TYPE/DOMAIN is not yet supported by CockroachDB but we
-// want to report it with the right issue number.
+
+// %Help: CREATE TYPE -- create a type
+// %Category: DDL
+// %Text: CREATE TYPE <type_name> AS ENUM (...)
+// %SeeAlso: WEBDOCS/create-type.html
 create_type_stmt:
-  // Record/Composite types.
-  CREATE TYPE type_name AS '(' error      { return unimplementedWithIssue(sqllex, 27792) }
   // Enum types.
-| CREATE TYPE type_name AS ENUM '(' opt_enum_val_list ')'
+  CREATE TYPE type_name AS ENUM '(' opt_enum_val_list ')'
   {
     $$.val = &tree.CreateType{
       TypeName: $3.unresolvedObjectName(),
@@ -5426,6 +5467,9 @@ create_type_stmt:
       EnumLabels: $7.strs(),
     }
   }
+| CREATE TYPE error // SHOW HELP: CREATE TYPE
+  // Record/Composite types.
+| CREATE TYPE type_name AS '(' error      { return unimplementedWithIssue(sqllex, 27792) }
   // Range types.
 | CREATE TYPE type_name AS RANGE error    { return unimplementedWithIssue(sqllex, 27791) }
   // Base (primitive) types.

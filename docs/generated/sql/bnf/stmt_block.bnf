@@ -343,6 +343,7 @@ create_ddl_stmt ::=
 	| create_schema_stmt
 	| create_table_stmt
 	| create_table_as_stmt
+	| create_type_stmt
 	| create_view_stmt
 	| create_sequence_stmt
 
@@ -381,6 +382,7 @@ drop_ddl_stmt ::=
 	| drop_table_stmt
 	| drop_view_stmt
 	| drop_sequence_stmt
+	| drop_type_stmt
 
 drop_role_stmt ::=
 	'DROP' role_or_group_or_user string_or_placeholder_list
@@ -1028,6 +1030,9 @@ create_table_as_stmt ::=
 	'CREATE' opt_temp_create_table 'TABLE' table_name create_as_opt_col_list 'AS' select_stmt
 	| 'CREATE' opt_temp_create_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name create_as_opt_col_list 'AS' select_stmt
 
+create_type_stmt ::=
+	'CREATE' 'TYPE' type_name 'AS' 'ENUM' '(' opt_enum_val_list ')'
+
 create_view_stmt ::=
 	'CREATE' opt_temp 'VIEW' view_name opt_column_list 'AS' select_stmt
 	| 'CREATE' 'OR' 'REPLACE' opt_temp 'VIEW' view_name opt_column_list 'AS' select_stmt
@@ -1092,6 +1097,10 @@ drop_view_stmt ::=
 drop_sequence_stmt ::=
 	'DROP' 'SEQUENCE' table_name_list opt_drop_behavior
 	| 'DROP' 'SEQUENCE' 'IF' 'EXISTS' table_name_list opt_drop_behavior
+
+drop_type_stmt ::=
+	'DROP' 'TYPE' type_name_list opt_drop_behavior
+	| 'DROP' 'TYPE' 'IF' 'EXISTS' type_name_list opt_drop_behavior
 
 explain_option_name ::=
 	non_reserved_word
@@ -1439,6 +1448,13 @@ create_as_opt_col_list ::=
 	'(' create_as_table_defs ')'
 	| 
 
+type_name ::=
+	db_object_name
+
+opt_enum_val_list ::=
+	enum_val_list
+	| 
+
 opt_temp ::=
 	'TEMPORARY'
 	| 'TEMP'
@@ -1490,6 +1506,9 @@ table_index_name_list ::=
 
 table_name_list ::=
 	( table_name ) ( ( ',' table_name ) )*
+
+type_name_list ::=
+	( type_name ) ( ( ',' type_name ) )*
 
 non_reserved_word ::=
 	'identifier'
@@ -1788,6 +1807,9 @@ partition_by ::=
 
 create_as_table_defs ::=
 	( column_name create_as_col_qual_list ) ( ( ',' column_name create_as_col_qual_list | ',' family_def | ',' create_as_constraint_def ) )*
+
+enum_val_list ::=
+	( 'SCONST' ) ( ( ',' 'SCONST' ) )*
 
 common_table_expr ::=
 	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'
