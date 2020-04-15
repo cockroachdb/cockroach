@@ -1482,7 +1482,17 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	// merge to complete without depending too heavily on implementation
 	// details.
 	for i := 0; i < reqConcurrency; i++ {
-		<-reqAcquiredLatch
+		select {
+		case <-reqAcquiredLatch:
+			// Latch acquired.
+		case <-time.After(time.Second):
+			// Requests may never make it to the latch acquisition if s1 has not
+			// yet learned s2's lease is expired.
+			// This happens relatively frequently to at least some of the
+			// requests under stress, and it's difficult to wait out the delay
+			// before spawning the reqs since the RHS is locked by the ongoing
+			// merge.
+		}
 	}
 	time.Sleep(50 * time.Millisecond)
 
