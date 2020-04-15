@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -78,14 +79,14 @@ const (
 )
 
 func GetInProjectionOperator(
-	allocator *Allocator,
+	allocator *colbase.Allocator,
 	ct *types.T,
-	input Operator,
+	input colbase.Operator,
 	colIdx int,
 	resultIdx int,
 	datumTuple *tree.DTuple,
 	negate bool,
-) (Operator, error) {
+) (colbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, coltypes.Bool, resultIdx)
 	var err error
 	switch t := typeconv.FromColumnType(ct); t {
@@ -110,8 +111,8 @@ func GetInProjectionOperator(
 }
 
 func GetInOperator(
-	ct *types.T, input Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
-) (Operator, error) {
+	ct *types.T, input colbase.Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
+) (colbase.Operator, error) {
 	var err error
 	switch t := typeconv.FromColumnType(ct); t {
 	// {{range .}}
@@ -144,7 +145,7 @@ type selectInOp_TYPE struct {
 
 type projectInOp_TYPE struct {
 	OneInputNode
-	allocator *Allocator
+	allocator *colbase.Allocator
 	colIdx    int
 	outputIdx int
 	filterRow []_GOTYPE
@@ -152,7 +153,7 @@ type projectInOp_TYPE struct {
 	negate    bool
 }
 
-var _ Operator = &projectInOp_TYPE{}
+var _ colbase.Operator = &projectInOp_TYPE{}
 
 func fillDatumRow_TYPE(ct *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
 	conv := typeconv.GetDatumToPhysicalFn(ct)

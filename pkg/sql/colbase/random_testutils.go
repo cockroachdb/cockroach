@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colbase
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 )
 
 func randomType(rng *rand.Rand) coltypes.T {
@@ -55,13 +56,13 @@ func RandomBatch(
 	return batch
 }
 
-// randomSel creates a random selection vector up to a given batchSize in
+// RandomSel creates a random selection vector up to a given batchSize in
 // length. probOfOmitting specifies the probability that a row should be omitted
 // from the batch (i.e. whether it should be selected out). So if probOfOmitting
 // is 0, then the selection vector will contain all rows, but if it is > 0, then
 // some rows might be omitted and the length of the selection vector might be
 // less than batchSize.
-func randomSel(rng *rand.Rand, batchSize int, probOfOmitting float64) []int {
+func RandomSel(rng *rand.Rand, batchSize int, probOfOmitting float64) []int {
 	if probOfOmitting < 0 || probOfOmitting > 1 {
 		execerror.VectorizedInternalPanic(fmt.Sprintf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
 	}
@@ -79,12 +80,12 @@ func randomSel(rng *rand.Rand, batchSize int, probOfOmitting float64) []int {
 // TODO(asubiotto): Remove this once this function is actually used.
 var _ = randomTypes
 
-// randomBatchWithSel is equivalent to RandomBatch, but will also add a
+// RandomBatchWithSel is equivalent to RandomBatch, but will also add a
 // selection vector to the batch where each row is selected with probability
 // selProbability. If selProbability is 1, all the rows will be selected, if
 // selProbability is 0, none will. The returned batch will have its length set
 // to the length of the selection vector, unless selProbability is 0.
-func randomBatchWithSel(
+func RandomBatchWithSel(
 	allocator *Allocator,
 	rng *rand.Rand,
 	typs []coltypes.T,
@@ -94,7 +95,7 @@ func randomBatchWithSel(
 ) coldata.Batch {
 	batch := RandomBatch(allocator, rng, typs, n, 0 /* length */, nullProbability)
 	if selProbability != 0 {
-		sel := randomSel(rng, n, 1-selProbability)
+		sel := RandomSel(rng, n, 1-selProbability)
 		batch.SetSelection(true)
 		copy(batch.Selection(), sel)
 		batch.SetLength(len(sel))
@@ -138,7 +139,6 @@ type RandomDataOpArgs struct {
 // RandomDataOp is an operator that generates random data according to
 // RandomDataOpArgs. Call GetBuffer to get all data that was returned.
 type RandomDataOp struct {
-	ZeroInputNode
 	allocator        *Allocator
 	batchAccumulator func(b coldata.Batch)
 	typs             []coltypes.T
@@ -149,6 +149,8 @@ type RandomDataOp struct {
 	selection        bool
 	nulls            bool
 }
+
+var _ Operator = &RandomDataOp{}
 
 // NewRandomDataOp creates a new RandomDataOp.
 func NewRandomDataOp(allocator *Allocator, rng *rand.Rand, args RandomDataOpArgs) *RandomDataOp {
@@ -191,10 +193,10 @@ func NewRandomDataOp(allocator *Allocator, rng *rand.Rand, args RandomDataOpArgs
 	}
 }
 
-// Init is part of the Operator interface.
+// Init is part of the colexec.Operator interface.
 func (o *RandomDataOp) Init() {}
 
-// Next is part of the Operator interface.
+// Next is part of the colexec.Operator interface.
 func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
 	if o.numReturned == o.numBatches {
 		// Done.
@@ -217,7 +219,7 @@ func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
 			nullProbability = o.rng.Float64()
 		}
 
-		b := randomBatchWithSel(o.allocator, o.rng, o.typs, o.batchSize, nullProbability, selProbability)
+		b := RandomBatchWithSel(o.allocator, o.rng, o.typs, o.batchSize, nullProbability, selProbability)
 		if !o.selection {
 			b.SetSelection(false)
 		}
@@ -231,6 +233,18 @@ func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
 		}
 		return b
 	}
+}
+
+// ChildCount implements the execinfra.OpNode interface.
+func (o *RandomDataOp) ChildCount(verbose bool) int {
+	return 0
+}
+
+// Child implements the execinfra.OpNode interface.
+func (o *RandomDataOp) Child(nth int, verbose bool) execinfra.OpNode {
+	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 // Typs returns the output types of the RandomDataOp.

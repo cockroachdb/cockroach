@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -113,7 +114,7 @@ func TestRandomizedCast(t *testing.T) {
 				output = append(output, tuple{c.fromPhysType(fromDatum), c.toPhysType(toDatum)})
 			}
 			runTests(t, []tuples{input}, output, orderedVerifier,
-				func(input []Operator) (Operator, error) {
+				func(input []colbase.Operator) (colbase.Operator, error) {
 					return createTestCastOperator(ctx, flowCtx, input[0], c.fromTyp, c.toTyp)
 				})
 		})
@@ -152,7 +153,7 @@ func BenchmarkCastOp(b *testing.B) {
 						if !useSel {
 							selectivity = 1.0
 						}
-						batch := randomBatchWithSel(
+						batch := colbase.RandomBatchWithSel(
 							testAllocator, rng, []coltypes.T{fromType},
 							coldata.BatchSize(), nullProbability, selectivity,
 						)
@@ -172,8 +173,12 @@ func BenchmarkCastOp(b *testing.B) {
 }
 
 func createTestCastOperator(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, input Operator, fromTyp *types.T, toTyp *types.T,
-) (Operator, error) {
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	input colbase.Operator,
+	fromTyp *types.T,
+	toTyp *types.T,
+) (colbase.Operator, error) {
 	// We currently don't support casting to decimal type (other than when
 	// casting from decimal with the same precision), so we will allow falling
 	// back to row-by-row engine.

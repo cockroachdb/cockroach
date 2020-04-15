@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,11 +42,11 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 		numBatches = rng.Intn(maxBatches) + 1
 	)
 
-	inputs := make([]Operator, numInputs)
+	inputs := make([]colbase.Operator, numInputs)
 	for i := range inputs {
 		source := NewRepeatableBatchSource(
 			testAllocator,
-			RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64()),
+			colbase.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64()),
 		)
 		source.ResetBatchesToReturn(numBatches)
 		inputs[i] = source
@@ -99,7 +100,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 
 	const expectedErr = "first input error"
 
-	inputs := make([]Operator, 6)
+	inputs := make([]colbase.Operator, 6)
 	inputs[0] = &CallbackOperator{NextCb: func(context.Context) coldata.Batch {
 		execerror.VectorizedInternalPanic(expectedErr)
 		// This code is unreachable, but the compiler cannot infer that.
@@ -131,7 +132,7 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	const numInputs = 6
 
 	typs := []coltypes.T{coltypes.Int64}
-	inputs := make([]Operator, numInputs)
+	inputs := make([]colbase.Operator, numInputs)
 	for i := range inputs {
 		batch := testAllocator.NewMemBatchWithSize(typs, coldata.BatchSize())
 		batch.SetLength(coldata.BatchSize())

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -48,7 +49,7 @@ type colBatchScan struct {
 	init bool
 }
 
-var _ Operator = &colBatchScan{}
+var _ colbase.Operator = &colBatchScan{}
 
 func (s *colBatchScan) Init() {
 	s.ctx = context.Background()
@@ -98,7 +99,7 @@ func (s *colBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 
 // newColBatchScan creates a new colBatchScan operator.
 func newColBatchScan(
-	allocator *Allocator,
+	allocator *colbase.Allocator,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
@@ -148,7 +149,7 @@ func newColBatchScan(
 
 // initCRowFetcher initializes a row.cFetcher. See initRowFetcher.
 func initCRowFetcher(
-	allocator *Allocator,
+	allocator *colbase.Allocator,
 	fetcher *cFetcher,
 	desc *sqlbase.TableDescriptor,
 	indexIdx int,

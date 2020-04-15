@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -88,7 +89,7 @@ func _RET_UNSAFEGET(_, _ interface{}) interface{} {
 // around the problem we specify it here.
 type projConstOpBase struct {
 	OneInputNode
-	allocator      *Allocator
+	allocator      *colbase.Allocator
 	colIdx         int
 	outputIdx      int
 	decimalScratch decimalOverloadScratch
@@ -97,7 +98,7 @@ type projConstOpBase struct {
 // projOpBase contains all of the fields for non-constant binary projections.
 type projOpBase struct {
 	OneInputNode
-	allocator      *Allocator
+	allocator      *colbase.Allocator
 	col1Idx        int
 	col2Idx        int
 	outputIdx      int
@@ -226,16 +227,16 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 // GetProjectionOperator returns the appropriate projection operator for the
 // given left and right column types and operation.
 func GetProjectionOperator(
-	allocator *Allocator,
+	allocator *colbase.Allocator,
 	leftColType *types.T,
 	rightColType *types.T,
 	outputPhysType coltypes.T,
 	op tree.Operator,
-	input Operator,
+	input colbase.Operator,
 	col1Idx int,
 	col2Idx int,
 	outputIdx int,
-) (Operator, error) {
+) (colbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputPhysType, outputIdx)
 	projOpBase := projOpBase{
 		OneInputNode: NewOneInputNode(input),

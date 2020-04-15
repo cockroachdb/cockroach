@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -90,7 +91,9 @@ func (b *projectingBatch) ReplaceCol(col coldata.Vec, idx int) {
 // only the columns in the projection slice, in order. In a degenerate case
 // when input already outputs batches that satisfy the projection, a
 // simpleProjectOp is not planned and input is returned.
-func NewSimpleProjectOp(input Operator, numInputCols int, projection []uint32) Operator {
+func NewSimpleProjectOp(
+	input colbase.Operator, numInputCols int, projection []uint32,
+) colbase.Operator {
 	if numInputCols == len(projection) {
 		projectionIsRedundant := true
 		for i := range projection {

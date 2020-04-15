@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -129,9 +130,9 @@ type testVectorizedInternalPanicEmitter struct {
 	emitBatch bool
 }
 
-var _ colexec.Operator = &testVectorizedInternalPanicEmitter{}
+var _ colbase.Operator = &testVectorizedInternalPanicEmitter{}
 
-func newTestVectorizedInternalPanicEmitter(input colexec.Operator) colexec.Operator {
+func newTestVectorizedInternalPanicEmitter(input colbase.Operator) colbase.Operator {
 	return &testVectorizedInternalPanicEmitter{
 		OneInputNode: colexec.NewOneInputNode(input),
 	}
@@ -162,9 +163,9 @@ type testNonVectorizedPanicEmitter struct {
 	emitBatch bool
 }
 
-var _ colexec.Operator = &testVectorizedInternalPanicEmitter{}
+var _ colbase.Operator = &testVectorizedInternalPanicEmitter{}
 
-func newTestNonVectorizedPanicEmitter(input colexec.Operator) colexec.Operator {
+func newTestNonVectorizedPanicEmitter(input colbase.Operator) colbase.Operator {
 	return &testNonVectorizedPanicEmitter{
 		OneInputNode: colexec.NewOneInputNode(input),
 	}

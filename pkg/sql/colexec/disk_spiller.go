@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -25,7 +26,7 @@ import (
 // in memory and knows how to export them once the memory limit has been
 // reached.
 type bufferingInMemoryOperator interface {
-	Operator
+	colbase.Operator
 
 	// ExportBuffered returns all the batches that have been buffered up from the
 	// input and have not yet been processed by the operator. It needs to be
@@ -35,7 +36,7 @@ type bufferingInMemoryOperator interface {
 	//
 	// Calling ExportBuffered may invalidate the contents of the last batch
 	// returned by ExportBuffered.
-	ExportBuffered(input Operator) coldata.Batch
+	ExportBuffered(input colbase.Operator) coldata.Batch
 }
 
 // oneInputDiskSpiller is an Operator that manages the fallback from a one
@@ -88,15 +89,15 @@ type bufferingInMemoryOperator interface {
 // - spillingCallbackFn will be called when the spilling from in-memory to disk
 //   backed operator occurs. It should only be set in tests.
 func newOneInputDiskSpiller(
-	input Operator,
+	input colbase.Operator,
 	inMemoryOp bufferingInMemoryOperator,
 	inMemoryMemMonitorName string,
-	diskBackedOpConstructor func(input Operator) Operator,
+	diskBackedOpConstructor func(input colbase.Operator) colbase.Operator,
 	spillingCallbackFn func(),
-) Operator {
+) colbase.Operator {
 	diskBackedOpInput := newBufferExportingOperator(inMemoryOp, input)
 	return &diskSpillerBase{
-		inputs:                 []Operator{input},
+		inputs:                 []colbase.Operator{input},
 		inMemoryOp:             inMemoryOp,
 		inMemoryMemMonitorName: inMemoryMemMonitorName,
 		diskBackedOp:           diskBackedOpConstructor(diskBackedOpInput),
@@ -155,16 +156,16 @@ func newOneInputDiskSpiller(
 // - spillingCallbackFn will be called when the spilling from in-memory to disk
 //   backed operator occurs. It should only be set in tests.
 func newTwoInputDiskSpiller(
-	inputOne, inputTwo Operator,
+	inputOne, inputTwo colbase.Operator,
 	inMemoryOp bufferingInMemoryOperator,
 	inMemoryMemMonitorName string,
-	diskBackedOpConstructor func(inputOne, inputTwo Operator) Operator,
+	diskBackedOpConstructor func(inputOne, inputTwo colbase.Operator) colbase.Operator,
 	spillingCallbackFn func(),
-) Operator {
+) colbase.Operator {
 	diskBackedOpInputOne := newBufferExportingOperator(inMemoryOp, inputOne)
 	diskBackedOpInputTwo := newBufferExportingOperator(inMemoryOp, inputTwo)
 	return &diskSpillerBase{
-		inputs:                 []Operator{inputOne, inputTwo},
+		inputs:                 []colbase.Operator{inputOne, inputTwo},
 		inMemoryOp:             inMemoryOp,
 		inMemoryOpInitStatus:   OperatorNotInitialized,
 		inMemoryMemMonitorName: inMemoryMemMonitorName,
@@ -181,13 +182,13 @@ type diskSpillerBase struct {
 
 	closerHelper
 
-	inputs  []Operator
+	inputs  []colbase.Operator
 	spilled bool
 
 	inMemoryOp             bufferingInMemoryOperator
 	inMemoryOpInitStatus   OperatorInitStatus
 	inMemoryMemMonitorName string
-	diskBackedOp           Operator
+	diskBackedOp           colbase.Operator
 	distBackedOpInitStatus OperatorInitStatus
 	spillingCallbackFn     func()
 }
@@ -312,15 +313,15 @@ type bufferExportingOperator struct {
 	NonExplainable
 
 	firstSource     bufferingInMemoryOperator
-	secondSource    Operator
+	secondSource    colbase.Operator
 	firstSourceDone bool
 }
 
 var _ resettableOperator = &bufferExportingOperator{}
 
 func newBufferExportingOperator(
-	firstSource bufferingInMemoryOperator, secondSource Operator,
-) Operator {
+	firstSource bufferingInMemoryOperator, secondSource colbase.Operator,
+) colbase.Operator {
 	return &bufferExportingOperator{
 		firstSource:  firstSource,
 		secondSource: secondSource,

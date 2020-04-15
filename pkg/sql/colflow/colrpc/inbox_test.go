@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -200,7 +200,7 @@ func TestInboxShutdown(t *testing.T) {
 		nextSleep          = time.Millisecond * time.Duration(rng.Intn(10))
 		runWithStreamSleep = time.Millisecond * time.Duration(rng.Intn(10))
 		typs               = []coltypes.T{coltypes.Int64}
-		batch              = colexec.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64())
+		batch              = colbase.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64())
 	)
 
 	for _, runDrainMetaGoroutine := range []bool{false, true} {
@@ -223,7 +223,7 @@ func TestInboxShutdown(t *testing.T) {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(inboxCtx)
 					inbox, err := NewInbox(
-						colexec.NewAllocator(inboxCtx, &inboxMemAccount),
+						colbase.NewAllocator(inboxCtx, &inboxMemAccount),
 						typs, execinfrapb.StreamID(0),
 					)
 					require.NoError(t, err)

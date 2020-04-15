@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/errors"
@@ -55,7 +56,7 @@ const (
 type hashAggregator struct {
 	OneInputNode
 
-	allocator *Allocator
+	allocator *colbase.Allocator
 
 	aggCols  [][]uint32
 	aggTypes [][]coltypes.T
@@ -158,19 +159,19 @@ type hashAggregator struct {
 	decimalScratch decimalOverloadScratch
 }
 
-var _ Operator = &hashAggregator{}
+var _ colbase.Operator = &hashAggregator{}
 
 // NewHashAggregator creates a hash aggregator on the given grouping columns.
 // The input specifications to this function are the same as that of the
 // NewOrderedAggregator function.
 func NewHashAggregator(
-	allocator *Allocator,
-	input Operator,
+	allocator *colbase.Allocator,
+	input colbase.Operator,
 	colTypes []coltypes.T,
 	aggFns []execinfrapb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
-) (Operator, error) {
+) (colbase.Operator, error) {
 	aggTyps := extractAggTypes(aggCols, colTypes)
 	outputTypes, err := makeAggregateFuncsOutputTypes(aggTyps, aggFns)
 	if err != nil {

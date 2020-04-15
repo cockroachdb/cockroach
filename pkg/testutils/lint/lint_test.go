@@ -1421,6 +1421,7 @@ func TestLint(t *testing.T) {
 			// uses "panic-catch" error propagation mechanism of the vectorized
 			// engine, don't forget to "register" the newly added package in
 			// sql/colexec/execerror/error.go file.
+			"sql/colbase",
 			"sql/colexec",
 			"sql/colflow",
 			"sql/colcontainer",
@@ -1466,7 +1467,6 @@ func TestLint(t *testing.T) {
 			"--",
 			"sql/colexec",
 			"sql/colflow",
-			":!sql/colexec/allocator.go",
 			":!sql/colexec/simple_project.go",
 		)
 		if err != nil {
@@ -1478,7 +1478,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use colexec.Allocator object instead", s)
+			t.Errorf("\n%s <- forbidden; use colbase.Allocator object instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -1497,12 +1497,11 @@ func TestLint(t *testing.T) {
 			"git",
 			"grep",
 			"-nE",
-			// We prohibit usage of Allocator.maybeAppendColumn outside of
+			// We prohibit usage of Allocator.MaybeAppendColumn outside of
 			// vectorTypeEnforcer and batchSchemaPrefixEnforcer.
-			fmt.Sprintf(`(maybeAppendColumn)\(`),
+			fmt.Sprintf(`(MaybeAppendColumn)\(`),
 			"--",
 			"sql/colexec",
-			":!sql/colexec/allocator.go",
 			":!sql/colexec/operator.go",
 		)
 		if err != nil {

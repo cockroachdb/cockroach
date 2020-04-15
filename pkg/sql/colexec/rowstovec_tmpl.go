@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -89,7 +90,7 @@ func _ROWS_TO_COL_VEC(
 // EncDatumRowsToColVec converts one column from EncDatumRows to a column
 // vector. columnIdx is the 0-based index of the column in the EncDatumRows.
 func EncDatumRowsToColVec(
-	allocator *Allocator,
+	allocator *colbase.Allocator,
 	rows sqlbase.EncDatumRows,
 	vec coldata.Vec,
 	columnIdx int,

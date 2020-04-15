@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -205,7 +206,7 @@ func maybeHasNulls(b coldata.Batch) bool {
 	return false
 }
 
-type testRunner func(*testing.T, []tuples, [][]coltypes.T, tuples, interface{}, func([]Operator) (Operator, error))
+type testRunner func(*testing.T, []tuples, [][]coltypes.T, tuples, interface{}, func([]colbase.Operator) (colbase.Operator, error))
 
 // variableOutputBatchSizeInitializer is implemented by operators that can be
 // initialized with variable output size batches. This allows runTests to
@@ -225,7 +226,7 @@ func runTests(
 	tups []tuples,
 	expected tuples,
 	verifier interface{},
-	constructor func(inputs []Operator) (Operator, error),
+	constructor func(inputs []colbase.Operator) (colbase.Operator, error),
 ) {
 	runTestsWithTyps(t, tups, nil /* typs */, expected, verifier, constructor)
 }
@@ -241,7 +242,7 @@ func runTestsWithTyps(
 	typs [][]coltypes.T,
 	expected tuples,
 	verifier interface{},
-	constructor func(inputs []Operator) (Operator, error),
+	constructor func(inputs []colbase.Operator) (colbase.Operator, error),
 ) {
 	runTestsWithoutAllNullsInjection(t, tups, typs, expected, verifier, constructor)
 
@@ -261,8 +262,8 @@ func runTestsWithTyps(
 				}
 			}
 		}
-		opConstructor := func(injectAllNulls bool) Operator {
-			inputSources := make([]Operator, len(tups))
+		opConstructor := func(injectAllNulls bool) colbase.Operator {
+			inputSources := make([]colbase.Operator, len(tups))
 			var inputTypes []coltypes.T
 			for i, tup := range tups {
 				if typs != nil {
@@ -334,7 +335,7 @@ func runTestsWithoutAllNullsInjection(
 	typs [][]coltypes.T,
 	expected tuples,
 	verifier interface{},
-	constructor func(inputs []Operator) (Operator, error),
+	constructor func(inputs []colbase.Operator) (colbase.Operator, error),
 ) {
 	skipVerifySelAndNullsResets := true
 	var verifyFn verifierFn
@@ -355,7 +356,7 @@ func runTestsWithoutAllNullsInjection(
 	case verifierFn:
 		verifyFn = v
 	}
-	runTestsWithFn(t, tups, typs, func(t *testing.T, inputs []Operator) {
+	runTestsWithFn(t, tups, typs, func(t *testing.T, inputs []colbase.Operator) {
 		op, err := constructor(inputs)
 		if err != nil {
 			t.Fatal(err)
@@ -383,7 +384,7 @@ func runTestsWithoutAllNullsInjection(
 				inputTypes                                   []coltypes.T
 			)
 			for round := 0; round < 2; round++ {
-				inputSources := make([]Operator, len(tups))
+				inputSources := make([]colbase.Operator, len(tups))
 				for i, tup := range tups {
 					if typs != nil {
 						inputTypes = typs[i]
@@ -453,7 +454,7 @@ func runTestsWithoutAllNullsInjection(
 	t.Run("randomNullsInjection", func(t *testing.T) {
 		// This test randomly injects nulls in the input tuples and ensures that
 		// the operator doesn't panic.
-		inputSources := make([]Operator, len(tups))
+		inputSources := make([]colbase.Operator, len(tups))
 		var inputTypes []coltypes.T
 		for i, tup := range tups {
 			if typs != nil {
@@ -489,7 +490,10 @@ func runTestsWithoutAllNullsInjection(
 // - test is a function that takes a list of input Operators and performs
 //   testing with t.
 func runTestsWithFn(
-	t *testing.T, tups []tuples, typs [][]coltypes.T, test func(t *testing.T, inputs []Operator),
+	t *testing.T,
+	tups []tuples,
+	typs [][]coltypes.T,
+	test func(t *testing.T, inputs []colbase.Operator),
 ) {
 	// Run tests over batchSizes of 1, (sometimes) a batch size that is small but
 	// greater than 1, and a full coldata.BatchSize().
@@ -504,7 +508,7 @@ func runTestsWithFn(
 	for _, batchSize := range batchSizes {
 		for _, useSel := range []bool{false, true} {
 			t.Run(fmt.Sprintf("batchSize=%d/sel=%t", batchSize, useSel), func(t *testing.T) {
-				inputSources := make([]Operator, len(tups))
+				inputSources := make([]colbase.Operator, len(tups))
 				var inputTypes []coltypes.T
 				if useSel {
 					for i, tup := range tups {
@@ -533,11 +537,11 @@ func runTestsWithFn(
 // function that takes a list of input Operators, which will give back the
 // tuples provided in batches.
 func runTestsWithFixedSel(
-	t *testing.T, tups []tuples, sel []int, test func(t *testing.T, inputs []Operator),
+	t *testing.T, tups []tuples, sel []int, test func(t *testing.T, inputs []colbase.Operator),
 ) {
 	for _, batchSize := range []int{1, 2, 3, 16, 1024} {
 		t.Run(fmt.Sprintf("batchSize=%d/fixedSel", batchSize), func(t *testing.T) {
-			inputSources := make([]Operator, len(tups))
+			inputSources := make([]colbase.Operator, len(tups))
 			for i, tup := range tups {
 				inputSources[i] = newOpFixedSelTestInput(sel, batchSize, tup)
 			}
@@ -616,7 +620,7 @@ type opTestInput struct {
 	injectRandomNulls bool
 }
 
-var _ Operator = &opTestInput{}
+var _ colbase.Operator = &opTestInput{}
 
 // newOpTestInput returns a new opTestInput with the given input tuples and the
 // given type schema. If typs is nil, the input tuples are translated into
@@ -796,7 +800,7 @@ type opFixedSelTestInput struct {
 	idx int
 }
 
-var _ Operator = &opFixedSelTestInput{}
+var _ colbase.Operator = &opFixedSelTestInput{}
 
 // newOpFixedSelTestInput returns a new opFixedSelTestInput with the given
 // input tuples and selection vector. The input tuples are translated into
@@ -915,7 +919,7 @@ type opTestOutput struct {
 
 // newOpTestOutput returns a new opTestOutput, initialized with the given input
 // to verify that the output is exactly equal to the expected tuples.
-func newOpTestOutput(input Operator, expected tuples) *opTestOutput {
+func newOpTestOutput(input colbase.Operator, expected tuples) *opTestOutput {
 	input.Init()
 
 	return &opTestOutput{
@@ -1105,7 +1109,7 @@ type finiteBatchSource struct {
 	usableCount int
 }
 
-var _ Operator = &finiteBatchSource{}
+var _ colbase.Operator = &finiteBatchSource{}
 
 // newFiniteBatchSource returns a new Operator initialized to return its input
 // batch a specified number of times.
@@ -1145,7 +1149,7 @@ type finiteChunksSource struct {
 	adjustment  []int64
 }
 
-var _ Operator = &finiteChunksSource{}
+var _ colbase.Operator = &finiteChunksSource{}
 
 func newFiniteChunksSource(batch coldata.Batch, usableCount int, matchLen int) *finiteChunksSource {
 	return &finiteChunksSource{
@@ -1203,7 +1207,7 @@ func TestOpTestInputOutput(t *testing.T) {
 			{1, 5, 0},
 		},
 	}
-	runTestsWithFn(t, inputs, nil /* typs */, func(t *testing.T, sources []Operator) {
+	runTestsWithFn(t, inputs, nil /* typs */, func(t *testing.T, sources []colbase.Operator) {
 		out := newOpTestOutput(sources[0], inputs[0])
 
 		if err := out.Verify(); err != nil {
@@ -1243,7 +1247,7 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	if batchSize > coldata.BatchSize() {
 		batchSize = coldata.BatchSize()
 	}
-	sel := randomSel(rng, batchSize, 0 /* probOfOmitting */)
+	sel := colbase.RandomSel(rng, batchSize, 0 /* probOfOmitting */)
 	batchLen := len(sel)
 	batch.SetLength(batchLen)
 	batch.SetSelection(true)
@@ -1267,7 +1271,7 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 		}
 	}
 
-	newSel := randomSel(rng, 10 /* batchSize */, 0.2 /* probOfOmitting */)
+	newSel := colbase.RandomSel(rng, 10 /* batchSize */, 0.2 /* probOfOmitting */)
 	newBatchLen := len(sel)
 	b.SetLength(newBatchLen)
 	b.SetSelection(true)
@@ -1299,7 +1303,7 @@ type chunkingBatchSource struct {
 	batch  coldata.Batch
 }
 
-var _ Operator = &chunkingBatchSource{}
+var _ colbase.Operator = &chunkingBatchSource{}
 
 // newChunkingBatchSource returns a new chunkingBatchSource with the given
 // column types, columns, and length.
@@ -1545,11 +1549,11 @@ func (p *mockTypeContext) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 func createTestProjectingOperator(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input Operator,
+	input colbase.Operator,
 	inputTypes []types.T,
 	projectingExpr string,
 	canFallbackToRowexec bool,
-) (Operator, error) {
+) (colbase.Operator, error) {
 	expr, err := parser.ParseExpr(projectingExpr)
 	if err != nil {
 		return nil, err
@@ -1575,7 +1579,7 @@ func createTestProjectingOperator(
 	}
 	args := NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []Operator{input},
+		Inputs:              []colbase.Operator{input},
 		StreamingMemAccount: testMemAcc,
 	}
 	if canFallbackToRowexec {

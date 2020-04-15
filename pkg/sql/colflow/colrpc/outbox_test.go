@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -53,7 +54,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	inboxMemAccount := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAccount.Close(ctx)
 	inbox, err := NewInbox(
-		colexec.NewAllocator(ctx, &inboxMemAccount), typs, execinfrapb.StreamID(0),
+		colbase.NewAllocator(ctx, &inboxMemAccount), typs, execinfrapb.StreamID(0),
 	)
 	require.NoError(t, err)
 
@@ -86,7 +87,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 
 	// Define common function that returns both an Outbox and a pointer to a
 	// uint32 that is set atomically when the outbox drains a metadata source.
-	newOutboxWithMetaSources := func(allocator *colexec.Allocator) (*Outbox, *uint32, error) {
+	newOutboxWithMetaSources := func(allocator *colbase.Allocator) (*Outbox, *uint32, error) {
 		var sourceDrained uint32
 		outbox, err := NewOutbox(allocator, input, typs, []execinfrapb.MetadataSource{
 			execinfrapb.CallbackMetadataSource{
@@ -107,7 +108,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		outboxMemAccount := testMemMonitor.MakeBoundAccount()
 		defer outboxMemAccount.Close(ctx)
 		outbox, sourceDrained, err := newOutboxWithMetaSources(
-			colexec.NewAllocator(ctx, &outboxMemAccount),
+			colbase.NewAllocator(ctx, &outboxMemAccount),
 		)
 		require.NoError(t, err)
 

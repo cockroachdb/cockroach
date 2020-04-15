@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -138,13 +139,13 @@ func cast(fromType, toType coltypes.T, inputVec, outputVec coldata.Vec, n int, s
 }
 
 func GetCastOperator(
-	allocator *Allocator,
-	input Operator,
+	allocator *colbase.Allocator,
+	input colbase.Operator,
 	colIdx int,
 	resultIdx int,
 	fromType *semtypes.T,
 	toType *semtypes.T,
-) (Operator, error) {
+) (colbase.Operator, error) {
 	to := typeconv.FromColumnType(toType)
 	input = newVectorTypeEnforcer(allocator, input, to, resultIdx)
 	if fromType.Family() == semtypes.UnknownFamily {
@@ -183,12 +184,12 @@ func GetCastOperator(
 
 type castOpNullAny struct {
 	OneInputNode
-	allocator *Allocator
+	allocator *colbase.Allocator
 	colIdx    int
 	outputIdx int
 }
 
-var _ Operator = &castOpNullAny{}
+var _ colbase.Operator = &castOpNullAny{}
 
 func (c *castOpNullAny) Init() {
 	c.input.Init()
@@ -227,14 +228,14 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 
 type castOp struct {
 	OneInputNode
-	allocator *Allocator
+	allocator *colbase.Allocator
 	colIdx    int
 	outputIdx int
 	fromType  coltypes.T
 	toType    coltypes.T
 }
 
-var _ Operator = &castOp{}
+var _ colbase.Operator = &castOp{}
 
 func (c *castOp) Init() {
 	c.input.Init()

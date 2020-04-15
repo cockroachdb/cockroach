@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -76,7 +77,7 @@ func _ASSIGN_CMP(_, _, _ string) bool {
 // {{/* Capture the aggregation name so we can use it in the inner loop. */}}
 // {{$agg := .AggNameLower}}
 
-func new_AGG_TITLEAgg(allocator *Allocator, t coltypes.T) (aggregateFunc, error) {
+func new_AGG_TITLEAgg(allocator *colbase.Allocator, t coltypes.T) (aggregateFunc, error) {
 	switch t {
 	// {{range .Overloads}}
 	case _TYPES_T:
@@ -90,7 +91,7 @@ func new_AGG_TITLEAgg(allocator *Allocator, t coltypes.T) (aggregateFunc, error)
 // {{range .Overloads}}
 
 type _AGG_TYPEAgg struct {
-	allocator *Allocator
+	allocator *colbase.Allocator
 	done      bool
 	groups    []bool
 	curIdx    int

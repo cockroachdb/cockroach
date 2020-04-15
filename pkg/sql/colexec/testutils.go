@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/errors"
 )
@@ -27,7 +28,7 @@ type BatchBuffer struct {
 	buffer []coldata.Batch
 }
 
-var _ Operator = &BatchBuffer{}
+var _ colbase.Operator = &BatchBuffer{}
 
 // NewBatchBuffer creates a new BatchBuffer.
 func NewBatchBuffer() *BatchBuffer {
@@ -69,13 +70,15 @@ type RepeatableBatchSource struct {
 	batchesReturned int
 }
 
-var _ Operator = &RepeatableBatchSource{}
+var _ colbase.Operator = &RepeatableBatchSource{}
 
 // NewRepeatableBatchSource returns a new Operator initialized to return its
 // input batch forever. Note that it stores the contents of the input batch and
 // copies them into a separate output batch. The output batch is allowed to be
 // modified whereas the input batch is *not*.
-func NewRepeatableBatchSource(allocator *Allocator, batch coldata.Batch) *RepeatableBatchSource {
+func NewRepeatableBatchSource(
+	allocator *colbase.Allocator, batch coldata.Batch,
+) *RepeatableBatchSource {
 	typs := make([]coltypes.T, batch.Width())
 	for i, vec := range batch.ColVecs() {
 		typs[i] = vec.Type()

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -39,7 +40,7 @@ import (
 // batch is not kept around and thus its referenced memory will be GCed as soon
 // as the batch is updated.
 type spillingQueue struct {
-	unlimitedAllocator *Allocator
+	unlimitedAllocator *colbase.Allocator
 	maxMemoryLimit     int64
 
 	typs             []coltypes.T
@@ -69,7 +70,7 @@ type spillingQueue struct {
 // If fdSemaphore is nil, no Acquire or Release calls will happen. The caller
 // may want to do this if requesting FDs up front.
 func newSpillingQueue(
-	unlimitedAllocator *Allocator,
+	unlimitedAllocator *colbase.Allocator,
 	typs []coltypes.T,
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
@@ -83,7 +84,7 @@ func newSpillingQueue(
 	if memoryLimit < 0 {
 		memoryLimit = 0
 	}
-	itemsLen := memoryLimit / int64(estimateBatchSizeBytes(typs, batchSize))
+	itemsLen := memoryLimit / int64(colbase.EstimateBatchSizeBytes(typs, batchSize))
 	if itemsLen == 0 {
 		// Make items at least of length 1. Even though batches will spill to disk
 		// directly (this can only happen with a very low memory limit), it's nice
@@ -108,7 +109,7 @@ func newSpillingQueue(
 // allocator must be passed in. The queue will use this allocator to check
 // whether memory usage exceeds the given memory limit and use disk if so.
 func newRewindableSpillingQueue(
-	unlimitedAllocator *Allocator,
+	unlimitedAllocator *colbase.Allocator,
 	typs []coltypes.T,
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,

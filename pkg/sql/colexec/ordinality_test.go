@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -66,7 +67,7 @@ func TestOrdinality(t *testing.T) {
 
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
-			func(input []Operator) (Operator, error) {
+			func(input []colbase.Operator) (colbase.Operator, error) {
 				return createTestOrdinalityOperator(ctx, flowCtx, input[0], tc.inputTypes)
 			})
 	}
@@ -98,8 +99,8 @@ func BenchmarkOrdinality(b *testing.B) {
 }
 
 func createTestOrdinalityOperator(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, input Operator, inputTypes []types.T,
-) (Operator, error) {
+	ctx context.Context, flowCtx *execinfra.FlowCtx, input colbase.Operator, inputTypes []types.T,
+) (colbase.Operator, error) {
 	spec := &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
 		Core: execinfrapb.ProcessorCoreUnion{
@@ -108,7 +109,7 @@ func createTestOrdinalityOperator(
 	}
 	args := NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []Operator{input},
+		Inputs:              []colbase.Operator{input},
 		StreamingMemAccount: testMemAcc,
 	}
 	args.TestingKnobs.UseStreamingMemAccountForBuffering = true

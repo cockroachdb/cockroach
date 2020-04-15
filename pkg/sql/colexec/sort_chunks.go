@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -26,12 +27,12 @@ import (
 // the columns in the input operator. The input tuples must be sorted on first
 // matchLen columns.
 func NewSortChunks(
-	allocator *Allocator,
-	input Operator,
+	allocator *colbase.Allocator,
+	input colbase.Operator,
 	inputTypes []coltypes.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	matchLen int,
-) (Operator, error) {
+) (colbase.Operator, error) {
 	if matchLen < 1 || matchLen == len(orderingCols) {
 		execerror.VectorizedInternalPanic(fmt.Sprintf(
 			"sort chunks should only be used when the input is "+
@@ -54,7 +55,7 @@ func NewSortChunks(
 }
 
 type sortChunksOp struct {
-	allocator *Allocator
+	allocator *colbase.Allocator
 	input     *chunker
 	sorter    resettableOperator
 
@@ -63,7 +64,7 @@ type sortChunksOp struct {
 	windowedBatch      coldata.Batch
 }
 
-var _ Operator = &sortChunksOp{}
+var _ colbase.Operator = &sortChunksOp{}
 var _ bufferingInMemoryOperator = &sortChunksOp{}
 
 func (c *sortChunksOp) ChildCount(verbose bool) int {
@@ -108,7 +109,7 @@ func (c *sortChunksOp) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (c *sortChunksOp) ExportBuffered(Operator) coldata.Batch {
+func (c *sortChunksOp) ExportBuffered(colbase.Operator) coldata.Batch {
 	// First, we check whether chunker has buffered up any tuples, and if so,
 	// whether we have exported them all.
 	if c.input.bufferedTuples.Length() > 0 {
@@ -199,7 +200,7 @@ type chunker struct {
 	OneInputNode
 	NonExplainable
 
-	allocator *Allocator
+	allocator *colbase.Allocator
 	// inputTypes contains the types of all of the columns from input.
 	inputTypes []coltypes.T
 	// inputDone indicates whether input has been fully consumed.
@@ -250,7 +251,10 @@ type chunker struct {
 var _ spooler = &chunker{}
 
 func newChunker(
-	allocator *Allocator, input Operator, inputTypes []coltypes.T, alreadySortedCols []uint32,
+	allocator *colbase.Allocator,
+	input colbase.Operator,
+	inputTypes []coltypes.T,
+	alreadySortedCols []uint32,
 ) (*chunker, error) {
 	var err error
 	partitioners := make([]partitioner, len(alreadySortedCols))

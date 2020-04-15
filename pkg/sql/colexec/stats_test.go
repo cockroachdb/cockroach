@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
@@ -132,7 +133,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 	}
 }
 
-func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) Operator {
+func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) colbase.Operator {
 	batch := testAllocator.NewMemBatchWithSize([]coltypes.T{coltypes.Int64}, batchSize)
 	vec := batch.ColVec(0).Int64()
 	for i := 0; i < batchSize; i++ {
@@ -150,7 +151,7 @@ type timeAdvancingOperator struct {
 	timeSource *timeutil.TestTimeSource
 }
 
-var _ Operator = &timeAdvancingOperator{}
+var _ colbase.Operator = &timeAdvancingOperator{}
 
 func (o *timeAdvancingOperator) Init() {
 	o.input.Init()

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -128,11 +129,11 @@ type arrowTestOperator struct {
 	r *colserde.RecordBatchSerializer
 }
 
-var _ Operator = &arrowTestOperator{}
+var _ colbase.Operator = &arrowTestOperator{}
 
 func newArrowTestOperator(
-	input Operator, c *colserde.ArrowBatchConverter, r *colserde.RecordBatchSerializer,
-) Operator {
+	input colbase.Operator, c *colserde.ArrowBatchConverter, r *colserde.RecordBatchSerializer,
+) colbase.Operator {
 	return &arrowTestOperator{
 		OneInputNode: NewOneInputNode(input),
 		c:            c,

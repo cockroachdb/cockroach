@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 )
 
 // ordinalityOp is an operator that implements WITH ORDINALITY, which adds
@@ -22,7 +23,7 @@ import (
 type ordinalityOp struct {
 	OneInputNode
 
-	allocator *Allocator
+	allocator *colbase.Allocator
 	// outputIdx is the index of the column in which ordinalityOp will write the
 	// ordinal number.
 	outputIdx int
@@ -30,10 +31,12 @@ type ordinalityOp struct {
 	counter int64
 }
 
-var _ Operator = &ordinalityOp{}
+var _ colbase.Operator = &ordinalityOp{}
 
 // NewOrdinalityOp returns a new WITH ORDINALITY operator.
-func NewOrdinalityOp(allocator *Allocator, input Operator, outputIdx int) Operator {
+func NewOrdinalityOp(
+	allocator *colbase.Allocator, input colbase.Operator, outputIdx int,
+) colbase.Operator {
 	input = newVectorTypeEnforcer(allocator, input, coltypes.Int64, outputIdx)
 	c := &ordinalityOp{
 		OneInputNode: NewOneInputNode(input),

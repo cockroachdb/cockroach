@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -74,7 +75,7 @@ func TestExternalHashJoiner(t *testing.T) {
 						}(tc.skipAllNullsInjection)
 						tc.skipAllNullsInjection = true
 					}
-					runHashJoinTestCase(t, tc, func(sources []Operator) (Operator, error) {
+					runHashJoinTestCase(t, tc, func(sources []colbase.Operator) (colbase.Operator, error) {
 						sem := NewTestingSemaphore(externalHJMinPartitions)
 						semsToCheck = append(semsToCheck, sem)
 						spec := createSpecForHashJoiner(tc)
@@ -158,7 +159,7 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	// all tuples. We assert this by checking that the semaphore reports a count
 	// of 0.
 	hj, accounts, monitors, _, err := createDiskBackedHashJoiner(
-		ctx, flowCtx, spec, []Operator{leftSource, rightSource},
+		ctx, flowCtx, spec, []colbase.Operator{leftSource, rightSource},
 		func() { spilled = true }, queueCfg, 0 /* numForcedRepartitions */, true, /* delegateFDAcquisitions */
 		sem,
 	)
@@ -263,7 +264,7 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 							leftSource.reset(nBatches)
 							rightSource.reset(nBatches)
 							hj, accounts, monitors, _, err := createDiskBackedHashJoiner(
-								ctx, flowCtx, spec, []Operator{leftSource, rightSource},
+								ctx, flowCtx, spec, []colbase.Operator{leftSource, rightSource},
 								func() {}, queueCfg, 0 /* numForcedRepartitions */, false, /* delegateFDAcquisitions */
 								NewTestingSemaphore(VecMaxOpenFDsLimit),
 							)
@@ -296,13 +297,13 @@ func createDiskBackedHashJoiner(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ProcessorSpec,
-	inputs []Operator,
+	inputs []colbase.Operator,
 	spillingCallbackFn func(),
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	numForcedRepartitions int,
 	delegateFDAcquisitions bool,
 	testingSemaphore semaphore.Semaphore,
-) (Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []IdempotentCloser, error) {
+) (colbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []IdempotentCloser, error) {
 	args := NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              inputs,

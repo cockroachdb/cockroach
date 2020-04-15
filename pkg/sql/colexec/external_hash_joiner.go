@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -165,7 +166,7 @@ type externalHashJoiner struct {
 	mu syncutil.Mutex
 
 	state              externalHashJoinerState
-	unlimitedAllocator *Allocator
+	unlimitedAllocator *colbase.Allocator
 	spec               hashJoinerSpec
 	diskQueueCfg       colcontainer.DiskQueueCfg
 
@@ -270,17 +271,17 @@ const (
 // let the partitioned disk queues acquire file descriptors instead of acquiring
 // them up front in Next. Should be true only in tests.
 func newExternalHashJoiner(
-	unlimitedAllocator *Allocator,
+	unlimitedAllocator *colbase.Allocator,
 	spec hashJoinerSpec,
-	leftInput, rightInput Operator,
+	leftInput, rightInput colbase.Operator,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	createReusableDiskBackedSorter func(input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (Operator, error),
+	createReusableDiskBackedSorter func(input colbase.Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (colbase.Operator, error),
 	numForcedRepartitions int,
 	delegateFDAcquisitions bool,
 	diskAcc *mon.BoundAccount,
-) Operator {
+) colbase.Operator {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeClearAndReuseCache {
 		execerror.VectorizedInternalPanic(errors.Errorf("external hash joiner instantiated with suboptimal disk queue cache mode: %d", diskQueueCfg.CacheMode))
 	}
@@ -481,7 +482,7 @@ func (hj *externalHashJoiner) partitionBatch(
 				// We cannot use allocator's methods directly because those
 				// look at the capacities of the vectors, and in our case only
 				// first len(sel) tuples belong to the "current" batch.
-				partitionInfo.rightMemSize += getProportionalBatchMemSize(scratchBatch, int64(len(sel)))
+				partitionInfo.rightMemSize += colbase.GetProportionalBatchMemSize(scratchBatch, int64(len(sel)))
 			}
 		}
 	}

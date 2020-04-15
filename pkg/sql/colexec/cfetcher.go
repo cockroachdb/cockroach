@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
@@ -234,7 +235,7 @@ type cFetcher struct {
 	// adapter is a utility struct that helps with memory accounting.
 	adapter struct {
 		ctx       context.Context
-		allocator *Allocator
+		allocator *colbase.Allocator
 		batch     coldata.Batch
 		err       error
 	}
@@ -244,7 +245,7 @@ type cFetcher struct {
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
 func (rf *cFetcher) Init(
-	allocator *Allocator,
+	allocator *colbase.Allocator,
 	reverse bool,
 	lockStr sqlbase.ScanLockingStrength,
 	returnRangeInfo bool,

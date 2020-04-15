@@ -24,6 +24,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 )
@@ -31,11 +32,11 @@ import (
 // {{ range .}}
 
 type _OP_LOWERProjOp struct {
-	allocator *Allocator
-	input     Operator
+	allocator *colbase.Allocator
+	input     colbase.Operator
 
-	leftProjOpChain  Operator
-	rightProjOpChain Operator
+	leftProjOpChain  colbase.Operator
+	rightProjOpChain colbase.Operator
 	leftFeedOp       *feedOperator
 	rightFeedOp      *feedOperator
 
@@ -53,11 +54,11 @@ type _OP_LOWERProjOp struct {
 // the boolean columns at leftIdx and rightIdx, returning the result in
 // outputIdx.
 func New_OP_TITLEProjOp(
-	allocator *Allocator,
-	input, leftProjOpChain, rightProjOpChain Operator,
+	allocator *colbase.Allocator,
+	input, leftProjOpChain, rightProjOpChain colbase.Operator,
 	leftFeedOp, rightFeedOp *feedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) Operator {
+) colbase.Operator {
 	return &_OP_LOWERProjOp{
 		allocator:        allocator,
 		input:            input,

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -34,10 +35,10 @@ func (c *CancelChecker) Init() {
 	c.input.Init()
 }
 
-var _ Operator = &CancelChecker{}
+var _ colbase.Operator = &CancelChecker{}
 
 // NewCancelChecker creates a new CancelChecker.
-func NewCancelChecker(op Operator) *CancelChecker {
+func NewCancelChecker(op colbase.Operator) *CancelChecker {
 	return &CancelChecker{OneInputNode: NewOneInputNode(op)}
 }
 

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -292,10 +293,10 @@ func GetSelectionConstOperator(
 	leftColType *types.T,
 	constColType *types.T,
 	cmpOp tree.ComparisonOperator,
-	input Operator,
+	input colbase.Operator,
 	colIdx int,
 	constArg tree.Datum,
-) (Operator, error) {
+) (colbase.Operator, error) {
 	c, err := typeconv.GetDatumToPhysicalFn(constColType)(constArg)
 	if err != nil {
 		return nil, err
@@ -334,10 +335,10 @@ func GetSelectionOperator(
 	leftColType *types.T,
 	rightColType *types.T,
 	cmpOp tree.ComparisonOperator,
-	input Operator,
+	input colbase.Operator,
 	col1Idx int,
 	col2Idx int,
-) (Operator, error) {
+) (colbase.Operator, error) {
 	selOpBase := selOpBase{
 		OneInputNode: NewOneInputNode(input),
 		col1Idx:      col1Idx,

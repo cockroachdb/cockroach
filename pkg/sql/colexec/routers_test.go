@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -179,14 +180,14 @@ func TestRouterOutputNext(t *testing.T) {
 	data, fullSelection := getDataAndFullSelection()
 
 	testCases := []struct {
-		unblockEvent func(in Operator, o *routerOutputOp)
+		unblockEvent func(in colbase.Operator, o *routerOutputOp)
 		expected     tuples
 		name         string
 	}{
 		{
 			// ReaderWaitsForData verifies that a reader blocks in Next(ctx) until there
 			// is data available.
-			unblockEvent: func(in Operator, o *routerOutputOp) {
+			unblockEvent: func(in colbase.Operator, o *routerOutputOp) {
 				for {
 					b := in.Next(ctx)
 					o.addBatch(ctx, b, fullSelection)
@@ -201,7 +202,7 @@ func TestRouterOutputNext(t *testing.T) {
 		{
 			// ReaderWaitsForZeroBatch verifies that a reader blocking on Next will
 			// also get unblocked with no data other than the zero batch.
-			unblockEvent: func(_ Operator, o *routerOutputOp) {
+			unblockEvent: func(_ colbase.Operator, o *routerOutputOp) {
 				o.addBatch(ctx, coldata.ZeroBatch, nil /* selection */)
 			},
 			expected: tuples{},
@@ -210,7 +211,7 @@ func TestRouterOutputNext(t *testing.T) {
 		{
 			// CancelUnblocksReader verifies that calling cancel on an output unblocks
 			// a reader.
-			unblockEvent: func(_ Operator, o *routerOutputOp) {
+			unblockEvent: func(_ colbase.Operator, o *routerOutputOp) {
 				o.cancel(ctx)
 			},
 			expected: tuples{},
@@ -394,7 +395,7 @@ func TestRouterOutputRandom(t *testing.T) {
 	)
 	for _, mtc := range memoryTestCases {
 		t.Run(fmt.Sprintf("%s/memoryLimit=%s", testName, humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
-			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []Operator) {
+			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []colbase.Operator) {
 				var wg sync.WaitGroup
 				unblockedEventsChans := make(chan struct{}, 2)
 				o := newRouterOutputOpWithBlockedThresholdAndBatchSize(testAllocator, typs, unblockedEventsChans, mtc.bytes, queueCfg, NewTestingSemaphore(2), blockedThreshold, outputSize, testDiskAcc)
@@ -416,7 +417,7 @@ func TestRouterOutputRandom(t *testing.T) {
 						b := inputs[0].Next(ctx)
 						selection := b.Selection()
 						if selection == nil {
-							selection = randomSel(rng, b.Length(), rng.Float64())
+							selection = colbase.RandomSel(rng, b.Length(), rng.Float64())
 						}
 
 						selection = selection[:b.Length()]
@@ -476,11 +477,11 @@ func TestRouterOutputRandom(t *testing.T) {
 					// a separate allocator to testAllocator since this is a separate
 					// goroutine and allocators may not be used concurrently.
 					acc := testMemMonitor.MakeBoundAccount()
-					allocator := NewAllocator(ctx, &acc)
+					allocator := colbase.NewAllocator(ctx, &acc)
 					defer acc.Close(ctx)
 					for {
 						b := o.Next(ctx)
-						actual.Add(CopyBatch(allocator, b))
+						actual.Add(colbase.CopyBatch(allocator, b))
 						if b.Length() == 0 {
 							wg.Done()
 							return
@@ -709,7 +710,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 
-	sel := randomSel(rng, coldata.BatchSize(), rng.Float64())
+	sel := colbase.RandomSel(rng, coldata.BatchSize(), rng.Float64())
 
 	data, _ := getDataAndFullSelection()
 	typs := []coltypes.T{coltypes.Int64}
@@ -729,7 +730,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 			diskAcc := testDiskMonitor.MakeBoundAccount()
 			defer diskAcc.Close(ctx)
 			r, routerOutputs := NewHashRouter(
-				[]*Allocator{testAllocator}, newOpFixedSelTestInput(sel, len(sel), data),
+				[]*colbase.Allocator{testAllocator}, newOpFixedSelTestInput(sel, len(sel), data),
 				typs, []uint32{0}, mtc.bytes, queueCfg, NewTestingSemaphore(2),
 				[]*mon.BoundAccount{&diskAcc},
 			)
@@ -827,10 +828,10 @@ func TestHashRouterRandom(t *testing.T) {
 	var expectedDistribution []int
 	for _, mtc := range memoryTestCases {
 		t.Run(fmt.Sprintf(testName+"/memoryLimit=%s", humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
-			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []Operator) {
+			runTestsWithFn(t, []tuples{data}, nil /* typs */, func(t *testing.T, inputs []colbase.Operator) {
 				unblockEventsChan := make(chan struct{}, 2*numOutputs)
 				outputs := make([]routerOutput, numOutputs)
-				outputsAsOps := make([]Operator, numOutputs)
+				outputsAsOps := make([]colbase.Operator, numOutputs)
 				memoryLimitPerOutput := mtc.bytes / int64(len(outputs))
 				for i := range outputs {
 					// Create separate monitoring infrastructure as well as
@@ -840,7 +841,7 @@ func TestHashRouterRandom(t *testing.T) {
 					defer acc.Close(ctx)
 					diskAcc := testDiskMonitor.MakeBoundAccount()
 					defer diskAcc.Close(ctx)
-					allocator := NewAllocator(ctx, &acc)
+					allocator := colbase.NewAllocator(ctx, &acc)
 					op := newRouterOutputOpWithBlockedThresholdAndBatchSize(allocator, typs, unblockEventsChan, memoryLimitPerOutput, queueCfg, NewTestingSemaphore(len(outputs)*2), blockedThreshold, outputSize, &diskAcc)
 					outputs[i] = op
 					outputsAsOps[i] = op
@@ -938,11 +939,11 @@ func BenchmarkHashRouter(b *testing.B) {
 	for _, numOutputs := range []int{2, 4, 8, 16} {
 		for _, numInputBatches := range []int{2, 4, 8, 16} {
 			b.Run(fmt.Sprintf("numOutputs=%d/numInputBatches=%d", numOutputs, numInputBatches), func(b *testing.B) {
-				allocators := make([]*Allocator, numOutputs)
+				allocators := make([]*colbase.Allocator, numOutputs)
 				diskAccounts := make([]*mon.BoundAccount, numOutputs)
 				for i := range allocators {
 					acc := testMemMonitor.MakeBoundAccount()
-					allocators[i] = NewAllocator(ctx, &acc)
+					allocators[i] = colbase.NewAllocator(ctx, &acc)
 					defer acc.Close(ctx)
 					diskAcc := testDiskMonitor.MakeBoundAccount()
 					diskAccounts[i] = &diskAcc

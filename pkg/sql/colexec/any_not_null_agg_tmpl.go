@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
@@ -32,7 +33,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func newAnyNotNullAgg(allocator *Allocator, t coltypes.T) (aggregateFunc, error) {
+func newAnyNotNullAgg(allocator *colbase.Allocator, t coltypes.T) (aggregateFunc, error) {
 	switch t {
 	// {{range .}}
 	case _TYPES_T:
@@ -72,7 +73,7 @@ const _TYPES_T = coltypes.Unhandled
 // anyNotNull_TYPEAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNull_TYPEAgg struct {
-	allocator                   *Allocator
+	allocator                   *colbase.Allocator
 	done                        bool
 	groups                      []bool
 	vec                         coldata.Vec

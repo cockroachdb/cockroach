@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -39,8 +40,12 @@ var _ coltypes.T
 // */}}
 
 func newSubstringOperator(
-	allocator *Allocator, columnTypes []types.T, argumentCols []int, outputIdx int, input Operator,
-) Operator {
+	allocator *colbase.Allocator,
+	columnTypes []types.T,
+	argumentCols []int,
+	outputIdx int,
+	input colbase.Operator,
+) colbase.Operator {
 	startType := typeconv.FromColumnType(&columnTypes[argumentCols[1]])
 	lengthType := typeconv.FromColumnType(&columnTypes[argumentCols[2]])
 	base := substringFunctionBase{
@@ -72,7 +77,7 @@ func newSubstringOperator(
 
 type substringFunctionBase struct {
 	OneInputNode
-	allocator    *Allocator
+	allocator    *colbase.Allocator
 	argumentCols []int
 	outputIdx    int
 }
@@ -88,7 +93,7 @@ type substring_StartType_LengthTypeOperator struct {
 	substringFunctionBase
 }
 
-var _ Operator = &substring_StartType_LengthTypeOperator{}
+var _ colbase.Operator = &substring_StartType_LengthTypeOperator{}
 
 func (s *substring_StartType_LengthTypeOperator) Next(ctx context.Context) coldata.Batch {
 	batch := s.input.Next(ctx)

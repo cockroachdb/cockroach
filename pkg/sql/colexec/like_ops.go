@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -87,8 +88,8 @@ func getLikeOperatorType(pattern string, negate bool) (likeOpType, string, error
 // pattern, or NOT LIKE if the negate argument is true. The implementation
 // varies depending on the complexity of the pattern.
 func GetLikeOperator(
-	ctx *tree.EvalContext, input Operator, colIdx int, pattern string, negate bool,
-) (Operator, error) {
+	ctx *tree.EvalContext, input colbase.Operator, colIdx int, pattern string, negate bool,
+) (colbase.Operator, error) {
 	likeOpType, pattern, err := getLikeOperatorType(pattern, negate)
 	if err != nil {
 		return nil, err
@@ -172,14 +173,14 @@ func isWildcard(c byte) bool {
 // result of the specified LIKE pattern, or NOT LIKE if the negate argument is
 // true. The implementation varies depending on the complexity of the pattern.
 func GetLikeProjectionOperator(
-	allocator *Allocator,
+	allocator *colbase.Allocator,
 	ctx *tree.EvalContext,
-	input Operator,
+	input colbase.Operator,
 	colIdx int,
 	resultIdx int,
 	pattern string,
 	negate bool,
-) (Operator, error) {
+) (colbase.Operator, error) {
 	likeOpType, pattern, err := getLikeOperatorType(pattern, negate)
 	if err != nil {
 		return nil, err

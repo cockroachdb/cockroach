@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
@@ -347,8 +348,8 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 // corresponding to operators in inputs (the latter must have already been
 // wrapped).
 func wrapWithVectorizedStatsCollector(
-	op colexec.Operator,
-	inputs []colexec.Operator,
+	op colbase.Operator,
+	inputs []colbase.Operator,
 	pspec *execinfrapb.ProcessorSpec,
 	monitors []*mon.BytesMonitor,
 ) (*colexec.VectorizedStatsCollector, error) {
@@ -440,7 +441,7 @@ type flowCreatorHelper interface {
 // as the metadataSources and closers in this DAG that need to be drained and
 // closed.
 type opDAGWithMetaSources struct {
-	rootOperator    colexec.Operator
+	rootOperator    colbase.Operator
 	metadataSources []execinfrapb.MetadataSource
 	toClose         []colexec.IdempotentCloser
 }
@@ -449,20 +450,20 @@ type opDAGWithMetaSources struct {
 // several components in a remote flow. Mostly for testing purposes.
 type remoteComponentCreator interface {
 	newOutbox(
-		allocator *colexec.Allocator,
-		input colexec.Operator,
+		allocator *colbase.Allocator,
+		input colbase.Operator,
 		typs []coltypes.T,
 		metadataSources []execinfrapb.MetadataSource,
 		toClose []colexec.IdempotentCloser,
 	) (*colrpc.Outbox, error)
-	newInbox(allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
+	newInbox(allocator *colbase.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
 
 type vectorizedRemoteComponentCreator struct{}
 
 func (vectorizedRemoteComponentCreator) newOutbox(
-	allocator *colexec.Allocator,
-	input colexec.Operator,
+	allocator *colbase.Allocator,
+	input colbase.Operator,
 	typs []coltypes.T,
 	metadataSources []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
@@ -471,7 +472,7 @@ func (vectorizedRemoteComponentCreator) newOutbox(
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
-	allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID,
+	allocator *colbase.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID,
 ) (*colrpc.Inbox, error) {
 	return colrpc.NewInbox(allocator, typs, streamID)
 }
@@ -595,14 +596,14 @@ func (s *vectorizedFlowCreator) newStreamingMemAccount(
 func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	op colexec.Operator,
+	op colbase.Operator,
 	outputTyps []coltypes.T,
 	stream *execinfrapb.StreamEndpointSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
 ) (execinfra.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(
-		colexec.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
+		colbase.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
 		op, outputTyps, metadataSourcesQueue, toClose,
 	)
 	if err != nil {
@@ -639,7 +640,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 func (s *vectorizedFlowCreator) setupRouter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input colexec.Operator,
+	input colbase.Operator,
 	outputTyps []coltypes.T,
 	output *execinfrapb.OutputRouterSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
@@ -657,10 +658,10 @@ func (s *vectorizedFlowCreator) setupRouter(
 	mmName := "hash-router-[" + strings.Join(streamIDs, ",") + "]"
 
 	hashRouterMemMonitor := s.createBufferingUnlimitedMemMonitor(ctx, flowCtx, mmName)
-	allocators := make([]*colexec.Allocator, len(output.Streams))
+	allocators := make([]*colbase.Allocator, len(output.Streams))
 	for i := range allocators {
 		acc := hashRouterMemMonitor.MakeBoundAccount()
-		allocators[i] = colexec.NewAllocator(ctx, &acc)
+		allocators[i] = colbase.NewAllocator(ctx, &acc)
 		s.accounts = append(s.accounts, &acc)
 	}
 	limit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
@@ -735,8 +736,8 @@ func (s *vectorizedFlowCreator) setupInput(
 	flowCtx *execinfra.FlowCtx,
 	input execinfrapb.InputSyncSpec,
 	opt flowinfra.FuseOpt,
-) (op colexec.Operator, _ []execinfrapb.MetadataSource, _ error) {
-	inputStreamOps := make([]colexec.Operator, 0, len(input.Streams))
+) (op colbase.Operator, _ []execinfrapb.MetadataSource, _ error) {
+	inputStreamOps := make([]colbase.Operator, 0, len(input.Streams))
 	metaSources := make([]execinfrapb.MetadataSource, 0, len(input.Streams))
 	for _, inputStream := range input.Streams {
 		switch inputStream.Type {
@@ -755,7 +756,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				return nil, nil, err
 			}
 			inbox, err := s.remoteComponentCreator.newInbox(
-				colexec.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
+				colbase.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
 				typs, inputStream.StreamID,
 			)
 			if err != nil {
@@ -794,7 +795,7 @@ func (s *vectorizedFlowCreator) setupInput(
 		}
 		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
 			op = colexec.NewOrderedSynchronizer(
-				colexec.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
+				colbase.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
 				inputStreamOps, typs, execinfrapb.ConvertToColumnOrdering(input.Ordering),
 			)
 		} else {
@@ -832,7 +833,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	pspec *execinfrapb.ProcessorSpec,
-	op colexec.Operator,
+	op colbase.Operator,
 	opOutputTypes []coltypes.T,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
@@ -966,7 +967,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		queue = append(queue, i)
 	}
 
-	inputs := make([]colexec.Operator, 0, 2)
+	inputs := make([]colbase.Operator, 0, 2)
 	for len(queue) > 0 {
 		pspec := &processorSpecs[queue[0]]
 		queue = queue[1:]

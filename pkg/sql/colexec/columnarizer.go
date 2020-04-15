@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -37,7 +38,7 @@ type Columnarizer struct {
 	//  which will simplify this model.
 	mu syncutil.Mutex
 
-	allocator  *Allocator
+	allocator  *colbase.Allocator
 	input      execinfra.RowSource
 	da         sqlbase.DatumAlloc
 	initStatus OperatorInitStatus
@@ -49,12 +50,12 @@ type Columnarizer struct {
 	typs            []coltypes.T
 }
 
-var _ Operator = &Columnarizer{}
+var _ colbase.Operator = &Columnarizer{}
 
 // NewColumnarizer returns a new Columnarizer.
 func NewColumnarizer(
 	ctx context.Context,
-	allocator *Allocator,
+	allocator *colbase.Allocator,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
@@ -141,7 +142,7 @@ func (c *Columnarizer) Run(context.Context) {
 	execerror.VectorizedInternalPanic("Columnarizer should not be Run")
 }
 
-var _ Operator = &Columnarizer{}
+var _ colbase.Operator = &Columnarizer{}
 var _ execinfrapb.MetadataSource = &Columnarizer{}
 
 // DrainMeta is part of the MetadataSource interface.

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -198,7 +199,7 @@ func TestOutboxInbox(t *testing.T) {
 		// Test random selection as the Outbox should be deselecting before sending
 		// over data. Nulls and types are not worth testing as those are tested in
 		// colserde.
-		args := colexec.RandomDataOpArgs{
+		args := colbase.RandomDataOpArgs{
 			DeterministicTyps: typs,
 			NumBatches:        64,
 			Selection:         true,
@@ -214,19 +215,19 @@ func TestOutboxInbox(t *testing.T) {
 		}
 		inputMemAcc := testMemMonitor.MakeBoundAccount()
 		defer inputMemAcc.Close(ctx)
-		input := colexec.NewRandomDataOp(
-			colexec.NewAllocator(ctx, &inputMemAcc), rng, args,
+		input := colbase.NewRandomDataOp(
+			colbase.NewAllocator(ctx, &inputMemAcc), rng, args,
 		)
 
 		outboxMemAcc := testMemMonitor.MakeBoundAccount()
 		defer outboxMemAcc.Close(ctx)
-		outbox, err := NewOutbox(colexec.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSource */, nil /* toClose */)
+		outbox, err := NewOutbox(colbase.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSource */, nil /* toClose */)
 		require.NoError(t, err)
 
 		inboxMemAcc := testMemMonitor.MakeBoundAccount()
 		defer inboxMemAcc.Close(ctx)
 		inbox, err := NewInbox(
-			colexec.NewAllocator(ctx, &inboxMemAcc), typs, execinfrapb.StreamID(0),
+			colbase.NewAllocator(ctx, &inboxMemAcc), typs, execinfrapb.StreamID(0),
 		)
 		require.NoError(t, err)
 
@@ -265,7 +266,7 @@ func TestOutboxInbox(t *testing.T) {
 		deselectorMemAcc := testMemMonitor.MakeBoundAccount()
 		defer deselectorMemAcc.Close(ctx)
 		inputBatches := colexec.NewDeselectorOp(
-			colexec.NewAllocator(ctx, &deselectorMemAcc), inputBuffer, typs,
+			colbase.NewAllocator(ctx, &deselectorMemAcc), inputBuffer, typs,
 		)
 		inputBatches.Init()
 		outputBatches := colexec.NewBatchBuffer()
@@ -443,10 +444,10 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				serverStreamNotification = <-mockServer.InboundStreams
 				serverStream             = serverStreamNotification.Stream
 				typs                     = []coltypes.T{coltypes.Int64}
-				input                    = colexec.NewRandomDataOp(
+				input                    = colbase.NewRandomDataOp(
 					testAllocator,
 					rng,
-					colexec.RandomDataOpArgs{
+					colbase.RandomDataOpArgs{
 						DeterministicTyps: typs,
 						NumBatches:        tc.numBatches,
 						Selection:         true,
@@ -458,7 +459,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 
 			outboxMemAcc := testMemMonitor.MakeBoundAccount()
 			defer outboxMemAcc.Close(ctx)
-			outbox, err := NewOutbox(colexec.NewAllocator(ctx, &outboxMemAcc), input, typs, []execinfrapb.MetadataSource{
+			outbox, err := NewOutbox(colbase.NewAllocator(ctx, &outboxMemAcc), input, typs, []execinfrapb.MetadataSource{
 				execinfrapb.CallbackMetadataSource{
 					DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
 						return []execinfrapb.ProducerMetadata{{Err: errors.New(expectedMeta)}}
@@ -470,7 +471,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			inboxMemAcc := testMemMonitor.MakeBoundAccount()
 			defer inboxMemAcc.Close(ctx)
 			inbox, err := NewInbox(
-				colexec.NewAllocator(ctx, &inboxMemAcc),
+				colbase.NewAllocator(ctx, &inboxMemAcc),
 				typs, execinfrapb.StreamID(0),
 			)
 			require.NoError(t, err)
@@ -532,13 +533,13 @@ func BenchmarkOutboxInbox(b *testing.B) {
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
-	outbox, err := NewOutbox(colexec.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSources */, nil /* toClose */)
+	outbox, err := NewOutbox(colbase.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSources */, nil /* toClose */)
 	require.NoError(b, err)
 
 	inboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAcc.Close(ctx)
 	inbox, err := NewInbox(
-		colexec.NewAllocator(ctx, &inboxMemAcc), typs, execinfrapb.StreamID(0),
+		colbase.NewAllocator(ctx, &inboxMemAcc), typs, execinfrapb.StreamID(0),
 	)
 	require.NoError(b, err)
 
@@ -596,7 +597,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
-	outbox, err := NewOutbox(colexec.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSources */, nil /* toClose */)
+	outbox, err := NewOutbox(colbase.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSources */, nil /* toClose */)
 	require.NoError(t, err)
 
 	outboxDone := make(chan struct{})

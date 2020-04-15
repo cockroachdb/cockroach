@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -65,8 +66,8 @@ const _TYPES_T = coltypes.Unhandled
 // stream of rows, ordered according to a set of columns. The rows in each input
 // stream are assumed to be ordered according to the same set of columns.
 type OrderedSynchronizer struct {
-	allocator   *Allocator
-	inputs      []Operator
+	allocator   *colbase.Allocator
+	inputs      []colbase.Operator
 	ordering    sqlbase.ColumnOrdering
 	columnTypes []coltypes.T
 
@@ -103,7 +104,7 @@ type OrderedSynchronizer struct {
 	outColsMap []int
 }
 
-var _ Operator = &OrderedSynchronizer{}
+var _ colbase.Operator = &OrderedSynchronizer{}
 
 // ChildCount implements the execinfrapb.OpNode interface.
 func (o *OrderedSynchronizer) ChildCount(verbose bool) int {
@@ -117,7 +118,10 @@ func (o *OrderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
 
 // NewOrderedSynchronizer creates a new OrderedSynchronizer.
 func NewOrderedSynchronizer(
-	allocator *Allocator, inputs []Operator, typs []coltypes.T, ordering sqlbase.ColumnOrdering,
+	allocator *colbase.Allocator,
+	inputs []colbase.Operator,
+	typs []coltypes.T,
+	ordering sqlbase.ColumnOrdering,
 ) *OrderedSynchronizer {
 	return &OrderedSynchronizer{
 		allocator:   allocator,

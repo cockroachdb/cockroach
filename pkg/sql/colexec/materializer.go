@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -28,7 +29,7 @@ type Materializer struct {
 	execinfra.ProcessorBase
 	NonExplainable
 
-	input Operator
+	input colbase.Operator
 
 	da sqlbase.DatumAlloc
 
@@ -76,7 +77,7 @@ const materializerProcName = "materializer"
 func NewMaterializer(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	input Operator,
+	input colbase.Operator,
 	typs []types.T,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,

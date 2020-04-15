@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -26,16 +27,16 @@ import (
 // given in orderingCols. The inputTypes must correspond 1-1 with the columns
 // in the input operator.
 func NewSorter(
-	allocator *Allocator,
-	input Operator,
+	allocator *colbase.Allocator,
+	input colbase.Operator,
 	inputTypes []coltypes.T,
 	orderingCols []execinfrapb.Ordering_Column,
-) (Operator, error) {
+) (colbase.Operator, error) {
 	return newSorter(allocator, newAllSpooler(allocator, input, inputTypes), inputTypes, orderingCols)
 }
 
 func newSorter(
-	allocator *Allocator,
+	allocator *colbase.Allocator,
 	input spooler,
 	inputTypes []coltypes.T,
 	orderingCols []execinfrapb.Ordering_Column,
@@ -99,7 +100,7 @@ type allSpooler struct {
 	OneInputNode
 	NonExplainable
 
-	allocator *Allocator
+	allocator *colbase.Allocator
 	// inputTypes contains the types of all of the columns from the input.
 	inputTypes []coltypes.T
 	// bufferedTuples stores all the values from the input after spooling. Each
@@ -113,7 +114,9 @@ type allSpooler struct {
 var _ spooler = &allSpooler{}
 var _ resetter = &allSpooler{}
 
-func newAllSpooler(allocator *Allocator, input Operator, inputTypes []coltypes.T) spooler {
+func newAllSpooler(
+	allocator *colbase.Allocator, input colbase.Operator, inputTypes []coltypes.T,
+) spooler {
 	return &allSpooler{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
@@ -182,7 +185,7 @@ func (p *allSpooler) reset(ctx context.Context) {
 }
 
 type sortOp struct {
-	allocator *Allocator
+	allocator *colbase.Allocator
 	input     spooler
 
 	// inputTypes contains the types of all of the columns from input.
@@ -423,7 +426,7 @@ func (p *sortOp) Child(nth int, verbose bool) execinfra.OpNode {
 	return nil
 }
 
-func (p *sortOp) ExportBuffered(Operator) coldata.Batch {
+func (p *sortOp) ExportBuffered(colbase.Operator) coldata.Batch {
 	if p.exported == p.input.getNumTuples() {
 		return coldata.ZeroBatch
 	}
