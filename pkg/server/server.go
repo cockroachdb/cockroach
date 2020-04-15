@@ -517,7 +517,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		protectedtsProvider:      protectedtsProvider,
 		gossip:                   g,
 		nodeDialer:               nodeDialer,
-		grpcServer:               grpcServer.Server,
+		grpcServerOrNil:          grpcServer.Server,
 		recorder:                 recorder,
 		runtime:                  runtimeSampler,
 		db:                       db,

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -104,7 +103,9 @@ type sqlServerArgs struct {
 	// The status server is handed the stmtDiagnosticsRegistry.
 	status *statusServer
 	// The DistSQLPlanner uses node liveness.
-	nodeLiveness *kvserver.NodeLiveness
+	nodeLiveness interface {
+		IsLive(roachpb.NodeID) (bool, error)
+	}
 	// The executorConfig uses the provider.
 	protectedtsProvider protectedts.Provider
 	// Gossip is relied upon by distSQLCfg (execinfra.ServerConfig), the executor
@@ -113,8 +114,9 @@ type sqlServerArgs struct {
 	gossip *gossip.Gossip
 	// Used by DistSQLConfig and DistSQLPlanner.
 	nodeDialer *nodedialer.Dialer
-	// To register blob and DistSQL servers.
-	grpcServer *grpc.Server
+	// To register blob and DistSQL servers. This is not available if a pure SQL
+	// server is being started, in which case we only have a Postgres listener.
+	grpcServerOrNil *grpc.Server
 	// Used by executorConfig.
 	recorder *status.MetricsRecorder
 	// For the temporaryObjectCleaner.
@@ -165,7 +167,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "creating blob service")
 	}
-	blobspb.RegisterBlobServer(cfg.grpcServer, blobService)
+	if cfg.grpcServerOrNil != nil {
+		blobspb.RegisterBlobServer(cfg.grpcServerOrNil, blobService)
+	}
 
 	jobRegistry := cfg.jobRegistry
 	*jobRegistry = *jobs.MakeRegistry(
@@ -315,7 +319,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	}
 
 	distSQLServer := distsql.NewServer(ctx, distSQLCfg)
-	execinfrapb.RegisterDistSQLServer(cfg.grpcServer, distSQLServer)
+	if cfg.grpcServerOrNil != nil {
+		execinfrapb.RegisterDistSQLServer(cfg.grpcServerOrNil, distSQLServer)
+	}
 
 	virtualSchemas, err := sql.NewVirtualSchemaHolder(ctx, cfg.Settings)
 	if err != nil {

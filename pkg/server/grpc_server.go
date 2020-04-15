@@ -21,7 +21,7 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 )
 
-// grpcServer is a wrapper on top of a grpc.Server that includes an interceptor
+// grpcServerOrNil is a wrapper on top of a grpc.Server that includes an interceptor
 // and a mode of operation that can instruct the interceptor to refuse certain
 // RPCs.
 type grpcServer struct {
