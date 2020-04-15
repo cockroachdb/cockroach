@@ -64,6 +64,11 @@ func ResolveTableIndex(
 				pgcode.WrongObjectType, "%q is not a table", name.Table.TableName,
 			)
 		}
+		if table.IsVirtualTable() {
+			return nil, DataSourceName{}, pgerror.Newf(
+				pgcode.WrongObjectType, "%q is a virtual table", name.Table.String(),
+			)
+		}
 		if name.Index == "" {
 			// Return primary index.
 			return table.Index(0), tn, nil
