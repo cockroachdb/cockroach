@@ -122,15 +122,16 @@ func (n Node) Child(text string) Node {
 }
 
 // AddLine adds a new line to a child node without an edge.
-func (n Node) AddLine(v string) {
+func (n Node) AddLine(text string) {
+	runes := []rune(text)
 	// Each level indents by this much.
 	k := len(n.tree.edgeLast)
 	indent := n.level * k
-	row := make([]rune, indent+len(v))
+	row := make([]rune, indent+len(runes))
 	for i := 0; i < indent; i++ {
 		row[i] = ' '
 	}
-	for i, r := range v {
+	for i, r := range runes {
 		row[indent+i] = r
 	}
 	n.tree.rows = append(n.tree.rows, row)
