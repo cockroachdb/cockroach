@@ -27,11 +27,12 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
@@ -49,22 +50,22 @@ var _ = math.MaxInt8
 var _ tree.Datum
 
 func _ASSIGN_CAST(to, from interface{}) {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // This will be replaced with execgen.UNSAFEGET
 func _FROM_TYPE_UNSAFEGET(to, from interface{}) interface{} {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // This will be replaced with execgen.SET.
 func _TO_TYPE_SET(to, from interface{}) {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // This will be replaced with execgen.SLICE.
 func _FROM_TYPE_SLICE(col, i, j interface{}) interface{} {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // */}}
@@ -129,22 +130,22 @@ func cast(fromType, toType coltypes.T, inputVec, outputVec coldata.Vec, n int, s
 			// {{end}}
 			// {{end}}
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled cast FROM -> TO type: %s -> %s", fromType, toType))
+			vecerror.InternalError(fmt.Sprintf("unhandled cast FROM -> TO type: %s -> %s", fromType, toType))
 		}
 		// {{end}}
 	default:
-		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled FROM type: %s", fromType))
+		vecerror.InternalError(fmt.Sprintf("unhandled FROM type: %s", fromType))
 	}
 }
 
 func GetCastOperator(
-	allocator *Allocator,
-	input Operator,
+	allocator *colbase.Allocator,
+	input colbase.Operator,
 	colIdx int,
 	resultIdx int,
 	fromType *semtypes.T,
 	toType *semtypes.T,
-) (Operator, error) {
+) (colbase.Operator, error) {
 	to := typeconv.FromColumnType(toType)
 	input = newVectorTypeEnforcer(allocator, input, to, resultIdx)
 	if fromType.Family() == semtypes.UnknownFamily {
@@ -183,12 +184,12 @@ func GetCastOperator(
 
 type castOpNullAny struct {
 	OneInputNode
-	allocator *Allocator
+	allocator *colbase.Allocator
 	colIdx    int
 	outputIdx int
 }
 
-var _ Operator = &castOpNullAny{}
+var _ colbase.Operator = &castOpNullAny{}
 
 func (c *castOpNullAny) Init() {
 	c.input.Init()
@@ -210,7 +211,7 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 			if vecNulls.NullAt(i) {
 				projNulls.SetNull(i)
 			} else {
-				execerror.VectorizedInternalPanic(errors.Errorf("unexpected non-null at index %d", i))
+				vecerror.InternalError(errors.Errorf("unexpected non-null at index %d", i))
 			}
 		}
 	} else {
@@ -218,7 +219,7 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 			if vecNulls.NullAt(i) {
 				projNulls.SetNull(i)
 			} else {
-				execerror.VectorizedInternalPanic(fmt.Errorf("unexpected non-null at index %d", i))
+				vecerror.InternalError(fmt.Errorf("unexpected non-null at index %d", i))
 			}
 		}
 	}
@@ -227,14 +228,14 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 
 type castOp struct {
 	OneInputNode
-	allocator *Allocator
+	allocator *colbase.Allocator
 	colIdx    int
 	outputIdx int
 	fromType  coltypes.T
 	toType    coltypes.T
 }
 
-var _ Operator = &castOp{}
+var _ colbase.Operator = &castOp{}
 
 func (c *castOp) Init() {
 	c.input.Init()

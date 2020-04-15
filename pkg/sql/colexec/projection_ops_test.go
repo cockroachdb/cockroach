@@ -20,7 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -44,7 +45,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 		},
 	}
 	runTests(t, []tuples{{{1}, {2}, {nil}}}, tuples{{1, 2}, {2, 3}, {nil, nil}}, orderedVerifier,
-		func(input []Operator) (Operator, error) {
+		func(input []colbase.Operator) (colbase.Operator, error) {
 			return createTestProjectingOperator(
 				ctx, flowCtx, input[0], []types.T{*types.Int},
 				"@1 + 1" /* projectingExpr */, false, /* canFallbackToRowexec */
@@ -66,7 +67,7 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 	}
 	runTests(t, []tuples{{{1, 2}, {3, 4}, {5, nil}}}, tuples{{1, 2, 3}, {3, 4, 7}, {5, nil, nil}},
 		orderedVerifier,
-		func(input []Operator) (Operator, error) {
+		func(input []colbase.Operator) (colbase.Operator, error) {
 			return createTestProjectingOperator(
 				ctx, flowCtx, input[0], []types.T{*types.Int, *types.Int},
 				"@1 + @2" /* projectingExpr */, false, /* canFallbackToRowexec */
@@ -88,7 +89,7 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 	}
 	runTests(t, []tuples{{{1.0, 2.0}, {3.0, 4.0}, {5.0, nil}}}, tuples{{1.0, 2.0, 0.5}, {3.0, 4.0, 0.75}, {5.0, nil, nil}},
 		orderedVerifier,
-		func(input []Operator) (Operator, error) {
+		func(input []colbase.Operator) (colbase.Operator, error) {
 			return createTestProjectingOperator(
 				ctx, flowCtx, input[0], []types.T{*types.Float, *types.Float},
 				"@1 / @2" /* projectingExpr */, false, /* canFallbackToRowexec */
@@ -127,7 +128,7 @@ func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, h
 			sel[i] = i
 		}
 	}
-	source := NewRepeatableBatchSource(testAllocator, batch)
+	source := colbase.NewRepeatableBatchSource(testAllocator, batch)
 	plusOp, err := createTestProjectingOperator(
 		ctx, flowCtx, source, []types.T{*types.Int},
 		"@1 + 1" /* projectingExpr */, false, /* canFallbackToRowexec */
@@ -154,7 +155,7 @@ func BenchmarkProjPlusInt64Int64ConstOp(b *testing.B) {
 func TestGetProjectionConstOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	binOp := tree.Mult
-	var input Operator
+	var input colbase.Operator
 	colIdx := 3
 	constVal := 31.37
 	constArg := tree.NewDFloat(tree.DFloat(constVal))
@@ -183,7 +184,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	binOp := tree.GE
-	var input Operator
+	var input colbase.Operator
 	colIdx := 3
 	constVal := int16(31)
 	constArg := tree.NewDInt(tree.DInt(constVal))
@@ -303,7 +304,7 @@ func TestGetProjectionOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ct := types.Int2
 	binOp := tree.Mult
-	var input Operator
+	var input colbase.Operator
 	col1Idx := 5
 	col2Idx := 7
 	outputIdx := 9
@@ -330,7 +331,7 @@ func TestGetProjectionOperator(t *testing.T) {
 
 func benchmarkProjOp(
 	b *testing.B,
-	makeProjOp func(source *RepeatableBatchSource, intType coltypes.T) (Operator, error),
+	makeProjOp func(source *colbase.RepeatableBatchSource, intType coltypes.T) (colbase.Operator, error),
 	useSelectionVector bool,
 	hasNulls bool,
 	intType coltypes.T,
@@ -374,7 +375,7 @@ func benchmarkProjOp(
 			sel[i] = i
 		}
 	}
-	source := NewRepeatableBatchSource(testAllocator, batch)
+	source := colbase.NewRepeatableBatchSource(testAllocator, batch)
 	op, err := makeProjOp(source, intType)
 	require.NoError(b, err)
 	op.Init()
@@ -407,26 +408,26 @@ func BenchmarkProjOp(b *testing.B) {
 			return nil
 		}
 	}
-	projOpMap := map[string]func(*RepeatableBatchSource, coltypes.T) (Operator, error){
-		"projPlusIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) (Operator, error) {
+	projOpMap := map[string]func(*colbase.RepeatableBatchSource, coltypes.T) (colbase.Operator, error){
+		"projPlusIntIntOp": func(source *colbase.RepeatableBatchSource, intType coltypes.T) (colbase.Operator, error) {
 			return createTestProjectingOperator(
 				ctx, flowCtx, source, getInputTypesForColtype(intType),
 				"@1 + @2" /* projectingExpr */, false, /* canFallbackToRowexec */
 			)
 		},
-		"projMinusIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) (Operator, error) {
+		"projMinusIntIntOp": func(source *colbase.RepeatableBatchSource, intType coltypes.T) (colbase.Operator, error) {
 			return createTestProjectingOperator(
 				ctx, flowCtx, source, getInputTypesForColtype(intType),
 				"@1 - @2" /* projectingExpr */, false, /* canFallbackToRowexec */
 			)
 		},
-		"projMultIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) (Operator, error) {
+		"projMultIntIntOp": func(source *colbase.RepeatableBatchSource, intType coltypes.T) (colbase.Operator, error) {
 			return createTestProjectingOperator(
 				ctx, flowCtx, source, getInputTypesForColtype(intType),
 				"@1 * @2" /* projectingExpr */, false, /* canFallbackToRowexec */
 			)
 		},
-		"projDivIntIntOp": func(source *RepeatableBatchSource, intType coltypes.T) (Operator, error) {
+		"projDivIntIntOp": func(source *colbase.RepeatableBatchSource, intType coltypes.T) (colbase.Operator, error) {
 			return createTestProjectingOperator(
 				ctx, flowCtx, source, getInputTypesForColtype(intType),
 				"@1 / @2" /* projectingExpr */, false, /* canFallbackToRowexec */

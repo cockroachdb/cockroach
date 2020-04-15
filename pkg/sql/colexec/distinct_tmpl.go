@@ -28,7 +28,8 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
@@ -41,8 +42,8 @@ import (
 // a slice of columns, creates a chain of distinct operators and returns the
 // last distinct operator in that chain as well as its output column.
 func OrderedDistinctColsToOperators(
-	input Operator, distinctCols []uint32, typs []coltypes.T,
-) (Operator, []bool, error) {
+	input colbase.Operator, distinctCols []uint32, typs []coltypes.T,
+) (colbase.Operator, []bool, error) {
 	distinctCol := make([]bool, coldata.BatchSize())
 	// zero the boolean column on every iteration.
 	input = fnOp{
@@ -61,7 +62,7 @@ func OrderedDistinctColsToOperators(
 		}
 	}
 	if r, ok = input.(resettableOperator); !ok {
-		execerror.VectorizedInternalPanic("unexpectedly an ordered distinct is not a resetter")
+		vecerror.InternalError("unexpectedly an ordered distinct is not a resetter")
 	}
 	distinctChain := &distinctChainOps{
 		resettableOperator: r,
@@ -78,8 +79,8 @@ var _ resettableOperator = &distinctChainOps{}
 // NewOrderedDistinct creates a new ordered distinct operator on the given
 // input columns with the given coltypes.
 func NewOrderedDistinct(
-	input Operator, distinctCols []uint32, typs []coltypes.T,
-) (Operator, error) {
+	input colbase.Operator, distinctCols []uint32, typs []coltypes.T,
+) (colbase.Operator, error) {
 	op, outputCol, err := OrderedDistinctColsToOperators(input, distinctCols, typs)
 	if err != nil {
 		return nil, err
@@ -129,14 +130,14 @@ const _TYPES_T = coltypes.Unhandled
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the second input != the third input.
 func _ASSIGN_NE(_ bool, _, _ _GOTYPE) bool {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // */}}
 
 func newSingleOrderedDistinct(
-	input Operator, distinctColIdx int, outputCol []bool, t coltypes.T,
-) (Operator, error) {
+	input colbase.Operator, distinctColIdx int, outputCol []bool, t coltypes.T,
+) (colbase.Operator, error) {
 	switch t {
 	// {{range .}}
 	case _TYPES_T:

@@ -15,7 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
 )
@@ -154,7 +155,7 @@ type hashJoinerSourceSpec struct {
 type hashJoiner struct {
 	twoInputNode
 
-	allocator *Allocator
+	allocator *colbase.Allocator
 	// spec holds the specification for the current hash join process.
 	spec hashJoinerSpec
 	// state stores the current state of the hash joiner.
@@ -250,7 +251,7 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 			hj.emitUnmatched()
 			return hj.output
 		default:
-			execerror.VectorizedInternalPanic("hash joiner in unhandled state")
+			vecerror.InternalError("hash joiner in unhandled state")
 			// This code is unreachable, but the compiler cannot infer that.
 			return nil
 		}
@@ -524,7 +525,7 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch, batchSize in
 	hj.output.SetLength(nResults)
 }
 
-func (hj *hashJoiner) ExportBuffered(input Operator) coldata.Batch {
+func (hj *hashJoiner) ExportBuffered(input colbase.Operator) coldata.Batch {
 	if hj.inputOne == input {
 		// We do not buffer anything from the left source. Furthermore, the memory
 		// limit can only hit during the building of the hash table step at which
@@ -550,7 +551,7 @@ func (hj *hashJoiner) ExportBuffered(input Operator) coldata.Batch {
 		hj.exportBufferedState.rightExported = newRightExported
 		return b
 	} else {
-		execerror.VectorizedInternalPanic(errors.New(
+		vecerror.InternalError(errors.New(
 			"unexpectedly ExportBuffered is called with neither left nor right inputs to hash join",
 		))
 		// This code is unreachable, but the compiler cannot infer that.
@@ -571,7 +572,7 @@ func (hj *hashJoiner) resetOutput() {
 }
 
 func (hj *hashJoiner) reset(ctx context.Context) {
-	for _, input := range []Operator{hj.inputOne, hj.inputTwo} {
+	for _, input := range []colbase.Operator{hj.inputOne, hj.inputTwo} {
 		if r, ok := input.(resetter); ok {
 			r.reset(ctx)
 		}
@@ -651,8 +652,8 @@ func makeHashJoinerSpec(
 // newHashJoiner creates a new equality hash join operator on the left and
 // right input tables.
 func newHashJoiner(
-	allocator *Allocator, spec hashJoinerSpec, leftSource, rightSource Operator,
-) Operator {
+	allocator *colbase.Allocator, spec hashJoinerSpec, leftSource, rightSource colbase.Operator,
+) colbase.Operator {
 	hj := &hashJoiner{
 		twoInputNode:    newTwoInputNode(leftSource, rightSource),
 		allocator:       allocator,

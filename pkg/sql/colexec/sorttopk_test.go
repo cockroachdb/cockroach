@@ -13,7 +13,8 @@ package colexec
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -66,7 +67,7 @@ func TestTopKSorter(t *testing.T) {
 
 	for _, tc := range topKSortTestCases {
 		t.Run(tc.description, func(t *testing.T) {
-			runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []Operator) (Operator, error) {
+			runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colbase.Operator) (colbase.Operator, error) {
 				physTypes, err := typeconv.FromColumnTypes(tc.logTypes)
 				if err != nil {
 					return nil, err

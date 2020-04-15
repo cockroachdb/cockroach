@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -61,7 +62,7 @@ func TestSimpleProjectOp(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []Operator) (Operator, error) {
+		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colbase.Operator) (colbase.Operator, error) {
 			return NewSimpleProjectOp(input[0], len(tc.tuples[0]), tc.colsToKeep), nil
 		})
 	}
@@ -69,7 +70,7 @@ func TestSimpleProjectOp(t *testing.T) {
 	// Empty projection. The all nulls injection test case will also return
 	// nothing.
 	runTestsWithoutAllNullsInjection(t, []tuples{{{1, 2, 3}, {1, 2, 3}}}, nil /* typs */, tuples{{}, {}}, orderedVerifier,
-		func(input []Operator) (Operator, error) {
+		func(input []colbase.Operator) (colbase.Operator, error) {
 			return NewSimpleProjectOp(input[0], 3 /* numInputCols */, nil), nil
 		})
 
@@ -107,8 +108,8 @@ func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 		{"bb", constVal},
 	}
 	runTestsWithoutAllNullsInjection(t, inputTuples, [][]coltypes.T{inputTypes, inputTypes}, expected,
-		unorderedVerifier, func(inputs []Operator) (Operator, error) {
-			var input Operator
+		unorderedVerifier, func(inputs []colbase.Operator) (colbase.Operator, error) {
+			var input colbase.Operator
 			input = NewParallelUnorderedSynchronizer(inputs, inputTypes, &wg)
 			input = NewSimpleProjectOp(input, len(inputTypes), []uint32{0})
 			return NewConstOp(testAllocator, input, coltypes.Int64, constVal, 1)

@@ -15,7 +15,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -44,7 +44,7 @@ func FromColumnType(ct *types.T) coltypes.T {
 		case 0, 64:
 			return coltypes.Int64
 		}
-		execerror.VectorizedInternalPanic(fmt.Sprintf("integer with unknown width %d", ct.Width()))
+		vecerror.InternalError(fmt.Sprintf("integer with unknown width %d", ct.Width()))
 	case types.FloatFamily:
 		return coltypes.Float64
 	case types.TimestampFamily:
@@ -117,7 +117,7 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
 				return int64(*d), nil
 			}
 		}
-		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled INT width %d", ct.Width()))
+		vecerror.InternalError(fmt.Sprintf("unhandled INT width %d", ct.Width()))
 	case types.DateFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DDate)

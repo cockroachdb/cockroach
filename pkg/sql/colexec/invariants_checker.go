@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 )
 
 // invariantsChecker is a helper Operator that will check that invariants that
@@ -24,10 +25,10 @@ type invariantsChecker struct {
 	OneInputNode
 }
 
-var _ Operator = invariantsChecker{}
+var _ colbase.Operator = invariantsChecker{}
 
 // NewInvariantsChecker creates a new invariantsChecker.
-func NewInvariantsChecker(input Operator) Operator {
+func NewInvariantsChecker(input colbase.Operator) colbase.Operator {
 	return &invariantsChecker{
 		OneInputNode: OneInputNode{input: input},
 	}

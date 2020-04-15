@@ -16,8 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -194,11 +195,11 @@ type mergeJoinInput struct {
 	// determine where the current group ends, in the case that the group ended
 	// with a batch.
 	distincterInput *feedOperator
-	distincter      Operator
+	distincter      colbase.Operator
 	distinctOutput  []bool
 
 	// source specifies the input operator to the merge join.
-	source Operator
+	source colbase.Operator
 }
 
 // The merge join operator uses a probe and build approach to generate the
@@ -221,13 +222,13 @@ type mergeJoinInput struct {
 // sources, based on the equality columns, assuming both inputs are in sorted
 // order.
 func newMergeJoinOp(
-	unlimitedAllocator *Allocator,
+	unlimitedAllocator *colbase.Allocator,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	joinType sqlbase.JoinType,
-	left Operator,
-	right Operator,
+	left colbase.Operator,
+	right colbase.Operator,
 	leftTypes []coltypes.T,
 	rightTypes []coltypes.T,
 	leftOrdering []execinfrapb.Ordering_Column,
@@ -284,13 +285,13 @@ func (s *mjBuilderCrossProductState) setBuilderColumnState(target mjBuilderCross
 }
 
 func newMergeJoinBase(
-	unlimitedAllocator *Allocator,
+	unlimitedAllocator *colbase.Allocator,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	joinType sqlbase.JoinType,
-	left Operator,
-	right Operator,
+	left colbase.Operator,
+	right colbase.Operator,
 	leftTypes []coltypes.T,
 	rightTypes []coltypes.T,
 	leftOrdering []execinfrapb.Ordering_Column,
@@ -362,7 +363,7 @@ type mergeJoinBase struct {
 	//  Next, which will simplify this model.
 	mu syncutil.Mutex
 
-	unlimitedAllocator *Allocator
+	unlimitedAllocator *colbase.Allocator
 	memoryLimit        int64
 	diskQueueCfg       colcontainer.DiskQueueCfg
 	fdSemaphore        semaphore.Semaphore
@@ -556,7 +557,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	scratchBatch.SetSelection(false)
 	scratchBatch.SetLength(groupLength)
 	if err := bufferedGroup.enqueue(ctx, scratchBatch); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 }
 
@@ -704,7 +705,7 @@ func (o *mergeJoinBase) IdempotentClose(ctx context.Context) error {
 		return nil
 	}
 	var lastErr error
-	for _, op := range []Operator{o.left.source, o.right.source} {
+	for _, op := range []colbase.Operator{o.left.source, o.right.source} {
 		if c, ok := op.(IdempotentCloser); ok {
 			if err := c.IdempotentClose(ctx); err != nil {
 				lastErr = err

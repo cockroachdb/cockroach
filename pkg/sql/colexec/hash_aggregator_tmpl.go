@@ -26,7 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
@@ -49,7 +49,7 @@ var _ int = math.MaxInt16
 // _ASSIGN_NE is the template function for assigning the result of comparing
 // the second input to the third input into the first input.
 func _ASSIGN_NE(_, _, _ interface{}) int {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // */}}
@@ -156,7 +156,7 @@ func (v hashAggFuncs) match(
 			}
 		// {{end}}
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", keyTyp))
+			vecerror.InternalError(fmt.Sprintf("unhandled type %d", keyTyp))
 		}
 	}
 

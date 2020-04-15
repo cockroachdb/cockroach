@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
@@ -76,7 +76,7 @@ const _ISNULL = false
 // _ASSIGN_LT is the template equality function for assigning the first input
 // to the result of the second input < the third input.
 func _ASSIGN_LT(_, _, _ string) bool {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // */}}
@@ -114,15 +114,15 @@ func newSingleSorter(
 				return &sort_TYPE_DIR_HANDLES_NULLSOp{}
 			// {{end}}
 			default:
-				execerror.VectorizedInternalPanic("nulls switch failed")
+				vecerror.InternalError("nulls switch failed")
 			}
 			// {{end}}
 		default:
-			execerror.VectorizedInternalPanic("nulls switch failed")
+			vecerror.InternalError("nulls switch failed")
 		}
 	// {{end}}
 	default:
-		execerror.VectorizedInternalPanic("nulls switch failed")
+		vecerror.InternalError("nulls switch failed")
 	}
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
@@ -152,7 +152,7 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sort(ctx context.Context) {
 
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sortPartitions(ctx context.Context, partitions []int) {
 	if len(partitions) < 1 {
-		execerror.VectorizedInternalPanic(fmt.Sprintf("invalid partitions list %v", partitions))
+		vecerror.InternalError(fmt.Sprintf("invalid partitions list %v", partitions))
 	}
 	order := s.order
 	for i, partitionStart := range partitions {

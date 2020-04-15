@@ -24,8 +24,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	// {{/*
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/errors"
@@ -38,14 +39,14 @@ import (
 // outputColIdx specifies in which coldata.Vec the operator should put its
 // output (if there is no such column, a new column is appended).
 func NewRankOperator(
-	allocator *Allocator,
-	input Operator,
+	allocator *colbase.Allocator,
+	input colbase.Operator,
 	windowFn execinfrapb.WindowerSpec_WindowFunc,
 	orderingCols []execinfrapb.Ordering_Column,
 	outputColIdx int,
 	partitionColIdx int,
 	peersColIdx int,
-) (Operator, error) {
+) (colbase.Operator, error) {
 	if len(orderingCols) == 0 {
 		return NewConstOp(allocator, input, coltypes.Int64, int64(1), outputColIdx)
 	}
@@ -78,13 +79,13 @@ func NewRankOperator(
 // _UPDATE_RANK is the template function for updating the state of rank
 // operators.
 func _UPDATE_RANK() {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // _UPDATE_RANK_INCREMENT is the template function for updating the state of
 // rank operators.
 func _UPDATE_RANK_INCREMENT() {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // */}}
@@ -92,7 +93,7 @@ func _UPDATE_RANK_INCREMENT() {
 type rankInitFields struct {
 	OneInputNode
 
-	allocator       *Allocator
+	allocator       *colbase.Allocator
 	outputColIdx    int
 	partitionColIdx int
 	peersColIdx     int
@@ -110,7 +111,7 @@ type _RANK_STRINGOp struct {
 	rankIncrement int64
 }
 
-var _ Operator = &_RANK_STRINGOp{}
+var _ colbase.Operator = &_RANK_STRINGOp{}
 
 func (r *_RANK_STRINGOp) Init() {
 	r.Input().Init()

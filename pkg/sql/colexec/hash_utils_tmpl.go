@@ -28,7 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
@@ -55,7 +55,7 @@ type _GOTYPESLICE interface{}
 // _ASSIGN_HASH is the template equality function for assigning the first input
 // to the result of the hash value of the second input.
 func _ASSIGN_HASH(_, _ interface{}) uint64 {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // */}}
@@ -136,6 +136,6 @@ func rehash(
 
 	// {{end}}
 	default:
-		execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", t))
+		vecerror.InternalError(fmt.Sprintf("unhandled type %d", t))
 	}
 }

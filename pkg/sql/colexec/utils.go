@@ -16,8 +16,9 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
@@ -40,30 +41,6 @@ var (
 // type must be declared before the inlined overloaded code.
 type decimalOverloadScratch struct {
 	tmpDec1, tmpDec2 apd.Decimal
-}
-
-// CopyBatch copies the original batch and returns that copy. However, note that
-// the underlying capacity might be different (a new batch is created only with
-// capacity original.Length()).
-func CopyBatch(allocator *Allocator, original coldata.Batch) coldata.Batch {
-	typs := make([]coltypes.T, original.Width())
-	for i, vec := range original.ColVecs() {
-		typs[i] = vec.Type()
-	}
-	b := allocator.NewMemBatchWithSize(typs, original.Length())
-	b.SetLength(original.Length())
-	allocator.PerformOperation(b.ColVecs(), func() {
-		for colIdx, col := range original.ColVecs() {
-			b.ColVec(colIdx).Copy(coldata.CopySliceArgs{
-				SliceArgs: coldata.SliceArgs{
-					ColType:   typs[colIdx],
-					Src:       col,
-					SrcEndIdx: original.Length(),
-				},
-			})
-		}
-	})
-	return b
 }
 
 // makeWindowIntoBatch updates windowedBatch so that it provides a "window"
@@ -102,7 +79,7 @@ func makeWindowIntoBatch(
 }
 
 func newPartitionerToOperator(
-	allocator *Allocator,
+	allocator *colbase.Allocator,
 	types []coltypes.T,
 	partitioner colcontainer.PartitionedQueue,
 	partitionIdx int,
@@ -118,7 +95,7 @@ func newPartitionerToOperator(
 // partition on every call to Next. It is a converter from filled in
 // PartitionedQueue to Operator.
 type partitionerToOperator struct {
-	ZeroInputNode
+	colbase.ZeroInputNode
 	NonExplainable
 
 	partitioner  colcontainer.PartitionedQueue
@@ -126,19 +103,19 @@ type partitionerToOperator struct {
 	batch        coldata.Batch
 }
 
-var _ Operator = &partitionerToOperator{}
+var _ colbase.Operator = &partitionerToOperator{}
 
 func (p *partitionerToOperator) Init() {}
 
 func (p *partitionerToOperator) Next(ctx context.Context) coldata.Batch {
 	if err := p.partitioner.Dequeue(ctx, p.partitionIdx, p.batch); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	return p.batch
 }
 
 func newAppendOnlyBufferedBatch(
-	allocator *Allocator, typs []coltypes.T, initialSize int,
+	allocator *colbase.Allocator, typs []coltypes.T, initialSize int,
 ) *appendOnlyBufferedBatch {
 	batch := allocator.NewMemBatchWithSize(typs, initialSize)
 	return &appendOnlyBufferedBatch{
@@ -186,11 +163,11 @@ func (b *appendOnlyBufferedBatch) ColVecs() []coldata.Vec {
 }
 
 func (b *appendOnlyBufferedBatch) AppendCol(coldata.Vec) {
-	execerror.VectorizedInternalPanic("AppendCol is prohibited on appendOnlyBufferedBatch")
+	vecerror.InternalError("AppendCol is prohibited on appendOnlyBufferedBatch")
 }
 
 func (b *appendOnlyBufferedBatch) ReplaceCol(coldata.Vec, int) {
-	execerror.VectorizedInternalPanic("ReplaceCol is prohibited on appendOnlyBufferedBatch")
+	vecerror.InternalError("ReplaceCol is prohibited on appendOnlyBufferedBatch")
 }
 
 // append is a helper method that appends all tuples with indices in range

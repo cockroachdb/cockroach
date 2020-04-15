@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -53,7 +54,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 	mat, err := colexec.NewMaterializer(
 		&flowCtx,
 		0, /* processorID */
-		&colexec.CallbackOperator{
+		&colbase.CallbackOperator{
 			NextCb: func(ctx context.Context) coldata.Batch {
 				panic("")
 			},

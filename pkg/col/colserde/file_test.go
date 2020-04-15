@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -32,7 +32,7 @@ func TestFileRoundtrip(t *testing.T) {
 	t.Run(`mem`, func(t *testing.T) {
 		// Make a copy of the original batch because the converter modifies and
 		// casts data without copying for performance reasons.
-		original := colexec.CopyBatch(testAllocator, b)
+		original := colbase.CopyBatch(testAllocator, b)
 
 		var buf bytes.Buffer
 		s, err := colserde.NewFileSerializer(&buf, typs)
@@ -65,7 +65,7 @@ func TestFileRoundtrip(t *testing.T) {
 
 		// Make a copy of the original batch because the converter modifies and
 		// casts data without copying for performance reasons.
-		original := colexec.CopyBatch(testAllocator, b)
+		original := colbase.CopyBatch(testAllocator, b)
 
 		f, err := os.Create(path)
 		require.NoError(t, err)

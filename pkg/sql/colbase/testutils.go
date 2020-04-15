@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colbase
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/errors"
 )
 
@@ -194,10 +194,10 @@ func (s *TestingSemaphore) TryAcquire(n int) bool {
 // Release implements the semaphore.Semaphore interface.
 func (s *TestingSemaphore) Release(n int) int {
 	if n < 0 {
-		execerror.VectorizedInternalPanic("releasing a negative amount")
+		vecerror.InternalError("releasing a negative amount")
 	}
 	if s.count-n < 0 {
-		execerror.VectorizedInternalPanic(fmt.Sprintf("testing semaphore too many resources released, releasing %d, have %d", n, s.count))
+		vecerror.InternalError(fmt.Sprintf("testing semaphore too many resources released, releasing %d, have %d", n, s.count))
 	}
 	pre := s.count
 	s.count -= n

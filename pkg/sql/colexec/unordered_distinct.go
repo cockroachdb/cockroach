@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 )
 
 // NewUnorderedDistinct creates an unordered distinct on the given distinct
@@ -22,12 +23,12 @@ import (
 // numHashBuckets determines the number of buckets that the hash table is
 // created with.
 func NewUnorderedDistinct(
-	allocator *Allocator,
-	input Operator,
+	allocator *colbase.Allocator,
+	input colbase.Operator,
 	distinctCols []uint32,
 	colTypes []coltypes.T,
 	numHashBuckets uint64,
-) Operator {
+) colbase.Operator {
 	ht := newHashTable(
 		allocator,
 		numHashBuckets,
@@ -55,7 +56,7 @@ func NewUnorderedDistinct(
 type unorderedDistinct struct {
 	OneInputNode
 
-	allocator     *Allocator
+	allocator     *colbase.Allocator
 	ht            *hashTable
 	buildFinished bool
 
@@ -65,7 +66,7 @@ type unorderedDistinct struct {
 	outputBatchStart int
 }
 
-var _ Operator = &unorderedDistinct{}
+var _ colbase.Operator = &unorderedDistinct{}
 
 func (op *unorderedDistinct) Init() {
 	op.input.Init()

@@ -16,7 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/errors"
 )
@@ -28,12 +29,12 @@ const partiallyOrderedDistinctNumHashBuckets = 1024
 // distinct columns when we have partial ordering on some of the distinct
 // columns.
 func newPartiallyOrderedDistinct(
-	allocator *Allocator,
-	input Operator,
+	allocator *colbase.Allocator,
+	input colbase.Operator,
 	distinctCols []uint32,
 	orderedCols []uint32,
 	colTypes []coltypes.T,
-) (Operator, error) {
+) (colbase.Operator, error) {
 	if len(orderedCols) == 0 || len(orderedCols) == len(distinctCols) {
 		return nil, errors.AssertionFailedf(
 			"partially ordered distinct wrongfully planned: numDistinctCols=%d "+
@@ -80,7 +81,7 @@ type partiallyOrderedDistinct struct {
 	distinct resettableOperator
 }
 
-var _ Operator = &partiallyOrderedDistinct{}
+var _ colbase.Operator = &partiallyOrderedDistinct{}
 
 func (p *partiallyOrderedDistinct) ChildCount(bool) int {
 	return 1
@@ -90,7 +91,7 @@ func (p *partiallyOrderedDistinct) Child(nth int, _ bool) execinfra.OpNode {
 	if nth == 0 {
 		return p.input
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	vecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -116,7 +117,7 @@ func (p *partiallyOrderedDistinct) Next(ctx context.Context) coldata.Batch {
 }
 
 func newChunkerOperator(
-	allocator *Allocator, input *chunker, inputTypes []coltypes.T,
+	allocator *colbase.Allocator, input *chunker, inputTypes []coltypes.T,
 ) *chunkerOperator {
 	return &chunkerOperator{
 		input:         input,
@@ -167,7 +168,7 @@ func (c *chunkerOperator) Child(nth int, _ bool) execinfra.OpNode {
 	if nth == 0 {
 		return c.input
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	vecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

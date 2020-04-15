@@ -25,11 +25,12 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -89,7 +90,7 @@ func _ROWS_TO_COL_VEC(
 // EncDatumRowsToColVec converts one column from EncDatumRows to a column
 // vector. columnIdx is the 0-based index of the column in the EncDatumRows.
 func EncDatumRowsToColVec(
-	allocator *Allocator,
+	allocator *colbase.Allocator,
 	rows sqlbase.EncDatumRows,
 	vec coldata.Vec,
 	columnIdx int,
@@ -110,14 +111,14 @@ func EncDatumRowsToColVec(
 					_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)
 				// {{end}}
 				default:
-					execerror.VectorizedInternalPanic(fmt.Sprintf("unsupported width %d for column type %s", columnType.Width(), columnType.String()))
+					vecerror.InternalError(fmt.Sprintf("unsupported width %d for column type %s", columnType.Width(), columnType.String()))
 				}
 				// {{ else }}
 				_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)
 				// {{end}}
 			// {{end}}
 			default:
-				execerror.VectorizedInternalPanic(fmt.Sprintf("unsupported column type %s", columnType.String()))
+				vecerror.InternalError(fmt.Sprintf("unsupported column type %s", columnType.String()))
 			}
 		},
 	)

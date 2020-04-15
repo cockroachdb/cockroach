@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 )
 
 // countOp is an operator that counts the number of input rows it receives,
@@ -29,10 +30,10 @@ type countOp struct {
 	count         int64
 }
 
-var _ Operator = &countOp{}
+var _ colbase.Operator = &countOp{}
 
 // NewCountOp returns a new count operator that counts the rows in its input.
-func NewCountOp(allocator *Allocator, input Operator) Operator {
+func NewCountOp(allocator *colbase.Allocator, input colbase.Operator) colbase.Operator {
 	c := &countOp{
 		OneInputNode: NewOneInputNode(input),
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -74,7 +75,7 @@ func TestSelectInInt64(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.desc, func(t *testing.T) {
-			opConstructor := func(input []Operator) (Operator, error) {
+			opConstructor := func(input []colbase.Operator) (colbase.Operator, error) {
 				op := selectInOpInt64{
 					OneInputNode: NewOneInputNode(input[0]),
 					colIdx:       0,
@@ -130,7 +131,7 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 		}
 	}
 
-	source := NewRepeatableBatchSource(testAllocator, batch)
+	source := colbase.NewRepeatableBatchSource(testAllocator, batch)
 	source.Init()
 	inOp := &selectInOpInt64{
 		OneInputNode: NewOneInputNode(source),
@@ -215,7 +216,7 @@ func TestProjectInInt64(t *testing.T) {
 	for _, c := range testCases {
 		t.Run(c.desc, func(t *testing.T) {
 			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier,
-				func(input []Operator) (Operator, error) {
+				func(input []colbase.Operator) (colbase.Operator, error) {
 					expr, err := parser.ParseExpr(fmt.Sprintf("@1 %s", c.inClause))
 					if err != nil {
 						return nil, err

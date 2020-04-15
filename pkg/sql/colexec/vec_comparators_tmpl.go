@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
@@ -61,7 +61,7 @@ var _ = math.MaxInt64
 // _COMPARE is the template equality function for assigning the first input
 // to the result of comparing second and third inputs.
 func _COMPARE(_, _, _ string) bool {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // */}}
@@ -145,7 +145,7 @@ func GetVecComparator(t coltypes.T, numVecs int) vecComparator {
 		}
 		// {{end}}
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %v", t))
+	vecerror.InternalError(fmt.Sprintf("unhandled type %v", t))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

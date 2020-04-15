@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -141,7 +142,7 @@ func TestOrderedSync(t *testing.T) {
 		for i := range columnTypes {
 			columnTypes[i] = coltypes.Int64
 		}
-		runTests(t, tc.sources, tc.expected, orderedVerifier, func(inputs []Operator) (Operator, error) {
+		runTests(t, tc.sources, tc.expected, orderedVerifier, func(inputs []colbase.Operator) (colbase.Operator, error) {
 			return &OrderedSynchronizer{
 				allocator:   testAllocator,
 				inputs:      inputs,
@@ -181,7 +182,7 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 		}
 		sources[sourceIdx] = append(sources[sourceIdx], t)
 	}
-	inputs := make([]Operator, numInputs)
+	inputs := make([]colbase.Operator, numInputs)
 	for i := range inputs {
 		inputs[i] = newOpTestInput(batchSize, sources[i], nil /* typs */)
 	}
@@ -218,9 +219,9 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 		batch.ColVec(0).Int64()[i/numInputs] = i
 	}
 
-	inputs := make([]Operator, len(batches))
+	inputs := make([]colbase.Operator, len(batches))
 	for i := range batches {
-		inputs[i] = NewRepeatableBatchSource(testAllocator, batches[i])
+		inputs[i] = colbase.NewRepeatableBatchSource(testAllocator, batches[i])
 	}
 
 	op := OrderedSynchronizer{

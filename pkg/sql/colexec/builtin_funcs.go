@@ -15,8 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -25,7 +26,7 @@ import (
 
 type defaultBuiltinFuncOperator struct {
 	OneInputNode
-	allocator      *Allocator
+	allocator      *colbase.Allocator
 	evalCtx        *tree.EvalContext
 	funcExpr       *tree.FuncExpr
 	columnTypes    []types.T
@@ -39,7 +40,7 @@ type defaultBuiltinFuncOperator struct {
 	da  sqlbase.DatumAlloc
 }
 
-var _ Operator = &defaultBuiltinFuncOperator{}
+var _ colbase.Operator = &defaultBuiltinFuncOperator{}
 
 func (b *defaultBuiltinFuncOperator) Init() {
 	b.input.Init()
@@ -81,7 +82,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 				} else {
 					res, err = b.funcExpr.ResolvedOverload().Fn(b.evalCtx, b.row)
 					if err != nil {
-						execerror.NonVectorizedPanic(err)
+						vecerror.ExpectedError(err)
 					}
 				}
 
@@ -91,7 +92,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 				} else {
 					converted, err := b.converter(res)
 					if err != nil {
-						execerror.VectorizedInternalPanic(err)
+						vecerror.InternalError(err)
 					}
 					coldata.SetValueAt(output, converted, rowIdx, b.outputPhysType)
 				}
@@ -106,14 +107,14 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 
 // NewBuiltinFunctionOperator returns an operator that applies builtin functions.
 func NewBuiltinFunctionOperator(
-	allocator *Allocator,
+	allocator *colbase.Allocator,
 	evalCtx *tree.EvalContext,
 	funcExpr *tree.FuncExpr,
 	columnTypes []types.T,
 	argumentCols []int,
 	outputIdx int,
-	input Operator,
-) (Operator, error) {
+	input colbase.Operator,
+) (colbase.Operator, error) {
 	switch funcExpr.ResolvedOverload().SpecializedVecBuiltin {
 	case tree.SubstringStringIntInt:
 		input = newVectorTypeEnforcer(allocator, input, coltypes.Bytes, outputIdx)
