@@ -102,6 +102,15 @@ func ParseGeometry(str string) (*Geometry, error) {
 	return NewGeometry(ewkb), nil
 }
 
+// MustParseGeometry behaves as ParseGeometry, but panics if there is an error.
+func MustParseGeometry(str string) *Geometry {
+	g, err := ParseGeometry(str)
+	if err != nil {
+		panic(err)
+	}
+	return g
+}
+
 // AsGeography converts a given Geometry to it's Geography form.
 func (g *Geometry) AsGeography() (*Geography, error) {
 	if g.SRID() != 0 {
