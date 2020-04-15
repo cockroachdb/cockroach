@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/errors"
 )
 
 // delegateShowRanges implements the SHOW RANGES statement:
@@ -65,6 +66,9 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 	}
 	if err := d.catalog.CheckPrivilege(d.ctx, idx.Table(), privilege.SELECT); err != nil {
 		return nil, err
+	}
+	if idx.Table().IsVirtualTable() {
+		return nil, errors.New("SHOW RANGES may not be called on a virtual table")
 	}
 
 	span := idx.Span()

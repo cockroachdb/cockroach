@@ -530,3 +530,11 @@ query T
 SELECT crdb_internal.pretty_key(crdb_internal.encode_key(70, 4, (1, )), 0)
 ----
 /70/4/1/0
+
+# Regression test for #44326. SHOW RANGES on a virtual table should cause
+# an error, not a panic.
+query error SHOW RANGES may not be called on a virtual table
+SHOW RANGES FROM TABLE crdb_internal.tables
+
+query error SHOW RANGE FOR ROW may not be called on a virtual table
+SHOW RANGE FROM TABLE crdb_internal.tables FOR ROW (0, 0)
