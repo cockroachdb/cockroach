@@ -49,6 +49,16 @@ typedef CR_GEOS_Geometry (*CR_GEOS_WKBReader_read_r)(CR_GEOS_Handle, CR_GEOS_WKB
                                                      size_t);
 typedef void (*CR_GEOS_WKBReader_destroy_r)(CR_GEOS_Handle, CR_GEOS_WKBReader);
 
+typedef char (*CR_GEOS_Covers_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_CoveredBy_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_Contains_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_Crosses_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_Equals_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_Intersects_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_Overlaps_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_Touches_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_Within_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+
 typedef CR_GEOS_WKBWriter (*CR_GEOS_WKBWriter_create_r)(CR_GEOS_Handle);
 typedef char* (*CR_GEOS_WKBWriter_write_r)(CR_GEOS_Handle, CR_GEOS_WKBWriter, CR_GEOS_Geometry,
                                            size_t*);
@@ -83,6 +93,16 @@ struct CR_GEOS {
   CR_GEOS_WKBReader_destroy_r GEOSWKBReader_destroy_r;
   CR_GEOS_WKBReader_read_r GEOSWKBReader_read_r;
 
+  CR_GEOS_Covers_r GEOSCovers_r;
+  CR_GEOS_CoveredBy_r GEOSCoveredBy_r;
+  CR_GEOS_Contains_r GEOSContains_r;
+  CR_GEOS_Crosses_r GEOSCrosses_r;
+  CR_GEOS_Equals_r GEOSEquals_r;
+  CR_GEOS_Intersects_r GEOSIntersects_r;
+  CR_GEOS_Overlaps_r GEOSOverlaps_r;
+  CR_GEOS_Touches_r GEOSTouches_r;
+  CR_GEOS_Within_r GEOSWithin_r;
+
   CR_GEOS_WKBWriter_create_r GEOSWKBWriter_create_r;
   CR_GEOS_WKBWriter_destroy_r GEOSWKBWriter_destroy_r;
   CR_GEOS_WKBWriter_setByteOrder_r GEOSWKBWriter_setByteOrder_r;
@@ -114,6 +134,15 @@ struct CR_GEOS {
     INIT(GEOSGeom_destroy_r);
     INIT(GEOSSetSRID_r);
     INIT(GEOSGetSRID_r);
+    INIT(GEOSCovers_r);
+    INIT(GEOSCoveredBy_r);
+    INIT(GEOSContains_r);
+    INIT(GEOSCrosses_r);
+    INIT(GEOSEquals_r);
+    INIT(GEOSIntersects_r);
+    INIT(GEOSOverlaps_r);
+    INIT(GEOSTouches_r);
+    INIT(GEOSWithin_r);
     INIT(GEOSWKTReader_create_r);
     INIT(GEOSWKTReader_destroy_r);
     INIT(GEOSWKTReader_read_r);
@@ -236,4 +265,69 @@ CR_GEOS_Status CR_GEOS_ClipEWKBByRect(CR_GEOS* lib, CR_GEOS_Slice ewkb, double x
 
   lib->GEOS_finish_r(handle);
   return toGEOSString(error.data(), error.length());
+}
+
+//
+// Binary predicates
+//
+
+template <typename T>
+CR_GEOS_Status CR_GEOS_BinaryPredicate(CR_GEOS* lib, T fn, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+
+  auto wkbReader = lib->GEOSWKBReader_create_r(handle);
+  auto geomA = lib->GEOSWKBReader_read_r(handle, wkbReader, a.data, a.len);
+  auto geomB = lib->GEOSWKBReader_read_r(handle, wkbReader, b.data, b.len);
+  lib->GEOSWKBReader_destroy_r(handle, wkbReader);
+
+  if (geomA != nullptr && geomB != nullptr) {
+    auto r = fn(handle, geomA, geomB);
+    // ret == 2 indicates an exception.
+    if (r == 2) {
+      if (error.length() == 0) {
+        error.assign("geos: returned invalid result but error not populated");
+      }
+    } else {
+      *ret = r;
+    }
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_Covers(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+  return CR_GEOS_BinaryPredicate(lib, lib->GEOSCovers_r, a, b, ret);
+}
+
+CR_GEOS_Status CR_GEOS_CoveredBy(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+  return CR_GEOS_BinaryPredicate(lib, lib->GEOSCoveredBy_r, a, b, ret);
+}
+
+CR_GEOS_Status CR_GEOS_Contains(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+  return CR_GEOS_BinaryPredicate(lib, lib->GEOSContains_r, a, b, ret);
+}
+
+CR_GEOS_Status CR_GEOS_Crosses(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+  return CR_GEOS_BinaryPredicate(lib, lib->GEOSCrosses_r, a, b, ret);
+}
+
+CR_GEOS_Status CR_GEOS_Equals(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+  return CR_GEOS_BinaryPredicate(lib, lib->GEOSEquals_r, a, b, ret);
+}
+
+CR_GEOS_Status CR_GEOS_Intersects(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+  return CR_GEOS_BinaryPredicate(lib, lib->GEOSIntersects_r, a, b, ret);
+}
+
+CR_GEOS_Status CR_GEOS_Overlaps(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+  return CR_GEOS_BinaryPredicate(lib, lib->GEOSOverlaps_r, a, b, ret);
+}
+
+CR_GEOS_Status CR_GEOS_Touches(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+  return CR_GEOS_BinaryPredicate(lib, lib->GEOSTouches_r, a, b, ret);
+}
+
+CR_GEOS_Status CR_GEOS_Within(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char *ret) {
+  return CR_GEOS_BinaryPredicate(lib, lib->GEOSWithin_r, a, b, ret);
 }
