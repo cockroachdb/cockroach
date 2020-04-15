@@ -1393,6 +1393,8 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`pkg/sql/opt/optgen/exprgen/custom_funcs.go:.* func .* is unused`),
 				// Using deprecated method to COPY.
 				stream.GrepNot(`pkg/cli/nodelocal.go:.* stmt.Exec is deprecated: .*`),
+				// Geospatial code is in-progress.
+				stream.GrepNot("pkg/geo/geopb/types.go:.* type WKB is unused .*"),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {

@@ -554,7 +554,27 @@ func setupTestingKnobs(
 		}
 	case AfterBackfill:
 		if shouldCancel {
-			knobs.RunAfterOnFailOrCancel = blockFn
+			// This is a special case where (1) RunAfterBackfill within Resume() needs
+			// to call cancelFn() to cancel the job, (2) RunBeforeOnFailOrCancel needs
+			// to set hasCanceled, and (3) RunAfterBackfill, running for the 2nd time
+			// within OnFailOrCancel(), needs to read the value of hasCanceled (which
+			// is true) and run BlockFn().
+			knobs.RunBeforeOnFailOrCancel = func(jobID int64) error {
+				mu.Lock()
+				defer mu.Unlock()
+				hasCanceled = true
+				return nil
+			}
+			knobs.RunAfterBackfill = func(jobID int64) error {
+				mu.Lock()
+				hasCanceled := hasCanceled
+				mu.Unlock()
+				if hasCanceled {
+					return blockFn(jobID)
+				} else {
+					return cancelFn(jobID)
+				}
+			}
 		} else {
 			knobs.RunAfterBackfill = blockFn
 		}
@@ -813,6 +833,10 @@ func TestMigrateSchemaChanges(t *testing.T) {
 				blockState := blockState
 				shouldCancel := shouldCancel
 
+				// Rollbacks of DROP CONSTRAINT are broken. See #47323.
+				if schemaChange.kind == DropConstraint && shouldCancel {
+					continue
+				}
 				if !canBlockIfCanceled(blockState, shouldCancel) {
 					continue
 				}

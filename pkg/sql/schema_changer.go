@@ -547,9 +547,11 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 	ctx context.Context, err error, evalCtx *extendedEvalContext,
 ) error {
 	if rollbackErr := sc.rollbackSchemaChange(ctx, err); rollbackErr != nil {
-		// Note: the "err" object is captured by rollbackSchemaChange(), so
-		// it does not simply disappear.
-		return errors.Wrap(rollbackErr, "while rolling back schema change")
+		// From now on, the returned error will be a secondary error of the returned
+		// error, so we'll record the original error now.
+		secondary := errors.Wrap(err, "original error when rolling back mutations")
+		sqltelemetry.RecordError(ctx, secondary, &sc.settings.SV)
+		return errors.WithSecondaryError(rollbackErr, secondary)
 	}
 
 	// TODO (lucy): This is almost the same as in exec(), maybe refactor.
@@ -634,20 +636,7 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) error {
 	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", *sc.job.ID(), err)
 	if errReverse := sc.maybeReverseMutations(ctx, err); errReverse != nil {
-		// Although the backfill did hit an integrity constraint violation
-		// and made a decision to reverse the mutations,
-		// maybeReverseMutations() failed. If exec() is called again the entire
-		// schema change will be retried.
-
-		// Note: we capture the original error as "secondary" to ensure it
-		// does not fully disappear.
-		// However, since it is not in the main causal chain any more,
-		// it will become invisible to further telemetry. So before
-		// we relegate it to a secondary, go through the recording motions.
-		// This ensures that any important error gets reported to Sentry, etc.
-		secondary := errors.Wrap(err, "original error when reversing mutations")
-		sqltelemetry.RecordError(ctx, secondary, &sc.settings.SV)
-		return errors.WithSecondaryError(errReverse, secondary)
+		return err
 	}
 
 	if fn := sc.testingKnobs.RunAfterMutationReversal; fn != nil {
@@ -658,20 +647,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 
 	// After this point the schema change has been reversed and any retry
 	// of the schema change will act upon the reversed schema change.
-	if errPurge := sc.runStateMachineAndBackfill(ctx); errPurge != nil {
-		// Don't return this error because we do want the caller to know
-		// that an integrity constraint was violated with the original
-		// schema change. The reversed schema change will be
-		// retried via the async schema change manager.
-
-		// Since the errors are going to disappear, do the recording
-		// motions on them. This ensures that any assertion failure or
-		// other important error underneath gets recorded properly.
-		log.Warningf(ctx, "error purging mutation: %+v\nwhile handling error: %+v", errPurge, err)
-		sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
-		sqltelemetry.RecordError(ctx, errPurge, &sc.settings.SV)
-	}
-	return nil
+	return sc.runStateMachineAndBackfill(ctx)
 }
 
 // RunStateMachineBeforeBackfill moves the state machine forward
@@ -1722,12 +1698,36 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, phs interface{}
 			// We check for this case so that we can just return the error without
 			// wrapping it in a retry error.
 			return rollbackErr
-		default:
-			// Always retry when we get any other error. Otherwise we risk leaving the
-			// in-progress schema change state on the table descriptor indefinitely.
-			// Note that, in theory, this could mean retrying the job forever even for
-			// an error we can't recover from, if there's a bug.
+		case !isPermanentSchemaChangeError(rollbackErr):
+			// Check if the error is on a whitelist of errors we should retry on, and
+			// have the job registry retry.
 			return jobs.NewRetryJobError(rollbackErr.Error())
+		default:
+			// All other errors lead to a failed job.
+			//
+			// TODO (lucy): We have a problem where some schema change rollbacks will
+			// never succeed because the backfiller can't handle rolling back schema
+			// changes that involve dropping a column; see #46541. (This is probably
+			// not the only bug that could cause rollbacks to fail.) For historical
+			// context: This was the case in 19.2 and probably earlier versions as
+			// well, and in those earlier versions, the old async schema changer would
+			// keep retrying the rollback and failing in the background because the
+			// mutation would still be left on the table descriptor. In the present
+			// schema change job, we return an error immediately and put the job in a
+			// terminal state instead of retrying indefinitely, basically to make the
+			// behavior similar to 19.2: If the rollback fails, we end up returning
+			// immediately (instead of retrying and blocking indefinitely), and the
+			// table descriptor is left in a bad state with some mutations that we
+			// can't clean up.
+			//
+			// Ultimately, this is untenable, and we should figure out some better way
+			// of dealing with failed rollbacks. Part of the solution is just making
+			// rollbacks (especially of dropped columns) more robust, but part of it
+			// will likely involve some sort of medium-term solution for cleaning up
+			// mutations that we can't make any progress on (see #47456). In the long
+			// term we'll hopefully be rethinking what it even means to "roll back" a
+			// (transactional) schema change.
+			return rollbackErr
 		}
 	}
 
