@@ -1,4 +1,4 @@
-// Copyright 2019 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,14 +8,4 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-@require nib
-
-@require 'base/layout-vars.styl'
-@require 'base/palette.styl'
-@require 'base/typography.styl'
-@require 'utils/fonts.styl'
-@require 'base/reset.styl'
-
-@require 'pages/reports.styl'
-
-@require 'shame.styl'
+export * from "./planView";
