@@ -18,7 +18,7 @@ import { AdminUIState } from "src/redux/state";
 import * as docsURL from "src/util/docs";
 
 import "./loginPage.styl";
-import { CockroachLabsLockupIcon, Button, TextInput } from "oss/src/components";
+import { CockroachLabsLockupIcon, Button, TextInput, PasswordInput } from "src/components";
 import { Text, TextTypes } from "src/components";
 import ErrorCircle from "assets/error-circle.svg";
 
@@ -93,7 +93,7 @@ class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, Lo
   }
 
   render() {
-    const { username, password, canSubmit } = this.state;
+    const { username, password } = this.state;
     const { loginState } = this.props;
 
     return (
@@ -114,9 +114,8 @@ class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, Lo
                     label="Username"
                     value={username}
                   />
-                  <TextInput
+                  <PasswordInput
                     name="password"
-                    type="password"
                     onChange={this.handleUpdatePassword}
                     placeholder="Password"
                     label="Password"

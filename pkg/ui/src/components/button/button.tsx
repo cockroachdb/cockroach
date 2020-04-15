@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, { ButtonHTMLAttributes } from "react";
 import classNames from "classnames/bind";
 import styles from "./button.module.styl";
 
@@ -21,7 +21,7 @@ export interface ButtonProps {
   iconPosition?: "left" | "right";
   onClick?: (event: React.MouseEvent<HTMLElement>) => void;
   className?: string;
-  buttonType?: "button" | "submit" | "reset";
+  buttonType?: ButtonHTMLAttributes<HTMLButtonElement>["type"];
 }
 
 const cx = classNames.bind(styles);
