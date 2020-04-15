@@ -30,3 +30,39 @@ func ClipEWKBByRect(
 ) (geopb.EWKB, error) {
 	return nil, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
 }
+
+func Covers(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	return false, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
+}
+
+func CoveredBy(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	return false, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
+}
+
+func Contains(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	return false, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
+}
+
+func Crosses(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	return false, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
+}
+
+func Equals(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	return false, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
+}
+
+func Intersects(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	return false, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
+}
+
+func Overlaps(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	return false, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
+}
+
+func Touches(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	return false, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
+}
+
+func Within(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	return false, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
+}

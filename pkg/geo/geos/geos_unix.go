@@ -198,3 +198,120 @@ func ClipEWKBByRect(
 	}
 	return cStringToSafeGoBytes(cEWKB), nil
 }
+
+// Covers returns whether the EWKB provided by A covers the EWKB provided by B.
+func Covers(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	if err != nil {
+		return false, err
+	}
+	var ret C.char
+	if err := statusToError(C.CR_GEOS_Covers(g, goToCSlice(a), goToCSlice(b), &ret)); err != nil {
+		return false, err
+	}
+	return ret == 1, nil
+}
+
+// CoveredBy returns whether the EWKB provided by A is covered by the EWKB provided by B.
+func CoveredBy(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	if err != nil {
+		return false, err
+	}
+	var ret C.char
+	if err := statusToError(C.CR_GEOS_CoveredBy(g, goToCSlice(a), goToCSlice(b), &ret)); err != nil {
+		return false, err
+	}
+	return ret == 1, nil
+}
+
+// Contains returns whether the EWKB provided by A contains the EWKB provided by B.
+func Contains(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	if err != nil {
+		return false, err
+	}
+	var ret C.char
+	if err := statusToError(C.CR_GEOS_Contains(g, goToCSlice(a), goToCSlice(b), &ret)); err != nil {
+		return false, err
+	}
+	return ret == 1, nil
+}
+
+// Crosses returns whether the EWKB provided by A crosses the EWKB provided by B.
+func Crosses(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	if err != nil {
+		return false, err
+	}
+	var ret C.char
+	if err := statusToError(C.CR_GEOS_Crosses(g, goToCSlice(a), goToCSlice(b), &ret)); err != nil {
+		return false, err
+	}
+	return ret == 1, nil
+}
+
+// Equals returns whether the EWKB provided by A equals the EWKB provided by B.
+func Equals(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	if err != nil {
+		return false, err
+	}
+	var ret C.char
+	if err := statusToError(C.CR_GEOS_Equals(g, goToCSlice(a), goToCSlice(b), &ret)); err != nil {
+		return false, err
+	}
+	return ret == 1, nil
+}
+
+// Intersects returns whether the EWKB provided by A intersects the EWKB provided by B.
+func Intersects(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	if err != nil {
+		return false, err
+	}
+	var ret C.char
+	if err := statusToError(C.CR_GEOS_Intersects(g, goToCSlice(a), goToCSlice(b), &ret)); err != nil {
+		return false, err
+	}
+	return ret == 1, nil
+}
+
+// Overlaps returns whether the EWKB provided by A overlaps the EWKB provided by B.
+func Overlaps(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	if err != nil {
+		return false, err
+	}
+	var ret C.char
+	if err := statusToError(C.CR_GEOS_Overlaps(g, goToCSlice(a), goToCSlice(b), &ret)); err != nil {
+		return false, err
+	}
+	return ret == 1, nil
+}
+
+// Touches returns whether the EWKB provided by A touches the EWKB provided by B.
+func Touches(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	if err != nil {
+		return false, err
+	}
+	var ret C.char
+	if err := statusToError(C.CR_GEOS_Touches(g, goToCSlice(a), goToCSlice(b), &ret)); err != nil {
+		return false, err
+	}
+	return ret == 1, nil
+}
+
+// Within returns whether the EWKB provided by A is within the EWKB provided by B.
+func Within(a geopb.EWKB, b geopb.EWKB) (bool, error) {
+	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	if err != nil {
+		return false, err
+	}
+	var ret C.char
+	if err := statusToError(C.CR_GEOS_Within(g, goToCSlice(a), goToCSlice(b), &ret)); err != nil {
+		return false, err
+	}
+	return ret == 1, nil
+}
