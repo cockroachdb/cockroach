@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	_ "github.com/lib/pq"
 )
 
@@ -81,7 +82,17 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVers
 	// 20.1; run the test (on 20.1) with the bool flipped to create the fixture.
 	// Check it in (instructions are on the 'checkpointer' struct) and off we
 	// go.
-	cp := checkpointer{on: false, nodes: c.All()}
+	if false {
+		// The version to create/update the fixture for. Must be released (i.e.
+		// can download it from the homepage); if that is not the case use the
+		// empty string which uses the local cockroach binary.
+		newV := "19.2.6"
+		predV, err := PredecessorVersion(*version.MustParse("v" + newV))
+		if err != nil {
+			t.Fatal(err)
+		}
+		makeVersionFixtureAndFatal(ctx, t, c, predV, newV)
+	}
 
 	testFeaturesStep := versionUpgradeTestFeatures.step(c.All())
 
@@ -139,12 +150,6 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, predecessorVers
 		testFeaturesStep,
 		waitForUpgradeStep(c.All()),
 		testFeaturesStep,
-
-		// This is usually a noop, but if cp.on was set above, this is where we
-		// create fixtures. This is last so that we're creating the fixtures for
-		// the binary we're testing (i.e. if this run is on release-20.1, we'll
-		// create a 20.1 fixture).
-		cp.createCheckpointsAndFail,
 	)
 
 	u.run(ctx, t)
@@ -265,10 +270,15 @@ func (u *versionUpgradeTest) clusterVersion(ctx context.Context, t *test, i int)
 // versionStep is an isolated version migration on a running cluster.
 type versionStep func(ctx context.Context, t *test, u *versionUpgradeTest)
 
-func uploadAndStartFromCheckpointFixture(nodes nodeListOption, version string) versionStep {
+func uploadAndStartFromCheckpointFixture(nodes nodeListOption, v string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		u.c.Run(ctx, nodes, "mkdir", "-p", "{store-dir}")
-		name := checkpointName(version)
+		vv := version.MustParse("v" + v)
+		// The fixtures use cluster version (major.minor) but the input might be
+		// a patch release.
+		name := checkpointName(
+			roachpb.Version{Major: int32(vv.Major()), Minor: int32(vv.Minor())}.String(),
+		)
 		for _, i := range nodes {
 			u.c.Put(ctx,
 				"pkg/cmd/roachtest/fixtures/"+strconv.Itoa(i)+"/"+name+".tgz",
@@ -279,7 +289,7 @@ func uploadAndStartFromCheckpointFixture(nodes nodeListOption, version string) v
 		u.c.Run(ctx, nodes, "cd {store-dir} && [ ! -f {store-dir}/CURRENT ] && tar -xf fixture.tgz")
 
 		// Put and start the binary.
-		args := u.uploadVersion(ctx, t, nodes, version)
+		args := u.uploadVersion(ctx, t, nodes, v)
 		// NB: can't start sequentially since cluster already bootstrapped.
 		u.c.Start(ctx, t, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
 	}
@@ -365,58 +375,6 @@ func waitForUpgradeStep(nodes nodeListOption) versionStep {
 	}
 }
 
-// checkpointer creates fixtures to "age out" old versions of CockroachDB. We
-// want to test data that was created at v1.0, but we don't actually want to run
-// a long chain of binaries starting all the way at v1.0. Instead, we
-// periodically bake a set of store directories that originally started out on
-// v1.0 and maintain it as a fixture for this test.
-//
-// The checkpoints will be created in the log directories downloaded as part of
-// the artifacts. The test will fail on purpose when it's done. After, manually
-// invoke the following to move the archives to the right place and commit the
-// result:
-//
-// for i in 1 2 3 4; do
-//   mkdir -p pkg/cmd/roachtest/fixtures/${i} && \
-//   mv artifacts/acceptance/version-upgrade/run_1/${i}.logs/checkpoint-*.tgz \
-//     pkg/cmd/roachtest/fixtures/${i}/
-// done
-type checkpointer struct {
-	on    bool
-	nodes nodeListOption
-}
-
-func (cp *checkpointer) createCheckpointsAndFail(
-	ctx context.Context, t *test, u *versionUpgradeTest,
-) {
-	if !cp.on {
-		return
-	}
-	c := u.c
-	// If we're taking checkpoints, momentarily stop the cluster (we
-	// need to do that to get the checkpoints to reflect a
-	// consistent cluster state). The binary at this point will be
-	// the new one, but the cluster version was not explicitly
-	// bumped, though auto-update may have taken place already.
-	// For example, if newVersion is 2.1, the cluster version in
-	// the store directories may be 2.0 on some stores and 2.1 on
-	// the others (though if any are on 2.1, then that's what's
-	// stored in system.settings).
-	// This means that when we restart from that version, we're
-	// going to want to use the binary mentioned in the checkpoint,
-	// or at least one compatible with the *predecessor* of the
-	// checkpoint version. For example, for checkpoint-2.1, the
-	// cluster version might be 2.0, so we can only use the 2.0 or
-	// 2.1 binary, but not the 19.1 binary (as 19.1 and 2.0 are not
-	// compatible).
-	name := checkpointName(u.binaryVersion(ctx, t, 1).String())
-	c.Stop(ctx, cp.nodes)
-	c.Run(ctx, cp.nodes, "./cockroach", "debug", "rocksdb", "--db={store-dir}",
-		"checkpoint", "--checkpoint_dir={store-dir}/"+name)
-	c.Run(ctx, cp.nodes, "tar", "-C", "{store-dir}/"+name, "-czf", "{log-dir}/"+name+".tgz", ".")
-	t.Fatalf("successfully created checkpoints; failing test on purpose")
-}
-
 type versionFeatureTest struct {
 	name string
 	fn   func(context.Context, *test, *versionUpgradeTest, nodeListOption) (skipped bool)
@@ -457,4 +415,70 @@ func stmtFeatureTest(
 			return false
 		},
 	}
+}
+
+// makeVersionFixtureAndFatal creates fixtures to "age out" old versions of CockroachDB.
+// We want to test data that was created at v1.0, but we don't actually want to
+// run a long chain of binaries starting all the way at v1.0. Instead, we
+// periodically bake a set of store directories that originally started out on
+// v1.0 and maintain it as a fixture for this test.
+//
+// The checkpoints will be created in the log directories downloaded as part of
+// the artifacts. The test will fail on purpose when it's done with instructions
+// on where to move the files.
+func makeVersionFixtureAndFatal(
+	ctx context.Context, t *test, c *cluster, predecessorVersion string, makeFixtureVersion string,
+) {
+	c.encryptDefault = false
+	newVersionUpgradeTest(c,
+		// Start the cluster from a fixture. That fixture's cluster version may
+		// be at the predecessor version (though in practice it's fully up to
+		// date, if it was created via the checkpointer above), so add a
+		// waitForUpgradeStep to make sure we're upgraded all the way before
+		// moving on.
+		//
+		// See the comment on createCheckpoints for details on fixtures.
+		uploadAndStartFromCheckpointFixture(c.All(), predecessorVersion),
+		waitForUpgradeStep(c.All()),
+
+		// NB: at this point, cluster and binary version equal predecessorVersion,
+		// and auto-upgrades are on.
+
+		binaryUpgradeStep(c.All(), makeFixtureVersion),
+		waitForUpgradeStep(c.All()),
+
+		func(ctx context.Context, t *test, u *versionUpgradeTest) {
+			// If we're taking checkpoints, momentarily stop the cluster (we
+			// need to do that to get the checkpoints to reflect a
+			// consistent cluster state). The binary at this point will be
+			// the new one, but the cluster version was not explicitly
+			// bumped, though auto-update may have taken place already.
+			// For example, if newVersion is 2.1, the cluster version in
+			// the store directories may be 2.0 on some stores and 2.1 on
+			// the others (though if any are on 2.1, then that's what's
+			// stored in system.settings).
+			// This means that when we restart from that version, we're
+			// going to want to use the binary mentioned in the checkpoint,
+			// or at least one compatible with the *predecessor* of the
+			// checkpoint version. For example, for checkpoint-2.1, the
+			// cluster version might be 2.0, so we can only use the 2.0 or
+			// 2.1 binary, but not the 19.1 binary (as 19.1 and 2.0 are not
+			// compatible).
+			name := checkpointName(u.binaryVersion(ctx, t, 1).String())
+			u.c.Stop(ctx, c.All())
+			c.Run(ctx, c.All(), cockroach, "debug", "rocksdb", "--db={store-dir}",
+				"checkpoint", "--checkpoint_dir={store-dir}/"+name)
+			c.Run(ctx, c.All(), "tar", "-C", "{store-dir}/"+name, "-czf", "{log-dir}/"+name+".tgz", ".")
+			t.Fatalf(`successfully created checkpoints; failing test on purpose.
+
+Invoke the following to move the archives to the right place and commit the
+result:
+
+for i in 1 2 3 4; do
+  mkdir -p pkg/cmd/roachtest/fixtures/${i} && \
+  mv artifacts/acceptance/version-upgrade/run_1/${i}.logs/checkpoint-*.tgz \
+     pkg/cmd/roachtest/fixtures/${i}/
+done
+`)
+		}).run(ctx, t)
 }
