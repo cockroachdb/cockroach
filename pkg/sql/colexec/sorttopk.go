@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
@@ -117,7 +117,7 @@ func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
 	case topKSortEmitting:
 		return t.emit()
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid sort state %v", t.state))
+	vecerror.InternalError(fmt.Sprintf("invalid sort state %v", t.state))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -250,7 +250,7 @@ func (t *topKSorter) compareRow(vecIdx1, vecIdx2 int, rowIdx1, rowIdx2 int) int 
 			case execinfrapb.Ordering_Column_DESC:
 				return -res
 			default:
-				execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected direction value %d", d))
+				vecerror.InternalError(fmt.Sprintf("unexpected direction value %d", d))
 			}
 		}
 	}

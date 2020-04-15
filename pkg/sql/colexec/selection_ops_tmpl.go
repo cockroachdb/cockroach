@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
@@ -67,7 +67,7 @@ var _ = coltypes.Bool
 // _ASSIGN_CMP is the template function for assigning the result of comparing
 // the second input to the third input into the first input.
 func _ASSIGN_CMP(_, _, _ interface{}) int {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // */}}

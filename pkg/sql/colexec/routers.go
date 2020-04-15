@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -127,7 +127,7 @@ func (o *routerOutputOp) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return o.input
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	vecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -205,7 +205,7 @@ func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 		var err error
 		b, err = o.mu.data.dequeue(ctx)
 		if err != nil {
-			execerror.VectorizedInternalPanic(err)
+			vecerror.InternalError(err)
 		}
 	}
 	o.mu.numUnread -= b.Length()
@@ -266,7 +266,7 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 	if batch.Length() == 0 {
 		if o.mu.pendingBatch != nil {
 			if err := o.mu.data.enqueue(ctx, o.mu.pendingBatch); err != nil {
-				execerror.VectorizedInternalPanic(err)
+				vecerror.InternalError(err)
 			}
 		}
 		o.mu.pendingBatch = coldata.ZeroBatch
@@ -312,7 +312,7 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 		if o.testingKnobs.alwaysFlush || newLength >= o.outputBatchSize {
 			// The capacity in o.mu.pendingBatch has been filled.
 			if err := o.mu.data.enqueue(ctx, o.mu.pendingBatch); err != nil {
-				execerror.VectorizedInternalPanic(err)
+				vecerror.InternalError(err)
 			}
 			o.mu.pendingBatch = nil
 		}
@@ -400,7 +400,7 @@ func NewHashRouter(
 	diskAccounts []*mon.BoundAccount,
 ) (*HashRouter, []colbase.Operator) {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeDefault {
-		execerror.VectorizedInternalPanic(errors.Errorf("hash router instantiated with incompatible disk queue cache mode: %d", diskQueueCfg.CacheMode))
+		vecerror.InternalError(errors.Errorf("hash router instantiated with incompatible disk queue cache mode: %d", diskQueueCfg.CacheMode))
 	}
 	outputs := make([]routerOutput, len(unlimitedAllocators))
 	outputsAsOps := make([]colbase.Operator, len(unlimitedAllocators))
@@ -494,7 +494,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 			}
 		}
 
-		if err := execerror.CatchVectorizedRuntimeError(processNextBatch); err != nil {
+		if err := vecerror.CatchVectorizedRuntimeError(processNextBatch); err != nil {
 			cancelOutputs(err)
 			return
 		}

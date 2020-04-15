@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	// {{/*
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/errors"
@@ -79,13 +79,13 @@ func NewRankOperator(
 // _UPDATE_RANK is the template function for updating the state of rank
 // operators.
 func _UPDATE_RANK() {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // _UPDATE_RANK_INCREMENT is the template function for updating the state of
 // rank operators.
 func _UPDATE_RANK_INCREMENT() {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // */}}

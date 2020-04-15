@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -65,7 +65,7 @@ func TestMain(m *testing.M) {
 		randomBatchSize := generateBatchSize()
 		fmt.Printf("coldata.BatchSize() is set to %d\n", randomBatchSize)
 		if err := coldata.SetBatchSizeForTests(randomBatchSize); err != nil {
-			execerror.VectorizedInternalPanic(err)
+			vecerror.InternalError(err)
 		}
 		return m.Run()
 	}())

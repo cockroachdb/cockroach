@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -154,7 +154,7 @@ func _COMPUTE_PARTITIONS_SIZES() { // */}}
 				// We need to flush the vector of partitions sizes.
 				r.partitionsState.runningSizes.SetLength(coldata.BatchSize())
 				if err := r.partitionsState.enqueue(ctx, r.partitionsState.runningSizes); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					vecerror.InternalError(err)
 				}
 				r.partitionsState.runningSizes = nil
 				r.partitionsState.idx = 0
@@ -192,7 +192,7 @@ func _COMPUTE_PEER_GROUPS_SIZES() { // */}}
 				// We need to flush the vector of peer group sizes.
 				r.peerGroupsState.runningSizes.SetLength(coldata.BatchSize())
 				if err := r.peerGroupsState.enqueue(ctx, r.peerGroupsState.runningSizes); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					vecerror.InternalError(err)
 				}
 				r.peerGroupsState.runningSizes = nil
 				r.peerGroupsState.idx = 0
@@ -356,7 +356,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			n := batch.Length()
 			if n == 0 {
 				if err := r.bufferedTuples.enqueue(ctx, coldata.ZeroBatch); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					vecerror.InternalError(err)
 				}
 				// {{if .HasPartition}}
 				// We need to flush the last vector of the running partitions
@@ -372,10 +372,10 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 				r.partitionsState.idx++
 				r.partitionsState.runningSizes.SetLength(r.partitionsState.idx)
 				if err := r.partitionsState.enqueue(ctx, r.partitionsState.runningSizes); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					vecerror.InternalError(err)
 				}
 				if err := r.partitionsState.enqueue(ctx, coldata.ZeroBatch); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					vecerror.InternalError(err)
 				}
 				// {{end}}
 				// {{if .IsCumeDist}}
@@ -392,10 +392,10 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 				r.peerGroupsState.idx++
 				r.peerGroupsState.runningSizes.SetLength(r.peerGroupsState.idx)
 				if err := r.peerGroupsState.enqueue(ctx, r.peerGroupsState.runningSizes); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					vecerror.InternalError(err)
 				}
 				if err := r.peerGroupsState.enqueue(ctx, coldata.ZeroBatch); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					vecerror.InternalError(err)
 				}
 				// {{end}}
 				// We have fully consumed the input, so now we can populate the output.
@@ -433,7 +433,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 				r.scratch.SetLength(n)
 			})
 			if err := r.bufferedTuples.enqueue(ctx, r.scratch); err != nil {
-				execerror.VectorizedInternalPanic(err)
+				vecerror.InternalError(err)
 			}
 
 			// Then, we need to update the sizes of the partitions.
@@ -478,7 +478,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 
 		case relativeRankEmitting:
 			if r.scratch, err = r.bufferedTuples.dequeue(ctx); err != nil {
-				execerror.VectorizedInternalPanic(err)
+				vecerror.InternalError(err)
 			}
 			n := r.scratch.Length()
 			if n == 0 {
@@ -489,7 +489,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			// Get the next batch of partition sizes if we haven't already.
 			if r.partitionsState.dequeuedSizes == nil {
 				if r.partitionsState.dequeuedSizes, err = r.partitionsState.dequeue(ctx); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					vecerror.InternalError(err)
 				}
 				r.partitionsState.idx = 0
 				r.numTuplesInPartition = 0
@@ -499,7 +499,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			// Get the next batch of peer group sizes if we haven't already.
 			if r.peerGroupsState.dequeuedSizes == nil {
 				if r.peerGroupsState.dequeuedSizes, err = r.peerGroupsState.dequeue(ctx); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					vecerror.InternalError(err)
 				}
 				r.peerGroupsState.idx = 0
 				r.numPeers = 0
@@ -537,7 +537,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 				if partitionCol[i] {
 					if r.partitionsState.idx == r.partitionsState.dequeuedSizes.Length() {
 						if r.partitionsState.dequeuedSizes, err = r.partitionsState.dequeue(ctx); err != nil {
-							execerror.VectorizedInternalPanic(err)
+							vecerror.InternalError(err)
 						}
 						r.partitionsState.idx = 0
 					}
@@ -573,7 +573,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 					r.numPrecedingTuples += r.numPeers
 					if r.peerGroupsState.idx == r.peerGroupsState.dequeuedSizes.Length() {
 						if r.peerGroupsState.dequeuedSizes, err = r.peerGroupsState.dequeue(ctx); err != nil {
-							execerror.VectorizedInternalPanic(err)
+							vecerror.InternalError(err)
 						}
 						r.peerGroupsState.idx = 0
 					}
@@ -602,12 +602,12 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 
 		case relativeRankFinished:
 			if err := r.idempotentCloseLocked(ctx); err != nil {
-				execerror.VectorizedInternalPanic(err)
+				vecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
 
 		default:
-			execerror.VectorizedInternalPanic("percent rank operator in unhandled state")
+			vecerror.InternalError("percent rank operator in unhandled state")
 			// This code is unreachable, but the compiler cannot infer that.
 			return nil
 		}

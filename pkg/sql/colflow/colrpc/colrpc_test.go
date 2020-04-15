@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -273,7 +273,7 @@ func TestOutboxInbox(t *testing.T) {
 		var readerErr error
 		for {
 			var outputBatch coldata.Batch
-			if err := execerror.CatchVectorizedRuntimeError(func() {
+			if err := vecerror.CatchVectorizedRuntimeError(func() {
 				outputBatch = inbox.Next(readerCtx)
 			}); err != nil {
 				readerErr = err

@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -60,7 +60,7 @@ func NewVectorizedStatsCollector(
 	diskMonitors []*mon.BytesMonitor,
 ) *VectorizedStatsCollector {
 	if inputWatch == nil {
-		execerror.VectorizedInternalPanic("input watch for VectorizedStatsCollector is nil")
+		vecerror.InternalError("input watch for VectorizedStatsCollector is nil")
 	}
 	return &VectorizedStatsCollector{
 		Operator:        op,

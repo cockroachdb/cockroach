@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -63,13 +63,13 @@ func newSubstringOperator(
 			return &substring_StartType_LengthTypeOperator{base}
 		// {{end}}
 		default:
-			execerror.VectorizedInternalPanic(errors.Errorf("unsupported length argument type %s", lengthType))
+			vecerror.InternalError(errors.Errorf("unsupported length argument type %s", lengthType))
 			// This code is unreachable, but the compiler cannot infer that.
 			return nil
 		}
 	// {{end}}
 	default:
-		execerror.VectorizedInternalPanic(errors.Errorf("unsupported start argument type %s", startType))
+		vecerror.InternalError(errors.Errorf("unsupported start argument type %s", startType))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}
@@ -136,7 +136,7 @@ func (s *substring_StartType_LengthTypeOperator) Next(ctx context.Context) colda
 				start := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
 				if length < 0 {
-					execerror.NonVectorizedPanic(errors.Errorf("negative substring length %d not allowed", length))
+					vecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
 				end := start + length

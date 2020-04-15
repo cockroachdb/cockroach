@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
@@ -59,25 +59,25 @@ var _ duration.Duration
 // _ASSIGN is the template function for assigning the first input to the result
 // of computation an operation on the second and the third inputs.
 func _ASSIGN(_, _, _ interface{}) {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // _L_UNSAFEGET is the template function that will be replaced by
 // "execgen.UNSAFEGET" which uses _L_TYP.
 func _L_UNSAFEGET(_, _ interface{}) interface{} {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // _R_UNSAFEGET is the template function that will be replaced by
 // "execgen.UNSAFEGET" which uses _R_TYP.
 func _R_UNSAFEGET(_, _ interface{}) interface{} {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // _RET_UNSAFEGET is the template function that will be replaced by
 // "execgen.UNSAFEGET" which uses _RET_TYP.
 func _RET_UNSAFEGET(_, _ interface{}) interface{} {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // */}}

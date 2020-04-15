@@ -17,7 +17,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 )
 
 type booleanAggTmplInfo struct {
@@ -31,7 +31,7 @@ func (b booleanAggTmplInfo) AssignBoolOp(target, l, r string) string {
 	case false:
 		return fmt.Sprintf("%s = %s || %s", target, l, r)
 	default:
-		execerror.VectorizedInternalPanic("unsupported boolean agg type")
+		vecerror.InternalError("unsupported boolean agg type")
 		// This code is unreachable, but the compiler cannot infer that.
 		return ""
 	}

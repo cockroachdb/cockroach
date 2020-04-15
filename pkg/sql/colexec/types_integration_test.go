@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -151,19 +151,19 @@ func (a *arrowTestOperator) Next(ctx context.Context) coldata.Batch {
 	var buf bytes.Buffer
 	arrowDataIn, err := a.c.BatchToArrow(batchIn)
 	if err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	_, _, err = a.r.Serialize(&buf, arrowDataIn)
 	if err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	var arrowDataOut []*array.Data
 	if err := a.r.Deserialize(&arrowDataOut, buf.Bytes()); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	batchOut := testAllocator.NewMemBatchWithSize(nil, 0)
 	if err := a.c.ArrowToBatch(arrowDataOut, batchOut); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	return batchOut
 }

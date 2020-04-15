@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
@@ -111,14 +111,14 @@ func EncDatumRowsToColVec(
 					_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)
 				// {{end}}
 				default:
-					execerror.VectorizedInternalPanic(fmt.Sprintf("unsupported width %d for column type %s", columnType.Width(), columnType.String()))
+					vecerror.InternalError(fmt.Sprintf("unsupported width %d for column type %s", columnType.Width(), columnType.String()))
 				}
 				// {{ else }}
 				_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)
 				// {{end}}
 			// {{end}}
 			default:
-				execerror.VectorizedInternalPanic(fmt.Sprintf("unsupported column type %s", columnType.String()))
+				vecerror.InternalError(fmt.Sprintf("unsupported column type %s", columnType.String()))
 			}
 		},
 	)

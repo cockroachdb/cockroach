@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/errors"
 )
@@ -309,7 +309,7 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 		case hashAggregatorDone:
 			return coldata.ZeroBatch
 		default:
-			execerror.VectorizedInternalPanic("hash aggregator in unhandled state")
+			vecerror.InternalError("hash aggregator in unhandled state")
 			// This code is unreachable, but the compiler cannot infer that.
 			return nil
 		}

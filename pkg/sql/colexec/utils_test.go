@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -125,7 +125,7 @@ func (t tuple) less(other tuple) bool {
 		case "string":
 			return lhsVal.String() < rhsVal.String()
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("Unhandled comparison type: %s", typ))
+			vecerror.InternalError(fmt.Sprintf("Unhandled comparison type: %s", typ))
 		}
 	}
 	return false
@@ -351,7 +351,7 @@ func runTestsWithoutAllNullsInjection(
 		case unorderedVerifier:
 			verifyFn = (*opTestOutput).VerifyAnyOrder
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected verifierType %d", v))
+			vecerror.InternalError(fmt.Sprintf("unexpected verifierType %d", v))
 		}
 	case verifierFn:
 		verifyFn = v
@@ -572,7 +572,7 @@ func setColVal(vec coldata.Vec, idx int, val interface{}) {
 			floatVal := val.(float64)
 			decimalVal, _, err := apd.NewFromString(fmt.Sprintf("%f", floatVal))
 			if err != nil {
-				execerror.VectorizedInternalPanic(
+				vecerror.InternalError(
 					fmt.Sprintf("unable to set decimal %f: %v", floatVal, err))
 			}
 			// .Set is used here instead of assignment to ensure the pointer address
@@ -650,7 +650,7 @@ func newOpTestSelInput(
 func (s *opTestInput) Init() {
 	if s.typs == nil {
 		if len(s.tuples) == 0 {
-			execerror.VectorizedInternalPanic("empty tuple source with no specified types")
+			vecerror.InternalError("empty tuple source with no specified types")
 		}
 
 		// The type schema was not provided, so we need to determine it based on
@@ -691,7 +691,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 	tupleLen := len(tups[0])
 	for i := range tups {
 		if len(tups[i]) != tupleLen {
-			execerror.VectorizedInternalPanic(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
+			vecerror.InternalError(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
 				tups[i], tupleLen))
 		}
 	}
@@ -762,7 +762,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 						d := apd.Decimal{}
 						_, err := d.SetFloat64(rng.Float64())
 						if err != nil {
-							execerror.VectorizedInternalPanic(fmt.Sprintf("%v", err))
+							vecerror.InternalError(fmt.Sprintf("%v", err))
 						}
 						col.Index(outputIdx).Set(reflect.ValueOf(d))
 					} else if typ == coltypes.Bytes {
@@ -772,7 +772,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 					} else if val, ok := quick.Value(reflect.TypeOf(vec.Col()).Elem(), rng); ok {
 						setColVal(vec, outputIdx, val.Interface())
 					} else {
-						execerror.VectorizedInternalPanic(fmt.Sprintf("could not generate a random value of type %T\n.", vec.Type()))
+						vecerror.InternalError(fmt.Sprintf("could not generate a random value of type %T\n.", vec.Type()))
 					}
 				}
 			} else {
@@ -816,7 +816,7 @@ func newOpFixedSelTestInput(sel []int, batchSize int, tuples tuples) *opFixedSel
 
 func (s *opFixedSelTestInput) Init() {
 	if len(s.tuples) == 0 {
-		execerror.VectorizedInternalPanic("empty tuple source")
+		vecerror.InternalError("empty tuple source")
 	}
 
 	typs := make([]coltypes.T, len(s.tuples[0]))
@@ -837,7 +837,7 @@ func (s *opFixedSelTestInput) Init() {
 	tupleLen := len(s.tuples[0])
 	for _, i := range s.sel {
 		if len(s.tuples[i]) != tupleLen {
-			execerror.VectorizedInternalPanic(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
+			vecerror.InternalError(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
 				s.tuples[i], tupleLen))
 		}
 	}
@@ -1420,7 +1420,7 @@ func (tc *joinTestCase) init() {
 		case coltypes.Interval:
 			return types.Interval
 		}
-		execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected coltype %s", t.String()))
+		vecerror.InternalError(fmt.Sprintf("unexpected coltype %s", t.String()))
 		return nil
 	}
 	toLogTypes := func(typs []coltypes.T) []types.T {
@@ -1435,7 +1435,7 @@ func (tc *joinTestCase) init() {
 	if tc.leftPhysTypes == nil {
 		tc.leftPhysTypes, err = typeconv.FromColumnTypes(tc.leftLogTypes)
 		if err != nil {
-			execerror.VectorizedInternalPanic(err)
+			vecerror.InternalError(err)
 		}
 	}
 	if tc.leftLogTypes == nil {
@@ -1444,7 +1444,7 @@ func (tc *joinTestCase) init() {
 	if tc.rightPhysTypes == nil {
 		tc.rightPhysTypes, err = typeconv.FromColumnTypes(tc.rightLogTypes)
 		if err != nil {
-			execerror.VectorizedInternalPanic(err)
+			vecerror.InternalError(err)
 		}
 	}
 	if tc.rightLogTypes == nil {

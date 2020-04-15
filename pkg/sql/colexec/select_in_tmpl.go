@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	// {{/*
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
@@ -64,7 +64,7 @@ var _ bytes.Buffer
 var _ = math.MaxInt64
 
 func _ASSIGN_EQ(_, _, _ interface{}) int {
-	execerror.VectorizedInternalPanic("")
+	vecerror.InternalError("")
 }
 
 // */}}

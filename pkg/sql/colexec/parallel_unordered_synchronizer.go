@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 )
@@ -154,7 +154,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				inputIdx: inputIdx,
 			}
 			for {
-				if err := execerror.CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
+				if err := vecerror.CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
 					select {
 					// Non-blocking write to errCh, if an error is present the main
 					// goroutine will use that and cancel all inputs.
@@ -217,7 +217,7 @@ func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch 
 			// propagate this error through a panic.
 			s.cancelFn()
 			s.internalWaitGroup.Wait()
-			execerror.VectorizedInternalPanic(err)
+			vecerror.InternalError(err)
 		}
 	case msg := <-s.batchCh:
 		if msg == nil {
@@ -227,7 +227,7 @@ func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch 
 			select {
 			case err := <-s.errCh:
 				if err != nil {
-					execerror.VectorizedInternalPanic(err)
+					vecerror.InternalError(err)
 				}
 			default:
 			}

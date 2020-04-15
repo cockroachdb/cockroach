@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 )
 
 // TODO(yuzefovich): support rehashing instead of large fixed bucket size.
@@ -278,7 +278,7 @@ func (ht *hashTable) build(ctx context.Context, input colbase.Operator) {
 			ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, numBuffered+1, batch.Length())
 		}
 	default:
-		execerror.VectorizedInternalPanic(fmt.Sprintf("hashTable in unhandled state"))
+		vecerror.InternalError(fmt.Sprintf("hashTable in unhandled state"))
 	}
 }
 

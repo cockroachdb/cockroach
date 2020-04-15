@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -61,17 +61,17 @@ func (s *colBatchScan) Init() {
 		s.ctx, s.flowCtx.Txn, s.spans,
 		limitBatches, s.limitHint, s.flowCtx.TraceKV,
 	); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 }
 
 func (s *colBatchScan) Next(ctx context.Context) coldata.Batch {
 	bat, err := s.rf.NextBatch(ctx)
 	if err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	if bat.Selection() != nil {
-		execerror.VectorizedInternalPanic("unexpectedly a selection vector is set on the batch coming from CFetcher")
+		vecerror.InternalError("unexpectedly a selection vector is set on the batch coming from CFetcher")
 	}
 	return bat
 }

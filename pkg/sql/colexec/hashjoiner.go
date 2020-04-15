@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
 )
@@ -251,7 +251,7 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 			hj.emitUnmatched()
 			return hj.output
 		default:
-			execerror.VectorizedInternalPanic("hash joiner in unhandled state")
+			vecerror.InternalError("hash joiner in unhandled state")
 			// This code is unreachable, but the compiler cannot infer that.
 			return nil
 		}
@@ -551,7 +551,7 @@ func (hj *hashJoiner) ExportBuffered(input colbase.Operator) coldata.Batch {
 		hj.exportBufferedState.rightExported = newRightExported
 		return b
 	} else {
-		execerror.VectorizedInternalPanic(errors.New(
+		vecerror.InternalError(errors.New(
 			"unexpectedly ExportBuffered is called with neither left nor right inputs to hash join",
 		))
 		// This code is unreachable, but the compiler cannot infer that.

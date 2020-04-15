@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -185,7 +185,7 @@ func newExternalSorter(
 	diskAcc *mon.BoundAccount,
 ) colbase.Operator {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeReuseCache {
-		execerror.VectorizedInternalPanic(errors.Errorf("external sorter instantiated with suboptimal disk queue cache mode: %d", diskQueueCfg.CacheMode))
+		vecerror.InternalError(errors.Errorf("external sorter instantiated with suboptimal disk queue cache mode: %d", diskQueueCfg.CacheMode))
 	}
 	if diskQueueCfg.BufferSizeBytes > 0 && maxNumberPartitions == 0 {
 		// With the default limit of 256 file descriptors, this results in 16
@@ -215,7 +215,7 @@ func newExternalSorter(
 		inputTypes, ordering.Columns,
 	)
 	if err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	partitionedDiskQueueSemaphore := fdSemaphore
 	if !delegateFDAcquisitions {
@@ -266,7 +266,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				s.partitioner = s.partitionerCreator()
 			}
 			if err := s.partitioner.Enqueue(ctx, newPartitionIdx, b); err != nil {
-				execerror.VectorizedInternalPanic(err)
+				vecerror.InternalError(err)
 			}
 			s.state = externalSorterSpillPartition
 			continue
@@ -294,12 +294,12 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			if !s.testingKnobs.delegateFDAcquisitions && s.fdState.fdSemaphore != nil && s.fdState.acquiredFDs == 0 {
 				toAcquire := s.maxNumberPartitions
 				if err := s.fdState.fdSemaphore.Acquire(ctx, toAcquire); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					vecerror.InternalError(err)
 				}
 				s.fdState.acquiredFDs = toAcquire
 			}
 			if err := s.partitioner.Enqueue(ctx, curPartitionIdx, b); err != nil {
-				execerror.VectorizedInternalPanic(err)
+				vecerror.InternalError(err)
 			}
 			continue
 		case externalSorterRepeatedMerging:
@@ -317,7 +317,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			newPartitionIdx := s.firstPartitionIdx + s.numPartitions
 			for b := merger.Next(ctx); b.Length() > 0; b = merger.Next(ctx) {
 				if err := s.partitioner.Enqueue(ctx, newPartitionIdx, b); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					vecerror.InternalError(err)
 				}
 			}
 			after := s.unlimitedAllocator.Used()
@@ -326,7 +326,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			// merger must have exhausted all inputs, this is all the partitions just
 			// read from.
 			if err := s.partitioner.CloseInactiveReadPartitions(ctx); err != nil {
-				execerror.VectorizedInternalPanic(err)
+				vecerror.InternalError(err)
 			}
 			s.firstPartitionIdx += s.numPartitions
 			s.numPartitions = 1
@@ -355,11 +355,11 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			return b
 		case externalSorterFinished:
 			if err := s.internalCloseLocked(ctx); err != nil {
-				execerror.VectorizedInternalPanic(err)
+				vecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected externalSorterState %d", s.state))
+			vecerror.InternalError(fmt.Sprintf("unexpected externalSorterState %d", s.state))
 		}
 	}
 }
@@ -372,7 +372,7 @@ func (s *externalSorter) reset(ctx context.Context) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.internalCloseLocked(ctx); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	s.firstPartitionIdx = 0
 	s.numPartitions = 0
@@ -483,7 +483,7 @@ func (o *inputPartitioningOperator) Next(ctx context.Context) coldata.Batch {
 	// for correctly.)
 	batchMemSize := colbase.GetProportionalBatchMemSize(b, int64(b.Length()))
 	if err := o.standaloneMemAccount.Grow(ctx, batchMemSize); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	return b
 }

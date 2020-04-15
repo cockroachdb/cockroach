@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -557,7 +557,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	scratchBatch.SetSelection(false)
 	scratchBatch.SetLength(groupLength)
 	if err := bufferedGroup.enqueue(ctx, scratchBatch); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 }
 

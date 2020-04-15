@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 )
 
@@ -60,7 +60,7 @@ func (n OneInputNode) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return n.input
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	vecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -80,7 +80,7 @@ func (ZeroInputNode) ChildCount(verbose bool) int {
 
 // Child implements the execinfra.OpNode interface.
 func (ZeroInputNode) Child(nth int, verbose bool) execinfra.OpNode {
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	vecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -106,7 +106,7 @@ func (n *twoInputNode) Child(nth int, verbose bool) execinfra.OpNode {
 	case 1:
 		return n.inputTwo
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid idx %d", nth))
+	vecerror.InternalError(fmt.Sprintf("invalid idx %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

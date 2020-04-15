@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -213,7 +213,7 @@ func (d *diskSpillerBase) Next(ctx context.Context) coldata.Batch {
 		return d.diskBackedOp.Next(ctx)
 	}
 	var batch coldata.Batch
-	if err := execerror.CatchVectorizedRuntimeError(
+	if err := vecerror.CatchVectorizedRuntimeError(
 		func() {
 			batch = d.inMemoryOp.Next(ctx)
 		},
@@ -230,7 +230,7 @@ func (d *diskSpillerBase) Next(ctx context.Context) coldata.Batch {
 		}
 		// Either not an out of memory error or an OOM error coming from a
 		// different operator, so we propagate it further.
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	return batch
 }
@@ -295,7 +295,7 @@ func (d *diskSpillerBase) Child(nth int, verbose bool) execinfra.OpNode {
 	case 0:
 		return d.inMemoryOp
 	default:
-		execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+		vecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}

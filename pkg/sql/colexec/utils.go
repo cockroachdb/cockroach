@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
@@ -109,7 +109,7 @@ func (p *partitionerToOperator) Init() {}
 
 func (p *partitionerToOperator) Next(ctx context.Context) coldata.Batch {
 	if err := p.partitioner.Dequeue(ctx, p.partitionIdx, p.batch); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	return p.batch
 }
@@ -163,11 +163,11 @@ func (b *appendOnlyBufferedBatch) ColVecs() []coldata.Vec {
 }
 
 func (b *appendOnlyBufferedBatch) AppendCol(coldata.Vec) {
-	execerror.VectorizedInternalPanic("AppendCol is prohibited on appendOnlyBufferedBatch")
+	vecerror.InternalError("AppendCol is prohibited on appendOnlyBufferedBatch")
 }
 
 func (b *appendOnlyBufferedBatch) ReplaceCol(coldata.Vec, int) {
-	execerror.VectorizedInternalPanic("ReplaceCol is prohibited on appendOnlyBufferedBatch")
+	vecerror.InternalError("ReplaceCol is prohibited on appendOnlyBufferedBatch")
 }
 
 // append is a helper method that appends all tuples with indices in range

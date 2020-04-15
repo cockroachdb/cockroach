@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -404,7 +404,7 @@ func generateColumnOrdering(
 	rng *rand.Rand, nCols int, nOrderingCols int,
 ) []execinfrapb.Ordering_Column {
 	if nOrderingCols > nCols {
-		execerror.VectorizedInternalPanic("nOrderingCols > nCols in generateColumnOrdering")
+		vecerror.InternalError("nOrderingCols > nCols in generateColumnOrdering")
 	}
 	orderingCols := make([]execinfrapb.Ordering_Column, nOrderingCols)
 	for i, col := range rng.Perm(nCols)[:nOrderingCols] {

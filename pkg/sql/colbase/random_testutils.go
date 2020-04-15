@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 )
 
@@ -64,7 +64,7 @@ func RandomBatch(
 // less than batchSize.
 func RandomSel(rng *rand.Rand, batchSize int, probOfOmitting float64) []int {
 	if probOfOmitting < 0 || probOfOmitting > 1 {
-		execerror.VectorizedInternalPanic(fmt.Sprintf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
+		vecerror.InternalError(fmt.Sprintf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
 	}
 	sel := make([]int, 0, batchSize)
 	for i := 0; i < batchSize; i++ {
@@ -242,7 +242,7 @@ func (o *RandomDataOp) ChildCount(verbose bool) int {
 
 // Child implements the execinfra.OpNode interface.
 func (o *RandomDataOp) Child(nth int, verbose bool) execinfra.OpNode {
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	vecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

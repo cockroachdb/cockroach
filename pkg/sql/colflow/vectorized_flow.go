@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -207,7 +207,7 @@ func (f *vectorizedFlow) Setup(
 			}
 			log.VEventf(ctx, 1, "flow %s spilled to disk, stack trace: %s", f.ID, util.GetSmallTrace(2))
 			if err := f.Cfg.TempFS.CreateDir(f.tempStorage.path); err != nil {
-				execerror.VectorizedInternalPanic(errors.Errorf("unable to create temporary storage directory: %v", err))
+				vecerror.InternalError(errors.Errorf("unable to create temporary storage directory: %v", err))
 			}
 			f.tempStorage.createdStateMu.created = true
 		},
@@ -1098,7 +1098,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	}
 
 	if len(s.vectorizedStatsCollectorsQueue) > 0 {
-		execerror.VectorizedInternalPanic("not all vectorized stats collectors have been processed")
+		vecerror.InternalError("not all vectorized stats collectors have been processed")
 	}
 	return s.leaves, nil
 }
@@ -1266,7 +1266,7 @@ func SupportsVectorized(
 			mon.Stop(ctx)
 		}
 	}()
-	if vecErr := execerror.CatchVectorizedRuntimeError(func() {
+	if vecErr := vecerror.CatchVectorizedRuntimeError(func() {
 		leaves, err = creator.setupFlow(ctx, flowCtx, processorSpecs, fuseOpt)
 	}); vecErr != nil {
 		return leaves, vecErr

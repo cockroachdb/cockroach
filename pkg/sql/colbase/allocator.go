@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -90,7 +90,7 @@ func (a *Allocator) NewMemBatch(typs []coltypes.T) coldata.Batch {
 func (a *Allocator) NewMemBatchWithSize(types []coltypes.T, size int) coldata.Batch {
 	estimatedMemoryUsage := selVectorSize(size) + int64(EstimateBatchSizeBytes(types, size))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	return coldata.NewMemBatchWithSize(types, size)
 }
@@ -101,7 +101,7 @@ func (a *Allocator) NewMemBatchWithSize(types []coltypes.T, size int) coldata.Ba
 func (a *Allocator) NewMemBatchNoCols(types []coltypes.T, size int) coldata.Batch {
 	estimatedMemoryUsage := selVectorSize(size)
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	return coldata.NewMemBatchNoCols(types, size)
 }
@@ -124,7 +124,7 @@ func (a *Allocator) RetainBatch(b coldata.Batch) {
 	usesSel := b.Selection() != nil
 	b.SetSelection(true)
 	if err := a.acc.Grow(a.ctx, selVectorSize(cap(b.Selection()))+getVecsMemoryFootprint(b.ColVecs())); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	b.SetSelection(usesSel)
 }
@@ -155,7 +155,7 @@ func (a *Allocator) ReleaseBatch(b coldata.Batch) {
 func (a *Allocator) NewMemColumn(t coltypes.T, n int) coldata.Vec {
 	estimatedMemoryUsage := int64(EstimateBatchSizeBytes([]coltypes.T{t}, n))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	return coldata.NewMemColumn(t, n)
 }
@@ -173,7 +173,7 @@ func (a *Allocator) NewMemColumn(t coltypes.T, n int) coldata.Vec {
 // NOTE: b must be non-zero length batch.
 func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t coltypes.T, colIdx int) {
 	if b.Length() == 0 {
-		execerror.VectorizedInternalPanic("trying to add a column to zero length batch")
+		vecerror.InternalError("trying to add a column to zero length batch")
 	}
 	width := b.Width()
 	if colIdx < width {
@@ -183,7 +183,7 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t coltypes.T, colIdx int)
 			return
 		default:
 			// We have a vector with an unexpected type, so we panic.
-			execerror.VectorizedInternalPanic(errors.Errorf(
+			vecerror.InternalError(errors.Errorf(
 				"trying to add a column of %s type at index %d but %s vector already present",
 				t, colIdx, presentType,
 			))
@@ -191,14 +191,14 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t coltypes.T, colIdx int)
 	} else if colIdx > width {
 		// We have a batch of unexpected width which indicates an error in the
 		// planning stage.
-		execerror.VectorizedInternalPanic(errors.Errorf(
+		vecerror.InternalError(errors.Errorf(
 			"trying to add a column of %s type at index %d but batch has width %d",
 			t, colIdx, width,
 		))
 	}
 	estimatedMemoryUsage := int64(EstimateBatchSizeBytes([]coltypes.T{t}, coldata.BatchSize()))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	b.AppendCol(a.NewMemColumn(t, coldata.BatchSize()))
 }
@@ -218,7 +218,7 @@ func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
 	delta := after - before
 	if delta >= 0 {
 		if err := a.acc.Grow(a.ctx, delta); err != nil {
-			execerror.VectorizedInternalPanic(err)
+			vecerror.InternalError(err)
 		}
 	} else {
 		a.ReleaseMemory(-delta)
@@ -300,7 +300,7 @@ func EstimateBatchSizeBytes(vecTypes []coltypes.T, batchLength int) int {
 		case coltypes.Unhandled:
 			// Placeholder coldata.Vecs of unknown types are allowed.
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %s", t))
+			vecerror.InternalError(fmt.Sprintf("unhandled type %s", t))
 		}
 	}
 	return acc * batchLength

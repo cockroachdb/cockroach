@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -76,7 +76,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 	batchesReturned := 0
 	for {
 		var b coldata.Batch
-		if err := execerror.CatchVectorizedRuntimeError(func() { b = s.Next(ctx) }); err != nil {
+		if err := vecerror.CatchVectorizedRuntimeError(func() { b = s.Next(ctx) }); err != nil {
 			if cancel {
 				require.True(t, testutils.IsError(err, "context canceled"), err)
 				break
@@ -102,7 +102,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 
 	inputs := make([]colbase.Operator, 6)
 	inputs[0] = &CallbackOperator{NextCb: func(context.Context) coldata.Batch {
-		execerror.VectorizedInternalPanic(expectedErr)
+		vecerror.InternalError(expectedErr)
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}}
@@ -110,7 +110,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		inputs[i] = &CallbackOperator{
 			NextCb: func(ctx context.Context) coldata.Batch {
 				<-ctx.Done()
-				execerror.VectorizedInternalPanic(ctx.Err())
+				vecerror.InternalError(ctx.Err())
 				// This code is unreachable, but the compiler cannot infer that.
 				return nil
 			},
@@ -122,7 +122,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		wg  sync.WaitGroup
 	)
 	s := NewParallelUnorderedSynchronizer(inputs, []coltypes.T{coltypes.Int64}, &wg)
-	err := execerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) })
+	err := vecerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) })
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
 	require.True(t, testutils.IsError(err, expectedErr), err)

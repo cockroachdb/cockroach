@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -236,7 +236,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				args.TestingKnobs.UseStreamingMemAccountForBuffering = !tc.spillingSupported
 				result, err := colexec.NewColOperator(ctx, flowCtx, args)
 				require.NoError(t, err)
-				err = execerror.CatchVectorizedRuntimeError(func() {
+				err = vecerror.CatchVectorizedRuntimeError(func() {
 					result.Op.Init()
 					result.Op.Next(ctx)
 					result.Op.Next(ctx)

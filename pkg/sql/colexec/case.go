@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 )
 
@@ -59,7 +59,7 @@ func (c *caseOp) Child(nth int, verbose bool) execinfra.OpNode {
 	} else if nth == 1+len(c.caseOps) {
 		return c.elseOp
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid idx %d", nth))
+	vecerror.InternalError(fmt.Sprintf("invalid idx %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

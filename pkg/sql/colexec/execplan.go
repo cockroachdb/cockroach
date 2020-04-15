@@ -18,8 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -532,7 +532,7 @@ func NewColOperator(
 			result.OpMonitors = result.OpMonitors[:0]
 		}
 		if panicErr != nil {
-			execerror.VectorizedInternalPanic(panicErr)
+			vecerror.InternalError(panicErr)
 		}
 	}()
 	spec := args.Spec
@@ -1982,7 +1982,7 @@ func planLogicalProjectionOp(
 		typedLeft = t.TypedLeft()
 		typedRight = t.TypedRight()
 	default:
-		execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected logical expression type %s", t.String()))
+		vecerror.InternalError(fmt.Sprintf("unexpected logical expression type %s", t.String()))
 	}
 	leftProjOpChain, leftIdx, ct, internalMemUsedLeft, err = planTypedMaybeNullProjectionOperators(
 		ctx, evalCtx, typedLeft, types.Bool, ct, &leftFeedOp, acc,

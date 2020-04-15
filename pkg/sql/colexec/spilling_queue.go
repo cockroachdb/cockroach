@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -168,7 +168,7 @@ func (q *spillingQueue) dequeue(ctx context.Context) (coldata.Batch, error) {
 		// No more in-memory items. Fill the circular buffer as much as possible.
 		// Note that there must be at least one element on disk.
 		if !q.rewindable && q.curHeadIdx != q.curTailIdx {
-			execerror.VectorizedInternalPanic(fmt.Sprintf("assertion failed in spillingQueue: curHeadIdx != curTailIdx, %d != %d", q.curHeadIdx, q.curTailIdx))
+			vecerror.InternalError(fmt.Sprintf("assertion failed in spillingQueue: curHeadIdx != curTailIdx, %d != %d", q.curHeadIdx, q.curTailIdx))
 		}
 		// NOTE: Only one item is dequeued from disk since a deserialized batch is
 		// only valid until the next call to Dequeue. In practice we could Dequeue
@@ -184,7 +184,7 @@ func (q *spillingQueue) dequeue(ctx context.Context) (coldata.Batch, error) {
 		if !ok {
 			// There was no batch to dequeue from disk. This should not really
 			// happen, as it should have been caught by the q.empty() check above.
-			execerror.VectorizedInternalPanic("disk queue was not empty but failed to dequeue element in spillingQueue")
+			vecerror.InternalError("disk queue was not empty but failed to dequeue element in spillingQueue")
 		}
 		// Account for this batch's memory.
 		q.unlimitedAllocator.RetainBatch(q.dequeueScratch)
@@ -297,7 +297,7 @@ func (q *spillingQueue) rewind() error {
 
 func (q *spillingQueue) reset(ctx context.Context) {
 	if err := q.close(ctx); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		vecerror.InternalError(err)
 	}
 	q.diskQueue = nil
 	q.closed = false
