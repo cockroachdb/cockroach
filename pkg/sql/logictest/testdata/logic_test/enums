@@ -1,2 +1,8 @@
 statement error pq: unimplemented: CREATE TYPE
 CREATE TYPE mytype AS ENUM ('val1', 'val2')
+
+statement error pq: unimplemented: DROP TYPE
+DROP TYPE mytype
+
+statement error pq: unimplemented: DROP TYPE
+DROP TYPE IF EXISTS mytype
