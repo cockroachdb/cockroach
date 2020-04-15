@@ -66,3 +66,73 @@ root
 		t.Errorf("incorrect result:\n%s", res)
 	}
 }
+
+func TestTreePrinterUTF(t *testing.T) {
+	n := New()
+
+	r := n.Child("root")
+	r1 := r.Child("日本語\n本語\n本語")
+	r1.Child("日本語\n本語\n本語")
+	r.Child("日本語\n本語\n本語")
+	res := n.String()
+	exp := `
+root
+ ├── 日本語
+ │   本語
+ │   本語
+ │    └── 日本語
+ │        本語
+ │        本語
+ └── 日本語
+     本語
+     本語
+`
+
+	exp = strings.TrimLeft(exp, "\n")
+	if res != exp {
+		t.Errorf("incorrect result:\n%s", res)
+	}
+}
+
+func TestTreePrinterNested(t *testing.T) {
+	// The output of a treeprinter can be used as a node inside a larger
+	// treeprinter. This is useful when formatting routines use treeprinter
+	// internally.
+	tp1 := New()
+	r1 := tp1.Child("root1")
+	r11 := r1.Child("1.1")
+	r11.Child("1.1.1")
+	r11.Child("1.1.2")
+	r1.Child("1.2")
+	tree1 := strings.TrimRight(tp1.String(), "\n")
+
+	tp2 := New()
+	r2 := tp2.Child("root2")
+	r2.Child("2.1")
+	r22 := r2.Child("2.2")
+	r22.Child("2.2.1")
+	tree2 := strings.TrimRight(tp2.String(), "\n")
+
+	tp := New()
+	r := tp.Child("tree of trees")
+	r.Child(tree1)
+	r.Child(tree2)
+	res := tp.String()
+	exp := `
+tree of trees
+ ├── root1
+ │    ├── 1.1
+ │    │    ├── 1.1.1
+ │    │    └── 1.1.2
+ │    └── 1.2
+ └── root2
+      ├── 2.1
+      └── 2.2
+           └── 2.2.1
+`
+
+	exp = strings.TrimLeft(exp, "\n")
+	if res != exp {
+		t.Errorf("incorrect result:\n%s", res)
+	}
+}
