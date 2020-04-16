@@ -18,7 +18,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -81,24 +83,28 @@ func NewAllocator(ctx context.Context, acc *mon.BoundAccount) *Allocator {
 }
 
 // NewMemBatch allocates a new in-memory coldata.Batch.
-func (a *Allocator) NewMemBatch(typs []coltypes.T) coldata.Batch {
+func (a *Allocator) NewMemBatch(typs []types.T) coldata.Batch {
 	return a.NewMemBatchWithSize(typs, coldata.BatchSize())
 }
 
 // NewMemBatchWithSize allocates a new in-memory coldata.Batch with the given
 // column size.
-func (a *Allocator) NewMemBatchWithSize(types []coltypes.T, size int) coldata.Batch {
-	estimatedMemoryUsage := selVectorSize(size) + int64(EstimateBatchSizeBytes(types, size))
+func (a *Allocator) NewMemBatchWithSize(typs []types.T, size int) coldata.Batch {
+	physTypes, err := typeconv.FromColumnTypes(typs)
+	if err != nil {
+		vecerror.InternalError(err)
+	}
+	estimatedMemoryUsage := selVectorSize(size) + int64(EstimateBatchSizeBytes(physTypes, size))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		vecerror.InternalError(err)
 	}
-	return coldata.NewMemBatchWithSize(types, size)
+	return coldata.NewMemBatchWithSize(typs, size)
 }
 
 // NewMemBatchNoCols creates a "skeleton" of new in-memory coldata.Batch. It
 // allocates memory for the selection vector but does *not* allocate any memory
 // for the column vectors - those will have to be added separately.
-func (a *Allocator) NewMemBatchNoCols(types []coltypes.T, size int) coldata.Batch {
+func (a *Allocator) NewMemBatchNoCols(types []types.T, size int) coldata.Batch {
 	estimatedMemoryUsage := selVectorSize(size)
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		vecerror.InternalError(err)
@@ -152,8 +158,8 @@ func (a *Allocator) ReleaseBatch(b coldata.Batch) {
 }
 
 // NewMemColumn returns a new coldata.Vec, initialized with a length.
-func (a *Allocator) NewMemColumn(t coltypes.T, n int) coldata.Vec {
-	estimatedMemoryUsage := int64(EstimateBatchSizeBytes([]coltypes.T{t}, n))
+func (a *Allocator) NewMemColumn(t *types.T, n int) coldata.Vec {
+	estimatedMemoryUsage := int64(EstimateBatchSizeBytes([]coltypes.T{typeconv.FromColumnType(t)}, n))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		vecerror.InternalError(err)
 	}
@@ -171,14 +177,14 @@ func (a *Allocator) NewMemColumn(t coltypes.T, n int) coldata.Vec {
 // indicates an error in setting up vector type enforcers during the planning
 // stage.
 // NOTE: b must be non-zero length batch.
-func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t coltypes.T, colIdx int) {
+func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 	if b.Length() == 0 {
 		vecerror.InternalError("trying to add a column to zero length batch")
 	}
 	width := b.Width()
 	if colIdx < width {
 		switch presentType := b.ColVec(colIdx).Type(); presentType {
-		case t:
+		case typeconv.FromColumnType(t):
 			// We already have the vector of the desired type in place.
 			return
 		default:
@@ -196,7 +202,7 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t coltypes.T, colIdx int)
 			t, colIdx, width,
 		))
 	}
-	estimatedMemoryUsage := int64(EstimateBatchSizeBytes([]coltypes.T{t}, coldata.BatchSize()))
+	estimatedMemoryUsage := int64(EstimateBatchSizeBytes([]coltypes.T{typeconv.FromColumnType(t)}, coldata.BatchSize()))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		vecerror.InternalError(err)
 	}

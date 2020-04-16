@@ -26,11 +26,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // {{/*
@@ -67,9 +69,9 @@ func _ASSIGN_NE(_, _, _ string) bool {
 // the values differ. This function pays attention to NULLs, and two NULL
 // values do *not* differ.
 func valuesDiffer(
-	t coltypes.T, aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValueIdx int,
+	t *types.T, aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValueIdx int,
 ) bool {
-	switch t {
+	switch typeconv.FromColumnType(t) {
 	// {{range .}}
 	case _TYPES_T:
 		aCol := aColVec._TemplateType()

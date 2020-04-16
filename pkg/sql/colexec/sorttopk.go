@@ -16,10 +16,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 const (
@@ -33,7 +34,7 @@ const (
 func NewTopKSorter(
 	allocator *colbase.Allocator,
 	input colbase.Operator,
-	inputTypes []coltypes.T,
+	inputTypes []types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	k uint16,
 ) colbase.Operator {
@@ -65,7 +66,7 @@ type topKSorter struct {
 
 	allocator    *colbase.Allocator
 	orderingCols []execinfrapb.Ordering_Column
-	inputTypes   []coltypes.T
+	inputTypes   []types.T
 	k            uint16 // TODO(solon): support larger k values
 
 	// state is the current state of the sort.
@@ -98,9 +99,8 @@ func (t *topKSorter) Init() {
 		t.allocator, t.inputTypes, 0, /* initialSize */
 	)
 	t.comparators = make([]vecComparator, len(t.inputTypes))
-	for i := range t.inputTypes {
-		typ := t.inputTypes[i]
-		t.comparators[i] = GetVecComparator(typ, 2)
+	for i, typ := range t.inputTypes {
+		t.comparators[i] = GetVecComparator(&typ, 2)
 	}
 	// TODO(yuzefovich): switch to calling this method on allocator. This will
 	// require plumbing unlimited allocator to work correctly in tests with
@@ -215,7 +215,7 @@ func (t *topKSorter) emit() coldata.Batch {
 	if toEmit > coldata.BatchSize() {
 		toEmit = coldata.BatchSize()
 	}
-	for i := range t.inputTypes {
+	for i, typ := range t.inputTypes {
 		vec := t.output.ColVec(i)
 		// At this point, we have already fully sorted the input. It is ok to do
 		// this Copy outside of the allocator - the work has been done, but
@@ -225,7 +225,7 @@ func (t *topKSorter) emit() coldata.Batch {
 		vec.Copy(
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
-					ColType:     t.inputTypes[i],
+					ColType:     typeconv.FromColumnType(&typ),
 					Src:         t.topK.ColVec(i),
 					Sel:         t.sel,
 					SrcStartIdx: t.emitted,
@@ -272,7 +272,7 @@ func (t *topKSorter) ExportBuffered(colbase.Operator) coldata.Batch {
 			newExportedFromTopK = topKLen
 		}
 		for i, typ := range t.inputTypes {
-			window := t.topK.ColVec(i).Window(typ, t.exportedFromTopK, newExportedFromTopK)
+			window := t.topK.ColVec(i).Window(typeconv.FromColumnType(&typ), t.exportedFromTopK, newExportedFromTopK)
 			t.windowedBatch.ReplaceCol(window, i)
 		}
 		t.windowedBatch.SetSelection(false)

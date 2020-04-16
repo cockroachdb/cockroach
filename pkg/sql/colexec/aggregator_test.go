@@ -18,9 +18,9 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -29,13 +29,13 @@ var (
 	defaultGroupCols = []uint32{0}
 	defaultAggCols   = [][]uint32{{1}}
 	defaultAggFns    = []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM}
-	defaultColTyps   = []coltypes.T{coltypes.Int64, coltypes.Int64}
+	defaultColTyps   = []types.T{*types.Int, *types.Int}
 )
 
 type aggregatorTestCase struct {
-	// colTypes, aggFns, groupCols, and aggCols will be set to their default
+	// typs, aggFns, groupCols, and aggCols will be set to their default
 	// values before running a test if nil.
-	colTypes       []coltypes.T
+	typs           []types.T
 	aggFns         []execinfrapb.AggregatorSpec_Func
 	groupCols      []uint32
 	aggCols        [][]uint32
@@ -60,7 +60,7 @@ type aggType struct {
 	new func(
 		allocator *colbase.Allocator,
 		input colbase.Operator,
-		colTypes []coltypes.T,
+		typs []types.T,
 		aggFns []execinfrapb.AggregatorSpec_Func,
 		groupCols []uint32,
 		aggCols [][]uint32,
@@ -76,14 +76,14 @@ var aggTypes = []aggType{
 		new: func(
 			allocator *colbase.Allocator,
 			input colbase.Operator,
-			colTypes []coltypes.T,
+			typs []types.T,
 			aggFns []execinfrapb.AggregatorSpec_Func,
 			groupCols []uint32,
 			aggCols [][]uint32,
 			_ bool,
 		) (colbase.Operator, error) {
 			return NewHashAggregator(
-				allocator, input, colTypes, aggFns, groupCols, aggCols)
+				allocator, input, typs, aggFns, groupCols, aggCols)
 		},
 		name: "hash",
 	},
@@ -129,8 +129,8 @@ func (tc *aggregatorTestCase) init() error {
 	if tc.aggCols == nil {
 		tc.aggCols = defaultAggCols
 	}
-	if tc.colTypes == nil {
-		tc.colTypes = defaultColTyps
+	if tc.typs == nil {
+		tc.typs = defaultColTyps
 	}
 	if tc.batchSize == 0 {
 		tc.batchSize = coldata.BatchSize()
@@ -269,7 +269,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 			batchSize:       1,
 			outputBatchSize: 1,
 			name:            "UnusedInputColumns",
-			colTypes:        []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			typs:            []types.T{*types.Int, *types.Int, *types.Int},
 			groupCols:       []uint32{1, 2},
 			aggCols:         [][]uint32{{0}},
 		},
@@ -300,7 +300,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 				a, err := NewOrderedAggregator(
 					testAllocator,
 					tupleSource,
-					tc.colTypes,
+					tc.typs,
 					tc.aggFns,
 					tc.groupCols,
 					tc.aggCols,
@@ -333,7 +333,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 								return agg.new(
 									testAllocator,
 									input[0],
-									tc.colTypes,
+									tc.typs,
 									tc.aggFns,
 									tc.groupCols,
 									tc.aggCols,
@@ -359,7 +359,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				{0, 1, 2},
 				{0, 1, 2},
 			},
-			colTypes: []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			typs: []types.T{*types.Int, *types.Int, *types.Int},
 			expected: tuples{
 				{4, 2},
 			},
@@ -376,7 +376,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				{0, 1, 0.5},
 				{1, 1, 1.2},
 			},
-			colTypes: []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Decimal},
+			typs: []types.T{*types.Int, *types.Int, *types.Decimal},
 			expected: tuples{
 				{3.4, 3},
 				{1.2, 1},
@@ -396,7 +396,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				{1, 6.21},
 				{1, 2.43},
 			},
-			colTypes: []coltypes.T{coltypes.Int64, coltypes.Decimal},
+			typs: []types.T{*types.Int, *types.Decimal},
 			expected: tuples{
 				{"1.5333333333333333333", 4.6},
 				{4.32, 8.64},
@@ -431,7 +431,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				{8, nil},
 				{8, nil},
 			},
-			colTypes: []coltypes.T{coltypes.Int64, coltypes.Bool},
+			typs: []types.T{*types.Int, *types.Bool},
 			expected: tuples{
 				{true, true},
 				{false, false},
@@ -463,7 +463,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				{2, 2.0, "2.0", 6.0, 6.0},
 			},
 			batchSize: 1,
-			colTypes:  []coltypes.T{coltypes.Int64, coltypes.Decimal, coltypes.Bytes, coltypes.Decimal},
+			typs:      []types.T{*types.Int, *types.Decimal, *types.Bytes, *types.Decimal},
 			name:      "MultiGroupColsWithPointerTypes",
 			groupCols: []uint32{0, 1, 2},
 			aggCols: [][]uint32{
@@ -478,9 +478,9 @@ func TestAggregatorMultiFunc(t *testing.T) {
 				if err := tc.init(); err != nil {
 					t.Fatal(err)
 				}
-				runTestsWithTyps(t, []tuples{tc.input}, [][]coltypes.T{tc.colTypes}, tc.expected, unorderedVerifier,
+				runTestsWithTyps(t, []tuples{tc.input}, [][]types.T{tc.typs}, tc.expected, unorderedVerifier,
 					func(input []colbase.Operator) (colbase.Operator, error) {
-						return agg.new(testAllocator, input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
+						return agg.new(testAllocator, input[0], tc.typs, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
 					})
 			})
 		}
@@ -503,8 +503,8 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				execinfrapb.AggregatorSpec_BOOL_AND,
 				execinfrapb.AggregatorSpec_BOOL_OR,
 			},
-			aggCols:  [][]uint32{{0}, {4}, {1}, {}, {1}, {2}, {2}, {2}, {3}, {3}},
-			colTypes: []coltypes.T{coltypes.Int64, coltypes.Decimal, coltypes.Int64, coltypes.Bool, coltypes.Bytes},
+			aggCols: [][]uint32{{0}, {4}, {1}, {}, {1}, {2}, {2}, {2}, {3}, {3}},
+			typs:    []types.T{*types.Int, *types.Decimal, *types.Int, *types.Bool, *types.Bytes},
 			input: tuples{
 				{0, 3.1, 2, true, "zero"},
 				{0, 1.1, 3, false, "zero"},
@@ -538,8 +538,8 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				execinfrapb.AggregatorSpec_BOOL_AND,
 				execinfrapb.AggregatorSpec_BOOL_OR,
 			},
-			aggCols:  [][]uint32{{0}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {1}, {3}, {3}},
-			colTypes: []coltypes.T{coltypes.Int64, coltypes.Decimal, coltypes.Int64, coltypes.Bool},
+			aggCols: [][]uint32{{0}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {1}, {3}, {3}},
+			typs:    []types.T{*types.Int, *types.Decimal, *types.Int, *types.Bool},
 			input: tuples{
 				{nil, 1.1, 4, true},
 				{0, nil, nil, nil},
@@ -572,7 +572,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 					tc.expected,
 					verifier,
 					func(input []colbase.Operator) (colbase.Operator, error) {
-						return agg.new(testAllocator, input[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
+						return agg.new(testAllocator, input[0], tc.typs, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
 					})
 			})
 		}
@@ -597,10 +597,10 @@ func TestAggregatorRandom(t *testing.T) {
 					t.Run(fmt.Sprintf("%s/groupSize=%d/numInputBatches=%d/hasNulls=%t", agg.name, groupSize, numInputBatches, hasNulls),
 						func(t *testing.T) {
 							nTuples := coldata.BatchSize() * numInputBatches
-							typs := []coltypes.T{coltypes.Int64, coltypes.Float64}
+							typs := []types.T{*types.Int, *types.Float}
 							cols := []coldata.Vec{
-								testAllocator.NewMemColumn(typs[0], nTuples),
-								testAllocator.NewMemColumn(typs[1], nTuples),
+								testAllocator.NewMemColumn(&typs[0], nTuples),
+								testAllocator.NewMemColumn(&typs[1], nTuples),
 							}
 							groups, aggCol, aggColNulls := cols[0].Int64(), cols[1].Float64(), cols[1].Nulls()
 							expectedTuples := tuples{}
@@ -718,12 +718,12 @@ func BenchmarkAggregator(b *testing.B) {
 		fName := execinfrapb.AggregatorSpec_Func_name[int32(aggFn)]
 		b.Run(fName, func(b *testing.B) {
 			for _, agg := range aggTypes {
-				for typIdx, typ := range []coltypes.T{coltypes.Int64, coltypes.Decimal, coltypes.Bytes} {
+				for typIdx, typ := range []types.T{*types.Int, *types.Decimal, *types.Bytes} {
 					for _, groupSize := range []int{1, 2, coldata.BatchSize() / 2, coldata.BatchSize()} {
 						for _, hasNulls := range []bool{false, true} {
 							for _, numInputBatches := range []int{64} {
 								if aggFn == execinfrapb.AggregatorSpec_BOOL_AND || aggFn == execinfrapb.AggregatorSpec_BOOL_OR {
-									typ = coltypes.Bool
+									typ = *types.Bool
 									if typIdx > 0 {
 										// We don't need to run the benchmark of bool_and and
 										// bool_or multiple times, so we skip all runs except
@@ -734,11 +734,11 @@ func BenchmarkAggregator(b *testing.B) {
 								b.Run(fmt.Sprintf("%s/%s/groupSize=%d/hasNulls=%t/numInputBatches=%d", agg.name, typ.String(),
 									groupSize, hasNulls, numInputBatches),
 									func(b *testing.B) {
-										colTypes := []coltypes.T{coltypes.Int64, typ}
+										typs := []types.T{*types.Int, typ}
 										nTuples := numInputBatches * coldata.BatchSize()
 										cols := []coldata.Vec{
-											testAllocator.NewMemColumn(coltypes.Int64, nTuples),
-											testAllocator.NewMemColumn(typ, nTuples),
+											testAllocator.NewMemColumn(types.Int, nTuples),
+											testAllocator.NewMemColumn(&typ, nTuples),
 										}
 										groups := cols[0].Int64()
 										curGroup := -1
@@ -752,8 +752,8 @@ func BenchmarkAggregator(b *testing.B) {
 										if hasNulls {
 											nullProb = nullProbability
 										}
-										coldata.RandomVec(rng, typ, bytesFixedLength, cols[1], nTuples, nullProb)
-										if typ == coltypes.Int64 && aggFn == execinfrapb.AggregatorSpec_SUM {
+										coldata.RandomVec(rng, &typ, bytesFixedLength, cols[1], nTuples, nullProb)
+										if &typ == types.Int && aggFn == execinfrapb.AggregatorSpec_SUM {
 											// Summation of random Int64 values can lead to
 											// overflow, and we will panic. To go around it, we
 											// restrict the range of values.
@@ -762,7 +762,7 @@ func BenchmarkAggregator(b *testing.B) {
 												vals[i] = vals[i] % 1024
 											}
 										}
-										source := newChunkingBatchSource(colTypes, cols, nTuples)
+										source := newChunkingBatchSource(typs, cols, nTuples)
 
 										nCols := 1
 										if aggFn == execinfrapb.AggregatorSpec_COUNT_ROWS {
@@ -771,7 +771,7 @@ func BenchmarkAggregator(b *testing.B) {
 										a, err := agg.new(
 											testAllocator,
 											source,
-											colTypes,
+											typs,
 											[]execinfrapb.AggregatorSpec_Func{aggFn},
 											[]uint32{0},
 											[][]uint32{[]uint32{1}[:nCols]},
@@ -818,7 +818,7 @@ func TestHashAggregator(t *testing.T) {
 				{0, 3},
 				{0, 7},
 			},
-			colTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64},
+			typs:      []types.T{*types.Int, *types.Int},
 			groupCols: []uint32{0},
 			aggCols:   [][]uint32{{1}},
 
@@ -835,7 +835,7 @@ func TestHashAggregator(t *testing.T) {
 			input: tuples{
 				{5},
 			},
-			colTypes:  []coltypes.T{coltypes.Int64},
+			typs:      []types.T{*types.Int},
 			groupCols: []uint32{0},
 			aggCols:   [][]uint32{{0}},
 
@@ -854,7 +854,7 @@ func TestHashAggregator(t *testing.T) {
 				{0, 5},
 				{hashTableNumBuckets, 7},
 			},
-			colTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64},
+			typs:      []types.T{*types.Int, *types.Int},
 			groupCols: []uint32{0},
 			aggCols:   [][]uint32{{1}},
 
@@ -872,7 +872,7 @@ func TestHashAggregator(t *testing.T) {
 				{0, 1, 0.5},
 				{1, 1, 1.2},
 			},
-			colTypes:      []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Decimal},
+			typs:          []types.T{*types.Int, *types.Int, *types.Decimal},
 			convToDecimal: true,
 
 			aggFns:    []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM},
@@ -898,7 +898,7 @@ func TestHashAggregator(t *testing.T) {
 				{0, 1, 6, 11},
 				{1, 2, 6, 13},
 			},
-			colTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			typs:      []types.T{*types.Int, *types.Int, *types.Int, *types.Int},
 			groupCols: []uint32{0, 1},
 			aggCols:   [][]uint32{{3}},
 
@@ -919,7 +919,7 @@ func TestHashAggregator(t *testing.T) {
 			}
 			t.Run(fmt.Sprintf("numOfHashBuckets=%d", numOfHashBuckets), func(t *testing.T) {
 				runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []colbase.Operator) (colbase.Operator, error) {
-					a, err := NewHashAggregator(testAllocator, sources[0], tc.colTypes, tc.aggFns, tc.groupCols, tc.aggCols)
+					a, err := NewHashAggregator(testAllocator, sources[0], tc.typs, tc.aggFns, tc.groupCols, tc.aggCols)
 					a.(*hashAggregator).testingKnobs.numOfHashBuckets = uint64(numOfHashBuckets)
 					return a, err
 				})

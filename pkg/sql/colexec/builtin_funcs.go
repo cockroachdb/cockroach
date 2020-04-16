@@ -117,7 +117,7 @@ func NewBuiltinFunctionOperator(
 ) (colbase.Operator, error) {
 	switch funcExpr.ResolvedOverload().SpecializedVecBuiltin {
 	case tree.SubstringStringIntInt:
-		input = newVectorTypeEnforcer(allocator, input, coltypes.Bytes, outputIdx)
+		input = newVectorTypeEnforcer(allocator, input, types.Bytes, outputIdx)
 		return newSubstringOperator(
 			allocator, columnTypes, argumentCols, outputIdx, input,
 		), nil
@@ -130,7 +130,7 @@ func NewBuiltinFunctionOperator(
 				outputType.String(), funcExpr.String(),
 			)
 		}
-		input = newVectorTypeEnforcer(allocator, input, outputPhysType, outputIdx)
+		input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 		return &defaultBuiltinFuncOperator{
 			OneInputNode:   NewOneInputNode(input),
 			allocator:      allocator,

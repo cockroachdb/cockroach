@@ -14,10 +14,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -59,11 +60,11 @@ type hashAggregator struct {
 	allocator *colbase.Allocator
 
 	aggCols  [][]uint32
-	aggTypes [][]coltypes.T
+	aggTypes [][]types.T
 	aggFuncs []execinfrapb.AggregatorSpec_Func
 
-	inputTypes  []coltypes.T
-	outputTypes []coltypes.T
+	inputTypes  []types.T
+	outputTypes []types.T
 
 	// aggFuncMap stores the mapping from hash code to a vector of aggregation
 	// functions. Each aggregation function is stored along with keys that
@@ -149,7 +150,7 @@ type hashAggregator struct {
 	groupCols []uint32
 
 	// groupCols stores the types of the grouping columns.
-	groupTypes []coltypes.T
+	groupTypes []types.T
 
 	// hashBuffer stores hash values for each tuple in the buffered batch.
 	hashBuffer []uint64
@@ -167,12 +168,12 @@ var _ colbase.Operator = &hashAggregator{}
 func NewHashAggregator(
 	allocator *colbase.Allocator,
 	input colbase.Operator,
-	colTypes []coltypes.T,
+	typs []types.T,
 	aggFns []execinfrapb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
 ) (colbase.Operator, error) {
-	aggTyps := extractAggTypes(aggCols, colTypes)
+	aggTyps := extractAggTypes(aggCols, typs)
 	outputTypes, err := makeAggregateFuncsOutputTypes(aggTyps, aggFns)
 	if err != nil {
 		return nil, errors.AssertionFailedf(
@@ -180,9 +181,9 @@ func NewHashAggregator(
 		)
 	}
 
-	groupTypes := make([]coltypes.T, len(groupCols))
+	groupTypes := make([]types.T, len(groupCols))
 	for i, colIdx := range groupCols {
-		groupTypes[i] = colTypes[colIdx]
+		groupTypes[i] = typs[colIdx]
 	}
 
 	// We picked value this as the result of our benchmark.
@@ -200,7 +201,7 @@ func NewHashAggregator(
 		batchTupleLimit: tupleLimit,
 
 		state:       hashAggregatorBuffering,
-		inputTypes:  colTypes,
+		inputTypes:  typs,
 		outputTypes: outputTypes,
 
 		groupCols:  groupCols,
@@ -342,7 +343,7 @@ func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context) {
 	for _, colIdx := range op.groupCols {
 		rehash(ctx,
 			hashBuffer,
-			op.inputTypes[colIdx],
+			&op.inputTypes[colIdx],
 			op.scratch.ColVec(int(colIdx)),
 			nKeys,
 			nil, /* sel */
@@ -430,7 +431,7 @@ func (op *hashAggregator) onlineAgg() {
 					// performance.
 					op.keyMapping.ColVec(keyIdx).Append(coldata.SliceArgs{
 						Src:         op.scratch.ColVec(int(colIdx)),
-						ColType:     op.inputTypes[colIdx],
+						ColType:     typeconv.FromColumnType(&op.inputTypes[colIdx]),
 						DestIdx:     aggFunc.keyIdx,
 						SrcStartIdx: remaining[0],
 						SrcEndIdx:   remaining[0] + 1,

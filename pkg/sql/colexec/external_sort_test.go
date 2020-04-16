@@ -94,7 +94,7 @@ func TestExternalSort(t *testing.T) {
 							//  result.ToClose) in cases where it is know the sorter will not
 							//  be drained.
 							sorter, newAccounts, newMonitors, closers, err := createDiskBackedSorter(
-								ctx, flowCtx, input, tc.logTypes, tc.ordCols, tc.matchLen, tc.k, func() {},
+								ctx, flowCtx, input, tc.typs, tc.ordCols, tc.matchLen, tc.k, func() {},
 								externalSorterMinPartitions, false /* delegateFDAcquisition */, queueCfg, sem,
 							)
 							// Check that the sort was added as a Closer.
@@ -258,9 +258,7 @@ func BenchmarkExternalSort(b *testing.B) {
 					for i := range logTypes {
 						logTypes[i] = *types.Int
 					}
-					physTypes, err := typeconv.FromColumnTypes(logTypes)
-					require.NoError(b, err)
-					batch := testAllocator.NewMemBatch(physTypes)
+					batch := testAllocator.NewMemBatch(logTypes)
 					batch.SetLength(coldata.BatchSize())
 					ordCols := make([]execinfrapb.Ordering_Column, nCols)
 					for i := range ordCols {
@@ -273,7 +271,7 @@ func BenchmarkExternalSort(b *testing.B) {
 					}
 					b.ResetTimer()
 					for n := 0; n < b.N; n++ {
-						source := newFiniteBatchSource(batch, nBatches)
+						source := newFiniteBatchSource(batch, logTypes, nBatches)
 						var spilled bool
 						// TODO(yuzefovich): do not specify maxNumberPartitions (let the
 						// external sorter figure out that number itself) once we pass in

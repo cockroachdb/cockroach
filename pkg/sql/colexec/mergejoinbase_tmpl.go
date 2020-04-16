@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -95,9 +96,9 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 	// Check all equality columns in the first row of batch to make sure we're in
 	// the same group.
 	for _, colIdx := range input.eqCols[:len(input.eqCols)] {
-		colTyp := input.sourceTypes[colIdx]
+		typ := input.sourceTypes[colIdx]
 
-		switch colTyp {
+		switch typeconv.FromColumnType(&typ) {
 		// {{ range . }}
 		case _TYPES_T:
 			// We perform this null check on every equality column of the first
@@ -123,7 +124,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 			}
 		// {{end}}
 		default:
-			vecerror.InternalError(fmt.Sprintf("unhandled type %d", colTyp))
+			vecerror.InternalError(fmt.Sprintf(" unhandled type %s", &typ))
 		}
 	}
 	return false

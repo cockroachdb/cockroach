@@ -230,7 +230,7 @@ func GetProjectionOperator(
 	allocator *colbase.Allocator,
 	leftColType *types.T,
 	rightColType *types.T,
-	outputPhysType coltypes.T,
+	outputPhysType *types.T,
 	op tree.Operator,
 	input colbase.Operator,
 	col1Idx int,

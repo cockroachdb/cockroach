@@ -29,11 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
@@ -42,7 +44,7 @@ import (
 // a slice of columns, creates a chain of distinct operators and returns the
 // last distinct operator in that chain as well as its output column.
 func OrderedDistinctColsToOperators(
-	input colbase.Operator, distinctCols []uint32, typs []coltypes.T,
+	input colbase.Operator, distinctCols []uint32, typs []types.T,
 ) (colbase.Operator, []bool, error) {
 	distinctCol := make([]bool, coldata.BatchSize())
 	// zero the boolean column on every iteration.
@@ -56,7 +58,7 @@ func OrderedDistinctColsToOperators(
 		ok  bool
 	)
 	for i := range distinctCols {
-		input, err = newSingleOrderedDistinct(input, int(distinctCols[i]), distinctCol, typs[distinctCols[i]])
+		input, err = newSingleOrderedDistinct(input, int(distinctCols[i]), distinctCol, &typs[distinctCols[i]])
 		if err != nil {
 			return nil, nil, err
 		}
@@ -79,7 +81,7 @@ var _ resettableOperator = &distinctChainOps{}
 // NewOrderedDistinct creates a new ordered distinct operator on the given
 // input columns with the given coltypes.
 func NewOrderedDistinct(
-	input colbase.Operator, distinctCols []uint32, typs []coltypes.T,
+	input colbase.Operator, distinctCols []uint32, typs []types.T,
 ) (colbase.Operator, error) {
 	op, outputCol, err := OrderedDistinctColsToOperators(input, distinctCols, typs)
 	if err != nil {
@@ -136,9 +138,9 @@ func _ASSIGN_NE(_ bool, _, _ _GOTYPE) bool {
 // */}}
 
 func newSingleOrderedDistinct(
-	input colbase.Operator, distinctColIdx int, outputCol []bool, t coltypes.T,
+	input colbase.Operator, distinctColIdx int, outputCol []bool, t *types.T,
 ) (colbase.Operator, error) {
-	switch t {
+	switch typeconv.FromColumnType(t) {
 	// {{range .}}
 	case _TYPES_T:
 		return &sortedDistinct_TYPEOp{
@@ -170,8 +172,8 @@ type partitioner interface {
 }
 
 // newPartitioner returns a new partitioner on type t.
-func newPartitioner(t coltypes.T) (partitioner, error) {
-	switch t {
+func newPartitioner(t *types.T) (partitioner, error) {
+	switch typeconv.FromColumnType(t) {
 	// {{range .}}
 	case _TYPES_T:
 		return partitioner_TYPE{}, nil

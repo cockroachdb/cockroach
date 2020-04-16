@@ -14,7 +14,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -49,7 +48,7 @@ func TestConst(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTestsWithTyps(t, []tuples{tc.tuples}, [][]coltypes.T{{coltypes.Int64}}, tc.expected, orderedVerifier,
+		runTestsWithTyps(t, []tuples{tc.tuples}, [][]types.T{{*types.Int}}, tc.expected, orderedVerifier,
 			func(input []colbase.Operator) (colbase.Operator, error) {
 				return createTestProjectingOperator(
 					ctx, flowCtx, input[0], []types.T{*types.Int},
@@ -85,7 +84,7 @@ func TestConstNull(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTestsWithTyps(t, []tuples{tc.tuples}, [][]coltypes.T{{coltypes.Int64}}, tc.expected, orderedVerifier,
+		runTestsWithTyps(t, []tuples{tc.tuples}, [][]types.T{{*types.Int}}, tc.expected, orderedVerifier,
 			func(input []colbase.Operator) (colbase.Operator, error) {
 				return createTestProjectingOperator(
 					ctx, flowCtx, input[0], []types.T{*types.Int},

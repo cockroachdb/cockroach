@@ -15,11 +15,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -121,7 +122,7 @@ type externalSorter struct {
 
 	unlimitedAllocator *colbase.Allocator
 	state              externalSorterState
-	inputTypes         []coltypes.T
+	inputTypes         []types.T
 	ordering           execinfrapb.Ordering
 	inMemSorter        resettableOperator
 	inMemSorterInput   *inputPartitioningOperator
@@ -175,7 +176,7 @@ func newExternalSorter(
 	unlimitedAllocator *colbase.Allocator,
 	standaloneMemAccount *mon.BoundAccount,
 	input colbase.Operator,
-	inputTypes []coltypes.T,
+	inputTypes []types.T,
 	ordering execinfrapb.Ordering,
 	memoryLimit int64,
 	maxNumberPartitions int,
@@ -197,11 +198,15 @@ func newExternalSorter(
 	if maxNumberPartitions < externalSorterMinPartitions {
 		maxNumberPartitions = externalSorterMinPartitions
 	}
+	inputPhysTypes, err := typeconv.FromColumnTypes(inputTypes)
+	if err != nil {
+		vecerror.InternalError(err)
+	}
 	// Each disk queue will use up to BufferSizeBytes of RAM, so we reduce the
 	// memoryLimit of the partitions to sort in memory by those cache sizes. To be
 	// safe, we also estimate the size of the output batch and subtract that as
 	// well.
-	batchMemSize := colbase.EstimateBatchSizeBytes(inputTypes, coldata.BatchSize())
+	batchMemSize := colbase.EstimateBatchSizeBytes(inputPhysTypes, coldata.BatchSize())
 	// Reserve a certain amount of memory for the partition caches.
 	memoryLimit -= int64((maxNumberPartitions * diskQueueCfg.BufferSizeBytes) + batchMemSize)
 	if memoryLimit < 1 {

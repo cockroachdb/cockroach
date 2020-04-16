@@ -29,12 +29,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -66,10 +68,10 @@ const _TYPES_T = coltypes.Unhandled
 // stream of rows, ordered according to a set of columns. The rows in each input
 // stream are assumed to be ordered according to the same set of columns.
 type OrderedSynchronizer struct {
-	allocator   *colbase.Allocator
-	inputs      []colbase.Operator
-	ordering    sqlbase.ColumnOrdering
-	columnTypes []coltypes.T
+	allocator *colbase.Allocator
+	inputs    []colbase.Operator
+	ordering  sqlbase.ColumnOrdering
+	typs      []types.T
 
 	// inputBatches stores the current batch for each input.
 	inputBatches []coldata.Batch
@@ -120,14 +122,14 @@ func (o *OrderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
 func NewOrderedSynchronizer(
 	allocator *colbase.Allocator,
 	inputs []colbase.Operator,
-	typs []coltypes.T,
+	typs []types.T,
 	ordering sqlbase.ColumnOrdering,
 ) *OrderedSynchronizer {
 	return &OrderedSynchronizer{
-		allocator:   allocator,
-		inputs:      inputs,
-		ordering:    ordering,
-		columnTypes: typs,
+		allocator: allocator,
+		inputs:    inputs,
+		ordering:  ordering,
+		typs:      typs,
 	}
 }
 
@@ -161,12 +163,12 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				srcRowIdx = sel[srcRowIdx]
 			}
-			for i, physType := range o.columnTypes {
+			for i, typ := range o.typs {
 				vec := batch.ColVec(i)
 				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(srcRowIdx) {
 					o.outNulls[i].SetNull(outputIdx)
 				} else {
-					switch physType {
+					switch typeconv.FromColumnType(&typ) {
 					// {{range .}}
 					case _TYPES_T:
 						srcCol := vec._TYPE()
@@ -175,7 +177,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 						execgen.SET(outCol, outputIdx, v)
 					// {{end}}
 					default:
-						vecerror.InternalError(fmt.Sprintf("unhandled type %d", physType))
+						vecerror.InternalError(fmt.Sprintf("  unhandled type %s", &typ))
 					}
 				}
 			}
@@ -205,19 +207,19 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 // Init is part of the Operator interface.
 func (o *OrderedSynchronizer) Init() {
 	o.inputIndices = make([]int, len(o.inputs))
-	o.output = o.allocator.NewMemBatch(o.columnTypes)
-	o.outNulls = make([]*coldata.Nulls, len(o.columnTypes))
-	o.outColsMap = make([]int, len(o.columnTypes))
+	o.output = o.allocator.NewMemBatch(o.typs)
+	o.outNulls = make([]*coldata.Nulls, len(o.typs))
+	o.outColsMap = make([]int, len(o.typs))
 	for i, outVec := range o.output.ColVecs() {
 		o.outNulls[i] = outVec.Nulls()
-		switch o.columnTypes[i] {
+		switch typeconv.FromColumnType(&o.typs[i]) {
 		// {{range .}}
 		case _TYPES_T:
 			o.outColsMap[i] = len(o.out_TYPECols)
 			o.out_TYPECols = append(o.out_TYPECols, outVec._TYPE())
 		// {{end}}
 		default:
-			vecerror.InternalError(fmt.Sprintf("unhandled type %d", o.columnTypes[i]))
+			vecerror.InternalError(fmt.Sprintf("  unhandled type %s", &o.typs[i]))
 		}
 	}
 	for i := range o.inputs {
@@ -225,8 +227,8 @@ func (o *OrderedSynchronizer) Init() {
 	}
 	o.comparators = make([]vecComparator, len(o.ordering))
 	for i := range o.ordering {
-		typ := o.columnTypes[o.ordering[i].ColIdx]
-		o.comparators[i] = GetVecComparator(typ, len(o.inputs))
+		typ := o.typs[o.ordering[i].ColIdx]
+		o.comparators[i] = GetVecComparator(&typ, len(o.inputs))
 	}
 }
 

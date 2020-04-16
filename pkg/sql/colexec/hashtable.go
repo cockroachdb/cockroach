@@ -15,9 +15,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // TODO(yuzefovich): support rehashing instead of large fixed bucket size.
@@ -132,9 +132,9 @@ type hashTable struct {
 	// index + 1.
 	vals *appendOnlyBufferedBatch
 	// valTypes stores the corresponding types of the val columns.
-	valTypes []coltypes.T
+	valTypes []types.T
 	// keyCols stores the corresponding types of key columns.
-	keyTypes []coltypes.T
+	keyTypes []types.T
 	// keyCols stores the indices of vals which are key columns.
 	keyCols []uint32
 
@@ -158,12 +158,12 @@ var _ resetter = &hashTable{}
 func newHashTable(
 	allocator *colbase.Allocator,
 	numBuckets uint64,
-	sourceTypes []coltypes.T,
+	sourceTypes []types.T,
 	eqCols []uint32,
 	allowNullEquality bool,
 	mode hashTableMode,
 ) *hashTable {
-	keyTypes := make([]coltypes.T, len(eqCols))
+	keyTypes := make([]types.T, len(eqCols))
 	for i, colIdx := range eqCols {
 		keyTypes[i] = sourceTypes[colIdx]
 	}
@@ -319,7 +319,7 @@ func (ht *hashTable) removeDuplicates(
 // checkCols performs a column by column checkCol on the key columns.
 func (ht *hashTable) checkCols(
 	probeVecs, buildVecs []coldata.Vec,
-	probeKeyTypes []coltypes.T,
+	probeKeyTypes []types.T,
 	buildKeyCols []uint32,
 	nToCheck uint64,
 	probeSel []int,
@@ -328,7 +328,7 @@ func (ht *hashTable) checkCols(
 	for i := range ht.keyCols {
 		probeType := probeKeyTypes[i]
 		buildType := ht.keyTypes[i]
-		ht.checkCol(probeVecs[i], buildVecs[buildKeyCols[i]], probeType, buildType,
+		ht.checkCol(probeVecs[i], buildVecs[buildKeyCols[i]], &probeType, &buildType,
 			i, nToCheck, probeSel, buildSel)
 	}
 }
@@ -344,7 +344,7 @@ func (ht *hashTable) checkColsForDistinctTuples(
 		buildVec := buildVecs[ht.keyCols[i]]
 		probeType := ht.keyTypes[i]
 
-		ht.checkColForDistinctTuples(probeVec, buildVec, probeType, nToCheck, probeSel)
+		ht.checkColForDistinctTuples(probeVec, buildVec, &probeType, nToCheck, probeSel)
 	}
 }
 
@@ -353,7 +353,7 @@ func (ht *hashTable) checkColsForDistinctTuples(
 func (ht *hashTable) computeBuckets(
 	ctx context.Context,
 	buckets []uint64,
-	keyTypes []coltypes.T,
+	keyTypes []types.T,
 	keys []coldata.Vec,
 	nKeys int,
 	sel []int,
@@ -366,7 +366,7 @@ func (ht *hashTable) computeBuckets(
 	}
 
 	for i := range ht.keyCols {
-		rehash(ctx, buckets, keyTypes[i], keys[i], nKeys, sel, ht.cancelChecker, ht.decimalScratch)
+		rehash(ctx, buckets, &keyTypes[i], keys[i], nKeys, sel, ht.cancelChecker, ht.decimalScratch)
 	}
 
 	finalizeHash(buckets, nKeys, ht.numBuckets)
@@ -438,7 +438,7 @@ func (ht *hashTable) maybeAllocateSameAndVisited() {
 // column of the batch and stores the results in groupID. It also initializes
 // toCheck with all indices in the range [0, batchSize).
 func (ht *hashTable) lookupInitial(
-	ctx context.Context, keyTypes []coltypes.T, batchSize int, sel []int,
+	ctx context.Context, keyTypes []types.T, batchSize int, sel []int,
 ) {
 	ht.computeBuckets(ctx, ht.probeScratch.buckets, keyTypes, ht.probeScratch.keys, batchSize, sel)
 	for i := 0; i < batchSize; i++ {

@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
@@ -36,14 +35,14 @@ import (
 )
 
 type callbackRemoteComponentCreator struct {
-	newOutboxFn func(*colbase.Allocator, colbase.Operator, []coltypes.T, []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
-	newInboxFn  func(allocator *colbase.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
+	newOutboxFn func(*colbase.Allocator, colbase.Operator, []types.T, []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
+	newInboxFn  func(allocator *colbase.Allocator, typs []types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
 
 func (c callbackRemoteComponentCreator) newOutbox(
 	allocator *colbase.Allocator,
 	input colbase.Operator,
-	typs []coltypes.T,
+	typs []types.T,
 	metadataSources []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
 ) (*colrpc.Outbox, error) {
@@ -51,7 +50,7 @@ func (c callbackRemoteComponentCreator) newOutbox(
 }
 
 func (c callbackRemoteComponentCreator) newInbox(
-	allocator *colbase.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID,
+	allocator *colbase.Allocator, typs []types.T, streamID execinfrapb.StreamID,
 ) (*colrpc.Inbox, error) {
 	return c.newInboxFn(allocator, typs, streamID)
 }
@@ -183,13 +182,13 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 		},
 	}
 
-	inboxToNumInputTypes := make(map[*colrpc.Inbox][]coltypes.T)
+	inboxToNumInputTypes := make(map[*colrpc.Inbox][]types.T)
 	outboxCreated := false
 	componentCreator := callbackRemoteComponentCreator{
 		newOutboxFn: func(
 			allocator *colbase.Allocator,
 			op colbase.Operator,
-			typs []coltypes.T,
+			typs []types.T,
 			sources []execinfrapb.MetadataSource,
 		) (*colrpc.Outbox, error) {
 			require.False(t, outboxCreated)
@@ -202,7 +201,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			require.Len(t, inboxToNumInputTypes[sources[0].(*colrpc.Inbox)], numInputTypesToOutbox)
 			return colrpc.NewOutbox(allocator, op, typs, sources, nil /* toClose */)
 		},
-		newInboxFn: func(allocator *colbase.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
+		newInboxFn: func(allocator *colbase.Allocator, typs []types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
 			inbox, err := colrpc.NewInbox(allocator, typs, streamID)
 			inboxToNumInputTypes[inbox] = typs
 			return inbox, err

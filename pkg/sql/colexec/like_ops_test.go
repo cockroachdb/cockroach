@@ -17,10 +17,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -102,7 +102,8 @@ func BenchmarkLikeOps(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Bytes})
+	typs := []types.T{*types.Bytes}
+	batch := testAllocator.NewMemBatch(typs)
 	col := batch.ColVec(0).Bytes()
 	width := 64
 	for i := 0; i < coldata.BatchSize(); i++ {
@@ -119,7 +120,7 @@ func BenchmarkLikeOps(b *testing.B) {
 	}
 
 	batch.SetLength(coldata.BatchSize())
-	source := colbase.NewRepeatableBatchSource(testAllocator, batch)
+	source := colbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	source.Init()
 
 	base := selConstOpBase{

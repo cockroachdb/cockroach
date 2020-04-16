@@ -80,16 +80,16 @@ const (
 
 func GetInProjectionOperator(
 	allocator *colbase.Allocator,
-	ct *types.T,
+	typ *types.T,
 	input colbase.Operator,
 	colIdx int,
 	resultIdx int,
 	datumTuple *tree.DTuple,
 	negate bool,
 ) (colbase.Operator, error) {
-	input = newVectorTypeEnforcer(allocator, input, coltypes.Bool, resultIdx)
+	input = newVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
 	var err error
-	switch t := typeconv.FromColumnType(ct); t {
+	switch typeconv.FromColumnType(typ) {
 	// {{range .}}
 	case coltypes._TYPE:
 		obj := &projectInOp_TYPE{
@@ -99,22 +99,22 @@ func GetInProjectionOperator(
 			outputIdx:    resultIdx,
 			negate:       negate,
 		}
-		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(ct, datumTuple)
+		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(typ, datumTuple)
 		if err != nil {
 			return nil, err
 		}
 		return obj, nil
 	// {{end}}
 	default:
-		return nil, errors.Errorf("unhandled type: %s", t)
+		return nil, errors.Errorf("unhandled type: %s", typ)
 	}
 }
 
 func GetInOperator(
-	ct *types.T, input colbase.Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
+	typ *types.T, input colbase.Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
 ) (colbase.Operator, error) {
 	var err error
-	switch t := typeconv.FromColumnType(ct); t {
+	switch typeconv.FromColumnType(typ) {
 	// {{range .}}
 	case coltypes._TYPE:
 		obj := &selectInOp_TYPE{
@@ -122,14 +122,14 @@ func GetInOperator(
 			colIdx:       colIdx,
 			negate:       negate,
 		}
-		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(ct, datumTuple)
+		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(typ, datumTuple)
 		if err != nil {
 			return nil, err
 		}
 		return obj, nil
 	// {{end}}
 	default:
-		return nil, errors.Errorf("unhandled type: %s", t)
+		return nil, errors.Errorf("unhandled type: %s", typ)
 	}
 }
 
@@ -155,8 +155,8 @@ type projectInOp_TYPE struct {
 
 var _ colbase.Operator = &projectInOp_TYPE{}
 
-func fillDatumRow_TYPE(ct *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
-	conv := typeconv.GetDatumToPhysicalFn(ct)
+func fillDatumRow_TYPE(typ *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
+	conv := typeconv.GetDatumToPhysicalFn(typ)
 	var result []_GOTYPE
 	hasNulls := false
 	for _, d := range datumTuple.D {

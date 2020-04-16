@@ -15,8 +15,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
@@ -105,7 +105,7 @@ const (
 
 // PartitionedDiskQueue is a PartitionedQueue whose partitions are on-disk.
 type PartitionedDiskQueue struct {
-	typs     []coltypes.T
+	typs     []types.T
 	strategy PartitionerStrategy
 	cfg      DiskQueueCfg
 
@@ -134,7 +134,7 @@ var _ PartitionedQueue = &PartitionedDiskQueue{}
 // Note that actual file descriptors open may be less than, but never more than
 // the number acquired through the semaphore.
 func NewPartitionedDiskQueue(
-	typs []coltypes.T,
+	typs []types.T,
 	cfg DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	partitionerStrategy PartitionerStrategy,

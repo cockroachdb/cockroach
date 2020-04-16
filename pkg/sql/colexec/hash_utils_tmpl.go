@@ -28,14 +28,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
-	// HACK: crlfmt removes the "*/}}" comment if it's the last line in the
-	// import block. This was picked because it sorts after
-	// "pkg/sql/colexec/execgen" and has no deps.
-	_ "github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // {{/*
@@ -48,6 +46,9 @@ var _ reflect.SliceHeader
 
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
+
+// Dummy import to pull in "coltypes" package.
+var _ coltypes.T
 
 // _GOTYPESLICE is a template Go type slice variable.
 type _GOTYPESLICE interface{}
@@ -109,14 +110,14 @@ func _REHASH_BODY(
 func rehash(
 	ctx context.Context,
 	buckets []uint64,
-	t coltypes.T,
+	t *types.T,
 	col coldata.Vec,
 	nKeys int,
 	sel []int,
 	cancelChecker CancelChecker,
 	decimalScratch decimalOverloadScratch,
 ) {
-	switch t {
+	switch typeconv.FromColumnType(t) {
 	// {{range $hashType := .}}
 	case _TYPES_T:
 		keys, nulls := col._TemplateType(), col.Nulls()
@@ -136,6 +137,6 @@ func rehash(
 
 	// {{end}}
 	default:
-		vecerror.InternalError(fmt.Sprintf("unhandled type %d", t))
+		vecerror.InternalError(fmt.Sprintf(" unhandled type %s", t))
 	}
 }

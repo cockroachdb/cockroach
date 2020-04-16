@@ -16,7 +16,6 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
@@ -195,16 +194,15 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 		},
 	}
 
-	batch := testAllocator.NewMemBatchWithSize(
-		[]coltypes.T{coltypes.Int64}, 1, /* size */
-	)
+	typs := []types.T{*types.Int}
+	batch := testAllocator.NewMemBatchWithSize(typs, 1 /* size */)
 	for _, tc := range testCases {
 		for _, success := range []bool{true, false} {
 			expectNoMemoryError := success || tc.spillingSupported
 			t.Run(fmt.Sprintf("%s-success-expected-%t", tc.desc, expectNoMemoryError), func(t *testing.T) {
-				inputs := []colbase.Operator{colbase.NewRepeatableBatchSource(testAllocator, batch)}
+				inputs := []colbase.Operator{colbase.NewRepeatableBatchSource(testAllocator, batch, typs)}
 				if len(tc.spec.Input) > 1 {
-					inputs = append(inputs, colbase.NewRepeatableBatchSource(testAllocator, batch))
+					inputs = append(inputs, colbase.NewRepeatableBatchSource(testAllocator, batch, typs))
 				}
 				memMon := mon.MakeMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
 				flowCtx.Cfg.TestingKnobs = execinfra.TestingKnobs{}

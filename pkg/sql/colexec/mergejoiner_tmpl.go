@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -119,7 +120,7 @@ func _PROBE_SWITCH(
 	// {{define "probeSwitch"}}
 	// {{ $sel := $.SelPermutation }}
 	// {{ $mjOverloads := $.Global.MJOverloads }}
-	switch colType {
+	switch typeconv.FromColumnType(&typ) {
 	// {{range $mjOverload := $.Global.MJOverloads }}
 	case _TYPES_T:
 		lKeys := lVec._TemplateType()
@@ -271,7 +272,7 @@ func _PROBE_SWITCH(
 		}
 	// {{end}}
 	default:
-		vecerror.InternalError(fmt.Sprintf("unhandled type %d", colType))
+		vecerror.InternalError(fmt.Sprintf("  unhandled type %s", &typ))
 	}
 	// {{end}}
 	// {{/*
@@ -553,9 +554,11 @@ EqLoop:
 		rightColIdx := o.right.eqCols[eqColIdx]
 		lVec := o.proberState.lBatch.ColVec(int(leftColIdx))
 		rVec := o.proberState.rBatch.ColVec(int(rightColIdx))
-		leftPhysType := o.left.sourceTypes[leftColIdx]
-		rightPhysType := o.right.sourceTypes[rightColIdx]
-		colType := leftPhysType
+		leftType := o.left.sourceTypes[leftColIdx]
+		leftPhysType := typeconv.FromColumnType(&leftType)
+		rightType := o.right.sourceTypes[rightColIdx]
+		rightPhysType := typeconv.FromColumnType(&rightType)
+		typ := leftType
 		// Merge joiner only supports the case when the physical types in the
 		// equality columns in both inputs are the same. If that is not the case,
 		// we need to cast one of the vectors to another's physical type putting
@@ -577,23 +580,26 @@ EqLoop:
 			case coltypes.Float64:
 				castLeftToRight = rightPhysType == coltypes.Decimal
 			}
-			toType := leftPhysType
+
+			toType := leftType
 			if castLeftToRight {
-				toType = rightPhysType
+				toType = rightType
 			}
-			tempVec := o.scratch.tempVecByType[toType]
+			tempVec := o.scratch.tempVecByType[typeconv.FromColumnType(&toType)]
 			if tempVec == nil {
-				tempVec = o.unlimitedAllocator.NewMemColumn(toType, coldata.BatchSize())
-				o.scratch.tempVecByType[toType] = tempVec
+				// TODO(yuzefovich): this will need to be changed once we fully
+				// support coltypes.Datum.
+				tempVec = o.unlimitedAllocator.NewMemColumn(&toType, coldata.BatchSize())
+				o.scratch.tempVecByType[typeconv.FromColumnType(&toType)] = tempVec
 			} else {
 				tempVec.Nulls().UnsetNulls()
 			}
 			if castLeftToRight {
-				cast(leftPhysType, rightPhysType, lVec, tempVec, o.proberState.lBatch.Length(), lSel)
+				cast(&leftType, &rightType, lVec, tempVec, o.proberState.lBatch.Length(), lSel)
 				lVec = tempVec
-				colType = o.right.sourceTypes[rightColIdx]
+				typ = rightType
 			} else {
-				cast(rightPhysType, leftPhysType, rVec, tempVec, o.proberState.rBatch.Length(), rSel)
+				cast(&rightType, &leftType, rVec, tempVec, o.proberState.rBatch.Length(), rSel)
 				rVec = tempVec
 			}
 		}
@@ -623,7 +629,7 @@ EqLoop:
 // the main body of buildLeftGroupsFromBatch()).
 func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool) { // */}}
 	// {{define "leftSwitch"}}
-	switch colType {
+	switch typeconv.FromColumnType(&typ) {
 	// {{ range $.Global.MJOverloads }}
 	case _TYPES_T:
 		var srcCol _GOTYPESLICE
@@ -710,7 +716,7 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 		o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 	// {{end}}
 	default:
-		vecerror.InternalError(fmt.Sprintf("unhandled type %d", colType))
+		vecerror.InternalError(fmt.Sprintf(" unhandled type %s", &typ))
 	}
 	// {{end}}
 	// {{/*
@@ -750,7 +756,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftGroupsFromBatch(
 		func() {
 			// Loop over every column.
 		LeftColLoop:
-			for colIdx, colType := range input.sourceTypes {
+			for colIdx, typ := range input.sourceTypes {
 				outStartIdx := destStartIdx
 				out := o.output.ColVec(colIdx)
 				var src coldata.Vec
@@ -813,11 +819,11 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftBufferedGroup(
 				var updatedDestStartIdx int
 				// Loop over every column.
 			LeftColLoop:
-				for colIdx, colType := range input.sourceTypes {
+				for colIdx, typ := range input.sourceTypes {
 					outStartIdx := destStartIdx
 					src := currentBatch.ColVec(colIdx)
 					out := o.output.ColVec(colIdx)
-					switch colType {
+					switch typeconv.FromColumnType(&typ) {
 					// {{ range $.MJOverloads }}
 					case _TYPES_T:
 						srcCol := src._TemplateType()
@@ -870,7 +876,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftBufferedGroup(
 						}
 					// {{end}}
 					default:
-						vecerror.InternalError(fmt.Sprintf("unhandled type %d", colType))
+						vecerror.InternalError(fmt.Sprintf("  unhandled type %s", &typ))
 					}
 					updatedDestStartIdx = outStartIdx
 					o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -910,7 +916,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftBufferedGroup(
 func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool) { // */}}
 	// {{define "rightSwitch"}}
 
-	switch colType {
+	switch colType := typeconv.FromColumnType(&typ); colType {
 	// {{range $.Global.MJOverloads }}
 	case _TYPES_T:
 		var srcCol _GOTYPESLICE
@@ -1004,7 +1010,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 		o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 	// {{end}}
 	default:
-		vecerror.InternalError(fmt.Sprintf("unhandled type %d", colType))
+		vecerror.InternalError(fmt.Sprintf(" unhandled type %s", &typ))
 	}
 	// {{end}}
 	// {{/*
@@ -1043,7 +1049,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightGroupsFromBatch(
 		func() {
 			// Loop over every column.
 		RightColLoop:
-			for colIdx, colType := range input.sourceTypes {
+			for colIdx, typ := range input.sourceTypes {
 				outStartIdx := destStartIdx
 				out := o.output.ColVec(colIdx + colOffset)
 				var src coldata.Vec
@@ -1111,10 +1117,10 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightBufferedGroup(
 					}
 
 					// Loop over every column.
-					for colIdx, colType := range input.sourceTypes {
+					for colIdx, typ := range input.sourceTypes {
 						out := o.output.ColVec(colIdx + colOffset)
 						src := currentBatch.ColVec(colIdx)
-						switch colType {
+						switch colType := typeconv.FromColumnType(&typ); colType {
 						// {{range $.MJOverloads }}
 						case _TYPES_T:
 							srcCol := src._TemplateType()
@@ -1144,7 +1150,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightBufferedGroup(
 							}
 							// {{end}}
 						default:
-							vecerror.InternalError(fmt.Sprintf("unhandled type %d", colType))
+							vecerror.InternalError(fmt.Sprintf("  unhandled type %s", &typ))
 						}
 					}
 					outStartIdx += toAppend

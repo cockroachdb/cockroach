@@ -17,10 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -189,7 +191,7 @@ type mergeJoinInput struct {
 
 	// sourceTypes specify the types of the input columns of the source table for
 	// the merge joiner.
-	sourceTypes []coltypes.T
+	sourceTypes []types.T
 
 	// The distincter is used in the finishGroup phase, and is used only to
 	// determine where the current group ends, in the case that the group ended
@@ -229,8 +231,8 @@ func newMergeJoinOp(
 	joinType sqlbase.JoinType,
 	left colbase.Operator,
 	right colbase.Operator,
-	leftTypes []coltypes.T,
-	rightTypes []coltypes.T,
+	leftTypes []types.T,
+	rightTypes []types.T,
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
@@ -292,8 +294,8 @@ func newMergeJoinBase(
 	joinType sqlbase.JoinType,
 	left colbase.Operator,
 	right colbase.Operator,
-	leftTypes []coltypes.T,
-	rightTypes []coltypes.T,
+	leftTypes []types.T,
+	rightTypes []types.T,
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
@@ -433,7 +435,7 @@ func (o *mergeJoinBase) Init() {
 }
 
 func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
-	outputTypes := append([]coltypes.T{}, o.left.sourceTypes...)
+	outputTypes := append([]types.T{}, o.left.sourceTypes...)
 	if o.joinType != sqlbase.LeftSemiJoin && o.joinType != sqlbase.LeftAntiJoin {
 		outputTypes = append(outputTypes, o.right.sourceTypes...)
 	}
@@ -454,16 +456,16 @@ func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
 		o.diskQueueCfg, o.fdSemaphore, coldata.BatchSize(), o.diskAcc,
 	)
 	o.proberState.lBufferedGroup.firstTuple = make([]coldata.Vec, len(o.left.sourceTypes))
-	for colIdx, colType := range o.left.sourceTypes {
-		o.proberState.lBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(colType, 1)
+	for colIdx, typ := range o.left.sourceTypes {
+		o.proberState.lBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(&typ, 1)
 	}
 	o.proberState.rBufferedGroup.spillingQueue = newRewindableSpillingQueue(
 		o.unlimitedAllocator, o.right.sourceTypes, o.memoryLimit,
 		o.diskQueueCfg, o.fdSemaphore, coldata.BatchSize(), o.diskAcc,
 	)
 	o.proberState.rBufferedGroup.firstTuple = make([]coldata.Vec, len(o.right.sourceTypes))
-	for colIdx, colType := range o.right.sourceTypes {
-		o.proberState.rBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(colType, 1)
+	for colIdx, typ := range o.right.sourceTypes {
+		o.proberState.rBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(&typ, 1)
 	}
 
 	o.builderState.lGroups = make([]group, 1)
@@ -496,7 +498,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	var (
 		bufferedGroup *mjBufferedGroup
 		scratchBatch  coldata.Batch
-		sourceTypes   []coltypes.T
+		sourceTypes   []types.T
 	)
 	if input == &o.left {
 		sourceTypes = o.left.sourceTypes
@@ -520,11 +522,11 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	scratchBatch = o.unlimitedAllocator.NewMemBatchWithSize(sourceTypes, groupLength)
 	if bufferedGroup.numTuples == 0 {
 		o.unlimitedAllocator.PerformOperation(bufferedGroup.firstTuple, func() {
-			for colIdx, colType := range sourceTypes {
+			for colIdx, typ := range sourceTypes {
 				bufferedGroup.firstTuple[colIdx].Copy(
 					coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
-							ColType:     colType,
+							ColType:     typeconv.FromColumnType(&typ),
 							Src:         batch.ColVec(colIdx),
 							Sel:         sel,
 							DestIdx:     0,
@@ -539,12 +541,12 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	bufferedGroup.numTuples += groupLength
 
 	o.unlimitedAllocator.PerformOperation(scratchBatch.ColVecs(), func() {
-		for cIdx, cType := range input.sourceTypes {
-			scratchBatch.ColVec(cIdx).Copy(
+		for colIdx, typ := range input.sourceTypes {
+			scratchBatch.ColVec(colIdx).Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
-						ColType:     cType,
-						Src:         batch.ColVec(cIdx),
+						ColType:     typeconv.FromColumnType(&typ),
+						Src:         batch.ColVec(colIdx),
 						Sel:         sel,
 						DestIdx:     0,
 						SrcStartIdx: groupStartIdx,

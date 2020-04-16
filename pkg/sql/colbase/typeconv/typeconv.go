@@ -70,6 +70,34 @@ func FromColumnTypes(cts []types.T) ([]coltypes.T, error) {
 	return typs, nil
 }
 
+// UnsafeToSQLType converts the given coltype to the logical SQL type. Note
+// that this conversion is lossful since multiple logical types can map to a
+// single coltype, so use this method *only* when such behavior is acceptable.
+func UnsafeToSQLType(t coltypes.T) (*types.T, error) {
+	switch t {
+	case coltypes.Bool:
+		return types.Bool, nil
+	case coltypes.Bytes:
+		return types.Bytes, nil
+	case coltypes.Decimal:
+		return types.Decimal, nil
+	case coltypes.Int16:
+		return types.Int2, nil
+	case coltypes.Int32:
+		return types.Int4, nil
+	case coltypes.Int64:
+		return types.Int, nil
+	case coltypes.Float64:
+		return types.Float, nil
+	case coltypes.Timestamp:
+		return types.Timestamp, nil
+	case coltypes.Interval:
+		return types.Interval, nil
+	default:
+		return nil, errors.Errorf("unsupported coltype %s", t)
+	}
+}
+
 // GetDatumToPhysicalFn returns a function for converting a datum of the given
 // ColumnType to the corresponding Go type.
 func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {

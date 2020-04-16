@@ -16,11 +16,12 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -277,7 +278,7 @@ func newExternalHashJoiner(
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	createReusableDiskBackedSorter func(input colbase.Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (colbase.Operator, error),
+	createReusableDiskBackedSorter func(input colbase.Operator, inputTypes []types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (colbase.Operator, error),
 	numForcedRepartitions int,
 	delegateFDAcquisitions bool,
 	diskAcc *mon.BoundAccount,
@@ -400,7 +401,7 @@ func newExternalHashJoiner(
 	ehj.recursiveScratch.leftBatch = unlimitedAllocator.NewMemBatchNoCols(spec.left.sourceTypes, 0 /* size */)
 	sameSourcesSchema := len(spec.left.sourceTypes) == len(spec.right.sourceTypes)
 	for i, leftType := range spec.left.sourceTypes {
-		if i < len(spec.right.sourceTypes) && leftType != spec.right.sourceTypes[i] {
+		if i < len(spec.right.sourceTypes) && !leftType.Identical(&spec.right.sourceTypes[i]) {
 			sameSourcesSchema = false
 		}
 	}
@@ -460,7 +461,7 @@ func (hj *externalHashJoiner) partitionBatch(
 				for i, colvec := range colVecs {
 					colvec.Copy(coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
-							ColType:   sourceSpec.sourceTypes[i],
+							ColType:   typeconv.FromColumnType(&sourceSpec.sourceTypes[i]),
 							Src:       batch.ColVec(i),
 							Sel:       sel,
 							SrcEndIdx: len(sel),

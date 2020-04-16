@@ -15,10 +15,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // OperatorInitStatus indicates whether Init method has already been called on
@@ -275,14 +275,14 @@ type vectorTypeEnforcer struct {
 	NonExplainable
 
 	allocator *colbase.Allocator
-	typ       coltypes.T
+	typ       *types.T
 	idx       int
 }
 
 var _ colbase.Operator = &vectorTypeEnforcer{}
 
 func newVectorTypeEnforcer(
-	allocator *colbase.Allocator, input colbase.Operator, typ coltypes.T, idx int,
+	allocator *colbase.Allocator, input colbase.Operator, typ *types.T, idx int,
 ) colbase.Operator {
 	return &vectorTypeEnforcer{
 		OneInputNode: NewOneInputNode(input),
@@ -320,13 +320,13 @@ type batchSchemaPrefixEnforcer struct {
 	NonExplainable
 
 	allocator *colbase.Allocator
-	typs      []coltypes.T
+	typs      []types.T
 }
 
 var _ colbase.Operator = &batchSchemaPrefixEnforcer{}
 
 func newBatchSchemaPrefixEnforcer(
-	allocator *colbase.Allocator, input colbase.Operator, typs []coltypes.T,
+	allocator *colbase.Allocator, input colbase.Operator, typs []types.T,
 ) *batchSchemaPrefixEnforcer {
 	return &batchSchemaPrefixEnforcer{
 		OneInputNode: NewOneInputNode(input),
@@ -345,7 +345,7 @@ func (e *batchSchemaPrefixEnforcer) Next(ctx context.Context) coldata.Batch {
 		return b
 	}
 	for i, typ := range e.typs {
-		e.allocator.MaybeAppendColumn(b, typ, i)
+		e.allocator.MaybeAppendColumn(b, &typ, i)
 	}
 	return b
 }

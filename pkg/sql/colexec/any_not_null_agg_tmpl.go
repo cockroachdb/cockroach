@@ -26,15 +26,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
 
-func newAnyNotNullAgg(allocator *colbase.Allocator, t coltypes.T) (aggregateFunc, error) {
-	switch t {
+func newAnyNotNullAgg(allocator *colbase.Allocator, t *types.T) (aggregateFunc, error) {
+	switch typeconv.FromColumnType(t) {
 	// {{range .}}
 	case _TYPES_T:
 		return &anyNotNull_TYPEAgg{allocator: allocator}, nil
@@ -56,6 +58,9 @@ var _ time.Time
 
 // Dummy import to pull in "duration" package.
 var _ duration.Duration
+
+// Dummy import to pull in "types" package.
+var _ types.T
 
 // _GOTYPESLICE is the template Go type slice variable for this operator. It
 // will be replaced by the Go slice representation for each type in coltypes.T, for

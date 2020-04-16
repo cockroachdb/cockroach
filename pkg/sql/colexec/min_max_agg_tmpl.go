@@ -28,11 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
@@ -58,6 +60,9 @@ var _ tree.Datum
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
 
+// Dummy import to pull in "coltypes" package.
+var _ = coltypes.T
+
 // _GOTYPESLICE is the template Go type slice variable for this operator. It
 // will be replaced by the Go slice representation for each type in coltypes.T, for
 // example []int64 for coltypes.Int64.
@@ -77,8 +82,8 @@ func _ASSIGN_CMP(_, _, _ string) bool {
 // {{/* Capture the aggregation name so we can use it in the inner loop. */}}
 // {{$agg := .AggNameLower}}
 
-func new_AGG_TITLEAgg(allocator *colbase.Allocator, t coltypes.T) (aggregateFunc, error) {
-	switch t {
+func new_AGG_TITLEAgg(allocator *colbase.Allocator, t *types.T) (aggregateFunc, error) {
+	switch typeconv.FromColumnType(t) {
 	// {{range .Overloads}}
 	case _TYPES_T:
 		return &_AGG_TYPEAgg{allocator: allocator}, nil
