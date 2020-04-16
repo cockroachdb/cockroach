@@ -10,10 +10,11 @@
 
 import { Button, TimePicker, notification, Calendar, Icon } from "antd";
 import moment, { Moment } from "moment";
-import { TimeWindow } from "oss/src/redux/timewindow";
+import { TimeWindow } from "src/redux/timewindow";
 import { trackTimeScaleSelected } from "src/util/analytics";
 import React from "react";
 import "./range.styl";
+import { arrowRenderer } from "src/views/shared/components/dropdown";
 
 export enum DateTypes {
   DATE_FROM,
@@ -38,6 +39,8 @@ interface RangeSelectProps {
   options: RangeOption[];
   onChange: (arg0: RangeOption) => void;
   changeDate: (arg0: moment.Moment, arg1: DateTypes) => void;
+  onOpened?: () => void;
+  onClosed?: () => void;
   value: TimeWindow;
   selected: Selected;
   useTimeRange: boolean;
@@ -126,7 +129,16 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
 
   toggleCustomPicker = (custom: boolean) => () => this.setState({ custom }, this.clearPanelValues);
 
-  toggleDropDown = () => this.setState({ opened: !this.state.opened }, this.toggleCustomPicker(this.state.opened ));
+  toggleDropDown = () => {
+    this.setState({ opened: !this.state.opened }, () => {
+      this.toggleCustomPicker(this.state.opened)();
+      if (this.state.opened) {
+        this.props.onOpened();
+      } else {
+        this.props.onClosed();
+      }
+    });
+  }
 
   handleOptionButtonOnClick = (option: RangeOption) => () => {
     trackTimeScaleSelected(option.label);
@@ -302,13 +314,6 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     );
   }
 
-  arrowRenderer = (isOpen: boolean) => {
-    if (!isOpen) {
-      return <span><Icon type="caret-up" /></span>;
-    }
-    return <span className="active"><Icon type="caret-down" /></span>;
-  }
-
   render() {
     const { opened, width, custom } = this.state;
     const selectedValue = this.findSelectedValue();
@@ -328,7 +333,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
             </span>
             <div className="Select-control">
               <div className="Select-arrow-zone">
-                {this.arrowRenderer(opened)}
+                {arrowRenderer({ isOpen: opened })}
               </div>
             </div>
           </div>

@@ -24,6 +24,7 @@ import TimeFrameControls from "../../components/controls";
 import RangeSelect, { DateTypes } from "../../components/range";
 import "./timescale.styl";
 import { Divider } from "antd";
+import classNames from "classnames";
 
 interface TimeScaleDropdownProps extends RouteComponentProps {
   currentScale: timewindow.TimeScale;
@@ -64,6 +65,10 @@ export const getTimeLabel = (currentWindow?: timewindow.TimeWindow, windowSize?:
 // TimeScaleDropdown is the dropdown that allows users to select the time range
 // for graphs.
 class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
+  state = {
+    is_opened: false,
+  };
+
   changeSettings = (newTimescaleKey: DropdownOption) => {
     const newSettings = timewindow.availableTimeScales[newTimescaleKey.value];
     newSettings.windowEnd = null;
@@ -263,6 +268,14 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     return disabledArrows;
   }
 
+  onOpened = () => {
+    this.setState({ is_opened: true });
+  }
+
+  onClosed = () => {
+    this.setState({ is_opened: false });
+  }
+
   render() {
     const { useTimeRange, currentScale, currentWindow } = this.props;
     return (
@@ -273,9 +286,12 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
           options={[]}
           selected={currentScale.key}
           onChange={this.changeSettings}
+          className={classNames({ "dropdown__focused": this.state.is_opened })}
           isTimeRange
           content={
             <RangeSelect
+              onOpened={this.onOpened}
+              onClosed={this.onClosed}
               value={currentWindow}
               useTimeRange={useTimeRange}
               selected={this.getTimeRangeTitle()}

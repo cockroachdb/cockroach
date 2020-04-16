@@ -18,7 +18,7 @@ import "./dropdown.styl";
 import {leftArrow, rightArrow} from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
 import ReactSelectClass from "react-select";
-import { Icon } from "antd";
+import { CaretDown } from "oss/src/components/icon/caretDown";
 
 export interface DropdownOption {
   value: string;
@@ -42,12 +42,19 @@ interface DropdownOwnProps {
   content?: any;
   isTimeRange?: boolean;
   className?: string;
+  type?: "primary" | "secondary";
 }
+
+export const arrowRenderer = ({ isOpen }: { isOpen: boolean }) => <span className={classNames("caret-down", { "active": isOpen })}><CaretDown /></span>;
 
 /**
  * Dropdown component that uses the URL query string for state.
  */
 export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
+  state = {
+    is_focused: false,
+  };
+
   dropdownRef: React.RefObject<HTMLDivElement> = React.createRef();
   titleRef: React.RefObject<HTMLDivElement> = React.createRef();
   selectRef: React.RefObject<ReactSelectClass> = React.createRef();
@@ -71,15 +78,18 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
     }
   }
 
-  arrowRenderer = () => <span className="active"><Icon type="caret-up" /></span>;
+  onFocus = () => this.setState({ is_focused: true });
+
+  onClose = () => this.setState({ is_focused: false });
 
   render() {
-    const { selected, options, onChange, onArrowClick, disabledArrows, content, isTimeRange } = this.props;
+    const { selected, options, onChange, onArrowClick, disabledArrows, content, isTimeRange, type = "secondary" } = this.props;
 
     const className = classNames(
       "dropdown",
+      `dropdown--type-${type}`,
       isTimeRange ? "_range" : "",
-      { "dropdown--side-arrows": !_.isNil(onArrowClick) },
+      { "dropdown--side-arrows": !_.isNil(onArrowClick), "dropdown__focused": this.state.is_focused },
       this.props.className,
     );
     const leftClassName = classNames(
@@ -105,12 +115,14 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
       </span>
       {content ? content : <Select
         className="dropdown__select"
-        arrowRenderer={this.arrowRenderer}
+        arrowRenderer={arrowRenderer}
         clearable={false}
         searchable={false}
         options={options}
         value={selected}
         onChange={onChange}
+        onFocus={this.onFocus}
+        onClose={this.onClose}
         ref={this.selectRef}
       />}
       <span
