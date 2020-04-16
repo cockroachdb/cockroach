@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -196,6 +197,7 @@ var virtualSchemas = map[sqlbase.ID]virtualSchema{
 // on an Executor.
 type VirtualSchemaHolder struct {
 	entries      map[string]virtualSchemaEntry
+	defsByID     map[sqlbase.ID]*virtualDefEntry
 	orderedNames []string
 }
 
@@ -311,6 +313,7 @@ func NewVirtualSchemaHolder(
 	vs := &VirtualSchemaHolder{
 		entries:      make(map[string]virtualSchemaEntry, len(virtualSchemas)),
 		orderedNames: make([]string, len(virtualSchemas)),
+		defsByID:     make(map[sqlbase.ID]*virtualDefEntry, math.MaxUint32-sqlbase.MinVirtualID),
 	}
 
 	order := 0
@@ -334,12 +337,14 @@ func NewVirtualSchemaHolder(
 				}
 			}
 
-			defs[tableDesc.Name] = virtualDefEntry{
+			entry := virtualDefEntry{
 				virtualDef:                 def,
 				desc:                       &tableDesc,
 				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
 				comment:                    def.getComment(),
 			}
+			defs[tableDesc.Name] = entry
+			vs.defsByID[tableDesc.ID] = &entry
 			orderedDefNames = append(orderedDefNames, tableDesc.Name)
 		}
 
@@ -410,11 +415,20 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtual
 	return virtualDefEntry{}, nil
 }
 
+func (vs *VirtualSchemaHolder) getVirtualTableEntryByID(id sqlbase.ID) (virtualDefEntry, error) {
+	entry, ok := vs.defsByID[id]
+	if !ok {
+		return virtualDefEntry{}, sqlbase.ErrDescriptorNotFound
+	}
+	return *entry, nil
+}
+
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
 	getVirtualTableDesc(tn *tree.TableName) (*sqlbase.TableDescriptor, error)
 	getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool)
 	getVirtualTableEntry(tn *tree.TableName) (virtualDefEntry, error)
+	getVirtualTableEntryByID(id sqlbase.ID) (virtualDefEntry, error)
 	getEntries() map[string]virtualSchemaEntry
 	getSchemaNames() []string
 }
