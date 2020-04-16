@@ -1655,12 +1655,31 @@ func (ds *DistSender) sendToReplicas(
 			// set the ambiguous commit flag (exceptions are captured in
 			// the grpcutil.RequestDidNotStart function).
 			//
-			// We retry ambiguous commit batches to avoid returning the
-			// unrecoverable AmbiguousResultError. This is safe because
-			// repeating an already-successfully applied batch is
-			// guaranteed to return an error. If the original attempt merely timed out
-			// or was lost, then the batch will succeed and we can be assured the
-			// commit was applied just once.
+			// We retry requests in order to avoid returning errors (in particular,
+			// AmbiguousResultError). Retrying the batch will either:
+			// a) succeed if the request had not been evaluated the first time.
+			// b) succeed if the request also succeeded the first time, but is
+			//    idempotent (i.e. it is internal to a txn, without a commit in the
+			//    batch).
+			// c) fail if it succeeded the first time and the request is not
+			//    idempotent. In the case of EndTxn requests, this is ensured by the
+			//    tombstone keys in the timestamp cache. The retry failing does not
+			//    prove that the request did not succeed the first time around, so we
+			//    can't claim success (and even if we could claim success, we still
+			//    wouldn't have the complete result of the successful evaluation).
+			//
+			// Case a) is great - the retry made the request succeed. Case b) is also
+			// good; due to idempotency we managed to swallow a communication error.
+			// Case c) is not great - we'll end up returning an error even though the
+			// request might have succeeded (an AmbiguousResultError if withCommit is
+			// set).
+			//
+			// TODO(andrei): Case c) is broken for non-transactional requests: nothing
+			// prevents them from double evaluation. This can result in, for example,
+			// an increment applying twice, ormore subtle problems like a blind write
+			// evaluating twice, overwriting another unrelated write that fell
+			// in-between.
+			//
 			if withCommit && !grpcutil.RequestDidNotStart(err) {
 				ambiguousError = err
 			}
