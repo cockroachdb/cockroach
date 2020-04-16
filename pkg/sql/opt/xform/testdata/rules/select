@@ -56,19 +56,6 @@ CREATE TABLE e
 ----
 
 exec-ddl
-CREATE TABLE f
-(
-    k INT,
-    j INT,
-    u INT,
-    v INT,
-    CONSTRAINT pk PRIMARY KEY (k, j),
-    INDEX u(u),
-    INDEX v(v)
-)
-----
-
-exec-ddl
 CREATE TABLE no_explicit_primary_key
 (
     k INT,
@@ -1068,88 +1055,70 @@ SELECT k FROM d WHERE u = 1 OR v = 1
 project
  ├── columns: k:1!null
  ├── key: (1)
- └── distinct-on
+ └── union
       ├── columns: k:1!null u:2 v:3
-      ├── grouping columns: k:1!null
+      ├── left columns: k:1!null u:2 v:3
+      ├── right columns: k:5 u:6 v:7
       ├── key: (1)
       ├── fd: (1)-->(2,3)
-      ├── union-all
-      │    ├── columns: k:1!null u:2 v:3
-      │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
-      │    ├── index-join d
-      │    │    ├── columns: k:1!null u:2!null v:3
-      │    │    ├── key: (1)
-      │    │    ├── fd: ()-->(2), (1)-->(3)
-      │    │    └── scan d@u
-      │    │         ├── columns: k:1!null u:2!null
-      │    │         ├── constraint: /2/1: [/1 - /1]
-      │    │         ├── key: (1)
-      │    │         └── fd: ()-->(2)
-      │    └── index-join d
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: ()-->(7), (5)-->(6)
-      │         └── scan d@v
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/5: [/1 - /1]
-      │              ├── key: (5)
-      │              └── fd: ()-->(7)
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           └── const-agg [as=v:3, outer=(3)]
-                └── v:3
+      ├── index-join d
+      │    ├── columns: k:1!null u:2!null v:3
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2), (1)-->(3)
+      │    └── scan d@u
+      │         ├── columns: k:1!null u:2!null
+      │         ├── constraint: /2/1: [/1 - /1]
+      │         ├── key: (1)
+      │         └── fd: ()-->(2)
+      └── index-join d
+           ├── columns: k:5!null u:6 v:7!null
+           ├── key: (5)
+           ├── fd: ()-->(7), (5)-->(6)
+           └── scan d@v
+                ├── columns: k:5!null v:7!null
+                ├── constraint: /7/5: [/1 - /1]
+                ├── key: (5)
+                └── fd: ()-->(7)
 
 opt expect=SplitDisjunction
 SELECT * FROM d WHERE w = 1 AND (u = 1 OR v = 1)
 ----
-distinct-on
+union
  ├── columns: k:1!null u:2 v:3 w:4!null
- ├── grouping columns: k:1!null
+ ├── left columns: k:1!null u:2 v:3 w:4!null
+ ├── right columns: k:5 u:6 v:7 w:8
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3)
- ├── union-all
- │    ├── columns: k:1!null u:2 v:3 w:4!null
- │    ├── left columns: k:1!null u:2 v:3 w:4!null
- │    ├── right columns: k:5 u:6 v:7 w:8
- │    ├── select
- │    │    ├── columns: k:1!null u:2!null v:3 w:4!null
+ ├── select
+ │    ├── columns: k:1!null u:2!null v:3 w:4!null
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2,4), (1)-->(3)
+ │    ├── index-join d
+ │    │    ├── columns: k:1!null u:2 v:3 w:4
  │    │    ├── key: (1)
- │    │    ├── fd: ()-->(2,4), (1)-->(3)
- │    │    ├── index-join d
- │    │    │    ├── columns: k:1!null u:2 v:3 w:4
- │    │    │    ├── key: (1)
- │    │    │    ├── fd: ()-->(2), (1)-->(3,4)
- │    │    │    └── scan d@u
- │    │    │         ├── columns: k:1!null u:2!null
- │    │    │         ├── constraint: /2/1: [/1 - /1]
- │    │    │         ├── key: (1)
- │    │    │         └── fd: ()-->(2)
- │    │    └── filters
- │    │         └── w:4 = 1 [outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
- │    └── select
- │         ├── columns: k:5!null u:6 v:7!null w:8!null
- │         ├── key: (5)
- │         ├── fd: ()-->(7,8), (5)-->(6)
- │         ├── index-join d
- │         │    ├── columns: k:5!null u:6 v:7 w:8
- │         │    ├── key: (5)
- │         │    ├── fd: ()-->(7), (5)-->(6,8)
- │         │    └── scan d@v
- │         │         ├── columns: k:5!null v:7!null
- │         │         ├── constraint: /7/5: [/1 - /1]
- │         │         ├── key: (5)
- │         │         └── fd: ()-->(7)
- │         └── filters
- │              └── w:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
- └── aggregations
-      ├── const-agg [as=u:2, outer=(2)]
-      │    └── u:2
-      ├── const-agg [as=v:3, outer=(3)]
-      │    └── v:3
-      └── const-agg [as=w:4, outer=(4)]
-           └── w:4
+ │    │    ├── fd: ()-->(2), (1)-->(3,4)
+ │    │    └── scan d@u
+ │    │         ├── columns: k:1!null u:2!null
+ │    │         ├── constraint: /2/1: [/1 - /1]
+ │    │         ├── key: (1)
+ │    │         └── fd: ()-->(2)
+ │    └── filters
+ │         └── w:4 = 1 [outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+ └── select
+      ├── columns: k:5!null u:6 v:7!null w:8!null
+      ├── key: (5)
+      ├── fd: ()-->(7,8), (5)-->(6)
+      ├── index-join d
+      │    ├── columns: k:5!null u:6 v:7 w:8
+      │    ├── key: (5)
+      │    ├── fd: ()-->(7), (5)-->(6,8)
+      │    └── scan d@v
+      │         ├── columns: k:5!null v:7!null
+      │         ├── constraint: /7/5: [/1 - /1]
+      │         ├── key: (5)
+      │         └── fd: ()-->(7)
+      └── filters
+           └── w:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
 
 opt expect=SplitDisjunction
 SELECT k FROM d WHERE (u = 1 OR v = 2) AND (u = 10 OR v = 20)
@@ -1157,40 +1126,32 @@ SELECT k FROM d WHERE (u = 1 OR v = 2) AND (u = 10 OR v = 20)
 project
  ├── columns: k:1!null
  ├── key: (1)
- └── distinct-on
+ └── union
       ├── columns: k:1!null u:2 v:3
-      ├── grouping columns: k:1!null
+      ├── left columns: k:1!null u:2 v:3
+      ├── right columns: k:5 u:6 v:7
       ├── key: (1)
       ├── fd: (1)-->(2,3)
-      ├── union-all
+      ├── inner-join (zigzag d@u d@v)
       │    ├── columns: k:1!null u:2!null v:3!null
-      │    ├── left columns: k:1!null u:2!null v:3!null
-      │    ├── right columns: k:5 u:6 v:7
-      │    ├── inner-join (zigzag d@u d@v)
-      │    │    ├── columns: k:1!null u:2!null v:3!null
-      │    │    ├── eq columns: [1] = [1]
-      │    │    ├── left fixed columns: [2] = [1]
-      │    │    ├── right fixed columns: [3] = [20]
-      │    │    ├── key: (1)
-      │    │    ├── fd: ()-->(2,3)
-      │    │    └── filters
-      │    │         ├── u:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-      │    │         └── v:3 = 20 [outer=(3), constraints=(/3: [/20 - /20]; tight), fd=()-->(3)]
-      │    └── inner-join (zigzag d@u d@v)
-      │         ├── columns: k:5!null u:6!null v:7!null
-      │         ├── eq columns: [5] = [5]
-      │         ├── left fixed columns: [6] = [10]
-      │         ├── right fixed columns: [7] = [2]
-      │         ├── key: (5)
-      │         ├── fd: ()-->(6,7)
-      │         └── filters
-      │              ├── v:7 = 2 [outer=(7), constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
-      │              └── u:6 = 10 [outer=(6), constraints=(/6: [/10 - /10]; tight), fd=()-->(6)]
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           └── const-agg [as=v:3, outer=(3)]
-                └── v:3
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [2] = [1]
+      │    ├── right fixed columns: [3] = [20]
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2,3)
+      │    └── filters
+      │         ├── u:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      │         └── v:3 = 20 [outer=(3), constraints=(/3: [/20 - /20]; tight), fd=()-->(3)]
+      └── inner-join (zigzag d@u d@v)
+           ├── columns: k:5!null u:6!null v:7!null
+           ├── eq columns: [5] = [5]
+           ├── left fixed columns: [6] = [10]
+           ├── right fixed columns: [7] = [2]
+           ├── key: (5)
+           ├── fd: ()-->(6,7)
+           └── filters
+                ├── v:7 = 2 [outer=(7), constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
+                └── u:6 = 10 [outer=(6), constraints=(/6: [/10 - /10]; tight), fd=()-->(6)]
 
 opt expect=SplitDisjunction
 SELECT count(k) FROM d WHERE u = 1 OR v = 1
@@ -1200,81 +1161,33 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
- ├── distinct-on
+ ├── union
  │    ├── columns: k:1!null u:2 v:3
- │    ├── grouping columns: k:1!null
+ │    ├── left columns: k:1!null u:2 v:3
+ │    ├── right columns: k:6 u:7 v:8
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
- │    ├── union-all
- │    │    ├── columns: k:1!null u:2 v:3
- │    │    ├── left columns: k:1!null u:2 v:3
- │    │    ├── right columns: k:6 u:7 v:8
- │    │    ├── index-join d
- │    │    │    ├── columns: k:1!null u:2!null v:3
- │    │    │    ├── key: (1)
- │    │    │    ├── fd: ()-->(2), (1)-->(3)
- │    │    │    └── scan d@u
- │    │    │         ├── columns: k:1!null u:2!null
- │    │    │         ├── constraint: /2/1: [/1 - /1]
- │    │    │         ├── key: (1)
- │    │    │         └── fd: ()-->(2)
- │    │    └── index-join d
- │    │         ├── columns: k:6!null u:7 v:8!null
- │    │         ├── key: (6)
- │    │         ├── fd: ()-->(8), (6)-->(7)
- │    │         └── scan d@v
- │    │              ├── columns: k:6!null v:8!null
- │    │              ├── constraint: /8/6: [/1 - /1]
- │    │              ├── key: (6)
- │    │              └── fd: ()-->(8)
- │    └── aggregations
- │         ├── const-agg [as=u:2, outer=(2)]
- │         │    └── u:2
- │         └── const-agg [as=v:3, outer=(3)]
- │              └── v:3
+ │    ├── index-join d
+ │    │    ├── columns: k:1!null u:2!null v:3
+ │    │    ├── key: (1)
+ │    │    ├── fd: ()-->(2), (1)-->(3)
+ │    │    └── scan d@u
+ │    │         ├── columns: k:1!null u:2!null
+ │    │         ├── constraint: /2/1: [/1 - /1]
+ │    │         ├── key: (1)
+ │    │         └── fd: ()-->(2)
+ │    └── index-join d
+ │         ├── columns: k:6!null u:7 v:8!null
+ │         ├── key: (6)
+ │         ├── fd: ()-->(8), (6)-->(7)
+ │         └── scan d@v
+ │              ├── columns: k:6!null v:8!null
+ │              ├── constraint: /8/6: [/1 - /1]
+ │              ├── key: (6)
+ │              └── fd: ()-->(8)
  └── aggregations
       └── count [as=count:5, outer=(1)]
            └── k:1
-
-# Multi-column primary key.
-opt expect=SplitDisjunction
-SELECT k, j FROM f WHERE u = 1 OR v = 2
-----
-project
- ├── columns: k:1!null j:2!null
- ├── key: (1,2)
- └── distinct-on
-      ├── columns: k:1!null j:2!null u:3 v:4
-      ├── grouping columns: k:1!null j:2!null
-      ├── key: (1,2)
-      ├── fd: (1,2)-->(3,4)
-      ├── union-all
-      │    ├── columns: k:1!null j:2!null u:3 v:4
-      │    ├── left columns: k:1!null j:2!null u:3 v:4
-      │    ├── right columns: k:5 j:6 u:7 v:8
-      │    ├── index-join f
-      │    │    ├── columns: k:1!null j:2!null u:3!null v:4
-      │    │    ├── key: (1,2)
-      │    │    ├── fd: ()-->(3), (1,2)-->(4)
-      │    │    └── scan f@u
-      │    │         ├── columns: k:1!null j:2!null u:3!null
-      │    │         ├── constraint: /3/1/2: [/1 - /1]
-      │    │         ├── key: (1,2)
-      │    │         └── fd: ()-->(3)
-      │    └── index-join f
-      │         ├── columns: k:5!null j:6!null u:7 v:8!null
-      │         ├── key: (5,6)
-      │         ├── fd: ()-->(8), (5,6)-->(7)
-      │         └── scan f@v
-      │              ├── columns: k:5!null j:6!null v:8!null
-      │              ├── constraint: /8/5/6: [/2 - /2]
-      │              ├── key: (5,6)
-      │              └── fd: ()-->(8)
-      └── aggregations
-           ├── const-agg [as=u:3, outer=(3)]
-           │    └── u:3
-           └── const-agg [as=v:4, outer=(4)]
-                └── v:4
 
 # Don't expand INs to many ORs.
 opt expect=SplitDisjunction
@@ -1283,38 +1196,30 @@ SELECT k FROM d WHERE u IN (1, 2, 3, 4) OR v IN (5, 6, 7, 8)
 project
  ├── columns: k:1!null
  ├── key: (1)
- └── distinct-on
+ └── union
       ├── columns: k:1!null u:2 v:3
-      ├── grouping columns: k:1!null
+      ├── left columns: k:1!null u:2 v:3
+      ├── right columns: k:5 u:6 v:7
       ├── key: (1)
       ├── fd: (1)-->(2,3)
-      ├── union-all
-      │    ├── columns: k:1!null u:2 v:3
-      │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
-      │    ├── index-join d
-      │    │    ├── columns: k:1!null u:2!null v:3
-      │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2,3)
-      │    │    └── scan d@u
-      │    │         ├── columns: k:1!null u:2!null
-      │    │         ├── constraint: /2/1: [/1 - /4]
-      │    │         ├── key: (1)
-      │    │         └── fd: (1)-->(2)
-      │    └── index-join d
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: (5)-->(6,7)
-      │         └── scan d@v
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/5: [/5 - /8]
-      │              ├── key: (5)
-      │              └── fd: (5)-->(7)
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           └── const-agg [as=v:3, outer=(3)]
-                └── v:3
+      ├── index-join d
+      │    ├── columns: k:1!null u:2!null v:3
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── scan d@u
+      │         ├── columns: k:1!null u:2!null
+      │         ├── constraint: /2/1: [/1 - /4]
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2)
+      └── index-join d
+           ├── columns: k:5!null u:6 v:7!null
+           ├── key: (5)
+           ├── fd: (5)-->(6,7)
+           └── scan d@v
+                ├── columns: k:5!null v:7!null
+                ├── constraint: /7/5: [/5 - /8]
+                ├── key: (5)
+                └── fd: (5)-->(7)
 
 # Uncorrelated subquery.
 opt expect=SplitDisjunction
@@ -1323,60 +1228,52 @@ SELECT k FROM d WHERE (u = 1 OR v = 1) AND EXISTS (SELECT u, v FROM a)
 project
  ├── columns: k:1!null
  ├── key: (1)
- └── distinct-on
+ └── union
       ├── columns: d.k:1!null d.u:2 d.v:3
-      ├── grouping columns: d.k:1!null
+      ├── left columns: d.k:1!null d.u:2 d.v:3
+      ├── right columns: d.k:8 d.u:9 d.v:10
       ├── key: (1)
       ├── fd: (1)-->(2,3)
-      ├── union-all
-      │    ├── columns: d.k:1!null d.u:2 d.v:3
-      │    ├── left columns: d.k:1!null d.u:2 d.v:3
-      │    ├── right columns: d.k:8 d.u:9 d.v:10
-      │    ├── index-join d
-      │    │    ├── columns: d.k:1!null d.u:2!null d.v:3
-      │    │    ├── key: (1)
-      │    │    ├── fd: ()-->(2), (1)-->(3)
-      │    │    └── select
-      │    │         ├── columns: d.k:1!null d.u:2!null
-      │    │         ├── key: (1)
-      │    │         ├── fd: ()-->(2)
-      │    │         ├── scan d@u
-      │    │         │    ├── columns: d.k:1!null d.u:2!null
-      │    │         │    ├── constraint: /2/1: [/1 - /1]
-      │    │         │    ├── key: (1)
-      │    │         │    └── fd: ()-->(2)
-      │    │         └── filters
-      │    │              └── exists [subquery]
-      │    │                   └── scan a
-      │    │                        ├── columns: a.u:6 a.v:7
-      │    │                        ├── limit: 1
-      │    │                        ├── key: ()
-      │    │                        └── fd: ()-->(6,7)
-      │    └── index-join d
-      │         ├── columns: d.k:8!null d.u:9 d.v:10!null
-      │         ├── key: (8)
-      │         ├── fd: ()-->(10), (8)-->(9)
-      │         └── select
-      │              ├── columns: d.k:8!null d.v:10!null
-      │              ├── key: (8)
-      │              ├── fd: ()-->(10)
-      │              ├── scan d@v
-      │              │    ├── columns: d.k:8!null d.v:10!null
-      │              │    ├── constraint: /10/8: [/1 - /1]
-      │              │    ├── key: (8)
-      │              │    └── fd: ()-->(10)
-      │              └── filters
-      │                   └── exists [subquery]
-      │                        └── scan a
-      │                             ├── columns: a.u:6 a.v:7
-      │                             ├── limit: 1
-      │                             ├── key: ()
-      │                             └── fd: ()-->(6,7)
-      └── aggregations
-           ├── const-agg [as=d.u:2, outer=(2)]
-           │    └── d.u:2
-           └── const-agg [as=d.v:3, outer=(3)]
-                └── d.v:3
+      ├── index-join d
+      │    ├── columns: d.k:1!null d.u:2!null d.v:3
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2), (1)-->(3)
+      │    └── select
+      │         ├── columns: d.k:1!null d.u:2!null
+      │         ├── key: (1)
+      │         ├── fd: ()-->(2)
+      │         ├── scan d@u
+      │         │    ├── columns: d.k:1!null d.u:2!null
+      │         │    ├── constraint: /2/1: [/1 - /1]
+      │         │    ├── key: (1)
+      │         │    └── fd: ()-->(2)
+      │         └── filters
+      │              └── exists [subquery]
+      │                   └── scan a
+      │                        ├── columns: a.u:6 a.v:7
+      │                        ├── limit: 1
+      │                        ├── key: ()
+      │                        └── fd: ()-->(6,7)
+      └── index-join d
+           ├── columns: d.k:8!null d.u:9 d.v:10!null
+           ├── key: (8)
+           ├── fd: ()-->(10), (8)-->(9)
+           └── select
+                ├── columns: d.k:8!null d.v:10!null
+                ├── key: (8)
+                ├── fd: ()-->(10)
+                ├── scan d@v
+                │    ├── columns: d.k:8!null d.v:10!null
+                │    ├── constraint: /10/8: [/1 - /1]
+                │    ├── key: (8)
+                │    └── fd: ()-->(10)
+                └── filters
+                     └── exists [subquery]
+                          └── scan a
+                               ├── columns: a.u:6 a.v:7
+                               ├── limit: 1
+                               ├── key: ()
+                               └── fd: ()-->(6,7)
 
 # Correlated subquery.
 opt expect=SplitDisjunction
@@ -1393,38 +1290,30 @@ project
            ├── columns: d.k:1!null d.u:2!null d.v:3 a.u:6!null
            ├── key: (1)
            ├── fd: (1)-->(2,3), (2)==(6), (6)==(2)
-           ├── distinct-on
+           ├── union
            │    ├── columns: d.k:1!null d.u:2 d.v:3
-           │    ├── grouping columns: d.k:1!null
+           │    ├── left columns: d.k:1!null d.u:2 d.v:3
+           │    ├── right columns: d.k:8 d.u:9 d.v:10
            │    ├── key: (1)
            │    ├── fd: (1)-->(2,3)
-           │    ├── union-all
-           │    │    ├── columns: d.k:1!null d.u:2 d.v:3
-           │    │    ├── left columns: d.k:1!null d.u:2 d.v:3
-           │    │    ├── right columns: d.k:8 d.u:9 d.v:10
-           │    │    ├── index-join d
-           │    │    │    ├── columns: d.k:1!null d.u:2!null d.v:3
-           │    │    │    ├── key: (1)
-           │    │    │    ├── fd: ()-->(2), (1)-->(3)
-           │    │    │    └── scan d@u
-           │    │    │         ├── columns: d.k:1!null d.u:2!null
-           │    │    │         ├── constraint: /2/1: [/1 - /1]
-           │    │    │         ├── key: (1)
-           │    │    │         └── fd: ()-->(2)
-           │    │    └── index-join d
-           │    │         ├── columns: d.k:8!null d.u:9 d.v:10!null
-           │    │         ├── key: (8)
-           │    │         ├── fd: ()-->(10), (8)-->(9)
-           │    │         └── scan d@v
-           │    │              ├── columns: d.k:8!null d.v:10!null
-           │    │              ├── constraint: /10/8: [/1 - /1]
-           │    │              ├── key: (8)
-           │    │              └── fd: ()-->(10)
-           │    └── aggregations
-           │         ├── const-agg [as=d.u:2, outer=(2)]
-           │         │    └── d.u:2
-           │         └── const-agg [as=d.v:3, outer=(3)]
-           │              └── d.v:3
+           │    ├── index-join d
+           │    │    ├── columns: d.k:1!null d.u:2!null d.v:3
+           │    │    ├── key: (1)
+           │    │    ├── fd: ()-->(2), (1)-->(3)
+           │    │    └── scan d@u
+           │    │         ├── columns: d.k:1!null d.u:2!null
+           │    │         ├── constraint: /2/1: [/1 - /1]
+           │    │         ├── key: (1)
+           │    │         └── fd: ()-->(2)
+           │    └── index-join d
+           │         ├── columns: d.k:8!null d.u:9 d.v:10!null
+           │         ├── key: (8)
+           │         ├── fd: ()-->(10), (8)-->(9)
+           │         └── scan d@v
+           │              ├── columns: d.k:8!null d.v:10!null
+           │              ├── constraint: /10/8: [/1 - /1]
+           │              ├── key: (8)
+           │              └── fd: ()-->(10)
            ├── distinct-on
            │    ├── columns: a.u:6
            │    ├── grouping columns: a.u:6
@@ -1451,40 +1340,30 @@ project
            ├── columns: d.k:1!null d.u:2 d.v:3 w:4!null a.u:6!null
            ├── key: (1)
            ├── fd: (1)-->(2-4), (4)==(6), (6)==(4)
-           ├── distinct-on
+           ├── union
            │    ├── columns: d.k:1!null d.u:2 d.v:3 w:4
-           │    ├── grouping columns: d.k:1!null
+           │    ├── left columns: d.k:1!null d.u:2 d.v:3 w:4
+           │    ├── right columns: d.k:8 d.u:9 d.v:10 w:11
            │    ├── key: (1)
            │    ├── fd: (1)-->(2-4)
-           │    ├── union-all
-           │    │    ├── columns: d.k:1!null d.u:2 d.v:3 w:4
-           │    │    ├── left columns: d.k:1!null d.u:2 d.v:3 w:4
-           │    │    ├── right columns: d.k:8 d.u:9 d.v:10 w:11
-           │    │    ├── index-join d
-           │    │    │    ├── columns: d.k:1!null d.u:2!null d.v:3 w:4
-           │    │    │    ├── key: (1)
-           │    │    │    ├── fd: ()-->(2), (1)-->(3,4)
-           │    │    │    └── scan d@u
-           │    │    │         ├── columns: d.k:1!null d.u:2!null
-           │    │    │         ├── constraint: /2/1: [/1 - /1]
-           │    │    │         ├── key: (1)
-           │    │    │         └── fd: ()-->(2)
-           │    │    └── index-join d
-           │    │         ├── columns: d.k:8!null d.u:9 d.v:10!null w:11
-           │    │         ├── key: (8)
-           │    │         ├── fd: ()-->(10), (8)-->(9,11)
-           │    │         └── scan d@v
-           │    │              ├── columns: d.k:8!null d.v:10!null
-           │    │              ├── constraint: /10/8: [/1 - /1]
-           │    │              ├── key: (8)
-           │    │              └── fd: ()-->(10)
-           │    └── aggregations
-           │         ├── const-agg [as=d.u:2, outer=(2)]
-           │         │    └── d.u:2
-           │         ├── const-agg [as=d.v:3, outer=(3)]
-           │         │    └── d.v:3
-           │         └── const-agg [as=w:4, outer=(4)]
-           │              └── w:4
+           │    ├── index-join d
+           │    │    ├── columns: d.k:1!null d.u:2!null d.v:3 w:4
+           │    │    ├── key: (1)
+           │    │    ├── fd: ()-->(2), (1)-->(3,4)
+           │    │    └── scan d@u
+           │    │         ├── columns: d.k:1!null d.u:2!null
+           │    │         ├── constraint: /2/1: [/1 - /1]
+           │    │         ├── key: (1)
+           │    │         └── fd: ()-->(2)
+           │    └── index-join d
+           │         ├── columns: d.k:8!null d.u:9 d.v:10!null w:11
+           │         ├── key: (8)
+           │         ├── fd: ()-->(10), (8)-->(9,11)
+           │         └── scan d@v
+           │              ├── columns: d.k:8!null d.v:10!null
+           │              ├── constraint: /10/8: [/1 - /1]
+           │              ├── key: (8)
+           │              └── fd: ()-->(10)
            ├── distinct-on
            │    ├── columns: a.u:6
            │    ├── grouping columns: a.u:6
@@ -1500,38 +1379,30 @@ project
 opt expect=SplitDisjunction
 SELECT k, u, v FROM e WHERE u = 1 OR v = 1
 ----
-distinct-on
+union
  ├── columns: k:1!null u:2 v:3
- ├── grouping columns: k:1!null
+ ├── left columns: k:1!null u:2 v:3
+ ├── right columns: k:5 u:6 v:7
  ├── key: (1)
  ├── fd: (1)-->(2,3)
- ├── union-all
- │    ├── columns: k:1!null u:2 v:3
- │    ├── left columns: k:1!null u:2 v:3
- │    ├── right columns: k:5 u:6 v:7
- │    ├── index-join e
- │    │    ├── columns: k:1!null u:2!null v:3
- │    │    ├── key: (1)
- │    │    ├── fd: ()-->(2), (1)-->(3)
- │    │    └── scan e@uw
- │    │         ├── columns: k:1!null u:2!null
- │    │         ├── constraint: /2/4/1: [/1 - /1]
- │    │         ├── key: (1)
- │    │         └── fd: ()-->(2)
- │    └── index-join e
- │         ├── columns: k:5!null u:6 v:7!null
- │         ├── key: (5)
- │         ├── fd: ()-->(7), (5)-->(6)
- │         └── scan e@vw
- │              ├── columns: k:5!null v:7!null
- │              ├── constraint: /7/8/5: [/1 - /1]
- │              ├── key: (5)
- │              └── fd: ()-->(7)
- └── aggregations
-      ├── const-agg [as=u:2, outer=(2)]
-      │    └── u:2
-      └── const-agg [as=v:3, outer=(3)]
-           └── v:3
+ ├── index-join e
+ │    ├── columns: k:1!null u:2!null v:3
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3)
+ │    └── scan e@uw
+ │         ├── columns: k:1!null u:2!null
+ │         ├── constraint: /2/4/1: [/1 - /1]
+ │         ├── key: (1)
+ │         └── fd: ()-->(2)
+ └── index-join e
+      ├── columns: k:5!null u:6 v:7!null
+      ├── key: (5)
+      ├── fd: ()-->(7), (5)-->(6)
+      └── scan e@vw
+           ├── columns: k:5!null v:7!null
+           ├── constraint: /7/8/5: [/1 - /1]
+           ├── key: (5)
+           └── fd: ()-->(7)
 
 # Apply when outer columns of both sides of OR are a superset of index columns.
 opt expect=SplitDisjunction
@@ -1541,178 +1412,144 @@ project
  ├── columns: k:1!null u:2 v:3
  ├── key: (1)
  ├── fd: (1)-->(2,3)
- └── distinct-on
+ └── union
       ├── columns: k:1!null u:2 v:3 w:4!null
-      ├── grouping columns: k:1!null
+      ├── left columns: k:1!null u:2 v:3 w:4!null
+      ├── right columns: k:5 u:6 v:7 w:8
       ├── key: (1)
       ├── fd: (1)-->(2-4)
-      ├── union-all
-      │    ├── columns: k:1!null u:2 v:3 w:4!null
-      │    ├── left columns: k:1!null u:2 v:3 w:4!null
-      │    ├── right columns: k:5 u:6 v:7 w:8
-      │    ├── select
-      │    │    ├── columns: k:1!null u:2!null v:3 w:4!null
+      ├── select
+      │    ├── columns: k:1!null u:2!null v:3 w:4!null
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2,4), (1)-->(3)
+      │    ├── index-join d
+      │    │    ├── columns: k:1!null u:2 v:3 w:4
       │    │    ├── key: (1)
-      │    │    ├── fd: ()-->(2,4), (1)-->(3)
-      │    │    ├── index-join d
-      │    │    │    ├── columns: k:1!null u:2 v:3 w:4
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: ()-->(2), (1)-->(3,4)
-      │    │    │    └── scan d@u
-      │    │    │         ├── columns: k:1!null u:2!null
-      │    │    │         ├── constraint: /2/1: [/1 - /1]
-      │    │    │         ├── key: (1)
-      │    │    │         └── fd: ()-->(2)
-      │    │    └── filters
-      │    │         └── w:4 = 2 [outer=(4), constraints=(/4: [/2 - /2]; tight), fd=()-->(4)]
-      │    └── select
-      │         ├── columns: k:5!null u:6 v:7!null w:8!null
-      │         ├── key: (5)
-      │         ├── fd: ()-->(7,8), (5)-->(6)
-      │         ├── index-join d
-      │         │    ├── columns: k:5!null u:6 v:7 w:8
-      │         │    ├── key: (5)
-      │         │    ├── fd: ()-->(7), (5)-->(6,8)
-      │         │    └── scan d@v
-      │         │         ├── columns: k:5!null v:7!null
-      │         │         ├── constraint: /7/5: [/1 - /1]
-      │         │         ├── key: (5)
-      │         │         └── fd: ()-->(7)
-      │         └── filters
-      │              └── w:8 = 3 [outer=(8), constraints=(/8: [/3 - /3]; tight), fd=()-->(8)]
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           ├── const-agg [as=v:3, outer=(3)]
-           │    └── v:3
-           └── const-agg [as=w:4, outer=(4)]
-                └── w:4
+      │    │    ├── fd: ()-->(2), (1)-->(3,4)
+      │    │    └── scan d@u
+      │    │         ├── columns: k:1!null u:2!null
+      │    │         ├── constraint: /2/1: [/1 - /1]
+      │    │         ├── key: (1)
+      │    │         └── fd: ()-->(2)
+      │    └── filters
+      │         └── w:4 = 2 [outer=(4), constraints=(/4: [/2 - /2]; tight), fd=()-->(4)]
+      └── select
+           ├── columns: k:5!null u:6 v:7!null w:8!null
+           ├── key: (5)
+           ├── fd: ()-->(7,8), (5)-->(6)
+           ├── index-join d
+           │    ├── columns: k:5!null u:6 v:7 w:8
+           │    ├── key: (5)
+           │    ├── fd: ()-->(7), (5)-->(6,8)
+           │    └── scan d@v
+           │         ├── columns: k:5!null v:7!null
+           │         ├── constraint: /7/5: [/1 - /1]
+           │         ├── key: (5)
+           │         └── fd: ()-->(7)
+           └── filters
+                └── w:8 = 3 [outer=(8), constraints=(/8: [/3 - /3]; tight), fd=()-->(8)]
 
 # Group sub-expr with the same columns together.
 opt expect=SplitDisjunction
 SELECT k, u, v FROM d WHERE (u = 1 OR v = 2) OR (u = 3 OR v = 4)
 ----
-distinct-on
+union
  ├── columns: k:1!null u:2 v:3
- ├── grouping columns: k:1!null
+ ├── left columns: k:1!null u:2 v:3
+ ├── right columns: k:5 u:6 v:7
  ├── key: (1)
  ├── fd: (1)-->(2,3)
- ├── union-all
- │    ├── columns: k:1!null u:2 v:3
- │    ├── left columns: k:1!null u:2 v:3
- │    ├── right columns: k:5 u:6 v:7
- │    ├── index-join d
- │    │    ├── columns: k:1!null u:2!null v:3
- │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2,3)
- │    │    └── scan d@u
- │    │         ├── columns: k:1!null u:2!null
- │    │         ├── constraint: /2/1
- │    │         │    ├── [/1 - /1]
- │    │         │    └── [/3 - /3]
- │    │         ├── key: (1)
- │    │         └── fd: (1)-->(2)
- │    └── index-join d
- │         ├── columns: k:5!null u:6 v:7!null
- │         ├── key: (5)
- │         ├── fd: (5)-->(6,7)
- │         └── scan d@v
- │              ├── columns: k:5!null v:7!null
- │              ├── constraint: /7/5
- │              │    ├── [/2 - /2]
- │              │    └── [/4 - /4]
- │              ├── key: (5)
- │              └── fd: (5)-->(7)
- └── aggregations
-      ├── const-agg [as=u:2, outer=(2)]
-      │    └── u:2
-      └── const-agg [as=v:3, outer=(3)]
-           └── v:3
+ ├── index-join d
+ │    ├── columns: k:1!null u:2!null v:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan d@u
+ │         ├── columns: k:1!null u:2!null
+ │         ├── constraint: /2/1
+ │         │    ├── [/1 - /1]
+ │         │    └── [/3 - /3]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── index-join d
+      ├── columns: k:5!null u:6 v:7!null
+      ├── key: (5)
+      ├── fd: (5)-->(6,7)
+      └── scan d@v
+           ├── columns: k:5!null v:7!null
+           ├── constraint: /7/5
+           │    ├── [/2 - /2]
+           │    └── [/4 - /4]
+           ├── key: (5)
+           └── fd: (5)-->(7)
 
 # Group sub-expr with the same columns together. Output should have a single union expr.
 opt expect=SplitDisjunction
 SELECT k, u, v FROM d WHERE u = 1 OR u = 3 OR v = 2 OR v = 4 OR u = 5 OR v = 6
 ----
-distinct-on
+union
  ├── columns: k:1!null u:2 v:3
- ├── grouping columns: k:1!null
+ ├── left columns: k:1!null u:2 v:3
+ ├── right columns: k:5 u:6 v:7
  ├── key: (1)
  ├── fd: (1)-->(2,3)
- ├── union-all
- │    ├── columns: k:1!null u:2 v:3
- │    ├── left columns: k:1!null u:2 v:3
- │    ├── right columns: k:5 u:6 v:7
- │    ├── index-join d
- │    │    ├── columns: k:1!null u:2!null v:3
- │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2,3)
- │    │    └── scan d@u
- │    │         ├── columns: k:1!null u:2!null
- │    │         ├── constraint: /2/1
- │    │         │    ├── [/1 - /1]
- │    │         │    ├── [/3 - /3]
- │    │         │    └── [/5 - /5]
- │    │         ├── key: (1)
- │    │         └── fd: (1)-->(2)
- │    └── index-join d
- │         ├── columns: k:5!null u:6 v:7!null
- │         ├── key: (5)
- │         ├── fd: (5)-->(6,7)
- │         └── scan d@v
- │              ├── columns: k:5!null v:7!null
- │              ├── constraint: /7/5
- │              │    ├── [/2 - /2]
- │              │    ├── [/4 - /4]
- │              │    └── [/6 - /6]
- │              ├── key: (5)
- │              └── fd: (5)-->(7)
- └── aggregations
-      ├── const-agg [as=u:2, outer=(2)]
-      │    └── u:2
-      └── const-agg [as=v:3, outer=(3)]
-           └── v:3
+ ├── index-join d
+ │    ├── columns: k:1!null u:2!null v:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan d@u
+ │         ├── columns: k:1!null u:2!null
+ │         ├── constraint: /2/1
+ │         │    ├── [/1 - /1]
+ │         │    ├── [/3 - /3]
+ │         │    └── [/5 - /5]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── index-join d
+      ├── columns: k:5!null u:6 v:7!null
+      ├── key: (5)
+      ├── fd: (5)-->(6,7)
+      └── scan d@v
+           ├── columns: k:5!null v:7!null
+           ├── constraint: /7/5
+           │    ├── [/2 - /2]
+           │    ├── [/4 - /4]
+           │    └── [/6 - /6]
+           ├── key: (5)
+           └── fd: (5)-->(7)
 
 # Group sub-expr with the same columns together. Output should have a single union expr.
 opt expect=SplitDisjunction
 SELECT k, u, v FROM d WHERE (u = 3 OR v = 2) OR (u = 5 OR v = 4) OR v = 6
 ----
-distinct-on
+union
  ├── columns: k:1!null u:2 v:3
- ├── grouping columns: k:1!null
+ ├── left columns: k:1!null u:2 v:3
+ ├── right columns: k:5 u:6 v:7
  ├── key: (1)
  ├── fd: (1)-->(2,3)
- ├── union-all
- │    ├── columns: k:1!null u:2 v:3
- │    ├── left columns: k:1!null u:2 v:3
- │    ├── right columns: k:5 u:6 v:7
- │    ├── index-join d
- │    │    ├── columns: k:1!null u:2!null v:3
- │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2,3)
- │    │    └── scan d@u
- │    │         ├── columns: k:1!null u:2!null
- │    │         ├── constraint: /2/1
- │    │         │    ├── [/3 - /3]
- │    │         │    └── [/5 - /5]
- │    │         ├── key: (1)
- │    │         └── fd: (1)-->(2)
- │    └── index-join d
- │         ├── columns: k:5!null u:6 v:7!null
- │         ├── key: (5)
- │         ├── fd: (5)-->(6,7)
- │         └── scan d@v
- │              ├── columns: k:5!null v:7!null
- │              ├── constraint: /7/5
- │              │    ├── [/2 - /2]
- │              │    ├── [/4 - /4]
- │              │    └── [/6 - /6]
- │              ├── key: (5)
- │              └── fd: (5)-->(7)
- └── aggregations
-      ├── const-agg [as=u:2, outer=(2)]
-      │    └── u:2
-      └── const-agg [as=v:3, outer=(3)]
-           └── v:3
+ ├── index-join d
+ │    ├── columns: k:1!null u:2!null v:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan d@u
+ │         ├── columns: k:1!null u:2!null
+ │         ├── constraint: /2/1
+ │         │    ├── [/3 - /3]
+ │         │    └── [/5 - /5]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── index-join d
+      ├── columns: k:5!null u:6 v:7!null
+      ├── key: (5)
+      ├── fd: (5)-->(6,7)
+      └── scan d@v
+           ├── columns: k:5!null v:7!null
+           ├── constraint: /7/5
+           │    ├── [/2 - /2]
+           │    ├── [/4 - /4]
+           │    └── [/6 - /6]
+           ├── key: (5)
+           └── fd: (5)-->(7)
 
 # Don't apply when outer columns of both sides of OR do not intersect with index columns.
 opt expect-not=SplitDisjunction
@@ -1735,38 +1572,29 @@ SELECT u, v FROM d WHERE u = 1 OR v = 1
 ----
 project
  ├── columns: u:2 v:3
- └── distinct-on
+ └── union
       ├── columns: k:1!null u:2 v:3
-      ├── grouping columns: k:1!null
-      ├── key: (1)
-      ├── fd: (1)-->(2,3)
-      ├── union-all
-      │    ├── columns: k:1!null u:2 v:3
-      │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
-      │    ├── index-join d
-      │    │    ├── columns: k:1!null u:2!null v:3
-      │    │    ├── key: (1)
-      │    │    ├── fd: ()-->(2), (1)-->(3)
-      │    │    └── scan d@u
-      │    │         ├── columns: k:1!null u:2!null
-      │    │         ├── constraint: /2/1: [/1 - /1]
-      │    │         ├── key: (1)
-      │    │         └── fd: ()-->(2)
-      │    └── index-join d
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: ()-->(7), (5)-->(6)
-      │         └── scan d@v
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/5: [/1 - /1]
-      │              ├── key: (5)
-      │              └── fd: ()-->(7)
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           └── const-agg [as=v:3, outer=(3)]
-                └── v:3
+      ├── left columns: k:1!null u:2 v:3
+      ├── right columns: k:5 u:6 v:7
+      ├── key: (1-3)
+      ├── index-join d
+      │    ├── columns: k:1!null u:2!null v:3
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2), (1)-->(3)
+      │    └── scan d@u
+      │         ├── columns: k:1!null u:2!null
+      │         ├── constraint: /2/1: [/1 - /1]
+      │         ├── key: (1)
+      │         └── fd: ()-->(2)
+      └── index-join d
+           ├── columns: k:5!null u:6 v:7!null
+           ├── key: (5)
+           ├── fd: ()-->(7), (5)-->(6)
+           └── scan d@v
+                ├── columns: k:5!null v:7!null
+                ├── constraint: /7/5: [/1 - /1]
+                ├── key: (5)
+                └── fd: ()-->(7)
 
 # Don't apply to disjunctions with identical colsets on the left and right.
 opt expect-not=SplitDisjunction
@@ -1790,33 +1618,25 @@ SELECT k FROM a@{NO_INDEX_JOIN} WHERE u = 1 OR v = 1
 project
  ├── columns: k:1!null
  ├── key: (1)
- └── distinct-on
+ └── union
       ├── columns: k:1!null u:2 v:3
-      ├── grouping columns: k:1!null
+      ├── left columns: k:1!null u:2 v:3
+      ├── right columns: k:4 u:5 v:6
       ├── key: (1)
       ├── fd: (1)-->(2,3), (3)~~>(1,2)
-      ├── union-all
-      │    ├── columns: k:1!null u:2 v:3
-      │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:4 u:5 v:6
-      │    ├── scan a@u
-      │    │    ├── columns: k:1!null u:2!null v:3
-      │    │    ├── constraint: /2/1: [/1 - /1]
-      │    │    ├── flags: no-index-join
-      │    │    ├── key: (1)
-      │    │    └── fd: ()-->(2), (1)-->(3), (3)~~>(1)
-      │    └── scan a@v
-      │         ├── columns: k:4!null u:5 v:6!null
-      │         ├── constraint: /6: [/1 - /1]
-      │         ├── flags: no-index-join
-      │         ├── cardinality: [0 - 1]
-      │         ├── key: ()
-      │         └── fd: ()-->(4-6)
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           └── const-agg [as=v:3, outer=(3)]
-                └── v:3
+      ├── scan a@u
+      │    ├── columns: k:1!null u:2!null v:3
+      │    ├── constraint: /2/1: [/1 - /1]
+      │    ├── flags: no-index-join
+      │    ├── key: (1)
+      │    └── fd: ()-->(2), (1)-->(3), (3)~~>(1)
+      └── scan a@v
+           ├── columns: k:4!null u:5 v:6!null
+           ├── constraint: /6: [/1 - /1]
+           ├── flags: no-index-join
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(4-6)
 
 # --------------------------------------------------
 # SplitDisjunctionAddKey
@@ -1827,38 +1647,29 @@ SELECT u, v FROM d WHERE u = 1 OR v = 1
 ----
 project
  ├── columns: u:2 v:3
- └── distinct-on
+ └── union
       ├── columns: k:1!null u:2 v:3
-      ├── grouping columns: k:1!null
-      ├── key: (1)
-      ├── fd: (1)-->(2,3)
-      ├── union-all
-      │    ├── columns: k:1!null u:2 v:3
-      │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
-      │    ├── index-join d
-      │    │    ├── columns: k:1!null u:2!null v:3
-      │    │    ├── key: (1)
-      │    │    ├── fd: ()-->(2), (1)-->(3)
-      │    │    └── scan d@u
-      │    │         ├── columns: k:1!null u:2!null
-      │    │         ├── constraint: /2/1: [/1 - /1]
-      │    │         ├── key: (1)
-      │    │         └── fd: ()-->(2)
-      │    └── index-join d
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: ()-->(7), (5)-->(6)
-      │         └── scan d@v
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/5: [/1 - /1]
-      │              ├── key: (5)
-      │              └── fd: ()-->(7)
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           └── const-agg [as=v:3, outer=(3)]
-                └── v:3
+      ├── left columns: k:1!null u:2 v:3
+      ├── right columns: k:5 u:6 v:7
+      ├── key: (1-3)
+      ├── index-join d
+      │    ├── columns: k:1!null u:2!null v:3
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2), (1)-->(3)
+      │    └── scan d@u
+      │         ├── columns: k:1!null u:2!null
+      │         ├── constraint: /2/1: [/1 - /1]
+      │         ├── key: (1)
+      │         └── fd: ()-->(2)
+      └── index-join d
+           ├── columns: k:5!null u:6 v:7!null
+           ├── key: (5)
+           ├── fd: ()-->(7), (5)-->(6)
+           └── scan d@v
+                ├── columns: k:5!null v:7!null
+                ├── constraint: /7/5: [/1 - /1]
+                ├── key: (5)
+                └── fd: ()-->(7)
 
 opt expect=SplitDisjunctionAddKey
 SELECT u, v, w FROM d WHERE w = 1 AND (u = 1 OR v = 1)
@@ -1866,92 +1677,72 @@ SELECT u, v, w FROM d WHERE w = 1 AND (u = 1 OR v = 1)
 project
  ├── columns: u:2 v:3 w:4!null
  ├── fd: ()-->(4)
- └── distinct-on
+ └── union
       ├── columns: k:1!null u:2 v:3 w:4!null
-      ├── grouping columns: k:1!null
-      ├── key: (1)
-      ├── fd: (1)-->(2-4)
-      ├── union-all
-      │    ├── columns: k:1!null u:2 v:3 w:4!null
-      │    ├── left columns: k:1!null u:2 v:3 w:4!null
-      │    ├── right columns: k:5 u:6 v:7 w:8
-      │    ├── select
-      │    │    ├── columns: k:1!null u:2!null v:3 w:4!null
+      ├── left columns: k:1!null u:2 v:3 w:4!null
+      ├── right columns: k:5 u:6 v:7 w:8
+      ├── key: (1-4)
+      ├── select
+      │    ├── columns: k:1!null u:2!null v:3 w:4!null
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2,4), (1)-->(3)
+      │    ├── index-join d
+      │    │    ├── columns: k:1!null u:2 v:3 w:4
       │    │    ├── key: (1)
-      │    │    ├── fd: ()-->(2,4), (1)-->(3)
-      │    │    ├── index-join d
-      │    │    │    ├── columns: k:1!null u:2 v:3 w:4
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: ()-->(2), (1)-->(3,4)
-      │    │    │    └── scan d@u
-      │    │    │         ├── columns: k:1!null u:2!null
-      │    │    │         ├── constraint: /2/1: [/1 - /1]
-      │    │    │         ├── key: (1)
-      │    │    │         └── fd: ()-->(2)
-      │    │    └── filters
-      │    │         └── w:4 = 1 [outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
-      │    └── select
-      │         ├── columns: k:5!null u:6 v:7!null w:8!null
-      │         ├── key: (5)
-      │         ├── fd: ()-->(7,8), (5)-->(6)
-      │         ├── index-join d
-      │         │    ├── columns: k:5!null u:6 v:7 w:8
-      │         │    ├── key: (5)
-      │         │    ├── fd: ()-->(7), (5)-->(6,8)
-      │         │    └── scan d@v
-      │         │         ├── columns: k:5!null v:7!null
-      │         │         ├── constraint: /7/5: [/1 - /1]
-      │         │         ├── key: (5)
-      │         │         └── fd: ()-->(7)
-      │         └── filters
-      │              └── w:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           ├── const-agg [as=v:3, outer=(3)]
-           │    └── v:3
-           └── const-agg [as=w:4, outer=(4)]
-                └── w:4
+      │    │    ├── fd: ()-->(2), (1)-->(3,4)
+      │    │    └── scan d@u
+      │    │         ├── columns: k:1!null u:2!null
+      │    │         ├── constraint: /2/1: [/1 - /1]
+      │    │         ├── key: (1)
+      │    │         └── fd: ()-->(2)
+      │    └── filters
+      │         └── w:4 = 1 [outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+      └── select
+           ├── columns: k:5!null u:6 v:7!null w:8!null
+           ├── key: (5)
+           ├── fd: ()-->(7,8), (5)-->(6)
+           ├── index-join d
+           │    ├── columns: k:5!null u:6 v:7 w:8
+           │    ├── key: (5)
+           │    ├── fd: ()-->(7), (5)-->(6,8)
+           │    └── scan d@v
+           │         ├── columns: k:5!null v:7!null
+           │         ├── constraint: /7/5: [/1 - /1]
+           │         ├── key: (5)
+           │         └── fd: ()-->(7)
+           └── filters
+                └── w:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
 
 opt expect=SplitDisjunctionAddKey
 SELECT u, v FROM d WHERE (u = 1 OR v = 2) AND (u = 10 OR v = 20)
 ----
 project
  ├── columns: u:2 v:3
- └── distinct-on
+ └── union
       ├── columns: k:1!null u:2!null v:3!null
-      ├── grouping columns: k:1!null
-      ├── key: (1)
-      ├── fd: (1)-->(2,3)
-      ├── union-all
+      ├── left columns: k:1!null u:2!null v:3!null
+      ├── right columns: k:5 u:6 v:7
+      ├── key: (1-3)
+      ├── inner-join (zigzag d@u d@v)
       │    ├── columns: k:1!null u:2!null v:3!null
-      │    ├── left columns: k:1!null u:2!null v:3!null
-      │    ├── right columns: k:5 u:6 v:7
-      │    ├── inner-join (zigzag d@u d@v)
-      │    │    ├── columns: k:1!null u:2!null v:3!null
-      │    │    ├── eq columns: [1] = [1]
-      │    │    ├── left fixed columns: [2] = [1]
-      │    │    ├── right fixed columns: [3] = [20]
-      │    │    ├── key: (1)
-      │    │    ├── fd: ()-->(2,3)
-      │    │    └── filters
-      │    │         ├── u:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-      │    │         └── v:3 = 20 [outer=(3), constraints=(/3: [/20 - /20]; tight), fd=()-->(3)]
-      │    └── inner-join (zigzag d@u d@v)
-      │         ├── columns: k:5!null u:6!null v:7!null
-      │         ├── eq columns: [5] = [5]
-      │         ├── left fixed columns: [6] = [10]
-      │         ├── right fixed columns: [7] = [2]
-      │         ├── key: (5)
-      │         ├── fd: ()-->(6,7)
-      │         └── filters
-      │              ├── v:7 = 2 [outer=(7), constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
-      │              └── u:6 = 10 [outer=(6), constraints=(/6: [/10 - /10]; tight), fd=()-->(6)]
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           └── const-agg [as=v:3, outer=(3)]
-                └── v:3
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [2] = [1]
+      │    ├── right fixed columns: [3] = [20]
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2,3)
+      │    └── filters
+      │         ├── u:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      │         └── v:3 = 20 [outer=(3), constraints=(/3: [/20 - /20]; tight), fd=()-->(3)]
+      └── inner-join (zigzag d@u d@v)
+           ├── columns: k:5!null u:6!null v:7!null
+           ├── eq columns: [5] = [5]
+           ├── left fixed columns: [6] = [10]
+           ├── right fixed columns: [7] = [2]
+           ├── key: (5)
+           ├── fd: ()-->(6,7)
+           └── filters
+                ├── v:7 = 2 [outer=(7), constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
+                └── u:6 = 10 [outer=(6), constraints=(/6: [/10 - /10]; tight), fd=()-->(6)]
 
 opt expect=SplitDisjunctionAddKey
 SELECT count(*) FROM d WHERE u = 1 OR v = 1
@@ -1963,80 +1754,31 @@ scalar-group-by
  ├── fd: ()-->(5)
  ├── project
  │    ├── columns: u:2 v:3
- │    └── distinct-on
+ │    └── union
  │         ├── columns: k:1!null u:2 v:3
- │         ├── grouping columns: k:1!null
- │         ├── key: (1)
- │         ├── fd: (1)-->(2,3)
- │         ├── union-all
- │         │    ├── columns: k:1!null u:2 v:3
- │         │    ├── left columns: k:1!null u:2 v:3
- │         │    ├── right columns: k:6 u:7 v:8
- │         │    ├── index-join d
- │         │    │    ├── columns: k:1!null u:2!null v:3
- │         │    │    ├── key: (1)
- │         │    │    ├── fd: ()-->(2), (1)-->(3)
- │         │    │    └── scan d@u
- │         │    │         ├── columns: k:1!null u:2!null
- │         │    │         ├── constraint: /2/1: [/1 - /1]
- │         │    │         ├── key: (1)
- │         │    │         └── fd: ()-->(2)
- │         │    └── index-join d
- │         │         ├── columns: k:6!null u:7 v:8!null
- │         │         ├── key: (6)
- │         │         ├── fd: ()-->(8), (6)-->(7)
- │         │         └── scan d@v
- │         │              ├── columns: k:6!null v:8!null
- │         │              ├── constraint: /8/6: [/1 - /1]
- │         │              ├── key: (6)
- │         │              └── fd: ()-->(8)
- │         └── aggregations
- │              ├── const-agg [as=u:2, outer=(2)]
- │              │    └── u:2
- │              └── const-agg [as=v:3, outer=(3)]
- │                   └── v:3
+ │         ├── left columns: k:1!null u:2 v:3
+ │         ├── right columns: k:6 u:7 v:8
+ │         ├── key: (1-3)
+ │         ├── index-join d
+ │         │    ├── columns: k:1!null u:2!null v:3
+ │         │    ├── key: (1)
+ │         │    ├── fd: ()-->(2), (1)-->(3)
+ │         │    └── scan d@u
+ │         │         ├── columns: k:1!null u:2!null
+ │         │         ├── constraint: /2/1: [/1 - /1]
+ │         │         ├── key: (1)
+ │         │         └── fd: ()-->(2)
+ │         └── index-join d
+ │              ├── columns: k:6!null u:7 v:8!null
+ │              ├── key: (6)
+ │              ├── fd: ()-->(8), (6)-->(7)
+ │              └── scan d@v
+ │                   ├── columns: k:6!null v:8!null
+ │                   ├── constraint: /8/6: [/1 - /1]
+ │                   ├── key: (6)
+ │                   └── fd: ()-->(8)
  └── aggregations
       └── count-rows [as=count_rows:5]
-
-
-# Multi-column primary key.
-opt expect=SplitDisjunctionAddKey
-SELECT u, v FROM f WHERE u = 1 OR v = 2
-----
-project
- ├── columns: u:3 v:4
- └── distinct-on
-      ├── columns: k:1!null j:2!null u:3 v:4
-      ├── grouping columns: k:1!null j:2!null
-      ├── key: (1,2)
-      ├── fd: (1,2)-->(3,4)
-      ├── union-all
-      │    ├── columns: k:1!null j:2!null u:3 v:4
-      │    ├── left columns: k:1!null j:2!null u:3 v:4
-      │    ├── right columns: k:5 j:6 u:7 v:8
-      │    ├── index-join f
-      │    │    ├── columns: k:1!null j:2!null u:3!null v:4
-      │    │    ├── key: (1,2)
-      │    │    ├── fd: ()-->(3), (1,2)-->(4)
-      │    │    └── scan f@u
-      │    │         ├── columns: k:1!null j:2!null u:3!null
-      │    │         ├── constraint: /3/1/2: [/1 - /1]
-      │    │         ├── key: (1,2)
-      │    │         └── fd: ()-->(3)
-      │    └── index-join f
-      │         ├── columns: k:5!null j:6!null u:7 v:8!null
-      │         ├── key: (5,6)
-      │         ├── fd: ()-->(8), (5,6)-->(7)
-      │         └── scan f@v
-      │              ├── columns: k:5!null j:6!null v:8!null
-      │              ├── constraint: /8/5/6: [/2 - /2]
-      │              ├── key: (5,6)
-      │              └── fd: ()-->(8)
-      └── aggregations
-           ├── const-agg [as=u:3, outer=(3)]
-           │    └── u:3
-           └── const-agg [as=v:4, outer=(4)]
-                └── v:4
 
 # Don't expand INs to many ORs.
 opt expect=SplitDisjunctionAddKey
@@ -2044,38 +1786,29 @@ SELECT u, v FROM d WHERE u IN (1, 2, 3, 4) OR v IN (5, 6, 7, 8)
 ----
 project
  ├── columns: u:2 v:3
- └── distinct-on
+ └── union
       ├── columns: k:1!null u:2 v:3
-      ├── grouping columns: k:1!null
-      ├── key: (1)
-      ├── fd: (1)-->(2,3)
-      ├── union-all
-      │    ├── columns: k:1!null u:2 v:3
-      │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
-      │    ├── index-join d
-      │    │    ├── columns: k:1!null u:2!null v:3
-      │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2,3)
-      │    │    └── scan d@u
-      │    │         ├── columns: k:1!null u:2!null
-      │    │         ├── constraint: /2/1: [/1 - /4]
-      │    │         ├── key: (1)
-      │    │         └── fd: (1)-->(2)
-      │    └── index-join d
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: (5)-->(6,7)
-      │         └── scan d@v
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/5: [/5 - /8]
-      │              ├── key: (5)
-      │              └── fd: (5)-->(7)
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           └── const-agg [as=v:3, outer=(3)]
-                └── v:3
+      ├── left columns: k:1!null u:2 v:3
+      ├── right columns: k:5 u:6 v:7
+      ├── key: (1-3)
+      ├── index-join d
+      │    ├── columns: k:1!null u:2!null v:3
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── scan d@u
+      │         ├── columns: k:1!null u:2!null
+      │         ├── constraint: /2/1: [/1 - /4]
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2)
+      └── index-join d
+           ├── columns: k:5!null u:6 v:7!null
+           ├── key: (5)
+           ├── fd: (5)-->(6,7)
+           └── scan d@v
+                ├── columns: k:5!null v:7!null
+                ├── constraint: /7/5: [/5 - /8]
+                ├── key: (5)
+                └── fd: (5)-->(7)
 
 # Uncorrelated subquery.
 opt expect=SplitDisjunctionAddKey
@@ -2083,60 +1816,51 @@ SELECT u, v FROM d WHERE (u = 1 OR v = 1) AND EXISTS (SELECT u, v FROM a)
 ----
 project
  ├── columns: u:2 v:3
- └── distinct-on
+ └── union
       ├── columns: d.k:1!null d.u:2 d.v:3
-      ├── grouping columns: d.k:1!null
-      ├── key: (1)
-      ├── fd: (1)-->(2,3)
-      ├── union-all
-      │    ├── columns: d.k:1!null d.u:2 d.v:3
-      │    ├── left columns: d.k:1!null d.u:2 d.v:3
-      │    ├── right columns: d.k:8 d.u:9 d.v:10
-      │    ├── index-join d
-      │    │    ├── columns: d.k:1!null d.u:2!null d.v:3
-      │    │    ├── key: (1)
-      │    │    ├── fd: ()-->(2), (1)-->(3)
-      │    │    └── select
-      │    │         ├── columns: d.k:1!null d.u:2!null
-      │    │         ├── key: (1)
-      │    │         ├── fd: ()-->(2)
-      │    │         ├── scan d@u
-      │    │         │    ├── columns: d.k:1!null d.u:2!null
-      │    │         │    ├── constraint: /2/1: [/1 - /1]
-      │    │         │    ├── key: (1)
-      │    │         │    └── fd: ()-->(2)
-      │    │         └── filters
-      │    │              └── exists [subquery]
-      │    │                   └── scan a
-      │    │                        ├── columns: a.u:6 a.v:7
-      │    │                        ├── limit: 1
-      │    │                        ├── key: ()
-      │    │                        └── fd: ()-->(6,7)
-      │    └── index-join d
-      │         ├── columns: d.k:8!null d.u:9 d.v:10!null
-      │         ├── key: (8)
-      │         ├── fd: ()-->(10), (8)-->(9)
-      │         └── select
-      │              ├── columns: d.k:8!null d.v:10!null
-      │              ├── key: (8)
-      │              ├── fd: ()-->(10)
-      │              ├── scan d@v
-      │              │    ├── columns: d.k:8!null d.v:10!null
-      │              │    ├── constraint: /10/8: [/1 - /1]
-      │              │    ├── key: (8)
-      │              │    └── fd: ()-->(10)
-      │              └── filters
-      │                   └── exists [subquery]
-      │                        └── scan a
-      │                             ├── columns: a.u:6 a.v:7
-      │                             ├── limit: 1
-      │                             ├── key: ()
-      │                             └── fd: ()-->(6,7)
-      └── aggregations
-           ├── const-agg [as=d.u:2, outer=(2)]
-           │    └── d.u:2
-           └── const-agg [as=d.v:3, outer=(3)]
-                └── d.v:3
+      ├── left columns: d.k:1!null d.u:2 d.v:3
+      ├── right columns: d.k:8 d.u:9 d.v:10
+      ├── key: (1-3)
+      ├── index-join d
+      │    ├── columns: d.k:1!null d.u:2!null d.v:3
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2), (1)-->(3)
+      │    └── select
+      │         ├── columns: d.k:1!null d.u:2!null
+      │         ├── key: (1)
+      │         ├── fd: ()-->(2)
+      │         ├── scan d@u
+      │         │    ├── columns: d.k:1!null d.u:2!null
+      │         │    ├── constraint: /2/1: [/1 - /1]
+      │         │    ├── key: (1)
+      │         │    └── fd: ()-->(2)
+      │         └── filters
+      │              └── exists [subquery]
+      │                   └── scan a
+      │                        ├── columns: a.u:6 a.v:7
+      │                        ├── limit: 1
+      │                        ├── key: ()
+      │                        └── fd: ()-->(6,7)
+      └── index-join d
+           ├── columns: d.k:8!null d.u:9 d.v:10!null
+           ├── key: (8)
+           ├── fd: ()-->(10), (8)-->(9)
+           └── select
+                ├── columns: d.k:8!null d.v:10!null
+                ├── key: (8)
+                ├── fd: ()-->(10)
+                ├── scan d@v
+                │    ├── columns: d.k:8!null d.v:10!null
+                │    ├── constraint: /10/8: [/1 - /1]
+                │    ├── key: (8)
+                │    └── fd: ()-->(10)
+                └── filters
+                     └── exists [subquery]
+                          └── scan a
+                               ├── columns: a.u:6 a.v:7
+                               ├── limit: 1
+                               ├── key: ()
+                               └── fd: ()-->(6,7)
 
 # Correlated subquery.
 opt expect=SplitDisjunctionAddKey
@@ -2149,38 +1873,29 @@ project
       ├── fd: (2)==(6), (6)==(2)
       ├── project
       │    ├── columns: d.u:2 d.v:3
-      │    └── distinct-on
+      │    └── union
       │         ├── columns: d.k:1!null d.u:2 d.v:3
-      │         ├── grouping columns: d.k:1!null
-      │         ├── key: (1)
-      │         ├── fd: (1)-->(2,3)
-      │         ├── union-all
-      │         │    ├── columns: d.k:1!null d.u:2 d.v:3
-      │         │    ├── left columns: d.k:1!null d.u:2 d.v:3
-      │         │    ├── right columns: d.k:8 d.u:9 d.v:10
-      │         │    ├── index-join d
-      │         │    │    ├── columns: d.k:1!null d.u:2!null d.v:3
-      │         │    │    ├── key: (1)
-      │         │    │    ├── fd: ()-->(2), (1)-->(3)
-      │         │    │    └── scan d@u
-      │         │    │         ├── columns: d.k:1!null d.u:2!null
-      │         │    │         ├── constraint: /2/1: [/1 - /1]
-      │         │    │         ├── key: (1)
-      │         │    │         └── fd: ()-->(2)
-      │         │    └── index-join d
-      │         │         ├── columns: d.k:8!null d.u:9 d.v:10!null
-      │         │         ├── key: (8)
-      │         │         ├── fd: ()-->(10), (8)-->(9)
-      │         │         └── scan d@v
-      │         │              ├── columns: d.k:8!null d.v:10!null
-      │         │              ├── constraint: /10/8: [/1 - /1]
-      │         │              ├── key: (8)
-      │         │              └── fd: ()-->(10)
-      │         └── aggregations
-      │              ├── const-agg [as=d.u:2, outer=(2)]
-      │              │    └── d.u:2
-      │              └── const-agg [as=d.v:3, outer=(3)]
-      │                   └── d.v:3
+      │         ├── left columns: d.k:1!null d.u:2 d.v:3
+      │         ├── right columns: d.k:8 d.u:9 d.v:10
+      │         ├── key: (1-3)
+      │         ├── index-join d
+      │         │    ├── columns: d.k:1!null d.u:2!null d.v:3
+      │         │    ├── key: (1)
+      │         │    ├── fd: ()-->(2), (1)-->(3)
+      │         │    └── scan d@u
+      │         │         ├── columns: d.k:1!null d.u:2!null
+      │         │         ├── constraint: /2/1: [/1 - /1]
+      │         │         ├── key: (1)
+      │         │         └── fd: ()-->(2)
+      │         └── index-join d
+      │              ├── columns: d.k:8!null d.u:9 d.v:10!null
+      │              ├── key: (8)
+      │              ├── fd: ()-->(10), (8)-->(9)
+      │              └── scan d@v
+      │                   ├── columns: d.k:8!null d.v:10!null
+      │                   ├── constraint: /10/8: [/1 - /1]
+      │                   ├── key: (8)
+      │                   └── fd: ()-->(10)
       ├── distinct-on
       │    ├── columns: a.u:6
       │    ├── grouping columns: a.u:6
@@ -2205,40 +1920,29 @@ project
            ├── fd: (4)==(6), (6)==(4)
            ├── project
            │    ├── columns: d.u:2 d.v:3 w:4
-           │    └── distinct-on
+           │    └── union
            │         ├── columns: d.k:1!null d.u:2 d.v:3 w:4
-           │         ├── grouping columns: d.k:1!null
-           │         ├── key: (1)
-           │         ├── fd: (1)-->(2-4)
-           │         ├── union-all
-           │         │    ├── columns: d.k:1!null d.u:2 d.v:3 w:4
-           │         │    ├── left columns: d.k:1!null d.u:2 d.v:3 w:4
-           │         │    ├── right columns: d.k:8 d.u:9 d.v:10 w:11
-           │         │    ├── index-join d
-           │         │    │    ├── columns: d.k:1!null d.u:2!null d.v:3 w:4
-           │         │    │    ├── key: (1)
-           │         │    │    ├── fd: ()-->(2), (1)-->(3,4)
-           │         │    │    └── scan d@u
-           │         │    │         ├── columns: d.k:1!null d.u:2!null
-           │         │    │         ├── constraint: /2/1: [/1 - /1]
-           │         │    │         ├── key: (1)
-           │         │    │         └── fd: ()-->(2)
-           │         │    └── index-join d
-           │         │         ├── columns: d.k:8!null d.u:9 d.v:10!null w:11
-           │         │         ├── key: (8)
-           │         │         ├── fd: ()-->(10), (8)-->(9,11)
-           │         │         └── scan d@v
-           │         │              ├── columns: d.k:8!null d.v:10!null
-           │         │              ├── constraint: /10/8: [/1 - /1]
-           │         │              ├── key: (8)
-           │         │              └── fd: ()-->(10)
-           │         └── aggregations
-           │              ├── const-agg [as=d.u:2, outer=(2)]
-           │              │    └── d.u:2
-           │              ├── const-agg [as=d.v:3, outer=(3)]
-           │              │    └── d.v:3
-           │              └── const-agg [as=w:4, outer=(4)]
-           │                   └── w:4
+           │         ├── left columns: d.k:1!null d.u:2 d.v:3 w:4
+           │         ├── right columns: d.k:8 d.u:9 d.v:10 w:11
+           │         ├── key: (1-4)
+           │         ├── index-join d
+           │         │    ├── columns: d.k:1!null d.u:2!null d.v:3 w:4
+           │         │    ├── key: (1)
+           │         │    ├── fd: ()-->(2), (1)-->(3,4)
+           │         │    └── scan d@u
+           │         │         ├── columns: d.k:1!null d.u:2!null
+           │         │         ├── constraint: /2/1: [/1 - /1]
+           │         │         ├── key: (1)
+           │         │         └── fd: ()-->(2)
+           │         └── index-join d
+           │              ├── columns: d.k:8!null d.u:9 d.v:10!null w:11
+           │              ├── key: (8)
+           │              ├── fd: ()-->(10), (8)-->(9,11)
+           │              └── scan d@v
+           │                   ├── columns: d.k:8!null d.v:10!null
+           │                   ├── constraint: /10/8: [/1 - /1]
+           │                   ├── key: (8)
+           │                   └── fd: ()-->(10)
            ├── distinct-on
            │    ├── columns: a.u:6
            │    ├── grouping columns: a.u:6
@@ -2256,38 +1960,29 @@ SELECT u, v FROM no_explicit_primary_key WHERE u = 1 OR v = 5
 ----
 project
  ├── columns: u:2 v:3
- └── distinct-on
+ └── union
       ├── columns: u:2 v:3 rowid:4!null
-      ├── grouping columns: rowid:4!null
-      ├── key: (4)
-      ├── fd: (4)-->(2,3)
-      ├── union-all
-      │    ├── columns: u:2 v:3 rowid:4!null
-      │    ├── left columns: u:2 v:3 rowid:4!null
-      │    ├── right columns: u:6 v:7 rowid:8
-      │    ├── index-join no_explicit_primary_key
-      │    │    ├── columns: u:2!null v:3 rowid:4!null
-      │    │    ├── key: (4)
-      │    │    ├── fd: ()-->(2), (4)-->(3)
-      │    │    └── scan no_explicit_primary_key@u
-      │    │         ├── columns: u:2!null rowid:4!null
-      │    │         ├── constraint: /2/4: [/1 - /1]
-      │    │         ├── key: (4)
-      │    │         └── fd: ()-->(2)
-      │    └── index-join no_explicit_primary_key
-      │         ├── columns: u:6 v:7!null rowid:8!null
-      │         ├── key: (8)
-      │         ├── fd: ()-->(7), (8)-->(6)
-      │         └── scan no_explicit_primary_key@v
-      │              ├── columns: v:7!null rowid:8!null
-      │              ├── constraint: /7/8: [/5 - /5]
-      │              ├── key: (8)
-      │              └── fd: ()-->(7)
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           └── const-agg [as=v:3, outer=(3)]
-                └── v:3
+      ├── left columns: u:2 v:3 rowid:4!null
+      ├── right columns: u:6 v:7 rowid:8
+      ├── key: (2-4)
+      ├── index-join no_explicit_primary_key
+      │    ├── columns: u:2!null v:3 rowid:4!null
+      │    ├── key: (4)
+      │    ├── fd: ()-->(2), (4)-->(3)
+      │    └── scan no_explicit_primary_key@u
+      │         ├── columns: u:2!null rowid:4!null
+      │         ├── constraint: /2/4: [/1 - /1]
+      │         ├── key: (4)
+      │         └── fd: ()-->(2)
+      └── index-join no_explicit_primary_key
+           ├── columns: u:6 v:7!null rowid:8!null
+           ├── key: (8)
+           ├── fd: ()-->(7), (8)-->(6)
+           └── scan no_explicit_primary_key@v
+                ├── columns: v:7!null rowid:8!null
+                ├── constraint: /7/8: [/5 - /5]
+                ├── key: (8)
+                └── fd: ()-->(7)
 
 # Apply when outer columns of both sides of OR are a subset of index columns.
 opt expect=SplitDisjunctionAddKey
@@ -2295,38 +1990,29 @@ SELECT u, v FROM e WHERE u = 1 OR v = 1
 ----
 project
  ├── columns: u:2 v:3
- └── distinct-on
+ └── union
       ├── columns: k:1!null u:2 v:3
-      ├── grouping columns: k:1!null
-      ├── key: (1)
-      ├── fd: (1)-->(2,3)
-      ├── union-all
-      │    ├── columns: k:1!null u:2 v:3
-      │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
-      │    ├── index-join e
-      │    │    ├── columns: k:1!null u:2!null v:3
-      │    │    ├── key: (1)
-      │    │    ├── fd: ()-->(2), (1)-->(3)
-      │    │    └── scan e@uw
-      │    │         ├── columns: k:1!null u:2!null
-      │    │         ├── constraint: /2/4/1: [/1 - /1]
-      │    │         ├── key: (1)
-      │    │         └── fd: ()-->(2)
-      │    └── index-join e
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: ()-->(7), (5)-->(6)
-      │         └── scan e@vw
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/8/5: [/1 - /1]
-      │              ├── key: (5)
-      │              └── fd: ()-->(7)
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           └── const-agg [as=v:3, outer=(3)]
-                └── v:3
+      ├── left columns: k:1!null u:2 v:3
+      ├── right columns: k:5 u:6 v:7
+      ├── key: (1-3)
+      ├── index-join e
+      │    ├── columns: k:1!null u:2!null v:3
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2), (1)-->(3)
+      │    └── scan e@uw
+      │         ├── columns: k:1!null u:2!null
+      │         ├── constraint: /2/4/1: [/1 - /1]
+      │         ├── key: (1)
+      │         └── fd: ()-->(2)
+      └── index-join e
+           ├── columns: k:5!null u:6 v:7!null
+           ├── key: (5)
+           ├── fd: ()-->(7), (5)-->(6)
+           └── scan e@vw
+                ├── columns: k:5!null v:7!null
+                ├── constraint: /7/8/5: [/1 - /1]
+                ├── key: (5)
+                └── fd: ()-->(7)
 
 # Apply when outer columns of both sides of OR are a superset of index columns.
 opt expect=SplitDisjunctionAddKey
@@ -2336,52 +2022,41 @@ project
  ├── columns: u:2 v:3
  └── project
       ├── columns: u:2 v:3 w:4!null
-      └── distinct-on
+      └── union
            ├── columns: k:1!null u:2 v:3 w:4!null
-           ├── grouping columns: k:1!null
-           ├── key: (1)
-           ├── fd: (1)-->(2-4)
-           ├── union-all
-           │    ├── columns: k:1!null u:2 v:3 w:4!null
-           │    ├── left columns: k:1!null u:2 v:3 w:4!null
-           │    ├── right columns: k:5 u:6 v:7 w:8
-           │    ├── select
-           │    │    ├── columns: k:1!null u:2!null v:3 w:4!null
+           ├── left columns: k:1!null u:2 v:3 w:4!null
+           ├── right columns: k:5 u:6 v:7 w:8
+           ├── key: (1-4)
+           ├── select
+           │    ├── columns: k:1!null u:2!null v:3 w:4!null
+           │    ├── key: (1)
+           │    ├── fd: ()-->(2,4), (1)-->(3)
+           │    ├── index-join d
+           │    │    ├── columns: k:1!null u:2 v:3 w:4
            │    │    ├── key: (1)
-           │    │    ├── fd: ()-->(2,4), (1)-->(3)
-           │    │    ├── index-join d
-           │    │    │    ├── columns: k:1!null u:2 v:3 w:4
-           │    │    │    ├── key: (1)
-           │    │    │    ├── fd: ()-->(2), (1)-->(3,4)
-           │    │    │    └── scan d@u
-           │    │    │         ├── columns: k:1!null u:2!null
-           │    │    │         ├── constraint: /2/1: [/1 - /1]
-           │    │    │         ├── key: (1)
-           │    │    │         └── fd: ()-->(2)
-           │    │    └── filters
-           │    │         └── w:4 = 2 [outer=(4), constraints=(/4: [/2 - /2]; tight), fd=()-->(4)]
-           │    └── select
-           │         ├── columns: k:5!null u:6 v:7!null w:8!null
-           │         ├── key: (5)
-           │         ├── fd: ()-->(7,8), (5)-->(6)
-           │         ├── index-join d
-           │         │    ├── columns: k:5!null u:6 v:7 w:8
-           │         │    ├── key: (5)
-           │         │    ├── fd: ()-->(7), (5)-->(6,8)
-           │         │    └── scan d@v
-           │         │         ├── columns: k:5!null v:7!null
-           │         │         ├── constraint: /7/5: [/1 - /1]
-           │         │         ├── key: (5)
-           │         │         └── fd: ()-->(7)
-           │         └── filters
-           │              └── w:8 = 3 [outer=(8), constraints=(/8: [/3 - /3]; tight), fd=()-->(8)]
-           └── aggregations
-                ├── const-agg [as=u:2, outer=(2)]
-                │    └── u:2
-                ├── const-agg [as=v:3, outer=(3)]
-                │    └── v:3
-                └── const-agg [as=w:4, outer=(4)]
-                     └── w:4
+           │    │    ├── fd: ()-->(2), (1)-->(3,4)
+           │    │    └── scan d@u
+           │    │         ├── columns: k:1!null u:2!null
+           │    │         ├── constraint: /2/1: [/1 - /1]
+           │    │         ├── key: (1)
+           │    │         └── fd: ()-->(2)
+           │    └── filters
+           │         └── w:4 = 2 [outer=(4), constraints=(/4: [/2 - /2]; tight), fd=()-->(4)]
+           └── select
+                ├── columns: k:5!null u:6 v:7!null w:8!null
+                ├── key: (5)
+                ├── fd: ()-->(7,8), (5)-->(6)
+                ├── index-join d
+                │    ├── columns: k:5!null u:6 v:7 w:8
+                │    ├── key: (5)
+                │    ├── fd: ()-->(7), (5)-->(6,8)
+                │    └── scan d@v
+                │         ├── columns: k:5!null v:7!null
+                │         ├── constraint: /7/5: [/1 - /1]
+                │         ├── key: (5)
+                │         └── fd: ()-->(7)
+                └── filters
+                     └── w:8 = 3 [outer=(8), constraints=(/8: [/3 - /3]; tight), fd=()-->(8)]
 
 # Group sub-expr with the same columns together.
 opt expect=SplitDisjunctionAddKey
@@ -2389,42 +2064,33 @@ SELECT u, v FROM d WHERE (u = 1 OR v = 2) OR (u = 3 OR v = 4)
 ----
 project
  ├── columns: u:2 v:3
- └── distinct-on
+ └── union
       ├── columns: k:1!null u:2 v:3
-      ├── grouping columns: k:1!null
-      ├── key: (1)
-      ├── fd: (1)-->(2,3)
-      ├── union-all
-      │    ├── columns: k:1!null u:2 v:3
-      │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
-      │    ├── index-join d
-      │    │    ├── columns: k:1!null u:2!null v:3
-      │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2,3)
-      │    │    └── scan d@u
-      │    │         ├── columns: k:1!null u:2!null
-      │    │         ├── constraint: /2/1
-      │    │         │    ├── [/1 - /1]
-      │    │         │    └── [/3 - /3]
-      │    │         ├── key: (1)
-      │    │         └── fd: (1)-->(2)
-      │    └── index-join d
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: (5)-->(6,7)
-      │         └── scan d@v
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/5
-      │              │    ├── [/2 - /2]
-      │              │    └── [/4 - /4]
-      │              ├── key: (5)
-      │              └── fd: (5)-->(7)
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           └── const-agg [as=v:3, outer=(3)]
-                └── v:3
+      ├── left columns: k:1!null u:2 v:3
+      ├── right columns: k:5 u:6 v:7
+      ├── key: (1-3)
+      ├── index-join d
+      │    ├── columns: k:1!null u:2!null v:3
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── scan d@u
+      │         ├── columns: k:1!null u:2!null
+      │         ├── constraint: /2/1
+      │         │    ├── [/1 - /1]
+      │         │    └── [/3 - /3]
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2)
+      └── index-join d
+           ├── columns: k:5!null u:6 v:7!null
+           ├── key: (5)
+           ├── fd: (5)-->(6,7)
+           └── scan d@v
+                ├── columns: k:5!null v:7!null
+                ├── constraint: /7/5
+                │    ├── [/2 - /2]
+                │    └── [/4 - /4]
+                ├── key: (5)
+                └── fd: (5)-->(7)
 
 # Group sub-expr with the same columns together. Output should have a single union expr.
 opt expect=SplitDisjunctionAddKey
@@ -2432,44 +2098,35 @@ SELECT u, v FROM d WHERE u = 1 OR u = 3 OR v = 2 OR v = 4 OR u = 5 OR v = 6
 ----
 project
  ├── columns: u:2 v:3
- └── distinct-on
+ └── union
       ├── columns: k:1!null u:2 v:3
-      ├── grouping columns: k:1!null
-      ├── key: (1)
-      ├── fd: (1)-->(2,3)
-      ├── union-all
-      │    ├── columns: k:1!null u:2 v:3
-      │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
-      │    ├── index-join d
-      │    │    ├── columns: k:1!null u:2!null v:3
-      │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2,3)
-      │    │    └── scan d@u
-      │    │         ├── columns: k:1!null u:2!null
-      │    │         ├── constraint: /2/1
-      │    │         │    ├── [/1 - /1]
-      │    │         │    ├── [/3 - /3]
-      │    │         │    └── [/5 - /5]
-      │    │         ├── key: (1)
-      │    │         └── fd: (1)-->(2)
-      │    └── index-join d
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: (5)-->(6,7)
-      │         └── scan d@v
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/5
-      │              │    ├── [/2 - /2]
-      │              │    ├── [/4 - /4]
-      │              │    └── [/6 - /6]
-      │              ├── key: (5)
-      │              └── fd: (5)-->(7)
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           └── const-agg [as=v:3, outer=(3)]
-                └── v:3
+      ├── left columns: k:1!null u:2 v:3
+      ├── right columns: k:5 u:6 v:7
+      ├── key: (1-3)
+      ├── index-join d
+      │    ├── columns: k:1!null u:2!null v:3
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── scan d@u
+      │         ├── columns: k:1!null u:2!null
+      │         ├── constraint: /2/1
+      │         │    ├── [/1 - /1]
+      │         │    ├── [/3 - /3]
+      │         │    └── [/5 - /5]
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2)
+      └── index-join d
+           ├── columns: k:5!null u:6 v:7!null
+           ├── key: (5)
+           ├── fd: (5)-->(6,7)
+           └── scan d@v
+                ├── columns: k:5!null v:7!null
+                ├── constraint: /7/5
+                │    ├── [/2 - /2]
+                │    ├── [/4 - /4]
+                │    └── [/6 - /6]
+                ├── key: (5)
+                └── fd: (5)-->(7)
 
 # Group sub-expr with the same columns together. Output should have a single union expr.
 opt expect=SplitDisjunctionAddKey
@@ -2477,43 +2134,34 @@ SELECT u, v FROM d WHERE (u = 3 OR v = 2) OR (u = 5 OR v = 4) OR v = 6
 ----
 project
  ├── columns: u:2 v:3
- └── distinct-on
+ └── union
       ├── columns: k:1!null u:2 v:3
-      ├── grouping columns: k:1!null
-      ├── key: (1)
-      ├── fd: (1)-->(2,3)
-      ├── union-all
-      │    ├── columns: k:1!null u:2 v:3
-      │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:5 u:6 v:7
-      │    ├── index-join d
-      │    │    ├── columns: k:1!null u:2!null v:3
-      │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2,3)
-      │    │    └── scan d@u
-      │    │         ├── columns: k:1!null u:2!null
-      │    │         ├── constraint: /2/1
-      │    │         │    ├── [/3 - /3]
-      │    │         │    └── [/5 - /5]
-      │    │         ├── key: (1)
-      │    │         └── fd: (1)-->(2)
-      │    └── index-join d
-      │         ├── columns: k:5!null u:6 v:7!null
-      │         ├── key: (5)
-      │         ├── fd: (5)-->(6,7)
-      │         └── scan d@v
-      │              ├── columns: k:5!null v:7!null
-      │              ├── constraint: /7/5
-      │              │    ├── [/2 - /2]
-      │              │    ├── [/4 - /4]
-      │              │    └── [/6 - /6]
-      │              ├── key: (5)
-      │              └── fd: (5)-->(7)
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           └── const-agg [as=v:3, outer=(3)]
-                └── v:3
+      ├── left columns: k:1!null u:2 v:3
+      ├── right columns: k:5 u:6 v:7
+      ├── key: (1-3)
+      ├── index-join d
+      │    ├── columns: k:1!null u:2!null v:3
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── scan d@u
+      │         ├── columns: k:1!null u:2!null
+      │         ├── constraint: /2/1
+      │         │    ├── [/3 - /3]
+      │         │    └── [/5 - /5]
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2)
+      └── index-join d
+           ├── columns: k:5!null u:6 v:7!null
+           ├── key: (5)
+           ├── fd: (5)-->(6,7)
+           └── scan d@v
+                ├── columns: k:5!null v:7!null
+                ├── constraint: /7/5
+                │    ├── [/2 - /2]
+                │    ├── [/4 - /4]
+                │    └── [/6 - /6]
+                ├── key: (5)
+                └── fd: (5)-->(7)
 
 # Don't apply when outer columns of both sides of OR do not intersect with index columns.
 opt expect-not=SplitDisjunctionAddKey
@@ -2530,38 +2178,30 @@ select
 opt expect-not=SplitDisjunctionAddKey
 SELECT k, u, v FROM d WHERE u = 1 OR v = 1
 ----
-distinct-on
+union
  ├── columns: k:1!null u:2 v:3
- ├── grouping columns: k:1!null
+ ├── left columns: k:1!null u:2 v:3
+ ├── right columns: k:5 u:6 v:7
  ├── key: (1)
  ├── fd: (1)-->(2,3)
- ├── union-all
- │    ├── columns: k:1!null u:2 v:3
- │    ├── left columns: k:1!null u:2 v:3
- │    ├── right columns: k:5 u:6 v:7
- │    ├── index-join d
- │    │    ├── columns: k:1!null u:2!null v:3
- │    │    ├── key: (1)
- │    │    ├── fd: ()-->(2), (1)-->(3)
- │    │    └── scan d@u
- │    │         ├── columns: k:1!null u:2!null
- │    │         ├── constraint: /2/1: [/1 - /1]
- │    │         ├── key: (1)
- │    │         └── fd: ()-->(2)
- │    └── index-join d
- │         ├── columns: k:5!null u:6 v:7!null
- │         ├── key: (5)
- │         ├── fd: ()-->(7), (5)-->(6)
- │         └── scan d@v
- │              ├── columns: k:5!null v:7!null
- │              ├── constraint: /7/5: [/1 - /1]
- │              ├── key: (5)
- │              └── fd: ()-->(7)
- └── aggregations
-      ├── const-agg [as=u:2, outer=(2)]
-      │    └── u:2
-      └── const-agg [as=v:3, outer=(3)]
-           └── v:3
+ ├── index-join d
+ │    ├── columns: k:1!null u:2!null v:3
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3)
+ │    └── scan d@u
+ │         ├── columns: k:1!null u:2!null
+ │         ├── constraint: /2/1: [/1 - /1]
+ │         ├── key: (1)
+ │         └── fd: ()-->(2)
+ └── index-join d
+      ├── columns: k:5!null u:6 v:7!null
+      ├── key: (5)
+      ├── fd: ()-->(7), (5)-->(6)
+      └── scan d@v
+           ├── columns: k:5!null v:7!null
+           ├── constraint: /7/5: [/1 - /1]
+           ├── key: (5)
+           └── fd: ()-->(7)
 
 # Don't apply to disjunctions with identical colsets on the left and right.
 opt expect-not=SplitDisjunctionAddKey
@@ -2581,30 +2221,21 @@ project
  ├── columns: u:2 v:3
  ├── lax-key: (2,3)
  ├── fd: (3)~~>(2)
- └── distinct-on
+ └── union
       ├── columns: k:1!null u:2 v:3
-      ├── grouping columns: k:1!null
-      ├── key: (1)
-      ├── fd: (1)-->(2,3)
-      ├── union-all
-      │    ├── columns: k:1!null u:2 v:3
-      │    ├── left columns: k:1!null u:2 v:3
-      │    ├── right columns: k:4 u:5 v:6
-      │    ├── scan a@u
-      │    │    ├── columns: k:1!null u:2!null v:3
-      │    │    ├── constraint: /2/1: [/1 - /1]
-      │    │    ├── flags: no-index-join
-      │    │    ├── key: (1)
-      │    │    └── fd: ()-->(2), (1)-->(3), (3)~~>(1)
-      │    └── scan a@v
-      │         ├── columns: k:4!null u:5 v:6!null
-      │         ├── constraint: /6: [/1 - /1]
-      │         ├── flags: no-index-join
-      │         ├── cardinality: [0 - 1]
-      │         ├── key: ()
-      │         └── fd: ()-->(4-6)
-      └── aggregations
-           ├── const-agg [as=u:2, outer=(2)]
-           │    └── u:2
-           └── const-agg [as=v:3, outer=(3)]
-                └── v:3
+      ├── left columns: k:1!null u:2 v:3
+      ├── right columns: k:4 u:5 v:6
+      ├── key: (1-3)
+      ├── scan a@u
+      │    ├── columns: k:1!null u:2!null v:3
+      │    ├── constraint: /2/1: [/1 - /1]
+      │    ├── flags: no-index-join
+      │    ├── key: (1)
+      │    └── fd: ()-->(2), (1)-->(3), (3)~~>(1)
+      └── scan a@v
+           ├── columns: k:4!null u:5 v:6!null
+           ├── constraint: /6: [/1 - /1]
+           ├── flags: no-index-join
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           └── fd: ()-->(4-6)
