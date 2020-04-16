@@ -25,7 +25,7 @@ function loadStories() {
 }
 
 addDecorator(storyFn => (
-  <div style={{padding: "24px"}}>
+  <div>
     {storyFn()}
   </div>
 ));
