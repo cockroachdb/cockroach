@@ -1923,10 +1923,14 @@ CREATE TABLE pg_catalog.pg_prepared_statements (
 				fromSQL = tree.DBoolTrue
 			}
 
+			ts, err := tree.MakeDTimestampTZ(stmt.createdAt, time.Microsecond)
+			if err != nil {
+				return err
+			}
 			if err := addRow(
 				tree.NewDString(name),
 				tree.NewDString(fmt.Sprintf("PREPARE %s%s AS %s", name, argumentsStr, stmt.SQL)),
-				tree.MakeDTimestampTZ(stmt.createdAt, time.Microsecond),
+				ts,
 				paramTypes,
 				fromSQL,
 			); err != nil {

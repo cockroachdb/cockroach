@@ -67,6 +67,20 @@ var (
 
 	// DTimeMaxTimeRegex is a compiled regex for parsing the 24:00 time value.
 	DTimeMaxTimeRegex = regexp.MustCompile(`^([0-9-]*(\s|T))?\s*24:00(:00(.0+)?)?\s*$`)
+
+	// The maximum timestamp Golang can represents is represented as UNIX
+	// time timeutil.Unix(-9223372028715321601, 0).
+	// However, this causes errors as we cannot reliably sort as we use
+	// UNIX time in the key encoding, and 9223372036854775807 > -9223372028715321601
+	// but timeutil.Unix(9223372036854775807, 0) < timeutil.Unix(-9223372028715321601, 0).
+	//
+	// To be compatible with pgwire, we only support the published min/max for
+	// postgres 4714 BC (JULIAN = 0) - 4713 in their docs - and 294276 AD.
+
+	// MaxSupportedTime is the maximum time we support parsing.
+	MaxSupportedTime = timeutil.Unix(9224318016000-1, 999999000) // 294276-12-31 23:59:59.999999
+	// MinSupportedTime is the minimum time we support parsing.
+	MinSupportedTime = timeutil.Unix(-210866803200, 0) // 4714-11-24 00:00:00+00 BC
 )
 
 // Datum represents a SQL value.
@@ -2101,11 +2115,25 @@ type DTimestamp struct {
 }
 
 // MakeDTimestamp creates a DTimestamp with specified precision.
-func MakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
-	return &DTimestamp{Time: t.Round(precision)}
+func MakeDTimestamp(t time.Time, precision time.Duration) (*DTimestamp, error) {
+	ret := t.Round(precision)
+	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
+		return nil, errors.Newf("timestamp %q exceeds supported timestamp bounds", ret.Format(time.RFC3339))
+	}
+	return &DTimestamp{Time: ret}, nil
 }
 
-var dMinTimestamp = &DTimestamp{}
+// MustMakeDTimestamp wraps MakeDTimestamp but panics if there is an error.
+// This is intended for testing applications only.
+func MustMakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
+	ret, err := MakeDTimestamp(t, precision)
+	if err != nil {
+		panic(err)
+	}
+	return ret
+}
+
+var dZeroTimestamp = &DTimestamp{}
 
 // time.Time formats.
 const (
@@ -2124,7 +2152,7 @@ func ParseDTimestamp(ctx ParseTimeContext, s string, precision time.Duration) (*
 	// Truncate the timezone. DTimestamp doesn't carry its timezone around.
 	_, offset := t.Zone()
 	t = t.Add(time.Duration(offset) * time.Second).UTC()
-	return MakeDTimestamp(t, precision), nil
+	return MakeDTimestamp(t, precision)
 }
 
 // AsDTimestamp attempts to retrieve a DTimestamp from an Expr, returning a DTimestamp and
@@ -2152,7 +2180,7 @@ func MustBeDTimestamp(e Expr) DTimestamp {
 }
 
 // Round returns a new DTimestamp to the specified precision.
-func (d *DTimestamp) Round(precision time.Duration) *DTimestamp {
+func (d *DTimestamp) Round(precision time.Duration) (*DTimestamp, error) {
 	return MakeDTimestamp(d.Time, precision)
 }
 
@@ -2249,39 +2277,39 @@ func (d *DTimestamp) Compare(ctx *EvalContext, other Datum) int {
 }
 
 // Prev implements the Datum interface.
-func (d *DTimestamp) Prev(_ *EvalContext) (Datum, bool) {
+func (d *DTimestamp) Prev(ctx *EvalContext) (Datum, bool) {
+	if d.IsMin(ctx) {
+		return nil, false
+	}
 	return &DTimestamp{Time: d.Add(-time.Microsecond)}, true
 }
 
 // Next implements the Datum interface.
-func (d *DTimestamp) Next(_ *EvalContext) (Datum, bool) {
+func (d *DTimestamp) Next(ctx *EvalContext) (Datum, bool) {
+	if d.IsMax(ctx) {
+		return nil, false
+	}
 	return &DTimestamp{Time: d.Add(time.Microsecond)}, true
 }
 
 // IsMax implements the Datum interface.
 func (d *DTimestamp) IsMax(_ *EvalContext) bool {
-	// Adding 1 overflows to a smaller value
-	tNext := d.Time.Add(time.Microsecond)
-	return d.After(tNext)
+	return d.Equal(MaxSupportedTime)
 }
 
 // IsMin implements the Datum interface.
 func (d *DTimestamp) IsMin(_ *EvalContext) bool {
-	// Subtracting 1 underflows to a larger value.
-	tPrev := d.Time.Add(-time.Microsecond)
-	return d.Before(tPrev)
+	return d.Equal(MinSupportedTime)
 }
 
 // Min implements the Datum interface.
 func (d *DTimestamp) Min(_ *EvalContext) (Datum, bool) {
-	// TODO(knz): figure a good way to find a minimum.
-	return nil, false
+	return &DTimestamp{Time: MinSupportedTime}, true
 }
 
 // Max implements the Datum interface.
 func (d *DTimestamp) Max(_ *EvalContext) (Datum, bool) {
-	// TODO(knz): figure a good way to find a minimum.
-	return nil, false
+	return &DTimestamp{Time: MaxSupportedTime}, true
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -2311,8 +2339,22 @@ type DTimestampTZ struct {
 }
 
 // MakeDTimestampTZ creates a DTimestampTZ with specified precision.
-func MakeDTimestampTZ(t time.Time, precision time.Duration) *DTimestampTZ {
-	return &DTimestampTZ{Time: t.Round(precision)}
+func MakeDTimestampTZ(t time.Time, precision time.Duration) (*DTimestampTZ, error) {
+	ret := t.Round(precision)
+	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
+		return nil, errors.Newf("timestamp %q exceeds supported timestamp bounds", ret.Format(time.RFC3339))
+	}
+	return &DTimestampTZ{Time: ret}, nil
+}
+
+// MustMakeDTimestampTZ wraps MakeDTimestampTZ but panics if there is an error.
+// This is intended for testing applications only.
+func MustMakeDTimestampTZ(t time.Time, precision time.Duration) *DTimestampTZ {
+	ret, err := MakeDTimestampTZ(t, precision)
+	if err != nil {
+		panic(err)
+	}
+	return ret
 }
 
 // MakeDTimestampTZFromDate creates a DTimestampTZ from a DDate.
@@ -2325,7 +2367,7 @@ func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) (*DTimestampTZ, erro
 	// Normalize to the correct zone.
 	t = t.In(loc)
 	_, offset := t.Zone()
-	return MakeDTimestampTZ(t.Add(time.Duration(-offset)*time.Second), time.Microsecond), nil
+	return MakeDTimestampTZ(t.Add(time.Duration(-offset)*time.Second), time.Microsecond)
 }
 
 // ParseDTimestampTZ parses and returns the *DTimestampTZ Datum value represented by
@@ -2339,10 +2381,10 @@ func ParseDTimestampTZ(
 		return nil, err
 	}
 	// Always normalize time to the current location.
-	return MakeDTimestampTZ(t, precision), nil
+	return MakeDTimestampTZ(t, precision)
 }
 
-var dMinTimestampTZ = &DTimestampTZ{}
+var dZeroTimestampTZ = &DTimestampTZ{}
 
 // AsDTimestampTZ attempts to retrieve a DTimestampTZ from an Expr, returning a
 // DTimestampTZ and a flag signifying whether the assertion was successful. The
@@ -2369,7 +2411,7 @@ func MustBeDTimestampTZ(e Expr) DTimestampTZ {
 }
 
 // Round returns a new DTimestampTZ to the specified precision.
-func (d *DTimestampTZ) Round(precision time.Duration) *DTimestampTZ {
+func (d *DTimestampTZ) Round(precision time.Duration) (*DTimestampTZ, error) {
 	return MakeDTimestampTZ(d.Time, precision)
 }
 
@@ -2388,39 +2430,39 @@ func (d *DTimestampTZ) Compare(ctx *EvalContext, other Datum) int {
 }
 
 // Prev implements the Datum interface.
-func (d *DTimestampTZ) Prev(_ *EvalContext) (Datum, bool) {
+func (d *DTimestampTZ) Prev(ctx *EvalContext) (Datum, bool) {
+	if d.IsMin(ctx) {
+		return nil, false
+	}
 	return &DTimestampTZ{Time: d.Add(-time.Microsecond)}, true
 }
 
 // Next implements the Datum interface.
-func (d *DTimestampTZ) Next(_ *EvalContext) (Datum, bool) {
+func (d *DTimestampTZ) Next(ctx *EvalContext) (Datum, bool) {
+	if d.IsMax(ctx) {
+		return nil, false
+	}
 	return &DTimestampTZ{Time: d.Add(time.Microsecond)}, true
 }
 
 // IsMax implements the Datum interface.
 func (d *DTimestampTZ) IsMax(_ *EvalContext) bool {
-	// Adding 1 overflows to a smaller value
-	tNext := d.Time.Add(time.Microsecond)
-	return d.After(tNext)
+	return d.Equal(MaxSupportedTime)
 }
 
 // IsMin implements the Datum interface.
 func (d *DTimestampTZ) IsMin(_ *EvalContext) bool {
-	// Subtracting 1 underflows to a larger value.
-	tPrev := d.Time.Add(-time.Microsecond)
-	return d.Before(tPrev)
+	return d.Equal(MinSupportedTime)
 }
 
 // Min implements the Datum interface.
 func (d *DTimestampTZ) Min(_ *EvalContext) (Datum, bool) {
-	// TODO(knz): figure a good way to find a minimum.
-	return nil, false
+	return &DTimestampTZ{Time: MinSupportedTime}, true
 }
 
 // Max implements the Datum interface.
 func (d *DTimestampTZ) Max(_ *EvalContext) (Datum, bool) {
-	// TODO(knz): figure a good way to find a minimum.
-	return nil, false
+	return &DTimestampTZ{Time: MaxSupportedTime}, true
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -2447,13 +2489,13 @@ func (d *DTimestampTZ) Size() uintptr {
 // stripTimeZone removes the time zone from this TimestampTZ. For example, a
 // TimestampTZ '2012-01-01 12:00:00 +02:00' would become
 //             '2012-01-01 12:00:00'.
-func (d *DTimestampTZ) stripTimeZone(ctx *EvalContext) *DTimestamp {
+func (d *DTimestampTZ) stripTimeZone(ctx *EvalContext) (*DTimestamp, error) {
 	return d.EvalAtTimeZone(ctx, ctx.GetLocation())
 }
 
 // EvalAtTimeZone evaluates this TimestampTZ as if it were in the supplied
 // location, returning a timestamp without a timezone.
-func (d *DTimestampTZ) EvalAtTimeZone(ctx *EvalContext, loc *time.Location) *DTimestamp {
+func (d *DTimestampTZ) EvalAtTimeZone(ctx *EvalContext, loc *time.Location) (*DTimestamp, error) {
 	_, locOffset := d.Time.In(loc).Zone()
 	t := d.Time.UTC().Add(time.Duration(locOffset) * time.Second).UTC()
 	return MakeDTimestamp(t, time.Microsecond)
@@ -4034,7 +4076,7 @@ func NewDefaultDatum(evalCtx *EvalContext, t *types.T) (d Datum, err error) {
 	case types.DateFamily:
 		return dEpochDate, nil
 	case types.TimestampFamily:
-		return dMinTimestamp, nil
+		return dZeroTimestamp, nil
 	case types.IntervalFamily:
 		return dZeroInterval, nil
 	case types.StringFamily:
@@ -4042,7 +4084,7 @@ func NewDefaultDatum(evalCtx *EvalContext, t *types.T) (d Datum, err error) {
 	case types.BytesFamily:
 		return dEmptyBytes, nil
 	case types.TimestampTZFamily:
-		return dMinTimestampTZ, nil
+		return dZeroTimestampTZ, nil
 	case types.CollatedStringFamily:
 		return NewDCollatedString("", t.Locale(), &evalCtx.CollationEnv)
 	case types.OidFamily:

@@ -204,9 +204,12 @@ func TestAverageRefreshTime(t *testing.T) {
 			if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(1))); err != nil {
 				return err
 			}
-			createdAt := tree.MakeDTimestamp(
+			createdAt, err := tree.MakeDTimestamp(
 				timeutil.Now().Add(time.Duration(-1*(i*3+7))*time.Hour), time.Hour,
 			)
+			if err != nil {
+				return err
+			}
 			name := fmt.Sprintf("stat%d", i)
 			if err := insertStat(txn, name, columnIDsVal, createdAt); err != nil {
 				return err
@@ -234,9 +237,12 @@ func TestAverageRefreshTime(t *testing.T) {
 			if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(2))); err != nil {
 				return err
 			}
-			createdAt := tree.MakeDTimestamp(
+			createdAt, err := tree.MakeDTimestamp(
 				timeutil.Now().Add(time.Duration(-1*(i*4+6))*time.Hour), time.Hour,
 			)
+			if err != nil {
+				return err
+			}
 			if err := insertStat(txn, AutoStatsName, columnIDsVal, createdAt); err != nil {
 				return err
 			}
@@ -282,9 +288,12 @@ func TestAverageRefreshTime(t *testing.T) {
 			if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(1))); err != nil {
 				return err
 			}
-			createdAt := tree.MakeDTimestamp(
+			createdAt, err := tree.MakeDTimestamp(
 				timeutil.Now().Add(time.Duration(-1*(i*90+300))*time.Minute), time.Minute,
 			)
+			if err != nil {
+				return err
+			}
 			if err := insertStat(txn, AutoStatsName, columnIDsVal, createdAt); err != nil {
 				return err
 			}

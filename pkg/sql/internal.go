@@ -431,7 +431,10 @@ func (ie *InternalExecutor) execInternal(
 
 	// Transforms the args to datums. The datum types will be passed as type hints
 	// to the PrepareStmt command.
-	datums := golangFillQueryArguments(qargs...)
+	datums, err := golangFillQueryArguments(qargs...)
+	if err != nil {
+		return result{}, err
+	}
 	typeHints := make(tree.PlaceholderTypes, len(datums))
 	for i, d := range datums {
 		// Arg numbers start from 1.
