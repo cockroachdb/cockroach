@@ -23,8 +23,10 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
@@ -41,6 +43,9 @@ var _ tree.Datum
 // Dummy import to pull in "duration" package.
 var _ duration.Duration
 
+// Dummy import to pull in "coltypes" package.
+var _ coltypes.T
+
 // _ASSIGN_ADD is the template addition function for assigning the first input
 // to the result of the second input + the third input.
 func _ASSIGN_ADD(_, _, _ string) {
@@ -49,8 +54,8 @@ func _ASSIGN_ADD(_, _, _ string) {
 
 // */}}
 
-func newSumAgg(t coltypes.T) (aggregateFunc, error) {
-	switch t {
+func newSumAgg(t *types.T) (aggregateFunc, error) {
+	switch typeconv.FromColumnType(t) {
 	// {{range .}}
 	case _TYPES_T:
 		return &sum_TYPEAgg{}, nil

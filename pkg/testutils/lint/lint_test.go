@@ -1423,6 +1423,7 @@ func TestLint(t *testing.T) {
 			// engine, don't forget to "register" the newly added package in
 			// sql/colbase/vecerror/error.go file.
 			"sql/col*",
+			":!sql/colbase/typeconv/typeconv.go",
 			":!sql/colbase/vecerror/error.go",
 			":!sql/colexec/execpb/stats.pb.go",
 			":!sql/colflow/vectorized_panic_propagation_test.go",

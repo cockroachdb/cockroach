@@ -15,11 +15,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -121,7 +121,7 @@ type externalSorter struct {
 
 	unlimitedAllocator *colbase.Allocator
 	state              externalSorterState
-	inputTypes         []coltypes.T
+	inputTypes         []types.T
 	ordering           execinfrapb.Ordering
 	inMemSorter        resettableOperator
 	inMemSorterInput   *inputPartitioningOperator
@@ -175,7 +175,7 @@ func newExternalSorter(
 	unlimitedAllocator *colbase.Allocator,
 	standaloneMemAccount *mon.BoundAccount,
 	input colbase.Operator,
-	inputTypes []coltypes.T,
+	inputTypes []types.T,
 	ordering execinfrapb.Ordering,
 	memoryLimit int64,
 	maxNumberPartitions int,
@@ -201,7 +201,7 @@ func newExternalSorter(
 	// memoryLimit of the partitions to sort in memory by those cache sizes. To be
 	// safe, we also estimate the size of the output batch and subtract that as
 	// well.
-	batchMemSize := colbase.EstimateBatchSizeBytes(inputTypes, coldata.BatchSize())
+	batchMemSize := colbase.EstimateBatchSizeBytesFromSQLTypes(inputTypes, coldata.BatchSize())
 	// Reserve a certain amount of memory for the partition caches.
 	memoryLimit -= int64((maxNumberPartitions * diskQueueCfg.BufferSizeBytes) + batchMemSize)
 	if memoryLimit < 1 {
@@ -312,7 +312,10 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			// with the unlimited allocator and will *not* release that memory
 			// from the allocator, so we have to do it ourselves.
 			before := s.unlimitedAllocator.Used()
-			merger := s.createMergerForPartitions(s.firstPartitionIdx, s.numPartitions)
+			merger, err := s.createMergerForPartitions(s.firstPartitionIdx, s.numPartitions)
+			if err != nil {
+				vecerror.InternalError(err)
+			}
 			merger.Init()
 			newPartitionIdx := s.firstPartitionIdx + s.numPartitions
 			for b := merger.Next(ctx); b.Length() > 0; b = merger.Next(ctx) {
@@ -341,7 +344,11 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 					s.unlimitedAllocator, s.inputTypes, s.partitioner, s.firstPartitionIdx,
 				)
 			} else {
-				s.emitter = s.createMergerForPartitions(s.firstPartitionIdx, s.numPartitions)
+				var err error
+				s.emitter, err = s.createMergerForPartitions(s.firstPartitionIdx, s.numPartitions)
+				if err != nil {
+					vecerror.InternalError(err)
+				}
 			}
 			s.emitter.Init()
 			s.state = externalSorterEmitting
@@ -405,7 +412,9 @@ func (s *externalSorter) IdempotentClose(ctx context.Context) error {
 
 // createMergerForPartitions creates an ordered synchronizer that will merge
 // partitions in [firstIdx, firstIdx+numPartitions) range.
-func (s *externalSorter) createMergerForPartitions(firstIdx, numPartitions int) colbase.Operator {
+func (s *externalSorter) createMergerForPartitions(
+	firstIdx, numPartitions int,
+) (colbase.Operator, error) {
 	syncInputs := make([]colbase.Operator, numPartitions)
 	for i := range syncInputs {
 		syncInputs[i] = newPartitionerToOperator(

@@ -20,9 +20,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -192,8 +192,8 @@ func TestByteArrayRoundTrip(t *testing.T) {
 		randValues = append(randValues, d)
 	}
 
-	for _, be := range []sessiondata.BytesEncodeFormat{
-		sessiondata.BytesEncodeHex, sessiondata.BytesEncodeEscape} {
+	for _, be := range []lex.BytesEncodeFormat{
+		lex.BytesEncodeHex, lex.BytesEncodeEscape} {
 		t.Run(be.String(), func(t *testing.T) {
 			for i, d := range randValues {
 				t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {

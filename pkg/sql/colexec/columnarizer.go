@@ -15,13 +15,13 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -47,7 +47,7 @@ type Columnarizer struct {
 	batch           coldata.Batch
 	accumulatedMeta []execinfrapb.ProducerMetadata
 	ctx             context.Context
-	typs            []coltypes.T
+	typs            []types.T
 }
 
 var _ colbase.Operator = &Columnarizer{}
@@ -78,8 +78,8 @@ func NewColumnarizer(
 	); err != nil {
 		return nil, err
 	}
-	c.typs, err = typeconv.FromColumnTypes(c.OutputTypes())
-
+	c.typs = c.OutputTypes()
+	_, err = typeconv.FromColumnTypes(c.typs)
 	return c, err
 }
 

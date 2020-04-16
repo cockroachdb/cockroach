@@ -12,24 +12,21 @@ package colbase
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // CopyBatch copies the original batch and returns that copy. However, note that
 // the underlying capacity might be different (a new batch is created only with
 // capacity original.Length()).
-func CopyBatch(allocator *Allocator, original coldata.Batch) coldata.Batch {
-	typs := make([]coltypes.T, original.Width())
-	for i, vec := range original.ColVecs() {
-		typs[i] = vec.Type()
-	}
+func CopyBatch(allocator *Allocator, original coldata.Batch, typs []types.T) coldata.Batch {
 	b := allocator.NewMemBatchWithSize(typs, original.Length())
 	b.SetLength(original.Length())
 	allocator.PerformOperation(b.ColVecs(), func() {
 		for colIdx, col := range original.ColVecs() {
 			b.ColVec(colIdx).Copy(coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
-					ColType:   typs[colIdx],
+					ColType:   typeconv.FromColumnType(&typs[colIdx]),
 					Src:       col,
 					SrcEndIdx: original.Length(),
 				},

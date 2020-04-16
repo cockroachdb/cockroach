@@ -16,7 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -37,7 +39,7 @@ func NewBatchBuffer() *BatchBuffer {
 }
 
 // Add adds a batch to the buffer.
-func (b *BatchBuffer) Add(batch coldata.Batch) {
+func (b *BatchBuffer) Add(batch coldata.Batch, _ []types.T) {
 	b.buffer = append(b.buffer, batch)
 }
 
@@ -55,10 +57,11 @@ func (b *BatchBuffer) Next(context.Context) coldata.Batch {
 type RepeatableBatchSource struct {
 	ZeroInputNode
 
-	colVecs  []coldata.Vec
-	typs     []coltypes.T
-	sel      []int
-	batchLen int
+	colVecs   []coldata.Vec
+	typs      []types.T
+	physTypes []coltypes.T
+	sel       []int
+	batchLen  int
 	// numToCopy indicates the number of tuples that needs to be copied. It is
 	// equal to batchLen when sel is nil and is equal to maxSelIdx+1 when sel is
 	// non-nil.
@@ -75,11 +78,9 @@ var _ Operator = &RepeatableBatchSource{}
 // input batch forever. Note that it stores the contents of the input batch and
 // copies them into a separate output batch. The output batch is allowed to be
 // modified whereas the input batch is *not*.
-func NewRepeatableBatchSource(allocator *Allocator, batch coldata.Batch) *RepeatableBatchSource {
-	typs := make([]coltypes.T, batch.Width())
-	for i, vec := range batch.ColVecs() {
-		typs[i] = vec.Type()
-	}
+func NewRepeatableBatchSource(
+	allocator *Allocator, batch coldata.Batch, typs []types.T,
+) *RepeatableBatchSource {
 	sel := batch.Selection()
 	batchLen := batch.Length()
 	numToCopy := batchLen
@@ -93,9 +94,14 @@ func NewRepeatableBatchSource(allocator *Allocator, batch coldata.Batch) *Repeat
 		numToCopy = maxIdx + 1
 	}
 	output := allocator.NewMemBatchWithSize(typs, numToCopy)
+	physTypes, err := typeconv.FromColumnTypes(typs)
+	if err != nil {
+		vecerror.InternalError(err)
+	}
 	src := &RepeatableBatchSource{
 		colVecs:   batch.ColVecs(),
 		typs:      typs,
+		physTypes: physTypes,
 		sel:       sel,
 		batchLen:  batchLen,
 		numToCopy: numToCopy,
@@ -114,13 +120,13 @@ func (s *RepeatableBatchSource) Next(context.Context) coldata.Batch {
 	if s.sel != nil {
 		copy(s.output.Selection()[:s.batchLen], s.sel[:s.batchLen])
 	}
-	for i, typ := range s.typs {
+	for i, physType := range s.physTypes {
 		// This Copy is outside of the allocator since the RepeatableBatchSource is
 		// a test utility which is often used in the benchmarks, and we want to
 		// reduce the performance impact of this operator.
 		s.output.ColVec(i).Copy(coldata.CopySliceArgs{
 			SliceArgs: coldata.SliceArgs{
-				ColType:   typ,
+				ColType:   physType,
 				Src:       s.colVecs[i],
 				SrcEndIdx: s.numToCopy,
 			},

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -96,7 +95,7 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 		},
 	}
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
+	batch := testAllocator.NewMemBatch([]types.T{*types.Int})
 	col := batch.ColVec(0).Int64()
 
 	for i := 0; i < coldata.BatchSize(); i++ {
@@ -125,9 +124,10 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 		}
 	}
 
-	source := colbase.NewRepeatableBatchSource(testAllocator, batch)
+	typs := []types.T{*types.Int}
+	source := colbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	op, err := createTestProjectingOperator(
-		ctx, flowCtx, source, []types.T{*types.Int},
+		ctx, flowCtx, source, typs,
 		"abs(@1)" /* projectingExpr */, false, /* canFallbackToRowexec */
 	)
 	require.NoError(b, err)
@@ -157,7 +157,8 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	ctx := context.Background()
 	tctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Bytes, coltypes.Int64, coltypes.Int64})
+	typs := []types.T{*types.String, *types.Int, *types.Int}
+	batch := testAllocator.NewMemBatch(typs)
 	outputIdx := 3
 	bCol := batch.ColVec(0).Bytes()
 	sCol := batch.ColVec(1).Int64()
@@ -169,15 +170,14 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	}
 	batch.SetLength(coldata.BatchSize())
 	var source colbase.Operator
-	source = colbase.NewRepeatableBatchSource(testAllocator, batch)
-	source = newVectorTypeEnforcer(testAllocator, source, coltypes.Bytes, outputIdx)
+	source = colbase.NewRepeatableBatchSource(testAllocator, batch, typs)
+	source = newVectorTypeEnforcer(testAllocator, source, types.Bytes, outputIdx)
 
 	// Set up the default operator.
 	expr, err := parser.ParseExpr("substring(@1, @2, @3)")
 	if err != nil {
 		b.Fatal(err)
 	}
-	typs := []types.T{*types.String, *types.Int, *types.Int}
 	inputCols := []int{0, 1, 2}
 	p := &mockTypeContext{typs: typs}
 	typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarContainer: p}, types.Any)
@@ -193,7 +193,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		columnTypes:    typs,
 		outputType:     types.String,
 		outputPhysType: coltypes.Bytes,
-		converter:      typeconv.GetDatumToPhysicalFn(types.String),
+		converter:      getDatumToPhysicalFn(types.String),
 		row:            make(tree.Datums, outputIdx),
 		argumentCols:   inputCols,
 	}

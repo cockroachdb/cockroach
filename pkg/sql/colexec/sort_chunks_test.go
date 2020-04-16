@@ -17,9 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -34,7 +32,7 @@ func init() {
 			description: `three chunks`,
 			tuples:      tuples{{1, 2}, {1, 2}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, 1}},
 			expected:    tuples{{1, 1}, {1, 2}, {1, 2}, {1, 3}, {5, 5}, {6, 1}, {6, 6}},
-			logTypes:    []types.T{*types.Int, *types.Int},
+			typs:        []types.T{*types.Int, *types.Int},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 			matchLen:    1,
 		},
@@ -42,7 +40,7 @@ func init() {
 			description: `simple nulls asc`,
 			tuples:      tuples{{1, 2}, {1, nil}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, nil}},
 			expected:    tuples{{1, nil}, {1, 1}, {1, 2}, {1, 3}, {5, 5}, {6, nil}, {6, 6}},
-			logTypes:    []types.T{*types.Int, *types.Int},
+			typs:        []types.T{*types.Int, *types.Int},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}},
 			matchLen:    1,
 		},
@@ -50,7 +48,7 @@ func init() {
 			description: `simple nulls desc`,
 			tuples:      tuples{{1, 2}, {1, nil}, {1, 3}, {1, 1}, {5, 5}, {6, 6}, {6, nil}},
 			expected:    tuples{{1, 3}, {1, 2}, {1, 1}, {1, nil}, {5, 5}, {6, 6}, {6, nil}},
-			logTypes:    []types.T{*types.Int, *types.Int},
+			typs:        []types.T{*types.Int, *types.Int},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC}},
 			matchLen:    1,
 		},
@@ -70,7 +68,7 @@ func init() {
 				{0, 2, 0},
 				{0, 2, 1},
 			},
-			logTypes: []types.T{*types.Int, *types.Int, *types.Int},
+			typs:     []types.T{*types.Int, *types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 1,
 		},
@@ -90,7 +88,7 @@ func init() {
 				{1, 1, 1},
 				{1, 2, 1},
 			},
-			logTypes: []types.T{*types.Int, *types.Int, *types.Int},
+			typs:     []types.T{*types.Int, *types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 1,
 		},
@@ -110,7 +108,7 @@ func init() {
 				{0, 2, 0},
 				{0, 2, 1},
 			},
-			logTypes: []types.T{*types.Int, *types.Int, *types.Int},
+			typs:     []types.T{*types.Int, *types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 2,
 		},
@@ -130,7 +128,7 @@ func init() {
 				{1, 1, 1},
 				{1, 2, 1},
 			},
-			logTypes: []types.T{*types.Int, *types.Int, *types.Int},
+			typs:     []types.T{*types.Int, *types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 2,
 		},
@@ -150,7 +148,7 @@ func init() {
 				{1, 1, 1},
 				{0, 1, 2},
 			},
-			logTypes: []types.T{*types.Int, *types.Int, *types.Int},
+			typs:     []types.T{*types.Int, *types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 2}, {ColIdx: 1}, {ColIdx: 0}},
 			matchLen: 1,
 		},
@@ -174,7 +172,7 @@ func init() {
 				{1, 1, 2},
 				{1, 2, 2},
 			},
-			logTypes: []types.T{*types.Int, *types.Int, *types.Int},
+			typs:     []types.T{*types.Int, *types.Int, *types.Int},
 			ordCols:  []execinfrapb.Ordering_Column{{ColIdx: 2}, {ColIdx: 0}, {ColIdx: 1}},
 			matchLen: 2,
 		},
@@ -186,11 +184,7 @@ func TestSortChunks(t *testing.T) {
 
 	for _, tc := range sortChunksTestCases {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colbase.Operator) (colbase.Operator, error) {
-			physTypes, err := typeconv.FromColumnTypes(tc.logTypes)
-			if err != nil {
-				return nil, err
-			}
-			return NewSortChunks(testAllocator, input[0], physTypes, tc.ordCols, tc.matchLen)
+			return NewSortChunks(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen)
 		})
 	}
 }
@@ -201,9 +195,9 @@ func TestSortChunksRandomized(t *testing.T) {
 	nTups := 8
 	maxCols := 5
 	// TODO(yuzefovich): randomize types as well.
-	typs := make([]coltypes.T, maxCols)
+	typs := make([]types.T, maxCols)
 	for i := range typs {
-		typs[i] = coltypes.Int64
+		typs[i] = *types.Int
 	}
 
 	for nCols := 1; nCols < maxCols; nCols++ {
@@ -242,9 +236,9 @@ func BenchmarkSortChunks(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	sorterConstructors := []func(*colbase.Allocator, colbase.Operator, []coltypes.T, []execinfrapb.Ordering_Column, int) (colbase.Operator, error){
+	sorterConstructors := []func(*colbase.Allocator, colbase.Operator, []types.T, []execinfrapb.Ordering_Column, int) (colbase.Operator, error){
 		NewSortChunks,
-		func(allocator *colbase.Allocator, input colbase.Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, _ int) (colbase.Operator, error) {
+		func(allocator *colbase.Allocator, input colbase.Operator, inputTypes []types.T, orderingCols []execinfrapb.Ordering_Column, _ int) (colbase.Operator, error) {
 			return NewSorter(allocator, input, inputTypes, orderingCols)
 		},
 	}
@@ -264,9 +258,9 @@ func BenchmarkSortChunks(b *testing.B) {
 								// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
 								// batch) * nCols (number of columns / row).
 								b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
-								typs := make([]coltypes.T, nCols)
+								typs := make([]types.T, nCols)
 								for i := range typs {
-									typs[i] = coltypes.Int64
+									typs[i] = *types.Int
 								}
 								batch := testAllocator.NewMemBatch(typs)
 								batch.SetLength(coldata.BatchSize())
@@ -294,7 +288,7 @@ func BenchmarkSortChunks(b *testing.B) {
 								}
 								b.ResetTimer()
 								for n := 0; n < b.N; n++ {
-									source := newFiniteChunksSource(batch, nBatches, matchLen)
+									source := newFiniteChunksSource(batch, typs, nBatches, matchLen)
 									sorter, err := sorterConstructor(testAllocator, source, typs, ordCols, matchLen)
 									if err != nil {
 										b.Fatal(err)

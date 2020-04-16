@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -921,7 +920,7 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 		// that we can let the user see and control the result using
 		// `bytea_output`.
 		return lex.EncodeByteArrayToRawBytes(string(t),
-			sessiondata.BytesEncodeEscape, false /* skipHexPrefix */)
+			lex.BytesEncodeEscape, false /* skipHexPrefix */)
 
 	case time.Time:
 		return t.Format(tree.TimestampOutputFormat)

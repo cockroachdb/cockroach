@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // isNullProjOp is an Operator that projects into outputIdx Vec whether the
@@ -32,7 +32,7 @@ type isNullProjOp struct {
 func newIsNullProjOp(
 	allocator *colbase.Allocator, input colbase.Operator, colIdx, outputIdx int, negate bool,
 ) colbase.Operator {
-	input = newVectorTypeEnforcer(allocator, input, coltypes.Bool, outputIdx)
+	input = newVectorTypeEnforcer(allocator, input, types.Bool, outputIdx)
 	return &isNullProjOp{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,

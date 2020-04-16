@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
@@ -50,9 +49,9 @@ func init() {
 
 	hjTestCases = []*joinTestCase{
 		{
-			description:    "0",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64},
+			description: "0",
+			leftTypes:   []types.T{*types.Int},
+			rightTypes:  []types.T{*types.Int},
 
 			leftTuples: tuples{
 				{0},
@@ -86,9 +85,9 @@ func init() {
 			},
 		},
 		{
-			description:    "1",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64},
+			description: "1",
+			leftTypes:   []types.T{*types.Int},
+			rightTypes:  []types.T{*types.Int},
 
 			// Test an empty build table.
 			leftTuples: tuples{},
@@ -113,9 +112,9 @@ func init() {
 			},
 		},
 		{
-			description:    "2",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64},
+			description: "2",
+			leftTypes:   []types.T{*types.Int},
+			rightTypes:  []types.T{*types.Int},
 
 			leftTuples: tuples{
 				{0},
@@ -148,9 +147,9 @@ func init() {
 			},
 		},
 		{
-			description:    "3",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64},
+			description: "3",
+			leftTypes:   []types.T{*types.Int},
+			rightTypes:  []types.T{*types.Int},
 
 			// Test right outer join.
 			leftTuples: tuples{
@@ -177,9 +176,9 @@ func init() {
 			},
 		},
 		{
-			description:    "4",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64},
+			description: "4",
+			leftTypes:   []types.T{*types.Int},
+			rightTypes:  []types.T{*types.Int},
 
 			// Test right outer join with non-distinct left build table with an
 			// unmatched row from the right followed by a matched one. This is a
@@ -209,9 +208,9 @@ func init() {
 			},
 		},
 		{
-			description:    "5",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64},
+			description: "5",
+			leftTypes:   []types.T{*types.Int},
+			rightTypes:  []types.T{*types.Int},
 
 			// Test null handling only on probe column.
 			leftTuples: tuples{
@@ -235,9 +234,9 @@ func init() {
 			},
 		},
 		{
-			description:    "6",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64},
+			description: "6",
+			leftTypes:   []types.T{*types.Int},
+			rightTypes:  []types.T{*types.Int},
 
 			// Test null handling only on build column.
 			leftTuples: tuples{
@@ -266,9 +265,9 @@ func init() {
 			},
 		},
 		{
-			description:    "7",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64, coltypes.Int64},
+			description: "7",
+			leftTypes:   []types.T{*types.Int, *types.Int},
+			rightTypes:  []types.T{*types.Int, *types.Int},
 
 			// Test null handling in output columns.
 			leftTuples: tuples{
@@ -300,9 +299,9 @@ func init() {
 			},
 		},
 		{
-			description:    "8",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64},
+			description: "8",
+			leftTypes:   []types.T{*types.Int},
+			rightTypes:  []types.T{*types.Int},
 
 			// Test null handling in hash join key column.
 			leftTuples: tuples{
@@ -335,9 +334,9 @@ func init() {
 		},
 		{
 			// Test handling of multiple column non-distinct equality keys.
-			description:    "9",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			description: "9",
+			leftTypes:   []types.T{*types.Int, *types.Int, *types.Int},
+			rightTypes:  []types.T{*types.Int, *types.Int, *types.Int},
 
 			leftTuples: tuples{
 				{0, 0, 1},
@@ -374,9 +373,9 @@ func init() {
 		},
 		{
 			// Test handling of duplicate equality keys that map to same buckets.
-			description:    "10",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64},
+			description: "10",
+			leftTypes:   []types.T{*types.Int},
+			rightTypes:  []types.T{*types.Int},
 
 			leftTuples: tuples{
 				{0},
@@ -421,9 +420,9 @@ func init() {
 		},
 		{
 			// Test handling of duplicate equality keys.
-			description:    "11",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64},
+			description: "11",
+			leftTypes:   []types.T{*types.Int},
+			rightTypes:  []types.T{*types.Int},
 
 			leftTuples: tuples{
 				{0},
@@ -460,9 +459,9 @@ func init() {
 		},
 		{
 			// Test handling of various output column coltypes.
-			description:    "12",
-			leftPhysTypes:  []coltypes.T{coltypes.Bool, coltypes.Int64, coltypes.Bytes, coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64, coltypes.Float64, coltypes.Int32},
+			description: "12",
+			leftTypes:   []types.T{*types.Bool, *types.Int, *types.Bytes, *types.Int},
+			rightTypes:  []types.T{*types.Int, *types.Float, *types.Int4},
 
 			leftTuples: tuples{
 				{false, 5, "a", 10},
@@ -493,9 +492,9 @@ func init() {
 			},
 		},
 		{
-			description:    "13",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64},
+			description: "13",
+			leftTypes:   []types.T{*types.Int},
+			rightTypes:  []types.T{*types.Int},
 
 			// Reverse engineering hash table hash heuristic to find key values that
 			// hash to the same bucket.
@@ -526,9 +525,9 @@ func init() {
 			},
 		},
 		{
-			description:    "14",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64},
+			description: "14",
+			leftTypes:   []types.T{*types.Int},
+			rightTypes:  []types.T{*types.Int},
 
 			// Test a N:1 inner join where the right side key has duplicate values.
 			leftTuples: tuples{
@@ -563,9 +562,9 @@ func init() {
 			},
 		},
 		{
-			description:    "15",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			description: "15",
+			leftTypes:   []types.T{*types.Int, *types.Int, *types.Int},
+			rightTypes:  []types.T{*types.Int, *types.Int, *types.Int},
 
 			// Test inner join on multiple equality columns.
 			leftTuples: tuples{
@@ -600,9 +599,9 @@ func init() {
 			},
 		},
 		{
-			description:    "16",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64, coltypes.Int64},
+			description: "16",
+			leftTypes:   []types.T{*types.Int, *types.Int, *types.Int},
+			rightTypes:  []types.T{*types.Int, *types.Int},
 
 			// Test multiple column with values that hash to the same bucket.
 			leftTuples: tuples{
@@ -635,9 +634,9 @@ func init() {
 			},
 		},
 		{
-			description:    "17",
-			leftPhysTypes:  []coltypes.T{coltypes.Bytes, coltypes.Bool, coltypes.Int16, coltypes.Int32, coltypes.Int64, coltypes.Bytes},
-			rightPhysTypes: []coltypes.T{coltypes.Int64, coltypes.Int32, coltypes.Int16, coltypes.Bool, coltypes.Bytes},
+			description: "17",
+			leftTypes:   []types.T{*types.Bytes, *types.Bool, *types.Int2, *types.Int4, *types.Int, *types.Bytes},
+			rightTypes:  []types.T{*types.Int, *types.Int4, *types.Int2, *types.Bool, *types.Bytes},
 
 			// Test multiple equality columns of different coltypes.
 			leftTuples: tuples{
@@ -673,9 +672,9 @@ func init() {
 			},
 		},
 		{
-			description:    "18",
-			leftPhysTypes:  []coltypes.T{coltypes.Float64},
-			rightPhysTypes: []coltypes.T{coltypes.Float64},
+			description: "18",
+			leftTypes:   []types.T{*types.Float},
+			rightTypes:  []types.T{*types.Float},
 
 			// Test equality columns of type float.
 			leftTuples: tuples{
@@ -706,9 +705,9 @@ func init() {
 			},
 		},
 		{
-			description:    "19",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64, coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64, coltypes.Int64},
+			description: "19",
+			leftTypes:   []types.T{*types.Int, *types.Int, *types.Int, *types.Int},
+			rightTypes:  []types.T{*types.Int, *types.Int, *types.Int, *types.Int},
 
 			// Test use right side as build table.
 			leftTuples: tuples{
@@ -738,11 +737,11 @@ func init() {
 			},
 		},
 		{
-			description:    "20",
-			leftPhysTypes:  []coltypes.T{coltypes.Decimal},
-			rightPhysTypes: []coltypes.T{coltypes.Decimal},
+			description: "20",
+			leftTypes:   []types.T{*types.Decimal},
+			rightTypes:  []types.T{*types.Decimal},
 
-			// Test coltypes.Decimal type as equality column.
+			// Test *types.Decimal type as equality column.
 			leftTuples: tuples{
 				{decs[0]},
 				{decs[1]},
@@ -768,9 +767,9 @@ func init() {
 			},
 		},
 		{
-			description:    "21",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64},
+			description: "21",
+			leftTypes:   []types.T{*types.Int},
+			rightTypes:  []types.T{*types.Int},
 
 			joinType: sqlbase.JoinType_LEFT_SEMI,
 
@@ -801,9 +800,9 @@ func init() {
 			},
 		},
 		{
-			description:    "22",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64},
+			description: "22",
+			leftTypes:   []types.T{*types.Int},
+			rightTypes:  []types.T{*types.Int},
 
 			joinType: sqlbase.JoinType_LEFT_ANTI,
 
@@ -832,9 +831,9 @@ func init() {
 			},
 		},
 		{
-			description:    "23",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64, coltypes.Int64},
+			description: "23",
+			leftTypes:   []types.T{*types.Int, *types.Int},
+			rightTypes:  []types.T{*types.Int, *types.Int},
 
 			// Test ON expression.
 			leftTuples: tuples{
@@ -865,9 +864,9 @@ func init() {
 			},
 		},
 		{
-			description:    "24",
-			leftPhysTypes:  []coltypes.T{coltypes.Int64, coltypes.Int64},
-			rightPhysTypes: []coltypes.T{coltypes.Int64, coltypes.Int64},
+			description: "24",
+			leftTypes:   []types.T{*types.Int, *types.Int},
+			rightTypes:  []types.T{*types.Int, *types.Int},
 
 			// Test ON expression.
 			leftTuples: tuples{
@@ -913,14 +912,14 @@ func createSpecForHashJoiner(tc *joinTestCase) *execinfrapb.ProcessorSpec {
 	}
 	projection := make([]uint32, 0, len(tc.leftOutCols)+len(tc.rightOutCols))
 	projection = append(projection, tc.leftOutCols...)
-	rColOffset := uint32(len(tc.leftPhysTypes))
+	rColOffset := uint32(len(tc.leftTypes))
 	for _, outCol := range tc.rightOutCols {
 		projection = append(projection, rColOffset+outCol)
 	}
 	return &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{
-			{ColumnTypes: tc.leftLogTypes},
-			{ColumnTypes: tc.rightLogTypes},
+			{ColumnTypes: tc.leftTypes},
+			{ColumnTypes: tc.rightTypes},
 		},
 		Core: execinfrapb.ProcessorCoreUnion{
 			HashJoiner: hjSpec,
@@ -942,7 +941,7 @@ func runHashJoinTestCase(
 ) {
 	tc.init()
 	inputs := []tuples{tc.leftTuples, tc.rightTuples}
-	typs := [][]coltypes.T{tc.leftPhysTypes, tc.rightPhysTypes}
+	typs := [][]types.T{tc.leftTypes, tc.rightTypes}
 	var runner testRunner
 	if tc.skipAllNullsInjection {
 		// We're omitting all nulls injection test. See comments for each such
@@ -1003,10 +1002,10 @@ func TestHashJoiner(t *testing.T) {
 func BenchmarkHashJoiner(b *testing.B) {
 	ctx := context.Background()
 	nCols := 4
-	sourceTypes := make([]coltypes.T, nCols)
+	sourceTypes := make([]types.T, nCols)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
-		sourceTypes[colIdx] = coltypes.Int64
+		sourceTypes[colIdx] = *types.Int
 	}
 
 	batch := testAllocator.NewMemBatch(sourceTypes)
@@ -1046,8 +1045,8 @@ func BenchmarkHashJoiner(b *testing.B) {
 									b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols * 2))
 									b.ResetTimer()
 									for i := 0; i < b.N; i++ {
-										leftSource := colbase.NewRepeatableBatchSource(testAllocator, batch)
-										rightSource := newFiniteBatchSource(batch, nBatches)
+										leftSource := colbase.NewRepeatableBatchSource(testAllocator, batch, sourceTypes)
+										rightSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
 										joinType := sqlbase.JoinType_INNER
 										if fullOuter {
 											joinType = sqlbase.JoinType_FULL_OUTER
@@ -1132,9 +1131,7 @@ func TestHashJoinerProjection(t *testing.T) {
 	}
 
 	leftTypes := []types.T{*types.Bool, *types.Int, *types.Bytes}
-	leftColTypes := []coltypes.T{coltypes.Bool, coltypes.Int64, coltypes.Bytes}
 	rightTypes := []types.T{*types.Int, *types.Float, *types.Decimal}
-	rightColTypes := []coltypes.T{coltypes.Int64, coltypes.Float64, coltypes.Decimal}
 	leftTuples := tuples{{false, 1, "foo"}}
 	rightTuples := tuples{{1, 1.1, decs[1]}}
 
@@ -1159,8 +1156,8 @@ func TestHashJoinerProjection(t *testing.T) {
 		},
 	}
 
-	leftSource := newOpTestInput(1, leftTuples, leftColTypes)
-	rightSource := newOpTestInput(1, rightTuples, rightColTypes)
+	leftSource := newOpTestInput(1, leftTuples, leftTypes)
+	rightSource := newOpTestInput(1, rightTuples, rightTypes)
 	args := NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              []colbase.Operator{leftSource, rightSource},

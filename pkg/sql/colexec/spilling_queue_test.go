@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -61,8 +62,8 @@ func TestSpillingQueue(t *testing.T) {
 					NumBatches: cap(batches),
 					BatchSize:  1 + rng.Intn(coldata.BatchSize()),
 					Nulls:      true,
-					BatchAccumulator: func(b coldata.Batch) {
-						batches = append(batches, colbase.CopyBatch(testAllocator, b))
+					BatchAccumulator: func(b coldata.Batch, typs []types.T) {
+						batches = append(batches, colbase.CopyBatch(testAllocator, b, typs))
 					},
 				})
 				typs := op.Typs()

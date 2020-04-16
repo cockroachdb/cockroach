@@ -26,11 +26,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // {{/*
@@ -183,7 +185,7 @@ func _CHECK_COL_WITH_NULLS(
 // there is no match.
 func (ht *hashTable) checkCol(
 	probeVec, buildVec coldata.Vec,
-	probeType, buildType coltypes.T,
+	probeType, buildType *types.T,
 	keyColIdx int,
 	nToCheck uint64,
 	probeSel []int,
@@ -193,10 +195,10 @@ func (ht *hashTable) checkCol(
 	// In order to inline the templated code of overloads, we need to have a
 	// `decimalScratch` local variable of type `decimalOverloadScratch`.
 	decimalScratch := ht.decimalScratch
-	switch probeType {
+	switch typeconv.FromColumnType(probeType) {
 	// {{range $lTyp, $rTypToOverload := .}}
 	case _PROBE_TYPE:
-		switch buildType {
+		switch typeconv.FromColumnType(buildType) {
 		// {{range $rTyp, $overload := $rTypToOverload}}
 		case _BUILD_TYPE:
 			probeKeys := probeVec._ProbeType()
@@ -217,11 +219,11 @@ func (ht *hashTable) checkCol(
 			}
 			// {{end}}
 		default:
-			vecerror.InternalError(fmt.Sprintf("unhandled type %d", buildType))
+			vecerror.InternalError(fmt.Sprintf("unhandled type %s", buildType))
 		}
 	// {{end}}
 	default:
-		vecerror.InternalError(fmt.Sprintf("unhandled type %d", probeType))
+		vecerror.InternalError(fmt.Sprintf("unhandled type %s", probeType))
 	}
 }
 
@@ -229,7 +231,7 @@ func (ht *hashTable) checkCol(
 func _CHECK_COL_FOR_DISTINCT_WITH_NULLS(
 	ht *hashTable,
 	probeVec, buildVec coldata.Vec,
-	probeType coltypes.T,
+	probeType *types.T,
 	nToCheck uint16,
 	probeSel []uint16,
 	_USE_PROBE_SEL bool,
@@ -255,9 +257,9 @@ func _CHECK_COL_FOR_DISTINCT_WITH_NULLS(
 } // */}}
 
 func (ht *hashTable) checkColForDistinctTuples(
-	probeVec, buildVec coldata.Vec, probeType coltypes.T, nToCheck uint64, probeSel []int,
+	probeVec, buildVec coldata.Vec, probeType *types.T, nToCheck uint64, probeSel []int,
 ) {
-	switch probeType {
+	switch typeconv.FromColumnType(probeType) {
 	// {{/*
 	// index directive allows the template to index into indexable types such as
 	// slices or maps. Following code is semantically equivalent to the Go code
@@ -283,7 +285,7 @@ func (ht *hashTable) checkColForDistinctTuples(
 		// {{end}}
 		// {{end}}
 	default:
-		vecerror.InternalError(fmt.Sprintf("unhandled type %d", probeType))
+		vecerror.InternalError(fmt.Sprintf("unhandled type %s", probeType))
 	}
 }
 
@@ -376,7 +378,7 @@ func (ht *hashTable) checkBuildForDistinct(
 // new length of toCheck is returned by this function.
 func (ht *hashTable) check(
 	probeVecs []coldata.Vec,
-	probeKeyTypes []coltypes.T,
+	probeKeyTypes []types.T,
 	buildKeyCols []uint32,
 	nToCheck uint64,
 	probeSel []int,
@@ -393,7 +395,7 @@ func (ht *hashTable) check(
 // in the probe table.
 func (ht *hashTable) checkProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, sel []int) uint64 {
 	for i := range ht.keyCols {
-		ht.checkCol(vecs[i], vecs[i], ht.keyTypes[i], ht.keyTypes[i], i, nToCheck, sel, sel)
+		ht.checkCol(vecs[i], vecs[i], &ht.keyTypes[i], &ht.keyTypes[i], i, nToCheck, sel, sel)
 	}
 
 	nDiffers := uint64(0)
@@ -460,7 +462,7 @@ func (ht *hashTable) updateSel(b coldata.Batch) {
 // list is reconstructed to only hold the indices of the eqCol keys that have
 // not been found. The new length of toCheck is returned by this function.
 func (ht *hashTable) distinctCheck(
-	probeKeyTypes []coltypes.T, nToCheck uint64, probeSel []int,
+	probeKeyTypes []types.T, nToCheck uint64, probeSel []int,
 ) uint64 {
 	probeVecs := ht.probeScratch.keys
 	buildVecs := ht.vals.ColVecs()

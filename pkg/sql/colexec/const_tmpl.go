@@ -27,9 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
@@ -63,12 +65,12 @@ type _GOTYPE interface{}
 func NewConstOp(
 	allocator *colbase.Allocator,
 	input colbase.Operator,
-	t coltypes.T,
+	t *types.T,
 	constVal interface{},
 	outputIdx int,
 ) (colbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, t, outputIdx)
-	switch t {
+	switch typeconv.FromColumnType(t) {
 	// {{range .}}
 	case _TYPES_T:
 		return &const_TYPEOp{
@@ -128,7 +130,7 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 // NewConstNullOp creates a new operator that produces a constant (untyped) NULL
 // value at index outputIdx.
 func NewConstNullOp(
-	allocator *colbase.Allocator, input colbase.Operator, outputIdx int, typ coltypes.T,
+	allocator *colbase.Allocator, input colbase.Operator, outputIdx int, typ *types.T,
 ) colbase.Operator {
 	input = newVectorTypeEnforcer(allocator, input, typ, outputIdx)
 	return &constNullOp{

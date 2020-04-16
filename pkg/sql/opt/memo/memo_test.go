@@ -16,13 +16,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	opttestutils "github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/datadriven"
 )
@@ -144,9 +144,9 @@ func TestMemoIsStale(t *testing.T) {
 	notStale()
 
 	// Stale bytes encode format.
-	evalCtx.SessionData.DataConversion.BytesEncodeFormat = sessiondata.BytesEncodeBase64
+	evalCtx.SessionData.DataConversion.BytesEncodeFormat = lex.BytesEncodeBase64
 	stale()
-	evalCtx.SessionData.DataConversion.BytesEncodeFormat = sessiondata.BytesEncodeHex
+	evalCtx.SessionData.DataConversion.BytesEncodeFormat = lex.BytesEncodeHex
 	notStale()
 
 	// Stale extra float digits.

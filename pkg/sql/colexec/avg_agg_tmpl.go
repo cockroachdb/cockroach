@@ -23,8 +23,10 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -36,6 +38,9 @@ var _ apd.Decimal
 
 // Dummy import to pull in "tree" package.
 var _ tree.Datum
+
+// Dummy import to pull in "coltypes" package.
+var _ coltypes.T
 
 // _ASSIGN_DIV_INT64 is the template division function for assigning the first
 // input to the result of the second input / the third input, where the third
@@ -52,8 +57,8 @@ func _ASSIGN_ADD(_, _, _ string) {
 
 // */}}
 
-func newAvgAgg(t coltypes.T) (aggregateFunc, error) {
-	switch t {
+func newAvgAgg(t *types.T) (aggregateFunc, error) {
+	switch typeconv.FromColumnType(t) {
 	// {{range .}}
 	case _TYPES_T:
 		return &avg_TYPEAgg{}, nil

@@ -11,12 +11,10 @@
 package protoutil
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"golang.org/x/sync/syncmap"
@@ -87,7 +85,7 @@ func RandomZeroInsertingVisitor(v reflect.Value) {
 		}
 		actual, loaded := insertZero.LoadOrStore(key, flipCoin())
 		if !loaded {
-			log.Infof(context.Background(), "inserting null for (%v).%v: %t", typ, typ.Field(i).Name, actual)
+			fmt.Printf("inserting null for (%v).%v: %t", typ, typ.Field(i).Name, actual)
 		}
 		if b := actual.(bool); b {
 			hookInsertZero(v, i)
