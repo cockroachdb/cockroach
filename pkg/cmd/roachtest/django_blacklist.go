@@ -171,38 +171,12 @@ var djangoBlacklists = blacklistsForVersion{
 }
 
 // Maintain that this list is alphabetized.
-var djangoBlacklist20_1 = blacklist{
-	"admin_changelist.tests.SeleniumTests.test_add_row_selection":                                "unknown",
-	"admin_custom_urls.tests.AdminCustomUrlsTest.test_post_url_continue":                         "unknown",
-	"admin_docs.test_views.TestFieldType.test_field_name":                                        "unknown",
-	"admin_filters.tests.ListFiltersTests.test_two_characters_long_field":                        "unknown",
-	"admin_inlines.tests.SeleniumTests.test_delete_stackeds":                                     "unknown",
-	"admin_utils.tests.UtilsTests.test_values_from_lookup_field":                                 "unknown",
-	"admin_views.tests.GroupAdminTest.test_group_permission_performance":                         "unknown",
-	"admin_views.tests.SecureViewTests.test_secure_view_shows_login_if_not_logged_in":            "unknown",
-	"admin_views.tests.SecureViewTests.test_staff_member_required_decorator_works_with_argument": "unknown",
-	"app_loading.tests.GetModelsTest.test_get_models_only_returns_installed_models":              "unknown",
-	"apps.tests.AppConfigTests.test_repr":                                                        "unknown",
-	"conditional_processing.tests.ConditionalGet.test_weak_if_none_match":                        "unknown",
-	"db_typecasts.tests.DBTypeCasts.test_typeCasts":                                              "unknown",
-	"field_subclassing.tests.TestDbType.test_db_parameters_respects_db_type":                     "unknown",
-	"model_meta.tests.GetFieldsTests.test_get_fields_is_immutable":                               "unknown",
-}
+var djangoBlacklist20_1 = blacklist{}
 
 var djangoBlacklist19_2 = blacklist{
-	// Blacklist generated from running the tests above.
-	"admin_custom_urls.tests.AdminCustomUrlsTest.test_post_url_continue":                           "unknown",
-	"admin_docs.test_views.TestFieldType.test_field_name":                                          "unknown",
-	"admin_filters.tests.ListFiltersTests.test_two_characters_long_field":                          "unknown",
-	"admin_inlines.tests.SeleniumTests.test_delete_stackeds":                                       "unknown",
-	"admin_ordering.tests.TestRelatedFieldsAdminOrdering.test_no_admin_fallback_to_model_ordering": "unknown",
-	"admin_utils.tests.UtilsTests.test_values_from_lookup_field":                                   "unknown",
-	"admin_views.tests.AdminViewBasicTest.test_date_hierarchy_timezone_dst":                        "unknown",
-	"app_loading.tests.GetModelsTest.test_get_models_only_returns_installed_models":                "unknown",
-	"conditional_processing.tests.ConditionalGet.test_without_conditions":                          "unknown",
-	"db_typecasts.tests.DBTypeCasts.test_typeCasts":                                                "unknown",
-	"field_subclassing.tests.TestDbType.test_db_parameters_respects_db_type":                       "unknown",
-	"model_meta.tests.GetFieldsTests.test_get_fields_is_immutable":                                 "unknown",
+	"admin_views.tests.AdminViewBasicTest.test_date_hierarchy_timezone_dst":                      "unknown",
+	"admin_views.tests.SecureViewTests.test_secure_view_shows_login_if_not_logged_in":            "unknown",
+	"admin_views.tests.SecureViewTests.test_staff_member_required_decorator_works_with_argument": "unknown",
 	// TODO (rohany): The postgres_tests suite within Django is not in a automatically
 	//  runnable state right now.
 	//"postgres_tests.test_aggregates.TestGeneralAggregate.test_bit_and_empty_result":                                 "41334",
