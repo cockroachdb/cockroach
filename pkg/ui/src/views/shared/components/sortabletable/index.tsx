@@ -79,6 +79,7 @@ interface TableProps {
   firstCellBordered?: boolean;
   renderNoResult?: React.ReactNode;
   loading?: boolean;
+  loadingLabel?: string;
 }
 
 export interface ExpandableConfig {
@@ -242,7 +243,7 @@ export class SortableTable extends React.Component<TableProps> {
   }
 
   render() {
-    const { sortSetting, columns, expandableConfig, drawer, firstCellBordered, count, renderNoResult, className, loading } = this.props;
+    const { sortSetting, columns, expandableConfig, drawer, firstCellBordered, count, renderNoResult, className, loading, loadingLabel } = this.props;
     const { visible, drawerData } = this.state;
     return (
       <React.Fragment>
@@ -290,7 +291,7 @@ export class SortableTable extends React.Component<TableProps> {
         {loading && (
           <div className="table__loading">
             <Spin className="table__loading--spin" indicator={<Icon component={SpinIcon} spin />} />
-            <span className="table__loading--label">Loading tables...</span>
+            {loadingLabel && <span className="table__loading--label">{loadingLabel}</span>}
           </div>
         )}
         {drawer && (
