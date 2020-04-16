@@ -874,3 +874,104 @@ select
  │         └── fd: (8)-->(2)
  └── filters
       └── (a:1 = 30) OR (a:1 = 40) [type=bool, outer=(1), constraints=(/1: [/30 - /30] [/40 - /40]; tight)]
+
+# Regression test for #47390. Histograms must be used with index constraints
+# to choose the correct index.
+exec-ddl
+CREATE TABLE xyz (
+  x INT,
+  y INT,
+  z INT,
+  other INT,
+  PRIMARY KEY(x, y),
+  UNIQUE INDEX xyz_x_z_key (x, z),
+  INDEX xyz_x_other_z (x, other DESC)
+)
+----
+
+exec-ddl
+ALTER TABLE xyz INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "distinct_count": 5,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2020-01-01 0:00:00.00000+00:00"
+  },
+  {
+    "columns": ["z"],
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2020-01-01 0:00:00.00000+00:00",
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 0, "num_range": 100, "distinct_range": 100, "upper_bound": "1000"}
+    ]
+  },
+  {
+    "columns": ["other"],
+    "distinct_count": 30,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2020-01-01 0:00:00.00000+00:00",
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 10, "distinct_range": 10, "upper_bound": "10"},
+      {"num_eq": 20, "num_range": 20, "distinct_range": 20, "upper_bound": "20"},
+      {"num_eq": 20, "num_range": 20, "distinct_range": 20, "upper_bound": "30"}
+    ]
+  }
+]'
+----
+
+opt
+SELECT * FROM xyz WHERE x=1 AND z>990
+----
+index-join xyz
+ ├── columns: x:1(int!null) y:2(int!null) z:3(int!null) other:4(int)
+ ├── stats: [rows=0.18018018, distinct(1)=0.18018018, null(1)=0, distinct(3)=0.18018018, null(3)=0]
+ │   histogram(3)=  0   0   0.18018   0
+ │                <--- 990 --------- 1000
+ ├── key: (2)
+ ├── fd: ()-->(1), (2)-->(3,4), (3)-->(2,4)
+ └── scan xyz@xyz_x_z_key
+      ├── columns: x:1(int!null) y:2(int!null) z:3(int!null)
+      ├── constraint: /1/3: [/1/991 - /1]
+      ├── stats: [rows=0.18018018, distinct(1)=0.18018018, null(1)=0, distinct(3)=0.18018018, null(3)=0]
+      │   histogram(3)=  0   0   0.18018   0
+      │                <--- 990 --------- 1000
+      ├── key: (2)
+      └── fd: ()-->(1), (2)-->(3), (3)-->(2)
+
+opt
+SELECT * FROM xyz WHERE x=1 AND z<990 AND (other=11 OR other=13)
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null) z:3(int!null) other:4(int!null)
+ ├── stats: [rows=0.879991102, distinct(1)=0.879991102, null(1)=0, distinct(3)=0.879991102, null(3)=0, distinct(4)=0.879991102, null(4)=0]
+ │   histogram(3)=  0  0  0.8791 0.00088978
+ │                <--- 0 ---------- 989 ---
+ │   histogram(4)=  0 0.44 0 0.44
+ │                <--- 11 --- 13
+ ├── key: (2)
+ ├── fd: ()-->(1), (2)-->(3,4), (3)-->(2,4)
+ ├── index-join xyz
+ │    ├── columns: x:1(int!null) y:2(int!null) z:3(int) other:4(int)
+ │    ├── stats: [rows=0.888888889]
+ │    ├── key: (2)
+ │    ├── fd: ()-->(1), (2)-->(4), (2)-->(3,4), (1,3)~~>(2,4)
+ │    └── scan xyz@xyz_x_other_z
+ │         ├── columns: x:1(int!null) y:2(int!null) other:4(int!null)
+ │         ├── constraint: /1/-4/2
+ │         │    ├── [/1/13 - /1/13]
+ │         │    └── [/1/11 - /1/11]
+ │         ├── stats: [rows=0.888888889, distinct(1)=0.888888889, null(1)=0, distinct(4)=0.888888889, null(4)=0]
+ │         │   histogram(4)=  0 0.44444 0 0.44444
+ │         │                <---- 11 ------ 13 --
+ │         ├── key: (2)
+ │         └── fd: ()-->(1), (2)-->(4)
+ └── filters
+      └── z:3 < 990 [type=bool, outer=(3), constraints=(/3: (/NULL - /989]; tight)]
