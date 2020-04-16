@@ -511,6 +511,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 // constraint in this test with corrupted KVs.
 func TestScrubFKConstraintFKNulls(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#47546")
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
