@@ -26,15 +26,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
+const all, latest = true, false
+
 func iterateExpectErr(
 	e Engine,
-	iterFn func(*MVCCIncrementalIterator),
 	startKey, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
+	revisions bool,
 	errString string,
 ) func(*testing.T) {
 	return func(t *testing.T) {
@@ -47,7 +50,13 @@ func iterateExpectErr(
 			EndTime:   endTime,
 		})
 		defer iter.Close()
-		for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
+		var iterFn func()
+		if revisions {
+			iterFn = iter.Next
+		} else {
+			iterFn = iter.NextKey
+		}
+		for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iterFn() {
 			if ok, _ := iter.Valid(); !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 				break
 			}
@@ -59,44 +68,118 @@ func iterateExpectErr(
 	}
 }
 
-func assertEqualKVs(
+func assertExportedKVs(
+	t *testing.T,
 	e Engine,
-	iterFn func(*MVCCIncrementalIterator),
 	startKey, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
+	revisions bool,
+	io IterOptions,
+	expected []MVCCKeyValue,
+) {
+	const big = 1 << 30
+	data, _, _, err := e.ExportToSst(startKey, endKey, startTime, endTime, revisions, big, big, io)
+	require.NoError(t, err)
+
+	if data == nil {
+		require.Nil(t, expected)
+		return
+	}
+	sst, err := NewMemSSTIterator(data, false)
+	require.NoError(t, err)
+	defer sst.Close()
+
+	sst.SeekGE(MVCCKey{})
+	for i := range expected {
+		ok, err := sst.Valid()
+		require.NoError(t, err)
+		require.Truef(t, ok, "iteration produced %d keys, expected %d", i, len(expected))
+		assert.Equalf(t, expected[i].Key, sst.UnsafeKey(), "key %d", i)
+		if expected[i].Value == nil {
+			assert.Equalf(t, []byte{}, sst.UnsafeValue(), "key %d %q", i, sst.UnsafeKey())
+		} else {
+			assert.Equalf(t, expected[i].Value, sst.UnsafeValue(), "key %d %q", i, sst.UnsafeKey())
+		}
+		sst.Next()
+	}
+	ok, err := sst.Valid()
+	require.NoError(t, err)
+	require.False(t, ok)
+}
+
+func assertIteratedKVs(
+	t *testing.T,
+	e Engine,
+	startKey, endKey roachpb.Key,
+	startTime, endTime hlc.Timestamp,
+	revisions bool,
+	io IterOptions,
+	expected []MVCCKeyValue,
+) {
+	iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
+		IterOptions: io,
+		StartTime:   startTime,
+		EndTime:     endTime,
+	})
+	defer iter.Close()
+	var iterFn func()
+	if revisions {
+		iterFn = iter.Next
+	} else {
+		iterFn = iter.NextKey
+	}
+	var kvs []MVCCKeyValue
+	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iterFn() {
+		if ok, err := iter.Valid(); err != nil {
+			t.Fatalf("unexpected error: %+v", err)
+		} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
+			break
+		}
+		kvs = append(kvs, MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+	}
+
+	if len(kvs) != len(expected) {
+		t.Fatalf("got %d kvs but expected %d: %v", len(kvs), len(expected), kvs)
+	}
+	for i := range kvs {
+		if !kvs[i].Key.Equal(expected[i].Key) {
+			t.Fatalf("%d key: got %v but expected %v", i, kvs[i].Key, expected[i].Key)
+		}
+		if !bytes.Equal(kvs[i].Value, expected[i].Value) {
+			t.Fatalf("%d value: got %x but expected %x", i, kvs[i].Value, expected[i].Value)
+		}
+	}
+}
+
+func assertEqualKVs(
+	e Engine,
+	startKey, endKey roachpb.Key,
+	startTime, endTime hlc.Timestamp,
+	revisions bool,
 	expected []MVCCKeyValue,
 ) func(*testing.T) {
 	return func(t *testing.T) {
 		t.Helper()
-		iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
-			IterOptions: IterOptions{
-				UpperBound: endKey,
-			},
-			StartTime: startTime,
-			EndTime:   endTime,
+		io := IterOptions{UpperBound: endKey}
+		t.Run("iterate", func(t *testing.T) {
+			assertIteratedKVs(t, e, startKey, endKey, startTime, endTime, revisions, io, expected)
 		})
-		defer iter.Close()
-		var kvs []MVCCKeyValue
-		for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
-			if ok, err := iter.Valid(); err != nil {
-				t.Fatalf("unexpected error: %+v", err)
-			} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
-				break
-			}
-			kvs = append(kvs, MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
-		}
+		t.Run("iterate-tbi", func(t *testing.T) {
+			io := io
+			io.MinTimestampHint = startTime.Next()
+			io.MaxTimestampHint = endTime
+			assertIteratedKVs(t, e, startKey, endKey, startTime, endTime, revisions, io, expected)
+		})
 
-		if len(kvs) != len(expected) {
-			t.Fatalf("got %d kvs but expected %d: %v", len(kvs), len(expected), kvs)
-		}
-		for i := range kvs {
-			if !kvs[i].Key.Equal(expected[i].Key) {
-				t.Fatalf("%d key: got %v but expected %v", i, kvs[i].Key, expected[i].Key)
-			}
-			if !bytes.Equal(kvs[i].Value, expected[i].Value) {
-				t.Fatalf("%d value: got %x but expected %x", i, kvs[i].Value, expected[i].Value)
-			}
-		}
+		t.Run("export", func(t *testing.T) {
+			assertExportedKVs(t, e, startKey, endKey, startTime, endTime, revisions, io, expected)
+		})
+		t.Run("export-tbi", func(t *testing.T) {
+			io := io
+			io.MinTimestampHint = startTime.Next()
+			io.MaxTimestampHint = endTime
+			assertExportedKVs(t, e, startKey, endKey, startTime, endTime, revisions, io, expected)
+		})
 	}
 }
 
@@ -115,7 +198,9 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 		testValue3 = []byte("val3")
 		testValue4 = []byte("val4")
 
-		tsMin = hlc.Timestamp{WallTime: 0, Logical: 0}
+		// Use a non-zero min, since we use IsEmpty to decide if a ts should be used
+		// as upper/lower-bound during iterator initialization.
+		tsMin = hlc.Timestamp{WallTime: 0, Logical: 1}
 		ts1   = hlc.Timestamp{WallTime: 1, Logical: 0}
 		ts2   = hlc.Timestamp{WallTime: 2, Logical: 0}
 		ts3   = hlc.Timestamp{WallTime: 3, Logical: 0}
@@ -139,9 +224,7 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			e := engineImpl.create()
 			defer e.Close()
 
-			fn := (*MVCCIncrementalIterator).NextKey
-
-			t.Run("empty", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, nil))
+			t.Run("empty", assertEqualKVs(e, keyMin, keyMax, tsMin, ts3, latest, nil))
 
 			for _, kv := range kvs(kv1_1_1, kv1_2_2, kv2_2_2) {
 				v := roachpb.Value{RawBytes: kv.Value}
@@ -151,22 +234,22 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			}
 
 			// Exercise time ranges.
-			t.Run("ts (0-0]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMin, nil))
-			t.Run("ts (0-1]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts1, kvs(kv1_1_1)))
-			t.Run("ts (0-∞]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_2_2, kv2_2_2)))
-			t.Run("ts (1-1]", assertEqualKVs(e, fn, keyMin, keyMax, ts1, ts1, nil))
-			t.Run("ts (1-2]", assertEqualKVs(e, fn, keyMin, keyMax, ts1, ts2, kvs(kv1_2_2, kv2_2_2)))
-			t.Run("ts (2-2]", assertEqualKVs(e, fn, keyMin, keyMax, ts2, ts2, nil))
+			t.Run("ts (0-0]", assertEqualKVs(e, keyMin, keyMax, tsMin, tsMin, latest, nil))
+			t.Run("ts (0-1]", assertEqualKVs(e, keyMin, keyMax, tsMin, ts1, latest, kvs(kv1_1_1)))
+			t.Run("ts (0-∞]", assertEqualKVs(e, keyMin, keyMax, tsMin, tsMax, latest, kvs(kv1_2_2, kv2_2_2)))
+			t.Run("ts (1-1]", assertEqualKVs(e, keyMin, keyMax, ts1, ts1, latest, nil))
+			t.Run("ts (1-2]", assertEqualKVs(e, keyMin, keyMax, ts1, ts2, latest, kvs(kv1_2_2, kv2_2_2)))
+			t.Run("ts (2-2]", assertEqualKVs(e, keyMin, keyMax, ts2, ts2, latest, nil))
 
 			// Exercise key ranges.
-			t.Run("kv [1-1)", assertEqualKVs(e, fn, testKey1, testKey1, tsMin, tsMax, nil))
-			t.Run("kv [1-2)", assertEqualKVs(e, fn, testKey1, testKey2, tsMin, tsMax, kvs(kv1_2_2)))
+			t.Run("kv [1-1)", assertEqualKVs(e, testKey1, testKey1, tsMin, tsMax, latest, nil))
+			t.Run("kv [1-2)", assertEqualKVs(e, testKey1, testKey2, tsMin, tsMax, latest, kvs(kv1_2_2)))
 
 			// Exercise deletion.
 			if err := MVCCDelete(ctx, e, nil, testKey1, ts3, nil); err != nil {
 				t.Fatal(err)
 			}
-			t.Run("del", assertEqualKVs(e, fn, keyMin, keyMax, ts1, tsMax, kvs(kv1_3Deleted, kv2_2_2)))
+			t.Run("del", assertEqualKVs(e, keyMin, keyMax, ts1, tsMax, latest, kvs(kv1_3Deleted, kv2_2_2)))
 
 			// Exercise intent handling.
 			txn1ID := uuid.MakeV4()
@@ -198,17 +281,17 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Run("intents",
-				iterateExpectErr(e, fn, testKey1, testKey1.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
+				iterateExpectErr(e, testKey1, testKey1.PrefixEnd(), tsMin, tsMax, latest, "conflicting intents"))
 			t.Run("intents",
-				iterateExpectErr(e, fn, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
+				iterateExpectErr(e, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, latest, "conflicting intents"))
 			t.Run("intents",
-				iterateExpectErr(e, fn, keyMin, keyMax, tsMin, ts4, "conflicting intents"))
+				iterateExpectErr(e, keyMin, keyMax, tsMin, ts4, latest, "conflicting intents"))
 			// Intents above the upper time bound or beneath the lower time bound must
 			// be ignored (#28358). Note that the lower time bound is exclusive while
 			// the upper time bound is inclusive.
-			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, kvs(kv1_3Deleted, kv2_2_2)))
-			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4, tsMax, kvs()))
-			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4.Next(), tsMax, kvs()))
+			t.Run("intents", assertEqualKVs(e, keyMin, keyMax, tsMin, ts3, latest, kvs(kv1_3Deleted, kv2_2_2)))
+			t.Run("intents", assertEqualKVs(e, keyMin, keyMax, ts4, tsMax, latest, kvs()))
+			t.Run("intents", assertEqualKVs(e, keyMin, keyMax, ts4.Next(), tsMax, latest, kvs()))
 
 			intent1 := roachpb.MakeLockUpdate(&txn1, roachpb.Span{Key: testKey1})
 			intent1.Status = roachpb.COMMITTED
@@ -220,7 +303,7 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
 				t.Fatal(err)
 			}
-			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_4_4, kv2_2_2)))
+			t.Run("intents", assertEqualKVs(e, keyMin, keyMax, tsMin, tsMax, latest, kvs(kv1_4_4, kv2_2_2)))
 		})
 	}
 
@@ -229,9 +312,7 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			e := engineImpl.create()
 			defer e.Close()
 
-			fn := (*MVCCIncrementalIterator).Next
-
-			t.Run("empty", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, nil))
+			t.Run("empty", assertEqualKVs(e, keyMin, keyMax, tsMin, ts3, all, nil))
 
 			for _, kv := range kvs(kv1_1_1, kv1_2_2, kv2_2_2) {
 				v := roachpb.Value{RawBytes: kv.Value}
@@ -241,22 +322,22 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			}
 
 			// Exercise time ranges.
-			t.Run("ts (0-0]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMin, nil))
-			t.Run("ts (0-1]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts1, kvs(kv1_1_1)))
-			t.Run("ts (0-∞]", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_2_2, kv1_1_1, kv2_2_2)))
-			t.Run("ts (1-1]", assertEqualKVs(e, fn, keyMin, keyMax, ts1, ts1, nil))
-			t.Run("ts (1-2]", assertEqualKVs(e, fn, keyMin, keyMax, ts1, ts2, kvs(kv1_2_2, kv2_2_2)))
-			t.Run("ts (2-2]", assertEqualKVs(e, fn, keyMin, keyMax, ts2, ts2, nil))
+			t.Run("ts (0-0]", assertEqualKVs(e, keyMin, keyMax, tsMin, tsMin, all, nil))
+			t.Run("ts (0-1]", assertEqualKVs(e, keyMin, keyMax, tsMin, ts1, all, kvs(kv1_1_1)))
+			t.Run("ts (0-∞]", assertEqualKVs(e, keyMin, keyMax, tsMin, tsMax, all, kvs(kv1_2_2, kv1_1_1, kv2_2_2)))
+			t.Run("ts (1-1]", assertEqualKVs(e, keyMin, keyMax, ts1, ts1, all, nil))
+			t.Run("ts (1-2]", assertEqualKVs(e, keyMin, keyMax, ts1, ts2, all, kvs(kv1_2_2, kv2_2_2)))
+			t.Run("ts (2-2]", assertEqualKVs(e, keyMin, keyMax, ts2, ts2, all, nil))
 
 			// Exercise key ranges.
-			t.Run("kv [1-1)", assertEqualKVs(e, fn, testKey1, testKey1, tsMin, tsMax, nil))
-			t.Run("kv [1-2)", assertEqualKVs(e, fn, testKey1, testKey2, tsMin, tsMax, kvs(kv1_2_2, kv1_1_1)))
+			t.Run("kv [1-1)", assertEqualKVs(e, testKey1, testKey1, tsMin, tsMax, all, nil))
+			t.Run("kv [1-2)", assertEqualKVs(e, testKey1, testKey2, tsMin, tsMax, all, kvs(kv1_2_2, kv1_1_1)))
 
 			// Exercise deletion.
 			if err := MVCCDelete(ctx, e, nil, testKey1, ts3, nil); err != nil {
 				t.Fatal(err)
 			}
-			t.Run("del", assertEqualKVs(e, fn, keyMin, keyMax, ts1, tsMax, kvs(kv1_3Deleted, kv1_2_2, kv2_2_2)))
+			t.Run("del", assertEqualKVs(e, keyMin, keyMax, ts1, tsMax, all, kvs(kv1_3Deleted, kv1_2_2, kv2_2_2)))
 
 			// Exercise intent handling.
 			txn1ID := uuid.MakeV4()
@@ -288,17 +369,17 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Run("intents",
-				iterateExpectErr(e, fn, testKey1, testKey1.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
+				iterateExpectErr(e, testKey1, testKey1.PrefixEnd(), tsMin, tsMax, all, "conflicting intents"))
 			t.Run("intents",
-				iterateExpectErr(e, fn, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, "conflicting intents"))
+				iterateExpectErr(e, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, all, "conflicting intents"))
 			t.Run("intents",
-				iterateExpectErr(e, fn, keyMin, keyMax, tsMin, ts4, "conflicting intents"))
+				iterateExpectErr(e, keyMin, keyMax, tsMin, ts4, all, "conflicting intents"))
 			// Intents above the upper time bound or beneath the lower time bound must
 			// be ignored (#28358). Note that the lower time bound is exclusive while
 			// the upper time bound is inclusive.
-			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, ts3, kvs(kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
-			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4, tsMax, kvs()))
-			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, ts4.Next(), tsMax, kvs()))
+			t.Run("intents", assertEqualKVs(e, keyMin, keyMax, tsMin, ts3, all, kvs(kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
+			t.Run("intents", assertEqualKVs(e, keyMin, keyMax, ts4, tsMax, all, kvs()))
+			t.Run("intents", assertEqualKVs(e, keyMin, keyMax, ts4.Next(), tsMax, all, kvs()))
 
 			intent1 := roachpb.MakeLockUpdate(&txn1, roachpb.Span{Key: testKey1})
 			intent1.Status = roachpb.COMMITTED
@@ -310,7 +391,7 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
 				t.Fatal(err)
 			}
-			t.Run("intents", assertEqualKVs(e, fn, keyMin, keyMax, tsMin, tsMax, kvs(kv1_4_4, kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
+			t.Run("intents", assertEqualKVs(e, keyMin, keyMax, tsMin, tsMax, all, kvs(kv1_4_4, kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
 		})
 	}
 }
@@ -713,8 +794,7 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 				t.Fatalf("source of truth had no expected KVs; likely a bug in the test itself")
 			}
 
-			fn := (*MVCCIncrementalIterator).NextKey
-			assertEqualKVs(eng, fn, keys.MinKey, keys.MaxKey, testCase.start, testCase.end, expectedKVs)(t)
+			assertEqualKVs(eng, keys.MinKey, keys.MaxKey, testCase.start, testCase.end, latest, expectedKVs)(t)
 		})
 	}
 }
