@@ -55,6 +55,9 @@ func registerSQLAlchemy(r *testRegistry) {
 		}
 		c.l.Printf("Latest sqlalchemy release is %s.", latestTag)
 
+		// TODO: using the latest version requires the dialect to implement `get_isolation_levels`
+		latestTag = "rel_1_3_14"
+
 		if err := repeatRunE(
 			ctx, c, node, "update apt-get",
 			`
@@ -102,7 +105,7 @@ func registerSQLAlchemy(r *testRegistry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "remove old cockroachdb-python", `sudo rm -rf /mnt/data1/cockroachdb-python`,
+			ctx, c, node, "remove old sqlalchemy-cockroachdb", `sudo rm -rf /mnt/data1/sqlalchemy-cockroachdb`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -111,18 +114,18 @@ func registerSQLAlchemy(r *testRegistry) {
 			ctx,
 			t.l,
 			c,
-			"https://github.com/cockroachdb/cockroachdb-python.git",
-			"/mnt/data1/cockroachdb-python",
+			"https://github.com/cockroachdb/sqlalchemy-cockroachdb.git",
+			"/mnt/data1/sqlalchemy-cockroachdb",
 			"master",
 			node,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		t.Status("installing cockroachdb-python")
+		t.Status("installing sqlalchemy-cockroachdb")
 		if err := repeatRunE(
-			ctx, c, node, "installing cockroachdb-python",
-			`cd /mnt/data1/cockroachdb-python && sudo python3 setup.py install`,
+			ctx, c, node, "installing sqlalchemy=cockroachdb",
+			`cd /mnt/data1/sqlalchemy-cockroachdb && sudo python3 setup.py install`,
 		); err != nil {
 			t.Fatal(err)
 		}
