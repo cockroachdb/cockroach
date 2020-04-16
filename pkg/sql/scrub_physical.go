@@ -142,8 +142,11 @@ func (o *physicalCheckOperation) Next(params runParams) (tree.Datums, error) {
 	row := o.run.rows.At(o.run.rowIndex)
 	o.run.rowIndex++
 
-	timestamp := tree.MakeDTimestamp(
+	timestamp, err := tree.MakeDTimestamp(
 		params.extendedEvalCtx.GetStmtTimestamp(), time.Nanosecond)
+	if err != nil {
+		return nil, err
+	}
 
 	details, ok := row[2].(*tree.DJSON)
 	if !ok {

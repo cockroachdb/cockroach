@@ -410,3 +410,23 @@ DROP TABLE example
 
 statement ok
 SET TIME ZONE 0
+
+subtest regression_46973
+
+statement ok
+CREATE TABLE regression_46973(c0 TIMESTAMP UNIQUE, c1 TIMESTAMPTZ UNIQUE)
+
+statement ok
+INSERT INTO regression_46973 VALUES ('1970-01-01 00:00:00', '1970-01-01 00:00:00')
+
+statement error "292277026596-12-04T15:30:08Z" exceeds supported timestamp bounds
+SELECT * FROM regression_46973 WHERE (-9223372036854775808)::TIMESTAMP!=regression_46973.c0
+
+statement error "292277026596-12-04T15:30:08Z" exceeds supported timestamp bounds
+SELECT * FROM regression_46973 WHERE (-9223372036854775808)::TIMESTAMPTZ!=regression_46973.c1
+
+statement error "294277-01-01T00:00:00Z" exceeds supported timestamp bounds
+SELECT '294276-12-31 23:59:59.999999'::TIMESTAMP(0)
+
+statement ok
+DROP TABLE regression_46973

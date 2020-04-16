@@ -183,6 +183,14 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 		return nil, err
 	}
 
+	ts, err := tree.MakeDTimestamp(
+		params.extendedEvalCtx.GetStmtTimestamp(),
+		time.Nanosecond,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	return tree.Datums{
 		// TODO(joey): Add the job UUID once the SCRUB command uses jobs.
 		tree.DNull, /* job_uuid */
@@ -190,7 +198,7 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 		tree.NewDString(o.tableName.Catalog()),
 		tree.NewDString(o.tableName.Table()),
 		tree.NewDString(primaryKeyDatums.String()),
-		tree.MakeDTimestamp(params.extendedEvalCtx.GetStmtTimestamp(), time.Nanosecond),
+		ts,
 		tree.DBoolFalse,
 		detailsJSON,
 	}, nil

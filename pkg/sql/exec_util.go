@@ -826,7 +826,7 @@ func shouldDistributePlan(
 // TODO: This does not support arguments of the SQL 'Date' type, as there is not
 // an equivalent type in Go's standard library. It's not currently needed by any
 // of our internal tables.
-func golangFillQueryArguments(args ...interface{}) tree.Datums {
+func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
 	res := make(tree.Datums, len(args))
 	for i, arg := range args {
 		if arg == nil {
@@ -842,7 +842,11 @@ func golangFillQueryArguments(args ...interface{}) tree.Datums {
 		case tree.Datum:
 			d = t
 		case time.Time:
-			d = tree.MakeDTimestamp(t, time.Microsecond)
+			var err error
+			d, err = tree.MakeDTimestamp(t, time.Microsecond)
+			if err != nil {
+				return nil, err
+			}
 		case time.Duration:
 			d = &tree.DInterval{Duration: duration.MakeDuration(t.Nanoseconds(), 0, 0)}
 		case bitarray.BitArray:
@@ -882,7 +886,7 @@ func golangFillQueryArguments(args ...interface{}) tree.Datums {
 		}
 		res[i] = d
 	}
-	return res
+	return res, nil
 }
 
 // checkResultType verifies that a table result can be returned to the
@@ -1645,10 +1649,15 @@ func generateSessionTraceVTable(spans []tracing.RecordedSpan) ([]traceRow, error
 			return nil, fmt.Errorf("unable to split trace message: %q", lrr.msg)
 		}
 
+		tsDatum, err := tree.MakeDTimestampTZ(lrr.timestamp, time.Nanosecond)
+		if err != nil {
+			return nil, err
+		}
+
 		row := traceRow{
-			tree.NewDInt(tree.DInt(lrr.span.index)),               // span_idx
-			tree.NewDInt(tree.DInt(lrr.index)),                    // message_idx
-			tree.MakeDTimestampTZ(lrr.timestamp, time.Nanosecond), // timestamp
+			tree.NewDInt(tree.DInt(lrr.span.index)), // span_idx
+			tree.NewDInt(tree.DInt(lrr.index)),      // message_idx
+			tsDatum,                                 // timestamp
 			tree.DNull,                              // duration, will be populated below
 			tree.DNull,                              // operation, will be populated below
 			tree.NewDString(lrr.msg[loc[2]:loc[3]]), // location

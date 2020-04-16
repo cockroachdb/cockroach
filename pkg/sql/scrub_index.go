@@ -171,8 +171,11 @@ func (o *indexCheckOperation) Next(params runParams) (tree.Datums, error) {
 		}
 	}
 	primaryKey := tree.NewDString(primaryKeyDatums.String())
-	timestamp := tree.MakeDTimestamp(
+	timestamp, err := tree.MakeDTimestamp(
 		params.extendedEvalCtx.GetStmtTimestamp(), time.Nanosecond)
+	if err != nil {
+		return nil, err
+	}
 
 	details := make(map[string]interface{})
 	rowDetails := make(map[string]interface{})
