@@ -213,7 +213,7 @@ func floatToInt(intSize int, floatSize int) func(string, string) string {
 	return func(to, from string) string {
 		convStr := `
 			if math.IsNaN(float64(%[2]s)) || %[2]s <= float%[4]d(math.MinInt%[3]d) || %[2]s >= float%[4]d(math.MaxInt%[3]d) {
-				vecerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
+				vecerror.ExpectedError(tree.ErrIntOutOfRange)
 			}
 			%[1]s = int%[3]d(%[2]s)
 		`
@@ -233,9 +233,9 @@ func floatToDecimal(to, from string) string {
 		{
 			var tmpDec apd.Decimal
 			_, tmpErr := tmpDec.SetFloat64(float64(%[2]s))
-    	if tmpErr != nil {
-    	  vecerror.NonVectorizedPanic(tmpErr)
-    	}
+			if tmpErr != nil {
+				vecerror.ExpectedError(tmpErr)
+			}
 			%[1]s = tmpDec
 		}
 	`
@@ -667,15 +667,15 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 			{
 				cond, err := tree.%s.%s(&%s, &%s, &%s)
 				if cond.DivisionByZero() {
-					vecerror.NonVectorizedPanic(tree.ErrDivByZero)
+					vecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				if err != nil {
-					vecerror.NonVectorizedPanic(err)
+					vecerror.ExpectedError(err)
 				}
 			}
 			`, binaryOpDecCtx[op.BinOp], binaryOpDecMethod[op.BinOp], target, l, r)
 		}
-		return fmt.Sprintf("if _, err := tree.%s.%s(&%s, &%s, &%s); err != nil { vecerror.NonVectorizedPanic(err) }",
+		return fmt.Sprintf("if _, err := tree.%s.%s(&%s, &%s, &%s); err != nil { vecerror.ExpectedError(err) }",
 			binaryOpDecCtx[op.BinOp], binaryOpDecMethod[op.BinOp], target, l, r)
 	}
 }
@@ -821,7 +821,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				{
 					result := {{.Left}} + {{.Right}}
 					if (result < {{.Left}}) != ({{.Right}} < 0) {
-						vecerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
+						vecerror.ExpectedError(tree.ErrIntOutOfRange)
 					}
 					{{.Target}} = result
 				}
@@ -832,7 +832,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				{
 					result := {{.Left}} - {{.Right}}
 					if (result < {{.Left}}) != ({{.Right}} > 0) {
-						vecerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
+						vecerror.ExpectedError(tree.ErrIntOutOfRange)
 					}
 					{{.Target}} = result
 				}
@@ -869,9 +869,9 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 						if {{.Left}} != 0 && {{.Right}} != 0 {
 							sameSign := ({{.Left}} < 0) == ({{.Right}} < 0)
 							if (result < 0) == sameSign {
-								vecerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
+								vecerror.ExpectedError(tree.ErrIntOutOfRange)
 							} else if result/{{.Right}} != {{.Left}} {
-								vecerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
+								vecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 						}
 					}
@@ -886,13 +886,13 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 			t = template.Must(template.New("").Parse(`
 			{
 				if {{.Right}} == 0 {
-					vecerror.NonVectorizedPanic(tree.ErrDivByZero)
+					vecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				leftTmpDec, rightTmpDec := &decimalScratch.tmpDec1, &decimalScratch.tmpDec2
 				leftTmpDec.SetFinite(int64({{.Left}}), 0)
 				rightTmpDec.SetFinite(int64({{.Right}}), 0)
 				if _, err := tree.{{.Ctx}}.Quo(&{{.Target}}, leftTmpDec, rightTmpDec); err != nil {
-					vecerror.NonVectorizedPanic(err)
+					vecerror.ExpectedError(err)
 				}
 			}
 		`))
@@ -916,7 +916,7 @@ func (c decimalFloatCustomizer) getCmpOpCompareFunc() compareFunc {
 			{
 				tmpDec := &decimalScratch.tmpDec1
 				if _, err := tmpDec.SetFloat64(float64({{.Right}})); err != nil {
-					vecerror.NonVectorizedPanic(err)
+					vecerror.ExpectedError(err)
 				}
 				{{.Target}} = tree.CompareDecimals(&{{.Left}}, tmpDec)
 			}
@@ -960,13 +960,13 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 			{
 				{{ if .IsDivision }}
 				if {{.Right}} == 0 {
-					vecerror.NonVectorizedPanic(tree.ErrDivByZero)
+					vecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{ end }}
 				tmpDec := &decimalScratch.tmpDec1
 				tmpDec.SetFinite(int64({{.Right}}), 0)
 				if _, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, tmpDec); err != nil {
-					vecerror.NonVectorizedPanic(err)
+					vecerror.ExpectedError(err)
 				}
 			}
 		`))
@@ -985,7 +985,7 @@ func (c floatDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 			{
 				tmpDec := &decimalScratch.tmpDec1
 				if _, err := tmpDec.SetFloat64(float64({{.Left}})); err != nil {
-					vecerror.NonVectorizedPanic(err)
+					vecerror.ExpectedError(err)
 				}
 				{{.Target}} = tree.CompareDecimals(tmpDec, &{{.Right}})
 			}
@@ -1033,13 +1033,13 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 				{{ if .IsDivision }}
 				cond, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})
 				if cond.DivisionByZero() {
-					vecerror.NonVectorizedPanic(tree.ErrDivByZero)
+					vecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{ else }}
 				_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})
 				{{ end }}
 				if err != nil {
-					vecerror.NonVectorizedPanic(err)
+					vecerror.ExpectedError(err)
 				}
 			}
 		`))
@@ -1182,7 +1182,7 @@ func (c intervalIntCustomizer) getBinOpAssignFunc() assignFunc {
 		case tree.Div:
 			return fmt.Sprintf(`
 				if %[3]s == 0 {
-					vecerror.NonVectorizedPanic(tree.ErrDivByZero)
+					vecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				%[1]s = %[2]s.Div(int64(%[3]s))`,
 				target, l, r)
@@ -1215,7 +1215,7 @@ func (c intervalFloatCustomizer) getBinOpAssignFunc() assignFunc {
 		case tree.Div:
 			return fmt.Sprintf(`
 				if %[3]s == 0.0 {
-					vecerror.NonVectorizedPanic(tree.ErrDivByZero)
+					vecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				%[1]s = %[2]s.DivFloat(float64(%[3]s))`,
 				target, l, r)

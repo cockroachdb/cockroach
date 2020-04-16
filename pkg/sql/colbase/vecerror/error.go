@@ -78,18 +78,18 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 		}
 
 		annotateErrorWithoutCode := true
-		var nvie *notVectorizedInternalError
-		if errors.As(err, &nvie) {
-			// A notVectorizedInternalError was not caused by the
-			// vectorized engine and represents an error that we don't
-			// want to annotate in case it doesn't have a valid PG code.
+		var nie *notInternalError
+		if errors.As(err, &nie) {
+			// A notInternalError was not caused by the vectorized engine and
+			// represents an error that we don't want to annotate in case it
+			// doesn't have a valid PG code.
 			annotateErrorWithoutCode = false
 		}
 		if code := pgerror.GetPGCode(err); annotateErrorWithoutCode && code == pgcode.Uncategorized {
 			// Any error without a code already is "surprising" and
 			// needs to be annotated to indicate that it was
 			// unexpected.
-			retErr = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error from the vectorized runtime")
+			retErr = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error from the vectorized engine")
 		}
 	}()
 	operation()
@@ -141,64 +141,58 @@ func NewStorageError(err error) *StorageError {
 	return &StorageError{error: err}
 }
 
-// notVectorizedInternalError is an error that originated outside of the
-// vectorized engine (for example, it was caused by a non-columnar builtin).
-// notVectorizedInternalError will be returned to the client not as an
+// notInternalError is an error that occurs not because the vectorized engine
+// happens to be in an unexpected state (for example, it was caused by a
+// non-columnar builtin).
+// notInternalError will be returned to the client not as an
 // "internal error" and without the stack trace.
-type notVectorizedInternalError struct {
+type notInternalError struct {
 	cause error
 }
 
-func newNotVectorizedInternalError(err error) *notVectorizedInternalError {
-	return &notVectorizedInternalError{cause: err}
+func newNotInternalError(err error) *notInternalError {
+	return &notInternalError{cause: err}
 }
 
 var (
-	_ causer.Causer  = &notVectorizedInternalError{}
-	_ errors.Wrapper = &notVectorizedInternalError{}
+	_ causer.Causer  = &notInternalError{}
+	_ errors.Wrapper = &notInternalError{}
 )
 
-func (e *notVectorizedInternalError) Error() string {
+func (e *notInternalError) Error() string {
 	return e.cause.Error()
 }
 
-func (e *notVectorizedInternalError) Cause() error {
+func (e *notInternalError) Cause() error {
 	return e.cause
 }
 
-func (e *notVectorizedInternalError) Unwrap() error {
+func (e *notInternalError) Unwrap() error {
 	return e.Cause()
 }
 
-func decodeNotVectorizedInternalError(
+func decodeNotInternalError(
 	_ context.Context, cause error, _ string, _ []string, _ proto.Message,
 ) error {
-	return newNotVectorizedInternalError(cause)
+	return newNotInternalError(cause)
 }
 
 func init() {
-	errors.RegisterWrapperDecoder(errors.GetTypeKey((*notVectorizedInternalError)(nil)), decodeNotVectorizedInternalError)
+	errors.RegisterWrapperDecoder(errors.GetTypeKey((*notInternalError)(nil)), decodeNotInternalError)
 }
 
 // InternalError simply panics with the provided object. It will always be
 // caught and returned as internal error to the client with the corresponding
-// stack trace. This method should be called to propagate all *unexpected*
-// errors that originated within the vectorized engine.
+// stack trace. This method should be called to propagate errors that resulted
+// in the vectorized engine being in an *unexpected* state.
 func InternalError(err interface{}) {
 	panic(err)
 }
 
-// ExpectedError is the same as NonVectorizedPanic. It should be called to
-// propagate all *expected* errors that originated within the vectorized
-// engine.
-func ExpectedError(err error) {
-	NonVectorizedPanic(err)
-}
-
-// NonVectorizedPanic panics with the error that is wrapped by
-// notVectorizedInternalError which will not be treated as internal error and
+// ExpectedError panics with the error that is wrapped by
+// notInternalError which will not be treated as internal error and
 // will not have a printed out stack trace. This method should be called to
-// propagate all errors that originated outside of the vectorized engine.
-func NonVectorizedPanic(err error) {
-	panic(newNotVectorizedInternalError(err))
+// propagate errors that the vectorized engine *expects* to occur.
+func ExpectedError(err error) {
+	panic(newNotInternalError(err))
 }

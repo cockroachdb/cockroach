@@ -82,7 +82,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 				} else {
 					res, err = b.funcExpr.ResolvedOverload().Fn(b.evalCtx, b.row)
 					if err != nil {
-						vecerror.NonVectorizedPanic(err)
+						vecerror.ExpectedError(err)
 					}
 				}
 
