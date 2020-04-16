@@ -53,9 +53,13 @@ function upload_stats {
       # to
       #     gs://${bucket}/artifacts/${stats_dir}/path/to/test/stats.json
       #
-      # `find` below will expand "{}" as ./path/to/test/stats.json.
-      (cd "${artifacts}" && find . -name stats.json -exec \
-        gsutil cp "{}" "gs://${bucket}/artifacts/${stats_dir}/{}" ';')
+      # `find` below will expand "{}" as ./path/to/test/stats.json. We need
+      # to bend over backwards to remove the `./` prefix or gsutil will have
+      # a `.` folder in ${stats_dir}, which we don't want.
+      (cd "${artifacts}" && \
+        while IFS= read -r f; do
+          gsutil cp "${f}" "gs://${bucket}/artifacts/${stats_dir}/${f}"
+        done <<< "$(find . -name stats.json | sed 's/^\.\///')")
   fi
 }
 
