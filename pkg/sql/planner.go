@@ -450,6 +450,9 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 // CommonLookupFlags, it could use or skip the TableCollection cache. See
 // TableCollection.getTableVersionByID for how it's used.
 func (p *planner) LookupTableByID(ctx context.Context, tableID sqlbase.ID) (row.TableEntry, error) {
+	if entry, err := p.getVirtualTabler().getVirtualTableEntryByID(tableID); err == nil {
+		return row.TableEntry{Desc: sqlbase.NewImmutableTableDescriptor(*entry.desc)}, nil
+	}
 	flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{AvoidCached: p.avoidCachedDescriptors}}
 	table, err := p.Tables().getTableVersionByID(ctx, p.txn, tableID, flags)
 	if err != nil {
