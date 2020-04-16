@@ -884,7 +884,7 @@ func applyColumnMutation(
 ) error {
 	switch t := mut.(type) {
 	case *tree.AlterTableAlterColumnType:
-		return AlterColumnType(tableDesc, col, t)
+		return AlterColumnType(tableDesc, col, t, params)
 
 	case *tree.AlterTableSetDefault:
 		if len(col.UsesSequenceIds) > 0 {

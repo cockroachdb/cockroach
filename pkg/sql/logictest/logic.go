@@ -1532,7 +1532,6 @@ func (t *logicTest) processSubtest(
 				)
 			}
 			repeat = count
-
 		case "sleep":
 			var err error
 			var duration time.Duration

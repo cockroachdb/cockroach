@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"sort"
 	"time"
 
@@ -1333,9 +1334,12 @@ func runSchemaChangesInTxn(
 		switch m.Direction {
 		case sqlbase.DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
-			case *sqlbase.DescriptorMutation_PrimaryKeySwap, *sqlbase.DescriptorMutation_ComputedColumnSwap:
+			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
 				// Don't need to do anything here, as the call to MakeMutationComplete
 				// will perform the steps for this operation.
+			case *sqlbase.DescriptorMutation_ComputedColumnSwap:
+				return unimplemented.NewWithIssue(47537,
+					"performing an ALTER TABLE ... ALTER COLUMN TYPE in the same txn as the table was created is not supported")
 			case *sqlbase.DescriptorMutation_Column:
 				if doneColumnBackfill || !sqlbase.ColumnNeedsBackfill(m.GetColumn()) {
 					break

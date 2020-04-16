@@ -12,15 +12,15 @@ package sql
 
 import (
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 // AlterColumnType takes an AlterTableAlterColumnType, determines
@@ -29,6 +29,7 @@ func AlterColumnType(
 	tableDesc *sqlbase.MutableTableDescriptor,
 	col *sqlbase.ColumnDescriptor,
 	t *tree.AlterTableAlterColumnType,
+	params runParams,
 ) error {
 	typ := t.ToType
 
@@ -69,82 +70,94 @@ func AlterColumnType(
 	case schemachange.ColumnConversionTrivial:
 		col.Type = *typ
 	case schemachange.ColumnConversionGeneral:
-		currentMutationID := tableDesc.ClusterVersion.NextMutationID
-		for i := range tableDesc.Mutations {
-			mut := &tableDesc.Mutations[i]
-			if mut.MutationID < currentMutationID {
-				return unimplemented.NewWithIssuef(
-					47137, "table %s is currently undergoing a schema change", tableDesc.Name)
-			}
+		if err := alterColumnTypeGeneral(tableDesc, col, t.ToType); err != nil {
+			return err
 		}
-
-		nameExists := func(name string) bool {
-			_, _, err := tableDesc.FindColumnByName(tree.Name(name))
-			return err == nil
-		}
-
-		shadowColName := sqlbase.GenerateUniqueConstraintName(
-			col.Name,
-			nameExists,
-		)
-
-		// Compute Expr.
-		unresolvedName := func(name string) *tree.UnresolvedName {
-			return &tree.UnresolvedName{
-				NumParts: 1,
-				Parts:    tree.NameParts{name},
-			}
-		}
-
-		newComputedExpr := tree.CastExpr{Expr: unresolvedName(col.Name), Type: t.ToType, SyntaxMode: tree.CastShort}
-		s := tree.Serialize(&newComputedExpr)
-		newColComputeExpr := &s
-
-		// May run into runtime error if DEFAULT value of column cannot be casted.
-		// In this case right now, the schema change is not rolled back.
-		hasDefault := col.HasDefault()
-		var newColDefaultExpr *string
-		if hasDefault {
-			if col.HasNullDefault() {
-				s := tree.Serialize(tree.DNull)
-				newColDefaultExpr = &s
-			} else {
-				expr, err := parser.ParseExpr(col.DefaultExprStr())
-				if err != nil {
-					return err
-				}
-				newDefaultComputedExpr := tree.CastExpr{Expr: expr, Type: t.ToType, SyntaxMode: tree.CastShort}
-				s := tree.Serialize(&newDefaultComputedExpr)
-				newColDefaultExpr = &s
-			}
-		}
-
-		id := tableDesc.NextColumnID
-		tableDesc.NextColumnID++
-
-		newCol := sqlbase.ColumnDescriptor{
-			Name:            shadowColName,
-			ID:              id,
-			Type:            *t.ToType,
-			Nullable:        col.Nullable,
-			DefaultExpr:     newColDefaultExpr,
-			UsesSequenceIds: col.UsesSequenceIds,
-			OwnsSequenceIds: col.OwnsSequenceIds,
-			ComputeExpr:     newColComputeExpr,
-		}
-
-		tableDesc.AddColumnMutation(&newCol, sqlbase.DescriptorMutation_ADD)
-
-		swapArgs := &sqlbase.ComputedColumnSwap{
-			OldColumnId: col.ID,
-			NewColumnId: newCol.ID,
-		}
-
-		tableDesc.AddComputedColumnSwapMutation(swapArgs)
+		params.p.createOrUpdateSchemaChangeJob(params.ctx, tableDesc, "alter column type", sqlbase.InvalidMutationID)
+		params.p.SendClientNotice(params.ctx, pgerror.Noticef("alter column type changes are finalized asynchronosuly;"+
+			"further schema changes on this table may be restricted until the job completes; "+
+			"some inserts into the altered column may not be supported until the schema change is finalized"))
 	default:
 		return fmt.Errorf("unknown conversion for %s -> %s",
 			col.Type.SQLString(), typ.SQLString())
 	}
 
+	return nil
+}
+
+func alterColumnTypeGeneral(tableDesc *sqlbase.MutableTableDescriptor,
+	col *sqlbase.ColumnDescriptor, toType *types.T) error {
+	currentMutationID := tableDesc.ClusterVersion.NextMutationID
+	for i := range tableDesc.Mutations {
+		mut := &tableDesc.Mutations[i]
+		if mut.MutationID < currentMutationID {
+			return unimplemented.NewWithIssuef(
+				47137, "table %s is currently undergoing a schema change", tableDesc.Name)
+		}
+	}
+
+	nameExists := func(name string) bool {
+		_, _, err := tableDesc.FindColumnByName(tree.Name(name))
+		return err == nil
+	}
+
+	shadowColName := sqlbase.GenerateUniqueConstraintName(
+		col.Name,
+		nameExists,
+	)
+
+	// Compute Expr.
+	unresolvedName := func(name string) *tree.UnresolvedName {
+		return &tree.UnresolvedName{
+			NumParts: 1,
+			Parts:    tree.NameParts{name},
+		}
+	}
+
+	newComputedExpr := tree.CastExpr{Expr: unresolvedName(col.Name), Type: toType, SyntaxMode: tree.CastShort}
+	s := tree.Serialize(&newComputedExpr)
+	newColComputeExpr := &s
+
+	// May run into runtime error if DEFAULT value of column cannot be casted.
+	// In this case right now, the schema change is not rolled back.
+	hasDefault := col.HasDefault()
+	var newColDefaultExpr *string
+	if hasDefault {
+		if col.HasNullDefault() {
+			s := tree.Serialize(tree.DNull)
+			newColDefaultExpr = &s
+		} else {
+			expr, err := parser.ParseExpr(col.DefaultExprStr())
+			if err != nil {
+				return err
+			}
+			newDefaultComputedExpr := tree.CastExpr{Expr: expr, Type: toType, SyntaxMode: tree.CastShort}
+			s := tree.Serialize(&newDefaultComputedExpr)
+			newColDefaultExpr = &s
+		}
+	}
+
+	id := tableDesc.NextColumnID
+	tableDesc.NextColumnID++
+
+	newCol := sqlbase.ColumnDescriptor{
+		Name:            shadowColName,
+		ID:              id,
+		Type:            *toType,
+		Nullable:        col.Nullable,
+		DefaultExpr:     newColDefaultExpr,
+		UsesSequenceIds: col.UsesSequenceIds,
+		OwnsSequenceIds: col.OwnsSequenceIds,
+		ComputeExpr:     newColComputeExpr,
+	}
+
+	tableDesc.AddColumnMutation(&newCol, sqlbase.DescriptorMutation_ADD)
+
+	swapArgs := &sqlbase.ComputedColumnSwap{
+		OldColumnId: col.ID,
+		NewColumnId: newCol.ID,
+	}
+
+	tableDesc.AddComputedColumnSwapMutation(swapArgs)
 	return nil
 }

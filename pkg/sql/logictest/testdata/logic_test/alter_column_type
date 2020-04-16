@@ -244,3 +244,47 @@ x      INT8    true   NULL            ·  {}         false
 y      STRING  true   NULL            ·  {}         false
 z      INT8    true   NULL            ·  {}         false
 rowid  INT8    false  unique_rowid()  ·  {primary}  true
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE d.t2 (x INT, y INT)
+
+statement error pq: unimplemented: performing an ALTER TABLE ... ALTER COLUMN TYPE in the same txn as the table was created is not supported
+ALTER TABLE d.t2 ALTER COLUMN x TYPE STRING
+
+statement ok
+ROLLBACK
+
+statement ok
+CREATE TABLE d.t3 (x INT, y INT, z INT)
+
+statement ok
+INSERT INTO d.t3 VALUES (1, 1, 1), (2, 2, 2);
+
+statement ok
+ALTER TABLE d.t3 ALTER COLUMN y TYPE STRING
+
+# Wait until drop column job is done
+query T retry
+SELECT STATUS FROM [SHOW JOBS] WHERE STATUS = 'running' AND description LIKE '%SET DATA TYPE%'
+----
+
+
+statement ok
+INSERT INTO d.t3 VALUES (3, 'HELLO', 3)
+
+query ITI
+SELECT * FROM d.t3
+----
+1 1     1
+2 2     2
+3 HELLO 3
+
+query T
+SELECT y FROM d.t3
+----
+1
+2
+HELLO
