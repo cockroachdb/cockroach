@@ -147,11 +147,15 @@ func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 
 	// Wait for the ranges to learn about the removed record and ensure that we
 	// can GC from the range soon.
-	gcRanRE := regexp.MustCompile("(?s)shouldQueue=true.*processing replica.*GC score after GC")
+	// This regex matches when all float priorities other than 0.00000. It does
+	// this by matching either a float >= 1 (e.g. 1230.012) or a float < 1 (e.g.
+	// 0.000123).
+	matchNonZero := "[1-9]\\d*\\.\\d+|0\\.\\d*[1-9]\\d*"
+	nonZeroProgressRE := regexp.MustCompile(fmt.Sprintf("priority=(%s)", matchNonZero))
 	testutils.SucceedsSoon(t, func() error {
 		writeGarbage(3, 10)
-		if trace := gcTable(false /* skipShouldQueue */); !gcRanRE.MatchString(trace) {
-			return fmt.Errorf("expected %v in trace: %v", gcRanRE, trace)
+		if trace := gcTable(false /* skipShouldQueue */); !nonZeroProgressRE.MatchString(trace) {
+			return fmt.Errorf("expected %v in trace: %v", nonZeroProgressRE, trace)
 		}
 		return nil
 	})
