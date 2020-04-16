@@ -3626,7 +3626,14 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	rowCount := runner.QueryStr(t, "SELECT * FROM foo")
 
 	go func() {
-		runner.Exec(t, `BACKUP TABLE FOO TO 'nodelocal://1/foo'`)
+		// N.B. We use the conn rather than the runner here since the test may
+		// finish before the job finishes. The test will finish as soon as the
+		// timestamp is no longer protected. If the test starts tearing down the
+		// cluster before the backup job is done, the test may still fail when the
+		// backup fails. This test does not particularly care if the BACKUP
+		// completes with a success or failure, as long as the timestamp is released
+		// shortly after the BACKUP is unblocked.
+		_, _ = conn.Exec(`BACKUP TABLE FOO TO 'nodelocal://1/foo'`) // ignore error.
 	}()
 
 	var jobID string
@@ -3669,11 +3676,15 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 
 	// Wait for the ranges to learn about the removed record and ensure that we
 	// can GC from the range soon.
-	gcRanRE := regexp.MustCompile("(?s)shouldQueue=true.*processing replica.*GC score after GC")
+	// This regex matches when all float priorities other than 0.00000. It does
+	// this by matching either a float >= 1 (e.g. 1230.012) or a float < 1 (e.g.
+	// 0.000123).
+	matchNonZero := "[1-9]\\d*\\.\\d+|0\\.\\d*[1-9]\\d*"
+	nonZeroProgressRE := regexp.MustCompile(fmt.Sprintf("priority=(%s)", matchNonZero))
 	testutils.SucceedsSoon(t, func() error {
 		writeGarbage(3, 10)
-		if trace := gcTable(false /* skipShouldQueue */); !gcRanRE.MatchString(trace) {
-			return fmt.Errorf("expected %v in trace: %v", gcRanRE, trace)
+		if trace := gcTable(false /* skipShouldQueue */); !nonZeroProgressRE.MatchString(trace) {
+			return fmt.Errorf("expected %v in trace: %v", nonZeroProgressRE, trace)
 		}
 		return nil
 	})
