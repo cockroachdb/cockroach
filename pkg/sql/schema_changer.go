@@ -636,7 +636,7 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) error {
 	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", *sc.job.ID(), err)
 	if errReverse := sc.maybeReverseMutations(ctx, err); errReverse != nil {
-		return err
+		return errReverse
 	}
 
 	if fn := sc.testingKnobs.RunAfterMutationReversal; fn != nil {
@@ -1036,6 +1036,12 @@ func (sc *SchemaChanger) refreshStats() {
 // applying a schema change. If a column being added is reversed and dropped,
 // all new indexes referencing the column will also be dropped.
 func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError error) error {
+	if fn := sc.testingKnobs.RunBeforeMutationReversal; fn != nil {
+		if err := fn(*sc.job.ID()); err != nil {
+			return err
+		}
+	}
+
 	// Get the other tables whose foreign key backreferences need to be removed.
 	var fksByBackrefTable map[sqlbase.ID][]*sqlbase.ConstraintToUpdate
 	alreadyReversed := false
@@ -1431,6 +1437,9 @@ type SchemaChangerTestingKnobs struct {
 	// RunBeforeConstraintValidation is called just before starting the checks validation,
 	// after setting the job status to validating.
 	RunBeforeConstraintValidation func() error
+
+	// RunBeforeMutationReversal runs at the beginning of maybeReverseMutations.
+	RunBeforeMutationReversal func(jobID int64) error
 
 	// RunAfterMutationReversal runs in OnFailOrCancel after the mutations have
 	// been reversed.
