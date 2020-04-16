@@ -22,7 +22,7 @@ import { CockroachLabsLockupIcon, Button, TextInput, PasswordInput } from "src/c
 import { Text, TextTypes } from "src/components";
 import ErrorCircle from "assets/error-circle.svg";
 
-interface LoginPageProps {
+export interface LoginPageProps {
   loginState: LoginAPIState;
   handleLogin: (username: string, password: string) => Promise<any>;
 }
@@ -32,7 +32,7 @@ interface LoginPageState {
   password?: string;
 }
 
-class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, LoginPageState> {
+export class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, LoginPageState> {
   constructor(props: LoginPageProps & RouteComponentProps) {
     super(props);
     this.state = {
