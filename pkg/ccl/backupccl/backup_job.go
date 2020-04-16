@@ -541,6 +541,14 @@ func (b *backupResumer) Resume(
 	}
 	b.deleteCheckpoint(ctx, p.ExecCfg())
 
+	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
+		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return b.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
+		}); err != nil {
+			log.Errorf(ctx, "failed to release protected timestamp: %v", err)
+		}
+	}
+
 	resultsCh <- tree.Datums{
 		tree.NewDInt(tree.DInt(*b.job.ID())),
 		tree.NewDString(string(jobs.StatusSucceeded)),
@@ -548,14 +556,6 @@ func (b *backupResumer) Resume(
 		tree.NewDInt(tree.DInt(res.Rows)),
 		tree.NewDInt(tree.DInt(res.IndexEntries)),
 		tree.NewDInt(tree.DInt(res.DataSize)),
-	}
-
-	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
-		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return b.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
-		}); err != nil {
-			log.Errorf(ctx, "failed to release protected timestamp: %v", err)
-		}
 	}
 
 	// Collect telemetry.
