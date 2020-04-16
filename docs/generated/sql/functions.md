@@ -630,11 +630,25 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="acos"></a><code>acos(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the inverse cosine of <code>val</code>.</p>
 </span></td></tr>
+<tr><td><a name="acosd"></a><code>acosd(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the inverse cosine of <code>val</code> with the result in degrees</p>
+</span></td></tr>
+<tr><td><a name="acosh"></a><code>acosh(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the inverse hyperbolic cosine of <code>val</code>.</p>
+</span></td></tr>
 <tr><td><a name="asin"></a><code>asin(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the inverse sine of <code>val</code>.</p>
+</span></td></tr>
+<tr><td><a name="asind"></a><code>asind(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the inverse sine of <code>val</code> with the result in degrees.</p>
+</span></td></tr>
+<tr><td><a name="asinh"></a><code>asinh(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the inverse hyperbolic sine of <code>val</code>.</p>
 </span></td></tr>
 <tr><td><a name="atan"></a><code>atan(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the inverse tangent of <code>val</code>.</p>
 </span></td></tr>
 <tr><td><a name="atan2"></a><code>atan2(x: <a href="float.html">float</a>, y: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the inverse tangent of <code>x</code>/<code>y</code>.</p>
+</span></td></tr>
+<tr><td><a name="atan2d"></a><code>atan2d(x: <a href="float.html">float</a>, y: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the inverse tangent of <code>x</code>/<code>y</code> with the result in degrees</p>
+</span></td></tr>
+<tr><td><a name="atand"></a><code>atand(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the inverse tangent of <code>val</code> with the result in degrees.</p>
+</span></td></tr>
+<tr><td><a name="atanh"></a><code>atanh(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the inverse hyperbolic tangent of <code>val</code>.</p>
 </span></td></tr>
 <tr><td><a name="cbrt"></a><code>cbrt(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the cube root (∛) of <code>val</code>.</p>
 </span></td></tr>
@@ -654,7 +668,13 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="cos"></a><code>cos(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the cosine of <code>val</code>.</p>
 </span></td></tr>
+<tr><td><a name="cosd"></a><code>cosd(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the cosine of <code>val</code> where <code>val</code> is in degrees.</p>
+</span></td></tr>
+<tr><td><a name="cosh"></a><code>cosh(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the hyperbolic cosine of <code>val</code>.</p>
+</span></td></tr>
 <tr><td><a name="cot"></a><code>cot(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the cotangent of <code>val</code>.</p>
+</span></td></tr>
+<tr><td><a name="cotd"></a><code>cotd(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the cotangent of <code>val</code> where <code>val</code> is in degrees.</p>
 </span></td></tr>
 <tr><td><a name="crc32c"></a><code>crc32c(<a href="bytes.html">bytes</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the CRC-32 hash using the Castagnoli polynomial.</p>
 </span></td></tr>
@@ -754,11 +774,19 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="sin"></a><code>sin(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the sine of <code>val</code>.</p>
 </span></td></tr>
+<tr><td><a name="sind"></a><code>sind(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the sine of <code>val</code> where <code>val</code> is in degrees.</p>
+</span></td></tr>
+<tr><td><a name="sinh"></a><code>sinh(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the hyperbolic sine of <code>val</code>.</p>
+</span></td></tr>
 <tr><td><a name="sqrt"></a><code>sqrt(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the square root of <code>val</code>.</p>
 </span></td></tr>
 <tr><td><a name="sqrt"></a><code>sqrt(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the square root of <code>val</code>.</p>
 </span></td></tr>
 <tr><td><a name="tan"></a><code>tan(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the tangent of <code>val</code>.</p>
+</span></td></tr>
+<tr><td><a name="tand"></a><code>tand(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the tangent of <code>val</code> where <code>val</code> is in degrees.</p>
+</span></td></tr>
+<tr><td><a name="tanh"></a><code>tanh(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the hyperbolic tangent of <code>val</code>.</p>
 </span></td></tr>
 <tr><td><a name="trunc"></a><code>trunc(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Truncates the decimal values of <code>val</code>.</p>
 </span></td></tr>

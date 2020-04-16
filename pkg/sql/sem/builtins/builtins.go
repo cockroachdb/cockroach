@@ -79,6 +79,11 @@ const maxAllocatedStringSize = 128 * 1024 * 1024
 const errInsufficientArgsFmtString = "unknown signature: %s()"
 
 const (
+	degToRad = math.Pi / 180.0
+	radToDeg = 180.0 / math.Pi
+)
+
+const (
 	categoryComparison    = "Comparison"
 	categoryCompatibility = "Compatibility"
 	categoryDateAndTime   = "Date and time"
@@ -2183,10 +2188,34 @@ may increase either contention or retry errors, or both.`,
 		}, "Calculates the inverse cosine of `val`."),
 	),
 
+	"acosd": makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(radToDeg * math.Acos(x))), nil
+		}, "Calculates the inverse cosine of `val` with the result in degrees"),
+	),
+
+	"acosh": makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Acosh(x))), nil
+		}, "Calculates the inverse hyperbolic cosine of `val`."),
+	),
+
 	"asin": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Asin(x))), nil
 		}, "Calculates the inverse sine of `val`."),
+	),
+
+	"asind": makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(radToDeg * math.Asin(x))), nil
+		}, "Calculates the inverse sine of `val` with the result in degrees."),
+	),
+
+	"asinh": makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Asinh(x))), nil
+		}, "Calculates the inverse hyperbolic sine of `val`."),
 	),
 
 	"atan": makeBuiltin(defProps(),
@@ -2195,10 +2224,28 @@ may increase either contention or retry errors, or both.`,
 		}, "Calculates the inverse tangent of `val`."),
 	),
 
+	"atand": makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(radToDeg * math.Atan(x))), nil
+		}, "Calculates the inverse tangent of `val` with the result in degrees."),
+	),
+
+	"atanh": makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Atanh(x))), nil
+		}, "Calculates the inverse hyperbolic tangent of `val`."),
+	),
+
 	"atan2": makeBuiltin(defProps(),
 		floatOverload2("x", "y", func(x, y float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Atan2(x, y))), nil
 		}, "Calculates the inverse tangent of `x`/`y`."),
+	),
+
+	"atan2d": makeBuiltin(defProps(),
+		floatOverload2("x", "y", func(x, y float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(radToDeg * math.Atan2(x, y))), nil
+		}, "Calculates the inverse tangent of `x`/`y` with the result in degrees"),
 	),
 
 	"cbrt": makeBuiltin(defProps(),
@@ -2221,10 +2268,28 @@ may increase either contention or retry errors, or both.`,
 		}, "Calculates the cosine of `val`."),
 	),
 
+	"cosd": makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Cos(degToRad * x))), nil
+		}, "Calculates the cosine of `val` where `val` is in degrees."),
+	),
+
+	"cosh": makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Cosh(x))), nil
+		}, "Calculates the hyperbolic cosine of `val`."),
+	),
+
 	"cot": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(1 / math.Tan(x))), nil
 		}, "Calculates the cotangent of `val`."),
+	),
+
+	"cotd": makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(1 / math.Tan(degToRad*x))), nil
+		}, "Calculates the cotangent of `val` where `val` is in degrees."),
 	),
 
 	"degrees": makeBuiltin(defProps(),
@@ -2503,6 +2568,18 @@ may increase either contention or retry errors, or both.`,
 		}, "Calculates the sine of `val`."),
 	),
 
+	"sind": makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Sin(degToRad * x))), nil
+		}, "Calculates the sine of `val` where `val` is in degrees."),
+	),
+
+	"sinh": makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Sinh(x))), nil
+		}, "Calculates the hyperbolic sine of `val`."),
+	),
+
 	"sign": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			switch {
@@ -2560,6 +2637,18 @@ may increase either contention or retry errors, or both.`,
 		floatOverload1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Tan(x))), nil
 		}, "Calculates the tangent of `val`."),
+	),
+
+	"tand": makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Tan(degToRad * x))), nil
+		}, "Calculates the tangent of `val` where `val` is in degrees."),
+	),
+
+	"tanh": makeBuiltin(defProps(),
+		floatOverload1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Tanh(x))), nil
+		}, "Calculates the hyperbolic tangent of `val`."),
 	),
 
 	// https://www.postgresql.org/docs/9.6/functions-datetime.html
