@@ -115,10 +115,6 @@ export function tableInfos(state: AdminUIState, dbName: string) {
   });
 }
 
-// export const isTableFlight = (state: AdminUIState, dbName: string) {
-
-// }
-
 // Function which extracts the grants for a single database from redux state.
 export function grants(state: AdminUIState, dbName: string) {
     const dbDetails = databaseDetails(state);

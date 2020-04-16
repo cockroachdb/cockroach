@@ -81,6 +81,7 @@ interface SortedTableProps<T> {
   renderNoResult?: React.ReactNode;
   pagination?: ISortedTablePagination;
   loading?: boolean;
+  loadingLabel?: string;
 }
 
 interface SortedTableState {
@@ -211,7 +212,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
   }
 
   render() {
-    const { data, loading, sortSetting, onChangeSortSetting, firstCellBordered, renderNoResult } = this.props;
+    const { data, loading, sortSetting, onChangeSortSetting, firstCellBordered, renderNoResult, loadingLabel } = this.props;
     let expandableConfig: ExpandableConfig = null;
     if (this.props.expandableConfig) {
       expandableConfig = {
@@ -234,6 +235,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
         firstCellBordered={firstCellBordered}
         renderNoResult={renderNoResult}
         loading={loading}
+        loadingLabel={loadingLabel}
       />
     );
   }

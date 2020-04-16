@@ -105,6 +105,7 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
                     sortSetting={sortSetting}
                     onChangeSortSetting={(setting) => this.props.setSort(setting)}
                     loading={loading as boolean}
+                    loadingLabel="Loading tables..."
                     columns={[
                       {
                         title: "Table Name",
