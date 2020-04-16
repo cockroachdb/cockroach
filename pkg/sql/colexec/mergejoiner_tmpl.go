@@ -271,7 +271,7 @@ func _PROBE_SWITCH(
 		}
 	// {{end}}
 	default:
-		vecerror.InternalError(fmt.Sprintf("unhandled type %d", colType))
+		vecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
 	}
 	// {{end}}
 	// {{/*
@@ -553,8 +553,10 @@ EqLoop:
 		rightColIdx := o.right.eqCols[eqColIdx]
 		lVec := o.proberState.lBatch.ColVec(int(leftColIdx))
 		rVec := o.proberState.rBatch.ColVec(int(rightColIdx))
-		leftPhysType := o.left.sourceTypes[leftColIdx]
-		rightPhysType := o.right.sourceTypes[rightColIdx]
+		leftType := o.left.sourceTypes[leftColIdx]
+		leftPhysType := o.left.sourcePhysTypes[leftColIdx]
+		rightType := o.right.sourceTypes[rightColIdx]
+		rightPhysType := o.right.sourcePhysTypes[rightColIdx]
 		colType := leftPhysType
 		// Merge joiner only supports the case when the physical types in the
 		// equality columns in both inputs are the same. If that is not the case,
@@ -577,23 +579,26 @@ EqLoop:
 			case coltypes.Float64:
 				castLeftToRight = rightPhysType == coltypes.Decimal
 			}
-			toType := leftPhysType
+
+			toType, toPhysType := leftType, leftPhysType
 			if castLeftToRight {
-				toType = rightPhysType
+				toType, toPhysType = rightType, rightPhysType
 			}
-			tempVec := o.scratch.tempVecByType[toType]
+			tempVec := o.scratch.tempVecByType[toPhysType]
 			if tempVec == nil {
-				tempVec = o.unlimitedAllocator.NewMemColumn(toType, coldata.BatchSize())
-				o.scratch.tempVecByType[toType] = tempVec
+				// TODO(yuzefovich): this will need to be changed once we fully
+				// support coltypes.Datum.
+				tempVec = o.unlimitedAllocator.NewMemColumn(&toType, coldata.BatchSize())
+				o.scratch.tempVecByType[toPhysType] = tempVec
 			} else {
 				tempVec.Nulls().UnsetNulls()
 			}
 			if castLeftToRight {
-				cast(leftPhysType, rightPhysType, lVec, tempVec, o.proberState.lBatch.Length(), lSel)
+				cast(&leftType, &rightType, lVec, tempVec, o.proberState.lBatch.Length(), lSel)
 				lVec = tempVec
-				colType = o.right.sourceTypes[rightColIdx]
+				colType = rightPhysType
 			} else {
-				cast(rightPhysType, leftPhysType, rVec, tempVec, o.proberState.rBatch.Length(), rSel)
+				cast(&rightType, &leftType, rVec, tempVec, o.proberState.rBatch.Length(), rSel)
 				rVec = tempVec
 			}
 		}
@@ -710,7 +715,7 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 		o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 	// {{end}}
 	default:
-		vecerror.InternalError(fmt.Sprintf("unhandled type %d", colType))
+		vecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
 	}
 	// {{end}}
 	// {{/*
@@ -750,7 +755,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftGroupsFromBatch(
 		func() {
 			// Loop over every column.
 		LeftColLoop:
-			for colIdx, colType := range input.sourceTypes {
+			for colIdx, colType := range input.sourcePhysTypes {
 				outStartIdx := destStartIdx
 				out := o.output.ColVec(colIdx)
 				var src coldata.Vec
@@ -813,7 +818,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftBufferedGroup(
 				var updatedDestStartIdx int
 				// Loop over every column.
 			LeftColLoop:
-				for colIdx, colType := range input.sourceTypes {
+				for colIdx, colType := range input.sourcePhysTypes {
 					outStartIdx := destStartIdx
 					src := currentBatch.ColVec(colIdx)
 					out := o.output.ColVec(colIdx)
@@ -870,7 +875,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftBufferedGroup(
 						}
 					// {{end}}
 					default:
-						vecerror.InternalError(fmt.Sprintf("unhandled type %d", colType))
+						vecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
 					}
 					updatedDestStartIdx = outStartIdx
 					o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -1004,7 +1009,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 		o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 	// {{end}}
 	default:
-		vecerror.InternalError(fmt.Sprintf("unhandled type %d", colType))
+		vecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
 	}
 	// {{end}}
 	// {{/*
@@ -1043,7 +1048,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightGroupsFromBatch(
 		func() {
 			// Loop over every column.
 		RightColLoop:
-			for colIdx, colType := range input.sourceTypes {
+			for colIdx, colType := range input.sourcePhysTypes {
 				outStartIdx := destStartIdx
 				out := o.output.ColVec(colIdx + colOffset)
 				var src coldata.Vec
@@ -1111,7 +1116,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightBufferedGroup(
 					}
 
 					// Loop over every column.
-					for colIdx, colType := range input.sourceTypes {
+					for colIdx, colType := range input.sourcePhysTypes {
 						out := o.output.ColVec(colIdx + colOffset)
 						src := currentBatch.ColVec(colIdx)
 						switch colType {
@@ -1144,7 +1149,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightBufferedGroup(
 							}
 							// {{end}}
 						default:
-							vecerror.InternalError(fmt.Sprintf("unhandled type %d", colType))
+							vecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
 						}
 					}
 					outStartIdx += toAppend

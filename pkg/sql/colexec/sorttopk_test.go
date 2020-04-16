@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -28,7 +27,7 @@ func init() {
 			description: "k < input length",
 			tuples:      tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			expected:    tuples{{1}, {2}, {3}},
-			logTypes:    []types.T{*types.Int},
+			typs:        []types.T{*types.Int},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}},
 			k:           3,
 		},
@@ -36,7 +35,7 @@ func init() {
 			description: "k > input length",
 			tuples:      tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
 			expected:    tuples{{1}, {2}, {3}, {4}, {5}, {6}, {7}},
-			logTypes:    []types.T{*types.Int},
+			typs:        []types.T{*types.Int},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}},
 			k:           10,
 		},
@@ -44,7 +43,7 @@ func init() {
 			description: "nulls",
 			tuples:      tuples{{1}, {2}, {nil}, {3}, {4}, {5}, {6}, {7}, {nil}},
 			expected:    tuples{{nil}, {nil}, {1}},
-			logTypes:    []types.T{*types.Int},
+			typs:        []types.T{*types.Int},
 			ordCols:     []execinfrapb.Ordering_Column{{ColIdx: 0}},
 			k:           3,
 		},
@@ -52,7 +51,7 @@ func init() {
 			description: "descending",
 			tuples:      tuples{{0, 1}, {0, 2}, {0, 3}, {0, 4}, {0, 5}, {1, 5}},
 			expected:    tuples{{0, 5}, {1, 5}, {0, 4}},
-			logTypes:    []types.T{*types.Int, *types.Int},
+			typs:        []types.T{*types.Int, *types.Int},
 			ordCols: []execinfrapb.Ordering_Column{
 				{ColIdx: 1, Direction: execinfrapb.Ordering_Column_DESC},
 				{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC},
@@ -68,11 +67,7 @@ func TestTopKSorter(t *testing.T) {
 	for _, tc := range topKSortTestCases {
 		t.Run(tc.description, func(t *testing.T) {
 			runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colbase.Operator) (colbase.Operator, error) {
-				physTypes, err := typeconv.FromColumnTypes(tc.logTypes)
-				if err != nil {
-					return nil, err
-				}
-				return NewTopKSorter(testAllocator, input[0], physTypes, tc.ordCols, tc.k), nil
+				return NewTopKSorter(testAllocator, input[0], tc.typs, tc.ordCols, tc.k), nil
 			})
 		})
 	}

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -94,7 +93,7 @@ func TestExternalSort(t *testing.T) {
 							//  result.ToClose) in cases where it is know the sorter will not
 							//  be drained.
 							sorter, newAccounts, newMonitors, closers, err := createDiskBackedSorter(
-								ctx, flowCtx, input, tc.logTypes, tc.ordCols, tc.matchLen, tc.k, func() {},
+								ctx, flowCtx, input, tc.typs, tc.ordCols, tc.matchLen, tc.k, func() {},
 								externalSorterMinPartitions, false /* delegateFDAcquisition */, queueCfg, sem,
 							)
 							// Check that the sort was added as a Closer.
@@ -137,9 +136,9 @@ func TestExternalSortRandomized(t *testing.T) {
 	nTups := coldata.BatchSize()*4 + 1
 	maxCols := 2
 	// TODO(yuzefovich): randomize types as well.
-	logTypes := make([]types.T, maxCols)
-	for i := range logTypes {
-		logTypes[i] = *types.Int
+	typs := make([]types.T, maxCols)
+	for i := range typs {
+		typs[i] = *types.Int
 	}
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
@@ -154,11 +153,9 @@ func TestExternalSortRandomized(t *testing.T) {
 	// 2) The memory limit is dynamically set to repartition twice, this will also
 	//    allow the in-memory sorter to spool several batches before hitting the
 	//    memory limit.
-	colTyps, err := typeconv.FromColumnTypes(logTypes)
-	require.NoError(t, err)
 	// memoryToSort is the total amount of memory that will be sorted in this
 	// test.
-	memoryToSort := (nTups / coldata.BatchSize()) * colbase.EstimateBatchSizeBytes(colTyps, coldata.BatchSize())
+	memoryToSort := (nTups / coldata.BatchSize()) * colbase.EstimateBatchSizeBytesFromSQLTypes(typs, coldata.BatchSize())
 	// partitionSize will be the memory limit passed in to tests with a memory
 	// limit. With a maximum number of partitions of 2 this will result in
 	// repartitioning twice. To make this a total amount of memory, we also need
@@ -198,7 +195,7 @@ func TestExternalSortRandomized(t *testing.T) {
 							sem := colbase.NewTestingSemaphore(externalSorterMinPartitions)
 							semsToCheck = append(semsToCheck, sem)
 							sorter, newAccounts, newMonitors, closers, err := createDiskBackedSorter(
-								ctx, flowCtx, input, logTypes[:nCols], ordCols,
+								ctx, flowCtx, input, typs[:nCols], ordCols,
 								0 /* matchLen */, 0 /* k */, func() {},
 								externalSorterMinPartitions, delegateFDAcquisition, queueCfg, sem)
 							// TODO(asubiotto): Explicitly Close when testing.T is passed into
@@ -254,13 +251,11 @@ func BenchmarkExternalSort(b *testing.B) {
 					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
 					// batch) * nCols (number of columns / row).
 					b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
-					logTypes := make([]types.T, nCols)
-					for i := range logTypes {
-						logTypes[i] = *types.Int
+					typs := make([]types.T, nCols)
+					for i := range typs {
+						typs[i] = *types.Int
 					}
-					physTypes, err := typeconv.FromColumnTypes(logTypes)
-					require.NoError(b, err)
-					batch := testAllocator.NewMemBatch(physTypes)
+					batch := testAllocator.NewMemBatch(typs)
 					batch.SetLength(coldata.BatchSize())
 					ordCols := make([]execinfrapb.Ordering_Column, nCols)
 					for i := range ordCols {
@@ -273,13 +268,13 @@ func BenchmarkExternalSort(b *testing.B) {
 					}
 					b.ResetTimer()
 					for n := 0; n < b.N; n++ {
-						source := newFiniteBatchSource(batch, nBatches)
+						source := newFiniteBatchSource(batch, typs, nBatches)
 						var spilled bool
 						// TODO(yuzefovich): do not specify maxNumberPartitions (let the
 						// external sorter figure out that number itself) once we pass in
 						// filled-in disk queue config.
 						sorter, accounts, monitors, _, err := createDiskBackedSorter(
-							ctx, flowCtx, []colbase.Operator{source}, logTypes, ordCols,
+							ctx, flowCtx, []colbase.Operator{source}, typs, ordCols,
 							0 /* matchLen */, 0 /* k */, func() { spilled = true },
 							64 /* maxNumberPartitions */, false /* delegateFDAcquisitions */, queueCfg, &colbase.TestingSemaphore{},
 						)
@@ -316,7 +311,7 @@ func createDiskBackedSorter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	input []colbase.Operator,
-	logTypes []types.T,
+	typs []types.T,
 	ordCols []execinfrapb.Ordering_Column,
 	matchLen int,
 	k uint16,
@@ -331,7 +326,7 @@ func createDiskBackedSorter(
 		OrderingMatchLen: uint32(matchLen),
 	}
 	spec := &execinfrapb.ProcessorSpec{
-		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: logTypes}},
+		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: typs}},
 		Core: execinfrapb.ProcessorCoreUnion{
 			Sorter: sorterSpec,
 		},

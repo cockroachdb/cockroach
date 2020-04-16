@@ -228,16 +228,16 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 // given left and right column types and operation.
 func GetProjectionOperator(
 	allocator *colbase.Allocator,
-	leftColType *types.T,
-	rightColType *types.T,
-	outputPhysType coltypes.T,
+	leftType *types.T,
+	rightType *types.T,
+	outputType *types.T,
 	op tree.Operator,
 	input colbase.Operator,
 	col1Idx int,
 	col2Idx int,
 	outputIdx int,
 ) (colbase.Operator, error) {
-	input = newVectorTypeEnforcer(allocator, input, outputPhysType, outputIdx)
+	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projOpBase := projOpBase{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
@@ -245,10 +245,10 @@ func GetProjectionOperator(
 		col2Idx:      col2Idx,
 		outputIdx:    outputIdx,
 	}
-	switch leftType := typeconv.FromColumnType(leftColType); leftType {
+	switch typeconv.FromColumnType(leftType) {
 	// {{range $lTyp, $rTypToOverloads := .}}
 	case coltypes._L_TYP_VAR:
-		switch rightType := typeconv.FromColumnType(rightColType); rightType {
+		switch typeconv.FromColumnType(rightType) {
 		// {{range $rTyp, $overloads := $rTypToOverloads}}
 		case coltypes._R_TYP_VAR:
 			switch op.(type) {

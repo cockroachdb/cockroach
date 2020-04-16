@@ -14,10 +14,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -62,7 +63,7 @@ type hashJoinerSourceSpec struct {
 
 	// sourceTypes specify the types of the input columns of the source table for
 	// the hash joiner.
-	sourceTypes []coltypes.T
+	sourceTypes []types.T
 
 	// outer specifies whether an outer join is required over the input.
 	outer bool
@@ -173,7 +174,7 @@ type hashJoiner struct {
 	// probeState is used in hjProbing state.
 	probeState struct {
 		// keyTypes stores the types of the equality columns on the probe side.
-		keyTypes []coltypes.T
+		keyTypes []types.T
 
 		// buildIdx and probeIdx represents the matching row indices that are used to
 		// stitch together the join results.
@@ -299,7 +300,7 @@ func (hj *hashJoiner) emitUnmatched() {
 	}
 
 	outCols := hj.output.ColVecs()[len(hj.spec.left.sourceTypes) : len(hj.spec.left.sourceTypes)+len(hj.spec.right.sourceTypes)]
-	for i, colType := range hj.spec.right.sourceTypes {
+	for i, typ := range hj.spec.right.sourceTypes {
 		outCol := outCols[i]
 		valCol := hj.ht.vals.ColVec(i)
 		// NOTE: this Copy is not accounted for because we don't want for memory
@@ -314,7 +315,7 @@ func (hj *hashJoiner) emitUnmatched() {
 		outCol.Copy(
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
-					ColType:   colType,
+					ColType:   typeconv.FromColumnType(&typ),
 					Src:       valCol,
 					SrcEndIdx: nResults,
 					Sel:       hj.probeState.buildIdx,
@@ -458,7 +459,7 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch, batchSize in
 		// will be set below.
 		if hj.ht.vals.Length() > 0 {
 			outCols := hj.output.ColVecs()[rightColOffset : rightColOffset+len(hj.spec.right.sourceTypes)]
-			for i, colType := range hj.spec.right.sourceTypes {
+			for i, typ := range hj.spec.right.sourceTypes {
 				outCol := outCols[i]
 				valCol := hj.ht.vals.ColVec(i)
 				// Note that if for some index i, probeRowUnmatched[i] is true, then
@@ -467,7 +468,7 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch, batchSize in
 				outCol.Copy(
 					coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
-							ColType:   colType,
+							ColType:   typeconv.FromColumnType(&typ),
 							Src:       valCol,
 							SrcEndIdx: nResults,
 							Sel:       hj.probeState.buildIdx,
@@ -491,13 +492,13 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch, batchSize in
 	}
 
 	outCols := hj.output.ColVecs()[:len(hj.spec.left.sourceTypes)]
-	for i, colType := range hj.spec.left.sourceTypes {
+	for i, typ := range hj.spec.left.sourceTypes {
 		outCol := outCols[i]
 		valCol := batch.ColVec(i)
 		outCol.Copy(
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
-					ColType:   colType,
+					ColType:   typeconv.FromColumnType(&typ),
 					Src:       valCol,
 					Sel:       hj.probeState.probeIdx,
 					SrcEndIdx: nResults,
@@ -544,7 +545,7 @@ func (hj *hashJoiner) ExportBuffered(input colbase.Operator) coldata.Batch {
 		// We don't need to worry about selection vectors on hj.ht.vals because the
 		// tuples have been already selected during building of the hash table.
 		for i, t := range hj.spec.right.sourceTypes {
-			window := hj.ht.vals.ColVec(i).Window(t, startIdx, endIdx)
+			window := hj.ht.vals.ColVec(i).Window(typeconv.FromColumnType(&t), startIdx, endIdx)
 			b.ReplaceCol(window, i)
 		}
 		b.SetLength(endIdx - startIdx)
@@ -561,7 +562,7 @@ func (hj *hashJoiner) ExportBuffered(input colbase.Operator) coldata.Batch {
 
 func (hj *hashJoiner) resetOutput() {
 	if hj.output == nil {
-		outputTypes := append([]coltypes.T{}, hj.spec.left.sourceTypes...)
+		outputTypes := append([]types.T{}, hj.spec.left.sourceTypes...)
 		if hj.spec.joinType != sqlbase.LeftSemiJoin && hj.spec.joinType != sqlbase.LeftAntiJoin {
 			outputTypes = append(outputTypes, hj.spec.right.sourceTypes...)
 		}
@@ -599,8 +600,8 @@ func makeHashJoinerSpec(
 	joinType sqlbase.JoinType,
 	leftEqCols []uint32,
 	rightEqCols []uint32,
-	leftTypes []coltypes.T,
-	rightTypes []coltypes.T,
+	leftTypes []types.T,
+	rightTypes []types.T,
 	rightDistinct bool,
 ) (hashJoinerSpec, error) {
 	var (
@@ -665,7 +666,7 @@ func newHashJoiner(
 	if spec.left.outer {
 		hj.probeState.probeRowUnmatched = make([]bool, coldata.BatchSize())
 	}
-	hj.probeState.keyTypes = make([]coltypes.T, len(spec.left.eqCols))
+	hj.probeState.keyTypes = make([]types.T, len(spec.left.eqCols))
 	for i, colIdx := range spec.left.eqCols {
 		hj.probeState.keyTypes[i] = spec.left.sourceTypes[colIdx]
 	}

@@ -22,13 +22,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -186,7 +187,7 @@ func TestOutboxInbox(t *testing.T) {
 	// Do the actual testing.
 	t.Run(fmt.Sprintf("cancellationScenario=%s", cancellationScenarioName), func(t *testing.T) {
 		var (
-			typs        = []coltypes.T{coltypes.Int64}
+			typs        = []types.T{*types.Int}
 			inputBuffer = colbase.NewBatchBuffer()
 			// Generate some random behavior before passing the random number
 			// generator to be used in the Outbox goroutine (to avoid races). These
@@ -283,14 +284,14 @@ func TestOutboxInbox(t *testing.T) {
 				// Accumulate batches to check for correctness.
 				// Copy batch since it's not safe to reuse after calling Next.
 				if outputBatch == coldata.ZeroBatch {
-					outputBatches.Add(coldata.ZeroBatch)
+					outputBatches.Add(coldata.ZeroBatch, typs)
 				} else {
 					batchCopy := testAllocator.NewMemBatchWithSize(typs, outputBatch.Length())
 					testAllocator.PerformOperation(batchCopy.ColVecs(), func() {
 						for i := range typs {
 							batchCopy.ColVec(i).Append(
 								coldata.SliceArgs{
-									ColType:   typs[i],
+									ColType:   typeconv.FromColumnType(&typs[i]),
 									Src:       outputBatch.ColVec(i),
 									SrcEndIdx: outputBatch.Length(),
 								},
@@ -298,7 +299,7 @@ func TestOutboxInbox(t *testing.T) {
 						}
 					})
 					batchCopy.SetLength(outputBatch.Length())
-					outputBatches.Add(batchCopy)
+					outputBatches.Add(batchCopy, typs)
 				}
 			}
 			if outputBatch.Length() == 0 {
@@ -333,8 +334,8 @@ func TestOutboxInbox(t *testing.T) {
 				for i := range typs {
 					require.Equal(
 						t,
-						inputBatch.ColVec(i).Window(typs[i], 0, inputBatch.Length()),
-						outputBatch.ColVec(i).Window(typs[i], 0, outputBatch.Length()),
+						inputBatch.ColVec(i).Window(typeconv.FromColumnType(&typs[i]), 0, inputBatch.Length()),
+						outputBatch.ColVec(i).Window(typeconv.FromColumnType(&typs[i]), 0, outputBatch.Length()),
 						"batchNum: %d", batchNum,
 					)
 				}
@@ -443,7 +444,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			var (
 				serverStreamNotification = <-mockServer.InboundStreams
 				serverStream             = serverStreamNotification.Stream
-				typs                     = []coltypes.T{coltypes.Int64}
+				typs                     = []types.T{*types.Int}
 				input                    = colbase.NewRandomDataOp(
 					testAllocator,
 					rng,
@@ -524,12 +525,12 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	serverStreamNotification := <-mockServer.InboundStreams
 	serverStream := serverStreamNotification.Stream
 
-	typs := []coltypes.T{coltypes.Int64}
+	typs := []types.T{*types.Int}
 
 	batch := testAllocator.NewMemBatch(typs)
 	batch.SetLength(coldata.BatchSize())
 
-	input := colbase.NewRepeatableBatchSource(testAllocator, batch)
+	input := colbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
@@ -582,7 +583,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	dialer := &execinfrapb.MockDialer{Addr: addr}
 	defer dialer.Close()
 
-	typs := []coltypes.T{coltypes.Int64}
+	typs := []types.T{*types.Int}
 
 	var inTags *logtags.Buffer
 
@@ -659,7 +660,7 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 
 			rpcLayer := makeMockFlowStreamRPCLayer()
 
-			typs := []coltypes.T{coltypes.Int64}
+			typs := []types.T{*types.Int}
 
 			inbox, err := NewInbox(testAllocator, typs, streamID)
 			require.NoError(t, err)

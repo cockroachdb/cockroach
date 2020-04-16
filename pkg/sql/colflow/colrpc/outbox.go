@@ -18,13 +18,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
@@ -50,7 +50,7 @@ type Dialer interface {
 type Outbox struct {
 	colexec.OneInputNode
 
-	typs []coltypes.T
+	typs []types.T
 	// batch is the last batch received from the input.
 	batch coldata.Batch
 
@@ -77,7 +77,7 @@ type Outbox struct {
 func NewOutbox(
 	allocator *colbase.Allocator,
 	input colbase.Operator,
-	typs []coltypes.T,
+	typs []types.T,
 	metadataSources []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
 ) (*Outbox, error) {

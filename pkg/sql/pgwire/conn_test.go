@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -343,7 +344,7 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 func makeTestingConvCfg() sessiondata.DataConversionConfig {
 	return sessiondata.DataConversionConfig{
 		Location:          time.UTC,
-		BytesEncodeFormat: sessiondata.BytesEncodeHex,
+		BytesEncodeFormat: lex.BytesEncodeHex,
 	}
 }
 

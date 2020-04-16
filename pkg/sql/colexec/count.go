@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // countOp is an operator that counts the number of input rows it receives,
@@ -37,7 +37,7 @@ func NewCountOp(allocator *colbase.Allocator, input colbase.Operator) colbase.Op
 	c := &countOp{
 		OneInputNode: NewOneInputNode(input),
 	}
-	c.internalBatch = allocator.NewMemBatchWithSize([]coltypes.T{coltypes.Int64}, 1)
+	c.internalBatch = allocator.NewMemBatchWithSize([]types.T{*types.Int}, 1)
 	return c
 }
 

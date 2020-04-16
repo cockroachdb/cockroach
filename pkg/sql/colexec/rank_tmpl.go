@@ -23,12 +23,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -48,9 +48,9 @@ func NewRankOperator(
 	peersColIdx int,
 ) (colbase.Operator, error) {
 	if len(orderingCols) == 0 {
-		return NewConstOp(allocator, input, coltypes.Int64, int64(1), outputColIdx)
+		return NewConstOp(allocator, input, types.Int, int64(1), outputColIdx)
 	}
-	input = newVectorTypeEnforcer(allocator, input, coltypes.Int64, outputColIdx)
+	input = newVectorTypeEnforcer(allocator, input, types.Int, outputColIdx)
 	initFields := rankInitFields{
 		OneInputNode:    NewOneInputNode(input),
 		allocator:       allocator,

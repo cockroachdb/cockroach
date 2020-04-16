@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -133,21 +133,21 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 			DiskMonitor: testDiskMonitor,
 		},
 	}
-	sourceTypes := []coltypes.T{coltypes.Int64}
+	sourceTypes := []types.T{*types.Int}
 	batch := testAllocator.NewMemBatch(sourceTypes)
 	// We don't need to set the data since zero values in the columns work.
 	batch.SetLength(coldata.BatchSize())
 	nBatches := 2
-	leftSource := newFiniteBatchSource(batch, nBatches)
-	rightSource := newFiniteBatchSource(batch, nBatches)
+	leftSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
+	rightSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
 	tc := &joinTestCase{
-		joinType:       sqlbase.JoinType_INNER,
-		leftPhysTypes:  sourceTypes,
-		leftOutCols:    []uint32{0},
-		leftEqCols:     []uint32{0},
-		rightPhysTypes: sourceTypes,
-		rightOutCols:   []uint32{0},
-		rightEqCols:    []uint32{0},
+		joinType:     sqlbase.JoinType_INNER,
+		leftTypes:    sourceTypes,
+		leftOutCols:  []uint32{0},
+		leftEqCols:   []uint32{0},
+		rightTypes:   sourceTypes,
+		rightOutCols: []uint32{0},
+		rightEqCols:  []uint32{0},
 	}
 	tc.init()
 	spec := createSpecForHashJoiner(tc)
@@ -198,10 +198,10 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 		},
 	}
 	nCols := 4
-	sourceTypes := make([]coltypes.T, nCols)
+	sourceTypes := make([]types.T, nCols)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
-		sourceTypes[colIdx] = coltypes.Int64
+		sourceTypes[colIdx] = *types.Int
 	}
 
 	batch := testAllocator.NewMemBatch(sourceTypes)
@@ -231,8 +231,8 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 		}
 		queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 		defer cleanup()
-		leftSource := newFiniteBatchSource(batch, 0)
-		rightSource := newFiniteBatchSource(batch, 0)
+		leftSource := newFiniteBatchSource(batch, sourceTypes, 0)
+		rightSource := newFiniteBatchSource(batch, sourceTypes, 0)
 		for _, fullOuter := range []bool{false, true} {
 			for _, nBatches := range []int{1 << 2, 1 << 7} {
 				for _, spillForced := range []bool{false, true} {
@@ -245,13 +245,13 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 						joinType = sqlbase.JoinType_FULL_OUTER
 					}
 					tc := &joinTestCase{
-						joinType:       joinType,
-						leftPhysTypes:  sourceTypes,
-						leftOutCols:    []uint32{0, 1},
-						leftEqCols:     []uint32{0, 2},
-						rightPhysTypes: sourceTypes,
-						rightOutCols:   []uint32{2, 3},
-						rightEqCols:    []uint32{0, 1},
+						joinType:     joinType,
+						leftTypes:    sourceTypes,
+						leftOutCols:  []uint32{0, 1},
+						leftEqCols:   []uint32{0, 2},
+						rightTypes:   sourceTypes,
+						rightOutCols: []uint32{2, 3},
+						rightEqCols:  []uint32{0, 1},
 					}
 					tc.init()
 					spec := createSpecForHashJoiner(tc)

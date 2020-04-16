@@ -16,9 +16,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -93,7 +93,7 @@ func TestPartitionedDiskQueue(t *testing.T) {
 
 	var (
 		ctx   = context.Background()
-		typs  = []coltypes.T{coltypes.Int64}
+		typs  = []types.T{*types.Int}
 		batch = testAllocator.NewMemBatch(typs)
 		sem   = &colbase.TestingSemaphore{}
 	)
@@ -144,7 +144,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 
 	var (
 		ctx    = context.Background()
-		typs   = []coltypes.T{coltypes.Int64}
+		typs   = []types.T{*types.Int}
 		batch  = testAllocator.NewMemBatch(typs)
 		rng, _ = randutil.NewPseudoRand()
 		// maxPartitions is in [1, 10]. The maximum partitions on a single level.

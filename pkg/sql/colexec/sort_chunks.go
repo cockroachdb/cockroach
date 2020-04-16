@@ -15,11 +15,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // NewSortChunks returns a new sort chunks operator, which sorts its input on
@@ -29,7 +30,7 @@ import (
 func NewSortChunks(
 	allocator *colbase.Allocator,
 	input colbase.Operator,
-	inputTypes []coltypes.T,
+	inputTypes []types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	matchLen int,
 ) (colbase.Operator, error) {
@@ -119,7 +120,7 @@ func (c *sortChunksOp) ExportBuffered(colbase.Operator) coldata.Batch {
 				newExportedFromBuffer = c.input.bufferedTuples.Length()
 			}
 			for i, t := range c.input.inputTypes {
-				window := c.input.bufferedTuples.ColVec(i).Window(t, c.exportedFromBuffer, newExportedFromBuffer)
+				window := c.input.bufferedTuples.ColVec(i).Window(typeconv.FromColumnType(&t), c.exportedFromBuffer, newExportedFromBuffer)
 				c.windowedBatch.ReplaceCol(window, i)
 			}
 			c.windowedBatch.SetLength(newExportedFromBuffer - c.exportedFromBuffer)
@@ -202,7 +203,7 @@ type chunker struct {
 
 	allocator *colbase.Allocator
 	// inputTypes contains the types of all of the columns from input.
-	inputTypes []coltypes.T
+	inputTypes []types.T
 	// inputDone indicates whether input has been fully consumed.
 	inputDone bool
 	// alreadySortedCols indicates the columns on which the input is already
@@ -253,13 +254,13 @@ var _ spooler = &chunker{}
 func newChunker(
 	allocator *colbase.Allocator,
 	input colbase.Operator,
-	inputTypes []coltypes.T,
+	inputTypes []types.T,
 	alreadySortedCols []uint32,
 ) (*chunker, error) {
 	var err error
 	partitioners := make([]partitioner, len(alreadySortedCols))
 	for i, col := range alreadySortedCols {
-		partitioners[i], err = newPartitioner(inputTypes[col])
+		partitioners[i], err = newPartitioner(&inputTypes[col])
 		if err != nil {
 			return nil, err
 		}
@@ -346,7 +347,7 @@ func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 				i := 0
 				for !differ && i < len(s.alreadySortedCols) {
 					differ = valuesDiffer(
-						s.inputTypes[s.alreadySortedCols[i]],
+						&s.inputTypes[s.alreadySortedCols[i]],
 						s.bufferedTuples.ColVec(int(s.alreadySortedCols[i])),
 						0, /*aValueIdx */
 						s.batch.ColVec(int(s.alreadySortedCols[i])),
@@ -434,9 +435,9 @@ func (s *chunker) spool(ctx context.Context) {
 func (s *chunker) getValues(i int) coldata.Vec {
 	switch s.readFrom {
 	case chunkerReadFromBuffer:
-		return s.bufferedTuples.ColVec(i).Window(s.inputTypes[i], 0 /* start */, s.bufferedTuples.Length())
+		return s.bufferedTuples.ColVec(i).Window(typeconv.FromColumnType(&s.inputTypes[i]), 0 /* start */, s.bufferedTuples.Length())
 	case chunkerReadFromBatch:
-		return s.batch.ColVec(i).Window(s.inputTypes[i], s.chunks[s.chunksStartIdx], s.chunks[len(s.chunks)-1])
+		return s.batch.ColVec(i).Window(typeconv.FromColumnType(&s.inputTypes[i]), s.chunks[s.chunksStartIdx], s.chunks[len(s.chunks)-1])
 	default:
 		vecerror.InternalError(fmt.Sprintf("unexpected chunkerReadingState in getValues: %v", s.state))
 		// This code is unreachable, but the compiler cannot infer that.

@@ -15,10 +15,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type caseOp struct {
@@ -30,7 +31,7 @@ type caseOp struct {
 
 	thenIdxs  []int
 	outputIdx int
-	typ       coltypes.T
+	typ       *types.T
 
 	// origSel is a buffer used to keep track of the original selection vector of
 	// the input batch. We need to do this because we're going to destructively
@@ -86,7 +87,7 @@ func NewCaseOp(
 	elseOp colbase.Operator,
 	thenIdxs []int,
 	outputIdx int,
-	typ coltypes.T,
+	typ *types.T,
 ) colbase.Operator {
 	return &caseOp{
 		allocator: allocator,
@@ -166,7 +167,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 				outputCol.Copy(
 					coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
-							ColType:     c.typ,
+							ColType:     typeconv.FromColumnType(c.typ),
 							Src:         inputCol,
 							Sel:         toSubtract,
 							SrcStartIdx: 0,
@@ -233,7 +234,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 			outputCol.Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
-						ColType:     c.typ,
+						ColType:     typeconv.FromColumnType(c.typ),
 						Src:         inputCol,
 						Sel:         batch.Selection(),
 						SrcStartIdx: 0,

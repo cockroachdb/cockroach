@@ -13,9 +13,9 @@ package colexec
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -186,7 +186,7 @@ func GetLikeProjectionOperator(
 		return nil, err
 	}
 	pat := []byte(pattern)
-	input = newVectorTypeEnforcer(allocator, input, coltypes.Bool, resultIdx)
+	input = newVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
 	base := projConstOpBase{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,

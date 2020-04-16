@@ -16,12 +16,13 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -69,7 +70,7 @@ type routerOutputOp struct {
 	// input is a reference to our router.
 	input execinfra.OpNode
 
-	types []coltypes.T
+	types []types.T
 
 	// unblockedEventsChan is signaled when a routerOutput changes state from
 	// blocked to unblocked.
@@ -167,7 +168,7 @@ var _ colbase.Operator = &routerOutputOp{}
 // when it is exceeded.
 func newRouterOutputOp(
 	unlimitedAllocator *colbase.Allocator,
-	types []coltypes.T,
+	types []types.T,
 	unblockedEventsChan chan<- struct{},
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
@@ -179,7 +180,7 @@ func newRouterOutputOp(
 
 func newRouterOutputOpWithBlockedThresholdAndBatchSize(
 	unlimitedAllocator *colbase.Allocator,
-	types []coltypes.T,
+	types []types.T,
 	unblockedEventsChan chan<- struct{},
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
@@ -330,7 +331,7 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 				o.mu.pendingBatch.ColVec(i).Copy(
 					coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
-							ColType:   t,
+							ColType:   typeconv.FromColumnType(&t),
 							Src:       batch.ColVec(i),
 							Sel:       selection[:numAppended],
 							DestIdx:   o.mu.pendingBatch.Length(),
@@ -401,7 +402,7 @@ func (o *routerOutputOp) reset(ctx context.Context) {
 type HashRouter struct {
 	OneInputNode
 	// types are the input coltypes.
-	types []coltypes.T
+	types []types.T
 	// hashCols is a slice of indices of the columns used for hashing.
 	hashCols []uint32
 
@@ -437,7 +438,7 @@ type HashRouter struct {
 func NewHashRouter(
 	unlimitedAllocators []*colbase.Allocator,
 	input colbase.Operator,
-	types []coltypes.T,
+	types []types.T,
 	hashCols []uint32,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
@@ -472,7 +473,7 @@ func NewHashRouter(
 
 func newHashRouterWithOutputs(
 	input colbase.Operator,
-	types []coltypes.T,
+	types []types.T,
 	hashCols []uint32,
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,

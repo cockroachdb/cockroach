@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -85,9 +84,10 @@ func BenchmarkOrdinality(b *testing.B) {
 		},
 	}
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
+	typs := []types.T{*types.Int, *types.Int, *types.Int}
+	batch := testAllocator.NewMemBatch(typs)
 	batch.SetLength(coldata.BatchSize())
-	source := colbase.NewRepeatableBatchSource(testAllocator, batch)
+	source := colbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	ordinality, err := createTestOrdinalityOperator(ctx, flowCtx, source, []types.T{*types.Int, *types.Int, *types.Int})
 	require.NoError(b, err)
 	ordinality.Init()

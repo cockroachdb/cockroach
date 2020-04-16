@@ -14,8 +14,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -75,8 +75,8 @@ func TestSimpleProjectOp(t *testing.T) {
 		})
 
 	t.Run("RedundantProjectionIsNotPlanned", func(t *testing.T) {
-		typs := []coltypes.T{coltypes.Int64, coltypes.Int64}
-		input := newFiniteBatchSource(testAllocator.NewMemBatch(typs), 1 /* usableCount */)
+		typs := []types.T{*types.Int, *types.Int}
+		input := newFiniteBatchSource(testAllocator.NewMemBatch(typs), typs, 1 /* usableCount */)
 		projectOp := NewSimpleProjectOp(input, len(typs), []uint32{0, 1})
 		require.IsType(t, input, projectOp)
 	})
@@ -94,7 +94,7 @@ func TestSimpleProjectOp(t *testing.T) {
 // batches. See #45686 for detailed discussion.
 func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	inputTypes := []coltypes.T{coltypes.Bytes, coltypes.Float64}
+	inputTypes := []types.T{*types.Bytes, *types.Float}
 	constVal := int64(42)
 	var wg sync.WaitGroup
 	inputTuples := []tuples{
@@ -107,12 +107,12 @@ func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 		{"b", constVal},
 		{"bb", constVal},
 	}
-	runTestsWithoutAllNullsInjection(t, inputTuples, [][]coltypes.T{inputTypes, inputTypes}, expected,
+	runTestsWithoutAllNullsInjection(t, inputTuples, [][]types.T{inputTypes, inputTypes}, expected,
 		unorderedVerifier, func(inputs []colbase.Operator) (colbase.Operator, error) {
 			var input colbase.Operator
 			input = NewParallelUnorderedSynchronizer(inputs, inputTypes, &wg)
 			input = NewSimpleProjectOp(input, len(inputTypes), []uint32{0})
-			return NewConstOp(testAllocator, input, coltypes.Int64, constVal, 1)
+			return NewConstOp(testAllocator, input, types.Int, constVal, 1)
 		})
 	wg.Wait()
 }

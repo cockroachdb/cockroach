@@ -16,8 +16,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -25,37 +25,37 @@ import (
 func TestDeselector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tcs := []struct {
-		colTypes []coltypes.T
+		typs     []types.T
 		tuples   []tuple
 		sel      []int
 		expected []tuple
 	}{
 		{
-			colTypes: []coltypes.T{coltypes.Int64},
+			typs:     []types.T{*types.Int},
 			tuples:   tuples{{0}, {1}, {2}},
 			sel:      nil,
 			expected: tuples{{0}, {1}, {2}},
 		},
 		{
-			colTypes: []coltypes.T{coltypes.Int64},
+			typs:     []types.T{*types.Int},
 			tuples:   tuples{{0}, {1}, {2}},
 			sel:      []int{},
 			expected: tuples{},
 		},
 		{
-			colTypes: []coltypes.T{coltypes.Int64},
+			typs:     []types.T{*types.Int},
 			tuples:   tuples{{0}, {1}, {2}},
 			sel:      []int{1},
 			expected: tuples{{1}},
 		},
 		{
-			colTypes: []coltypes.T{coltypes.Int64},
+			typs:     []types.T{*types.Int},
 			tuples:   tuples{{0}, {1}, {2}},
 			sel:      []int{0, 2},
 			expected: tuples{{0}, {2}},
 		},
 		{
-			colTypes: []coltypes.T{coltypes.Int64},
+			typs:     []types.T{*types.Int},
 			tuples:   tuples{{0}, {1}, {2}},
 			sel:      []int{0, 1, 2},
 			expected: tuples{{0}, {1}, {2}},
@@ -64,7 +64,7 @@ func TestDeselector(t *testing.T) {
 
 	for _, tc := range tcs {
 		runTestsWithFixedSel(t, []tuples{tc.tuples}, tc.sel, func(t *testing.T, input []colbase.Operator) {
-			op := NewDeselectorOp(testAllocator, input[0], tc.colTypes)
+			op := NewDeselectorOp(testAllocator, input[0], tc.typs)
 			out := newOpTestOutput(op, tc.expected)
 
 			if err := out.Verify(); err != nil {
@@ -79,10 +79,10 @@ func BenchmarkDeselector(b *testing.B) {
 	ctx := context.Background()
 
 	nCols := 1
-	inputTypes := make([]coltypes.T, nCols)
+	inputTypes := make([]types.T, nCols)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
-		inputTypes[colIdx] = coltypes.Int64
+		inputTypes[colIdx] = *types.Int
 	}
 
 	batch := testAllocator.NewMemBatch(inputTypes)
@@ -104,7 +104,7 @@ func BenchmarkDeselector(b *testing.B) {
 				batch.SetSelection(true)
 				copy(batch.Selection(), sel)
 				batch.SetLength(batchLen)
-				input := colbase.NewRepeatableBatchSource(testAllocator, batch)
+				input := colbase.NewRepeatableBatchSource(testAllocator, batch, inputTypes)
 				op := NewDeselectorOp(testAllocator, input, inputTypes)
 				op.Init()
 				b.ResetTimer()

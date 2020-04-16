@@ -16,9 +16,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -31,7 +31,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 
 	var (
 		input    = colbase.NewBatchBuffer()
-		typs     = []coltypes.T{coltypes.Int64}
+		typs     = []types.T{*types.Int}
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
 	outbox, err := NewOutbox(testAllocator, input, typs, nil /* metadataSources */, nil /* toClose */)
@@ -81,7 +81,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 
 	var (
 		input = colbase.NewBatchBuffer()
-		typs  = []coltypes.T{coltypes.Int64}
+		typs  = []types.T{*types.Int}
 	)
 
 	// Define common function that returns both an Outbox and a pointer to a
@@ -113,7 +113,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 
 		b := testAllocator.NewMemBatch(typs)
 		b.SetLength(0)
-		input.Add(b)
+		input.Add(b, typs)
 
 		// Close the csChan to unblock the Recv goroutine (we don't need it for this
 		// test).

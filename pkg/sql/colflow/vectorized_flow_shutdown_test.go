@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
@@ -144,8 +143,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				var (
 					err             error
 					wg              sync.WaitGroup
-					typs            = []coltypes.T{coltypes.Int64}
-					semtyps         = []types.T{*types.Int}
+					typs            = []types.T{*types.Int}
 					hashRouterInput = colbase.NewRandomDataOp(
 						testAllocator,
 						rng,
@@ -267,7 +265,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						remoteAllocator := colbase.NewAllocator(ctxRemote, &sourceMemAccount)
 						batch := remoteAllocator.NewMemBatch(typs)
 						batch.SetLength(coldata.BatchSize())
-						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colbase.NewRepeatableBatchSource(remoteAllocator, batch), inboxes[i], streamID, outboxMetadataSources)
+						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colbase.NewRepeatableBatchSource(remoteAllocator, batch, typs), inboxes[i], streamID, outboxMetadataSources)
 					}
 					streamID++
 				}
@@ -302,7 +300,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					flowCtx,
 					1, /* processorID */
 					materializerInput,
-					semtyps,
+					typs,
 					&execinfrapb.PostProcessSpec{},
 					nil, /* output */
 					materializerMetadataSources,

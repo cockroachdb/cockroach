@@ -15,10 +15,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -33,18 +34,18 @@ func newPartiallyOrderedDistinct(
 	input colbase.Operator,
 	distinctCols []uint32,
 	orderedCols []uint32,
-	colTypes []coltypes.T,
+	typs []types.T,
 ) (colbase.Operator, error) {
 	if len(orderedCols) == 0 || len(orderedCols) == len(distinctCols) {
 		return nil, errors.AssertionFailedf(
 			"partially ordered distinct wrongfully planned: numDistinctCols=%d "+
 				"numOrderedCols=%d", len(distinctCols), len(orderedCols))
 	}
-	chunker, err := newChunker(allocator, input, colTypes, orderedCols)
+	chunker, err := newChunker(allocator, input, typs, orderedCols)
 	if err != nil {
 		return nil, err
 	}
-	chunkerOperator := newChunkerOperator(allocator, chunker, colTypes)
+	chunkerOperator := newChunkerOperator(allocator, chunker, typs)
 	// distinctUnorderedCols will contain distinct columns that are not present
 	// among orderedCols. The unordered distinct operator will use these columns
 	// to find distinct tuples within "chunks" of tuples that are the same on the
@@ -63,7 +64,7 @@ func newPartiallyOrderedDistinct(
 		}
 	}
 	distinct := NewUnorderedDistinct(
-		allocator, chunkerOperator, distinctUnorderedCols, colTypes,
+		allocator, chunkerOperator, distinctUnorderedCols, typs,
 		partiallyOrderedDistinctNumHashBuckets,
 	)
 	return &partiallyOrderedDistinct{
@@ -117,7 +118,7 @@ func (p *partiallyOrderedDistinct) Next(ctx context.Context) coldata.Batch {
 }
 
 func newChunkerOperator(
-	allocator *colbase.Allocator, input *chunker, inputTypes []coltypes.T,
+	allocator *colbase.Allocator, input *chunker, inputTypes []types.T,
 ) *chunkerOperator {
 	return &chunkerOperator{
 		input:         input,
@@ -135,7 +136,7 @@ func newChunkerOperator(
 // that the input has been fully processed).
 type chunkerOperator struct {
 	input      *chunker
-	inputTypes []coltypes.T
+	inputTypes []types.T
 	// haveChunksToEmit indicates whether we have spooled input and still there
 	// are more chunks to emit.
 	haveChunksToEmit bool
@@ -212,7 +213,7 @@ func (c *chunkerOperator) Next(ctx context.Context) coldata.Batch {
 		c.currentChunkFinished = true
 	}
 	for i, typ := range c.inputTypes {
-		window := c.input.getValues(i).Window(typ, c.outputTupleStartIdx, outputTupleEndIdx)
+		window := c.input.getValues(i).Window(typeconv.FromColumnType(&typ), c.outputTupleStartIdx, outputTupleEndIdx)
 		c.windowedBatch.ReplaceCol(window, i)
 	}
 	c.windowedBatch.SetSelection(false)

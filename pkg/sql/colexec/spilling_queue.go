@@ -15,10 +15,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -43,7 +43,7 @@ type spillingQueue struct {
 	unlimitedAllocator *colbase.Allocator
 	maxMemoryLimit     int64
 
-	typs             []coltypes.T
+	typs             []types.T
 	items            []coldata.Batch
 	curHeadIdx       int
 	curTailIdx       int
@@ -71,7 +71,7 @@ type spillingQueue struct {
 // may want to do this if requesting FDs up front.
 func newSpillingQueue(
 	unlimitedAllocator *colbase.Allocator,
-	typs []coltypes.T,
+	typs []types.T,
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
@@ -84,7 +84,7 @@ func newSpillingQueue(
 	if memoryLimit < 0 {
 		memoryLimit = 0
 	}
-	itemsLen := memoryLimit / int64(colbase.EstimateBatchSizeBytes(typs, batchSize))
+	itemsLen := memoryLimit / int64(colbase.EstimateBatchSizeBytesFromSQLTypes(typs, batchSize))
 	if itemsLen == 0 {
 		// Make items at least of length 1. Even though batches will spill to disk
 		// directly (this can only happen with a very low memory limit), it's nice
@@ -110,7 +110,7 @@ func newSpillingQueue(
 // whether memory usage exceeds the given memory limit and use disk if so.
 func newRewindableSpillingQueue(
 	unlimitedAllocator *colbase.Allocator,
-	typs []coltypes.T,
+	typs []types.T,
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,

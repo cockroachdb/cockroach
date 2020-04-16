@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -59,7 +58,7 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 	var da sqlbase.DatumAlloc
 	rng, _ := randutil.NewPseudoRand()
 
-	for _, typ := range allSupportedSQLTypes {
+	for _, typ := range colbase.AllSupportedSQLTypes {
 		for _, numRows := range []int{
 			// A few interesting sizes.
 			1,
@@ -78,11 +77,9 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 			columnarizer, err := NewColumnarizer(ctx, testAllocator, flowCtx, 0 /* processorID */, source)
 			require.NoError(t, err)
 
-			coltyps, err := typeconv.FromColumnTypes(typs)
+			c, err := colserde.NewArrowBatchConverter(typs)
 			require.NoError(t, err)
-			c, err := colserde.NewArrowBatchConverter(coltyps)
-			require.NoError(t, err)
-			r, err := colserde.NewRecordBatchSerializer(coltyps)
+			r, err := colserde.NewRecordBatchSerializer(typs)
 			require.NoError(t, err)
 			arrowOp := newArrowTestOperator(columnarizer, c, r)
 

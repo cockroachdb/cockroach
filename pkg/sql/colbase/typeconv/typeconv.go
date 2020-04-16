@@ -12,19 +12,15 @@ package typeconv
 
 import (
 	"fmt"
-	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
 )
 
 // FromColumnType returns the T that corresponds to the input ColumnType.
 // Note: if you're adding a new type here, add it to
-// colexec.allSupportedSQLTypes as well.
+// colexec.AllSupportedSQLTypes as well.
 func FromColumnType(ct *types.T) coltypes.T {
 	switch ct.Family() {
 	case types.BoolFamily:
@@ -44,7 +40,7 @@ func FromColumnType(ct *types.T) coltypes.T {
 		case 0, 64:
 			return coltypes.Int64
 		}
-		vecerror.InternalError(fmt.Sprintf("integer with unknown width %d", ct.Width()))
+		panic(fmt.Sprintf("integer with unknown width %d", ct.Width()))
 	case types.FloatFamily:
 		return coltypes.Float64
 	case types.TimestampFamily:
@@ -70,138 +66,30 @@ func FromColumnTypes(cts []types.T) ([]coltypes.T, error) {
 	return typs, nil
 }
 
-// GetDatumToPhysicalFn returns a function for converting a datum of the given
-// ColumnType to the corresponding Go type.
-func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
-	switch ct.Family() {
-	case types.BoolFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DBool)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DBool, found %s", reflect.TypeOf(datum))
-			}
-			return bool(*d), nil
-		}
-	case types.BytesFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DBytes)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DBytes, found %s", reflect.TypeOf(datum))
-			}
-			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
-		}
-	case types.IntFamily:
-		switch ct.Width() {
-		case 16:
-			return func(datum tree.Datum) (interface{}, error) {
-				d, ok := datum.(*tree.DInt)
-				if !ok {
-					return nil, errors.Errorf("expected *tree.DInt, found %s", reflect.TypeOf(datum))
-				}
-				return int16(*d), nil
-			}
-		case 32:
-			return func(datum tree.Datum) (interface{}, error) {
-				d, ok := datum.(*tree.DInt)
-				if !ok {
-					return nil, errors.Errorf("expected *tree.DInt, found %s", reflect.TypeOf(datum))
-				}
-				return int32(*d), nil
-			}
-		case 0, 64:
-			return func(datum tree.Datum) (interface{}, error) {
-				d, ok := datum.(*tree.DInt)
-				if !ok {
-					return nil, errors.Errorf("expected *tree.DInt, found %s", reflect.TypeOf(datum))
-				}
-				return int64(*d), nil
-			}
-		}
-		vecerror.InternalError(fmt.Sprintf("unhandled INT width %d", ct.Width()))
-	case types.DateFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DDate)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DDate, found %s", reflect.TypeOf(datum))
-			}
-			return d.UnixEpochDaysWithOrig(), nil
-		}
-	case types.FloatFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DFloat)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DFloat, found %s", reflect.TypeOf(datum))
-			}
-			return float64(*d), nil
-		}
-	case types.OidFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DOid)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DOid, found %s", reflect.TypeOf(datum))
-			}
-			return int64(d.DInt), nil
-		}
-	case types.StringFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			// Handle other STRING-related OID types, like oid.T_name.
-			wrapper, ok := datum.(*tree.DOidWrapper)
-			if ok {
-				datum = wrapper.Wrapped
-			}
-
-			d, ok := datum.(*tree.DString)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DString, found %s", reflect.TypeOf(datum))
-			}
-			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
-		}
-	case types.DecimalFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DDecimal)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DDecimal, found %s", reflect.TypeOf(datum))
-			}
-			return d.Decimal, nil
-		}
-	case types.UuidFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DUuid)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DUuid, found %s", reflect.TypeOf(datum))
-			}
-			return d.UUID.GetBytesMut(), nil
-		}
-	case types.TimestampFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DTimestamp)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DTimestamp, found %s", reflect.TypeOf(datum))
-			}
-			return d.Time, nil
-		}
-	case types.TimestampTZFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DTimestampTZ)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DTimestampTZ, found %s", reflect.TypeOf(datum))
-			}
-			return d.Time, nil
-		}
-	case types.IntervalFamily:
-		return func(datum tree.Datum) (interface{}, error) {
-			d, ok := datum.(*tree.DInterval)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DInterval, found %s", reflect.TypeOf(datum))
-			}
-			return d.Duration, nil
-		}
-	}
-	// It would probably be more correct to return an error here, rather than a
-	// function which always returns an error. But since the function tends to be
-	// invoked immediately after GetDatumToPhysicalFn is called, this works just
-	// as well and makes the error handling less messy for the caller.
-	return func(datum tree.Datum) (interface{}, error) {
-		return nil, errors.Errorf("unhandled type %s", ct.DebugString())
+// UnsafeToSQLType converts the given coltype to the logical SQL type. Note
+// that this conversion is lossful since multiple logical types can map to a
+// single coltype, so use this method *only* when such behavior is acceptable.
+func UnsafeToSQLType(t coltypes.T) (*types.T, error) {
+	switch t {
+	case coltypes.Bool:
+		return types.Bool, nil
+	case coltypes.Bytes:
+		return types.Bytes, nil
+	case coltypes.Decimal:
+		return types.Decimal, nil
+	case coltypes.Int16:
+		return types.Int2, nil
+	case coltypes.Int32:
+		return types.Int4, nil
+	case coltypes.Int64:
+		return types.Int, nil
+	case coltypes.Float64:
+		return types.Float, nil
+	case coltypes.Timestamp:
+		return types.Timestamp, nil
+	case coltypes.Interval:
+		return types.Interval, nil
+	default:
+		return nil, errors.Errorf("unsupported coltype %s", t)
 	}
 }

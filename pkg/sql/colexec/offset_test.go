@@ -15,8 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -65,9 +65,10 @@ func TestOffset(t *testing.T) {
 
 func BenchmarkOffset(b *testing.B) {
 	ctx := context.Background()
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
+	typs := []types.T{*types.Int, *types.Int, *types.Int}
+	batch := testAllocator.NewMemBatch(typs)
 	batch.SetLength(coldata.BatchSize())
-	source := colbase.NewRepeatableBatchSource(testAllocator, batch)
+	source := colbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	source.Init()
 
 	o := NewOffsetOp(source, 1)

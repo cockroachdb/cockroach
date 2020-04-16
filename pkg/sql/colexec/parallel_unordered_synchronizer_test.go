@@ -18,9 +18,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -37,7 +37,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 
 	var (
 		rng, _     = randutil.NewPseudoRand()
-		typs       = []coltypes.T{coltypes.Int64}
+		typs       = []types.T{*types.Int}
 		numInputs  = rng.Intn(maxInputs) + 1
 		numBatches = rng.Intn(maxBatches) + 1
 	)
@@ -47,6 +47,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 		source := colbase.NewRepeatableBatchSource(
 			testAllocator,
 			colbase.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64()),
+			typs,
 		)
 		source.ResetBatchesToReturn(numBatches)
 		inputs[i] = source
@@ -121,7 +122,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		ctx = context.Background()
 		wg  sync.WaitGroup
 	)
-	s := NewParallelUnorderedSynchronizer(inputs, []coltypes.T{coltypes.Int64}, &wg)
+	s := NewParallelUnorderedSynchronizer(inputs, []types.T{*types.Int}, &wg)
 	err := vecerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) })
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
@@ -131,12 +132,12 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	const numInputs = 6
 
-	typs := []coltypes.T{coltypes.Int64}
+	typs := []types.T{*types.Int}
 	inputs := make([]colbase.Operator, numInputs)
 	for i := range inputs {
 		batch := testAllocator.NewMemBatchWithSize(typs, coldata.BatchSize())
 		batch.SetLength(coldata.BatchSize())
-		inputs[i] = colbase.NewRepeatableBatchSource(testAllocator, batch)
+		inputs[i] = colbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	}
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())

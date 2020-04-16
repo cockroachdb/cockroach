@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -49,9 +51,9 @@ func init() {
 // bytesFixedLength (when greater than zero) specifies the fixed length of the
 // bytes slice to be generated. It is used only if typ == coltypes.Bytes.
 func RandomVec(
-	rng *rand.Rand, typ coltypes.T, bytesFixedLength int, vec Vec, n int, nullProbability float64,
+	rng *rand.Rand, typ *types.T, bytesFixedLength int, vec Vec, n int, nullProbability float64,
 ) {
-	switch typ {
+	switch typeconv.FromColumnType(typ) {
 	case coltypes.Bool:
 		bools := vec.Bool()
 		for i := 0; i < n; i++ {

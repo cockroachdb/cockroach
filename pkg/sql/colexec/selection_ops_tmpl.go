@@ -62,7 +62,7 @@ var _ time.Time
 var _ duration.Duration
 
 // Dummy import to pull in "coltypes" package.
-var _ = coltypes.Bool
+var _ coltypes.T
 
 // _ASSIGN_CMP is the template function for assigning the result of comparing
 // the second input to the third input into the first input.
@@ -290,14 +290,14 @@ func (p *_OP_NAME) Init() {
 // GetSelectionConstOperator returns the appropriate constant selection operator
 // for the given left and right column types and comparison.
 func GetSelectionConstOperator(
-	leftColType *types.T,
-	constColType *types.T,
+	leftType *types.T,
+	constType *types.T,
 	cmpOp tree.ComparisonOperator,
 	input colbase.Operator,
 	colIdx int,
 	constArg tree.Datum,
 ) (colbase.Operator, error) {
-	c, err := typeconv.GetDatumToPhysicalFn(constColType)(constArg)
+	c, err := getDatumToPhysicalFn(constType)(constArg)
 	if err != nil {
 		return nil, err
 	}
@@ -305,10 +305,10 @@ func GetSelectionConstOperator(
 		OneInputNode: NewOneInputNode(input),
 		colIdx:       colIdx,
 	}
-	switch leftType := typeconv.FromColumnType(leftColType); leftType {
+	switch typeconv.FromColumnType(leftType) {
 	// {{range $lTyp, $rTypToOverloads := .}}
 	case coltypes._L_TYP_VAR:
-		switch rightType := typeconv.FromColumnType(constColType); rightType {
+		switch typeconv.FromColumnType(constType) {
 		// {{range $rTyp, $overloads := $rTypToOverloads}}
 		case coltypes._R_TYP_VAR:
 			switch cmpOp {
@@ -321,7 +321,7 @@ func GetSelectionConstOperator(
 			}
 			// {{end}}
 		default:
-			return nil, errors.Errorf("unhandled right type: %s", rightType)
+			return nil, errors.Errorf("unhandled const type: %s", constType)
 		}
 		// {{end}}
 	default:
@@ -332,8 +332,8 @@ func GetSelectionConstOperator(
 // GetSelectionOperator returns the appropriate two column selection operator
 // for the given left and right column types and comparison.
 func GetSelectionOperator(
-	leftColType *types.T,
-	rightColType *types.T,
+	leftType *types.T,
+	rightType *types.T,
 	cmpOp tree.ComparisonOperator,
 	input colbase.Operator,
 	col1Idx int,
@@ -344,10 +344,10 @@ func GetSelectionOperator(
 		col1Idx:      col1Idx,
 		col2Idx:      col2Idx,
 	}
-	switch leftType := typeconv.FromColumnType(leftColType); leftType {
+	switch typeconv.FromColumnType(leftType) {
 	// {{range $lTyp, $rTypToOverloads := .}}
 	case coltypes._L_TYP_VAR:
-		switch rightType := typeconv.FromColumnType(rightColType); rightType {
+		switch typeconv.FromColumnType(rightType) {
 		// {{range $rTyp, $overloads := $rTypToOverloads}}
 		case coltypes._R_TYP_VAR:
 			switch cmpOp {

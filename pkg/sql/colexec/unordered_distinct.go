@@ -14,8 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // NewUnorderedDistinct creates an unordered distinct on the given distinct
@@ -26,13 +27,13 @@ func NewUnorderedDistinct(
 	allocator *colbase.Allocator,
 	input colbase.Operator,
 	distinctCols []uint32,
-	colTypes []coltypes.T,
+	typs []types.T,
 	numHashBuckets uint64,
 ) colbase.Operator {
 	ht := newHashTable(
 		allocator,
 		numHashBuckets,
-		colTypes,
+		typs,
 		distinctCols,
 		true, /* allowNullEquality */
 		hashTableDistinctMode,
@@ -42,7 +43,7 @@ func NewUnorderedDistinct(
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
 		ht:           ht,
-		output:       allocator.NewMemBatch(colTypes),
+		output:       allocator.NewMemBatch(typs),
 	}
 }
 
@@ -101,7 +102,7 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 			toCol.Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
-						ColType:     typ,
+						ColType:     typeconv.FromColumnType(&typ),
 						Src:         fromCol,
 						SrcStartIdx: op.outputBatchStart,
 						SrcEndIdx:   batchEnd,

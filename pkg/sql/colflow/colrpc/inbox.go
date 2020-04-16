@@ -19,10 +19,10 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/logtags"
@@ -46,7 +46,7 @@ type flowStreamServer interface {
 // closing the stream.
 type Inbox struct {
 	colbase.ZeroInputNode
-	typs []coltypes.T
+	typs []types.T
 
 	converter  *colserde.ArrowBatchConverter
 	serializer *colserde.RecordBatchSerializer
@@ -117,7 +117,7 @@ var _ colbase.Operator = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(
-	allocator *colbase.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID,
+	allocator *colbase.Allocator, typs []types.T, streamID execinfrapb.StreamID,
 ) (*Inbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {

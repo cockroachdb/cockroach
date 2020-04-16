@@ -29,12 +29,14 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
@@ -81,8 +83,8 @@ func _ASSIGN_LT(_, _, _ string) bool {
 
 // */}}
 
-func isSorterSupported(t coltypes.T, dir execinfrapb.Ordering_Column_Direction) bool {
-	switch t {
+func isSorterSupported(t *types.T, dir execinfrapb.Ordering_Column_Direction) bool {
+	switch typeconv.FromColumnType(t) {
 	// {{range $typ, $ := . }} {{/* for each type */}}
 	case _TYPES_T:
 		switch dir {
@@ -100,9 +102,9 @@ func isSorterSupported(t coltypes.T, dir execinfrapb.Ordering_Column_Direction) 
 }
 
 func newSingleSorter(
-	t coltypes.T, dir execinfrapb.Ordering_Column_Direction, hasNulls bool,
+	t *types.T, dir execinfrapb.Ordering_Column_Direction, hasNulls bool,
 ) colSorter {
-	switch t {
+	switch typeconv.FromColumnType(t) {
 	// {{range $typ, $ := . }} {{/* for each type */}}
 	case _TYPES_T:
 		switch hasNulls {

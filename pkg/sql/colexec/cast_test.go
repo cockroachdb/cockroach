@@ -16,10 +16,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -144,7 +142,6 @@ func BenchmarkCastOp(b *testing.B) {
 					fmt.Sprintf("useSel=%t/hasNulls=%t/%s_to_%s",
 						useSel, hasNulls, typePair[0].Name(), typePair[1].Name(),
 					), func(b *testing.B) {
-						fromType := typeconv.FromColumnType(&typePair[0])
 						nullProbability := nullProbability
 						if !hasNulls {
 							nullProbability = 0
@@ -153,11 +150,12 @@ func BenchmarkCastOp(b *testing.B) {
 						if !useSel {
 							selectivity = 1.0
 						}
+						typs := []types.T{typePair[0]}
 						batch := colbase.RandomBatchWithSel(
-							testAllocator, rng, []coltypes.T{fromType},
+							testAllocator, rng, typs,
 							coldata.BatchSize(), nullProbability, selectivity,
 						)
-						source := colbase.NewRepeatableBatchSource(testAllocator, batch)
+						source := colbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 						op, err := createTestCastOperator(ctx, flowCtx, source, &typePair[0], &typePair[1])
 						require.NoError(b, err)
 						b.SetBytes(int64(8 * coldata.BatchSize()))

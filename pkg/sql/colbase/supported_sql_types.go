@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colbase
 
 import "github.com/cockroachdb/cockroach/pkg/sql/types"
 
-// allSupportedSQLTypes is a slice of all SQL types that the vectorized engine
+// AllSupportedSQLTypes is a slice of all SQL types that the vectorized engine
 // currently supports. It should be kept in sync with typeconv.FromColumnType().
-var allSupportedSQLTypes = []types.T{
+var AllSupportedSQLTypes = []types.T{
 	*types.Bool,
 	*types.Bytes,
 	*types.Date,

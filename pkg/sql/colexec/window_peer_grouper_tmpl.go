@@ -23,9 +23,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // NewWindowPeerGrouper creates a new Operator that puts 'true' in
@@ -39,7 +39,7 @@ import (
 func NewWindowPeerGrouper(
 	allocator *colbase.Allocator,
 	input colbase.Operator,
-	inputTyps []coltypes.T,
+	typs []types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	partitionColIdx int,
 	outputColIdx int,
@@ -52,13 +52,13 @@ func NewWindowPeerGrouper(
 			orderIdxs[i] = ordCol.ColIdx
 		}
 		input, distinctCol, err = OrderedDistinctColsToOperators(
-			input, orderIdxs, inputTyps,
+			input, orderIdxs, typs,
 		)
 		if err != nil {
 			return nil, err
 		}
 	}
-	input = newVectorTypeEnforcer(allocator, input, coltypes.Bool, outputColIdx)
+	input = newVectorTypeEnforcer(allocator, input, types.Bool, outputColIdx)
 	initFields := windowPeerGrouperInitFields{
 		OneInputNode:    NewOneInputNode(input),
 		allocator:       allocator,

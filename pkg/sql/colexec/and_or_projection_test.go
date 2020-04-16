@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -195,7 +194,7 @@ func TestAndOrOps(t *testing.T) {
 				runner(
 					t,
 					[]tuples{tc.tuples},
-					[][]coltypes.T{{coltypes.Bool, coltypes.Bool}},
+					[][]types.T{{*types.Bool, *types.Bool}},
 					tc.expected,
 					orderedVerifier,
 					func(input []colbase.Operator) (colbase.Operator, error) {
@@ -230,7 +229,7 @@ func benchmarkLogicalProjOp(
 	}
 	rng, _ := randutil.NewPseudoRand()
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Bool, coltypes.Bool})
+	batch := testAllocator.NewMemBatch([]types.T{*types.Bool, *types.Bool})
 	col1 := batch.ColVec(0).Bool()
 	col2 := batch.ColVec(0).Bool()
 	for i := 0; i < coldata.BatchSize(); i++ {
@@ -257,9 +256,10 @@ func benchmarkLogicalProjOp(
 			sel[i] = i
 		}
 	}
-	input := colbase.NewRepeatableBatchSource(testAllocator, batch)
+	typs := []types.T{*types.Bool, *types.Bool}
+	input := colbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	logicalProjOp, err := createTestProjectingOperator(
-		ctx, flowCtx, input, []types.T{*types.Bool, *types.Bool},
+		ctx, flowCtx, input, typs,
 		fmt.Sprintf("@1 %s @2", operation), false, /* canFallbackToRowexec */
 	)
 	require.NoError(b, err)

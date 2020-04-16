@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -48,6 +48,7 @@ type _GOTYPE interface{}
 var _ apd.Decimal
 var _ = math.MaxInt8
 var _ tree.Datum
+var _ coltypes.T
 
 func _ASSIGN_CAST(to, from interface{}) {
 	vecerror.InternalError("")
@@ -70,11 +71,11 @@ func _FROM_TYPE_SLICE(col, i, j interface{}) interface{} {
 
 // */}}
 
-func cast(fromType, toType coltypes.T, inputVec, outputVec coldata.Vec, n int, sel []int) {
-	switch fromType {
+func cast(fromType, toType *types.T, inputVec, outputVec coldata.Vec, n int, sel []int) {
+	switch typeconv.FromColumnType(fromType) {
 	// {{ range $typ, $overloads := . }}
 	case coltypes._ALLTYPES:
-		switch toType {
+		switch typeconv.FromColumnType(toType) {
 		// {{ range $overloads }}
 		// {{ if isCastFuncSet . }}
 		case coltypes._TOTYPE:
@@ -143,12 +144,11 @@ func GetCastOperator(
 	input colbase.Operator,
 	colIdx int,
 	resultIdx int,
-	fromType *semtypes.T,
-	toType *semtypes.T,
+	fromType *types.T,
+	toType *types.T,
 ) (colbase.Operator, error) {
-	to := typeconv.FromColumnType(toType)
-	input = newVectorTypeEnforcer(allocator, input, to, resultIdx)
-	if fromType.Family() == semtypes.UnknownFamily {
+	input = newVectorTypeEnforcer(allocator, input, toType, resultIdx)
+	if fromType.Family() == types.UnknownFamily {
 		return &castOpNullAny{
 			OneInputNode: NewOneInputNode(input),
 			allocator:    allocator,
@@ -156,10 +156,10 @@ func GetCastOperator(
 			outputIdx:    resultIdx,
 		}, nil
 	}
-	switch from := typeconv.FromColumnType(fromType); from {
+	switch typeconv.FromColumnType(fromType) {
 	// {{ range $typ, $overloads := . }}
 	case coltypes._ALLTYPES:
-		switch to {
+		switch typeconv.FromColumnType(toType) {
 		// {{ range $overloads }}
 		// {{ if isCastFuncSet . }}
 		case coltypes._TOTYPE:
@@ -168,17 +168,17 @@ func GetCastOperator(
 				allocator:    allocator,
 				colIdx:       colIdx,
 				outputIdx:    resultIdx,
-				fromType:     from,
-				toType:       to,
+				fromType:     fromType,
+				toType:       toType,
 			}, nil
 			// {{end}}
 			// {{end}}
 		default:
-			return nil, errors.Errorf("unhandled cast FROM -> TO type: %s -> %s", from, to)
+			return nil, errors.Errorf("unhandled cast FROM -> TO type: %s -> %s", fromType, toType)
 		}
 		// {{end}}
 	default:
-		return nil, errors.Errorf("unhandled FROM type: %s", from)
+		return nil, errors.Errorf("unhandled FROM type: %s", fromType)
 	}
 }
 
@@ -231,8 +231,8 @@ type castOp struct {
 	allocator *colbase.Allocator
 	colIdx    int
 	outputIdx int
-	fromType  coltypes.T
-	toType    coltypes.T
+	fromType  *types.T
+	toType    *types.T
 }
 
 var _ colbase.Operator = &castOp{}

@@ -14,9 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // NewWindowSortingPartitioner creates a new colexec.Operator that orders input
@@ -27,11 +27,11 @@ import (
 func NewWindowSortingPartitioner(
 	allocator *colbase.Allocator,
 	input colbase.Operator,
-	inputTyps []coltypes.T,
+	inputTyps []types.T,
 	partitionIdxs []uint32,
 	ordCols []execinfrapb.Ordering_Column,
 	partitionColIdx int,
-	createDiskBackedSorter func(input colbase.Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column) (colbase.Operator, error),
+	createDiskBackedSorter func(input colbase.Operator, inputTypes []types.T, orderingCols []execinfrapb.Ordering_Column) (colbase.Operator, error),
 ) (op colbase.Operator, err error) {
 	partitionAndOrderingCols := make([]execinfrapb.Ordering_Column, len(partitionIdxs)+len(ordCols))
 	for i, idx := range partitionIdxs {
@@ -49,7 +49,7 @@ func NewWindowSortingPartitioner(
 		return nil, err
 	}
 
-	input = newVectorTypeEnforcer(allocator, input, coltypes.Bool, partitionColIdx)
+	input = newVectorTypeEnforcer(allocator, input, types.Bool, partitionColIdx)
 	return &windowSortingPartitioner{
 		OneInputNode:    NewOneInputNode(input),
 		allocator:       allocator,
