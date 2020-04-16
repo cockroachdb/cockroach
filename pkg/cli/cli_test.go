@@ -2024,11 +2024,6 @@ func Example_dump_no_visible_columns() {
 	// sql -e create table t(x int); set sql_safe_updates=false; alter table t drop x
 	// ALTER TABLE
 	// dump defaultdb
-	// CREATE TABLE t (,
-	// 	FAMILY "primary" (rowid)
+	// CREATE TABLE t (FAMILY "primary" (rowid)
 	// );
-	// ERROR: table "defaultdb.public.t" has no visible columns
-	// HINT: To proceed with the dump, either omit this table from the list of tables to dump, drop the table, or add some visible columns.
-	// --
-	// See: https://github.com/cockroachdb/cockroach/issues/37768
 }

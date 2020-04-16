@@ -373,16 +373,11 @@ func extractArray(val interface{}) ([]string, error) {
 	return res, nil
 }
 
-func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetadata, error) {
-	// Fetch column types.
-	//
-	// TODO(knz): this approach is flawed, see #28948.
-
-	makeQuery := func(colname string) string {
-		// This query is parameterized by the column name because of
-		// 2.0/2.1beta/2.1 trans-version compatibility requirements.  See
-		// below for details.
-		return fmt.Sprintf(`
+func makeMetadataQuery(md basicMetadata, ts, columnName string) string {
+	// This query is parameterized by the column name because of
+	// 2.0/2.1beta/2.1 trans-version compatibility requirements.  See
+	// below for details.
+	return fmt.Sprintf(`
 		SELECT COLUMN_NAME, %s
 		FROM %s.information_schema.columns
 		AS OF SYSTEM TIME %s
@@ -390,9 +385,17 @@ func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetad
 			AND TABLE_SCHEMA = $2
 			AND TABLE_NAME = $3
 			AND GENERATION_EXPRESSION = ''
-		`, colname, &md.name.CatalogName, lex.EscapeSQLString(ts))
+		`, columnName, &md.name.CatalogName, lex.EscapeSQLString(ts))
+}
+
+func fetchColumnsNamesAndTypes(
+	conn *sqlConn, md basicMetadata, ts string, noHidden bool,
+) (*sqlRows, error) {
+	query := makeMetadataQuery(md, ts, "CRDB_SQL_TYPE")
+	if noHidden {
+		query = query + ` AND IS_HIDDEN = 'NO'`
 	}
-	rows, err := conn.Query(makeQuery("CRDB_SQL_TYPE")+` AND IS_HIDDEN = 'NO'`,
+	rows, err := conn.Query(query,
 		[]driver.Value{md.name.Catalog(), md.name.Schema(), md.name.Table()})
 	if err != nil {
 		// IS_HIDDEN was introduced in the first 2.1 beta. CRDB_SQL_TYPE
@@ -406,20 +409,28 @@ func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetad
 			// information_schema.columns. When it does not exist,
 			// information_schema.columns.data_type contains a usable SQL
 			// type name instead. Use that.
-			rows, err = conn.Query(makeQuery("DATA_TYPE")+` AND IS_HIDDEN = 'NO'`,
+			query := makeMetadataQuery(md, ts, "DATA_TYPE")
+			if noHidden {
+				query = query + ` AND IS_HIDDEN = 'NO'`
+			}
+			rows, err = conn.Query(query,
 				[]driver.Value{md.name.Catalog(), md.name.Schema(), md.name.Table()})
 		}
 		if strings.Contains(err.Error(), "column \"is_hidden\" does not exist") {
 			// Pre-2.1 IS_HIDDEN did not exist in information_schema.columns.
 			// When it does not exist, information_schema.columns only returns
 			// non-hidden columns so we can still use that.
-			rows, err = conn.Query(makeQuery("DATA_TYPE"),
+			rows, err = conn.Query(makeMetadataQuery(md, ts, "DATA_TYPE"),
 				[]driver.Value{md.name.Catalog(), md.name.Schema(), md.name.Table()})
 		}
 		if err != nil {
-			return tableMetadata{}, err
+			return nil, err
 		}
 	}
+	return rows, err
+}
+
+func constructTableMetadata(rows *sqlRows, md basicMetadata) (tableMetadata, error) {
 	vals := make([]driver.Value, 2)
 	coltypes := make(map[string]*types.T)
 	colnames := tree.NewFmtCtx(tree.FmtSimple)
@@ -464,6 +475,32 @@ func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetad
 		columnNames: colnames.String(),
 		columnTypes: coltypes,
 	}, nil
+}
+
+func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetadata, error) {
+	// Fetch column types.
+	//
+	// TODO(knz): this approach is flawed, see #28948.
+
+	rows, err := fetchColumnsNamesAndTypes(conn, md, ts, true)
+	if err != nil {
+		return tableMetadata{}, err
+	}
+
+	metadata, err := constructTableMetadata(rows, md)
+	if err != nil {
+		return tableMetadata{}, err
+	}
+
+	if len(metadata.columnNames) == 0 {
+		rows, err := fetchColumnsNamesAndTypes(conn, md, ts, false)
+		if err != nil {
+			return tableMetadata{}, err
+		}
+
+		return constructTableMetadata(rows, md)
+	}
+	return metadata, err
 }
 
 // dumpCreateTable dumps the CREATE statement of the specified table to w.
@@ -533,20 +570,6 @@ func dumpSequenceData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMet
 func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetadata) error {
 	md, err := getMetadataForTable(conn, bmd, clusterTS)
 	if err != nil {
-		return err
-	}
-
-	if strings.TrimSpace(md.columnNames) == "" {
-		// A table with no columns may still have one or more rows. In
-		// fact, it can have arbitrary many rows, each with a different
-		// (hidden) PK value. Unfortunately, the dump command today simply
-		// omits the hidden PKs from the dump, so it is not possible to
-		// restore the invisible values.
-		// Instead of failing with an incomprehensible error below, inform
-		// the user more clearly.
-		err := errors.Newf("table %q has no visible columns", tree.ErrString(bmd.name))
-		err = errors.WithHint(err, "To proceed with the dump, either omit this table from the list of tables to dump, drop the table, or add some visible columns.")
-		err = errors.WithIssueLink(err, errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/37768"})
 		return err
 	}
 

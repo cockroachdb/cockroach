@@ -226,7 +226,11 @@ func showFamilyClause(desc *sqlbase.TableDescriptor, f *tree.FmtCtx) {
 				activeColumnNames = append(activeColumnNames, fam.ColumnNames[i])
 			}
 		}
-		f.WriteString(",\n\tFAMILY ")
+		if len(desc.VisibleColumns()) == 0 {
+			f.WriteString("FAMILY ")
+		} else {
+			f.WriteString(",\n\tFAMILY ")
+		}
 		formatQuoteNames(&f.Buffer, fam.Name)
 		f.WriteString(" (")
 		formatQuoteNames(&f.Buffer, activeColumnNames...)
