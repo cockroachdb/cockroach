@@ -46,6 +46,7 @@ func registerTests(r *testRegistry) {
 	registerIndexes(r)
 	registerInterleaved(r)
 	registerJepsen(r)
+	registerJobsMixedVersions(r)
 	registerKV(r)
 	registerKVContention(r)
 	registerKVQuiescenceDead(r)
