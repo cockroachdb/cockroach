@@ -14,9 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // SerialUnorderedSynchronizer is an Operator that combines multiple Operator
@@ -46,7 +46,7 @@ func (s *SerialUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.OpN
 
 // NewSerialUnorderedSynchronizer creates a new SerialUnorderedSynchronizer.
 func NewSerialUnorderedSynchronizer(
-	inputs []colbase.Operator, typs []coltypes.T,
+	inputs []colbase.Operator, typs []types.T,
 ) *SerialUnorderedSynchronizer {
 	return &SerialUnorderedSynchronizer{
 		inputs:            inputs,

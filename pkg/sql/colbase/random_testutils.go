@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func randomType(rng *rand.Rand) coltypes.T {
@@ -40,7 +41,7 @@ func randomTypes(rng *rand.Rand, n int) []coltypes.T {
 func RandomBatch(
 	allocator *Allocator,
 	rng *rand.Rand,
-	typs []coltypes.T,
+	typs []types.T,
 	capacity int,
 	length int,
 	nullProbability float64,
@@ -50,7 +51,7 @@ func RandomBatch(
 		length = capacity
 	}
 	for i, typ := range typs {
-		coldata.RandomVec(rng, typ, 0 /* bytesFixedLength */, batch.ColVec(i), length, nullProbability)
+		coldata.RandomVec(rng, &typ, 0 /* bytesFixedLength */, batch.ColVec(i), length, nullProbability)
 	}
 	batch.SetLength(length)
 	return batch
@@ -88,7 +89,7 @@ var _ = randomTypes
 func RandomBatchWithSel(
 	allocator *Allocator,
 	rng *rand.Rand,
-	typs []coltypes.T,
+	typs []types.T,
 	n int,
 	nullProbability float64,
 	selProbability float64,
@@ -115,10 +116,10 @@ const (
 type RandomDataOpArgs struct {
 	// DeterministicTyps, if set, overrides AvailableTyps and MaxSchemaLength,
 	// forcing the RandomDataOp to use this schema.
-	DeterministicTyps []coltypes.T
+	DeterministicTyps []types.T
 	// AvailableTyps is the pool of types from which the operator's schema will
 	// be generated.
-	AvailableTyps []coltypes.T
+	AvailableTyps []types.T
 	// MaxSchemaLength is the maximum length of the operator's schema, which will
 	// be at least one type.
 	MaxSchemaLength int
@@ -133,15 +134,15 @@ type RandomDataOpArgs struct {
 	Nulls bool
 	// BatchAccumulator, if set, will be called before returning a coldata.Batch
 	// from Next.
-	BatchAccumulator func(b coldata.Batch)
+	BatchAccumulator func(b coldata.Batch, typs []types.T)
 }
 
 // RandomDataOp is an operator that generates random data according to
 // RandomDataOpArgs. Call GetBuffer to get all data that was returned.
 type RandomDataOp struct {
 	allocator        *Allocator
-	batchAccumulator func(b coldata.Batch)
-	typs             []coltypes.T
+	batchAccumulator func(b coldata.Batch, typs []types.T)
+	typs             []types.T
 	rng              *rand.Rand
 	batchSize        int
 	numBatches       int
@@ -155,7 +156,7 @@ var _ Operator = &RandomDataOp{}
 // NewRandomDataOp creates a new RandomDataOp.
 func NewRandomDataOp(allocator *Allocator, rng *rand.Rand, args RandomDataOpArgs) *RandomDataOp {
 	var (
-		availableTyps   = coltypes.AllTypes
+		availableTyps   = AllSupportedSQLTypes
 		maxSchemaLength = defaultMaxSchemaLength
 		batchSize       = coldata.BatchSize()
 		numBatches      = defaultNumBatches
@@ -176,7 +177,7 @@ func NewRandomDataOp(allocator *Allocator, rng *rand.Rand, args RandomDataOpArgs
 	typs := args.DeterministicTyps
 	if typs == nil {
 		// Generate at least one type.
-		typs = make([]coltypes.T, 1+rng.Intn(maxSchemaLength))
+		typs = make([]types.T, 1+rng.Intn(maxSchemaLength))
 		for i := range typs {
 			typs[i] = availableTyps[rng.Intn(len(availableTyps))]
 		}
@@ -202,7 +203,7 @@ func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
 		// Done.
 		b := coldata.ZeroBatch
 		if o.batchAccumulator != nil {
-			o.batchAccumulator(b)
+			o.batchAccumulator(b, o.typs)
 		}
 		return b
 	}
@@ -229,7 +230,7 @@ func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
 		}
 		o.numReturned++
 		if o.batchAccumulator != nil {
-			o.batchAccumulator(b)
+			o.batchAccumulator(b, o.typs)
 		}
 		return b
 	}
@@ -248,6 +249,6 @@ func (o *RandomDataOp) Child(nth int, verbose bool) execinfra.OpNode {
 }
 
 // Typs returns the output types of the RandomDataOp.
-func (o *RandomDataOp) Typs() []coltypes.T {
+func (o *RandomDataOp) Typs() []types.T {
 	return o.typs
 }

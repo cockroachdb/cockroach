@@ -41,23 +41,23 @@ var _ coltypes.T
 
 func newSubstringOperator(
 	allocator *colbase.Allocator,
-	columnTypes []types.T,
+	typs []types.T,
 	argumentCols []int,
 	outputIdx int,
 	input colbase.Operator,
 ) colbase.Operator {
-	startType := typeconv.FromColumnType(&columnTypes[argumentCols[1]])
-	lengthType := typeconv.FromColumnType(&columnTypes[argumentCols[2]])
+	startType := &typs[argumentCols[1]]
+	lengthType := &typs[argumentCols[2]]
 	base := substringFunctionBase{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
 		argumentCols: argumentCols,
 		outputIdx:    outputIdx,
 	}
-	switch startType {
+	switch typeconv.FromColumnType(startType) {
 	// {{range $startType, $lengthTypes := .}}
 	case _StartType_T:
-		switch lengthType {
+		switch typeconv.FromColumnType(lengthType) {
 		// {{range $lengthType := $lengthTypes}}
 		case _LengthType_T:
 			return &substring_StartType_LengthTypeOperator{base}

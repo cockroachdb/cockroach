@@ -15,6 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
@@ -25,7 +27,7 @@ func TestMemColumnWindow(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 
-	c := NewMemColumn(coltypes.Int64, BatchSize())
+	c := NewMemColumn(types.Int, BatchSize())
 
 	ints := c.Int64()
 	for i := 0; i < BatchSize(); i++ {
@@ -113,7 +115,7 @@ func TestNullRanges(t *testing.T) {
 		},
 	}
 
-	c := NewMemColumn(coltypes.Int64, BatchSize())
+	c := NewMemColumn(types.Int, BatchSize())
 	for _, tc := range tcs {
 		c.Nulls().UnsetNulls()
 		c.Nulls().SetNullRange(tc.start, tc.end)
@@ -134,7 +136,7 @@ func TestNullRanges(t *testing.T) {
 
 func TestAppend(t *testing.T) {
 	// TODO(asubiotto): Test nulls.
-	const typ = coltypes.Int64
+	var typ = types.Int
 
 	src := NewMemColumn(typ, BatchSize())
 	sel := make([]int, len(src.Int64()))
@@ -203,7 +205,7 @@ func TestAppend(t *testing.T) {
 
 	for _, tc := range testCases {
 		tc.args.Src = src
-		tc.args.ColType = typ
+		tc.args.ColType = typeconv.FromColumnType(typ)
 		if tc.args.SrcEndIdx == 0 {
 			// SrcEndIdx is always required.
 			tc.args.SrcEndIdx = BatchSize()
@@ -219,7 +221,7 @@ func TestAppend(t *testing.T) {
 // TestAppendBytesWithLastNull makes sure that Append handles correctly the
 // case when the last element of Bytes vector is NULL.
 func TestAppendBytesWithLastNull(t *testing.T) {
-	src := NewMemColumn(coltypes.Bytes, 4)
+	src := NewMemColumn(types.Bytes, 4)
 	sel := []int{0, 2, 3}
 	src.Bytes().Set(0, []byte("zero"))
 	src.Nulls().SetNull(1)
@@ -232,8 +234,8 @@ func TestAppendBytesWithLastNull(t *testing.T) {
 		SrcStartIdx: 0,
 		SrcEndIdx:   len(sel),
 	}
-	dest := NewMemColumn(coltypes.Bytes, 3)
-	expected := NewMemColumn(coltypes.Bytes, 3)
+	dest := NewMemColumn(types.Bytes, 3)
+	expected := NewMemColumn(types.Bytes, 3)
 	for _, withSel := range []bool{false, true} {
 		t.Run(fmt.Sprintf("AppendBytesWithLastNull/sel=%t", withSel), func(t *testing.T) {
 			expected.Nulls().UnsetNulls()
@@ -271,7 +273,7 @@ func TestAppendBytesWithLastNull(t *testing.T) {
 
 func TestCopy(t *testing.T) {
 	// TODO(asubiotto): Test nulls.
-	const typ = coltypes.Int64
+	var typ = types.Int
 
 	src := NewMemColumn(typ, BatchSize())
 	srcInts := src.Int64()
@@ -330,7 +332,7 @@ func TestCopy(t *testing.T) {
 
 	for _, tc := range testCases {
 		tc.args.Src = src
-		tc.args.ColType = typ
+		tc.args.ColType = typeconv.FromColumnType(typ)
 		t.Run(tc.name, func(t *testing.T) {
 			dest := NewMemColumn(typ, BatchSize())
 			dest.Copy(tc.args)
@@ -350,7 +352,7 @@ func TestCopy(t *testing.T) {
 }
 
 func TestCopyNulls(t *testing.T) {
-	const typ = coltypes.Int64
+	var typ = types.Int
 
 	// Set up the destination vector.
 	dst := NewMemColumn(typ, BatchSize())
@@ -376,7 +378,7 @@ func TestCopyNulls(t *testing.T) {
 
 	copyArgs := CopySliceArgs{
 		SliceArgs: SliceArgs{
-			ColType:     typ,
+			ColType:     typeconv.FromColumnType(typ),
 			Src:         src,
 			DestIdx:     3,
 			SrcStartIdx: 3,
@@ -406,7 +408,7 @@ func TestCopyNulls(t *testing.T) {
 }
 
 func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
-	const typ = coltypes.Int64
+	var typ = types.Int
 
 	// Set up the destination vector. It is all nulls except for a single
 	// non-null at index 0.
@@ -432,7 +434,7 @@ func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
 	copyArgs := CopySliceArgs{
 		SelOnDest: true,
 		SliceArgs: SliceArgs{
-			ColType:     typ,
+			ColType:     typeconv.FromColumnType(typ),
 			Src:         src,
 			SrcStartIdx: 1,
 			SrcEndIdx:   3,
@@ -474,16 +476,16 @@ func BenchmarkAppend(b *testing.B) {
 		},
 	}
 
-	for _, typ := range []coltypes.T{coltypes.Bytes, coltypes.Decimal, coltypes.Int64} {
+	for _, typ := range []types.T{*types.Bytes, *types.Decimal, *types.Int} {
 		for _, nullProbability := range []float64{0, 0.2} {
-			src := NewMemColumn(typ, BatchSize())
-			RandomVec(rng, typ, 8 /* bytesFixedLength */, src, BatchSize(), nullProbability)
+			src := NewMemColumn(&typ, BatchSize())
+			RandomVec(rng, &typ, 8 /* bytesFixedLength */, src, BatchSize(), nullProbability)
 			for _, bc := range benchCases {
 				bc.args.Src = src
-				bc.args.ColType = typ
+				bc.args.ColType = typeconv.FromColumnType(&typ)
 				bc.args.SrcEndIdx = BatchSize()
-				dest := NewMemColumn(typ, BatchSize())
-				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", typ, bc.name, nullProbability), func(b *testing.B) {
+				dest := NewMemColumn(&typ, BatchSize())
+				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", &typ, bc.name, nullProbability), func(b *testing.B) {
 					b.SetBytes(8 * int64(BatchSize()))
 					bc.args.DestIdx = 0
 					for i := 0; i < b.N; i++ {
@@ -518,20 +520,20 @@ func BenchmarkCopy(b *testing.B) {
 		},
 	}
 
-	for _, typ := range []coltypes.T{coltypes.Bytes, coltypes.Decimal, coltypes.Int64} {
+	for _, typ := range []types.T{*types.Bytes, *types.Decimal, *types.Int} {
 		for _, nullProbability := range []float64{0, 0.2} {
-			src := NewMemColumn(typ, BatchSize())
-			RandomVec(rng, typ, 8 /* bytesFixedLength */, src, BatchSize(), nullProbability)
+			src := NewMemColumn(&typ, BatchSize())
+			RandomVec(rng, &typ, 8 /* bytesFixedLength */, src, BatchSize(), nullProbability)
 			for _, bc := range benchCases {
 				bc.args.Src = src
-				bc.args.ColType = typ
+				bc.args.ColType = typeconv.FromColumnType(&typ)
 				bc.args.SrcEndIdx = BatchSize()
-				dest := NewMemColumn(typ, BatchSize())
-				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", typ, bc.name, nullProbability), func(b *testing.B) {
+				dest := NewMemColumn(&typ, BatchSize())
+				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", &typ, bc.name, nullProbability), func(b *testing.B) {
 					b.SetBytes(8 * int64(BatchSize()))
 					for i := 0; i < b.N; i++ {
 						dest.Copy(bc.args)
-						if typ == coltypes.Bytes {
+						if typ.Identical(types.Bytes) {
 							// We need to reset flat bytes so that we could copy into it
 							// (otherwise it'll panic on the second copy due to maxSetIndex
 							// being not zero).

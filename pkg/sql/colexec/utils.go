@@ -12,14 +12,20 @@ package colexec
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -48,7 +54,7 @@ type decimalOverloadScratch struct {
 // vectors on inputBatch as well (in which case windowedBatch will also have a
 // "windowed" selection vector).
 func makeWindowIntoBatch(
-	windowedBatch, inputBatch coldata.Batch, startIdx int, inputTypes []coltypes.T,
+	windowedBatch, inputBatch coldata.Batch, startIdx int, inputTypes []types.T,
 ) {
 	inputBatchLen := inputBatch.Length()
 	windowStart := startIdx
@@ -72,7 +78,7 @@ func makeWindowIntoBatch(
 		windowedBatch.SetSelection(false)
 	}
 	for i, typ := range inputTypes {
-		window := inputBatch.ColVec(i).Window(typ, windowStart, windowEnd)
+		window := inputBatch.ColVec(i).Window(typeconv.FromColumnType(&typ), windowStart, windowEnd)
 		windowedBatch.ReplaceCol(window, i)
 	}
 	windowedBatch.SetLength(inputBatchLen - startIdx)
@@ -80,7 +86,7 @@ func makeWindowIntoBatch(
 
 func newPartitionerToOperator(
 	allocator *colbase.Allocator,
-	types []coltypes.T,
+	types []types.T,
 	partitioner colcontainer.PartitionedQueue,
 	partitionIdx int,
 ) *partitionerToOperator {
@@ -115,7 +121,7 @@ func (p *partitionerToOperator) Next(ctx context.Context) coldata.Batch {
 }
 
 func newAppendOnlyBufferedBatch(
-	allocator *colbase.Allocator, typs []coltypes.T, initialSize int,
+	allocator *colbase.Allocator, typs []types.T, initialSize int,
 ) *appendOnlyBufferedBatch {
 	batch := allocator.NewMemBatchWithSize(typs, initialSize)
 	return &appendOnlyBufferedBatch{
@@ -129,7 +135,7 @@ func newAppendOnlyBufferedBatch(
 // used by operators that buffer many tuples into a single batch by appending
 // to it. It stores the length of the batch separately and intercepts calls to
 // Length() and SetLength() in order to avoid updating offsets on vectors of
-// coltypes.Bytes type - which would result in a quadratic behavior - because
+// *types.Bytes type - which would result in a quadratic behavior - because
 // it is not necessary since coldata.Vec.Append maintains the correct offsets.
 //
 // Note: "appendOnly" in the name indicates that the tuples should *only* be
@@ -141,7 +147,7 @@ type appendOnlyBufferedBatch struct {
 
 	length  int
 	colVecs []coldata.Vec
-	typs    []coltypes.T
+	typs    []types.T
 }
 
 var _ coldata.Batch = &appendOnlyBufferedBatch{}
@@ -178,7 +184,7 @@ func (b *appendOnlyBufferedBatch) append(batch coldata.Batch, startIdx, endIdx i
 	for i, colVec := range b.colVecs {
 		colVec.Append(
 			coldata.SliceArgs{
-				ColType:     b.typs[i],
+				ColType:     typeconv.FromColumnType(&b.typs[i]),
 				Src:         batch.ColVec(i),
 				Sel:         batch.Selection(),
 				DestIdx:     b.length,
@@ -188,4 +194,140 @@ func (b *appendOnlyBufferedBatch) append(batch coldata.Batch, startIdx, endIdx i
 		)
 	}
 	b.length += endIdx - startIdx
+}
+
+// getDatumToPhysicalFn returns a function for converting a datum of the given
+// ColumnType to the corresponding Go type.
+func getDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
+	switch ct.Family() {
+	case types.BoolFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DBool)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DBool, found %s", reflect.TypeOf(datum))
+			}
+			return bool(*d), nil
+		}
+	case types.BytesFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DBytes)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DBytes, found %s", reflect.TypeOf(datum))
+			}
+			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
+		}
+	case types.IntFamily:
+		switch ct.Width() {
+		case 16:
+			return func(datum tree.Datum) (interface{}, error) {
+				d, ok := datum.(*tree.DInt)
+				if !ok {
+					return nil, errors.Errorf("expected *tree.DInt, found %s", reflect.TypeOf(datum))
+				}
+				return int16(*d), nil
+			}
+		case 32:
+			return func(datum tree.Datum) (interface{}, error) {
+				d, ok := datum.(*tree.DInt)
+				if !ok {
+					return nil, errors.Errorf("expected *tree.DInt, found %s", reflect.TypeOf(datum))
+				}
+				return int32(*d), nil
+			}
+		case 0, 64:
+			return func(datum tree.Datum) (interface{}, error) {
+				d, ok := datum.(*tree.DInt)
+				if !ok {
+					return nil, errors.Errorf("expected *tree.DInt, found %s", reflect.TypeOf(datum))
+				}
+				return int64(*d), nil
+			}
+		}
+		vecerror.InternalError(fmt.Sprintf("unhandled INT width %d", ct.Width()))
+	case types.DateFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DDate)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DDate, found %s", reflect.TypeOf(datum))
+			}
+			return d.UnixEpochDaysWithOrig(), nil
+		}
+	case types.FloatFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DFloat)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DFloat, found %s", reflect.TypeOf(datum))
+			}
+			return float64(*d), nil
+		}
+	case types.OidFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DOid)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DOid, found %s", reflect.TypeOf(datum))
+			}
+			return int64(d.DInt), nil
+		}
+	case types.StringFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			// Handle other STRING-related OID types, like oid.T_name.
+			wrapper, ok := datum.(*tree.DOidWrapper)
+			if ok {
+				datum = wrapper.Wrapped
+			}
+
+			d, ok := datum.(*tree.DString)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DString, found %s", reflect.TypeOf(datum))
+			}
+			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
+		}
+	case types.DecimalFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DDecimal)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DDecimal, found %s", reflect.TypeOf(datum))
+			}
+			return d.Decimal, nil
+		}
+	case types.UuidFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DUuid)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DUuid, found %s", reflect.TypeOf(datum))
+			}
+			return d.UUID.GetBytesMut(), nil
+		}
+	case types.TimestampFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DTimestamp)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DTimestamp, found %s", reflect.TypeOf(datum))
+			}
+			return d.Time, nil
+		}
+	case types.TimestampTZFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DTimestampTZ)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DTimestampTZ, found %s", reflect.TypeOf(datum))
+			}
+			return d.Time, nil
+		}
+	case types.IntervalFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			d, ok := datum.(*tree.DInterval)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DInterval, found %s", reflect.TypeOf(datum))
+			}
+			return d.Duration, nil
+		}
+	}
+	// It would probably be more correct to return an error here, rather than a
+	// function which always returns an error. But since the function tends to be
+	// invoked immediately after getDatumToPhysicalFn is called, this works just
+	// as well and makes the error handling less messy for the caller.
+	return func(datum tree.Datum) (interface{}, error) {
+		return nil, errors.Errorf("unhandled type %s", ct.DebugString())
+	}
 }

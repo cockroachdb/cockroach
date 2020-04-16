@@ -15,11 +15,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -29,7 +30,7 @@ import (
 func NewSorter(
 	allocator *colbase.Allocator,
 	input colbase.Operator,
-	inputTypes []coltypes.T,
+	inputTypes []types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 ) (colbase.Operator, error) {
 	return newSorter(allocator, newAllSpooler(allocator, input, inputTypes), inputTypes, orderingCols)
@@ -38,18 +39,18 @@ func NewSorter(
 func newSorter(
 	allocator *colbase.Allocator,
 	input spooler,
-	inputTypes []coltypes.T,
+	inputTypes []types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 ) (resettableOperator, error) {
 	partitioners := make([]partitioner, len(orderingCols)-1)
 
 	var err error
 	for i, ord := range orderingCols {
-		if !isSorterSupported(inputTypes[ord.ColIdx], ord.Direction) {
-			return nil, errors.Errorf("sorter for type: %s and direction: %s not supported", inputTypes[ord.ColIdx], ord.Direction)
+		if !isSorterSupported(&inputTypes[ord.ColIdx], ord.Direction) {
+			return nil, errors.Errorf("sorter for type: %s and direction: %s not supported", &inputTypes[ord.ColIdx], ord.Direction)
 		}
 		if i < len(orderingCols)-1 {
-			partitioners[i], err = newPartitioner(inputTypes[ord.ColIdx])
+			partitioners[i], err = newPartitioner(&inputTypes[ord.ColIdx])
 			if err != nil {
 				return nil, err
 			}
@@ -102,7 +103,7 @@ type allSpooler struct {
 
 	allocator *colbase.Allocator
 	// inputTypes contains the types of all of the columns from the input.
-	inputTypes []coltypes.T
+	inputTypes []types.T
 	// bufferedTuples stores all the values from the input after spooling. Each
 	// Vec in this batch is the entire column from the input.
 	bufferedTuples *appendOnlyBufferedBatch
@@ -115,7 +116,7 @@ var _ spooler = &allSpooler{}
 var _ resetter = &allSpooler{}
 
 func newAllSpooler(
-	allocator *colbase.Allocator, input colbase.Operator, inputTypes []coltypes.T,
+	allocator *colbase.Allocator, input colbase.Operator, inputTypes []types.T,
 ) spooler {
 	return &allSpooler{
 		OneInputNode: NewOneInputNode(input),
@@ -167,7 +168,7 @@ func (p *allSpooler) getWindowedBatch(startIdx, endIdx int) coldata.Batch {
 	// present on the original input batches, they have been removed when we were
 	// buffering up tuples.
 	for i, t := range p.inputTypes {
-		window := p.bufferedTuples.ColVec(i).Window(t, startIdx, endIdx)
+		window := p.bufferedTuples.ColVec(i).Window(typeconv.FromColumnType(&t), startIdx, endIdx)
 		p.windowedBatch.ReplaceCol(window, i)
 	}
 	p.windowedBatch.SetSelection(false)
@@ -189,7 +190,7 @@ type sortOp struct {
 	input     spooler
 
 	// inputTypes contains the types of all of the columns from input.
-	inputTypes []coltypes.T
+	inputTypes []types.T
 	// orderingCols is the ordered list of column orderings that the sorter should
 	// sort on.
 	orderingCols []execinfrapb.Ordering_Column
@@ -281,7 +282,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 			p.output.ColVec(j).Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
-						ColType:     p.inputTypes[j],
+						ColType:     typeconv.FromColumnType(&p.inputTypes[j]),
 						Sel:         p.order,
 						Src:         p.input.getValues(j),
 						SrcStartIdx: p.emitted,
@@ -321,7 +322,7 @@ func (p *sortOp) sort(ctx context.Context) {
 
 	for i := range p.orderingCols {
 		inputVec := p.input.getValues(int(p.orderingCols[i].ColIdx))
-		p.sorters[i] = newSingleSorter(p.inputTypes[p.orderingCols[i].ColIdx], p.orderingCols[i].Direction, inputVec.MaybeHasNulls())
+		p.sorters[i] = newSingleSorter(&p.inputTypes[p.orderingCols[i].ColIdx], p.orderingCols[i].Direction, inputVec.MaybeHasNulls())
 		p.sorters[i].init(inputVec, p.order)
 	}
 

@@ -26,11 +26,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // {{/*
@@ -45,6 +47,9 @@ var _ tree.Operator
 
 // Dummy import to pull in "math" package.
 var _ int = math.MaxInt16
+
+// Dummy import to pull in "coltypes" package.
+var _ coltypes.T
 
 // _ASSIGN_NE is the template function for assigning the result of comparing
 // the second input to the third input into the first input.
@@ -114,7 +119,7 @@ func (v hashAggFuncs) match(
 	sel []int,
 	b coldata.Batch,
 	keyCols []uint32,
-	keyTypes []coltypes.T,
+	keyTypes []types.T,
 	keyMapping coldata.Batch,
 	diff []bool,
 ) (bool, []int) {
@@ -135,7 +140,7 @@ func (v hashAggFuncs) match(
 
 		keyTyp := keyTypes[keyIdx]
 
-		switch keyTyp {
+		switch typeconv.FromColumnType(&keyTyp) {
 		// {{range .}}
 		case _TYPES_T:
 			lhsCol := lhs._TemplateType()
@@ -156,7 +161,7 @@ func (v hashAggFuncs) match(
 			}
 		// {{end}}
 		default:
-			vecerror.InternalError(fmt.Sprintf("unhandled type %d", keyTyp))
+			vecerror.InternalError(fmt.Sprintf("unhandled type %s", &keyTyp))
 		}
 	}
 

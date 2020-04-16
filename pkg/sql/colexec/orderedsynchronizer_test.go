@@ -17,11 +17,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 // Adapted from the same-named test in the rowflow package.
@@ -138,17 +139,12 @@ func TestOrderedSync(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		numCols := len(tc.sources[0][0])
-		columnTypes := make([]coltypes.T, numCols)
-		for i := range columnTypes {
-			columnTypes[i] = coltypes.Int64
+		typs := make([]types.T, numCols)
+		for i := range typs {
+			typs[i] = *types.Int
 		}
 		runTests(t, tc.sources, tc.expected, orderedVerifier, func(inputs []colbase.Operator) (colbase.Operator, error) {
-			return &OrderedSynchronizer{
-				allocator:   testAllocator,
-				inputs:      inputs,
-				ordering:    tc.ordering,
-				columnTypes: columnTypes,
-			}, nil
+			return NewOrderedSynchronizer(testAllocator, inputs, typs, tc.ordering)
 		})
 	}
 }
@@ -157,10 +153,11 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	numInputs := 3
 	inputLen := 1024
-	batchSize := int(16)
+	batchSize := 16
 	if batchSize > coldata.BatchSize() {
 		batchSize = coldata.BatchSize()
 	}
+	typs := []types.T{*types.Int}
 
 	// Generate a random slice of sorted ints.
 	randInts := make([]int, inputLen)
@@ -184,22 +181,13 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 	}
 	inputs := make([]colbase.Operator, numInputs)
 	for i := range inputs {
-		inputs[i] = newOpTestInput(batchSize, sources[i], nil /* typs */)
+		inputs[i] = newOpTestInput(batchSize, sources[i], typs)
 	}
-
-	op := OrderedSynchronizer{
-		allocator: testAllocator,
-		inputs:    inputs,
-		ordering: sqlbase.ColumnOrdering{
-			{
-				ColIdx:    0,
-				Direction: encoding.Ascending,
-			},
-		},
-		columnTypes: []coltypes.T{coltypes.Int64},
-	}
+	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
+	op, err := NewOrderedSynchronizer(testAllocator, inputs, typs, ordering)
+	require.NoError(t, err)
 	op.Init()
-	out := newOpTestOutput(&op, expected)
+	out := newOpTestOutput(op, expected)
 	if err := out.Verify(); err != nil {
 		t.Error(err)
 	}
@@ -209,9 +197,10 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 	ctx := context.Background()
 
 	numInputs := int64(3)
+	typs := []types.T{*types.Int}
 	batches := make([]coldata.Batch, numInputs)
 	for i := range batches {
-		batches[i] = testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
+		batches[i] = testAllocator.NewMemBatch(typs)
 		batches[i].SetLength(coldata.BatchSize())
 	}
 	for i := int64(0); i < int64(coldata.BatchSize())*numInputs; i++ {
@@ -221,17 +210,12 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 
 	inputs := make([]colbase.Operator, len(batches))
 	for i := range batches {
-		inputs[i] = colbase.NewRepeatableBatchSource(testAllocator, batches[i])
+		inputs[i] = colbase.NewRepeatableBatchSource(testAllocator, batches[i], typs)
 	}
 
-	op := OrderedSynchronizer{
-		allocator: testAllocator,
-		inputs:    inputs,
-		ordering: sqlbase.ColumnOrdering{
-			{ColIdx: 0, Direction: encoding.Ascending},
-		},
-		columnTypes: []coltypes.T{coltypes.Int64},
-	}
+	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
+	op, err := NewOrderedSynchronizer(testAllocator, inputs, typs, ordering)
+	require.NoError(b, err)
 	op.Init()
 
 	b.SetBytes(8 * int64(coldata.BatchSize()) * numInputs)
