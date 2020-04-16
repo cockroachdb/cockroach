@@ -341,6 +341,14 @@ func TestParse(t *testing.T) {
 		{`CREATE TYPE a.b AS ENUM ('a', 'b', 'c')`},
 		{`CREATE TYPE a.b.c AS ENUM ('a', 'b', 'c')`},
 
+		{`DROP TYPE a`},
+		{`DROP TYPE a, b, c`},
+		{`DROP TYPE db.sc.a, sc.a`},
+		{`DROP TYPE IF EXISTS db.sc.a, sc.a`},
+		{`DROP TYPE db.sc.a, sc.a CASCADE`},
+		{`DROP TYPE IF EXISTS db.sc.a, sc.a CASCADE`},
+		{`DROP TYPE IF EXISTS db.sc.a, sc.a RESTRICT`},
+
 		{`DELETE FROM a`},
 		{`EXPLAIN DELETE FROM a`},
 		{`DELETE FROM a.b`},
@@ -3210,7 +3218,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`DROP SUBSCRIPTION a`, 0, `drop subscription`, ``},
 		{`DROP TEXT SEARCH a`, 7821, `drop text`, ``},
 		{`DROP TRIGGER a`, 28296, `drop`, ``},
-		{`DROP TYPE a`, 27793, `drop type`, ``},
 
 		{`DISCARD PLANS`, 0, `discard plans`, ``},
 		{`DISCARD SEQUENCES`, 0, `discard sequences`, ``},

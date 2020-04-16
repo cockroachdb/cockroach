@@ -918,7 +918,6 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 		record := sql.CreateGCJobRecord(
 			fmt.Sprintf("table %d", desc.ID),
 			security.NodeUser,
-			sqlbase.IDs{desc.ID},
 			jobspb.SchemaChangeGCDetails{
 				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{{ID: desc.ID, DropTime: desc.DropTime}},
 			})
@@ -1079,7 +1078,6 @@ func migrateMutationJobForTable(
 		indexGCJobRecord := sql.CreateGCJobRecord(
 			job.Payload().Description,
 			job.Payload().Username,
-			sqlbase.IDs{tableDesc.ID},
 			jobspb.SchemaChangeGCDetails{
 				Indexes: []jobspb.SchemaChangeGCDetails_DroppedIndex{
 					{
@@ -1181,7 +1179,6 @@ func migrateDropTablesOrDatabaseJob(
 	gcJobRecord := sql.CreateGCJobRecord(
 		job.Payload().Description,
 		job.Payload().Username,
-		job.Payload().DescriptorIDs,
 		jobspb.SchemaChangeGCDetails{
 			Tables:   tablesToDrop,
 			ParentID: details.DroppedDatabaseID,

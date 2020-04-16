@@ -89,6 +89,8 @@ func buildOpaque(
 		plan, err = p.DropRole(ctx, n)
 	case *tree.DropTable:
 		plan, err = p.DropTable(ctx, n)
+	case *tree.DropType:
+		plan, err = p.DropType(ctx, n)
 	case *tree.DropView:
 		plan, err = p.DropView(ctx, n)
 	case *tree.DropSequence:
@@ -180,6 +182,7 @@ func init() {
 		&tree.DropDatabase{},
 		&tree.DropIndex{},
 		&tree.DropTable{},
+		&tree.DropType{},
 		&tree.DropView{},
 		&tree.DropRole{},
 		&tree.DropSequence{},

@@ -38,3 +38,4 @@ func (n *createTypeNode) startExec(params runParams) error {
 func (n *createTypeNode) Next(params runParams) (bool, error) { return false, nil }
 func (n *createTypeNode) Values() tree.Datums                 { return tree.Datums{} }
 func (n *createTypeNode) Close(ctx context.Context)           {}
+func (n *createTypeNode) ReadingOwnWrites()                   {}
