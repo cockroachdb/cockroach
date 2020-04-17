@@ -53,10 +53,10 @@ func (pg *Error) SafeDetails() []string {
 func FullError(err error) string {
 	var errString string
 	if pqErr, ok := err.(*pq.Error); ok {
-		errString = formatMsgHintDetail("pq: ", pqErr.Message, pqErr.Hint, pqErr.Detail)
+		errString = formatMsgHintDetail("pq", pqErr.Message, pqErr.Hint, pqErr.Detail)
 	} else {
 		pg := Flatten(err)
-		errString = formatMsgHintDetail("", err.Error(), pg.Hint, pg.Detail)
+		errString = formatMsgHintDetail(pg.Severity, err.Error(), pg.Hint, pg.Detail)
 	}
 	return errString
 }
@@ -64,6 +64,7 @@ func FullError(err error) string {
 func formatMsgHintDetail(prefix, msg, hint, detail string) string {
 	var b strings.Builder
 	b.WriteString(prefix)
+	b.WriteString(": ")
 	b.WriteString(msg)
 	if hint != "" {
 		b.WriteString("\nHINT: ")
@@ -102,6 +103,7 @@ func Newf(code string, format string, args ...interface{}) error {
 func Noticef(format string, args ...interface{}) error {
 	err := errors.NewWithDepthf(1, format, args...)
 	err = WithCandidateCode(err, pgcode.SuccessfulCompletion)
+	err = WithSeverity(err, "NOTICE")
 	return err
 }
 
