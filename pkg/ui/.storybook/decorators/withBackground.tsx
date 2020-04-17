@@ -8,5 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./withRouterProvider";
-export * from "./withBackground";
+import React from "react";
+import {RenderFunction} from "storybook__react";
+
+export const withBackgroundFactory = (backgroundColor = "#F5F7FA") => (storyFn: RenderFunction) => (
+  <div style={{backgroundColor}}>
+    {storyFn()}
+  </div>
+);
