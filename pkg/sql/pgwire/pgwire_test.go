@@ -1866,33 +1866,41 @@ var _ pgx.Logger = pgxTestLogger{}
 func TestCancelRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params := base.TestServerArgs{Insecure: true}
-	s, _, _ := serverutils.StartServer(t, params)
+	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
+		params := base.TestServerArgs{Insecure: insecure}
+		s, _, _ := serverutils.StartServer(t, params)
 
-	ctx := context.TODO()
-	defer s.Stopper().Stop(ctx)
+		ctx := context.TODO()
+		defer s.Stopper().Stop(ctx)
 
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "tcp", s.ServingSQLAddr())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close()
+		var d net.Dialer
+		conn, err := d.DialContext(ctx, "tcp", s.ServingSQLAddr())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
 
-	fe, err := pgproto3.NewFrontend(conn, conn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const versionCancel = 80877102
-	if err := fe.Send(&pgproto3.StartupMessage{ProtocolVersion: versionCancel}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := fe.Receive(); err != io.EOF {
-		t.Fatalf("unexpected: %v", err)
-	}
-	if count := telemetry.GetRawFeatureCounts()["pgwire.unimplemented.cancel_request"]; count != 1 {
-		t.Fatalf("expected 1 cancel request, got %d", count)
-	}
+		// Reset telemetry so we get a deterministic count below.
+		_ = telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+
+		fe, err := pgproto3.NewFrontend(conn, conn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// versionCancel is the special code sent as header for cancel requests.
+		// See: https://www.postgresql.org/docs/current/protocol-message-formats.html
+		// and the explanation in server.go.
+		const versionCancel = 80877102
+		if err := fe.Send(&pgproto3.StartupMessage{ProtocolVersion: versionCancel}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fe.Receive(); err != io.EOF {
+			t.Fatalf("unexpected: %v", err)
+		}
+		if count := telemetry.GetRawFeatureCounts()["pgwire.unimplemented.cancel_request"]; count != 1 {
+			t.Fatalf("expected 1 cancel request, got %d", count)
+		}
+	})
 }
 
 func TestFailPrepareFailsTxn(t *testing.T) {
