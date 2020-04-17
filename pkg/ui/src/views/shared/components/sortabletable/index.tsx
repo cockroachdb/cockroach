@@ -18,9 +18,9 @@ import getHighlightedText from "src/util/highlightedText";
 import { DrawerComponent } from "../drawer";
 import { trackTableSort } from "src/util/analytics";
 
-import "./sortabletable.styl";
+import styles from "./sortabletable.module.styl";
 import { Spin, Icon } from "antd";
-import SpinIcon from "oss/src/components/icon/spin";
+import SpinIcon from "src/components/icon/spin";
 import { Empty, IEmptyProps } from "src/components/empty";
 
 /**
@@ -151,7 +151,10 @@ export class SortableTable extends React.Component<TableProps> {
   expansionControl(expanded: boolean) {
     const content = expanded ? "▼" : "▶";
     return (
-      <td className="sort-table__cell sort-table__cell__expansion-control">
+      <td className={classNames([
+        styles["sort-table__cell"],
+        styles["sort-table__cell__expansion-control"],
+      ])}>
         <div>
           {content}
         </div>
@@ -162,11 +165,11 @@ export class SortableTable extends React.Component<TableProps> {
   renderRow = (rowIndex: number) => {
     const { columns, expandableConfig, drawer, firstCellBordered } = this.props;
     const classes = classNames(
-      "sort-table__row",
-      "sort-table__row--body",
-      this.state.activeIndex === rowIndex ? "drawer-active" : "",
+      styles["sort-table__row"],
+      styles["sort-table__row--body"],
+      this.state.activeIndex === rowIndex ? styles["drawer-active"] : "",
       this.props.rowClass(rowIndex),
-      { "sort-table__row--expandable": !!expandableConfig },
+      { [styles["sort-table__row--expandable"]]: !!expandableConfig },
     );
     const expanded = expandableConfig && expandableConfig.rowIsExpanded(rowIndex);
     const onClickExpand = expandableConfig && expandableConfig.onChangeExpansion;
@@ -187,7 +190,13 @@ export class SortableTable extends React.Component<TableProps> {
         {expandableConfig ? this.expansionControl(expanded) : null}
         {map(columns, (c: SortableColumn, colIndex: number) => {
           return (
-            <td className={classNames("sort-table__cell", { "sort-table__cell--header": firstCellBordered && colIndex === 0 }, c.className)} key={colIndex}>
+            <td className={classNames(
+              styles["sort-table__cell"],
+              {
+                [styles["sort-table__cell--header"]]: firstCellBordered && colIndex === 0,
+              },
+              c.className,
+            )} key={colIndex}>
               {c.cell(rowIndex)}
             </td>
           );
@@ -197,8 +206,8 @@ export class SortableTable extends React.Component<TableProps> {
     ];
     if (expandableConfig && expandableConfig.rowIsExpanded(rowIndex)) {
       const expandedAreaClasses = classNames(
-        "sort-table__row",
-        "sort-table__row--body",
+        styles["sort-table__row"],
+        styles["sort-table__row--body"],
         "sort-table__row--expanded-area",
       );
       output.push(
@@ -208,7 +217,7 @@ export class SortableTable extends React.Component<TableProps> {
         <tr className={expandedAreaClasses} key={output.length + 2} >
           <td />
           <td
-            className="sort-table__cell"
+            className={styles["sort-table__cell"]}
             colSpan={columns.length}
           >
             {expandableConfig.expandedContent(rowIndex)}
@@ -253,39 +262,48 @@ export class SortableTable extends React.Component<TableProps> {
       return <Empty {...emptyProps}/>;
     }
     return (
-      <div className="cl-table-wrapper">
-        <table className={classNames("sort-table", className)}>
+      <div className={styles["cl-table-wrapper"]}>
+        <table className={classNames(
+          styles["sort-table"],
+          className,
+          )}
+        >
           <thead>
-            <tr className="sort-table__row sort-table__row--header">
-              {expandableConfig ? <th className="sort-table__cell" /> : null}
+            <tr
+              className={classNames([
+                styles["sort-table__row"],
+                styles["sort-table__row--header"],
+              ])}
+            >
+              {expandableConfig ? <th className={styles["sort-table__cell"]} /> : null}
               {map(columns, (c: SortableColumn, colIndex: number) => {
-                const classes = ["sort-table__cell"];
+                const classes = [styles["sort-table__cell"]];
                 const style = {
                   textAlign: c.titleAlign,
                 };
                 let onClick: (e: any) => void = undefined;
 
                 if (!isUndefined(c.sortKey)) {
-                  classes.push("sort-table__cell--sortable");
+                  classes.push(styles["sort-table__cell--sortable"]);
                   onClick = () => {
                     trackTableSort(className, c, sortSetting);
                     this.clickSort(c.sortKey);
                   };
                   if (c.sortKey === sortSetting.sortKey) {
                     if (sortSetting.ascending) {
-                      classes.push(" sort-table__cell--ascending");
+                      classes.push(styles["sort-table__cell--ascending"]);
                     } else {
-                      classes.push("sort-table__cell--descending");
+                      classes.push(styles["sort-table__cell--descending"]);
                     }
                   }
                 }
                 if (firstCellBordered && colIndex === 0) {
-                  classes.push("sort-table__cell--header");
+                  classes.push(styles["sort-table__cell--header"]);
                 }
                 return (
                   <th className={classNames(classes)} key={colIndex} onClick={onClick} style={style}>
                     {c.title}
-                    {!isUndefined(c.sortKey) && <span className="sortable__actions" />}
+                    {!isUndefined(c.sortKey) && <span className={styles[`sortable__actions`]} />}
                   </th>
                 );
               })}
@@ -296,18 +314,18 @@ export class SortableTable extends React.Component<TableProps> {
           </tbody>
         </table>
         {loading && (
-          <div className="table__loading">
-            <Spin className="table__loading--spin" indicator={<Icon component={SpinIcon} spin />} />
-            {loadingLabel && <span className="table__loading--label">{loadingLabel}</span>}
+          <div className={styles[`table__loading`]}>
+            <Spin className={styles[`table__loading--spin`]} indicator={<Icon component={SpinIcon} spin />} />
+            {loadingLabel && <span className={styles[`table__loading--label`]}>{loadingLabel}</span>}
           </div>
         )}
         {drawer && (
           <DrawerComponent visible={visible} onClose={this.onClose} data={drawerData} details>
-            <span className="drawer__content">{getHighlightedText(drawerData.statement, drawerData.search, true)}</span>
+            <span className={styles[`drawer__content`]}>{getHighlightedText(drawerData.statement, drawerData.search, true)}</span>
           </DrawerComponent>
         )}
         {count === 0 && (
-          <div className="table__no-results">
+          <div className={styles["table__no-results"]}>
             {renderNoResult}
           </div>
         )}

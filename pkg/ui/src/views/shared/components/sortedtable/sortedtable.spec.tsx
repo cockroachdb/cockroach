@@ -17,6 +17,7 @@ import * as sinon from "sinon";
 import "src/enzymeInit";
 import { SortedTable, ColumnDescriptor, ISortedTablePagination } from "src/views/shared/components/sortedtable";
 import { SortSetting } from "src/views/shared/components/sortabletable";
+import styles from "../sortabletable/sortabletable.module.styl";
 
 class TestRow {
   constructor(public name: string, public value: number) { }
@@ -67,14 +68,14 @@ describe("<SortedTable>", function() {
     const wrapper = makeTable([new TestRow("test", 1)]);
     assert.lengthOf(wrapper.find("table"), 1, "one table");
     assert.lengthOf(wrapper.find("thead").find("tr"), 1, "one header row");
-    assert.lengthOf(wrapper.find("tr.sort-table__row--header"), 1, "column header row");
+    assert.lengthOf(wrapper.find(`tr.${styles["sort-table__row--header"]}`), 1, "column header row");
     assert.lengthOf(wrapper.find("tbody"), 1, "tbody element");
   });
 
   it("correctly uses onChangeSortSetting", function() {
     const spy = sinon.spy();
     const wrapper = makeTable([new TestRow("test", 1)], undefined, spy);
-    wrapper.find("th.sort-table__cell--sortable").first().simulate("click");
+    wrapper.find(`th.${styles["sort-table__cell"]}`).first().simulate("click");
     assert.isTrue(spy.calledOnce);
     assert.deepEqual(spy.getCall(0).args[0], {
       sortKey: 0,
@@ -110,30 +111,30 @@ describe("<SortedTable>", function() {
       const wrapper = makeExpandableTable([new TestRow("test", 1)], undefined);
       assert.lengthOf(wrapper.find("table"), 1, "one table");
       assert.lengthOf(wrapper.find("thead").find("tr"), 1, "one header row");
-      assert.lengthOf(wrapper.find("tr.sort-table__row--header"), 1, "column header row");
+      assert.lengthOf(wrapper.find(`tr.${styles["sort-table__row--header"]}`), 1, "column header row");
       assert.lengthOf(wrapper.find("tbody"), 1, "tbody element");
       assert.lengthOf(wrapper.find("tbody tr"), 1, "one body row");
       assert.lengthOf(wrapper.find("tbody td"), 3, "two body cells plus one expansion control cell");
-      assert.lengthOf(wrapper.find("td.sort-table__cell__expansion-control"), 1, "one expansion control cell");
+      assert.lengthOf(wrapper.find(`td.${styles["sort-table__cell__expansion-control"]}`), 1, "one expansion control cell");
     });
 
     it("expands and collapses the clicked row", function() {
       const wrapper = makeExpandableTable([new TestRow("test", 1)], undefined);
-      assert.lengthOf(wrapper.find(".sort-table__row--expanded-area"), 0, "nothing expanded yet");
-      wrapper.find(".sort-table__cell__expansion-control").simulate("click");
+      assert.lengthOf(wrapper.find(`.${styles["sort-table__row--expanded-area"]}`), 0, "nothing expanded yet");
+      wrapper.find(`.${styles["sort-table__cell__expansion-control"]}`).simulate("click");
       const expandedArea = wrapper.find(".sort-table__row--expanded-area");
       assert.lengthOf(expandedArea, 1, "row is expanded");
       assert.lengthOf(expandedArea.children(), 2, "expanded row contains placeholder and content area");
       assert.isTrue(expandedArea.contains(<td />));
       assert.isTrue(expandedArea.contains(
-        <td className="sort-table__cell" colSpan={2}>
+        <td className={styles["sort-table__cell"]} colSpan={2}>
           <div>
             test=1
           </div>
         </td>,
       ));
-      wrapper.find(".sort-table__cell__expansion-control").simulate("click");
-      assert.lengthOf(wrapper.find(".sort-table__row--expanded-area"), 0, "row collapsed again");
+      wrapper.find(`.${styles["sort-table__cell__expansion-control"]}`).simulate("click");
+      assert.lengthOf(wrapper.find(`.${styles["sort-table__row--expanded-area"]}`), 0, "row collapsed again");
     });
   });
 

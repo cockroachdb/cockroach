@@ -18,7 +18,7 @@ import "./dropdown.styl";
 import {leftArrow, rightArrow} from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
 import ReactSelectClass from "react-select";
-import { CaretDown } from "oss/src/components/icon/caretDown";
+import { CaretDown } from "src/components/icon/caretDown";
 
 export interface DropdownOption {
   value: string;
