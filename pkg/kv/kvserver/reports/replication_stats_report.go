@@ -183,9 +183,7 @@ func (r *replicationStatsReportSaver) Save(
 		}
 
 		for key, status := range r.stats {
-			if err := r.upsertStats(
-				ctx, reportTS, txn, key, status, db, ex,
-			); err != nil {
+			if err := r.upsertStats(ctx, txn, key, status, ex); err != nil {
 				return err
 			}
 		}
@@ -224,13 +222,7 @@ func (r *replicationStatsReportSaver) Save(
 //
 // existing is used to decide is this is a new data.
 func (r *replicationStatsReportSaver) upsertStats(
-	ctx context.Context,
-	reportTS time.Time,
-	txn *kv.Txn,
-	key ZoneKey,
-	stats zoneRangeStatus,
-	db *kv.DB,
-	ex sqlutil.InternalExecutor,
+	ctx context.Context, txn *kv.Txn, key ZoneKey, stats zoneRangeStatus, ex sqlutil.InternalExecutor,
 ) error {
 	var err error
 	previousStats, hasOldVersion := r.previousVersion[key]
