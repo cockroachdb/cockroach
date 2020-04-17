@@ -80,7 +80,7 @@ func (c *CustomFuncs) IsLocking(scan *memo.ScanPrivate) bool {
 func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.ScanPrivate) {
 	// Iterate over all secondary indexes.
 	var iter scanIndexIter
-	iter.init(c.e.mem, scanPrivate)
+	iter.init(c.e.mem, scanPrivate, onlyStandardIndexes)
 	for iter.next() {
 		// Skip primary index.
 		if iter.indexOrdinal == cat.PrimaryIndex {
@@ -209,7 +209,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	var iter scanIndexIter
 	md := c.e.mem.Metadata()
 	tabMeta := md.TableMeta(scanPrivate.Table)
-	iter.init(c.e.mem, scanPrivate)
+	iter.init(c.e.mem, scanPrivate, onlyStandardIndexes)
 	for iter.next() {
 		// We only consider the partition values when a particular index can otherwise
 		// not be constrained. For indexes that are constrained, the partitioned values
@@ -829,8 +829,8 @@ func (c *CustomFuncs) partitionValuesFilters(
 func (c *CustomFuncs) HasInvertedIndexes(scanPrivate *memo.ScanPrivate) bool {
 	// Don't bother matching unless there's an inverted index.
 	var iter scanIndexIter
-	iter.init(c.e.mem, scanPrivate)
-	return iter.nextInverted()
+	iter.init(c.e.mem, scanPrivate, onlyInvertedIndexes)
+	return iter.next()
 }
 
 // GenerateInvertedIndexScans enumerates all inverted indexes on the Scan
@@ -849,11 +849,11 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 
 	// Iterate over all inverted indexes.
 	var iter scanIndexIter
-	iter.init(c.e.mem, scanPrivate)
-	for iter.nextInverted() {
+	iter.init(c.e.mem, scanPrivate, onlyInvertedIndexes)
+	for iter.next() {
 		// Check whether the filter can constrain the index.
 		constraint, remaining, ok := c.tryConstrainIndex(
-			filters, nil /* optioanlFilters */, scanPrivate.Table, iter.indexOrdinal, true /* isInverted */)
+			filters, nil /* optionalFilters */, scanPrivate.Table, iter.indexOrdinal, true /* isInverted */)
 		if !ok {
 			continue
 		}
@@ -1088,7 +1088,7 @@ func (c *CustomFuncs) GenerateLimitedScans(
 
 	// Iterate over all indexes, looking for those that can be limited.
 	var iter scanIndexIter
-	iter.init(c.e.mem, scanPrivate)
+	iter.init(c.e.mem, scanPrivate, onlyStandardIndexes)
 	for iter.next() {
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = iter.indexOrdinal
@@ -1328,7 +1328,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	var pkCols opt.ColList
 
 	var iter scanIndexIter
-	iter.init(c.e.mem, scanPrivate)
+	iter.init(c.e.mem, scanPrivate, onlyStandardIndexes)
 	for iter.next() {
 		// Find the longest prefix of index key columns that are constrained by
 		// an equality with another column or a constant.
@@ -1677,7 +1677,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 	// algorithm laid out here:
 	// https://en.wikipedia.org/wiki/Maximum_coverage_problem
 	var iter, iter2 scanIndexIter
-	iter.init(c.e.mem, scanPrivate)
+	iter.init(c.e.mem, scanPrivate, onlyStandardIndexes)
 	for iter.next() {
 		if iter.indexOrdinal == cat.PrimaryIndex {
 			continue
@@ -1689,7 +1689,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 		if leftFixed.Len() == 0 {
 			continue
 		}
-		iter2.init(c.e.mem, scanPrivate)
+		iter2.init(c.e.mem, scanPrivate, onlyStandardIndexes)
 		// Only look at indexes after this one.
 		iter2.indexOrdinal = iter.indexOrdinal
 
@@ -1879,8 +1879,8 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 
 	// Iterate over all inverted indexes.
 	var iter scanIndexIter
-	iter.init(c.e.mem, scanPrivate)
-	for iter.nextInverted() {
+	iter.init(c.e.mem, scanPrivate, onlyInvertedIndexes)
+	for iter.next() {
 		// See if there are two or more constraints that can be satisfied
 		// by this inverted index. This is possible with inverted indexes as
 		// opposed to secondary indexes, because one row in the primary index
@@ -2372,7 +2372,7 @@ func (c *CustomFuncs) CanMaybeConstrainIndexWithCols(sp *memo.ScanPrivate, cols 
 	tabMeta := md.TableMeta(sp.Table)
 
 	var iter scanIndexIter
-	iter.init(c.e.mem, sp)
+	iter.init(c.e.mem, sp, allIndexes)
 	for iter.next() {
 		// Iterate through all indexes of the table and return true if cols
 		// intersect with the index's columns.
@@ -2483,11 +2483,28 @@ func (c *CustomFuncs) AddPrimaryKeyColsToScanPrivate(sp *memo.ScanPrivate) *memo
 	}
 }
 
+// indexIterType is an option passed to scanIndexIter.init() to specify index types
+// to include during iteration.
+type indexIterType int
+
+const (
+	// allIndexes sepcifies that no indexes will be skipped during iteration.
+	allIndexes indexIterType = iota
+
+	// onlyStandardIndexes specifies iteration over all standard indexes,
+	// skipping inverted indexes.
+	onlyStandardIndexes
+
+	// onlyInvertedIndexes specifies iteration over all inverted indexes,
+	// skipping standard indexes.
+	onlyInvertedIndexes
+)
+
 // scanIndexIter is a helper struct that supports iteration over the indexes
 // of a Scan operator table. For example:
 //
 //   var iter scanIndexIter
-//   iter.init(mem, scanOpDef)
+//   iter.init(mem, scanOpDef, onlyStandardIndexes)
 //   for iter.next() {
 //     doSomething(iter.indexOrdinal)
 //   }
@@ -2498,63 +2515,54 @@ type scanIndexIter struct {
 	tab          cat.Table
 	indexOrdinal cat.IndexOrdinal
 	index        cat.Index
+	indexType    indexIterType
 	cols         opt.ColSet
 }
 
-func (it *scanIndexIter) init(mem *memo.Memo, scanPrivate *memo.ScanPrivate) {
+func (it *scanIndexIter) init(mem *memo.Memo, scanPrivate *memo.ScanPrivate, t indexIterType) {
 	it.mem = mem
 	it.scanPrivate = scanPrivate
 	it.tab = mem.Metadata().Table(scanPrivate.Table)
 	it.indexOrdinal = -1
 	it.index = nil
+	it.indexType = t
 }
 
 // next advances iteration to the next index of the Scan operator's table. This
 // is the primary index if it's the first time next is called, or a secondary
-// index thereafter. Inverted index are skipped. If the ForceIndex flag is set,
-// then all indexes except the forced index are skipped. When there are no more
-// indexes to enumerate, next returns false. The current index is accessible via
-// the iterator's "index" field.
+// index thereafter. When there are no more indexes to enumerate, next returns
+// false. The current index is accessible via the iterator's "index" field.
+//
+// The indexType determines which indexes to skip when iterating, if any.
+//
+// If the ForceIndex flag is set, then all indexes except the forced index are
+// skipped.
 func (it *scanIndexIter) next() bool {
 	for {
 		it.indexOrdinal++
-		if it.indexOrdinal >= it.tab.IndexCount() {
-			it.index = nil
-			return false
-		}
-		it.index = it.tab.Index(it.indexOrdinal)
-		if it.index.IsInverted() {
-			continue
-		}
-		if it.scanPrivate.Flags.ForceIndex && it.scanPrivate.Flags.Index != it.indexOrdinal {
-			// If we are forcing a specific index, ignore the others.
-			continue
-		}
-		it.cols = opt.ColSet{}
-		return true
-	}
-}
 
-// nextInverted advances iteration to the next inverted index of the Scan
-// operator's table. It returns false when there are no more inverted indexes to
-// enumerate (or if there were none to begin with). The current index is
-// accessible via the iterator's "index" field.
-func (it *scanIndexIter) nextInverted() bool {
-	for {
-		it.indexOrdinal++
 		if it.indexOrdinal >= it.tab.IndexCount() {
 			it.index = nil
 			return false
 		}
 
 		it.index = it.tab.Index(it.indexOrdinal)
-		if !it.index.IsInverted() {
+
+		// Skip over inverted indexes if indexType is onlyStandardIndexes.
+		if it.indexType == onlyStandardIndexes && it.index.IsInverted() {
 			continue
 		}
+
+		// Skip over standard indexes if indexType is onlyInvertedIndexes.
+		if it.indexType == onlyInvertedIndexes && !it.index.IsInverted() {
+			continue
+		}
+
 		if it.scanPrivate.Flags.ForceIndex && it.scanPrivate.Flags.Index != it.indexOrdinal {
 			// If we are forcing a specific index, ignore the others.
 			continue
 		}
+
 		it.cols = opt.ColSet{}
 		return true
 	}
