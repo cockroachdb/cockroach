@@ -267,31 +267,27 @@ render               ·            ·            (y, z, x)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (max(y)) max(x) FROM xyz
 ----
-·               distributed  false        ·       ·
-·               vectorized   true         ·       ·
-group           ·            ·            (max)   ·
- │              aggregate 0  max(x)       ·       ·
- │              scalar       ·            ·       ·
- └── render     ·            ·            (x)     ·
-      │         render 0     x            ·       ·
-      └── scan  ·            ·            (x, y)  ·
-·               table        xyz@primary  ·       ·
-·               spans        FULL SCAN    ·       ·
+·          distributed  false        ·      ·
+·          vectorized   true         ·      ·
+group      ·            ·            (max)  ·
+ │         aggregate 0  max(x)       ·      ·
+ │         scalar       ·            ·      ·
+ └── scan  ·            ·            (x)    ·
+·          table        xyz@primary  ·      ·
+·          spans        FULL SCAN    ·      ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(a), max(b), min(c)) max(a) FROM abc
 ----
-·                  distributed  false            ·          ·
-·                  vectorized   true             ·          ·
-group              ·            ·                (max)      ·
- │                 aggregate 0  any_not_null(a)  ·          ·
- │                 scalar       ·                ·          ·
- └── render        ·            ·                (a)        ·
-      │            render 0     a                ·          ·
-      └── revscan  ·            ·                (a, b, c)  ·
-·                  table        abc@primary      ·          ·
-·                  spans        LIMITED SCAN     ·          ·
-·                  limit        1                ·          ·
+·             distributed  false            ·      ·
+·             vectorized   true             ·      ·
+group         ·            ·                (max)  ·
+ │            aggregate 0  any_not_null(a)  ·      ·
+ │            scalar       ·                ·      ·
+ └── revscan  ·            ·                (a)    ·
+·             table        abc@primary      ·      ·
+·             spans        LIMITED SCAN     ·      ·
+·             limit        1                ·      ·
 
 #################
 # With GROUP BY #
