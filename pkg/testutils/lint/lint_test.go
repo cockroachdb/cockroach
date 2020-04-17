@@ -920,7 +920,7 @@ func TestLint(t *testing.T) {
 			":!*.pb.gw.go",
 			":!sql/pgwire/pgerror/severity.go",
 			":!sql/pgwire/pgerror/with_candidate_code.go",
-			":!sql/colbase/vecerror/error.go",
+			":!sql/colexecbase/colexecerror/error.go",
 			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
@@ -1421,10 +1421,9 @@ func TestLint(t *testing.T) {
 			// NOTE: if you're adding a new package to the list here because it
 			// uses "panic-catch" error propagation mechanism of the vectorized
 			// engine, don't forget to "register" the newly added package in
-			// sql/colbase/vecerror/error.go file.
+			// sql/colexecbase/colexecerror/error.go file.
 			"sql/col*",
-			":!sql/colbase/typeconv/typeconv.go",
-			":!sql/colbase/vecerror/error.go",
+			":!sql/colexecbase/colexecerror/error.go",
 			":!sql/colexec/execpb/stats.pb.go",
 			":!sql/colflow/vectorized_panic_propagation_test.go",
 		)
@@ -1437,7 +1436,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use either vecerror.InternalError() or vecerror.ExpectedError() instead", s)
+			t.Errorf("\n%s <- forbidden; use either colexecerror.InternalError() or colexecerror.ExpectedError() instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -1464,6 +1463,8 @@ func TestLint(t *testing.T) {
 			// TODO(yuzefovich): prohibit call to coldata.NewMemBatchNoCols.
 			fmt.Sprintf(`(coldata\.NewMem(Batch|BatchWithSize|Column)|\.AppendCol)\(`),
 			"--",
+			// TODO(yuzefovich): prohibit calling coldata.* methods from other
+			// sql/col* packages.
 			"sql/colexec",
 			"sql/colflow",
 			":!sql/colexec/simple_project.go",
@@ -1477,7 +1478,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use colbase.Allocator object instead", s)
+			t.Errorf("\n%s <- forbidden; use colmem.Allocator object instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -1500,8 +1501,9 @@ func TestLint(t *testing.T) {
 			// vectorTypeEnforcer and batchSchemaPrefixEnforcer.
 			fmt.Sprintf(`(MaybeAppendColumn)\(`),
 			"--",
-			"sql/colexec",
+			"sql/col*",
 			":!sql/colexec/operator.go",
+			":!sql/colmem/allocator.go",
 		)
 		if err != nil {
 			t.Fatal(err)

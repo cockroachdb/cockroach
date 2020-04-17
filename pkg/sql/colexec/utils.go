@@ -17,10 +17,11 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -85,7 +86,7 @@ func makeWindowIntoBatch(
 }
 
 func newPartitionerToOperator(
-	allocator *colbase.Allocator,
+	allocator *colmem.Allocator,
 	types []types.T,
 	partitioner colcontainer.PartitionedQueue,
 	partitionIdx int,
@@ -101,7 +102,7 @@ func newPartitionerToOperator(
 // partition on every call to Next. It is a converter from filled in
 // PartitionedQueue to Operator.
 type partitionerToOperator struct {
-	colbase.ZeroInputNode
+	colexecbase.ZeroInputNode
 	NonExplainable
 
 	partitioner  colcontainer.PartitionedQueue
@@ -109,19 +110,19 @@ type partitionerToOperator struct {
 	batch        coldata.Batch
 }
 
-var _ colbase.Operator = &partitionerToOperator{}
+var _ colexecbase.Operator = &partitionerToOperator{}
 
 func (p *partitionerToOperator) Init() {}
 
 func (p *partitionerToOperator) Next(ctx context.Context) coldata.Batch {
 	if err := p.partitioner.Dequeue(ctx, p.partitionIdx, p.batch); err != nil {
-		vecerror.InternalError(err)
+		colexecerror.InternalError(err)
 	}
 	return p.batch
 }
 
 func newAppendOnlyBufferedBatch(
-	allocator *colbase.Allocator, typs []types.T, initialSize int,
+	allocator *colmem.Allocator, typs []types.T, initialSize int,
 ) *appendOnlyBufferedBatch {
 	batch := allocator.NewMemBatchWithSize(typs, initialSize)
 	return &appendOnlyBufferedBatch{
@@ -169,11 +170,11 @@ func (b *appendOnlyBufferedBatch) ColVecs() []coldata.Vec {
 }
 
 func (b *appendOnlyBufferedBatch) AppendCol(coldata.Vec) {
-	vecerror.InternalError("AppendCol is prohibited on appendOnlyBufferedBatch")
+	colexecerror.InternalError("AppendCol is prohibited on appendOnlyBufferedBatch")
 }
 
 func (b *appendOnlyBufferedBatch) ReplaceCol(coldata.Vec, int) {
-	vecerror.InternalError("ReplaceCol is prohibited on appendOnlyBufferedBatch")
+	colexecerror.InternalError("ReplaceCol is prohibited on appendOnlyBufferedBatch")
 }
 
 // append is a helper method that appends all tuples with indices in range
@@ -243,7 +244,7 @@ func getDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
 				return int64(*d), nil
 			}
 		}
-		vecerror.InternalError(fmt.Sprintf("unhandled INT width %d", ct.Width()))
+		colexecerror.InternalError(fmt.Sprintf("unhandled INT width %d", ct.Width()))
 	case types.DateFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DDate)

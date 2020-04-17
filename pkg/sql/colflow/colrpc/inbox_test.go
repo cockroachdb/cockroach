@@ -22,9 +22,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -66,7 +67,7 @@ func TestInboxCancellation(t *testing.T) {
 		// Cancel the context.
 		cancelFn()
 		// Next should not block if the context is canceled.
-		err = vecerror.CatchVectorizedRuntimeError(func() { inbox.Next(ctx) })
+		err = colexecerror.CatchVectorizedRuntimeError(func() { inbox.Next(ctx) })
 		require.True(t, testutils.IsError(err, "context canceled"), err)
 		// Now, the remote stream arrives.
 		err = inbox.RunWithStream(context.Background(), mockFlowStreamServer{})
@@ -159,7 +160,7 @@ func TestInboxTimeout(t *testing.T) {
 		rpcLayer    = makeMockFlowStreamRPCLayer()
 	)
 	go func() {
-		readerErrCh <- vecerror.CatchVectorizedRuntimeError(func() { inbox.Next(ctx) })
+		readerErrCh <- colexecerror.CatchVectorizedRuntimeError(func() { inbox.Next(ctx) })
 	}()
 
 	// Timeout the inbox.
@@ -200,7 +201,7 @@ func TestInboxShutdown(t *testing.T) {
 		nextSleep          = time.Millisecond * time.Duration(rng.Intn(10))
 		runWithStreamSleep = time.Millisecond * time.Duration(rng.Intn(10))
 		typs               = []types.T{*types.Int}
-		batch              = colbase.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64())
+		batch              = coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64())
 	)
 
 	for _, runDrainMetaGoroutine := range []bool{false, true} {
@@ -223,7 +224,7 @@ func TestInboxShutdown(t *testing.T) {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(inboxCtx)
 					inbox, err := NewInbox(
-						colbase.NewAllocator(inboxCtx, &inboxMemAccount),
+						colmem.NewAllocator(inboxCtx, &inboxMemAccount),
 						typs, execinfrapb.StreamID(0),
 					)
 					require.NoError(t, err)
@@ -338,7 +339,7 @@ func TestInboxShutdown(t *testing.T) {
 										err  error
 									)
 									for !done && err == nil {
-										err = vecerror.CatchVectorizedRuntimeError(func() { b := inbox.Next(inboxCtx); done = b.Length() == 0 })
+										err = colexecerror.CatchVectorizedRuntimeError(func() { b := inbox.Next(inboxCtx); done = b.Length() == 0 })
 									}
 									errCh <- err
 								}()

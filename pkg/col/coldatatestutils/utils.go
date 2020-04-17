@@ -8,30 +8,29 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colbase
+package coldatatestutils
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // CopyBatch copies the original batch and returns that copy. However, note that
 // the underlying capacity might be different (a new batch is created only with
 // capacity original.Length()).
-func CopyBatch(allocator *Allocator, original coldata.Batch, typs []types.T) coldata.Batch {
-	b := allocator.NewMemBatchWithSize(typs, original.Length())
+// NOTE: memory accounting is not performed.
+func CopyBatch(original coldata.Batch, typs []types.T) coldata.Batch {
+	b := coldata.NewMemBatchWithSize(typs, original.Length())
 	b.SetLength(original.Length())
-	allocator.PerformOperation(b.ColVecs(), func() {
-		for colIdx, col := range original.ColVecs() {
-			b.ColVec(colIdx).Copy(coldata.CopySliceArgs{
-				SliceArgs: coldata.SliceArgs{
-					ColType:   typeconv.FromColumnType(&typs[colIdx]),
-					Src:       col,
-					SrcEndIdx: original.Length(),
-				},
-			})
-		}
-	})
+	for colIdx, col := range original.ColVecs() {
+		b.ColVec(colIdx).Copy(coldata.CopySliceArgs{
+			SliceArgs: coldata.SliceArgs{
+				ColType:   typeconv.FromColumnType(&typs[colIdx]),
+				Src:       col,
+				SrcEndIdx: original.Length(),
+			},
+		})
+	}
 	return b
 }
