@@ -1026,22 +1026,25 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(28)
- ├── inner-join (lookup stock)
- │    ├── columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null ol_i_id:5!null s_i_id:11!null s_w_id:12!null s_quantity:13!null
- │    ├── key columns: [3 5] = [12 11]
- │    ├── lookup columns are key
- │    ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
- │    ├── scan order_line
- │    │    ├── columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null ol_i_id:5!null
- │    │    ├── constraint: /3/2/-1/4: [/10/100/999 - /10/100/980]
- │    │    └── fd: ()-->(2,3)
- │    └── filters
- │         ├── s_w_id:12 = 10 [outer=(12), constraints=(/12: [/10 - /10]; tight), fd=()-->(12)]
- │         └── s_quantity:13 < 15 [outer=(13), constraints=(/13: (/NULL - /14]; tight)]
+ ├── distinct-on
+ │    ├── columns: s_i_id:11!null
+ │    ├── grouping columns: s_i_id:11!null
+ │    ├── key: (11)
+ │    └── inner-join (lookup stock)
+ │         ├── columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null ol_i_id:5!null s_i_id:11!null s_w_id:12!null s_quantity:13!null
+ │         ├── key columns: [3 5] = [12 11]
+ │         ├── lookup columns are key
+ │         ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
+ │         ├── scan order_line
+ │         │    ├── columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null ol_i_id:5!null
+ │         │    ├── constraint: /3/2/-1/4: [/10/100/999 - /10/100/980]
+ │         │    └── fd: ()-->(2,3)
+ │         └── filters
+ │              ├── s_w_id:12 = 10 [outer=(12), constraints=(/12: [/10 - /10]; tight), fd=()-->(12)]
+ │              └── s_quantity:13 < 15 [outer=(13), constraints=(/13: (/NULL - /14]; tight)]
  └── aggregations
-      └── agg-distinct [as=count:28, outer=(11)]
-           └── count
-                └── s_i_id:11
+      └── count [as=count:28, outer=(11)]
+           └── s_i_id:11
 
 # --------------------------------------------------
 # Consistency Queries

@@ -211,21 +211,23 @@ group      ·            ·                  (count, count, sum, sum, min, min) 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT count(DISTINCT a.*) FROM kv a, kv b
 ----
-·                     distributed  false                         ·             ·
-·                     vectorized   false                         ·             ·
-group                 ·            ·                             (count)       ·
- │                    aggregate 0  count(DISTINCT column9)       ·             ·
- │                    scalar       ·                             ·             ·
- └── render           ·            ·                             (column9)     ·
-      │               render 0     ((k, v, w, s) AS k, v, w, s)  ·             ·
-      └── cross-join  ·            ·                             (k, v, w, s)  ·
-           │          type         cross                         ·             ·
-           ├── scan   ·            ·                             (k, v, w, s)  ·
-           │          table        kv@primary                    ·             ·
-           │          spans        FULL SCAN                     ·             ·
-           └── scan   ·            ·                             ()            ·
-·                     table        kv@primary                    ·             ·
-·                     spans        FULL SCAN                     ·             ·
+·                          distributed  false                         ·             ·
+·                          vectorized   false                         ·             ·
+group                      ·            ·                             (count)       ·
+ │                         aggregate 0  count(column9)                ·             ·
+ │                         scalar       ·                             ·             ·
+ └── distinct              ·            ·                             (column9)     ·
+      │                    distinct on  column9                       ·             ·
+      └── render           ·            ·                             (column9)     ·
+           │               render 0     ((k, v, w, s) AS k, v, w, s)  ·             ·
+           └── cross-join  ·            ·                             (k, v, w, s)  ·
+                │          type         cross                         ·             ·
+                ├── scan   ·            ·                             (k, v, w, s)  ·
+                │          table        kv@primary                    ·             ·
+                │          spans        FULL SCAN                     ·             ·
+                └── scan   ·            ·                             ()            ·
+·                          table        kv@primary                    ·             ·
+·                          spans        FULL SCAN                     ·             ·
 
 query TTT
 SELECT tree, field, description FROM [
