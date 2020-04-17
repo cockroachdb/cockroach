@@ -9,6 +9,10 @@
 // licenses/APL.txt.
 
 import React from "react";
+import classNames from "classnames/bind";
+import styles from "./highlightedText.module.styl";
+
+const cx = classNames.bind(styles);
 
 export default function getHighlightedText(text: string, highlight: string, isOriginalText?: boolean) {
   if (!highlight || highlight.length === 0) {
@@ -25,7 +29,7 @@ export default function getHighlightedText(text: string, highlight: string, isOr
   return parts.map((part, i) => {
     if (search.includes(part.toLowerCase())) {
       return (
-        <span key={i} className="_text-bold">
+        <span key={i} className={cx("_text-bold")}>
           {`${part}`}
         </span>
       );
