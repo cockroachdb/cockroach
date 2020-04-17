@@ -11,7 +11,11 @@
 import React from "react";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
-import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
+import {
+  Metric,
+  Axis,
+  AxisUnits,
+} from "src/views/shared/components/metricQuery";
 
 import { GraphDashboardProps } from "./dashboardUtils";
 
@@ -21,33 +25,62 @@ export default function (props: GraphDashboardProps) {
   return [
     <LineGraph title="Max Changefeed Latency" sources={storeSources}>
       <Axis units={AxisUnits.Duration} label="time">
-        <Metric name="cr.node.changefeed.max_behind_nanos" title="Max Changefeed Latency" downsampleMax aggregateMax />
+        <Metric
+          name="cr.node.changefeed.max_behind_nanos"
+          title="Max Changefeed Latency"
+          downsampleMax
+          aggregateMax
+        />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="Sink Byte Traffic" sources={storeSources}>
       <Axis units={AxisUnits.Bytes} label="bytes">
-        <Metric name="cr.node.changefeed.emitted_bytes" title="Emitted Bytes" nonNegativeRate />
+        <Metric
+          name="cr.node.changefeed.emitted_bytes"
+          title="Emitted Bytes"
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="Sink Counts" sources={storeSources}>
       <Axis units={AxisUnits.Count} label="actions">
-        <Metric name="cr.node.changefeed.emitted_messages" title="Messages" nonNegativeRate />
-        <Metric name="cr.node.changefeed.flushes" title="Flushes" nonNegativeRate />
+        <Metric
+          name="cr.node.changefeed.emitted_messages"
+          title="Messages"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.changefeed.flushes"
+          title="Flushes"
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="Sink Timings" sources={storeSources}>
       <Axis units={AxisUnits.Duration} label="time">
-        <Metric name="cr.node.changefeed.emit_nanos" title="Message Emit Time" nonNegativeRate />
-        <Metric name="cr.node.changefeed.flush_nanos" title="Flush Time" nonNegativeRate />
+        <Metric
+          name="cr.node.changefeed.emit_nanos"
+          title="Message Emit Time"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.changefeed.flush_nanos"
+          title="Flush Time"
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="Changefeed Restarts" sources={storeSources}>
       <Axis units={AxisUnits.Count} label="actions">
-        <Metric name="cr.node.changefeed.error_retries" title="Retryable Errors" nonNegativeRate />
+        <Metric
+          name="cr.node.changefeed.error_retries"
+          title="Retryable Errors"
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
   ];

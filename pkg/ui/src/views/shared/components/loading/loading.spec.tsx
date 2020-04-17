@@ -19,7 +19,11 @@ import { ReactWrapper, mount } from "enzyme";
 const LOADING_CLASS_NAME = "loading-class-name";
 const RENDER_CLASS_NAME = "render-class-name";
 const ERROR_CLASS_NAME = "loading-error";
-const ALL_CLASS_NAMES = [LOADING_CLASS_NAME, ERROR_CLASS_NAME, RENDER_CLASS_NAME];
+const ALL_CLASS_NAMES = [
+  LOADING_CLASS_NAME,
+  ERROR_CLASS_NAME,
+  RENDER_CLASS_NAME,
+];
 
 interface MakeLoadingProps {
   loading: boolean;
@@ -32,22 +36,27 @@ interface AssertExpectedProps {
   errorCount?: number;
 }
 
-const makeLoadingComponent = (props: MakeLoadingProps) => mount(
-  <Loading
-    loading={props.loading}
-    error={props.error}
-    className={LOADING_CLASS_NAME}
-    render={() => (<div className={props.renderClassName || RENDER_CLASS_NAME}>Hello, world!</div>)}
-  />,
-);
+const makeLoadingComponent = (props: MakeLoadingProps) =>
+  mount(
+    <Loading
+      loading={props.loading}
+      error={props.error}
+      className={LOADING_CLASS_NAME}
+      render={() => (
+        <div className={props.renderClassName || RENDER_CLASS_NAME}>
+          Hello, world!
+        </div>
+      )}
+    />,
+  );
 
 describe("<Loading>", () => {
-
   describe("when error is null", () => {
     describe("when loading=false", () => {
       it("renders content.", () => {
         const wrapper = makeLoadingComponent({
-          loading: false, error: null,
+          loading: false,
+          error: null,
           renderClassName: "my-rendered-content",
         });
         assertExpectedState(wrapper, {
@@ -59,7 +68,8 @@ describe("<Loading>", () => {
     describe("when loading=true", () => {
       it("renders loading spinner.", () => {
         const wrapper = makeLoadingComponent({
-          loading: true, error: null,
+          loading: true,
+          error: null,
         });
         assertExpectedState(wrapper, {
           onlyVisibleClass: LOADING_CLASS_NAME,
@@ -101,11 +111,7 @@ describe("<Loading>", () => {
       it("renders all errors in list", () => {
         const wrapper = makeLoadingComponent({
           loading: false,
-          error: [
-            Error("error1"),
-            Error("error2"),
-            Error("error3"),
-          ],
+          error: [Error("error1"), Error("error2"), Error("error3")],
         });
         assertExpectedState(wrapper, {
           onlyVisibleClass: ERROR_CLASS_NAME,
@@ -138,11 +144,7 @@ describe("<Loading>", () => {
       it("renders content, since there are no errors.", () => {
         const wrapper = makeLoadingComponent({
           loading: false,
-          error: [
-            null,
-            null,
-            null,
-          ],
+          error: [null, null, null],
           renderClassName: "no-errors-so-should-render-me",
         });
         assertExpectedState(wrapper, {
@@ -164,8 +166,11 @@ function assertExpectedState(
     const element = "div." + className;
     assert.lengthOf(
       wrapper.find(element),
-      expectedLength, "expected " + element +
-      (expectedVisibility ? " to be visible" : " to not be rendered"));
+      expectedLength,
+      "expected " +
+        element +
+        (expectedVisibility ? " to be visible" : " to not be rendered"),
+    );
   });
 
   if (props.errorCount) {

@@ -19,12 +19,7 @@ interface AnchorProps {
 export function Anchor(props: React.PropsWithChildren<AnchorProps>) {
   const { href, target, children, onClick } = props;
   return (
-    <a
-      className="crl-anchor"
-      href={href}
-      target={target}
-      onClick={onClick}
-    >
+    <a className="crl-anchor" href={href} target={target} onClick={onClick}>
       {children}
     </a>
   );

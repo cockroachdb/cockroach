@@ -11,7 +11,12 @@
 import { assert } from "chai";
 
 import { cockroach } from "src/js/protos";
-import { FlatPlanNode, FlatPlanNodeAttribute, flattenTree, flattenAttributes } from "src/views/statements/planView";
+import {
+  FlatPlanNode,
+  FlatPlanNodeAttribute,
+  flattenTree,
+  flattenAttributes,
+} from "src/views/statements/planView";
 import IAttr = cockroach.sql.ExplainTreePlanNode.IAttr;
 import IExplainTreePlanNode = cockroach.sql.IExplainTreePlanNode;
 
@@ -303,10 +308,7 @@ describe("flattenAttributes", () => {
         },
       ];
 
-      assert.deepEqual(
-        flattenAttributes(testAttrs),
-        expectedTestAttrs,
-      );
+      assert.deepEqual(flattenAttributes(testAttrs), expectedTestAttrs);
     });
   });
   describe("when there are multiple attributes with same key", () => {
@@ -338,10 +340,7 @@ describe("flattenAttributes", () => {
         },
       ];
 
-      assert.deepEqual(
-        flattenAttributes(testAttrs),
-        expectedTestAttrs,
-      );
+      assert.deepEqual(flattenAttributes(testAttrs), expectedTestAttrs);
     });
   });
   describe("when attribute key/value is `spans ALL`", () => {
@@ -369,10 +368,7 @@ describe("flattenAttributes", () => {
         },
       ];
 
-      assert.deepEqual(
-        flattenAttributes(testAttrs),
-        expectedTestAttrs,
-      );
+      assert.deepEqual(flattenAttributes(testAttrs), expectedTestAttrs);
     });
   });
   describe("when keys are unsorted", () => {
@@ -413,10 +409,7 @@ describe("flattenAttributes", () => {
         },
       ];
 
-      assert.deepEqual(
-        flattenAttributes(testAttrs),
-        expectedTestAttrs,
-      );
+      assert.deepEqual(flattenAttributes(testAttrs), expectedTestAttrs);
     });
   });
 });

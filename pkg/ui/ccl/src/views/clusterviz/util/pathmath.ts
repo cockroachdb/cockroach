@@ -13,9 +13,14 @@ import * as vector from "src/util/vector";
 // createArcPath returns an svg arc object. startAngle and endAngle are
 // expressed in radians.
 export function createArcPath(
-  innerR: number, outerR: number, startAngle: number, endAngle: number, cornerRadius: number,
+  innerR: number,
+  outerR: number,
+  startAngle: number,
+  endAngle: number,
+  cornerRadius: number,
 ) {
-  return d3.svg.arc()
+  return d3.svg
+    .arc()
     .innerRadius(innerR)
     .outerRadius(outerR)
     .cornerRadius(cornerRadius)
@@ -24,7 +29,7 @@ export function createArcPath(
 }
 
 export function arcAngleFromPct(pct: number) {
-  return Math.PI * (pct * 1.25 - .625);
+  return Math.PI * (pct * 1.25 - 0.625);
 }
 
 export function angleFromPct(pct: number) {
@@ -36,7 +41,11 @@ export function angleFromPct(pct: number) {
 // Returns an empty vector if the closest point is either start or end
 // point or located before or after the line segment defined by [s,
 // e].
-export function findClosestPoint(s: [number, number], e: [number, number], p: [number, number]): [number, number] {
+export function findClosestPoint(
+  s: [number, number],
+  e: [number, number],
+  p: [number, number],
+): [number, number] {
   // u = e - s
   // v = s+tu - p
   // d = length(v)
@@ -52,7 +61,7 @@ export function findClosestPoint(s: [number, number], e: [number, number], p: [n
   const d = vector.sub(s, p);
   const t = -(d[0] * u[0] + d[1] * u[1]) / (u[0] * u[0] + u[1] * u[1]);
   if (t <= 0 || t >= 1) {
-      return [0, 0];
+    return [0, 0];
   }
   return vector.add(s, vector.mult(u, t));
 }

@@ -15,7 +15,7 @@ import _ from "lodash";
 
 import "./dropdown.styl";
 
-import {leftArrow, rightArrow} from "src/views/shared/components/icons";
+import { leftArrow, rightArrow } from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
 import ReactSelectClass from "react-select";
 import { Icon } from "antd";
@@ -26,7 +26,9 @@ export interface DropdownOption {
 }
 
 export enum ArrowDirection {
-  LEFT, RIGHT, CENTER,
+  LEFT,
+  RIGHT,
+  CENTER,
 }
 
 interface DropdownOwnProps {
@@ -57,7 +59,11 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
     const titleNode = this.titleRef.current as Node;
     const selectNode = this.selectRef.current;
 
-    if (e.target.isSameNode(dropdownNode) || e.target.isSameNode(titleNode) || e.target.className.indexOf("dropdown__select") > -1) {
+    if (
+      e.target.isSameNode(dropdownNode) ||
+      e.target.isSameNode(titleNode) ||
+      e.target.className.indexOf("dropdown__select") > -1
+    ) {
       // This is a far-less-than-ideal solution to the need to trigger
       // the react-select dropdown from the entirety of the dropdown area
       // instead of just the nodes rendered by the component itself
@@ -69,12 +75,24 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
       // https://github.com/JedWatson/react-select/issues/1989
       (selectNode as any).handleMouseDownOnMenu(e);
     }
-  }
+  };
 
-  arrowRenderer = () => <span className="active"><Icon type="caret-up" /></span>;
+  arrowRenderer = () => (
+    <span className="active">
+      <Icon type="caret-up" />
+    </span>
+  );
 
   render() {
-    const { selected, options, onChange, onArrowClick, disabledArrows, content, isTimeRange } = this.props;
+    const {
+      selected,
+      options,
+      onChange,
+      onArrowClick,
+      disabledArrows,
+      content,
+      isTimeRange,
+    } = this.props;
 
     const className = classNames(
       "dropdown",
@@ -82,42 +100,58 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
       { "dropdown--side-arrows": !_.isNil(onArrowClick) },
       this.props.className,
     );
-    const leftClassName = classNames(
-      "dropdown__side-arrow",
-      { "dropdown__side-arrow--disabled": _.includes(disabledArrows, ArrowDirection.LEFT) },
-    );
-    const rightClassName = classNames(
-      "dropdown__side-arrow",
-      { "dropdown__side-arrow--disabled": _.includes(disabledArrows, ArrowDirection.RIGHT) },
-    );
+    const leftClassName = classNames("dropdown__side-arrow", {
+      "dropdown__side-arrow--disabled": _.includes(
+        disabledArrows,
+        ArrowDirection.LEFT,
+      ),
+    });
+    const rightClassName = classNames("dropdown__side-arrow", {
+      "dropdown__side-arrow--disabled": _.includes(
+        disabledArrows,
+        ArrowDirection.RIGHT,
+      ),
+    });
 
-    return <div className={className} onClick={this.triggerSelectClick} ref={this.dropdownRef}>
-      {/* TODO (maxlang): consider moving arrows outside the dropdown component */}
-      <span
-        className={leftClassName}
-        dangerouslySetInnerHTML={trustIcon(leftArrow)}
-        onClick={() => this.props.onArrowClick(ArrowDirection.LEFT)}>
-      </span>
-      <span
-        className={isTimeRange ? "dropdown__range-title" : "dropdown__title"}
-        ref={this.titleRef}>
-          {this.props.title}{this.props.title && !isTimeRange ? ":" : ""}
-      </span>
-      {content ? content : <Select
-        className="dropdown__select"
-        arrowRenderer={this.arrowRenderer}
-        clearable={false}
-        searchable={false}
-        options={options}
-        value={selected}
-        onChange={onChange}
-        ref={this.selectRef}
-      />}
-      <span
-        className={rightClassName}
-        dangerouslySetInnerHTML={trustIcon(rightArrow)}
-        onClick={() => this.props.onArrowClick(ArrowDirection.RIGHT)}>
-      </span>
-    </div>;
+    return (
+      <div
+        className={className}
+        onClick={this.triggerSelectClick}
+        ref={this.dropdownRef}
+      >
+        {/* TODO (maxlang): consider moving arrows outside the dropdown component */}
+        <span
+          className={leftClassName}
+          dangerouslySetInnerHTML={trustIcon(leftArrow)}
+          onClick={() => this.props.onArrowClick(ArrowDirection.LEFT)}
+        ></span>
+        <span
+          className={isTimeRange ? "dropdown__range-title" : "dropdown__title"}
+          ref={this.titleRef}
+        >
+          {this.props.title}
+          {this.props.title && !isTimeRange ? ":" : ""}
+        </span>
+        {content ? (
+          content
+        ) : (
+          <Select
+            className="dropdown__select"
+            arrowRenderer={this.arrowRenderer}
+            clearable={false}
+            searchable={false}
+            options={options}
+            value={selected}
+            onChange={onChange}
+            ref={this.selectRef}
+          />
+        )}
+        <span
+          className={rightClassName}
+          dangerouslySetInnerHTML={trustIcon(rightArrow)}
+          onClick={() => this.props.onArrowClick(ArrowDirection.RIGHT)}
+        ></span>
+      </div>
+    );
   }
 }

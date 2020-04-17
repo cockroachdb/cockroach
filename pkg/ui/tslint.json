@@ -1,9 +1,7 @@
 {
   "rules": {
     "align": [
-      true,
-      "parameters",
-      "arguments",
+      false,
       "statements"
     ],
     "ban": false,
@@ -48,19 +46,12 @@
     "no-parameter-properties": false,
     "no-debugger": true,
     "no-duplicate-variable": true,
-    "no-shadowed-variable": true,
+    "no-shadowed-variable": false,
     "no-empty": false,
     "no-eval": true,
     "no-require-imports": false,
     "no-string-literal": true,
     "no-switch-case-fall-through": true,
-    "trailing-comma": [
-      true,
-      {
-        "multiline": "always",
-        "singleline": "never"
-      }
-    ],
     "no-trailing-whitespace": true,
     "no-unused-expression": true,
     "no-use-before-declare": false,
@@ -79,12 +70,8 @@
         "destructuring": "all"
       }
     ],
-    "quotemark": [
-      true,
-      "double"
-    ],
     "radix": true,
-    "semicolon": true,
+    "semicolon": false,
     "switch-default": true,
     "triple-equals": [
       true,
@@ -121,12 +108,6 @@
     ]
   },
   "jsRules": {
-    "align": {
-      "options": [
-        "parameters",
-        "statements"
-      ]
-    },
     "class-name": true,
     "curly": true,
     "eofline": true,
@@ -157,7 +138,6 @@
     "no-empty": true,
     "no-eval": true,
     "no-reference": true,
-    "no-shadowed-variable": true,
     "no-string-literal": true,
     "no-string-throw": true,
     "no-switch-case-fall-through": false,
@@ -179,12 +159,6 @@
         "ignore-for-loop"
       ]
     },
-    "quotemark": {
-      "options": [
-        "double",
-        "avoid-escape"
-      ]
-    },
     "radix": true,
     "semicolon": {
       "options": [
@@ -198,12 +172,6 @@
         "constructor": "never",
         "method": "never",
         "named": "never"
-      }
-    },
-    "trailing-comma": {
-      "options": {
-        "multiline": "always",
-        "singleline": "never"
       }
     },
     "triple-equals": {

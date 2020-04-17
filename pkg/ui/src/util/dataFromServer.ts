@@ -27,5 +27,5 @@ declare global {
 }
 
 export function getDataFromServer(): DataFromServer {
-  return window.dataFromServer || {} as DataFromServer;
+  return window.dataFromServer || ({} as DataFromServer);
 }

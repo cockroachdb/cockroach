@@ -41,6 +41,7 @@
     "@babel/core": "^7.7.7",
     "@babel/preset-env": "^7.7.7",
     "@babel/preset-react": "^7.7.4",
+    "@cockroachlabs/eslint-config": "^0.1.2",
     "@types/analytics-node": "^0.0.32",
     "@types/assert": "^1.4.0",
     "@types/bytebuffer": "^5.0.33",
@@ -71,6 +72,8 @@
     "@types/redux-saga": "^0.10.5",
     "@types/redux-thunk": "^2.1.0",
     "@types/sinon": "^7.5.1",
+    "@typescript-eslint/eslint-plugin": "^2.28.0",
+    "@typescript-eslint/parser": "^2.28.0",
     "babel-loader": "^8.0.6",
     "babel-plugin-import": "^1.12.2",
     "bytebuffer": "^5.0.1",
@@ -82,12 +85,18 @@
     "d3-geo-projection": "^2.5.0",
     "enzyme": "^3.3.0",
     "enzyme-adapter-react-16": "^1.15.2",
+    "eslint": "^6.8.0",
+    "eslint-config-prettier": "^6.10.1",
+    "eslint-plugin-prettier": "^3.1.3",
+    "eslint-plugin-react": "^7.19.0",
+    "eslint-plugin-react-hooks": "^3.0.0",
     "express": "^4.15.2",
     "fetch-mock": "^5.9.4",
     "file-loader": "^5.0.2",
     "fork-ts-checker-webpack-plugin": "^1.0.0",
     "html-webpack-template": "^6.0.1",
     "http-proxy-middleware": "^0.19.1",
+    "husky": "^4.2.5",
     "karma": "^4.3.0",
     "karma-chai": "^0.1.0",
     "karma-chrome-launcher": "^2.2.0",
@@ -96,8 +105,10 @@
     "karma-sinon": "^1.0.5",
     "karma-sourcemap-loader": "^0.3.7",
     "karma-webpack": "^2.0.13",
+    "lint-staged": "^10.1.3",
     "mocha": "^6.2.1",
     "nib": "^1.1.2",
+    "prettier": "^2.0.4",
     "prop-types": "^15.5.10",
     "protobufjs": "^6.7.3",
     "redux-saga-test-plan": "^4.0.0-beta.2",
@@ -136,5 +147,22 @@
   },
   "browserslist": [
     "defaults"
-  ]
+  ],
+  "scripts": {
+    "eslint": "eslint '**'",
+    "eslint:fix": "tsc --noEmit && eslint '*/**/*.{ts,tsx}' --quiet --fix --debug",
+    "lint:fix": "prettier --write src/**/*.{ts,tsx}",
+    "lint": "prettier --check src/**/*.{ts,tsx}"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "tsc --noEmit && lint-staged"
+    }
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "eslint"
+    ]
+  }
 }

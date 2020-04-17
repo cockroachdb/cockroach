@@ -15,8 +15,16 @@ import { connect } from "react-redux";
 import { withRouter } from "react-router-dom";
 
 import { refreshLocations, refreshNodes } from "src/redux/apiReducers";
-import { LocalityTier, LocalityTree, selectLocalityTree } from "src/redux/localities";
-import { LocationTree, selectLocationsRequestStatus, selectLocationTree } from "src/redux/locations";
+import {
+  LocalityTier,
+  LocalityTree,
+  selectLocalityTree,
+} from "src/redux/localities";
+import {
+  LocationTree,
+  selectLocationsRequestStatus,
+  selectLocationTree,
+} from "src/redux/locations";
 import { selectNodeRequestStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { getNodeLocalityTiers } from "src/util/localities";
@@ -36,7 +44,9 @@ function renderLocation(locations: LocationTree, tiers: LocalityTier[]) {
     return "";
   }
 
-  return `${formatCoord(location.latitude)}, ${formatCoord(location.longitude)}`;
+  return `${formatCoord(location.latitude)}, ${formatCoord(
+    location.longitude,
+  )}`;
 }
 
 function renderLocalityTree(locations: LocationTree, tree: LocalityTree) {
@@ -51,8 +61,10 @@ function renderLocalityTree(locations: LocationTree, tree: LocalityTree) {
     rows.push(
       <tr>
         <td></td>
-        <td>n{ node.desc.node_id } @ { node.desc.address.address_field }</td>
-        <td className="parent-location">{ renderLocation(locations, tiers) }</td>
+        <td>
+          n{node.desc.node_id} @ {node.desc.address.address_field}
+        </td>
+        <td className="parent-location">{renderLocation(locations, tiers)}</td>
       </tr>,
     );
   });
@@ -63,10 +75,20 @@ function renderLocalityTree(locations: LocationTree, tree: LocalityTree) {
 
       rows.push(
         <tr>
-          <td><span style={leftIndentStyle}>{ key }={ value }</span></td>
+          <td>
+            <span style={leftIndentStyle}>
+              {key}={value}
+            </span>
+          </td>
           <td></td>
-          <td className={hasLocation(locations, { key, value }) ? "own-location" : "parent-location"}>
-            { renderLocation(locations, child.tiers) }
+          <td
+            className={
+              hasLocation(locations, { key, value })
+                ? "own-location"
+                : "parent-location"
+            }
+          >
+            {renderLocation(locations, child.tiers)}
           </td>
         </tr>,
       );
@@ -102,10 +124,17 @@ export class Localities extends React.Component<LocalitiesProps, {}> {
     return (
       <div>
         <Helmet title="Localities | Debug" />
-        <section className="section"><h1 className="base-heading">Localities</h1></section>
+        <section className="section">
+          <h1 className="base-heading">Localities</h1>
+        </section>
         <Loading
-          loading={ !this.props.localityStatus.data || !this.props.locationStatus.data }
-          error={ [this.props.localityStatus.lastError, this.props.locationStatus.lastError] }
+          loading={
+            !this.props.localityStatus.data || !this.props.locationStatus.data
+          }
+          error={[
+            this.props.localityStatus.lastError,
+            this.props.locationStatus.lastError,
+          ]}
           render={() => (
             <section className="section">
               <table className="locality-table">
@@ -117,7 +146,10 @@ export class Localities extends React.Component<LocalitiesProps, {}> {
                   </tr>
                 </thead>
                 <tbody>
-                  { renderLocalityTree(this.props.locationTree, this.props.localityTree) }
+                  {renderLocalityTree(
+                    this.props.locationTree,
+                    this.props.localityTree,
+                  )}
                 </tbody>
               </table>
             </section>
@@ -128,7 +160,8 @@ export class Localities extends React.Component<LocalitiesProps, {}> {
   }
 }
 
-const mapStateToProps = (state: AdminUIState) => ({ // RootState contains declaration for whole state
+const mapStateToProps = (state: AdminUIState) => ({
+  // RootState contains declaration for whole state
   localityTree: selectLocalityTree(state),
   localityStatus: selectNodeRequestStatus(state),
   locationTree: selectLocationTree(state),
@@ -140,4 +173,6 @@ const mapDispatchToProps = {
   refreshNodes,
 };
 
-export default withRouter(connect(mapStateToProps, mapDispatchToProps)(Localities));
+export default withRouter(
+  connect(mapStateToProps, mapDispatchToProps)(Localities),
+);

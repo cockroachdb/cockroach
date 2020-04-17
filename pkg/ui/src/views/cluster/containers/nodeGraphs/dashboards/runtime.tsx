@@ -12,24 +12,39 @@ import React from "react";
 import _ from "lodash";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
-import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
+import {
+  Metric,
+  Axis,
+  AxisUnits,
+} from "src/views/shared/components/metricQuery";
 
-import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
+import {
+  GraphDashboardProps,
+  nodeDisplayName,
+  storeIDsForNode,
+} from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, tooltipSelection } = props;
 
   return [
-    <LineGraph title="Live Node Count" tooltip="The number of live nodes in the cluster.">
+    <LineGraph
+      title="Live Node Count"
+      tooltip="The number of live nodes in the cluster."
+    >
       <Axis label="nodes">
-        <Metric name="cr.node.liveness.livenodes" title="Live Nodes" aggregateMax />
+        <Metric
+          name="cr.node.liveness.livenodes"
+          title="Live Nodes"
+          aggregateMax
+        />
       </Axis>
     </LineGraph>,
 
     <LineGraph
       title="Memory Usage"
       sources={nodeSources}
-      tooltip={(
+      tooltip={
         <div>
           {`Memory in use ${tooltipSelection}:`}
           <dl>
@@ -45,7 +60,7 @@ export default function (props: GraphDashboardProps) {
             <dd>Total memory managed by the C layer</dd>
           </dl>
         </div>
-      )}
+      }
     >
       <Axis units={AxisUnits.Bytes} label="memory usage">
         <Metric name="cr.node.sys.rss" title="Total memory (RSS)" />
@@ -59,10 +74,8 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Goroutine Count"
       sources={nodeSources}
-      tooltip={
-        `The number of Goroutines ${tooltipSelection}.
-           This count should rise and fall based on load.`
-      }
+      tooltip={`The number of Goroutines ${tooltipSelection}.
+           This count should rise and fall based on load.`}
     >
       <Axis label="goroutines">
         <Metric name="cr.node.sys.goroutines" title="Goroutine Count" />
@@ -74,9 +87,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="GC Runs"
       sources={nodeSources}
-      tooltip={
-        `The number of times that Go’s garbage collector was invoked per second ${tooltipSelection}.`
-      }
+      tooltip={`The number of times that Go’s garbage collector was invoked per second ${tooltipSelection}.`}
     >
       <Axis label="runs">
         <Metric name="cr.node.sys.gc.count" title="GC Runs" nonNegativeRate />
@@ -86,28 +97,36 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="GC Pause Time"
       sources={nodeSources}
-      tooltip={
-        `The amount of processor time used by Go’s garbage collector
+      tooltip={`The amount of processor time used by Go’s garbage collector
            per second ${tooltipSelection}.
-           During garbage collection, application code execution is paused.`
-      }
+           During garbage collection, application code execution is paused.`}
     >
       <Axis units={AxisUnits.Duration} label="pause time">
-        <Metric name="cr.node.sys.gc.pause.ns" title="GC Pause Time" nonNegativeRate />
+        <Metric
+          name="cr.node.sys.gc.pause.ns"
+          title="GC Pause Time"
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
     <LineGraph
       title="CPU Time"
       sources={nodeSources}
-      tooltip={
-        `The amount of CPU time used by CockroachDB (User)
-           and system-level operations (Sys) ${tooltipSelection}.`
-      }
+      tooltip={`The amount of CPU time used by CockroachDB (User)
+           and system-level operations (Sys) ${tooltipSelection}.`}
     >
       <Axis units={AxisUnits.Duration} label="cpu time">
-        <Metric name="cr.node.sys.cpu.user.ns" title="User CPU Time" nonNegativeRate />
-        <Metric name="cr.node.sys.cpu.sys.ns" title="Sys CPU Time" nonNegativeRate />
+        <Metric
+          name="cr.node.sys.cpu.user.ns"
+          title="User CPU Time"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.sys.cpu.sys.ns"
+          title="Sys CPU Time"
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -117,16 +136,14 @@ export default function (props: GraphDashboardProps) {
       tooltip={`Mean clock offset of each node against the rest of the cluster.`}
     >
       <Axis label="offset" units={AxisUnits.Duration}>
-        {
-          _.map(nodeIDs, (nid) => (
-            <Metric
-              key={nid}
-              name="cr.node.clock-offset.meannanos"
-              title={nodeDisplayName(nodesSummary, nid)}
-              sources={storeIDsForNode(nodesSummary, nid)}
-            />
-          ))
-        }
+        {_.map(nodeIDs, (nid) => (
+          <Metric
+            key={nid}
+            name="cr.node.clock-offset.meannanos"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={storeIDsForNode(nodesSummary, nid)}
+          />
+        ))}
       </Axis>
     </LineGraph>,
   ];

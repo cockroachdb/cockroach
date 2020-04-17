@@ -12,7 +12,11 @@ import { withRouter } from "react-router-dom";
 
 import { LocalityTree } from "src/redux/localities";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
-import { generateLocalityRoute, getLocalityLabel, getLeaves } from "src/util/localities";
+import {
+  generateLocalityRoute,
+  getLocalityLabel,
+  getLeaves,
+} from "src/util/localities";
 
 import { sumNodeStats, LivenessStatus } from "src/redux/nodes";
 import { pluralize } from "src/util/pluralize";
@@ -40,24 +44,29 @@ const LIVENESS_ICON_SPACING = 3;
 const LIVENESS_ICON_RADIUS = 8;
 const LIVENESS_TOTAL_WIDTH = LIVENESS_ICON_RADIUS * 2 + LIVENESS_ICON_SPACING;
 
-class LocalityView extends React.Component<LocalityViewProps & RouteComponentProps> {
+class LocalityView extends React.Component<
+  LocalityViewProps & RouteComponentProps
+> {
   onClick = () => {
     const localityTree = this.props.localityTree;
-    const destination = CLUSTERVIZ_ROOT + generateLocalityRoute(localityTree.tiers);
+    const destination =
+      CLUSTERVIZ_ROOT + generateLocalityRoute(localityTree.tiers);
     this.props.history.push(destination);
-  }
+  };
 
-  renderLivenessIcons(nodeCounts: { healthy: number, suspect: number, dead: number }) {
+  renderLivenessIcons(nodeCounts: {
+    healthy: number;
+    suspect: number;
+    dead: number;
+  }) {
     // note: there's also a count of decommissioned nodes; it's ignored here.
 
     // If all nodes live, render green checkmark.
     if (nodeCounts.dead === 0 && nodeCounts.suspect === 0) {
-      return (
-        <g dangerouslySetInnerHTML={trustIcon(liveIcon)} />
-      );
+      return <g dangerouslySetInnerHTML={trustIcon(liveIcon)} />;
     }
 
-    const pairs: { color: string, count: number }[] = [];
+    const pairs: { color: string; count: number }[] = [];
     if (nodeCounts.suspect > 0) {
       pairs.push({ color: SUSPECT_COLOR, count: nodeCounts.suspect });
     }
@@ -67,12 +76,9 @@ class LocalityView extends React.Component<LocalityViewProps & RouteComponentPro
 
     return (
       <g transform="translate(12 12)">
-        {pairs.map(({color, count}, idx) => (
+        {pairs.map(({ color, count }, idx) => (
           <g transform={`translate(${LIVENESS_TOTAL_WIDTH * idx * -1} 0)`}>
-            <circle
-              r={LIVENESS_ICON_RADIUS}
-              fill={color}
-            />
+            <circle r={LIVENESS_ICON_RADIUS} fill={color} />
             <text
               fill="white"
               textAnchor="middle"
@@ -92,11 +98,10 @@ class LocalityView extends React.Component<LocalityViewProps & RouteComponentPro
     const { tiers } = this.props.localityTree;
 
     const leavesUnderMe = getLeaves(this.props.localityTree);
-    const {
-      capacityUsable,
-      capacityUsed,
-      nodeCounts,
-    } = sumNodeStats(leavesUnderMe, this.props.livenessStatuses);
+    const { capacityUsable, capacityUsed, nodeCounts } = sumNodeStats(
+      leavesUnderMe,
+      this.props.livenessStatuses,
+    );
 
     const nodeIds = leavesUnderMe.map((node) => `${node.desc.node_id}`);
 
@@ -109,9 +114,16 @@ class LocalityView extends React.Component<LocalityViewProps & RouteComponentPro
         <rect width={180} height={210} opacity={0} />
         <Labels
           label={getLocalityLabel(tiers)}
-          subLabel={`${leavesUnderMe.length} ${pluralize(leavesUnderMe.length, "Node", "Nodes")}`}
+          subLabel={`${leavesUnderMe.length} ${pluralize(
+            leavesUnderMe.length,
+            "Node",
+            "Nodes",
+          )}`}
         />
-        <g dangerouslySetInnerHTML={trustIcon(localityIcon)} transform="translate(14 14)" />
+        <g
+          dangerouslySetInnerHTML={trustIcon(localityIcon)}
+          transform="translate(14 14)"
+        />
         {this.renderLivenessIcons(nodeCounts)}
         <CapacityArc
           usableCapacity={capacityUsable}

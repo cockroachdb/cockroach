@@ -34,7 +34,10 @@ interface LoginPageState {
   password: string;
 }
 
-class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, LoginPageState> {
+class LoginPage extends React.Component<
+  LoginPageProps & RouteComponentProps,
+  LoginPageState
+> {
   constructor(props: LoginPageProps & RouteComponentProps) {
     super(props);
     this.state = {
@@ -48,29 +51,28 @@ class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, Lo
     this.setState({
       username: evt.currentTarget.value,
     });
-  }
+  };
 
   handleUpdatePassword = (evt: React.FormEvent<{ value: string }>) => {
     this.setState({
       password: evt.currentTarget.value,
     });
-  }
+  };
 
   handleSubmit = (evt: React.FormEvent<any>) => {
-    const { location, history, handleLogin} = this.props;
+    const { location, history, handleLogin } = this.props;
     const { username, password } = this.state;
     evt.preventDefault();
 
-    handleLogin(username, password)
-      .then(() => {
-        const params = new URLSearchParams(location.search);
-        if (params.has("redirectTo")) {
-          history.push(params.get("redirectTo"));
-        } else {
-          history.push("/");
-        }
-      });
-  }
+    handleLogin(username, password).then(() => {
+      const params = new URLSearchParams(location.search);
+      if (params.has("redirectTo")) {
+        history.push(params.get("redirectTo"));
+      } else {
+        history.push("/");
+      }
+    });
+  };
 
   renderError() {
     const { error } = this.props.loginState;
@@ -81,11 +83,9 @@ class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, Lo
 
     let message = "Invalid username or password.";
     if (error.message !== "Unauthorized") {
-        message = error.message;
+      message = error.message;
     }
-    return (
-      <div className="login-page__error">Unable to log in: { message }</div>
-    );
+    return <div className="login-page__error">Unable to log in: {message}</div>;
   }
 
   render() {
@@ -102,24 +102,32 @@ class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, Lo
             <InfoBox>
               <h4 className="login-note-box__heading">Note:</h4>
               <p>
-                A user with a password is required to log in to the UI
-                on secure clusters.
+                A user with a password is required to log in to the UI on secure
+                clusters.
               </p>
               <p className="login-note-box__blurb">
                 Create a user with this SQL command:
               </p>
               <pre className="login-note-box__sql-command">
-                <span className="sql-keyword">CREATE USER</span>
-                {" "}craig{" "}
-                <span className="sql-keyword">WITH PASSWORD</span>
-                {" "}
-                <span className="sql-string">'cockroach'</span>
+                <span className="sql-keyword">CREATE USER</span> craig{" "}
+                <span className="sql-keyword">WITH PASSWORD</span>{" "}
+                <span className="sql-string">`cockroach`</span>
                 <span className="sql-keyword">;</span>
               </pre>
               <p className="aside">
-                <a href={docsURL.adminUILoginNoVersion} className="login-docs-link" target="_blank">
-                  <span className="login-docs-link__icon" dangerouslySetInnerHTML={trustIcon(docsIcon)} />
-                  <span className="login-docs-link__text">Read more about configuring login</span>
+                <a
+                  href={docsURL.adminUILoginNoVersion}
+                  className="login-docs-link"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span
+                    className="login-docs-link__icon"
+                    dangerouslySetInnerHTML={trustIcon(docsIcon)}
+                  />
+                  <span className="login-docs-link__text">
+                    Read more about configuring login
+                  </span>
                 </a>
               </p>
             </InfoBox>
@@ -128,7 +136,11 @@ class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, Lo
             <div className="form-container">
               <h1 className="base-heading heading">Log in to the Web UI</h1>
               {this.renderError()}
-              <form onSubmit={this.handleSubmit} className="form-internal" method="post">
+              <form
+                onSubmit={this.handleSubmit}
+                className="form-internal"
+                method="post"
+              >
                 <input
                   type="text"
                   name="username"
@@ -149,7 +161,11 @@ class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, Lo
                   type="submit"
                   className="submit-button"
                   disabled={this.props.loginState.inProgress}
-                  value={this.props.loginState.inProgress ? "Logging in..." : "Log In"}
+                  value={
+                    this.props.loginState.inProgress
+                      ? "Logging in..."
+                      : "Log In"
+                  }
                 />
               </form>
             </div>
@@ -161,18 +177,20 @@ class LoginPage extends React.Component<LoginPageProps & RouteComponentProps, Lo
 }
 
 // tslint:disable-next-line:variable-name
-const LoginPageConnected = withRouter(connect(
-  (state: AdminUIState) => {
-    return {
-      loginState: state.login,
-      location: state.router.location,
-    };
-  },
-  (dispatch) => ({
-    handleLogin: (username: string, password: string) => {
-      return dispatch(doLogin(username, password));
+const LoginPageConnected = withRouter(
+  connect(
+    (state: AdminUIState) => {
+      return {
+        loginState: state.login,
+        location: state.router.location,
+      };
     },
-  }),
-)(LoginPage));
+    (dispatch) => ({
+      handleLogin: (username: string, password: string) => {
+        return dispatch(doLogin(username, password));
+      },
+    }),
+  )(LoginPage),
+);
 
 export default LoginPageConnected;

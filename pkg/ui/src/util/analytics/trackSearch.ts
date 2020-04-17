@@ -12,10 +12,10 @@ import { analytics } from "src/redux/analytics";
 
 export const track = (fn: Function) => (numberOfResults: number) => {
   fn({
-      event: "Search",
-      properties: {
-        numberOfResults,
-      },
+    event: "Search",
+    properties: {
+      numberOfResults,
+    },
   });
 };
 

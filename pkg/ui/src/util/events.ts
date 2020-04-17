@@ -19,7 +19,9 @@ type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.IEvent;
  * getEventDescription returns a short summary of an event.
  */
 export function getEventDescription(e: Event$Properties): string {
-  const info: EventInfo = protobuf.util.isset(e, "info") ? JSON.parse(e.info) : {};
+  const info: EventInfo = protobuf.util.isset(e, "info")
+    ? JSON.parse(e.info)
+    : {};
   const targetId: number = e.target_id ? e.target_id.toNumber() : null;
 
   switch (e.event_type) {
@@ -78,7 +80,11 @@ export function getEventDescription(e: Event$Properties): string {
     case eventTypes.CREATE_STATISTICS:
       return `Table statistics refreshed for ${info.TableName}`;
     default:
-      return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(info, null, 2)}`;
+      return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(
+        info,
+        null,
+        2,
+      )}`;
   }
 }
 
@@ -106,7 +112,9 @@ export interface EventInfo {
 
 export function getDroppedObjectsText(eventInfo: EventInfo): string {
   const droppedObjects =
-    eventInfo.DroppedSchemaObjects || eventInfo.DroppedTablesAndViews || eventInfo.DroppedTables;
+    eventInfo.DroppedSchemaObjects ||
+    eventInfo.DroppedTablesAndViews ||
+    eventInfo.DroppedTables;
   if (!droppedObjects) {
     return "";
   }
@@ -115,5 +123,7 @@ export function getDroppedObjectsText(eventInfo: EventInfo): string {
   } else if (droppedObjects.length === 1) {
     return `1 schema object was dropped: ${droppedObjects[0]}`;
   }
-  return `${droppedObjects.length} schema objects were dropped: ${droppedObjects.join(", ")}`;
+  return `${
+    droppedObjects.length
+  } schema objects were dropped: ${droppedObjects.join(", ")}`;
 }

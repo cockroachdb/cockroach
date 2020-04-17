@@ -46,9 +46,10 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
     this.setState({
       width: window.innerWidth,
     });
-  }
+  };
 
-  onChange = (key: string, value: string) => () => this.props.onChangeFilter(key, value);
+  onChange = (key: string, value: string) => () =>
+    this.props.onChangeFilter(key, value);
 
   onDeselect = (key: string) => () => this.props.deselectFilterByKey(key);
 
@@ -56,7 +57,8 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
     const { filter } = this.props;
 
     if (filter && filter[id]) {
-      const value = (key: string) => `${filter[id].length} ${this.firstLetterToUpperCase(key)} Selected`;
+      const value = (key: string) =>
+        `${filter[id].length} ${this.firstLetterToUpperCase(key)} Selected`;
       switch (true) {
         case filter[id].length === 1 && id === "cluster":
           return value("Node");
@@ -71,42 +73,67 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
       }
     }
     return;
-  }
+  };
 
-  firstLetterToUpperCase = (value: string) => value.replace(/^[a-z]/, m => m.toUpperCase());
+  firstLetterToUpperCase = (value: string) =>
+    value.replace(/^[a-z]/, (m) => m.toUpperCase());
 
   renderSelect = () => {
     const { sort, filter } = this.props;
-    return sort.map(value => (
+    return sort.map((value) => (
       <div style={{ width: "100%" }} className="select__container">
-        <p className="filter--label">{`${value.id === "cluster" ? "Nodes" : this.firstLetterToUpperCase(value.id)}`}</p>
+        <p className="filter--label">{`${
+          value.id === "cluster"
+            ? "Nodes"
+            : this.firstLetterToUpperCase(value.id)
+        }`}</p>
         <Select
           style={{ width: "100%" }}
-          placeholder={`Filter ${value.id === "cluster" ? "node" : value.id}(s)`}
+          placeholder={`Filter ${
+            value.id === "cluster" ? "node" : value.id
+          }(s)`}
           value={this.renderSelectValue(value.id)}
-          dropdownRender={_ =>
-            <div onMouseDown={e => e.preventDefault()}>
-              <div className="select-selection__deselect"><a onClick={this.onDeselect(value.id)}>Deselect all</a></div>
-              {value.filters.map(val => {
-                const checked = filter && filter[value.id] && filter[value.id].indexOf(val.name) !== -1;
+          dropdownRender={() => (
+            <div onMouseDown={(e) => e.preventDefault()}>
+              <div className="select-selection__deselect">
+                <a onClick={this.onDeselect(value.id)}>Deselect all</a>
+              </div>
+              {value.filters.map((val) => {
+                const checked =
+                  filter &&
+                  filter[value.id] &&
+                  filter[value.id].indexOf(val.name) !== -1;
                 return (
                   <div className="filter__checkbox">
-                    <Checkbox checked={checked} onChange={this.onChange(value.id, val.name)} />
-                    <a className={`filter__checkbox--label ${checked ? "filter__checkbox--label__active" : ""}`} onClick={this.onChange(value.id, val.name)}>{`${value.id === "cluster" ? "N" : ""}${val.name}: ${val.address}`}</a>
+                    <Checkbox
+                      checked={checked}
+                      onChange={this.onChange(value.id, val.name)}
+                    />
+                    <a
+                      className={`filter__checkbox--label ${
+                        checked ? "filter__checkbox--label__active" : ""
+                      }`}
+                      onClick={this.onChange(value.id, val.name)}
+                    >{`${value.id === "cluster" ? "N" : ""}${val.name}: ${
+                      val.address
+                    }`}</a>
                   </div>
                 );
               })}
             </div>
-          }
+          )}
         />
       </div>
     ));
-  }
+  };
 
   render() {
     const { opened, width } = this.state;
-    const containerLeft = this.rangeContainer.current ? this.rangeContainer.current.getBoundingClientRect().left : 0;
-    const left = width >= (containerLeft + 240) ? 0 : width - (containerLeft + 240);
+    const containerLeft = this.rangeContainer.current
+      ? this.rangeContainer.current.getBoundingClientRect().left
+      : 0;
+    const left =
+      width >= containerLeft + 240 ? 0 : width - (containerLeft + 240);
     return (
       <div className="Filter-latency">
         <Dropdown
@@ -115,11 +142,19 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
           selected=""
           content={
             <div ref={this.rangeContainer} className="Range">
-              <div className="click-zone" onClick={() => this.setState({ opened: !opened })}/>
-              {opened && <div className="trigger-container" onClick={() => this.setState({ opened: false })} />}
+              <div
+                className="click-zone"
+                onClick={() => this.setState({ opened: !opened })}
+              />
+              {opened && (
+                <div
+                  className="trigger-container"
+                  onClick={() => this.setState({ opened: false })}
+                />
+              )}
               <div className="trigger-wrapper">
                 <div
-                  className={`trigger Select ${opened && "is-open" || ""}`}
+                  className={`trigger Select ${(opened && "is-open") || ""}`}
                 >
                   <div className="Select-control">
                     <div className="Select-arrow-zone">
@@ -127,11 +162,11 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
                     </div>
                   </div>
                 </div>
-                {opened &&
+                {opened && (
                   <div className="multiple-filter__selection" style={{ left }}>
                     {this.renderSelect()}
                   </div>
-                }
+                )}
               </div>
             </div>
           }

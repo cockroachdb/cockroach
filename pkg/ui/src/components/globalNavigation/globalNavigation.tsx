@@ -21,21 +21,13 @@ export interface PanelProps {
 }
 
 export function Left(props: PanelProps) {
-  return (
-    <div className="left-side-panel">{props.children}</div>
-  );
+  return <div className="left-side-panel">{props.children}</div>;
 }
 
 export function Right(props: PanelProps) {
-  return (
-    <div className="right-side-panel">{props.children}</div>
-  );
+  return <div className="right-side-panel">{props.children}</div>;
 }
 
 export function GlobalNavigation(props: GlobalNavigationProps) {
-  return (
-    <div className="global-navigation">
-      {props.children}
-    </div>
-  );
+  return <div className="global-navigation">{props.children}</div>;
 }

@@ -19,7 +19,10 @@ import { AdminUIState } from "src/redux/state";
 import * as timewindow from "src/redux/timewindow";
 import { INodeStatus } from "src/util/proto";
 import { trackTimeFrameChange } from "src/util/analytics";
-import Dropdown, { ArrowDirection, DropdownOption } from "src/views/shared/components/dropdown";
+import Dropdown, {
+  ArrowDirection,
+  DropdownOption,
+} from "src/views/shared/components/dropdown";
 import TimeFrameControls from "../../components/controls";
 import RangeSelect, { DateTypes } from "../../components/range";
 import "./timescale.styl";
@@ -39,8 +42,15 @@ interface TimeScaleDropdownProps extends RouteComponentProps {
   useTimeRange: boolean;
 }
 
-export const getTimeLabel = (currentWindow?: timewindow.TimeWindow, windowSize?: moment.Duration) => {
-  const time = windowSize ? windowSize : currentWindow ? moment.duration(moment(currentWindow.end).diff(currentWindow.start)) : moment.duration(10, "minutes");
+export const getTimeLabel = (
+  currentWindow?: timewindow.TimeWindow,
+  windowSize?: moment.Duration,
+) => {
+  const time = windowSize
+    ? windowSize
+    : currentWindow
+    ? moment.duration(moment(currentWindow.end).diff(currentWindow.start))
+    : moment.duration(10, "minutes");
   const seconds = time.asSeconds();
   const minutes = 60;
   const hour = minutes * 60;
@@ -50,7 +60,7 @@ export const getTimeLabel = (currentWindow?: timewindow.TimeWindow, windowSize?:
   switch (true) {
     case seconds < hour:
       return time.asMinutes().toFixed() + "m";
-    case (seconds >= hour && seconds < day):
+    case seconds >= hour && seconds < day:
       return time.asHours().toFixed() + "h";
     case seconds < week:
       return time.asDays().toFixed() + "d";
@@ -71,11 +81,13 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
       this.setQueryParamsByDates(newSettings.windowSize, moment());
       this.props.setTimeScale({ ...newSettings, key: newTimescaleKey.value });
     }
-  }
+  };
 
   arrowClick = (direction: ArrowDirection) => {
     const { currentWindow, currentScale } = this.props;
-    const windowSize: any = moment.duration(moment(currentWindow.end).diff(currentWindow.start));
+    const windowSize: any = moment.duration(
+      moment(currentWindow.end).diff(currentWindow.start),
+    );
     const seconds = windowSize.asSeconds();
     let selected = {};
     let key = currentScale.key;
@@ -102,7 +114,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     // If the timescale extends into the future then fallback to a default
     // timescale. Otherwise set the key to "Custom" so it appears correctly.
     if (!windowEnd || windowEnd > moment().subtract(currentScale.windowValid)) {
-      const size = { windowSize: { _data: windowSize._data } } ;
+      const size = { windowSize: { _data: windowSize._data } };
       if (_.find(timewindow.availableTimeScales, size as any)) {
         const data = {
           ..._.find(timewindow.availableTimeScales, size as any),
@@ -117,13 +129,23 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     }
 
     this.setQueryParamsByDates(windowSize, windowEnd);
-    this.props.setTimeScale({ ...currentScale, windowEnd, windowSize, key, ...selected });
-  }
+    this.props.setTimeScale({
+      ...currentScale,
+      windowEnd,
+      windowSize,
+      key,
+      ...selected,
+    });
+  };
 
   getTimescaleOptions = () => {
     const { currentWindow } = this.props;
     const timescaleOptions = _.map(timewindow.availableTimeScales, (_ts, k) => {
-      return { value: k, label: k, timeLabel: getTimeLabel(null, _ts.windowSize) };
+      return {
+        value: k,
+        label: k,
+        timeLabel: getTimeLabel(null, _ts.windowSize),
+      };
     });
 
     // This just ensures that if the key is "Custom" it will show up in the
@@ -135,7 +157,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
       timeLabel: getTimeLabel(currentWindow),
     });
     return timescaleOptions;
-  }
+  };
 
   componentDidMount() {
     this.props.refreshNodes();
@@ -150,7 +172,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     const end = queryEnd && moment.unix(Number(queryEnd)).utc();
 
     this.setDatesByQueryParams({ start, end });
-  }
+  };
 
   setQueryParams = (date: moment.Moment, type: DateTypes) => {
     const { location, history } = this.props;
@@ -161,7 +183,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
       pathname: location.pathname,
       search: `?${queryToString(query)}`,
     });
-  }
+  };
 
   componentDidUpdate() {
     if (!this.props.nodeStatusesValid) {
@@ -169,13 +191,16 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     }
   }
 
-  setQueryParamsByDates = (duration: moment.Duration, dateEnd: moment.Moment) => {
+  setQueryParamsByDates = (
+    duration: moment.Duration,
+    dateEnd: moment.Moment,
+  ) => {
     const { location, history } = this.props;
     const { pathname, search } = location;
     const urlParams = new URLSearchParams(search);
     const seconds = duration.clone().asSeconds();
     const end = dateEnd.clone();
-    const start =  moment.utc(end.subtract(seconds, "seconds")).format("X");
+    const start = moment.utc(end.subtract(seconds, "seconds")).format("X");
 
     urlParams.set("start", start);
     urlParams.set("end", moment.utc(dateEnd).format("X"));
@@ -184,28 +209,38 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
       pathname,
       search: urlParams.toString(),
     });
-  }
+  };
 
   setDatesByQueryParams = (dates?: timewindow.TimeWindow) => {
     const currentWindow = _.clone(this.props.currentWindow);
-    const end = dates.end || currentWindow && currentWindow.end || moment();
-    const start = dates.start || currentWindow && currentWindow.start || moment().subtract(10, "minutes");
+    const end = dates.end || (currentWindow && currentWindow.end) || moment();
+    const start =
+      dates.start ||
+      (currentWindow && currentWindow.start) ||
+      moment().subtract(10, "minutes");
     const seconds = moment.duration(moment(end).diff(start)).asSeconds();
     const timeScale = timewindow.findClosestTimeScale(seconds);
     const now = moment();
-    if (moment.duration(now.diff(end)).asMinutes() > timeScale.sampleSize.asMinutes()) {
+    if (
+      moment.duration(now.diff(end)).asMinutes() >
+      timeScale.sampleSize.asMinutes()
+    ) {
       timeScale.key = "Custom";
     }
     timeScale.windowEnd = null;
     this.props.setTimeRange({ end, start });
     this.props.setTimeScale(timeScale);
-  }
+  };
 
   setDate = (date: moment.Moment, type: DateTypes) => {
     const currentWindow = _.clone(this.props.currentWindow);
     const selected = _.clone(this.props.currentScale);
-    const end  = currentWindow.end || moment().utc().set({hours: 23, minutes: 59, seconds: 0});
-    const start = currentWindow.start || moment().utc().set({hours: 0, minutes: 0, seconds: 0});
+    const end =
+      currentWindow.end ||
+      moment().utc().set({ hours: 23, minutes: 59, seconds: 0 });
+    const start =
+      currentWindow.start ||
+      moment().utc().set({ hours: 0, minutes: 0, seconds: 0 });
     switch (type) {
       case DateTypes.DATE_FROM:
         this.setQueryParams(date, DateTypes.DATE_FROM);
@@ -224,18 +259,25 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
     selected.key = "Custom";
     this.props.setTimeScale(selected);
     this.props.setTimeRange(currentWindow);
-  }
+  };
 
   getTimeRangeTitle = () => {
     const { currentWindow, currentScale } = this.props;
     const dateFormat = "MMM DD,";
     const timeFormat = "h:mmA";
     if (currentScale.key === "Custom" && currentWindow) {
-      const isSameStartDay = moment(currentWindow.start).isSame(moment(), "day");
+      const isSameStartDay = moment(currentWindow.start).isSame(
+        moment(),
+        "day",
+      );
       const isSameEndDay = moment(currentWindow.end).isSame(moment(), "day");
       return {
-        dateStart: isSameStartDay ? "" : moment.utc(currentWindow.start).format(dateFormat),
-        dateEnd: isSameEndDay ? "" : moment.utc(currentWindow.end).format(dateFormat),
+        dateStart: isSameStartDay
+          ? ""
+          : moment.utc(currentWindow.start).format(dateFormat),
+        dateEnd: isSameEndDay
+          ? ""
+          : moment.utc(currentWindow.end).format(dateFormat),
         timeStart: moment.utc(currentWindow.start).format(timeFormat),
         timeEnd: moment.utc(currentWindow.end).format(timeFormat),
         title: "Custom",
@@ -245,14 +287,18 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
         title: currentScale.key,
       };
     }
-  }
+  };
 
   generateDisabledArrows = () => {
     const { currentWindow } = this.props;
     const disabledArrows = [];
     if (currentWindow) {
-      const differenceEndToNow = moment.duration(moment().diff(currentWindow.end)).asMinutes();
-      const differenceEndToStart = moment.duration(moment(currentWindow.end).diff(currentWindow.start)).asMinutes();
+      const differenceEndToNow = moment
+        .duration(moment().diff(currentWindow.end))
+        .asMinutes();
+      const differenceEndToStart = moment
+        .duration(moment(currentWindow.end).diff(currentWindow.start))
+        .asMinutes();
       if (differenceEndToNow < differenceEndToStart) {
         if (differenceEndToNow < 10) {
           disabledArrows.push(ArrowDirection.CENTER);
@@ -261,7 +307,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
       }
     }
     return disabledArrows;
-  }
+  };
 
   render() {
     const { useTimeRange, currentScale, currentWindow } = this.props;
@@ -285,26 +331,32 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
             />
           }
         />
-        <TimeFrameControls disabledArrows={this.generateDisabledArrows()} onArrowClick={this.arrowClick} />
+        <TimeFrameControls
+          disabledArrows={this.generateDisabledArrows()}
+          onArrowClick={this.arrowClick}
+        />
       </div>
     );
   }
 }
 
-export default withRouter(connect(
-  (state: AdminUIState) => {
-    return {
-      nodeStatusesValid: state.cachedData.nodes.valid,
-      nodeStatuses: state.cachedData.nodes.data,
-      currentScale: (state.timewindow as timewindow.TimeWindowState).scale,
-      currentWindow: (state.timewindow as timewindow.TimeWindowState).currentWindow,
-      availableScales: timewindow.availableTimeScales,
-      useTimeRange: state.timewindow.useTimeRange,
-    };
-  },
-  {
-    setTimeScale: timewindow.setTimeScale,
-    setTimeRange: timewindow.setTimeRange,
-    refreshNodes: refreshNodes,
-  },
-)(TimeScaleDropdown));
+export default withRouter(
+  connect(
+    (state: AdminUIState) => {
+      return {
+        nodeStatusesValid: state.cachedData.nodes.valid,
+        nodeStatuses: state.cachedData.nodes.data,
+        currentScale: (state.timewindow as timewindow.TimeWindowState).scale,
+        currentWindow: (state.timewindow as timewindow.TimeWindowState)
+          .currentWindow,
+        availableScales: timewindow.availableTimeScales,
+        useTimeRange: state.timewindow.useTimeRange,
+      };
+    },
+    {
+      setTimeScale: timewindow.setTimeScale,
+      setTimeRange: timewindow.setTimeRange,
+      refreshNodes: refreshNodes,
+    },
+  )(TimeScaleDropdown),
+);

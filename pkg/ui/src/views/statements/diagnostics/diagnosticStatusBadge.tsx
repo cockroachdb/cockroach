@@ -40,10 +40,7 @@ function mapStatusToDescription(diagnosticsStatus: DiagnosticStatuses) {
         <div>
           {`Go to the detail page for this statement and click the ‘diagnostics’ tab.
            The statement diagnostics download will include EXPLAIN plans, table statistics, and traces. `}
-          <Anchor
-            href={statementDiagnostics}
-            target="_blank"
-          >
+          <Anchor href={statementDiagnostics} target="_blank">
             Learn more
           </Anchor>
         </div>
@@ -52,16 +49,14 @@ function mapStatusToDescription(diagnosticsStatus: DiagnosticStatuses) {
       return (
         <div>
           <span>
-            CockroachDB is waiting for the next query that matches this statement fingerprint.
+            CockroachDB is waiting for the next query that matches this
+            statement fingerprint.
           </span>
-          <p/>
+          <p />
           <span>
             {`A download button will appear on the statement list and detail pages when the query is ready.
             The download will include EXPLAIN plans, table statistics, and traces. `}
-            <Anchor
-              href={statementDiagnostics}
-              target="_blank"
-            >
+            <Anchor href={statementDiagnostics} target="_blank">
               Learn more
             </Anchor>
           </span>
@@ -70,11 +65,10 @@ function mapStatusToDescription(diagnosticsStatus: DiagnosticStatuses) {
     case "ERROR":
       return (
         <div>
-          {"There was an error when attempting to collect diagnostics for this statement. Please try activating again. "}
-          <Anchor
-            href={statementDiagnostics}
-            target="_blank"
-          >
+          {
+            "There was an error when attempting to collect diagnostics for this statement. Please try activating again. "
+          }
+          <Anchor href={statementDiagnostics} target="_blank">
             Learn more
           </Anchor>
         </div>
@@ -89,27 +83,13 @@ export function DiagnosticStatusBadge(props: OwnProps) {
   const tooltipContent = mapStatusToDescription(status);
 
   if (!enableTooltip) {
-    return (
-      <Badge
-        text={status}
-        status={mapDiagnosticsStatusToBadge(status)}
-      />
-    );
+    return <Badge text={status} status={mapDiagnosticsStatusToBadge(status)} />;
   }
 
   return (
-    <Tooltip
-      title={tooltipContent}
-      theme="blue"
-      placement="bottomLeft"
-    >
-      <div
-        className="diagnostic-status-badge__content"
-      >
-        <Badge
-          text={status}
-          status={mapDiagnosticsStatusToBadge(status)}
-        />
+    <Tooltip title={tooltipContent} theme="blue" placement="bottomLeft">
+      <div className="diagnostic-status-badge__content">
+        <Badge text={status} status={mapDiagnosticsStatusToBadge(status)} />
       </div>
     </Tooltip>
   );

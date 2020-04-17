@@ -30,17 +30,20 @@ interface AlertSectionProps {
 }
 
 class AlertSection extends React.Component<AlertSectionProps, {}> {
+  dismiss = (val: any) => () => {
+    const { dispatch } = this.props;
+    bindActionCreators(() => val, dispatch);
+  };
+
   render() {
-    const { alerts, dispatch } = this.props;
-    return <div>
-      {
-        _.map(alerts, (a, i) => {
-          const { dismiss, ...alertProps } = a;
-          const boundDismiss = bindActionCreators(() => a.dismiss, dispatch);
-          return <AlertBox key={i} dismiss={ boundDismiss } {...alertProps} />;
-        })
-      }
-    </div>;
+    const { alerts } = this.props;
+    return (
+      <div>
+        {_.map(alerts, (alert, i) => (
+          <AlertBox {...alert} key={i} dismiss={this.dismiss(alert.dismiss)} />
+        ))}
+      </div>
+    );
   }
 }
 

@@ -21,7 +21,7 @@ export interface IEmptyProps {
   backgroundImage?: string;
 }
 
-export default function Empty (props: IEmptyProps) {
+export default function Empty(props: IEmptyProps) {
   const {
     title = "No results",
     description,
@@ -33,9 +33,21 @@ export default function Empty (props: IEmptyProps) {
   return (
     <div className="empty-container">
       <h2 className="base-heading empty-container__title">{title}</h2>
-      {description && <p className="empty-container__description">{description}</p>}
-      <Button onClick={openLink} className="empty-container__button" type="primary">{button}</Button>
-      <img className="empty-container__background" src={backgroundImage} alt="Empty screen" />
+      {description && (
+        <p className="empty-container__description">{description}</p>
+      )}
+      <Button
+        onClick={openLink}
+        className="empty-container__button"
+        type="primary"
+      >
+        {button}
+      </Button>
+      <img
+        className="empty-container__background"
+        src={backgroundImage}
+        alt="Empty screen"
+      />
     </div>
   );
 }

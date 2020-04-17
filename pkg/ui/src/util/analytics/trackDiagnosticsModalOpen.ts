@@ -19,7 +19,7 @@ export const track = (fn: Function) => (statement: string) => {
   });
 };
 
-export default function trackDiagnosticsModalOpen (statement: string) {
+export default function trackDiagnosticsModalOpen(statement: string) {
   const boundTrack = analytics.track.bind(analytics);
   track(boundTrack)(statement);
 }

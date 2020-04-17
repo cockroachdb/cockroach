@@ -106,8 +106,8 @@ export class SortableTable extends React.Component<TableProps> {
       sortKey: null,
       ascending: false,
     },
-    onChangeSortSetting: (_ss) => { },
-    rowClass: (_rowIndex) => "",
+    onChangeSortSetting: () => {},
+    rowClass: () => "",
   };
 
   state = {
@@ -144,9 +144,7 @@ export class SortableTable extends React.Component<TableProps> {
     const content = expanded ? "▼" : "▶";
     return (
       <td className="sort-table__cell sort-table__cell__expansion-control">
-        <div>
-          {content}
-        </div>
+        <div>{content}</div>
       </td>
     );
   }
@@ -160,8 +158,10 @@ export class SortableTable extends React.Component<TableProps> {
       this.props.rowClass(rowIndex),
       { "sort-table__row--expandable": !!expandableConfig },
     );
-    const expanded = expandableConfig && expandableConfig.rowIsExpanded(rowIndex);
-    const onClickExpand = expandableConfig && expandableConfig.onChangeExpansion;
+    const expanded =
+      expandableConfig && expandableConfig.rowIsExpanded(rowIndex);
+    const onClickExpand =
+      expandableConfig && expandableConfig.onChangeExpansion;
     const output = [
       <tr
         key={rowIndex}
@@ -179,12 +179,21 @@ export class SortableTable extends React.Component<TableProps> {
         {expandableConfig ? this.expansionControl(expanded) : null}
         {map(columns, (c: SortableColumn, colIndex: number) => {
           return (
-            <td className={classNames("sort-table__cell", { "sort-table__cell--header": firstCellBordered && colIndex === 0 }, c.className)} key={colIndex}>
+            <td
+              className={classNames(
+                "sort-table__cell",
+                {
+                  "sort-table__cell--header":
+                    firstCellBordered && colIndex === 0,
+                },
+                c.className,
+              )}
+              key={colIndex}
+            >
               {c.cell(rowIndex)}
             </td>
           );
-        })
-        }
+        })}
       </tr>,
     ];
     if (expandableConfig && expandableConfig.rowIsExpanded(rowIndex)) {
@@ -197,19 +206,16 @@ export class SortableTable extends React.Component<TableProps> {
         // Add a zero-height empty row so that the expanded area will have the same background
         // color as the row it's expanded from, since the CSS causes row colors to alternate.
         <tr className={classes} key={output.length + 1} />,
-        <tr className={expandedAreaClasses} key={output.length + 2} >
+        <tr className={expandedAreaClasses} key={output.length + 2}>
           <td />
-          <td
-            className="sort-table__cell"
-            colSpan={columns.length}
-          >
+          <td className="sort-table__cell" colSpan={columns.length}>
             {expandableConfig.expandedContent(rowIndex)}
           </td>
         </tr>,
       );
     }
     return output;
-  }
+  };
 
   showDrawer = (rowIndex: number) => {
     const { drawer, columns } = this.props;
@@ -219,7 +225,7 @@ export class SortableTable extends React.Component<TableProps> {
       visible: true,
       drawerData: drawer ? values.props : drawerData,
     });
-  }
+  };
 
   onClose = () => {
     this.setState({
@@ -230,16 +236,25 @@ export class SortableTable extends React.Component<TableProps> {
       },
       activeIndex: NaN,
     });
-  }
+  };
 
-  onChange = (e: { target: { value: any; }; }) => {
+  onChange = (e: { target: { value: any } }) => {
     this.setState({
       placement: e.target.value,
     });
-  }
+  };
 
   render() {
-    const { sortSetting, columns, expandableConfig, drawer, firstCellBordered, count, renderNoResult, className } = this.props;
+    const {
+      sortSetting,
+      columns,
+      expandableConfig,
+      drawer,
+      firstCellBordered,
+      count,
+      renderNoResult,
+      className,
+    } = this.props;
     const { visible, drawerData } = this.state;
     return (
       <React.Fragment>
@@ -272,27 +287,41 @@ export class SortableTable extends React.Component<TableProps> {
                   classes.push("sort-table__cell--header");
                 }
                 return (
-                  <th className={classNames(classes)} key={colIndex} onClick={onClick} style={style}>
+                  <th
+                    className={classNames(classes)}
+                    key={colIndex}
+                    onClick={onClick}
+                    style={style}
+                  >
                     {c.title}
-                    {!isUndefined(c.sortKey) && <span className="sortable__actions" />}
+                    {!isUndefined(c.sortKey) && (
+                      <span className="sortable__actions" />
+                    )}
                   </th>
                 );
               })}
             </tr>
           </thead>
-          <tbody>
-            {times(this.props.count, this.renderRow)}
-          </tbody>
+          <tbody>{times(this.props.count, this.renderRow)}</tbody>
         </table>
         {drawer && (
-          <DrawerComponent visible={visible} onClose={this.onClose} data={drawerData} details>
-            <span className="drawer__content">{getHighlightedText(drawerData.statement, drawerData.search, true)}</span>
+          <DrawerComponent
+            visible={visible}
+            onClose={this.onClose}
+            data={drawerData}
+            details
+          >
+            <span className="drawer__content">
+              {getHighlightedText(
+                drawerData.statement,
+                drawerData.search,
+                true,
+              )}
+            </span>
           </DrawerComponent>
         )}
         {count === 0 && (
-          <div className="table__no-results">
-            {renderNoResult}
-          </div>
+          <div className="table__no-results">{renderNoResult}</div>
         )}
       </React.Fragment>
     );

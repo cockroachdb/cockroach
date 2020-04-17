@@ -17,11 +17,10 @@ interface ISummaryCardProps {
 }
 
 // tslint:disable-next-line: variable-name
-export const SummaryCard: React.FC<ISummaryCardProps> = ({ children, className }) => (
-  <div className={`summary--card ${className}`}>
-    {children}
-  </div>
-);
+export const SummaryCard: React.FC<ISummaryCardProps> = ({
+  children,
+  className,
+}) => <div className={`summary--card ${className}`}>{children}</div>;
 
 SummaryCard.defaultProps = {
   className: "",

@@ -13,8 +13,8 @@ import { assert } from "chai";
 import * as protos from "src/js/protos";
 import { selectDatabasesByType } from "./";
 
-describe("selectDatabasesByType", function() {
-  it("returns empty arrays if database data is missing", function() {
+describe("selectDatabasesByType", function () {
+  it("returns empty arrays if database data is missing", function () {
     const state = {
       cachedData: {
         databases: {
@@ -27,7 +27,7 @@ describe("selectDatabasesByType", function() {
     assert.deepEqual(selectDatabasesByType(state), { user: [], system: [] });
   });
 
-  it("separates out the system databases", function() {
+  it("separates out the system databases", function () {
     const userDatabases = ["foo", "bar", "baz"];
     const systemDatabases = ["defaultdb", "postgres", "system"];
     const state = {

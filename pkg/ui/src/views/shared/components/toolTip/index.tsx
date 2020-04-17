@@ -33,9 +33,17 @@ interface ToolTipWrapperProps extends AbstractTooltipProps {
 // tslint:disable-next-line: variable-name
 export const ToolTipWrapper = (props: ToolTipWrapperProps) => {
   const { text, children, placement } = props;
-  const overlayClassName = classNames("tooltip__preset--white", `tooltip__preset--placement-${placement}`);
+  const overlayClassName = classNames(
+    "tooltip__preset--white",
+    `tooltip__preset--placement-${placement}`,
+  );
   return (
-    <Tooltip title={ text } placement="bottom" overlayClassName={overlayClassName} {...props}>
+    <Tooltip
+      title={text}
+      placement="bottom"
+      overlayClassName={overlayClassName}
+      {...props}
+    >
       {children}
     </Tooltip>
   );

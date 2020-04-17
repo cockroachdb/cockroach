@@ -54,12 +54,16 @@ describe("EmailSubscriptionForm", () => {
     });
 
     it("submit button is disabled", () => {
-      const buttonComponent = wrapper.find("button.crl-button.crl-button--disabled").first();
+      const buttonComponent = wrapper
+        .find("button.crl-button.crl-button--disabled")
+        .first();
       assert.isTrue(buttonComponent.exists());
     });
 
     it("validation message is shown", () => {
-      const validationMessageWrapper = wrapper.find(".crl-text-input__error-message").first();
+      const validationMessageWrapper = wrapper
+        .find(".crl-text-input__error-message")
+        .first();
       assert.isTrue(validationMessageWrapper.exists());
       assert.equal(validationMessageWrapper.text(), "Invalid email address.");
     });

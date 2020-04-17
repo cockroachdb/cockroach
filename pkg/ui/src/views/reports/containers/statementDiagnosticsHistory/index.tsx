@@ -15,15 +15,21 @@ import moment from "moment";
 import { Action, Dispatch } from "redux";
 import Long from "long";
 
-import { Button, ColumnsConfig, DownloadFile, DownloadFileRef, Table, Text, TextTypes } from "src/components";
+import {
+  Button,
+  ColumnsConfig,
+  DownloadFile,
+  DownloadFileRef,
+  Table,
+  Text,
+  TextTypes,
+} from "src/components";
 import HeaderSection from "src/views/shared/components/headerSection";
 import { AdminUIState } from "src/redux/state";
 import { getStatementDiagnostics } from "src/util/api";
 import { trustIcon } from "src/util/trust";
 import DownloadIcon from "!!raw-loader!assets/download.svg";
-import {
-  selectStatementDiagnosticsReports,
-} from "src/redux/statements/statementsSelectors";
+import { selectStatementDiagnosticsReports } from "src/redux/statements/statementsSelectors";
 import {
   invalidateStatementDiagnosticsRequests,
   refreshStatementDiagnosticsRequests,
@@ -41,9 +47,12 @@ import {
 } from "src/views/statements/diagnostics";
 import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
 
-type StatementDiagnosticsHistoryViewProps = MapStateToProps & MapDispatchToProps;
+type StatementDiagnosticsHistoryViewProps = MapStateToProps &
+  MapDispatchToProps;
 
-class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosticsHistoryViewProps> {
+class StatementDiagnosticsHistoryView extends React.Component<
+  StatementDiagnosticsHistoryViewProps
+> {
   columns: ColumnsConfig<IStatementDiagnosticsReport> = [
     {
       key: "activatedOn",
@@ -71,9 +80,7 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
       width: "160px",
       render: (_text, record) => (
         <Text>
-          <DiagnosticStatusBadge
-            status={getDiagnosticsStatus(record)}
-          />
+          <DiagnosticStatusBadge status={getDiagnosticsStatus(record)} />
         </Text>
       ),
     },
@@ -86,8 +93,12 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
         if (record.completed) {
           return (
             <div className="crl-statements-diagnostics-view__actions-column cell--show-on-hover nodes-table__link">
-              <a href={`_admin/v1/stmtbundle/${record.statement_diagnostics_id}`}
-                 onClick={() => trackDownloadDiagnosticsBundle(record.statement_fingerprint)}>
+              <a
+                href={`_admin/v1/stmtbundle/${record.statement_diagnostics_id}`}
+                onClick={() =>
+                  trackDownloadDiagnosticsBundle(record.statement_fingerprint)
+                }
+              >
                 <Button
                   size="small"
                   type="flat"
@@ -95,7 +106,7 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
                   icon={() => (
                     <span
                       className="crl-statements-diagnostics-view__icon"
-                      dangerouslySetInnerHTML={ trustIcon(DownloadIcon) }
+                      dangerouslySetInnerHTML={trustIcon(DownloadIcon)}
                     />
                   )}
                 >
@@ -140,14 +151,20 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
         <Text>{`${this.tablePageSize} of ${totalCount} traces`}</Text>
       </div>
     );
-  }
+  };
 
   getStatementDiagnostics = async (diagnosticsId: Long) => {
-    const request = new StatementDiagnosticsRequest({ statement_diagnostics_id: diagnosticsId });
+    const request = new StatementDiagnosticsRequest({
+      statement_diagnostics_id: diagnosticsId,
+    });
     const response = await getStatementDiagnostics(request);
     const trace = response.diagnostics?.trace;
-    this.downloadRef.current?.download("statement-diagnostics.json", "application/json", trace);
-  }
+    this.downloadRef.current?.download(
+      "statement-diagnostics.json",
+      "application/json",
+      trace,
+    );
+  };
 
   render() {
     const { diagnosticsReports } = this.props;
@@ -166,7 +183,7 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
             path: "/debug",
           }}
         />
-        { this.renderTableTitle() }
+        {this.renderTableTitle()}
         <div className="diagnostics-history-view__table-container">
           <Table
             pageSize={this.tablePageSize}
@@ -174,7 +191,7 @@ class StatementDiagnosticsHistoryView extends React.Component<StatementDiagnosti
             columns={this.columns}
           />
         </div>
-        <DownloadFile ref={this.downloadRef}/>
+        <DownloadFile ref={this.downloadRef} />
       </section>
     );
   }
@@ -192,7 +209,9 @@ const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
   diagnosticsReports: selectStatementDiagnosticsReports(state) || [],
 });
 
-const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>): MapDispatchToProps => ({
+const mapDispatchToProps = (
+  dispatch: Dispatch<Action, AdminUIState>,
+): MapDispatchToProps => ({
   refresh: () => {
     dispatch(invalidateStatementDiagnosticsRequests());
     dispatch(refreshStatementDiagnosticsRequests());
@@ -203,4 +222,7 @@ export default connect<
   MapStateToProps,
   MapDispatchToProps,
   StatementDiagnosticsHistoryViewProps
-  >(mapStateToProps, mapDispatchToProps)(StatementDiagnosticsHistoryView);
+>(
+  mapStateToProps,
+  mapDispatchToProps,
+)(StatementDiagnosticsHistoryView);

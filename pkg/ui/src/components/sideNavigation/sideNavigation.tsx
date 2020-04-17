@@ -35,20 +35,14 @@ export function NavigationItem(props: NavigationItem) {
     textType = TextTypes.BodyStrong;
   }
 
-  const classes = cn(
-    "side-navigation__navigation-item",
-    {
-      "side-navigation__navigation-item--active": isActive,
-      "side-navigation__navigation-item--disabled": disabled,
-    },
-  );
+  const classes = cn("side-navigation__navigation-item", {
+    "side-navigation__navigation-item--active": isActive,
+    "side-navigation__navigation-item--disabled": disabled,
+  });
 
   return (
-    <li
-      className={classes}>
-      <Text textType={textType}>
-        {children}
-      </Text>
+    <li className={classes}>
+      <Text textType={textType}>{children}</Text>
     </li>
   );
 }
@@ -63,9 +57,7 @@ SideNavigation.Item = NavigationItem;
 export function SideNavigation(props: SideNavigationProps) {
   return (
     <nav className="side-navigation">
-      <ul className="side-navigation--list">
-        {props.children}
-      </ul>
+      <ul className="side-navigation--list">{props.children}</ul>
     </nav>
   );
 }

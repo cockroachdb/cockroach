@@ -9,10 +9,10 @@
 // licenses/APL.txt.
 
 import React from "react";
-import {Link} from "react-router-dom";
-import {Tooltip} from "src/components";
+import { Link } from "react-router-dom";
+import { Tooltip } from "src/components";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
-import {cockroach} from "src/js/protos";
+import { cockroach } from "src/js/protos";
 
 export class JobDescriptionCell extends React.PureComponent<{ job: Job }> {
   render() {
@@ -20,8 +20,11 @@ export class JobDescriptionCell extends React.PureComponent<{ job: Job }> {
     // is a human-readable message. Otherwise job.description is a SQL
     // statement.
     const job = this.props.job;
-    const additionalStyle = (job.statement ? "" : " jobs-table__cell--sql");
-    const description = job.description && job.description.length > 425 ? `${job.description.slice(0, 425)}...` : job.description;
+    const additionalStyle = job.statement ? "" : " jobs-table__cell--sql";
+    const description =
+      job.description && job.description.length > 425
+        ? `${job.description.slice(0, 425)}...`
+        : job.description;
     return (
       <Link className={`${additionalStyle}`} to={`jobs/${String(job.id)}`}>
         <div className="cl-table-link__tooltip">
@@ -29,11 +32,18 @@ export class JobDescriptionCell extends React.PureComponent<{ job: Job }> {
             arrowPointAtCenter
             placement="bottom"
             title={
-              <pre style={{whiteSpace: "pre-wrap"}} className="cl-table-link__description">{description}</pre>
+              <pre
+                style={{ whiteSpace: "pre-wrap" }}
+                className="cl-table-link__description"
+              >
+                {description}
+              </pre>
             }
             overlayClassName="cl-table-link__statement-tooltip--fixed-width"
           >
-            <div className="jobs-table__cell--description">{job.statement || job.description}</div>
+            <div className="jobs-table__cell--description">
+              {job.statement || job.description}
+            </div>
           </Tooltip>
         </div>
       </Link>

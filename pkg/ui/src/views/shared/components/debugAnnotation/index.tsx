@@ -20,13 +20,14 @@ export interface DebugAnnotationProps {
 /**
  * DebugAnnotation is an indicator showing a bit of information on the debug page.
  */
-export default class DebugAnnotation extends React.Component<DebugAnnotationProps> {
+export default class DebugAnnotation extends React.Component<
+  DebugAnnotationProps
+> {
   render() {
     return (
       <h3>
-        <span className="debug-annotation__label">{ this.props.label }:</span>
-        {" "}
-        <span className="debug-annotation__value">{ this.props.value }</span>
+        <span className="debug-annotation__label">{this.props.label}:</span>{" "}
+        <span className="debug-annotation__value">{this.props.value}</span>
       </h3>
     );
   }

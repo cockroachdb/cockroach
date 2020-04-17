@@ -35,7 +35,11 @@ class Sidebar extends React.Component<RouteComponentProps> {
     { path: "/metrics", text: "Metrics", activeFor: [] },
     { path: "/databases", text: "Databases", activeFor: ["/database"] },
     { path: "/statements", text: "Statements", activeFor: ["/statement"] },
-    { path: "/reports/network", text: "Network Latency", activeFor: ["/reports/network"] },
+    {
+      path: "/reports/network",
+      text: "Network Latency",
+      activeFor: ["/reports/network"],
+    },
     { path: "/jobs", text: "Jobs", activeFor: [] },
     {
       path: "/debug",
@@ -47,13 +51,17 @@ class Sidebar extends React.Component<RouteComponentProps> {
 
   isActiveNavigationItem = (path: string): boolean => {
     const { pathname } = this.props.location;
-    const { activeFor, ignoreFor = []} = this.routes.find(route => route.path === path);
-    return [...activeFor, path].some(p => {
-      const isMatchedToIgnoredPaths = ignoreFor.some(ignorePath => pathname.startsWith(ignorePath));
+    const { activeFor, ignoreFor = [] } = this.routes.find(
+      (route) => route.path === path,
+    );
+    return [...activeFor, path].some((p) => {
+      const isMatchedToIgnoredPaths = ignoreFor.some((ignorePath) =>
+        pathname.startsWith(ignorePath),
+      );
       const isMatchedToActiveFor = pathname.startsWith(p);
       return isMatchedToActiveFor && !isMatchedToIgnoredPaths;
     });
-  }
+  };
 
   render() {
     const navigationItems = this.routes.map(({ path, text }, idx) => (
@@ -64,11 +72,7 @@ class Sidebar extends React.Component<RouteComponentProps> {
         <Link to={path}>{text}</Link>
       </SideNavigation.Item>
     ));
-    return (
-      <SideNavigation>
-        {navigationItems}
-      </SideNavigation>
-    );
+    return <SideNavigation>{navigationItems}</SideNavigation>;
   }
 }
 

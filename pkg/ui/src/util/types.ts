@@ -35,6 +35,7 @@
  * const complicatedReturnType = nullOfReturnType(fnWithComplicatedReturn);
  * let complicatedVariable: typeof complicatedReturnType;
  */
-export function nullOfReturnType<R> (_: (...args: any[]) => R): R {
-    return null;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function nullOfReturnType<R>(_?: (...args: any[]) => R): R {
+  return null;
 }

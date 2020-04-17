@@ -26,7 +26,16 @@ export interface ButtonProps {
 }
 
 export function Button(props: ButtonProps) {
-  const { children, type, disabled, size, icon, iconPosition, onClick, className } = props;
+  const {
+    children,
+    type,
+    disabled,
+    size,
+    icon,
+    iconPosition,
+    onClick,
+    className,
+  } = props;
 
   const rootStyles = cn(
     "crl-button",
@@ -43,24 +52,16 @@ export function Button(props: ButtonProps) {
       return null;
     }
     return (
-      <div className={`crl-button__icon--push-${iconPosition}`}>
-        { icon() }
-      </div>
+      <div className={`crl-button__icon--push-${iconPosition}`}>{icon()}</div>
     );
   };
 
   return (
-    <button
-      onClick={onClick}
-      className={rootStyles}
-      disabled={disabled}
-    >
+    <button onClick={onClick} className={rootStyles} disabled={disabled}>
       <div className="crl-button__container">
-        { iconPosition === "left" && renderIcon() }
-        <div className="crl-button__content">
-          {children}
-        </div>
-        { iconPosition === "right" && renderIcon() }
+        {iconPosition === "left" && renderIcon()}
+        <div className="crl-button__content">{children}</div>
+        {iconPosition === "right" && renderIcon()}
       </div>
     </button>
   );

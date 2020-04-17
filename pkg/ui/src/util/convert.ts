@@ -37,11 +37,15 @@ export function SecondsToNano(sec: number): number {
  * TimestampToMoment converts a Timestamp$Properties object, as seen in wire.proto, to
  * a Moment object. If timestamp is null, it returns the current time.
  */
-export function TimestampToMoment(timestamp?: protos.google.protobuf.ITimestamp): moment.Moment {
+export function TimestampToMoment(
+  timestamp?: protos.google.protobuf.ITimestamp,
+): moment.Moment {
   if (!timestamp) {
     return moment.utc();
   }
-  return moment.utc((timestamp.seconds.toNumber() * 1e3) + NanoToMilli(timestamp.nanos));
+  return moment.utc(
+    timestamp.seconds.toNumber() * 1e3 + NanoToMilli(timestamp.nanos),
+  );
 }
 
 /**

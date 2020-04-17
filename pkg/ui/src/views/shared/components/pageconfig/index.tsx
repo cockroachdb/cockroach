@@ -24,9 +24,7 @@ export function PageConfig(props: PageConfigProps) {
 
   return (
     <div className="page-config">
-      <ul className={ classes }>
-        { props.children }
-      </ul>
+      <ul className={classes}>{props.children}</ul>
     </div>
   );
 }
@@ -36,9 +34,5 @@ export interface PageConfigItemProps {
 }
 
 export function PageConfigItem(props: PageConfigItemProps) {
-  return (
-    <li className="page-config__item">
-      { props.children }
-    </li>
-  );
+  return <li className="page-config__item">{props.children}</li>;
 }

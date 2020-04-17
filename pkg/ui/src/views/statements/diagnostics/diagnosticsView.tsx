@@ -40,16 +40,25 @@ import "./diagnosticsView.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequest;
-import { getDiagnosticsStatus, sortByCompletedField, sortByRequestedAtField } from "./diagnosticsUtils";
+import {
+  getDiagnosticsStatus,
+  sortByCompletedField,
+  sortByRequestedAtField,
+} from "./diagnosticsUtils";
 import { statementDiagnostics } from "src/util/docs";
 import { createStatementDiagnosticsAlertLocalSetting } from "oss/src/redux/alerts";
-import { trackActivateDiagnostics, trackDownloadDiagnosticsBundle } from "src/util/analytics";
+import {
+  trackActivateDiagnostics,
+  trackDownloadDiagnosticsBundle,
+} from "src/util/analytics";
 
 interface DiagnosticsViewOwnProps {
   statementFingerprint?: string;
 }
 
-type DiagnosticsViewProps = DiagnosticsViewOwnProps & MapStateToProps & MapDispatchToProps;
+type DiagnosticsViewProps = DiagnosticsViewOwnProps &
+  MapStateToProps &
+  MapDispatchToProps;
 
 interface DiagnosticsViewState {
   traces: {
@@ -57,7 +66,10 @@ interface DiagnosticsViewState {
   };
 }
 
-export class DiagnosticsView extends React.Component<DiagnosticsViewProps, DiagnosticsViewState> {
+export class DiagnosticsView extends React.Component<
+  DiagnosticsViewProps,
+  DiagnosticsViewState
+> {
   columns: ColumnsConfig<IStatementDiagnosticsReport> = [
     {
       key: "activatedOn",
@@ -93,8 +105,12 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
         if (record.completed) {
           return (
             <div className="crl-statements-diagnostics-view__actions-column">
-              <a href={`_admin/v1/stmtbundle/${record.statement_diagnostics_id}`}
-                 onClick={() => trackDownloadDiagnosticsBundle(record.statement_fingerprint)}>
+              <a
+                href={`_admin/v1/stmtbundle/${record.statement_diagnostics_id}`}
+                onClick={() =>
+                  trackDownloadDiagnosticsBundle(record.statement_fingerprint)
+                }
+              >
                 <Button
                   size="small"
                   type="flat"
@@ -102,7 +118,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
                   icon={() => (
                     <span
                       className="crl-statements-diagnostics-view__icon"
-                      dangerouslySetInnerHTML={ trustIcon(DownloadIcon) }
+                      dangerouslySetInnerHTML={trustIcon(DownloadIcon)}
                     />
                   )}
                 >
@@ -120,17 +136,23 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
   downloadRef = React.createRef<DownloadFileRef>();
 
   getStatementDiagnostics = async (diagnosticsId: Long) => {
-    const request = new StatementDiagnosticsRequest({ statement_diagnostics_id: diagnosticsId });
+    const request = new StatementDiagnosticsRequest({
+      statement_diagnostics_id: diagnosticsId,
+    });
     const response = await getStatementDiagnostics(request);
     const trace = response.diagnostics?.trace;
-    this.downloadRef.current?.download("statement-diagnostics.json", "application/json", trace);
-  }
+    this.downloadRef.current?.download(
+      "statement-diagnostics.json",
+      "application/json",
+      trace,
+    );
+  };
 
   onActivateButtonClick = () => {
     const { activate, statementFingerprint } = this.props;
     activate(statementFingerprint);
     trackActivateDiagnostics(statementFingerprint);
-  }
+  };
 
   componentWillUnmount() {
     this.props.dismissAlertMessage();
@@ -139,7 +161,9 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
   render() {
     const { hasData, diagnosticsReports } = this.props;
 
-    const canRequestDiagnostics = diagnosticsReports.every(diagnostic => diagnostic.completed);
+    const canRequestDiagnostics = diagnosticsReports.every(
+      (diagnostic) => diagnostic.completed,
+    );
 
     const dataSource = diagnosticsReports.map((diagnosticsReport, idx) => ({
       ...diagnosticsReport,
@@ -155,47 +179,39 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
     }
     return (
       <SummaryCard>
-        <div
-          className="crl-statements-diagnostics-view__title"
-        >
-          <Text
-            textType={TextTypes.Heading3}
-          >
-            Statement diagnostics
-          </Text>
-          {
-            canRequestDiagnostics && (
-              <Button
-                onClick={this.onActivateButtonClick}
-                disabled={!canRequestDiagnostics}
-                type="secondary"
-                className="crl-statements-diagnostics-view__activate-button"
-              >
-                Activate diagnostics
-              </Button>
-            )
-          }
+        <div className="crl-statements-diagnostics-view__title">
+          <Text textType={TextTypes.Heading3}>Statement diagnostics</Text>
+          {canRequestDiagnostics && (
+            <Button
+              onClick={this.onActivateButtonClick}
+              disabled={!canRequestDiagnostics}
+              type="secondary"
+              className="crl-statements-diagnostics-view__activate-button"
+            >
+              Activate diagnostics
+            </Button>
+          )}
         </div>
-        <Table
-          dataSource={dataSource}
-          columns={this.columns}
-        />
+        <Table dataSource={dataSource} columns={this.columns} />
         <div className="crl-statements-diagnostics-view__footer">
-          <Link to="/reports/statements/diagnosticshistory">All statement diagnostics</Link>
+          <Link to="/reports/statements/diagnosticshistory">
+            All statement diagnostics
+          </Link>
         </div>
-        <DownloadFile ref={this.downloadRef}/>
+        <DownloadFile ref={this.downloadRef} />
       </SummaryCard>
     );
   }
 }
 
-export class EmptyDiagnosticsView extends React.Component<DiagnosticsViewProps> {
-
+export class EmptyDiagnosticsView extends React.Component<
+  DiagnosticsViewProps
+> {
   onActivateButtonClick = () => {
     const { activate, statementFingerprint } = this.props;
     activate(statementFingerprint);
     trackActivateDiagnostics(statementFingerprint);
-  }
+  };
 
   render() {
     return (
@@ -208,20 +224,17 @@ export class EmptyDiagnosticsView extends React.Component<DiagnosticsViewProps> 
         </Text>
         <div className="crl-statements-diagnostics-view__content">
           <main className="crl-statements-diagnostics-view__main">
-            <Text
-              textType={TextTypes.Body}
-            >
-              When you activate statement diagnostics, CockroachDB will wait for the next query that matches
-              this statement fingerprint. A download button will appear on the statement list and detail pages
-              when the query is ready. The statement diagnostic will include EXPLAIN plans,
-              table statistics, and traces. <Anchor href={statementDiagnostics}>Learn more</Anchor>
+            <Text textType={TextTypes.Body}>
+              When you activate statement diagnostics, CockroachDB will wait for
+              the next query that matches this statement fingerprint. A download
+              button will appear on the statement list and detail pages when the
+              query is ready. The statement diagnostic will include EXPLAIN
+              plans, table statistics, and traces.{" "}
+              <Anchor href={statementDiagnostics}>Learn more</Anchor>
             </Text>
           </main>
           <footer className="crl-statements-diagnostics-view__footer">
-            <Button
-              type="primary"
-              onClick={this.onActivateButtonClick}
-            >
+            <Button type="primary" onClick={this.onActivateButtonClick}>
               Activate
             </Button>
           </footer>
@@ -241,10 +254,20 @@ interface MapDispatchToProps {
   dismissAlertMessage: () => void;
 }
 
-const mapStateToProps = (state: AdminUIState, props: DiagnosticsViewProps): MapStateToProps => {
+const mapStateToProps = (
+  state: AdminUIState,
+  props: DiagnosticsViewProps,
+): MapStateToProps => {
   const { statementFingerprint } = props;
-  const hasData = selectDiagnosticsReportsCountByStatementFingerprint(state, statementFingerprint) > 0;
-  const diagnosticsReports = selectDiagnosticsReportsByStatementFingerprint(state, statementFingerprint);
+  const hasData =
+    selectDiagnosticsReportsCountByStatementFingerprint(
+      state,
+      statementFingerprint,
+    ) > 0;
+  const diagnosticsReports = selectDiagnosticsReportsByStatementFingerprint(
+    state,
+    statementFingerprint,
+  );
   return {
     hasData,
     diagnosticsReports,
@@ -253,11 +276,15 @@ const mapStateToProps = (state: AdminUIState, props: DiagnosticsViewProps): MapS
 
 const mapDispatchToProps: MapDispatchToProps = {
   activate: createStatementDiagnosticsReportAction,
-  dismissAlertMessage: () => createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
+  dismissAlertMessage: () =>
+    createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
 };
 
 export default connect<
   MapStateToProps,
   MapDispatchToProps,
   DiagnosticsViewOwnProps
-  >(mapStateToProps, mapDispatchToProps)(DiagnosticsView);
+>(
+  mapStateToProps,
+  mapDispatchToProps,
+)(DiagnosticsView);

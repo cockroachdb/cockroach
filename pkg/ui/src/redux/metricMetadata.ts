@@ -16,7 +16,8 @@ import { MetricMetadataResponseMessage } from "src/util/api";
 export type MetricsMetadata = MetricMetadataResponseMessage["metadata"];
 
 // State selectors
-const metricsMetadataStateSelector = (state: AdminUIState) => state.cachedData.metricMetadata.data;
+const metricsMetadataStateSelector = (state: AdminUIState) =>
+  state.cachedData.metricMetadata.data;
 
 export const metricsMetadataSelector = createSelector(
   metricsMetadataStateSelector,

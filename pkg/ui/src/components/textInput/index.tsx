@@ -56,10 +56,10 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
     const { validate } = this.props;
     const validationMessage = validate(value);
     this.setState({
-      isValid: !Boolean(validationMessage),
+      isValid: !validationMessage,
       validationMessage,
     });
-  }
+  };
 
   handleOnTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
@@ -71,7 +71,7 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
       isDirty: true,
     });
     this.props.onChange(value);
-  }
+  };
 
   handleOnBlur = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
@@ -80,20 +80,16 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
       isTouched: true,
       needValidation: true,
     });
-  }
+  };
 
   render() {
     const { initialValue, placeholder, className, name, value } = this.props;
     const { isDirty, isValid, validationMessage } = this.state;
     const textValue = isDirty ? value : initialValue;
 
-    const classes = cn(
-      className,
-      "crl-text-input",
-      {
-        "crl-text-input--invalid": !isValid,
-      },
-    );
+    const classes = cn(className, "crl-text-input", {
+      "crl-text-input--invalid": !isValid,
+    });
     return (
       <div className="crl-text-input__wrapper">
         <input
@@ -106,18 +102,16 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
           onBlur={this.handleOnBlur}
           autoComplete="off"
         />
-        {
-          !isValid && (
-            <div className="crl-text-input__validation-container">
-              <Text
-                textType={TextTypes.Caption}
-                className="crl-text-input__error-message"
-              >
-                {validationMessage}
-              </Text>
-            </div>
-          )
-        }
+        {!isValid && (
+          <div className="crl-text-input__validation-container">
+            <Text
+              textType={TextTypes.Caption}
+              className="crl-text-input__error-message"
+            >
+              {validationMessage}
+            </Text>
+          </div>
+        )}
       </div>
     );
   }

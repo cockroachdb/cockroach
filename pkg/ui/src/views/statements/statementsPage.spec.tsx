@@ -24,7 +24,10 @@ describe("StatementsPage", () => {
     it("sorts data by Execution Count DESC as default option", () => {
       const rootWrapper = connectedMount(() => <StatementsPageConnected />);
 
-      const statementsPageWrapper: ReactWrapper<StatementsPageProps, StatementsPageState> = rootWrapper.find(StatementsPage).first();
+      const statementsPageWrapper: ReactWrapper<
+        StatementsPageProps,
+        StatementsPageState
+      > = rootWrapper.find(StatementsPage).first();
       const statementsPageInstance = statementsPageWrapper.instance();
 
       assert.equal(statementsPageInstance.state.sortSetting.sortKey, 3);

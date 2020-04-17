@@ -42,7 +42,8 @@ describe("DiagnosticsView", () => {
           hasData={false}
           diagnosticsReports={[]}
           dismissAlertMessage={() => {}}
-        />);
+        />,
+      );
     });
 
     it("renders EmptyDiagnosticsView component when no diagnostics data provided", () => {
@@ -70,8 +71,8 @@ describe("DiagnosticsView", () => {
           hasData={true}
           diagnosticsReports={diagnosticsRequests}
           dismissAlertMessage={() => {}}
-        />),
-      );
+        />
+      ));
     });
 
     it("renders Table component when diagnostics data is provided", () => {
@@ -96,16 +97,20 @@ describe("DiagnosticsView", () => {
           hasData={true}
           diagnosticsReports={diagnosticsRequests}
           dismissAlertMessage={() => {}}
-        />),
-      );
+        />
+      ));
 
-      const activateButtonComponent = wrapper.find(".crl-statements-diagnostics-view__activate-button").first();
+      const activateButtonComponent = wrapper
+        .find(".crl-statements-diagnostics-view__activate-button")
+        .first();
       assert.isFalse(activateButtonComponent.exists());
     });
   });
 });
 
-function generateDiagnosticsRequest(extendObject: Partial<IStatementDiagnosticsReport> = {}): IStatementDiagnosticsReport {
+function generateDiagnosticsRequest(
+  extendObject: Partial<IStatementDiagnosticsReport> = {},
+): IStatementDiagnosticsReport {
   const diagnosticsRequest = {
     statement_fingerprint: "SELECT * FROM table",
     completed: true,

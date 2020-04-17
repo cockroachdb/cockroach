@@ -19,27 +19,43 @@ import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import * as protos from "src/js/protos";
-import { refreshStatementDiagnosticsRequests, refreshStatements } from "src/redux/apiReducers";
+import {
+  refreshStatementDiagnosticsRequests,
+  refreshStatements,
+} from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { StatementsResponseMessage } from "src/util/api";
-import { aggregateStatementStats, combineStatementStats, ExecutionStatistics, flattenStatementStats, StatementStatistics } from "src/util/appStats";
+import {
+  aggregateStatementStats,
+  combineStatementStats,
+  ExecutionStatistics,
+  flattenStatementStats,
+  StatementStatistics,
+} from "src/util/appStats";
 import { appAttr } from "src/util/constants";
 import { TimestampToMoment } from "src/util/convert";
 import { Pick } from "src/util/pick";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
-import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
+import {
+  PageConfig,
+  PageConfigItem,
+} from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import Empty from "../app/components/empty";
 import { Search } from "../app/components/Search";
-import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
-import ActivateDiagnosticsModal, { ActivateDiagnosticsModalRef } from "src/views/statements/diagnostics/activateDiagnosticsModal";
-import "./statements.styl";
 import {
-  selectLastDiagnosticsReportPerStatement,
-} from "src/redux/statements/statementsSelectors";
+  AggregateStatistics,
+  makeStatementsColumns,
+  StatementsSortedTable,
+} from "./statementsTable";
+import ActivateDiagnosticsModal, {
+  ActivateDiagnosticsModalRef,
+} from "src/views/statements/diagnostics/activateDiagnosticsModal";
+import "./statements.styl";
+import { selectLastDiagnosticsReportPerStatement } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
 import { trackPaginate, trackSearch } from "src/util/analytics";
@@ -71,7 +87,10 @@ export interface StatementsPageState {
 
 export type StatementsPageProps = OwnProps & RouteComponentProps<any>;
 
-export class StatementsPage extends React.Component<StatementsPageProps, StatementsPageState> {
+export class StatementsPage extends React.Component<
+  StatementsPageProps,
+  StatementsPageState
+> {
   activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
 
   constructor(props: StatementsPageProps) {
@@ -107,7 +126,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
       },
       search: searchQuery,
     };
-  }
+  };
 
   syncHistory = (params: Record<string, string | undefined>) => {
     const { history } = this.props;
@@ -124,7 +143,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
 
     history.location.search = currentSearchParams.toString();
     history.replace(history.location);
-  }
+  };
 
   changeSortSetting = (ss: SortSetting) => {
     this.setState({
@@ -132,29 +151,32 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     });
 
     this.syncHistory({
-      "sortKey": ss.sortKey,
-      "ascending": Boolean(ss.ascending).toString(),
+      sortKey: ss.sortKey,
+      ascending: Boolean(ss.ascending).toString(),
     });
-  }
+  };
 
   selectApp = (app: DropdownOption) => {
     const { history } = this.props;
     history.location.pathname = `/statements/${app.value}`;
     history.replace(history.location);
-  }
+  };
 
   componentDidMount() {
     this.props.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
   }
 
-  componentDidUpdate = (__: StatementsPageProps, prevState: StatementsPageState) => {
+  componentDidUpdate = (
+    __: StatementsPageProps,
+    prevState: StatementsPageState,
+  ) => {
     if (this.state.search && this.state.search !== prevState.search) {
       trackSearch(this.filteredStatementsData().length);
     }
     this.props.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
-  }
+  };
 
   componentWillUnmount() {
     this.props.dismissAlertMessage();
@@ -164,28 +186,41 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     const { pagination } = this.state;
     this.setState({ pagination: { ...pagination, current } });
     trackPaginate(current);
-  }
+  };
   onSubmitSearchField = (search: string) => {
-    this.setState({ pagination: { ...this.state.pagination, current: 1 }, search });
-    this.syncHistory({
-      "q": search,
+    this.setState({
+      pagination: { ...this.state.pagination, current: 1 },
+      search,
     });
-  }
+    this.syncHistory({
+      q: search,
+    });
+  };
 
   onClearSearchField = () => {
     this.setState({ search: "" });
     this.syncHistory({
-      "q": undefined,
+      q: undefined,
     });
-  }
+  };
 
   filteredStatementsData = () => {
     const { search } = this.state;
     const { statements } = this.props;
-    return statements.filter(statement => search.split(" ").every(val => statement.label.toLowerCase().includes(val.toLowerCase())));
-  }
+    return statements.filter((statement) =>
+      search
+        .split(" ")
+        .every((val) =>
+          statement.label.toLowerCase().includes(val.toLowerCase()),
+        ),
+    );
+  };
 
-  renderPage = (_page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next", originalElement: React.ReactNode) => {
+  renderPage = (
+    _page: number,
+    type: "page" | "prev" | "next" | "jump-prev" | "jump-next",
+    originalElement: React.ReactNode,
+  ) => {
     switch (type) {
       case "jump-prev":
         return (
@@ -204,10 +239,13 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
       default:
         return originalElement;
     }
-  }
+  };
 
   renderCounts = () => {
-    const { pagination: { current, pageSize }, search } = this.state;
+    const {
+      pagination: { current, pageSize },
+      search,
+    } = this.state;
     const { match } = this.props;
     const appAttrValue = getMatchParamByName(match, appAttr);
     const selectedApp = appAttrValue || "";
@@ -215,26 +253,43 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     const pageCount = current * pageSize > total ? total : current * pageSize;
     const count = total > 10 ? pageCount : current * total;
     if (search.length > 0) {
-      const text = `${total} ${total > 1 || total === 0 ? "results" : "result"} for`;
-      const filter = selectedApp ? <React.Fragment>in <span className="label">{selectedApp}</span></React.Fragment> : null;
+      const text = `${total} ${
+        total > 1 || total === 0 ? "results" : "result"
+      } for`;
+      const filter = selectedApp ? (
+        <React.Fragment>
+          in <span className="label">{selectedApp}</span>
+        </React.Fragment>
+      ) : null;
       return (
-        <React.Fragment>{text} <span className="label">{search}</span> {filter}</React.Fragment>
+        <React.Fragment>
+          {text} <span className="label">{search}</span> {filter}
+        </React.Fragment>
       );
     }
     return `${count} of ${total} statements`;
-  }
+  };
 
   renderLastCleared = () => {
     const { lastReset } = this.props;
     return `Last cleared ${moment.utc(lastReset).format(DATE_FORMAT)}`;
-  }
+  };
 
   noStatementResult = () => (
     <>
-      <p>There are no SQL statements that match your search or filter since this page was last cleared.</p>
-      <a href="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html" target="_blank">Learn more about the statement page</a>
+      <p>
+        There are no SQL statements that match your search or filter since this
+        page was last cleared.
+      </p>
+      <a
+        href="https://www.cockroachlabs.com/docs/stable/admin-ui-statements-page.html"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Learn more about the statement page
+      </a>
     </>
-  )
+  );
 
   renderStatements = () => {
     const { pagination, search } = this.state;
@@ -242,7 +297,9 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     const appAttrValue = getMatchParamByName(match, appAttr);
     const selectedApp = appAttrValue || "";
     const appOptions = [{ value: "", label: "All" }];
-    this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
+    this.props.apps.forEach((app) =>
+      appOptions.push({ value: app, label: app }),
+    );
     const data = this.filteredStatementsData();
     return (
       <div>
@@ -265,12 +322,8 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
         </PageConfig>
         <section className="cl-table-container">
           <div className="cl-table-statistic">
-            <h4 className="cl-count-title">
-              {this.renderCounts()}
-            </h4>
-            <h4 className="last-cleared-title">
-              {this.renderLastCleared()}
-            </h4>
+            <h4 className="cl-count-title">{this.renderCounts()}</h4>
+            <h4 className="last-cleared-title">{this.renderLastCleared()}</h4>
           </div>
           {data.length === 0 && search.length === 0 && (
             <Empty
@@ -284,14 +337,12 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
               <StatementsSortedTable
                 className="statements-table"
                 data={data}
-                columns={
-                  makeStatementsColumns(
-                    statements,
-                    selectedApp,
-                    search,
-                    this.activateDiagnosticsRef,
-                  )
-                }
+                columns={makeStatementsColumns(
+                  statements,
+                  selectedApp,
+                  search,
+                  this.activateDiagnosticsRef,
+                )}
                 sortSetting={this.state.sortSetting}
                 onChangeSortSetting={this.changeSortSetting}
                 renderNoResult={this.noStatementResult()}
@@ -302,7 +353,12 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
         </section>
         <Pagination
           size="small"
-          itemRender={this.renderPage as (page: number, type: "page" | "prev" | "next" | "jump-prev" | "jump-next") => React.ReactNode}
+          itemRender={
+            this.renderPage as (
+              page: number,
+              type: "page" | "prev" | "next" | "jump-prev" | "jump-next",
+            ) => React.ReactNode
+          }
           pageSize={pagination.pageSize}
           current={pagination.current}
           total={data.length}
@@ -311,7 +367,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
         />
       </div>
     );
-  }
+  };
 
   render() {
     const { match } = this.props;
@@ -363,7 +419,8 @@ export const selectStatements = createSelector(
     }
     let statements = flattenStatementStats(state.data.statements);
     const app = getMatchParamByName(props.match, appAttr);
-    const isInternal = (statement: ExecutionStatistics) => statement.app.startsWith(state.data.internal_app_name_prefix);
+    const isInternal = (statement: ExecutionStatistics) =>
+      statement.app.startsWith(state.data.internal_app_name_prefix);
 
     if (app) {
       let criteria = app;
@@ -375,14 +432,19 @@ export const selectStatements = createSelector(
       }
 
       statements = statements.filter(
-        (statement: ExecutionStatistics) => (showInternal && isInternal(statement)) || statement.app === criteria,
+        (statement: ExecutionStatistics) =>
+          (showInternal && isInternal(statement)) || statement.app === criteria,
       );
     } else {
-      statements = statements.filter((statement: ExecutionStatistics) => !isInternal(statement));
+      statements = statements.filter(
+        (statement: ExecutionStatistics) => !isInternal(statement),
+      );
     }
 
-    const statsByStatementAndImplicitTxn: { [statement: string]: StatementsSummaryData } = {};
-    statements.forEach(stmt => {
+    const statsByStatementAndImplicitTxn: {
+      [statement: string]: StatementsSummaryData;
+    } = {};
+    statements.forEach((stmt) => {
       const key = keyByStatementAndImplicitTxn(stmt);
       if (!(key in statsByStatementAndImplicitTxn)) {
         statsByStatementAndImplicitTxn[key] = {
@@ -394,7 +456,7 @@ export const selectStatements = createSelector(
       statsByStatementAndImplicitTxn[key].stats.push(stmt.stats);
     });
 
-    return Object.keys(statsByStatementAndImplicitTxn).map(key => {
+    return Object.keys(statsByStatementAndImplicitTxn).map((key) => {
       const stmt = statsByStatementAndImplicitTxn[key];
       return {
         label: stmt.statement,
@@ -420,7 +482,12 @@ export const selectApps = createSelector(
     const apps: { [app: string]: boolean } = {};
     state.data.statements.forEach(
       (statement: ICollectedStatementStatistics) => {
-        if (state.data.internal_app_name_prefix && statement.key.key_data.app.startsWith(state.data.internal_app_name_prefix)) {
+        if (
+          state.data.internal_app_name_prefix &&
+          statement.key.key_data.app.startsWith(
+            state.data.internal_app_name_prefix,
+          )
+        ) {
           sawInternal = true;
         } else if (statement.key.key_data.app) {
           apps[statement.key.key_data.app] = true;
@@ -429,7 +496,10 @@ export const selectApps = createSelector(
         }
       },
     );
-    return [].concat(sawInternal ? ["(internal)"] : []).concat(sawBlank ? ["(unset)"] : []).concat(Object.keys(apps));
+    return []
+      .concat(sawInternal ? ["(internal)"] : [])
+      .concat(sawBlank ? ["(unset)"] : [])
+      .concat(Object.keys(apps));
   },
 );
 
@@ -460,19 +530,22 @@ export const selectLastReset = createSelector(
 );
 
 // tslint:disable-next-line:variable-name
-const StatementsPageConnected = withRouter(connect(
-  (state: AdminUIState, props: RouteComponentProps) => ({
-    statements: selectStatements(state, props),
-    statementsError: state.cachedData.statements.lastError,
-    apps: selectApps(state),
-    totalFingerprints: selectTotalFingerprints(state),
-    lastReset: selectLastReset(state),
-  }),
-  {
-    refreshStatements,
-    refreshStatementDiagnosticsRequests,
-    dismissAlertMessage: () => createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
-  },
-)(StatementsPage));
+const StatementsPageConnected = withRouter(
+  connect(
+    (state: AdminUIState, props: RouteComponentProps) => ({
+      statements: selectStatements(state, props),
+      statementsError: state.cachedData.statements.lastError,
+      apps: selectApps(state),
+      totalFingerprints: selectTotalFingerprints(state),
+      lastReset: selectLastReset(state),
+    }),
+    {
+      refreshStatements,
+      refreshStatementDiagnosticsRequests,
+      dismissAlertMessage: () =>
+        createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
+    },
+  )(StatementsPage),
+);
 
 export default StatementsPageConnected;

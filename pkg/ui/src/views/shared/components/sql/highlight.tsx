@@ -18,7 +18,6 @@ interface SqlBoxProps {
 }
 
 export class Highlight extends React.Component<SqlBoxProps> {
-
   preNode: React.RefObject<HTMLPreElement> = React.createRef();
 
   shouldComponentUpdate(newProps: SqlBoxProps) {
@@ -44,10 +43,14 @@ export class Highlight extends React.Component<SqlBoxProps> {
         <span className="hljs-keyword">CONFIGURE ZONE USING</span>
         <br />
         <span className="hljs-label">range_min_bytes = </span>
-        <span className="hljs-built_in">{`${String(zoneConfig.range_min_bytes)},`}</span>
+        <span className="hljs-built_in">{`${String(
+          zoneConfig.range_min_bytes,
+        )},`}</span>
         <br />
         <span className="hljs-label">range_max_bytes = </span>
-        <span className="hljs-built_in">{`${String(zoneConfig.range_max_bytes)},`}</span>
+        <span className="hljs-built_in">{`${String(
+          zoneConfig.range_max_bytes,
+        )},`}</span>
         <br />
         <span className="hljs-label">gc.ttlseconds = </span>
         <span className="hljs-built_in">{`${zoneConfig.gc.ttl_seconds},`}</span>
@@ -55,16 +58,18 @@ export class Highlight extends React.Component<SqlBoxProps> {
         <span className="hljs-label">num_replicas = </span>
         <span className="hljs-built_in">{`${zoneConfig.num_replicas},`}</span>
         <br />
-        <span className="hljs-label">constraints = ['</span>
+        <span className="hljs-label">{`constraints = ['`}</span>
         <span className="hljs-built_in">{String(zoneConfig.constraints)}</span>
-        '],
+        {`'],`}
         <br />
-        <span className="hljs-label">lease_preferences = [['</span>
-        <span className="hljs-built_in">{String(zoneConfig.lease_preferences)}</span>
-        ']]
+        <span className="hljs-label">lease_preferences = {`[['`}</span>
+        <span className="hljs-built_in">
+          {String(zoneConfig.lease_preferences)}
+        </span>
+        {`']]`}
       </span>
     );
-  }
+  };
 
   render() {
     const { value, zone } = this.props;

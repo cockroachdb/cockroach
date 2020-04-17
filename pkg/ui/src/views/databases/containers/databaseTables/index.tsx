@@ -14,20 +14,34 @@ import { SummaryCard } from "oss/src/views/shared/components/summaryCard";
 import React from "react";
 import { connect } from "react-redux";
 import { Link } from "react-router-dom";
-import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats } from "src/redux/apiReducers";
+import {
+  refreshDatabaseDetails,
+  refreshTableDetails,
+  refreshTableStats,
+} from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { Bytes } from "src/util/format";
 import { trustIcon } from "src/util/trust";
-import { databaseDetails, DatabaseSummaryBase, DatabaseSummaryExplicitData, grants, tableInfos as selectTableInfos } from "src/views/databases/containers/databaseSummary";
+import {
+  databaseDetails,
+  DatabaseSummaryBase,
+  DatabaseSummaryExplicitData,
+  grants,
+  tableInfos as selectTableInfos,
+} from "src/views/databases/containers/databaseSummary";
 import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
-import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
+import {
+  SummaryBar,
+  SummaryHeadlineStat,
+} from "src/views/shared/components/summaryBar";
 import "./databaseTables.styl";
 
 const databaseTablesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
-  "databases/sort_setting/tables", (s) => s.localSettings,
+  "databases/sort_setting/tables",
+  (s) => s.localSettings,
 );
 
 class DatabaseTableListSortedTable extends SortedTable<TableInfo> {}
@@ -60,7 +74,10 @@ class DatabaseTableListEmpty extends React.Component {
             <td className="sort-table__cell" colSpan={5}>
               <div className="empty-state">
                 <div className="empty-state__line">
-                  <span className="table-icon" dangerouslySetInnerHTML={trustIcon(tableIcon)} />
+                  <span
+                    className="table-icon"
+                    dangerouslySetInnerHTML={trustIcon(tableIcon)}
+                  />
                   This database has no tables.
                 </div>
               </div>
@@ -89,7 +106,7 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
     const { tableInfos, sortSetting } = this.props;
     const dbID = this.props.name;
 
-    const numTables = tableInfos && tableInfos.length || 0;
+    const numTables = (tableInfos && tableInfos.length) || 0;
 
     return (
       <div className="database-summary">
@@ -100,47 +117,55 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
           <div className="l-columns">
             <div className="l-columns__left">
               <div className="database-summary-table sql-table">
-                {
-                  (numTables === 0) ? <DatabaseTableListEmpty /> :
-                    <DatabaseTableListSortedTable
-                      data={tableInfos}
-                      sortSetting={sortSetting}
-                      onChangeSortSetting={(setting) => this.props.setSort(setting)}
-                      columns={[
-                        {
-                          title: "Table Name",
-                          cell: (tableInfo) => {
-                            return (
-                              <div className="sort-table__unbounded-column">
-                                <Link to={`/database/${dbID}/table/${tableInfo.name}`}>{tableInfo.name}</Link>
-                              </div>
-                            );
-                          },
-                          sort: (tableInfo) => tableInfo.name,
-                          className: "expand-link", // don't pad the td element to allow the link to expand
+                {numTables === 0 ? (
+                  <DatabaseTableListEmpty />
+                ) : (
+                  <DatabaseTableListSortedTable
+                    data={tableInfos}
+                    sortSetting={sortSetting}
+                    onChangeSortSetting={(setting) =>
+                      this.props.setSort(setting)
+                    }
+                    columns={[
+                      {
+                        title: "Table Name",
+                        cell: (tableInfo) => {
+                          return (
+                            <div className="sort-table__unbounded-column">
+                              <Link
+                                to={`/database/${dbID}/table/${tableInfo.name}`}
+                              >
+                                {tableInfo.name}
+                              </Link>
+                            </div>
+                          );
                         },
-                        {
-                          title: "Size",
-                          cell: (tableInfo) => Bytes(tableInfo.physicalSize),
-                          sort: (tableInfo) => tableInfo.physicalSize,
-                        },
-                        {
-                          title: "Ranges",
-                          cell: (tableInfo) => tableInfo.rangeCount,
-                          sort: (tableInfo) => tableInfo.rangeCount,
-                        },
-                        {
-                          title: "# of Columns",
-                          cell: (tableInfo) => tableInfo.numColumns,
-                          sort: (tableInfo) => tableInfo.numColumns,
-                        },
-                        {
-                          title: "# of Indices",
-                          cell: (tableInfo) => tableInfo.numIndices,
-                          sort: (tableInfo) => tableInfo.numIndices,
-                        },
-                      ]} />
-                }
+                        sort: (tableInfo) => tableInfo.name,
+                        className: "expand-link", // don't pad the td element to allow the link to expand
+                      },
+                      {
+                        title: "Size",
+                        cell: (tableInfo) => Bytes(tableInfo.physicalSize),
+                        sort: (tableInfo) => tableInfo.physicalSize,
+                      },
+                      {
+                        title: "Ranges",
+                        cell: (tableInfo) => tableInfo.rangeCount,
+                        sort: (tableInfo) => tableInfo.rangeCount,
+                      },
+                      {
+                        title: "# of Columns",
+                        cell: (tableInfo) => tableInfo.numColumns,
+                        sort: (tableInfo) => tableInfo.numColumns,
+                      },
+                      {
+                        title: "# of Indices",
+                        cell: (tableInfo) => tableInfo.numIndices,
+                        sort: (tableInfo) => tableInfo.numIndices,
+                      },
+                    ]}
+                  />
+                )}
               </div>
             </div>
             <div className="l-columns__right">
@@ -149,15 +174,18 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
                   title="Database Size"
                   tooltip="Approximate total disk size of this database across all table replicas."
                   value={this.totalSize()}
-                  format={Bytes} />
+                  format={Bytes}
+                />
                 <SummaryHeadlineStat
-                  title={(numTables === 1) ? "Table" : "Tables"}
+                  title={numTables === 1 ? "Table" : "Tables"}
                   tooltip="The total number of tables in this database."
-                  value={numTables} />
+                  value={numTables}
+                />
                 <SummaryHeadlineStat
                   title="Total Range Count"
                   tooltip="The total ranges across all tables in this database."
-                  value={this.totalRangeCount()} />
+                  value={this.totalRangeCount()}
+                />
               </SummaryBar>
             </div>
           </div>
@@ -167,10 +195,16 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
   }
 }
 
-const mapStateToProps = (state: AdminUIState, ownProps: DatabaseSummaryExplicitData) => ({ // RootState contains declaration for whole state
+const mapStateToProps = (
+  state: AdminUIState,
+  ownProps: DatabaseSummaryExplicitData,
+) => ({
+  // RootState contains declaration for whole state
   tableInfos: selectTableInfos(state, ownProps.name),
   sortSetting: databaseTablesSortSetting.selector(state),
-  dbResponse: databaseDetails(state)[ownProps.name] && databaseDetails(state)[ownProps.name].data,
+  dbResponse:
+    databaseDetails(state)[ownProps.name] &&
+    databaseDetails(state)[ownProps.name].data,
   grants: grants(state, ownProps.name),
 });
 

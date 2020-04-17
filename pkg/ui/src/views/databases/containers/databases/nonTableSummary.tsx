@@ -44,38 +44,42 @@ class NonTableSummary extends React.Component<TimeSeriesSummaryProps> {
         <table className="sort-table">
           <thead>
             <tr className="sort-table__row sort-table__row--header">
-              <td className="sort-table__cell">
-                Data Type
-              </td>
-              <td className="sort-table__cell">
-                Size
-              </td>
-              <td className="sort-table__cell">
-                Ranges
-              </td>
+              <td className="sort-table__cell">Data Type</td>
+              <td className="sort-table__cell">Size</td>
+              <td className="sort-table__cell">Ranges</td>
             </tr>
           </thead>
           <tbody>
             <tr className="sort-table__row sort-table__row--body">
+              <td className="sort-table__cell">Time Series</td>
               <td className="sort-table__cell">
-                Time Series
+                {Bytes(
+                  FixLong(
+                    this.props.nonTableStats.time_series_stats
+                      .approximate_disk_bytes,
+                  ).toNumber(),
+                )}
               </td>
               <td className="sort-table__cell">
-                { Bytes(FixLong(this.props.nonTableStats.time_series_stats.approximate_disk_bytes).toNumber()) }
-              </td>
-              <td className="sort-table__cell">
-                { FixLong(this.props.nonTableStats.time_series_stats.range_count).toNumber() }
+                {FixLong(
+                  this.props.nonTableStats.time_series_stats.range_count,
+                ).toNumber()}
               </td>
             </tr>
             <tr className="sort-table__row sort-table__row--body">
+              <td className="sort-table__cell">Internal Use</td>
               <td className="sort-table__cell">
-                Internal Use
+                {Bytes(
+                  FixLong(
+                    this.props.nonTableStats.internal_use_stats
+                      .approximate_disk_bytes,
+                  ).toNumber(),
+                )}
               </td>
               <td className="sort-table__cell">
-                { Bytes(FixLong(this.props.nonTableStats.internal_use_stats.approximate_disk_bytes).toNumber()) }
-              </td>
-              <td className="sort-table__cell">
-                { FixLong(this.props.nonTableStats.internal_use_stats.range_count).toNumber() }
+                {FixLong(
+                  this.props.nonTableStats.internal_use_stats.range_count,
+                ).toNumber()}
               </td>
             </tr>
           </tbody>
@@ -93,7 +97,7 @@ class NonTableSummary extends React.Component<TimeSeriesSummaryProps> {
         </div>
         <div className="l-columns">
           <div className="l-columns__left">
-            { hasData ? this.renderTable() : "loading..." }
+            {hasData ? this.renderTable() : "loading..."}
           </div>
           <div className="l-columns__right" />
         </div>
@@ -103,7 +107,8 @@ class NonTableSummary extends React.Component<TimeSeriesSummaryProps> {
 }
 
 // Base selectors to extract data from redux state.
-const nonTableStatsData = (state: AdminUIState) => state.cachedData.nonTableStats;
+const nonTableStatsData = (state: AdminUIState) =>
+  state.cachedData.nonTableStats;
 
 const mapStateToProps = (state: AdminUIState) => {
   const ntStats = nonTableStatsData(state);

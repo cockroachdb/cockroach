@@ -19,7 +19,6 @@ interface SparklinesProps {
 }
 
 export class Sparklines extends React.Component<SparklinesProps> {
-
   renderCPU() {
     return (
       <g>
@@ -76,5 +75,4 @@ export class Sparklines extends React.Component<SparklinesProps> {
       </g>
     );
   }
-
 }

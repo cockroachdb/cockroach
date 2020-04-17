@@ -9,5 +9,8 @@
 import { AdminUIState } from "src/redux/state";
 
 export function selectEnterpriseEnabled(state: AdminUIState) {
-  return state.cachedData.cluster.valid && state.cachedData.cluster.data.enterprise_enabled;
+  return (
+    state.cachedData.cluster.valid &&
+    state.cachedData.cluster.data.enterprise_enabled
+  );
 }

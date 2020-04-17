@@ -22,17 +22,14 @@ export default class NodeList extends React.Component<RouteComponentProps> {
 
   handleMapTableToggle = (value: string) => {
     this.props.history.push(`/overview/${value}`);
-  }
+  };
 
   render() {
     // TODO(vilterp): dedup with ClusterVisualization
     return (
       <div className="fixed-panel">
         <div className="fixed-panel__panel-switcher">
-          <Dropdown
-            items={this.items}
-            onChange={this.handleMapTableToggle}
-          >
+          <Dropdown items={this.items} onChange={this.handleMapTableToggle}>
             Node List
           </Dropdown>
         </div>

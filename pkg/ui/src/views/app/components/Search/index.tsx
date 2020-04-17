@@ -44,30 +44,42 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
         submitted: true,
       });
     }
-  }
+  };
 
   onChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value: string = event.target.value;
     const submitted = value.length === 0;
     this.setState({ value, submitted }, () => submitted && this.onSubmit());
-  }
+  };
 
   onClear = () => {
     const { onClear } = this.props;
     this.setState({ value: "", submit: false });
     onClear();
-  }
+  };
 
   renderSuffix = () => {
     const { value, submitted } = this.state;
     if (value.length > 0) {
       if (submitted) {
-        return <Button onClick={this.onClear} type="default" className="_clear-search"><img className="_suffix-icon" src={CancelIcon} /></Button>;
+        return (
+          <Button
+            onClick={this.onClear}
+            type="default"
+            className="_clear-search"
+          >
+            <img className="_suffix-icon" src={CancelIcon} />
+          </Button>
+        );
       }
-      return <Button type="default" htmlType="submit" className="_submit-search">Enter</Button>;
+      return (
+        <Button type="default" htmlType="submit" className="_submit-search">
+          Enter
+        </Button>
+      );
     }
     return null;
-  }
+  };
 
   render() {
     const { value, submitted } = this.state;
@@ -92,7 +104,7 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
             suffix={this.renderSuffix()}
             value={value}
             {...this.props}
-         />
+          />
         </Form.Item>
       </Form>
     );
