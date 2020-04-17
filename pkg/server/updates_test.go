@@ -16,7 +16,6 @@ import (
 	"net/url"
 	"reflect"
 	"runtime"
-	"sort"
 	"strings"
 	"testing"
 
@@ -30,12 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 )
 
@@ -205,11 +202,12 @@ func TestUsageQuantization(t *testing.T) {
 	}
 }
 
+// This test is deprecated; it is being replaced with datadriven tests
+// (see sql.TestTelemetry).
 func TestReportUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const elemName = "somestring"
-	const internalAppName = sqlbase.ReportableAppNamePrefix + "foo"
 	ctx := context.TODO()
 
 	r := diagutils.NewServer()
@@ -270,14 +268,6 @@ func TestReportUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	telemetry.Count("test.a")
-	telemetry.Count("test.b")
-	telemetry.Count("test.b")
-	c := telemetry.GetCounter("test.c")
-	telemetry.Inc(c)
-	telemetry.Inc(c)
-	telemetry.Inc(c)
-
 	for _, cmd := range []struct {
 		resource string
 		config   string
@@ -298,74 +288,11 @@ func TestReportUsage(t *testing.T) {
 			return nil
 		})
 	}
-	if _, err := db.Exec(`INSERT INTO system.zones (id, config) VALUES (10000, null)`); err != nil {
-		t.Fatal(err)
-	}
 
-	if _, err := db.Exec(
-		fmt.Sprintf(`CREATE TABLE %[1]s.%[1]s (%[1]s INT8 CONSTRAINT %[1]s CHECK (%[1]s > 1))`, elemName),
-	); err != nil {
+	// Set cluster to an internal testing cluster
+	q := `SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing'`
+	if _, err := db.Exec(q); err != nil {
 		t.Fatal(err)
-	}
-
-	if _, err := db.Exec(
-		fmt.Sprintf(`CREATE TABLE %[1]s.%[1]s_s (%[1]s SERIAL2)`, elemName),
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	// Run some queries so we have some query statistics collected.
-	for i := 0; i < 10; i++ {
-		// Run some sample queries. Each are passed a string and int by Exec.
-		// Note placeholders aren't allowed in some positions, including names.
-		for _, q := range []string{
-			`SELECT * FROM %[1]s.%[1]s WHERE %[1]s = length($1::string) OR %[1]s = $2`,
-			`INSERT INTO %[1]s.%[1]s VALUES (length($1::string)), ($2)`,
-		} {
-			if _, err := db.Exec(fmt.Sprintf(q, elemName), elemName, 10003); err != nil {
-				t.Fatal(err)
-			}
-		}
-		// Even queries that don't use placeholders and contain literal strings
-		// should still not cause those strings to appear in reports.
-		for _, q := range []string{
-			`SELECT * FROM %[1]s.%[1]s WHERE %[1]s = 1 AND '%[1]s' = '%[1]s'`,
-			`INSERT INTO %[1]s.%[1]s VALUES (6), (7), (8)`,
-			`INSERT INTO %[1]s.%[1]s SELECT unnest(ARRAY[9, 10, 11, 12])`,
-			`SELECT (1, 20, 30, 40) = (SELECT %[1]s, 1, 2, 3 FROM %[1]s.%[1]s LIMIT 1)`,
-			`SET application_name = '%[1]s'`,
-			`SELECT %[1]s FROM %[1]s.%[1]s WHERE %[1]s = 1 AND lower('%[1]s') = lower('%[1]s')`,
-			`UPDATE %[1]s.%[1]s SET %[1]s = %[1]s + 1`,
-		} {
-			if _, err := db.Exec(fmt.Sprintf(q, elemName)); err != nil {
-				t.Fatal(err)
-			}
-		}
-		// Application names with the '$ ' prefix should not be scrubbed.
-		if _, err := db.Exec(`SET application_name = $1`, internalAppName); err != nil {
-			t.Fatal(err)
-		}
-		// Set cluster to an internal testing cluster
-		q := `SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing'`
-		if _, err := db.Exec(q); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec(`RESET application_name`); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	tables, err := ts.collectSchemaInfo(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if actual := len(tables); actual != 2 {
-		t.Fatalf("unexpected table count %d", actual)
-	}
-	for _, table := range tables {
-		if expected, actual := "_", table.Name; expected != actual {
-			t.Fatalf("unexpected table name, expected %q got %q", expected, actual)
-		}
 	}
 
 	expectedUsageReports := 0
@@ -474,44 +401,6 @@ func TestReportUsage(t *testing.T) {
 		t.Fatalf("%q should not appear in %q", elemName, last.RawReportBody)
 	}
 
-	if expected, actual := len(tables), len(last.Schema); expected != actual {
-		t.Fatalf("expected %d tables in schema, got %d", expected, actual)
-	}
-	reportedByID := make(map[sqlbase.ID]sqlbase.TableDescriptor, len(tables))
-	for _, tbl := range last.Schema {
-		reportedByID[tbl.ID] = tbl
-	}
-	for _, tbl := range tables {
-		r, ok := reportedByID[tbl.ID]
-		if !ok {
-			t.Fatalf("expected table %d to be in reported schema", tbl.ID)
-		}
-		if !reflect.DeepEqual(r, tbl) {
-			t.Fatalf("reported table %d does not match: expected\n%+v got\n%+v", tbl.ID, tbl, r)
-		}
-	}
-
-	expectedFeatureUsage := map[string]int32{
-		"test.a": 1,
-		"test.b": 2,
-		"test.c": 3,
-
-		// SERIAL normalization.
-		"sql.schema.serial.rowid.int2": 1,
-	}
-
-	if expected, actual := len(expectedFeatureUsage), len(last.FeatureUsage); actual < expected {
-		t.Fatalf("expected at least %d feature usage counts, got %d: %v", expected, actual, last.FeatureUsage)
-	}
-	t.Logf("%# v", pretty.Formatter(last.FeatureUsage))
-	for key, expected := range expectedFeatureUsage {
-		if got, ok := last.FeatureUsage[key]; !ok {
-			t.Fatalf("expected report of feature %q", key)
-		} else if got != expected {
-			t.Fatalf("expected reported value of feature %q to be %d not %d", key, expected, got)
-		}
-	}
-
 	// 3 + 3 = 6: set 3 initially and org is set mid-test for 3 altered settings,
 	// plus version, reporting and secret settings are set in startup
 	// migrations.
@@ -597,140 +486,6 @@ func TestReportUsage(t *testing.T) {
 				},
 			}; !reflect.DeepEqual(a, e) {
 				t.Errorf("expected zone %d LeasePreferences = %+v; got %+v", id, e, a)
-			}
-		}
-	}
-
-	var foundKeys []string
-	for _, s := range last.SqlStats {
-		if strings.HasPrefix(s.Key.App, sqlbase.InternalAppNamePrefix) {
-			// Let's ignore all internal queries for this test.
-			continue
-		}
-		var tags []string
-		if s.Key.Opt {
-			tags = append(tags, "opt")
-		}
-
-		if s.Key.DistSQL {
-			tags = append(tags, "dist")
-		} else {
-			tags = append(tags, "nodist")
-		}
-
-		if s.Key.Failed {
-			tags = append(tags, "failed")
-		} else {
-			tags = append(tags, "ok")
-		}
-
-		foundKeys = append(foundKeys, fmt.Sprintf("[%s] %s", strings.Join(tags, ","), s.Key.Query))
-	}
-	sort.Strings(foundKeys)
-	expectedKeys := []string{
-		`[opt,nodist,ok] ALTER DATABASE _ CONFIGURE ZONE = _`,
-		`[opt,nodist,ok] ALTER TABLE _ CONFIGURE ZONE = _`,
-		`[opt,nodist,ok] CREATE DATABASE _`,
-		`[opt,nodist,ok] SET CLUSTER SETTING "cluster.organization" = _`,
-		`[opt,nodist,ok] SET CLUSTER SETTING "diagnostics.reporting.enabled" = _`,
-		`[opt,nodist,ok] SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
-		`[opt,nodist,ok] SET CLUSTER SETTING "server.time_until_store_dead" = _`,
-		`[opt,nodist,ok] SET application_name = $1`,
-		`[opt,nodist,ok] SET application_name = DEFAULT`,
-		`[opt,nodist,ok] SET application_name = _`,
-		`[opt,nodist,ok] CREATE TABLE _ (_ INT8 NOT NULL DEFAULT unique_rowid())`,
-		`[opt,nodist,ok] CREATE TABLE _ (_ INT8, CONSTRAINT _ CHECK (_ > _))`,
-		`[opt,nodist,ok] INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
-		`[opt,nodist,ok] INSERT INTO _ VALUES (_), (__more2__)`,
-		`[opt,nodist,ok] INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
-		`[opt,nodist,ok] INSERT INTO _(_, _) VALUES (_, _)`,
-		`[opt,nodist,ok] SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
-		`[opt,nodist,ok] UPDATE _ SET _ = _ + _`,
-		`[opt,dist,ok] SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
-		`[opt,dist,ok] SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
-		`[opt,dist,ok] SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
-	}
-	sort.Strings(expectedKeys)
-	t.Logf("expected:\n%s\ngot:\n%s", pretty.Sprint(expectedKeys), pretty.Sprint(foundKeys))
-	for i, found := range foundKeys {
-		if i >= len(expectedKeys) {
-			t.Fatalf("extraneous stat entry: %q", found)
-		}
-		if expectedKeys[i] != found {
-			t.Fatalf("expected entry %d to be %q, got %q", i, expectedKeys[i], found)
-		}
-	}
-	if len(foundKeys) < len(expectedKeys) {
-		t.Fatalf("expected %d stat entries, found %d", len(expectedKeys), len(foundKeys))
-	}
-
-	bucketByApp := make(map[string][]roachpb.CollectedStatementStatistics)
-	for _, s := range last.SqlStats {
-		if strings.HasPrefix(s.Key.App, sqlbase.InternalAppNamePrefix) {
-			// Let's ignore all internal queries for this test.
-			continue
-		}
-		bucketByApp[s.Key.App] = append(bucketByApp[s.Key.App], s)
-	}
-
-	if expected, actual := 3, len(bucketByApp); expected != actual {
-		t.Fatalf("expected %d apps in stats report, got %d", expected, actual)
-	}
-
-	for appName, expectedStatements := range map[string][]string{
-		"": {
-			`ALTER DATABASE _ CONFIGURE ZONE = _`,
-			`ALTER TABLE _ CONFIGURE ZONE = _`,
-			`CREATE DATABASE _`,
-			`CREATE TABLE _ (_ INT8, CONSTRAINT _ CHECK (_ > _))`,
-			`CREATE TABLE _ (_ INT8 NOT NULL DEFAULT unique_rowid())`,
-			`INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
-			`INSERT INTO _ VALUES (_), (__more2__)`,
-			`INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
-			`INSERT INTO _(_, _) VALUES (_, _)`,
-			`SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
-			`SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
-			`SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
-			`SET CLUSTER SETTING "server.time_until_store_dead" = _`,
-			`SET CLUSTER SETTING "diagnostics.reporting.enabled" = _`,
-			`SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
-			`SET application_name = _`,
-		},
-		elemName: {
-			`SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
-			`UPDATE _ SET _ = _ + _`,
-			`SET application_name = $1`,
-		},
-		internalAppName: {
-			`SET CLUSTER SETTING "cluster.organization" = _`,
-			`SET application_name = DEFAULT`,
-		},
-	} {
-		maybeHashedAppName := sql.HashForReporting(clusterSecret, appName)
-		if appName == internalAppName {
-			// Exempted from hashing due to '$ ' prefix.
-			maybeHashedAppName = internalAppName
-		}
-		if maybeHashedAppName == sql.FailedHashedValue {
-			t.Fatalf("expected maybeHashedAppName to not be 'unknown'")
-		}
-		if app, ok := bucketByApp[maybeHashedAppName]; !ok {
-			t.Fatalf("missing stats for app %q %+v", appName, bucketByApp)
-		} else {
-			if actual, expected := len(app), len(expectedStatements); expected != actual {
-				for _, q := range app {
-					t.Log(q.Key.Query, q.Key)
-				}
-				t.Fatalf("expected %d statements in app %q report, got %d: %+v", expected, appName, actual, app)
-			}
-			keys := make(map[string]struct{})
-			for _, q := range app {
-				keys[q.Key.Query] = struct{}{}
-			}
-			for _, expected := range expectedStatements {
-				if _, ok := keys[expected]; !ok {
-					t.Fatalf("expected %q in app %s: %s", expected, pretty.Sprint(appName), pretty.Sprint(keys))
-				}
 			}
 		}
 	}
