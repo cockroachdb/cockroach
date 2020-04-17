@@ -96,6 +96,7 @@ type NodeLiveness interface {
 type Registry struct {
 	ac         log.AmbientContext
 	stopper    *stop.Stopper
+	nl         NodeLiveness
 	db         *kv.DB
 	ex         sqlutil.InternalExecutor
 	clock      *hlc.Clock
@@ -174,6 +175,7 @@ func MakeRegistry(
 	ac log.AmbientContext,
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
+	nl NodeLiveness,
 	db *kv.DB,
 	ex sqlutil.InternalExecutor,
 	nodeID *base.NodeIDContainer,
@@ -186,6 +188,7 @@ func MakeRegistry(
 		ac:                  ac,
 		stopper:             stopper,
 		clock:               clock,
+		nl:                  nl,
 		db:                  db,
 		ex:                  ex,
 		nodeID:              nodeID,
@@ -457,14 +460,11 @@ const gcInterval = 1 * time.Hour
 // jobs if it observes a failure. Otherwise it starts all the main daemons of
 // registry that poll the jobs table and start/cancel/gc jobs.
 func (r *Registry) Start(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	nl NodeLiveness,
-	cancelInterval, adoptInterval time.Duration,
+	ctx context.Context, stopper *stop.Stopper, cancelInterval, adoptInterval time.Duration,
 ) error {
 	// Calling maybeCancelJobs once at the start ensures we have an up-to-date
 	// liveness epoch before we wait out the first cancelInterval.
-	r.maybeCancelJobs(ctx, nl)
+	r.maybeCancelJobs(ctx, r.nl)
 
 	stopper.RunWorker(context.Background(), func(ctx context.Context) {
 		for {
@@ -472,7 +472,7 @@ func (r *Registry) Start(
 			case <-stopper.ShouldStop():
 				return
 			case <-time.After(cancelInterval):
-				r.maybeCancelJobs(ctx, nl)
+				r.maybeCancelJobs(ctx, r.nl)
 			}
 		}
 	})
@@ -496,7 +496,7 @@ func (r *Registry) Start(
 			r.cancelAll(ctx)
 			return
 		}
-		if err := r.maybeAdoptJob(ctx, nl, randomizeJobOrder); err != nil {
+		if err := r.maybeAdoptJob(ctx, r.nl, randomizeJobOrder); err != nil {
 			log.Errorf(ctx, "error while adopting jobs: %s", err)
 		}
 	}
