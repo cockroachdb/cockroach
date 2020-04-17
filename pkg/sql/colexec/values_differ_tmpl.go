@@ -26,14 +26,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
-	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
+
+// Remove unused warning.
+var _ = execgen.UNSAFEGET
 
 // {{/*
 
@@ -60,7 +61,7 @@ const _TYPES_T = coltypes.Unhandled
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the second input != the third input.
 func _ASSIGN_NE(_, _, _ string) bool {
-	vecerror.InternalError("")
+	colexecerror.InternalError("")
 }
 
 // */}}
@@ -92,7 +93,7 @@ func valuesDiffer(
 		return unique
 	// {{end}}
 	default:
-		vecerror.InternalError(fmt.Sprintf("unsupported valuesDiffer type %s", t))
+		colexecerror.InternalError(fmt.Sprintf("unsupported valuesDiffer type %s", t))
 		// This code is unreachable, but the compiler cannot infer that.
 		return false
 	}

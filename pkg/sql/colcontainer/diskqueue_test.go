@@ -16,8 +16,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -62,12 +63,12 @@ func TestDiskQueue(t *testing.T) {
 					prefix, diskQueueCacheMode, alwaysCompress, suffix, numBatches), func(t *testing.T) {
 					// Create random input.
 					batches := make([]coldata.Batch, 0, numBatches)
-					op := colbase.NewRandomDataOp(testAllocator, rng, colbase.RandomDataOpArgs{
+					op := coldatatestutils.NewRandomDataOp(testAllocator, rng, coldatatestutils.RandomDataOpArgs{
 						NumBatches: cap(batches),
 						BatchSize:  1 + rng.Intn(coldata.BatchSize()),
 						Nulls:      true,
 						BatchAccumulator: func(b coldata.Batch, typs []types.T) {
-							batches = append(batches, colbase.CopyBatch(testAllocator, b, typs))
+							batches = append(batches, coldatatestutils.CopyBatch(b, typs))
 						},
 					})
 					typs := op.Typs()
@@ -200,8 +201,8 @@ func BenchmarkDiskQueue(b *testing.B) {
 
 	rng, _ := randutil.NewPseudoRand()
 	typs := []types.T{*types.Int}
-	batch := colbase.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0, 0)
-	op := colbase.NewRepeatableBatchSource(testAllocator, batch, typs)
+	batch := coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0, 0)
+	op := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	ctx := context.Background()
 	for i := 0; i < b.N; i++ {
 		op.ResetBatchesToReturn(numBatches)

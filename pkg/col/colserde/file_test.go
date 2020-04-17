@@ -17,9 +17,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,7 +33,7 @@ func TestFileRoundtrip(t *testing.T) {
 	t.Run(`mem`, func(t *testing.T) {
 		// Make a copy of the original batch because the converter modifies and
 		// casts data without copying for performance reasons.
-		original := colbase.CopyBatch(testAllocator, b, typs)
+		original := coldatatestutils.CopyBatch(b, typs)
 
 		var buf bytes.Buffer
 		s, err := colserde.NewFileSerializer(&buf, typs)
@@ -66,7 +66,7 @@ func TestFileRoundtrip(t *testing.T) {
 
 		// Make a copy of the original batch because the converter modifies and
 		// casts data without copying for performance reasons.
-		original := colbase.CopyBatch(testAllocator, b, typs)
+		original := coldatatestutils.CopyBatch(b, typs)
 
 		f, err := os.Create(path)
 		require.NoError(t, err)

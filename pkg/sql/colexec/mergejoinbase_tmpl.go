@@ -28,14 +28,15 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
-	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
+
+// Remove unused warning.
+var _ = execgen.UNSAFEGET
 
 // {{/*
 // Declarations to make the template compile properly.
@@ -70,7 +71,7 @@ type _GOTYPE interface{}
 // _ASSIGN_EQ is the template equality function for assigning the first input
 // to the result of the the second input == the third input.
 func _ASSIGN_EQ(_, _, _ interface{}) int {
-	vecerror.InternalError("")
+	colexecerror.InternalError("")
 }
 
 // */}}
@@ -124,7 +125,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 			}
 		// {{end}}
 		default:
-			vecerror.InternalError(fmt.Sprintf("unhandled type %s", &typ))
+			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", &typ))
 		}
 	}
 	return false

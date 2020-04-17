@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colbase
+package colexecbase
 
 import (
 	"context"
@@ -16,8 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -79,7 +80,7 @@ var _ Operator = &RepeatableBatchSource{}
 // copies them into a separate output batch. The output batch is allowed to be
 // modified whereas the input batch is *not*.
 func NewRepeatableBatchSource(
-	allocator *Allocator, batch coldata.Batch, typs []types.T,
+	allocator *colmem.Allocator, batch coldata.Batch, typs []types.T,
 ) *RepeatableBatchSource {
 	sel := batch.Selection()
 	batchLen := batch.Length()
@@ -96,7 +97,7 @@ func NewRepeatableBatchSource(
 	output := allocator.NewMemBatchWithSize(typs, numToCopy)
 	physTypes, err := typeconv.FromColumnTypes(typs)
 	if err != nil {
-		vecerror.InternalError(err)
+		colexecerror.InternalError(err)
 	}
 	src := &RepeatableBatchSource{
 		colVecs:   batch.ColVecs(),
@@ -200,10 +201,10 @@ func (s *TestingSemaphore) TryAcquire(n int) bool {
 // Release implements the semaphore.Semaphore interface.
 func (s *TestingSemaphore) Release(n int) int {
 	if n < 0 {
-		vecerror.InternalError("releasing a negative amount")
+		colexecerror.InternalError("releasing a negative amount")
 	}
 	if s.count-n < 0 {
-		vecerror.InternalError(fmt.Sprintf("testing semaphore too many resources released, releasing %d, have %d", n, s.count))
+		colexecerror.InternalError(fmt.Sprintf("testing semaphore too many resources released, releasing %d, have %d", n, s.count))
 	}
 	pre := s.count
 	s.count -= n

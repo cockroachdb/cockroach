@@ -28,17 +28,18 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
-	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
+
+// Remove unused warning.
+var _ = execgen.UNSAFEGET
 
 // {{/*
 // Declarations to make the template compile properly.
@@ -67,7 +68,7 @@ var _ coltypes.T
 // _ASSIGN_CMP is the template function for assigning the result of comparing
 // the second input to the third input into the first input.
 func _ASSIGN_CMP(_, _, _ interface{}) int {
-	vecerror.InternalError("")
+	colexecerror.InternalError("")
 }
 
 // */}}
@@ -293,10 +294,10 @@ func GetSelectionConstOperator(
 	leftType *types.T,
 	constType *types.T,
 	cmpOp tree.ComparisonOperator,
-	input colbase.Operator,
+	input colexecbase.Operator,
 	colIdx int,
 	constArg tree.Datum,
-) (colbase.Operator, error) {
+) (colexecbase.Operator, error) {
 	c, err := getDatumToPhysicalFn(constType)(constArg)
 	if err != nil {
 		return nil, err
@@ -335,10 +336,10 @@ func GetSelectionOperator(
 	leftType *types.T,
 	rightType *types.T,
 	cmpOp tree.ComparisonOperator,
-	input colbase.Operator,
+	input colexecbase.Operator,
 	col1Idx int,
 	col2Idx int,
-) (colbase.Operator, error) {
+) (colexecbase.Operator, error) {
 	selOpBase := selOpBase{
 		OneInputNode: NewOneInputNode(input),
 		col1Idx:      col1Idx,

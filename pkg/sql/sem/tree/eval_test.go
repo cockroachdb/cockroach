@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
@@ -210,8 +210,8 @@ func TestEval(t *testing.T) {
 						RenderExprs: []execinfrapb.Expression{{Expr: d.Input}},
 					},
 				},
-				Inputs: []colbase.Operator{
-					&colbase.CallbackOperator{
+				Inputs: []colexecbase.Operator{
+					&colexecbase.CallbackOperator{
 						NextCb: func(_ context.Context) coldata.Batch {
 							if batchesReturned > 0 {
 								return coldata.ZeroBatch

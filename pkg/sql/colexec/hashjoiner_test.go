@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -43,7 +43,7 @@ func init() {
 	for i, f := range floats {
 		_, err := decs[i].SetFloat64(f)
 		if err != nil {
-			vecerror.InternalError(fmt.Sprintf("%v", err))
+			colexecerror.InternalError(fmt.Sprintf("%v", err))
 		}
 	}
 
@@ -937,7 +937,7 @@ func createSpecForHashJoiner(tc *joinTestCase) *execinfrapb.ProcessorSpec {
 func runHashJoinTestCase(
 	t *testing.T,
 	tc *joinTestCase,
-	hjOpConstructor func(sources []colbase.Operator) (colbase.Operator, error),
+	hjOpConstructor func(sources []colexecbase.Operator) (colexecbase.Operator, error),
 ) {
 	tc.init()
 	inputs := []tuples{tc.leftTuples, tc.rightTuples}
@@ -975,7 +975,7 @@ func TestHashJoiner(t *testing.T) {
 		for _, tcs := range [][]*joinTestCase{hjTestCases, mjTestCases} {
 			for _, tc := range tcs {
 				for _, tc := range tc.mutateTypes() {
-					runHashJoinTestCase(t, tc, func(sources []colbase.Operator) (colbase.Operator, error) {
+					runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
 						spec := createSpecForHashJoiner(tc)
 						args := NewColOperatorArgs{
 							Spec:                spec,
@@ -1045,7 +1045,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 									b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols * 2))
 									b.ResetTimer()
 									for i := 0; i < b.N; i++ {
-										leftSource := colbase.NewRepeatableBatchSource(testAllocator, batch, sourceTypes)
+										leftSource := colexecbase.NewRepeatableBatchSource(testAllocator, batch, sourceTypes)
 										rightSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
 										joinType := sqlbase.JoinType_INNER
 										if fullOuter {
@@ -1160,7 +1160,7 @@ func TestHashJoinerProjection(t *testing.T) {
 	rightSource := newOpTestInput(1, rightTuples, rightTypes)
 	args := NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []colbase.Operator{leftSource, rightSource},
+		Inputs:              []colexecbase.Operator{leftSource, rightSource},
 		StreamingMemAccount: testMemAcc,
 	}
 	args.TestingKnobs.UseStreamingMemAccountForBuffering = true

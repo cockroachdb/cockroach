@@ -26,14 +26,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
-	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
+
+// Remove unused warning.
+var _ = execgen.UNSAFEGET
 
 // {{/*
 
@@ -49,7 +50,7 @@ var _ = math.MaxInt64
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the the second input != the third input.
 func _ASSIGN_NE(_, _, _ interface{}) int {
-	vecerror.InternalError("")
+	colexecerror.InternalError("")
 }
 
 // _PROBE_TYPE is the template type variable for coltypes.T. It will be
@@ -219,11 +220,11 @@ func (ht *hashTable) checkCol(
 			}
 			// {{end}}
 		default:
-			vecerror.InternalError(fmt.Sprintf("unhandled type %s", buildType))
+			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", buildType))
 		}
 	// {{end}}
 	default:
-		vecerror.InternalError(fmt.Sprintf("unhandled type %s", probeType))
+		colexecerror.InternalError(fmt.Sprintf("unhandled type %s", probeType))
 	}
 }
 
@@ -285,7 +286,7 @@ func (ht *hashTable) checkColForDistinctTuples(
 		// {{end}}
 		// {{end}}
 	default:
-		vecerror.InternalError(fmt.Sprintf("unhandled type %s", probeType))
+		colexecerror.InternalError(fmt.Sprintf("unhandled type %s", probeType))
 	}
 }
 
@@ -346,7 +347,7 @@ func (ht *hashTable) checkBuildForDistinct(
 	probeVecs []coldata.Vec, nToCheck uint64, probeSel []int,
 ) uint64 {
 	if probeSel == nil {
-		vecerror.InternalError("invalid selection vector")
+		colexecerror.InternalError("invalid selection vector")
 	}
 	copy(ht.probeScratch.distinct, zeroBoolColumn)
 

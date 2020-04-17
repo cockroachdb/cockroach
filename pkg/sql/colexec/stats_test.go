@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -92,7 +92,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 
 		mergeJoiner, err := newMergeJoinOp(
 			testAllocator, defaultMemoryLimit, queueCfg,
-			colbase.NewTestingSemaphore(4), sqlbase.InnerJoin, leftInput, rightInput,
+			colexecbase.NewTestingSemaphore(4), sqlbase.InnerJoin, leftInput, rightInput,
 			[]types.T{*types.Int}, []types.T{*types.Int},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
@@ -133,7 +133,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 	}
 }
 
-func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) colbase.Operator {
+func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) colexecbase.Operator {
 	typs := []types.T{*types.Int}
 	batch := testAllocator.NewMemBatchWithSize(typs, batchSize)
 	vec := batch.ColVec(0).Int64()
@@ -152,7 +152,7 @@ type timeAdvancingOperator struct {
 	timeSource *timeutil.TestTimeSource
 }
 
-var _ colbase.Operator = &timeAdvancingOperator{}
+var _ colexecbase.Operator = &timeAdvancingOperator{}
 
 func (o *timeAdvancingOperator) Init() {
 	o.input.Init()

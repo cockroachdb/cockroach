@@ -28,18 +28,20 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
-	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
+
+// Remove unused warning.
+var _ = execgen.UNSAFEGET
 
 // {{/*
 // Declarations to make the template compile properly.
@@ -68,8 +70,8 @@ const _TYPES_T = coltypes.Unhandled
 // stream of rows, ordered according to a set of columns. The rows in each input
 // stream are assumed to be ordered according to the same set of columns.
 type OrderedSynchronizer struct {
-	allocator *colbase.Allocator
-	inputs    []colbase.Operator
+	allocator *colmem.Allocator
+	inputs    []colexecbase.Operator
 	ordering  sqlbase.ColumnOrdering
 	typs      []types.T
 	physTypes []coltypes.T
@@ -107,7 +109,7 @@ type OrderedSynchronizer struct {
 	outColsMap []int
 }
 
-var _ colbase.Operator = &OrderedSynchronizer{}
+var _ colexecbase.Operator = &OrderedSynchronizer{}
 
 // ChildCount implements the execinfrapb.OpNode interface.
 func (o *OrderedSynchronizer) ChildCount(verbose bool) int {
@@ -121,8 +123,8 @@ func (o *OrderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
 
 // NewOrderedSynchronizer creates a new OrderedSynchronizer.
 func NewOrderedSynchronizer(
-	allocator *colbase.Allocator,
-	inputs []colbase.Operator,
+	allocator *colmem.Allocator,
+	inputs []colexecbase.Operator,
 	typs []types.T,
 	ordering sqlbase.ColumnOrdering,
 ) (*OrderedSynchronizer, error) {
@@ -180,7 +182,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 						execgen.SET(outCol, outputIdx, v)
 					// {{end}}
 					default:
-						vecerror.InternalError(fmt.Sprintf("unhandled type %s", physType))
+						colexecerror.InternalError(fmt.Sprintf("unhandled type %s", physType))
 					}
 				}
 			}
@@ -222,7 +224,7 @@ func (o *OrderedSynchronizer) Init() {
 			o.out_TYPECols = append(o.out_TYPECols, outVec._TYPE())
 		// {{end}}
 		default:
-			vecerror.InternalError(fmt.Sprintf("unhandled type %s", &o.typs[i]))
+			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", &o.typs[i]))
 		}
 	}
 	for i := range o.inputs {
@@ -256,7 +258,7 @@ func (o *OrderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {
 			case encoding.Descending:
 				return -res
 			default:
-				vecerror.InternalError(fmt.Sprintf("unexpected direction value %d", d))
+				colexecerror.InternalError(fmt.Sprintf("unexpected direction value %d", d))
 			}
 		}
 	}

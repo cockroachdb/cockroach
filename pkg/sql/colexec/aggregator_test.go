@@ -18,7 +18,9 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -58,14 +60,14 @@ type aggregatorTestCase struct {
 // hash aggregators at the same time.
 type aggType struct {
 	new func(
-		allocator *colbase.Allocator,
-		input colbase.Operator,
+		allocator *colmem.Allocator,
+		input colexecbase.Operator,
 		typs []types.T,
 		aggFns []execinfrapb.AggregatorSpec_Func,
 		groupCols []uint32,
 		aggCols [][]uint32,
 		isScalar bool,
-	) (colbase.Operator, error)
+	) (colexecbase.Operator, error)
 	name string
 }
 
@@ -74,14 +76,14 @@ var aggTypes = []aggType{
 		// This is a wrapper around NewHashAggregator so its signature is compatible
 		// with orderedAggregator.
 		new: func(
-			allocator *colbase.Allocator,
-			input colbase.Operator,
+			allocator *colmem.Allocator,
+			input colexecbase.Operator,
 			typs []types.T,
 			aggFns []execinfrapb.AggregatorSpec_Func,
 			groupCols []uint32,
 			aggCols [][]uint32,
 			_ bool,
-		) (colbase.Operator, error) {
+		) (colexecbase.Operator, error) {
 			return NewHashAggregator(
 				allocator, input, typs, aggFns, groupCols, aggCols)
 		},
@@ -329,7 +331,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 					}
 					t.Run(agg.name, func(t *testing.T) {
 						runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier,
-							func(input []colbase.Operator) (colbase.Operator, error) {
+							func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 								return agg.new(
 									testAllocator,
 									input[0],
@@ -479,7 +481,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 					t.Fatal(err)
 				}
 				runTestsWithTyps(t, []tuples{tc.input}, [][]types.T{tc.typs}, tc.expected, unorderedVerifier,
-					func(input []colbase.Operator) (colbase.Operator, error) {
+					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 						return agg.new(testAllocator, input[0], tc.typs, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
 					})
 			})
@@ -571,7 +573,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 					[]tuples{tc.input},
 					tc.expected,
 					verifier,
-					func(input []colbase.Operator) (colbase.Operator, error) {
+					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 						return agg.new(testAllocator, input[0], tc.typs, tc.aggFns, tc.groupCols, tc.aggCols, false /* isScalar */)
 					})
 			})
@@ -752,7 +754,7 @@ func BenchmarkAggregator(b *testing.B) {
 										if hasNulls {
 											nullProb = nullProbability
 										}
-										coldata.RandomVec(rng, &typ, bytesFixedLength, cols[1], nTuples, nullProb)
+										coldatatestutils.RandomVec(rng, &typ, bytesFixedLength, cols[1], nTuples, nullProb)
 										if typ.Identical(types.Int) && aggFn == execinfrapb.AggregatorSpec_SUM {
 											// Summation of random Int64 values can lead to
 											// overflow, and we will panic. To go around it, we
@@ -918,7 +920,7 @@ func TestHashAggregator(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Run(fmt.Sprintf("numOfHashBuckets=%d", numOfHashBuckets), func(t *testing.T) {
-				runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []colbase.Operator) (colbase.Operator, error) {
+				runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
 					a, err := NewHashAggregator(testAllocator, sources[0], tc.typs, tc.aggFns, tc.groupCols, tc.aggCols)
 					a.(*hashAggregator).testingKnobs.numOfHashBuckets = uint64(numOfHashBuckets)
 					return a, err

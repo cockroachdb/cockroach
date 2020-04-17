@@ -17,7 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -183,7 +184,7 @@ func TestSortChunks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	for _, tc := range sortChunksTestCases {
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colbase.Operator) (colbase.Operator, error) {
+		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 			return NewSortChunks(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen)
 		})
 	}
@@ -224,7 +225,7 @@ func TestSortChunksRandomized(t *testing.T) {
 				copy(expected, tups)
 				sort.Slice(expected, less(expected, ordCols))
 
-				runTests(t, []tuples{sortedTups}, expected, orderedVerifier, func(input []colbase.Operator) (colbase.Operator, error) {
+				runTests(t, []tuples{sortedTups}, expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 					return NewSortChunks(testAllocator, input[0], typs[:nCols], ordCols, matchLen)
 				})
 			}
@@ -236,9 +237,9 @@ func BenchmarkSortChunks(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	sorterConstructors := []func(*colbase.Allocator, colbase.Operator, []types.T, []execinfrapb.Ordering_Column, int) (colbase.Operator, error){
+	sorterConstructors := []func(*colmem.Allocator, colexecbase.Operator, []types.T, []execinfrapb.Ordering_Column, int) (colexecbase.Operator, error){
 		NewSortChunks,
-		func(allocator *colbase.Allocator, input colbase.Operator, inputTypes []types.T, orderingCols []execinfrapb.Ordering_Column, _ int) (colbase.Operator, error) {
+		func(allocator *colmem.Allocator, input colexecbase.Operator, inputTypes []types.T, orderingCols []execinfrapb.Ordering_Column, _ int) (colexecbase.Operator, error) {
 			return NewSorter(allocator, input, inputTypes, orderingCols)
 		},
 	}
