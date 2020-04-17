@@ -1580,3 +1580,94 @@ func TestRocksDBWALFileEmptyBatch(t *testing.T) {
 		}
 	})
 }
+
+// Regression test for https://github.com/facebook/rocksdb/issues/6666.
+func TestRocksDBGlobalSeqnumIssue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tempDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	db := setupMVCCRocksDB(t, tempDir)
+	defer db.Close()
+
+	keyBase := []byte("ab")
+	valBase := []byte("foobar")
+	valBase2 := []byte("barfoo")
+	key0 := MVCCKey{Key: []byte("aa")}
+
+	// When encoded, this MVCC key is 0x616200, trailer 0x0000000000000001 (seqnum
+	// 0, key type 1 or SET), which gets encoded as little endian.
+	// Including the trailer, this key is encoded internally as
+	// 0x6162000100000000000000
+	key1 := MVCCKey{Key: keyBase}
+	// When encoded, this MVCC key is 0x616200010000000000000009, trailer
+	// 0x0000000000000001 (same as before).
+	// Including the trailer, the internal key is encoded as
+	// 0x6162000100000000000000090100000000000000.
+	// Note that it has a prefix matching the earlier key's full internal key.
+	key2 := MVCCKey{Key: keyBase, Timestamp: hlc.Timestamp{WallTime: 0x0100000000000000}}
+
+	// Bump up the global sequence number to a non-zero number. Also lay down
+	// keys around key1 and key2.
+	if err := db.Put(key0, valBase); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 50; i++ {
+		key := make([]byte, len(keyBase)+1)
+		copy(key, keyBase)
+		// Make keys of the format ac0, ac1, ...
+		key[1] = 'c'
+		key[2] = byte(i)
+		err := db.Put(MVCCKey{Key: key}, valBase)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A flush + compact is necessary to push down the writes above into L6.
+	if err := db.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Compact(); err != nil {
+		t.Fatal(err)
+	}
+	// An open snapshot ensures RocksDB assigns a nonzero global sequence number
+	// to the SSTable we're about to ingest.
+	snapshot := db.NewSnapshot()
+
+	sstFilePath := filepath.Join(db.GetAuxiliaryDir(), "test1.sst")
+	_ = os.MkdirAll(db.GetAuxiliaryDir(), 0755)
+	sstFile, err := os.Create(sstFilePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := MakeIngestionSSTWriter(sstFile)
+	if err := writer.Put(key1, valBase2); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Put(key2, valBase2); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Finish(); err != nil {
+		t.Fatal(err)
+	}
+	writer.Close()
+	sstFile.Close()
+
+	// When this file is ingested, it'll be added to L0, since it overlaps in key
+	// bounds (but not actual keys) with the SSTable flushed earlier.
+	if err := db.IngestExternalFiles(context.TODO(), []string{sstFilePath}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot.Close()
+	val, err := db.Get(key1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	val2, err := db.Get(key2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(val, valBase2) || !bytes.Equal(val2, valBase2) {
+		t.Fatalf("expected values to match: %v != %v != 'barfoo'", val, val2)
+	}
+}
