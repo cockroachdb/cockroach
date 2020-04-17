@@ -140,9 +140,9 @@ scalar-group-by
  ├── key: ()
  ├── fd: ()-->(6)
  ├── scan abcde
- │    ├── columns: a:1!null b:2 c:3
+ │    ├── columns: a:1!null b:2
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,3), (2,3)~~>(1)
+ │    ├── fd: (1)-->(2)
  │    └── ordering: +1
  └── aggregations
       └── array-agg [as=array_agg:6, outer=(2)]
