@@ -274,12 +274,6 @@ var (
 	// SystemConfigTableDataMax is the end key of system config span.
 	SystemConfigTableDataMax = roachpb.Key(MakeTablePrefix(MaxSystemConfigDescID + 1))
 	//
-	// NamespaceTableMin is the start key of system.namespace, which is a system
-	// table that does not reside in the same range as other system tables.
-	NamespaceTableMin = roachpb.Key(MakeTablePrefix(NamespaceTableID))
-	// NamespaceTableMax is the end key of system.namespace.
-	NamespaceTableMax = roachpb.Key(MakeTablePrefix(NamespaceTableID + 1))
-	//
 	// UserTableDataMin is the start key of user structured data.
 	UserTableDataMin = roachpb.Key(MakeTablePrefix(MinUserDescID))
 )

@@ -231,7 +231,6 @@ var _ = [...]interface{}{
 
 	// 	3. SQL keys: This is where we store all table data.
 	TableDataMin,
-	NamespaceTableMin,
 	UserTableDataMin,
 	TableDataMax,
 

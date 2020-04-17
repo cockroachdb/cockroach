@@ -46,14 +46,17 @@ func parseUnsupported(_ string) (string, roachpb.Key) {
 	panic(&ErrUglifyUnsupported{})
 }
 
-// KeyComprehensionTable contains information about how to decode pretty-printed
-// keys, split by key spans.
-type KeyComprehensionTable []struct {
+// KeyComprehensionTableEntry is an entry in a KeyComprehensionTable.
+type KeyComprehensionTableEntry struct {
 	Name    string
 	start   roachpb.Key
 	end     roachpb.Key
 	Entries []DictEntry
 }
+
+// KeyComprehensionTable contains information about how to decode pretty-printed
+// keys, split by key spans.
+type KeyComprehensionTable []KeyComprehensionTableEntry
 
 var (
 	// ConstKeyDict translates some pretty-printed keys.
@@ -126,12 +129,6 @@ var (
 				PSFunc: parseUnsupported,
 			},
 		}},
-		{Name: "/NamespaceTable", start: NamespaceTableMin, end: NamespaceTableMax, Entries: []DictEntry{
-			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: parseUnsupported},
-		}},
-		{Name: "/Table", start: TableDataMin, end: TableDataMax, Entries: []DictEntry{
-			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: tableKeyParse},
-		}},
 	}
 
 	// keyofKeyDict means the key of suffix which is itself a key,
@@ -177,6 +174,63 @@ var (
 		{name: "QueueLastProcessed", suffix: LocalQueueLastProcessedSuffix, atEnd: false},
 	}
 )
+
+// tablePrefixNameMap is an init-time map to create pretty-printed keys in
+// traces.
+var tablePrefixNameMap = map[uint32]string{
+	SystemDatabaseID:                     "SystemDatabase",
+	DeprecatedNamespaceTableID:           "DeprecatedNamespaceTable",
+	DescriptorTableID:                    "DescriptorTable",
+	UsersTableID:                         "UsersTable",
+	ZonesTableID:                         "ZonesTable",
+	SettingsTableID:                      "SettingsTable",
+	LeaseTableID:                         "LeaseTable",
+	EventLogTableID:                      "EventLogTable",
+	RangeEventTableID:                    "RangeEventTable",
+	UITableID:                            "UITable",
+	JobsTableID:                          "JobsTable",
+	MetaRangesID:                         "MetaRanges",
+	SystemRangesID:                       "SystemRanges",
+	TimeseriesRangesID:                   "TimeseriesRanges",
+	WebSessionsTableID:                   "WebSessionsTable",
+	TableStatisticsTableID:               "TableStatisticsTable",
+	LocationsTableID:                     "LocationsTable",
+	LivenessRangesID:                     "LivenessRanges",
+	RoleMembersTableID:                   "RoleMembersTable",
+	CommentsTableID:                      "CommentsTable",
+	ReplicationConstraintStatsTableID:    "ReplicationConstraintStatsTable",
+	ReplicationCriticalLocalitiesTableID: "ReplicationCriticalLocalitiesTable",
+	ReplicationStatsTableID:              "ReplicationStatsTable",
+	ReportsMetaTableID:                   "ReportsMetaTable",
+	NamespaceTableID:                     "NamespaceTable",
+	ProtectedTimestampsMetaTableID:       "ProtectedTimestampsMetaTable",
+	ProtectedTimestampsRecordsTableID:    "ProtectedTimestampsRecordsTable",
+	RoleOptionsTableID:                   "RoleOptionsTable",
+	StatementBundleChunksTableID:         "StatementBundleChunksTable",
+	StatementDiagnosticsRequestsTableID:  "StatementDiagnosticsRequestsTable",
+	StatementDiagnosticsTableID:          "StatementDiagnosticsTable",
+}
+
+func init() {
+	// Add all of the system tables as prettified keys.
+	for id, name := range tablePrefixNameMap {
+		KeyDict = append(KeyDict, KeyComprehensionTableEntry{
+			Name:  "/" + name,
+			start: MakeTablePrefix(id),
+			end:   MakeTablePrefix(id + 1),
+			Entries: []DictEntry{{
+				Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: parseUnsupported,
+			}},
+		})
+	}
+
+	// Add /Table at the end, as a catch-all.
+	KeyDict = append(KeyDict, KeyComprehensionTableEntry{
+		Name: "/Table", start: TableDataMin, end: TableDataMax, Entries: []DictEntry{
+			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: tableKeyParse},
+		},
+	})
+}
 
 var constSubKeyDict = []struct {
 	name string
