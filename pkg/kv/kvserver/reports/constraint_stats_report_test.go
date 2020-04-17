@@ -204,6 +204,52 @@ func TestConformanceReport(t *testing.T) {
 				},
 			},
 		},
+		{
+			// Test that, when we have conjunctions of constraints, we report at the
+			// level of the whole conjunction, not for individuals constraints within
+			// the conjunction. I.e. if we have a constraint {"+region=us,+dc=dc1":1}
+			// (one replica needs to be in a node with locality us,dc1), and instead
+			// the replica is in us,dc2, then the report has an entry for the pair
+			// "us,dc1" with a violation instead of one entry for "us" with no
+			// violation, and another entry for "dc1" with one violation.
+			name: "constraint conjunctions",
+			baseReportTestCase: baseReportTestCase{
+				defaultZone: zone{replicas: 3},
+				schema: []database{
+					{
+						name:   "db1",
+						tables: []table{{name: "t1"}, {name: "t2"}},
+						// The database has a zone requesting everything to be on SSDs.
+						zone: &zone{
+							replicas: 2,
+							// The first conjunction will be satisfied; the second won't.
+							constraints: `{"+region=us,+dc=dc1":1,"+region=us,+dc=dc2":1}`,
+						},
+					},
+				},
+				splits: []split{
+					{key: "/Table/t1", stores: []int{1, 2}},
+				},
+				nodes: []node{
+					{id: 1, locality: "region=us,dc=dc1", stores: []store{{id: 1}}},
+					{id: 2, locality: "region=us,dc=dc3", stores: []store{{id: 2}}},
+				},
+			},
+			exp: []constraintEntry{
+				{
+					object:         "db1",
+					constraint:     "+region=us,+dc=dc1:1",
+					constraintType: Constraint,
+					numRanges:      0,
+				},
+				{
+					object:         "db1",
+					constraint:     "+region=us,+dc=dc2:1",
+					constraintType: Constraint,
+					numRanges:      1,
+				},
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

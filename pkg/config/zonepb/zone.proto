@@ -52,18 +52,22 @@ message Constraint {
   optional string value = 3 [(gogoproto.nullable) = false];
 }
 
-// Constraints is a collection of constraints.
-message Constraints {
+// ConstraintsConjunction is a set of constraints that need to be satisfied
+// together by a replica (i.e. by the replica's store).
+message ConstraintsConjunction {
   option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
   option (gogoproto.populate) = true;
 
-  // The number of replicas that should abide by the constraints. If left
-  // unspecified (i.e. set to 0), the constraints will be assumed to apply
-  // to all replicas of the range.
+  // The number of replicas that should abide by the constraints below. If left
+  // unspecified (i.e. set to 0), the constraints will apply to all replicas of
+  // the range.
   // As of v2.0, only REQUIRED constraints are allowed when num_replicas is
   // set to a non-zero value.
   optional int32 num_replicas = 7 [(gogoproto.nullable) = false];
 
+  // The set of attributes and/or localities that need to be satisfied by the
+  // store.
   repeated Constraint constraints = 6 [(gogoproto.nullable) = false];
 }
 
@@ -100,7 +104,7 @@ message ZoneConfig {
   // NOTE: The sum of the num_replicas fields of the Constraints must add up to
   // ZoneConfig.num_replicas, or there must be no more than a single Constraints
   // field with num_replicas set to 0.
-  repeated Constraints constraints = 6 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"constraints,flow\""];
+  repeated ConstraintsConjunction constraints = 6 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"constraints,flow\""];
 
   // InheritedContraints specifies if the value in the Constraints field was
   // inherited from the zone's parent or specified explicitly by the user.

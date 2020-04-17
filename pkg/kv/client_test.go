@@ -295,7 +295,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 
 	zoneConfig := zonepb.ZoneConfig{
 		NumReplicas:   proto.Int32(2),
-		Constraints:   []zonepb.Constraints{{Constraints: []zonepb.Constraint{{Value: "mem"}}}},
+		Constraints:   []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "mem"}}}},
 		RangeMinBytes: proto.Int64(1 << 10), // 1k
 		RangeMaxBytes: proto.Int64(1 << 18), // 256k
 	}

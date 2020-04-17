@@ -223,8 +223,9 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 					"where zone_id=$1 and locality=$2",
 				zid, s)
 			var numRanges int
-			require.NoError(t, r.Scan(&numRanges))
-			require.NotEqual(t, 0, numRanges)
+			msg := fmt.Sprintf("zone_id: %d, locality: %s", zid, s)
+			require.NoError(t, r.Scan(&numRanges), msg)
+			require.NotEqual(t, 0, numRanges, msg)
 		}
 	}
 

@@ -119,17 +119,6 @@ func (k ConstraintStatusKey) Less(other ConstraintStatusKey) bool {
 	return k.Constraint.Less(other.Constraint)
 }
 
-// MakeConstraintRepr creates a canonical string representation for a
-// constraint. The constraint is identified by the group it belongs to and the
-// index within the group.
-func MakeConstraintRepr(constraintGroup zonepb.Constraints, constraintIdx int) ConstraintRepr {
-	cstr := constraintGroup.Constraints[constraintIdx].String()
-	if constraintGroup.NumReplicas == 0 {
-		return ConstraintRepr(cstr)
-	}
-	return ConstraintRepr(fmt.Sprintf("%q:%d", cstr, constraintGroup.NumReplicas))
-}
-
 // AddViolation add a constraint that is being violated for a given range. Each call
 // will increase the number of ranges that failed.
 func (r *replicationConstraintStatsReportSaver) AddViolation(
@@ -165,10 +154,8 @@ func (r *replicationConstraintStatsReportSaver) EnsureEntry(
 func (r *replicationConstraintStatsReportSaver) ensureEntries(
 	key ZoneKey, zone *zonepb.ZoneConfig,
 ) {
-	for _, group := range zone.Constraints {
-		for i := range group.Constraints {
-			r.EnsureEntry(key, Constraint, MakeConstraintRepr(group, i))
-		}
+	for _, conjunction := range zone.Constraints {
+		r.EnsureEntry(key, Constraint, ConstraintRepr(conjunction.String()))
 	}
 	for i, sz := range zone.Subzones {
 		szKey := ZoneKey{ZoneID: key.ZoneID, SubzoneID: base.SubzoneIDFromIndex(i)}
@@ -372,7 +359,7 @@ type constraintConformanceVisitor struct {
 	// This state can be reused when a range is covered by the same zone config as
 	// the previous one. Reusing it speeds up the report generation.
 	prevZoneKey     ZoneKey
-	prevConstraints []zonepb.Constraints
+	prevConstraints []zonepb.ConstraintsConjunction
 }
 
 var _ rangeVisitor = &constraintConformanceVisitor{}
@@ -434,7 +421,7 @@ func (v *constraintConformanceVisitor) visitNewZone(
 	}()
 
 	// Find the applicable constraints, which may be inherited.
-	var constraints []zonepb.Constraints
+	var constraints []zonepb.ConstraintsConjunction
 	var zKey ZoneKey
 	_, err := visitZones(ctx, r, v.cfg, ignoreSubzonePlaceholders,
 		func(_ context.Context, zone *zonepb.ZoneConfig, key ZoneKey) bool {
@@ -463,11 +450,57 @@ func (v *constraintConformanceVisitor) visitSameZone(
 }
 
 func (v *constraintConformanceVisitor) countRange(
-	ctx context.Context, r *roachpb.RangeDescriptor, key ZoneKey, constraints []zonepb.Constraints,
+	ctx context.Context,
+	r *roachpb.RangeDescriptor,
+	key ZoneKey,
+	constraints []zonepb.ConstraintsConjunction,
 ) {
 	storeDescs := v.storeResolver(r)
-	violated := processRange(ctx, storeDescs, constraints)
+	violated := getViolations(ctx, storeDescs, constraints)
 	for _, c := range violated {
 		v.report.AddViolation(key, Constraint, c)
 	}
+}
+
+// getViolations returns the list of constraints violated by a range. The range
+// is represented by the descriptors of the replicas' stores.
+func getViolations(
+	ctx context.Context,
+	storeDescs []roachpb.StoreDescriptor,
+	constraintConjunctions []zonepb.ConstraintsConjunction,
+) []ConstraintRepr {
+	var res []ConstraintRepr
+	// Evaluate all zone constraints for the stores (i.e. replicas) of the given range.
+	for _, conjunction := range constraintConjunctions {
+		replicasRequiredToMatch := int(conjunction.NumReplicas)
+		if replicasRequiredToMatch == 0 {
+			replicasRequiredToMatch = len(storeDescs)
+		}
+		for _, c := range conjunction.Constraints {
+			if !constraintSatisfied(c, replicasRequiredToMatch, storeDescs) {
+				res = append(res, ConstraintRepr(conjunction.String()))
+				break
+			}
+		}
+	}
+	return res
+}
+
+// constraintSatisfied checks that a range (represented by its replicas' stores)
+// satisfies a constraint.
+func constraintSatisfied(
+	c zonepb.Constraint, replicasRequiredToMatch int, storeDescs []roachpb.StoreDescriptor,
+) bool {
+	passCount := 0
+	for _, storeDesc := range storeDescs {
+		// Consider stores for which we have no information to pass everything.
+		if storeDesc.StoreID == 0 {
+			passCount++
+			continue
+		}
+		if zonepb.StoreSatisfiesConstraint(storeDesc, c) {
+			passCount++
+		}
+	}
+	return replicasRequiredToMatch <= passCount
 }

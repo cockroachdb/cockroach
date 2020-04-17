@@ -52,8 +52,6 @@ var ReporterInterval = settings.RegisterPublicNonNegativeDurationSetting(
 type Reporter struct {
 	// Contains the list of the stores of the current node
 	localStores *kvserver.Stores
-	// Constraints constructed from the locality information
-	localityConstraints []zonepb.Constraints
 	// The store that is the current meta 1 leaseholder
 	meta1LeaseHolder *kvserver.Store
 	// Latest zone config
@@ -176,9 +174,7 @@ func (stats *Reporter) update(
 		return nil
 	}
 
-	if err := stats.updateLocalityConstraints(); err != nil {
-		log.Errorf(ctx, "unable to update the locality constraints: %s", err)
-	}
+	localityConstraints := stats.computeLocalityConstraints()
 
 	allStores := stats.storePool.GetStores()
 	var getStoresFromGossip StoreResolver = func(
@@ -205,7 +201,7 @@ func (stats *Reporter) update(
 	constraintConfVisitor := makeConstraintConformanceVisitor(
 		ctx, stats.latestConfig, getStoresFromGossip, constraintsSaver)
 	localityStatsVisitor := makeLocalityStatsVisitor(
-		ctx, stats.localityConstraints, stats.latestConfig,
+		ctx, localityConstraints, stats.latestConfig,
 		getStoresFromGossip, isNodeLive, locSaver)
 	statusVisitor := makeReplicationStatsVisitor(
 		ctx, stats.latestConfig, isNodeLive, replStatsSaver)
@@ -269,24 +265,33 @@ func (stats *Reporter) updateLatestConfig() {
 	stats.latestConfig = stats.meta1LeaseHolder.Gossip().GetSystemConfig()
 }
 
-func (stats *Reporter) updateLocalityConstraints() error {
-	localityConstraintsByName := make(map[string]zonepb.Constraints, 16)
+// computeLocalityConstraints returns a set of synthetic constraints for all the
+// localities in the cluster. They will be used to check whether any locality is
+// critical. If a node has a tiered locality like "region:us-east,dc:new-york",
+// we'll return constraints {"region:us-east", "region:us-east,dc:new-york"}.
+func (stats *Reporter) computeLocalityConstraints() []zonepb.ConstraintsConjunction {
+	// localityConstraintsByName de-duplicates localities across nodes.
+	localityConstraintsByName := make(map[string]zonepb.ConstraintsConjunction, 16)
 	for _, sd := range stats.storePool.GetStores() {
-		c := zonepb.Constraints{
-			Constraints: make([]zonepb.Constraint, 0),
-		}
-		for _, t := range sd.Node.Locality.Tiers {
-			c.Constraints = append(
-				c.Constraints,
-				zonepb.Constraint{Type: zonepb.Constraint_REQUIRED, Key: t.Key, Value: t.Value})
+		// For each tier t, return a constraint covering all the higher-order tiers
+		// up to and including t.
+		for i := range sd.Node.Locality.Tiers {
+			c := zonepb.ConstraintsConjunction{
+				Constraints: make([]zonepb.Constraint, 0, i+1),
+			}
+			for _, highTier := range sd.Node.Locality.Tiers[:i+1] {
+				c.Constraints = append(c.Constraints, zonepb.Constraint{
+					Type: zonepb.Constraint_REQUIRED, Key: highTier.Key, Value: highTier.Value,
+				})
+			}
 			localityConstraintsByName[c.String()] = c
 		}
 	}
-	stats.localityConstraints = make([]zonepb.Constraints, 0, len(localityConstraintsByName))
+	res := make([]zonepb.ConstraintsConjunction, 0, len(localityConstraintsByName))
 	for _, c := range localityConstraintsByName {
-		stats.localityConstraints = append(stats.localityConstraints, c)
+		res = append(res, c)
 	}
-	return nil
+	return res
 }
 
 // nodeChecker checks whether a node is to be considered alive or not.
@@ -506,56 +511,6 @@ func getZoneByID(id uint32, cfg *config.SystemConfig) (*zonepb.ZoneConfig, error
 		return nil, err
 	}
 	return zone, nil
-}
-
-// processRange returns the list of constraints violated by a range. The range
-// is represented by the descriptors of the replicas' stores.
-func processRange(
-	ctx context.Context, storeDescs []roachpb.StoreDescriptor, constraintGroups []zonepb.Constraints,
-) []ConstraintRepr {
-	var res []ConstraintRepr
-	// Evaluate all zone constraints for the stores (i.e. replicas) of the given range.
-	for _, constraintGroup := range constraintGroups {
-		for i, c := range constraintGroup.Constraints {
-			replicasRequiredToMatch := int(constraintGroup.NumReplicas)
-			if replicasRequiredToMatch == 0 {
-				replicasRequiredToMatch = len(storeDescs)
-			}
-			if !constraintSatisfied(c, replicasRequiredToMatch, storeDescs) {
-				res = append(res, MakeConstraintRepr(constraintGroup, i))
-			}
-		}
-	}
-	return res
-}
-
-// constraintSatisfied checks that a range (represented by its replicas' stores)
-// satisfies a constraint.
-func constraintSatisfied(
-	c zonepb.Constraint, replicasRequiredToMatch int, storeDescs []roachpb.StoreDescriptor,
-) bool {
-	passCount := 0
-	for _, storeDesc := range storeDescs {
-		// Consider stores for which we have no information to pass everything.
-		if storeDesc.StoreID == 0 {
-			passCount++
-			continue
-		}
-
-		storeMatches := true
-		match := zonepb.StoreMatchesConstraint(storeDesc, c)
-		if c.Type == zonepb.Constraint_REQUIRED && !match {
-			storeMatches = false
-		}
-		if c.Type == zonepb.Constraint_PROHIBITED && match {
-			storeMatches = false
-		}
-
-		if storeMatches {
-			passCount++
-		}
-	}
-	return replicasRequiredToMatch <= passCount
 }
 
 // StoreResolver is a function resolving a range to a store descriptor for each
