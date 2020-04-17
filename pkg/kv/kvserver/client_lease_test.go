@@ -438,5 +438,5 @@ func TestTimestampCacheErrorAfterLeaseTransfer(t *testing.T) {
 	require.NoError(t, tc.TransferRangeLease(rangeDesc, tc.Target(1)))
 
 	err = txn.Commit(ctx)
-	require.Error(t, err, "TransactionAbortedError(ABORT_REASON_NEW_LEASE_PREVENTS_TXN)")
+	require.Regexp(t, `TransactionAbortedError\(ABORT_REASON_NEW_LEASE_PREVENTS_TXN\)`, err)
 }

@@ -1977,7 +1977,7 @@ func TestConcurrentTxnRequestsProhibited(t *testing.T) {
 		})
 		return g.Wait()
 	})
-	require.Error(t, err, "concurrent txn use detected")
+	require.Regexp(t, "concurrent txn use detected", err)
 }
 
 // TestTxnRequestTxnTimestamp verifies response txn timestamp is

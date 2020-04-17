@@ -3058,7 +3058,7 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 				return nil
 			})
 
-			require.Error(t, txn.CommitInBatch(ctx, b), "injected")
+			require.Regexp(t, "injected", txn.CommitInBatch(ctx, b))
 			err = kvclientutils.CheckPushResult(
 				ctx, db, *origTxn, kvclientutils.ExpectAborted, tc.txnRecExpectation)
 			require.NoError(t, err)
