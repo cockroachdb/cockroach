@@ -1,0 +1,71 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+._pg-jump
+  width 32px
+  height 24px
+  position relative
+  justify-content center
+  align-items center
+  ._jump-dots
+    position absolute
+    top 50%
+    left 50%
+    transform: translate(-50%, -50%)
+    color $colors--neutral-5
+    font-size 14px
+    letter-spacing 1.5px
+  .anticon
+    position absolute
+    top 50%
+    left 50%
+    transform: translate(-50%, -50%)
+    display none
+    font-size 10px
+    color #3a7ce1
+  &:hover
+    ._jump-dots
+      display none
+    .anticon
+      display block
+
+.cl-table-statistic
+  display flex
+  justify-content space-between
+  align-items center
+  margin-bottom 7px
+
+.cl-count-title, .last-cleared-title
+  font-family SourceSansPro-Regular
+  font-size 14px
+  padding 0px
+  margin 0px
+  color $placeholder
+  line-height 1.57
+  letter-spacing 0.1px
+  .label
+    font-family $font-family--bold
+    color $colors--neutral-7
+
+.section
+  flex 0 0 auto
+  padding 12px 24px
+  max-width $max-window-width
+  clearfix()
+
+  &--heading
+    padding-top 0
+    padding-bottom 0
+
+  &--container
+    padding 0 24px 0 0
+
+.base-heading
+  composes base-heading from '~styl/base/typography.styl'
