@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 // TestSQLServer starts up a semi-dedicated SQL server and runs some smoke test
@@ -82,7 +81,7 @@ func TestSQLServer(t *testing.T) {
 
 	pgL, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer pgL.Close()
+	defer func() { _ = pgL.Close() }()
 
 	const (
 		socketFile = "" // no unix socket
@@ -92,7 +91,6 @@ func TestSQLServer(t *testing.T) {
 	require.NoError(t, s.start(ctx,
 		args.stopper,
 		args.Config.TestingKnobs,
-		allErrorsFakeLiveness{},
 		connManager,
 		pgL,
 		socketFile,
@@ -155,7 +153,10 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 
 	var nodeIDContainer base.NodeIDContainer
 
-	dummyGRPCServer := grpc.NewServer() // never used
+	// We don't need this for anything except some services that want a gRPC
+	// server to register against (but they'll never get RPCs at the time of
+	// writing): the blob service and DistSQL.
+	dummyRPCServer := rpc.NewServer(rpcContext)
 
 	return sqlServerArgs{
 		Config:              &cfg,
@@ -168,7 +169,7 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 		protectedtsProvider: protectedTSProvider,
 		gossip:              g,
 		nodeDialer:          nd,
-		grpcServer:          dummyGRPCServer,
+		grpcServer:          dummyRPCServer,
 		recorder:            dummyRecorder,
 		isMeta1Leaseholder: func(timestamp hlc.Timestamp) (bool, error) {
 			return false, errors.New("fake isMeta1Leaseholder")
