@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -103,8 +102,11 @@ type sqlServerArgs struct {
 	// The executorConfig depends on the status server.
 	// The status server is handed the stmtDiagnosticsRegistry.
 	status *statusServer
-	// The DistSQLPlanner uses node liveness.
-	nodeLiveness *kvserver.NodeLiveness
+	// Narrowed down version of *NodeLiveness.
+	nodeLiveness interface {
+		jobs.NodeLiveness                    // jobs uses this
+		IsLive(roachpb.NodeID) (bool, error) // DistSQLPlanner wants this
+	}
 	// The executorConfig uses the provider.
 	protectedtsProvider protectedts.Provider
 	// Gossip is relied upon by distSQLCfg (execinfra.ServerConfig), the executor
@@ -168,22 +170,30 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	blobspb.RegisterBlobServer(cfg.grpcServer, blobService)
 
 	jobRegistry := cfg.jobRegistry
-	*jobRegistry = *jobs.MakeRegistry(
-		cfg.AmbientCtx,
-		cfg.stopper,
-		cfg.clock,
-		cfg.db,
-		cfg.circularInternalExecutor,
-		cfg.nodeIDContainer,
-		cfg.Settings,
-		cfg.HistogramWindowInterval(),
-		func(opName, user string) (interface{}, func()) {
-			// This is a hack to get around a Go package dependency cycle. See comment
-			// in sql/jobs/registry.go on planHookMaker.
-			return sql.NewInternalPlanner(opName, nil, user, &sql.MemoryMetrics{}, execCfg)
-		},
-		jobAdoptionStopFile,
-	)
+
+	{
+		regLiveness := jobs.NodeLiveness(cfg.nodeLiveness)
+		if testingLiveness := cfg.TestingKnobs.RegistryLiveness; testingLiveness != nil {
+			regLiveness = testingLiveness.(*jobs.FakeNodeLiveness)
+		}
+		*jobRegistry = *jobs.MakeRegistry(
+			cfg.AmbientCtx,
+			cfg.stopper,
+			cfg.clock,
+			regLiveness,
+			cfg.db,
+			cfg.circularInternalExecutor,
+			cfg.nodeIDContainer,
+			cfg.Settings,
+			cfg.HistogramWindowInterval(),
+			func(opName, user string) (interface{}, func()) {
+				// This is a hack to get around a Go package dependency cycle. See comment
+				// in sql/jobs/registry.go on planHookMaker.
+				return sql.NewInternalPlanner(opName, nil, user, &sql.MemoryMetrics{}, execCfg)
+			},
+			jobAdoptionStopFile,
+		)
+	}
 	cfg.registry.AddMetricStruct(jobRegistry.MetricsStruct())
 
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
@@ -543,7 +553,6 @@ func (s *sqlServer) start(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	knobs base.TestingKnobs,
-	nl jobs.NodeLiveness,
 	connManager netutil.Server,
 	pgL net.Listener,
 	socketFile string,
@@ -590,16 +599,10 @@ func (s *sqlServer) start(
 	)
 	s.migMgr = migMgr // only for testing via TestServer
 
-	{
-		regLiveness := nl
-		if testingLiveness := knobs.RegistryLiveness; testingLiveness != nil {
-			regLiveness = testingLiveness.(*jobs.FakeNodeLiveness)
-		}
-		if err := s.jobRegistry.Start(
-			ctx, stopper, regLiveness, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
-		); err != nil {
-			return err
-		}
+	if err := s.jobRegistry.Start(
+		ctx, stopper, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
+	); err != nil {
+		return err
 	}
 
 	{
