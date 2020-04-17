@@ -24,19 +24,19 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 )
 
 // {{ range .}}
 
 type _OP_LOWERProjOp struct {
-	allocator *colbase.Allocator
-	input     colbase.Operator
+	allocator *colexecbase.Allocator
+	input     colexecbase.Operator
 
-	leftProjOpChain  colbase.Operator
-	rightProjOpChain colbase.Operator
+	leftProjOpChain  colexecbase.Operator
+	rightProjOpChain colexecbase.Operator
 	leftFeedOp       *feedOperator
 	rightFeedOp      *feedOperator
 
@@ -54,11 +54,11 @@ type _OP_LOWERProjOp struct {
 // the boolean columns at leftIdx and rightIdx, returning the result in
 // outputIdx.
 func New_OP_TITLEProjOp(
-	allocator *colbase.Allocator,
-	input, leftProjOpChain, rightProjOpChain colbase.Operator,
+	allocator *colexecbase.Allocator,
+	input, leftProjOpChain, rightProjOpChain colexecbase.Operator,
 	leftFeedOp, rightFeedOp *feedOperator,
 	leftIdx, rightIdx, outputIdx int,
-) colbase.Operator {
+) colexecbase.Operator {
 	return &_OP_LOWERProjOp{
 		allocator:        allocator,
 		input:            input,
@@ -86,7 +86,7 @@ func (o *_OP_LOWERProjOp) Child(nth int, verbose bool) execinfra.OpNode {
 	case 2:
 		return o.rightProjOpChain
 	default:
-		vecerror.InternalError(fmt.Sprintf("invalid idx %d", nth))
+		colexecerror.InternalError(fmt.Sprintf("invalid idx %d", nth))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}

@@ -919,7 +919,7 @@ func TestLint(t *testing.T) {
 			":!*.pb.go",
 			":!*.pb.gw.go",
 			":!sql/pgwire/pgerror/with_candidate_code.go",
-			":!sql/colbase/vecerror/error.go",
+			":!sql/colexecbase/colexecerror/error.go",
 			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
@@ -1420,10 +1420,9 @@ func TestLint(t *testing.T) {
 			// NOTE: if you're adding a new package to the list here because it
 			// uses "panic-catch" error propagation mechanism of the vectorized
 			// engine, don't forget to "register" the newly added package in
-			// sql/colbase/vecerror/error.go file.
+			// sql/colexecbase/colexecerror/error.go file.
 			"sql/col*",
-			":!sql/colbase/typeconv/typeconv.go",
-			":!sql/colbase/vecerror/error.go",
+			":!sql/colexecbase/colexecerror/error.go",
 			":!sql/colexec/execpb/stats.pb.go",
 			":!sql/colflow/vectorized_panic_propagation_test.go",
 		)
@@ -1436,7 +1435,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use either vecerror.InternalError() or vecerror.ExpectedError() instead", s)
+			t.Errorf("\n%s <- forbidden; use either colexecerror.InternalError() or colexecerror.ExpectedError() instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -1476,7 +1475,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use colbase.Allocator object instead", s)
+			t.Errorf("\n%s <- forbidden; use colexecbase.Allocator object instead", s)
 		}); err != nil {
 			t.Error(err)
 		}

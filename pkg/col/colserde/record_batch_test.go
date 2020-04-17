@@ -27,8 +27,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -227,7 +226,7 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	)
 
 	for i := range typs {
-		typs[i] = colbase.AllSupportedSQLTypes[rng.Intn(len(colbase.AllSupportedSQLTypes))]
+		typs[i] = typeconv.AllSupportedSQLTypes[rng.Intn(len(typeconv.AllSupportedSQLTypes))]
 		data[i] = randomDataFromType(rng, &typs[i], dataLen, nullProbability)
 	}
 

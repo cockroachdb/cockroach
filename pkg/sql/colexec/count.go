@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -30,10 +30,10 @@ type countOp struct {
 	count         int64
 }
 
-var _ colbase.Operator = &countOp{}
+var _ colexecbase.Operator = &countOp{}
 
 // NewCountOp returns a new count operator that counts the rows in its input.
-func NewCountOp(allocator *colbase.Allocator, input colbase.Operator) colbase.Operator {
+func NewCountOp(allocator *colexecbase.Allocator, input colexecbase.Operator) colexecbase.Operator {
 	c := &countOp{
 		OneInputNode: NewOneInputNode(input),
 	}

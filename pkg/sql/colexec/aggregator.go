@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -104,7 +104,7 @@ type aggregateFunc interface {
 type orderedAggregator struct {
 	OneInputNode
 
-	allocator *colbase.Allocator
+	allocator *colexecbase.Allocator
 	done      bool
 
 	aggCols  [][]uint32
@@ -149,21 +149,21 @@ type orderedAggregator struct {
 	seenNonEmptyBatch bool
 }
 
-var _ colbase.Operator = &orderedAggregator{}
+var _ colexecbase.Operator = &orderedAggregator{}
 
 // NewOrderedAggregator creates an ordered aggregator on the given grouping
 // columns. aggCols is a slice where each index represents a new aggregation
 // function. The slice at that index specifies the columns of the input batch
 // that the aggregate function should work on.
 func NewOrderedAggregator(
-	allocator *colbase.Allocator,
-	input colbase.Operator,
+	allocator *colexecbase.Allocator,
+	input colexecbase.Operator,
 	typs []types.T,
 	aggFns []execinfrapb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
 	isScalar bool,
-) (colbase.Operator, error) {
+) (colexecbase.Operator, error) {
 	if len(aggFns) != len(aggCols) {
 		return nil,
 			errors.Errorf(
@@ -228,7 +228,7 @@ func NewOrderedAggregator(
 }
 
 func makeAggregateFuncs(
-	allocator *colbase.Allocator, aggTyps [][]types.T, aggFns []execinfrapb.AggregatorSpec_Func,
+	allocator *colexecbase.Allocator, aggTyps [][]types.T, aggFns []execinfrapb.AggregatorSpec_Func,
 ) ([]aggregateFunc, error) {
 	funcs := make([]aggregateFunc, len(aggFns))
 

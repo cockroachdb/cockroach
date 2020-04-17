@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde/arrowserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"

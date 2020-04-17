@@ -16,9 +16,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -32,12 +32,12 @@ const (
 // columns given in orderingCols and returns the first K rows. The inputTypes
 // must correspond 1-1 with the columns in the input operator.
 func NewTopKSorter(
-	allocator *colbase.Allocator,
-	input colbase.Operator,
+	allocator *colexecbase.Allocator,
+	input colexecbase.Operator,
 	inputTypes []types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	k uint16,
-) colbase.Operator {
+) colexecbase.Operator {
 	return &topKSorter{
 		allocator:    allocator,
 		OneInputNode: NewOneInputNode(input),
@@ -64,7 +64,7 @@ const (
 type topKSorter struct {
 	OneInputNode
 
-	allocator    *colbase.Allocator
+	allocator    *colexecbase.Allocator
 	orderingCols []execinfrapb.Ordering_Column
 	inputTypes   []types.T
 	k            uint16 // TODO(solon): support larger k values
@@ -117,7 +117,7 @@ func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
 	case topKSortEmitting:
 		return t.emit()
 	}
-	vecerror.InternalError(fmt.Sprintf("invalid sort state %v", t.state))
+	colexecerror.InternalError(fmt.Sprintf("invalid sort state %v", t.state))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -250,7 +250,7 @@ func (t *topKSorter) compareRow(vecIdx1, vecIdx2 int, rowIdx1, rowIdx2 int) int 
 			case execinfrapb.Ordering_Column_DESC:
 				return -res
 			default:
-				vecerror.InternalError(fmt.Sprintf("unexpected direction value %d", d))
+				colexecerror.InternalError(fmt.Sprintf("unexpected direction value %d", d))
 			}
 		}
 	}
@@ -263,7 +263,7 @@ func (t *topKSorter) updateComparators(vecIdx int, batch coldata.Batch) {
 	}
 }
 
-func (t *topKSorter) ExportBuffered(colbase.Operator) coldata.Batch {
+func (t *topKSorter) ExportBuffered(colexecbase.Operator) coldata.Batch {
 	topKLen := t.topK.Length()
 	// First, we check whether we have exported all tuples from the topK vector.
 	if t.exportedFromTopK < topKLen {

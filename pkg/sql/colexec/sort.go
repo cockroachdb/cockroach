@@ -15,9 +15,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -28,16 +28,16 @@ import (
 // given in orderingCols. The inputTypes must correspond 1-1 with the columns
 // in the input operator.
 func NewSorter(
-	allocator *colbase.Allocator,
-	input colbase.Operator,
+	allocator *colexecbase.Allocator,
+	input colexecbase.Operator,
 	inputTypes []types.T,
 	orderingCols []execinfrapb.Ordering_Column,
-) (colbase.Operator, error) {
+) (colexecbase.Operator, error) {
 	return newSorter(allocator, newAllSpooler(allocator, input, inputTypes), inputTypes, orderingCols)
 }
 
 func newSorter(
-	allocator *colbase.Allocator,
+	allocator *colexecbase.Allocator,
 	input spooler,
 	inputTypes []types.T,
 	orderingCols []execinfrapb.Ordering_Column,
@@ -101,7 +101,7 @@ type allSpooler struct {
 	OneInputNode
 	NonExplainable
 
-	allocator *colbase.Allocator
+	allocator *colexecbase.Allocator
 	// inputTypes contains the types of all of the columns from the input.
 	inputTypes []types.T
 	// bufferedTuples stores all the values from the input after spooling. Each
@@ -116,7 +116,7 @@ var _ spooler = &allSpooler{}
 var _ resetter = &allSpooler{}
 
 func newAllSpooler(
-	allocator *colbase.Allocator, input colbase.Operator, inputTypes []types.T,
+	allocator *colexecbase.Allocator, input colexecbase.Operator, inputTypes []types.T,
 ) spooler {
 	return &allSpooler{
 		OneInputNode: NewOneInputNode(input),
@@ -135,7 +135,7 @@ func (p *allSpooler) init() {
 
 func (p *allSpooler) spool(ctx context.Context) {
 	if p.spooled {
-		vecerror.InternalError("spool() is called for the second time")
+		colexecerror.InternalError("spool() is called for the second time")
 	}
 	p.spooled = true
 	for batch := p.input.Next(ctx); batch.Length() != 0; batch = p.input.Next(ctx) {
@@ -147,7 +147,7 @@ func (p *allSpooler) spool(ctx context.Context) {
 
 func (p *allSpooler) getValues(i int) coldata.Vec {
 	if !p.spooled {
-		vecerror.InternalError("getValues() is called before spool()")
+		colexecerror.InternalError("getValues() is called before spool()")
 	}
 	return p.bufferedTuples.ColVec(i)
 }
@@ -158,7 +158,7 @@ func (p *allSpooler) getNumTuples() int {
 
 func (p *allSpooler) getPartitionsCol() []bool {
 	if !p.spooled {
-		vecerror.InternalError("getPartitionsCol() is called before spool()")
+		colexecerror.InternalError("getPartitionsCol() is called before spool()")
 	}
 	return nil
 }
@@ -186,7 +186,7 @@ func (p *allSpooler) reset(ctx context.Context) {
 }
 
 type sortOp struct {
-	allocator *colbase.Allocator
+	allocator *colexecbase.Allocator
 	input     spooler
 
 	// inputTypes contains the types of all of the columns from input.
@@ -295,7 +295,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 		p.emitted = newEmitted
 		return p.output
 	}
-	vecerror.InternalError(fmt.Sprintf("invalid sort state %v", p.state))
+	colexecerror.InternalError(fmt.Sprintf("invalid sort state %v", p.state))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -422,12 +422,12 @@ func (p *sortOp) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return p.input
 	}
-	vecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
 
-func (p *sortOp) ExportBuffered(colbase.Operator) coldata.Batch {
+func (p *sortOp) ExportBuffered(colexecbase.Operator) coldata.Batch {
 	if p.exported == p.input.getNumTuples() {
 		return coldata.ZeroBatch
 	}

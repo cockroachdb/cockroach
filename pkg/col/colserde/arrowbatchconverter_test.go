@@ -17,26 +17,28 @@ import (
 
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
-func randomBatch(allocator *colbase.Allocator) ([]types.T, coldata.Batch) {
+func randomBatch(allocator *colexecbase.Allocator) ([]types.T, coldata.Batch) {
 	const maxTyps = 16
 	rng, _ := randutil.NewPseudoRand()
 
 	typs := make([]types.T, rng.Intn(maxTyps)+1)
 	for i := range typs {
-		typs[i] = colbase.AllSupportedSQLTypes[rng.Intn(len(colbase.AllSupportedSQLTypes))]
+		typs[i] = typeconv.AllSupportedSQLTypes[rng.Intn(len(typeconv.AllSupportedSQLTypes))]
 	}
 
 	capacity := rng.Intn(coldata.BatchSize()) + 1
 	length := rng.Intn(capacity)
-	b := colbase.RandomBatch(allocator, rng, typs, capacity, length, rng.Float64())
+	b := coldatatestutils.RandomBatch(allocator, rng, typs, capacity, length, rng.Float64())
 	return typs, b
 }
 
@@ -59,7 +61,7 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 
 	// Make a copy of the original batch because the converter modifies and casts
 	// data without copying for performance reasons.
-	expected := colbase.CopyBatch(testAllocator, b, typs)
+	expected := coldatatestutils.CopyBatch(b, typs)
 
 	arrowData, err := c.BatchToArrow(b)
 	require.NoError(t, err)
@@ -109,7 +111,7 @@ func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 
 		// Make a copy of the original batch because the converter modifies and
 		// casts data without copying for performance reasons.
-		expected := colbase.CopyBatch(testAllocator, b, typs)
+		expected := coldatatestutils.CopyBatch(b, typs)
 		actual, err := roundTripBatch(b, c, r)
 		require.NoError(t, err)
 
@@ -143,7 +145,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 	}
 	// Run a benchmark on every type we care about.
 	for typIdx, typ := range typs {
-		batch := colbase.RandomBatch(testAllocator, rng, []types.T{typ}, coldata.BatchSize(), 0 /* length */, 0 /* nullProbability */)
+		batch := coldatatestutils.RandomBatch(testAllocator, rng, []types.T{typ}, coldata.BatchSize(), 0 /* length */, 0 /* nullProbability */)
 		if batch.Width() != 1 {
 			b.Fatalf("unexpected batch width: %d", batch.Width())
 		}

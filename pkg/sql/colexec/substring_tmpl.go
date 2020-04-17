@@ -24,9 +24,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -40,12 +40,12 @@ var _ coltypes.T
 // */}}
 
 func newSubstringOperator(
-	allocator *colbase.Allocator,
+	allocator *colexecbase.Allocator,
 	typs []types.T,
 	argumentCols []int,
 	outputIdx int,
-	input colbase.Operator,
-) colbase.Operator {
+	input colexecbase.Operator,
+) colexecbase.Operator {
 	startType := &typs[argumentCols[1]]
 	lengthType := &typs[argumentCols[2]]
 	base := substringFunctionBase{
@@ -63,13 +63,13 @@ func newSubstringOperator(
 			return &substring_StartType_LengthTypeOperator{base}
 		// {{end}}
 		default:
-			vecerror.InternalError(errors.Errorf("unsupported length argument type %s", lengthType))
+			colexecerror.InternalError(errors.Errorf("unsupported length argument type %s", lengthType))
 			// This code is unreachable, but the compiler cannot infer that.
 			return nil
 		}
 	// {{end}}
 	default:
-		vecerror.InternalError(errors.Errorf("unsupported start argument type %s", startType))
+		colexecerror.InternalError(errors.Errorf("unsupported start argument type %s", startType))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}
@@ -77,7 +77,7 @@ func newSubstringOperator(
 
 type substringFunctionBase struct {
 	OneInputNode
-	allocator    *colbase.Allocator
+	allocator    *colexecbase.Allocator
 	argumentCols []int
 	outputIdx    int
 }
@@ -93,7 +93,7 @@ type substring_StartType_LengthTypeOperator struct {
 	substringFunctionBase
 }
 
-var _ colbase.Operator = &substring_StartType_LengthTypeOperator{}
+var _ colexecbase.Operator = &substring_StartType_LengthTypeOperator{}
 
 func (s *substring_StartType_LengthTypeOperator) Next(ctx context.Context) coldata.Batch {
 	batch := s.input.Next(ctx)
@@ -136,7 +136,7 @@ func (s *substring_StartType_LengthTypeOperator) Next(ctx context.Context) colda
 				start := int(startVec[rowIdx]) - 1
 				length := int(lengthVec[rowIdx])
 				if length < 0 {
-					vecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
+					colexecerror.ExpectedError(errors.Errorf("negative substring length %d not allowed", length))
 				}
 
 				end := start + length

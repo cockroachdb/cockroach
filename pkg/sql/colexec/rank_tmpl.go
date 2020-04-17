@@ -23,14 +23,15 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	// {{/*
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
-	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
+
+// Remove unused warning.
+var _ = colexecerror.InternalError
 
 // TODO(yuzefovich): add benchmarks.
 
@@ -39,14 +40,14 @@ import (
 // outputColIdx specifies in which coldata.Vec the operator should put its
 // output (if there is no such column, a new column is appended).
 func NewRankOperator(
-	allocator *colbase.Allocator,
-	input colbase.Operator,
+	allocator *colexecbase.Allocator,
+	input colexecbase.Operator,
 	windowFn execinfrapb.WindowerSpec_WindowFunc,
 	orderingCols []execinfrapb.Ordering_Column,
 	outputColIdx int,
 	partitionColIdx int,
 	peersColIdx int,
-) (colbase.Operator, error) {
+) (colexecbase.Operator, error) {
 	if len(orderingCols) == 0 {
 		return NewConstOp(allocator, input, types.Int, int64(1), outputColIdx)
 	}
@@ -79,13 +80,13 @@ func NewRankOperator(
 // _UPDATE_RANK is the template function for updating the state of rank
 // operators.
 func _UPDATE_RANK() {
-	vecerror.InternalError("")
+	colexecerror.InternalError("")
 }
 
 // _UPDATE_RANK_INCREMENT is the template function for updating the state of
 // rank operators.
 func _UPDATE_RANK_INCREMENT() {
-	vecerror.InternalError("")
+	colexecerror.InternalError("")
 }
 
 // */}}
@@ -93,7 +94,7 @@ func _UPDATE_RANK_INCREMENT() {
 type rankInitFields struct {
 	OneInputNode
 
-	allocator       *colbase.Allocator
+	allocator       *colexecbase.Allocator
 	outputColIdx    int
 	partitionColIdx int
 	peersColIdx     int
@@ -111,7 +112,7 @@ type _RANK_STRINGOp struct {
 	rankIncrement int64
 }
 
-var _ colbase.Operator = &_RANK_STRINGOp{}
+var _ colexecbase.Operator = &_RANK_STRINGOp{}
 
 func (r *_RANK_STRINGOp) Init() {
 	r.Input().Init()

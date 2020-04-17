@@ -26,15 +26,16 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
+
+// Remove unused warning.
+var _ = execgen.UNSAFEGET
 
 // {{/*
 
@@ -63,12 +64,12 @@ type _GOTYPE interface{}
 // NewConstOp creates a new operator that produces a constant value constVal of
 // type t at index outputIdx.
 func NewConstOp(
-	allocator *colbase.Allocator,
-	input colbase.Operator,
+	allocator *colexecbase.Allocator,
+	input colexecbase.Operator,
 	t *types.T,
 	constVal interface{},
 	outputIdx int,
-) (colbase.Operator, error) {
+) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, t, outputIdx)
 	switch typeconv.FromColumnType(t) {
 	// {{range .}}
@@ -90,7 +91,7 @@ func NewConstOp(
 type const_TYPEOp struct {
 	OneInputNode
 
-	allocator *colbase.Allocator
+	allocator *colexecbase.Allocator
 	outputIdx int
 	constVal  _GOTYPE
 }
@@ -130,8 +131,8 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 // NewConstNullOp creates a new operator that produces a constant (untyped) NULL
 // value at index outputIdx.
 func NewConstNullOp(
-	allocator *colbase.Allocator, input colbase.Operator, outputIdx int, typ *types.T,
-) colbase.Operator {
+	allocator *colexecbase.Allocator, input colexecbase.Operator, outputIdx int, typ *types.T,
+) colexecbase.Operator {
 	input = newVectorTypeEnforcer(allocator, input, typ, outputIdx)
 	return &constNullOp{
 		OneInputNode: NewOneInputNode(input),
@@ -142,11 +143,11 @@ func NewConstNullOp(
 
 type constNullOp struct {
 	OneInputNode
-	allocator *colbase.Allocator
+	allocator *colexecbase.Allocator
 	outputIdx int
 }
 
-var _ colbase.Operator = &constNullOp{}
+var _ colexecbase.Operator = &constNullOp{}
 
 func (c constNullOp) Init() {
 	c.input.Init()

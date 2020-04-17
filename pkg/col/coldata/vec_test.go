@@ -14,8 +14,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -479,7 +480,7 @@ func BenchmarkAppend(b *testing.B) {
 	for _, typ := range []types.T{*types.Bytes, *types.Decimal, *types.Int} {
 		for _, nullProbability := range []float64{0, 0.2} {
 			src := NewMemColumn(&typ, BatchSize())
-			RandomVec(rng, &typ, 8 /* bytesFixedLength */, src, BatchSize(), nullProbability)
+			coldatatestutils.RandomVec(rng, &typ, 8 /* bytesFixedLength */, src, BatchSize(), nullProbability)
 			for _, bc := range benchCases {
 				bc.args.Src = src
 				bc.args.ColType = typeconv.FromColumnType(&typ)
@@ -523,7 +524,7 @@ func BenchmarkCopy(b *testing.B) {
 	for _, typ := range []types.T{*types.Bytes, *types.Decimal, *types.Int} {
 		for _, nullProbability := range []float64{0, 0.2} {
 			src := NewMemColumn(&typ, BatchSize())
-			RandomVec(rng, &typ, 8 /* bytesFixedLength */, src, BatchSize(), nullProbability)
+			coldatatestutils.RandomVec(rng, &typ, 8 /* bytesFixedLength */, src, BatchSize(), nullProbability)
 			for _, bc := range benchCases {
 				bc.args.Src = src
 				bc.args.ColType = typeconv.FromColumnType(&typ)

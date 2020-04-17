@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -489,7 +489,7 @@ func (d *diskQueue) writeFooterAndFlush(ctx context.Context) error {
 	d.numBufferedBatches = 0
 	d.files[d.writeFileIdx].totalSize += written
 	if err := d.diskAcc.Grow(ctx, int64(written)); err != nil {
-		vecerror.InternalError(err)
+		colexecerror.InternalError(err)
 	}
 	// Append offset for the readers.
 	d.files[d.writeFileIdx].offsets = append(d.files[d.writeFileIdx].offsets, d.files[d.writeFileIdx].totalSize)

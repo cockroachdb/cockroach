@@ -20,9 +20,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -144,10 +145,10 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					err             error
 					wg              sync.WaitGroup
 					typs            = []types.T{*types.Int}
-					hashRouterInput = colbase.NewRandomDataOp(
+					hashRouterInput = coldatatestutils.NewRandomDataOp(
 						testAllocator,
 						rng,
-						colbase.RandomDataOpArgs{
+						coldatatestutils.RandomDataOpArgs{
 							DeterministicTyps: typs,
 							// Set a high number of batches to ensure that the HashRouter is
 							// very far from being finished when the flow is shut down.
@@ -159,37 +160,37 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					numInboxes                  = numHashRouterOutputs + 3
 					inboxes                     = make([]*colrpc.Inbox, 0, numInboxes+1)
 					handleStreamErrCh           = make([]chan error, numInboxes+1)
-					synchronizerInputs          = make([]colbase.Operator, 0, numInboxes)
+					synchronizerInputs          = make([]colexecbase.Operator, 0, numInboxes)
 					materializerMetadataSources = make([]execinfrapb.MetadataSource, 0, numInboxes+1)
 					streamID                    = 0
 					addAnotherRemote            = rng.Float64() < 0.5
 				)
 
 				// Create an allocator for each output.
-				allocators := make([]*colbase.Allocator, numHashRouterOutputs)
+				allocators := make([]*colexecbase.Allocator, numHashRouterOutputs)
 				diskAccounts := make([]*mon.BoundAccount, numHashRouterOutputs)
 				for i := range allocators {
 					acc := testMemMonitor.MakeBoundAccount()
 					defer acc.Close(ctxRemote)
-					allocators[i] = colbase.NewAllocator(ctxRemote, &acc)
+					allocators[i] = colexecbase.NewAllocator(ctxRemote, &acc)
 					diskAcc := testDiskMonitor.MakeBoundAccount()
 					diskAccounts[i] = &diskAcc
 					defer diskAcc.Close(ctxRemote)
 				}
 				hashRouter, hashRouterOutputs := colexec.NewHashRouter(
 					allocators, hashRouterInput, typs, []uint32{0}, 64<<20, /* 64 MiB */
-					queueCfg, &colbase.TestingSemaphore{}, diskAccounts,
+					queueCfg, &colexecbase.TestingSemaphore{}, diskAccounts,
 				)
 				for i := 0; i < numInboxes; i++ {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxLocal)
 					inbox, err := colrpc.NewInbox(
-						colbase.NewAllocator(ctxLocal, &inboxMemAccount), typs, execinfrapb.StreamID(streamID),
+						colexecbase.NewAllocator(ctxLocal, &inboxMemAccount), typs, execinfrapb.StreamID(streamID),
 					)
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					materializerMetadataSources = append(materializerMetadataSources, inbox)
-					synchronizerInputs = append(synchronizerInputs, colbase.Operator(inbox))
+					synchronizerInputs = append(synchronizerInputs, colexecbase.Operator(inbox))
 				}
 				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, typs, &wg)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
@@ -204,7 +205,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					ctx context.Context,
 					cancelFn context.CancelFunc,
 					outboxMemAcc *mon.BoundAccount,
-					outboxInput colbase.Operator,
+					outboxInput colexecbase.Operator,
 					inbox *colrpc.Inbox,
 					id int,
 					outboxMetadataSources []execinfrapb.MetadataSource,
@@ -212,7 +213,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					idToClosed.Lock()
 					idToClosed.mapping[id] = false
 					idToClosed.Unlock()
-					outbox, err := colrpc.NewOutbox(colbase.NewAllocator(ctx, outboxMemAcc), outboxInput, typs, append(outboxMetadataSources,
+					outbox, err := colrpc.NewOutbox(colexecbase.NewAllocator(ctx, outboxMemAcc), outboxInput, typs, append(outboxMetadataSources,
 						execinfrapb.CallbackMetadataSource{
 							DrainMetaCb: func(ctx context.Context) []execinfrapb.ProducerMetadata {
 								return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("%d", id)}}
@@ -262,22 +263,22 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					} else {
 						sourceMemAccount := testMemMonitor.MakeBoundAccount()
 						defer sourceMemAccount.Close(ctxRemote)
-						remoteAllocator := colbase.NewAllocator(ctxRemote, &sourceMemAccount)
+						remoteAllocator := colexecbase.NewAllocator(ctxRemote, &sourceMemAccount)
 						batch := remoteAllocator.NewMemBatch(typs)
 						batch.SetLength(coldata.BatchSize())
-						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colbase.NewRepeatableBatchSource(remoteAllocator, batch, typs), inboxes[i], streamID, outboxMetadataSources)
+						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colexecbase.NewRepeatableBatchSource(remoteAllocator, batch, typs), inboxes[i], streamID, outboxMetadataSources)
 					}
 					streamID++
 				}
 
-				var materializerInput colbase.Operator
+				var materializerInput colexecbase.Operator
 				ctxAnotherRemote, cancelAnotherRemote := context.WithCancel(context.Background())
 				if addAnotherRemote {
 					// Add another "remote" node to the flow.
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxAnotherRemote)
 					inbox, err := colrpc.NewInbox(
-						colbase.NewAllocator(ctxAnotherRemote, &inboxMemAccount),
+						colexecbase.NewAllocator(ctxAnotherRemote, &inboxMemAccount),
 						typs, execinfrapb.StreamID(streamID),
 					)
 					require.NoError(t, err)

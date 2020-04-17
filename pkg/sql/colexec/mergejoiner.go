@@ -16,10 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -198,11 +198,11 @@ type mergeJoinInput struct {
 	// determine where the current group ends, in the case that the group ended
 	// with a batch.
 	distincterInput *feedOperator
-	distincter      colbase.Operator
+	distincter      colexecbase.Operator
 	distinctOutput  []bool
 
 	// source specifies the input operator to the merge join.
-	source colbase.Operator
+	source colexecbase.Operator
 }
 
 // The merge join operator uses a probe and build approach to generate the
@@ -225,13 +225,13 @@ type mergeJoinInput struct {
 // sources, based on the equality columns, assuming both inputs are in sorted
 // order.
 func newMergeJoinOp(
-	unlimitedAllocator *colbase.Allocator,
+	unlimitedAllocator *colexecbase.Allocator,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	joinType sqlbase.JoinType,
-	left colbase.Operator,
-	right colbase.Operator,
+	left colexecbase.Operator,
+	right colexecbase.Operator,
 	leftTypes []types.T,
 	rightTypes []types.T,
 	leftOrdering []execinfrapb.Ordering_Column,
@@ -288,13 +288,13 @@ func (s *mjBuilderCrossProductState) setBuilderColumnState(target mjBuilderCross
 }
 
 func newMergeJoinBase(
-	unlimitedAllocator *colbase.Allocator,
+	unlimitedAllocator *colexecbase.Allocator,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	joinType sqlbase.JoinType,
-	left colbase.Operator,
-	right colbase.Operator,
+	left colexecbase.Operator,
+	right colexecbase.Operator,
 	leftTypes []types.T,
 	rightTypes []types.T,
 	leftOrdering []execinfrapb.Ordering_Column,
@@ -375,7 +375,7 @@ type mergeJoinBase struct {
 	//  Next, which will simplify this model.
 	mu syncutil.Mutex
 
-	unlimitedAllocator *colbase.Allocator
+	unlimitedAllocator *colexecbase.Allocator
 	memoryLimit        int64
 	diskQueueCfg       colcontainer.DiskQueueCfg
 	fdSemaphore        semaphore.Semaphore
@@ -569,7 +569,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	scratchBatch.SetSelection(false)
 	scratchBatch.SetLength(groupLength)
 	if err := bufferedGroup.enqueue(ctx, scratchBatch); err != nil {
-		vecerror.InternalError(err)
+		colexecerror.InternalError(err)
 	}
 }
 
@@ -717,7 +717,7 @@ func (o *mergeJoinBase) IdempotentClose(ctx context.Context) error {
 		return nil
 	}
 	var lastErr error
-	for _, op := range []colbase.Operator{o.left.source, o.right.source} {
+	for _, op := range []colexecbase.Operator{o.left.source, o.right.source} {
 		if c, ok := op.(IdempotentCloser); ok {
 			if err := c.IdempotentClose(ctx); err != nil {
 				lastErr = err

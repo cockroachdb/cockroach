@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -75,8 +75,8 @@ type Outbox struct {
 
 // NewOutbox creates a new Outbox.
 func NewOutbox(
-	allocator *colbase.Allocator,
-	input colbase.Operator,
+	allocator *colexecbase.Allocator,
+	input colexecbase.Operator,
 	typs []types.T,
 	metadataSources []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
@@ -247,7 +247,7 @@ func (o *Outbox) sendBatches(
 			return true, nil
 		}
 
-		if err := vecerror.CatchVectorizedRuntimeError(nextBatch); err != nil {
+		if err := colexecerror.CatchVectorizedRuntimeError(nextBatch); err != nil {
 			if log.V(1) {
 				log.Warningf(ctx, "Outbox Next error: %+v", err)
 			}

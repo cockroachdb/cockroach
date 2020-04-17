@@ -16,10 +16,10 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -92,7 +92,7 @@ type routerOutputOp struct {
 		// In short, batches whose references are retained are also retained in the
 		// allocator, but if any references are overwritten or lost, those batches
 		// are released.
-		unlimitedAllocator *colbase.Allocator
+		unlimitedAllocator *colexecbase.Allocator
 		cond               *sync.Cond
 		done               bool
 		// pendingBatch is a partially-filled batch with data added through
@@ -128,12 +128,12 @@ func (o *routerOutputOp) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return o.input
 	}
-	vecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
 
-var _ colbase.Operator = &routerOutputOp{}
+var _ colexecbase.Operator = &routerOutputOp{}
 
 // newRouterOutputOp creates a new router output. The caller must ensure that
 // unblockedEventsChan is a buffered channel, as the router output will write to
@@ -141,7 +141,7 @@ var _ colbase.Operator = &routerOutputOp{}
 // memoryLimit will act as a soft limit to allow the router output to use disk
 // when it is exceeded.
 func newRouterOutputOp(
-	unlimitedAllocator *colbase.Allocator,
+	unlimitedAllocator *colexecbase.Allocator,
 	types []types.T,
 	unblockedEventsChan chan<- struct{},
 	memoryLimit int64,
@@ -153,7 +153,7 @@ func newRouterOutputOp(
 }
 
 func newRouterOutputOpWithBlockedThresholdAndBatchSize(
-	unlimitedAllocator *colbase.Allocator,
+	unlimitedAllocator *colexecbase.Allocator,
 	types []types.T,
 	unblockedEventsChan chan<- struct{},
 	memoryLimit int64,
@@ -206,7 +206,7 @@ func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 		var err error
 		b, err = o.mu.data.dequeue(ctx)
 		if err != nil {
-			vecerror.InternalError(err)
+			colexecerror.InternalError(err)
 		}
 	}
 	o.mu.numUnread -= b.Length()
@@ -267,7 +267,7 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 	if batch.Length() == 0 {
 		if o.mu.pendingBatch != nil {
 			if err := o.mu.data.enqueue(ctx, o.mu.pendingBatch); err != nil {
-				vecerror.InternalError(err)
+				colexecerror.InternalError(err)
 			}
 		}
 		o.mu.pendingBatch = coldata.ZeroBatch
@@ -313,7 +313,7 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 		if o.testingKnobs.alwaysFlush || newLength >= o.outputBatchSize {
 			// The capacity in o.mu.pendingBatch has been filled.
 			if err := o.mu.data.enqueue(ctx, o.mu.pendingBatch); err != nil {
-				vecerror.InternalError(err)
+				colexecerror.InternalError(err)
 			}
 			o.mu.pendingBatch = nil
 		}
@@ -391,20 +391,20 @@ type HashRouter struct {
 // be called concurrently between different outputs. Similarly, each output
 // needs to have a separate disk account.
 func NewHashRouter(
-	unlimitedAllocators []*colbase.Allocator,
-	input colbase.Operator,
+	unlimitedAllocators []*colexecbase.Allocator,
+	input colexecbase.Operator,
 	types []types.T,
 	hashCols []uint32,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	diskAccounts []*mon.BoundAccount,
-) (*HashRouter, []colbase.Operator) {
+) (*HashRouter, []colexecbase.Operator) {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeDefault {
-		vecerror.InternalError(errors.Errorf("hash router instantiated with incompatible disk queue cache mode: %d", diskQueueCfg.CacheMode))
+		colexecerror.InternalError(errors.Errorf("hash router instantiated with incompatible disk queue cache mode: %d", diskQueueCfg.CacheMode))
 	}
 	outputs := make([]routerOutput, len(unlimitedAllocators))
-	outputsAsOps := make([]colbase.Operator, len(unlimitedAllocators))
+	outputsAsOps := make([]colexecbase.Operator, len(unlimitedAllocators))
 	// unblockEventsChan is buffered to 2*numOutputs as we don't want the outputs
 	// writing to it to block.
 	// Unblock events only happen after a corresponding block event. Since these
@@ -427,7 +427,7 @@ func NewHashRouter(
 }
 
 func newHashRouterWithOutputs(
-	input colbase.Operator,
+	input colexecbase.Operator,
 	types []types.T,
 	hashCols []uint32,
 	unblockEventsChan <-chan struct{},
@@ -495,7 +495,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 			}
 		}
 
-		if err := vecerror.CatchVectorizedRuntimeError(processNextBatch); err != nil {
+		if err := colexecerror.CatchVectorizedRuntimeError(processNextBatch); err != nil {
 			cancelOutputs(err)
 			return
 		}

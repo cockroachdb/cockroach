@@ -15,9 +15,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -30,12 +30,12 @@ const partiallyOrderedDistinctNumHashBuckets = 1024
 // distinct columns when we have partial ordering on some of the distinct
 // columns.
 func newPartiallyOrderedDistinct(
-	allocator *colbase.Allocator,
-	input colbase.Operator,
+	allocator *colexecbase.Allocator,
+	input colexecbase.Operator,
 	distinctCols []uint32,
 	orderedCols []uint32,
 	typs []types.T,
-) (colbase.Operator, error) {
+) (colexecbase.Operator, error) {
 	if len(orderedCols) == 0 || len(orderedCols) == len(distinctCols) {
 		return nil, errors.AssertionFailedf(
 			"partially ordered distinct wrongfully planned: numDistinctCols=%d "+
@@ -82,7 +82,7 @@ type partiallyOrderedDistinct struct {
 	distinct resettableOperator
 }
 
-var _ colbase.Operator = &partiallyOrderedDistinct{}
+var _ colexecbase.Operator = &partiallyOrderedDistinct{}
 
 func (p *partiallyOrderedDistinct) ChildCount(bool) int {
 	return 1
@@ -92,7 +92,7 @@ func (p *partiallyOrderedDistinct) Child(nth int, _ bool) execinfra.OpNode {
 	if nth == 0 {
 		return p.input
 	}
-	vecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -118,7 +118,7 @@ func (p *partiallyOrderedDistinct) Next(ctx context.Context) coldata.Batch {
 }
 
 func newChunkerOperator(
-	allocator *colbase.Allocator, input *chunker, inputTypes []types.T,
+	allocator *colexecbase.Allocator, input *chunker, inputTypes []types.T,
 ) *chunkerOperator {
 	return &chunkerOperator{
 		input:         input,
@@ -169,7 +169,7 @@ func (c *chunkerOperator) Child(nth int, _ bool) execinfra.OpNode {
 	if nth == 0 {
 		return c.input
 	}
-	vecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

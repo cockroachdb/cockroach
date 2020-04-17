@@ -15,19 +15,19 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type caseOp struct {
-	allocator *colbase.Allocator
+	allocator *colexecbase.Allocator
 	buffer    *bufferOp
 
-	caseOps []colbase.Operator
-	elseOp  colbase.Operator
+	caseOps []colexecbase.Operator
+	elseOp  colexecbase.Operator
 
 	thenIdxs  []int
 	outputIdx int
@@ -60,14 +60,14 @@ func (c *caseOp) Child(nth int, verbose bool) execinfra.OpNode {
 	} else if nth == 1+len(c.caseOps) {
 		return c.elseOp
 	}
-	vecerror.InternalError(fmt.Sprintf("invalid idx %d", nth))
+	colexecerror.InternalError(fmt.Sprintf("invalid idx %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
 
 func (c *caseOp) InternalMemoryUsage() int {
 	// We internally use two selection vectors, origSel and prevSel.
-	return 2 * colbase.SizeOfBatchSizeSelVector
+	return 2 * colexecbase.SizeOfBatchSizeSelVector
 }
 
 // NewCaseOp returns an operator that runs a case statement.
@@ -81,14 +81,14 @@ func (c *caseOp) InternalMemoryUsage() int {
 // thenCol is the index into the output batch to write to.
 // typ is the type of the CASE expression.
 func NewCaseOp(
-	allocator *colbase.Allocator,
-	buffer colbase.Operator,
-	caseOps []colbase.Operator,
-	elseOp colbase.Operator,
+	allocator *colexecbase.Allocator,
+	buffer colexecbase.Operator,
+	caseOps []colexecbase.Operator,
+	elseOp colexecbase.Operator,
 	thenIdxs []int,
 	outputIdx int,
 	typ *types.T,
-) colbase.Operator {
+) colexecbase.Operator {
 	return &caseOp{
 		allocator: allocator,
 		buffer:    buffer.(*bufferOp),

@@ -13,7 +13,7 @@ package colexec
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
@@ -47,7 +47,7 @@ func windowFnNeedsPeersInfo(windowFn execinfrapb.WindowerSpec_WindowFunc) bool {
 		execinfrapb.WindowerSpec_CUME_DIST:
 		return true
 	default:
-		vecerror.InternalError(fmt.Sprintf("window function %s is not supported", windowFn.String()))
+		colexecerror.InternalError(fmt.Sprintf("window function %s is not supported", windowFn.String()))
 		// This code is unreachable, but the compiler cannot infer that.
 		return false
 	}

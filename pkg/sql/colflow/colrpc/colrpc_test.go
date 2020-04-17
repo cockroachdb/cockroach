@@ -22,11 +22,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -188,7 +189,7 @@ func TestOutboxInbox(t *testing.T) {
 	t.Run(fmt.Sprintf("cancellationScenario=%s", cancellationScenarioName), func(t *testing.T) {
 		var (
 			typs        = []types.T{*types.Int}
-			inputBuffer = colbase.NewBatchBuffer()
+			inputBuffer = colexecbase.NewBatchBuffer()
 			// Generate some random behavior before passing the random number
 			// generator to be used in the Outbox goroutine (to avoid races). These
 			// sleep variables enable a sleep for up to half a millisecond with a .25
@@ -200,7 +201,7 @@ func TestOutboxInbox(t *testing.T) {
 		// Test random selection as the Outbox should be deselecting before sending
 		// over data. Nulls and types are not worth testing as those are tested in
 		// colserde.
-		args := colbase.RandomDataOpArgs{
+		args := coldatatestutils.RandomDataOpArgs{
 			DeterministicTyps: typs,
 			NumBatches:        64,
 			Selection:         true,
@@ -216,19 +217,19 @@ func TestOutboxInbox(t *testing.T) {
 		}
 		inputMemAcc := testMemMonitor.MakeBoundAccount()
 		defer inputMemAcc.Close(ctx)
-		input := colbase.NewRandomDataOp(
-			colbase.NewAllocator(ctx, &inputMemAcc), rng, args,
+		input := coldatatestutils.NewRandomDataOp(
+			colexecbase.NewAllocator(ctx, &inputMemAcc), rng, args,
 		)
 
 		outboxMemAcc := testMemMonitor.MakeBoundAccount()
 		defer outboxMemAcc.Close(ctx)
-		outbox, err := NewOutbox(colbase.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSource */, nil /* toClose */)
+		outbox, err := NewOutbox(colexecbase.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSource */, nil /* toClose */)
 		require.NoError(t, err)
 
 		inboxMemAcc := testMemMonitor.MakeBoundAccount()
 		defer inboxMemAcc.Close(ctx)
 		inbox, err := NewInbox(
-			colbase.NewAllocator(ctx, &inboxMemAcc), typs, execinfrapb.StreamID(0),
+			colexecbase.NewAllocator(ctx, &inboxMemAcc), typs, execinfrapb.StreamID(0),
 		)
 		require.NoError(t, err)
 
@@ -267,14 +268,14 @@ func TestOutboxInbox(t *testing.T) {
 		deselectorMemAcc := testMemMonitor.MakeBoundAccount()
 		defer deselectorMemAcc.Close(ctx)
 		inputBatches := colexec.NewDeselectorOp(
-			colbase.NewAllocator(ctx, &deselectorMemAcc), inputBuffer, typs,
+			colexecbase.NewAllocator(ctx, &deselectorMemAcc), inputBuffer, typs,
 		)
 		inputBatches.Init()
-		outputBatches := colbase.NewBatchBuffer()
+		outputBatches := colexecbase.NewBatchBuffer()
 		var readerErr error
 		for {
 			var outputBatch coldata.Batch
-			if err := vecerror.CatchVectorizedRuntimeError(func() {
+			if err := colexecerror.CatchVectorizedRuntimeError(func() {
 				outputBatch = inbox.Next(readerCtx)
 			}); err != nil {
 				readerErr = err
@@ -445,10 +446,10 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				serverStreamNotification = <-mockServer.InboundStreams
 				serverStream             = serverStreamNotification.Stream
 				typs                     = []types.T{*types.Int}
-				input                    = colbase.NewRandomDataOp(
+				input                    = coldatatestutils.NewRandomDataOp(
 					testAllocator,
 					rng,
-					colbase.RandomDataOpArgs{
+					coldatatestutils.RandomDataOpArgs{
 						DeterministicTyps: typs,
 						NumBatches:        tc.numBatches,
 						Selection:         true,
@@ -460,7 +461,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 
 			outboxMemAcc := testMemMonitor.MakeBoundAccount()
 			defer outboxMemAcc.Close(ctx)
-			outbox, err := NewOutbox(colbase.NewAllocator(ctx, &outboxMemAcc), input, typs, []execinfrapb.MetadataSource{
+			outbox, err := NewOutbox(colexecbase.NewAllocator(ctx, &outboxMemAcc), input, typs, []execinfrapb.MetadataSource{
 				execinfrapb.CallbackMetadataSource{
 					DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
 						return []execinfrapb.ProducerMetadata{{Err: errors.New(expectedMeta)}}
@@ -472,7 +473,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			inboxMemAcc := testMemMonitor.MakeBoundAccount()
 			defer inboxMemAcc.Close(ctx)
 			inbox, err := NewInbox(
-				colbase.NewAllocator(ctx, &inboxMemAcc),
+				colexecbase.NewAllocator(ctx, &inboxMemAcc),
 				typs, execinfrapb.StreamID(0),
 			)
 			require.NoError(t, err)
@@ -530,17 +531,17 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	batch := testAllocator.NewMemBatch(typs)
 	batch.SetLength(coldata.BatchSize())
 
-	input := colbase.NewRepeatableBatchSource(testAllocator, batch, typs)
+	input := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
-	outbox, err := NewOutbox(colbase.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSources */, nil /* toClose */)
+	outbox, err := NewOutbox(colexecbase.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSources */, nil /* toClose */)
 	require.NoError(b, err)
 
 	inboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAcc.Close(ctx)
 	inbox, err := NewInbox(
-		colbase.NewAllocator(ctx, &inboxMemAcc), typs, execinfrapb.StreamID(0),
+		colexecbase.NewAllocator(ctx, &inboxMemAcc), typs, execinfrapb.StreamID(0),
 	)
 	require.NoError(b, err)
 
@@ -588,7 +589,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	var inTags *logtags.Buffer
 
 	nextDone := make(chan struct{})
-	input := &colbase.CallbackOperator{NextCb: func(ctx context.Context) coldata.Batch {
+	input := &colexecbase.CallbackOperator{NextCb: func(ctx context.Context) coldata.Batch {
 		b := testAllocator.NewMemBatchWithSize(typs, 0)
 		b.SetLength(0)
 		inTags = logtags.FromContext(ctx)
@@ -598,7 +599,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
-	outbox, err := NewOutbox(colbase.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSources */, nil /* toClose */)
+	outbox, err := NewOutbox(colexecbase.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSources */, nil /* toClose */)
 	require.NoError(t, err)
 
 	outboxDone := make(chan struct{})

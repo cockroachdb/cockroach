@@ -15,9 +15,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -40,7 +40,7 @@ import (
 // batch is not kept around and thus its referenced memory will be GCed as soon
 // as the batch is updated.
 type spillingQueue struct {
-	unlimitedAllocator *colbase.Allocator
+	unlimitedAllocator *colexecbase.Allocator
 	maxMemoryLimit     int64
 
 	typs             []types.T
@@ -70,7 +70,7 @@ type spillingQueue struct {
 // If fdSemaphore is nil, no Acquire or Release calls will happen. The caller
 // may want to do this if requesting FDs up front.
 func newSpillingQueue(
-	unlimitedAllocator *colbase.Allocator,
+	unlimitedAllocator *colexecbase.Allocator,
 	typs []types.T,
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
@@ -84,7 +84,7 @@ func newSpillingQueue(
 	if memoryLimit < 0 {
 		memoryLimit = 0
 	}
-	itemsLen := memoryLimit / int64(colbase.EstimateBatchSizeBytesFromSQLTypes(typs, batchSize))
+	itemsLen := memoryLimit / int64(colexecbase.EstimateBatchSizeBytesFromSQLTypes(typs, batchSize))
 	if itemsLen == 0 {
 		// Make items at least of length 1. Even though batches will spill to disk
 		// directly (this can only happen with a very low memory limit), it's nice
@@ -109,7 +109,7 @@ func newSpillingQueue(
 // allocator must be passed in. The queue will use this allocator to check
 // whether memory usage exceeds the given memory limit and use disk if so.
 func newRewindableSpillingQueue(
-	unlimitedAllocator *colbase.Allocator,
+	unlimitedAllocator *colexecbase.Allocator,
 	typs []types.T,
 	memoryLimit int64,
 	cfg colcontainer.DiskQueueCfg,
@@ -168,7 +168,7 @@ func (q *spillingQueue) dequeue(ctx context.Context) (coldata.Batch, error) {
 		// No more in-memory items. Fill the circular buffer as much as possible.
 		// Note that there must be at least one element on disk.
 		if !q.rewindable && q.curHeadIdx != q.curTailIdx {
-			vecerror.InternalError(fmt.Sprintf("assertion failed in spillingQueue: curHeadIdx != curTailIdx, %d != %d", q.curHeadIdx, q.curTailIdx))
+			colexecerror.InternalError(fmt.Sprintf("assertion failed in spillingQueue: curHeadIdx != curTailIdx, %d != %d", q.curHeadIdx, q.curTailIdx))
 		}
 		// NOTE: Only one item is dequeued from disk since a deserialized batch is
 		// only valid until the next call to Dequeue. In practice we could Dequeue
@@ -184,7 +184,7 @@ func (q *spillingQueue) dequeue(ctx context.Context) (coldata.Batch, error) {
 		if !ok {
 			// There was no batch to dequeue from disk. This should not really
 			// happen, as it should have been caught by the q.empty() check above.
-			vecerror.InternalError("disk queue was not empty but failed to dequeue element in spillingQueue")
+			colexecerror.InternalError("disk queue was not empty but failed to dequeue element in spillingQueue")
 		}
 		// Account for this batch's memory.
 		q.unlimitedAllocator.RetainBatch(q.dequeueScratch)
@@ -297,7 +297,7 @@ func (q *spillingQueue) rewind() error {
 
 func (q *spillingQueue) reset(ctx context.Context) {
 	if err := q.close(ctx); err != nil {
-		vecerror.InternalError(err)
+		colexecerror.InternalError(err)
 	}
 	q.diskQueue = nil
 	q.closed = false

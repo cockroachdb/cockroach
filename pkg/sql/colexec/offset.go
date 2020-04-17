@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 )
 
 // offsetOp is an operator that implements offset, returning everything
@@ -28,10 +28,10 @@ type offsetOp struct {
 	seen int
 }
 
-var _ colbase.Operator = &offsetOp{}
+var _ colexecbase.Operator = &offsetOp{}
 
 // NewOffsetOp returns a new offset operator with the given offset.
-func NewOffsetOp(input colbase.Operator, offset int) colbase.Operator {
+func NewOffsetOp(input colexecbase.Operator, offset int) colexecbase.Operator {
 	c := &offsetOp{
 		OneInputNode: NewOneInputNode(input),
 		offset:       offset,

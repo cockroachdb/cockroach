@@ -1,4 +1,4 @@
-// Copyright 2019 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,19 +8,135 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colbase
+package coldatatestutils
 
 import (
 	"context"
 	"fmt"
 	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+// maxVarLen specifies a length limit for variable length types (e.g. byte slices).
+const maxVarLen = 64
+
+var locations []*time.Location
+
+func init() {
+	// Load some random time zones.
+	for _, locationName := range []string{
+		"Africa/Addis_Ababa",
+		"America/Anchorage",
+		"Antarctica/Davis",
+		"Asia/Ashkhabad",
+		"Australia/Sydney",
+		"Europe/Minsk",
+		"Pacific/Palau",
+	} {
+		loc, err := timeutil.LoadLocation(locationName)
+		if err == nil {
+			locations = append(locations, loc)
+		}
+	}
+}
+
+// RandomVec populates vec with n random values of typ, setting each value to
+// null with a probability of nullProbability. It is assumed that n is in bounds
+// of the given vec.
+// bytesFixedLength (when greater than zero) specifies the fixed length of the
+// bytes slice to be generated. It is used only if typ == coltypes.Bytes.
+func RandomVec(
+	rng *rand.Rand,
+	typ *types.T,
+	bytesFixedLength int,
+	vec coldata.Vec,
+	n int,
+	nullProbability float64,
+) {
+	switch typeconv.FromColumnType(typ) {
+	case coltypes.Bool:
+		bools := vec.Bool()
+		for i := 0; i < n; i++ {
+			if rng.Float64() < 0.5 {
+				bools[i] = true
+			} else {
+				bools[i] = false
+			}
+		}
+	case coltypes.Bytes:
+		bytes := vec.Bytes()
+		for i := 0; i < n; i++ {
+			bytesLen := bytesFixedLength
+			if bytesLen <= 0 {
+				bytesLen = rng.Intn(maxVarLen)
+			}
+			randBytes := make([]byte, bytesLen)
+			// Read always returns len(bytes[i]) and nil.
+			_, _ = rand.Read(randBytes)
+			bytes.Set(i, randBytes)
+		}
+	case coltypes.Decimal:
+		decs := vec.Decimal()
+		for i := 0; i < n; i++ {
+			// int64(rng.Uint64()) to get negative numbers, too
+			decs[i].SetFinite(int64(rng.Uint64()), int32(rng.Intn(40)-20))
+		}
+	case coltypes.Int16:
+		ints := vec.Int16()
+		for i := 0; i < n; i++ {
+			ints[i] = int16(rng.Uint64())
+		}
+	case coltypes.Int32:
+		ints := vec.Int32()
+		for i := 0; i < n; i++ {
+			ints[i] = int32(rng.Uint64())
+		}
+	case coltypes.Int64:
+		ints := vec.Int64()
+		for i := 0; i < n; i++ {
+			ints[i] = int64(rng.Uint64())
+		}
+	case coltypes.Float64:
+		floats := vec.Float64()
+		for i := 0; i < n; i++ {
+			floats[i] = rng.Float64()
+		}
+	case coltypes.Timestamp:
+		timestamps := vec.Timestamp()
+		for i := 0; i < n; i++ {
+			timestamps[i] = timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))
+			loc := locations[rng.Intn(len(locations))]
+			timestamps[i] = timestamps[i].In(loc)
+		}
+	case coltypes.Interval:
+		intervals := vec.Interval()
+		for i := 0; i < n; i++ {
+			intervals[i] = duration.FromFloat64(rng.Float64())
+		}
+	default:
+		panic(fmt.Sprintf("unhandled type %s", typ))
+	}
+	vec.Nulls().UnsetNulls()
+	if nullProbability == 0 {
+		return
+	}
+
+	for i := 0; i < n; i++ {
+		if rng.Float64() < nullProbability {
+			vec.Nulls().SetNull(i)
+		}
+	}
+}
 
 func randomType(rng *rand.Rand) coltypes.T {
 	return coltypes.AllTypes[rng.Intn(len(coltypes.AllTypes))]
@@ -39,7 +155,7 @@ func randomTypes(rng *rand.Rand, n int) []coltypes.T {
 // random elements equal to length (capacity if length is 0). The values will be
 // null with a probability of nullProbability.
 func RandomBatch(
-	allocator *Allocator,
+	allocator *colexecbase.Allocator,
 	rng *rand.Rand,
 	typs []types.T,
 	capacity int,
@@ -51,7 +167,7 @@ func RandomBatch(
 		length = capacity
 	}
 	for i, typ := range typs {
-		coldata.RandomVec(rng, &typ, 0 /* bytesFixedLength */, batch.ColVec(i), length, nullProbability)
+		RandomVec(rng, &typ, 0 /* bytesFixedLength */, batch.ColVec(i), length, nullProbability)
 	}
 	batch.SetLength(length)
 	return batch
@@ -65,7 +181,7 @@ func RandomBatch(
 // less than batchSize.
 func RandomSel(rng *rand.Rand, batchSize int, probOfOmitting float64) []int {
 	if probOfOmitting < 0 || probOfOmitting > 1 {
-		vecerror.InternalError(fmt.Sprintf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
+		colexecerror.InternalError(fmt.Sprintf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
 	}
 	sel := make([]int, 0, batchSize)
 	for i := 0; i < batchSize; i++ {
@@ -87,7 +203,7 @@ var _ = randomTypes
 // selProbability is 0, none will. The returned batch will have its length set
 // to the length of the selection vector, unless selProbability is 0.
 func RandomBatchWithSel(
-	allocator *Allocator,
+	allocator *colexecbase.Allocator,
 	rng *rand.Rand,
 	typs []types.T,
 	n int,
@@ -112,7 +228,7 @@ const (
 // RandomDataOpArgs are arguments passed in to RandomDataOp. All arguments are
 // optional (refer to the constants above this struct definition for the
 // defaults). Bools are false by default and AvailableTyps defaults to
-// coltypes.AllTypes.
+// colexecbase.AllSupportedSQLTypes.
 type RandomDataOpArgs struct {
 	// DeterministicTyps, if set, overrides AvailableTyps and MaxSchemaLength,
 	// forcing the RandomDataOp to use this schema.
@@ -140,7 +256,7 @@ type RandomDataOpArgs struct {
 // RandomDataOp is an operator that generates random data according to
 // RandomDataOpArgs. Call GetBuffer to get all data that was returned.
 type RandomDataOp struct {
-	allocator        *Allocator
+	allocator        *colexecbase.Allocator
 	batchAccumulator func(b coldata.Batch, typs []types.T)
 	typs             []types.T
 	rng              *rand.Rand
@@ -151,12 +267,14 @@ type RandomDataOp struct {
 	nulls            bool
 }
 
-var _ Operator = &RandomDataOp{}
+var _ colexecbase.Operator = &RandomDataOp{}
 
 // NewRandomDataOp creates a new RandomDataOp.
-func NewRandomDataOp(allocator *Allocator, rng *rand.Rand, args RandomDataOpArgs) *RandomDataOp {
+func NewRandomDataOp(
+	allocator *colexecbase.Allocator, rng *rand.Rand, args RandomDataOpArgs,
+) *RandomDataOp {
 	var (
-		availableTyps   = AllSupportedSQLTypes
+		availableTyps   = typeconv.AllSupportedSQLTypes
 		maxSchemaLength = defaultMaxSchemaLength
 		batchSize       = coldata.BatchSize()
 		numBatches      = defaultNumBatches
@@ -243,7 +361,7 @@ func (o *RandomDataOp) ChildCount(verbose bool) int {
 
 // Child implements the execinfra.OpNode interface.
 func (o *RandomDataOp) Child(nth int, verbose bool) execinfra.OpNode {
-	vecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

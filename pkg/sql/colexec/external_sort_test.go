@@ -17,8 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -74,11 +74,11 @@ func TestExternalSort(t *testing.T) {
 						[]tuples{tc.tuples},
 						tc.expected,
 						orderedVerifier,
-						func(input []colbase.Operator) (colbase.Operator, error) {
+						func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 							// A sorter should never exceed externalSorterMinPartitions, even
 							// during repartitioning. A panic will happen if a sorter requests
 							// more than this number of file descriptors.
-							sem := colbase.NewTestingSemaphore(externalSorterMinPartitions)
+							sem := colexecbase.NewTestingSemaphore(externalSorterMinPartitions)
 							// If a limit is satisfied before the sorter is drained of all its
 							// tuples, the sorter will not close its partitioner. During a
 							// flow this will happen in a downstream materializer/outbox,
@@ -155,7 +155,7 @@ func TestExternalSortRandomized(t *testing.T) {
 	//    memory limit.
 	// memoryToSort is the total amount of memory that will be sorted in this
 	// test.
-	memoryToSort := (nTups / coldata.BatchSize()) * colbase.EstimateBatchSizeBytesFromSQLTypes(typs, coldata.BatchSize())
+	memoryToSort := (nTups / coldata.BatchSize()) * colexecbase.EstimateBatchSizeBytesFromSQLTypes(typs, coldata.BatchSize())
 	// partitionSize will be the memory limit passed in to tests with a memory
 	// limit. With a maximum number of partitions of 2 this will result in
 	// repartitioning twice. To make this a total amount of memory, we also need
@@ -191,8 +191,8 @@ func TestExternalSortRandomized(t *testing.T) {
 						[]tuples{tups},
 						expected,
 						orderedVerifier,
-						func(input []colbase.Operator) (colbase.Operator, error) {
-							sem := colbase.NewTestingSemaphore(externalSorterMinPartitions)
+						func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+							sem := colexecbase.NewTestingSemaphore(externalSorterMinPartitions)
 							semsToCheck = append(semsToCheck, sem)
 							sorter, newAccounts, newMonitors, closers, err := createDiskBackedSorter(
 								ctx, flowCtx, input, typs[:nCols], ordCols,
@@ -274,9 +274,9 @@ func BenchmarkExternalSort(b *testing.B) {
 						// external sorter figure out that number itself) once we pass in
 						// filled-in disk queue config.
 						sorter, accounts, monitors, _, err := createDiskBackedSorter(
-							ctx, flowCtx, []colbase.Operator{source}, typs, ordCols,
+							ctx, flowCtx, []colexecbase.Operator{source}, typs, ordCols,
 							0 /* matchLen */, 0 /* k */, func() { spilled = true },
-							64 /* maxNumberPartitions */, false /* delegateFDAcquisitions */, queueCfg, &colbase.TestingSemaphore{},
+							64 /* maxNumberPartitions */, false /* delegateFDAcquisitions */, queueCfg, &colexecbase.TestingSemaphore{},
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
@@ -310,7 +310,7 @@ func BenchmarkExternalSort(b *testing.B) {
 func createDiskBackedSorter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input []colbase.Operator,
+	input []colexecbase.Operator,
 	typs []types.T,
 	ordCols []execinfrapb.Ordering_Column,
 	matchLen int,
@@ -320,7 +320,7 @@ func createDiskBackedSorter(
 	delegateFDAcquisitions bool,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
-) (colbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []IdempotentCloser, error) {
+) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []IdempotentCloser, error) {
 	sorterSpec := &execinfrapb.SorterSpec{
 		OutputOrdering:   execinfrapb.Ordering{Columns: ordCols},
 		OrderingMatchLen: uint32(matchLen),

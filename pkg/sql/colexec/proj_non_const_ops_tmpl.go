@@ -26,17 +26,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
-	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
+
+// Remove unused warning.
+var _ = execgen.UNSAFEGET
 
 // {{/*
 // Declarations to make the template compile properly.
@@ -59,25 +60,25 @@ var _ duration.Duration
 // _ASSIGN is the template function for assigning the first input to the result
 // of computation an operation on the second and the third inputs.
 func _ASSIGN(_, _, _ interface{}) {
-	vecerror.InternalError("")
+	colexecerror.InternalError("")
 }
 
 // _L_UNSAFEGET is the template function that will be replaced by
 // "execgen.UNSAFEGET" which uses _L_TYP.
 func _L_UNSAFEGET(_, _ interface{}) interface{} {
-	vecerror.InternalError("")
+	colexecerror.InternalError("")
 }
 
 // _R_UNSAFEGET is the template function that will be replaced by
 // "execgen.UNSAFEGET" which uses _R_TYP.
 func _R_UNSAFEGET(_, _ interface{}) interface{} {
-	vecerror.InternalError("")
+	colexecerror.InternalError("")
 }
 
 // _RET_UNSAFEGET is the template function that will be replaced by
 // "execgen.UNSAFEGET" which uses _RET_TYP.
 func _RET_UNSAFEGET(_, _ interface{}) interface{} {
-	vecerror.InternalError("")
+	colexecerror.InternalError("")
 }
 
 // */}}
@@ -89,7 +90,7 @@ func _RET_UNSAFEGET(_, _ interface{}) interface{} {
 // around the problem we specify it here.
 type projConstOpBase struct {
 	OneInputNode
-	allocator      *colbase.Allocator
+	allocator      *colexecbase.Allocator
 	colIdx         int
 	outputIdx      int
 	decimalScratch decimalOverloadScratch
@@ -98,7 +99,7 @@ type projConstOpBase struct {
 // projOpBase contains all of the fields for non-constant binary projections.
 type projOpBase struct {
 	OneInputNode
-	allocator      *colbase.Allocator
+	allocator      *colexecbase.Allocator
 	col1Idx        int
 	col2Idx        int
 	outputIdx      int
@@ -227,16 +228,16 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 // GetProjectionOperator returns the appropriate projection operator for the
 // given left and right column types and operation.
 func GetProjectionOperator(
-	allocator *colbase.Allocator,
+	allocator *colexecbase.Allocator,
 	leftType *types.T,
 	rightType *types.T,
 	outputType *types.T,
 	op tree.Operator,
-	input colbase.Operator,
+	input colexecbase.Operator,
 	col1Idx int,
 	col2Idx int,
 	outputIdx int,
-) (colbase.Operator, error) {
+) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projOpBase := projOpBase{
 		OneInputNode: NewOneInputNode(input),

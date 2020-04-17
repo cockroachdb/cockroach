@@ -29,14 +29,15 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
-	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
+
+// Remove unused warning.
+var _ = execgen.UNSAFEGET
 
 // {{/*
 // Declarations to make the template compile properly.
@@ -71,13 +72,13 @@ type _GOTYPE interface{}
 // _ASSIGN_EQ is the template equality function for assigning the first input
 // to the result of the second input == the third input.
 func _ASSIGN_EQ(_, _, _ interface{}) int {
-	vecerror.InternalError("")
+	colexecerror.InternalError("")
 }
 
 // _ASSIGN_LT is the template equality function for assigning the first input
 // to the result of the the second input < the third input.
 func _ASSIGN_LT(_, _, _ interface{}) int {
-	vecerror.InternalError("")
+	colexecerror.InternalError("")
 }
 
 // _L_SEL_IND is the template type variable for the loop variable that
@@ -271,7 +272,7 @@ func _PROBE_SWITCH(
 		}
 	// {{end}}
 	default:
-		vecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+		colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
 	}
 	// {{end}}
 	// {{/*
@@ -292,7 +293,7 @@ func _LEFT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{ if or $.JoinType.IsLeftOuter $.JoinType.IsLeftAnti }}
 	if lGroup.unmatched {
 		if curLIdx+1 != curLLength {
-			vecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the left unmatched group is not 1", curLLength-curLIdx))
+			colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the left unmatched group is not 1", curLLength-curLIdx))
 		}
 		// The row already does not have a match, so we don't need to do any
 		// additional processing.
@@ -332,7 +333,7 @@ func _RIGHT_UNMATCHED_GROUP_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// {{ if $.JoinType.IsRightOuter }}
 	if rGroup.unmatched {
 		if curRIdx+1 != curRLength {
-			vecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curRLength-curRIdx))
+			colexecerror.InternalError(fmt.Sprintf("unexpectedly length %d of the right unmatched group is not 1", curRLength-curRIdx))
 		}
 		// The row already does not have a match, so we don't need to do any
 		// additional processing.
@@ -715,7 +716,7 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 		o.builderState.left.groupsIdx = zeroMJCPGroupsIdx
 	// {{end}}
 	default:
-		vecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+		colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
 	}
 	// {{end}}
 	// {{/*
@@ -803,7 +804,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftBufferedGroup(
 	if currentBatch == nil {
 		currentBatch, err = bufferedGroup.dequeue(ctx)
 		if err != nil {
-			vecerror.InternalError(err)
+			colexecerror.InternalError(err)
 		}
 		o.builderState.lBufferedGroupBatch = currentBatch
 		o.builderState.left.curSrcStartIdx = 0
@@ -875,7 +876,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftBufferedGroup(
 						}
 					// {{end}}
 					default:
-						vecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+						colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
 					}
 					updatedDestStartIdx = outStartIdx
 					o.builderState.left.setBuilderColumnState(initialBuilderState)
@@ -889,7 +890,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftBufferedGroup(
 				o.unlimitedAllocator.ReleaseBatch(currentBatch)
 				currentBatch, err = bufferedGroup.dequeue(ctx)
 				if err != nil {
-					vecerror.InternalError(err)
+					colexecerror.InternalError(err)
 				}
 				o.builderState.lBufferedGroupBatch = currentBatch
 				batchLength = currentBatch.Length()
@@ -1009,7 +1010,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 		o.builderState.right.groupsIdx = zeroMJCPGroupsIdx
 	// {{end}}
 	default:
-		vecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+		colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
 	}
 	// {{end}}
 	// {{/*
@@ -1103,7 +1104,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightBufferedGroup(
 				if currentBatch == nil {
 					currentBatch, err = bufferedGroup.dequeue(ctx)
 					if err != nil {
-						vecerror.InternalError(err)
+						colexecerror.InternalError(err)
 					}
 					o.builderState.rBufferedGroupBatch = currentBatch
 					o.builderState.right.curSrcStartIdx = 0
@@ -1149,7 +1150,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightBufferedGroup(
 							}
 							// {{end}}
 						default:
-							vecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
+							colexecerror.InternalError(fmt.Sprintf("unhandled type %s", colType))
 						}
 					}
 					outStartIdx += toAppend
@@ -1165,7 +1166,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightBufferedGroup(
 					o.unlimitedAllocator.ReleaseBatch(currentBatch)
 					currentBatch, err = bufferedGroup.dequeue(ctx)
 					if err != nil {
-						vecerror.InternalError(err)
+						colexecerror.InternalError(err)
 					}
 					o.builderState.rBufferedGroupBatch = currentBatch
 					batchLength = currentBatch.Length()
@@ -1174,7 +1175,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightBufferedGroup(
 				// We have fully processed all the batches from the buffered group, so
 				// we need to rewind it.
 				if err := bufferedGroup.rewind(); err != nil {
-					vecerror.InternalError(err)
+					colexecerror.InternalError(err)
 				}
 				o.builderState.rBufferedGroupBatch = nil
 			}
@@ -1386,7 +1387,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) build(ctx context.Context) {
 		// {{ end }}
 
 		default:
-			vecerror.InternalError(fmt.Sprintf("unsupported mjBuildFrom %d", o.builderState.buildFrom))
+			colexecerror.InternalError(fmt.Sprintf("unsupported mjBuildFrom %d", o.builderState.buildFrom))
 		}
 	}
 }
@@ -1506,7 +1507,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			}
 			return coldata.ZeroBatch
 		default:
-			vecerror.InternalError(fmt.Sprintf("unexpected merge joiner state in Next: %v", o.state))
+			colexecerror.InternalError(fmt.Sprintf("unexpected merge joiner state in Next: %v", o.state))
 		}
 	}
 }
