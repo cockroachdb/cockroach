@@ -1546,7 +1546,6 @@ func (s *Server) Start(ctx context.Context) error {
 		workersCtx,
 		s.stopper,
 		s.cfg.TestingKnobs,
-		s.nodeLiveness,
 		connManager,
 		pgL,
 		s.cfg.SocketFile,

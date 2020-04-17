@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"regexp"
 	"sort"
@@ -24,58 +25,64 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func registerTPCHVec(r *testRegistry) {
-	const (
-		nodeCount      = 3
-		numTPCHQueries = 22
-	)
+const (
+	tpchVecNodeCount  = 3
+	tpchVecNumQueries = 22
+)
 
-	type crdbVersion int
-	const (
-		version19_2 crdbVersion = iota
-		version20_1
-	)
-	toCRDBVersion := func(v string) (crdbVersion, error) {
-		if strings.HasPrefix(v, "v19.2") {
-			return version19_2, nil
-		} else if strings.HasPrefix(v, "v20.1") {
-			return version20_1, nil
-		} else {
-			return 0, errors.Errorf("unrecognized version: %s", v)
-		}
+type crdbVersion int
+
+const (
+	tpchVecVersion19_2 crdbVersion = iota
+	tpchVecVersion20_1
+)
+
+func toCRDBVersion(v string) (crdbVersion, error) {
+	if strings.HasPrefix(v, "v19.2") {
+		return tpchVecVersion19_2, nil
+	} else if strings.HasPrefix(v, "v20.1") {
+		return tpchVecVersion20_1, nil
+	} else {
+		return 0, errors.Errorf("unrecognized version: %s", v)
+	}
+}
+
+var (
+	vectorizeOnOptionByVersion = map[crdbVersion]string{
+		tpchVecVersion19_2: "experimental_on",
+		tpchVecVersion20_1: "on",
 	}
 
-	// queriesToSkipByVersion is a map from crdbVersion to another map that
-	// contains query numbers to be skipped (as well as the reasons for why
-	// they are skipped).
-	queriesToSkipByVersion := make(map[crdbVersion]map[int]string)
-	queriesToSkipByVersion[version19_2] = map[int]string{
-		5:  "can cause OOM",
-		7:  "can cause OOM",
-		8:  "can cause OOM",
-		9:  "can cause OOM",
-		19: "can cause OOM",
+	// queriesToSkipByVersion is a map keyed by version that contains query numbers
+	// to be skipped for the given version (as well as the reasons for why they are skipped).
+	queriesToSkipByVersion = map[crdbVersion]map[int]string{
+		tpchVecVersion19_2: {
+			5:  "can cause OOM",
+			7:  "can cause OOM",
+			8:  "can cause OOM",
+			9:  "can cause OOM",
+			19: "can cause OOM",
+		},
 	}
-	vectorizeOnOptionByVersion := map[crdbVersion]string{
-		version19_2: "experimental_on",
-		version20_1: "on",
-	}
+
 	// slownessThreshold describes the threshold at which we fail the test
 	// if vec ON is slower that vec OFF, meaning that if
 	// vec_on_time > vecOnSlowerFailFactor * vec_off_time, the test is failed.
 	// This will help catch any regressions.
 	// Note that for 19.2 version the threshold is higher in order to reduce
 	// the noise.
-	slownessThresholdByVersion := map[crdbVersion]float64{
-		version19_2: 1.5,
-		version20_1: 1.2,
+	slownessThresholdByVersion = map[crdbVersion]float64{
+		tpchVecVersion19_2: 1.5,
+		tpchVecVersion20_1: 1.2,
 	}
+)
 
-	TPCHTables := []string{
+var (
+	tpchTables = []string{
 		"nation", "region", "part", "supplier",
 		"partsupp", "customer", "orders", "lineitem",
 	}
-	TPCHTableStatsInjection := []string{
+	tpchTableStatsInjection = []string{
 		`ALTER TABLE region INJECT STATISTICS '[
 				{
 					"columns": ["r_regionkey"],
@@ -459,215 +466,287 @@ func registerTPCHVec(r *testRegistry) {
 				}
 			]';`,
 	}
+)
 
-	type runOption int
-	const (
-		// perf configuration is meant to be used to check the correctness of
-		// the vectorized engine and compare the queries' runtimes against
-		// row-by-row engine.
-		perf runOption = iota
-		// stressDiskSpilling configuration is meant to stress disk spilling of
-		// the vectorized engine. There is no comparison of the runtimes.
-		stressDiskSpilling
-	)
-	type runConfig struct {
-		vectorizeOptions   []bool
-		stressDiskSpilling bool
-		numRunsPerQuery    int
+type tpchVecTestCase interface {
+	// TODO(asubiotto): Getting the queries we want to run given a version should
+	//  also be part of this. This can also be where we return tpch queries with
+	//  random placeholders.
+	// vectorizeOptions are the vectorize options that each query will be run
+	// with.
+	vectorizeOptions() []bool
+	// numRunsPerQuery is the number of times each tpch query should be run.
+	numRunsPerQuery() int
+	// preTestRunHook is called before any tpch query is run. Can be used to
+	// perform setup.
+	preTestRunHook(t *test, conn *gosql.DB)
+	// postQueryRunHook is called after each tpch query is run with the output and
+	// the vectorize mode it was run in.
+	postQueryRunHook(t *test, output []byte, vectorized bool)
+	// postTestRunHook is called after all tpch queries are run. Can be used to
+	// perform teardown or general validation.
+	postTestRunHook(t *test, conn *gosql.DB, version crdbVersion)
+}
+
+// tpchVecTestCaseBase is a default tpchVecTestCase implementation that can be
+// embedded and extended.
+type tpchVecTestCaseBase struct{}
+
+func (r tpchVecTestCaseBase) vectorizeOptions() []bool {
+	return []bool{true}
+}
+
+func (r tpchVecTestCaseBase) numRunsPerQuery() int {
+	return 1
+}
+
+func (r tpchVecTestCaseBase) preTestRunHook(t *test, conn *gosql.DB) {
+	t.Status("resetting sql.testing.vectorize.batch_size")
+	if _, err := conn.Exec("RESET CLUSTER SETTING sql.testing.vectorize.batch_size"); err != nil {
+		t.Fatal(err)
 	}
-	runConfigs := make(map[runOption]runConfig)
-	const (
-		// These correspond to "perf" run configuration below.
-		vecOnConfig  = 0
-		vecOffConfig = 1
-	)
-	runConfigs[perf] = runConfig{
-		vectorizeOptions:   []bool{true, false},
-		stressDiskSpilling: false,
-		numRunsPerQuery:    3,
+	t.Status("resetting workmem to default")
+	if _, err := conn.Exec("RESET CLUSTER SETTING sql.distsql.temp_storage.workmem"); err != nil {
+		t.Fatal(err)
 	}
-	runConfigs[stressDiskSpilling] = runConfig{
-		vectorizeOptions:   []bool{true},
-		stressDiskSpilling: true,
-		numRunsPerQuery:    1,
+}
+
+func (r tpchVecTestCaseBase) postQueryRunHook(_ *test, _ []byte, _ bool) {}
+
+func (r tpchVecTestCaseBase) postTestRunHook(_ *test, _ *gosql.DB, _ crdbVersion) {}
+
+const (
+	tpchPerfTestNumRunsPerQuery = 3
+	tpchPerfTestVecOnConfigIdx  = 0
+	tpchPerfTestVecOffConfigIdx = 1
+)
+
+type tpchVecPerfTest struct {
+	tpchVecTestCaseBase
+	timeByQueryNum []map[int][]float64
+}
+
+var _ tpchVecTestCase = &tpchVecPerfTest{}
+
+func newTpchVecPerfTest() *tpchVecPerfTest {
+	return &tpchVecPerfTest{
+		timeByQueryNum: []map[int][]float64{make(map[int][]float64), make(map[int][]float64)},
 	}
+}
 
-	runTPCHVec := func(ctx context.Context, t *test, c *cluster, option runOption) {
-		firstNode := c.Node(1)
-		c.Put(ctx, cockroach, "./cockroach", c.All())
-		c.Put(ctx, workload, "./workload", firstNode)
-		c.Start(ctx, t)
+func (p tpchVecPerfTest) vectorizeOptions() []bool {
+	// Since this is a performance test, each query should be run with both
+	// vectorize modes.
+	return []bool{true, false}
+}
 
-		conn := c.Conn(ctx, 1)
-		t.Status("restoring TPCH dataset for Scale Factor 1")
-		setup := `
-CREATE DATABASE tpch;
-RESTORE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup' WITH into_db = 'tpch';
-`
-		if _, err := conn.Exec(setup); err != nil {
-			t.Fatal(err)
-		}
+func (p tpchVecPerfTest) numRunsPerQuery() int {
+	return tpchPerfTestNumRunsPerQuery
+}
 
-		t.Status("scattering the data")
-		if _, err := conn.Exec("USE tpch;"); err != nil {
-			t.Fatal(err)
-		}
-		for _, table := range TPCHTables {
-			scatter := fmt.Sprintf("ALTER TABLE %s SCATTER;", table)
-			if _, err := conn.Exec(scatter); err != nil {
-				t.Fatal(err)
+func (p *tpchVecPerfTest) postQueryRunHook(t *test, output []byte, vectorized bool) {
+	configIdx := tpchPerfTestVecOffConfigIdx
+	if vectorized {
+		configIdx = tpchPerfTestVecOnConfigIdx
+	}
+	runtimeRegex := regexp.MustCompile(`.*\[q([\d]+)\] returned \d+ rows after ([\d]+\.[\d]+) seconds.*`)
+	scanner := bufio.NewScanner(bytes.NewReader(output))
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		match := runtimeRegex.FindSubmatch(line)
+		if match != nil {
+			queryNum, err := strconv.Atoi(string(match[1]))
+			if err != nil {
+				t.Fatalf("failed parsing %q as int with %s", match[1], err)
 			}
-		}
-		t.Status("waiting for full replication")
-		waitForFullReplication(t, conn)
-		t.Status("injecting stats")
-		for _, injectStats := range TPCHTableStatsInjection {
-			if _, err := conn.Exec(injectStats); err != nil {
-				t.Fatal(err)
+			queryTime, err := strconv.ParseFloat(string(match[2]), 64)
+			if err != nil {
+				t.Fatalf("failed parsing %q as float with %s", match[2], err)
 			}
+			p.timeByQueryNum[configIdx][queryNum] = append(p.timeByQueryNum[configIdx][queryNum], queryTime)
 		}
-		versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
-		if err != nil {
-			t.Fatal(err)
+	}
+}
+
+func (p *tpchVecPerfTest) postTestRunHook(t *test, _ *gosql.DB, version crdbVersion) {
+	queriesToSkip := queriesToSkipByVersion[version]
+	t.Status("comparing the runtimes (only median values for each query are compared)")
+	for queryNum := 1; queryNum <= tpchVecNumQueries; queryNum++ {
+		if _, skipped := queriesToSkip[queryNum]; skipped {
+			continue
 		}
-		version, err := toCRDBVersion(versionString)
-		if err != nil {
-			t.Fatal(err)
+		findMedian := func(times []float64) float64 {
+			sort.Float64s(times)
+			return times[len(times)/2]
 		}
-		queriesToSkip := queriesToSkipByVersion[version]
-		runConfig := runConfigs[option]
-		rng, _ := randutil.NewPseudoRand()
-		if runConfig.stressDiskSpilling {
-			// In order to stress the disk spilling of the vectorized
-			// engine, we will set workmem limit to a random value in range
-			// [16KiB, 256KiB).
-			workmemInKiB := 16 + rng.Intn(240)
-			workmem := fmt.Sprintf("%dKiB", workmemInKiB)
-			t.Status(fmt.Sprintf("setting workmem='%s'", workmem))
-			if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.distsql.temp_storage.workmem='%s'", workmem)); err != nil {
-				t.Fatal(err)
-			}
+		vecOnTimes := p.timeByQueryNum[tpchPerfTestVecOnConfigIdx][queryNum]
+		vecOffTimes := p.timeByQueryNum[tpchPerfTestVecOffConfigIdx][queryNum]
+		if len(vecOnTimes) != tpchPerfTestNumRunsPerQuery {
+			t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
+				"recorded with vec ON config: %v", queryNum, vecOnTimes))
+		}
+		if len(vecOffTimes) != tpchPerfTestNumRunsPerQuery {
+			t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
+				"recorded with vec OFF config: %v", queryNum, vecOffTimes))
+		}
+		vecOnTime := findMedian(vecOnTimes)
+		vecOffTime := findMedian(vecOffTimes)
+		if vecOffTime < vecOnTime {
+			t.l.Printf(
+				fmt.Sprintf("[q%d] vec OFF was faster by %.2f%%: "+
+					"%.2fs ON vs %.2fs OFF --- WARNING\n"+
+					"vec ON times: %v\t vec OFF times: %v",
+					queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime,
+					vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
 		} else {
-			// We are interested in the performance comparison between
-			// vectorized and row-by-row engines, so we will reset workmem
-			// limit to the default value.
-			t.Status("resetting workmem to default")
-			if _, err := conn.Exec("RESET CLUSTER SETTING sql.distsql.temp_storage.workmem"); err != nil {
-				t.Fatal(err)
-			}
+			t.l.Printf(
+				fmt.Sprintf("[q%d] vec ON was faster by %.2f%%: "+
+					"%.2fs ON vs %.2fs OFF\n"+
+					"vec ON times: %v\t vec OFF times: %v",
+					queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime,
+					vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
 		}
-		timeByQueryNum := []map[int][]float64{make(map[int][]float64), make(map[int][]float64)}
-		for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
-			for configIdx, vectorize := range runConfig.vectorizeOptions {
-				if reason, skip := queriesToSkip[queryNum]; skip {
-					t.Status(fmt.Sprintf("skipping q%d because of %q", queryNum, reason))
-					continue
-				}
-				vectorizeSetting := "off"
-				if vectorize {
-					vectorizeSetting = vectorizeOnOptionByVersion[version]
-				}
-				cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
-					"--max-ops=%d --queries=%d --vectorize=%s {pgurl:1-%d}",
-					runConfig.numRunsPerQuery, queryNum, vectorizeSetting, nodeCount)
-				workloadOutput, err := c.RunWithBuffer(ctx, t.l, firstNode, cmd)
-				t.l.Printf("\n" + string(workloadOutput))
-				if err != nil {
-					// Note: if you see an error like "exit status 1", it is likely caused
-					// by the erroneous output of the query.
-					t.Fatal(err)
-				}
-				parseOutput := func(output []byte, timeByQueryNum map[int][]float64) {
-					runtimeRegex := regexp.MustCompile(`.*\[q([\d]+)\] returned \d+ rows after ([\d]+\.[\d]+) seconds.*`)
-					scanner := bufio.NewScanner(bytes.NewReader(output))
-					for scanner.Scan() {
-						line := scanner.Bytes()
-						match := runtimeRegex.FindSubmatch(line)
-						if match != nil {
-							queryNum, err := strconv.Atoi(string(match[1]))
-							if err != nil {
-								t.Fatalf("failed parsing %q as int with %s", match[1], err)
-							}
-							queryTime, err := strconv.ParseFloat(string(match[2]), 64)
-							if err != nil {
-								t.Fatalf("failed parsing %q as float with %s", match[2], err)
-							}
-							timeByQueryNum[queryNum] = append(timeByQueryNum[queryNum], queryTime)
-						}
-					}
-				}
-				if option == perf {
-					// We only need to parse the output with 'perf' run option.
-					parseOutput(workloadOutput, timeByQueryNum[configIdx])
-				}
-			}
-		}
-		if option == perf {
-			// We are only interested in comparison with 'perf' run option.
-			t.Status("comparing the runtimes (only median values for each query are compared)")
-			for queryNum := 1; queryNum <= numTPCHQueries; queryNum++ {
-				if _, skipped := queriesToSkip[queryNum]; skipped {
-					continue
-				}
-				findMedian := func(times []float64) float64 {
-					sort.Float64s(times)
-					return times[len(times)/2]
-				}
-				vecOnTimes := timeByQueryNum[vecOnConfig][queryNum]
-				vecOffTimes := timeByQueryNum[vecOffConfig][queryNum]
-				if len(vecOnTimes) != runConfig.numRunsPerQuery {
-					t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
-						"recorded with vec ON config: %v", queryNum, vecOnTimes))
-				}
-				if len(vecOffTimes) != runConfig.numRunsPerQuery {
-					t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
-						"recorded with vec OFF config: %v", queryNum, vecOffTimes))
-				}
-				vecOnTime := findMedian(vecOnTimes)
-				vecOffTime := findMedian(vecOffTimes)
-				if vecOffTime < vecOnTime {
-					t.l.Printf(
-						fmt.Sprintf("[q%d] vec OFF was faster by %.2f%%: "+
-							"%.2fs ON vs %.2fs OFF --- WARNING\n"+
-							"vec ON times: %v\t vec OFF times: %v",
-							queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime,
-							vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
-				} else {
-					t.l.Printf(
-						fmt.Sprintf("[q%d] vec ON was faster by %.2f%%: "+
-							"%.2fs ON vs %.2fs OFF\n"+
-							"vec ON times: %v\t vec OFF times: %v",
-							queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime,
-							vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
-				}
-				if vecOnTime >= slownessThresholdByVersion[version]*vecOffTime {
-					t.Fatal(fmt.Sprintf(
-						"[q%d] vec ON is slower by %.2f%% than vec OFF\n"+
-							"vec ON times: %v\nvec OFF times: %v",
-						queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime, vecOnTimes, vecOffTimes))
-				}
-			}
+		if vecOnTime >= slownessThresholdByVersion[version]*vecOffTime {
+			t.Fatal(fmt.Sprintf(
+				"[q%d] vec ON is slower by %.2f%% than vec OFF\n"+
+					"vec ON times: %v\nvec OFF times: %v",
+				queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime, vecOnTimes, vecOffTimes))
 		}
 	}
+}
 
+type tpchVecDiskTest struct {
+	tpchVecTestCaseBase
+}
+
+func (d tpchVecDiskTest) preTestRunHook(t *test, conn *gosql.DB) {
+	d.tpchVecTestCaseBase.preTestRunHook(t, conn)
+	// In order to stress the disk spilling of the vectorized
+	// engine, we will set workmem limit to a random value in range
+	// [16KiB, 256KiB).
+	rng, _ := randutil.NewPseudoRand()
+	workmemInKiB := 16 + rng.Intn(240)
+	workmem := fmt.Sprintf("%dKiB", workmemInKiB)
+	t.Status(fmt.Sprintf("setting workmem='%s'", workmem))
+	if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.distsql.temp_storage.workmem='%s'", workmem)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type tpchVecSmallBatchSizeTest struct {
+	tpchVecTestCaseBase
+}
+
+func (b tpchVecSmallBatchSizeTest) preTestRunHook(t *test, conn *gosql.DB) {
+	b.tpchVecTestCaseBase.preTestRunHook(t, conn)
+	rng, _ := randutil.NewPseudoRand()
+	batchSize := 1 + rng.Intn(4)
+	t.Status(fmt.Sprintf("setting sql.testing.vectorize.batch_size to %d", batchSize))
+	if _, err := conn.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.testing.vectorize.batch_size=%d", batchSize)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func runTPCHVec(ctx context.Context, t *test, c *cluster, testCase tpchVecTestCase) {
+	firstNode := c.Node(1)
+	c.Put(ctx, cockroach, "./cockroach", c.All())
+	c.Put(ctx, workload, "./workload", firstNode)
+	c.Start(ctx, t)
+
+	t.Status("restoring TPCH dataset for Scale Factor 1")
+	if err := loadTPCHDataset(ctx, t, c, 1 /* sf */, newMonitor(ctx, c), c.All()); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Status("scattering the data")
+	conn := c.Conn(ctx, 1)
+	if _, err := conn.Exec("USE tpch;"); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range tpchTables {
+		scatter := fmt.Sprintf("ALTER TABLE %s SCATTER;", table)
+		if _, err := conn.Exec(scatter); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Status("waiting for full replication")
+	waitForFullReplication(t, conn)
+	t.Status("injecting stats")
+	for _, injectStats := range tpchTableStatsInjection {
+		if _, err := conn.Exec(injectStats); err != nil {
+			t.Fatal(err)
+		}
+	}
+	versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	version, err := toCRDBVersion(versionString)
+	if err != nil {
+		t.Fatal(err)
+	}
+	queriesToSkip := queriesToSkipByVersion[version]
+
+	testCase.preTestRunHook(t, conn)
+
+	for queryNum := 1; queryNum <= tpchVecNumQueries; queryNum++ {
+		for _, vectorize := range testCase.vectorizeOptions() {
+			if reason, skip := queriesToSkip[queryNum]; skip {
+				t.Status(fmt.Sprintf("skipping q%d because of %q", queryNum, reason))
+				continue
+			}
+			vectorizeSetting := "off"
+			if vectorize {
+				vectorizeSetting = vectorizeOnOptionByVersion[version]
+			}
+			cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
+				"--max-ops=%d --queries=%d --vectorize=%s {pgurl:1-%d}",
+				testCase.numRunsPerQuery(), queryNum, vectorizeSetting, tpchVecNodeCount)
+			workloadOutput, err := c.RunWithBuffer(ctx, t.l, firstNode, cmd)
+			t.l.Printf("\n" + string(workloadOutput))
+			if err != nil {
+				// Note: if you see an error like "exit status 1", it is likely caused
+				// by the erroneous output of the query.
+				t.Fatal(err)
+			}
+			testCase.postQueryRunHook(t, workloadOutput, vectorize)
+		}
+	}
+	testCase.postTestRunHook(t, conn, version)
+}
+
+func registerTPCHVec(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "tpchvec/perf",
 		Owner:      OwnerSQLExec,
-		Cluster:    makeClusterSpec(nodeCount),
+		Cluster:    makeClusterSpec(tpchVecNodeCount),
 		MinVersion: "v19.2.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runTPCHVec(ctx, t, c, perf)
+			runTPCHVec(ctx, t, c, newTpchVecPerfTest())
 		},
 	})
+
 	r.Add(testSpec{
 		Name:    "tpchvec/disk",
 		Owner:   OwnerSQLExec,
-		Cluster: makeClusterSpec(nodeCount),
+		Cluster: makeClusterSpec(tpchVecNodeCount),
 		// 19.2 version doesn't have disk spilling nor memory monitoring, so
 		// there is no point in running this config on that version.
 		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runTPCHVec(ctx, t, c, stressDiskSpilling)
+			runTPCHVec(ctx, t, c, tpchVecDiskTest{})
+		},
+	})
+
+	r.Add(testSpec{
+		Name:    "tpchvec/smallbatchsize",
+		Owner:   OwnerSQLExec,
+		Cluster: makeClusterSpec(tpchVecNodeCount),
+		// 19.2 version doesn't have the testing cluster setting to change the batch
+		// size, so only run on versions >= 20.1.0.
+		MinVersion: "v20.1.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCHVec(ctx, t, c, tpchVecSmallBatchSizeTest{})
 		},
 	})
 }

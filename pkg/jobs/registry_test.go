@@ -47,20 +47,20 @@ func TestRegistryCancelation(t *testing.T) {
 	// of a dep cycle.
 	const histogramWindowInterval = 60 * time.Second
 
+	const nodeCount = 1
+	nodeLiveness := NewFakeNodeLiveness(nodeCount)
+
 	var db *kv.DB
 	// Insulate this test from wall time.
 	mClock := hlc.NewManualClock(hlc.UnixNano())
 	clock := hlc.NewClock(mClock.UnixNano, time.Nanosecond)
 	registry := MakeRegistry(
-		log.AmbientContext{}, stopper, clock, db, nil /* ex */, FakeNodeID, cluster.NoSettings,
+		log.AmbientContext{}, stopper, clock, nodeLiveness, db, nil /* ex */, FakeNodeID, cluster.NoSettings,
 		histogramWindowInterval, FakePHS, "")
-
-	const nodeCount = 1
-	nodeLiveness := NewFakeNodeLiveness(nodeCount)
 
 	const cancelInterval = time.Nanosecond
 	const adoptInterval = time.Duration(math.MaxInt64)
-	if err := registry.Start(ctx, stopper, nodeLiveness, cancelInterval, adoptInterval); err != nil {
+	if err := registry.Start(ctx, stopper, cancelInterval, adoptInterval); err != nil {
 		t.Fatal(err)
 	}
 
