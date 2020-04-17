@@ -28,14 +28,14 @@ $dropdown-hover-color = darken($background-color, 2.5%)
   display flex
   align-items center
 
-  .Select
+  :global(.Select)
     position initial
 
-  .Select-menu-outer
+  :global(.Select-menu-outer)
     top calc(100% + 8px)
     padding 8px 0
 
-  .Select-option
+  :global(.Select-option)
     font-size 14px
     line-height 22px
     font-family $font-family--base
@@ -45,7 +45,7 @@ $dropdown-hover-color = darken($background-color, 2.5%)
       color $colors--primary-blue-3 !important
       background-color transparent
 
-  .dropdown__title, .Select-value-label
+  .dropdown__title, :global(.Select-value-label)
     color $adminui-grey-1 !important
     font-family SourceSansPro-SemiBold
     font-size 14px
@@ -53,7 +53,7 @@ $dropdown-hover-color = darken($background-color, 2.5%)
     letter-spacing 0.1px
 
   &:hover
-    .Select-arrow-zone
+    :global(.Select-arrow-zone)
       path
         fill $colors--neutral-5
 
@@ -74,7 +74,7 @@ $dropdown-hover-color = darken($background-color, 2.5%)
       border 1px solid $colors--primary-blue-3 
       box-shadow 0px 0px 3px 2px $colors--primary-blue-1
 
-  .Select-arrow-zone
+  :global(.Select-arrow-zone)
     color $adminui-blue-1-base
     .caret-down
       display flex
@@ -163,7 +163,7 @@ $dropdown-hover-color = darken($background-color, 2.5%)
       &:hover
         background-color $dropdown-hover-color
 .dropdown.full-size
-  .Select-menu-outer, .Select-menu
+  :global(.Select-menu-outer), :global(.Select-menu)
     max-height 450px
 
 // NOTE: react-select styles can be found in styl/shame.styl
