@@ -54,7 +54,7 @@ var roachtestOwners = map[Owner]OwnerMetadata{
 	OwnerCDC:          {SlackRoom: `cdc`, ContactEmail: `ajwerner@cockroachlabs.com`},
 	OwnerKV:           {SlackRoom: `kv`, ContactEmail: `andrei@cockroachlabs.com`},
 	OwnerPartitioning: {SlackRoom: `partitioning`, ContactEmail: `andrei@cockroachlabs.com`},
-	OwnerSQLExec:      {SlackRoom: `sql-execution-team`, ContactEmail: `jordan@cockroachlabs.com`},
+	OwnerSQLExec:      {SlackRoom: `sql-execution-team`, ContactEmail: `alfonso@cockroachlabs.com`},
 	OwnerSQLSchema:    {SlackRoom: `sql-schema`, ContactEmail: `lucy@cockroachlabs.com`},
 	OwnerStorage:      {SlackRoom: `storage`, ContactEmail: `peter@cockroachlabs.com`},
 	// Only for use in roachtest package unittests.
