@@ -404,7 +404,7 @@ func (op *hashAggregator) onlineAgg() {
 				// allocated for 'sel' to avoid extra allocation and copying.
 				anyMatched, remaining = aggFunc.match(
 					remaining, op.scratch, op.groupCols, op.groupTypes, op.keyMapping,
-					op.scratch.group[:len(remaining)],
+					op.scratch.group[:len(remaining)], false, /* firstDefiniteMatch */
 				)
 				if anyMatched {
 					aggFunc.compute(op.scratch, op.aggCols)
@@ -438,8 +438,8 @@ func (op *hashAggregator) onlineAgg() {
 						Src:         op.scratch.ColVec(int(colIdx)),
 						ColType:     op.inputPhysTypes[colIdx],
 						DestIdx:     aggFunc.keyIdx,
-						SrcStartIdx: remaining[0],
-						SrcEndIdx:   remaining[0] + 1,
+						SrcStartIdx: groupStartIdx,
+						SrcEndIdx:   groupStartIdx + 1,
 					})
 				}
 				op.keyMapping.SetLength(keyIdx + 1)
@@ -451,10 +451,9 @@ func (op *hashAggregator) onlineAgg() {
 			// Select rest of the tuples that matches the current key. We don't need
 			// to check if there is any match since 'remaining[0]' will always be
 			// matched.
-			// TODO(azhng): Refactor match so that we can skip checking remaining[0].
 			_, remaining = aggFunc.match(
 				remaining, op.scratch, op.groupCols, op.groupTypes, op.keyMapping,
-				op.scratch.group[:len(remaining)],
+				op.scratch.group[:len(remaining)], true, /* firstDefiniteMatch */
 			)
 
 			// Hack required to get aggregation function working. See '.scratch.group'
