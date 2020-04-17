@@ -36,9 +36,9 @@ func genHashAggregator(wr io.Writer) error {
 	assignCmpRe := makeFunctionRegex("_ASSIGN_NE", 3)
 	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 3))
 
-	matchLoop := makeFunctionRegex("_MATCH_LOOP", 8)
+	matchLoop := makeFunctionRegex("_MATCH_LOOP", 9)
 	s = matchLoop.ReplaceAllString(
-		s, `{{template "matchLoop" buildDict "Global" . "LhsMaybeHasNulls" $7 "RhsMaybeHasNulls" $8}}`)
+		s, `{{template "matchLoop" buildDict "Global" . "LhsMaybeHasNulls" $8 "RhsMaybeHasNulls" $8}}`)
 
 	tmpl, err := template.New("hash_aggregator").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
