@@ -1330,9 +1330,9 @@ distinct-on
       └── first-agg [as=f:3, outer=(3)]
            └── f:3
 
-# Scalar GroupBy case.
+# ScalarGroupBy case.
 norm expect=PruneGroupByCols
-SELECT icnt FROM (SELECT COUNT(i+1) AS icnt, COUNT(k+1) FROM a);
+SELECT icnt FROM (SELECT count(i+1) AS icnt, count(k+1) FROM a);
 ----
 scalar-group-by
  ├── columns: icnt:6!null
