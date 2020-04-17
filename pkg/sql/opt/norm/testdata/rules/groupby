@@ -58,6 +58,18 @@ CREATE TABLE nullablecols (
 )
 ----
 
+exec-ddl
+CREATE TABLE xyzbs
+(
+  x INT PRIMARY KEY,
+  y INT,
+  z INT NOT NULL,
+  b BOOL,
+  s TEXT,
+  INDEX (y)
+)
+----
+
 # --------------------------------------------------
 # ConvertGroupByToDistinct
 # --------------------------------------------------
@@ -1941,3 +1953,243 @@ insert a
            │    └── column13:13
            └── const-agg [as="?column?":11, outer=(11)]
                 └── "?column?":11
+
+# --------------------------------------------------
+# PushAggDistinctIntoScalarGroupBy
+# --------------------------------------------------
+
+# SUM case.
+norm expect=PushAggDistinctIntoScalarGroupBy
+SELECT sum(DISTINCT y) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: sum:6
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── distinct-on
+ │    ├── columns: y:2
+ │    ├── grouping columns: y:2
+ │    ├── key: (2)
+ │    └── scan xyzbs
+ │         └── columns: y:2
+ └── aggregations
+      └── sum [as=sum:6, outer=(2)]
+           └── y:2
+
+# COUNT case. Expecting an index scan because opt command is used.
+opt expect=PushAggDistinctIntoScalarGroupBy
+SELECT count(DISTINCT y) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: count:6!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── distinct-on
+ │    ├── columns: y:2
+ │    ├── grouping columns: y:2
+ │    ├── internal-ordering: +2
+ │    ├── key: (2)
+ │    └── scan xyzbs@secondary
+ │         ├── columns: y:2
+ │         └── ordering: +2
+ └── aggregations
+      └── count [as=count:6, outer=(2)]
+           └── y:2
+
+# AVG case.
+norm expect=PushAggDistinctIntoScalarGroupBy
+SELECT avg(DISTINCT y) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: avg:6
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── distinct-on
+ │    ├── columns: y:2
+ │    ├── grouping columns: y:2
+ │    ├── key: (2)
+ │    └── scan xyzbs
+ │         └── columns: y:2
+ └── aggregations
+      └── avg [as=avg:6, outer=(2)]
+           └── y:2
+
+# JSON_AGG case.
+norm expect=PushAggDistinctIntoScalarGroupBy
+SELECT json_agg(DISTINCT y) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: json_agg:6
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── distinct-on
+ │    ├── columns: y:2
+ │    ├── grouping columns: y:2
+ │    ├── key: (2)
+ │    └── scan xyzbs
+ │         └── columns: y:2
+ └── aggregations
+      └── json-agg [as=json_agg:6, outer=(2)]
+           └── y:2
+
+# CORR case.
+# Multiple input arguments for aggregate function.
+norm expect=PushAggDistinctIntoScalarGroupBy
+SELECT corr(DISTINCT y, z) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: corr:6
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── distinct-on
+ │    ├── columns: y:2 z:3!null
+ │    ├── grouping columns: y:2 z:3!null
+ │    ├── key: (2,3)
+ │    └── scan xyzbs
+ │         └── columns: y:2 z:3!null
+ └── aggregations
+      └── corr [as=corr:6, outer=(2,3)]
+           ├── y:2
+           └── z:3
+
+# STRING_AGG case.
+# Multiple input arguments for aggregate function.
+norm expect=PushAggDistinctIntoScalarGroupBy
+SELECT string_agg(DISTINCT s, '-') FROM xyzbs
+----
+scalar-group-by
+ ├── columns: string_agg:7
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── distinct-on
+ │    ├── columns: s:5 column6:6!null
+ │    ├── grouping columns: s:5
+ │    ├── key: (5)
+ │    ├── fd: ()-->(6)
+ │    ├── project
+ │    │    ├── columns: column6:6!null s:5
+ │    │    ├── fd: ()-->(6)
+ │    │    ├── scan xyzbs
+ │    │    │    └── columns: s:5
+ │    │    └── projections
+ │    │         └── '-' [as=column6:6]
+ │    └── aggregations
+ │         └── const-agg [as=column6:6, outer=(6)]
+ │              └── column6:6
+ └── aggregations
+      └── string-agg [as=string_agg:7, outer=(5,6)]
+           ├── s:5
+           └── column6:6
+
+# STRING_AGG case with an ORDER BY.
+# Multiple input arguments for aggregate function.
+norm expect=PushAggDistinctIntoScalarGroupBy
+SELECT string_agg(DISTINCT s, '-') FROM (SELECT s FROM xyzbs ORDER BY s)
+----
+scalar-group-by
+ ├── columns: string_agg:7
+ ├── internal-ordering: +5 opt(6)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── sort
+ │    ├── columns: s:5 column6:6!null
+ │    ├── key: (5)
+ │    ├── fd: ()-->(6)
+ │    ├── ordering: +5 opt(6) [actual: +5]
+ │    └── distinct-on
+ │         ├── columns: s:5 column6:6!null
+ │         ├── grouping columns: s:5
+ │         ├── key: (5)
+ │         ├── fd: ()-->(6)
+ │         ├── project
+ │         │    ├── columns: column6:6!null s:5
+ │         │    ├── fd: ()-->(6)
+ │         │    ├── scan xyzbs
+ │         │    │    └── columns: s:5
+ │         │    └── projections
+ │         │         └── '-' [as=column6:6]
+ │         └── aggregations
+ │              └── const-agg [as=column6:6, outer=(6)]
+ │                   └── column6:6
+ └── aggregations
+      └── string-agg [as=string_agg:7, outer=(5,6)]
+           ├── s:5
+           └── column6:6
+
+# No-op case where the same aggregate function is called on different
+# columns.
+norm expect-not=PushAggDistinctIntoScalarGroupBy
+SELECT count(DISTINCT y), count(DISTINCT z) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: count:6!null count:7!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6,7)
+ ├── scan xyzbs
+ │    └── columns: y:2 z:3!null
+ └── aggregations
+      ├── agg-distinct [as=count:6, outer=(2)]
+      │    └── count
+      │         └── y:2
+      └── agg-distinct [as=count:7, outer=(3)]
+           └── count
+                └── z:3
+
+# No-op case where different aggregate functions are called on the same
+# column.
+norm expect-not=PushAggDistinctIntoScalarGroupBy
+SELECT count(DISTINCT y), sum(DISTINCT y) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: count:6!null sum:7
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6,7)
+ ├── scan xyzbs
+ │    └── columns: y:2
+ └── aggregations
+      ├── agg-distinct [as=count:6, outer=(2)]
+      │    └── count
+      │         └── y:2
+      └── agg-distinct [as=sum:7, outer=(2)]
+           └── sum
+                └── y:2
+
+# No-op cases where EliminateAggDistinct removes the AggDistinct before
+# PushAggDistinctIntoScalarGroupBy is applied. Applies to MAX, MIN, BOOL_AND,
+# and BOOL_OR.
+norm expect-not=PushAggDistinctIntoScalarGroupBy
+SELECT max(DISTINCT y) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: max:6
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── scan xyzbs
+ │    └── columns: y:2
+ └── aggregations
+      └── max [as=max:6, outer=(2)]
+           └── y:2
+
+norm expect-not=PushAggDistinctIntoScalarGroupBy
+SELECT bool_and(DISTINCT b) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: bool_and:6
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── scan xyzbs
+ │    └── columns: b:4
+ └── aggregations
+      └── bool-and [as=bool_and:6, outer=(4)]
+           └── b:4
