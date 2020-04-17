@@ -3150,7 +3150,7 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 				return nil
 			})
 
-			require.Error(t, txn.CommitInBatch(ctx, b), "injected")
+			require.Regexp(t, "injected", txn.CommitInBatch(ctx, b))
 			require.NoError(t, checkPushResult(ctx, db, *origTxn, expectAborted, tc.txnRecExpectation))
 		})
 	}
