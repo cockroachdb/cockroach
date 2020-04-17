@@ -23,6 +23,7 @@ message Error {
   string message = 2;
   string detail = 3;
   string hint = 4;
+  string severity = 8;
 
   message Source {
       string file = 1;
