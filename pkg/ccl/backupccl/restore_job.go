@@ -1075,6 +1075,7 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 	}
 	log.Event(ctx, "making tables live")
 
+	newSchemaChangeJobs := make([]*jobs.StartableJob, 0)
 	err := r.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Write the new TableDescriptors and flip state over to public so they can be
 		// accessed.
@@ -1083,6 +1084,13 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 			tableDesc := *tbl
 			tableDesc.Version++
 			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+			// Convert any mutations that were in progress on the table descriptor
+			// when the backup was taken, and convert them to schema change jobs.
+			newJobs, err := createSchemaChangeJobsFromMutations(ctx, r.execCfg.JobRegistry, txn, r.job.Payload().Username, &tableDesc)
+			if err != nil {
+				return err
+			}
+			newSchemaChangeJobs = append(newSchemaChangeJobs, newJobs...)
 			existingDescVal, err := sqlbase.ConditionalGetTableDescFromTxn(ctx, txn, tbl)
 			if err != nil {
 				return errors.Wrap(err, "validating table descriptor has not changed")
@@ -1108,6 +1116,13 @@ func (r *restoreResumer) publishTables(ctx context.Context) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	// Start the schema change jobs we created.
+	for _, newJob := range newSchemaChangeJobs {
+		if _, err := newJob.Start(ctx); err != nil {
+			return err
+		}
 	}
 
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
@@ -1223,6 +1238,62 @@ func (r *restoreResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn 
 	}
 
 	return nil
+}
+
+// createSchemaChangeJobsFromMutations creates and runs jobs for any mutations
+// on the table descriptor. It also updates tableDesc's MutationJobs to
+// reference the new jobs. This is only used to reconstruct a job based off a
+// mutation, namely during RESTORE.
+func createSchemaChangeJobsFromMutations(
+	ctx context.Context,
+	jr *jobs.Registry,
+	txn *kv.Txn,
+	username string,
+	tableDesc *sqlbase.TableDescriptor,
+) ([]*jobs.StartableJob, error) {
+	mutationJobs := make([]sqlbase.TableDescriptor_MutationJob, 0, len(tableDesc.MutationJobs))
+	newJobs := make([]*jobs.StartableJob, 0, len(tableDesc.MutationJobs))
+	for _, mj := range tableDesc.MutationJobs {
+		mutationID := mj.MutationID
+		jobDesc, mutationCount, err := sql.JobDescriptionFromMutationID(tableDesc, mj.MutationID)
+		if err != nil {
+			return nil, err
+		}
+		spanList := make([]jobspb.ResumeSpanList, mutationCount)
+		for i := range spanList {
+			spanList[i] = jobspb.ResumeSpanList{ResumeSpans: []roachpb.Span{tableDesc.PrimaryIndexSpan()}}
+		}
+		jobRecord := jobs.Record{
+			// We indicate that this schema change was triggered by a RESTORE since
+			// the job description may not have all the information to fully describe
+			// the schema change.
+			Description:   "RESTORING: " + jobDesc,
+			Username:      username,
+			DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
+			Details: jobspb.SchemaChangeDetails{
+				TableID:        tableDesc.ID,
+				MutationID:     mutationID,
+				ResumeSpanList: spanList,
+				FormatVersion:  jobspb.JobResumerFormatVersion,
+			},
+			Progress: jobspb.SchemaChangeProgress{},
+		}
+		newJob, err := jr.CreateStartableJobWithTxn(ctx, jobRecord, txn, nil)
+		if err != nil {
+			return nil, err
+		}
+		newMutationJob := sqlbase.TableDescriptor_MutationJob{
+			MutationID: mutationID,
+			JobID:      *newJob.ID(),
+		}
+		mutationJobs = append(mutationJobs, newMutationJob)
+		newJobs = append(newJobs, newJob)
+
+		log.Infof(ctx, "queued new schema change job for table %d, mutation %d",
+			tableDesc.ID, mutationID)
+	}
+	tableDesc.MutationJobs = mutationJobs
+	return newJobs, nil
 }
 
 // restoreSystemTables atomically replaces the contents of the system tables

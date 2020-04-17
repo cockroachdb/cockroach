@@ -916,6 +916,105 @@ func (p *planner) createDropDatabaseJob(
 	return err
 }
 
+// JobDescriptionFromMutationID returns a string description of a mutation with
+// a particular ID on a given tableDesc, as well as the number of mutations
+// associated with it. This is only used to reconstruct a job based off a
+// mutation, namely during RESTORE.
+// N.B.: This does not currently attempt to fully reconstruct the schema change
+// job being performed, but serves to give an indication of the work being done.
+func JobDescriptionFromMutationID(
+	tableDesc *sqlbase.TableDescriptor, id sqlbase.MutationID,
+) (string, int, error) {
+	var jobDescBuilder strings.Builder
+	mutationCount := 0
+	for _, m := range tableDesc.Mutations {
+		if m.MutationID == id {
+			mutationCount++
+			// This is one of the mutations that we're looking for.
+			// Note that for primary key swaps, we want the last mutation in this list.
+			isPrimaryKeySwap := false
+			isIndexMutation := false
+			switch m.Descriptor_.(type) {
+			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
+				isPrimaryKeySwap = true
+			case *sqlbase.DescriptorMutation_Index:
+				isIndexMutation = true
+			}
+
+			if isPrimaryKeySwap {
+				// Primary key swaps have multiple mutations with the same ID, but we
+				// can derive the description from just the PrimaryKeySwap mutation
+				// which appears after the other mutations.
+				jobDescBuilder.Reset()
+			} else if jobDescBuilder.Len() != 0 {
+				jobDescBuilder.WriteString("; ")
+			}
+
+			if m.Rollback {
+				jobDescBuilder.WriteString("ROLLBACK for ")
+			}
+
+			if !isIndexMutation {
+				jobDescBuilder.WriteString(fmt.Sprintf("ALTER TABLE %s ", tableDesc.Name))
+			}
+
+			if !isPrimaryKeySwap {
+				switch m.Direction {
+				case sqlbase.DescriptorMutation_ADD:
+					if isIndexMutation {
+						jobDescBuilder.WriteString("CREATE ")
+					} else {
+						jobDescBuilder.WriteString("ADD ")
+					}
+				case sqlbase.DescriptorMutation_DROP:
+					jobDescBuilder.WriteString("DROP ")
+				default:
+					return "", 0, errors.Newf("unsupported mutation %+v, while restoring table %+v", m, tableDesc)
+				}
+			}
+
+			switch t := m.Descriptor_.(type) {
+			case *sqlbase.DescriptorMutation_Column:
+				jobDescBuilder.WriteString("COLUMN ")
+				jobDescBuilder.WriteString(t.Column.Name)
+				if m.Direction == sqlbase.DescriptorMutation_ADD {
+					jobDescBuilder.WriteString(" " + t.Column.Type.String())
+				}
+			case *sqlbase.DescriptorMutation_Index:
+				jobDescBuilder.WriteString("INDEX ")
+				jobDescBuilder.WriteString(t.Index.Name + " ON " + tableDesc.Name + " (")
+				jobDescBuilder.WriteString(strings.Join(t.Index.ColumnNames, ", "))
+				jobDescBuilder.WriteString(")")
+			case *sqlbase.DescriptorMutation_Constraint:
+				jobDescBuilder.WriteString("CONSTRAINT ")
+				jobDescBuilder.WriteString(t.Constraint.Name)
+			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
+				jobDescBuilder.WriteString("ALTER PRIMARY KEY USING COLUMNS (")
+				newIndexID := t.PrimaryKeySwap.NewPrimaryIndexId
+				// Find the ADD INDEX mutation with the same mutation ID that is adding
+				// the new index.
+				for _, otherMut := range tableDesc.Mutations {
+					if indexMut, ok := otherMut.Descriptor_.(*sqlbase.DescriptorMutation_Index); ok &&
+						indexMut.Index.ID == newIndexID &&
+						otherMut.MutationID == m.MutationID &&
+						m.Direction == sqlbase.DescriptorMutation_ADD {
+						jobDescBuilder.WriteString(strings.Join(indexMut.Index.ColumnNames, ", "))
+					}
+				}
+				jobDescBuilder.WriteString(")")
+			default:
+				return "", 0, errors.Newf("unsupported mutation %+v, while restoring table %+v", m, tableDesc)
+			}
+		}
+	}
+
+	jobDesc := jobDescBuilder.String()
+	if mutationCount == 0 {
+		return "", 0, errors.Newf("could not find mutation %d on table %s (%d) while restoring", id, tableDesc.Name, tableDesc.ID)
+	}
+	return jobDesc, mutationCount, nil
+}
+
 // createOrUpdateSchemaChangeJob queues a new job for the schema change if there
 // is no existing schema change job for the table, or updates the existing job
 // if there is one.
