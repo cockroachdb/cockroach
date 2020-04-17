@@ -20,8 +20,9 @@ import (
 
 // loadTPCHDataset loads a TPC-H dataset for the specific benchmark spec on the
 // provided roachNodes. The function is idempotent and first checks whether a
-// compatible dataset exists, performing an expensive dataset restore only if it
-// doesn't.
+// compatible dataset exists (compatible is defined as a tpch dataset with a
+// scale factor at least as large as the provided scale factor), performing an
+// expensive dataset restore only if it doesn't.
 func loadTPCHDataset(
 	ctx context.Context, t *test, c *cluster, sf int, m *monitor, roachNodes nodeListOption,
 ) error {
