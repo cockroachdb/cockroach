@@ -1,0 +1,46 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~styl/base/palette.styl'
+@require '~styl/base/layout-vars.styl'
+
+.page-config
+  padding-left 24px
+  // Stick to the top.
+  position sticky
+  position -webkit-sticky
+  top 0
+  // We want 10px of spacing above and below this div when
+  // it's fixed during scrolling, but not when the page
+  // is scrolled to the top. This combination of padding
+  // and negative margins achieves that.
+  padding-bottom 10px
+  padding-top 10px
+  margin-bottom -10px
+  margin-top -10px
+
+  z-index $z-index-page-config
+  background-color $background-color
+
+  &__list
+    display flex
+    justify-content flex-start
+    align-items center
+
+    .page-config__item
+      margin-right 24px
+
+  &__spread
+    display flex
+    justify-content space-between
+    align-items center
+
+  &__item
+    list-style none
