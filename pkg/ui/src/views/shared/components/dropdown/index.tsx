@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import classNames from "classnames";
+import classNames from "classnames/bind";
 import Select from "react-select";
 import React from "react";
 import _ from "lodash";
 
-import "./dropdown.styl";
+import styles from "./dropdown.module.styl";
 
 import {leftArrow, rightArrow} from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
@@ -45,7 +45,17 @@ interface DropdownOwnProps {
   type?: "primary" | "secondary";
 }
 
-export const arrowRenderer = ({ isOpen }: { isOpen: boolean }) => <span className={classNames("caret-down", { "active": isOpen })}><CaretDown /></span>;
+const cx = classNames.bind(styles);
+
+export const arrowRenderer = ({ isOpen }: { isOpen: boolean }) =>
+  <span
+    className={cx(
+      "caret-down",
+      { active: isOpen },
+    )}
+  >
+    <CaretDown />
+  </span>;
 
 /**
  * Dropdown component that uses the URL query string for state.
@@ -85,20 +95,27 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
   render() {
     const { selected, options, onChange, onArrowClick, disabledArrows, content, isTimeRange, type = "secondary" } = this.props;
 
-    const className = classNames(
+    const className = cx(
       "dropdown",
       `dropdown--type-${type}`,
-      isTimeRange ? "_range" : "",
-      { "dropdown--side-arrows": !_.isNil(onArrowClick), "dropdown__focused": this.state.is_focused },
+      {
+        "_range": isTimeRange,
+        "dropdown--side-arrows": !_.isNil(onArrowClick),
+        "dropdown__focused": this.state.is_focused,
+      },
       this.props.className,
     );
-    const leftClassName = classNames(
+    const leftClassName = cx(
       "dropdown__side-arrow",
-      { "dropdown__side-arrow--disabled": _.includes(disabledArrows, ArrowDirection.LEFT) },
+      {
+        "dropdown__side-arrow--disabled": _.includes(disabledArrows, ArrowDirection.LEFT),
+      },
     );
-    const rightClassName = classNames(
+    const rightClassName = cx(
       "dropdown__side-arrow",
-      { "dropdown__side-arrow--disabled": _.includes(disabledArrows, ArrowDirection.RIGHT) },
+      {
+        "dropdown__side-arrow--disabled": _.includes(disabledArrows, ArrowDirection.RIGHT),
+      },
     );
 
     return <div className={className} onClick={this.triggerSelectClick} ref={this.dropdownRef}>
@@ -109,12 +126,15 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
         onClick={() => this.props.onArrowClick(ArrowDirection.LEFT)}>
       </span>
       <span
-        className={isTimeRange ? "dropdown__range-title" : "dropdown__title"}
+        className={cx({
+          "dropdown__range-title": isTimeRange,
+          "dropdown__title": !isTimeRange,
+        })}
         ref={this.titleRef}>
           {this.props.title}{this.props.title && !isTimeRange ? ":" : ""}
       </span>
       {content ? content : <Select
-        className="dropdown__select"
+        className={cx("dropdown__select")}
         arrowRenderer={arrowRenderer}
         clearable={false}
         searchable={false}
