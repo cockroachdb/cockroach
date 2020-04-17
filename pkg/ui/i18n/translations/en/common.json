@@ -2,7 +2,34 @@
   "statements": {
     "table": {
       "head": {
-        "statements": "SQL statement <1>fingerprint</1>. <3/> <4/> To view additional details of a SQL statement fingerprint, click this to open the Statement Details page."
+        "statements": {
+          "label": "Statements",
+          "tooltip": "SQL statement <1>fingerprint</1>.<3/><4/>To view additional details of a SQL statement fingerprint, click this to open the Statement Details page."
+        }, 
+        "txn": {
+          "label": "TXN Type",
+          "tooltip": "Type of transaction (implicit or explicit). Explicit transactions refer to statements that are wrapped by <1>BEGIN</1> and <3>COMMIT</3> statements by the client. Explicit transactions employ <5>transactional pipelining</5> and therefore report latencies that do not account for replication.<7/><8/>For statements not in explicit transactions, CockroachDB wraps each statement in individual implicit transactions."
+        },
+        "diagnostics": {
+          "label": "Diagnostics",
+          "tooltip": "Option to activate <1>diagnostics</1> for each statement. If activated, this displays the status of diagnostics collection (<3>WAITING FOR QUERY</3>, <5>READY</5>, OR <7>ERROR</7>)."
+        },
+        "retries": {
+          "label": "Retries",
+          "tooltip": "Cumulative number of <1>retries</1> of statements with this fingerprint within the last hour or specified time interval."
+        },
+        "execution-count": {
+          "label": "Execution Count",
+          "tooltip": "Cumulative number of executions of statements with this fingerprint within the last hour or specified <1>time interval</1>.<3/><4/>The bar indicates the ratio of runtime success (gray) to <6>retries</6> (red) for the SQL statement fingerprint."
+        },
+        "rows": {
+          "label": "Rows Affected",
+          "tooltip": "Average number of rows returned while executing statements with this fingerprint within the last hour or specified <1>time interval</1>.<3/><4/>The gray bar indicates the mean number of rows returned. The blue bar indicates one standard deviation from the mean."
+        },
+        "latency": {
+          "label": "Latency",
+          "tooltip": "Average service latency of statements with this fingerprint within the last hour or specified time interval.<1/><2/>The gray bar indicates the mean latency. The blue bar indicates one standard deviation from the mean."
+        }
       }
     }
   }

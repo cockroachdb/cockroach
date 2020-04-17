@@ -55,13 +55,13 @@ export function makeStatementsColumns(
 ): ColumnDescriptor<AggregateStatistics>[]  {
   const columns: ColumnDescriptor<AggregateStatistics>[] = [
     {
-      title: StatementTableTitle.statements,
+      title: StatementTableTitle().statements,
       className: "cl-table__col-query-text",
       cell: StatementTableCell.statements(search, selectedApp),
       sort: (stmt) => stmt.label,
     },
     {
-      title: StatementTableTitle.txtType,
+      title: StatementTableTitle().txtType,
       className: "statements-table__col-time",
       cell: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
       sort: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
@@ -71,7 +71,7 @@ export function makeStatementsColumns(
 
   if (activateDiagnosticsRef) {
     const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
-      title: StatementTableTitle.diagnostics,
+      title: StatementTableTitle().diagnostics,
       cell: StatementTableCell.diagnostics(activateDiagnosticsRef),
       sort: (stmt) => {
         if (stmt.diagnosticsReport) {
@@ -107,25 +107,25 @@ function makeCommonColumns(statements: AggregateStatistics[])
 
   return [
     {
-      title: StatementTableTitle.retries,
+      title: StatementTableTitle().retries,
       className: "statements-table__col-retries",
       cell: retryBar,
       sort: (stmt) => (longToInt(stmt.stats.count) - longToInt(stmt.stats.first_attempt_count)),
     },
     {
-      title: StatementTableTitle.executionCount,
+      title: StatementTableTitle().executionCount,
       className: "statements-table__col-count",
       cell: countBar,
       sort: (stmt) => FixLong(stmt.stats.count).toInt(),
     },
     {
-      title: StatementTableTitle.rowsAffected,
+      title: StatementTableTitle().rowsAffected,
       className: "statements-table__col-rows",
       cell: rowsBar,
       sort: (stmt) => stmt.stats.num_rows.mean,
     },
     {
-      title: StatementTableTitle.latency,
+      title: StatementTableTitle().latency,
       className: "statements-table__col-latency",
       cell: latencyBar,
       sort: (stmt) => stmt.stats.service_lat.mean,
