@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -103,8 +102,11 @@ type sqlServerArgs struct {
 	// The executorConfig depends on the status server.
 	// The status server is handed the stmtDiagnosticsRegistry.
 	status *statusServer
-	// The DistSQLPlanner uses node liveness.
-	nodeLiveness *kvserver.NodeLiveness
+	// Narrowed down version of *NodeLiveness.
+	nodeLiveness interface {
+		jobs.NodeLiveness // jobs uses this
+		IsLive(roachpb.NodeID) (bool, error) // DistSQLPlanner wants this
+	}
 	// The executorConfig uses the provider.
 	protectedtsProvider protectedts.Provider
 	// Gossip is relied upon by distSQLCfg (execinfra.ServerConfig), the executor
