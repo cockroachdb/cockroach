@@ -182,6 +182,28 @@ func (g *Geography) AsS2() ([]s2.Region, error) {
 	return s2RegionsFromGeom(geomRepr), nil
 }
 
+// isLinearRingCCW returns whether a given linear ring is counter clock wise.
+// Consider:
+// * slope of line segment (p1, p2): a = (y2 - y1)/(x2 - x1)
+// * slope of line segment (p2, p3): b = (y3 - y2)/(x3 - x2)
+// If a < b, then we have a "left turn". Solving that, we need to solve
+// (y2 - y1)/(x2 - x1) < (y3 - y2)/(x3 - x2) - or rearranged -
+// (y2 - y1) * (x3 - x2) - (y3 - y2) * (x2 - x1) < 0
+func isLinearRingCCW(linearRing *geom.LinearRing) bool {
+	for pointIdx := 0; pointIdx < linearRing.NumCoords()-2; pointIdx++ {
+		p1 := linearRing.Coord(pointIdx)
+		p2 := linearRing.Coord(pointIdx + 1)
+		p3 := linearRing.Coord(pointIdx + 2)
+		sign := (p2.Y()-p1.Y())*(p3.X()-p2.X()) - (p3.Y()-p2.Y())*(p2.X()-p1.X())
+		if sign == 0 {
+			continue
+		}
+		return sign < 0
+	}
+	// At this point, everything is linear.
+	return true
+}
+
 // s2RegionsFromGeom converts an geom representation of an object
 // to s2 regions.
 func s2RegionsFromGeom(geomRepr geom.T) []s2.Region {
@@ -202,15 +224,15 @@ func s2RegionsFromGeom(geomRepr geom.T) []s2.Region {
 		}
 	case *geom.Polygon:
 		loops := make([]*s2.Loop, repr.NumLinearRings())
-		// The first ring is a "shell", which is represented as CCW.
-		// Following rings are "holes", which are CW. For S2, they are CCW and automatically figured out.
+		// All loops must be oriented CCW for S2.
 		for ringIdx := 0; ringIdx < repr.NumLinearRings(); ringIdx++ {
 			linearRing := repr.LinearRing(ringIdx)
 			points := make([]s2.Point, linearRing.NumCoords())
+			isCCW := isLinearRingCCW(linearRing)
 			for pointIdx := 0; pointIdx < linearRing.NumCoords(); pointIdx++ {
 				p := linearRing.Coord(pointIdx)
 				pt := s2.PointFromLatLng(s2.LatLngFromDegrees(p.Y(), p.X()))
-				if ringIdx == 0 {
+				if isCCW {
 					points[pointIdx] = pt
 				} else {
 					points[len(points)-pointIdx-1] = pt
