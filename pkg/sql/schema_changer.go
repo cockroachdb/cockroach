@@ -778,10 +778,12 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 	}
 
 	var indexGCJobs []*jobs.StartableJob
+	var pkChangeIndexDropJob *jobs.StartableJob
 	update := func(txn *kv.Txn, descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
 		// Reset vars here because update function can be called multiple times in a retry.
 		isRollback = false
 		indexGCJobs = nil
+		pkChangeIndexDropJob = nil
 
 		i := 0
 		scDesc, ok := descs[sc.tableID]
@@ -910,15 +912,12 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 						Progress:      jobspb.SchemaChangeProgress{},
 						NonCancelable: true,
 					}
-					// TODO (lucy): We should be able to create a StartableJob and start
-					// it after calling PublishMultiple() to finalize the mutations,
-					// as with the indexGCJob. That will allow us to start the job
-					// immediately without having to wait for the registry to adopt it.
-					job, err := sc.jobRegistry.CreateJobWithTxn(ctx, jobRecord, txn)
+					job, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn, nil /* resultsCh */)
 					if err != nil {
 						return err
 					}
 					log.VEventf(ctx, 2, "created job %d to drop previous indexes", *job.ID())
+					pkChangeIndexDropJob = job
 					scDesc.MutationJobs = append(scDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
 						MutationID: mutationID,
 						JobID:      *job.ID(),
@@ -969,7 +968,12 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 	if err != nil {
 		for _, job := range indexGCJobs {
 			if rollbackErr := job.CleanupOnRollback(ctx); rollbackErr != nil {
-				log.Warningf(ctx, "failed to cleanup job: %v", rollbackErr)
+				log.Warningf(ctx, "failed to clean up job: %v", rollbackErr)
+			}
+		}
+		if pkChangeIndexDropJob != nil {
+			if rollbackErr := pkChangeIndexDropJob.CleanupOnRollback(ctx); rollbackErr != nil {
+				log.Warningf(ctx, "failed to clean up job: %v", rollbackErr)
 			}
 		}
 		return nil, err
@@ -979,6 +983,13 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 			log.Warningf(ctx, "starting GC job %d failed with error: %v", *job.ID(), err)
 		}
 		log.VEventf(ctx, 2, "started GC job %d", *job.ID())
+	}
+	if pkChangeIndexDropJob != nil {
+		if _, err := pkChangeIndexDropJob.Start(ctx); err != nil {
+			log.Warningf(ctx, "starting primary key change index cleanup job %d failed with error: %v",
+				*pkChangeIndexDropJob.ID(), err)
+		}
+		log.VEventf(ctx, 2, "started primary key change index cleanup job %d", *pkChangeIndexDropJob.ID())
 	}
 	return descs[sc.tableID], nil
 }

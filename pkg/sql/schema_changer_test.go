@@ -405,10 +405,12 @@ func runSchemaChangeWithOperations(
 	wg.Wait() // for schema change to complete.
 
 	// Verify the number of keys left behind in the table to validate schema
-	// change operations.
-	if err := checkTableKeyCount(ctx, kvDB, keyMultiple, maxValue+numInserts); err != nil {
-		t.Fatal(err)
-	}
+	// change operations. This is wrapped in SucceedsSoon to handle cases where
+	// dropped indexes are expected to be GC'ed immediately after the schema
+	// change completes.
+	testutils.SucceedsSoon(t, func() error {
+		return checkTableKeyCount(ctx, kvDB, keyMultiple, maxValue+numInserts)
+	})
 	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
@@ -2494,6 +2496,13 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 `); err != nil {
 		t.Fatal(err)
 	}
+	// GC the old indexes to be dropped after the PK change immediately.
+	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+
 	// Bulk insert.
 	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
 		t.Fatal(err)
@@ -2505,7 +2514,7 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 		kvDB,
 		"ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)",
 		maxValue,
-		2,
+		1,
 		initBackfillNotification(),
 		// We don't let runSchemaChangeWithOperations use UPSERT statements, because
 		// way in which runSchemaChangeWithOperations uses them assumes that k is already
@@ -2992,14 +3001,68 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 	})
 }
 
+// TestPrimaryKeyDropIndexNotCancelable tests that the job to drop indexes after
+// a primary key change is not cancelable.
+func TestPrimaryKeyDropIndexNotCancelable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	var db *gosql.DB
+	shouldAttemptCancel := true
+	hasAttemptedCancel := make(chan struct{})
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		GCJob: &sql.GCJobTestingKnobs{
+			RunBeforeResume: func(jobID int64) error {
+				if !shouldAttemptCancel {
+					return nil
+				}
+				_, err := db.Exec(`CANCEL JOB ($1)`, jobID)
+				require.Regexp(t, "not cancelable", err)
+				shouldAttemptCancel = false
+				close(hasAttemptedCancel)
+				return nil
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	db = sqlDB
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT NOT NULL, v INT);
+`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`)
+	require.NoError(t, err)
+
+	// Wait until the testing knob has notified that canceling the job has been
+	// attempted before continuing.
+	<-hasAttemptedCancel
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	testutils.SucceedsSoon(t, func() error {
+		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+			Description:   "CLEANUP JOB for 'ALTER TABLE t.public.test ALTER PRIMARY KEY USING COLUMNS (k)'",
+			Username:      security.RootUser,
+			DescriptorIDs: sqlbase.IDs{tableDesc.ID},
+		})
+	})
+}
+
 // TestMultiplePrimaryKeyChanges ensures that we can run many primary key
-// changes back to back. We cannot run this in a logic test because we need the
-// job that drops old indexes to finish so that the following primary key change
-// occurs quickly.
+// changes back to back. We cannot run this in a logic test because we need to
+// set a low job registry adopt interval, so that each successive schema change
+// can run immediately without waiting too long for a retry due to being second
+// in line after the mutation to drop indexes for the previous primary key
+// change.
 func TestMultiplePrimaryKeyChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Adopt the job to drop old indexes quickly.
+	// Decrease the adopt loop interval so that retries happen quickly.
 	defer setTestJobsAdoptInterval()()
 
 	ctx := context.Background()
