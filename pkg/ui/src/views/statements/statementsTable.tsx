@@ -18,11 +18,11 @@ import { StatementSummary, summarize } from "src/util/sql/summarize";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { countBarChart, latencyBarChart, retryBarChart, rowsBarChart } from "./barCharts";
 import { Anchor, Tooltip } from "src/components";
-import "./statements.styl";
 import { DiagnosticStatusBadge } from "./diagnostics/diagnosticStatusBadge";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import { ActivateDiagnosticsModalRef } from "./diagnostics/activateDiagnosticsModal";
+import styles from "./statementsTable.module.styl";
 
 const longToInt = (d: number | Long) => FixLong(d).toInt();
 
@@ -43,15 +43,15 @@ function StatementLink(props: { statement: string, app: string, implicitTxn: boo
   const base = props.app && props.app.length > 0 ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
   return (
     <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
-      <div className="cl-table-link__tooltip">
+      <div className={styles["cl-table-link__tooltip"]}>
         <Tooltip
           placement="bottom"
-          title={<pre className="cl-table-link__description">
+          title={<pre className={styles["cl-table-link__description"]}>
             { getHighlightedText(props.statement, props.search) }
           </pre>}
-          overlayClassName="cl-table-link__statement-tooltip--fixed-width"
+          overlayClassName={styles["cl-table-link__statement-tooltip--fixed-width"]}
         >
-          <div className="cl-table-link__tooltip-hover-area">
+          <div>
             { getHighlightedText(shortStatement(summary, props.statement), props.search, true) }
           </div>
         </Tooltip>
@@ -81,7 +81,7 @@ export function makeStatementsColumns(
   const columns: ColumnDescriptor<AggregateStatistics>[] = [
     {
       title: "Statement",
-      className: "cl-table__col-query-text",
+      className: styles["cl-table__col-query-text"],
       cell: (stmt) => (
         <StatementLink
           statement={ stmt.label }
@@ -94,7 +94,7 @@ export function makeStatementsColumns(
     },
     {
       title: "Txn Type",
-      className: "statements-table__col-time",
+      className: styles["statements-table__col-time"],
       cell: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
       sort: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
     },
@@ -131,7 +131,7 @@ export function makeStatementsColumns(
 function NodeLink(props: { nodeId: string, nodeNames: { [nodeId: string]: string } }) {
   return (
     <Link to={ `/node/${props.nodeId}` }>
-      <div className="node-name-tooltip__info-icon">{props.nodeNames[props.nodeId]}</div>
+      <div>{props.nodeNames[props.nodeId]}</div>
     </Link>
   );
 }
@@ -151,33 +151,64 @@ export function makeNodesColumns(statements: AggregateStatistics[], nodeNames: {
 
 function makeCommonColumns(statements: AggregateStatistics[])
     : ColumnDescriptor<AggregateStatistics>[] {
-  const countBar = countBarChart(statements);
-  const retryBar = retryBarChart(statements);
-  const rowsBar = rowsBarChart(statements);
-  const latencyBar = latencyBarChart(statements);
+  const countBar = countBarChart(
+    statements,
+    {
+      classes: {
+        root: styles["statements-table__col-count--bar-chart"],
+        label: styles["statements-table__col-count--bar-chart__label"],
+      },
+    },
+  );
+  const retryBar = retryBarChart(
+    statements,
+    {
+      classes: {
+        root: styles["statements-table__col-retries--bar-chart"],
+        label: styles["statements-table__col-retries--bar-chart__label"],
+      },
+    },
+  );
+  const rowsBar = rowsBarChart(
+    statements,
+    {
+      classes: {
+        root: styles["statements-table__col-rows--bar-chart"],
+        label: styles["statements-table__col-rows--bar-chart__label"],
+      },
+    },
+  );
+  const latencyBar = latencyBarChart(
+    statements,
+    {
+      classes: {
+        root: styles["statements-table__col-latency--bar-chart"],
+      },
+    },
+  );
 
   return [
     {
       title: "Retries",
-      className: "statements-table__col-retries",
+      className: styles["statements-table__col-retries"],
       cell: retryBar,
       sort: (stmt) => (longToInt(stmt.stats.count) - longToInt(stmt.stats.first_attempt_count)),
     },
     {
       title: "Execution Count",
-      className: "statements-table__col-count",
+      className: styles["statements-table__col-count"],
       cell: countBar,
       sort: (stmt) => FixLong(stmt.stats.count).toInt(),
     },
     {
       title: "Rows Affected",
-      className: "statements-table__col-rows",
+      className: styles["statements-table__col-rows"],
       cell: rowsBar,
       sort: (stmt) => stmt.stats.num_rows.mean,
     },
     {
       title: "Latency",
-      className: "statements-table__col-latency",
+      className: styles["statements-table__col-latency"],
       cell: latencyBar,
       sort: (stmt) => stmt.stats.service_lat.mean,
     },
