@@ -182,6 +182,40 @@ func (g *Geography) AsS2() ([]s2.Region, error) {
 	return s2RegionsFromGeom(geomRepr), nil
 }
 
+// isLinearRingCCW returns whether a given linear ring is counter clock wise.
+// See 2.07 of http://www.faqs.org/faqs/graphics/algorithms-faq/.
+// * Find the lowest vertex (or, if  there is more than one vertex with the same lowest coordinate,
+//   the rightmost of those vertices) and then take the cross product of the edges fore and aft of it.
+// * Code adapted from the given polyorient.C.
+func isLinearRingCCW(linearRing *geom.LinearRing) bool {
+	// smallestIdx represents point A.
+	smallestIdx := 0
+	smallest := linearRing.Coord(0)
+
+	for pointIdx := 1; pointIdx < linearRing.NumCoords()-1; pointIdx++ {
+		curr := linearRing.Coord(pointIdx)
+		if curr.Y() < smallest.Y() || (curr.Y() == smallest.Y() && curr.X() > smallest.X()) {
+			smallestIdx = pointIdx
+			smallest = curr
+		}
+	}
+
+	// prevIdx is the previous point. If we are at the 0th point, the last coordinate
+	// is also the 0th point, so take the second last point.
+	// Note we don't have to apply this for "nextIdx" as we cap the search above at the last vertex.
+	prevIdx := smallestIdx - 1
+	if smallestIdx == 0 {
+		prevIdx = linearRing.NumCoords() - 2
+	}
+	a := linearRing.Coord(prevIdx)
+	b := smallest
+	c := linearRing.Coord(smallestIdx + 1)
+	crossProduct := a.X()*b.Y() - a.Y()*b.X() +
+		a.Y()*c.X() - a.X()*c.Y() +
+		b.X()*c.Y() - c.X()*b.Y()
+	return crossProduct > 0
+}
+
 // s2RegionsFromGeom converts an geom representation of an object
 // to s2 regions.
 func s2RegionsFromGeom(geomRepr geom.T) []s2.Region {
@@ -202,15 +236,15 @@ func s2RegionsFromGeom(geomRepr geom.T) []s2.Region {
 		}
 	case *geom.Polygon:
 		loops := make([]*s2.Loop, repr.NumLinearRings())
-		// The first ring is a "shell", which is represented as CCW.
-		// Following rings are "holes", which are CW. For S2, they are CCW and automatically figured out.
+		// All loops must be oriented CCW for S2.
 		for ringIdx := 0; ringIdx < repr.NumLinearRings(); ringIdx++ {
 			linearRing := repr.LinearRing(ringIdx)
 			points := make([]s2.Point, linearRing.NumCoords())
+			isCCW := isLinearRingCCW(linearRing)
 			for pointIdx := 0; pointIdx < linearRing.NumCoords(); pointIdx++ {
 				p := linearRing.Coord(pointIdx)
 				pt := s2.PointFromLatLng(s2.LatLngFromDegrees(p.Y(), p.X()))
-				if ringIdx == 0 {
+				if isCCW {
 					points[pointIdx] = pt
 				} else {
 					points[len(points)-pointIdx-1] = pt

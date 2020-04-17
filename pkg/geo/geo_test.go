@@ -64,6 +64,81 @@ func TestGeographyAsS2(t *testing.T) {
 			},
 		},
 		{
+			`POLYGON(
+				(0.0 0.0, 0.5 0.0, 0.75 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0),
+				(0.2 0.2, 0.2 0.4, 0.4 0.4, 0.4 0.2, 0.2 0.2)
+			)`,
+			[]s2.Region{
+				s2.PolygonFromLoops([]*s2.Loop{
+					s2.LoopFromPoints([]s2.Point{
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 0.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 0.5)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 0.75)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 1.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(1.0, 1.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(1.0, 0.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 0.0)),
+					}),
+					s2.LoopFromPoints([]s2.Point{
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.2)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.4)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.4, 0.4)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.4, 0.2)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.2)),
+					}),
+				}),
+			},
+		},
+		{
+			`POLYGON(
+				(0.0 0.0, 0.0 1.0, 1.0 1.0, 1.0 0.0, 0.0 0.0),
+				(0.2 0.2, 0.2 0.4, 0.4 0.4, 0.4 0.2, 0.2 0.2)
+			)`,
+			[]s2.Region{
+				s2.PolygonFromLoops([]*s2.Loop{
+					s2.LoopFromPoints([]s2.Point{
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 0.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 1.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(1.0, 1.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(1.0, 0.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 0.0)),
+					}),
+					s2.LoopFromPoints([]s2.Point{
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.2)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.4)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.4, 0.4)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.4, 0.2)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.2)),
+					}),
+				}),
+			},
+		},
+		{
+			`POLYGON(
+				(0.0 0.0, 0.0 0.5, 0.0 1.0, 1.0 1.0, 1.0 0.0, 0.0 0.0),
+				(0.2 0.2, 0.2 0.4, 0.4 0.4, 0.4 0.2, 0.2 0.2)
+			)`,
+			[]s2.Region{
+				s2.PolygonFromLoops([]*s2.Loop{
+					s2.LoopFromPoints([]s2.Point{
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 0.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 1.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(1.0, 1.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(1.0, 0.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.5, 0.0)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.0, 0.0)),
+					}),
+					s2.LoopFromPoints([]s2.Point{
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.2)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.4)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.4, 0.4)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.4, 0.2)),
+						s2.PointFromLatLng(s2.LatLngFromDegrees(0.2, 0.2)),
+					}),
+				}),
+			},
+		},
+		{
 			`GEOMETRYCOLLECTION(POINT(1.0 2.0), POLYGON(
 				(0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0),
 				(0.2 0.2, 0.2 0.4, 0.4 0.4, 0.4 0.2, 0.2 0.2)
