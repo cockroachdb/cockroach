@@ -4301,7 +4301,7 @@ func TestEndTxnWithErrorAndSyncIntentResolution(t *testing.T) {
 	args.Sequence = 2
 
 	_, pErr := tc.SendWrappedWith(h, &args)
-	require.Error(t, pErr.GetDetail(), "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)")
+	require.Regexp(t, `TransactionAbortedError\(ABORT_REASON_ABORTED_RECORD_FOUND\)`, pErr)
 	require.NotNil(t, pErr.GetTxn())
 	require.Equal(t, txn.ID, pErr.GetTxn().ID)
 }
@@ -4429,8 +4429,9 @@ func TestRPCRetryProtectionInTxn(t *testing.T) {
 		if pErr == nil {
 			t.Fatalf("expected error, got nil")
 		}
-		require.Error(t, pErr.GetDetail(),
-			"TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)")
+		require.Regexp(t,
+			`TransactionAbortedError\(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY\)`,
+			pErr)
 	})
 }
 
