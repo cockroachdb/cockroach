@@ -14,7 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -23,15 +24,15 @@ import (
 // If negate is true, it does the opposite - it performs IS NOT NULL check.
 type isNullProjOp struct {
 	OneInputNode
-	allocator *colbase.Allocator
+	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
 	negate    bool
 }
 
 func newIsNullProjOp(
-	allocator *colbase.Allocator, input colbase.Operator, colIdx, outputIdx int, negate bool,
-) colbase.Operator {
+	allocator *colmem.Allocator, input colexecbase.Operator, colIdx, outputIdx int, negate bool,
+) colexecbase.Operator {
 	input = newVectorTypeEnforcer(allocator, input, types.Bool, outputIdx)
 	return &isNullProjOp{
 		OneInputNode: NewOneInputNode(input),
@@ -42,7 +43,7 @@ func newIsNullProjOp(
 	}
 }
 
-var _ colbase.Operator = &isNullProjOp{}
+var _ colexecbase.Operator = &isNullProjOp{}
 
 func (o *isNullProjOp) Init() {
 	o.input.Init()
@@ -96,7 +97,7 @@ type isNullSelOp struct {
 	negate bool
 }
 
-func newIsNullSelOp(input colbase.Operator, colIdx int, negate bool) colbase.Operator {
+func newIsNullSelOp(input colexecbase.Operator, colIdx int, negate bool) colexecbase.Operator {
 	return &isNullSelOp{
 		OneInputNode: NewOneInputNode(input),
 		colIdx:       colIdx,
@@ -104,7 +105,7 @@ func newIsNullSelOp(input colbase.Operator, colIdx int, negate bool) colbase.Ope
 	}
 }
 
-var _ colbase.Operator = &isNullSelOp{}
+var _ colexecbase.Operator = &isNullSelOp{}
 
 func (o *isNullSelOp) Init() {
 	o.input.Init()

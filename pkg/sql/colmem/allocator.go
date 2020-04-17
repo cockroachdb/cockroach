@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colbase
+package colmem
 
 import (
 	"context"
@@ -18,8 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -92,7 +92,7 @@ func (a *Allocator) NewMemBatch(typs []types.T) coldata.Batch {
 func (a *Allocator) NewMemBatchWithSize(typs []types.T, size int) coldata.Batch {
 	estimatedMemoryUsage := selVectorSize(size) + int64(EstimateBatchSizeBytesFromSQLTypes(typs, size))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
-		vecerror.InternalError(err)
+		colexecerror.InternalError(err)
 	}
 	return coldata.NewMemBatchWithSize(typs, size)
 }
@@ -103,7 +103,7 @@ func (a *Allocator) NewMemBatchWithSize(typs []types.T, size int) coldata.Batch 
 func (a *Allocator) NewMemBatchNoCols(types []types.T, size int) coldata.Batch {
 	estimatedMemoryUsage := selVectorSize(size)
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
-		vecerror.InternalError(err)
+		colexecerror.InternalError(err)
 	}
 	return coldata.NewMemBatchNoCols(types, size)
 }
@@ -126,7 +126,7 @@ func (a *Allocator) RetainBatch(b coldata.Batch) {
 	usesSel := b.Selection() != nil
 	b.SetSelection(true)
 	if err := a.acc.Grow(a.ctx, selVectorSize(cap(b.Selection()))+getVecsMemoryFootprint(b.ColVecs())); err != nil {
-		vecerror.InternalError(err)
+		colexecerror.InternalError(err)
 	}
 	b.SetSelection(usesSel)
 }
@@ -157,7 +157,7 @@ func (a *Allocator) ReleaseBatch(b coldata.Batch) {
 func (a *Allocator) NewMemColumn(t *types.T, n int) coldata.Vec {
 	estimatedMemoryUsage := int64(EstimateBatchSizeBytes([]coltypes.T{typeconv.FromColumnType(t)}, n))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
-		vecerror.InternalError(err)
+		colexecerror.InternalError(err)
 	}
 	return coldata.NewMemColumn(t, n)
 }
@@ -175,7 +175,7 @@ func (a *Allocator) NewMemColumn(t *types.T, n int) coldata.Vec {
 // NOTE: b must be non-zero length batch.
 func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 	if b.Length() == 0 {
-		vecerror.InternalError("trying to add a column to zero length batch")
+		colexecerror.InternalError("trying to add a column to zero length batch")
 	}
 	width := b.Width()
 	desiredPhysType := typeconv.FromColumnType(t)
@@ -186,7 +186,7 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 			return
 		default:
 			// We have a vector with an unexpected type, so we panic.
-			vecerror.InternalError(errors.Errorf(
+			colexecerror.InternalError(errors.Errorf(
 				"trying to add a column of %s type at index %d but %s vector already present",
 				t, colIdx, presentPhysType,
 			))
@@ -194,14 +194,14 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 	} else if colIdx > width {
 		// We have a batch of unexpected width which indicates an error in the
 		// planning stage.
-		vecerror.InternalError(errors.Errorf(
+		colexecerror.InternalError(errors.Errorf(
 			"trying to add a column of %s type at index %d but batch has width %d",
 			t, colIdx, width,
 		))
 	}
 	estimatedMemoryUsage := int64(EstimateBatchSizeBytes([]coltypes.T{desiredPhysType}, coldata.BatchSize()))
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
-		vecerror.InternalError(err)
+		colexecerror.InternalError(err)
 	}
 	b.AppendCol(a.NewMemColumn(t, coldata.BatchSize()))
 }
@@ -221,7 +221,7 @@ func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
 	delta := after - before
 	if delta >= 0 {
 		if err := a.acc.Grow(a.ctx, delta); err != nil {
-			vecerror.InternalError(err)
+			colexecerror.InternalError(err)
 		}
 	} else {
 		a.ReleaseMemory(-delta)
@@ -303,7 +303,7 @@ func EstimateBatchSizeBytes(vecTypes []coltypes.T, batchLength int) int {
 		case coltypes.Unhandled:
 			// Placeholder coldata.Vecs of unknown types are allowed.
 		default:
-			vecerror.InternalError(fmt.Sprintf("unhandled type %s", t))
+			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t))
 		}
 	}
 	return acc * batchLength

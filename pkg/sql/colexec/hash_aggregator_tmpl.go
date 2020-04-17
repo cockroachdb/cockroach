@@ -26,14 +26,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
-	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
+
+// Remove unused warning.
+var _ = execgen.UNSAFEGET
 
 // {{/*
 
@@ -54,7 +55,7 @@ var _ coltypes.T
 // _ASSIGN_NE is the template function for assigning the result of comparing
 // the second input to the third input into the first input.
 func _ASSIGN_NE(_, _, _ interface{}) int {
-	vecerror.InternalError("")
+	colexecerror.InternalError("")
 }
 
 // */}}
@@ -161,7 +162,7 @@ func (v hashAggFuncs) match(
 			}
 		// {{end}}
 		default:
-			vecerror.InternalError(fmt.Sprintf("unhandled type %s", &keyTyp))
+			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", &keyTyp))
 		}
 	}
 

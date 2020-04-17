@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -197,7 +197,7 @@ func TestAndOrOps(t *testing.T) {
 					[][]types.T{{*types.Bool, *types.Bool}},
 					tc.expected,
 					orderedVerifier,
-					func(input []colbase.Operator) (colbase.Operator, error) {
+					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 						projOp, err := createTestProjectingOperator(
 							ctx, flowCtx, input[0], []types.T{*types.Bool, *types.Bool},
 							fmt.Sprintf("@1 %s @2", test.operation), false, /* canFallbackToRowexec */
@@ -257,7 +257,7 @@ func benchmarkLogicalProjOp(
 		}
 	}
 	typs := []types.T{*types.Bool, *types.Bool}
-	input := colbase.NewRepeatableBatchSource(testAllocator, batch, typs)
+	input := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	logicalProjOp, err := createTestProjectingOperator(
 		ctx, flowCtx, input, typs,
 		fmt.Sprintf("@1 %s @2", operation), false, /* canFallbackToRowexec */

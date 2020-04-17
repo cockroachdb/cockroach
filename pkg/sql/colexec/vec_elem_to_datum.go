@@ -15,7 +15,7 @@ import (
 	"math/big"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -81,7 +81,7 @@ func PhysicalTypeColElemToDatum(
 		// a copy.
 		id, err := uuid.FromBytes(col.Bytes().Get(rowIdx))
 		if err != nil {
-			vecerror.InternalError(err)
+			colexecerror.InternalError(err)
 		}
 		return da.NewDUuid(tree.DUuid{UUID: id})
 	case types.TimestampFamily:
@@ -91,7 +91,7 @@ func PhysicalTypeColElemToDatum(
 	case types.IntervalFamily:
 		return da.NewDInterval(tree.DInterval{Duration: col.Interval()[rowIdx]})
 	default:
-		vecerror.InternalError(fmt.Sprintf("Unsupported column type %s", ct.String()))
+		colexecerror.InternalError(fmt.Sprintf("Unsupported column type %s", ct.String()))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}

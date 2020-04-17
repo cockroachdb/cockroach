@@ -27,17 +27,21 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	// {{/*
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
+
+// Remove unused warning.
+var _ = execgen.UNSAFEGET
+
+// Remove unused warning.
+var _ = colexecerror.InternalError
 
 // {{/*
 // Declarations to make the template compile properly.
@@ -72,7 +76,7 @@ type _GOTYPESLICE interface{}
 // if the second input compares successfully to the third input. The comparison
 // operator is tree.LT for MIN and is tree.GT for MAX.
 func _ASSIGN_CMP(_, _, _ string) bool {
-	vecerror.InternalError("")
+	colexecerror.InternalError("")
 }
 
 // */}}
@@ -82,7 +86,7 @@ func _ASSIGN_CMP(_, _, _ string) bool {
 // {{/* Capture the aggregation name so we can use it in the inner loop. */}}
 // {{$agg := .AggNameLower}}
 
-func new_AGG_TITLEAgg(allocator *colbase.Allocator, t *types.T) (aggregateFunc, error) {
+func new_AGG_TITLEAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, error) {
 	switch typeconv.FromColumnType(t) {
 	// {{range .Overloads}}
 	case _TYPES_T:
@@ -96,7 +100,7 @@ func new_AGG_TITLEAgg(allocator *colbase.Allocator, t *types.T) (aggregateFunc, 
 // {{range .Overloads}}
 
 type _AGG_TYPEAgg struct {
-	allocator *colbase.Allocator
+	allocator *colmem.Allocator
 	done      bool
 	groups    []bool
 	curIdx    int

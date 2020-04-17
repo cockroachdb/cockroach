@@ -28,12 +28,10 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
-	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -44,8 +42,8 @@ import (
 // a slice of columns, creates a chain of distinct operators and returns the
 // last distinct operator in that chain as well as its output column.
 func OrderedDistinctColsToOperators(
-	input colbase.Operator, distinctCols []uint32, typs []types.T,
-) (colbase.Operator, []bool, error) {
+	input colexecbase.Operator, distinctCols []uint32, typs []types.T,
+) (colexecbase.Operator, []bool, error) {
 	distinctCol := make([]bool, coldata.BatchSize())
 	// zero the boolean column on every iteration.
 	input = fnOp{
@@ -64,7 +62,7 @@ func OrderedDistinctColsToOperators(
 		}
 	}
 	if r, ok = input.(resettableOperator); !ok {
-		vecerror.InternalError("unexpectedly an ordered distinct is not a resetter")
+		colexecerror.InternalError("unexpectedly an ordered distinct is not a resetter")
 	}
 	distinctChain := &distinctChainOps{
 		resettableOperator: r,
@@ -81,8 +79,8 @@ var _ resettableOperator = &distinctChainOps{}
 // NewOrderedDistinct creates a new ordered distinct operator on the given
 // input columns with the given coltypes.
 func NewOrderedDistinct(
-	input colbase.Operator, distinctCols []uint32, typs []types.T,
-) (colbase.Operator, error) {
+	input colexecbase.Operator, distinctCols []uint32, typs []types.T,
+) (colexecbase.Operator, error) {
 	op, outputCol, err := OrderedDistinctColsToOperators(input, distinctCols, typs)
 	if err != nil {
 		return nil, err
@@ -92,6 +90,9 @@ func NewOrderedDistinct(
 		outputCol:    outputCol,
 	}, nil
 }
+
+// Remove unused warning.
+var _ = execgen.UNSAFEGET
 
 // {{/*
 
@@ -132,14 +133,14 @@ const _TYPES_T = coltypes.Unhandled
 // _ASSIGN_NE is the template equality function for assigning the first input
 // to the result of the second input != the third input.
 func _ASSIGN_NE(_ bool, _, _ _GOTYPE) bool {
-	vecerror.InternalError("")
+	colexecerror.InternalError("")
 }
 
 // */}}
 
 func newSingleOrderedDistinct(
-	input colbase.Operator, distinctColIdx int, outputCol []bool, t *types.T,
-) (colbase.Operator, error) {
+	input colexecbase.Operator, distinctColIdx int, outputCol []bool, t *types.T,
+) (colexecbase.Operator, error) {
 	switch typeconv.FromColumnType(t) {
 	// {{range .}}
 	case _TYPES_T:

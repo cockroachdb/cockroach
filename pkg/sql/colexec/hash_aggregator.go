@@ -15,9 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colbase/vecerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -58,7 +59,7 @@ const (
 type hashAggregator struct {
 	OneInputNode
 
-	allocator *colbase.Allocator
+	allocator *colmem.Allocator
 
 	aggCols  [][]uint32
 	aggTypes [][]types.T
@@ -162,19 +163,19 @@ type hashAggregator struct {
 	decimalScratch decimalOverloadScratch
 }
 
-var _ colbase.Operator = &hashAggregator{}
+var _ colexecbase.Operator = &hashAggregator{}
 
 // NewHashAggregator creates a hash aggregator on the given grouping columns.
 // The input specifications to this function are the same as that of the
 // NewOrderedAggregator function.
 func NewHashAggregator(
-	allocator *colbase.Allocator,
-	input colbase.Operator,
+	allocator *colmem.Allocator,
+	input colexecbase.Operator,
 	typs []types.T,
 	aggFns []execinfrapb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
-) (colbase.Operator, error) {
+) (colexecbase.Operator, error) {
 	aggTyps := extractAggTypes(aggCols, typs)
 	outputTypes, err := makeAggregateFuncsOutputTypes(aggTyps, aggFns)
 	if err != nil {
@@ -314,7 +315,7 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 		case hashAggregatorDone:
 			return coldata.ZeroBatch
 		default:
-			vecerror.InternalError("hash aggregator in unhandled state")
+			colexecerror.InternalError("hash aggregator in unhandled state")
 			// This code is unreachable, but the compiler cannot infer that.
 			return nil
 		}
