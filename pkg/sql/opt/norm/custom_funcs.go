@@ -1289,6 +1289,11 @@ func (c *CustomFuncs) GroupingCols(grouping *memo.GroupingPrivate) opt.ColSet {
 	return grouping.GroupingCols
 }
 
+// ExtractAggInputColumns returns the set of columns the aggregate depends on.
+func (c *CustomFuncs) ExtractAggInputColumns(e opt.ScalarExpr) opt.ColSet {
+	return memo.ExtractAggInputColumns(e)
+}
+
 // IsUnorderedGrouping returns true if the given grouping ordering is not
 // specified.
 func (c *CustomFuncs) IsUnorderedGrouping(grouping *memo.GroupingPrivate) bool {
@@ -1904,6 +1909,12 @@ func (c *CustomFuncs) MakeOrderedGrouping(
 	groupingCols opt.ColSet, ordering physical.OrderingChoice,
 ) *memo.GroupingPrivate {
 	return &memo.GroupingPrivate{GroupingCols: groupingCols, Ordering: ordering}
+}
+
+// MakeUnorderedGrouping constructs a new GroupingPrivate using the given
+// grouping columns, but with no ordering on the groups.
+func (c CustomFuncs) MakeUnorderedGrouping(groupingCols opt.ColSet) *memo.GroupingPrivate {
+	return &memo.GroupingPrivate{GroupingCols: groupingCols}
 }
 
 // IsLimited indicates whether a limit was pushed under the subquery
