@@ -75,11 +75,52 @@ func s2PointToLatLng(fromPoint s2.Point) LatLng {
 	return LatLng{Lat: from.Lat.Degrees(), Lng: from.Lng.Degrees()}
 }
 
+func polygonsToBoundingBoxes(regions []s2.Region) []s2.Region {
+	ret := make([]s2.Region, len(regions))
+	for i, region := range regions {
+		switch region := region.(type) {
+		case *s2.Polygon:
+			latLng := s2.LatLngFromPoint(region.Loop(0).Vertex(0))
+			left, right := latLng.Lng, latLng.Lng
+			top, bot := latLng.Lat, latLng.Lat
+			for _, point := range region.Loop(0).Vertices()[1:] {
+				latLng := s2.LatLngFromPoint(point)
+				lat := latLng.Lat
+				lng := latLng.Lng
+				if lng < left {
+					left = lng
+				} else if lng > right {
+					right = lng
+				}
+				if lat > top {
+					top = lat
+				} else if lat < bot {
+					bot = lat
+				}
+			}
+			ret[i] = s2.PolygonFromLoops([]*s2.Loop{
+				s2.LoopFromPoints([]s2.Point{
+					s2.PointFromLatLng(s2.LatLng{Lat: bot, Lng: left}),
+					s2.PointFromLatLng(s2.LatLng{Lat: bot, Lng: right}),
+					s2.PointFromLatLng(s2.LatLng{Lat: top, Lng: right}),
+					s2.PointFromLatLng(s2.LatLng{Lat: top, Lng: left}),
+					s2.PointFromLatLng(s2.LatLng{Lat: bot, Lng: left}),
+				})})
+		default:
+			ret[i] = region
+		}
+	}
+	return ret
+}
+
 // AddGeography adds a given Geography to an image.
-func (img *Image) AddGeography(g *geo.Geography, title string, color string) {
+func (img *Image) AddGeography(g *geo.Geography, title string, color string, box bool) {
 	regions, err := g.AsS2()
 	if err != nil {
 		panic(err)
+	}
+	if box {
+		regions = polygonsToBoundingBoxes(regions)
 	}
 	object := Object{Title: title, Color: color}
 	for _, region := range regions {
@@ -199,7 +240,13 @@ func ImageFromReader(r io.Reader) (*Image, error) {
 			if err != nil {
 				return nil, fmt.Errorf("error parsing: %s", data)
 			}
-			gviz.AddGeography(g, name, color)
+			gviz.AddGeography(g, name, color, false)
+		case "drawgeographybbox":
+			g, err := geo.ParseGeography(data)
+			if err != nil {
+				return nil, fmt.Errorf("error parsing: %s", data)
+			}
+			gviz.AddGeography(g, name, color, true)
 		case "innercovering":
 			g, err := geo.ParseGeography(data)
 			if err != nil {
@@ -242,6 +289,22 @@ func ImageFromReader(r io.Reader) (*Image, error) {
 			if err != nil {
 				return nil, err
 			}
+			rc := &s2.RegionCoverer{MinLevel: 0, MaxLevel: 30, MaxCells: 4}
+			cellIDs := []s2.CellID{}
+			for _, s := range gS2 {
+				cellIDs = append(cellIDs, rc.Covering(s)...)
+			}
+			gviz.AddS2Cells(name, color, cellIDs...)
+		case "bboxcovering":
+			g, err := geo.ParseGeography(data)
+			if err != nil {
+				return nil, fmt.Errorf("error parsing: %s", data)
+			}
+			gS2, err := g.AsS2()
+			if err != nil {
+				return nil, err
+			}
+			gS2 = polygonsToBoundingBoxes(gS2)
 			rc := &s2.RegionCoverer{MinLevel: 0, MaxLevel: 30, MaxCells: 4}
 			cellIDs := []s2.CellID{}
 			for _, s := range gS2 {
