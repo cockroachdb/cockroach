@@ -17,6 +17,7 @@ import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import classNames from "classnames/bind";
 import { paginationPageCount } from "src/components/pagination/pagination";
 import * as protos from "src/js/protos";
 import { refreshStatementDiagnosticsRequests, refreshStatements } from "src/redux/apiReducers";
@@ -35,17 +36,19 @@ import { SortSetting } from "src/views/shared/components/sortabletable";
 import { Search } from "../app/components/Search";
 import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
 import ActivateDiagnosticsModal, { ActivateDiagnosticsModalRef } from "src/views/statements/diagnostics/activateDiagnosticsModal";
-import "./statements.styl";
 import {
   selectLastDiagnosticsReportPerStatement,
 } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
 import { trackPaginate, trackSearch } from "src/util/analytics";
-
-import "./statements.styl";
 import { ISortedTablePagination } from "../shared/components/sortedtable";
 import { statementsTable } from "src/util/docs";
+import styles from "./statementsPage.module.styl";
+import sortableTableStyles from "src/views/shared/components/sortabletable/sortabletable.module.styl";
+
+const cx = classNames.bind(styles);
+const sortableTableCx = classNames.bind(sortableTableStyles);
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
@@ -199,16 +202,16 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     switch (type) {
       case "jump-prev":
         return (
-          <div className="_pg-jump">
+          <div className={cx("_pg-jump")}>
             <Icon type="left" />
-            <span className="_jump-dots">•••</span>
+            <span className={cx("_jump-dots")}>•••</span>
           </div>
         );
       case "jump-next":
         return (
-          <div className="_pg-jump">
+          <div className={cx("_pg-jump")}>
             <Icon type="right" />
-            <span className="_jump-dots">•••</span>
+            <span className={cx("_jump-dots")}>•••</span>
           </div>
         );
       default:
@@ -223,8 +226,8 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
 
   noStatementResult = () => (
     <>
-      <h3 className="table__no-results--title">There are no SQL statements that match your search or filter since this page was last cleared.</h3>
-      <p className="table__no-results--description">
+      <h3 className={sortableTableCx("table__no-results--title")}>There are no SQL statements that match your search or filter since this page was last cleared.</h3>
+      <p className={sortableTableCx("table__no-results--description")}>
         <span>Statements are cleared every hour by default, or according to your configuration.</span>
         <a href={statementsTable} target="_blank">Learn more</a>
       </p>
@@ -258,12 +261,12 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
             />
           </PageConfigItem>
         </PageConfig>
-        <section className="cl-table-container">
-          <div className="cl-table-statistic">
-            <h4 className="cl-count-title">
+        <section className={sortableTableCx("cl-table-container")}>
+          <div className={cx("cl-table-statistic")}>
+            <h4 className={cx("cl-count-title")}>
               {paginationPageCount({ ...pagination, total: this.filteredStatementsData().length }, "statements", match, appAttr, search)}
             </h4>
-            <h4 className="last-cleared-title">
+            <h4 className={cx("last-cleared-title")}>
               {this.renderLastCleared()}
             </h4>
           </div>
@@ -311,8 +314,8 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
       <React.Fragment>
         <Helmet title={app ? `${app} App | Statements` : "Statements"} />
 
-        <section className="section">
-          <h1 className="base-heading">Statements</h1>
+        <section className={cx("section")}>
+          <h1 className={cx("base-heading")}>Statements</h1>
         </section>
 
         <Loading

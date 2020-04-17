@@ -19,7 +19,6 @@ import { StatementSummary, summarize } from "src/util/sql/summarize";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { countBarChart, latencyBarChart, retryBarChart, rowsBarChart } from "./barCharts";
 import { Anchor, Tooltip } from "src/components";
-import "./statements.styl";
 import { DiagnosticStatusBadge } from "./diagnostics/diagnosticStatusBadge";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -46,15 +45,15 @@ function StatementLink(props: { statement: string, app: string, implicitTxn: boo
   const base = props.app && props.app.length > 0 ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
   return (
     <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
-      <div className="cl-table-link__tooltip">
+      <div className={cx("cl-table-link__tooltip")}>
         <Tooltip
           placement="bottom"
-          title={<pre className="cl-table-link__description">
+          title={<pre className={cx("cl-table-link__description")}>
             { getHighlightedText(props.statement, props.search) }
           </pre>}
-          overlayClassName="cl-table-link__statement-tooltip--fixed-width"
+          overlayClassName={cx("cl-table-link__statement-tooltip--fixed-width")}
         >
-          <div className="cl-table-link__tooltip-hover-area">
+          <div>
             { getHighlightedText(shortStatement(summary, props.statement), props.search, true) }
           </div>
         </Tooltip>
@@ -84,7 +83,7 @@ export function makeStatementsColumns(
   const columns: ColumnDescriptor<AggregateStatistics>[] = [
     {
       title: "Statement",
-      className: "cl-table__col-query-text",
+      className: cx("cl-table__col-query-text"),
       cell: (stmt) => (
         <StatementLink
           statement={ stmt.label }
@@ -97,7 +96,7 @@ export function makeStatementsColumns(
     },
     {
       title: "Txn Type",
-      className: "statements-table__col-time",
+      className: cx("statements-table__col-time"),
       cell: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
       sort: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
     },
@@ -134,7 +133,7 @@ export function makeStatementsColumns(
 function NodeLink(props: { nodeId: string, nodeNames: { [nodeId: string]: string } }) {
   return (
     <Link to={ `/node/${props.nodeId}` }>
-      <div className="node-name-tooltip__info-icon">{props.nodeNames[props.nodeId]}</div>
+      <div>{props.nodeNames[props.nodeId]}</div>
     </Link>
   );
 }
@@ -193,25 +192,25 @@ function makeCommonColumns(statements: AggregateStatistics[])
   return [
     {
       title: "Retries",
-      className: "statements-table__col-retries",
+      className: cx("statements-table__col-retries"),
       cell: retryBar,
       sort: (stmt) => (longToInt(stmt.stats.count) - longToInt(stmt.stats.first_attempt_count)),
     },
     {
       title: "Execution Count",
-      className: "statements-table__col-count",
+      className: cx("statements-table__col-count"),
       cell: countBar,
       sort: (stmt) => FixLong(stmt.stats.count).toInt(),
     },
     {
       title: "Rows Affected",
-      className: "statements-table__col-rows",
+      className: cx("statements-table__col-rows"),
       cell: rowsBar,
       sort: (stmt) => stmt.stats.num_rows.mean,
     },
     {
       title: "Latency",
-      className: "statements-table__col-latency",
+      className: cx("statements-table__col-latency"),
       cell: latencyBar,
       sort: (stmt) => stmt.stats.service_lat.mean,
     },
