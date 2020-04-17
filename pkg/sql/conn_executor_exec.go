@@ -916,14 +916,14 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	historicalTimestamp *hlc.Timestamp,
 	err error,
 ) {
-	now := ex.server.cfg.Clock.Now()
+	now := ex.server.cfg.Clock.PhysicalTime()
 	if s.Modes.AsOf.Expr == nil {
 		rwMode = ex.readWriteModeWithSessionDefault(s.Modes.ReadWriteMode)
-		return rwMode, now.GoTime(), nil, nil
+		return rwMode, now, nil, nil
 	}
 	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 	p := &ex.planner
-	ex.resetPlanner(ctx, p, nil /* txn */, now.GoTime())
+	ex.resetPlanner(ctx, p, nil /* txn */, now)
 	ts, err := p.EvalAsOfTimestamp(s.Modes.AsOf)
 	if err != nil {
 		return 0, time.Time{}, nil, err
