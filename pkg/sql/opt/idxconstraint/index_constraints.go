@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -684,13 +685,48 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 func (c *indexConstraintCtx) makeSpansForAnd(
 	offset int, e opt.Expr, out *constraint.Constraint,
 ) (tight bool) {
+	// We need to handle both FiltersExpr and AndExpr. In FiltersExpr, we already
+	// have a list of conjuncts. But AndExpr is a binary operator so we may have
+	// nested Ands; we collect all the conjuncts in this case.
+	//
+	// Note that the common case is Filters; we only see And when it is part of a
+	// larger filter (e.g. an Or).
+	var filters memo.FiltersExpr
+	if f, ok := e.(*memo.FiltersExpr); ok {
+		filters = *f
+	} else {
+		filters = make(memo.FiltersExpr, 0, 2)
+		var collectConjunctions func(e opt.ScalarExpr)
+		collectConjunctions = func(e opt.ScalarExpr) {
+			if and, ok := e.(*memo.AndExpr); ok {
+				collectConjunctions(and.Left)
+				collectConjunctions(and.Right)
+			} else {
+				filters = append(filters, memo.FiltersItem{Condition: e})
+			}
+		}
+		collectConjunctions(e.(*memo.AndExpr))
+	}
+
+	// tightDeltaMap maps each filter to the relative index column offset at which
+	// we generated tight constraints for that expression (if any).
+	// Note that it is not possible for a given condition to generate tight
+	// constraints at different column offsets.
+	var tightDeltaMap util.FastIntMap
+
 	// TODO(radu): sorting the expressions by the variable index, or pre-building
 	// a map could help here.
-	tight = c.makeSpansForExpr(offset, e.Child(0), out)
+	tight = c.makeSpansForExpr(offset, filters[0].Condition, out)
+	if tight {
+		tightDeltaMap.Set(0, 0)
+	}
 	var exprConstraint constraint.Constraint
-	for i, n := 1, e.ChildCount(); i < n; i++ {
-		childTight := c.makeSpansForExpr(offset, e.Child(i), &exprConstraint)
-		tight = tight && childTight
+	for i := 1; i < len(filters); i++ {
+		filterTight := c.makeSpansForExpr(offset, filters[i].Condition, &exprConstraint)
+		if filterTight {
+			tightDeltaMap.Set(i, 0)
+		}
+		tight = tight && filterTight
 		out.IntersectWith(c.evalCtx, &exprConstraint)
 	}
 	if out.IsUnconstrained() {
@@ -728,37 +764,57 @@ func (c *indexConstraintCtx) makeSpansForAnd(
 			break
 		}
 
-		c.makeSpansForExpr(offset+delta, e.Child(0), &ofsC)
-		for j, n := 1, e.ChildCount(); j < n; j++ {
-			c.makeSpansForExpr(offset+delta, e.Child(j), &exprConstraint)
+		tight := c.makeSpansForExpr(offset+delta, filters[0].Condition, &ofsC)
+		if tight {
+			tightDeltaMap.Set(0, delta)
+		}
+		for j := 1; j < len(filters); j++ {
+			tight := c.makeSpansForExpr(offset+delta, filters[j].Condition, &exprConstraint)
+			if tight {
+				tightDeltaMap.Set(j, delta)
+			}
 			ofsC.IntersectWith(c.evalCtx, &exprConstraint)
 		}
 		out.Combine(c.evalCtx, &ofsC)
 	}
 
-	// We're not sure if the refinement process above "consumed" all conjuncts.
-	return false
+	// It's hard in the most general case to determine if the constraints are
+	// tight. But we can cover a lot of cases using the following sufficient
+	// condition:
+	//  - let `prefix` be the longest prefix of columns for which all spans have the
+	//    same start and end value (see Constraint.Prefix).
+	//  - every filter must have generated tight spans for a set of columns
+	//    starting at an offset that is at most `prefix`.
+	//
+	// This is because the Combine call above can only keep the constraints tight
+	// if it is "appending" to single-value spans.
+	prefix := out.Prefix(c.evalCtx)
+	for i := range filters {
+		delta, ok := tightDeltaMap.Get(i)
+		if !ok || delta > prefix {
+			return false
+		}
+	}
+	return true
 }
 
 // makeSpansForOr calculates spans for an OrOp.
 func (c *indexConstraintCtx) makeSpansForOr(
 	offset int, e opt.Expr, out *constraint.Constraint,
 ) (tight bool) {
-	c.contradiction(offset, out)
-	tight = true
-	var exprConstraint constraint.Constraint
-	for i, n := 0, e.ChildCount(); i < n; i++ {
-		exprTight := c.makeSpansForExpr(offset, e.Child(i), &exprConstraint)
-		if exprConstraint.IsUnconstrained() {
-			// If we can't generate spans for a disjunct, exit early.
-			c.unconstrained(offset, out)
-			return false
-		}
-		// The OR is "tight" if all the spans are tight.
-		tight = tight && exprTight
-		out.UnionWith(c.evalCtx, &exprConstraint)
+	or := e.(*memo.OrExpr)
+	tightLeft := c.makeSpansForExpr(offset, or.Left, out)
+	if out.IsUnconstrained() {
+		// If spans can't be generated for the left child, exit early.
+		c.unconstrained(offset, out)
+		return false
 	}
-	return tight
+	var rightConstraint constraint.Constraint
+	tightRight := c.makeSpansForExpr(offset, or.Right, &rightConstraint)
+	out.UnionWith(c.evalCtx, &rightConstraint)
+
+	// The OR is "tight" if both constraints were tight.
+	return tightLeft && tightRight
 }
 
 // makeInvertedIndexSpansForJSONExpr is the implementation of
