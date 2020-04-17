@@ -11,6 +11,7 @@
 package storage
 
 import (
+	"io"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -255,10 +256,10 @@ func (t *MVCCValueMerger) MergeOlder(value []byte) error {
 // In case of non-timeseries the values are simply concatenated from old to new. In case
 // of timeseries the values are sorted, deduplicated, and potentially migrated to columnar
 // format. When deduplicating, only the latest sample for a given offset is retained.
-func (t *MVCCValueMerger) Finish() ([]byte, error) {
+func (t *MVCCValueMerger) Finish() ([]byte, io.Closer, error) {
 	isColumnar := false
 	if t.timeSeriesOps == nil && t.rawByteOps == nil {
-		return nil, errors.Errorf("empty merge unsupported")
+		return nil, nil, errors.Errorf("empty merge unsupported")
 	}
 	t.ensureOrder(true /* oldToNew */)
 	if t.timeSeriesOps == nil {
@@ -276,9 +277,9 @@ func (t *MVCCValueMerger) Finish() ([]byte, error) {
 		}
 		res, err := protoutil.Marshal(&meta)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return res, nil
+		return res, nil, nil
 	}
 
 	// TODO(ajkr): confirm it is the case that (1) today's CRDB always merges timeseries
@@ -291,10 +292,10 @@ func (t *MVCCValueMerger) Finish() ([]byte, error) {
 	merged.SampleDurationNanos = t.timeSeriesOps[0].SampleDurationNanos
 	for _, timeSeriesOp := range t.timeSeriesOps {
 		if timeSeriesOp.StartTimestampNanos != merged.StartTimestampNanos {
-			return nil, errors.Errorf("start timestamp mismatch")
+			return nil, nil, errors.Errorf("start timestamp mismatch")
 		}
 		if timeSeriesOp.SampleDurationNanos != merged.SampleDurationNanos {
-			return nil, errors.Errorf("sample duration mismatch")
+			return nil, nil, errors.Errorf("sample duration mismatch")
 		}
 		if !isColumnar && len(timeSeriesOp.Offset) > 0 {
 			ensureColumnar(&merged)
@@ -312,7 +313,7 @@ func (t *MVCCValueMerger) Finish() ([]byte, error) {
 	}
 	tsBytes, err := protoutil.Marshal(&merged)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// See the motivating comment in mvcc.proto.
 	var meta enginepb.MVCCMetadataSubsetForMergeSerialization
@@ -325,7 +326,7 @@ func (t *MVCCValueMerger) Finish() ([]byte, error) {
 	meta.RawBytes = append(header, tsBytes...)
 	res, err := protoutil.Marshal(&meta)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return res, nil
+	return res, nil, nil
 }

@@ -464,7 +464,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:2a55164a97ace26d520ad3a5494789627e0511db321c74dd62f0f03eeca91604"
+  digest = "1:f75d5bc93783656eeeeceeb15cfc4db3a87e3e4f4d16bd1c5c5e0bb17031321e"
   name = "github.com/cockroachdb/pebble"
   packages = [
     ".",
@@ -490,7 +490,7 @@
     "vfs",
   ]
   pruneopts = "UT"
-  revision = "de7fc1b547d5c7f390ae3a8162289f2dc7efab6a"
+  revision = "d9c9d49c3cf01cc4801dc06f092956684c8fa4be"
 
 [[projects]]
   branch = "master"
@@ -2116,6 +2116,7 @@
     "github.com/gogo/protobuf/vanity/command",
     "github.com/golang-commonmark/markdown",
     "github.com/golang/dep/cmd/dep",
+    "github.com/golang/geo/r3",
     "github.com/golang/geo/s2",
     "github.com/golang/protobuf/proto",
     "github.com/golang/snappy",
