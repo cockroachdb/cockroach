@@ -387,10 +387,10 @@ orders      fk_product_ref_products  FOREIGN KEY      FOREIGN KEY (product) REFE
 orders      primary                  PRIMARY KEY      PRIMARY KEY (id ASC, shipment ASC)                                                    true
 orders      valid_customer           FOREIGN KEY      FOREIGN KEY (customer) REFERENCES customers(id)                                       true
 
-statement error "products_upc_key" is referenced by foreign key from table "delivery"
+statement error pq: index "products_upc_key" is in use as unique constraint
 DROP INDEX products@products_upc_key
 
-statement error "products_upc_key" is referenced by foreign key from table "delivery"
+statement error pq: index "products_upc_key" is in use as unique constraint
 DROP INDEX products@products_upc_key RESTRICT
 
 statement error "products_upc_key" is referenced by foreign key from table "delivery"
@@ -478,7 +478,7 @@ CREATE TABLE grandchild (id INT PRIMARY KEY, parent_id INT REFERENCES child (par
 statement error pgcode 23503 foreign key violation
 INSERT INTO grandchild VALUES (1, 1)
 
-statement error "child_parent_id_key" is referenced by foreign key from table "grandchild"
+statement error pq: index "child_parent_id_key" is in use as unique constraint
 DROP INDEX child@child_parent_id_key
 
 statement ok
