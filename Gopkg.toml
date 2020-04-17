@@ -127,7 +127,7 @@ ignored = [
 
 [[constraint]]
   name = "github.com/cockroachdb/pebble"
-  branch = "master"
+  branch = "crl-release-20.1"
 
 # github.com/lib/pq has a newer revision that has notices, which we want
 [[override]]
