@@ -219,8 +219,6 @@ func (r *replicationStatsReportSaver) Save(
 }
 
 // upsertStat upserts a row into system.replication_stats.
-//
-// existing is used to decide is this is a new data.
 func (r *replicationStatsReportSaver) upsertStats(
 	ctx context.Context, txn *kv.Txn, key ZoneKey, stats zoneRangeStatus, ex sqlutil.InternalExecutor,
 ) error {
