@@ -498,17 +498,7 @@ func constraintSatisfied(
 			passCount++
 			continue
 		}
-
-		storeMatches := true
-		match := zonepb.StoreMatchesConstraint(storeDesc, c)
-		if c.Type == zonepb.Constraint_REQUIRED && !match {
-			storeMatches = false
-		}
-		if c.Type == zonepb.Constraint_PROHIBITED && match {
-			storeMatches = false
-		}
-
-		if storeMatches {
+		if zonepb.StoreSatisfiesConstraint(storeDesc, c) {
 			passCount++
 		}
 	}
