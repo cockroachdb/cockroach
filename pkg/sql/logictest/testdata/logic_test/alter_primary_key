@@ -735,20 +735,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x)
 statement ok
 ROLLBACK
 
-# Ensure that we cannot cancel the index cleanup jobs spawned by
-# a primary key change.
-statement ok
-DROP TABLE IF EXISTS t;
-CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL);
-ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
-
-statement error pq: job [0-9]*: not cancelable
-CANCEL JOB (
-  SELECT job_id FROM [SHOW JOBS] WHERE
-  description = 'CLEANUP JOB for ''ALTER TABLE test.public.t ALTER PRIMARY KEY USING COLUMNS (y)''' AND
-  status = 'running'
-)
-
 # Ensure that starting a primary key change that does not
 # enqueue any mutations doesn't start a job.
 # TODO (rohany): This test might become obselete when #44923 is fixed.
