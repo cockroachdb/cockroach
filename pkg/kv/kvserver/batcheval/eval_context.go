@@ -180,7 +180,7 @@ func (m *mockEvalCtxImpl) Desc() *roachpb.RangeDescriptor {
 	return m.MockEvalCtx.Desc
 }
 func (m *mockEvalCtxImpl) ContainsKey(key roachpb.Key) bool {
-	panic("unimplemented")
+	return false
 }
 func (m *mockEvalCtxImpl) GetMVCCStats() enginepb.MVCCStats {
 	return m.Stats

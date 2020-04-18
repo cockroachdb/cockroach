@@ -95,6 +95,7 @@ func (r *Replica) MaybeGossipSystemConfig(ctx context.Context) error {
 	if err != nil {
 		if err == errSystemConfigIntent {
 			log.VEventf(ctx, 2, "not gossiping system config because intents were found on SystemConfigSpan")
+			r.markSystemConfigGossipFailed()
 			return nil
 		}
 		return errors.Wrap(err, "could not load SystemConfig span")
@@ -103,6 +104,9 @@ func (r *Replica) MaybeGossipSystemConfig(ctx context.Context) error {
 	if gossipedCfg := r.store.Gossip().GetSystemConfig(); gossipedCfg != nil && gossipedCfg.Equal(loadedCfg) &&
 		r.store.Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
 		log.VEventf(ctx, 2, "not gossiping unchanged system config")
+		// Clear the failure bit if all intents have been resolved but there's
+		// nothing new to gossip.
+		r.markSystemConfigGossipSuccess()
 		return nil
 	}
 
@@ -110,7 +114,21 @@ func (r *Replica) MaybeGossipSystemConfig(ctx context.Context) error {
 	if err := r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, loadedCfg, 0); err != nil {
 		return errors.Wrap(err, "failed to gossip system config")
 	}
+	r.markSystemConfigGossipSuccess()
 	return nil
+}
+
+// MaybeGossipSystemConfigIfHaveFailure is a trigger to gossip the system config
+// due to an abort of a transaction keyed in the system config span. It will
+// call MaybeGossipSystemConfig if failureToGossipSystemConfig is true.
+func (r *Replica) MaybeGossipSystemConfigIfHaveFailure(ctx context.Context) error {
+	r.mu.RLock()
+	failed := r.mu.failureToGossipSystemConfig
+	r.mu.RUnlock()
+	if !failed {
+		return nil
+	}
+	return r.MaybeGossipSystemConfig(ctx)
 }
 
 // MaybeGossipNodeLiveness gossips information for all node liveness
