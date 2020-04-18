@@ -512,8 +512,7 @@ scalar-group-by
  │    │    └── ordering: +11
  │    └── filters (true)
  └── aggregations
-      └── count [as=count:28, outer=(11)]
-           └── l_orderkey:11
+      └── count-rows [as=count:28]
 
 # ------------------------------------------------------------------------------
 # Ensure we do a lookup join when one side comes from an SRF.

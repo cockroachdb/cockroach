@@ -1039,8 +1039,7 @@ scalar-group-by
  │              ├── s_w_id:12 = 10 [outer=(12), constraints=(/12: [/10 - /10]; tight), fd=()-->(12)]
  │              └── s_quantity:13 < 15 [outer=(13), constraints=(/13: (/NULL - /14]; tight)]
  └── aggregations
-      └── count [as=count:28, outer=(11)]
-           └── s_i_id:11
+      └── count-rows [as=count:28]
 
 # --------------------------------------------------
 # Consistency Queries
