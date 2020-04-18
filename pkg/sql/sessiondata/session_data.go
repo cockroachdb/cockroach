@@ -27,6 +27,11 @@ type SessionData struct {
 	// Database indicates the "current" database for the purpose of
 	// resolving names. See searchAndQualifyDatabase() for details.
 	Database string
+	// DefaultTxnPriority indicates the default priority of newly created
+	// transactions.
+	// NOTE: we'd prefer to use tree.UserPriority here, but doing so would
+	// introduce a package dependency cycle.
+	DefaultTxnPriority int
 	// DefaultReadOnly indicates the default read-only status of newly created
 	// transactions.
 	DefaultReadOnly bool

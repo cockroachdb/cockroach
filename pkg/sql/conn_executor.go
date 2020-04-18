@@ -1885,10 +1885,7 @@ func (ex *connExecutor) setTransactionModes(
 	// Transform the transaction options into the types needed by the state
 	// machine.
 	if modes.UserPriority != tree.UnspecifiedUserPriority {
-		pri, err := priorityToProto(modes.UserPriority)
-		if err != nil {
-			return err
-		}
+		pri := txnPriorityToProto(modes.UserPriority)
 		if err := ex.state.setPriority(pri); err != nil {
 			return err
 		}
@@ -1911,7 +1908,7 @@ func (ex *connExecutor) setTransactionModes(
 	return ex.state.setReadOnlyMode(rwMode)
 }
 
-func priorityToProto(mode tree.UserPriority) (roachpb.UserPriority, error) {
+func txnPriorityToProto(mode tree.UserPriority) roachpb.UserPriority {
 	var pri roachpb.UserPriority
 	switch mode {
 	case tree.UnspecifiedUserPriority:
@@ -1923,9 +1920,16 @@ func priorityToProto(mode tree.UserPriority) (roachpb.UserPriority, error) {
 	case tree.High:
 		pri = roachpb.MaxUserPriority
 	default:
-		return roachpb.UserPriority(0), errors.AssertionFailedf("unknown user priority: %s", errors.Safe(mode))
+		log.Fatalf(context.Background(), "unknown user priority: %s", mode)
 	}
-	return pri, nil
+	return pri
+}
+
+func (ex *connExecutor) txnPriorityWithSessionDefault(mode tree.UserPriority) roachpb.UserPriority {
+	if mode == tree.UnspecifiedUserPriority {
+		mode = tree.UserPriority(ex.sessionData.DefaultTxnPriority)
+	}
+	return txnPriorityToProto(mode)
 }
 
 func (ex *connExecutor) readWriteModeWithSessionDefault(
