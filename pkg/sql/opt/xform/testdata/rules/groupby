@@ -80,20 +80,15 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(6)
- ├── project
- │    ├── columns: column5:5!null a:1!null
- │    ├── key: (1)
- │    ├── fd: (1)-->(5)
- │    ├── scan abc
- │    │    ├── columns: a:1!null
- │    │    └── key: (1)
- │    └── projections
- │         └── a:1 > 'a' [as=column5:5, outer=(1)]
+ ├── scan abc
+ │    ├── columns: a:1!null
+ │    ├── constraint: /1: [/e'a\x00' - ]
+ │    ├── limit: 1
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
  └── aggregations
-      └── agg-filter [as=min:6, outer=(1,5)]
-           ├── min
-           │    └── a:1
-           └── column5:5
+      └── const-agg [as=min:6, outer=(1)]
+           └── a:1
 
 opt
 SELECT min(b) FROM abc
@@ -664,20 +659,15 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(6)
- ├── project
- │    ├── columns: column5:5!null a:1!null
- │    ├── key: (1)
- │    ├── fd: (1)-->(5)
- │    ├── scan abc
- │    │    ├── columns: a:1!null
- │    │    └── key: (1)
- │    └── projections
- │         └── a:1 > 'a' [as=column5:5, outer=(1)]
+ ├── scan abc,rev
+ │    ├── columns: a:1!null
+ │    ├── constraint: /1: [/e'a\x00' - ]
+ │    ├── limit: 1(rev)
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
  └── aggregations
-      └── agg-filter [as=max:6, outer=(1,5)]
-           ├── max
-           │    └── a:1
-           └── column5:5
+      └── const-agg [as=max:6, outer=(1)]
+           └── a:1
 
 opt
 SELECT max(b) FROM abc
