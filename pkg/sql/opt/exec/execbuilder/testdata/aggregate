@@ -9,28 +9,29 @@ CREATE TABLE kv (
 )
 
 query TTTTT
-EXPLAIN (TYPES) SELECT min(1), max(1), count(1), sum_int(1), avg(1), sum(1), stddev(1), variance(1), bool_and(true), bool_or(false), xor_agg(b'\x01') FROM kv
+EXPLAIN (TYPES) SELECT min(1), max(1), count(NULL), sum_int(1), avg(1), sum(1), stddev(1), variance(1), bool_and(true), bool_or(false), xor_agg(b'\x01') FROM kv
 ----
 ·               distributed   false               ·                                                                                                                                                   ·
 ·               vectorized    false               ·                                                                                                                                                   ·
 group           ·             ·                   (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)  ·
  │              aggregate 0   min(column5)        ·                                                                                                                                                   ·
  │              aggregate 1   max(column5)        ·                                                                                                                                                   ·
- │              aggregate 2   count(column5)      ·                                                                                                                                                   ·
+ │              aggregate 2   count(column8)      ·                                                                                                                                                   ·
  │              aggregate 3   sum_int(column5)    ·                                                                                                                                                   ·
  │              aggregate 4   avg(column5)        ·                                                                                                                                                   ·
  │              aggregate 5   sum(column5)        ·                                                                                                                                                   ·
  │              aggregate 6   stddev(column5)     ·                                                                                                                                                   ·
  │              aggregate 7   variance(column5)   ·                                                                                                                                                   ·
- │              aggregate 8   bool_and(column14)  ·                                                                                                                                                   ·
- │              aggregate 9   bool_or(column16)   ·                                                                                                                                                   ·
- │              aggregate 10  xor_agg(column18)   ·                                                                                                                                                   ·
+ │              aggregate 8   bool_and(column15)  ·                                                                                                                                                   ·
+ │              aggregate 9   bool_or(column17)   ·                                                                                                                                                   ·
+ │              aggregate 10  xor_agg(column19)   ·                                                                                                                                                   ·
  │              scalar        ·                   ·                                                                                                                                                   ·
- └── render     ·             ·                   (column5 int, column14 bool, column16 bool, column18 bytes)                                                                                         ·
+ └── render     ·             ·                   (column5 int, column8 unknown, column15 bool, column17 bool, column19 bytes)                                                                        ·
       │         render 0      (1)[int]            ·                                                                                                                                                   ·
-      │         render 1      (true)[bool]        ·                                                                                                                                                   ·
-      │         render 2      (false)[bool]       ·                                                                                                                                                   ·
-      │         render 3      ('\x01')[bytes]     ·                                                                                                                                                   ·
+      │         render 1      (NULL)[unknown]     ·                                                                                                                                                   ·
+      │         render 2      (true)[bool]        ·                                                                                                                                                   ·
+      │         render 3      (false)[bool]       ·                                                                                                                                                   ·
+      │         render 4      ('\x01')[bytes]     ·                                                                                                                                                   ·
       └── scan  ·             ·                   ()                                                                                                                                                  ·
 ·               table         kv@primary          ·                                                                                                                                                   ·
 ·               spans         FULL SCAN           ·                                                                                                                                                   ·
@@ -75,7 +76,7 @@ render               ·            ·                            (min int, max i
 
 # Aggregate functions trigger aggregation and computation when there is no source.
 query TTTTT
-EXPLAIN (TYPES) SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
+EXPLAIN (TYPES) SELECT min(1), count(NULL), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
 ----
 ·                 distributed    false                               ·                                                                                                                                                   ·
 ·                 vectorized     false                               ·                                                                                                                                                   ·
@@ -93,22 +94,23 @@ render            ·              ·                                   (min int,
  │                render 10      (to_hex((xor_agg)[bytes]))[string]  ·                                                                                                                                                   ·
  └── group        ·              ·                                   (min int, count int, max int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)  ·
       │           aggregate 0    min(column1)                        ·                                                                                                                                                   ·
-      │           aggregate 1    count(column1)                      ·                                                                                                                                                   ·
+      │           aggregate 1    count(column3)                      ·                                                                                                                                                   ·
       │           aggregate 2    max(column1)                        ·                                                                                                                                                   ·
       │           aggregate 3    sum_int(column1)                    ·                                                                                                                                                   ·
       │           aggregate 4    avg(column1)                        ·                                                                                                                                                   ·
       │           aggregate 5    sum(column1)                        ·                                                                                                                                                   ·
       │           aggregate 6    stddev(column1)                     ·                                                                                                                                                   ·
       │           aggregate 7    variance(column1)                   ·                                                                                                                                                   ·
-      │           aggregate 8    bool_and(column10)                  ·                                                                                                                                                   ·
-      │           aggregate 9    bool_or(column10)                   ·                                                                                                                                                   ·
-      │           aggregate 10   xor_agg(column13)                   ·                                                                                                                                                   ·
+      │           aggregate 8    bool_and(column11)                  ·                                                                                                                                                   ·
+      │           aggregate 9    bool_or(column11)                   ·                                                                                                                                                   ·
+      │           aggregate 10   xor_agg(column14)                   ·                                                                                                                                                   ·
       │           scalar         ·                                   ·                                                                                                                                                   ·
-      └── values  ·              ·                                   (column1 int, column10 bool, column13 bytes)                                                                                                        ·
-·                 size           3 columns, 1 row                    ·                                                                                                                                                   ·
+      └── values  ·              ·                                   (column1 int, column3 unknown, column11 bool, column14 bytes)                                                                                       ·
+·                 size           4 columns, 1 row                    ·                                                                                                                                                   ·
 ·                 row 0, expr 0  (1)[int]                            ·                                                                                                                                                   ·
-·                 row 0, expr 1  (true)[bool]                        ·                                                                                                                                                   ·
-·                 row 0, expr 2  ('\x01')[bytes]                     ·                                                                                                                                                   ·
+·                 row 0, expr 1  (NULL)[unknown]                     ·                                                                                                                                                   ·
+·                 row 0, expr 2  (true)[bool]                        ·                                                                                                                                                   ·
+·                 row 0, expr 3  ('\x01')[bytes]                     ·                                                                                                                                                   ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT count(*), k FROM kv GROUP BY 2
@@ -168,28 +170,28 @@ render          ·            ·                                      (count int
 query TTTTT
 EXPLAIN (TYPES) SELECT count(k) FROM kv
 ----
-·          distributed  false       ·            ·
-·          vectorized   true        ·            ·
-group      ·            ·           (count int)  ·
- │         aggregate 0  count(k)    ·            ·
- │         scalar       ·           ·            ·
- └── scan  ·            ·           (k int)      ·
-·          table        kv@primary  ·            ·
-·          spans        FULL SCAN   ·            ·
+·          distributed  false         ·            ·
+·          vectorized   true          ·            ·
+group      ·            ·             (count int)  ·
+ │         aggregate 0  count_rows()  ·            ·
+ │         scalar       ·             ·            ·
+ └── scan  ·            ·             ()           ·
+·          table        kv@primary    ·            ·
+·          spans        FULL SCAN     ·            ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT count(k), sum(k), max(k) FROM kv
 ----
-·          distributed  false       ·                                  ·
-·          vectorized   false       ·                                  ·
-group      ·            ·           (count int, sum decimal, max int)  ·
- │         aggregate 0  count(k)    ·                                  ·
- │         aggregate 1  sum(k)      ·                                  ·
- │         aggregate 2  max(k)      ·                                  ·
- │         scalar       ·           ·                                  ·
- └── scan  ·            ·           (k int)                            ·
-·          table        kv@primary  ·                                  ·
-·          spans        FULL SCAN   ·                                  ·
+·          distributed  false         ·                                  ·
+·          vectorized   false         ·                                  ·
+group      ·            ·             (count int, sum decimal, max int)  ·
+ │         aggregate 0  count_rows()  ·                                  ·
+ │         aggregate 1  sum(k)        ·                                  ·
+ │         aggregate 2  max(k)        ·                                  ·
+ │         scalar       ·             ·                                  ·
+ └── scan  ·            ·             (k int)                            ·
+·          table        kv@primary    ·                                  ·
+·          spans        FULL SCAN     ·                                  ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT count(v), count(DISTINCT v), sum(v), sum(DISTINCT v), min(v), min(DISTINCT v) FROM kv
@@ -583,17 +585,17 @@ INSERT INTO ab VALUES
 query TTTTT
 EXPLAIN (TYPES) SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k)
 ----
-·               distributed  false       ·                   ·
-·               vectorized   false       ·                   ·
-sort            ·            ·           (v int, count int)  +count
- │              order        +count      ·                   ·
- └── group      ·            ·           (v int, count int)  ·
-      │         aggregate 0  v           ·                   ·
-      │         aggregate 1  count(k)    ·                   ·
-      │         group by     v           ·                   ·
-      └── scan  ·            ·           (k int, v int)      ·
-·               table        kv@primary  ·                   ·
-·               spans        FULL SCAN   ·                   ·
+·               distributed  false         ·                   ·
+·               vectorized   false         ·                   ·
+sort            ·            ·             (v int, count int)  +count
+ │              order        +count        ·                   ·
+ └── group      ·            ·             (v int, count int)  ·
+      │         aggregate 0  v             ·                   ·
+      │         aggregate 1  count_rows()  ·                   ·
+      │         group by     v             ·                   ·
+      └── scan  ·            ·             (v int)             ·
+·               table        kv@primary    ·                   ·
+·               spans        FULL SCAN     ·                   ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
@@ -611,26 +613,30 @@ sort            ·            ·             (v int, count int)  +count
 ·               spans        FULL SCAN     ·                   ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT v, count(1) FROM kv GROUP BY v ORDER BY count(1)
+EXPLAIN (TYPES) SELECT v, count(NULL) FROM kv GROUP BY v ORDER BY count(1)
 ----
-·                    distributed  false           ·                     ·
-·                    vectorized   false           ·                     ·
-sort                 ·            ·               (v int, count int)    +count
- │                   order        +count          ·                     ·
- └── group           ·            ·               (v int, count int)    ·
-      │              aggregate 0  v               ·                     ·
-      │              aggregate 1  count(column5)  ·                     ·
-      │              group by     v               ·                     ·
-      └── render     ·            ·               (column5 int, v int)  ·
-           │         render 0     (1)[int]        ·                     ·
-           │         render 1     (v)[int]        ·                     ·
-           └── scan  ·            ·               (v int)               ·
-·                    table        kv@primary      ·                     ·
-·                    spans        FULL SCAN       ·                     ·
+·                         distributed  false            ·                                   ·
+·                         vectorized   false            ·                                   ·
+render                    ·            ·                (v int, count int)                  ·
+ │                        render 0     (v)[int]         ·                                   ·
+ │                        render 1     (count)[int]     ·                                   ·
+ └── sort                 ·            ·                (v int, count int, count_rows int)  +count_rows
+      │                   order        +count_rows      ·                                   ·
+      └── group           ·            ·                (v int, count int, count_rows int)  ·
+           │              aggregate 0  v                ·                                   ·
+           │              aggregate 1  count(column5)   ·                                   ·
+           │              aggregate 2  count_rows()     ·                                   ·
+           │              group by     v                ·                                   ·
+           └── render     ·            ·                (column5 unknown, v int)            ·
+                │         render 0     (NULL)[unknown]  ·                                   ·
+                │         render 1     (v)[int]         ·                                   ·
+                └── scan  ·            ·                (v int)                             ·
+·                         table        kv@primary       ·                                   ·
+·                         spans        FULL SCAN        ·                                   ·
 
 # Check that filters propagate through no-op aggregation.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(1) FROM kv GROUP BY v) WHERE v > 10
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(NULL) FROM kv GROUP BY v) WHERE v > 10
 ----
 ·               distributed  false           ·             ·
 ·               vectorized   false           ·             ·
@@ -639,7 +645,7 @@ group           ·            ·               (v, count)    ·
  │              aggregate 1  count(column5)  ·             ·
  │              group by     v               ·             ·
  └── render     ·            ·               (column5, v)  ·
-      │         render 0     1               ·             ·
+      │         render 0     NULL            ·             ·
       │         render 1     v               ·             ·
       └── scan  ·            ·               (v)           ·
 ·               table        kv@primary      ·             ·

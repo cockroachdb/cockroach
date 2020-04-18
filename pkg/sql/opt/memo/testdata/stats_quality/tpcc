@@ -569,8 +569,7 @@ scalar-group-by
  │              ├── s_w_id:12 = 1 [type=bool, outer=(12), constraints=(/12: [/1 - /1]; tight), fd=()-->(12)]
  │              └── s_quantity:13 < 15 [type=bool, outer=(13), constraints=(/13: (/NULL - /14]; tight)]
  └── aggregations
-      └── count [as=count:28, type=int, outer=(11)]
-           └── s_i_id:11 [type=int]
+      └── count-rows [as=count:28, type=int]
 
 stats table=stock_level_02_scan_4
 ----
