@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -2082,4 +2084,75 @@ func TestLeaseAcquisitionByNameDoesntBlock(t *testing.T) {
 
 	// Wait for the schema change to finish.
 	require.NoError(t, <-schemaCh)
+}
+
+// TestIntentOnSystemConfigDoesNotPreventSchemaChange tests that failures to
+// gossip the system config due to intents are rectified when later intents
+// are aborted.
+func TestIntentOnSystemConfigDoesNotPreventSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.ServerConn(0)
+	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+
+	connA, err := db.Conn(ctx)
+	require.NoError(t, err)
+	connB, err := db.Conn(ctx)
+	require.NoError(t, err)
+
+	txA, err := connA.BeginTx(ctx, &gosql.TxOptions{})
+	require.NoError(t, err)
+	txB, err := connB.BeginTx(ctx, &gosql.TxOptions{})
+	require.NoError(t, err)
+
+	// Lay down an intent on the system config span.
+	_, err = txA.Exec("CREATE TABLE bar (i INT PRIMARY KEY)")
+	require.NoError(t, err)
+
+	_, err = txB.Exec("ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 2")
+	require.NoError(t, err)
+
+	getFooVersion := func() (version int) {
+		tx, err := db.Begin()
+		require.NoError(t, err)
+		// Prevent this transaction from blocking on intents.
+		_, err = tx.Exec("SET TRANSACTION PRIORITY HIGH")
+		require.NoError(t, err)
+		require.NoError(t, tx.QueryRow(
+			"SELECT version FROM crdb_internal.tables WHERE name = 'foo'").
+			Scan(&version))
+		require.NoError(t, tx.Commit())
+		return version
+	}
+
+	// Fire off the commit. In order to return, the table descriptor will need
+	// to make it through several versions. We wait until the version has been
+	// incremented once before we rollback txA.
+	origVersion := getFooVersion()
+	errCh := make(chan error)
+	go func() { errCh <- txB.Commit() }()
+	testutils.SucceedsSoon(t, func() error {
+		if got := getFooVersion(); got <= origVersion {
+			return fmt.Errorf("got %d, expected greater", got)
+		}
+		return nil
+	})
+
+	// Roll back txA which had left an intent on the system config span which
+	// prevented the leaseholders of origVersion of foo from being notified.
+	// Ensure that those leaseholders are notified in a timely manner.
+	require.NoError(t, txA.Rollback())
+
+	const extremelyLongTime = 10 * time.Second
+	select {
+	case <-time.After(extremelyLongTime):
+		t.Fatalf("schema change did not complete in %v", extremelyLongTime)
+	case err := <-errCh:
+		require.NoError(t, err)
+	}
 }
