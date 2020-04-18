@@ -1618,6 +1618,7 @@ datestyle                                 ISO, MDY            NULL      NULL    
 default_int_size                          8                   NULL      NULL        NULL        string
 default_tablespace                        ·                   NULL      NULL        NULL        string
 default_transaction_isolation             serializable        NULL      NULL        NULL        string
+default_transaction_priority              normal              NULL      NULL        NULL        string
 default_transaction_read_only             off                 NULL      NULL        NULL        string
 distsql                                   off                 NULL      NULL        NULL        string
 enable_implicit_select_for_update         on                  NULL      NULL        NULL        string
@@ -1677,6 +1678,7 @@ datestyle                                 ISO, MDY            NULL  user     NUL
 default_int_size                          8                   NULL  user     NULL      8                   8
 default_tablespace                        ·                   NULL  user     NULL      ·                   ·
 default_transaction_isolation             serializable        NULL  user     NULL      default             default
+default_transaction_priority              normal              NULL  user     NULL      normal              normal
 default_transaction_read_only             off                 NULL  user     NULL      off                 off
 distsql                                   off                 NULL  user     NULL      off                 off
 enable_implicit_select_for_update         on                  NULL  user     NULL      on                  on
@@ -1732,6 +1734,7 @@ datestyle                                 NULL    NULL     NULL     NULL        
 default_int_size                          NULL    NULL     NULL     NULL        NULL
 default_tablespace                        NULL    NULL     NULL     NULL        NULL
 default_transaction_isolation             NULL    NULL     NULL     NULL        NULL
+default_transaction_priority              NULL    NULL     NULL     NULL        NULL
 default_transaction_read_only             NULL    NULL     NULL     NULL        NULL
 distsql                                   NULL    NULL     NULL     NULL        NULL
 enable_implicit_select_for_update         NULL    NULL     NULL     NULL        NULL

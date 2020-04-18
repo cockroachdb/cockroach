@@ -234,6 +234,7 @@ var varGen = map[string]sessionVar{
 		Get:           func(evalCtx *extendedEvalContext) string { return "ISO, MDY" },
 		GlobalDefault: func(_ *settings.Values) string { return "ISO, MDY" },
 	},
+
 	// Controls the subsequent parsing of a "naked" INT type.
 	// TODO(bob): Remove or no-op this in v2.4: https://github.com/cockroachdb/cockroach/issues/32844
 	`default_int_size`: {
@@ -267,6 +268,7 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(defaultIntSize.Get(sv), 10)
 		},
 	},
+
 	// See https://www.postgresql.org/docs/10/runtime-config-client.html.
 	// Supported only for pg compatibility - CockroachDB has no notion of
 	// tablespaces.
@@ -282,6 +284,7 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string { return "" },
 	},
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-DEFAULT-TRANSACTION-ISOLATION
 	`default_transaction_isolation`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
@@ -299,6 +302,29 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string { return "default" },
 	},
+
+	// CockroachDB extension.
+	`default_transaction_priority`: {
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			pri, ok := tree.UserPriorityFromString(s)
+			if !ok {
+				return newVarValueError(`default_transaction_isolation`, s, "low", "normal", "high")
+			}
+			m.SetDefaultTransactionPriority(pri)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			pri := tree.UserPriority(evalCtx.SessionData.DefaultTxnPriority)
+			if pri == tree.UnspecifiedUserPriority {
+				pri = tree.Normal
+			}
+			return strings.ToLower(pri.String())
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strings.ToLower(tree.Normal.String())
+		},
+	},
+
 	// See https://www.postgresql.org/docs/9.3/static/runtime-config-client.html#GUC-DEFAULT-TRANSACTION-READ-ONLY
 	`default_transaction_read_only`: {
 		GetStringVal: makePostgresBoolGetStringValFn("default_transaction_read_only"),
@@ -557,6 +583,7 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string { return "0" },
 	},
+
 	// CockroachDB extension. See docs on SessionData.ForceSavepointRestart.
 	// https://github.com/cockroachdb/cockroach/issues/30588
 	`force_savepoint_restart`: {
@@ -577,6 +604,7 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-preset.html
 	`integer_datetimes`: makeReadOnlyVar("on"),
 

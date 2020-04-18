@@ -1870,6 +1870,10 @@ func (m *sessionDataMutator) SetDefaultIntSize(size int) {
 	m.data.DefaultIntSize = size
 }
 
+func (m *sessionDataMutator) SetDefaultTransactionPriority(val tree.UserPriority) {
+	m.data.DefaultTxnPriority = int(val)
+}
+
 func (m *sessionDataMutator) SetDefaultReadOnly(val bool) {
 	m.data.DefaultReadOnly = val
 }
