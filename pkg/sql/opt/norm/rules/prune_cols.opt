@@ -295,7 +295,7 @@
 # PruneGroupByCols discards GroupBy input columns that are never used. Note that
 # UpsertDistinctOn is not included here because its columns are always used.
 [PruneGroupByCols, Normalize]
-(GroupBy | DistinctOn
+(GroupBy | ScalarGroupBy | DistinctOn
     $input:*
     $aggregations:*
     $groupingPrivate:* &

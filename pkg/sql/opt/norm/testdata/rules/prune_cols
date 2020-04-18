@@ -1195,12 +1195,8 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
- ├── project
- │    ├── columns: column6:6 i:2
- │    ├── scan a
- │    │    └── columns: i:2 s:4
- │    └── projections
- │         └── s:4 || 'foo' [as=column6:6, outer=(4)]
+ ├── scan a
+ │    └── columns: i:2
  └── aggregations
       └── sum [as=sum:5, outer=(2)]
            └── i:2
@@ -1231,9 +1227,9 @@ scalar-group-by
  ├── key: ()
  ├── fd: ()-->(5,6)
  ├── scan a
- │    ├── columns: k:1!null i:2 f:3
+ │    ├── columns: k:1!null i:2
  │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
+ │    └── fd: (1)-->(2)
  └── aggregations
       ├── min [as=min:5, outer=(2)]
       │    └── i:2
@@ -1333,6 +1329,25 @@ distinct-on
  └── aggregations
       └── first-agg [as=f:3, outer=(3)]
            └── f:3
+
+# ScalarGroupBy case.
+norm expect=PruneGroupByCols
+SELECT icnt FROM (SELECT count(i+1) AS icnt, count(k+1) FROM a);
+----
+scalar-group-by
+ ├── columns: icnt:6!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── project
+ │    ├── columns: column5:5
+ │    ├── scan a
+ │    │    └── columns: i:2
+ │    └── projections
+ │         └── i:2 + 1 [as=column5:5, outer=(2)]
+ └── aggregations
+      └── count [as=count:6, outer=(5)]
+           └── column5:5
 
 # --------------------------------------------------
 # PruneValuesCols
