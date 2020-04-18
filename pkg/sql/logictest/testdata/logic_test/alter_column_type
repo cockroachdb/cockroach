@@ -162,8 +162,7 @@ ALTER TABLE t ALTER s TYPE STRING
 statement ok
 DROP TABLE t
 
-# Test cases for ALTER COLUMN TYPE requiring a cast
-
+subtest alter_column_type_general
 # Failed alter
 statement ok
 CREATE TABLE t1 (date string)
@@ -171,10 +170,17 @@ CREATE TABLE t1 (date string)
 statement ok
 INSERT INTO t1 VALUES ('hello')
 
+statement error pq: alter column type general is experimental; you can enable alter column type general support by running `SET enable_alter_column_type_general = true
+ALTER TABLE t1 ALTER COLUMN date TYPE timestamp
+
+statement ok
+SET enable_alter_column_type_general = true
+
 statement error pq: parsing as type timestamp: could not parse "hello"
 ALTER TABLE t1 ALTER COLUMN date TYPE timestamp
 
-subtest ColumnNotPartOfIndex
+
+#ColumnNotPartOfIndex
 
 statement ok
 CREATE TABLE t2 (id int)
@@ -258,33 +264,67 @@ statement ok
 ROLLBACK
 
 statement ok
-CREATE TABLE d.t3 (x INT, y INT, z INT)
-
-statement ok
-INSERT INTO d.t3 VALUES (1, 1, 1), (2, 2, 2);
-
-statement ok
-ALTER TABLE d.t3 ALTER COLUMN y TYPE STRING
-
-# Wait until drop column job is done
-query T retry
-SELECT STATUS FROM [SHOW JOBS] WHERE STATUS = 'running' AND description LIKE '%SET DATA TYPE%'
-----
-
-
-statement ok
-INSERT INTO d.t3 VALUES (3, 'HELLO', 3)
-
-query ITI
-SELECT * FROM d.t3
-----
-1 1     1
-2 2     2
-3 HELLO 3
+CREATE TABLE d.t4 (x TIMESTAMPTZ(6));
+INSERT INTO d.t4 VALUES ('2016-01-25 10:10:10.555555-05:00');
+INSERT INTO d.t4 VALUES ('2016-01-26 10:10:10.555555-05:00');
+ALTER TABLE d.t4 ALTER COLUMN x TYPE TIMESTAMPTZ(3);
+INSERT INTO d.t4 VALUES ('2016-01-26 10:10:10.55-05:00');
 
 query T
-SELECT y FROM d.t3
+SELECT * FROM d.t4 ORDER BY x
 ----
-1
-2
-HELLO
+2016-01-25 16:10:10.556 +0100 CET
+2016-01-26 16:10:10.55 +0100 CET
+2016-01-26 16:10:10.556 +0100 CET
+
+# ensure column families stay the same
+statement ok
+CREATE TABLE d.t5(id INT, id2 INT, FAMILY f1 (id), FAMILY f2 (id2));
+INSERT INTO d.t5 VALUES (1), (2), (3);
+ALTER TABLE d.t5 ALTER COLUMN id2 TYPE STRING;
+
+query TT
+SHOW CREATE TABLE d.t5
+----
+d.public.t5 CREATE TABLE t5 (
+              id INT8 NULL,
+              id2 STRING NULL,
+              FAMILY f1 (id, rowid),
+              FAMILY f2 (id2)
+            )
+
+# testing default expressions
+statement ok
+CREATE TABLE d.t6 (x INT DEFAULT 1, y INT);
+INSERT INTO d.t6 (y) VALUES (1), (2), (3);
+ALTER TABLE d.t6 ALTER COLUMN x TYPE DATE;
+INSERT INTO d.t6 (y) VALUES (4);
+
+query TI
+SELECT * FROM d.t6 ORDER BY y
+----
+1970-01-02 00:00:00 +0000 +0000  1
+1970-01-02 00:00:00 +0000 +0000  2
+1970-01-02 00:00:00 +0000 +0000  3
+1970-01-02 00:00:00 +0000 +0000  4
+
+# runtime error, rollback job
+statement ok
+
+statement ok
+CREATE TABLE d.d7 (x INT PRIMARY KEY)
+
+statement error pq: unimplemented: alter column type requiring rewrite of on-disk data is currently not supported for columns that are part of an index
+ALTER TABLE d.d7 ALTER COLUMN x TYPE STRING
+
+statement ok
+CREATE TABLE d.d8 (x INT, y INT, INDEX(x, y))
+
+statement error pq: unimplemented: alter column type requiring rewrite of on-disk data is currently not supported for columns that are part of an index
+ALTER TABLE d.d8 ALTER COLUMN y TYPE STRING
+
+statement ok
+CREATE TABLE d.d9 (x INT)
+
+statement error pq: unimplemented: alter column type using expression is not supported\nHINT: You have attempted to use a feature that is not yet implemented.\nSee: https://github.com/cockroachdb/cockroach/issues/47706
+ALTER TABLE d.d9 ALTER COLUMN x TYPE STRING USING CAST(x AS STRING)

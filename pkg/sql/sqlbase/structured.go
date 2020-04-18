@@ -3292,7 +3292,7 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 			newCol.LogicalColumnID = oldCol.LogicalColumnID
 			oldCol.LogicalColumnID = 0
 
-			oldCol.AlterColumnTypeDropColumn = true
+			oldCol.AlterColumnTypeInProgress = true
 
 			//Drop old column.
 			for i := range desc.Columns {

@@ -104,6 +104,9 @@ type SessionData struct {
 	// InsertFastPath is true if the fast path for insert (with VALUES input) may
 	// be used.
 	InsertFastPath bool
+	// AlterColumnTypeGeneral is true if ALTER TABLE ... ALTER COLUMN ... TYPE x
+	// may be used for general conversions requiring online schema change/
+	AlterColumnTypeGeneral bool
 }
 
 // DataConversionConfig contains the parameters that influence

@@ -284,7 +284,7 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 			inputRow[col], err = typedExpr.Eval(params.EvalContext())
 			if err != nil {
 				// Intercept parse error due to ALTER COLUMN TYPE schema change.
-				if n.run.insertRun.insertCols[col].AlterColumnTypeDropColumn {
+				if n.run.insertRun.insertCols[col].AlterColumnTypeInProgress {
 					code := pgerror.GetPGCode(err)
 					if code == "22P02" {
 						return false, errors.Wrapf(err,

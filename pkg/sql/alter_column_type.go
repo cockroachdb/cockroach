@@ -12,15 +12,16 @@ package sql
 
 import (
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 // AlterColumnType takes an AlterTableAlterColumnType, determines
@@ -70,10 +71,22 @@ func AlterColumnType(
 	case schemachange.ColumnConversionTrivial:
 		col.Type = *typ
 	case schemachange.ColumnConversionGeneral:
-		if err := alterColumnTypeGeneral(tableDesc, col, t.ToType); err != nil {
+		// Make sure that all nodes in the cluster are able to perform general alter column type conversions.
+		if !params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionAlterColumnTypeGeneral) {
+			return pgerror.Newf(pgcode.FeatureNotSupported,
+				"all nodes are not the correct version for alter column type general")
+		}
+		if !params.SessionData().AlterColumnTypeGeneral {
+			return pgerror.Newf(pgcode.FeatureNotSupported,
+				"alter column type general is experimental; "+
+					"you can enable alter column type general support by running `SET enable_alter_column_type_general = true")
+		}
+		if err := alterColumnTypeGeneral(tableDesc, col, t); err != nil {
 			return err
 		}
-		params.p.createOrUpdateSchemaChangeJob(params.ctx, tableDesc, "alter column type", sqlbase.InvalidMutationID)
+		if err := params.p.createOrUpdateSchemaChangeJob(params.ctx, tableDesc, "alter column type", sqlbase.InvalidMutationID); err != nil {
+			return err
+		}
 		params.p.SendClientNotice(params.ctx, pgerror.Noticef("alter column type changes are finalized asynchronosuly;"+
 			"further schema changes on this table may be restricted until the job completes; "+
 			"some inserts into the altered column may not be supported until the schema change is finalized"))
@@ -85,8 +98,41 @@ func AlterColumnType(
 	return nil
 }
 
-func alterColumnTypeGeneral(tableDesc *sqlbase.MutableTableDescriptor,
-	col *sqlbase.ColumnDescriptor, toType *types.T) error {
+func alterColumnTypeGeneral(
+	tableDesc *sqlbase.MutableTableDescriptor,
+	col *sqlbase.ColumnDescriptor,
+	t *tree.AlterTableAlterColumnType,
+) error {
+
+	usingExpressionNotSupportedErr := unimplemented.NewWithIssuef(
+		47706, "alter column type using expression is not supported")
+
+	colInIndexNotSupportedErr := unimplemented.NewWithIssuef(
+		47636, "alter column type requiring rewrite of on-disk "+
+			"data is currently not supported for columns that are part of an index")
+
+	if t.Using != nil {
+		return usingExpressionNotSupportedErr
+	}
+
+	for i := range tableDesc.Indexes {
+		for _, id := range append(
+			tableDesc.Indexes[i].ColumnIDs,
+			tableDesc.Indexes[i].ExtraColumnIDs...) {
+			if col.ID == id {
+				return colInIndexNotSupportedErr
+			}
+		}
+	}
+
+	for _, id := range append(
+		tableDesc.PrimaryIndex.ColumnIDs,
+		tableDesc.PrimaryIndex.ExtraColumnIDs...) {
+		if col.ID == id {
+			return colInIndexNotSupportedErr
+		}
+	}
+
 	currentMutationID := tableDesc.ClusterVersion.NextMutationID
 	for i := range tableDesc.Mutations {
 		mut := &tableDesc.Mutations[i]
@@ -114,7 +160,7 @@ func alterColumnTypeGeneral(tableDesc *sqlbase.MutableTableDescriptor,
 		}
 	}
 
-	newComputedExpr := tree.CastExpr{Expr: unresolvedName(col.Name), Type: toType, SyntaxMode: tree.CastShort}
+	newComputedExpr := tree.CastExpr{Expr: unresolvedName(col.Name), Type: t.ToType, SyntaxMode: tree.CastShort}
 	s := tree.Serialize(&newComputedExpr)
 	newColComputeExpr := &s
 
@@ -131,7 +177,7 @@ func alterColumnTypeGeneral(tableDesc *sqlbase.MutableTableDescriptor,
 			if err != nil {
 				return err
 			}
-			newDefaultComputedExpr := tree.CastExpr{Expr: expr, Type: toType, SyntaxMode: tree.CastShort}
+			newDefaultComputedExpr := tree.CastExpr{Expr: expr, Type: t.ToType, SyntaxMode: tree.CastShort}
 			s := tree.Serialize(&newDefaultComputedExpr)
 			newColDefaultExpr = &s
 		}
@@ -143,12 +189,28 @@ func alterColumnTypeGeneral(tableDesc *sqlbase.MutableTableDescriptor,
 	newCol := sqlbase.ColumnDescriptor{
 		Name:            shadowColName,
 		ID:              id,
-		Type:            *toType,
+		Type:            *t.ToType,
 		Nullable:        col.Nullable,
 		DefaultExpr:     newColDefaultExpr,
 		UsesSequenceIds: col.UsesSequenceIds,
 		OwnsSequenceIds: col.OwnsSequenceIds,
 		ComputeExpr:     newColComputeExpr,
+	}
+
+	// Ensure shadow column is created in the same column family as the original
+	// so backfiller writes to the same column family.
+	var family sqlbase.ColumnFamilyDescriptor
+	for _, fam := range tableDesc.Families {
+		for _, id := range fam.ColumnIDs {
+			if id == col.ID {
+				family = fam
+			}
+		}
+	}
+
+	if err := tableDesc.AddColumnToFamilyMaybeCreate(
+		newCol.Name, family.Name, false, false); err != nil {
+		return err
 	}
 
 	tableDesc.AddColumnMutation(&newCol, sqlbase.DescriptorMutation_ADD)

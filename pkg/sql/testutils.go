@@ -12,6 +12,8 @@ package sql
 
 import (
 	"context"
+	gosql "database/sql"
+	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -20,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 // CreateTestTableDescriptor converts a SQL string to a table for test purposes.
@@ -125,4 +128,37 @@ func (dsp *DistSQLPlanner) Exec(
 
 	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.plan, recv)()
 	return rw.Err()
+}
+
+// QueryExpect runs the query string using the gosql.DB and compares to queries
+// row values with the expected values.
+// expected: a slice of slices of type interface{} containing the row values.
+// 		Example:
+//			expected := [][]interface{}{{1, "1", 1}, {2, "2", 2}, {3, "HELLO", 3}}
+// dest: pointers to the desired types for the Scan to read into.
+//			for the example above, dest should contain *int, *string, *int.
+func QueryExpect(
+	query string, sqlDB *gosql.DB, expected [][]interface{}, dest []interface{},
+) error {
+	rows, err := sqlDB.Query(query)
+	if err != nil {
+		return err
+	}
+
+	for i := 0; ; i++ {
+		if !rows.Next() {
+			break
+		}
+		if err := rows.Scan(dest...); err != nil {
+			return err
+		}
+
+		for j := range expected[i] {
+			actual := reflect.ValueOf(dest[j]).Elem().Interface()
+			if expected[i][j] != actual {
+				return errors.Newf("found %v, expected %v", actual, expected[i][j])
+			}
+		}
+	}
+	return nil
 }

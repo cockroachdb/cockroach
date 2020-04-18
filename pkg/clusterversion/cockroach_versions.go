@@ -61,6 +61,7 @@ const (
 	VersionTimePrecision
 	Version20_1
 	VersionStart20_2
+	VersionAlterColumnTypeGeneral
 
 	// Add new versions here (step one of two).
 )
@@ -467,6 +468,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionStart20_2 demarcates work towards CockroachDB v20.2.
 		Key:     VersionStart20_2,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 1},
+	},
+	{
+		// VersionAlterColumnTypeGeneral enables the use of alter column type for general conversions.
+		Key:     VersionAlterColumnTypeGeneral,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 2},
 	},
 
 	// Add new versions here (step two of two).

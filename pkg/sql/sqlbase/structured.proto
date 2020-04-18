@@ -138,7 +138,7 @@ message ColumnDescriptor {
   optional uint32 logical_id = 13 [(gogoproto.nullable) = false,
    (gogoproto.customname) = "LogicalColumnID", (gogoproto.casttype) = "ColumnID"];
   // Used to indicate column is used and dropped for ALTER COLUMN TYPE mutation.
-  optional bool alter_column_type_drop_column = 14 [(gogoproto.nullable) = false];
+  optional bool alter_column_type_in_progress = 14 [(gogoproto.nullable) = false];
 }
   
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.
@@ -989,11 +989,7 @@ message Descriptor {
 // Column a while Column a becomes computed using a'.
 message ComputedColumnSwap {
   option (gogoproto.equal) = true;
-  // old_column_index_id is the ID of the old column (column a).
-  optional uint32 old_column_id = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
-  // new_column_index_id is the ID of the new column (column a').
   optional uint32 new_column_id = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
-//  // old_indexes and new_indexes are lists of IndexID's where the i'th index in old_indexes will be
-//  // swapped out with the i'th index in new_indexes.
+  optional uint32 old_column_id = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
 }
 

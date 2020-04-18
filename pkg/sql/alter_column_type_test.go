@@ -12,14 +12,15 @@ package sql_test
 
 import (
 	"context"
-	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -31,7 +32,11 @@ func TestAlterColumnTypeInTxn(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	_, err := sqlDB.Exec(`
+	_, err := sqlDB.Exec(`SET enable_alter_column_type_general = true;`)
+	if err != nil {
+		t.Error(err)
+	}
+	_, err = sqlDB.Exec(`
 CREATE DATABASE t;
 BEGIN;
 CREATE TABLE t.test (x INT);
@@ -57,6 +62,11 @@ func TestInsertBeforeOldColumnIsDropped(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(
+		`SET enable_alter_column_type_general = true;`); err != nil {
+		t.Error(err)
+	}
 
 	_, err := sqlDB.Exec(`
 CREATE TABLE test (x INT);
@@ -93,12 +103,17 @@ func TestVisibilityDuringAlterColumnType(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
+	if _, err := sqlDB.Exec(
+		`SET enable_alter_column_type_general = true;`); err != nil {
+		t.Error(err)
+	}
+
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (x INT);
 INSERT INTO t.test VALUES (1), (2), (3);
 `); err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
 
 	var wg sync.WaitGroup
@@ -115,7 +130,7 @@ INSERT INTO t.test VALUES (1), (2), (3);
 	row := sqlDB.QueryRow("SHOW CREATE TABLE t.test")
 	var scanName, create string
 	if err := row.Scan(&scanName, &create); err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
 	expected := `CREATE TABLE test (
 	x INT8 NULL,
@@ -131,7 +146,7 @@ INSERT INTO t.test VALUES (1), (2), (3);
 
 	row = sqlDB.QueryRow("SHOW CREATE TABLE t.test")
 	if err := row.Scan(&scanName, &create); err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
 	expected = `CREATE TABLE test (
 	x STRING NULL,
@@ -142,139 +157,365 @@ INSERT INTO t.test VALUES (1), (2), (3);
 	}
 }
 
-// Column Families test
-func TestColumnFamilies(t *testing.T) {
+// TestAlterColumnTypeFailureRollback tests running a primary key
+// change on a table created in the same transaction.
+func TestAlterColumnTypeFailureRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	if _, err := sqlDB.Exec(`
+	if _, err := sqlDB.Exec(
+		`SET enable_alter_column_type_general = true;`); err != nil {
+		t.Error(err)
+	}
+
+	_, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test(id INT, id2 INT, FAMILY f1 (id), FAMILY f2 (id2));
-INSERT INTO t.test VALUES (1), (2), (3);
-ALTER TABLE t.test ALTER COLUMN id2 TYPE STRING;
-`); err != nil {
-		t.Fatal(err)
+CREATE TABLE t.test (x STRING);
+INSERT INTO t.test VALUES ('1'), ('2'), ('HELLO');
+ALTER TABLE 
+t.test ALTER COLUMN x TYPE INT;
+`)
+	actual := err.Error()
+	expected := "pq: could not parse \"HELLO\" as type int: strconv.ParseInt: parsing \"HELLO\": invalid syntax"
+
+	if actual != expected {
+		t.Fatalf("expected %s, got %s", expected, actual)
 	}
 
-	row := sqlDB.QueryRow("SHOW CREATE TABLE t.test")
-	var scanName, create string
-	if err := row.Scan(&scanName, &create); err != nil {
-		t.Fatal(err)
-	}
-	expected := `CREATE TABLE test (
-	id INT8 NULL,
-	id2 STRING NULL,
-	FAMILY f1 (id, rowid),
-	FAMILY f2 (id2)
-)`
+	desc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// Expect to find two drop mutations, one to drop the Column, one to drop the
+	// Computed Column swap.
+	if len(desc.Mutations) != 2 {
+		t.Fatalf("expected to find 2 mutations, but found %d", len(desc.Mutations))
 
-	if create != expected {
-		t.Fatalf("expected %s, found %s", expected, create)
+		if desc.Mutations[0].Direction != sqlbase.DescriptorMutation_DROP {
+			t.Fatal("expected to be a drop mutation")
+			if desc.Mutations[0].GetColumn().Name != "x_1" {
+				t.Fatal("expected to be dropping column x_1")
+			}
+		}
+
+		if desc.Mutations[0].Direction != sqlbase.DescriptorMutation_DROP {
+			t.Fatal("expected to be a drop mutation")
+		}
+
+		column := desc.Mutations[0].GetColumn()
+		if column == nil {
+			t.Fatal("expected column to be non-nil")
+		}
+		if column.Name != "x_1" {
+			t.Fatalf("expected to column to have name x_1, found: %s", column.Name)
+		}
+
+		if desc.Mutations[1].Direction != sqlbase.DescriptorMutation_DROP {
+			t.Fatal("expected to be a drop mutation")
+		}
+
+		if desc.Mutations[1].GetComputedColumnSwap() == nil {
+			t.Fatal("expected to find a ComputedColumnSwap mutation with direction drop")
+		}
+
 	}
 }
 
-func TestAlterColumnTypeTimestampTZ(t *testing.T) {
+func TestAddDropColumnDuringAlterColumnType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+
+	waitBeforeContinuing := make(chan struct{})
+	swapNotification := make(chan struct{})
+
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeComputedColumnSwap: func() {
+				// Notify the tester that the alter column type is about to happen.
+				swapNotification <- struct{}{}
+				// Wait for the tester to finish before continuing the swap.
+				<-waitBeforeContinuing
+			},
+		},
+	}
+
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-BEGIN;
-CREATE TABLE t.test (x TIMESTAMPTZ(6));
-INSERT INTO t.test VALUES ('2016-01-25 10:10:10.555555-05:00');
-ALTER TABLE t.test ALTER COLUMN x TYPE TIMESTAMPTZ(3);
-INSERT INTO t.test VALUES ('2016-01-26 10:10:10.555555-05:00');
-COMMIT;
-`); err != nil {
-		t.Fatal(err)
+	if _, err := sqlDB.Exec(
+		`SET enable_alter_column_type_general = true;`); err != nil {
+		t.Error(err)
 	}
 
-	rows, err := sqlDB.Query("SELECT * FROM t.test ORDER BY x")
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (x INT);
+`); err != nil {
+		t.Error(err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		if _, err := sqlDB.Exec(`
+ALTER TABLE t.test ADD COLUMN y INT;
+ALTER TABLE t.test ALTER COLUMN x TYPE STRING;
+ALTER TABLE t.test ADD COLUMN z INT;
+ALTER TABLE t.test DROP COLUMN y;
+`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	<-swapNotification
+
+	var name, created string
+	dest := []interface{}{&name, &created}
+	expected := [][]interface{}{{
+		"t.public.test",
+		"CREATE TABLE test (\n\tx INT8 NULL,\n\ty INT8 NULL,\n\tFAMILY \"primary\" (x, rowid, y)\n)",
+	}}
+	err := sql.QueryExpect(`SHOW CREATE TABLE t.test`, sqlDB, expected, dest)
 	if err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
-	var date string
-	for _, tc := range []struct {
-		expected string
-	}{
-		{"2016-01-25T15:10:10.556Z"},
-		{"2016-01-26T15:10:10.556Z"},
-	} {
-		rows.Next()
-		if err = rows.Scan(&date); err != nil {
-			t.Fatal(err)
-		}
-		if date != tc.expected {
-			t.Fatalf("expected %s, got %s", tc.expected, date)
-		}
+
+	waitBeforeContinuing <- struct{}{}
+	wg.Wait()
+
+	expected = [][]interface{}{{
+		"t.public.test",
+		"CREATE TABLE test (\n\tx STRING NULL,\n\tz INT8 NULL,\n\tFAMILY \"primary\" (x, rowid, z)\n)",
+	}}
+	err = sql.QueryExpect(`SHOW CREATE TABLE t.test`, sqlDB, expected, dest)
+	if err != nil {
+		t.Error(err)
 	}
 }
 
-// Generalize this test?
-func TestAlterColumnTypeIntToString(t *testing.T) {
+func TestIntToStringBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := tests.CreateTestServerParams()
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(
+		`SET enable_alter_column_type_general = true;`); err != nil {
+		t.Error(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+CREATE TABLE test (x INT);
+ALTER TABLE test ALTER COLUMN x TYPE STRING;
+INSERT INTO test VALUES ('1'), ('2'), ('3');
+`); err != nil {
+		t.Error(err)
+	}
+
+	var x string
+	dest := []interface{}{&x}
+
+	expected := [][]interface{}{{"1"}, {"2"}, {"3"}}
+	err := sql.QueryExpect(`SELECT * FROM test ORDER BY x`, sqlDB, expected, dest)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestQueryIntToString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer setTestJobsAdoptInterval()()
-	ctx := context.Background()
+
 	params, _ := tests.CreateTestServerParams()
+
 	s, sqlDB, _ := serverutils.StartServer(t, params)
+	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
+	if _, err := sqlDB.Exec(
+		`SET enable_alter_column_type_general = true;`); err != nil {
+		t.Error(err)
+	}
+
 	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (x INT, y INT, z INT);
-INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2);
-ALTER TABLE t.test ALTER COLUMN y TYPE STRING;
+CREATE DATABASE d;
+CREATE TABLE d.t3 (x INT, y INT, z INT);
+INSERT INTO d.t3 VALUES (1, 1, 1), (2, 2, 2);
+ALTER TABLE d.t3 ALTER COLUMN y TYPE STRING;
 `); err != nil {
-		t.Fatal(err)
+		t.Error(err)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		rows, err := sqlDB.Query(`SHOW CREATE TABLE t.test;`)
-		if err != nil {
-			return err
-		}
-		var a, b string
-		rows.Next()
-		if err = rows.Scan(&a, &b); err != nil {
-			t.Fatal(err)
-		}
-		fmt.Printf("out: %s,%s", a, b)
-		return nil
-	})
-
-	testutils.SucceedsSoon(t, func() error {
-		_, err := sqlDB.Exec(`INSERT INTO t.test VALUES (3, 'HELLO', 3);`)
+		_, err := sqlDB.Exec(`INSERT INTO d.t3 VALUES (3, 'HELLO', 3);`)
 		return err
 	})
 
-	rows, err := sqlDB.Query("SELECT * FROM t.test ORDER BY x")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var x, z int
 	var y string
-	for _, tc := range []struct {
-		x int
-		y string
-		z int
-	}{
-		{1, "1", 1},
-		{2, "2", 2},
-		{3, "HELLO", 3},
-	} {
-		rows.Next()
-		if err = rows.Scan(&x, &y, &z); err != nil {
-			t.Fatal(err)
-		}
-		if x != tc.x || y != tc.y || z != tc.z {
-			t.Fatalf("expected %d %s %d, got %d %s %d", tc.x, tc.y, tc.z, x, y, z)
-		}
+	var x, z int
+	dest := []interface{}{&x, &y, &z}
+
+	expected := [][]interface{}{{1, "1", 1}, {2, "2", 2}, {3, "HELLO", 3}}
+	err := sql.QueryExpect(`SELECT * FROM d.t3 ORDER BY x`, sqlDB, expected, dest)
+	if err != nil {
+		t.Error(err)
 	}
+}
+
+func TestAlterColumnTypeBeforeAlterPrimaryKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	swapNotification := make(chan struct{})
+	waitBeforeContinuing := make(chan struct{})
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeComputedColumnSwap: func() {
+				swapNotification <- struct{}{}
+				<-waitBeforeContinuing
+			},
+		},
+		DistSQL: &execinfra.TestingKnobs{},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(
+		`SET enable_alter_column_type_general = true;`); err != nil {
+		t.Error(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (x INT NOT NULL);
+`); err != nil {
+		t.Error(err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		if _, err := sqlDB.Exec(`
+ALTER TABLE t.test ALTER COLUMN x TYPE STRING;
+`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	<-swapNotification
+
+	expected := "pq: unimplemented: table test is currently undergoing a schema change"
+	_, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (x);`)
+	waitBeforeContinuing <- struct{}{}
+	wg.Wait()
+	if err.Error() != expected {
+		t.Fatalf("expected error: %s, got: %s", expected, err.Error())
+	}
+}
+
+func TestAlterPrimaryKeyBeforeAlterColumnType(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	swapNotification := make(chan struct{})
+	waitBeforeContinuing := make(chan struct{})
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforePrimaryKeySwap: func() {
+				swapNotification <- struct{}{}
+				<-waitBeforeContinuing
+			},
+		},
+		DistSQL: &execinfra.TestingKnobs{},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (x INT NOT NULL);
+`); err != nil {
+		t.Error(err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		if _, err := sqlDB.Exec(`
+ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (x);
+`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	<-swapNotification
+
+	expected := "pq: unimplemented: table test is currently undergoing a schema change"
+	_, err := sqlDB.Exec(`
+SET enable_alter_column_type_general = true;
+ALTER TABLE t.test ALTER COLUMN x TYPE STRING;`)
+	waitBeforeContinuing <- struct{}{}
+	wg.Wait()
+	if err.Error() != expected {
+		t.Fatalf("expected error: %s, got: %s", expected, err.Error())
+	}
+}
+
+func TestAlterColumnTypeWithAlterPrimaryKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer setTestJobsAdoptInterval()()
+	ctx := context.Background()
+
+	params, _ := tests.CreateTestServerParams()
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(
+		`SET enable_alter_column_type_general = true;`); err != nil {
+		t.Error(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (x INT NOT NULL, y INT NOT NULL);
+`); err != nil {
+		t.Error(err)
+	}
+
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER COLUMN x TYPE STRING;`); err != nil {
+		t.Error(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		_, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (x,y);`)
+		return err
+	})
+
+	testutils.SucceedsSoon(t, func() error {
+		var name, created string
+		dest := []interface{}{&name, &created}
+		expected := [][]interface{}{{
+			"t.public.test",
+			"CREATE TABLE test (\n\tx STRING NOT NULL,\n\ty INT8 NOT NULL,\n\tCONSTRAINT \"primary\" PRIMARY KEY (x ASC, y ASC),\n\tFAMILY \"primary\" (x, y, rowid)\n)",
+		}}
+		err := sql.QueryExpect(`SHOW CREATE TABLE t.test`, sqlDB, expected, dest)
+		if err != nil {
+			t.Error(err)
+		}
+		return nil
+	})
 }
