@@ -1156,10 +1156,10 @@ project
                 └── u:6 = 10 [outer=(6), constraints=(/6: [/10 - /10]; tight), fd=()-->(6)]
 
 opt expect=SplitDisjunction
-SELECT count(k) FROM d WHERE u = 1 OR v = 1
+SELECT sum(k) FROM d WHERE u = 1 OR v = 1
 ----
 scalar-group-by
- ├── columns: count:5!null
+ ├── columns: sum:5
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(5)
@@ -1188,7 +1188,7 @@ scalar-group-by
  │              ├── key: (6)
  │              └── fd: ()-->(8)
  └── aggregations
-      └── count [as=count:5, outer=(1)]
+      └── sum [as=sum:5, outer=(1)]
            └── k:1
 
 # Don't expand INs to many ORs.

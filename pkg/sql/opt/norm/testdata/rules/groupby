@@ -64,7 +64,7 @@ CREATE TABLE xyzbs
   x INT PRIMARY KEY,
   y INT,
   z INT NOT NULL,
-  b BOOL,
+  b BOOL NOT NULL,
   s TEXT,
   INDEX (y),
   INDEX (s)
@@ -2192,7 +2192,7 @@ scalar-group-by
  ├── key: ()
  ├── fd: ()-->(6)
  ├── scan xyzbs
- │    └── columns: b:4
+ │    └── columns: b:4!null
  └── aggregations
       └── bool-and [as=bool_and:6, outer=(4)]
            └── b:4
@@ -2233,8 +2233,7 @@ scalar-group-by
  │    ├── columns: y:2!null
  │    └── constraint: /2/1: (/NULL - /49]
  └── aggregations
-      └── count [as=count:7, outer=(2)]
-           └── y:2
+      └── count-rows [as=count:7]
 
 # AVG case.
 norm expect=PushAggFilterIntoScalarGroupBy
@@ -2287,7 +2286,7 @@ scalar-group-by
  │    ├── columns: b:4!null
  │    ├── fd: ()-->(4)
  │    ├── scan xyzbs
- │    │    └── columns: b:4
+ │    │    └── columns: b:4!null
  │    └── filters
  │         └── b:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
  └── aggregations
@@ -2404,8 +2403,7 @@ scalar-group-by
  │         ├── y:2 < 50 [outer=(2), constraints=(/2: (/NULL - /49]; tight)]
  │         └── z:3 > 5 [outer=(3), constraints=(/3: [/6 - ]; tight)]
  └── aggregations
-      └── count [as=count:7, outer=(2)]
-           └── y:2
+      └── count-rows [as=count:7]
 
 # No-op case where the same aggregate function is called on different
 # columns.
@@ -2461,3 +2459,93 @@ scalar-group-by
            ├── sum
            │    └── y:2
            └── column6:6
+
+# --------------------------------------------------
+# ConvertCountToCountRows
+# --------------------------------------------------
+
+# ScalarGroupBy case.
+norm expect=ConvertCountToCountRows
+SELECT count(z) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: count:6!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── scan xyzbs
+ └── aggregations
+      └── count-rows [as=count:6]
+
+# GroupBy case.
+norm expect=ConvertCountToCountRows
+SELECT count(z) FROM xyzbs GROUP BY s
+----
+project
+ ├── columns: count:6!null
+ └── group-by
+      ├── columns: s:5 count:6!null
+      ├── grouping columns: s:5
+      ├── key: (5)
+      ├── fd: (5)-->(6)
+      ├── scan xyzbs
+      │    └── columns: s:5
+      └── aggregations
+           └── count-rows [as=count:6]
+
+# Case with multiple aggregate functions.
+# Expecting to activate on z and b but not y, because y can be null.
+norm expect=ConvertCountToCountRows
+SELECT count(y), corr(y, z), count(z), sum(y), count(b) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: count:6!null corr:7 count:8!null sum:9 count:10!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6-10)
+ ├── scan xyzbs
+ │    └── columns: y:2 z:3!null
+ └── aggregations
+      ├── count [as=count:6, outer=(2)]
+      │    └── y:2
+      ├── corr [as=corr:7, outer=(2,3)]
+      │    ├── y:2
+      │    └── z:3
+      ├── count-rows [as=count:8]
+      ├── sum [as=sum:9, outer=(2)]
+      │    └── y:2
+      └── count-rows [as=count:10]
+
+# No-op case because y can contain nulls.
+norm expect-not=ConvertCountToCountRows
+SELECT count(y) FROM xyzbs
+----
+scalar-group-by
+ ├── columns: count:6!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── scan xyzbs
+ │    └── columns: y:2
+ └── aggregations
+      └── count [as=count:6, outer=(2)]
+           └── y:2
+
+# No-op case because the DISTINCT requires the count input column, so the count
+# can't be eliminated.
+norm
+SELECT count(DISTINCT y) FROM xyzbs GROUP BY z
+----
+project
+ ├── columns: count:6!null
+ └── group-by
+      ├── columns: z:3!null count:6!null
+      ├── grouping columns: z:3!null
+      ├── key: (3)
+      ├── fd: (3)-->(6)
+      ├── scan xyzbs
+      │    └── columns: y:2 z:3!null
+      └── aggregations
+           └── agg-distinct [as=count:6, outer=(2)]
+                └── count
+                     └── y:2
