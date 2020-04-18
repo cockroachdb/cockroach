@@ -3914,6 +3914,12 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	// Disable async intent resolution. This can lead to flakiness in the test
+	// because it allows for the intents written by the split transaction to be
+	// resolved at any time, including after the nodes are restarted. The intent
+	// resolution on the RHS's local range descriptor can both wake up the RHS
+	// range's Raft group and result in the wrong replica acquiring the lease.
+	storeCfg.TestingKnobs.IntentResolverKnobs.DisableAsyncIntentResolution = true
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
 		// TODO(andrei): This test was written before multiTestContexts started with
@@ -3945,6 +3951,8 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 	mtc.restart()
 
 	// Get replica from the store which isn't the leaseholder.
+	// NOTE: StoreID is 1-indexed and storeIdx is 0-indexed, so despite what
+	// this might look like, this is grabbing the replica without the lease.
 	storeIdx := int(lease.Replica.StoreID) % len(mtc.stores)
 	if repl = mtc.stores[storeIdx].LookupReplica(roachpb.RKey(splitKey)); repl == nil {
 		t.Fatal("replica should not be nil for RHS range")
