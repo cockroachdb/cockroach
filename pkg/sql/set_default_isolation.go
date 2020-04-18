@@ -14,12 +14,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (planNode, error) {
-	// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... ' above.
-	// Ensure both versions stay in sync.
+	// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... '.
 	switch n.Modes.Isolation {
 	case tree.SerializableIsolation, tree.UnspecifiedIsolation:
 		// Do nothing. All transactions execute with serializable isolation.
@@ -27,6 +25,14 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 		return nil, fmt.Errorf("unsupported default isolation level: %s", n.Modes.Isolation)
 	}
 
+	// Note: We also support SET DEFAULT_TRANSACTION_PRIORITY TO ' .... '.
+	switch n.Modes.UserPriority {
+	case tree.UnspecifiedUserPriority:
+	default:
+		p.sessionDataMutator.SetDefaultTransactionPriority(n.Modes.UserPriority)
+	}
+
+	// Note: We also support SET DEFAULT_TRANSACTION_READ_ONLY TO ' .... '.
 	switch n.Modes.ReadWriteMode {
 	case tree.ReadOnly:
 		p.sessionDataMutator.SetDefaultReadOnly(true)
@@ -35,13 +41,6 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 	case tree.UnspecifiedReadWriteMode:
 	default:
 		return nil, fmt.Errorf("unsupported default read write mode: %s", n.Modes.ReadWriteMode)
-	}
-
-	switch n.Modes.UserPriority {
-	case tree.UnspecifiedUserPriority:
-	default:
-		return nil, unimplemented.New("default transaction priority",
-			"unsupported session default: transaction priority")
 	}
 	return newZeroNode(nil /* columns */), nil
 }
