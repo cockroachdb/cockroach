@@ -278,7 +278,7 @@ serializable
 statement ok
 COMMIT
 
-# user priority
+# User priority.
 
 statement error there is no transaction in progress
 SET TRANSACTION PRIORITY LOW
@@ -368,6 +368,151 @@ normal
 
 statement ok
 COMMIT
+
+# Transaction priority can be assigned a default value.
+
+query T
+SHOW DEFAULT_TRANSACTION_PRIORITY
+----
+normal
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+normal
+
+statement ok
+SET DEFAULT_TRANSACTION_PRIORITY TO 'LOW'
+
+query T
+SHOW DEFAULT_TRANSACTION_PRIORITY
+----
+low
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+low
+
+statement ok
+SET DEFAULT_TRANSACTION_PRIORITY TO 'NORMAL'
+
+query T
+SHOW DEFAULT_TRANSACTION_PRIORITY
+----
+normal
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+normal
+
+statement ok
+SET DEFAULT_TRANSACTION_PRIORITY TO 'HIGH'
+
+query T
+SHOW DEFAULT_TRANSACTION_PRIORITY
+----
+high
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+high
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION PRIORITY LOW
+
+query T
+SHOW DEFAULT_TRANSACTION_PRIORITY
+----
+low
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+low
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION PRIORITY NORMAL
+
+query T
+SHOW DEFAULT_TRANSACTION_PRIORITY
+----
+normal
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+normal
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION PRIORITY HIGH
+
+query T
+SHOW DEFAULT_TRANSACTION_PRIORITY
+----
+high
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+high
+
+# Without the priority specified, BEGIN should use the default
+
+statement ok
+BEGIN
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+high
+
+statement ok
+COMMIT
+
+# With the priority specified, BEGIN PRIORITY overrides the default
+
+statement ok
+BEGIN TRANSACTION PRIORITY LOW
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+low
+
+statement ok
+COMMIT
+
+# Even after starting a transaction, the default priority can be overridden
+
+statement ok
+BEGIN
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+high
+
+statement ok
+SET TRANSACTION PRIORITY LOW
+
+query T
+SHOW TRANSACTION PRIORITY
+----
+low
+
+statement ok
+COMMIT
+
+statement ok
+RESET DEFAULT_TRANSACTION_PRIORITY
+
+query T
+SHOW DEFAULT_TRANSACTION_PRIORITY
+----
+normal
 
 # We can specify both isolation level and user priority.
 
@@ -464,7 +609,7 @@ serializable
 statement ok
 COMMIT
 
-# setting user priority without isolation level should not change isolation level.
+# Setting user priority without isolation level should not change isolation level
 
 statement ok
 BEGIN TRANSACTION
@@ -488,9 +633,13 @@ serializable
 statement ok
 COMMIT
 
-# restore default
 statement ok
-SET DEFAULT_TRANSACTION_ISOLATION TO 'SERIALIZABLE'
+RESET DEFAULT_TRANSACTION_ISOLATION
+
+query T
+SHOW DEFAULT_TRANSACTION_ISOLATION
+----
+serializable
 
 # SHOW TRANSACTION STATUS
 
@@ -828,7 +977,7 @@ off
 statement ok
 COMMIT
 
-# BEGIN READ WRITE overwrites READ ONLY default
+# BEGIN READ WRITE overrides READ ONLY default
 statement ok
 BEGIN READ WRITE
 

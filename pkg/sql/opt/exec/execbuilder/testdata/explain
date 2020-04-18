@@ -271,6 +271,18 @@ render                        ·            ·
 ·                             source       ·
 
 query TTT
+SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_PRIORITY] WHERE field != 'size'
+----
+·                             distributed  false
+·                             vectorized   false
+render                        ·            ·
+ └── filter                   ·            ·
+      │                       filter       variable = 'default_transaction_priority'
+      └── render              ·            ·
+           └── virtual table  ·            ·
+·                             source       ·
+
+query TTT
 SELECT * FROM [EXPLAIN SHOW TRANSACTION ISOLATION LEVEL] WHERE field != 'size'
 ----
 ·                             distributed  false

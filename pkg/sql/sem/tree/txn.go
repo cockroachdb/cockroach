@@ -12,6 +12,7 @@ package tree
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -67,6 +68,20 @@ func (up UserPriority) String() string {
 		return fmt.Sprintf("UserPriority(%d)", up)
 	}
 	return userPriorityNames[up]
+}
+
+// UserPriorityFromString converts a string into a UserPriority.
+func UserPriorityFromString(val string) (_ UserPriority, ok bool) {
+	switch strings.ToUpper(val) {
+	case "LOW":
+		return Low, true
+	case "NORMAL":
+		return Normal, true
+	case "HIGH":
+		return High, true
+	default:
+		return 0, false
+	}
 }
 
 // ReadWriteMode holds the read write mode for a transaction.

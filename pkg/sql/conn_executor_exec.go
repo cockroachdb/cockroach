@@ -959,34 +959,28 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				ex.incrementExecutedStmtCounter(stmt)
 			}
 		}()
-		pri, err := priorityToProto(s.Modes.UserPriority)
-		if err != nil {
-			return ex.makeErrEvent(err, s)
-		}
 		mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, s)
 		if err != nil {
 			return ex.makeErrEvent(err, s)
 		}
 		return eventTxnStart{ImplicitTxn: fsm.False},
 			makeEventTxnStartPayload(
-				pri, mode, sqlTs,
+				ex.txnPriorityWithSessionDefault(s.Modes.UserPriority),
+				mode,
+				sqlTs,
 				historicalTs,
 				ex.transitionCtx)
 	case *tree.CommitTransaction, *tree.ReleaseSavepoint,
 		*tree.RollbackTransaction, *tree.SetTransaction, *tree.Savepoint:
 		return ex.makeErrEvent(errNoTransactionInProgress, stmt.AST)
 	default:
-		mode := tree.ReadWrite
-		if ex.sessionData.DefaultReadOnly {
-			mode = tree.ReadOnly
-		}
 		// NB: Implicit transactions are created without a historical timestamp even
 		// though the statement might contain an AOST clause. In these cases the
 		// clause is evaluated and applied execStmtInOpenState.
 		return eventTxnStart{ImplicitTxn: fsm.True},
 			makeEventTxnStartPayload(
-				roachpb.NormalUserPriority,
-				mode,
+				ex.txnPriorityWithSessionDefault(tree.UnspecifiedUserPriority),
+				ex.readWriteModeWithSessionDefault(tree.UnspecifiedReadWriteMode),
 				ex.server.cfg.Clock.PhysicalTime(),
 				nil, /* historicalTimestamp */
 				ex.transitionCtx)
