@@ -36,8 +36,8 @@ import (
 // use a different plan builder.
 // TODO(rytaft,andyk): study and reuse this.
 type SchemaResolver interface {
-	tree.TableNameExistingResolver
-	tree.TableNameTargetResolver
+	tree.ObjectNameExistingResolver
+	tree.ObjectNameTargetResolver
 
 	Txn() *kv.Txn
 	LogicalSchemaAccessor() SchemaAccessor
@@ -80,17 +80,17 @@ func GetObjectNames(
 		})
 }
 
-// ResolveExistingObject looks up an existing object.
+// ResolveExistingTableObject looks up an existing Table backed object.
 // If required is true, an error is returned if the object does not exist.
 // Optionally, if a desired descriptor type is specified, that type is checked.
 //
 // The object name is modified in-place with the result of the name
 // resolution, if successful. It is not modified in case of error or
 // if no object is found.
-func ResolveExistingObject(
+func ResolveExistingTableObject(
 	ctx context.Context,
 	sc SchemaResolver,
-	tn *ObjectName,
+	tn *TableName,
 	lookupFlags tree.ObjectLookupFlags,
 	requiredType ResolveRequiredType,
 ) (res *ImmutableTableDescriptor, err error) {
@@ -101,17 +101,17 @@ func ResolveExistingObject(
 	return desc.(*ImmutableTableDescriptor), nil
 }
 
-// ResolveMutableExistingObject looks up an existing mutable object.
+// ResolveMutableExistingTableObject looks up an existing mutable Table object.
 // If required is true, an error is returned if the object does not exist.
 // Optionally, if a desired descriptor type is specified, that type is checked.
 //
 // The object name is modified in-place with the result of the name
 // resolution, if successful. It is not modified in case of error or
 // if no object is found.
-func ResolveMutableExistingObject(
+func ResolveMutableExistingTableObject(
 	ctx context.Context,
 	sc SchemaResolver,
-	tn *ObjectName,
+	tn *TableName,
 	required bool,
 	requiredType ResolveRequiredType,
 ) (res *MutableTableDescriptor, err error) {
@@ -129,11 +129,11 @@ func ResolveMutableExistingObject(
 func resolveExistingObjectImpl(
 	ctx context.Context,
 	sc SchemaResolver,
-	tn *ObjectName,
+	tn ObjectName,
 	lookupFlags tree.ObjectLookupFlags,
 	requiredType ResolveRequiredType,
 ) (res tree.NameResolutionResult, err error) {
-	found, descI, err := tn.ResolveExisting(ctx, sc, lookupFlags, sc.CurrentDatabase(), sc.CurrentSearchPath())
+	found, descI, err := tree.ResolveExisting(ctx, tn, sc, lookupFlags, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +183,7 @@ func resolveExistingObjectImpl(
 // var someVar T
 // var err error
 // p.runWithOptions(resolveFlags{skipCache: true}, func() {
-//    someVar, err = ResolveExistingObject(ctx, p, ...)
+//    someVar, err = ResolveExistingTableObject(ctx, p, ...)
 // })
 // if err != nil { ... }
 // use(someVar)
@@ -200,17 +200,17 @@ type resolveFlags struct {
 }
 
 func (p *planner) ResolveMutableTableDescriptor(
-	ctx context.Context, tn *ObjectName, required bool, requiredType ResolveRequiredType,
+	ctx context.Context, tn *TableName, required bool, requiredType ResolveRequiredType,
 ) (table *MutableTableDescriptor, err error) {
-	return ResolveMutableExistingObject(ctx, p, tn, required, requiredType)
+	return ResolveMutableExistingTableObject(ctx, p, tn, required, requiredType)
 }
 
 func (p *planner) ResolveUncachedTableDescriptor(
-	ctx context.Context, tn *ObjectName, required bool, requiredType ResolveRequiredType,
+	ctx context.Context, tn *TableName, required bool, requiredType ResolveRequiredType,
 ) (table *ImmutableTableDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		lookupFlags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: required}}
-		table, err = ResolveExistingObject(ctx, p, tn, lookupFlags, requiredType)
+		table, err = ResolveExistingTableObject(ctx, p, tn, lookupFlags, requiredType)
 	})
 	return table, err
 }
@@ -222,9 +222,9 @@ func (p *planner) ResolveUncachedTableDescriptor(
 // The object name is modified in-place with the result of the name
 // resolution.
 func ResolveTargetObject(
-	ctx context.Context, sc SchemaResolver, tn *ObjectName,
+	ctx context.Context, sc SchemaResolver, tn *TableName,
 ) (res *DatabaseDescriptor, err error) {
-	found, descI, err := tn.ResolveTarget(ctx, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
+	found, descI, err := tree.ResolveTarget(ctx, tn, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +246,7 @@ func ResolveTargetObject(
 }
 
 func (p *planner) ResolveUncachedDatabase(
-	ctx context.Context, tn *ObjectName,
+	ctx context.Context, tn *TableName,
 ) (res *UncachedDatabaseDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		res, err = ResolveTargetObject(ctx, p, tn)
@@ -254,7 +254,7 @@ func (p *planner) ResolveUncachedDatabase(
 	return res, err
 }
 
-// ResolveRequiredType can be passed to the ResolveExistingObject function to
+// ResolveRequiredType can be passed to the ResolveExistingTableObject function to
 // require the returned descriptor to be of a specific type.
 type ResolveRequiredType int
 
@@ -274,7 +274,7 @@ var requiredTypeNames = [...]string{
 	ResolveRequireSequenceDesc:    "sequence",
 }
 
-// LookupSchema implements the tree.TableNameTargetResolver interface.
+// LookupSchema implements the tree.ObjectNameTargetResolver interface.
 func (p *planner) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (found bool, scMeta tree.SchemaMeta, err error) {
@@ -290,7 +290,7 @@ func (p *planner) LookupSchema(
 	return found, dbDesc, nil
 }
 
-// LookupObject implements the tree.TableNameExistingResolver interface.
+// LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (p *planner) LookupObject(
 	ctx context.Context, lookupFlags tree.ObjectLookupFlags, dbName, scName, tbName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
@@ -351,7 +351,7 @@ func getDescriptorsFromTargetList(
 			return nil, err
 		}
 		for i := range tableNames {
-			descriptor, err := ResolveMutableExistingObject(ctx, p, &tableNames[i], true, ResolveAnyDescType)
+			descriptor, err := ResolveMutableExistingTableObject(ctx, p, &tableNames[i], true, ResolveAnyDescType)
 			if err != nil {
 				return nil, err
 			}
@@ -418,7 +418,7 @@ func findTableContainingIndex(
 	result = nil
 	for i := range tns {
 		tn := &tns[i]
-		tableDesc, err := ResolveMutableExistingObject(ctx, sc, tn, false /*required*/, ResolveAnyDescType)
+		tableDesc, err := ResolveMutableExistingTableObject(ctx, sc, tn, false /*required*/, ResolveAnyDescType)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -475,7 +475,7 @@ func expandIndexName(
 	tn = &index.Table
 	if tn.Table() != "" {
 		// The index and its table prefix must exist already. Resolve the table.
-		desc, err = ResolveMutableExistingObject(ctx, sc, tn, requireTable, ResolveRequireTableDesc)
+		desc, err = ResolveMutableExistingTableObject(ctx, sc, tn, requireTable, ResolveRequireTableDesc)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -566,7 +566,7 @@ type fkSelfResolver struct {
 
 var _ SchemaResolver = &fkSelfResolver{}
 
-// LookupObject implements the tree.TableNameExistingResolver interface.
+// LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (r *fkSelfResolver) LookupObject(
 	ctx context.Context, lookupFlags tree.ObjectLookupFlags, dbName, scName, tbName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
@@ -719,7 +719,7 @@ func (p *planner) ResolveMutableTableDescriptorEx(
 	requiredType ResolveRequiredType,
 ) (*MutableTableDescriptor, error) {
 	tn := name.ToTableName()
-	table, err := ResolveMutableExistingObject(ctx, p, &tn, required, requiredType)
+	table, err := ResolveMutableExistingTableObject(ctx, p, &tn, required, requiredType)
 	if err != nil {
 		return nil, err
 	}
@@ -763,7 +763,7 @@ func (p *planner) ResolveUncachedTableDescriptorEx(
 	return table, err
 }
 
-// See ResolveExistingObject.
+// See ResolveExistingTableObject.
 func (p *planner) ResolveExistingObjectEx(
 	ctx context.Context,
 	name *tree.UnresolvedObjectName,

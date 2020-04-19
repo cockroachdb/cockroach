@@ -139,8 +139,9 @@ func (oc *optCatalog) ResolveSchema(
 	oc.tn.TableName = ""
 	oc.tn.TableNamePrefix = *name
 
-	found, desc, err := oc.tn.ResolveTarget(
+	found, desc, err := tree.ResolveTarget(
 		ctx,
+		&oc.tn,
 		oc.planner,
 		oc.planner.CurrentDatabase(),
 		oc.planner.CurrentSearchPath(),
@@ -177,7 +178,7 @@ func (oc *optCatalog) ResolveDataSource(
 	}
 
 	oc.tn = *name
-	desc, err := ResolveExistingObject(ctx, oc.planner, &oc.tn, tree.ObjectLookupFlagsWithRequired(), ResolveAnyDescType)
+	desc, err := ResolveExistingTableObject(ctx, oc.planner, &oc.tn, tree.ObjectLookupFlagsWithRequired(), ResolveAnyDescType)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}

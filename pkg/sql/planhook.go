@@ -89,7 +89,7 @@ type PlanHookState interface {
 	ResolveUncachedDatabaseByName(
 		ctx context.Context, dbName string, required bool) (*UncachedDatabaseDescriptor, error)
 	ResolveMutableTableDescriptor(
-		ctx context.Context, tn *ObjectName, required bool, requiredType ResolveRequiredType,
+		ctx context.Context, tn *TableName, required bool, requiredType ResolveRequiredType,
 	) (table *MutableTableDescriptor, err error)
 	ShowCreate(
 		ctx context.Context, dbPrefix string, allDescs []sqlbase.Descriptor, desc *sqlbase.TableDescriptor, ignoreFKs shouldOmitFKClausesFromCreate,

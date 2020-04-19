@@ -35,7 +35,13 @@ import (
 type (
 	// ObjectName is provided for convenience and to make the interface
 	// definitions below more intuitive.
-	ObjectName = tree.TableName
+	ObjectName = tree.ObjectName
+	// TableName is provided for convenience and to make the interface
+	// definitions below more intuitive.
+	TableName = tree.TableName
+	// TypeName is provided for convenience and to make the interface
+	// definitions below more intuitive.
+	TypeName = tree.TypeName
 	// DatabaseDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	DatabaseDescriptor = sqlbase.DatabaseDescriptor
@@ -90,5 +96,5 @@ type SchemaAccessor interface {
 	// descriptor and that of its parent database. If the object is not
 	// found and flags.required is true, an error is returned, otherwise
 	// a nil reference is returned.
-	GetObjectDesc(ctx context.Context, txn *kv.Txn, settings *cluster.Settings, name *ObjectName, flags tree.ObjectLookupFlags) (ObjectDescriptor, error)
+	GetObjectDesc(ctx context.Context, txn *kv.Txn, settings *cluster.Settings, name ObjectName, flags tree.ObjectLookupFlags) (ObjectDescriptor, error)
 }

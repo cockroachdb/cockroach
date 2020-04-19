@@ -63,7 +63,7 @@ type descriptorResolver struct {
 	objsByName map[sqlbase.ID]map[string]sqlbase.ID
 }
 
-// LookupSchema implements the tree.TableNameTargetResolver interface.
+// LookupSchema implements the tree.ObjectNameTargetResolver interface.
 func (r *descriptorResolver) LookupSchema(
 	_ context.Context, dbName, scName string,
 ) (bool, tree.SchemaMeta, error) {
@@ -76,7 +76,7 @@ func (r *descriptorResolver) LookupSchema(
 	return false, nil, nil
 }
 
-// LookupObject implements the tree.TableNameExistingResolver interface.
+// LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (r *descriptorResolver) LookupObject(
 	_ context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (bool, tree.NameResolutionResult, error) {
@@ -211,7 +211,7 @@ func descriptorsMatchingTargets(
 
 		switch p := pattern.(type) {
 		case *tree.TableName:
-			found, descI, err := p.ResolveExisting(ctx, resolver, tree.ObjectLookupFlags{}, currentDatabase, searchPath)
+			found, descI, err := tree.ResolveExisting(ctx, p, resolver, tree.ObjectLookupFlags{}, currentDatabase, searchPath)
 			if err != nil {
 				return ret, err
 			}

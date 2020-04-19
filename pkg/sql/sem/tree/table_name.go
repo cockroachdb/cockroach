@@ -10,6 +10,34 @@
 
 package tree
 
+// ObjectName is an interface for operating on names of qualified objects
+// including the types, tables, views and sequences.
+type ObjectName interface {
+	NodeFormatter
+
+	Catalog() string
+	SetCatalog(Name)
+
+	Schema() string
+	SetSchema(Name)
+
+	Object() string
+
+	HasExplicitCatalog() bool
+	SetExplicitCatalog(bool)
+
+	HasExplicitSchema() bool
+	SetExplicitSchema(bool)
+
+	objectName()
+}
+
+var _ ObjectName = &TableName{}
+var _ ObjectName = &TypeName{}
+
+func (t *TableName) objectName() {}
+func (t *TypeName) objectName()  {}
+
 // TableName corresponds to the name of a table in a FROM clause,
 // INSERT or UPDATE statement, etc.
 //
@@ -34,6 +62,11 @@ type tblName struct {
 	// TableNamePrefix is the path to the object.  This can be modified
 	// further by name resolution, see name_resolution.go.
 	TableNamePrefix
+}
+
+// Object implements the ObjectName interface.
+func (t *tblName) Object() string {
+	return string(t.TableName)
 }
 
 // TableNamePrefix corresponds to the path prefix of a table name.
@@ -68,9 +101,39 @@ func (tp *TableNamePrefix) Schema() string {
 	return string(tp.SchemaName)
 }
 
+// SetSchema implements the ObjectName interface.
+func (tp *TableNamePrefix) SetSchema(schema Name) {
+	tp.SchemaName = schema
+}
+
 // Catalog retrieves the unqualified catalog name.
 func (tp *TableNamePrefix) Catalog() string {
 	return string(tp.CatalogName)
+}
+
+// SetCatalog implements the ObjectName interface.
+func (tp *TableNamePrefix) SetCatalog(catalog Name) {
+	tp.CatalogName = catalog
+}
+
+// HasExplicitCatalog implements the ObjectName interface.
+func (tp *TableNamePrefix) HasExplicitCatalog() bool {
+	return tp.ExplicitCatalog
+}
+
+// SetExplicitCatalog implements the ObjectName interface.
+func (tp *TableNamePrefix) SetExplicitCatalog(val bool) {
+	tp.ExplicitCatalog = val
+}
+
+// HasExplicitSchema implements the ObjectName interface.
+func (tp *TableNamePrefix) HasExplicitSchema() bool {
+	return tp.ExplicitSchema
+}
+
+// SetExplicitSchema implements the ObjectName interface.
+func (tp *TableNamePrefix) SetExplicitSchema(val bool) {
+	tp.ExplicitSchema = val
 }
 
 // Format implements the NodeFormatter interface.
@@ -192,6 +255,35 @@ func makeTableNamePrefixFromUnresolvedName(n *UnresolvedName) TableNamePrefix {
 		ExplicitSchema:  n.NumParts >= 2,
 		ExplicitCatalog: n.NumParts >= 3,
 	}
+}
+
+// TypeName corresponds to the name of a type in an expression.
+// It shares internals with TableName, but is separated so that
+// resolution can perform differently on tables and types, but
+// can share as much functionality as possible.
+type TypeName struct {
+	tblName
+}
+
+// Satisfy the linter.
+var _ = (*TypeName).Type
+
+// Type returns the unqualified type name.
+func (t *TypeName) Type() string {
+	return string(t.TableName)
+}
+
+// Format implements the NodeFormatter interface.
+func (t *TypeName) Format(ctx *FmtCtx) {
+	t.TableNamePrefix.Format(ctx)
+	if t.HasExplicitSchema() || ctx.alwaysFormatTablePrefix() {
+		ctx.WriteByte('.')
+	}
+	ctx.FormatNode(&t.TableName)
+}
+
+func (t *TypeName) String() string {
+	return AsString(t)
 }
 
 // TableNames represents a comma separated list (see the Format method)

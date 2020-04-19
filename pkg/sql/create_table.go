@@ -628,7 +628,7 @@ func ResolveFK(
 		originColumnIDs[i] = col.ID
 	}
 
-	target, err := ResolveMutableExistingObject(ctx, sc, &d.Table, true /*required*/, ResolveRequireTableDesc)
+	target, err := ResolveMutableExistingTableObject(ctx, sc, &d.Table, true /*required*/, ResolveRequireTableDesc)
 	if err != nil {
 		return err
 	}
@@ -897,7 +897,7 @@ func addInterleave(
 			7854, "unsupported shorthand %s", interleave.DropBehavior)
 	}
 
-	parentTable, err := ResolveExistingObject(
+	parentTable, err := ResolveExistingTableObject(
 		ctx, vt, &interleave.Parent, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc,
 	)
 	if err != nil {

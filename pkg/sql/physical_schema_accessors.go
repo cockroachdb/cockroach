@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // This file provides reference implementations of the schema accessor
@@ -169,7 +170,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	ctx context.Context,
 	txn *kv.Txn,
 	settings *cluster.Settings,
-	name *ObjectName,
+	name ObjectName,
 	flags tree.ObjectLookupFlags,
 ) (ObjectDescriptor, error) {
 	// Look up the database ID.
@@ -194,10 +195,10 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	// Note: we can only bypass name to ID resolution. The desc
 	// lookup below must still go through KV because system descriptors
 	// can be modified on a running cluster.
-	descID := sqlbase.LookupSystemTableDescriptorID(ctx, settings, dbID, name.Table())
+	descID := sqlbase.LookupSystemTableDescriptorID(ctx, settings, dbID, name.Object())
 	if descID == sqlbase.InvalidID {
 		var found bool
-		found, descID, err = sqlbase.LookupObjectID(ctx, txn, dbID, schemaID, name.Table())
+		found, descID, err = sqlbase.LookupObjectID(ctx, txn, dbID, schemaID, name.Object())
 		if err != nil {
 			return nil, err
 		}
@@ -210,35 +211,40 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 		}
 	}
 
-	// Look up the table using the discovered database descriptor.
-	desc := &sqlbase.TableDescriptor{}
-	err = getDescriptorByID(ctx, txn, descID, desc)
-	if err != nil {
-		return nil, err
-	}
+	switch name.(type) {
+	case *TypeName:
+		return nil, errors.AssertionFailedf("physical access for types is unsupported")
+	case *TableName:
+		// Look up the table using the discovered database descriptor.
+		desc := &sqlbase.TableDescriptor{}
+		err = getDescriptorByID(ctx, txn, descID, desc)
+		if err != nil {
+			return nil, err
+		}
 
-	// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
-	// OFFLINE if the relevant flag is set.
-	acceptableStates := map[sqlbase.TableDescriptor_State]bool{
-		sqlbase.TableDescriptor_ADD:     true,
-		sqlbase.TableDescriptor_PUBLIC:  true,
-		sqlbase.TableDescriptor_OFFLINE: flags.IncludeOffline,
-	}
-	if acceptableStates[desc.State] {
-		// Immediately after a RENAME an old name still points to the
-		// descriptor during the drain phase for the name. Do not
-		// return a descriptor during draining.
-		//
-		// The second or condition ensures that clusters < 20.1 access the
-		// system.namespace_deprecated table when selecting from system.namespace.
-		// As this table can not be renamed by users, it is okay that the first
-		// check fails.
-		if desc.Name == name.Table() ||
-			name.Table() == sqlbase.NamespaceTableName && name.Catalog() == sqlbase.SystemDB.Name {
-			if flags.RequireMutable {
-				return sqlbase.NewMutableExistingTableDescriptor(*desc), nil
+		// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
+		// OFFLINE if the relevant flag is set.
+		acceptableStates := map[sqlbase.TableDescriptor_State]bool{
+			sqlbase.TableDescriptor_ADD:     true,
+			sqlbase.TableDescriptor_PUBLIC:  true,
+			sqlbase.TableDescriptor_OFFLINE: flags.IncludeOffline,
+		}
+		if acceptableStates[desc.State] {
+			// Immediately after a RENAME an old name still points to the
+			// descriptor during the drain phase for the name. Do not
+			// return a descriptor during draining.
+			//
+			// The second or condition ensures that clusters < 20.1 access the
+			// system.namespace_deprecated table when selecting from system.namespace.
+			// As this table can not be renamed by users, it is okay that the first
+			// check fails.
+			if desc.Name == name.Object() ||
+				name.Object() == sqlbase.NamespaceTableName && name.Catalog() == sqlbase.SystemDB.Name {
+				if flags.RequireMutable {
+					return sqlbase.NewMutableExistingTableDescriptor(*desc), nil
+				}
+				return sqlbase.NewImmutableTableDescriptor(*desc), nil
 			}
-			return sqlbase.NewImmutableTableDescriptor(*desc), nil
 		}
 	}
 
@@ -295,21 +301,29 @@ func (a *CachedPhysicalAccessor) GetObjectDesc(
 	ctx context.Context,
 	txn *kv.Txn,
 	settings *cluster.Settings,
-	name *ObjectName,
+	name ObjectName,
 	flags tree.ObjectLookupFlags,
 ) (ObjectDescriptor, error) {
-	if flags.RequireMutable {
-		table, err := a.tc.getMutableTableDescriptor(ctx, txn, name, flags)
+	switch t := name.(type) {
+	case *TableName:
+		if flags.RequireMutable {
+			table, err := a.tc.getMutableTableDescriptor(ctx, txn, t, flags)
+			if table == nil {
+				// return nil interface.
+				return nil, err
+			}
+			return table, err
+		}
+		table, err := a.tc.getTableVersion(ctx, txn, t, flags)
 		if table == nil {
 			// return nil interface.
 			return nil, err
 		}
 		return table, err
+	case *TypeName:
+		// We don't support caching for types yet.
+		return UncachedPhysicalAccessor{}.GetObjectDesc(ctx, txn, settings, name, flags)
+	default:
+		return nil, errors.AssertionFailedf("unexpected object name variant %v", t)
 	}
-	table, err := a.tc.getTableVersion(ctx, txn, name, flags)
-	if table == nil {
-		// return nil interface.
-		return nil, err
-	}
-	return table, err
 }

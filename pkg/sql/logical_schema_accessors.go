@@ -74,28 +74,30 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 	ctx context.Context,
 	txn *kv.Txn,
 	settings *cluster.Settings,
-	name *ObjectName,
+	obj ObjectName,
 	flags tree.ObjectLookupFlags,
 ) (ObjectDescriptor, error) {
-	if scEntry, ok := l.vt.getVirtualSchemaEntry(name.Schema()); ok {
-		tableName := name.Table()
-		if t, ok := scEntry.defs[tableName]; ok {
-			if flags.RequireMutable {
-				return sqlbase.NewMutableExistingTableDescriptor(*t.desc), nil
+	if name, ok := obj.(*TableName); ok {
+		if scEntry, ok := l.vt.getVirtualSchemaEntry(name.Schema()); ok {
+			tableName := name.Table()
+			if t, ok := scEntry.defs[tableName]; ok {
+				if flags.RequireMutable {
+					return sqlbase.NewMutableExistingTableDescriptor(*t.desc), nil
+				}
+				return sqlbase.NewImmutableTableDescriptor(*t.desc), nil
 			}
-			return sqlbase.NewImmutableTableDescriptor(*t.desc), nil
-		}
-		if _, ok := scEntry.allTableNames[tableName]; ok {
-			return nil, unimplemented.Newf(name.Schema()+"."+tableName,
-				"virtual schema table not implemented: %s.%s", name.Schema(), tableName)
-		}
+			if _, ok := scEntry.allTableNames[tableName]; ok {
+				return nil, unimplemented.Newf(name.Schema()+"."+tableName,
+					"virtual schema table not implemented: %s.%s", name.Schema(), tableName)
+			}
 
-		if flags.Required {
-			return nil, sqlbase.NewUndefinedRelationError(name)
+			if flags.Required {
+				return nil, sqlbase.NewUndefinedRelationError(name)
+			}
+			return nil, nil
 		}
-		return nil, nil
 	}
 
 	// Fallthrough.
-	return l.SchemaAccessor.GetObjectDesc(ctx, txn, settings, name, flags)
+	return l.SchemaAccessor.GetObjectDesc(ctx, txn, settings, obj, flags)
 }

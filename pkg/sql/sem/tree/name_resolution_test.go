@@ -794,9 +794,9 @@ func TestResolveTablePatternOrName(t *testing.T) {
 				case *tree.TableName:
 					if tc.expected {
 						flags := tree.ObjectLookupFlags{}
-						found, obMeta, err = tpv.ResolveExisting(ctx, fakeResolver, flags, tc.curDb, tc.searchPath)
+						found, obMeta, err = tree.ResolveExisting(ctx, tpv, fakeResolver, flags, tc.curDb, tc.searchPath)
 					} else {
-						found, scMeta, err = tpv.ResolveTarget(ctx, fakeResolver, tc.curDb, tc.searchPath)
+						found, scMeta, err = tree.ResolveTarget(ctx, tpv, fakeResolver, tc.curDb, tc.searchPath)
 					}
 					scPrefix = tpv.Schema()
 					ctPrefix = tpv.Catalog()

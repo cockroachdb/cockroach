@@ -276,8 +276,7 @@ func importPlanHook(
 		var parentID sqlbase.ID
 		if table != nil {
 			// We have a target table, so it might specify a DB in its name.
-			found, descI, err := table.ResolveTarget(ctx,
-				p, p.SessionData().Database, p.SessionData().SearchPath)
+			found, descI, err := tree.ResolveTarget(ctx, table, p, p.SessionData().Database, p.SessionData().SearchPath)
 			if err != nil {
 				return pgerror.Wrap(err, pgcode.UndefinedTable,
 					"resolving target import name")
