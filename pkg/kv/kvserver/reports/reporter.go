@@ -234,7 +234,7 @@ func (stats *Reporter) update(
 			return errors.Wrap(err, "failed to save locality report")
 		}
 	}
-	if !localityStatsVisitor.failed() {
+	if !statusVisitor.failed() {
 		if err := statusVisitor.report.Save(
 			ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
 		); err != nil {
