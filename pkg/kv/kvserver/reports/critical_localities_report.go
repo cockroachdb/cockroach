@@ -283,6 +283,7 @@ func makeLocalityStatsVisitor(
 		nodeChecker:         nodeChecker,
 		report:              saver,
 	}
+	v.reset(ctx)
 	return v
 }
 
@@ -293,7 +294,13 @@ func (v *criticalLocalitiesVisitor) failed() bool {
 
 // reset is part of the rangeVisitor interface.
 func (v *criticalLocalitiesVisitor) reset(ctx context.Context) {
-	v.visitErr = false
+	*v = criticalLocalitiesVisitor{
+		localityConstraints: v.localityConstraints,
+		cfg:                 v.cfg,
+		storeResolver:       v.storeResolver,
+		nodeChecker:         v.nodeChecker,
+		report:              v.report,
+	}
 	v.report.resetReport()
 }
 

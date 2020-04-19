@@ -287,10 +287,13 @@ func (v *replicationStatsVisitor) failed() bool {
 
 // reset is part of the rangeVisitor interface.
 func (v *replicationStatsVisitor) reset(ctx context.Context) {
-	v.visitErr = false
+	*v = replicationStatsVisitor{
+		cfg:             v.cfg,
+		nodeChecker:     v.nodeChecker,
+		report:          v.report,
+		prevNumReplicas: -1,
+	}
 	v.report.resetReport()
-	v.prevZoneKey = ZoneKey{}
-	v.prevNumReplicas = -1
 
 	// Iterate through all the zone configs to create report entries for all the
 	// zones that have constraints. Otherwise, just iterating through the ranges
