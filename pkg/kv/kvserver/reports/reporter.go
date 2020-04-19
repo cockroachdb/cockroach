@@ -174,8 +174,6 @@ func (stats *Reporter) update(
 		return nil
 	}
 
-	localityConstraints := stats.computeLocalityConstraints()
-
 	allStores := stats.storePool.GetStores()
 	var getStoresFromGossip StoreResolver = func(
 		r *roachpb.RangeDescriptor,
@@ -197,11 +195,19 @@ func (stats *Reporter) update(
 		return isLiveMap[nodeID].IsLive
 	}
 
+	nodeLocalities := make(map[roachpb.NodeID]roachpb.Locality, len(allStores))
+	for _, storeDesc := range allStores {
+		nodeDesc := storeDesc.Node
+		// Note: We might overwrite the node's localities here. We assume that all
+		// the stores for a node have the same node descriptor.
+		nodeLocalities[nodeDesc.NodeID] = nodeDesc.Locality
+	}
+
 	// Create the visitors that we're going to pass to visitRanges() below.
 	constraintConfVisitor := makeConstraintConformanceVisitor(
 		ctx, stats.latestConfig, getStoresFromGossip)
 	localityStatsVisitor := makeCriticalLocalitiesVisitor(
-		ctx, localityConstraints, stats.latestConfig,
+		ctx, nodeLocalities, stats.latestConfig,
 		getStoresFromGossip, isNodeLive)
 	replicationStatsVisitor := makeReplicationStatsVisitor(ctx, stats.latestConfig, isNodeLive)
 
@@ -263,35 +269,6 @@ func (stats *Reporter) meta1LeaseHolderStore() *kvserver.Store {
 
 func (stats *Reporter) updateLatestConfig() {
 	stats.latestConfig = stats.meta1LeaseHolder.Gossip().GetSystemConfig()
-}
-
-// computeLocalityConstraints returns a set of synthetic constraints for all the
-// localities in the cluster. They will be used to check whether any locality is
-// critical. If a node has a tiered locality like "region:us-east,dc:new-york",
-// we'll return constraints {"region:us-east", "region:us-east,dc:new-york"}.
-func (stats *Reporter) computeLocalityConstraints() []zonepb.ConstraintsConjunction {
-	// localityConstraintsByName de-duplicates localities across nodes.
-	localityConstraintsByName := make(map[string]zonepb.ConstraintsConjunction, 16)
-	for _, sd := range stats.storePool.GetStores() {
-		// For each tier t, return a constraint covering all the higher-order tiers
-		// up to and including t.
-		for i := range sd.Node.Locality.Tiers {
-			c := zonepb.ConstraintsConjunction{
-				Constraints: make([]zonepb.Constraint, 0, i+1),
-			}
-			for _, highTier := range sd.Node.Locality.Tiers[:i+1] {
-				c.Constraints = append(c.Constraints, zonepb.Constraint{
-					Type: zonepb.Constraint_REQUIRED, Key: highTier.Key, Value: highTier.Value,
-				})
-			}
-			localityConstraintsByName[c.String()] = c
-		}
-	}
-	res := make([]zonepb.ConstraintsConjunction, 0, len(localityConstraintsByName))
-	for _, c := range localityConstraintsByName {
-		res = append(res, c)
-	}
-	return res
 }
 
 // nodeChecker checks whether a node is to be considered alive or not.
