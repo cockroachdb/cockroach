@@ -63,3 +63,88 @@ query TT
 SELECT NULL::geometry, NULL::geography
 ----
 NULL  NULL
+
+subtest binary_predicates
+
+statement ok
+CREATE TABLE geom_binary_predicates_test (
+  dsc TEXT PRIMARY KEY,
+  geom GEOMETRY
+)
+
+statement ok
+INSERT INTO geom_binary_predicates_test VALUES
+  ('NULL', NULL),
+  ('Square (left)', 'POLYGON((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0))'),
+  ('Point middle of Left Square', 'POINT(-0.5 0.5)'),
+  ('Square (right)', 'POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))'),
+  ('Point middle of Right Square', 'POINT(0.5 0.5)'),
+  ('Square overlapping left and right square', 'POLYGON((-0.1 0.0, 1.0 0.0, 1.0 1.0, -0.1 1.0, -0.1 0.0))'),
+  ('Line going through left and right square', 'LINESTRING(-0.5 0.5, 0.5 0.5)')
+
+query TTBBBBBBBBB
+SELECT
+  a.dsc,
+  b.dsc,
+  ST_Covers(a.geom, b.geom),
+  ST_CoveredBy(a.geom, b.geom),
+  ST_Contains(a.geom, b.geom),
+  ST_Crosses(a.geom, b.geom),
+  ST_Equals(a.geom, b.geom),
+  ST_Intersects(a.geom, b.geom),
+  ST_Overlaps(a.geom, b.geom),
+  ST_Touches(a.geom, b.geom),
+  ST_Within(a.geom, b.geom)
+FROM geom_binary_predicates_test a
+JOIN geom_binary_predicates_test b ON (1=1)
+ORDER BY a.dsc, b.dsc
+----
+Line going through left and right square  Line going through left and right square  true   true   true   false  true   true   false  false  true
+Line going through left and right square  NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Line going through left and right square  Point middle of Left Square               true   false  false  false  false  true   false  true   false
+Line going through left and right square  Point middle of Right Square              true   false  false  false  false  true   false  true   false
+Line going through left and right square  Square (left)                             false  false  false  true   false  true   false  false  false
+Line going through left and right square  Square (right)                            false  false  false  true   false  true   false  false  false
+Line going through left and right square  Square overlapping left and right square  false  false  false  true   false  true   false  false  false
+NULL                                      Line going through left and right square  NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+NULL                                      NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+NULL                                      Point middle of Left Square               NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+NULL                                      Point middle of Right Square              NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+NULL                                      Square (left)                             NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+NULL                                      Square (right)                            NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+NULL                                      Square overlapping left and right square  NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Point middle of Left Square               Line going through left and right square  false  true   false  false  false  true   false  true   false
+Point middle of Left Square               NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Point middle of Left Square               Point middle of Left Square               true   true   true   false  true   true   false  false  true
+Point middle of Left Square               Point middle of Right Square              false  false  false  false  false  false  false  false  false
+Point middle of Left Square               Square (left)                             false  true   false  false  false  true   false  false  true
+Point middle of Left Square               Square (right)                            false  false  false  false  false  false  false  false  false
+Point middle of Left Square               Square overlapping left and right square  false  false  false  false  false  false  false  false  false
+Point middle of Right Square              Line going through left and right square  false  true   false  false  false  true   false  true   false
+Point middle of Right Square              NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Point middle of Right Square              Point middle of Left Square               false  false  false  false  false  false  false  false  false
+Point middle of Right Square              Point middle of Right Square              true   true   true   false  true   true   false  false  true
+Point middle of Right Square              Square (left)                             false  false  false  false  false  false  false  false  false
+Point middle of Right Square              Square (right)                            false  true   false  false  false  true   false  false  true
+Point middle of Right Square              Square overlapping left and right square  false  true   false  false  false  true   false  false  true
+Square (left)                             Line going through left and right square  false  false  false  true   false  true   false  false  false
+Square (left)                             NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Square (left)                             Point middle of Left Square               true   false  true   false  false  true   false  false  false
+Square (left)                             Point middle of Right Square              false  false  false  false  false  false  false  false  false
+Square (left)                             Square (left)                             true   true   true   false  true   true   false  false  true
+Square (left)                             Square (right)                            false  false  false  false  false  true   false  true   false
+Square (left)                             Square overlapping left and right square  false  false  false  false  false  true   true   false  false
+Square (right)                            Line going through left and right square  false  false  false  true   false  true   false  false  false
+Square (right)                            NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Square (right)                            Point middle of Left Square               false  false  false  false  false  false  false  false  false
+Square (right)                            Point middle of Right Square              true   false  true   false  false  true   false  false  false
+Square (right)                            Square (left)                             false  false  false  false  false  true   false  true   false
+Square (right)                            Square (right)                            true   true   true   false  true   true   false  false  true
+Square (right)                            Square overlapping left and right square  false  true   false  false  false  true   false  false  true
+Square overlapping left and right square  Line going through left and right square  false  false  false  true   false  true   false  false  false
+Square overlapping left and right square  NULL                                      NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL   NULL
+Square overlapping left and right square  Point middle of Left Square               false  false  false  false  false  false  false  false  false
+Square overlapping left and right square  Point middle of Right Square              true   false  true   false  false  true   false  false  false
+Square overlapping left and right square  Square (left)                             false  false  false  false  false  true   true   false  false
+Square overlapping left and right square  Square (right)                            true   false  true   false  false  true   false  false  false
+Square overlapping left and right square  Square overlapping left and right square  true   true   true   false  true   true   false  false  true

@@ -34,6 +34,7 @@ func init() {
 	initAggregateBuiltins()
 	initWindowBuiltins()
 	initGeneratorBuiltins()
+	initGeoBuiltins()
 	initPGBuiltins()
 
 	AllBuiltinNames = make([]string, 0, len(builtins))
