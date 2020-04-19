@@ -378,11 +378,8 @@ func (v *replicationStatsVisitor) visitNewZone(
 }
 
 // visitSameZone is part of the rangeVisitor interface.
-func (v *replicationStatsVisitor) visitSameZone(
-	ctx context.Context, r *roachpb.RangeDescriptor,
-) error {
+func (v *replicationStatsVisitor) visitSameZone(ctx context.Context, r *roachpb.RangeDescriptor) {
 	v.countRange(v.prevZoneKey, v.prevNumReplicas, r)
-	return nil
 }
 
 func (v *replicationStatsVisitor) countRange(
