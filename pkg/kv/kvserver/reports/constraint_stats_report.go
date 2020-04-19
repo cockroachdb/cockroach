@@ -386,9 +386,11 @@ func (v *constraintConformanceVisitor) failed() bool {
 
 // reset is part of the rangeVisitor interface.
 func (v *constraintConformanceVisitor) reset(ctx context.Context) {
-	v.visitErr = false
-	v.prevZoneKey = ZoneKey{}
-	v.prevConstraints = nil
+	*v = constraintConformanceVisitor{
+		cfg:           v.cfg,
+		storeResolver: v.storeResolver,
+		report:        v.report,
+	}
 	v.report.resetReport()
 
 	// Iterate through all the zone configs to create report entries for all the
