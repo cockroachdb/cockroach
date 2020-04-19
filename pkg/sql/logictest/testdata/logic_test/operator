@@ -1,0 +1,15 @@
+query RR
+SELECT |/ 4.0::float, |/ 9.0::decimal
+----
+2 3
+
+query error cannot take square root of a negative number
+SELECT |/ -1.0::float
+
+query error cannot take square root of a negative number
+SELECT |/ -1.0::decimal
+
+query RRR
+SELECT ||/ -1.0::float, round(||/ 27.0::float, 15), ||/ 19.3::decimal
+----
+-1 3 2.6823725926296729544
