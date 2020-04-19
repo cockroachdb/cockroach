@@ -266,7 +266,7 @@ type criticalLocalitiesVisitor struct {
 
 var _ rangeVisitor = &criticalLocalitiesVisitor{}
 
-func makeLocalityStatsVisitor(
+func makeCriticalLocalitiesVisitor(
 	ctx context.Context,
 	localityConstraints []zonepb.ConstraintsConjunction,
 	cfg *config.SystemConfig,
