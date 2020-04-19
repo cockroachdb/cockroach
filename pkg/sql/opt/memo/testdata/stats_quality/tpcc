@@ -301,7 +301,9 @@ project
            ├── save-table-name: order_status_02_scan_3
            ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_last:6(varchar!null)
            ├── constraint: /3/2/6/4/1: [/2/2/'ANTIBARESE' - /2/2/'ANTIBARESE']
-           ├── stats: [rows=3, distinct(1)=2.99851499, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=2.99196484, null(4)=0, distinct(6)=1, null(6)=0]
+           ├── stats: [rows=2.853, distinct(1)=2.85165693, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=2.84573236, null(4)=0, distinct(6)=1, null(6)=0]
+           │   histogram(3)=  0 2.853
+           │                <---- 2 -
            ├── key: (1)
            ├── fd: ()-->(2,3,6), (1)-->(4)
            └── ordering: +4 opt(2,3,6) [actual: +4]

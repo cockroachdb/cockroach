@@ -163,29 +163,27 @@ func maxDistinctValuesInRange(lowerBound, upperBound tree.Datum) (_ float64, ok 
 }
 
 // CanFilter returns true if the given constraint can filter the histogram.
-// This is the case if there is only one constrained column in c, it is
-// ascending, and it matches the column of the histogram.
-func (h *Histogram) CanFilter(c *constraint.Constraint) bool {
-	if c.ConstrainedColumns(h.evalCtx) != 1 || c.Columns.Get(0).ID() != h.col {
-		return false
+// This is the case if the histogram column matches one of the columns in
+// the exact prefix of c or the next column immediately after the exact prefix.
+// Returns the offset of the matching column in the constraint if found.
+func (h *Histogram) CanFilter(c *constraint.Constraint) (colOffset int, ok bool) {
+	exactPrefix := c.ExactPrefix(h.evalCtx)
+	constrainedCols := c.ConstrainedColumns(h.evalCtx)
+	for i := 0; i < constrainedCols && i <= exactPrefix; i++ {
+		if c.Columns.Get(i).ID() == h.col {
+			return i, true
+		}
 	}
-	if c.Columns.Get(0).Descending() {
-		return false
-	}
-	return true
+	return 0, false
 }
 
 // Filter filters the histogram according to the given constraint, and returns
 // a new histogram with the results. CanFilter should be called first to
 // validate that c can filter the histogram.
 func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
-	// TODO(rytaft): add support for index constraints with multiple ascending
-	// or descending columns.
-	if c.ConstrainedColumns(h.evalCtx) != 1 && c.Columns.Get(0).ID() != h.col {
+	colOffset, ok := h.CanFilter(c)
+	if !ok {
 		panic(errors.AssertionFailedf("column mismatch"))
-	}
-	if c.Columns.Get(0).Descending() {
-		panic(errors.AssertionFailedf("histogram filter with descending constraint not yet supported"))
 	}
 
 	bucketCount := h.BucketCount()
@@ -203,15 +201,19 @@ func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
 	if h.Bucket(0).NumRange != 0 {
 		panic(errors.AssertionFailedf("the first bucket should have NumRange=0"))
 	}
-	lowerBound := h.Bucket(0).UpperBound
 
-	bucIndex := 0
+	prefix := make([]tree.Datum, colOffset)
+	for i := range prefix {
+		prefix[i] = c.Spans.Get(0).StartKey().Value(i)
+	}
+	desc := c.Columns.Get(colOffset).Descending()
+	var iter histogramIter
+	iter.init(h, desc)
 	spanIndex := 0
-	keyCtx := constraint.KeyContext{EvalCtx: h.evalCtx}
-	keyCtx.Columns.InitSingle(opt.MakeOrderingColumn(h.col, false /* descending */))
+	keyCtx := constraint.KeyContext{EvalCtx: h.evalCtx, Columns: c.Columns}
 
 	// Find the first span that may overlap with the histogram.
-	firstBucket := makeSpanFromBucket(h.Bucket(bucIndex), lowerBound)
+	firstBucket := makeSpanFromBucket(&iter, prefix)
 	spanCount := c.Spans.Count()
 	for spanIndex < spanCount {
 		span := c.Spans.Get(spanIndex)
@@ -227,27 +229,33 @@ func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
 
 	// Use binary search to find the first bucket that overlaps with the span.
 	span := c.Spans.Get(spanIndex)
-	bucIndex = sort.Search(bucketCount, func(i int) bool {
-		// The lower bound of the bucket doesn't matter here since we're just
-		// checking whether the span starts after the *upper bound* of the bucket.
-		bucket := makeSpanFromBucket(h.Bucket(i), lowerBound)
+	bucIndex := sort.Search(bucketCount, func(i int) bool {
+		iter.setIdx(i)
+		bucket := makeSpanFromBucket(&iter, prefix)
+		if desc {
+			return span.StartsAfter(&keyCtx, &bucket)
+		}
 		return !span.StartsAfter(&keyCtx, &bucket)
 	})
-	if bucIndex == bucketCount {
+	if desc {
+		bucIndex--
+		if bucIndex == -1 {
+			return filtered
+		}
+	} else if bucIndex == bucketCount {
 		return filtered
 	}
-	if bucIndex > 0 {
+	iter.setIdx(bucIndex)
+	if !desc && bucIndex > 0 {
 		prevUpperBound := h.Bucket(bucIndex - 1).UpperBound
-		filtered.addEmptyBucket(prevUpperBound)
-		lowerBound = h.getNextLowerBound(prevUpperBound)
+		filtered.addEmptyBucket(prevUpperBound, desc)
 	}
 
 	// For the remaining buckets and spans, use a variation on merge sort.
-	for bucIndex < bucketCount && spanIndex < spanCount {
-		bucket := h.Bucket(bucIndex)
+	for spanIndex < spanCount {
 		// Convert the bucket to a span in order to take advantage of the
 		// constraint library.
-		left := makeSpanFromBucket(bucket, lowerBound)
+		left := makeSpanFromBucket(&iter, prefix)
 		right := c.Spans.Get(spanIndex)
 
 		if left.StartsAfter(&keyCtx, right) {
@@ -257,39 +265,56 @@ func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
 
 		filteredSpan := left
 		if !filteredSpan.TryIntersectWith(&keyCtx, right) {
-			filtered.addEmptyBucket(bucket.UpperBound)
-			lowerBound = h.getNextLowerBound(bucket.UpperBound)
-			bucIndex++
+			filtered.addEmptyBucket(iter.b.UpperBound, desc)
+			if ok := iter.next(); !ok {
+				break
+			}
 			continue
 		}
 
-		filteredBucket := bucket
+		filteredBucket := iter.b
 		if filteredSpan.Compare(&keyCtx, &left) != 0 {
 			// The bucket was cut off in the middle. Get the resulting filtered
 			// bucket.
-			filteredBucket = getFilteredBucket(bucket, &keyCtx, &filteredSpan, lowerBound)
-			if filteredSpan.CompareStarts(&keyCtx, &left) != 0 {
+			filteredBucket = getFilteredBucket(&iter, &keyCtx, &filteredSpan, colOffset)
+			if !desc && filteredSpan.CompareStarts(&keyCtx, &left) != 0 {
 				// We need to add an empty bucket before the new bucket.
-				emptyBucketUpperBound := filteredSpan.StartKey().Value(0)
-				if filteredSpan.StartBoundary() == constraint.IncludeBoundary {
-					if prev, ok := emptyBucketUpperBound.Prev(h.evalCtx); ok {
-						emptyBucketUpperBound = prev
-					}
-				}
-				filtered.addEmptyBucket(emptyBucketUpperBound)
+				ub := h.getPrevUpperBound(filteredSpan.StartKey(), filteredSpan.StartBoundary(), colOffset)
+				filtered.addEmptyBucket(ub, desc)
 			}
 		}
-		filtered.addBucket(filteredBucket)
+		filtered.addBucket(filteredBucket, desc)
+
+		if desc && filteredSpan.CompareEnds(&keyCtx, &left) != 0 {
+			// We need to add an empty bucket after the new bucket.
+			ub := h.getPrevUpperBound(filteredSpan.EndKey(), filteredSpan.EndBoundary(), colOffset)
+			filtered.addEmptyBucket(ub, desc)
+		}
 
 		// Skip past whichever span ends first, or skip past both if they have
 		// the same endpoint.
 		cmp := left.CompareEnds(&keyCtx, right)
 		if cmp <= 0 {
-			lowerBound = h.getNextLowerBound(bucket.UpperBound)
-			bucIndex++
+			if ok := iter.next(); !ok {
+				break
+			}
 		}
 		if cmp >= 0 {
 			spanIndex++
+		}
+	}
+
+	if desc {
+		// Add an empty bucket to indicate that the remaining buckets from the
+		// original histogram have been removed.
+		if iter.next() {
+			filtered.addEmptyBucket(iter.lb, desc)
+		}
+
+		// Reverse the buckets so they are in ascending order.
+		for i := 0; i < len(filtered.buckets)/2; i++ {
+			j := len(filtered.buckets) - 1 - i
+			filtered.buckets[i], filtered.buckets[j] = filtered.buckets[j], filtered.buckets[i]
 		}
 	}
 
@@ -304,21 +329,38 @@ func (h *Histogram) getNextLowerBound(currentUpperBound tree.Datum) tree.Datum {
 	return nextLowerBound
 }
 
-func (h *Histogram) addEmptyBucket(upperBound tree.Datum) {
-	h.addBucket(&cat.HistogramBucket{UpperBound: upperBound})
+func (h *Histogram) getPrevUpperBound(
+	currentLowerBound constraint.Key, boundary constraint.SpanBoundary, colOffset int,
+) tree.Datum {
+	prevUpperBound := currentLowerBound.Value(colOffset)
+	if boundary == constraint.IncludeBoundary {
+		if prev, ok := prevUpperBound.Prev(h.evalCtx); ok {
+			prevUpperBound = prev
+		}
+	}
+	return prevUpperBound
 }
 
-func (h *Histogram) addBucket(bucket *cat.HistogramBucket) {
+func (h *Histogram) addEmptyBucket(upperBound tree.Datum, desc bool) {
+	h.addBucket(&cat.HistogramBucket{UpperBound: upperBound}, desc)
+}
+
+func (h *Histogram) addBucket(bucket *cat.HistogramBucket, desc bool) {
 	// Check whether we can combine this bucket with the previous bucket.
 	if len(h.buckets) != 0 {
 		lastBucket := &h.buckets[len(h.buckets)-1]
-		if lastBucket.NumRange == 0 && lastBucket.NumEq == 0 && bucket.NumRange == 0 {
-			lastBucket.NumEq = bucket.NumEq
-			lastBucket.UpperBound = bucket.UpperBound
+		lower, higher := lastBucket, bucket
+		if desc {
+			lower, higher = bucket, lastBucket
+		}
+		if lower.NumRange == 0 && lower.NumEq == 0 && higher.NumRange == 0 {
+			lastBucket.NumEq = higher.NumEq
+			lastBucket.UpperBound = higher.UpperBound
 			return
 		}
 		if lastBucket.UpperBound.Compare(h.evalCtx, bucket.UpperBound) == 0 {
-			lastBucket.NumEq += bucket.NumRange + bucket.NumEq
+			lastBucket.NumEq = lower.NumEq + higher.NumRange + higher.NumEq
+			lastBucket.NumRange = lower.NumRange
 			return
 		}
 	}
@@ -354,11 +396,78 @@ func (h *Histogram) ApplySelectivity(selectivity float64) *Histogram {
 	return res
 }
 
-func makeSpanFromBucket(b *cat.HistogramBucket, lowerBound tree.Datum) (span constraint.Span) {
+// histogramIter is a helper struct for iterating through the buckets in a
+// histogram. It enables iterating both forward and backward through the
+// buckets.
+type histogramIter struct {
+	h    *Histogram
+	desc bool
+	idx  int
+	b    *cat.HistogramBucket
+	lb   tree.Datum
+	ub   tree.Datum
+}
+
+// init initializes a histogramIter to point to the first bucket of the given
+// histogram. If desc is true, the iterator starts from the end of the
+// histogram and moves backwards.
+func (hi *histogramIter) init(h *Histogram, desc bool) {
+	hi.idx = -1
+	if desc {
+		hi.idx = h.BucketCount()
+	}
+	hi.h = h
+	hi.desc = desc
+	hi.next()
+}
+
+// setIdx updates the histogramIter to point to the ith bucket in the
+// histogram.
+func (hi *histogramIter) setIdx(i int) {
+	hi.idx = i - 1
+	if hi.desc {
+		hi.idx = i + 1
+	}
+	hi.next()
+}
+
+// next sets the histogramIter to point to the next bucket. If hi.desc is true
+// the "next" bucket is actually the previous bucket in the histogram. Returns
+// false if there are no more buckets.
+func (hi *histogramIter) next() (ok bool) {
+	getBounds := func() (lb, ub tree.Datum) {
+		hi.b = hi.h.Bucket(hi.idx)
+		ub = hi.b.UpperBound
+		if hi.idx == 0 {
+			lb = ub
+		} else {
+			lb = hi.h.getNextLowerBound(hi.h.Bucket(hi.idx - 1).UpperBound)
+		}
+		return lb, ub
+	}
+
+	if hi.desc {
+		hi.idx--
+		if hi.idx < 0 {
+			return false
+		}
+		hi.ub, hi.lb = getBounds()
+	} else {
+		hi.idx++
+		if hi.idx >= hi.h.BucketCount() {
+			return false
+		}
+		hi.lb, hi.ub = getBounds()
+	}
+
+	return true
+}
+
+func makeSpanFromBucket(iter *histogramIter, prefix []tree.Datum) (span constraint.Span) {
 	span.Init(
-		constraint.MakeKey(lowerBound),
+		constraint.MakeCompositeKey(append(prefix[:len(prefix):len(prefix)], iter.lb)...),
 		constraint.IncludeBoundary,
-		constraint.MakeKey(b.UpperBound),
+		constraint.MakeCompositeKey(append(prefix[:len(prefix):len(prefix)], iter.ub)...),
 		constraint.IncludeBoundary,
 	)
 	return span
@@ -396,29 +505,37 @@ func makeSpanFromBucket(b *cat.HistogramBucket, lowerBound tree.Datum) (span con
 // we use the heuristic that NumRange is reduced by half.
 //
 func getFilteredBucket(
-	b *cat.HistogramBucket,
-	keyCtx *constraint.KeyContext,
-	filteredSpan *constraint.Span,
-	bucketLowerBound tree.Datum,
+	iter *histogramIter, keyCtx *constraint.KeyContext, filteredSpan *constraint.Span, colOffset int,
 ) *cat.HistogramBucket {
-	spanLowerBound := filteredSpan.StartKey().Value(0)
-	spanUpperBound := filteredSpan.EndKey().Value(0)
+	spanLowerBound := filteredSpan.StartKey().Value(colOffset)
+	spanUpperBound := filteredSpan.EndKey().Value(colOffset)
+	bucketLowerBound := iter.lb
+	bucketUpperBound := iter.ub
+	b := iter.b
 
 	// Check that the given span is contained in the bucket.
 	cmpSpanStartBucketStart := spanLowerBound.Compare(keyCtx.EvalCtx, bucketLowerBound)
-	cmpSpanEndBucketEnd := spanUpperBound.Compare(keyCtx.EvalCtx, b.UpperBound)
-	if cmpSpanStartBucketStart < 0 || cmpSpanEndBucketEnd > 0 {
+	cmpSpanEndBucketEnd := spanUpperBound.Compare(keyCtx.EvalCtx, bucketUpperBound)
+	contained := cmpSpanStartBucketStart >= 0 && cmpSpanEndBucketEnd <= 0
+	if iter.desc {
+		contained = cmpSpanStartBucketStart <= 0 && cmpSpanEndBucketEnd >= 0
+	}
+	if !contained {
 		panic(errors.AssertionFailedf("span must be fully contained in the bucket"))
 	}
 
 	// Extract the range sizes before and after filtering.
 	rangeBefore, rangeAfter, ok := getRangesBeforeAndAfter(
-		bucketLowerBound, b.UpperBound, spanLowerBound, spanUpperBound,
+		bucketLowerBound, bucketUpperBound, spanLowerBound, spanUpperBound, iter.desc,
 	)
 
 	var numEq float64
 	isSpanEndBoundaryInclusive := filteredSpan.EndBoundary() == constraint.IncludeBoundary
 	includesOriginalUpperBound := isSpanEndBoundaryInclusive && cmpSpanEndBucketEnd == 0
+	if iter.desc {
+		isSpanStartBoundaryInclusive := filteredSpan.StartBoundary() == constraint.IncludeBoundary
+		includesOriginalUpperBound = isSpanStartBoundaryInclusive && cmpSpanStartBucketStart == 0
+	}
 	if includesOriginalUpperBound {
 		numEq = b.NumEq
 	}
@@ -432,7 +549,7 @@ func getFilteredBucket(
 			numEq = b.NumRange / rangeBefore
 		}
 		numRange = b.NumRange * rangeAfter / rangeBefore
-	} else if b.UpperBound.Compare(keyCtx.EvalCtx, spanLowerBound) == 0 {
+	} else if bucketUpperBound.Compare(keyCtx.EvalCtx, spanLowerBound) == 0 {
 		// This span represents an equality condition with the upper bound.
 		numRange = 0
 	} else {
@@ -446,19 +563,24 @@ func getFilteredBucket(
 		distinctCountRange = b.DistinctRange * numRange / b.NumRange
 	}
 
+	upperBound := spanUpperBound
+	if iter.desc {
+		upperBound = spanLowerBound
+	}
 	return &cat.HistogramBucket{
 		NumEq:         numEq,
 		NumRange:      numRange,
 		DistinctRange: distinctCountRange,
-		UpperBound:    spanUpperBound,
+		UpperBound:    upperBound,
 	}
 }
 
 // getRangesBeforeAndAfter returns the size of the ranges before and after the
-// given bucket is filtered by the given span. Returns ok=true if these range
-// sizes are calculated successfully, and false otherwise.
+// given bucket is filtered by the given span. If swap is true, the upper and
+// lower bounds should be swapped for the bucket and the span. Returns ok=true
+// if these range sizes are calculated successfully, and false otherwise.
 func getRangesBeforeAndAfter(
-	bucketLowerBound, bucketUpperBound, spanLowerBound, spanUpperBound tree.Datum,
+	bucketLowerBound, bucketUpperBound, spanLowerBound, spanUpperBound tree.Datum, swap bool,
 ) (rangeBefore, rangeAfter float64, ok bool) {
 	// If the data types don't match, don't bother trying to calculate the range
 	// sizes. This should almost never happen, but we want to avoid type
@@ -469,6 +591,11 @@ func getRangesBeforeAndAfter(
 			spanLowerBound.ResolvedType().Equivalent(spanUpperBound.ResolvedType())
 	if !typesMatch {
 		return 0, 0, false
+	}
+
+	if swap {
+		bucketLowerBound, bucketUpperBound = bucketUpperBound, bucketLowerBound
+		spanLowerBound, spanUpperBound = spanUpperBound, spanLowerBound
 	}
 
 	// TODO(rytaft): handle more types here.
