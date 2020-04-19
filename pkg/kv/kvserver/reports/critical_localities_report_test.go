@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -156,4 +157,37 @@ func TableData(
 		return result
 	}
 	return nil
+}
+
+func TestExpandLocalities(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	nodeLocalities := map[roachpb.NodeID]roachpb.Locality{
+		roachpb.NodeID(1): {Tiers: []roachpb.Tier{
+			{Key: "region", Value: "r1"},
+			{Key: "dc", Value: "dc1"},
+			{Key: "az", Value: "az1"},
+		}},
+		roachpb.NodeID(2): {Tiers: []roachpb.Tier{
+			{Key: "region", Value: "r2"},
+			{Key: "dc", Value: "dc2"},
+			{Key: "az", Value: "az2"},
+		}},
+	}
+	expanded := expandLocalities(nodeLocalities)
+	require.Equal(t,
+		map[roachpb.NodeID]map[string]roachpb.Locality{
+			1: {
+				"region=r1":               {Tiers: []roachpb.Tier{{Key: "region", Value: "r1"}}},
+				"region=r1,dc=dc1":        {Tiers: []roachpb.Tier{{Key: "region", Value: "r1"}, {Key: "dc", Value: "dc1"}}},
+				"region=r1,dc=dc1,az=az1": {Tiers: []roachpb.Tier{{Key: "region", Value: "r1"}, {Key: "dc", Value: "dc1"}, {Key: "az", Value: "az1"}}},
+			},
+			2: {
+				"region=r2":               {Tiers: []roachpb.Tier{{Key: "region", Value: "r2"}}},
+				"region=r2,dc=dc2":        {Tiers: []roachpb.Tier{{Key: "region", Value: "r2"}, {Key: "dc", Value: "dc2"}}},
+				"region=r2,dc=dc2,az=az2": {Tiers: []roachpb.Tier{{Key: "region", Value: "r2"}, {Key: "dc", Value: "dc2"}, {Key: "az", Value: "az2"}}},
+			},
+		},
+		expanded,
+	)
 }
