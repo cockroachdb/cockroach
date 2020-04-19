@@ -20,7 +20,7 @@ import (
 
 var (
 	leftRect             = geo.MustParseGeometry("POLYGON((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0))")
-	leftRectPoint        = geo.MustParseGeometry("POINT(-0.5 -0.5)")
+	leftRectPoint        = geo.MustParseGeometry("POINT(-0.5 0.5)")
 	rightRect            = geo.MustParseGeometry("POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))")
 	rightRectPoint       = geo.MustParseGeometry("POINT(0.5 0.5)")
 	overlappingRightRect = geo.MustParseGeometry("POLYGON((-0.1 0.0, 1.0 0.0, 1.0 1.0, -0.1 1.0, -0.1 0.0))")

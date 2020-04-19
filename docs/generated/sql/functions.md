@@ -506,6 +506,49 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr></tbody>
 </table>
 
+### Geospatial functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="st_contains"></a><code>st_contains(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if no points of geometry_b lie in the exterior of geometry_a, and there is at least one point in the interior of geometry_b that lies in the interior of geometry_a.</p>
+<p>This function uses the GEOS module.</p>
+<p>This function will automatically use any available index.</p>
+</span></td></tr>
+<tr><td><a name="st_coveredby"></a><code>st_coveredby(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if no point in geometry_a is outside geometry_b.</p>
+<p>This function uses the GEOS module.</p>
+<p>This function will automatically use any available index.</p>
+</span></td></tr>
+<tr><td><a name="st_covers"></a><code>st_covers(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if no point in geometry_b is outside geometry_a.</p>
+<p>This function uses the GEOS module.</p>
+<p>This function will automatically use any available index.</p>
+</span></td></tr>
+<tr><td><a name="st_crosses"></a><code>st_crosses(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a has some - but not all - interior points in common with geometry_b.</p>
+<p>This function uses the GEOS module.</p>
+<p>This function will automatically use any available index.</p>
+</span></td></tr>
+<tr><td><a name="st_equals"></a><code>st_equals(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is spatially equal to geometry_b, i.e. ST_Within(geometry_a, geometry_b) = ST_Within(geometry_b, geometry_a) = true.</p>
+<p>This function uses the GEOS module.</p>
+<p>This function will automatically use any available index.</p>
+</span></td></tr>
+<tr><td><a name="st_intersects"></a><code>st_intersects(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a shares any portion of space with geometry_b.</p>
+<p>This function uses the GEOS module.</p>
+<p>This function will automatically use any available index.</p>
+</span></td></tr>
+<tr><td><a name="st_overlaps"></a><code>st_overlaps(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a intersects but does not completely contain geometry_b, or vice versa. “Does not completely” implies ST_Within(geometry_a, geometry_b) = ST_Within(geometry_b, geometry_a) = false.</p>
+<p>This function uses the GEOS module.</p>
+<p>This function will automatically use any available index.</p>
+</span></td></tr>
+<tr><td><a name="st_touches"></a><code>st_touches(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if the only points in common between geometry_a and geometry_b are on the boundary. Note points do not touch other points.</p>
+<p>This function uses the GEOS module.</p>
+<p>This function will automatically use any available index.</p>
+</span></td></tr>
+<tr><td><a name="st_within"></a><code>st_within(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is completely inside geometry_b.</p>
+<p>This function uses the GEOS module.</p>
+<p>This function will automatically use any available index.</p>
+</span></td></tr></tbody>
+</table>
+
 ### ID generation functions
 
 <table>
