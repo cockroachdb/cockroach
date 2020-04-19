@@ -272,9 +272,9 @@ func runConformanceReportTest(t *testing.T, tc conformanceConstraintTestCase) {
 	}
 
 	// Sort the report's keys.
-	gotRows := make(rows, len(rep.constraints))
+	gotRows := make(rows, len(rep))
 	i := 0
-	for k, v := range rep.constraints {
+	for k, v := range rep {
 		gotRows[i] = row{ConstraintStatusKey: k, ConstraintStatus: v}
 		i++
 	}
@@ -562,20 +562,22 @@ func TestConstraintReport(t *testing.T) {
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{})
 
 	// Add several replication constraint statuses.
-	r := makeReplicationConstraintStatusReportSaver()
-	r.EnsureEntry(MakeZoneKey(1, 3), "constraint", "+country=CH")
-	r.AddViolation(MakeZoneKey(2, 3), "constraint", "+country=CH")
-	r.EnsureEntry(MakeZoneKey(2, 3), "constraint", "+country=CH")
-	r.AddViolation(MakeZoneKey(5, 6), "constraint", "+ssd")
-	r.AddViolation(MakeZoneKey(5, 6), "constraint", "+ssd")
-	r.AddViolation(MakeZoneKey(7, 8), "constraint", "+dc=west")
-	r.EnsureEntry(MakeZoneKey(7, 8), "constraint", "+dc=east")
-	r.EnsureEntry(MakeZoneKey(7, 8), "constraint", "+dc=east")
-	r.AddViolation(MakeZoneKey(8, 9), "constraint", "+dc=west")
-	r.EnsureEntry(MakeZoneKey(8, 9), "constraint", "+dc=east")
+	report := make(ConstraintReport)
+	report.ensureEntry(MakeZoneKey(1, 3), "constraint", "+country=CH")
+	report.AddViolation(MakeZoneKey(2, 3), "constraint", "+country=CH")
+	report.ensureEntry(MakeZoneKey(2, 3), "constraint", "+country=CH")
+	report.AddViolation(MakeZoneKey(5, 6), "constraint", "+ssd")
+	report.AddViolation(MakeZoneKey(5, 6), "constraint", "+ssd")
+	report.AddViolation(MakeZoneKey(7, 8), "constraint", "+dc=west")
+	report.ensureEntry(MakeZoneKey(7, 8), "constraint", "+dc=east")
+	report.ensureEntry(MakeZoneKey(7, 8), "constraint", "+dc=east")
+	report.AddViolation(MakeZoneKey(8, 9), "constraint", "+dc=west")
+	report.ensureEntry(MakeZoneKey(8, 9), "constraint", "+dc=east")
 
 	time1 := time.Date(2001, 1, 1, 10, 0, 0, 0, time.UTC)
-	require.NoError(t, r.Save(ctx, time1, db, con))
+	r := makeReplicationConstraintStatusReportSaver()
+	require.NoError(t, r.Save(ctx, report, time1, db, con))
+	report = make(ConstraintReport)
 
 	require.ElementsMatch(t, TableData(ctx, "system.replication_constraint_stats", con), [][]string{
 		{"1", "3", "'constraint'", "'+country=CH'", "1", "NULL", "0"},
@@ -592,17 +594,18 @@ func TestConstraintReport(t *testing.T) {
 	require.Equal(t, 7, r.LastUpdatedRowCount())
 
 	// Add new set of replication constraint statuses to the existing report and verify the old ones are deleted.
-	r.AddViolation(MakeZoneKey(1, 3), "constraint", "+country=CH")
-	r.EnsureEntry(MakeZoneKey(5, 6), "constraint", "+ssd")
-	r.AddViolation(MakeZoneKey(6, 8), "constraint", "+dc=east")
-	r.EnsureEntry(MakeZoneKey(6, 8), "constraint", "+dc=west")
-	r.AddViolation(MakeZoneKey(7, 8), "constraint", "+dc=west")
-	r.AddViolation(MakeZoneKey(7, 8), "constraint", "+dc=west")
-	r.AddViolation(MakeZoneKey(8, 9), "constraint", "+dc=west")
-	r.EnsureEntry(MakeZoneKey(8, 9), "constraint", "+dc=east")
+	report.AddViolation(MakeZoneKey(1, 3), "constraint", "+country=CH")
+	report.ensureEntry(MakeZoneKey(5, 6), "constraint", "+ssd")
+	report.AddViolation(MakeZoneKey(6, 8), "constraint", "+dc=east")
+	report.ensureEntry(MakeZoneKey(6, 8), "constraint", "+dc=west")
+	report.AddViolation(MakeZoneKey(7, 8), "constraint", "+dc=west")
+	report.AddViolation(MakeZoneKey(7, 8), "constraint", "+dc=west")
+	report.AddViolation(MakeZoneKey(8, 9), "constraint", "+dc=west")
+	report.ensureEntry(MakeZoneKey(8, 9), "constraint", "+dc=east")
 
 	time2 := time.Date(2001, 1, 1, 11, 0, 0, 0, time.UTC)
-	require.NoError(t, r.Save(ctx, time2, db, con))
+	require.NoError(t, r.Save(ctx, report, time2, db, con))
+	report = make(ConstraintReport)
 
 	require.ElementsMatch(t, TableData(ctx, "system.replication_constraint_stats", con), [][]string{
 		// Wasn't violated before - is violated now.
@@ -644,17 +647,18 @@ func TestConstraintReport(t *testing.T) {
 	require.Equal(t, 1, rows)
 
 	// Add new set of replication constraint statuses to the existing report and verify the everything is good.
-	r.AddViolation(MakeZoneKey(1, 3), "constraint", "+country=CH")
-	r.EnsureEntry(MakeZoneKey(5, 6), "constraint", "+ssd")
-	r.AddViolation(MakeZoneKey(6, 8), "constraint", "+dc=east")
-	r.EnsureEntry(MakeZoneKey(6, 8), "constraint", "+dc=west")
-	r.AddViolation(MakeZoneKey(7, 8), "constraint", "+dc=west")
-	r.AddViolation(MakeZoneKey(7, 8), "constraint", "+dc=west")
-	r.AddViolation(MakeZoneKey(8, 9), "constraint", "+dc=west")
-	r.EnsureEntry(MakeZoneKey(8, 9), "constraint", "+dc=east")
+	report.AddViolation(MakeZoneKey(1, 3), "constraint", "+country=CH")
+	report.ensureEntry(MakeZoneKey(5, 6), "constraint", "+ssd")
+	report.AddViolation(MakeZoneKey(6, 8), "constraint", "+dc=east")
+	report.ensureEntry(MakeZoneKey(6, 8), "constraint", "+dc=west")
+	report.AddViolation(MakeZoneKey(7, 8), "constraint", "+dc=west")
+	report.AddViolation(MakeZoneKey(7, 8), "constraint", "+dc=west")
+	report.AddViolation(MakeZoneKey(8, 9), "constraint", "+dc=west")
+	report.ensureEntry(MakeZoneKey(8, 9), "constraint", "+dc=east")
 
 	time4 := time.Date(2001, 1, 1, 12, 0, 0, 0, time.UTC)
-	require.NoError(t, r.Save(ctx, time4, db, con))
+	require.NoError(t, r.Save(ctx, report, time4, db, con))
+	report = make(ConstraintReport)
 
 	require.ElementsMatch(t, TableData(ctx, "system.replication_constraint_stats", con), [][]string{
 		{"1", "3", "'constraint'", "'+country=CH'", "1", "'2001-01-01 12:00:00+00:00'", "1"},
@@ -673,10 +677,10 @@ func TestConstraintReport(t *testing.T) {
 	// A brand new report (after restart for example) - still works.
 	// Add several replication constraint statuses.
 	r = makeReplicationConstraintStatusReportSaver()
-	r.AddViolation(MakeZoneKey(1, 3), "constraint", "+country=CH")
+	report.AddViolation(MakeZoneKey(1, 3), "constraint", "+country=CH")
 
 	time5 := time.Date(2001, 1, 1, 12, 30, 0, 0, time.UTC)
-	require.NoError(t, r.Save(ctx, time5, db, con))
+	require.NoError(t, r.Save(ctx, report, time5, db, con))
 
 	require.ElementsMatch(t, TableData(ctx, "system.replication_constraint_stats", con), [][]string{
 		{"1", "3", "'constraint'", "'+country=CH'", "1", "'2001-01-01 12:00:00+00:00'", "1"},

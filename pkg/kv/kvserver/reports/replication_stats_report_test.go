@@ -43,16 +43,18 @@ func TestRangeReport(t *testing.T) {
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{})
 
 	// Add several localities and verify the result
-	r := makeReplicationStatsReportSaver()
-	r.AddZoneRangeStatus(MakeZoneKey(1, 3), true, true, true)
-	r.AddZoneRangeStatus(MakeZoneKey(1, 3), false, true, true)
-	r.AddZoneRangeStatus(MakeZoneKey(1, 3), false, false, true)
-	r.AddZoneRangeStatus(MakeZoneKey(1, 3), true, true, false)
-	r.AddZoneRangeStatus(MakeZoneKey(2, 3), false, false, false)
-	r.AddZoneRangeStatus(MakeZoneKey(2, 4), false, true, false)
+	stats := make(RangeReport)
+	stats.CountRange(MakeZoneKey(1, 3), true, true, true)
+	stats.CountRange(MakeZoneKey(1, 3), false, true, true)
+	stats.CountRange(MakeZoneKey(1, 3), false, false, true)
+	stats.CountRange(MakeZoneKey(1, 3), true, true, false)
+	stats.CountRange(MakeZoneKey(2, 3), false, false, false)
+	stats.CountRange(MakeZoneKey(2, 4), false, true, false)
 
+	r := makeReplicationStatsReportSaver()
 	time1 := time.Date(2001, 1, 1, 10, 0, 0, 0, time.UTC)
-	require.NoError(t, r.Save(ctx, time1, db, con))
+	require.NoError(t, r.Save(ctx, stats, time1, db, con))
+	stats = make(RangeReport)
 
 	require.ElementsMatch(t, TableData(ctx, "system.replication_stats", con), [][]string{
 		{"1", "3", "3", "4", "2", "3", "3"},
@@ -65,12 +67,13 @@ func TestRangeReport(t *testing.T) {
 	require.Equal(t, 3, r.LastUpdatedRowCount())
 
 	// Add new set of localities and verify the old ones are deleted
-	r.AddZoneRangeStatus(MakeZoneKey(1, 3), false, true, true)
-	r.AddZoneRangeStatus(MakeZoneKey(2, 3), false, false, false)
-	r.AddZoneRangeStatus(MakeZoneKey(4, 4), false, true, true)
+	stats.CountRange(MakeZoneKey(1, 3), false, true, true)
+	stats.CountRange(MakeZoneKey(2, 3), false, false, false)
+	stats.CountRange(MakeZoneKey(4, 4), false, true, true)
 
 	time2 := time.Date(2001, 1, 1, 11, 0, 0, 0, time.UTC)
-	require.NoError(t, r.Save(ctx, time2, db, con))
+	require.NoError(t, r.Save(ctx, stats, time2, db, con))
+	stats = make(RangeReport)
 
 	require.ElementsMatch(t, TableData(ctx, "system.replication_stats", con), [][]string{
 		{"1", "3", "3", "1", "0", "1", "1"},
@@ -102,12 +105,13 @@ func TestRangeReport(t *testing.T) {
 	require.Equal(t, 1, rows)
 
 	// Add new set of localities and verify the old ones are deleted
-	r.AddZoneRangeStatus(MakeZoneKey(1, 3), false, true, true)
-	r.AddZoneRangeStatus(MakeZoneKey(2, 3), false, false, false)
-	r.AddZoneRangeStatus(MakeZoneKey(4, 4), false, true, true)
+	stats.CountRange(MakeZoneKey(1, 3), false, true, true)
+	stats.CountRange(MakeZoneKey(2, 3), false, false, false)
+	stats.CountRange(MakeZoneKey(4, 4), false, true, true)
 
 	time4 := time.Date(2001, 1, 1, 12, 0, 0, 0, time.UTC)
-	require.NoError(t, r.Save(ctx, time4, db, con))
+	require.NoError(t, r.Save(ctx, stats, time4, db, con))
+	stats = make(RangeReport)
 
 	require.ElementsMatch(t, TableData(ctx, "system.replication_stats", con), [][]string{
 		{"1", "3", "3", "1", "0", "1", "1"},
@@ -121,10 +125,10 @@ func TestRangeReport(t *testing.T) {
 
 	// A brand new report (after restart for example) - still works.
 	r = makeReplicationStatsReportSaver()
-	r.AddZoneRangeStatus(MakeZoneKey(1, 3), false, true, true)
+	stats.CountRange(MakeZoneKey(1, 3), false, true, true)
 
 	time5 := time.Date(2001, 1, 1, 12, 30, 0, 0, time.UTC)
-	require.NoError(t, r.Save(ctx, time5, db, con))
+	require.NoError(t, r.Save(ctx, stats, time5, db, con))
 
 	require.ElementsMatch(t, TableData(ctx, "system.replication_stats", con), [][]string{
 		{"1", "3", "3", "1", "0", "1", "1"},
@@ -159,9 +163,9 @@ func runReplicationStatsTest(t *testing.T, tc replicationStatsTestCase) {
 	}
 
 	// Sort the report's keys.
-	gotRows := make([]replicationStatsEntry, len(rep.stats))
+	gotRows := make([]replicationStatsEntry, len(rep))
 	i := 0
-	for zone, stats := range rep.stats {
+	for zone, stats := range rep {
 		object := ctc.zoneToObject[zone]
 		gotRows[i] = replicationStatsEntry{
 			zoneRangeStatus: stats,
