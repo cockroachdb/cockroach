@@ -43,7 +43,6 @@ type zoneRangeStatus struct {
 
 // replicationStatsReportSaver manages the content and the saving of the report.
 type replicationStatsReportSaver struct {
-	stats               RangeReport
 	previousVersion     RangeReport
 	lastGenerated       time.Time
 	lastUpdatedRowCount int
@@ -51,14 +50,7 @@ type replicationStatsReportSaver struct {
 
 // makeReplicationStatsReportSaver creates a new report saver.
 func makeReplicationStatsReportSaver() replicationStatsReportSaver {
-	return replicationStatsReportSaver{
-		stats: RangeReport{},
-	}
-}
-
-// resetReport resets the report to an empty state.
-func (r *replicationStatsReportSaver) resetReport() {
-	r.stats = RangeReport{}
+	return replicationStatsReportSaver{}
 }
 
 // LastUpdatedRowCount is the count of the rows that were touched during the last save.
@@ -67,18 +59,19 @@ func (r *replicationStatsReportSaver) LastUpdatedRowCount() int {
 }
 
 // EnsureEntry creates an entry for the given key if there is none.
-func (r *replicationStatsReportSaver) EnsureEntry(zKey ZoneKey) {
-	if _, ok := r.stats[zKey]; !ok {
-		r.stats[zKey] = zoneRangeStatus{}
+func (r RangeReport) EnsureEntry(zKey ZoneKey) {
+	if _, ok := r[zKey]; !ok {
+		r[zKey] = zoneRangeStatus{}
 	}
 }
 
-// AddZoneRangeStatus adds a row to the report.
-func (r *replicationStatsReportSaver) AddZoneRangeStatus(
+// CountRange adds one range's info to the report. If there's no entry in the
+// report for the range's zone, a new one is created.
+func (r RangeReport) CountRange(
 	zKey ZoneKey, unavailable bool, underReplicated bool, overReplicated bool,
 ) {
 	r.EnsureEntry(zKey)
-	rStat := r.stats[zKey]
+	rStat := r[zKey]
 	rStat.numRanges++
 	if unavailable {
 		rStat.unavailable++
@@ -89,7 +82,7 @@ func (r *replicationStatsReportSaver) AddZoneRangeStatus(
 	if overReplicated {
 		rStat.overReplicated++
 	}
-	r.stats[zKey] = rStat
+	r[zKey] = rStat
 }
 
 func (r *replicationStatsReportSaver) loadPreviousVersion(
@@ -137,11 +130,6 @@ func (r *replicationStatsReportSaver) loadPreviousVersion(
 	return nil
 }
 
-func (r *replicationStatsReportSaver) updatePreviousVersion() {
-	r.previousVersion = r.stats
-	r.stats = make(RangeReport, len(r.previousVersion))
-}
-
 func (r *replicationStatsReportSaver) updateTimestamp(
 	ctx context.Context, ex sqlutil.InternalExecutor, txn *kv.Txn, reportTS time.Time,
 ) error {
@@ -164,11 +152,17 @@ func (r *replicationStatsReportSaver) updateTimestamp(
 	return err
 }
 
-// Save the report.
+// Save a report in the database.
 //
+// report should not be used by the caller any more after this call; the callee
+// takes ownership.
 // reportTS is the time that will be set in the updated_at column for every row.
 func (r *replicationStatsReportSaver) Save(
-	ctx context.Context, reportTS time.Time, db *kv.DB, ex sqlutil.InternalExecutor,
+	ctx context.Context,
+	report RangeReport,
+	reportTS time.Time,
+	db *kv.DB,
+	ex sqlutil.InternalExecutor,
 ) error {
 	r.lastUpdatedRowCount = 0
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -182,14 +176,14 @@ func (r *replicationStatsReportSaver) Save(
 			return err
 		}
 
-		for key, status := range r.stats {
+		for key, status := range report {
 			if err := r.upsertStats(ctx, txn, key, status, ex); err != nil {
 				return err
 			}
 		}
 
 		for key := range r.previousVersion {
-			if _, ok := r.stats[key]; !ok {
+			if _, ok := report[key]; !ok {
 				_, err := ex.Exec(
 					ctx,
 					"delete-old-replication-stats",
@@ -213,7 +207,7 @@ func (r *replicationStatsReportSaver) Save(
 	}
 
 	r.lastGenerated = reportTS
-	r.updatePreviousVersion()
+	r.previousVersion = report
 
 	return nil
 }
@@ -253,7 +247,9 @@ type replicationStatsVisitor struct {
 	cfg         *config.SystemConfig
 	nodeChecker nodeChecker
 
-	report   *replicationStatsReportSaver
+	// report is the output of the visitor. visit*() methods populate it.
+	// After visiting all the ranges, it can be retrieved with Report().
+	report   RangeReport
 	visitErr bool
 
 	// prevZoneKey and prevNumReplicas maintain state from one range to the next.
@@ -266,15 +262,12 @@ type replicationStatsVisitor struct {
 var _ rangeVisitor = &replicationStatsVisitor{}
 
 func makeReplicationStatsVisitor(
-	ctx context.Context,
-	cfg *config.SystemConfig,
-	nodeChecker nodeChecker,
-	saver *replicationStatsReportSaver,
+	ctx context.Context, cfg *config.SystemConfig, nodeChecker nodeChecker,
 ) replicationStatsVisitor {
 	v := replicationStatsVisitor{
 		cfg:         cfg,
 		nodeChecker: nodeChecker,
-		report:      saver,
+		report:      make(RangeReport),
 	}
 	v.reset(ctx)
 	return v
@@ -285,10 +278,15 @@ func (v *replicationStatsVisitor) failed() bool {
 	return v.visitErr
 }
 
+// Report returns the RangeReport that was populated by previous visit*() calls.
+func (v *replicationStatsVisitor) Report() RangeReport {
+	return v.report
+}
+
 // reset is part of the rangeVisitor interface.
 func (v *replicationStatsVisitor) reset(ctx context.Context) {
 	v.visitErr = false
-	v.report.resetReport()
+	v.report = make(RangeReport, len(v.report))
 	v.prevZoneKey = ZoneKey{}
 	v.prevNumReplicas = -1
 
@@ -407,7 +405,7 @@ func (v *replicationStatsVisitor) countRange(
 	// time if it has many replicas, but sufficiently many of them are on dead
 	// nodes.
 
-	v.report.AddZoneRangeStatus(key, unavailable, underReplicated, overReplicated)
+	v.report.CountRange(key, unavailable, underReplicated, overReplicated)
 }
 
 // zoneChangesReplication determines whether a given zone config changes

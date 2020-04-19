@@ -199,19 +199,18 @@ func (stats *Reporter) update(
 
 	// Create the visitors that we're going to pass to visitRanges() below.
 	constraintConfVisitor := makeConstraintConformanceVisitor(
-		ctx, stats.latestConfig, getStoresFromGossip, constraintsSaver)
+		ctx, stats.latestConfig, getStoresFromGossip)
 	localityStatsVisitor := makeLocalityStatsVisitor(
 		ctx, localityConstraints, stats.latestConfig,
-		getStoresFromGossip, isNodeLive, locSaver)
-	statusVisitor := makeReplicationStatsVisitor(
-		ctx, stats.latestConfig, isNodeLive, replStatsSaver)
+		getStoresFromGossip, isNodeLive)
+	replicationStatsVisitor := makeReplicationStatsVisitor(ctx, stats.latestConfig, isNodeLive)
 
 	// Iterate through all the ranges.
 	const descriptorReadBatchSize = 10000
 	rangeIter := makeMeta2RangeIter(stats.db, descriptorReadBatchSize)
 	if err := visitRanges(
 		ctx, &rangeIter, stats.latestConfig,
-		&constraintConfVisitor, &localityStatsVisitor, &statusVisitor,
+		&constraintConfVisitor, &localityStatsVisitor, &replicationStatsVisitor,
 	); err != nil {
 		if _, ok := err.(visitorError); ok {
 			log.Errorf(ctx, "some reports have not been generated: %s", err)
@@ -221,22 +220,23 @@ func (stats *Reporter) update(
 	}
 
 	if !constraintConfVisitor.failed() {
-		if err := constraintConfVisitor.report.Save(
-			ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
+		if err := constraintsSaver.Save(
+			ctx, constraintConfVisitor.report, timeutil.Now() /* reportTS */, stats.db, stats.executor,
 		); err != nil {
 			return errors.Wrap(err, "failed to save constraint report")
 		}
 	}
 	if !localityStatsVisitor.failed() {
-		if err := localityStatsVisitor.report.Save(
-			ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
+		if err := locSaver.Save(
+			ctx, localityStatsVisitor.Report(), timeutil.Now() /* reportTS */, stats.db, stats.executor,
 		); err != nil {
 			return errors.Wrap(err, "failed to save locality report")
 		}
 	}
-	if !statusVisitor.failed() {
-		if err := statusVisitor.report.Save(
-			ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
+	if !replicationStatsVisitor.failed() {
+		if err := replStatsSaver.Save(
+			ctx, replicationStatsVisitor.Report(),
+			timeutil.Now() /* reportTS */, stats.db, stats.executor,
 		); err != nil {
 			return errors.Wrap(err, "failed to save range status report")
 		}
