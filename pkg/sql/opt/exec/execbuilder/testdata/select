@@ -1351,7 +1351,6 @@ scan  ·            ·
 statement ok
 SET CLUSTER SETTING sql.parallel_scans.enabled = true
 
-# TODO(radu): fix this testcase after #31614 is resolved. There should be no filter left.
 query TTT
 EXPLAIN SELECT * FROM b WHERE (a = 10 AND b = 10) OR (a = 20 AND b = 20)
 ----
@@ -1361,7 +1360,6 @@ scan  ·            ·
 ·     table        b@primary
 ·     spans        /10/10-/10/10/# /20/20-/20/20/#
 ·     parallel     ·
-·     filter       ((a = 10) AND (b = 10)) OR ((a = 20) AND (b = 20))
 
 # This one isn't parallelizable because it's not a point lookup - only part of
 # the primary key is specified.
@@ -1450,7 +1448,6 @@ render     ·            ·
  └── scan  ·            ·
 ·          table        b@b_c_d_key
 ·          spans        /NULL/1-/NULL/2 /10/10-/10/11
-·          filter       ((c = 10) AND (d = 10)) OR ((c IS NULL) AND (d < 2))
 
 statement ok
 DROP INDEX b_b_idx

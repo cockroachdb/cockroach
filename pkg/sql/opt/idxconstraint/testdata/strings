@@ -87,4 +87,3 @@ index-constraints vars=(string, string) index=(@1, @2)
 ----
 [/'eu' - /'us')
 [/'us'/'cali' - /'us'/'cali']
-Remaining filter: (((@1 = 'us') AND (@2 = 'cali')) OR (@1 = 'eu')) OR ((@1 > 'eu') AND (@1 < 'us'))
