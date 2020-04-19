@@ -343,6 +343,12 @@ func (v *criticalLocalitiesVisitor) countRange(
 	ctx context.Context, zoneKey ZoneKey, r *roachpb.RangeDescriptor,
 ) error {
 	stores := v.storeResolver(r)
+	// TODO(andrei): We're about to iterate through all the localities in the
+	// cluster and consider each one in relation to the current range. That's
+	// inefficient, since most localities will have nothing to do with the range -
+	// most localities will not have any replica of the range. Such localities are
+	// obviously not critical for the range. We should only iterate through the
+	// localities of the range's replicas.
 	for _, c := range v.localityConstraints {
 		if err := processLocalityForRange(
 			ctx, r, zoneKey, v.report, &c, v.nodeChecker, stores,
