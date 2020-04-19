@@ -661,11 +661,8 @@ func (r *recordingRangeVisitor) visitNewZone(
 	return nil
 }
 
-func (r *recordingRangeVisitor) visitSameZone(
-	_ context.Context, rng *roachpb.RangeDescriptor,
-) error {
+func (r *recordingRangeVisitor) visitSameZone(_ context.Context, rng *roachpb.RangeDescriptor) {
 	r.rngs = append(r.rngs, visitorEntry{newZone: false, rng: *rng})
-	return nil
 }
 
 func (r *recordingRangeVisitor) failed() bool {

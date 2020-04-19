@@ -511,7 +511,7 @@ type rangeVisitor interface {
 	// to multiple ranges, and so visitSameZone() allows them to efficiently reuse
 	// that state (in particular, not unmarshall ZoneConfigs again).
 	visitNewZone(context.Context, *roachpb.RangeDescriptor) error
-	visitSameZone(context.Context, *roachpb.RangeDescriptor) error
+	visitSameZone(context.Context, *roachpb.RangeDescriptor)
 
 	// failed returns true if an error was encountered by the last visit() call
 	// (and reset( ) wasn't called since).
@@ -586,7 +586,7 @@ func visitRanges(
 		for i, v := range visitors {
 			var err error
 			if sameZoneAsPrevRange {
-				err = v.visitSameZone(ctx, &rd)
+				v.visitSameZone(ctx, &rd)
 			} else {
 				err = v.visitNewZone(ctx, &rd)
 			}

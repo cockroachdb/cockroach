@@ -438,9 +438,8 @@ func (v *constraintConformanceVisitor) visitNewZone(
 // visitSameZone is part of the rangeVisitor interface.
 func (v *constraintConformanceVisitor) visitSameZone(
 	ctx context.Context, r *roachpb.RangeDescriptor,
-) (retErr error) {
+) {
 	v.countRange(ctx, r, v.prevZoneKey, v.prevConstraints)
-	return nil
 }
 
 func (v *constraintConformanceVisitor) countRange(
