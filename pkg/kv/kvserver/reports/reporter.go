@@ -200,7 +200,7 @@ func (stats *Reporter) update(
 	// Create the visitors that we're going to pass to visitRanges() below.
 	constraintConfVisitor := makeConstraintConformanceVisitor(
 		ctx, stats.latestConfig, getStoresFromGossip)
-	localityStatsVisitor := makeLocalityStatsVisitor(
+	localityStatsVisitor := makeCriticalLocalitiesVisitor(
 		ctx, localityConstraints, stats.latestConfig,
 		getStoresFromGossip, isNodeLive)
 	replicationStatsVisitor := makeReplicationStatsVisitor(ctx, stats.latestConfig, isNodeLive)
