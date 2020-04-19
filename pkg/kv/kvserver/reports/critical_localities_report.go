@@ -12,8 +12,6 @@ package reports
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -246,10 +244,10 @@ func (r *replicationCriticalLocalitiesReportSaver) upsertLocality(
 // criticalLocalitiesVisitor is a visitor that, when passed to visitRanges(), builds
 // a LocalityReport.
 type criticalLocalitiesVisitor struct {
-	localityConstraints []zonepb.ConstraintsConjunction
-	cfg                 *config.SystemConfig
-	storeResolver       StoreResolver
-	nodeChecker         nodeChecker
+	allLocalities map[roachpb.NodeID]map[string]roachpb.Locality
+	cfg           *config.SystemConfig
+	storeResolver StoreResolver
+	nodeChecker   nodeChecker
 
 	// report is the output of the visitor. visit*() methods populate it.
 	// After visiting all the ranges, it can be retrieved with Report().
@@ -266,19 +264,45 @@ var _ rangeVisitor = &criticalLocalitiesVisitor{}
 
 func makeCriticalLocalitiesVisitor(
 	ctx context.Context,
-	localityConstraints []zonepb.ConstraintsConjunction,
+	nodeLocalities map[roachpb.NodeID]roachpb.Locality,
 	cfg *config.SystemConfig,
 	storeResolver StoreResolver,
 	nodeChecker nodeChecker,
 ) criticalLocalitiesVisitor {
+	allLocalities := expandLocalities(nodeLocalities)
 	v := criticalLocalitiesVisitor{
-		localityConstraints: localityConstraints,
-		cfg:                 cfg,
-		storeResolver:       storeResolver,
-		nodeChecker:         nodeChecker,
+		allLocalities: allLocalities,
+		cfg:           cfg,
+		storeResolver: storeResolver,
+		nodeChecker:   nodeChecker,
 	}
 	v.reset(ctx)
 	return v
+}
+
+// expandLocalities expands each locality in its input into multiple localities,
+// each at a different level of granularity. For example the locality
+// "region=r1,dc=dc1,az=az1" is expanded into ["region=r1", "region=r1,dc=dc1",
+// "region=r1,dc=dc1,az=az1"].
+// The localities are returned in a format convenient for the
+// criticalLocalitiesVisitor.
+func expandLocalities(
+	nodeLocalities map[roachpb.NodeID]roachpb.Locality,
+) map[roachpb.NodeID]map[string]roachpb.Locality {
+	res := make(map[roachpb.NodeID]map[string]roachpb.Locality)
+	for nid, loc := range nodeLocalities {
+		if len(loc.Tiers) == 0 {
+			res[nid] = nil
+			continue
+		}
+		res[nid] = make(map[string]roachpb.Locality, len(loc.Tiers))
+		for i := range loc.Tiers {
+			partialLoc := roachpb.Locality{Tiers: make([]roachpb.Tier, i+1)}
+			copy(partialLoc.Tiers, loc.Tiers[:i+1])
+			res[nid][partialLoc.String()] = partialLoc
+		}
+	}
+	return res
 }
 
 // failed is part of the rangeVisitor interface.
@@ -345,15 +369,26 @@ func (v *criticalLocalitiesVisitor) countRange(
 	ctx context.Context, zoneKey ZoneKey, r *roachpb.RangeDescriptor,
 ) error {
 	stores := v.storeResolver(r)
-	// TODO(andrei): We're about to iterate through all the localities in the
-	// cluster and consider each one in relation to the current range. That's
-	// inefficient, since most localities will have nothing to do with the range -
-	// most localities will not have any replica of the range. Such localities are
-	// obviously not critical for the range. We should only iterate through the
-	// localities of the range's replicas.
-	for _, c := range v.localityConstraints {
+
+	// Collect all the localities of all the replicas. Note that we collect
+	// "expanded" localities: if a replica has a multi-tier locality like
+	// "region:us-east,dc=new-york", we collect both "region:us-east" and
+	// "region:us-east,dc=new-york".
+	dedupLocal := make(map[string]roachpb.Locality)
+	for _, rep := range r.Replicas().All() {
+		for s, loc := range v.allLocalities[rep.NodeID] {
+			if _, ok := dedupLocal[s]; ok {
+				continue
+			}
+			dedupLocal[s] = loc
+		}
+	}
+
+	// Any of the localities of any of the nodes could be critical. We'll check
+	// them one by one.
+	for _, loc := range dedupLocal {
 		if err := processLocalityForRange(
-			ctx, r, zoneKey, v.report, &c, v.nodeChecker, stores,
+			ctx, r, zoneKey, v.report, loc, v.nodeChecker, stores,
 		); err != nil {
 			return err
 		}
@@ -368,7 +403,7 @@ func processLocalityForRange(
 	r *roachpb.RangeDescriptor,
 	zoneKey ZoneKey,
 	rep LocalityReport,
-	c *zonepb.ConstraintsConjunction,
+	loc roachpb.Locality,
 	nodeChecker nodeChecker,
 	storeDescs []roachpb.StoreDescriptor,
 ) error {
@@ -389,12 +424,20 @@ func processLocalityForRange(
 		}
 	}
 
-	cstrs := make([]string, 0, len(c.Constraints))
-	for _, con := range c.Constraints {
-		cstrs = append(cstrs, fmt.Sprintf("%s=%s", con.Key, con.Value))
+	localityToConstraints := func(loc roachpb.Locality) zonepb.ConstraintsConjunction {
+		c := zonepb.ConstraintsConjunction{
+			Constraints: make([]zonepb.Constraint, 0, len(loc.Tiers)),
+		}
+		for _, tier := range loc.Tiers {
+			c.Constraints = append(c.Constraints, zonepb.Constraint{
+				Type: zonepb.Constraint_REQUIRED, Key: tier.Key, Value: tier.Value,
+			})
+		}
+		return c
 	}
-	loc := LocalityRepr(strings.Join(cstrs, ","))
 
+	locStr := LocalityRepr(loc.String())
+	c := localityToConstraints(loc)
 	passCount := 0
 	for _, storeDesc := range storeDescs {
 		storeHasConstraint := true
@@ -414,7 +457,7 @@ func processLocalityForRange(
 	// If the live nodes outside of the given locality are not enough to
 	// form quorum then this locality is critical.
 	if quorumCount > liveNodeCount-passCount {
-		rep.CountRangeAtRisk(zoneKey, loc)
+		rep.CountRangeAtRisk(zoneKey, locStr)
 	}
 	return nil
 }
