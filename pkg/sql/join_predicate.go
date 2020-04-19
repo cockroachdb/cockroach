@@ -67,8 +67,8 @@ type joinPredicate struct {
 	rightEqKey bool
 }
 
-// makePredicate constructs a joinPredicate object for joins. The join condition
-// includes equality between usingColumns.
+// makePredicate constructs a joinPredicate object for joins. The equality
+// columns / on condition must be initialized separately.
 func makePredicate(
 	joinType sqlbase.JoinType, left, right sqlbase.ResultColumns,
 ) (*joinPredicate, error) {
