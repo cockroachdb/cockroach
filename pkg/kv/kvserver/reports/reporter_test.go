@@ -471,29 +471,6 @@ func (it *erroryRangeIterator) Close(ctx context.Context) {
 	it.iter.Close(ctx)
 }
 
-// computeConstraintConformanceReport iterates through all the ranges and
-// generates the constraint conformance report.
-func computeConstraintConformanceReport(
-	ctx context.Context,
-	rangeStore RangeIterator,
-	cfg *config.SystemConfig,
-	storeResolver StoreResolver,
-) (ConstraintReport, error) {
-	v := makeConstraintConformanceVisitor(ctx, cfg, storeResolver)
-	err := visitRanges(ctx, rangeStore, cfg, &v)
-	return v.Report(), err
-}
-
-// computeReplicationStatsReport iterates through all the ranges and generates
-// the replication stats report.
-func computeReplicationStatsReport(
-	ctx context.Context, rangeStore RangeIterator, checker nodeChecker, cfg *config.SystemConfig,
-) (RangeReport, error) {
-	v := makeReplicationStatsVisitor(ctx, cfg, checker)
-	err := visitRanges(ctx, rangeStore, cfg, &v)
-	return v.Report(), err
-}
-
 func TestZoneChecker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
