@@ -283,6 +283,7 @@ func makeLocalityStatsVisitor(
 		nodeChecker:         nodeChecker,
 		report:              saver,
 	}
+	v.reset(ctx)
 	return v
 }
 
@@ -294,6 +295,7 @@ func (v *criticalLocalitiesVisitor) failed() bool {
 // reset is part of the rangeVisitor interface.
 func (v *criticalLocalitiesVisitor) reset(ctx context.Context) {
 	v.visitErr = false
+	v.prevZoneKey = ZoneKey{}
 	v.report.resetReport()
 }
 
