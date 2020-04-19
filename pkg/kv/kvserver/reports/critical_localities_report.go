@@ -350,7 +350,8 @@ func (v *criticalLocalitiesVisitor) visitNewZone(
 	}
 	v.prevZoneKey = zKey
 
-	return v.countRange(ctx, zKey, r)
+	v.countRange(ctx, zKey, r)
+	return nil
 }
 
 // visitSameZone is part of the rangeVisitor interface.
@@ -358,16 +359,18 @@ func (v *criticalLocalitiesVisitor) visitSameZone(
 	ctx context.Context, r *roachpb.RangeDescriptor,
 ) (retErr error) {
 	defer func() {
-		if retErr != nil {
-			v.visitErr = true
-		}
+		// NOTE: This method doesn't return errors right not; this defer is here
+		// just in case it starts returning them in the future.
+		v.visitErr = retErr != nil
 	}()
-	return v.countRange(ctx, v.prevZoneKey, r)
+
+	v.countRange(ctx, v.prevZoneKey, r)
+	return nil
 }
 
 func (v *criticalLocalitiesVisitor) countRange(
 	ctx context.Context, zoneKey ZoneKey, r *roachpb.RangeDescriptor,
-) error {
+) {
 	stores := v.storeResolver(r)
 
 	// Collect all the localities of all the replicas. Note that we collect
@@ -387,13 +390,8 @@ func (v *criticalLocalitiesVisitor) countRange(
 	// Any of the localities of any of the nodes could be critical. We'll check
 	// them one by one.
 	for _, loc := range dedupLocal {
-		if err := processLocalityForRange(
-			ctx, r, zoneKey, v.report, loc, v.nodeChecker, stores,
-		); err != nil {
-			return err
-		}
+		processLocalityForRange(ctx, r, zoneKey, v.report, loc, v.nodeChecker, stores)
 	}
-	return nil
 }
 
 // processLocalityForRange checks a single locality constraint against a
@@ -406,7 +404,7 @@ func processLocalityForRange(
 	loc roachpb.Locality,
 	nodeChecker nodeChecker,
 	storeDescs []roachpb.StoreDescriptor,
-) error {
+) {
 	// Compute the required quorum and the number of live nodes. If the number of
 	// live nodes gets lower than the required quorum then the range is already
 	// unavailable.
@@ -459,5 +457,4 @@ func processLocalityForRange(
 	if quorumCount > liveNodeCount-passCount {
 		rep.CountRangeAtRisk(zoneKey, locStr)
 	}
-	return nil
 }
