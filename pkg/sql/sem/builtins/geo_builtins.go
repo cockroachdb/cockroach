@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geomfn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // infoBuilder is used to build a detailed info string that is consistent between
@@ -40,6 +41,24 @@ func (ib infoBuilder) String() string {
 }
 
 var geoBuiltins = map[string]builtinDefinition{
+	//
+	// Unary functions.
+	//
+	// TODO(rytaft, otan): replace this with a real function.
+	"st_area": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry_a", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDFloat(0), errors.Newf("ST_Area is not yet supported.")
+			},
+			Info: "Returns the area of geometry_a",
+		},
+	),
+
 	//
 	// Binary Predicates
 	//
