@@ -877,14 +877,15 @@ FROM [SHOW COLUMNS FROM "%s"];
 		columnNames = append(columnNames, name)
 	}
 	if rows.Err() != nil {
-		return nil, err
-	}
-	if len(columnNames) <= 0 {
-		return nil, errors.Errorf("table %s has no columns", tableName)
+		return nil, rows.Err()
 	}
 
 	w.rng.Shuffle(len(columnNames), func(i, j int) {
 		columnNames[i], columnNames[j] = columnNames[j], columnNames[i]
 	})
+
+	if len(columnNames) <= 0 {
+		return nil, errors.Errorf("table %s has no columns", tableName)
+	}
 	return columnNames, nil
 }
