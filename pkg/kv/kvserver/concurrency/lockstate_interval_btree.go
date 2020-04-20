@@ -109,6 +109,7 @@ type node struct {
 	children [maxItems + 1]*node
 }
 
+//go:nocheckptr casts a ptr to a smaller struct to a ptr to a larger struct.
 func leafToNode(ln *leafNode) *node {
 	return (*node)(unsafe.Pointer(ln))
 }
