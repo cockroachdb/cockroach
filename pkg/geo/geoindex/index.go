@@ -117,6 +117,34 @@ type GeometryIndex interface {
 	testingInnerCovering(g *geo.Geometry) s2.CellUnion
 }
 
+// RelationshipType stores a type of geospatial relationship query that can
+// be accelerated using an index.
+type RelationshipType uint8
+
+const (
+	// Covers corresponds to the relationship in which one geospatial object
+	// covers another geospatial object.
+	Covers RelationshipType = (1 << iota)
+
+	// CoveredBy corresponds to the relationship in which one geospatial object
+	// is covered by another geospatial object.
+	CoveredBy
+
+	// Intersects corresponds to the relationship in which one geospatial object
+	// intersects another geospatial object.
+	Intersects
+)
+
+var geoRelationshipTypeStr = map[RelationshipType]string{
+	Covers:     "covers",
+	CoveredBy:  "covered by",
+	Intersects: "intersects",
+}
+
+func (gr RelationshipType) String() string {
+	return geoRelationshipTypeStr[gr]
+}
+
 // Key is one entry under which a geospatial shape is stored on behalf of an
 // Index. The index is of the form (Key, Primary Key).
 type Key uint64
