@@ -166,7 +166,6 @@ type FlowBase struct {
 	ctxDone   <-chan struct{}
 
 	// spec is the request that produced this flow. Only used for debugging.
-	// TODO(yuzefovich): probably we can get rid off this field.
 	spec *execinfrapb.FlowSpec
 }
 

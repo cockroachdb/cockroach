@@ -45,6 +45,7 @@ func (s *sorterBase) init(
 	self execinfra.RowSource,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
+	processorName string,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
@@ -58,18 +59,9 @@ func (s *sorterBase) init(
 		s.FinishTrace = s.outputStatsToTrace
 	}
 
-	useTempStorage := execinfra.SettingUseTempStorageSorts.Get(&flowCtx.Cfg.Settings.SV) ||
-		flowCtx.Cfg.TestingKnobs.ForceDiskSpill ||
-		flowCtx.Cfg.TestingKnobs.MemoryLimitBytes > 0
-	var memMonitor *mon.BytesMonitor
-	if useTempStorage {
-		// Limit the memory use by creating a child monitor with a hard limit.
-		// The processor will overflow to disk if this limit is not enough.
-		memMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "sortall-limited")
-	} else {
-		memMonitor = execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "sorter-mem")
-	}
-
+	// Limit the memory use by creating a child monitor with a hard limit.
+	// The processor will overflow to disk if this limit is not enough.
+	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, fmt.Sprintf("%s-limited", processorName))
 	if err := s.ProcessorBase.Init(
 		self, post, input.OutputTypes(), flowCtx, processorID, output, memMonitor, opts,
 	); err != nil {
@@ -77,24 +69,18 @@ func (s *sorterBase) init(
 		return err
 	}
 
-	if useTempStorage {
-		s.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, "sorter-disk")
-		rc := rowcontainer.DiskBackedRowContainer{}
-		rc.Init(
-			ordering,
-			input.OutputTypes(),
-			s.EvalCtx,
-			flowCtx.Cfg.TempStorage,
-			memMonitor,
-			s.diskMonitor,
-			0, /* rowCapacity */
-		)
-		s.rows = &rc
-	} else {
-		rc := rowcontainer.MemRowContainer{}
-		rc.InitWithMon(ordering, input.OutputTypes(), s.EvalCtx, memMonitor, 0 /* rowCapacity */)
-		s.rows = &rc
-	}
+	s.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.Cfg.DiskMonitor, fmt.Sprintf("%s-disk", processorName))
+	rc := rowcontainer.DiskBackedRowContainer{}
+	rc.Init(
+		ordering,
+		input.OutputTypes(),
+		s.EvalCtx,
+		flowCtx.Cfg.TempStorage,
+		memMonitor,
+		s.diskMonitor,
+		0, /* rowCapacity */
+	)
+	s.rows = &rc
 
 	s.input = input
 	s.ordering = ordering
@@ -262,7 +248,7 @@ func newSortAllProcessor(
 ) (execinfra.Processor, error) {
 	proc := &sortAllProcessor{}
 	if err := proc.sorterBase.init(
-		proc, flowCtx, processorID, input, post, out,
+		proc, flowCtx, processorID, sortAllProcName, input, post, out,
 		execinfrapb.ConvertToColumnOrdering(spec.OutputOrdering),
 		spec.OrderingMatchLen,
 		execinfra.ProcStateOpts{
@@ -381,7 +367,7 @@ func newSortTopKProcessor(
 	ordering := execinfrapb.ConvertToColumnOrdering(spec.OutputOrdering)
 	proc := &sortTopKProcessor{k: k}
 	if err := proc.sorterBase.init(
-		proc, flowCtx, processorID, input, post, out,
+		proc, flowCtx, processorID, sortTopKProcName, input, post, out,
 		ordering, spec.OrderingMatchLen,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},
@@ -485,7 +471,7 @@ func newSortChunksProcessor(
 
 	proc := &sortChunksProcessor{}
 	if err := proc.sorterBase.init(
-		proc, flowCtx, processorID, input, post, out, ordering, spec.OrderingMatchLen,
+		proc, flowCtx, processorID, sortChunksProcName, input, post, out, ordering, spec.OrderingMatchLen,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},
 			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {

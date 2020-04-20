@@ -199,7 +199,10 @@ func NewProcessor(
 		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
 			return nil, err
 		}
-		return newHashJoiner(flowCtx, processorID, core.HashJoiner, inputs[0], inputs[1], post, outputs[0])
+		return newHashJoiner(
+			flowCtx, processorID, core.HashJoiner, inputs[0], inputs[1], post,
+			outputs[0], false, /* disableTempStorage */
+		)
 	}
 	if core.Backfiller != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
