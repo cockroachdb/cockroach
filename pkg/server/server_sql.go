@@ -83,14 +83,13 @@ type sqlServer struct {
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
 }
 
-type sqlServerArgs struct {
-	*Config
-	stopper *stop.Stopper
-
-	// SQL uses the clock to assign timestamps to transactions, among many
-	// others.
-	clock *hlc.Clock
-
+// sqlServerOptionalArgs are the arguments supplied to newSQLServer which
+// are only available if the SQL server runs as part of a KV node.
+//
+// TODO(tbg): give all of these fields a wrapper that can signal whether the
+// respective object is available. When it is not, return
+// UnsupportedWithMultiTenancy.
+type sqlServerOptionalArgs struct {
 	// DistSQL uses rpcContext to set up flows. Less centrally, the executor
 	// also uses rpcContext in a number of places to learn whether the server
 	// is running insecure, and to read the cluster name.
@@ -112,8 +111,6 @@ type sqlServerArgs struct {
 		jobs.NodeLiveness                    // jobs uses this
 		IsLive(roachpb.NodeID) (bool, error) // DistSQLPlanner wants this
 	}
-	// The executorConfig uses the provider.
-	protectedtsProvider protectedts.Provider
 	// Gossip is relied upon by distSQLCfg (execinfra.ServerConfig), the executor
 	// config, the DistSQL planner, the table statistics cache, the statements
 	// diagnostics registry, and the lease manager.
@@ -126,6 +123,26 @@ type sqlServerArgs struct {
 	recorder *status.MetricsRecorder
 	// For the temporaryObjectCleaner.
 	isMeta1Leaseholder func(hlc.Timestamp) (bool, error)
+	// DistSQL, lease management, and others want to know the node they're on.
+	nodeIDContainer *base.NodeIDContainer
+
+	// Used by backup/restore.
+	externalStorage        cloud.ExternalStorageFactory
+	externalStorageFromURI cloud.ExternalStorageFromURIFactory
+}
+
+type sqlServerArgs struct {
+	sqlServerOptionalArgs
+
+	*Config
+	stopper *stop.Stopper
+
+	// SQL uses the clock to assign timestamps to transactions, among many
+	// others.
+	clock *hlc.Clock
+
+	// The executorConfig uses the provider.
+	protectedtsProvider protectedts.Provider
 	// DistSQLCfg holds on to this to check for node CPU utilization in
 	// samplerProcessor.
 	runtime *status.RuntimeStatSampler
@@ -141,18 +158,10 @@ type sqlServerArgs struct {
 	//
 	// TODO(tbg): make this less hacky.
 	circularInternalExecutor *sql.InternalExecutor // empty initially
-	// DistSQL, lease management, and others want to know the node they're on.
-	//
-	// TODO(tbg): replace this with a method that can refuse to return a result
-	// because once we have multi-tenancy, a NodeID will not be available.
-	nodeIDContainer *base.NodeIDContainer
 
-	// Used by backup/restore.
-	externalStorage        cloud.ExternalStorageFactory
-	externalStorageFromURI cloud.ExternalStorageFromURIFactory
-
-	// The protected timestamps KV subsystem depends on this, so it is bound
-	// early but only gets filled in newSQLServer.
+	// The protected timestamps KV subsystem depends on this, so we pass a
+	// pointer to an empty struct in this configuration, which newSQLServer
+	// fills.
 	jobRegistry *jobs.Registry
 }
 
