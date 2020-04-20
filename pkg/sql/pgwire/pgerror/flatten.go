@@ -37,8 +37,9 @@ func Flatten(err error) *Error {
 		return nil
 	}
 	resErr := &Error{
-		Code:    GetPGCode(err),
-		Message: err.Error(),
+		Code:     GetPGCode(err),
+		Message:  err.Error(),
+		Severity: GetSeverity(err),
 	}
 
 	// Populate the source field if available.

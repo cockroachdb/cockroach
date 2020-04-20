@@ -38,6 +38,8 @@ type routerOutput interface {
 	addBatch(context.Context, coldata.Batch, []int) bool
 	// cancel tells the output to stop producing batches.
 	cancel(ctx context.Context)
+	// drain drains the output of any metadata.
+	drain() []execinfrapb.ProducerMetadata
 }
 
 // getDefaultRouterOutputBlockedThreshold returns the number of unread values
@@ -48,6 +50,19 @@ type routerOutput interface {
 func getDefaultRouterOutputBlockedThreshold() int {
 	return coldata.BatchSize() * 2
 }
+
+type routerOutputOpState int
+
+const (
+	// routerOutputOpRunning is the state in which routerOutputOp operates
+	// normally. The router output transitions into the draining state when
+	// either it is finished (when a zero-length batch was added or when it was
+	// canceled) or it encounters an error.
+	routerOutputOpRunning routerOutputOpState = iota
+	// routerOutputOpDraining is the state in which routerOutputOp always
+	// returns zero-length batches on calls to Next.
+	routerOutputOpDraining
+)
 
 type routerOutputOp struct {
 	// input is a reference to our router.
@@ -61,6 +76,7 @@ type routerOutputOp struct {
 
 	mu struct {
 		syncutil.Mutex
+		state routerOutputOpState
 		// unlimitedAllocator tracks the memory usage of this router output,
 		// providing a signal for when it should spill to disk.
 		// The memory lifecycle is as follows:
@@ -92,7 +108,6 @@ type routerOutputOp struct {
 		// are released.
 		unlimitedAllocator *Allocator
 		cond               *sync.Cond
-		done               bool
 		// pendingBatch is a partially-filled batch with data added through
 		// addBatch. Once this batch reaches capacity, it is flushed to data. The
 		// main use of pendingBatch is coalescing various fragmented batches into
@@ -102,6 +117,17 @@ type routerOutputOp struct {
 		data      *spillingQueue
 		numUnread int
 		blocked   bool
+
+		drainState struct {
+			// err stores any error (if such occurs) when dequeueing from data
+			// (one possible error could be hitting disk usage limit). Once
+			// such error occurs, the output transitions into draining state.
+			// The error, however, will not be propagated right away - in order to
+			// prevent double reporting of the error by the hash router, it will be
+			// returned either on the next call to addBatch (if such occurs) or
+			// during draining of the router output.
+			err error
+		}
 	}
 
 	testingKnobs struct {
@@ -182,14 +208,11 @@ func (o *routerOutputOp) Init() {}
 func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	if o.mu.done {
-		return coldata.ZeroBatch
-	}
-	for o.mu.pendingBatch == nil && o.mu.data.empty() && !o.mu.done {
+	for o.mu.state == routerOutputOpRunning && o.mu.pendingBatch == nil && o.mu.data.empty() {
 		// Wait until there is data to read or the output is canceled.
 		o.mu.cond.Wait()
 	}
-	if o.mu.done {
+	if o.mu.state == routerOutputOpDraining {
 		return coldata.ZeroBatch
 	}
 	var b coldata.Batch
@@ -201,10 +224,10 @@ func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 		o.mu.unlimitedAllocator.ReleaseBatch(b)
 		o.mu.pendingBatch = nil
 	} else {
-		var err error
-		b, err = o.mu.data.dequeue(ctx)
-		if err != nil {
-			execerror.VectorizedInternalPanic(err)
+		b, o.mu.drainState.err = o.mu.data.dequeue(ctx)
+		if o.mu.drainState.err != nil {
+			o.mu.state = routerOutputOpDraining
+			return coldata.ZeroBatch
 		}
 	}
 	o.mu.numUnread -= b.Length()
@@ -221,7 +244,7 @@ func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (o *routerOutputOp) closeLocked(ctx context.Context) {
-	o.mu.done = true
+	o.mu.state = routerOutputOpDraining
 	if err := o.mu.data.close(ctx); err != nil {
 		// This log message is Info instead of Warning because the flow will also
 		// attempt to clean up the parent directory, so this failure might not have
@@ -262,6 +285,16 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	if o.mu.state == routerOutputOpDraining {
+		// We have encountered an error in Next() but have not yet propagated
+		// it, so we do so now - the error will get to the hash router which
+		// will cancel all of its outputs.
+		err := o.mu.drainState.err
+		// We set the error to nil so that it is not propagated again, during
+		// drain() call.
+		o.mu.drainState.err = nil
+		execerror.VectorizedInternalPanic(err)
+	}
 	if batch.Length() == 0 {
 		if o.mu.pendingBatch != nil {
 			if err := o.mu.data.enqueue(ctx, o.mu.pendingBatch); err != nil {
@@ -339,11 +372,23 @@ func (o *routerOutputOp) maybeUnblockLocked() {
 	}
 }
 
+func (o *routerOutputOp) drain() []execinfrapb.ProducerMetadata {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.mu.drainState.err != nil {
+		err := o.mu.drainState.err
+		o.mu.drainState.err = nil
+		return []execinfrapb.ProducerMetadata{{Err: err}}
+	}
+	return nil
+}
+
 // reset resets the routerOutputOp for a benchmark run.
 func (o *routerOutputOp) reset(ctx context.Context) {
 	o.mu.Lock()
-	o.mu.done = false
+	o.mu.state = routerOutputOpRunning
 	o.mu.data.reset(ctx)
+	o.mu.drainState.err = nil
 	o.mu.numUnread = 0
 	o.mu.blocked = false
 	o.mu.Unlock()
@@ -446,62 +491,82 @@ func newHashRouterWithOutputs(
 // output calculated by hashing columns. Cancel the given context to terminate
 // early.
 func (r *HashRouter) Run(ctx context.Context) {
-	r.input.Init()
-	cancelOutputs := func(err error) {
-		if err != nil {
-			r.mu.Lock()
-			r.mu.bufferedMeta = append(r.mu.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
-			r.mu.Unlock()
-		}
-		for _, o := range r.outputs {
-			o.cancel(ctx)
-		}
+	bufferErr := func(err error) {
+		r.mu.Lock()
+		r.mu.bufferedMeta = append(r.mu.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
+		r.mu.Unlock()
 	}
-	var done bool
-	processNextBatch := func() {
-		done = r.processNextBatch(ctx)
-	}
-	for {
-		// Check for cancellation.
-		select {
-		case <-ctx.Done():
-			cancelOutputs(ctx.Err())
-			return
-		default:
-		}
-
-		// Read all the routerOutput state changes that have happened since the
-		// last iteration.
-		for moreToRead := true; moreToRead; {
-			select {
-			case <-r.unblockedEventsChan:
-				r.numBlockedOutputs--
-			default:
-				// No more routerOutput state changes to read without blocking.
-				moreToRead = false
+	// Since HashRouter runs in a separate goroutine, we want to be safe and
+	// make sure that we catch errors in all code paths, so we wrap the whole
+	// method with a catcher. Note that we also have "internal" catchers as
+	// well for more fine-grained control of error propagation.
+	if err := execerror.CatchVectorizedRuntimeError(func() {
+		r.input.Init()
+		// cancelOutputs buffers non-nil error as metadata, cancels all of the
+		// outputs additionally buffering any error if such occurs during the
+		// outputs' cancellation as metadata as well. Note that it attempts to
+		// cancel every output regardless of whether "previous" output's
+		// cancellation succeeds.
+		cancelOutputs := func(err error) {
+			if err != nil {
+				bufferErr(err)
+			}
+			for _, o := range r.outputs {
+				if err := execerror.CatchVectorizedRuntimeError(func() {
+					o.cancel(ctx)
+				}); err != nil {
+					bufferErr(err)
+				}
 			}
 		}
-
-		if r.numBlockedOutputs == len(r.outputs) {
-			// All outputs are blocked, wait until at least one output is unblocked.
+		var done bool
+		processNextBatch := func() {
+			done = r.processNextBatch(ctx)
+		}
+		for {
+			// Check for cancellation.
 			select {
-			case <-r.unblockedEventsChan:
-				r.numBlockedOutputs--
 			case <-ctx.Done():
 				cancelOutputs(ctx.Err())
 				return
+			default:
+			}
+
+			// Read all the routerOutput state changes that have happened since the
+			// last iteration.
+			for moreToRead := true; moreToRead; {
+				select {
+				case <-r.unblockedEventsChan:
+					r.numBlockedOutputs--
+				default:
+					// No more routerOutput state changes to read without blocking.
+					moreToRead = false
+				}
+			}
+
+			if r.numBlockedOutputs == len(r.outputs) {
+				// All outputs are blocked, wait until at least one output is unblocked.
+				select {
+				case <-r.unblockedEventsChan:
+					r.numBlockedOutputs--
+				case <-ctx.Done():
+					cancelOutputs(ctx.Err())
+					return
+				}
+			}
+
+			if err := execerror.CatchVectorizedRuntimeError(processNextBatch); err != nil {
+				cancelOutputs(err)
+				return
+			}
+			if done {
+				// The input was done and we have notified the routerOutputs that there
+				// is no more data.
+				return
 			}
 		}
-
-		if err := execerror.CatchVectorizedRuntimeError(processNextBatch); err != nil {
-			cancelOutputs(err)
-			return
-		}
-		if done {
-			// The input was done and we have notified the routerOutputs that there
-			// is no more data.
-			return
-		}
+	}); err != nil {
+		bufferErr(err)
 	}
 }
 
@@ -552,6 +617,9 @@ func (r *HashRouter) reset(ctx context.Context) {
 func (r *HashRouter) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	for _, o := range r.outputs {
+		r.mu.bufferedMeta = append(r.mu.bufferedMeta, o.drain()...)
+	}
 	meta := r.mu.bufferedMeta
 	r.mu.bufferedMeta = r.mu.bufferedMeta[:0]
 	return meta

@@ -529,6 +529,10 @@ func (o callbackRouterOutput) cancel(context.Context) {
 	}
 }
 
+func (o callbackRouterOutput) drain() []execinfrapb.ProducerMetadata {
+	return nil
+}
+
 func TestHashRouterComputesDestination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
