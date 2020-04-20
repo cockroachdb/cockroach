@@ -353,7 +353,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	nodeCountFn := func() int64 {
 		return nodeLiveness.Metrics().LiveNodes.Value()
 	}
-	tsServer := ts.MakeServer(cfg.AmbientCtx, tsDB, nodeCountFn, cfg.TimeSeriesServerConfig, stopper)
+	sTS := ts.MakeServer(cfg.AmbientCtx, tsDB, nodeCountFn, cfg.TimeSeriesServerConfig, stopper)
 
 	// The InternalExecutor will be further initialized later, as we create more
 	// of the server's components. There's a circular dependency - many things
@@ -478,14 +478,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	lateBoundServer := &Server{}
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
-	adminServer := newAdminServer(lateBoundServer)
+	sAdmin := newAdminServer(lateBoundServer)
 	sessionRegistry := sql.NewSessionRegistry()
 
-	statusServer := newStatusServer(
+	sStatus := newStatusServer(
 		cfg.AmbientCtx,
 		st,
 		cfg.Config,
-		adminServer,
+		sAdmin,
 		db,
 		g,
 		recorder,
@@ -498,8 +498,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		internalExecutor,
 	)
 	// TODO(tbg): don't pass all of Server into this to avoid this hack.
-	authenticationServer := newAuthenticationServer(lateBoundServer)
-	for i, gw := range []grpcGatewayServer{adminServer, statusServer, authenticationServer, &tsServer} {
+	sAuth := newAuthenticationServer(lateBoundServer)
+	for i, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth, &sTS} {
 		if reflect.ValueOf(gw).IsNil() {
 			return nil, errors.Errorf("%d: nil", i)
 		}
@@ -507,12 +507,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
-		Config:                   &cfg, // NB: s.cfg has a populated AmbientContext.
-		stopper:                  stopper,
-		clock:                    clock,
-		rpcContext:               rpcContext,
-		distSender:               distSender,
-		status:                   statusServer,
+		Config:     &cfg, // NB: s.cfg has a populated AmbientContext.
+		stopper:    stopper,
+		clock:      clock,
+		rpcContext: rpcContext,
+		distSender: distSender,
+		status: func() (*statusServer, bool) {
+			return sStatus, true
+		},
 		nodeLiveness:             nodeLiveness,
 		protectedtsProvider:      protectedtsProvider,
 		gossip:                   g,
@@ -553,11 +555,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		registry:              registry,
 		recorder:              recorder,
 		runtime:               runtimeSampler,
-		admin:                 adminServer,
-		status:                statusServer,
-		authentication:        authenticationServer,
+		admin:                 sAdmin,
+		status:                sStatus,
+		authentication:        sAuth,
 		tsDB:                  tsDB,
-		tsServer:              &tsServer,
+		tsServer:              &sTS,
 		raftTransport:         raftTransport,
 		stopper:               stopper,
 		debug:                 debugServer,
