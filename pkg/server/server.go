@@ -1450,14 +1450,14 @@ func (s *Server) Start(ctx context.Context) error {
 	// Begin the node liveness heartbeat. Add a callback which records the local
 	// store "last up" timestamp for every store whenever the liveness record is
 	// updated.
-	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, func(ctx context.Context) {
+	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, s.engines, func(ctx context.Context) {
 		now := s.clock.Now()
 		if err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
 			return s.WriteLastUpTimestamp(ctx, now)
 		}); err != nil {
 			log.Warning(ctx, errors.Wrap(err, "writing last up timestamp"))
 		}
-	}, s.engines)
+	})
 
 	// Begin recording status summaries.
 	s.node.startWriteNodeStatus(DefaultMetricsSampleInterval)
