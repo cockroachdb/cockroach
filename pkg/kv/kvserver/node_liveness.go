@@ -903,9 +903,9 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 		return err
 	}
 
-	nl.mu.Lock()
+	nl.mu.RLock()
 	cb := nl.mu.heartbeatCallback
-	nl.mu.Unlock()
+	nl.mu.RUnlock()
 	if cb != nil {
 		cb(ctx)
 	}
