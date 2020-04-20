@@ -33,6 +33,9 @@ type SRID int32
 // WKT is the Well Known Text form of a spatial object.
 type WKT string
 
+// EWKT is the Extended Well Known Text form of a spatial object.
+type EWKT string
+
 // WKB is the Well Known Bytes form of a spatial object.
 type WKB []byte
 

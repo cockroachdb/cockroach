@@ -20,6 +20,7 @@ import (
 	"github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/encoding/ewkb"
 	"github.com/twpayne/go-geom/encoding/ewkbhex"
+	"github.com/twpayne/go-geom/encoding/geojson"
 )
 
 // parseAmbiguousTextToEWKB parses a text as a number of different options
@@ -31,33 +32,59 @@ func parseAmbiguousTextToEWKB(str string, defaultSRID geopb.SRID) (geopb.EWKB, e
 		return nil, fmt.Errorf("geo: parsing empty string to geo type")
 	}
 
+	switch str[0] {
+	case '0':
+		return ParseEWKBHex(str, defaultSRID)
+	case 0x00, 0x01:
+		return ParseEWKB([]byte(str), defaultSRID)
+	case '{':
+		return ParseGeoJSON([]byte(str), defaultSRID)
+	}
+
+	return ParseEWKT(geopb.EWKT(str), defaultSRID)
+}
+
+// ParseEWKBHex takes a given str assumed to be in EWKB hex and transforms it
+// into an EWKB.
+func ParseEWKBHex(str string, defaultSRID geopb.SRID) (geopb.EWKB, error) {
+	t, err := ewkbhex.Decode(str)
+	if err != nil {
+		return nil, err
+	}
 	// TODO(otan): check SRID is valid against spatial_ref_sys.
-	// Parse as EWKB hex.
-	if str[0] == '0' {
-		t, err := ewkbhex.Decode(str)
-		if err != nil {
-			return nil, err
-		}
-		if defaultSRID != 0 && t.SRID() == 0 {
-			adjustGeomSRID(t, defaultSRID)
-		}
-		return ewkb.Marshal(t, ewkbEncodingFormat)
+	if defaultSRID != 0 && t.SRID() == 0 {
+		adjustGeomSRID(t, defaultSRID)
 	}
+	return ewkb.Marshal(t, ewkbEncodingFormat)
+}
 
-	// Parse as EWKB if it's a byte start.
-	if str[0] == 0x00 || str[0] == 0x01 {
-		t, err := ewkb.Unmarshal([]byte(str))
-		if err != nil {
-			return nil, err
-		}
-		if defaultSRID != 0 && t.SRID() == 0 {
-			adjustGeomSRID(t, defaultSRID)
-		}
-		return ewkb.Marshal(t, ewkbEncodingFormat)
+// ParseEWKB takes given bytes assumed to be EWKB and transforms it into
+// an EWKB in the proper format.
+func ParseEWKB(b []byte, defaultSRID geopb.SRID) (geopb.EWKB, error) {
+	t, err := ewkb.Unmarshal(b)
+	if err != nil {
+		return nil, err
 	}
+	// TODO(otan): check SRID is valid against spatial_ref_sys.
+	if defaultSRID != 0 && t.SRID() == 0 {
+		adjustGeomSRID(t, defaultSRID)
+	}
+	return ewkb.Marshal(t, ewkbEncodingFormat)
+}
 
-	// TODO(otan): parse GeoJSON by checking if character starts with '{'
-	return decodeEWKT(str, defaultSRID)
+// ParseGeoJSON takes given bytes assumed to be GeoJSON and transforms it to
+// an EWKB in the proper format.
+func ParseGeoJSON(b []byte, defaultSRID geopb.SRID) (geopb.EWKB, error) {
+	var f geojson.Feature
+	if err := f.UnmarshalJSON(b); err != nil {
+		return nil, err
+	}
+	t := f.Geometry
+	// TODO(otan): check SRID from properties.
+	if defaultSRID != 0 && t.SRID() == 0 {
+		adjustGeomSRID(t, defaultSRID)
+	}
+	return ewkb.Marshal(t, ewkbEncodingFormat)
 }
 
 // adjustGeomSRID adjusts the SRID of a given geom.T.
@@ -86,13 +113,13 @@ func adjustGeomSRID(t geom.T, srid geopb.SRID) {
 const sridPrefix = "SRID="
 const sridPrefixLen = len(sridPrefix)
 
-// decodeEWKT decodes a WKT string.
-func decodeEWKT(str string, defaultSRID geopb.SRID) (geopb.EWKB, error) {
+// ParseEWKT decodes a WKT string.
+func ParseEWKT(str geopb.EWKT, defaultSRID geopb.SRID) (geopb.EWKB, error) {
 	srid := defaultSRID
-	if strings.HasPrefix(str, sridPrefix) {
-		end := strings.Index(str[sridPrefixLen:], ";")
+	if strings.HasPrefix(string(str), sridPrefix) {
+		end := strings.Index(string(str[sridPrefixLen:]), ";")
 		if end != -1 {
-			sridInt64, err := strconv.ParseInt(str[sridPrefixLen:sridPrefixLen+end], 10, 32)
+			sridInt64, err := strconv.ParseInt(string(str[sridPrefixLen:sridPrefixLen+end]), 10, 32)
 			if err != nil {
 				return nil, err
 			}
