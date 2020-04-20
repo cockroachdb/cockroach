@@ -168,7 +168,7 @@ type Server struct {
 
 	sqlServer *sqlServer
 
-	// The fields below are populated at start time, i.e. in `(*Server).Start`.
+	// The following fields are populated at start time, i.e. in `(*Server).Start`.
 
 	startTime time.Time
 	engines   Engines
