@@ -45,7 +45,7 @@ func TestFileRoundtrip(t *testing.T) {
 		// buffer.
 		for i := 0; i < 2; i++ {
 			func() {
-				roundtrip := coldata.NewMemBatchWithSize(nil, 0)
+				roundtrip := coldata.NewMemBatchWithSize(typs, b.Length())
 				d, err := colserde.NewFileDeserializerFromBytes(buf.Bytes())
 				require.NoError(t, err)
 				defer func() { require.NoError(t, d.Close()) }()
@@ -81,7 +81,7 @@ func TestFileRoundtrip(t *testing.T) {
 		// file.
 		for i := 0; i < 2; i++ {
 			func() {
-				roundtrip := coldata.NewMemBatchWithSize(nil, 0)
+				roundtrip := coldata.NewMemBatchWithSize(typs, b.Length())
 				d, err := colserde.NewFileDeserializerFromPath(path)
 				require.NoError(t, err)
 				defer func() { require.NoError(t, d.Close()) }()
@@ -119,7 +119,7 @@ func TestFileIndexing(t *testing.T) {
 	require.Equal(t, typs, d.Typs())
 	require.Equal(t, numInts, d.NumBatches())
 	for batchIdx := numInts - 1; batchIdx >= 0; batchIdx-- {
-		b := coldata.NewMemBatchWithSize(nil, 0)
+		b := coldata.NewMemBatchWithSize(typs, 1 /* size */)
 		require.NoError(t, d.GetBatch(batchIdx, b))
 		require.Equal(t, 1, b.Length())
 		require.Equal(t, 1, b.Width())

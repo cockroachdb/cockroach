@@ -18,6 +18,7 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
@@ -83,7 +84,7 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 			require.NoError(t, err)
 			r, err := colserde.NewRecordBatchSerializer(coltyps)
 			require.NoError(t, err)
-			arrowOp := newArrowTestOperator(columnarizer, c, r)
+			arrowOp := newArrowTestOperator(columnarizer, c, r, coltyps)
 
 			output := distsqlutils.NewRowBuffer(typs, nil /* rows */, distsqlutils.RowBufferArgs{})
 			materializer, err := NewMaterializer(
@@ -126,17 +127,20 @@ type arrowTestOperator struct {
 
 	c *colserde.ArrowBatchConverter
 	r *colserde.RecordBatchSerializer
+
+	typs []coltypes.T
 }
 
 var _ Operator = &arrowTestOperator{}
 
 func newArrowTestOperator(
-	input Operator, c *colserde.ArrowBatchConverter, r *colserde.RecordBatchSerializer,
+	input Operator, c *colserde.ArrowBatchConverter, r *colserde.RecordBatchSerializer, typs []coltypes.T,
 ) Operator {
 	return &arrowTestOperator{
 		OneInputNode: NewOneInputNode(input),
 		c:            c,
 		r:            r,
+		typs:         typs,
 	}
 }
 
@@ -160,7 +164,7 @@ func (a *arrowTestOperator) Next(ctx context.Context) coldata.Batch {
 	if err := a.r.Deserialize(&arrowDataOut, buf.Bytes()); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
-	batchOut := testAllocator.NewMemBatchWithSize(nil, 0)
+	batchOut := testAllocator.NewMemBatchWithSize(a.typs, coldata.BatchSize() /* size */)
 	if err := a.c.ArrowToBatch(arrowDataOut, batchOut); err != nil {
 		execerror.VectorizedInternalPanic(err)
 	}
