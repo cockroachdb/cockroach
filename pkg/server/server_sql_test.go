@@ -155,33 +155,35 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 	dummyRPCServer := rpc.NewServer(rpcContext)
 	noStatusServer := func() (*statusServer, bool) { return nil, false }
 	return sqlServerArgs{
-		Config:              &cfg,
-		stopper:             stopper,
-		clock:               clock,
-		rpcContext:          rpcContext,
-		distSender:          ds,
-		status:              noStatusServer,
-		nodeLiveness:        nl,
-		protectedtsProvider: protectedTSProvider,
-		gossip:              g,
-		nodeDialer:          nd,
-		grpcServer:          dummyRPCServer,
-		recorder:            dummyRecorder,
-		isMeta1Leaseholder: func(timestamp hlc.Timestamp) (bool, error) {
-			return false, errors.New("fake isMeta1Leaseholder")
+		sqlServerOptionalArgs: sqlServerOptionalArgs{
+			rpcContext:   rpcContext,
+			distSender:   ds,
+			status:       noStatusServer,
+			nodeLiveness: nl,
+			gossip:       g,
+			nodeDialer:   nd,
+			grpcServer:   dummyRPCServer,
+			recorder:     dummyRecorder,
+			isMeta1Leaseholder: func(timestamp hlc.Timestamp) (bool, error) {
+				return false, errors.New("fake isMeta1Leaseholder")
+			},
+			nodeIDContainer: &nodeIDContainer,
+			externalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
+				return nil, errors.New("fake external storage")
+			},
+			externalStorageFromURI: func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
+				return nil, errors.New("fake external uri storage")
+			},
 		},
+		Config:                   &cfg,
+		stopper:                  stopper,
+		clock:                    clock,
+		protectedtsProvider:      protectedTSProvider,
 		runtime:                  &status.RuntimeStatSampler{}, // dummy
 		db:                       ts.DB(),
 		registry:                 registry,
 		circularInternalExecutor: &sql.InternalExecutor{},
-		nodeIDContainer:          &nodeIDContainer,
-		externalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
-			return nil, errors.New("fake external storage")
-		},
-		externalStorageFromURI: func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
-			return nil, errors.New("fake external uri storage")
-		},
-		jobRegistry: &jobs.Registry{},
+		jobRegistry:              &jobs.Registry{},
 	}
 }
 

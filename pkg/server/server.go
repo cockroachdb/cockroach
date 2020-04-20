@@ -507,29 +507,31 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
-		Config:     &cfg, // NB: s.cfg has a populated AmbientContext.
-		stopper:    stopper,
-		clock:      clock,
-		rpcContext: rpcContext,
-		distSender: distSender,
-		status: func() (*statusServer, bool) {
-			return sStatus, true
+		sqlServerOptionalArgs: sqlServerOptionalArgs{
+			rpcContext: rpcContext,
+			distSender: distSender,
+			status: func() (*statusServer, bool) {
+				return sStatus, true
+			},
+			nodeLiveness:           nodeLiveness,
+			gossip:                 g,
+			nodeDialer:             nodeDialer,
+			grpcServer:             grpcServer.Server,
+			recorder:               recorder,
+			nodeIDContainer:        nodeIDContainer,
+			externalStorage:        externalStorage,
+			externalStorageFromURI: externalStorageFromURI,
+			isMeta1Leaseholder:     node.stores.IsMeta1Leaseholder,
 		},
-		nodeLiveness:             nodeLiveness,
+		Config:                   &cfg, // NB: s.cfg has a populated AmbientContext.
+		stopper:                  stopper,
+		clock:                    clock,
 		protectedtsProvider:      protectedtsProvider,
-		gossip:                   g,
-		nodeDialer:               nodeDialer,
-		grpcServer:               grpcServer.Server,
-		recorder:                 recorder,
 		runtime:                  runtimeSampler,
 		db:                       db,
 		registry:                 registry,
 		circularInternalExecutor: internalExecutor,
-		nodeIDContainer:          nodeIDContainer,
-		externalStorage:          externalStorage,
-		externalStorageFromURI:   externalStorageFromURI,
 		jobRegistry:              jobRegistry,
-		isMeta1Leaseholder:       node.stores.IsMeta1Leaseholder,
 	})
 	if err != nil {
 		return nil, err
