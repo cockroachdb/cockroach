@@ -8,6 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// "make test" would normally test this file, but it should only be tested
+// during nightlies or when invoked by "make compose".
+
+// +build compose
+
 // Package compose contains nightly tests that need docker-compose.
 package compose
 
@@ -26,12 +31,8 @@ var (
 )
 
 func TestComposeCompare(t *testing.T) {
-	const file = "docker-compose"
-	if _, err := exec.LookPath(file); err != nil {
-		t.Skip(err)
-	}
 	cmd := exec.Command(
-		file,
+		"docker-compose",
 		"-f", filepath.Join("compare", "docker-compose.yml"),
 		"--no-ansi",
 		"up",
