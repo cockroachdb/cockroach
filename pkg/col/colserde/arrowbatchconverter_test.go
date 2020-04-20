@@ -63,7 +63,7 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 
 	arrowData, err := c.BatchToArrow(b)
 	require.NoError(t, err)
-	actual := coldata.NewMemBatchWithSize(nil, 0)
+	actual := coldata.NewMemBatchWithSize(typs, b.Length())
 	require.NoError(t, c.ArrowToBatch(arrowData, actual))
 
 	coldata.AssertEquivalentBatches(t, expected, actual)
@@ -74,7 +74,10 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 // batch is equal to the input batch. Make sure to copy the input batch before
 // passing it to this function to assert equality.
 func roundTripBatch(
-	b coldata.Batch, c *colserde.ArrowBatchConverter, r *colserde.RecordBatchSerializer,
+	b coldata.Batch,
+	c *colserde.ArrowBatchConverter,
+	r *colserde.RecordBatchSerializer,
+	typs []coltypes.T,
 ) (coldata.Batch, error) {
 	var buf bytes.Buffer
 	arrowDataIn, err := c.BatchToArrow(b)
@@ -90,7 +93,7 @@ func roundTripBatch(
 	if err := r.Deserialize(&arrowDataOut, buf.Bytes()); err != nil {
 		return nil, err
 	}
-	actual := coldata.NewMemBatchWithSize(nil, 0)
+	actual := coldata.NewMemBatchWithSize(typs, b.Length())
 	if err := c.ArrowToBatch(arrowDataOut, actual); err != nil {
 		return nil, err
 	}
@@ -110,7 +113,7 @@ func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 		// Make a copy of the original batch because the converter modifies and
 		// casts data without copying for performance reasons.
 		expected := colexec.CopyBatch(testAllocator, b)
-		actual, err := roundTripBatch(b, c, r)
+		actual, err := roundTripBatch(b, c, r, typs)
 		require.NoError(t, err)
 
 		coldata.AssertEquivalentBatches(t, expected, actual)
