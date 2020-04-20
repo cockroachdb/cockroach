@@ -438,7 +438,7 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 // liveness. The slice of engines will be written to before each heartbeat to
 // avoid maintaining liveness in the presence of disk stalls.
 func (nl *NodeLiveness) StartHeartbeat(
-	ctx context.Context, stopper *stop.Stopper, alive HeartbeatCallback, engines []storage.Engine,
+	ctx context.Context, stopper *stop.Stopper, engines []storage.Engine, alive HeartbeatCallback,
 ) {
 	log.VEventf(ctx, 1, "starting liveness heartbeat")
 	retryOpts := base.DefaultRetryOptions()
