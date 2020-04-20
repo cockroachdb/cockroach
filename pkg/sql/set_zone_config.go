@@ -565,10 +565,15 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				return err
 			}
 
+			ss, ok := params.extendedEvalCtx.StatusServer()
+			if !ok {
+				return pgerror.UnsupportedWithMultiTenancy()
+			}
+
 			// Validate that the result makes sense.
 			if err := validateZoneAttrsAndLocalities(
 				params.ctx,
-				params.extendedEvalCtx.StatusServer.Nodes,
+				ss.Nodes,
 				&newZone,
 			); err != nil {
 				return err

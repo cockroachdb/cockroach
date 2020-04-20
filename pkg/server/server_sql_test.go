@@ -126,10 +126,6 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 	clock := hlc.NewClock(hlc.UnixNano, 1)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 
-	// Dummy. This thing needs the world and then some.
-	statusServer := &statusServer{
-		sessionRegistry: sql.NewSessionRegistry(),
-	}
 	nl := allErrorsFakeLiveness{}
 
 	ds := ts.DistSender()
@@ -157,14 +153,14 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 	// server to register against (but they'll never get RPCs at the time of
 	// writing): the blob service and DistSQL.
 	dummyRPCServer := rpc.NewServer(rpcContext)
-
+	noStatusServer := func() (*statusServer, bool) { return nil, false }
 	return sqlServerArgs{
 		Config:              &cfg,
 		stopper:             stopper,
 		clock:               clock,
 		rpcContext:          rpcContext,
 		distSender:          ds,
-		status:              statusServer,
+		status:              noStatusServer,
 		nodeLiveness:        nl,
 		protectedtsProvider: protectedTSProvider,
 		gossip:              g,

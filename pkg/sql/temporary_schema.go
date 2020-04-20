@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -363,7 +364,7 @@ type TemporaryObjectCleaner struct {
 	settings                         *cluster.Settings
 	db                               *kv.DB
 	makeSessionBoundInternalExecutor sqlutil.SessionBoundInternalExecutorFactory
-	statusServer                     serverpb.StatusServer
+	statusServer                     func() (serverpb.StatusServer, bool)
 	isMeta1LeaseholderFunc           isMeta1LeaseholderFunc
 	testingKnobs                     ExecutorTestingKnobs
 	metrics                          *temporaryObjectCleanerMetrics
@@ -389,7 +390,7 @@ func NewTemporaryObjectCleaner(
 	db *kv.DB,
 	registry *metric.Registry,
 	makeSessionBoundInternalExecutor sqlutil.SessionBoundInternalExecutorFactory,
-	statusServer serverpb.StatusServer,
+	statusServer func() (serverpb.StatusServer, bool),
 	isMeta1LeaseholderFunc isMeta1LeaseholderFunc,
 	testingKnobs ExecutorTestingKnobs,
 ) *TemporaryObjectCleaner {
@@ -498,11 +499,18 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		return nil
 	}
 
+	statusServer, ok := c.statusServer()
+	if !ok {
+		// TODO(tbg): a SQL tenant server still needs to clean up temporary schemas.
+		// Listing sessions should not require a full status server.
+		return pgerror.UnsupportedWithMultiTenancy()
+	}
+
 	// Get active sessions.
 	var response *serverpb.ListSessionsResponse
 	if err := retryFunc(ctx, func() error {
 		var err error
-		response, err = c.statusServer.ListSessions(
+		response, err = statusServer.ListSessions(
 			ctx,
 			&serverpb.ListSessionsRequest{},
 		)

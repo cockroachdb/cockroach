@@ -910,7 +910,11 @@ var crdbInternalLocalTxnsTable = virtualSchemaTable{
 			return err
 		}
 		req := p.makeSessionsRequest(ctx)
-		response, err := p.extendedEvalCtx.StatusServer.ListLocalSessions(ctx, &req)
+		ss, ok := p.extendedEvalCtx.StatusServer()
+		if !ok {
+			return pgerror.UnsupportedWithMultiTenancy()
+		}
+		response, err := ss.ListLocalSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -926,7 +930,11 @@ var crdbInternalClusterTxnsTable = virtualSchemaTable{
 			return err
 		}
 		req := p.makeSessionsRequest(ctx)
-		response, err := p.extendedEvalCtx.StatusServer.ListSessions(ctx, &req)
+		ss, ok := p.extendedEvalCtx.StatusServer()
+		if !ok {
+			return pgerror.UnsupportedWithMultiTenancy()
+		}
+		response, err := ss.ListSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -1028,7 +1036,11 @@ var crdbInternalLocalQueriesTable = virtualSchemaTable{
 	schema:  fmt.Sprintf(queriesSchemaPattern, "node_queries"),
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		req := p.makeSessionsRequest(ctx)
-		response, err := p.extendedEvalCtx.StatusServer.ListLocalSessions(ctx, &req)
+		ss, ok := p.extendedEvalCtx.StatusServer()
+		if !ok {
+			return pgerror.UnsupportedWithMultiTenancy()
+		}
+		response, err := ss.ListLocalSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -1043,7 +1055,11 @@ var crdbInternalClusterQueriesTable = virtualSchemaTable{
 	schema:  fmt.Sprintf(queriesSchemaPattern, "cluster_queries"),
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		req := p.makeSessionsRequest(ctx)
-		response, err := p.extendedEvalCtx.StatusServer.ListSessions(ctx, &req)
+		ss, ok := p.extendedEvalCtx.StatusServer()
+		if !ok {
+			return pgerror.UnsupportedWithMultiTenancy()
+		}
+		response, err := ss.ListSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -1147,7 +1163,11 @@ var crdbInternalLocalSessionsTable = virtualSchemaTable{
 	schema:  fmt.Sprintf(sessionsSchemaPattern, "node_sessions"),
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		req := p.makeSessionsRequest(ctx)
-		response, err := p.extendedEvalCtx.StatusServer.ListLocalSessions(ctx, &req)
+		ss, ok := p.extendedEvalCtx.StatusServer()
+		if !ok {
+			return pgerror.UnsupportedWithMultiTenancy()
+		}
+		response, err := ss.ListLocalSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -1162,7 +1182,11 @@ var crdbInternalClusterSessionsTable = virtualSchemaTable{
 	schema:  fmt.Sprintf(sessionsSchemaPattern, "cluster_sessions"),
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		req := p.makeSessionsRequest(ctx)
-		response, err := p.extendedEvalCtx.StatusServer.ListSessions(ctx, &req)
+		ss, ok := p.extendedEvalCtx.StatusServer()
+		if !ok {
+			return pgerror.UnsupportedWithMultiTenancy()
+		}
+		response, err := ss.ListSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -3049,8 +3073,11 @@ CREATE TABLE crdb_internal.kv_node_status (
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.kv_node_status"); err != nil {
 			return err
 		}
-
-		response, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+		ss, ok := p.extendedEvalCtx.StatusServer()
+		if !ok {
+			return pgerror.UnsupportedWithMultiTenancy()
+		}
+		response, err := ss.Nodes(ctx, &serverpb.NodesRequest{})
 		if err != nil {
 			return err
 		}
@@ -3152,8 +3179,11 @@ CREATE TABLE crdb_internal.kv_store_status (
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.kv_store_status"); err != nil {
 			return err
 		}
-
-		response, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+		ss, ok := p.ExecCfg().StatusServer()
+		if !ok {
+			return pgerror.UnsupportedWithMultiTenancy()
+		}
+		response, err := ss.Nodes(ctx, &serverpb.NodesRequest{})
 		if err != nil {
 			return err
 		}

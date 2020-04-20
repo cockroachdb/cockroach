@@ -563,7 +563,7 @@ type ExecutorConfig struct {
 	LeaseManager      *LeaseManager
 	Clock             *hlc.Clock
 	DistSQLSrv        *distsql.ServerImpl
-	StatusServer      serverpb.StatusServer
+	StatusServer      func() (serverpb.StatusServer, bool)
 	MetricsRecorder   nodeStatusGenerator
 	SessionRegistry   *SessionRegistry
 	JobRegistry       *jobs.Registry
