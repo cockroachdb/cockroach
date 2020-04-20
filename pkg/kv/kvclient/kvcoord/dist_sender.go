@@ -1691,9 +1691,10 @@ func (ds *DistSender) sendToReplicas(
 			// in the batch, we track the ambiguity more explicitly by setting
 			// ambiguousError. This serves two purposes:
 			// 1) the higher-level retries in the DistSender will not forget the
-			// ambiguity, like they forget it non-commit batches. This in turn will
-			// ensure that TxnCoordSender-level retries don't happen across commits;
-			// that'd be bad since requests are not idempotent across commits.
+			// ambiguity, like they forget it for non-commit batches. This in turn
+			// will ensure that TxnCoordSender-level retries don't happen across
+			// commits; that'd be bad since requests are not idempotent across
+			// commits.
 			// TODO(andrei): This higher-level does things too bluntly, retrying only
 			// in case of SendError. It should also retry in case of
 			// AmbiguousRetryError as long as it makes sure to not forget about the

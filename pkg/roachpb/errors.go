@@ -63,11 +63,25 @@ const (
 	// ErrorScoreTxnRestart indicates that the transaction should be restarted
 	// with an incremented epoch.
 	ErrorScoreTxnRestart
+
+	// ErrorScoreUnambiguousError is used for errors which are known to return a
+	// transaction reflecting the highest timestamp of any intent that was
+	// written. We allow the transaction to continue after such errors; we also
+	// allow RollbackToSavepoint() to be called after such errors. In particular,
+	// this is useful for SQL which wants to allow rolling back to a savepoint
+	// after ConditionFailedErrors (uniqueness violations). With continuing after
+	// errors its important for the coordinator to track the timestamp at which
+	// intents might have been written.
+	//
+	// Note that all the lower scores also are unambiguous in this sense, so this
+	// score can be seen as an upper-bound for unambiguous errors.
+	ErrorScoreUnambiguousError
+
 	// ErrorScoreNonRetriable indicates that the transaction performed an
-	// operation that does not warrant a retry. Often this indicates that the
-	// operation ran into a logic error. The error should be propagated to the
-	// client and the transaction should terminate immediately.
+	// operation that does not warrant a retry. The error should be propagated to
+	// the client and the transaction should terminate immediately.
 	ErrorScoreNonRetriable
+
 	// ErrorScoreTxnAbort indicates that the transaction is aborted. The
 	// operation can only try again under the purview of a new transaction.
 	//
@@ -97,6 +111,12 @@ func ErrPriority(err error) ErrorPriority {
 			return ErrorScoreTxnAbort
 		}
 		return ErrorScoreTxnRestart
+	case *ConditionFailedError:
+		// We particularly care about returning the low ErrorScoreUnambiguousError
+		// because we don't want to transition a transaction that encounters
+		// ConditionFailedError to an error state. More specifically, we want to
+		// allow rollbacks to savepoint after a ConditionFailedError.
+		return ErrorScoreUnambiguousError
 	}
 	return ErrorScoreNonRetriable
 }

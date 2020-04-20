@@ -343,6 +343,54 @@ rollback x
 
 subtest end
 
+
+
+subtest rollback_after_failed_cput
+# CPut errors are white-listed to allow a rollback to savepoint afterwards.
+
+begin
+----
+0 <noignore>
+
+savepoint x
+----
+0 <noignore>
+
+cput k v bogus_expected
+----
+(*roachpb.ConditionFailedError) unexpected value
+
+rollback x
+----
+1 [1-1]
+
+subtest end
+
+
+
+subtest rollback_after_random_err
+# Only CPut errors allow rollbacks after them. Any other error results in the rollback failing.
+
+begin
+----
+0 <noignore>
+
+savepoint x
+----
+0 <noignore>
+
+inject-error
+----
+injected error
+
+rollback x
+----
+(*telemetrykeys.withTelemetry) unimplemented: cannot rollback to savepoint after error
+
+subtest end
+
+
+
 subtest rollback_across_abort
 
 begin
