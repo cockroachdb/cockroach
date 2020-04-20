@@ -2148,6 +2148,8 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				res.SetError(newErr)
 			}
 		}
+		ex.notifyStatsRefresherOfNewTables(ex.Ctx())
+
 		if err := ex.server.cfg.JobRegistry.Run(
 			ex.ctxHolder.connCtx,
 			ex.server.cfg.InternalExecutor,
@@ -2313,6 +2315,23 @@ func (ex *connExecutor) sessionEventf(ctx context.Context, format string, args .
 	}
 	if ex.eventLog != nil {
 		ex.eventLog.Printf(format, args...)
+	}
+}
+
+// notifyStatsRefresherOfNewTables is call in the post commit hook to inform
+// the stats refresher that a new table exists and should have its stats
+// collected now.
+func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
+	for _, desc := range ex.extraTxnState.tables.getNewTables() {
+		// The CREATE STATISTICS run for an async CTAS query is initiated by the
+		// SchemaChanger.
+		if desc.IsTable() && !desc.IsAs() {
+			// Initiate a run of CREATE STATISTICS. We use a large number
+			// for rowsAffected because we want to make sure that stats always get
+			// created/refreshed here.
+			ex.planner.execCfg.StatsRefresher.
+				NotifyMutation(desc.ID, math.MaxInt32 /* rowsAffected */)
+		}
 	}
 }
 
