@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"go/constant"
-	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -472,16 +471,6 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	// The CREATE STATISTICS run for an async CTAS query is initiated by the
-	// SchemaChanger.
-	if n.n.As() && params.p.autoCommit {
-		return nil
-	}
-
-	// Initiate a run of CREATE STATISTICS. We use a large number
-	// for rowsAffected because we want to make sure that stats always get
-	// created/refreshed here.
-	params.ExecCfg().StatsRefresher.NotifyMutation(desc.ID, math.MaxInt32 /* rowsAffected */)
 	return nil
 }
 
