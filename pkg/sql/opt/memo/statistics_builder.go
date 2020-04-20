@@ -210,6 +210,10 @@ func (sb *statisticsBuilder) availabilityFromInput(e RelExpr) bool {
 		ensureLookupJoinInputProps(t, sb)
 		return t.lookupProps.Stats.Available && t.Input.Relational().Stats.Available
 
+	case *GeospatialLookupJoinExpr:
+		ensureGeospatialLookupJoinInputProps(t, sb)
+		return t.lookupProps.Stats.Available && t.Input.Relational().Stats.Available
+
 	case *ZigzagJoinExpr:
 		ensureZigzagJoinInputProps(t, sb)
 		return t.leftProps.Stats.Available
@@ -236,6 +240,7 @@ func (sb *statisticsBuilder) colStatFromInput(
 	colSet opt.ColSet, e RelExpr,
 ) (*props.ColumnStatistic, *props.Statistics) {
 	var lookupJoin *LookupJoinExpr
+	var geospatialLookupJoin *GeospatialLookupJoinExpr
 	var zigzagJoin *ZigzagJoinExpr
 
 	switch t := e.(type) {
@@ -249,12 +254,17 @@ func (sb *statisticsBuilder) colStatFromInput(
 		lookupJoin = t
 		ensureLookupJoinInputProps(lookupJoin, sb)
 
+	case *GeospatialLookupJoinExpr:
+		geospatialLookupJoin = t
+		ensureGeospatialLookupJoinInputProps(geospatialLookupJoin, sb)
+
 	case *ZigzagJoinExpr:
 		zigzagJoin = t
 		ensureZigzagJoinInputProps(zigzagJoin, sb)
 	}
 
-	if lookupJoin != nil || zigzagJoin != nil || opt.IsJoinOp(e) || e.Op() == opt.MergeJoinOp {
+	if lookupJoin != nil || geospatialLookupJoin != nil || zigzagJoin != nil ||
+		opt.IsJoinOp(e) || e.Op() == opt.MergeJoinOp {
 		var leftProps *props.Relational
 		if zigzagJoin != nil {
 			leftProps = &zigzagJoin.leftProps
@@ -266,6 +276,8 @@ func (sb *statisticsBuilder) colStatFromInput(
 		var intersectsRight bool
 		if lookupJoin != nil {
 			intersectsRight = lookupJoin.lookupProps.OutputCols.Intersects(colSet)
+		} else if geospatialLookupJoin != nil {
+			intersectsRight = geospatialLookupJoin.lookupProps.OutputCols.Intersects(colSet)
 		} else if zigzagJoin != nil {
 			intersectsRight = zigzagJoin.rightProps.OutputCols.Intersects(colSet)
 		} else {
@@ -287,6 +299,11 @@ func (sb *statisticsBuilder) colStatFromInput(
 			if lookupJoin != nil {
 				return sb.colStatTable(lookupJoin.Table, colSet),
 					sb.makeTableStatistics(lookupJoin.Table)
+			}
+			if geospatialLookupJoin != nil {
+				// TODO(rytaft): use inverted index stats when available.
+				return sb.colStatTable(geospatialLookupJoin.Table, colSet),
+					sb.makeTableStatistics(geospatialLookupJoin.Table)
 			}
 			if zigzagJoin != nil {
 				return sb.colStatTable(zigzagJoin.RightTable, colSet),
@@ -343,7 +360,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
 		opt.SemiJoinApplyOp, opt.AntiJoinApplyOp, opt.MergeJoinOp, opt.LookupJoinOp,
-		opt.ZigzagJoinOp:
+		opt.GeospatialLookupJoinOp, opt.ZigzagJoinOp:
 		return sb.colStatJoin(colSet, e)
 
 	case opt.IndexJoinOp:
@@ -909,6 +926,9 @@ func (sb *statisticsBuilder) buildJoin(
 		s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filtersFD, join, s))
 	}
 
+	if join.Op() == opt.GeospatialLookupJoinOp {
+		s.ApplySelectivity(sb.selectivityFromGeospatialRelationship(join, s))
+	}
 	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, join, s))
 	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols.Difference(histCols), join, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
@@ -1039,6 +1059,12 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		joinType = j.JoinType
 		leftProps = j.Input.Relational()
 		ensureLookupJoinInputProps(j, sb)
+		rightProps = &j.lookupProps
+
+	case *GeospatialLookupJoinExpr:
+		joinType = j.JoinType
+		leftProps = j.Input.Relational()
+		ensureGeospatialLookupJoinInputProps(j, sb)
 		rightProps = &j.lookupProps
 
 	case *ZigzagJoinExpr:
@@ -2482,6 +2508,11 @@ const (
 	// This is the minimum cardinality an expression should have in order to make
 	// it worth adding the overhead of using a histogram.
 	minCardinalityForHistogram = 100
+
+	// This is the default selectivity estimated for geospatial lookup joins
+	// until we can get better statistics on inverted indexes and geospatial
+	// columns.
+	unknownGeospatialRelationshipSelectivity = 1.0 / 100.0
 )
 
 // countJSONPaths returns the number of JSON paths in the specified
@@ -3193,6 +3224,12 @@ func (sb *statisticsBuilder) selectivityFromEquivalencySemiJoin(
 	}
 
 	return fraction(minDistinctCountRight, maxDistinctCountLeft)
+}
+
+func (sb *statisticsBuilder) selectivityFromGeospatialRelationship(
+	e RelExpr, s *props.Statistics,
+) (selectivity float64) {
+	return unknownGeospatialRelationshipSelectivity
 }
 
 func (sb *statisticsBuilder) selectivityFromUnappliedConjuncts(

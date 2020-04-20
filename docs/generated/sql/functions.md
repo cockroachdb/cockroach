@@ -1058,6 +1058,14 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="split_part"></a><code>split_part(input: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>, return_index_pos: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Splits <code>input</code> on <code>delimiter</code> and return the value in the <code>return_index_pos</code>  position (starting at 1).</p>
 <p>For example, <code>split_part('123.456.789.0','.',3)</code>returns <code>789</code>.</p>
 </span></td></tr>
+<tr><td><a name="st_area"></a><code>st_area(geom0: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of geom0</p>
+</span></td></tr>
+<tr><td><a name="st_containedby"></a><code>st_containedby(geom0: geography, geom1: geography) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geom0 is contained by geom1</p>
+</span></td></tr>
+<tr><td><a name="st_contains"></a><code>st_contains(geom0: geography, geom1: geography) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geom0 contains geom1</p>
+</span></td></tr>
+<tr><td><a name="st_intersects"></a><code>st_intersects(geom0: geography, geom1: geography) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geom0 intersects geom1</p>
+</span></td></tr>
 <tr><td><a name="strpos"></a><code>strpos(input: <a href="bytes.html">bytes</a>, find: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the position where the byte subarray <code>find</code> begins in <code>input</code>.</p>
 </span></td></tr>
 <tr><td><a name="strpos"></a><code>strpos(input: <a href="string.html">string</a>, find: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the position where the string <code>find</code> begins in <code>input</code>.</p>

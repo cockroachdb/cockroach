@@ -3203,6 +3203,67 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	// Geospatial functions.
+	// TODO(rytaft): replace these functions with real builtins.
+	"st_contains": makeBuiltin(
+		tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geom0", types.Geography},
+				{"geom1", types.Geography},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.DBoolTrue, nil
+			},
+			Info: "Returns true if geom0 contains geom1",
+		},
+	),
+
+	"st_containedby": makeBuiltin(
+		tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geom0", types.Geography},
+				{"geom1", types.Geography},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.DBoolTrue, nil
+			},
+			Info: "Returns true if geom0 is contained by geom1",
+		},
+	),
+
+	"st_intersects": makeBuiltin(
+		tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geom0", types.Geography},
+				{"geom1", types.Geography},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.DBoolTrue, nil
+			},
+			Info: "Returns true if geom0 intersects geom1",
+		},
+	),
+
+	"st_area": makeBuiltin(
+		tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geom0", types.Geography},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDFloat(0), nil
+			},
+			Info: "Returns the area of geom0",
+		},
+	),
+
 	"crdb_internal.locality_value": makeBuiltin(
 		tree.FunctionProperties{Category: categorySystemInfo},
 		tree.Overload{

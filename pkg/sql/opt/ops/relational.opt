@@ -307,6 +307,49 @@ define LookupJoinPrivate {
     _ JoinPrivate
 }
 
+# GeospatialLookupJoin represents a join between an input expression and an index,
+# where the index is an inverted index on a Geometry or Geography column.
+[Relational]
+define GeospatialLookupJoin {
+    Input RelExpr
+    On    FiltersExpr
+
+    _ GeospatialLookupJoinPrivate
+
+    # lookupProps caches relational properties for the "table" side of the lookup
+    # join, treating it as if it were another relational input. This makes the
+    # lookup join appear more like other join operators.
+    lookupProps RelProps
+}
+
+[Private]
+define GeospatialLookupJoinPrivate {
+    # JoinType is InnerJoin, LeftJoin, SemiJoin, or AntiJoin.
+    JoinType Operator
+
+    # GeospatialRelationship is Contains, ContainedBy, or Intersects.
+    GeospatialRelationship GeospatialRelationship
+
+    # Table identifies the table do to lookups in.
+    Table TableID
+
+    # Index identifies the geospatial inverted index to do lookups in. It can
+    # be passed to the cat.Table.Index() method in order to fetch the cat.Index
+    # metadata.
+    Index IndexOrdinal
+
+    # GeoCol is the geospatial column (produced by the input) used to
+    # determine the keys (i.e., s2 CellIDs) to scan in the inverted index.
+    GeoCol ColumnID
+
+    # Cols is the set of columns produced by the geospatial lookup join. This
+    # set can contain columns from the input and columns from the index. Any
+    # columns not in the input are retrieved from the index.
+    Cols ColSet
+
+    _ JoinPrivate
+}
+
 # MergeJoin represents a join that is executed using merge-join.
 # MergeOn is a scalar which contains the ON condition and merge-join ordering
 # information; see the MergeOn scalar operator.

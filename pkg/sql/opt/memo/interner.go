@@ -551,6 +551,10 @@ func (h *hasher) HashLockingItem(val *tree.LockingItem) {
 	}
 }
 
+func (h *hasher) HashGeospatialRelationship(val GeospatialRelationship) {
+	h.HashUint64(uint64(val))
+}
+
 func (h *hasher) HashRelExpr(val RelExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
@@ -878,6 +882,10 @@ func (h *hasher) IsLockingItemEqual(l, r *tree.LockingItem) bool {
 		return l == r
 	}
 	return l.Strength == r.Strength && l.WaitPolicy == r.WaitPolicy
+}
+
+func (h *hasher) IsGeospatialRelationshipEqual(l, r GeospatialRelationship) bool {
+	return l == r
 }
 
 func (h *hasher) IsPointerEqual(l, r unsafe.Pointer) bool {

@@ -181,6 +181,9 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	case opt.LookupJoinOp:
 		cost = c.computeLookupJoinCost(candidate.(*memo.LookupJoinExpr), required)
 
+	case opt.GeospatialLookupJoinOp:
+		cost = c.computeGeospatialLookupJoinCost(candidate.(*memo.GeospatialLookupJoinExpr))
+
 	case opt.ZigzagJoinOp:
 		cost = c.computeZigzagJoinCost(candidate.(*memo.ZigzagJoinExpr))
 
@@ -453,6 +456,11 @@ func (c *coster) computeLookupJoinCost(
 	// plans when RowCount is too small.
 	cost += cpuCostFactor * memo.Cost(len(join.On))
 	return cost
+}
+
+func (c *coster) computeGeospatialLookupJoinCost(join *memo.GeospatialLookupJoinExpr) memo.Cost {
+	// TODO(rytaft): add a real cost here.
+	return 0
 }
 
 func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {

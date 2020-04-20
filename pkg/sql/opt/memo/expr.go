@@ -420,7 +420,43 @@ func (jf JoinFlags) String() string {
 	return b.String()
 }
 
+// GeospatialRelationship stores the relationship represented by the geospatial
+// lookup join. See the description of each type of relationship below for more
+// details.
+type GeospatialRelationship uint8
+
+const (
+	// GeospatialContains corresponds to a join in which for each row of the
+	// input, the index entries scanned include all the geospatial objects that
+	// might contain the geospatial object in the input row.
+	GeospatialContains GeospatialRelationship = (1 << iota)
+
+	// GeospatialContainedBy corresponds to a join in which for each row of the
+	// input, the index entries scanned include all the geospatial objects that
+	// might be contained by the geospatial object in the input row.
+	GeospatialContainedBy
+
+	// GeospatialIntersects corresponds to a join in which for each row of the
+	// input, the index entries scanned include all the geospatial objects that
+	// might intersect the geospatial object in the input row.
+	GeospatialIntersects
+)
+
+var geospatialRelationshipStr = map[GeospatialRelationship]string{
+	GeospatialContains:    "contains",
+	GeospatialContainedBy: "contained by",
+	GeospatialIntersects:  "intersects",
+}
+
+func (gr GeospatialRelationship) String() string {
+	return geospatialRelationshipStr[gr]
+}
+
 func (lj *LookupJoinExpr) initUnexportedFields(mem *Memo) {
+	// lookupProps are initialized as necessary by the logical props builder.
+}
+
+func (gj *GeospatialLookupJoinExpr) initUnexportedFields(mem *Memo) {
 	// lookupProps are initialized as necessary by the logical props builder.
 }
 
