@@ -78,7 +78,7 @@ func (i *s2GeographyIndex) Intersects(c context.Context, g *geo.Geography) (Unio
 	return intersects(c, i.rc, r), nil
 }
 
-func (i *s2GeographyIndex) testingInnerCovering(g *geo.Geography) s2.CellUnion {
+func (i *s2GeographyIndex) TestingInnerCovering(g *geo.Geography) s2.CellUnion {
 	r, _ := g.AsS2()
 	if r == nil {
 		return nil
