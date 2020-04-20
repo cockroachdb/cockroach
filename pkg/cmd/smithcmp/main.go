@@ -51,12 +51,13 @@ func usage() {
 }
 
 type options struct {
-	Postgres    bool
-	InitSQL     string
-	Smither     string
-	Seed        int64
-	TimeoutSecs int
-	SQL         []string
+	Postgres        bool
+	InitSQL         string
+	Smither         string
+	Seed            int64
+	TimeoutMins     int
+	StmtTimeoutSecs int
+	SQL             []string
 
 	Databases map[string]struct {
 		Addr           string
@@ -89,9 +90,13 @@ func main() {
 	if err := toml.Unmarshal(tomlData, &opts); err != nil {
 		log.Fatal(err)
 	}
-	timeout := time.Duration(opts.TimeoutSecs) * time.Second
+	timeout := time.Duration(opts.TimeoutMins) * time.Minute
 	if timeout <= 0 {
-		timeout = time.Minute
+		timeout = 15 * time.Minute
+	}
+	stmtTimeout := time.Duration(opts.StmtTimeoutSecs) * time.Second
+	if stmtTimeout <= 0 {
+		stmtTimeout = time.Minute
 	}
 
 	rng := rand.New(rand.NewSource(opts.Seed))
@@ -159,7 +164,13 @@ func main() {
 
 	var prep, exec string
 	ctx := context.Background()
+	done := time.After(timeout)
 	for i := 0; true; i++ {
+		select {
+		case <-done:
+			return
+		default:
+		}
 		fmt.Printf("stmt: %d\n", i)
 		if smither != nil {
 			exec = smither.Generate()
@@ -188,7 +199,7 @@ func main() {
 		}
 		if compare {
 			if err := cmpconn.CompareConns(
-				ctx, timeout, conns, prep, exec, true, /* ignoreSQLErrors */
+				ctx, stmtTimeout, conns, prep, exec, true, /* ignoreSQLErrors */
 			); err != nil {
 				fmt.Printf("prep:\n%s;\nexec:\n%s;\nERR: %s\n\n", prep, exec, err)
 				os.Exit(1)
