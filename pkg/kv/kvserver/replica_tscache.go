@@ -467,9 +467,17 @@ func (r *Replica) CanCreateTxnRecord(
 		switch tombstomeTxnID {
 		case txnID:
 			// If we find our own transaction ID then an EndTxn request sent by
-			// our coordinator has already been processed. We might be a replay,
-			// or we raced with an asynchronous abort. Either way, return an
-			// error.
+			// our coordinator has already been processed. We might be a replay (e.g.
+			// a DistSender retry), or we raced with an asynchronous abort. Either
+			// way, return an error.
+			//
+			// TODO(andrei): We could keep a bit more info in the tscache to return a
+			// different error for COMMITTED transactions. If the EndTxn(commit) was
+			// the only request in the batch, this this would be sufficient for the
+			// client to swallow the error and declare the transaction as committed.
+			// If there were other requests in the EndTxn batch, then the client would
+			// still have trouble reconstructing the result, but at least it could
+			// provide a non-ambiguous error to the application.
 			return false, hlc.Timestamp{},
 				roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY
 		case uuid.Nil:
