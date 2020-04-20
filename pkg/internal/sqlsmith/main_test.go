@@ -14,6 +14,7 @@ import (
 	"os"
 	"testing"
 
+	_ "github.com/cockroachdb/cockroach/pkg/ccl" // ccl init hooks to enable Bulk IO
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
