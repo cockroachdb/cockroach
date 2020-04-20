@@ -479,7 +479,7 @@ type tpchVecTestCase interface {
 	numRunsPerQuery() int
 	// preTestRunHook is called before any tpch query is run. Can be used to
 	// perform setup.
-	preTestRunHook(t *test, conn *gosql.DB)
+	preTestRunHook(t *test, conn *gosql.DB, version crdbVersion)
 	// postQueryRunHook is called after each tpch query is run with the output and
 	// the vectorize mode it was run in.
 	postQueryRunHook(t *test, output []byte, vectorized bool)
@@ -500,10 +500,12 @@ func (r tpchVecTestCaseBase) numRunsPerQuery() int {
 	return 1
 }
 
-func (r tpchVecTestCaseBase) preTestRunHook(t *test, conn *gosql.DB) {
-	t.Status("resetting sql.testing.vectorize.batch_size")
-	if _, err := conn.Exec("RESET CLUSTER SETTING sql.testing.vectorize.batch_size"); err != nil {
-		t.Fatal(err)
+func (r tpchVecTestCaseBase) preTestRunHook(t *test, conn *gosql.DB, version crdbVersion) {
+	if version != tpchVecVersion19_2 {
+		t.Status("resetting sql.testing.vectorize.batch_size")
+		if _, err := conn.Exec("RESET CLUSTER SETTING sql.testing.vectorize.batch_size"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	t.Status("resetting workmem to default")
 	if _, err := conn.Exec("RESET CLUSTER SETTING sql.distsql.temp_storage.workmem"); err != nil {
@@ -619,8 +621,8 @@ type tpchVecDiskTest struct {
 	tpchVecTestCaseBase
 }
 
-func (d tpchVecDiskTest) preTestRunHook(t *test, conn *gosql.DB) {
-	d.tpchVecTestCaseBase.preTestRunHook(t, conn)
+func (d tpchVecDiskTest) preTestRunHook(t *test, conn *gosql.DB, version crdbVersion) {
+	d.tpchVecTestCaseBase.preTestRunHook(t, conn, version)
 	// In order to stress the disk spilling of the vectorized
 	// engine, we will set workmem limit to a random value in range
 	// [16KiB, 256KiB).
@@ -637,8 +639,8 @@ type tpchVecSmallBatchSizeTest struct {
 	tpchVecTestCaseBase
 }
 
-func (b tpchVecSmallBatchSizeTest) preTestRunHook(t *test, conn *gosql.DB) {
-	b.tpchVecTestCaseBase.preTestRunHook(t, conn)
+func (b tpchVecSmallBatchSizeTest) preTestRunHook(t *test, conn *gosql.DB, version crdbVersion) {
+	b.tpchVecTestCaseBase.preTestRunHook(t, conn, version)
 	rng, _ := randutil.NewPseudoRand()
 	batchSize := 1 + rng.Intn(4)
 	t.Status(fmt.Sprintf("setting sql.testing.vectorize.batch_size to %d", batchSize))
@@ -687,7 +689,7 @@ func runTPCHVec(ctx context.Context, t *test, c *cluster, testCase tpchVecTestCa
 	}
 	queriesToSkip := queriesToSkipByVersion[version]
 
-	testCase.preTestRunHook(t, conn)
+	testCase.preTestRunHook(t, conn, version)
 
 	for queryNum := 1; queryNum <= tpchVecNumQueries; queryNum++ {
 		for _, vectorize := range testCase.vectorizeOptions() {
