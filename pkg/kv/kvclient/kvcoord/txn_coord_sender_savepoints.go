@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -116,10 +115,6 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s kv.Savepoin
 			)
 		}
 		return err
-	}
-
-	if tc.mu.txnState == txnFinalized {
-		return unimplemented.New("rollback_error", "savepoint rollback finalized txn")
 	}
 
 	// Restore the transaction's state, in case we're rewiding after an error.
