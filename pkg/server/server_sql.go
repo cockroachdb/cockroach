@@ -87,7 +87,7 @@ type sqlServerArgs struct {
 	stopper *stop.Stopper
 
 	// SQL uses the clock to assign timestamps to transactions, among many
-	// others.
+	// other things.
 	clock *hlc.Clock
 
 	// DistSQL uses rpcContext to set up flows. Less centrally, the executor
