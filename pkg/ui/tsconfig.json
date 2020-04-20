@@ -27,8 +27,5 @@
         "node_modules/*"
       ]
     }
-  },
-  "exclude": [
-    "cypress"
-  ]
+  }
 }
