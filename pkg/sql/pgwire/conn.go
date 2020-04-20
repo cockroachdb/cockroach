@@ -613,7 +613,7 @@ func (c *conn) bufferParamStatus(param, value string) error {
 func (c *conn) bufferNotice(ctx context.Context, noticeErr error) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgNoticeResponse)
 	c.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverity)
-	c.msgBuilder.writeTerminatedString("NOTICE")
+	c.msgBuilder.writeTerminatedString(pgerror.GetSeverity(noticeErr))
 	return writeErrFields(ctx, c.sv, noticeErr, &c.msgBuilder, &c.writerState.buf)
 }
 
@@ -1201,7 +1201,7 @@ func writeErr(
 	sqltelemetry.RecordError(ctx, err, sv)
 	msgBuilder.initMsg(pgwirebase.ServerMsgErrorResponse)
 	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverity)
-	msgBuilder.writeTerminatedString("ERROR")
+	msgBuilder.writeTerminatedString(pgerror.GetSeverity(err))
 	return writeErrFields(ctx, sv, err, msgBuilder, w)
 }
 
