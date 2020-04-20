@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ErrClusterInitialized is reported when the Boostrap RPC is ran on
-// a node already part of an initialized cluster.
+// ErrClusterInitialized is reported when the Boostrap RPC is run on
+// a node that is already part of an initialized cluster.
 var ErrClusterInitialized = fmt.Errorf("cluster has already been initialized")
 
 // initServer handles the bootstrapping process. It is instantiated early in the

@@ -136,7 +136,7 @@ type sqlServerArgs struct {
 	stopper *stop.Stopper
 
 	// SQL uses the clock to assign timestamps to transactions, among many
-	// others.
+	// other things.
 	clock *hlc.Clock
 
 	// The executorConfig uses the provider.
