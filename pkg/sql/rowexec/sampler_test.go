@@ -189,9 +189,12 @@ func TestSamplerSketch(t *testing.T) {
 		{-1, 1},
 		{-1, 3},
 		{1, -1},
+		{2, 8},
+		{-1, 1},
+		{-1, -1},
 	}
-	cardinalities := []int{3, 9}
-	numNulls := []int{2, 1}
+	cardinalities := []int{3, 9, 12}
+	numNulls := []int{4, 2, 5}
 
 	rows := sqlbase.GenEncDatumRowsInt(inputRows)
 	in := distsqlutils.NewRowBuffer(sqlbase.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
@@ -226,6 +229,10 @@ func TestSamplerSketch(t *testing.T) {
 				SketchType: execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 				Columns:    []uint32{1},
 			},
+			{
+				SketchType: execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
+				Columns:    []uint32{0, 1},
+			},
 		},
 	}
 	p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{}, out)
@@ -249,9 +256,9 @@ func TestSamplerSketch(t *testing.T) {
 		rows = append(rows, row)
 	}
 
-	// We expect one sampled row and two sketch rows.
-	if len(rows) != 3 {
-		t.Fatalf("expected 3 rows, got %v\n", rows.String(outTypes))
+	// We expect one sampled row and three sketch rows.
+	if len(rows) != 4 {
+		t.Fatalf("expected 4 rows, got %v\n", rows.String(outTypes))
 	}
 	rows = rows[1:]
 
