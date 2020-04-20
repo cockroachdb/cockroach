@@ -2720,9 +2720,17 @@ func TestMultipleErrorsMerged(t *testing.T) {
 		"test", nil /* baseKey */, roachpb.NormalUserPriority,
 		clock.Now(), clock.MaxOffset().Nanoseconds(),
 	)
+	// We're also going to check that the highest bumped WriteTimestamp makes it
+	// to the merged error.
+	err1WriteTimestamp := txn.WriteTimestamp.Add(100, 0)
+	err2WriteTimestamp := txn.WriteTimestamp.Add(200, 0)
+
 	retryErr := roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "test err")
 	abortErr := roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 	conditionFailedErr := &roachpb.ConditionFailedError{}
+	sendErr := &roachpb.SendError{}
+	ambiguousErr := &roachpb.AmbiguousResultError{}
+	randomErr := &roachpb.IntegerOverflowError{}
 
 	testCases := []struct {
 		err1, err2 error
@@ -2773,49 +2781,96 @@ func TestMultipleErrorsMerged(t *testing.T) {
 			err2:   conditionFailedErr,
 			expErr: "unexpected value",
 		},
+		// ConditionFailedError has a low score since it's "not ambiguous". We want
+		// ambiguity to be infectious, so most things have a higher score.
+		{
+			err1:   conditionFailedErr,
+			err2:   ambiguousErr,
+			expErr: "result is ambiguous",
+		},
+		{
+			err1:   conditionFailedErr,
+			err2:   sendErr,
+			expErr: "failed to send RPC",
+		},
+		{
+			err1:   conditionFailedErr,
+			err2:   randomErr,
+			expErr: "results in overflow",
+		},
 	}
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			var testFn simpleSendFn = func(
-				_ context.Context,
-				_ SendOptions,
-				_ ReplicaSlice,
-				ba roachpb.BatchRequest,
-			) (*roachpb.BatchResponse, error) {
-				reply := ba.CreateReply()
-				if delRng := ba.Requests[0].GetDeleteRange(); delRng == nil {
-					return nil, errors.Errorf("expected DeleteRange request, found %v", ba.Requests[0])
-				} else if delRng.Key.Equal(roachpb.Key("a")) {
-					reply.Error = roachpb.NewError(tc.err1)
-				} else if delRng.Key.Equal(roachpb.Key("b")) {
-					reply.Error = roachpb.NewError(tc.err2)
-				} else {
-					return nil, errors.Errorf("unexpected DeleteRange boundaries")
+			// We run every test case twice, to make sure error merging is commutative.
+			testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
+				if reverse {
+					// Switch the order of errors.
+					err1 := tc.err1
+					err2 := tc.err2
+					tc.err1 = err2
+					tc.err2 = err1
 				}
-				return reply, nil
-			}
 
-			cfg := DistSenderConfig{
-				AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-				Clock:      clock,
-				RPCContext: rpcContext,
-				TestingKnobs: ClientTestingKnobs{
-					TransportFactory: adaptSimpleTransport(testFn),
-				},
-				RangeDescriptorDB: descDB,
-				Settings:          cluster.MakeTestingClusterSettings(),
-			}
-			ds := NewDistSender(cfg, g)
+				var testFn simpleSendFn = func(
+					_ context.Context,
+					_ SendOptions,
+					_ ReplicaSlice,
+					ba roachpb.BatchRequest,
+				) (*roachpb.BatchResponse, error) {
+					reply := ba.CreateReply()
+					if delRng := ba.Requests[0].GetDeleteRange(); delRng == nil {
+						return nil, errors.Errorf("expected DeleteRange request, found %v", ba.Requests[0])
+					} else if delRng.Key.Equal(roachpb.Key("a")) {
+						if tc.err1 != nil {
+							errTxn := ba.Txn.Clone()
+							errTxn.WriteTimestamp = err1WriteTimestamp
+							reply.Error = roachpb.NewErrorWithTxn(tc.err1, errTxn)
+						}
+					} else if delRng.Key.Equal(roachpb.Key("b")) {
+						if tc.err2 != nil {
+							errTxn := ba.Txn.Clone()
+							errTxn.WriteTimestamp = err2WriteTimestamp
+							reply.Error = roachpb.NewErrorWithTxn(tc.err2, errTxn)
+						}
+					} else {
+						return nil, errors.Errorf("unexpected DeleteRange boundaries")
+					}
+					return reply, nil
+				}
 
-			var ba roachpb.BatchRequest
-			ba.Txn = txn.Clone()
-			ba.Add(roachpb.NewDeleteRange(roachpb.Key("a"), roachpb.Key("c"), false))
+				cfg := DistSenderConfig{
+					AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+					Clock:      clock,
+					RPCContext: rpcContext,
+					TestingKnobs: ClientTestingKnobs{
+						TransportFactory: adaptSimpleTransport(testFn),
+					},
+					RangeDescriptorDB: descDB,
+					Settings:          cluster.MakeTestingClusterSettings(),
+					RPCRetryOptions:   &retry.Options{MaxRetries: 1},
+				}
+				ds := NewDistSender(cfg, g)
 
-			if _, pErr := ds.Send(context.Background(), ba); pErr == nil {
-				t.Fatalf("expected an error to be returned from distSender")
-			} else if !testutils.IsPError(pErr, regexp.QuoteMeta(tc.expErr)) {
-				t.Fatalf("expected error %q; found %v", tc.expErr, pErr)
-			}
+				var ba roachpb.BatchRequest
+				ba.Txn = txn.Clone()
+				ba.Add(roachpb.NewDeleteRange(roachpb.Key("a"), roachpb.Key("c"), false /* returnKeys */))
+
+				expWriteTimestamp := txn.WriteTimestamp
+				if tc.err1 != nil {
+					expWriteTimestamp = err1WriteTimestamp
+				}
+				if tc.err2 != nil {
+					expWriteTimestamp = err2WriteTimestamp
+				}
+
+				if _, pErr := ds.Send(context.Background(), ba); pErr == nil {
+					t.Fatalf("expected an error to be returned from distSender")
+				} else if !testutils.IsPError(pErr, regexp.QuoteMeta(tc.expErr)) {
+					t.Fatalf("expected error %q; found %v", tc.expErr, pErr)
+				} else if !pErr.GetTxn().WriteTimestamp.Equal(expWriteTimestamp) {
+					t.Fatalf("expected bumped ts %s, got: %s", expWriteTimestamp, pErr.GetTxn().WriteTimestamp)
+				}
+			})
 		})
 	}
 }
