@@ -153,7 +153,7 @@ func DefaultTestTempStorageConfig(st *cluster.Settings) TempStorageConfig {
 	var maxSizeBytes int64 = DefaultInMemTempStorageMaxSizeBytes
 	monitor := mon.MakeMonitor(
 		"in-mem temp storage",
-		mon.MemoryResource,
+		mon.DiskResource,
 		nil,             /* curCount */
 		nil,             /* maxHist */
 		1024*1024,       /* increment */
