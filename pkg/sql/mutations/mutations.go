@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"math/rand"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -507,6 +508,8 @@ Loop:
 	}
 }
 
+var PostgresMutatorAtIndex = regexp.MustCompile(`@[\[\]\w]+`)
+
 func postgresMutator(rng *rand.Rand, q string) string {
 	q, _ = ApplyString(rng, q, postgresStatementMutator)
 
@@ -521,6 +524,7 @@ func postgresMutator(rng *rand.Rand, q string) string {
 	} {
 		q = strings.Replace(q, from, to, -1)
 	}
+	q = PostgresMutatorAtIndex.ReplaceAllString(q, "")
 	return q
 }
 
