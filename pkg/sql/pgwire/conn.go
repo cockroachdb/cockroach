@@ -213,6 +213,8 @@ func (c *conn) serveImpl(
 	authOpt authOptions,
 	stopper *stop.Stopper,
 ) {
+	defer func() { _ = c.conn.Close() }()
+
 	ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
 
 	inTestWithoutSQL := sqlServer == nil
@@ -221,7 +223,6 @@ func (c *conn) serveImpl(
 		authLogger = sqlServer.GetExecutorConfig().AuthLogger
 		sessionStart := timeutil.Now()
 		defer func() {
-			_ = c.conn.Close()
 			if c.authLogEnabled() {
 				authLogger.Logf(ctx, "session terminated; duration: %s", timeutil.Now().Sub(sessionStart))
 			}
