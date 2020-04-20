@@ -282,7 +282,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		RuntimeStats:   cfg.runtime,
 		DB:             cfg.db,
 		Executor:       cfg.circularInternalExecutor,
-		FlowDB:         cfg.db,
 		RPCContext:     cfg.rpcContext,
 		Stopper:        cfg.stopper,
 		NodeID:         cfg.nodeIDContainer,
