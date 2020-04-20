@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
@@ -101,7 +102,11 @@ type sqlServerArgs struct {
 	distSender *kvcoord.DistSender
 	// The executorConfig depends on the status server.
 	// The status server is handed the stmtDiagnosticsRegistry.
-	status *statusServer
+	//
+	// The status server is not available in pure SQL servers, in which case
+	// the wrapper method returns (nil, false). Otherwise it returns the status
+	// server and true.
+	status func() (*statusServer, bool)
 	// Narrowed down version of *NodeLiveness.
 	nodeLiveness interface {
 		jobs.NodeLiveness                    // jobs uses this
@@ -152,7 +157,13 @@ type sqlServerArgs struct {
 }
 
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
-	sessionRegistry := cfg.status.sessionRegistry
+	var sessionRegistry *sql.SessionRegistry
+	if statusServer, ok := cfg.status(); ok {
+		sessionRegistry = statusServer.sessionRegistry
+	} else {
+		sessionRegistry = sql.NewSessionRegistry()
+	}
+
 	execCfg := &sql.ExecutorConfig{}
 	var jobAdoptionStopFile string
 	for _, spec := range cfg.Stores.Specs {
@@ -364,7 +375,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		LeaseManager:            leaseMgr,
 		Clock:                   cfg.clock,
 		DistSQLSrv:              distSQLServer,
-		StatusServer:            cfg.status,
+		StatusServer:            func() (serverpb.StatusServer, bool) { return cfg.status() },
 		SessionRegistry:         sessionRegistry,
 		JobRegistry:             jobRegistry,
 		VirtualSchemas:          virtualSchemas,
@@ -511,7 +522,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	execCfg.InternalExecutor = cfg.circularInternalExecutor
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
 		cfg.circularInternalExecutor, cfg.db, cfg.gossip, cfg.Settings)
-	cfg.status.setStmtDiagnosticsRequester(stmtDiagnosticsRegistry)
+	if statusServer, ok := cfg.status(); ok {
+		statusServer.setStmtDiagnosticsRequester(stmtDiagnosticsRegistry)
+	}
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
 	leaseMgr.RefreshLeases(cfg.stopper, cfg.db, cfg.gossip)
@@ -522,7 +535,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		cfg.db,
 		cfg.registry,
 		distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
-		cfg.status,
+		func() (serverpb.StatusServer, bool) {
+			return cfg.status()
+		},
 		cfg.isMeta1Leaseholder,
 		sqlExecutorTestingKnobs,
 	)
