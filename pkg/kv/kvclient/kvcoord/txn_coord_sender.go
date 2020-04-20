@@ -783,10 +783,16 @@ func (tc *TxnCoordSender) updateStateLocked(
 	// This is the non-retriable error case. The client is expected to send a
 	// rollback.
 	if errTxn := pErr.GetTxn(); errTxn != nil {
-		tc.mu.txnState = txnError
-		tc.mu.storedErr = roachpb.NewError(&roachpb.TxnAlreadyEncounteredErrorError{
-			PrevError: pErr.String(),
-		})
+		// Most errors cause the transaction to not accept further request, but some
+		// errors are safe to allow continuing (in particular ConditionFailedError).
+		// In particular, SQL can recover by rolling back to a savepoint.
+		if roachpb.ErrPriority(pErr.GetDetail()) != roachpb.ErrorScoreUnambiguousError {
+			tc.mu.txnState = txnError
+			tc.mu.storedErr = roachpb.NewError(&roachpb.TxnAlreadyEncounteredErrorError{
+				PrevError: pErr.String(),
+			})
+		}
+
 		tc.mu.txn.Update(errTxn)
 		if errTxn.Status != roachpb.PENDING {
 			// We only expect TransactionAbortedError to carry an aborted txn.
