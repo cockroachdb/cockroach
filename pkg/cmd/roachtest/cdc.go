@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -61,56 +62,10 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		t.Skip("no poller in >= v19.2.0", "")
 	}
 
-	crdbNodes := c.Range(1, c.spec.NodeCount-1)
-	workloadNode := c.Node(c.spec.NodeCount)
-	kafkaNode := c.Node(c.spec.NodeCount)
-	c.Put(ctx, cockroach, "./cockroach")
-	c.Put(ctx, workload, "./workload", workloadNode)
-	c.Start(ctx, t, crdbNodes)
+	crdbNodes, workloadNode, db, kafka, sinkURI, m, cleanup := setupCDCTest(ctx, t, c, args)
+	defer cleanup()
 
-	db := c.Conn(ctx, 1)
-	defer stopFeeds(db)
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING kv.rangefeed.enabled = $1`, args.rangefeed,
-	); err != nil {
-		t.Fatal(err)
-	}
-	// The 2.1 branch doesn't have this cluster setting, so ignore the error if
-	// it's about an unknown cluster setting
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING changefeed.push.enabled = $1`, args.rangefeed,
-	); err != nil && !strings.Contains(err.Error(), "unknown cluster setting") {
-		t.Fatal(err)
-	}
-	kafka := kafkaManager{
-		c:     c,
-		nodes: kafkaNode,
-	}
-
-	// Workaround for #35947. The optimizer currently plans a bad query for TPCC
-	// when it has stats, so disable stats for now.
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`,
-	); err != nil && !strings.Contains(err.Error(), "unknown cluster setting") {
-		t.Fatal(err)
-	}
-
-	var sinkURI string
-	if args.cloudStorageSink {
-		ts := timeutil.Now().Format(`20060102150405`)
-		// cockroach-tmp is a multi-region bucket with a TTL to clean up old
-		// data.
-		sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts
-	} else {
-		t.Status("installing kafka")
-		kafka.install(ctx)
-		kafka.start(ctx)
-		sinkURI = kafka.sinkURL(ctx)
-	}
-
-	m := newMonitor(ctx, c, crdbNodes)
 	workloadCompleteCh := make(chan struct{}, 1)
-
 	workloadStart := timeutil.Now()
 	if args.workloadType == tpccWorkloadType {
 		t.Status("installing TPCC")
@@ -229,6 +184,174 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		verifyTxnPerSecond(
 			ctx, c, t, crdbNodes.randNode(), workloadStart, workloadEnd, args.targetTxnPerSecond, 0.05,
 		)
+	}
+}
+
+func setupCDCTest(
+	ctx context.Context, t *test, c *cluster, args cdcTestArgs,
+) (
+	crdbNodes, workloadNode nodeListOption,
+	db *gosql.DB,
+	kafka kafkaManager,
+	sinkURI string,
+	m *monitor,
+	cleanup func(),
+) {
+
+	crdbNodes = c.Range(1, c.spec.NodeCount-1)
+	workloadNode = c.Node(c.spec.NodeCount)
+	kafkaNode := c.Node(c.spec.NodeCount)
+	//c.Put(ctx, cockroach, "./cockroach")
+	//c.Put(ctx, workload, "./workload", workloadNode)
+	c.Start(ctx, t, crdbNodes)
+
+	db = c.Conn(ctx, 1)
+	cleanup = func() { stopFeeds(db) }
+	if _, err := db.Exec(
+		`SET CLUSTER SETTING kv.rangefeed.enabled = $1`, args.rangefeed,
+	); err != nil {
+		t.Fatal(err)
+	}
+	// The 2.1 branch doesn't have this cluster setting, so ignore the error if
+	// it's about an unknown cluster setting
+	if _, err := db.Exec(
+		`SET CLUSTER SETTING changefeed.push.enabled = $1`, args.rangefeed,
+	); err != nil && !strings.Contains(err.Error(), "unknown cluster setting") {
+		t.Fatal(err)
+	}
+	kafka = kafkaManager{
+		c:     c,
+		nodes: kafkaNode,
+	}
+
+	// Workaround for #35947. The optimizer currently plans a bad query for TPCC
+	// when it has stats, so disable stats for now.
+	if _, err := db.Exec(
+		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`,
+	); err != nil && !strings.Contains(err.Error(), "unknown cluster setting") {
+		t.Fatal(err)
+	}
+
+	if args.cloudStorageSink {
+		ts := timeutil.Now().Format(`20060102150405`)
+		// cockroach-tmp is a multi-region bucket with a TTL to clean up old
+		// data.
+		sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts
+	} else {
+		t.Status("installing kafka")
+		kafka.install(ctx)
+		kafka.start(ctx)
+		sinkURI = kafka.sinkURL(ctx)
+	}
+
+	m = newMonitor(ctx, c, crdbNodes)
+	return crdbNodes, workloadNode, db, kafka, sinkURI, m, cleanup
+}
+
+func runCDCManyTables(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
+
+	// Skip the poller test on v19.2. After 19.2 is out, we should likely delete
+	// the test entirely.
+	if !args.rangefeed && t.buildVersion.Compare(version.MustParse(`v19.1.0-0`)) > 0 {
+		t.Skip("no poller in >= v19.2.0", "")
+	}
+
+	crdbNodes, workloadNodes, db, _, sinkURI, m, cleanup := setupCDCTest(ctx, t, c, args)
+	defer cleanup()
+
+	const insertCount = 1000000
+	const numDatabases = 1
+	const maxTotalOps = 1000
+	const maxOpsPerDB = maxTotalOps / numDatabases
+	const workloadDuration = 20 * time.Minute
+	type changefeed struct {
+		dbName        string
+		logger        *logger
+		verifier      *latencyVerifier
+		changefeedJob int
+	}
+	var wg sync.WaitGroup
+	t.Status("setting up workload")
+
+	makeChangefeed := func(i int) (cf changefeed) {
+		cf.dbName = "ycsb" + strconv.Itoa(i)
+		changefeedLogger, err := t.l.ChildLogger("changefeed-" + cf.dbName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cf.logger = changefeedLogger
+		cf.verifier = makeLatencyVerifier(
+			args.targetInitialScanLatency,
+			args.targetSteadyLatency,
+			changefeedLogger,
+			args.crdbChaos)
+		return cf
+	}
+	changefeeds := make([]changefeed, numDatabases)
+	for i := range changefeeds {
+		changefeeds[i] = makeChangefeed(i)
+		defer changefeeds[i].logger.close()
+	}
+	for i := range changefeeds {
+		cf := &changefeeds[i]
+		wg.Add(1)
+		m.Go(func(ctx context.Context) error {
+			defer wg.Done()
+			waitForFullReplication(t, db)
+			return c.RunE(ctx, workloadNodes, fmt.Sprintf(
+				`./workload init ycsb --drop --db %s --insert-count=%d {pgurl%s} --families=false`,
+				cf.dbName,
+				insertCount,
+				crdbNodes.randNode()))
+		})
+	}
+
+	wg.Wait()
+	waitForFullReplication(t, db)
+	wg = sync.WaitGroup{}
+	for i := range changefeeds {
+		cf := &changefeeds[i]
+		m.Go(func(ctx context.Context) error {
+			return c.RunE(ctx, workloadNodes, fmt.Sprintf(
+				`./workload run ycsb --db %s  --duration %v --concurrency 2 --max-rate %d --workload A --request-distribution uniform --insert-count %d {pgurl%s} `,
+				cf.dbName,
+				workloadDuration,
+				maxOpsPerDB,
+				insertCount,
+				crdbNodes,
+			))
+		})
+	}
+	workloadCompleteCh := make(chan struct{})
+	go func() { wg.Wait(); close(workloadCompleteCh) }()
+
+	t.Status("creating changefeeds")
+	for i := range changefeeds {
+		cf := &changefeeds[i]
+		m.Go(func(ctx context.Context) (err error) {
+			defer func() {
+				cf.logger.Printf("%v returning with %v", cf.dbName, err)
+			}()
+			cf.changefeedJob, err = createChangefeed(db, cf.dbName+".usertable", sinkURI, args)
+			if err != nil {
+				return err
+			}
+
+			info, err := getChangefeedInfo(db, cf.changefeedJob)
+			if err != nil {
+				return err
+			}
+			cf.verifier.statementTime = info.statementTime
+			cf.logger.Printf("started changefeed at (%d) %s\n",
+				cf.verifier.statementTime.UnixNano(), cf.verifier.statementTime)
+
+			return cf.verifier.pollLatency(ctx, db, cf.changefeedJob, time.Second, workloadCompleteCh)
+		})
+	}
+
+	m.Wait()
+	for i := range changefeeds {
+		changefeeds[i].verifier.assertValid(t)
 	}
 }
 
@@ -639,6 +762,22 @@ func registerCDC(r *testRegistry) {
 				// which should be much faster, with a larger warehouse count.
 				tpccWarehouseCount:       50,
 				workloadDuration:         "30m",
+				initialScan:              true,
+				rangefeed:                true,
+				cloudStorageSink:         true,
+				fixturesImport:           true,
+				targetInitialScanLatency: 30 * time.Minute,
+				targetSteadyLatency:      time.Minute,
+			})
+		},
+	})
+	r.Add(testSpec{
+		Name:       "cdc/many-tables/cloud-sink-gcs/rangefeed=true",
+		Owner:      `cdc`,
+		MinVersion: "v19.2.0",
+		Cluster:    makeClusterSpec(4, cpu(16)),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runCDCManyTables(ctx, t, c, cdcTestArgs{
 				initialScan:              true,
 				rangefeed:                true,
 				cloudStorageSink:         true,
