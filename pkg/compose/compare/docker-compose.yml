@@ -4,6 +4,7 @@ services:
     image: postgres:11
     environment:
       - POSTGRES_INITDB_ARGS=--locale=C
+      - POSTGRES_HOST_AUTH_METHOD=trust
   cockroach1:
     image: ubuntu:xenial-20170214
     command: /cockroach/cockroach start-single-node --insecure --listen-addr cockroach1
