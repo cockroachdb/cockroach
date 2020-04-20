@@ -90,11 +90,6 @@ type ServerConfig struct {
 	// whereas this one isn't.
 	Executor sqlutil.InternalExecutor
 
-	// FlowDB is the DB that flows should use for interacting with the database.
-	// This DB has to be set such that it bypasses the local TxnCoordSender. We
-	// want only the TxnCoordSender on the gateway to be involved with requests
-	// performed by DistSQL.
-	FlowDB       *kv.DB
 	RPCContext   *rpc.Context
 	Stopper      *stop.Stopper
 	TestingKnobs TestingKnobs

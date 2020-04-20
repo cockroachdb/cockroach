@@ -226,7 +226,7 @@ func (ds *ServerImpl) setupFlow(
 		}
 		// The flow will run in a LeafTxn because we do not want each distributed
 		// Txn to heartbeat the transaction.
-		return kv.NewLeafTxn(ctx, ds.FlowDB, req.Flow.Gateway, tis), nil
+		return kv.NewLeafTxn(ctx, ds.DB, req.Flow.Gateway, tis), nil
 	}
 
 	var evalCtx *tree.EvalContext
