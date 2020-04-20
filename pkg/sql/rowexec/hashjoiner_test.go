@@ -101,7 +101,10 @@ func TestHashJoiner(t *testing.T) {
 					Type:           c.joinType,
 					OnExpr:         c.onExpr,
 				}
-				h, err := newHashJoiner(&flowCtx, 0 /* processorID */, spec, leftInput, rightInput, &post, out)
+				h, err := newHashJoiner(
+					&flowCtx, 0 /* processorID */, spec, leftInput,
+					rightInput, &post, out, false, /* disableTempStorage */
+				)
 				if err != nil {
 					return err
 				}
@@ -206,7 +209,10 @@ func TestHashJoinerError(t *testing.T) {
 				Type:           c.joinType,
 				OnExpr:         c.onExpr,
 			}
-			h, err := newHashJoiner(&flowCtx, 0 /* processorID */, spec, leftInput, rightInput, &post, out)
+			h, err := newHashJoiner(
+				&flowCtx, 0 /* processorID */, spec, leftInput, rightInput,
+				&post, out, false, /* disableTempStorage */
+			)
 			if err != nil {
 				return err
 			}
@@ -264,8 +270,8 @@ func checkExpectedRows(
 	return nil
 }
 
-// TestDrain tests that, if the consumer starts draining, the hashJoiner informs
-// the producers and drains them.
+// TestHashJoinerDrain tests that, if the consumer starts draining, the
+// hashJoiner informs the producers and drains them.
 //
 // Concretely, the HashJoiner is set up to read the right input fully before
 // starting to produce rows, so only the left input will be asked to drain if
@@ -323,11 +329,7 @@ func TestHashJoinerDrain(t *testing.T) {
 		distsqlutils.RowBufferArgs{AccumulateRowsWhileDraining: true},
 	)
 
-	// Since the use of external storage overrides h.initialBufferSize, disable
-	// it for this test.
 	settings := cluster.MakeTestingClusterSettings()
-	execinfra.SettingUseTempStorageJoins.Override(&settings.SV, false)
-
 	evalCtx := tree.MakeTestingEvalContext(settings)
 	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
@@ -337,7 +339,12 @@ func TestHashJoinerDrain(t *testing.T) {
 	}
 
 	post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outCols}
-	h, err := newHashJoiner(&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
+	// Since the use of external storage overrides h.initialBufferSize, disable
+	// it for this test.
+	h, err := newHashJoiner(
+		&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput,
+		&post, out, true, /* disableTempStorage */
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -460,10 +467,11 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 
 	// Disable external storage for this test to avoid initializing temp storage
 	// infrastructure.
-	execinfra.SettingUseTempStorageJoins.Override(&st.SV, false)
-
 	post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outCols}
-	h, err := newHashJoiner(&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
+	h, err := newHashJoiner(
+		&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput,
+		&post, out, true, /* disableTempStorage */
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -548,7 +556,10 @@ func BenchmarkHashJoiner(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						// TODO(asubiotto): Get rid of uncleared state between
 						// hashJoiner Run()s to omit instantiation time from benchmarks.
-						h, err := newHashJoiner(flowCtx, 0 /* processorID */, spec, leftInput, rightInput, post, &execinfra.RowDisposer{})
+						h, err := newHashJoiner(
+							flowCtx, 0 /* processorID */, spec, leftInput, rightInput,
+							post, &execinfra.RowDisposer{}, false, /* disableTempStorage */
+						)
 						if err != nil {
 							b.Fatal(err)
 						}
