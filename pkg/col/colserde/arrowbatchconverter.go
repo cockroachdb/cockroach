@@ -245,13 +245,6 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 	}
 	// Assume > 0 length data.
 	n := data[0].Len()
-	// ResetNoTruncation reuses the passed-in Batch when possible, saving
-	// allocations but overwriting it. If the passed-in Batch is not suitable
-	// for use, a new one is allocated.
-	coldata.ResetNoTruncation(b.(*coldata.MemBatch), c.typs, n)
-	b.SetLength(n)
-	// Reset the batch, this resets the selection vector as well.
-	b.ResetInternalBatch()
 
 	for i, typ := range c.typs {
 		vec := b.ColVec(i)
@@ -370,7 +363,11 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 		arrowBitmap := arr.NullBitmapBytes()
 		if len(arrowBitmap) != 0 {
 			vec.Nulls().SetNullBitmap(arrowBitmap, n)
+		} else {
+			vec.Nulls().UnsetNulls()
 		}
+		b.SetSelection(false)
 	}
+	b.SetLength(n)
 	return nil
 }

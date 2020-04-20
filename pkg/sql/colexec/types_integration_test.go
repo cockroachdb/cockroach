@@ -82,7 +82,7 @@ func TestSupportedSQLTypesIntegration(t *testing.T) {
 			require.NoError(t, err)
 			r, err := colserde.NewRecordBatchSerializer(typs)
 			require.NoError(t, err)
-			arrowOp := newArrowTestOperator(columnarizer, c, r)
+			arrowOp := newArrowTestOperator(columnarizer, c, r, typs)
 
 			output := distsqlutils.NewRowBuffer(typs, nil /* rows */, distsqlutils.RowBufferArgs{})
 			materializer, err := NewMaterializer(
@@ -125,17 +125,23 @@ type arrowTestOperator struct {
 
 	c *colserde.ArrowBatchConverter
 	r *colserde.RecordBatchSerializer
+
+	typs []types.T
 }
 
 var _ colexecbase.Operator = &arrowTestOperator{}
 
 func newArrowTestOperator(
-	input colexecbase.Operator, c *colserde.ArrowBatchConverter, r *colserde.RecordBatchSerializer,
+	input colexecbase.Operator,
+	c *colserde.ArrowBatchConverter,
+	r *colserde.RecordBatchSerializer,
+	typs []types.T,
 ) colexecbase.Operator {
 	return &arrowTestOperator{
 		OneInputNode: NewOneInputNode(input),
 		c:            c,
 		r:            r,
+		typs:         typs,
 	}
 }
 
@@ -159,7 +165,7 @@ func (a *arrowTestOperator) Next(ctx context.Context) coldata.Batch {
 	if err := a.r.Deserialize(&arrowDataOut, buf.Bytes()); err != nil {
 		colexecerror.InternalError(err)
 	}
-	batchOut := testAllocator.NewMemBatchWithSize(nil, 0)
+	batchOut := testAllocator.NewMemBatchWithSize(a.typs, coldata.BatchSize())
 	if err := a.c.ArrowToBatch(arrowDataOut, batchOut); err != nil {
 		colexecerror.InternalError(err)
 	}
