@@ -13,6 +13,8 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -269,37 +271,64 @@ const maxNonIndexCols = 100
 // In addition to the index columns, we collect stats on up to maxNonIndexCols
 // other columns from the table. We only collect histograms for index columns,
 // plus any other boolean columns (where the "histogram" is tiny).
-//
-// TODO(rytaft): This currently only generates one single-column stat per
-// index. Add code to collect multi-column stats once they are supported.
 func createStatsDefaultColumns(
 	desc *ImmutableTableDescriptor,
 ) ([]jobspb.CreateStatsDetails_ColStat, error) {
 	colStats := make([]jobspb.CreateStatsDetails_ColStat, 0, len(desc.Indexes)+1)
 
 	var requestedCols util.FastIntSet
+	var requestedMultiCols map[string]struct{}
 
-	// Add a column for the primary key.
-	pkCol := desc.PrimaryIndex.ColumnIDs[0]
-	colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
-		ColumnIDs:    []sqlbase.ColumnID{pkCol},
-		HasHistogram: true,
-	})
-	requestedCols.Add(int(pkCol))
+	// Add column stats for the primary key.
+	for i := range desc.PrimaryIndex.ColumnIDs {
+		// Remember the requested stats so we don't request duplicates.
+		if i == 0 {
+			pkCol := desc.PrimaryIndex.ColumnIDs[0]
+			requestedCols.Add(int(pkCol))
+		} else {
+			if requestedMultiCols == nil {
+				requestedMultiCols = make(map[string]struct{})
+			}
+			key := makeMultiColKey(desc.PrimaryIndex.ColumnIDs[: i+1 : i+1])
+			requestedMultiCols[key] = struct{}{}
+		}
 
-	// Add columns for each secondary index.
+		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
+			ColumnIDs:    desc.PrimaryIndex.ColumnIDs[: i+1 : i+1],
+			HasHistogram: i == 0,
+		})
+	}
+
+	// Add column stats for each secondary index.
 	for i := range desc.Indexes {
 		if desc.Indexes[i].Type == sqlbase.IndexDescriptor_INVERTED {
 			// We don't yet support stats on inverted indexes.
 			continue
 		}
-		idxCol := desc.Indexes[i].ColumnIDs[0]
-		if !requestedCols.Contains(int(idxCol)) {
+		for j := range desc.Indexes[i].ColumnIDs {
+			if j == 0 {
+				// Check for existing single-column stats.
+				idxCol := desc.Indexes[i].ColumnIDs[0]
+				if requestedCols.Contains(int(idxCol)) {
+					continue
+				}
+				requestedCols.Add(int(idxCol))
+			} else {
+				// Check for existing multi-column stats.
+				if requestedMultiCols == nil {
+					requestedMultiCols = make(map[string]struct{})
+				}
+				key := makeMultiColKey(desc.Indexes[i].ColumnIDs[: j+1 : j+1])
+				if _, ok := requestedMultiCols[key]; ok {
+					continue
+				}
+				requestedMultiCols[key] = struct{}{}
+			}
+
 			colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
-				ColumnIDs:    []sqlbase.ColumnID{idxCol},
-				HasHistogram: true,
+				ColumnIDs:    desc.Indexes[i].ColumnIDs[: j+1 : j+1],
+				HasHistogram: j == 0,
 			})
-			requestedCols.Add(int(idxCol))
 		}
 	}
 
@@ -317,6 +346,19 @@ func createStatsDefaultColumns(
 	}
 
 	return colStats, nil
+}
+
+// makeMultiColKey constructs a unique key representing cols that can be used
+// as the key in a map.
+func makeMultiColKey(cols []sqlbase.ColumnID) string {
+	var b strings.Builder
+	for i, c := range cols {
+		if i != 0 {
+			b.WriteRune(',')
+		}
+		b.WriteString(strconv.Itoa(int(c)))
+	}
+	return b.String()
 }
 
 // makePlanForExplainDistSQL is part of the distSQLExplainable interface.

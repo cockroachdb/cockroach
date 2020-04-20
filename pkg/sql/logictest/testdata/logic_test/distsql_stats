@@ -181,14 +181,18 @@ WHERE statistics_name = 's3'
 ----
 column_names  row_count  distinct_count  null_count  has_histogram
 {a}           256        4               0           true
+{a,b}         256        16              0           false
+{a,b,c}       256        64              0           false
+{a,b,c,d}     256        256             0           false
 {c}           256        4               0           true
+{c,d}         256        16              0           false
 {b}           256        4               0           false
 {d}           256        4               0           false
 {e}           256        2               0           true
 
-# Add indexes, including duplicate index on column c.
+# Add indexes, including duplicate index on column c and columns (a, b).
 statement ok
-CREATE INDEX ON data (c DESC, b ASC); CREATE INDEX ON data (b DESC)
+CREATE INDEX ON data (c DESC, b ASC); CREATE INDEX ON data (b DESC); CREATE INDEX ON data (a DESC, b)
 
 statement ok
 CREATE STATISTICS s4 FROM data
@@ -201,7 +205,12 @@ WHERE statistics_name = 's4'
 ----
 column_names  row_count  distinct_count  null_count
 {a}           256        4               0
+{a,b}         256        16              0
+{a,b,c}       256        64              0
+{a,b,c,d}     256        256             0
 {c}           256        4               0
+{c,d}         256        16              0
+{c,b}         256        16              0
 {b}           256        4               0
 {d}           256        4               0
 {e}           256        2               0
@@ -221,6 +230,9 @@ WHERE statistics_name = 's5'
 ----
 column_names  row_count  distinct_count  null_count
 {a}           256        4               0
+{a,b}         256        16              0
+{a,b,c}       256        64              0
+{a,b,c,d}     256        256             0
 {b}           256        4               0
 {c}           256        4               0
 {d}           256        4               0
@@ -263,6 +275,30 @@ default_stat2    {rowid}       1          1               0
 default_stat2    {y}           1          1               1
 default_stat2    {x}           1          1               1
 
+# Add a few more rows.
+statement ok
+INSERT INTO simple VALUES (DEFAULT, DEFAULT);
+INSERT INTO simple VALUES (0, DEFAULT);
+INSERT INTO simple VALUES (DEFAULT, 0);
+INSERT INTO simple VALUES (0, 1);
+
+# Add an index.
+statement ok
+CREATE INDEX ON simple (x, y)
+
+statement ok
+CREATE STATISTICS default_stat3 FROM simple
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE simple]
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+default_stat3    {rowid}       5          5               0
+default_stat3    {y}           5          3               3
+default_stat3    {x}           5          2               3
+default_stat3    {x,y}         5          4               4
+
 #
 # Test numeric references
 #
@@ -275,6 +311,11 @@ SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data]
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
+s4               {c,d}         256        16              0
+s4               {c,b}         256        16              0
+s5               {a,b}         256        16              0
+s5               {a,b,c}       256        64              0
+s5               {a,b,c,d}     256        256             0
 s5               {b}           256        4               0
 s5               {c}           256        4               0
 s5               {d}           256        4               0
@@ -292,6 +333,9 @@ WHERE statistics_name = '__auto__'
 ----
 column_names  row_count  distinct_count  null_count
 {a}           256        4               0
+{a,b}         256        16              0
+{a,b,c}       256        64              0
+{a,b,c,d}     256        256             0
 {b}           256        4               0
 {c}           256        4               0
 {d}           256        4               0
@@ -318,6 +362,21 @@ SELECT statistics_name, column_names
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
 __auto__         {a}
 __auto__         {a}
 __auto__         {a}
@@ -343,6 +402,8 @@ __auto__         {e}
 __auto__         {e}
 __auto__         {e}
 __auto__         {e}
+s4               {c,b}
+s4               {c,d}
 
 statement ok
 CREATE STATISTICS s7 ON a FROM [53]
@@ -352,6 +413,21 @@ SELECT statistics_name, column_names
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
 __auto__         {a}
 __auto__         {a}
 __auto__         {a}
@@ -376,6 +452,8 @@ __auto__         {e}
 __auto__         {e}
 __auto__         {e}
 __auto__         {e}
+s4               {c,b}
+s4               {c,d}
 s7               {a}
 
 statement ok
@@ -387,6 +465,21 @@ SELECT statistics_name, column_names
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c,d}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b,c}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
+__auto__         {a,b}
 __auto__         {a}
 __auto__         {a}
 __auto__         {a}
@@ -411,6 +504,8 @@ __auto__         {e}
 __auto__         {e}
 __auto__         {e}
 __auto__         {e}
+s4               {c,b}
+s4               {c,d}
 s8               {a}
 
 # Regression test for #33195.
