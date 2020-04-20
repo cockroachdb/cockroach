@@ -542,6 +542,13 @@ func init() {
 	// Quit command.
 	BoolFlag(quitCmd.Flags(), &quitCtx.serverDecommission, cliflags.Decommission, quitCtx.serverDecommission)
 
+	// Quit and node drain.
+	for _, cmd := range []*cobra.Command{quitCmd, drainNodeCmd} {
+		f := cmd.Flags()
+		DurationFlag(f, &quitCtx.drainWait, cliflags.DrainWait, quitCtx.drainWait)
+	}
+
+	// SQL and demo commands.
 	for _, cmd := range append([]*cobra.Command{sqlShellCmd, demoCmd}, demoCmd.Commands()...) {
 		f := cmd.Flags()
 		VarFlag(f, &sqlCtx.setStmts, cliflags.Set)

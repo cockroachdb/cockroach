@@ -1484,7 +1484,7 @@ func TestReplicaDrainLease(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	tc.store.SetDraining(true)
+	tc.store.SetDraining(true, nil /* reporter */)
 	tc.repl.mu.Lock()
 	pErr = <-tc.repl.requestLeaseLocked(ctx, status).C()
 	tc.repl.mu.Unlock()
@@ -1492,7 +1492,7 @@ func TestReplicaDrainLease(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected NotLeaseHolderError, not %v", pErr)
 	}
-	tc.store.SetDraining(false)
+	tc.store.SetDraining(false, nil /* reporter */)
 	// Newly undrained, leases work again.
 	if _, pErr := tc.repl.redirectOnOrAcquireLease(ctx); pErr != nil {
 		t.Fatal(pErr)
