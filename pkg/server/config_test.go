@@ -37,7 +37,7 @@ func TestParseInitNodeAttributes(t *testing.T) {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
 	defer engines.Close()
-	if err := cfg.InitNode(); err != nil {
+	if err := cfg.InitNode(context.TODO()); err != nil {
 		t.Fatalf("Failed to initialize node: %s", err)
 	}
 
@@ -58,7 +58,7 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
 	defer engines.Close()
-	if err := cfg.InitNode(); err != nil {
+	if err := cfg.InitNode(context.TODO()); err != nil {
 		t.Fatalf("Failed to initialize node: %s", err)
 	}
 	r1, err := resolver.NewResolver("localhost:12345")
