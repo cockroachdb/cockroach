@@ -3,7 +3,7 @@
 
 smither = "postgres"
 seed = -1
-timeoutsecs = 120
+stmttimeoutsecs = 120
 
 sql = [
 """
