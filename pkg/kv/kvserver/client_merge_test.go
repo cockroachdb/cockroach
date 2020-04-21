@@ -1426,9 +1426,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 
 	// Manually heartbeat the liveness on the first store to ensure it's
 	// considered live. The automatic heartbeat might not come for a while.
-	if err := mtc.heartbeatLiveness(ctx, 0); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, mtc.heartbeatLiveness(ctx, 0))
 
 	// Send several get and put requests to the the RHS. The first of these to
 	// arrive will acquire the lease; the remaining requests will wait for that
@@ -1448,9 +1446,17 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	//
 	// This race has since been fixed by installing the mergeComplete channel
 	// before the new lease.
-	reqErrs := make(chan error)
+	reqErrs := make(chan *roachpb.Error) // closed when all reqs done
+	var wg sync.WaitGroup
+	wg.Add(reqConcurrency)
+	go func() {
+		wg.Wait()
+		close(reqErrs)
+	}()
+
 	for i := 0; i < reqConcurrency; i++ {
 		go func(i int) {
+			defer wg.Done()
 			// For this test to have a shot at triggering a race, this log message
 			// must be interleaved with the "new range lease" message, like so:
 			//
@@ -1471,7 +1477,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 			_, pErr := kv.SendWrappedWith(ctx, mtc.stores[0].TestSender(), roachpb.Header{
 				RangeID: rhsDesc.RangeID,
 			}, req)
-			reqErrs <- pErr.GoError()
+			reqErrs <- pErr
 		}(i)
 		time.Sleep(time.Millisecond)
 	}
@@ -1482,24 +1488,28 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	// merge to complete without depending too heavily on implementation
 	// details.
 	for i := 0; i < reqConcurrency; i++ {
-		<-reqAcquiredLatch
+		select {
+		case <-reqAcquiredLatch:
+			// Latch acquired.
+		case pErr := <-reqErrs:
+			// Requests may never make it to the latch acquisition if s1 has not
+			// yet learned s2's lease is expired. Instead, we'll see a
+			// NotLeaseholderError.
+			require.IsType(t, &roachpb.NotLeaseHolderError{}, pErr.GetDetail())
+		}
 	}
 	time.Sleep(50 * time.Millisecond)
 
 	// Finally, allow the merge to complete. It should complete successfully.
 	close(finishMerge)
-	if err := <-mergeErr; err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, <-mergeErr)
 
 	// Because the merge completed successfully, r2 has ceased to exist. We
-	// therefore *must* see either a RangeNotFound or a NotLeaseHolderError
-	// error from every pending get and put request. Anything else is a
-	// consistency error (or a bug in the test).
-	for i := 0; i < reqConcurrency; i++ {
-		if err := <-reqErrs; !testutils.IsError(err, "(r2 was not found|not lease holder)") {
-			t.Fatalf("expected error from req during merge, but got %v", err)
-		}
+	// therefore *must* see only RangeNotFoundErrors here from every pending get
+	// and put request. Anything else is a consistency error (or a bug in the
+	// test).
+	for pErr := range reqErrs {
+		require.IsType(t, &roachpb.RangeNotFoundError{}, pErr.GetDetail())
 	}
 }
 
