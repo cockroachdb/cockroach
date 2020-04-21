@@ -724,6 +724,13 @@ If specified, decommissions the node and waits for it to rebalance before
 shutting down the node.`,
 	}
 
+	DrainWait = FlagInfo{
+		Name: "drain-wait",
+		Description: `
+When non-zero, wait for the specified amount of time for the node to
+drain all active client connections and migrate away range leases.`,
+	}
+
 	Wait = FlagInfo{
 		Name: "wait",
 		Description: `

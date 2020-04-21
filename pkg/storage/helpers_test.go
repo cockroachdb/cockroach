@@ -491,7 +491,7 @@ func (r *Replica) UnquiesceAndWakeLeader() {
 func (nl *NodeLiveness) SetDrainingInternal(
 	ctx context.Context, liveness *storagepb.Liveness, drain bool,
 ) error {
-	return nl.setDrainingInternal(ctx, liveness, drain)
+	return nl.setDrainingInternal(ctx, liveness, drain, nil /* reporter */)
 }
 
 func (nl *NodeLiveness) SetDecommissioningInternal(
