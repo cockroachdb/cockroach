@@ -79,7 +79,7 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
 
   render() {
     const { value, submitted } = this.state;
-    const className = submitted ? styles["_submitted"] : "";
+    const className = submitted ? styles[`_submitted`] : "";
 
     /*
       current antdesign (3.25.3) has Input.d.ts incompatible with latest @types/react
