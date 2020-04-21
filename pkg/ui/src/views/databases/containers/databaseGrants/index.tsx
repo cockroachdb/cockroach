@@ -17,7 +17,10 @@ import { AdminUIState } from "src/redux/state";
 import { databaseDetails, DatabaseSummaryExplicitData, grants as selectGrants, tableInfos, DatabaseSummaryBase } from "src/views/databases/containers/databaseSummary";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
-import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
+import { SummaryCard } from "oss/src/views/shared/components/summaryCard";
+import { Row, Col } from "antd";
+import { DatabaseIcon } from "oss/src/components/icon/databaseIcon";
+import Stack from "assets/stack.svg";
 
 class DatabaseGrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant> {}
 
@@ -33,47 +36,62 @@ class DatabaseSummaryGrants extends DatabaseSummaryBase {
     return grants && grants.length;
   }
 
+  noDatabaseResults = () => (
+    <>
+      <h3 className="table__no-results--title"><DatabaseIcon />This grands has no users.</h3>
+      <p className="table__no-results--description">
+        <a href="https://www.cockroachlabs.com/docs/stable/admin-ui-databases-page.html" target="_blank">Learn more</a>
+      </p>
+    </>
+  )
+
   render() {
     const { grants, sortSetting } = this.props;
     const dbID = this.props.name;
 
-    const numTables = tableInfos && tableInfos.length || 0;
-
     return (
       <div className="database-summary">
         <div className="database-summary-title">
-          <h2 className="base-heading">{dbID}</h2>
+          <h2 className="base-heading"><img src={Stack} alt="Stack" />{dbID}</h2>
         </div>
         <div className="l-columns">
           <div className="l-columns__left">
-            <div className="database-summary-table sql-table">
-              {
-                (numTables === 0) ? "" :
-                  <DatabaseGrantsSortedTable
-                    data={grants as protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant[]}
-                    sortSetting={sortSetting}
-                    onChangeSortSetting={(setting) => this.props.setSort(setting)}
-                    columns={[
-                      {
-                        title: "User",
-                        cell: (grant) => grant.user,
-                        sort: (grant) => grant.user,
-                      },
-                      {
-                        title: "Grants",
-                        cell: (grant) => grant.privileges.join(", "),
-                      },
-                    ]} />
-              }
-            </div>
+            <DatabaseGrantsSortedTable
+              data={grants as protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant[]}
+              sortSetting={sortSetting}
+              onChangeSortSetting={(setting) => this.props.setSort(setting)}
+              columns={[
+                {
+                  title: "User",
+                  cell: (grant) => grant.user,
+                  sort: (grant) => grant.user,
+                },
+                {
+                  title: "Grants",
+                  cell: (grant) => grant.privileges.join(", "),
+                },
+              ]}
+              // empty={tableInfos.length}
+              // emptyProps={{
+              //   title: "There are no statements since this page was last cleared.",
+              //   description: "Statements help you identify frequently executed or high latency SQL statements. Statements are cleared every hour by default, or according to your configuration.",
+              //   label: "Learn more",
+              //   onClick: () => window.open("https://www.cockroachlabs.com/docs/stable/admin-ui-databases-page.html"),
+              // }}
+              renderNoResult={this.noDatabaseResults()}
+            />
           </div>
           <div className="l-columns__right">
-            <SummaryBar>
-              <SummaryHeadlineStat
-                title="Total Users"
-                tooltip="Total users that have been granted permissions on this table."
-                value={this.totalUsers()} />
-            </SummaryBar>
+            <SummaryCard>
+              <Row>
+                <Col span={24}>
+                  <div className="summary--card__counting">
+                    <h3 className="summary--card__counting--value">{this.totalUsers()}</h3>
+                    <p className="summary--card__counting--label">Total Users</p>
+                  </div>
+                </Col>
+              </Row>
+            </SummaryCard>
           </div>
         </div>
       </div>
