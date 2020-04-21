@@ -287,6 +287,7 @@ pg_catalog          pg_default_acl
 pg_catalog          pg_depend
 pg_catalog          pg_description
 pg_catalog          pg_enum
+pg_catalog          pg_event_trigger
 pg_catalog          pg_extension
 pg_catalog          pg_foreign_data_wrapper
 pg_catalog          pg_foreign_server
@@ -429,6 +430,7 @@ pg_default_acl
 pg_depend
 pg_description
 pg_enum
+pg_event_trigger
 pg_extension
 pg_foreign_data_wrapper
 pg_foreign_server
@@ -578,6 +580,7 @@ system         pg_catalog          pg_default_acl                     SYSTEM VIE
 system         pg_catalog          pg_depend                          SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_description                     SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_enum                            SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_event_trigger                   SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_extension                       SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_foreign_data_wrapper            SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_foreign_server                  SYSTEM VIEW  NO                  1
@@ -1574,6 +1577,7 @@ NULL     public   system         pg_catalog          pg_default_acl             
 NULL     public   system         pg_catalog          pg_depend                          SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_description                     SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_enum                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_event_trigger                   SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_extension                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_foreign_data_wrapper            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_foreign_server                  SELECT          NULL          YES
@@ -1917,6 +1921,7 @@ NULL     public   system         pg_catalog          pg_default_acl             
 NULL     public   system         pg_catalog          pg_depend                          SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_description                     SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_enum                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_event_trigger                   SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_extension                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_foreign_data_wrapper            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_foreign_server                  SELECT          NULL          YES

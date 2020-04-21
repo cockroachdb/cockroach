@@ -111,6 +111,7 @@ test           pg_catalog          pg_default_acl                     public   S
 test           pg_catalog          pg_depend                          public   SELECT
 test           pg_catalog          pg_description                     public   SELECT
 test           pg_catalog          pg_enum                            public   SELECT
+test           pg_catalog          pg_event_trigger                   public   SELECT
 test           pg_catalog          pg_extension                       public   SELECT
 test           pg_catalog          pg_foreign_data_wrapper            public   SELECT
 test           pg_catalog          pg_foreign_server                  public   SELECT
