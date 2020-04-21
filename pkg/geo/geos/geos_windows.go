@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
-func EnsureInit(errDisplay EnsureInitErrorDisplay) error {
+func EnsureInit(errDisplay EnsureInitErrorDisplay, flagGEOSLocationValue string) error {
 	return nil
 }
 

@@ -44,16 +44,25 @@ var geosOnce struct {
 
 // EnsureInit attempts to start GEOS if it has not been opened already
 // and returns an error if the CR_GEOS  is not valid.
-func EnsureInit(errDisplay EnsureInitErrorDisplay) error {
-	_, err := ensureInit(errDisplay)
+func EnsureInit(errDisplay EnsureInitErrorDisplay, flagGEOSLocationValue string) error {
+	_, err := ensureInit(errDisplay, flagGEOSLocationValue)
 	return err
 }
 
-// ensureInit behaves as described in EnsureInit, but also returns the GEOS
+// ensureInitInternal ensures initialization has been done, always displaying
+// errors privately and not assuming a flag has been set if initialized
+// for the first time.
+func ensureInitInternal() (*C.CR_GEOS, error) {
+	return ensureInit(EnsureInitErrorDisplayPrivate, "")
+}
+
+// ensureInits behaves as described in EnsureInit, but also returns the GEOS
 // C object which should be hidden from the public eye.
-func ensureInit(errDisplay EnsureInitErrorDisplay) (*C.CR_GEOS, error) {
+func ensureInit(
+	errDisplay EnsureInitErrorDisplay, flagGEOSLocationValue string,
+) (*C.CR_GEOS, error) {
 	geosOnce.once.Do(func() {
-		geosOnce.geos, geosOnce.err = initGEOS(defaultGEOSLocations)
+		geosOnce.geos, geosOnce.err = initGEOS(findGEOSLocations(flagGEOSLocationValue))
 	})
 	if geosOnce.err != nil && errDisplay == EnsureInitErrorDisplayPublic {
 		return nil, errors.Newf("geos: this operation is not available")
@@ -61,12 +70,51 @@ func ensureInit(errDisplay EnsureInitErrorDisplay) (*C.CR_GEOS, error) {
 	return geosOnce.geos, geosOnce.err
 }
 
-// defaultGEOSLocations contains a list of locations where GEOS is expected to exist.
-// TODO(otan): make this configurable by flags.
-// TODO(otan): put mac / linux locations
-var defaultGEOSLocations []string
+// findGEOSLocations returns the default locations where GEOS is installed.
+func findGEOSLocations(flagGEOSLocationValue string) []string {
+	var ext string
+	switch runtime.GOOS {
+	case "darwin":
+		ext = "dylib"
+	default:
+		ext = "so"
+	}
+	if flagGEOSLocationValue != "" {
+		// Try both the location itself, as well as adding the libgeos_c extension
+		// at the end in case our user assumes it's just a directory.
+		return []string{
+			flagGEOSLocationValue,
+			filepath.Join(flagGEOSLocationValue, "libgeos_c."+ext),
+		}
+	}
+	var locDirs []string
+	switch runtime.GOOS {
+	case "darwin":
+		locDirs = []string{
+			"/usr/local/lib",
+			"/usr/lib",
+		}
+	default:
+		locDirs = []string{
+			"/usr/local/lib",
+			"/usr/lib/x86_64-linux-gnu",
+			"/usr/lib/i386-linux-gnu",
+			"/usr/lib",
+		}
+	}
+	var locs []string
+	locs = append(locs, findGEOSLocationsInParentingDirectories(ext)...)
+	for _, loc := range locDirs {
+		locs = append(locs, filepath.Join(loc, "libgeos_c."+ext))
+	}
+	return locs
+}
 
-func init() {
+// findGEOSLocationsInParentingDirectories attempts to find GEOS by looking at
+// parenting folders and looking inside `lib/lib_geos_c.*`.
+func findGEOSLocationsInParentingDirectories(ext string) []string {
+	locs := []string{}
+
 	// Add the CI path by trying to find all parenting paths and appending
 	// `lib/lib_geos.<ext>`.
 	cwd, err := os.Getwd()
@@ -75,14 +123,9 @@ func init() {
 	}
 
 	for {
-		var nextPath string
-		if runtime.GOOS == "darwin" {
-			nextPath = filepath.Join(cwd, "lib", "libgeos_c.dylib")
-		} else {
-			nextPath = filepath.Join(cwd, "lib", "libgeos_c.so")
-		}
+		nextPath := filepath.Join(cwd, "lib", "libgeos_c."+ext)
 		if _, err := os.Stat(nextPath); err == nil {
-			defaultGEOSLocations = append(defaultGEOSLocations, nextPath)
+			locs = append(locs, nextPath)
 		}
 		nextCWD := filepath.Dir(cwd)
 		if nextCWD == cwd {
@@ -90,6 +133,7 @@ func init() {
 		}
 		cwd = nextCWD
 	}
+	return locs
 }
 
 // initGEOS initializes the CR_GEOS by attempting to dlopen all
@@ -111,7 +155,10 @@ func initGEOS(locs []string) (*C.CR_GEOS, error) {
 			),
 		)
 	}
-	return nil, errors.Wrap(err, "geos: could not find location to init GEOS")
+	if err != nil {
+		return nil, errors.Wrap(err, "geos: could not init GEOS")
+	}
+	return nil, errors.Newf("geos: no valid locations to init GEOS")
 }
 
 // goToCSlice returns a CR_GEOS_Slice from a given Go byte slice.
@@ -172,7 +219,7 @@ func statusToError(s C.CR_GEOS_Status) error {
 
 // WKTToEWKB parses a WKT into WKB using the GEOS library.
 func WKTToEWKB(wkt geopb.WKT, srid geopb.SRID) (geopb.EWKB, error) {
-	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	g, err := ensureInitInternal()
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +234,7 @@ func WKTToEWKB(wkt geopb.WKT, srid geopb.SRID) (geopb.EWKB, error) {
 func ClipEWKBByRect(
 	wkb geopb.EWKB, xMin float64, yMin float64, xMax float64, yMax float64,
 ) (geopb.EWKB, error) {
-	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	g, err := ensureInitInternal()
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +248,7 @@ func ClipEWKBByRect(
 
 // Covers returns whether the EWKB provided by A covers the EWKB provided by B.
 func Covers(a geopb.EWKB, b geopb.EWKB) (bool, error) {
-	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	g, err := ensureInitInternal()
 	if err != nil {
 		return false, err
 	}
@@ -214,7 +261,7 @@ func Covers(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 
 // CoveredBy returns whether the EWKB provided by A is covered by the EWKB provided by B.
 func CoveredBy(a geopb.EWKB, b geopb.EWKB) (bool, error) {
-	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	g, err := ensureInitInternal()
 	if err != nil {
 		return false, err
 	}
@@ -227,7 +274,7 @@ func CoveredBy(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 
 // Contains returns whether the EWKB provided by A contains the EWKB provided by B.
 func Contains(a geopb.EWKB, b geopb.EWKB) (bool, error) {
-	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	g, err := ensureInitInternal()
 	if err != nil {
 		return false, err
 	}
@@ -240,7 +287,7 @@ func Contains(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 
 // Crosses returns whether the EWKB provided by A crosses the EWKB provided by B.
 func Crosses(a geopb.EWKB, b geopb.EWKB) (bool, error) {
-	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	g, err := ensureInitInternal()
 	if err != nil {
 		return false, err
 	}
@@ -253,7 +300,7 @@ func Crosses(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 
 // Equals returns whether the EWKB provided by A equals the EWKB provided by B.
 func Equals(a geopb.EWKB, b geopb.EWKB) (bool, error) {
-	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	g, err := ensureInitInternal()
 	if err != nil {
 		return false, err
 	}
@@ -266,7 +313,7 @@ func Equals(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 
 // Intersects returns whether the EWKB provided by A intersects the EWKB provided by B.
 func Intersects(a geopb.EWKB, b geopb.EWKB) (bool, error) {
-	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	g, err := ensureInitInternal()
 	if err != nil {
 		return false, err
 	}
@@ -279,7 +326,7 @@ func Intersects(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 
 // Overlaps returns whether the EWKB provided by A overlaps the EWKB provided by B.
 func Overlaps(a geopb.EWKB, b geopb.EWKB) (bool, error) {
-	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	g, err := ensureInitInternal()
 	if err != nil {
 		return false, err
 	}
@@ -292,7 +339,7 @@ func Overlaps(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 
 // Touches returns whether the EWKB provided by A touches the EWKB provided by B.
 func Touches(a geopb.EWKB, b geopb.EWKB) (bool, error) {
-	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	g, err := ensureInitInternal()
 	if err != nil {
 		return false, err
 	}
@@ -305,7 +352,7 @@ func Touches(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 
 // Within returns whether the EWKB provided by A is within the EWKB provided by B.
 func Within(a geopb.EWKB, b geopb.EWKB) (bool, error) {
-	g, err := ensureInit(EnsureInitErrorDisplayPrivate)
+	g, err := ensureInitInternal()
 	if err != nil {
 		return false, err
 	}

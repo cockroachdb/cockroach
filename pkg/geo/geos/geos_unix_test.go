@@ -20,13 +20,18 @@ import (
 )
 
 func TestInitGEOS(t *testing.T) {
+	t.Run("test no initGEOS paths", func(t *testing.T) {
+		_, err := initGEOS([]string{})
+		require.Error(t, err)
+	})
+
 	t.Run("test invalid initGEOS paths", func(t *testing.T) {
 		_, err := initGEOS([]string{"/invalid/path"})
 		require.Error(t, err)
 	})
 
 	t.Run("test valid initGEOS paths", func(t *testing.T) {
-		ret, err := initGEOS(defaultGEOSLocations)
+		ret, err := initGEOS(findGEOSLocations(""))
 		require.NoError(t, err)
 		require.NotNil(t, ret)
 	})
@@ -34,16 +39,16 @@ func TestInitGEOS(t *testing.T) {
 
 func TestEnsureInit(t *testing.T) {
 	// Fetch at least once.
-	_, err := ensureInit(EnsureInitErrorDisplayPublic)
+	_, err := ensureInit(EnsureInitErrorDisplayPublic, "")
 	require.NoError(t, err)
 
 	fakeErr := errors.Newf("contain path info do not display me")
 	defer func() { geosOnce.err = nil }()
 
 	geosOnce.err = fakeErr
-	_, err = ensureInit(EnsureInitErrorDisplayPrivate)
+	_, err = ensureInit(EnsureInitErrorDisplayPrivate, "")
 	require.Contains(t, err.Error(), fakeErr.Error())
 
-	_, err = ensureInit(EnsureInitErrorDisplayPublic)
+	_, err = ensureInit(EnsureInitErrorDisplayPublic, "")
 	require.Equal(t, errors.Newf("geos: this operation is not available").Error(), err.Error())
 }

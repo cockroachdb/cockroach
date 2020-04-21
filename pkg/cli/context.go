@@ -325,6 +325,9 @@ var startCtx struct {
 
 	// logging settings specific to file logging.
 	logDir log.DirName
+
+	// geosLocation is used to specify locations of the GEOS library.
+	geosLocation string
 }
 
 // quitCtx captures the command-line parameters of the `quit` and
@@ -392,4 +395,5 @@ var demoCtx struct {
 	simulateLatency           bool
 	transientCluster          *transientCluster
 	insecure                  bool
+	geosLocation              string
 }

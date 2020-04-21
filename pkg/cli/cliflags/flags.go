@@ -1050,6 +1050,13 @@ Start with an empty database: avoid pre-loading a default dataset in
 the demo shell.`,
 	}
 
+	GEOSLocation = FlagInfo{
+		Name: "geos",
+		Description: `
+If set, will use the location provided when interfacing with the GEOS library.
+This is only required for using Geospatial data types.`,
+	}
+
 	Global = FlagInfo{
 		Name: "global",
 		Description: `
