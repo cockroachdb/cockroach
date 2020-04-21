@@ -2,7 +2,7 @@
   "compilerOptions": {
     "strict": true,
     "allowJs": true,
-    "baseUrl": "../node_modules",
+    "baseUrl": "../opt/node_modules",
     "target": "es6",
     "module": "es6",
     "lib": ["es5", "dom"],
