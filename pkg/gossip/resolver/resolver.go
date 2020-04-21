@@ -11,12 +11,14 @@
 package resolver
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/pkg/errors"
 )
@@ -64,7 +66,11 @@ func SRV(name string) ([]string, error) {
 			return nil, nil
 		}
 
-		return nil, errors.Wrapf(err, "failed to lookup SRV record for %q", name)
+		if log.V(1) {
+			log.Infof(context.TODO(), "failed to lookup SRV record for %q: %v", name, err)
+		}
+
+		return nil, nil
 	}
 
 	var addrs = make([]string, len(recs))
