@@ -1490,7 +1490,13 @@ func (c *cluster) FailOnDeadNodes(ctx context.Context, t *test) {
 // check since we know that such spurious errors are possibly without any relation
 // to the check having failed.
 func (c *cluster) CheckReplicaDivergenceOnDB(ctx context.Context, db *gosql.DB) error {
+	// NB: we set a statement_timeout since context cancellation won't work here,
+	// see:
+	// https://github.com/cockroachdb/cockroach/pull/34520
+	//
+	// We've seen the consistency checks hang indefinitely in some cases.
 	rows, err := db.QueryContext(ctx, `
+SET statement_timeout = '3m';
 SELECT t.range_id, t.start_key_pretty, t.status, t.detail
 FROM
 crdb_internal.check_consistency(true, '', '') as t
