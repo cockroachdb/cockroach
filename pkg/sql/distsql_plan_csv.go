@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -107,7 +108,11 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanning(
 ) (*PlanningCtx, []roachpb.NodeID, error) {
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* txn */)
 
-	resp, err := execCfg.StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+	ss, ok := execCfg.StatusServer()
+	if !ok {
+		return nil, nil, pgerror.UnsupportedWithMultiTenancy()
+	}
+	resp, err := ss.Nodes(ctx, &serverpb.NodesRequest{})
 	if err != nil {
 		return nil, nil, err
 	}

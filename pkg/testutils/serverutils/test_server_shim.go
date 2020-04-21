@@ -194,6 +194,9 @@ type TestServerInterface interface {
 	// This can be slow because of cloud detection; use cloudinfo.Disable() in
 	// tests to avoid that.
 	ReportDiagnostics(ctx context.Context)
+
+	// StartTenant spawns off tenant process connecting to this TestServer.
+	StartTenant() (pgAddr string, _ error)
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
@@ -253,6 +256,28 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 		return nil, err
 	}
 	return server, nil
+}
+
+// StartTenant starts a tenant SQL server connecting to the supplied test
+// server. It uses the server's stopper to shut down automatically. However,
+// the returned DB is for the caller to close.
+func StartTenant(t testing.TB, ts TestServerInterface) *gosql.DB {
+	pgAddr, err := ts.StartTenant()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pgURL, cleanupGoDB := sqlutils.PGUrl(
+		t, pgAddr, t.Name() /* prefix */, url.User(security.RootUser))
+
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts.Stopper().AddCloser(stop.CloserFn(func() {
+		cleanupGoDB()
+	}))
+	return db
 }
 
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters

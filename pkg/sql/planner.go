@@ -51,8 +51,11 @@ type extendedEvalContext struct {
 	// tracing state should be done through the sessionDataMutator.
 	Tracing *SessionTracing
 
-	// StatusServer gives access to the Status service. Used to cancel queries.
-	StatusServer serverpb.StatusServer
+	// StatusServer gives access to the Status service.
+	//
+	// In a SQL tenant server, this is not available (returning false) and
+	// pgerror.UnsupportedWithMultiTenancy should be returned.
+	StatusServer func() (serverpb.StatusServer, bool)
 
 	// MemMetrics represent the group of metrics to which execution should
 	// contribute.
@@ -332,10 +335,7 @@ func internalExtendedEvalCtx(
 	execCfg *ExecutorConfig,
 	plannerMon *mon.BytesMonitor,
 ) extendedEvalContext {
-	var evalContextTestingKnobs tree.EvalContextTestingKnobs
-	var statusServer serverpb.StatusServer
-	evalContextTestingKnobs = execCfg.EvalContextTestingKnobs
-	statusServer = execCfg.StatusServer
+	evalContextTestingKnobs := execCfg.EvalContextTestingKnobs
 
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
@@ -354,7 +354,7 @@ func internalExtendedEvalCtx(
 		SessionMutator:  dataMutator,
 		VirtualSchemas:  execCfg.VirtualSchemas,
 		Tracing:         &SessionTracing{},
-		StatusServer:    statusServer,
+		StatusServer:    execCfg.StatusServer,
 		Tables:          tables,
 		ExecCfg:         execCfg,
 		schemaAccessors: newSchemaInterface(tables, execCfg.VirtualSchemas),

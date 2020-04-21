@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -26,26 +27,34 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -396,6 +405,146 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	ts.Cfg = &ts.Server.cfg
 
 	return ts.Server.Start(context.Background())
+}
+
+type allErrorsFakeLiveness struct{}
+
+var _ jobs.NodeLiveness = (*allErrorsFakeLiveness)(nil)
+
+func (allErrorsFakeLiveness) Self() (storagepb.Liveness, error) {
+	return storagepb.Liveness{}, errors.New("fake liveness")
+
+}
+func (allErrorsFakeLiveness) GetLivenesses() []storagepb.Liveness {
+	return nil
+}
+
+func (allErrorsFakeLiveness) IsLive(roachpb.NodeID) (bool, error) {
+	return false, errors.New("fake liveness")
+}
+
+func testSQLServerArgs(ts *TestServer) sqlServerArgs {
+	st := cluster.MakeTestingClusterSettings()
+	stopper := ts.Stopper()
+
+	cfg := makeTestConfig(st)
+
+	clock := hlc.NewClock(hlc.UnixNano, 1)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+
+	nl := allErrorsFakeLiveness{}
+
+	ds := ts.DistSender()
+
+	// Protected timestamps won't be available (at first) in multi-tenant
+	// clusters. TODO(tbg): fail with an error instead of a crash when it's
+	// used. I believe IMPORT INTO is the only use that needs it for correct-
+	// ness, everywhere else we can just not protect the timestamp and continue.
+	var protectedTSProvider protectedts.Provider
+
+	registry := metric.NewRegistry()
+
+	// If we used a dummy gossip, DistSQL and random other things won't work.
+	// Just use the test server's for now.
+	// g := gossip.NewTest(nodeID, nil, nil, stopper, registry, nil)
+	g := ts.Gossip()
+
+	nd := nodedialer.New(rpcContext, gossip.AddressResolver(ts.Gossip()))
+
+	dummyRecorder := &status.MetricsRecorder{}
+
+	var nodeIDContainer base.NodeIDContainer
+
+	// We don't need this for anything except some services that want a gRPC
+	// server to register against (but they'll never get RPCs at the time of
+	// writing): the blob service and DistSQL.
+	dummyRPCServer := rpc.NewServer(rpcContext)
+	noStatusServer := func() (*statusServer, bool) { return nil, false }
+	return sqlServerArgs{
+		sqlServerOptionalArgs: sqlServerOptionalArgs{
+			rpcContext:   rpcContext,
+			distSender:   ds,
+			statusServer: noStatusServer,
+			nodeLiveness: nl,
+			gossip:       g,
+			nodeDialer:   nd,
+			grpcServer:   dummyRPCServer,
+			recorder:     dummyRecorder,
+			isMeta1Leaseholder: func(timestamp hlc.Timestamp) (bool, error) {
+				return false, errors.New("fake isMeta1Leaseholder")
+			},
+			nodeIDContainer: &nodeIDContainer,
+			externalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
+				return nil, errors.New("fake external storage")
+			},
+			externalStorageFromURI: func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
+				return nil, errors.New("fake external uri storage")
+			},
+		},
+		Config:                   &cfg,
+		stopper:                  stopper,
+		clock:                    clock,
+		protectedtsProvider:      protectedTSProvider,
+		runtime:                  &status.RuntimeStatSampler{}, // dummy
+		db:                       ts.DB(),
+		registry:                 registry,
+		circularInternalExecutor: &sql.InternalExecutor{},
+		jobRegistry:              &jobs.Registry{},
+	}
+}
+
+// StartTenant starts a SQL tenant communicating with this TestServer.
+func (ts *TestServer) StartTenant() (addr string, _ error) {
+	ctx := context.Background()
+	args := testSQLServerArgs(ts)
+	const nodeID = 9999
+	args.nodeIDContainer.Set(context.Background(), nodeID)
+	s, err := newSQLServer(ctx, args)
+	if err != nil {
+		return "", err
+	}
+
+	s.execCfg.DistSQLPlanner.SetNodeDesc(roachpb.NodeDescriptor{
+		NodeID: args.nodeIDContainer.Get(),
+	})
+
+	connManager := netutil.MakeServer(
+		args.stopper,
+		// The SQL server only uses connManager.ServeWith. The both below
+		// are unused.
+		nil, // tlsConfig
+		nil, // handler
+	)
+
+	pgL, err := net.Listen("tcp", args.Config.SQLAddr)
+	if err != nil {
+		return "", err
+	}
+	ts.Stopper().RunWorker(ctx, func(ctx context.Context) {
+		<-ts.Stopper().ShouldQuiesce()
+		// NB: we can't do this as a Closer because (*Server).ServeWith is
+		// running in a worker and usually sits on accept(pgL) which unblocks
+		// only when pgL closes. In other words, pgL needs to close when
+		// quiescing starts to allow that worker to shut down.
+		_ = pgL.Close()
+	})
+
+	const (
+		socketFile = "" // no unix socket
+	)
+	orphanedLeasesTimeThresholdNanos := args.clock.Now().WallTime
+
+	if err := s.start(ctx,
+		args.stopper,
+		args.Config.TestingKnobs,
+		connManager,
+		pgL,
+		socketFile,
+		orphanedLeasesTimeThresholdNanos,
+	); err != nil {
+		return "", err
+	}
+	return pgL.Addr().String(), nil
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
