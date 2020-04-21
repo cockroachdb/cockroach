@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -79,7 +80,7 @@ func BenchmarkWriteCSVRows(b *testing.B) {
 
 	var batches []coldata.Batch
 	for _, table := range tpcc.FromWarehouses(1).Tables() {
-		cb := coldata.NewMemBatch(nil)
+		cb := coldata.NewMemBatch(nil /* types */, colmem.NewExtendedColumnFactory(nil /* evalCtx */))
 		var a bufalloc.ByteAllocator
 		table.InitialRows.FillBatch(0, cb, &a)
 		batches = append(batches, cb)
@@ -129,7 +130,7 @@ func TestCSVRowsReader(t *testing.T) {
 func BenchmarkCSVRowsReader(b *testing.B) {
 	var batches []coldata.Batch
 	for _, table := range tpcc.FromWarehouses(1).Tables() {
-		cb := coldata.NewMemBatch(nil)
+		cb := coldata.NewMemBatch(nil /* types */, colmem.NewExtendedColumnFactory(nil /* evalCtx */))
 		var a bufalloc.ByteAllocator
 		table.InitialRows.FillBatch(0, cb, &a)
 		batches = append(batches, cb)

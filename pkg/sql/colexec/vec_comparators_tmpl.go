@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -63,6 +64,9 @@ var _ = math.MaxInt64
 
 // Dummy import to pull in "coltypes" package.
 var _ coltypes.T
+
+// Dummy import to pull in "colmem" package.
+var _ colmem.ContextWrappedDatum
 
 // _COMPARE is the template equality function for assigning the first input
 // to the result of comparing second and third inputs.

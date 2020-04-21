@@ -379,6 +379,11 @@ func schema(fb *flatbuffers.Builder, typs []types.T) flatbuffers.UOffsetT {
 			arrowserde.BinaryStart(fb)
 			fbTypOffset = arrowserde.BinaryEnd(fb)
 			fbTyp = arrowserde.TypeInterval
+		case coltypes.Datum:
+			// Datums are marshaled into bytes, so we use binary headers.
+			arrowserde.BinaryStart(fb)
+			fbTypOffset = arrowserde.BinaryEnd(fb)
+			fbTyp = arrowserde.TypeUtf8
 		default:
 			panic(errors.Errorf(`don't know how to map %s`, &typ))
 		}

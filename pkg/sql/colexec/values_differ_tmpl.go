@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -48,6 +49,9 @@ var _ tree.Datum
 
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
+
+// Dummy import to pull in "colmem" package.
+var _ colmem.ContextWrappedDatum
 
 // _GOTYPE is the template Go type variable for this operator. It will be
 // replaced by the Go type equivalent for each type in coltypes.T, for example

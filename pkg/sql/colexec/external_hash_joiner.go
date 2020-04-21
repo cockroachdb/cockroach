@@ -292,13 +292,15 @@ func newExternalHashJoiner(
 		partitionedDiskQueueSemaphore = nil
 	}
 	leftPartitioner := colcontainer.NewPartitionedDiskQueue(
-		spec.left.sourceTypes, diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyDefault, diskAcc,
+		spec.left.sourceTypes, diskQueueCfg, partitionedDiskQueueSemaphore,
+		colcontainer.PartitionerStrategyDefault, diskAcc,
 	)
 	leftJoinerInput := newPartitionerToOperator(
 		unlimitedAllocator, spec.left.sourceTypes, leftPartitioner, 0, /* partitionIdx */
 	)
 	rightPartitioner := colcontainer.NewPartitionedDiskQueue(
-		spec.right.sourceTypes, diskQueueCfg, partitionedDiskQueueSemaphore, colcontainer.PartitionerStrategyDefault, diskAcc,
+		spec.right.sourceTypes, diskQueueCfg, partitionedDiskQueueSemaphore,
+		colcontainer.PartitionerStrategyDefault, diskAcc,
 	)
 	rightJoinerInput := newPartitionerToOperator(
 		unlimitedAllocator, spec.right.sourceTypes, rightPartitioner, 0, /* partitionIdx */

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
@@ -58,6 +59,9 @@ var _ duration.Duration
 
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
+
+// Dummy import to pull in "colmem" package.
+var _ colmem.ContextWrappedDatum
 
 // _TYPES_T is the template type variable for coltypes.T. It will be replaced by
 // coltypes.Foo for each type Foo in the coltypes.T type.

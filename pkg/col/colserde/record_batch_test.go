@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -176,6 +177,15 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 			binary.LittleEndian.PutUint64(data[i][0:sizeOfInt64], rng.Uint64())
 			binary.LittleEndian.PutUint64(data[i][sizeOfInt64:sizeOfInt64*2], rng.Uint64())
 			binary.LittleEndian.PutUint64(data[i][sizeOfInt64*2:sizeOfInt64*3], rng.Uint64())
+		}
+		builder.(*array.BinaryBuilder).AppendValues(data, valid)
+	case coltypes.Datum:
+		builder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
+		data := make([][]byte, n)
+		for i := range data {
+			v := rng.Float64() * math.MaxFloat64
+			j, _ := json.FromFloat64(v)
+			data[i], _ = json.EncodeJSON(data[i], j)
 		}
 		builder.(*array.BinaryBuilder).AppendValues(data, valid)
 	default:

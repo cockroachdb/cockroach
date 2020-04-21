@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -226,7 +227,7 @@ func TypedTuples(count int, typs []types.T, fn func(int) []interface{}) BatchedT
 				}
 			})
 
-			cb.Reset(typs, 1)
+			cb.Reset(typs, 1, coldata.StandardVectorizedColumnFactory)
 			for colIdx, col := range cb.ColVecs() {
 				switch d := row[colIdx].(type) {
 				case nil:
@@ -257,7 +258,7 @@ func TypedTuples(count int, typs []types.T, fn func(int) []interface{}) BatchedT
 // heavy. In performance-critical code, FillBatch should be used directly,
 // instead.
 func (b BatchedTuples) BatchRows(batchIdx int) [][]interface{} {
-	cb := coldata.NewMemBatchWithSize(nil, 0)
+	cb := coldata.NewMemBatchWithSize(nil, 0, colmem.NewExtendedColumnFactory(nil /* evalCtx */))
 	var a bufalloc.ByteAllocator
 	b.FillBatch(batchIdx, cb, &a)
 	return ColBatchToRows(cb)

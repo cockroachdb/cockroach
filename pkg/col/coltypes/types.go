@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 // T represents an exec physical type - a bytes representation of a particular
@@ -44,6 +45,10 @@ const (
 	Timestamp
 	// Interval is a column of type duration.Duration
 	Interval
+	// Datum is a column of type tree.Datum
+	// NOTE: currently we only support the logical json type through this datum
+	// type due to type system restrictions.
+	Datum
 
 	// Unhandled is a temporary value that represents an unhandled type.
 	// TODO(jordan): this should be replaced by a panic once all types are
@@ -89,6 +94,7 @@ func init() {
 	CompatibleTypes[Float64] = append(CompatibleTypes[Float64], append(NumberTypes, Interval)...)
 	CompatibleTypes[Timestamp] = append(CompatibleTypes[Timestamp], TimeTypes...)
 	CompatibleTypes[Interval] = append(CompatibleTypes[Interval], append(NumberTypes, TimeTypes...)...)
+	CompatibleTypes[Datum] = []T{Datum}
 
 	ComparableTypes = make(map[T][]T)
 	ComparableTypes[Bool] = append(ComparableTypes[Bool], Bool)
@@ -100,6 +106,7 @@ func init() {
 	ComparableTypes[Float64] = append(ComparableTypes[Float64], NumberTypes...)
 	ComparableTypes[Timestamp] = append(ComparableTypes[Timestamp], Timestamp)
 	ComparableTypes[Interval] = append(ComparableTypes[Interval], Interval)
+	ComparableTypes[Datum] = []T{Datum}
 }
 
 // FromGoType returns the type for a Go value, if applicable. Shouldn't be used at
@@ -126,6 +133,8 @@ func FromGoType(v interface{}) T {
 		return Timestamp
 	case duration.Duration:
 		return Interval
+	case json.JSON:
+		return Datum
 	default:
 		panic(fmt.Sprintf("type %T not supported yet", t))
 	}
@@ -152,6 +161,9 @@ func (t T) GoTypeName() string {
 		return "time.Time"
 	case Interval:
 		return "duration.Duration"
+	case Datum:
+		// TODO(azhng): this is very unfortunate
+		return "interface{}"
 	default:
 		panic(fmt.Sprintf("unhandled type %d", t))
 	}
@@ -174,16 +186,20 @@ var (
 
 // GoTypeSliceName returns how a slice of the receiver type is represented.
 func (t T) GoTypeSliceName() string {
-	if t == Bytes {
+	switch t {
+	case Bytes:
 		return "*coldata.Bytes"
+	case Datum:
+		return "coldata.DatumContainer"
+	default:
+		return "[]" + t.GoTypeName()
 	}
-	return "[]" + t.GoTypeName()
 }
 
 // Get is a function that should only be used in templates.
 func (t T) Get(target, i string) string {
 	switch t {
-	case Bytes:
+	case Bytes, Datum:
 		return fmt.Sprintf("%s.Get(%s)", target, i)
 	}
 	return fmt.Sprintf("%s[%s]", target, i)
@@ -203,7 +219,7 @@ func (t T) CopyVal(dest, src string) string {
 // Set is a function that should only be used in templates.
 func (t T) Set(target, i, new string) string {
 	switch t {
-	case Bytes:
+	case Bytes, Datum:
 		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
 	case Decimal:
 		return fmt.Sprintf("%s[%s].Set(&%s)", target, i, new)
@@ -213,21 +229,25 @@ func (t T) Set(target, i, new string) string {
 
 // Slice is a function that should only be used in templates.
 func (t T) Slice(target, start, end string) string {
-	if t == Bytes {
+	switch t {
+	case Bytes:
 		// Slice is a noop for Bytes. We also add a few lines to address "unused
 		// variable" compiler errors.
 		return fmt.Sprintf(`%s
 _ = %s
 _ = %s`, target, start, end)
+	case Datum:
+		return fmt.Sprintf(`%s.Slice(%s, %s)`, target, start, end)
+	default:
+		return fmt.Sprintf("%s[%s:%s]", target, start, end)
 	}
-	return fmt.Sprintf("%s[%s:%s]", target, start, end)
 }
 
 // CopySlice is a function that should only be used in templates.
 func (t T) CopySlice(target, src, destIdx, srcStartIdx, srcEndIdx string) string {
 	var tmpl string
 	switch t {
-	case Bytes:
+	case Bytes, Datum:
 		tmpl = `{{.Tgt}}.CopySlice({{.Src}}, {{.TgtIdx}}, {{.SrcStart}}, {{.SrcEnd}})`
 	case Decimal:
 		tmpl = `{
@@ -258,7 +278,7 @@ func (t T) CopySlice(target, src, destIdx, srcStartIdx, srcEndIdx string) string
 func (t T) AppendSlice(target, src, destIdx, srcStartIdx, srcEndIdx string) string {
 	var tmpl string
 	switch t {
-	case Bytes:
+	case Bytes, Datum:
 		tmpl = `{{.Tgt}}.AppendSlice({{.Src}}, {{.TgtIdx}}, {{.SrcStart}}, {{.SrcEnd}})`
 	case Decimal:
 		tmpl = `{
@@ -301,7 +321,7 @@ func (t T) AppendSlice(target, src, destIdx, srcStartIdx, srcEndIdx string) stri
 // AppendVal is a function that should only be used in templates.
 func (t T) AppendVal(target, v string) string {
 	switch t {
-	case Bytes:
+	case Bytes, Datum:
 		return fmt.Sprintf("%s.AppendVal(%s)", target, v)
 	case Decimal:
 		return fmt.Sprintf(`%[1]s = append(%[1]s, apd.Decimal{})
@@ -314,24 +334,32 @@ func (t T) AppendVal(target, v string) string {
 // WARNING: combination of Slice and Len might not work correctly for Bytes
 // type.
 func (t T) Len(target string) string {
-	if t == Bytes {
+	switch t {
+	case Bytes, Datum:
 		return fmt.Sprintf("%s.Len()", target)
+	default:
+		return fmt.Sprintf("len(%s)", target)
 	}
-	return fmt.Sprintf("len(%s)", target)
 }
 
 // Range is a function that should only be used in templates.
 func (t T) Range(loopVariableIdent, target, start, end string) string {
-	if t == Bytes {
+	switch t {
+	case Bytes, Datum:
 		return fmt.Sprintf("%[1]s := %[2]s; %[1]s < %[3]s; %[1]s++", loopVariableIdent, start, end)
+	default:
+		return fmt.Sprintf("%[1]s := range %[2]s", loopVariableIdent, target)
 	}
-	return fmt.Sprintf("%[1]s := range %[2]s", loopVariableIdent, target)
 }
 
 // Window is a function that should only be used in templates.
 func (t T) Window(target, start, end string) string {
-	if t == Bytes {
+	switch t {
+	case Bytes:
 		return fmt.Sprintf(`%s.Window(%s, %s)`, target, start, end)
+	case Datum:
+		return fmt.Sprintf(`%s.Slice(%s, %s)`, target, start, end)
+	default:
+		return fmt.Sprintf("%s[%s:%s]", target, start, end)
 	}
-	return fmt.Sprintf("%s[%s:%s]", target, start, end)
 }

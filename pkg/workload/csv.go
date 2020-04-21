@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/pkg/errors"
@@ -39,7 +40,7 @@ const (
 func WriteCSVRows(
 	ctx context.Context, w io.Writer, table Table, rowStart, rowEnd int, sizeBytesLimit int64,
 ) (rowBatchIdx int, err error) {
-	cb := coldata.NewMemBatchWithSize(nil, 0)
+	cb := coldata.NewMemBatchWithSize(nil /* types */, 0 /* size */, colmem.NewExtendedColumnFactory(nil /* evalCtx */))
 	var a bufalloc.ByteAllocator
 
 	bytesWrittenW := &bytesWrittenWriter{w: w}
@@ -91,7 +92,7 @@ type csvRowsReader struct {
 
 func (r *csvRowsReader) Read(p []byte) (n int, err error) {
 	if r.cb == nil {
-		r.cb = coldata.NewMemBatchWithSize(nil, 0)
+		r.cb = coldata.NewMemBatchWithSize(nil /* types */, 0 /* size */, colmem.NewExtendedColumnFactory(nil /* evalCtx */))
 	}
 
 	for {

@@ -196,7 +196,7 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 						ordCols    []execinfrapb.Ordering_Column
 					)
 					if rng.Float64() < randTypesProbability {
-						inputTypes = generateRandomSupportedTypes(rng, nCols)
+						inputTypes = generateRandomSupportedTypes(rng, nCols, nil /* blackList */)
 						rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 					} else {
 						inputTypes = intTyps[:nCols]
@@ -285,7 +285,8 @@ func TestSorterAgainstProcessor(t *testing.T) {
 						inputTypes []types.T
 					)
 					if rng.Float64() < randTypesProbability {
-						inputTypes = generateRandomSupportedTypes(rng, nCols)
+						// We disallow json in sorting since rowexec engine doesn't support it.
+						inputTypes = generateRandomSupportedTypes(rng, nCols, []types.T{*types.Jsonb})
 						rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 					} else {
 						inputTypes = intTyps[:nCols]
@@ -319,6 +320,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 					if spillForced {
 						args.numForcedRepartitions = 2 + rng.Intn(3)
 					}
+
 					if err := verifyColOperator(args); err != nil {
 						fmt.Printf("--- seed = %d spillForced = %t nCols = %d K = %d ---\n",
 							seed, spillForced, nCols, topK)
@@ -327,7 +329,9 @@ func TestSorterAgainstProcessor(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
+
 			}
+
 		}
 	}
 }
@@ -359,7 +363,8 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 						inputTypes []types.T
 					)
 					if rng.Float64() < randTypesProbability {
-						inputTypes = generateRandomSupportedTypes(rng, nCols)
+						// We disallow json in sorting since rowexec engine doesn't support it.
+						inputTypes = generateRandomSupportedTypes(rng, nCols, []types.T{*types.Jsonb})
 						rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 					} else {
 						inputTypes = intTyps[:nCols]
@@ -468,7 +473,8 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 									usingRandomTypes         bool
 								)
 								if rng.Float64() < randTypesProbability {
-									lInputTypes = generateRandomSupportedTypes(rng, nCols)
+									// We disallow json in sorting since rowexec engine doesn't support it.
+									lInputTypes = generateRandomSupportedTypes(rng, nCols, []types.T{*types.Jsonb})
 									lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
 									rInputTypes = append(rInputTypes[:0], lInputTypes...)
 									rEqCols = append(rEqCols[:0], lEqCols...)
@@ -645,7 +651,8 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								usingRandomTypes             bool
 							)
 							if rng.Float64() < randTypesProbability {
-								lInputTypes = generateRandomSupportedTypes(rng, nCols)
+								// We disallow json in sorting since rowexec engine doesn't support it.
+								lInputTypes = generateRandomSupportedTypes(rng, nCols, []types.T{*types.Jsonb})
 								lOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
 								rInputTypes = append(rInputTypes[:0], lInputTypes...)
 								rOrderingCols = append(rOrderingCols[:0], lOrderingCols...)
@@ -908,12 +915,27 @@ func isSupportedType(typ *types.T) bool {
 	return converted != coltypes.Unhandled
 }
 
+func isSupportedComparableType(typ *types.T) bool {
+	converted := typeconv.FromColumnType(typ)
+	return converted != coltypes.Unhandled && converted != coltypes.Datum
+}
+
 // generateRandomSupportedTypes generates nCols random types that are supported
 // by the vectorized engine.
-func generateRandomSupportedTypes(rng *rand.Rand, nCols int) []types.T {
+func generateRandomSupportedTypes(rng *rand.Rand, nCols int, blackList []types.T) []types.T {
 	typs := make([]types.T, 0, nCols)
 	for len(typs) < nCols {
 		typ := sqlbase.RandType(rng)
+		typeBlackListed := false
+		for _, blackListedType := range blackList {
+			if typ.Equal(blackListedType) {
+				typeBlackListed = true
+				break
+			}
+		}
+		if typeBlackListed {
+			continue
+		}
 		if isSupportedType(typ) {
 			typs = append(typs, *typ)
 		}
@@ -929,7 +951,7 @@ func generateRandomComparableTypes(rng *rand.Rand, inputTypes []types.T) []types
 	for i, inputType := range inputTypes {
 		for {
 			typ := sqlbase.RandType(rng)
-			if isSupportedType(typ) {
+			if isSupportedComparableType(typ) {
 				comparable := false
 				for _, cmpOverloads := range tree.CmpOps[tree.LT] {
 					o := cmpOverloads.(*tree.CmpOp)

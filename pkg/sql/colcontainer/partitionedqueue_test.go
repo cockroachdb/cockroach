@@ -106,7 +106,8 @@ func TestPartitionedDiskQueue(t *testing.T) {
 	queueCfg.FS = countingFS
 
 	t.Run("ReopenReadPartition", func(t *testing.T) {
-		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyDefault, testDiskAcc)
+		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem,
+			colcontainer.PartitionerStrategyDefault, testDiskAcc)
 
 		countingFS.assertOpenFDs(t, sem, 0, 0)
 		require.NoError(t, p.Enqueue(ctx, 0, batch))

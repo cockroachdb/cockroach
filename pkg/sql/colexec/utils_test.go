@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/pkg/errors"
@@ -93,6 +95,20 @@ func (t tuple) less(other tuple) bool {
 				return true
 			} else {
 				return false
+			}
+		}
+
+		// Since the expected values are provided as strings, we convert the json
+		// values here to strings so we can use the string lexical ordering. This is
+		// because json orders certain values differently (e.g. null) compared to
+		// string.
+		if strings.Contains(lhsVal.Type().String(), "json") {
+			lhsStr := lhsVal.Interface().(fmt.Stringer).String()
+			rhsStr := rhsVal.Interface().(fmt.Stringer).String()
+			if lhsStr == rhsStr {
+				continue
+			} else {
+				return lhsStr < rhsStr
 			}
 		}
 
@@ -581,6 +597,17 @@ func setColVal(vec coldata.Vec, idx int, val interface{}) {
 			// cause the code that does not properly use execgen package to fail.
 			vec.Decimal()[idx].Set(decimalVal)
 		}
+	} else if vec.Type() == coltypes.Datum {
+		if jsonStr, ok := val.(string); ok {
+			jobj, err := json.ParseJSON(jsonStr)
+			if err != nil {
+				colexecerror.InternalError(
+					fmt.Sprintf("unable to parse json object: %v: %v", jobj, err))
+			}
+			vec.Datum().Set(idx, &tree.DJSON{JSON: jobj})
+		} else if jobj, ok := val.(json.JSON); ok {
+			vec.Datum().Set(idx, &tree.DJSON{JSON: jobj})
+		}
 	} else {
 		reflect.ValueOf(vec.Col()).Index(idx).Set(reflect.ValueOf(val).Convert(reflect.TypeOf(vec.Col()).Elem()))
 	}
@@ -768,10 +795,15 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 							colexecerror.InternalError(fmt.Sprintf("%v", err))
 						}
 						col.Index(outputIdx).Set(reflect.ValueOf(d))
-					} else if typ == coltypes.Bytes {
+					} else if typ == coltypes.Bytes || typ == coltypes.Datum {
 						newBytes := make([]byte, rng.Intn(16)+1)
 						rng.Read(newBytes)
-						setColVal(vec, outputIdx, newBytes)
+						if typ == coltypes.Bytes {
+							setColVal(vec, outputIdx, newBytes)
+						} else {
+							j := json.FromString(string(newBytes))
+							setColVal(vec, outputIdx, j)
+						}
 					} else if val, ok := quick.Value(reflect.TypeOf(vec.Col()).Elem(), rng); ok {
 						setColVal(vec, outputIdx, val.Interface())
 					} else {
@@ -955,6 +987,13 @@ func getTupleFromBatch(batch coldata.Batch, tupleIdx int) tuple {
 				var newDec apd.Decimal
 				newDec.Set(&colDec[tupleIdx])
 				val = reflect.ValueOf(newDec)
+			} else if vec.Type() == coltypes.Datum {
+				d := vec.Datum().Get(tupleIdx).(*colmem.ContextWrappedDatum).Datum
+				if datum, ok := d.(*tree.DJSON); ok {
+					val = reflect.ValueOf(datum.JSON)
+				} else if d == tree.DNull {
+					val = reflect.ValueOf(tree.DNull)
+				}
 			} else {
 				val = reflect.ValueOf(vec.Col()).Index(tupleIdx)
 			}
@@ -1045,6 +1084,22 @@ func tupleEquals(expected tuple, actual tuple) bool {
 						return false
 					}
 				}
+			}
+			if j1, ok := actual[i].(json.JSON); ok {
+				if j2, ok := expected[i].(json.JSON); ok {
+					if cmp, err := j1.Compare(j2); err == nil && cmp == 0 {
+						continue
+					}
+				} else if str2, ok := expected[i].(string); ok {
+					j2, err := json.ParseJSON(str2)
+					if err != nil {
+						return false
+					}
+					if cmp, err := j1.Compare(j2); err == nil && cmp == 0 {
+						continue
+					}
+				}
+				return false
 			}
 			if !reflect.DeepEqual(
 				reflect.ValueOf(actual[i]).Convert(reflect.TypeOf(expected[i])).Interface(),

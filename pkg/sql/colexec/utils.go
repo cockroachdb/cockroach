@@ -323,6 +323,14 @@ func getDatumToPhysicalFn(ct *types.T) func(tree.Datum) (interface{}, error) {
 			}
 			return d.Duration, nil
 		}
+	case types.JsonFamily:
+		return func(datum tree.Datum) (interface{}, error) {
+			j, ok := datum.(*tree.DJSON)
+			if !ok {
+				return nil, errors.Errorf("expected *tree.DJSON, found %s", reflect.TypeOf(datum))
+			}
+			return j, nil
+		}
 	}
 	// It would probably be more correct to return an error here, rather than a
 	// function which always returns an error. But since the function tends to be

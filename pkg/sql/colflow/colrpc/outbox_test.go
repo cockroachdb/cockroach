@@ -54,7 +54,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	inboxMemAccount := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAccount.Close(ctx)
 	inbox, err := NewInbox(
-		colmem.NewAllocator(ctx, &inboxMemAccount), typs, execinfrapb.StreamID(0),
+		colmem.NewAllocator(ctx, &inboxMemAccount, testColumnFactory), typs, execinfrapb.StreamID(0),
 	)
 	require.NoError(t, err)
 
@@ -108,7 +108,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		outboxMemAccount := testMemMonitor.MakeBoundAccount()
 		defer outboxMemAccount.Close(ctx)
 		outbox, sourceDrained, err := newOutboxWithMetaSources(
-			colmem.NewAllocator(ctx, &outboxMemAccount),
+			colmem.NewAllocator(ctx, &outboxMemAccount, testColumnFactory),
 		)
 		require.NoError(t, err)
 

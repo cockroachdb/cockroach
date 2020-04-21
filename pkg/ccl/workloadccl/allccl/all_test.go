@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -188,7 +189,7 @@ func hashTableInitialData(
 	h hash.Hash, data workload.BatchedTuples, a *bufalloc.ByteAllocator,
 ) error {
 	var scratch [8]byte
-	b := coldata.NewMemBatchWithSize(nil, 0)
+	b := coldata.NewMemBatchWithSize(nil /* types */, 0 /* size */, colmem.NewExtendedColumnFactory(nil /* evalCtx */))
 	for batchIdx := 0; batchIdx < data.NumBatches; batchIdx++ {
 		*a = (*a)[:0]
 		data.FillBatch(batchIdx, b, a)

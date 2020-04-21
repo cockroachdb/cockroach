@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -50,6 +51,9 @@ var _ = math.MaxInt64
 
 // Dummy import to pull in "coltypes" package.
 var _ coltypes.T
+
+// Dummy import to pull in "tree" package.
+var _ tree.Datum
 
 // _GOTYPESLICE is a template Go type slice variable.
 type _GOTYPESLICE interface{}

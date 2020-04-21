@@ -55,7 +55,8 @@ func TestMain(m *testing.M) {
 		defer testMemMonitor.Stop(ctx)
 		memAcc := testMemMonitor.MakeBoundAccount()
 		testMemAcc = &memAcc
-		testAllocator = colmem.NewAllocator(ctx, testMemAcc)
+		columnFactory := colmem.NewExtendedColumnFactory(nil /* evalCtx */)
+		testAllocator = colmem.NewAllocator(ctx, testMemAcc, columnFactory)
 		defer testMemAcc.Close(ctx)
 
 		testDiskMonitor = execinfra.NewTestDiskMonitor(ctx, cluster.MakeTestingClusterSettings())
