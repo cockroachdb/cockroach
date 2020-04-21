@@ -624,6 +624,7 @@ var charts = []sectionDescription{
 		Organization: [][]string{
 			{KVTransactionLayer, "Requests", "Slow"},
 			{ReplicationLayer, "Requests", "Slow"},
+			{DistributionLayer, "Requests", "Slow"},
 		},
 		Charts: []chartDescription{
 			{
@@ -643,6 +644,12 @@ var charts = []sectionDescription{
 				Downsampler: DescribeAggregator_MAX,
 				Percentiles: false,
 				Metrics:     []string{"requests.slow.raft"},
+			},
+			{
+				Title:       "Stuck sending RPCs to range",
+				Downsampler: DescribeAggregator_MAX,
+				Percentiles: false,
+				Metrics:     []string{"requests.slow.distsender"},
 			},
 		},
 	},
