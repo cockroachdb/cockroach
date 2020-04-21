@@ -477,7 +477,7 @@ func TestRouterOutputRandom(t *testing.T) {
 				go func() {
 					for {
 						b := o.Next(ctx)
-						actual.Add(coldatatestutils.CopyBatch(b, typs), typs)
+						actual.Add(coldatatestutils.CopyBatch(b, typs, testColumnFactory), typs)
 						if b.Length() == 0 {
 							wg.Done()
 							return
@@ -842,7 +842,7 @@ func TestHashRouterRandom(t *testing.T) {
 					defer acc.Close(ctx)
 					diskAcc := testDiskMonitor.MakeBoundAccount()
 					defer diskAcc.Close(ctx)
-					allocator := colmem.NewAllocator(ctx, &acc)
+					allocator := colmem.NewAllocator(ctx, &acc, testColumnFactory)
 					op := newRouterOutputOpWithBlockedThresholdAndBatchSize(allocator, typs, unblockEventsChan, memoryLimitPerOutput, queueCfg, colexecbase.NewTestingSemaphore(len(outputs)*2), blockedThreshold, outputSize, &diskAcc)
 					outputs[i] = op
 					outputsAsOps[i] = op
@@ -943,7 +943,7 @@ func BenchmarkHashRouter(b *testing.B) {
 				diskAccounts := make([]*mon.BoundAccount, numOutputs)
 				for i := range allocators {
 					acc := testMemMonitor.MakeBoundAccount()
-					allocators[i] = colmem.NewAllocator(ctx, &acc)
+					allocators[i] = colmem.NewAllocator(ctx, &acc, testColumnFactory)
 					defer acc.Close(ctx)
 					diskAcc := testDiskMonitor.MakeBoundAccount()
 					diskAccounts[i] = &diskAcc

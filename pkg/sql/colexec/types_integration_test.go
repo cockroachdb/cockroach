@@ -16,6 +16,8 @@ import (
 	"testing"
 
 	"github.com/apache/arrow/go/arrow/array"
+	"github.com/stretchr/testify/require"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
@@ -30,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/stretchr/testify/require"
 )
 
 // TestSupportedSQLTypesIntegration tests that all SQL types supported by the

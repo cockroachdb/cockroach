@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -32,8 +33,9 @@ import (
 //
 // In the future this can also be used to pool coldata.Vec allocations.
 type Allocator struct {
-	ctx context.Context
-	acc *mon.BoundAccount
+	ctx     context.Context
+	acc     *mon.BoundAccount
+	factory coldata.ColumnFactory
 }
 
 func selVectorSize(capacity int) int64 {
@@ -78,8 +80,12 @@ func GetProportionalBatchMemSize(b coldata.Batch, length int64) int64 {
 }
 
 // NewAllocator constructs a new Allocator instance.
-func NewAllocator(ctx context.Context, acc *mon.BoundAccount) *Allocator {
-	return &Allocator{ctx: ctx, acc: acc}
+func NewAllocator(ctx context.Context, acc *mon.BoundAccount, factory coldata.ColumnFactory) *Allocator {
+	return &Allocator{
+		ctx:     ctx,
+		acc:     acc,
+		factory: factory,
+	}
 }
 
 // NewMemBatch allocates a new in-memory coldata.Batch.
@@ -94,7 +100,7 @@ func (a *Allocator) NewMemBatchWithSize(typs []types.T, size int) coldata.Batch 
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
-	return coldata.NewMemBatchWithSize(typs, size)
+	return coldata.NewMemBatchWithSize(typs, size, a.factory)
 }
 
 // NewMemBatchNoCols creates a "skeleton" of new in-memory coldata.Batch. It
@@ -159,7 +165,7 @@ func (a *Allocator) NewMemColumn(t *types.T, n int) coldata.Vec {
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
-	return coldata.NewMemColumn(t, n)
+	return coldata.NewMemColumn(t, n, a.factory)
 }
 
 // MaybeAppendColumn might append a newly allocated coldata.Vec of the given
@@ -251,6 +257,9 @@ const (
 	sizeOfFloat64  = int(unsafe.Sizeof(float64(0)))
 	sizeOfTime     = int(unsafe.Sizeof(time.Time{}))
 	sizeOfDuration = int(unsafe.Sizeof(duration.Duration{}))
+	// Since we currently only support JSON using datum, we use tree.DJSON struct
+	// to estimate the size of datum.
+	sizeOfDatum = int(unsafe.Sizeof(tree.DJSON{}))
 )
 
 // SizeOfBatchSizeSelVector is the size (in bytes) of a selection vector of
@@ -300,6 +309,8 @@ func EstimateBatchSizeBytes(vecTypes []coltypes.T, batchLength int) int {
 			acc += sizeOfTime
 		case coltypes.Interval:
 			acc += sizeOfDuration
+		case coltypes.Datum:
+			acc += sizeOfDatum
 		case coltypes.Unhandled:
 			// Placeholder coldata.Vecs of unknown types are allowed.
 		default:

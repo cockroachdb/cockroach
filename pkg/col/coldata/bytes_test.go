@@ -418,7 +418,7 @@ func TestBytes(t *testing.T) {
 // TestAppendBytesWithLastNull makes sure that Append handles correctly the
 // case when the last element of Bytes vector is NULL.
 func TestAppendBytesWithLastNull(t *testing.T) {
-	src := NewMemColumn(types.Bytes, 4)
+	src := NewMemColumn(types.Bytes, 4, StandardVectorizedColumnFactory)
 	sel := []int{0, 2, 3}
 	src.Bytes().Set(0, []byte("zero"))
 	src.Nulls().SetNull(1)
@@ -431,8 +431,8 @@ func TestAppendBytesWithLastNull(t *testing.T) {
 		SrcStartIdx: 0,
 		SrcEndIdx:   len(sel),
 	}
-	dest := NewMemColumn(types.Bytes, 3)
-	expected := NewMemColumn(types.Bytes, 3)
+	dest := NewMemColumn(types.Bytes, 3, StandardVectorizedColumnFactory)
+	expected := NewMemColumn(types.Bytes, 3, StandardVectorizedColumnFactory)
 	for _, withSel := range []bool{false, true} {
 		t.Run(fmt.Sprintf("AppendBytesWithLastNull/sel=%t", withSel), func(t *testing.T) {
 			expected.Nulls().UnsetNulls()

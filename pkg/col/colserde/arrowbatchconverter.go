@@ -104,7 +104,8 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		}
 
 		physType := typeconv.FromColumnType(&typ)
-		if physType == coltypes.Bool || physType == coltypes.Decimal || physType == coltypes.Timestamp || physType == coltypes.Interval {
+		if physType == coltypes.Bool || physType == coltypes.Decimal || physType == coltypes.Timestamp || physType == coltypes.Interval ||
+			physType == coltypes.Datum {
 			var data *array.Data
 			switch physType {
 			case coltypes.Bool:
@@ -144,6 +145,16 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 					binary.LittleEndian.PutUint64(scratchIntervalBytes[sizeOfInt64:sizeOfInt64*2], uint64(months))
 					binary.LittleEndian.PutUint64(scratchIntervalBytes[sizeOfInt64*2:sizeOfInt64*3], uint64(days))
 					c.builders.binaryBuilder.Append(scratchIntervalBytes)
+				}
+				data = c.builders.binaryBuilder.NewBinaryArray().Data()
+			case coltypes.Datum:
+				datums := vec.Datum().Slice(0, n)
+				for i := 0; i < n; i++ {
+					b, err := datums.MarshalAt(i)
+					if err != nil {
+						return nil, err
+					}
+					c.builders.binaryBuilder.Append(b)
 				}
 				data = c.builders.binaryBuilder.NewBinaryArray().Data()
 			default:
@@ -329,6 +340,28 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 					int64(binary.LittleEndian.Uint64(intervalBytes[sizeOfInt64:sizeOfInt64*2])),
 					int64(binary.LittleEndian.Uint64(intervalBytes[sizeOfInt64*2:sizeOfInt64*3])),
 				)
+				if err != nil {
+					return err
+				}
+			}
+			arr = bytesArr
+		case coltypes.Datum:
+			// TODO(azhng): this serialization is quite inefficient - improve
+			//  it.
+			bytesArr := array.NewBinaryData(d)
+			bytes := bytesArr.ValueBytes()
+			if bytes == nil {
+				// All bytes values are empty, so the representation is solely with the
+				// offsets slice, so create an empty slice so that the conversion
+				// corresponds.
+				bytes = make([]byte, 0)
+			}
+			offsets := bytesArr.ValueOffsets()
+			vecArr := vec.Datum()
+			// TODO(azhng): extends unmarshaling support to more than json.
+			vecArr.SetType(types.Jsonb)
+			for i := 0; i < len(offsets)-1; i++ {
+				err := vecArr.UnmarshalTo(i, bytes[offsets[i]:offsets[i+1]])
 				if err != nil {
 					return err
 				}

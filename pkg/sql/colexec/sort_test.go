@@ -132,15 +132,64 @@ func init() {
 			typs:    []types.T{*types.Int, *types.Int, *types.Int},
 			ordCols: []execinfrapb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 		},
+
+		{
+			tuples: tuples{
+				{
+					`{
+						"int_val": 3,
+						"str_val": "string value 1"
+					}`,
+				},
+				{
+					`{
+						"int_val": 2,
+						"str_val": "string value 2"
+					}`,
+				},
+				{
+					`{
+						"int_val": 1,
+						"str_val": "string value 3"
+					}`,
+				},
+				{nil},
+			},
+			expected: tuples{
+				{nil},
+				{
+					`
+					{
+						"int_val": 1,
+						"str_val": "string value 3"
+					}`,
+				},
+				{
+					`{
+						"int_val": 2,
+						"str_val": "string value 2"
+					}`,
+				},
+				{
+					`{
+						"int_val": 3,
+						"str_val": "string value 1"
+					}`,
+				},
+			},
+			typs:    []types.T{*types.Jsonb},
+			ordCols: []execinfrapb.Ordering_Column{{ColIdx: 0}},
+		},
 	}
 }
 
 func TestSort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, tc := range sortAllTestCases {
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-			return NewSorter(testAllocator, input[0], tc.typs, tc.ordCols)
-		})
+		runTestsWithTyps(t, []tuples{tc.tuples}, [][]types.T{tc.typs}, tc.expected, orderedVerifier,
+			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+				return NewSorter(testAllocator, input[0], tc.typs, tc.ordCols)
+			})
 	}
 }
 

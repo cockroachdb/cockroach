@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -831,7 +832,7 @@ func (w *interleavedPartitioned) childInitialRowBatchFunc(
 		nowString := timeutil.Now().UTC().Format(time.RFC3339)
 		rng := rand.New(rand.NewSource(int64(sessionRowIdx) + rngFactor))
 
-		cb.Reset(childTypes, nPerBatch)
+		cb.Reset(childTypes, nPerBatch, colmem.NewExtendedColumnFactory(nil /* evalCtx */))
 		sessionIDCol := cb.ColVec(0).Bytes()
 		idCol := cb.ColVec(1).Bytes()
 		valueCol := cb.ColVec(2).Bytes()
@@ -868,7 +869,7 @@ func (w *interleavedPartitioned) deviceInitialRowBatch(
 	sessionID := randomSessionID(sessionRNG, `east`, w.initEastPercent)
 	nowString := timeutil.Now().UTC().Format(time.RFC3339)
 
-	cb.Reset(deviceTypes, w.devicesPerSession)
+	cb.Reset(deviceTypes, w.devicesPerSession, colmem.NewExtendedColumnFactory(nil /* evalCtx */))
 	sessionIDCol := cb.ColVec(0).Bytes()
 	idCol := cb.ColVec(1).Bytes()
 	deviceIDCol := cb.ColVec(2).Bytes()
@@ -908,7 +909,7 @@ func (w *interleavedPartitioned) queryInitialRowBatch(
 	sessionID := randomSessionID(sessionRNG, `east`, w.initEastPercent)
 	nowString := timeutil.Now().UTC().Format(time.RFC3339)
 
-	cb.Reset(queryTypes, w.queriesPerSession)
+	cb.Reset(queryTypes, w.queriesPerSession, colmem.NewExtendedColumnFactory(nil /* evalCtx */))
 	sessionIDCol := cb.ColVec(0).Bytes()
 	idCol := cb.ColVec(1).Bytes()
 	createdCol := cb.ColVec(2).Bytes()

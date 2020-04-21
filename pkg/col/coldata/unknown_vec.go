@@ -63,6 +63,10 @@ func (u unknown) Interval() []duration.Duration {
 	panic("Vec is of unknown type and should not be accessed")
 }
 
+func (u unknown) Datum() DatumContainer {
+	panic("Vec is of unknown type and should not be accessed")
+}
+
 func (u unknown) Col() interface{} {
 	panic("Vec is of unknown type and should not be accessed")
 }

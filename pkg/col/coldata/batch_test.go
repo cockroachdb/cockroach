@@ -15,13 +15,25 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/stretchr/testify/assert"
 )
+
+var columnFactory = colmem.NewExtendedColumnFactory(nil /* evalCtx */)
+
+func newTestMemBatch(types []types.T) coldata.Batch {
+	return coldata.NewMemBatch(types, columnFactory)
+}
+
+func newTestMemBatchWithSize(types []types.T, n int) coldata.Batch {
+	return coldata.NewMemBatchWithSize(types, n, columnFactory)
+}
 
 func TestBatchReset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -32,7 +44,7 @@ func TestBatchReset(t *testing.T) {
 		// reallocated.
 		vecsBefore := b.ColVecs()
 		ptrBefore := (*reflect.SliceHeader)(unsafe.Pointer(&vecsBefore))
-		b.Reset(typs, n)
+		b.Reset(typs, n, columnFactory)
 		vecsAfter := b.ColVecs()
 		ptrAfter := (*reflect.SliceHeader)(unsafe.Pointer(&vecsAfter))
 		assert.Equal(t, shouldReuse, ptrBefore.Data == ptrAfter.Data)
@@ -76,37 +88,37 @@ func TestBatchReset(t *testing.T) {
 	var b coldata.Batch
 
 	// Simple case, reuse
-	b = coldata.NewMemBatch(typsInt)
+	b = newTestMemBatch(typsInt)
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Types don't match, don't reuse
-	b = coldata.NewMemBatch(typsInt)
+	b = newTestMemBatch(typsInt)
 	resetAndCheck(b, typsBytes, 1, false)
 
 	// Columns are a prefix, reuse
-	b = coldata.NewMemBatch(typsIntBytes)
+	b = newTestMemBatch(typsIntBytes)
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Exact length, reuse
-	b = coldata.NewMemBatchWithSize(typsInt, 1)
+	b = newTestMemBatchWithSize(typsInt, 1)
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Insufficient capacity, don't reuse
-	b = coldata.NewMemBatchWithSize(typsInt, 1)
+	b = newTestMemBatchWithSize(typsInt, 1)
 	resetAndCheck(b, typsInt, 2, false)
 
 	// Selection vector gets reset
-	b = coldata.NewMemBatchWithSize(typsInt, 1)
+	b = newTestMemBatchWithSize(typsInt, 1)
 	b.SetSelection(true)
 	b.Selection()[0] = 7
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Nulls gets reset
-	b = coldata.NewMemBatchWithSize(typsInt, 1)
+	b = newTestMemBatchWithSize(typsInt, 1)
 	b.ColVec(0).Nulls().SetNull(0)
 	resetAndCheck(b, typsInt, 1, true)
 
 	// Bytes columns use a different impl than everything else
-	b = coldata.NewMemBatch(typsBytes)
+	b = newTestMemBatch(typsBytes)
 	resetAndCheck(b, typsBytes, 1, true)
 }

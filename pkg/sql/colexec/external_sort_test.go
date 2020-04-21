@@ -15,6 +15,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/marusama/semaphore"
+	"github.com/stretchr/testify/require"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
@@ -29,8 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/marusama/semaphore"
-	"github.com/stretchr/testify/require"
 )
 
 func TestExternalSort(t *testing.T) {
@@ -70,9 +71,10 @@ func TestExternalSort(t *testing.T) {
 			for _, tc := range tcs {
 				t.Run(fmt.Sprintf("spillForced=%t/%s", spillForced, tc.description), func(t *testing.T) {
 					var semsToCheck []semaphore.Semaphore
-					runTests(
+					runTestsWithTyps(
 						t,
 						[]tuples{tc.tuples},
+						[][]types.T{tc.typs},
 						tc.expected,
 						orderedVerifier,
 						func(input []colexecbase.Operator) (colexecbase.Operator, error) {

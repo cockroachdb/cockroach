@@ -630,6 +630,8 @@ func init() {
 		}
 	}
 
+	a := seedTypes
+	_ = a
 	for _, typ := range types.OidToType {
 		// Don't include un-encodable types.
 		encTyp, err := datumTypeToArrayElementEncodingType(typ)

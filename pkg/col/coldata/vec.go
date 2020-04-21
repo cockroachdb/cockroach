@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
-// column is an interface that represents a raw array of a Go native type.
-type column interface{}
+// Column is an interface that represents a raw array of a Go native type.
+type Column interface{}
 
 // SliceArgs represents the arguments passed in to Vec.Append and Nulls.set.
 type SliceArgs struct {
@@ -81,11 +81,13 @@ type Vec interface {
 	Timestamp() []time.Time
 	// Interval returns a duration.Duration slice.
 	Interval() []duration.Duration
+	// Datum returns a vector of Datums.
+	Datum() DatumContainer
 
 	// Col returns the raw, typeless backing storage for this Vec.
 	Col() interface{}
 
-	// SetCol sets the member column (in the case of mutable columns).
+	// SetCol sets the member Column (in the case of mutable columns).
 	SetCol(interface{})
 
 	// TemplateType returns an []interface{} and is used for operator templates.
@@ -114,14 +116,14 @@ type Vec interface {
 	// behavior).
 	Window(colType coltypes.T, start int, end int) Vec
 
-	// MaybeHasNulls returns true if the column possibly has any null values, and
-	// returns false if the column definitely has no null values.
+	// MaybeHasNulls returns true if the Column possibly has any null values, and
+	// returns false if the Column definitely has no null values.
 	MaybeHasNulls() bool
 
-	// Nulls returns the nulls vector for the column.
+	// Nulls returns the nulls vector for the Column.
 	Nulls() *Nulls
 
-	// SetNulls sets the nulls vector for this column.
+	// SetNulls sets the nulls vector for this Column.
 	SetNulls(*Nulls)
 
 	// Length returns the length of the slice that is underlying this Vec.
@@ -144,37 +146,58 @@ var _ Vec = &memColumn{}
 // a generic interface{} to the proper type when requested.
 type memColumn struct {
 	t     coltypes.T
-	col   column
+	col   Column
 	nulls Nulls
 }
 
-// NewMemColumn returns a new memColumn, initialized with a length.
-func NewMemColumn(t *types.T, n int) Vec {
-	nulls := NewNulls(n)
+type ColumnFactory interface {
+	ConstructColumn(t coltypes.T, n int) Column
+}
 
-	switch t := typeconv.FromColumnType(t); t {
+type defaultColumnFactory struct{}
+
+var StandardVectorizedColumnFactory ColumnFactory = &defaultColumnFactory{}
+
+func (cf *defaultColumnFactory) ConstructColumn(t coltypes.T, n int) Column {
+	switch t {
 	case coltypes.Bool:
-		return &memColumn{t: t, col: make([]bool, n), nulls: nulls}
+		return make([]bool, n)
 	case coltypes.Bytes:
-		return &memColumn{t: t, col: NewBytes(n), nulls: nulls}
+		return NewBytes(n)
 	case coltypes.Int16:
-		return &memColumn{t: t, col: make([]int16, n), nulls: nulls}
+		return make([]int16, n)
 	case coltypes.Int32:
-		return &memColumn{t: t, col: make([]int32, n), nulls: nulls}
+		return make([]int32, n)
 	case coltypes.Int64:
-		return &memColumn{t: t, col: make([]int64, n), nulls: nulls}
+		return make([]int64, n)
 	case coltypes.Float64:
-		return &memColumn{t: t, col: make([]float64, n), nulls: nulls}
+		return make([]float64, n)
 	case coltypes.Decimal:
-		return &memColumn{t: t, col: make([]apd.Decimal, n), nulls: nulls}
+		return make([]apd.Decimal, n)
 	case coltypes.Timestamp:
-		return &memColumn{t: t, col: make([]time.Time, n), nulls: nulls}
+		return make([]time.Time, n)
 	case coltypes.Interval:
-		return &memColumn{t: t, col: make([]duration.Duration, n), nulls: nulls}
+		return make([]duration.Duration, n)
 	case coltypes.Unhandled:
-		return unknown{}
+		return nil
 	default:
 		panic(fmt.Sprintf("unhandled type %s", t))
+	}
+}
+
+// NewMemColumn returns a new memColumn, initialized with a length
+// using the given column factory.
+func NewMemColumn(t *types.T, n int, factory ColumnFactory) Vec {
+	nulls := NewNulls(n)
+
+	coltyps := typeconv.FromColumnType(t)
+	if coltyps == coltypes.Unhandled {
+		return unknown{}
+	}
+	return &memColumn{
+		t:     coltyps,
+		col:   factory.ConstructColumn(coltyps, n),
+		nulls: nulls,
 	}
 }
 
@@ -222,6 +245,10 @@ func (m *memColumn) Interval() []duration.Duration {
 	return m.col.([]duration.Duration)
 }
 
+func (m *memColumn) Datum() DatumContainer {
+	return m.col.(DatumContainer)
+}
+
 func (m *memColumn) Col() interface{} {
 	return m.col
 }
@@ -262,6 +289,8 @@ func (m *memColumn) Length() int {
 		return len(m.col.([]time.Time))
 	case coltypes.Interval:
 		return len(m.col.([]duration.Duration))
+	case coltypes.Datum:
+		return m.col.(DatumContainer).Len()
 	default:
 		panic(fmt.Sprintf("unhandled type %s", m.t))
 	}
@@ -287,6 +316,8 @@ func (m *memColumn) SetLength(l int) {
 		m.col = m.col.([]time.Time)[:l]
 	case coltypes.Interval:
 		m.col = m.col.([]duration.Duration)[:l]
+	case coltypes.Datum:
+		m.col.(DatumContainer).SetLength(l)
 	default:
 		panic(fmt.Sprintf("unhandled type %s", m.t))
 	}
@@ -312,6 +343,8 @@ func (m *memColumn) Capacity() int {
 		return cap(m.col.([]time.Time))
 	case coltypes.Interval:
 		return cap(m.col.([]duration.Duration))
+	case coltypes.Datum:
+		return m.col.(DatumContainer).Cap()
 	default:
 		panic(fmt.Sprintf("unhandled type %s", m.t))
 	}

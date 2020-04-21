@@ -601,9 +601,10 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	stream *execinfrapb.StreamEndpointSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
+	columnFactory coldata.ColumnFactory,
 ) (execinfra.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(
-		colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
+		colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), columnFactory),
 		op, outputTyps, metadataSourcesQueue, toClose,
 	)
 	if err != nil {
@@ -645,6 +646,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	output *execinfrapb.OutputRouterSpec,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
+	columnFactory coldata.ColumnFactory,
 ) error {
 	if output.Type != execinfrapb.OutputRouterSpec_BY_HASH {
 		return errors.Errorf("vectorized output router type %s unsupported", output.Type)
@@ -661,7 +663,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	allocators := make([]*colmem.Allocator, len(output.Streams))
 	for i := range allocators {
 		acc := hashRouterMemMonitor.MakeBoundAccount()
-		allocators[i] = colmem.NewAllocator(ctx, &acc)
+		allocators[i] = colmem.NewAllocator(ctx, &acc, columnFactory)
 		s.accounts = append(s.accounts, &acc)
 	}
 	limit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
@@ -689,7 +691,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 			return errors.Errorf("unexpected sync response output when setting up router")
 		case execinfrapb.StreamEndpointSpec_REMOTE:
 			if _, err := s.setupRemoteOutputStream(
-				ctx, flowCtx, op, outputTyps, stream, metadataSourcesQueue, toClose,
+				ctx, flowCtx, op, outputTyps, stream, metadataSourcesQueue, toClose, columnFactory,
 			); err != nil {
 				return err
 			}
@@ -736,6 +738,7 @@ func (s *vectorizedFlowCreator) setupInput(
 	flowCtx *execinfra.FlowCtx,
 	input execinfrapb.InputSyncSpec,
 	opt flowinfra.FuseOpt,
+	columnFactory coldata.ColumnFactory,
 ) (op colexecbase.Operator, _ []execinfrapb.MetadataSource, _ error) {
 	inputStreamOps := make([]colexecbase.Operator, 0, len(input.Streams))
 	metaSources := make([]execinfrapb.MetadataSource, 0, len(input.Streams))
@@ -755,7 +758,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				return nil, nil, err
 			}
 			inbox, err := s.remoteComponentCreator.newInbox(
-				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
+				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), columnFactory),
 				input.ColumnTypes, inputStream.StreamID,
 			)
 			if err != nil {
@@ -794,7 +797,7 @@ func (s *vectorizedFlowCreator) setupInput(
 		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
 			var err error
 			op, err = colexec.NewOrderedSynchronizer(
-				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx)),
+				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), columnFactory),
 				inputStreamOps, input.ColumnTypes, execinfrapb.ConvertToColumnOrdering(input.Ordering),
 			)
 			if err != nil {
@@ -839,6 +842,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 	opOutputTypes []types.T,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
+	columnFactory coldata.ColumnFactory,
 ) error {
 	output := &pspec.Output[0]
 	if output.Type != execinfrapb.OutputRouterSpec_PASS_THROUGH {
@@ -852,6 +856,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			// further appends without overwriting.
 			metadataSourcesQueue,
 			toClose,
+			columnFactory,
 		)
 	}
 
@@ -887,7 +892,8 @@ func (s *vectorizedFlowCreator) setupOutput(
 				},
 			)
 		}
-		outbox, err := s.setupRemoteOutputStream(ctx, flowCtx, op, opOutputTypes, outputStream, metadataSourcesQueue, toClose)
+		outbox, err :=
+			s.setupRemoteOutputStream(ctx, flowCtx, op, opOutputTypes, outputStream, metadataSourcesQueue, toClose, columnFactory)
 		if err != nil {
 			return err
 		}
@@ -947,6 +953,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	opt flowinfra.FuseOpt,
 ) (leaves []execinfra.OpNode, err error) {
 	streamIDToSpecIdx := make(map[execinfrapb.StreamID]int)
+	columnFactory := colmem.NewExtendedColumnFactory(flowCtx.NewEvalCtx())
 	// queue is a queue of indices into processorSpecs, for topologically
 	// ordered processing.
 	queue := make([]int, 0, len(processorSpecs))
@@ -989,7 +996,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		toClose := make([]colexec.IdempotentCloser, 0, 1)
 		inputs = inputs[:0]
 		for i := range pspec.Input {
-			input, metadataSources, err := s.setupInput(ctx, flowCtx, pspec.Input[i], opt)
+			input, metadataSources, err := s.setupInput(ctx, flowCtx, pspec.Input[i], opt, columnFactory)
 			if err != nil {
 				return nil, err
 			}
@@ -1052,7 +1059,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			return nil, err
 		}
 		if err = s.setupOutput(
-			ctx, flowCtx, pspec, op, result.ColumnTypes, metadataSourcesQueue, toClose,
+			ctx, flowCtx, pspec, op, result.ColumnTypes, metadataSourcesQueue, toClose, columnFactory,
 		); err != nil {
 			return nil, err
 		}

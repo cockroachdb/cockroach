@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -190,7 +191,8 @@ type diskQueue struct {
 	readFile                     fs.File
 	scratchDecompressedReadBytes []byte
 
-	diskAcc *mon.BoundAccount
+	diskAcc   *mon.BoundAccount
+	allocator *colmem.Allocator
 }
 
 var _ RewindableQueue = &diskQueue{}

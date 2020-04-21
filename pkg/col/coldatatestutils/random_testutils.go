@@ -23,8 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -123,6 +125,12 @@ func RandomVec(
 		intervals := vec.Interval()
 		for i := 0; i < n; i++ {
 			intervals[i] = duration.FromFloat64(rng.Float64())
+		}
+	case coltypes.Datum:
+		datums := vec.Datum()
+		for i := 0; i < n; i++ {
+			j, _ := json.Random(20 /* complexity */, rng)
+			datums.Set(i, &tree.DJSON{JSON: j})
 		}
 	default:
 		panic(fmt.Sprintf("unhandled type %s", typ))
@@ -317,7 +325,7 @@ func NewRandomDataOp(
 func (o *RandomDataOp) Init() {}
 
 // Next is part of the colexec.Operator interface.
-func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
+func (o *RandomDataOp) Next(_ context.Context) coldata.Batch {
 	if o.numReturned == o.numBatches {
 		// Done.
 		b := coldata.ZeroBatch

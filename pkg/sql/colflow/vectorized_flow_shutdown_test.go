@@ -136,6 +136,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				defer cancelRemote()
 				st := cluster.MakeTestingClusterSettings()
 				evalCtx := tree.MakeTestingEvalContext(st)
+				columnFactory := colexec.NewExtendedColumnFactory(&evalCtx)
 				defer evalCtx.Stop(ctxLocal)
 				flowCtx := &execinfra.FlowCtx{
 					EvalCtx: &evalCtx,
@@ -173,7 +174,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				for i := range allocators {
 					acc := testMemMonitor.MakeBoundAccount()
 					defer acc.Close(ctxRemote)
-					allocators[i] = colmem.NewAllocator(ctxRemote, &acc)
+					allocators[i] = colmem.NewAllocator(ctxRemote, &acc, columnFactory)
 					diskAcc := testDiskMonitor.MakeBoundAccount()
 					diskAccounts[i] = &diskAcc
 					defer diskAcc.Close(ctxRemote)
@@ -186,7 +187,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxLocal)
 					inbox, err := colrpc.NewInbox(
-						colmem.NewAllocator(ctxLocal, &inboxMemAccount), typs, execinfrapb.StreamID(streamID),
+						colmem.NewAllocator(ctxLocal, &inboxMemAccount, columnFactory), typs, execinfrapb.StreamID(streamID),
 					)
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
@@ -214,18 +215,19 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					idToClosed.Lock()
 					idToClosed.mapping[id] = false
 					idToClosed.Unlock()
-					outbox, err := colrpc.NewOutbox(colmem.NewAllocator(ctx, outboxMemAcc), outboxInput, typs, append(outboxMetadataSources,
-						execinfrapb.CallbackMetadataSource{
+					outbox, err := colrpc.NewOutbox(colmem.NewAllocator(ctx, outboxMemAcc, columnFactory), outboxInput, typs,
+						append(outboxMetadataSources, execinfrapb.CallbackMetadataSource{
 							DrainMetaCb: func(ctx context.Context) []execinfrapb.ProducerMetadata {
 								return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("%d", id)}}
 							},
 						},
-					), []colexec.IdempotentCloser{callbackCloser{closeCb: func() error {
-						idToClosed.Lock()
-						idToClosed.mapping[id] = true
-						idToClosed.Unlock()
-						return nil
-					}}})
+						), []colexec.IdempotentCloser{callbackCloser{closeCb: func() error {
+							idToClosed.Lock()
+							idToClosed.mapping[id] = true
+							idToClosed.Unlock()
+							return nil
+						}}})
+
 					require.NoError(t, err)
 					wg.Add(1)
 					go func(id int) {
@@ -264,7 +266,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					} else {
 						sourceMemAccount := testMemMonitor.MakeBoundAccount()
 						defer sourceMemAccount.Close(ctxRemote)
-						remoteAllocator := colmem.NewAllocator(ctxRemote, &sourceMemAccount)
+						remoteAllocator := colmem.NewAllocator(ctxRemote, &sourceMemAccount, columnFactory)
 						batch := remoteAllocator.NewMemBatch(typs)
 						batch.SetLength(coldata.BatchSize())
 						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colexecbase.NewRepeatableBatchSource(remoteAllocator, batch, typs), inboxes[i], streamID, outboxMetadataSources)
@@ -279,7 +281,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxAnotherRemote)
 					inbox, err := colrpc.NewInbox(
-						colmem.NewAllocator(ctxAnotherRemote, &inboxMemAccount),
+						colmem.NewAllocator(ctxAnotherRemote, &inboxMemAccount, columnFactory),
 						typs, execinfrapb.StreamID(streamID),
 					)
 					require.NoError(t, err)

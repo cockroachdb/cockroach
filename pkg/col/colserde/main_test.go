@@ -15,6 +15,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -31,6 +32,8 @@ var (
 	// and a memory account bound to it for use in tests.
 	testMemMonitor *mon.BytesMonitor
 	testMemAcc     *mon.BoundAccount
+
+	testColumnFactory coldata.ColumnFactory
 )
 
 func TestMain(m *testing.M) {
@@ -41,7 +44,8 @@ func TestMain(m *testing.M) {
 		defer testMemMonitor.Stop(ctx)
 		memAcc := testMemMonitor.MakeBoundAccount()
 		testMemAcc = &memAcc
-		testAllocator = colmem.NewAllocator(ctx, testMemAcc)
+		testColumnFactory = colmem.NewExtendedColumnFactory(nil /* evalCtx */)
+		testAllocator = colmem.NewAllocator(ctx, testMemAcc, testColumnFactory)
 		defer testMemAcc.Close(ctx)
 		return m.Run()
 	}())

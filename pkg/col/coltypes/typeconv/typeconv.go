@@ -36,6 +36,7 @@ var AllSupportedSQLTypes = []types.T{
 	*types.Timestamp,
 	*types.TimestampTZ,
 	*types.Interval,
+	*types.Jsonb,
 }
 
 // FromColumnType returns the T that corresponds to the input ColumnType.
@@ -69,6 +70,8 @@ func FromColumnType(ct *types.T) coltypes.T {
 		return coltypes.Timestamp
 	case types.IntervalFamily:
 		return coltypes.Interval
+	case types.JsonFamily:
+		return coltypes.Datum
 	}
 	return coltypes.Unhandled
 }
@@ -109,6 +112,8 @@ func UnsafeToSQLType(t coltypes.T) (*types.T, error) {
 		return types.Timestamp, nil
 	case coltypes.Interval:
 		return types.Interval, nil
+	case coltypes.Datum:
+		return types.Jsonb, nil
 	default:
 		return nil, errors.Errorf("unsupported coltype %s", t)
 	}
