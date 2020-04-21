@@ -33,6 +33,7 @@ pg_catalog  pg_default_acl           table
 pg_catalog  pg_depend                table
 pg_catalog  pg_description           table
 pg_catalog  pg_enum                  table
+pg_catalog  pg_event_trigger         table
 pg_catalog  pg_extension             table
 pg_catalog  pg_foreign_data_wrapper  table
 pg_catalog  pg_foreign_server        table
@@ -108,6 +109,7 @@ pg_catalog  pg_default_acl           table
 pg_catalog  pg_depend                table
 pg_catalog  pg_description           table
 pg_catalog  pg_enum                  table
+pg_catalog  pg_event_trigger         table
 pg_catalog  pg_extension             table
 pg_catalog  pg_foreign_data_wrapper  table
 pg_catalog  pg_foreign_server        table
@@ -1507,39 +1509,40 @@ objoid      classoid    objsubid  description
 4294967221  4294967227  0         dependency relationships (incomplete)
 4294967220  4294967227  0         object comments
 4294967218  4294967227  0         enum types and labels (empty - feature does not exist)
-4294967217  4294967227  0         installed extensions (empty - feature does not exist)
-4294967216  4294967227  0         foreign data wrappers (empty - feature does not exist)
-4294967215  4294967227  0         foreign servers (empty - feature does not exist)
-4294967214  4294967227  0         foreign tables (empty  - feature does not exist)
-4294967213  4294967227  0         indexes (incomplete)
-4294967212  4294967227  0         index creation statements
-4294967211  4294967227  0         table inheritance hierarchy (empty - feature does not exist)
-4294967210  4294967227  0         available languages (empty - feature does not exist)
-4294967209  4294967227  0         locks held by active processes (empty - feature does not exist)
-4294967208  4294967227  0         available materialized views (empty - feature does not exist)
-4294967207  4294967227  0         available namespaces (incomplete; namespaces and databases are congruent in CockroachDB)
-4294967206  4294967227  0         operators (incomplete)
-4294967205  4294967227  0         prepared statements
-4294967204  4294967227  0         prepared transactions (empty - feature does not exist)
-4294967203  4294967227  0         built-in functions (incomplete)
-4294967202  4294967227  0         range types (empty - feature does not exist)
-4294967201  4294967227  0         rewrite rules (empty - feature does not exist)
-4294967200  4294967227  0         database roles
-4294967187  4294967227  0         security labels (empty - feature does not exist)
-4294967199  4294967227  0         security labels (empty)
-4294967198  4294967227  0         sequences (see also information_schema.sequences)
-4294967197  4294967227  0         session variables (incomplete)
-4294967196  4294967227  0         shared dependencies (empty - not implemented)
+4294967217  4294967227  0         event triggers (empty - feature does not exist)
+4294967216  4294967227  0         installed extensions (empty - feature does not exist)
+4294967215  4294967227  0         foreign data wrappers (empty - feature does not exist)
+4294967214  4294967227  0         foreign servers (empty - feature does not exist)
+4294967213  4294967227  0         foreign tables (empty  - feature does not exist)
+4294967212  4294967227  0         indexes (incomplete)
+4294967211  4294967227  0         index creation statements
+4294967210  4294967227  0         table inheritance hierarchy (empty - feature does not exist)
+4294967209  4294967227  0         available languages (empty - feature does not exist)
+4294967208  4294967227  0         locks held by active processes (empty - feature does not exist)
+4294967207  4294967227  0         available materialized views (empty - feature does not exist)
+4294967206  4294967227  0         available namespaces (incomplete; namespaces and databases are congruent in CockroachDB)
+4294967205  4294967227  0         operators (incomplete)
+4294967204  4294967227  0         prepared statements
+4294967203  4294967227  0         prepared transactions (empty - feature does not exist)
+4294967202  4294967227  0         built-in functions (incomplete)
+4294967201  4294967227  0         range types (empty - feature does not exist)
+4294967200  4294967227  0         rewrite rules (empty - feature does not exist)
+4294967199  4294967227  0         database roles
+4294967186  4294967227  0         security labels (empty - feature does not exist)
+4294967198  4294967227  0         security labels (empty)
+4294967197  4294967227  0         sequences (see also information_schema.sequences)
+4294967196  4294967227  0         session variables (incomplete)
+4294967195  4294967227  0         shared dependencies (empty - not implemented)
 4294967219  4294967227  0         shared object comments
-4294967186  4294967227  0         shared security labels (empty - feature not supported)
-4294967188  4294967227  0         backend access statistics (empty - monitoring works differently in CockroachDB)
-4294967193  4294967227  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
-4294967192  4294967227  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
-4294967191  4294967227  0         triggers (empty - feature does not exist)
-4294967190  4294967227  0         scalar types (incomplete)
-4294967195  4294967227  0         database users
-4294967194  4294967227  0         local to remote user mapping (empty - feature does not exist)
-4294967189  4294967227  0         view definitions (incomplete - see also information_schema.views)
+4294967185  4294967227  0         shared security labels (empty - feature not supported)
+4294967187  4294967227  0         backend access statistics (empty - monitoring works differently in CockroachDB)
+4294967192  4294967227  0         tables summary (see also information_schema.tables, pg_catalog.pg_class)
+4294967191  4294967227  0         available tablespaces (incomplete; concept inapplicable to CockroachDB)
+4294967190  4294967227  0         triggers (empty - feature does not exist)
+4294967189  4294967227  0         scalar types (incomplete)
+4294967194  4294967227  0         database users
+4294967193  4294967227  0         local to remote user mapping (empty - feature does not exist)
+4294967188  4294967227  0         view definitions (incomplete - see also information_schema.views)
 
 ## pg_catalog.pg_shdescription
 
@@ -1554,6 +1557,13 @@ query OORT colnames
 SELECT * FROM pg_catalog.pg_enum
 ----
 oid  enumtypid  enumsortorder  enumlabel
+
+## pg_catalog.pg_event_trigger
+
+query TTOOTT colnames
+SELECT * FROM pg_catalog.pg_event_trigger
+----
+evtname  evtevent  evtowner  evtfoid  evtenabled  evttags
 
 ## pg_catalog.pg_extension
 query OTOOBTTT colnames
