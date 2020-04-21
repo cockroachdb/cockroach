@@ -211,6 +211,7 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogDescriptionTableID:         pgCatalogDescriptionTable,
 		sqlbase.PgCatalogSharedDescriptionTableID:   pgCatalogSharedDescriptionTable,
 		sqlbase.PgCatalogEnumTableID:                pgCatalogEnumTable,
+		sqlbase.PgCatalogEventTriggerTableID:        pgCatalogEventTriggerTable,
 		sqlbase.PgCatalogExtensionTableID:           pgCatalogExtensionTable,
 		sqlbase.PgCatalogForeignDataWrapperTableID:  pgCatalogForeignDataWrapperTable,
 		sqlbase.PgCatalogForeignServerTableID:       pgCatalogForeignServerTable,
@@ -1350,6 +1351,24 @@ CREATE TABLE pg_catalog.pg_enum (
 )`,
 	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// Enum types are not currently supported.
+		return nil
+	},
+}
+
+var pgCatalogEventTriggerTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_event_trigger {
+	evtname NAME,
+	evtevent NAME,
+	evtowner OID,
+	evtfoid OID,
+	evtenabled CHAR,
+	evttags TEXT[]
+}`,
+	comment: `event triggers (empty - feature does not exist)
+https://www.postgresql.org/docs/9.6/catalog-pg-event-trigger.html`,
+	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// Event triggers are not currently supported.
 		return nil
 	},
 }
