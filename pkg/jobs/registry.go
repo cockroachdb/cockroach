@@ -297,12 +297,15 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 		if i > 0 {
 			buf.WriteString(",")
 		}
-		buf.WriteString(fmt.Sprintf(" (%d)", id))
+		buf.WriteString(fmt.Sprintf(" %d", id))
 	}
 	// Manually retry instead of using SHOW JOBS WHEN COMPLETE so we have greater
-	// control over retries.
+	// control over retries. Also, avoiding SHOW JOBS prevents us from having to
+	// populate the crdb_internal.jobs vtable.
 	query := fmt.Sprintf(
-		"SELECT count(*) FROM [SHOW JOBS VALUES %s] WHERE finished IS NULL", buf.String())
+		`SELECT count(*) FROM system.jobs WHERE id IN (%s)
+       AND (status != 'succeeded' AND status != 'failed' AND status != 'canceled')`,
+		buf.String())
 	for r := retry.StartWithCtx(ctx, retry.Options{
 		InitialBackoff: 10 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,
