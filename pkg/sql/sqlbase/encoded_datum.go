@@ -279,15 +279,21 @@ func (ed *EncDatum) Encode(
 // fingerprints of a set of datums are appended together, the resulting
 // fingerprint will uniquely identify the set.
 func (ed *EncDatum) Fingerprint(typ *types.T, a *DatumAlloc, appendTo []byte) ([]byte, error) {
-	if err := ed.EnsureDecoded(typ, a); err != nil {
-		return nil, err
-	}
+	// Note: we don't ed.EnsureDecoded on top of this method, because the default
+	// case uses ed.Encode, which has a fast path if the encoded bytes are already
+	// the right encoding.
 	switch typ.Family() {
 	case types.JsonFamily:
+		if err := ed.EnsureDecoded(typ, a); err != nil {
+			return nil, err
+		}
 		// We must use value encodings without a column ID even if the EncDatum already
 		// is encoded with the value encoding so that the hashes are indeed unique.
 		return EncodeTableValue(appendTo, ColumnID(encoding.NoColumnID), ed.Datum, a.scratch)
 	case types.ArrayFamily:
+		if err := ed.EnsureDecoded(typ, a); err != nil {
+			return nil, err
+		}
 		// Arrays may contain composite data, so we cannot just value
 		// encode an array (that would give same-valued composite
 		// datums a different encoding).

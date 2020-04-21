@@ -180,8 +180,6 @@ func registerAlterPK(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		// TODO(yuzefovich): investigate #47598 and unskip this configuration.
-		Skip:  "#47598",
 		Name:  "alterpk-tpcc-500",
 		Owner: OwnerSQLSchema,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
