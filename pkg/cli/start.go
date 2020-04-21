@@ -470,14 +470,6 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	// not be world-readable.
 	disableOtherPermissionBits()
 
-	// TODO(knz): the following call is not in the right place.
-	// See: https://github.com/cockroachdb/cockroach/issues/44041
-	if s, err := serverCfg.Stores.GetPreventedStartupMessage(); err != nil {
-		return err
-	} else if s != "" {
-		log.Fatal(context.Background(), s)
-	}
-
 	// Set up the signal handlers. This also ensures that any of these
 	// signals received beyond this point do not interrupt the startup
 	// sequence until the point signals are checked below.
@@ -518,6 +510,12 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	// cannot be picked up beyond this point.
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd)
 	if err != nil {
+		return err
+	}
+
+	// If any store has something to say against a server start-up
+	// (e.g. previously detected corruption), listen to them now.
+	if err := serverCfg.Stores.PriorCriticalAlertError(); err != nil {
 		return err
 	}
 
