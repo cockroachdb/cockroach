@@ -20,12 +20,6 @@ import (
 	"github.com/golang/geo/s2"
 	"github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/encoding/ewkb"
-	// Force imports until they are used.
-	_ "github.com/twpayne/go-geom/encoding/geojson"
-	_ "github.com/twpayne/go-geom/encoding/kml"
-	_ "github.com/twpayne/go-geom/encoding/wkb"
-	_ "github.com/twpayne/go-geom/encoding/wkbhex"
-	_ "github.com/twpayne/go-geom/encoding/wkt"
 )
 
 var ewkbEncodingFormat = binary.LittleEndian
@@ -156,7 +150,6 @@ func NewGeographyFromUnvalidatedEWKB(ewkb geopb.UnvalidatedEWKB) (*Geography, er
 }
 
 // ParseGeography parses a Geography from a given text.
-// TODO(otan): when we have our own WKT parser, move this to geo.
 func ParseGeography(str string) (*Geography, error) {
 	// TODO(otan): set SRID of EWKB to 4326.
 	ewkb, err := parseAmbiguousTextToEWKB(str, geopb.DefaultGeographySRID)

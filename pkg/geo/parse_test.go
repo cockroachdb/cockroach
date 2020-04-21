@@ -55,6 +55,12 @@ func TestParseGeometry(t *testing.T) {
 			0,
 		},
 		{
+			`{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [1.0, 1.0] }, "properties": { "name": "┳━┳ ヽ(ಠل͜ಠ)ﾉ" } }`,
+			NewGeometry(geopb.EWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			"",
+			0,
+		},
+		{
 			"invalid",
 			nil,
 			"geos error: ParseException: Unknown type: 'INVALID'",
@@ -138,6 +144,12 @@ func TestParseGeography(t *testing.T) {
 			NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
 			"",
 			3857,
+		},
+		{
+			`{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [1.0, 1.0] }, "properties": { "name": "┳━┳ ヽ(ಠل͜ಠ)ﾉ" } }`,
+			NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			"",
+			4326,
 		},
 		{
 			"invalid",
