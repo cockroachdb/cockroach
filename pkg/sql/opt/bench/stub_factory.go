@@ -344,11 +344,11 @@ func (f *stubFactory) ConstructAlterTableRelocate(
 	return struct{}{}, nil
 }
 
-func (f *stubFactory) ConstructBuffer(value exec.Node, label string) (exec.Node, error) {
-	return struct{}{}, nil
+func (f *stubFactory) ConstructBuffer(value exec.Node, label string) (exec.BufferNode, error) {
+	return struct{ exec.BufferNode }{}, nil
 }
 
-func (f *stubFactory) ConstructScanBuffer(ref exec.Node, label string) (exec.Node, error) {
+func (f *stubFactory) ConstructScanBuffer(ref exec.BufferNode, label string) (exec.Node, error) {
 	return struct{}{}, nil
 }
 
