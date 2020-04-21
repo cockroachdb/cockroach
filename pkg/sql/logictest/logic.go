@@ -415,6 +415,9 @@ type testClusterConfig struct {
 	// to be the binary version.
 	binaryVersion  roachpb.Version
 	disableUpgrade bool
+	// If true, a sql tenant server will be started and pointed at a node in the
+	// cluster. Connections on behalf of the logic test will go to that tenant.
+	useTenant bool
 }
 
 // logicTestConfigs contains all possible cluster configs. A test file can
@@ -549,6 +552,11 @@ var logicTestConfigs = []testClusterConfig{
 		overrideAutoStats:   "false",
 		sqlExecUseDisk:      true,
 		skipShort:           true,
+	},
+	{
+		name:      "3node-tenant",
+		numNodes:  3,
+		useTenant: true,
 	},
 }
 
@@ -940,6 +948,9 @@ type logicTest struct {
 	// the index of the node (within the cluster) against which we run the test
 	// statements.
 	nodeIdx int
+	// If this test uses a SQL tenant server, this is its address. In this case,
+	// all clients are created against this tenant.
+	tenantAddr string
 	// map of built clients. Needs to be persisted so that we can
 	// re-use them and close them all on exit.
 	clients map[string]*gosql.DB
@@ -1089,7 +1100,10 @@ func (t *logicTest) setUser(user string) func() {
 		return func() {}
 	}
 
-	addr := t.cluster.Server(t.nodeIdx).ServingSQLAddr()
+	addr := t.tenantAddr
+	if addr == "" {
+		addr = t.cluster.Server(t.nodeIdx).ServingSQLAddr()
+	}
 	pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(user))
 	pgURL.Path = "test"
 
@@ -1211,6 +1225,14 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 	if cfg.useFakeSpanResolver {
 		fakeResolver := physicalplanutils.FakeResolverForTestCluster(t.cluster)
 		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
+	}
+
+	if cfg.useTenant {
+		var err error
+		t.tenantAddr, err = t.cluster.Server(t.nodeIdx).StartTenant()
+		if err != nil {
+			t.rootT.Fatal(err)
+		}
 	}
 
 	if _, err := t.cluster.ServerConn(0).Exec(
