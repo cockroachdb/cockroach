@@ -18,8 +18,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -36,16 +38,17 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 
 	var (
 		rng, _     = randutil.NewPseudoRand()
-		typs       = []coltypes.T{coltypes.Int64}
+		typs       = []types.T{*types.Int}
 		numInputs  = rng.Intn(maxInputs) + 1
 		numBatches = rng.Intn(maxBatches) + 1
 	)
 
-	inputs := make([]Operator, numInputs)
+	inputs := make([]colexecbase.Operator, numInputs)
 	for i := range inputs {
-		source := NewRepeatableBatchSource(
+		source := colexecbase.NewRepeatableBatchSource(
 			testAllocator,
-			RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64()),
+			coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64()),
+			typs,
 		)
 		source.ResetBatchesToReturn(numBatches)
 		inputs[i] = source
@@ -75,7 +78,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 	batchesReturned := 0
 	for {
 		var b coldata.Batch
-		if err := execerror.CatchVectorizedRuntimeError(func() { b = s.Next(ctx) }); err != nil {
+		if err := colexecerror.CatchVectorizedRuntimeError(func() { b = s.Next(ctx) }); err != nil {
 			if cancel {
 				require.True(t, testutils.IsError(err, "context canceled"), err)
 				break
@@ -99,17 +102,17 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 
 	const expectedErr = "first input error"
 
-	inputs := make([]Operator, 6)
-	inputs[0] = &CallbackOperator{NextCb: func(context.Context) coldata.Batch {
-		execerror.VectorizedInternalPanic(expectedErr)
+	inputs := make([]colexecbase.Operator, 6)
+	inputs[0] = &colexecbase.CallbackOperator{NextCb: func(context.Context) coldata.Batch {
+		colexecerror.InternalError(expectedErr)
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}}
 	for i := 1; i < len(inputs); i++ {
-		inputs[i] = &CallbackOperator{
+		inputs[i] = &colexecbase.CallbackOperator{
 			NextCb: func(ctx context.Context) coldata.Batch {
 				<-ctx.Done()
-				execerror.VectorizedInternalPanic(ctx.Err())
+				colexecerror.InternalError(ctx.Err())
 				// This code is unreachable, but the compiler cannot infer that.
 				return nil
 			},
@@ -120,8 +123,8 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		ctx = context.Background()
 		wg  sync.WaitGroup
 	)
-	s := NewParallelUnorderedSynchronizer(inputs, []coltypes.T{coltypes.Int64}, &wg)
-	err := execerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) })
+	s := NewParallelUnorderedSynchronizer(inputs, []types.T{*types.Int}, &wg)
+	err := colexecerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) })
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
 	require.True(t, testutils.IsError(err, expectedErr), err)
@@ -130,12 +133,12 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	const numInputs = 6
 
-	typs := []coltypes.T{coltypes.Int64}
-	inputs := make([]Operator, numInputs)
+	typs := []types.T{*types.Int}
+	inputs := make([]colexecbase.Operator, numInputs)
 	for i := range inputs {
 		batch := testAllocator.NewMemBatchWithSize(typs, coldata.BatchSize())
 		batch.SetLength(coldata.BatchSize())
-		inputs[i] = NewRepeatableBatchSource(testAllocator, batch)
+		inputs[i] = colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	}
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())

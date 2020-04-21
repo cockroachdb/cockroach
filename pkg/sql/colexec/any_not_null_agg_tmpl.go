@@ -25,15 +25,16 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 )
 
-func newAnyNotNullAgg(allocator *Allocator, t coltypes.T) (aggregateFunc, error) {
-	switch t {
+func newAnyNotNullAgg(allocator *colmem.Allocator, t *types.T) (aggregateFunc, error) {
+	switch typeconv.FromColumnType(t) {
 	// {{range .}}
 	case _TYPES_T:
 		return &anyNotNull_TYPEAgg{allocator: allocator}, nil
@@ -42,6 +43,9 @@ func newAnyNotNullAgg(allocator *Allocator, t coltypes.T) (aggregateFunc, error)
 		return nil, errors.Errorf("unsupported any not null agg type %s", t)
 	}
 }
+
+// Remove unused warning.
+var _ = execgen.UNSAFEGET
 
 // {{/*
 
@@ -72,7 +76,7 @@ const _TYPES_T = coltypes.Unhandled
 // anyNotNull_TYPEAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNull_TYPEAgg struct {
-	allocator                   *Allocator
+	allocator                   *colmem.Allocator
 	done                        bool
 	groups                      []bool
 	vec                         coldata.Vec

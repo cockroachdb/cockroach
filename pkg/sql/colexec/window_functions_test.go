@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -271,7 +272,7 @@ func TestWindowFunctions(t *testing.T) {
 		} {
 			t.Run(fmt.Sprintf("spillForced=%t/%s", spillForced, tc.windowerSpec.WindowFns[0].Func.String()), func(t *testing.T) {
 				var semsToCheck []semaphore.Semaphore
-				runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier, func(inputs []Operator) (Operator, error) {
+				runTests(t, []tuples{tc.tuples}, tc.expected, unorderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
 					tc.init()
 					ct := make([]types.T, len(tc.tuples[0]))
 					for i := range ct {
@@ -283,7 +284,7 @@ func TestWindowFunctions(t *testing.T) {
 							Windower: &tc.windowerSpec,
 						},
 					}
-					sem := NewTestingSemaphore(maxNumberFDs)
+					sem := colexecbase.NewTestingSemaphore(maxNumberFDs)
 					args := NewColOperatorArgs{
 						Spec:                spec,
 						Inputs:              inputs,

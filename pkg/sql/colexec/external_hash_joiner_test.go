@@ -16,13 +16,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -74,8 +75,8 @@ func TestExternalHashJoiner(t *testing.T) {
 						}(tc.skipAllNullsInjection)
 						tc.skipAllNullsInjection = true
 					}
-					runHashJoinTestCase(t, tc, func(sources []Operator) (Operator, error) {
-						sem := NewTestingSemaphore(externalHJMinPartitions)
+					runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
+						sem := colexecbase.NewTestingSemaphore(externalHJMinPartitions)
 						semsToCheck = append(semsToCheck, sem)
 						spec := createSpecForHashJoiner(tc)
 						// TODO(asubiotto): Pass in the testing.T of the caller to this
@@ -132,33 +133,33 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 			DiskMonitor: testDiskMonitor,
 		},
 	}
-	sourceTypes := []coltypes.T{coltypes.Int64}
+	sourceTypes := []types.T{*types.Int}
 	batch := testAllocator.NewMemBatch(sourceTypes)
 	// We don't need to set the data since zero values in the columns work.
 	batch.SetLength(coldata.BatchSize())
 	nBatches := 2
-	leftSource := newFiniteBatchSource(batch, nBatches)
-	rightSource := newFiniteBatchSource(batch, nBatches)
+	leftSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
+	rightSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
 	tc := &joinTestCase{
-		joinType:       sqlbase.JoinType_INNER,
-		leftPhysTypes:  sourceTypes,
-		leftOutCols:    []uint32{0},
-		leftEqCols:     []uint32{0},
-		rightPhysTypes: sourceTypes,
-		rightOutCols:   []uint32{0},
-		rightEqCols:    []uint32{0},
+		joinType:     sqlbase.JoinType_INNER,
+		leftTypes:    sourceTypes,
+		leftOutCols:  []uint32{0},
+		leftEqCols:   []uint32{0},
+		rightTypes:   sourceTypes,
+		rightOutCols: []uint32{0},
+		rightEqCols:  []uint32{0},
 	}
 	tc.init()
 	spec := createSpecForHashJoiner(tc)
 	var spilled bool
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
-	sem := NewTestingSemaphore(externalHJMinPartitions)
+	sem := colexecbase.NewTestingSemaphore(externalHJMinPartitions)
 	// Ignore closers since the sorter should close itself when it is drained of
 	// all tuples. We assert this by checking that the semaphore reports a count
 	// of 0.
 	hj, accounts, monitors, _, err := createDiskBackedHashJoiner(
-		ctx, flowCtx, spec, []Operator{leftSource, rightSource},
+		ctx, flowCtx, spec, []colexecbase.Operator{leftSource, rightSource},
 		func() { spilled = true }, queueCfg, 0 /* numForcedRepartitions */, true, /* delegateFDAcquisitions */
 		sem,
 	)
@@ -197,10 +198,10 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 		},
 	}
 	nCols := 4
-	sourceTypes := make([]coltypes.T, nCols)
+	sourceTypes := make([]types.T, nCols)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
-		sourceTypes[colIdx] = coltypes.Int64
+		sourceTypes[colIdx] = *types.Int
 	}
 
 	batch := testAllocator.NewMemBatch(sourceTypes)
@@ -230,8 +231,8 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 		}
 		queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 		defer cleanup()
-		leftSource := newFiniteBatchSource(batch, 0)
-		rightSource := newFiniteBatchSource(batch, 0)
+		leftSource := newFiniteBatchSource(batch, sourceTypes, 0)
+		rightSource := newFiniteBatchSource(batch, sourceTypes, 0)
 		for _, fullOuter := range []bool{false, true} {
 			for _, nBatches := range []int{1 << 2, 1 << 7} {
 				for _, spillForced := range []bool{false, true} {
@@ -244,13 +245,13 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 						joinType = sqlbase.JoinType_FULL_OUTER
 					}
 					tc := &joinTestCase{
-						joinType:       joinType,
-						leftPhysTypes:  sourceTypes,
-						leftOutCols:    []uint32{0, 1},
-						leftEqCols:     []uint32{0, 2},
-						rightPhysTypes: sourceTypes,
-						rightOutCols:   []uint32{2, 3},
-						rightEqCols:    []uint32{0, 1},
+						joinType:     joinType,
+						leftTypes:    sourceTypes,
+						leftOutCols:  []uint32{0, 1},
+						leftEqCols:   []uint32{0, 2},
+						rightTypes:   sourceTypes,
+						rightOutCols: []uint32{2, 3},
+						rightEqCols:  []uint32{0, 1},
 					}
 					tc.init()
 					spec := createSpecForHashJoiner(tc)
@@ -263,9 +264,9 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 							leftSource.reset(nBatches)
 							rightSource.reset(nBatches)
 							hj, accounts, monitors, _, err := createDiskBackedHashJoiner(
-								ctx, flowCtx, spec, []Operator{leftSource, rightSource},
+								ctx, flowCtx, spec, []colexecbase.Operator{leftSource, rightSource},
 								func() {}, queueCfg, 0 /* numForcedRepartitions */, false, /* delegateFDAcquisitions */
-								NewTestingSemaphore(VecMaxOpenFDsLimit),
+								colexecbase.NewTestingSemaphore(VecMaxOpenFDsLimit),
 							)
 							memAccounts = append(memAccounts, accounts...)
 							memMonitors = append(memMonitors, monitors...)
@@ -296,13 +297,13 @@ func createDiskBackedHashJoiner(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ProcessorSpec,
-	inputs []Operator,
+	inputs []colexecbase.Operator,
 	spillingCallbackFn func(),
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	numForcedRepartitions int,
 	delegateFDAcquisitions bool,
 	testingSemaphore semaphore.Semaphore,
-) (Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []IdempotentCloser, error) {
+) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []IdempotentCloser, error) {
 	args := NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              inputs,

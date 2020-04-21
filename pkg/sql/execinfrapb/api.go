@@ -11,8 +11,8 @@
 package execinfrapb
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -35,11 +35,11 @@ type DistSQLVersion uint32
 func MakeEvalContext(evalCtx *tree.EvalContext) EvalContext {
 	var be BytesEncodeFormat
 	switch evalCtx.SessionData.DataConversion.BytesEncodeFormat {
-	case sessiondata.BytesEncodeHex:
+	case lex.BytesEncodeHex:
 		be = BytesEncodeFormat_HEX
-	case sessiondata.BytesEncodeEscape:
+	case lex.BytesEncodeEscape:
 		be = BytesEncodeFormat_ESCAPE
-	case sessiondata.BytesEncodeBase64:
+	case lex.BytesEncodeBase64:
 		be = BytesEncodeFormat_BASE64
 	default:
 		panic("unknown format")

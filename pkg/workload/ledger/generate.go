@@ -17,7 +17,7 @@ import (
 	"math/rand"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -32,17 +32,17 @@ const (
 	cashMoneyType    = "C"
 )
 
-var ledgerCustomerColTypes = []coltypes.T{
-	coltypes.Int64,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bool,
-	coltypes.Bool,
-	coltypes.Bytes,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Int64,
+var ledgerCustomerTypes = []types.T{
+	*types.Int,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bool,
+	*types.Bool,
+	*types.Bytes,
+	*types.Int,
+	*types.Int,
+	*types.Int,
 }
 
 func (w *ledger) ledgerCustomerInitialRow(rowIdx int) []interface{} {
@@ -70,16 +70,16 @@ func (w *ledger) ledgerCustomerSplitRow(splitIdx int) []interface{} {
 	}
 }
 
-var ledgerTransactionColTypes = []coltypes.T{
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Int64,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
+var ledgerTransactionColTypes = []types.T{
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Int,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
 }
 
 func (w *ledger) ledgerTransactionInitialRow(rowIdx int) []interface{} {

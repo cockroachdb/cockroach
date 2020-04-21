@@ -24,11 +24,11 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 	"github.com/cockroachdb/errors"
 )
@@ -235,11 +235,9 @@ func EncodeSQLBytes(buf *bytes.Buffer, in string) {
 // If the skipHexPrefix argument is set, the hexadecimal encoding does not
 // prefix the output with "\x". This is suitable e.g. for the encode()
 // built-in.
-func EncodeByteArrayToRawBytes(
-	data string, be sessiondata.BytesEncodeFormat, skipHexPrefix bool,
-) string {
+func EncodeByteArrayToRawBytes(data string, be BytesEncodeFormat, skipHexPrefix bool) string {
 	switch be {
-	case sessiondata.BytesEncodeHex:
+	case BytesEncodeHex:
 		head := 2
 		if skipHexPrefix {
 			head = 0
@@ -252,7 +250,7 @@ func EncodeByteArrayToRawBytes(
 		hex.Encode(res[head:], []byte(data))
 		return string(res)
 
-	case sessiondata.BytesEncodeEscape:
+	case BytesEncodeEscape:
 		// PostgreSQL does not allow all the escapes formats recognized by
 		// CockroachDB's scanner. It only recognizes octal and \\ for the
 		// backslash itself.
@@ -274,7 +272,7 @@ func EncodeByteArrayToRawBytes(
 		}
 		return string(res)
 
-	case sessiondata.BytesEncodeBase64:
+	case BytesEncodeBase64:
 		return base64.StdEncoding.EncodeToString([]byte(data))
 
 	default:
@@ -287,12 +285,12 @@ func EncodeByteArrayToRawBytes(
 // When using the Hex format, the caller is responsible for skipping the
 // "\x" prefix, if any. See DecodeRawBytesToByteArrayAuto() below for
 // an alternative.
-func DecodeRawBytesToByteArray(data string, be sessiondata.BytesEncodeFormat) ([]byte, error) {
+func DecodeRawBytesToByteArray(data string, be BytesEncodeFormat) ([]byte, error) {
 	switch be {
-	case sessiondata.BytesEncodeHex:
+	case BytesEncodeHex:
 		return hex.DecodeString(data)
 
-	case sessiondata.BytesEncodeEscape:
+	case BytesEncodeEscape:
 		// PostgreSQL does not allow all the escapes formats recognized by
 		// CockroachDB's scanner. It only recognizes octal and \\ for the
 		// backslash itself.
@@ -331,7 +329,7 @@ func DecodeRawBytesToByteArray(data string, be sessiondata.BytesEncodeFormat) ([
 		}
 		return res, nil
 
-	case sessiondata.BytesEncodeBase64:
+	case BytesEncodeBase64:
 		return base64.StdEncoding.DecodeString(data)
 
 	default:
@@ -344,7 +342,48 @@ func DecodeRawBytesToByteArray(data string, be sessiondata.BytesEncodeFormat) ([
 // and escape.
 func DecodeRawBytesToByteArrayAuto(data []byte) ([]byte, error) {
 	if len(data) >= 2 && data[0] == '\\' && (data[1] == 'x' || data[1] == 'X') {
-		return DecodeRawBytesToByteArray(string(data[2:]), sessiondata.BytesEncodeHex)
+		return DecodeRawBytesToByteArray(string(data[2:]), BytesEncodeHex)
 	}
-	return DecodeRawBytesToByteArray(string(data), sessiondata.BytesEncodeEscape)
+	return DecodeRawBytesToByteArray(string(data), BytesEncodeEscape)
+}
+
+// BytesEncodeFormat controls which format to use for BYTES->STRING
+// conversions.
+type BytesEncodeFormat int
+
+const (
+	// BytesEncodeHex uses the hex format: e'abc\n'::BYTES::STRING -> '\x61626312'.
+	// This is the default, for compatibility with PostgreSQL.
+	BytesEncodeHex BytesEncodeFormat = iota
+	// BytesEncodeEscape uses the escaped format: e'abc\n'::BYTES::STRING -> 'abc\012'.
+	BytesEncodeEscape
+	// BytesEncodeBase64 uses base64 encoding.
+	BytesEncodeBase64
+)
+
+func (f BytesEncodeFormat) String() string {
+	switch f {
+	case BytesEncodeHex:
+		return "hex"
+	case BytesEncodeEscape:
+		return "escape"
+	case BytesEncodeBase64:
+		return "base64"
+	default:
+		return fmt.Sprintf("invalid (%d)", f)
+	}
+}
+
+// BytesEncodeFormatFromString converts a string into a BytesEncodeFormat.
+func BytesEncodeFormatFromString(val string) (_ BytesEncodeFormat, ok bool) {
+	switch strings.ToUpper(val) {
+	case "HEX":
+		return BytesEncodeHex, true
+	case "ESCAPE":
+		return BytesEncodeEscape, true
+	case "BASE64":
+		return BytesEncodeBase64, true
+	default:
+		return -1, false
+	}
 }

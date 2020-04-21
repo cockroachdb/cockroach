@@ -18,12 +18,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
@@ -49,7 +51,7 @@ type Dialer interface {
 type Outbox struct {
 	colexec.OneInputNode
 
-	typs []coltypes.T
+	typs []types.T
 	// batch is the last batch received from the input.
 	batch coldata.Batch
 
@@ -74,9 +76,9 @@ type Outbox struct {
 
 // NewOutbox creates a new Outbox.
 func NewOutbox(
-	allocator *colexec.Allocator,
-	input colexec.Operator,
-	typs []coltypes.T,
+	allocator *colmem.Allocator,
+	input colexecbase.Operator,
+	typs []types.T,
 	metadataSources []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
 ) (*Outbox, error) {
@@ -246,7 +248,7 @@ func (o *Outbox) sendBatches(
 			return true, nil
 		}
 
-		if err := execerror.CatchVectorizedRuntimeError(nextBatch); err != nil {
+		if err := colexecerror.CatchVectorizedRuntimeError(nextBatch); err != nil {
 			if log.V(1) {
 				log.Warningf(ctx, "Outbox Next error: %+v", err)
 			}

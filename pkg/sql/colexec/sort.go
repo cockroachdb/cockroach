@@ -15,10 +15,13 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -26,29 +29,29 @@ import (
 // given in orderingCols. The inputTypes must correspond 1-1 with the columns
 // in the input operator.
 func NewSorter(
-	allocator *Allocator,
-	input Operator,
-	inputTypes []coltypes.T,
+	allocator *colmem.Allocator,
+	input colexecbase.Operator,
+	inputTypes []types.T,
 	orderingCols []execinfrapb.Ordering_Column,
-) (Operator, error) {
+) (colexecbase.Operator, error) {
 	return newSorter(allocator, newAllSpooler(allocator, input, inputTypes), inputTypes, orderingCols)
 }
 
 func newSorter(
-	allocator *Allocator,
+	allocator *colmem.Allocator,
 	input spooler,
-	inputTypes []coltypes.T,
+	inputTypes []types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 ) (resettableOperator, error) {
 	partitioners := make([]partitioner, len(orderingCols)-1)
 
 	var err error
 	for i, ord := range orderingCols {
-		if !isSorterSupported(inputTypes[ord.ColIdx], ord.Direction) {
-			return nil, errors.Errorf("sorter for type: %s and direction: %s not supported", inputTypes[ord.ColIdx], ord.Direction)
+		if !isSorterSupported(&inputTypes[ord.ColIdx], ord.Direction) {
+			return nil, errors.Errorf("sorter for type: %s and direction: %s not supported", &inputTypes[ord.ColIdx], ord.Direction)
 		}
 		if i < len(orderingCols)-1 {
-			partitioners[i], err = newPartitioner(inputTypes[ord.ColIdx])
+			partitioners[i], err = newPartitioner(&inputTypes[ord.ColIdx])
 			if err != nil {
 				return nil, err
 			}
@@ -99,9 +102,9 @@ type allSpooler struct {
 	OneInputNode
 	NonExplainable
 
-	allocator *Allocator
+	allocator *colmem.Allocator
 	// inputTypes contains the types of all of the columns from the input.
-	inputTypes []coltypes.T
+	inputTypes []types.T
 	// bufferedTuples stores all the values from the input after spooling. Each
 	// Vec in this batch is the entire column from the input.
 	bufferedTuples *appendOnlyBufferedBatch
@@ -113,7 +116,9 @@ type allSpooler struct {
 var _ spooler = &allSpooler{}
 var _ resetter = &allSpooler{}
 
-func newAllSpooler(allocator *Allocator, input Operator, inputTypes []coltypes.T) spooler {
+func newAllSpooler(
+	allocator *colmem.Allocator, input colexecbase.Operator, inputTypes []types.T,
+) spooler {
 	return &allSpooler{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
@@ -131,7 +136,7 @@ func (p *allSpooler) init() {
 
 func (p *allSpooler) spool(ctx context.Context) {
 	if p.spooled {
-		execerror.VectorizedInternalPanic("spool() is called for the second time")
+		colexecerror.InternalError("spool() is called for the second time")
 	}
 	p.spooled = true
 	for batch := p.input.Next(ctx); batch.Length() != 0; batch = p.input.Next(ctx) {
@@ -143,7 +148,7 @@ func (p *allSpooler) spool(ctx context.Context) {
 
 func (p *allSpooler) getValues(i int) coldata.Vec {
 	if !p.spooled {
-		execerror.VectorizedInternalPanic("getValues() is called before spool()")
+		colexecerror.InternalError("getValues() is called before spool()")
 	}
 	return p.bufferedTuples.ColVec(i)
 }
@@ -154,7 +159,7 @@ func (p *allSpooler) getNumTuples() int {
 
 func (p *allSpooler) getPartitionsCol() []bool {
 	if !p.spooled {
-		execerror.VectorizedInternalPanic("getPartitionsCol() is called before spool()")
+		colexecerror.InternalError("getPartitionsCol() is called before spool()")
 	}
 	return nil
 }
@@ -164,7 +169,7 @@ func (p *allSpooler) getWindowedBatch(startIdx, endIdx int) coldata.Batch {
 	// present on the original input batches, they have been removed when we were
 	// buffering up tuples.
 	for i, t := range p.inputTypes {
-		window := p.bufferedTuples.ColVec(i).Window(t, startIdx, endIdx)
+		window := p.bufferedTuples.ColVec(i).Window(typeconv.FromColumnType(&t), startIdx, endIdx)
 		p.windowedBatch.ReplaceCol(window, i)
 	}
 	p.windowedBatch.SetSelection(false)
@@ -182,11 +187,11 @@ func (p *allSpooler) reset(ctx context.Context) {
 }
 
 type sortOp struct {
-	allocator *Allocator
+	allocator *colmem.Allocator
 	input     spooler
 
 	// inputTypes contains the types of all of the columns from input.
-	inputTypes []coltypes.T
+	inputTypes []types.T
 	// orderingCols is the ordered list of column orderings that the sorter should
 	// sort on.
 	orderingCols []execinfrapb.Ordering_Column
@@ -278,7 +283,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 			p.output.ColVec(j).Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
-						ColType:     p.inputTypes[j],
+						ColType:     typeconv.FromColumnType(&p.inputTypes[j]),
 						Sel:         p.order,
 						Src:         p.input.getValues(j),
 						SrcStartIdx: p.emitted,
@@ -291,7 +296,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 		p.emitted = newEmitted
 		return p.output
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid sort state %v", p.state))
+	colexecerror.InternalError(fmt.Sprintf("invalid sort state %v", p.state))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -318,7 +323,7 @@ func (p *sortOp) sort(ctx context.Context) {
 
 	for i := range p.orderingCols {
 		inputVec := p.input.getValues(int(p.orderingCols[i].ColIdx))
-		p.sorters[i] = newSingleSorter(p.inputTypes[p.orderingCols[i].ColIdx], p.orderingCols[i].Direction, inputVec.MaybeHasNulls())
+		p.sorters[i] = newSingleSorter(&p.inputTypes[p.orderingCols[i].ColIdx], p.orderingCols[i].Direction, inputVec.MaybeHasNulls())
 		p.sorters[i].init(inputVec, p.order)
 	}
 
@@ -418,12 +423,12 @@ func (p *sortOp) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return p.input
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
 
-func (p *sortOp) ExportBuffered(Operator) coldata.Batch {
+func (p *sortOp) ExportBuffered(colexecbase.Operator) coldata.Batch {
 	if p.exported == p.input.getNumTuples() {
 		return coldata.ZeroBatch
 	}

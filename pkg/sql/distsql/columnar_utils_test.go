@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
@@ -97,8 +99,8 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 
 	acc := evalCtx.Mon.MakeBoundAccount()
 	defer acc.Close(ctx)
-	testAllocator := colexec.NewAllocator(ctx, &acc)
-	columnarizers := make([]colexec.Operator, len(args.inputs))
+	testAllocator := colmem.NewAllocator(ctx, &acc)
+	columnarizers := make([]colexecbase.Operator, len(args.inputs))
 	for i, input := range inputsColOp {
 		c, err := colexec.NewColumnarizer(ctx, testAllocator, flowCtx, int32(i)+1, input)
 		if err != nil {
@@ -113,7 +115,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		StreamingMemAccount:  &acc,
 		ProcessorConstructor: rowexec.NewProcessor,
 		DiskQueueCfg:         colcontainer.DiskQueueCfg{FS: tempFS},
-		FDSemaphore:          colexec.NewTestingSemaphore(256),
+		FDSemaphore:          colexecbase.NewTestingSemaphore(256),
 	}
 	var spilled bool
 	if args.forceDiskSpill {

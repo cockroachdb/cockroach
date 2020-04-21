@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 )
 
 // limitOp is an operator that implements limit, returning only the first n
@@ -30,11 +31,11 @@ type limitOp struct {
 	done bool
 }
 
-var _ Operator = &limitOp{}
+var _ colexecbase.Operator = &limitOp{}
 var _ closableOperator = &limitOp{}
 
 // NewLimitOp returns a new limit operator with the given limit.
-func NewLimitOp(input Operator, limit int) Operator {
+func NewLimitOp(input colexecbase.Operator, limit int) colexecbase.Operator {
 	c := &limitOp{
 		OneInputNode: NewOneInputNode(input),
 		limit:        limit,

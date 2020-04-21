@@ -28,15 +28,20 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
+
+// Remove unused warning.
+var _ = execgen.UNSAFEGET
 
 // {{/*
 // Declarations to make the template compile properly.
@@ -65,10 +70,11 @@ const _TYPES_T = coltypes.Unhandled
 // stream of rows, ordered according to a set of columns. The rows in each input
 // stream are assumed to be ordered according to the same set of columns.
 type OrderedSynchronizer struct {
-	allocator   *Allocator
-	inputs      []Operator
-	ordering    sqlbase.ColumnOrdering
-	columnTypes []coltypes.T
+	allocator *colmem.Allocator
+	inputs    []colexecbase.Operator
+	ordering  sqlbase.ColumnOrdering
+	typs      []types.T
+	physTypes []coltypes.T
 
 	// inputBatches stores the current batch for each input.
 	inputBatches []coldata.Batch
@@ -103,7 +109,7 @@ type OrderedSynchronizer struct {
 	outColsMap []int
 }
 
-var _ Operator = &OrderedSynchronizer{}
+var _ colexecbase.Operator = &OrderedSynchronizer{}
 
 // ChildCount implements the execinfrapb.OpNode interface.
 func (o *OrderedSynchronizer) ChildCount(verbose bool) int {
@@ -117,14 +123,19 @@ func (o *OrderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
 
 // NewOrderedSynchronizer creates a new OrderedSynchronizer.
 func NewOrderedSynchronizer(
-	allocator *Allocator, inputs []Operator, typs []coltypes.T, ordering sqlbase.ColumnOrdering,
-) *OrderedSynchronizer {
+	allocator *colmem.Allocator,
+	inputs []colexecbase.Operator,
+	typs []types.T,
+	ordering sqlbase.ColumnOrdering,
+) (*OrderedSynchronizer, error) {
+	physTypes, err := typeconv.FromColumnTypes(typs)
 	return &OrderedSynchronizer{
-		allocator:   allocator,
-		inputs:      inputs,
-		ordering:    ordering,
-		columnTypes: typs,
-	}
+		allocator: allocator,
+		inputs:    inputs,
+		ordering:  ordering,
+		typs:      typs,
+		physTypes: physTypes,
+	}, err
 }
 
 // Next is part of the Operator interface.
@@ -157,7 +168,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				srcRowIdx = sel[srcRowIdx]
 			}
-			for i, physType := range o.columnTypes {
+			for i, physType := range o.physTypes {
 				vec := batch.ColVec(i)
 				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(srcRowIdx) {
 					o.outNulls[i].SetNull(outputIdx)
@@ -171,7 +182,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 						execgen.SET(outCol, outputIdx, v)
 					// {{end}}
 					default:
-						execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", physType))
+						colexecerror.InternalError(fmt.Sprintf("unhandled type %s", physType))
 					}
 				}
 			}
@@ -201,19 +212,19 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 // Init is part of the Operator interface.
 func (o *OrderedSynchronizer) Init() {
 	o.inputIndices = make([]int, len(o.inputs))
-	o.output = o.allocator.NewMemBatch(o.columnTypes)
-	o.outNulls = make([]*coldata.Nulls, len(o.columnTypes))
-	o.outColsMap = make([]int, len(o.columnTypes))
+	o.output = o.allocator.NewMemBatch(o.typs)
+	o.outNulls = make([]*coldata.Nulls, len(o.typs))
+	o.outColsMap = make([]int, len(o.typs))
 	for i, outVec := range o.output.ColVecs() {
 		o.outNulls[i] = outVec.Nulls()
-		switch o.columnTypes[i] {
+		switch o.physTypes[i] {
 		// {{range .}}
 		case _TYPES_T:
 			o.outColsMap[i] = len(o.out_TYPECols)
 			o.out_TYPECols = append(o.out_TYPECols, outVec._TYPE())
 		// {{end}}
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", o.columnTypes[i]))
+			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", &o.typs[i]))
 		}
 	}
 	for i := range o.inputs {
@@ -221,8 +232,8 @@ func (o *OrderedSynchronizer) Init() {
 	}
 	o.comparators = make([]vecComparator, len(o.ordering))
 	for i := range o.ordering {
-		typ := o.columnTypes[o.ordering[i].ColIdx]
-		o.comparators[i] = GetVecComparator(typ, len(o.inputs))
+		typ := o.typs[o.ordering[i].ColIdx]
+		o.comparators[i] = GetVecComparator(&typ, len(o.inputs))
 	}
 }
 
@@ -247,7 +258,7 @@ func (o *OrderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {
 			case encoding.Descending:
 				return -res
 			default:
-				execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected direction value %d", d))
+				colexecerror.InternalError(fmt.Sprintf("unexpected direction value %d", d))
 			}
 		}
 	}

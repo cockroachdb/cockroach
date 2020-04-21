@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -82,7 +83,7 @@ func TestIsNullProjOp(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.desc, func(t *testing.T) {
-			opConstructor := func(input []Operator) (Operator, error) {
+			opConstructor := func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 				projExpr := "IS NULL"
 				if c.negate {
 					projExpr = "IS NOT NULL"
@@ -156,7 +157,7 @@ func TestIsNullSelOp(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.desc, func(t *testing.T) {
-			opConstructor := func(input []Operator) (Operator, error) {
+			opConstructor := func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 				selExpr := "IS NULL"
 				if c.negate {
 					selExpr = "IS NOT NULL"

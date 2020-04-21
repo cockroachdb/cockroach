@@ -15,21 +15,24 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type caseOp struct {
-	allocator *Allocator
+	allocator *colmem.Allocator
 	buffer    *bufferOp
 
-	caseOps []Operator
-	elseOp  Operator
+	caseOps []colexecbase.Operator
+	elseOp  colexecbase.Operator
 
 	thenIdxs  []int
 	outputIdx int
-	typ       coltypes.T
+	typ       *types.T
 
 	// origSel is a buffer used to keep track of the original selection vector of
 	// the input batch. We need to do this because we're going to destructively
@@ -58,14 +61,14 @@ func (c *caseOp) Child(nth int, verbose bool) execinfra.OpNode {
 	} else if nth == 1+len(c.caseOps) {
 		return c.elseOp
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid idx %d", nth))
+	colexecerror.InternalError(fmt.Sprintf("invalid idx %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
 
 func (c *caseOp) InternalMemoryUsage() int {
 	// We internally use two selection vectors, origSel and prevSel.
-	return 2 * sizeOfBatchSizeSelVector
+	return 2 * colmem.SizeOfBatchSizeSelVector
 }
 
 // NewCaseOp returns an operator that runs a case statement.
@@ -79,14 +82,14 @@ func (c *caseOp) InternalMemoryUsage() int {
 // thenCol is the index into the output batch to write to.
 // typ is the type of the CASE expression.
 func NewCaseOp(
-	allocator *Allocator,
-	buffer Operator,
-	caseOps []Operator,
-	elseOp Operator,
+	allocator *colmem.Allocator,
+	buffer colexecbase.Operator,
+	caseOps []colexecbase.Operator,
+	elseOp colexecbase.Operator,
 	thenIdxs []int,
 	outputIdx int,
-	typ coltypes.T,
-) Operator {
+	typ *types.T,
+) colexecbase.Operator {
 	return &caseOp{
 		allocator: allocator,
 		buffer:    buffer.(*bufferOp),
@@ -165,7 +168,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 				outputCol.Copy(
 					coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
-							ColType:     c.typ,
+							ColType:     typeconv.FromColumnType(c.typ),
 							Src:         inputCol,
 							Sel:         toSubtract,
 							SrcStartIdx: 0,
@@ -232,7 +235,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 			outputCol.Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
-						ColType:     c.typ,
+						ColType:     typeconv.FromColumnType(c.typ),
 						Src:         inputCol,
 						Sel:         batch.Selection(),
 						SrcStartIdx: 0,

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -248,14 +249,14 @@ func (ds *ServerImpl) setupFlow(
 			return ctx, nil, err
 		}
 
-		var be sessiondata.BytesEncodeFormat
+		var be lex.BytesEncodeFormat
 		switch req.EvalContext.BytesEncodeFormat {
 		case execinfrapb.BytesEncodeFormat_HEX:
-			be = sessiondata.BytesEncodeHex
+			be = lex.BytesEncodeHex
 		case execinfrapb.BytesEncodeFormat_ESCAPE:
-			be = sessiondata.BytesEncodeEscape
+			be = lex.BytesEncodeEscape
 		case execinfrapb.BytesEncodeFormat_BASE64:
-			be = sessiondata.BytesEncodeBase64
+			be = lex.BytesEncodeBase64
 		default:
 			return nil, nil, errors.AssertionFailedf("unknown byte encode format: %s",
 				errors.Safe(req.EvalContext.BytesEncodeFormat))

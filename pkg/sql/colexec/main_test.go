@@ -18,7 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -29,7 +30,7 @@ import (
 
 var (
 	// testAllocator is an Allocator with an unlimited budget for use in tests.
-	testAllocator *Allocator
+	testAllocator *colmem.Allocator
 
 	// testMemMonitor and testMemAcc are a test monitor with an unlimited budget
 	// and a memory account bound to it for use in tests.
@@ -50,7 +51,7 @@ func TestMain(m *testing.M) {
 		defer testMemMonitor.Stop(ctx)
 		memAcc := testMemMonitor.MakeBoundAccount()
 		testMemAcc = &memAcc
-		testAllocator = NewAllocator(ctx, testMemAcc)
+		testAllocator = colmem.NewAllocator(ctx, testMemAcc)
 		defer testMemAcc.Close(ctx)
 
 		testDiskMonitor = execinfra.NewTestDiskMonitor(ctx, cluster.MakeTestingClusterSettings())
@@ -64,7 +65,7 @@ func TestMain(m *testing.M) {
 		randomBatchSize := generateBatchSize()
 		fmt.Printf("coldata.BatchSize() is set to %d\n", randomBatchSize)
 		if err := coldata.SetBatchSizeForTests(randomBatchSize); err != nil {
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 		return m.Run()
 	}())

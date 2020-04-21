@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
@@ -147,10 +149,10 @@ type memColumn struct {
 }
 
 // NewMemColumn returns a new memColumn, initialized with a length.
-func NewMemColumn(t coltypes.T, n int) Vec {
+func NewMemColumn(t *types.T, n int) Vec {
 	nulls := NewNulls(n)
 
-	switch t {
+	switch t := typeconv.FromColumnType(t); t {
 	case coltypes.Bool:
 		return &memColumn{t: t, col: make([]bool, n), nulls: nulls}
 	case coltypes.Bytes:

@@ -10,7 +10,7 @@
 
 package execgen
 
-import "github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+import "github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 
 const nonTemplatePanic = "do not call from non-template code"
 
@@ -32,7 +32,7 @@ var (
 // UNSAFEGET is a template function. Use this if you are not keeping data around
 // (including passing it to SET).
 func UNSAFEGET(target, i interface{}) interface{} {
-	execerror.VectorizedInternalPanic(nonTemplatePanic)
+	colexecerror.InternalError(nonTemplatePanic)
 	return nil
 }
 
@@ -41,54 +41,54 @@ func UNSAFEGET(target, i interface{}) interface{} {
 // source is. You must use this on the result of UNSAFEGET if you wish to store
 // that result past the lifetime of the batch you UNSAFEGET'd from.
 func COPYVAL(dest, src interface{}) {
-	execerror.VectorizedInternalPanic(nonTemplatePanic)
+	colexecerror.InternalError(nonTemplatePanic)
 }
 
 // SET is a template function.
 func SET(target, i, new interface{}) {
-	execerror.VectorizedInternalPanic(nonTemplatePanic)
+	colexecerror.InternalError(nonTemplatePanic)
 }
 
 // SLICE is a template function.
 func SLICE(target, start, end interface{}) interface{} {
-	execerror.VectorizedInternalPanic(nonTemplatePanic)
+	colexecerror.InternalError(nonTemplatePanic)
 	return nil
 }
 
 // COPYSLICE is a template function.
 func COPYSLICE(target, src, destIdx, srcStartIdx, srcEndIdx interface{}) {
-	execerror.VectorizedInternalPanic(nonTemplatePanic)
+	colexecerror.InternalError(nonTemplatePanic)
 }
 
 // APPENDSLICE is a template function.
 func APPENDSLICE(target, src, destIdx, srcStartIdx, srcEndIdx interface{}) {
-	execerror.VectorizedInternalPanic(nonTemplatePanic)
+	colexecerror.InternalError(nonTemplatePanic)
 }
 
 // APPENDVAL is a template function.
 func APPENDVAL(target, v interface{}) {
-	execerror.VectorizedInternalPanic(nonTemplatePanic)
+	colexecerror.InternalError(nonTemplatePanic)
 }
 
 // LEN is a template function.
 func LEN(target interface{}) interface{} {
-	execerror.VectorizedInternalPanic(nonTemplatePanic)
+	colexecerror.InternalError(nonTemplatePanic)
 	return nil
 }
 
 // ZERO is a template function.
 func ZERO(target interface{}) {
-	execerror.VectorizedInternalPanic(nonTemplatePanic)
+	colexecerror.InternalError(nonTemplatePanic)
 }
 
 // RANGE is a template function.
 func RANGE(loopVariableIdent, target, start, end interface{}) bool {
-	execerror.VectorizedInternalPanic(nonTemplatePanic)
+	colexecerror.InternalError(nonTemplatePanic)
 	return false
 }
 
 // WINDOW is a template function.
 func WINDOW(target, start, end interface{}) interface{} {
-	execerror.VectorizedInternalPanic(nonTemplatePanic)
+	colexecerror.InternalError(nonTemplatePanic)
 	return nil
 }

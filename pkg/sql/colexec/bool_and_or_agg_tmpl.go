@@ -21,14 +21,11 @@ package colexec
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	// {{/*
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	// */}}
-	// HACK: crlfmt removes the "*/}}" comment if it's the last line in the import
-	// block. This was picked because it sorts after "pkg/sql/colexec/execerror" and
-	// has no deps.
-	_ "github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 )
+
+// Remove unused warning.
+var _ = colexecerror.InternalError
 
 // {{/*
 
@@ -36,7 +33,7 @@ import (
 // first input to the result of a boolean operation of the second and the third
 // inputs.
 func _ASSIGN_BOOL_OP(_, _, _ string) {
-	execerror.VectorizedInternalPanic("")
+	colexecerror.InternalError("")
 }
 
 // */}}

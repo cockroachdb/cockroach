@@ -19,12 +19,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -234,7 +235,7 @@ type cFetcher struct {
 	// adapter is a utility struct that helps with memory accounting.
 	adapter struct {
 		ctx       context.Context
-		allocator *Allocator
+		allocator *colmem.Allocator
 		batch     coldata.Batch
 		err       error
 	}
@@ -244,7 +245,7 @@ type cFetcher struct {
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
 func (rf *cFetcher) Init(
-	allocator *Allocator,
+	allocator *colmem.Allocator,
 	reverse bool,
 	lockStr sqlbase.ScanLockingStrength,
 	returnRangeInfo bool,
@@ -293,10 +294,11 @@ func (rf *cFetcher) Init(
 		allExtraValColOrdinals: oldTable.allExtraValColOrdinals[:0],
 	}
 
-	typs := make([]coltypes.T, len(colDescriptors))
+	typs := make([]types.T, len(colDescriptors))
 	for i := range typs {
-		typs[i] = typeconv.FromColumnType(&colDescriptors[i].Type)
-		if typs[i] == coltypes.Unhandled && tableArgs.ValNeededForCol.Contains(i) {
+		typs[i] = colDescriptors[i].Type
+		physType := typeconv.FromColumnType(&typs[i])
+		if physType == coltypes.Unhandled && tableArgs.ValNeededForCol.Contains(i) {
 			// Only return an error if the type is unhandled and needed. If not needed,
 			// a placeholder Vec will be created.
 			return errors.Errorf("unhandled type %+v", &colDescriptors[i].Type)
@@ -599,7 +601,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInitFetch:
 			moreKeys, kv, newSpan, err := rf.fetcher.NextKV(ctx)
 			if err != nil {
-				return nil, execerror.NewStorageError(err)
+				return nil, colexecerror.NewStorageError(err)
 			}
 			if !moreKeys {
 				rf.machine.state[0] = stateEmitLastBatch
@@ -748,7 +750,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			for {
 				moreRows, kv, _, err := rf.fetcher.NextKV(ctx)
 				if err != nil {
-					return nil, execerror.NewStorageError(err)
+					return nil, colexecerror.NewStorageError(err)
 				}
 				if debugState {
 					log.Infof(ctx, "found kv %s, seeking to prefix %s", kv.Key, rf.machine.seekPrefix)
@@ -780,7 +782,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateFetchNextKVWithUnfinishedRow:
 			moreKVs, kv, _, err := rf.fetcher.NextKV(ctx)
 			if err != nil {
-				return nil, execerror.NewStorageError(err)
+				return nil, colexecerror.NewStorageError(err)
 			}
 			if !moreKVs {
 				// No more data. Finalize the row and exit.
@@ -880,8 +882,8 @@ func (rf *cFetcher) pushState(state fetcherState) {
 
 // getDatumAt returns the converted datum object at the given (colIdx, rowIdx).
 // This function is meant for tracing and should not be used in hot paths.
-func (rf *cFetcher) getDatumAt(colIdx int, rowIdx int, typ types.T) tree.Datum {
-	return PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, rf.table.da, &typ)
+func (rf *cFetcher) getDatumAt(colIdx int, rowIdx int, typ *types.T) tree.Datum {
+	return PhysicalTypeColElemToDatum(rf.machine.colvecs[colIdx], rowIdx, rf.table.da, typ)
 }
 
 // processValue processes the state machine's current value component, setting
@@ -903,7 +905,7 @@ func (rf *cFetcher) processValue(
 		for _, idx := range rf.table.allIndexColOrdinals {
 			buf.WriteByte('/')
 			if idx != -1 {
-				buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
+				buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, &rf.table.cols[idx].Type).String())
 			} else {
 				buf.WriteByte('?')
 			}
@@ -997,7 +999,7 @@ func (rf *cFetcher) processValue(
 					for j := range table.extraTypes {
 						idx := table.allExtraValColOrdinals[j]
 						buf.WriteByte('/')
-						buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
+						buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx, &rf.table.cols[idx].Type).String())
 					}
 					prettyValue = buf.String()
 				}
@@ -1076,7 +1078,7 @@ func (rf *cFetcher) processValueSingle(
 			rf.machine.remainingValueColsByIdx.Remove(idx)
 
 			if rf.traceKV {
-				prettyValue = rf.getDatumAt(idx, rf.machine.rowIdx, *typ).String()
+				prettyValue = rf.getDatumAt(idx, rf.machine.rowIdx, typ).String()
 			}
 			if row.DebugRowFetch {
 				log.Infof(ctx, "Scan %s -> %v", rf.machine.nextKV.Key, "?")
@@ -1166,7 +1168,7 @@ func (rf *cFetcher) processValueBytes(
 		}
 		rf.machine.remainingValueColsByIdx.Remove(idx)
 		if rf.traceKV {
-			dVal := rf.getDatumAt(idx, rf.machine.rowIdx, *valTyp)
+			dVal := rf.getDatumAt(idx, rf.machine.rowIdx, valTyp)
 			if _, err := fmt.Fprintf(rf.machine.prettyValueBuf, "/%v", dVal.String()); err != nil {
 				return "", "", err
 			}
@@ -1201,7 +1203,7 @@ func (rf *cFetcher) fillNulls() error {
 			var indexColValues []string
 			for _, idx := range table.indexColOrdinals {
 				if idx != -1 {
-					indexColValues = append(indexColValues, rf.getDatumAt(idx, rf.machine.rowIdx, rf.table.cols[idx].Type).String())
+					indexColValues = append(indexColValues, rf.getDatumAt(idx, rf.machine.rowIdx, &rf.table.cols[idx].Type).String())
 				} else {
 					indexColValues = append(indexColValues, "?")
 				}

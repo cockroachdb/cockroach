@@ -16,9 +16,10 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 )
 
@@ -30,13 +31,13 @@ type unorderedSynchronizerMsg struct {
 	b        coldata.Batch
 }
 
-var _ Operator = &ParallelUnorderedSynchronizer{}
+var _ colexecbase.Operator = &ParallelUnorderedSynchronizer{}
 var _ execinfra.OpNode = &ParallelUnorderedSynchronizer{}
 
 // ParallelUnorderedSynchronizer is an Operator that combines multiple Operator streams
 // into one.
 type ParallelUnorderedSynchronizer struct {
-	inputs []Operator
+	inputs []colexecbase.Operator
 	// readNextBatch is a slice of channels, where each channel corresponds to the
 	// input at the same index in inputs. It is used as a barrier for input
 	// goroutines to wait on until the Next goroutine signals that it is safe to
@@ -90,7 +91,7 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.O
 // guaranteed that these spawned goroutines will have completed on any error or
 // zero-length batch received from Next.
 func NewParallelUnorderedSynchronizer(
-	inputs []Operator, typs []coltypes.T, wg *sync.WaitGroup,
+	inputs []colexecbase.Operator, typs []types.T, wg *sync.WaitGroup,
 ) *ParallelUnorderedSynchronizer {
 	readNextBatch := make([]chan struct{}, len(inputs))
 	for i := range readNextBatch {
@@ -131,7 +132,7 @@ func (s *ParallelUnorderedSynchronizer) Init() {
 func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 	ctx, s.cancelFn = contextutil.WithCancel(ctx)
 	for i, input := range s.inputs {
-		s.nextBatch[i] = func(input Operator, inputIdx int) func() {
+		s.nextBatch[i] = func(input colexecbase.Operator, inputIdx int) func() {
 			return func() {
 				s.batches[inputIdx] = input.Next(ctx)
 			}
@@ -141,7 +142,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 		// TODO(asubiotto): Most inputs are Inboxes, and these have handler
 		// goroutines just sitting around waiting for cancellation. I wonder if we
 		// could reuse those goroutines to push batches to batchCh directly.
-		go func(input Operator, inputIdx int) {
+		go func(input colexecbase.Operator, inputIdx int) {
 			defer func() {
 				if int(atomic.AddUint32(&s.numFinishedInputs, 1)) == len(s.inputs) {
 					close(s.batchCh)
@@ -153,7 +154,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				inputIdx: inputIdx,
 			}
 			for {
-				if err := execerror.CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
+				if err := colexecerror.CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
 					select {
 					// Non-blocking write to errCh, if an error is present the main
 					// goroutine will use that and cancel all inputs.
@@ -216,7 +217,7 @@ func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch 
 			// propagate this error through a panic.
 			s.cancelFn()
 			s.internalWaitGroup.Wait()
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 	case msg := <-s.batchCh:
 		if msg == nil {
@@ -226,7 +227,7 @@ func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch 
 			select {
 			case err := <-s.errCh:
 				if err != nil {
-					execerror.VectorizedInternalPanic(err)
+					colexecerror.InternalError(err)
 				}
 			default:
 			}

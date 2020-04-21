@@ -432,7 +432,6 @@ func WriteTableDescs(
 	databases []*sqlbase.DatabaseDescriptor,
 	tables []*sqlbase.TableDescriptor,
 	descCoverage tree.DescriptorCoverage,
-	user string,
 	settings *cluster.Settings,
 	extra []roachpb.KeyValue,
 ) error {
@@ -924,7 +923,7 @@ func createImportingTables(
 	if !details.PrepareCompleted {
 		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			// Write the new TableDescriptors which are set in the OFFLINE state.
-			if err := WriteTableDescs(ctx, txn, databases, tables, details.DescriptorCoverage, r.job.Payload().Username, r.settings, nil /* extra */); err != nil {
+			if err := WriteTableDescs(ctx, txn, databases, tables, details.DescriptorCoverage, r.settings, nil /* extra */); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(r.tables), len(databases))
 			}
 

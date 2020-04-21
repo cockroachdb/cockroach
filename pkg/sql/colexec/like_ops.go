@@ -13,8 +13,10 @@ package colexec
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -87,8 +89,8 @@ func getLikeOperatorType(pattern string, negate bool) (likeOpType, string, error
 // pattern, or NOT LIKE if the negate argument is true. The implementation
 // varies depending on the complexity of the pattern.
 func GetLikeOperator(
-	ctx *tree.EvalContext, input Operator, colIdx int, pattern string, negate bool,
-) (Operator, error) {
+	ctx *tree.EvalContext, input colexecbase.Operator, colIdx int, pattern string, negate bool,
+) (colexecbase.Operator, error) {
 	likeOpType, pattern, err := getLikeOperatorType(pattern, negate)
 	if err != nil {
 		return nil, err
@@ -172,20 +174,20 @@ func isWildcard(c byte) bool {
 // result of the specified LIKE pattern, or NOT LIKE if the negate argument is
 // true. The implementation varies depending on the complexity of the pattern.
 func GetLikeProjectionOperator(
-	allocator *Allocator,
+	allocator *colmem.Allocator,
 	ctx *tree.EvalContext,
-	input Operator,
+	input colexecbase.Operator,
 	colIdx int,
 	resultIdx int,
 	pattern string,
 	negate bool,
-) (Operator, error) {
+) (colexecbase.Operator, error) {
 	likeOpType, pattern, err := getLikeOperatorType(pattern, negate)
 	if err != nil {
 		return nil, err
 	}
 	pat := []byte(pattern)
-	input = newVectorTypeEnforcer(allocator, input, coltypes.Bool, resultIdx)
+	input = newVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
 	base := projConstOpBase{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,

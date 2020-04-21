@@ -16,10 +16,13 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -165,7 +168,7 @@ type externalHashJoiner struct {
 	mu syncutil.Mutex
 
 	state              externalHashJoinerState
-	unlimitedAllocator *Allocator
+	unlimitedAllocator *colmem.Allocator
 	spec               hashJoinerSpec
 	diskQueueCfg       colcontainer.DiskQueueCfg
 
@@ -270,19 +273,19 @@ const (
 // let the partitioned disk queues acquire file descriptors instead of acquiring
 // them up front in Next. Should be true only in tests.
 func newExternalHashJoiner(
-	unlimitedAllocator *Allocator,
+	unlimitedAllocator *colmem.Allocator,
 	spec hashJoinerSpec,
-	leftInput, rightInput Operator,
+	leftInput, rightInput colexecbase.Operator,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	createReusableDiskBackedSorter func(input Operator, inputTypes []coltypes.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (Operator, error),
+	createReusableDiskBackedSorter func(input colexecbase.Operator, inputTypes []types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (colexecbase.Operator, error),
 	numForcedRepartitions int,
 	delegateFDAcquisitions bool,
 	diskAcc *mon.BoundAccount,
-) Operator {
+) colexecbase.Operator {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeClearAndReuseCache {
-		execerror.VectorizedInternalPanic(errors.Errorf("external hash joiner instantiated with suboptimal disk queue cache mode: %d", diskQueueCfg.CacheMode))
+		colexecerror.InternalError(errors.Errorf("external hash joiner instantiated with suboptimal disk queue cache mode: %d", diskQueueCfg.CacheMode))
 	}
 	partitionedDiskQueueSemaphore := fdSemaphore
 	if !delegateFDAcquisitions {
@@ -343,14 +346,14 @@ func newExternalHashJoiner(
 		leftJoinerInput, spec.left.sourceTypes, leftOrdering, externalSorterMaxNumberPartitions,
 	)
 	if err != nil {
-		execerror.VectorizedInternalPanic(err)
+		colexecerror.InternalError(err)
 	}
 	rightOrdering := makeOrderingCols(spec.right.eqCols)
 	rightPartitionSorter, err := createReusableDiskBackedSorter(
 		rightJoinerInput, spec.right.sourceTypes, rightOrdering, externalSorterMaxNumberPartitions,
 	)
 	if err != nil {
-		execerror.VectorizedInternalPanic(err)
+		colexecerror.InternalError(err)
 	}
 	diskBackedSortMerge, err := newMergeJoinOp(
 		unlimitedAllocator, memoryLimit, diskQueueCfg,
@@ -359,7 +362,7 @@ func newExternalHashJoiner(
 		diskAcc,
 	)
 	if err != nil {
-		execerror.VectorizedInternalPanic(err)
+		colexecerror.InternalError(err)
 	}
 	ehj := &externalHashJoiner{
 		twoInputNode:              newTwoInputNode(leftInput, rightInput),
@@ -399,7 +402,7 @@ func newExternalHashJoiner(
 	ehj.recursiveScratch.leftBatch = unlimitedAllocator.NewMemBatchNoCols(spec.left.sourceTypes, 0 /* size */)
 	sameSourcesSchema := len(spec.left.sourceTypes) == len(spec.right.sourceTypes)
 	for i, leftType := range spec.left.sourceTypes {
-		if i < len(spec.right.sourceTypes) && leftType != spec.right.sourceTypes[i] {
+		if i < len(spec.right.sourceTypes) && !leftType.Identical(&spec.right.sourceTypes[i]) {
 			sameSourcesSchema = false
 		}
 	}
@@ -459,7 +462,7 @@ func (hj *externalHashJoiner) partitionBatch(
 				for i, colvec := range colVecs {
 					colvec.Copy(coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
-							ColType:   sourceSpec.sourceTypes[i],
+							ColType:   typeconv.FromColumnType(&sourceSpec.sourceTypes[i]),
 							Src:       batch.ColVec(i),
 							Sel:       sel,
 							SrcEndIdx: len(sel),
@@ -469,7 +472,7 @@ func (hj *externalHashJoiner) partitionBatch(
 				scratchBatch.SetLength(len(sel))
 			})
 			if err := partitioner.Enqueue(ctx, partitionIdx, scratchBatch); err != nil {
-				execerror.VectorizedInternalPanic(err)
+				colexecerror.InternalError(err)
 			}
 			partitionInfo, ok := hj.partitionsToJoinUsingInMemHash[partitionIdx]
 			if !ok {
@@ -481,7 +484,7 @@ func (hj *externalHashJoiner) partitionBatch(
 				// We cannot use allocator's methods directly because those
 				// look at the capacities of the vectors, and in our case only
 				// first len(sel) tuples belong to the "current" batch.
-				partitionInfo.rightMemSize += getProportionalBatchMemSize(scratchBatch, int64(len(sel)))
+				partitionInfo.rightMemSize += colmem.GetProportionalBatchMemSize(scratchBatch, int64(len(sel)))
 			}
 		}
 	}
@@ -511,10 +514,10 @@ StateChanged:
 				// from before doing that to exempt them from releasing their FDs to
 				// the semaphore.
 				if err := hj.leftPartitioner.CloseAllOpenWriteFileDescriptors(ctx); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					colexecerror.InternalError(err)
 				}
 				if err := hj.rightPartitioner.CloseAllOpenWriteFileDescriptors(ctx); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					colexecerror.InternalError(err)
 				}
 				hj.inMemHashJoiner.Init()
 				hj.partitionIdxOffset += hj.numBuckets
@@ -524,7 +527,7 @@ StateChanged:
 			if !hj.testingKnobs.delegateFDAcquisitions && hj.fdState.acquiredFDs == 0 {
 				toAcquire := hj.maxNumberActivePartitions
 				if err := hj.fdState.fdSemaphore.Acquire(ctx, toAcquire); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					colexecerror.InternalError(err)
 				}
 				hj.fdState.acquiredFDs = toAcquire
 			}
@@ -560,7 +563,7 @@ StateChanged:
 					}
 					for {
 						if err := partitioner.Dequeue(ctx, parentPartitionIdx, batch); err != nil {
-							execerror.VectorizedInternalPanic(err)
+							colexecerror.InternalError(err)
 						}
 						if batch.Length() == 0 {
 							break
@@ -570,7 +573,7 @@ StateChanged:
 					// We're done reading from this partition, and it will never be read
 					// from again, so we can close it.
 					if err := partitioner.CloseInactiveReadPartitions(ctx); err != nil {
-						execerror.VectorizedInternalPanic(err)
+						colexecerror.InternalError(err)
 					}
 					// We're done writing to the newly created partitions.
 					// TODO(yuzefovich): we should not release the descriptors here. The
@@ -583,7 +586,7 @@ StateChanged:
 					// partitions we want. This'll allow us to remove the call to
 					// CloseAllOpen... in the first state as well.
 					if err := partitioner.CloseAllOpenWriteFileDescriptors(ctx); err != nil {
-						execerror.VectorizedInternalPanic(err)
+						colexecerror.InternalError(err)
 					}
 				}
 				for idx := 0; idx < hj.numBuckets; idx++ {
@@ -660,10 +663,10 @@ StateChanged:
 				// We're done joining these partitions, so we close them and transition
 				// to joining new ones.
 				if err := hj.leftPartitioner.CloseInactiveReadPartitions(ctx); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					colexecerror.InternalError(err)
 				}
 				if err := hj.rightPartitioner.CloseInactiveReadPartitions(ctx); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					colexecerror.InternalError(err)
 				}
 				hj.state = externalHJJoinNewPartition
 				continue
@@ -692,10 +695,10 @@ StateChanged:
 				// We're done joining these partitions, so we close them and transition
 				// to joining new ones.
 				if err := hj.leftPartitioner.CloseInactiveReadPartitions(ctx); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					colexecerror.InternalError(err)
 				}
 				if err := hj.rightPartitioner.CloseInactiveReadPartitions(ctx); err != nil {
-					execerror.VectorizedInternalPanic(err)
+					colexecerror.InternalError(err)
 				}
 				hj.state = externalHJSortMergeNewPartition
 				continue
@@ -704,11 +707,11 @@ StateChanged:
 
 		case externalHJFinished:
 			if err := hj.idempotentCloseLocked(ctx); err != nil {
-				execerror.VectorizedInternalPanic(err)
+				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected externalHashJoinerState %d", hj.state))
+			colexecerror.InternalError(fmt.Sprintf("unexpected externalHashJoinerState %d", hj.state))
 		}
 	}
 }

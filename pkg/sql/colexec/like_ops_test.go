@@ -17,9 +17,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -90,7 +91,7 @@ func TestLikeOperators(t *testing.T) {
 	} {
 		runTests(
 			t, []tuples{tc.tups}, tc.expected, orderedVerifier,
-			func(input []Operator) (Operator, error) {
+			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 				ctx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 				return GetLikeOperator(&ctx, input[0], 0, tc.pattern, tc.negate)
 			})
@@ -101,7 +102,8 @@ func BenchmarkLikeOps(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Bytes})
+	typs := []types.T{*types.Bytes}
+	batch := testAllocator.NewMemBatch(typs)
 	col := batch.ColVec(0).Bytes()
 	width := 64
 	for i := 0; i < coldata.BatchSize(); i++ {
@@ -118,7 +120,7 @@ func BenchmarkLikeOps(b *testing.B) {
 	}
 
 	batch.SetLength(coldata.BatchSize())
-	source := NewRepeatableBatchSource(testAllocator, batch)
+	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	source.Init()
 
 	base := selConstOpBase{
@@ -141,7 +143,7 @@ func BenchmarkLikeOps(b *testing.B) {
 
 	testCases := []struct {
 		name string
-		op   Operator
+		op   colexecbase.Operator
 	}{
 		{name: "selPrefixBytesBytesConstOp", op: prefixOp},
 		{name: "selSuffixBytesBytesConstOp", op: suffixOp},

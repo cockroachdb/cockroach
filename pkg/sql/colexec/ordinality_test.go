@@ -15,8 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -66,7 +66,7 @@ func TestOrdinality(t *testing.T) {
 
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
-			func(input []Operator) (Operator, error) {
+			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 				return createTestOrdinalityOperator(ctx, flowCtx, input[0], tc.inputTypes)
 			})
 	}
@@ -84,9 +84,10 @@ func BenchmarkOrdinality(b *testing.B) {
 		},
 	}
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64, coltypes.Int64})
+	typs := []types.T{*types.Int, *types.Int, *types.Int}
+	batch := testAllocator.NewMemBatch(typs)
 	batch.SetLength(coldata.BatchSize())
-	source := NewRepeatableBatchSource(testAllocator, batch)
+	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	ordinality, err := createTestOrdinalityOperator(ctx, flowCtx, source, []types.T{*types.Int, *types.Int, *types.Int})
 	require.NoError(b, err)
 	ordinality.Init()
@@ -98,8 +99,8 @@ func BenchmarkOrdinality(b *testing.B) {
 }
 
 func createTestOrdinalityOperator(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, input Operator, inputTypes []types.T,
-) (Operator, error) {
+	ctx context.Context, flowCtx *execinfra.FlowCtx, input colexecbase.Operator, inputTypes []types.T,
+) (colexecbase.Operator, error) {
 	spec := &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
 		Core: execinfrapb.ProcessorCoreUnion{
@@ -108,7 +109,7 @@ func createTestOrdinalityOperator(
 	}
 	args := NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []Operator{input},
+		Inputs:              []colexecbase.Operator{input},
 		StreamingMemAccount: testMemAcc,
 	}
 	args.TestingKnobs.UseStreamingMemAccountForBuffering = true

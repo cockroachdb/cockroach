@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execerror
+package colexecerror
 
 import (
 	"bufio"
@@ -78,18 +78,18 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 		}
 
 		annotateErrorWithoutCode := true
-		var nvie *notVectorizedInternalError
-		if errors.As(err, &nvie) {
-			// A notVectorizedInternalError was not caused by the
-			// vectorized engine and represents an error that we don't
-			// want to annotate in case it doesn't have a valid PG code.
+		var nie *notInternalError
+		if errors.As(err, &nie) {
+			// A notInternalError was not caused by the vectorized engine and
+			// represents an error that we don't want to annotate in case it
+			// doesn't have a valid PG code.
 			annotateErrorWithoutCode = false
 		}
 		if code := pgerror.GetPGCode(err); annotateErrorWithoutCode && code == pgcode.Uncategorized {
 			// Any error without a code already is "surprising" and
 			// needs to be annotated to indicate that it was
 			// unexpected.
-			retErr = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error from the vectorized runtime")
+			retErr = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error from the vectorized engine")
 		}
 	}()
 	operation()
@@ -97,13 +97,11 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 }
 
 const (
-	colPackagePrefix          = "github.com/cockroachdb/cockroach/pkg/col"
-	colcontainerPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	colexecPackagePrefix      = "github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	colflowsetupPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/colflow"
-	execinfraPackagePrefix    = "github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	rowexecPackagePrefix      = "github.com/cockroachdb/cockroach/pkg/sql/rowexec"
-	treePackagePrefix         = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	colPackagesPrefix      = "github.com/cockroachdb/cockroach/pkg/col"
+	execinfraPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	rowexecPackagePrefix   = "github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	sqlColPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/col"
+	treePackagePrefix      = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // isPanicFromVectorizedEngine checks whether the panic that was emitted from
@@ -118,12 +116,10 @@ func isPanicFromVectorizedEngine(panicEmittedFrom string) bool {
 		// we say that the panic is not from the vectorized engine.
 		return false
 	}
-	return strings.HasPrefix(panicEmittedFrom, colPackagePrefix) ||
-		strings.HasPrefix(panicEmittedFrom, colcontainerPackagePrefix) ||
-		strings.HasPrefix(panicEmittedFrom, colexecPackagePrefix) ||
-		strings.HasPrefix(panicEmittedFrom, colflowsetupPackagePrefix) ||
+	return strings.HasPrefix(panicEmittedFrom, colPackagesPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, execinfraPackagePrefix) ||
 		strings.HasPrefix(panicEmittedFrom, rowexecPackagePrefix) ||
+		strings.HasPrefix(panicEmittedFrom, sqlColPackagesPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, treePackagePrefix)
 }
 
@@ -145,65 +141,58 @@ func NewStorageError(err error) *StorageError {
 	return &StorageError{error: err}
 }
 
-// notVectorizedInternalError is an error that originated outside of the
-// vectorized engine (for example, it was caused by a non-columnar builtin).
-// notVectorizedInternalError will be returned to the client not as an
+// notInternalError is an error that occurs not because the vectorized engine
+// happens to be in an unexpected state (for example, it was caused by a
+// non-columnar builtin).
+// notInternalError will be returned to the client not as an
 // "internal error" and without the stack trace.
-type notVectorizedInternalError struct {
+type notInternalError struct {
 	cause error
 }
 
-func newNotVectorizedInternalError(err error) *notVectorizedInternalError {
-	return &notVectorizedInternalError{cause: err}
+func newNotInternalError(err error) *notInternalError {
+	return &notInternalError{cause: err}
 }
 
 var (
-	_ causer.Causer  = &notVectorizedInternalError{}
-	_ errors.Wrapper = &notVectorizedInternalError{}
+	_ causer.Causer  = &notInternalError{}
+	_ errors.Wrapper = &notInternalError{}
 )
 
-func (e *notVectorizedInternalError) Error() string {
+func (e *notInternalError) Error() string {
 	return e.cause.Error()
 }
 
-func (e *notVectorizedInternalError) Cause() error {
+func (e *notInternalError) Cause() error {
 	return e.cause
 }
 
-func (e *notVectorizedInternalError) Unwrap() error {
+func (e *notInternalError) Unwrap() error {
 	return e.Cause()
 }
 
-func decodeNotVectorizedInternalError(
+func decodeNotInternalError(
 	_ context.Context, cause error, _ string, _ []string, _ proto.Message,
 ) error {
-	return newNotVectorizedInternalError(cause)
+	return newNotInternalError(cause)
 }
 
 func init() {
-	errors.RegisterWrapperDecoder(errors.GetTypeKey((*notVectorizedInternalError)(nil)), decodeNotVectorizedInternalError)
+	errors.RegisterWrapperDecoder(errors.GetTypeKey((*notInternalError)(nil)), decodeNotInternalError)
 }
 
-// VectorizedInternalPanic simply panics with the provided object. It will
-// always be returned as internal error to the client with the corresponding
-// stack trace. This method should be called to propagate all *unexpected*
-// errors that originated within the vectorized engine.
-func VectorizedInternalPanic(err interface{}) {
+// InternalError simply panics with the provided object. It will always be
+// caught and returned as internal error to the client with the corresponding
+// stack trace. This method should be called to propagate errors that resulted
+// in the vectorized engine being in an *unexpected* state.
+func InternalError(err interface{}) {
 	panic(err)
 }
 
-// VectorizedExpectedInternalPanic is the same as NonVectorizedPanic. It should
-// be called to propagate all *expected* errors that originated within the
-// vectorized engine.
-func VectorizedExpectedInternalPanic(err error) {
-	NonVectorizedPanic(err)
-}
-
-// NonVectorizedPanic panics with the error that is wrapped by
-// notVectorizedInternalError which will not be treated as internal error and
+// ExpectedError panics with the error that is wrapped by
+// notInternalError which will not be treated as internal error and
 // will not have a printed out stack trace. This method should be called to
-// propagate all errors that originated outside of the vectorized engine and
-// all expected errors from the vectorized engine.
-func NonVectorizedPanic(err error) {
-	panic(newNotVectorizedInternalError(err))
+// propagate errors that the vectorized engine *expects* to occur.
+func ExpectedError(err error) {
+	panic(newNotInternalError(err))
 }

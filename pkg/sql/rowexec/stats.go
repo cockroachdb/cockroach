@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -54,9 +53,7 @@ func (isc *inputStatCollector) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return isc.RowSource.(execinfra.OpNode)
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
-	// This code is unreachable, but the compiler cannot infer that.
-	return nil
+	panic(fmt.Sprintf("invalid index %d", nth))
 }
 
 // Next implements the RowSource interface. It calls Next on the embedded

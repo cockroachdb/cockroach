@@ -23,8 +23,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // NewWindowPeerGrouper creates a new Operator that puts 'true' in
@@ -36,13 +38,13 @@ import (
 //   'true' indicates the start of a new partition.
 // NOTE: the input *must* already be ordered on ordCols.
 func NewWindowPeerGrouper(
-	allocator *Allocator,
-	input Operator,
-	inputTyps []coltypes.T,
+	allocator *colmem.Allocator,
+	input colexecbase.Operator,
+	typs []types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	partitionColIdx int,
 	outputColIdx int,
-) (op Operator, err error) {
+) (op colexecbase.Operator, err error) {
 	allPeers := len(orderingCols) == 0
 	var distinctCol []bool
 	if !allPeers {
@@ -51,13 +53,13 @@ func NewWindowPeerGrouper(
 			orderIdxs[i] = ordCol.ColIdx
 		}
 		input, distinctCol, err = OrderedDistinctColsToOperators(
-			input, orderIdxs, inputTyps,
+			input, orderIdxs, typs,
 		)
 		if err != nil {
 			return nil, err
 		}
 	}
-	input = newVectorTypeEnforcer(allocator, input, coltypes.Bool, outputColIdx)
+	input = newVectorTypeEnforcer(allocator, input, types.Bool, outputColIdx)
 	initFields := windowPeerGrouperInitFields{
 		OneInputNode:    NewOneInputNode(input),
 		allocator:       allocator,
@@ -88,7 +90,7 @@ func NewWindowPeerGrouper(
 type windowPeerGrouperInitFields struct {
 	OneInputNode
 
-	allocator       *Allocator
+	allocator       *colmem.Allocator
 	partitionColIdx int
 	// distinctCol is the output column of the chain of ordered distinct
 	// operators in which 'true' will indicate that a new peer group begins with
@@ -106,7 +108,7 @@ type _PEER_GROUPER_STRINGOp struct {
 	// {{end}}
 }
 
-var _ Operator = &_PEER_GROUPER_STRINGOp{}
+var _ colexecbase.Operator = &_PEER_GROUPER_STRINGOp{}
 
 func (p *_PEER_GROUPER_STRINGOp) Init() {
 	p.input.Init()

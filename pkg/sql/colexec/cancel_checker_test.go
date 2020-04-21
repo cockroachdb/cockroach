@@ -14,9 +14,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -27,10 +28,11 @@ import (
 func TestCancelChecker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx, cancel := context.WithCancel(context.Background())
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
-	op := NewCancelChecker(NewNoop(NewRepeatableBatchSource(testAllocator, batch)))
+	typs := []types.T{*types.Int}
+	batch := testAllocator.NewMemBatch(typs)
+	op := NewCancelChecker(NewNoop(colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)))
 	cancel()
-	err := execerror.CatchVectorizedRuntimeError(func() {
+	err := colexecerror.CatchVectorizedRuntimeError(func() {
 		op.Next(ctx)
 	})
 	require.True(t, errors.Is(err, sqlbase.QueryCanceledError))

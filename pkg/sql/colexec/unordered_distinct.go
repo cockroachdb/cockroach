@@ -14,7 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // NewUnorderedDistinct creates an unordered distinct on the given distinct
@@ -22,16 +25,16 @@ import (
 // numHashBuckets determines the number of buckets that the hash table is
 // created with.
 func NewUnorderedDistinct(
-	allocator *Allocator,
-	input Operator,
+	allocator *colmem.Allocator,
+	input colexecbase.Operator,
 	distinctCols []uint32,
-	colTypes []coltypes.T,
+	typs []types.T,
 	numHashBuckets uint64,
-) Operator {
+) colexecbase.Operator {
 	ht := newHashTable(
 		allocator,
 		numHashBuckets,
-		colTypes,
+		typs,
 		distinctCols,
 		true, /* allowNullEquality */
 		hashTableDistinctMode,
@@ -41,7 +44,7 @@ func NewUnorderedDistinct(
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
 		ht:           ht,
-		output:       allocator.NewMemBatch(colTypes),
+		output:       allocator.NewMemBatch(typs),
 	}
 }
 
@@ -55,7 +58,7 @@ func NewUnorderedDistinct(
 type unorderedDistinct struct {
 	OneInputNode
 
-	allocator     *Allocator
+	allocator     *colmem.Allocator
 	ht            *hashTable
 	buildFinished bool
 
@@ -65,7 +68,7 @@ type unorderedDistinct struct {
 	outputBatchStart int
 }
 
-var _ Operator = &unorderedDistinct{}
+var _ colexecbase.Operator = &unorderedDistinct{}
 
 func (op *unorderedDistinct) Init() {
 	op.input.Init()
@@ -100,7 +103,7 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 			toCol.Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
-						ColType:     typ,
+						ColType:     typeconv.FromColumnType(&typ),
 						Src:         fromCol,
 						SrcStartIdx: op.outputBatchStart,
 						SrcEndIdx:   batchEnd,

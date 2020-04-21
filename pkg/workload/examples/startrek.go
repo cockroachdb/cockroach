@@ -11,7 +11,7 @@
 package examples
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
@@ -48,7 +48,7 @@ func (startrek) Tables() []workload.Table {
 			Schema: episodesSchema,
 			InitialRows: workload.TypedTuples(
 				len(startrekEpisodes),
-				episodesColTypes,
+				episodesTypes,
 				func(rowIdx int) []interface{} { return startrekEpisodes[rowIdx] },
 			),
 		},
@@ -57,19 +57,19 @@ func (startrek) Tables() []workload.Table {
 			Schema: quotesSchema,
 			InitialRows: workload.TypedTuples(
 				len(startrekQuotes),
-				quotesColTypes,
+				quotesTypes,
 				func(rowIdx int) []interface{} { return startrekQuotes[rowIdx] },
 			),
 		},
 	}
 }
 
-var episodesColTypes = []coltypes.T{
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Bytes,
-	coltypes.Float64,
+var episodesTypes = []types.T{
+	*types.Int,
+	*types.Int,
+	*types.Int,
+	*types.Bytes,
+	*types.Float,
 }
 
 // The data that follows was derived from the 'startrek' fortune cookie file.
@@ -155,11 +155,11 @@ var startrekEpisodes = [...][]interface{}{
 	{79, 3, 24, `Turnabout Intruder`, 5928.5},
 }
 
-var quotesColTypes = []coltypes.T{
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Float64,
-	coltypes.Int64,
+var quotesTypes = []types.T{
+	*types.Bytes,
+	*types.Bytes,
+	*types.Float,
+	*types.Int,
 }
 
 var startrekQuotes = [...][]interface{}{

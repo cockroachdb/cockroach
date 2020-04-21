@@ -20,8 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde/arrowserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	mmap "github.com/edsrzf/mmap-go"
 	flatbuffers "github.com/google/flatbuffers/go"
 	"github.com/pkg/errors"
@@ -44,7 +46,7 @@ type FileSerializer struct {
 	scratch [4]byte
 
 	w    *countingWriter
-	typs []coltypes.T
+	typs []types.T
 	fb   *flatbuffers.Builder
 	a    *ArrowBatchConverter
 	rb   *RecordBatchSerializer
@@ -52,9 +54,9 @@ type FileSerializer struct {
 	recordBatches []fileBlock
 }
 
-// NewFileSerializer creates a FileSerializer for the given coltypes. The caller is
+// NewFileSerializer creates a FileSerializer for the given types. The caller is
 // responsible for closing the given writer.
-func NewFileSerializer(w io.Writer, typs []coltypes.T) (*FileSerializer, error) {
+func NewFileSerializer(w io.Writer, typs []types.T) (*FileSerializer, error) {
 	a, err := NewArrowBatchConverter(typs)
 	if err != nil {
 		return nil, err
@@ -161,7 +163,7 @@ type FileDeserializer struct {
 
 	idx  int
 	end  int
-	typs []coltypes.T
+	typs []types.T
 	a    *ArrowBatchConverter
 	rb   *RecordBatchSerializer
 
@@ -170,13 +172,13 @@ type FileDeserializer struct {
 
 // NewFileDeserializerFromBytes constructs a FileDeserializer for an in-memory
 // buffer.
-func NewFileDeserializerFromBytes(buf []byte) (*FileDeserializer, error) {
-	return newFileDeserializer(buf, func() error { return nil })
+func NewFileDeserializerFromBytes(typs []types.T, buf []byte) (*FileDeserializer, error) {
+	return newFileDeserializer(typs, buf, func() error { return nil })
 }
 
 // NewFileDeserializerFromPath constructs a FileDeserializer by reading it from
 // a file.
-func NewFileDeserializerFromPath(path string) (*FileDeserializer, error) {
+func NewFileDeserializerFromPath(typs []types.T, path string) (*FileDeserializer, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.Io, `opening %s`, path)
@@ -190,17 +192,19 @@ func NewFileDeserializerFromPath(path string) (*FileDeserializer, error) {
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.Io, `mmaping %s`, path)
 	}
-	return newFileDeserializer(buf, buf.Unmap)
+	return newFileDeserializer(typs, buf, buf.Unmap)
 }
 
-func newFileDeserializer(buf []byte, bufCloseFn func() error) (*FileDeserializer, error) {
+func newFileDeserializer(
+	typs []types.T, buf []byte, bufCloseFn func() error,
+) (*FileDeserializer, error) {
 	d := &FileDeserializer{
 		buf:        buf,
 		bufCloseFn: bufCloseFn,
 		end:        len(buf),
 	}
-	typs, err := d.init()
-	if err != nil {
+	var err error
+	if err = d.init(); err != nil {
 		return nil, err
 	}
 	d.typs = typs
@@ -221,8 +225,8 @@ func (d *FileDeserializer) Close() error {
 	return d.bufCloseFn()
 }
 
-// Typs returns the in-memory columnar types for the data stored in this file.
-func (d *FileDeserializer) Typs() []coltypes.T {
+// Typs returns the in-memory types for the data stored in this file.
+func (d *FileDeserializer) Typs() []types.T {
 	return d.typs
 }
 
@@ -269,42 +273,34 @@ func (d *FileDeserializer) readBackward(n int) ([]byte, error) {
 // init verifies the file magic and headers. After init, the `idx` and `end`
 // fields are set to the range of record batches and dictionary batches
 // described by the arrow spec's streaming format.
-func (d *FileDeserializer) init() ([]coltypes.T, error) {
+func (d *FileDeserializer) init() error {
 	// Check the header magic
 	if magic, err := d.read(8); err != nil {
-		return nil, pgerror.Wrap(err, pgcode.DataException, `verifying arrow file header magic`)
+		return pgerror.Wrap(err, pgcode.DataException, `verifying arrow file header magic`)
 	} else if !bytes.Equal([]byte(fileMagic), magic[:len(fileMagic)]) {
-		return nil, errors.New(`arrow file header magic mismatch`)
+		return errors.New(`arrow file header magic mismatch`)
 	}
 	if magic, err := d.readBackward(len(fileMagic)); err != nil {
-		return nil, pgerror.Wrap(err, pgcode.DataException, `verifying arrow file footer magic`)
+		return pgerror.Wrap(err, pgcode.DataException, `verifying arrow file footer magic`)
 	} else if !bytes.Equal([]byte(fileMagic), magic) {
-		return nil, errors.New(`arrow file magic footer mismatch`)
+		return errors.New(`arrow file magic footer mismatch`)
 	}
 
 	footerSize, err := d.readBackward(4)
 	if err != nil {
-		return nil, pgerror.Wrap(err, pgcode.DataException, `reading arrow file footer`)
+		return pgerror.Wrap(err, pgcode.DataException, `reading arrow file footer`)
 	}
 	footerBytes, err := d.readBackward(int(binary.LittleEndian.Uint32(footerSize)))
 	if err != nil {
-		return nil, pgerror.Wrap(err, pgcode.DataException, `reading arrow file footer`)
+		return pgerror.Wrap(err, pgcode.DataException, `reading arrow file footer`)
 	}
 	footer := arrowserde.GetRootAsFooter(footerBytes, 0)
 	if footer.Version() != arrowserde.MetadataVersionV1 {
-		return nil, errors.Errorf(`only arrow V1 is supported got %d`, footer.Version())
+		return errors.Errorf(`only arrow V1 is supported got %d`, footer.Version())
 	}
 
-	var schema arrowserde.Schema
-	footer.Schema(&schema)
-	typs := make([]coltypes.T, schema.FieldsLength())
-	var field arrowserde.Field
-	for i := range typs {
-		schema.Fields(&field, i)
-		if typs[i], err = typeFromField(&field); err != nil {
-			return nil, err
-		}
-	}
+	// TODO(yuzefovich): we used to populate types here from the schema. Do we
+	// actually need it?
 
 	var block arrowserde.Block
 	d.recordBatches = d.recordBatches[:0]
@@ -317,7 +313,7 @@ func (d *FileDeserializer) init() ([]coltypes.T, error) {
 		})
 	}
 
-	return typs, nil
+	return nil
 }
 
 type countingWriter struct {
@@ -331,12 +327,12 @@ func (w *countingWriter) Write(buf []byte) (int, error) {
 	return n, err
 }
 
-func schema(fb *flatbuffers.Builder, typs []coltypes.T) flatbuffers.UOffsetT {
+func schema(fb *flatbuffers.Builder, typs []types.T) flatbuffers.UOffsetT {
 	fieldOffsets := make([]flatbuffers.UOffsetT, len(typs))
 	for idx, typ := range typs {
 		var fbTyp byte
 		var fbTypOffset flatbuffers.UOffsetT
-		switch typ {
+		switch typeconv.FromColumnType(&typ) {
 		case coltypes.Bool:
 			arrowserde.BoolStart(fb)
 			fbTypOffset = arrowserde.BoolEnd(fb)
@@ -384,7 +380,7 @@ func schema(fb *flatbuffers.Builder, typs []coltypes.T) flatbuffers.UOffsetT {
 			fbTypOffset = arrowserde.BinaryEnd(fb)
 			fbTyp = arrowserde.TypeInterval
 		default:
-			panic(errors.Errorf(`don't know how to map %s`, typ))
+			panic(errors.Errorf(`don't know how to map %s`, &typ))
 		}
 		arrowserde.FieldStart(fb)
 		arrowserde.FieldAddTypeType(fb, fbTyp)
@@ -405,7 +401,7 @@ func schema(fb *flatbuffers.Builder, typs []coltypes.T) flatbuffers.UOffsetT {
 	return arrowserde.SchemaEnd(fb)
 }
 
-func schemaMessage(fb *flatbuffers.Builder, typs []coltypes.T) flatbuffers.UOffsetT {
+func schemaMessage(fb *flatbuffers.Builder, typs []types.T) flatbuffers.UOffsetT {
 	schemaOffset := schema(fb, typs)
 	arrowserde.MessageStart(fb)
 	arrowserde.MessageAddVersion(fb, arrowserde.MetadataVersionV1)
@@ -415,7 +411,7 @@ func schemaMessage(fb *flatbuffers.Builder, typs []coltypes.T) flatbuffers.UOffs
 }
 
 func fileFooter(
-	fb *flatbuffers.Builder, typs []coltypes.T, recordBatches []fileBlock,
+	fb *flatbuffers.Builder, typs []types.T, recordBatches []fileBlock,
 ) flatbuffers.UOffsetT {
 	schemaOffset := schema(fb, typs)
 	arrowserde.FooterStartRecordBatchesVector(fb, len(recordBatches))
@@ -431,52 +427,4 @@ func fileFooter(
 	arrowserde.FooterAddSchema(fb, schemaOffset)
 	arrowserde.FooterAddRecordBatches(fb, recordBatchesOffset)
 	return arrowserde.FooterEnd(fb)
-}
-
-func typeFromField(field *arrowserde.Field) (coltypes.T, error) {
-	var typeTab flatbuffers.Table
-	field.Type(&typeTab)
-	typeType := field.TypeType()
-	switch typeType {
-	case arrowserde.TypeBool:
-		return coltypes.Bool, nil
-	case arrowserde.TypeBinary:
-		return coltypes.Bytes, nil
-	case arrowserde.TypeInt:
-		var intType arrowserde.Int
-		intType.Init(typeTab.Bytes, typeTab.Pos)
-		if intType.IsSigned() > 0 {
-			switch intType.BitWidth() {
-			case 16:
-				return coltypes.Int16, nil
-			case 32:
-				return coltypes.Int32, nil
-			case 64:
-				return coltypes.Int64, nil
-			default:
-				return coltypes.Unhandled, errors.Errorf(`unhandled bit width %d`, intType.BitWidth())
-			}
-		}
-	case arrowserde.TypeFloatingPoint:
-		var floatType arrowserde.FloatingPoint
-		floatType.Init(typeTab.Bytes, typeTab.Pos)
-		switch floatType.Precision() {
-		case arrowserde.PrecisionDOUBLE:
-			return coltypes.Float64, nil
-		default:
-			return coltypes.Unhandled, errors.Errorf(`unhandled float precision %d`, floatType.Precision())
-		}
-	case arrowserde.TypeDecimal:
-		return coltypes.Decimal, nil
-	case arrowserde.TypeTimestamp:
-		return coltypes.Timestamp, nil
-	case arrowserde.TypeInterval:
-		return coltypes.Interval, nil
-	}
-	// It'd be nice if this error could include more details, but flatbuffers
-	// doesn't make a String method or anything like that.
-	if typeName, ok := arrowserde.EnumNamesType[typeType]; ok {
-		return coltypes.Unhandled, errors.Errorf(`unknown type: %s`, typeName)
-	}
-	return coltypes.Unhandled, errors.Errorf(`unknown type: %d`, typeType)
 }

@@ -20,7 +20,7 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/pkg/errors"
 )
 
@@ -58,7 +58,7 @@ type entry struct {
 
 func registerGenerator(g generator, filename, dep string) {
 	if _, ok := generators[filename]; ok {
-		execerror.VectorizedInternalPanic(fmt.Sprintf("%s generator already registered", filename))
+		colexecerror.InternalError(fmt.Sprintf("%s generator already registered", filename))
 	}
 	generators[filename] = entry{fn: g, dep: dep}
 }

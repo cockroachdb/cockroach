@@ -16,9 +16,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -93,9 +93,9 @@ func TestPartitionedDiskQueue(t *testing.T) {
 
 	var (
 		ctx   = context.Background()
-		typs  = []coltypes.T{coltypes.Int64}
+		typs  = []types.T{*types.Int}
 		batch = testAllocator.NewMemBatch(typs)
-		sem   = &colexec.TestingSemaphore{}
+		sem   = &colexecbase.TestingSemaphore{}
 	)
 	batch.SetLength(coldata.BatchSize())
 
@@ -144,7 +144,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 
 	var (
 		ctx    = context.Background()
-		typs   = []coltypes.T{coltypes.Int64}
+		typs   = []types.T{*types.Int}
 		batch  = testAllocator.NewMemBatch(typs)
 		rng, _ = randutil.NewPseudoRand()
 		// maxPartitions is in [1, 10]. The maximum partitions on a single level.
@@ -170,7 +170,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 		// maxPartitions+1 are created. The +1 is the file descriptor of the
 		// new partition being written to when closedForWrites from maxPartitions
 		// and writing the merged result to a single new partition.
-		sem := colexec.NewTestingSemaphore(maxPartitions + 1)
+		sem := colexecbase.NewTestingSemaphore(maxPartitions + 1)
 		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyCloseOnNewPartition, testDiskAcc)
 
 		// Define sortRepartition to be able to call this helper function
@@ -250,7 +250,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 		// The limit for a hash join is maxPartitions + 2. maxPartitions is the
 		// number of partitions partitioned to and 2 represents the file descriptors
 		// for the left and right side in the case of a repartition.
-		sem := colexec.NewTestingSemaphore(maxPartitions + 2)
+		sem := colexecbase.NewTestingSemaphore(maxPartitions + 2)
 		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyDefault, testDiskAcc)
 
 		// joinRepartition will perform the partitioning that happens during a hash

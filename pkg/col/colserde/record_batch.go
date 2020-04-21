@@ -18,6 +18,8 @@ import (
 	"github.com/apache/arrow/go/arrow/memory"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde/arrowserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	flatbuffers "github.com/google/flatbuffers/go"
 	"github.com/pkg/errors"
 )
@@ -68,7 +70,7 @@ type RecordBatchSerializer struct {
 // NewRecordBatchSerializer creates a new RecordBatchSerializer according to
 // typs. Note that Serializing or Deserializing data that does not follow the
 // passed in schema results in undefined behavior.
-func NewRecordBatchSerializer(typs []coltypes.T) (*RecordBatchSerializer, error) {
+func NewRecordBatchSerializer(typs []types.T) (*RecordBatchSerializer, error) {
 	if len(typs) == 0 {
 		return nil, errors.Errorf("zero length schema unsupported")
 	}
@@ -77,7 +79,7 @@ func NewRecordBatchSerializer(typs []coltypes.T) (*RecordBatchSerializer, error)
 		builder:    flatbuffers.NewBuilder(flatbufferBuilderInitialCapacity),
 	}
 	for i := range typs {
-		s.numBuffers[i] = numBuffersForType(typs[i])
+		s.numBuffers[i] = numBuffersForType(typeconv.FromColumnType(&typs[i]))
 	}
 	// s.scratch.padding is used to align metadata to an 8 byte boundary, so
 	// doesn't need to be larger than 7 bytes.

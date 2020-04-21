@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 )
 
 // oneShotOp is an operator that does an arbitrary operation on the first batch
@@ -22,12 +23,12 @@ import (
 type oneShotOp struct {
 	OneInputNode
 
-	outputSourceRef *Operator
+	outputSourceRef *colexecbase.Operator
 
 	fn func(batch coldata.Batch)
 }
 
-var _ Operator = &oneShotOp{}
+var _ colexecbase.Operator = &oneShotOp{}
 
 func (o *oneShotOp) Init() {
 	o.input.Init()

@@ -15,7 +15,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -28,7 +29,7 @@ type Materializer struct {
 	execinfra.ProcessorBase
 	NonExplainable
 
-	input Operator
+	input colexecbase.Operator
 
 	da sqlbase.DatumAlloc
 
@@ -76,7 +77,7 @@ const materializerProcName = "materializer"
 func NewMaterializer(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	input Operator,
+	input colexecbase.Operator,
 	typs []types.T,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
@@ -129,7 +130,7 @@ func (m *Materializer) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		return m.input
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -181,7 +182,7 @@ func (m *Materializer) next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 
 // Next is part of the execinfra.RowSource interface.
 func (m *Materializer) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	if err := execerror.CatchVectorizedRuntimeError(m.nextAdapter); err != nil {
+	if err := colexecerror.CatchVectorizedRuntimeError(m.nextAdapter); err != nil {
 		m.MoveToDraining(err)
 		return nil, m.DrainHelper()
 	}

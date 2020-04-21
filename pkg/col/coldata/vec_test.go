@@ -8,13 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package coldata
+package coldata_test
 
 import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
@@ -25,10 +29,10 @@ func TestMemColumnWindow(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 
-	c := NewMemColumn(coltypes.Int64, BatchSize())
+	c := coldata.NewMemColumn(types.Int, coldata.BatchSize())
 
 	ints := c.Int64()
-	for i := 0; i < BatchSize(); i++ {
+	for i := 0; i < coldata.BatchSize(); i++ {
 		ints[i] = int64(i)
 		if i%2 == 0 {
 			// Set every other value to null.
@@ -39,8 +43,8 @@ func TestMemColumnWindow(t *testing.T) {
 	startWindow := 1
 	endWindow := 0
 	for startWindow > endWindow {
-		startWindow = rng.Intn(BatchSize())
-		endWindow = 1 + rng.Intn(BatchSize())
+		startWindow = rng.Intn(coldata.BatchSize())
+		endWindow = 1 + rng.Intn(coldata.BatchSize())
 	}
 
 	window := c.Window(coltypes.Int64, startWindow, endWindow)
@@ -113,12 +117,12 @@ func TestNullRanges(t *testing.T) {
 		},
 	}
 
-	c := NewMemColumn(coltypes.Int64, BatchSize())
+	c := coldata.NewMemColumn(types.Int, coldata.BatchSize())
 	for _, tc := range tcs {
 		c.Nulls().UnsetNulls()
 		c.Nulls().SetNullRange(tc.start, tc.end)
 
-		for i := 0; i < BatchSize(); i++ {
+		for i := 0; i < coldata.BatchSize(); i++ {
 			if i >= tc.start && i < tc.end {
 				if !c.Nulls().NullAt(i) {
 					t.Fatalf("expected null at %d, start: %d end: %d", i, tc.start, tc.end)
@@ -134,9 +138,9 @@ func TestNullRanges(t *testing.T) {
 
 func TestAppend(t *testing.T) {
 	// TODO(asubiotto): Test nulls.
-	const typ = coltypes.Int64
+	var typ = types.Int
 
-	src := NewMemColumn(typ, BatchSize())
+	src := coldata.NewMemColumn(typ, coldata.BatchSize())
 	sel := make([]int, len(src.Int64()))
 	for i := range sel {
 		sel[i] = i
@@ -144,36 +148,36 @@ func TestAppend(t *testing.T) {
 
 	testCases := []struct {
 		name           string
-		args           SliceArgs
+		args           coldata.SliceArgs
 		expectedLength int
 	}{
 		{
 			name: "AppendSimple",
-			args: SliceArgs{
+			args: coldata.SliceArgs{
 				// DestIdx must be specified to append to the end of dest.
-				DestIdx: BatchSize(),
+				DestIdx: coldata.BatchSize(),
 			},
-			expectedLength: BatchSize() * 2,
+			expectedLength: coldata.BatchSize() * 2,
 		},
 		{
 			name: "AppendOverwriteSimple",
-			args: SliceArgs{
+			args: coldata.SliceArgs{
 				// DestIdx 0, the default value, will start appending at index 0.
 				DestIdx: 0,
 			},
-			expectedLength: BatchSize(),
+			expectedLength: coldata.BatchSize(),
 		},
 		{
 			name: "AppendOverwriteSlice",
-			args: SliceArgs{
+			args: coldata.SliceArgs{
 				// Start appending at index 10.
 				DestIdx: 10,
 			},
-			expectedLength: BatchSize() + 10,
+			expectedLength: coldata.BatchSize() + 10,
 		},
 		{
 			name: "AppendSlice",
-			args: SliceArgs{
+			args: coldata.SliceArgs{
 				DestIdx:     20,
 				SrcStartIdx: 10,
 				SrcEndIdx:   20,
@@ -182,7 +186,7 @@ func TestAppend(t *testing.T) {
 		},
 		{
 			name: "AppendWithSel",
-			args: SliceArgs{
+			args: coldata.SliceArgs{
 				DestIdx:     5,
 				SrcStartIdx: 10,
 				SrcEndIdx:   20,
@@ -192,88 +196,35 @@ func TestAppend(t *testing.T) {
 		},
 		{
 			name: "AppendWithHalfSel",
-			args: SliceArgs{
+			args: coldata.SliceArgs{
 				DestIdx:   5,
 				Sel:       sel[:len(sel)/2],
 				SrcEndIdx: len(sel) / 2,
 			},
-			expectedLength: 5 + (BatchSize())/2,
+			expectedLength: 5 + (coldata.BatchSize())/2,
 		},
 	}
 
 	for _, tc := range testCases {
 		tc.args.Src = src
-		tc.args.ColType = typ
+		tc.args.ColType = typeconv.FromColumnType(typ)
 		if tc.args.SrcEndIdx == 0 {
 			// SrcEndIdx is always required.
-			tc.args.SrcEndIdx = BatchSize()
+			tc.args.SrcEndIdx = coldata.BatchSize()
 		}
 		t.Run(tc.name, func(t *testing.T) {
-			dest := NewMemColumn(typ, BatchSize())
+			dest := coldata.NewMemColumn(typ, coldata.BatchSize())
 			dest.Append(tc.args)
 			require.Equal(t, tc.expectedLength, len(dest.Int64()))
 		})
 	}
 }
 
-// TestAppendBytesWithLastNull makes sure that Append handles correctly the
-// case when the last element of Bytes vector is NULL.
-func TestAppendBytesWithLastNull(t *testing.T) {
-	src := NewMemColumn(coltypes.Bytes, 4)
-	sel := []int{0, 2, 3}
-	src.Bytes().Set(0, []byte("zero"))
-	src.Nulls().SetNull(1)
-	src.Bytes().Set(2, []byte("two"))
-	src.Nulls().SetNull(3)
-	sliceArgs := SliceArgs{
-		Src:         src,
-		ColType:     coltypes.Bytes,
-		DestIdx:     0,
-		SrcStartIdx: 0,
-		SrcEndIdx:   len(sel),
-	}
-	dest := NewMemColumn(coltypes.Bytes, 3)
-	expected := NewMemColumn(coltypes.Bytes, 3)
-	for _, withSel := range []bool{false, true} {
-		t.Run(fmt.Sprintf("AppendBytesWithLastNull/sel=%t", withSel), func(t *testing.T) {
-			expected.Nulls().UnsetNulls()
-			expected.Bytes().Reset()
-			if withSel {
-				sliceArgs.Sel = sel
-				for expIdx, srcIdx := range sel {
-					if src.Nulls().NullAt(srcIdx) {
-						expected.Nulls().SetNull(expIdx)
-					} else {
-						expected.Bytes().Set(expIdx, src.Bytes().Get(srcIdx))
-					}
-				}
-			} else {
-				sliceArgs.Sel = nil
-				for expIdx := 0; expIdx < 3; expIdx++ {
-					if src.Nulls().NullAt(expIdx) {
-						expected.Nulls().SetNull(expIdx)
-					} else {
-						expected.Bytes().Set(expIdx, src.Bytes().Get(expIdx))
-					}
-				}
-			}
-			expected.Bytes().UpdateOffsetsToBeNonDecreasing(3)
-			// require.Equal checks the "string-ified" versions of the vectors for
-			// equality. Bytes uses maxSetIndex to print out "truncated"
-			// representation, so we manually update it (Vec.Append will use
-			// AppendVal function that updates maxSetIndex itself).
-			expected.Bytes().maxSetIndex = 2
-			dest.Append(sliceArgs)
-			require.Equal(t, expected, dest)
-		})
-	}
-}
-
 func TestCopy(t *testing.T) {
 	// TODO(asubiotto): Test nulls.
-	const typ = coltypes.Int64
+	var typ = types.Int
 
-	src := NewMemColumn(typ, BatchSize())
+	src := coldata.NewMemColumn(typ, coldata.BatchSize())
 	srcInts := src.Int64()
 	for i := range srcInts {
 		srcInts[i] = int64(i + 1)
@@ -293,30 +244,30 @@ func TestCopy(t *testing.T) {
 
 	testCases := []struct {
 		name        string
-		args        CopySliceArgs
+		args        coldata.CopySliceArgs
 		expectedSum int
 	}{
 		{
 			name:        "CopyNothing",
-			args:        CopySliceArgs{},
+			args:        coldata.CopySliceArgs{},
 			expectedSum: 0,
 		},
 		{
 			name: "CopyBatchSizeMinus1WithOffset1",
-			args: CopySliceArgs{
-				SliceArgs: SliceArgs{
+			args: coldata.CopySliceArgs{
+				SliceArgs: coldata.SliceArgs{
 					// Use DestIdx 1 to make sure that it is respected.
 					DestIdx:   1,
-					SrcEndIdx: BatchSize() - 1,
+					SrcEndIdx: coldata.BatchSize() - 1,
 				},
 			},
 			// expectedSum uses sum of positive integers formula.
-			expectedSum: (BatchSize() - 1) * BatchSize() / 2,
+			expectedSum: (coldata.BatchSize() - 1) * coldata.BatchSize() / 2,
 		},
 		{
 			name: "CopyWithSel",
-			args: CopySliceArgs{
-				SliceArgs: SliceArgs{
+			args: coldata.CopySliceArgs{
+				SliceArgs: coldata.SliceArgs{
 					Sel:         sel[1:],
 					DestIdx:     25,
 					SrcStartIdx: 1,
@@ -330,9 +281,9 @@ func TestCopy(t *testing.T) {
 
 	for _, tc := range testCases {
 		tc.args.Src = src
-		tc.args.ColType = typ
+		tc.args.ColType = typeconv.FromColumnType(typ)
 		t.Run(tc.name, func(t *testing.T) {
-			dest := NewMemColumn(typ, BatchSize())
+			dest := coldata.NewMemColumn(typ, coldata.BatchSize())
 			dest.Copy(tc.args)
 			destInts := dest.Int64()
 			firstNonZero := 0
@@ -350,10 +301,10 @@ func TestCopy(t *testing.T) {
 }
 
 func TestCopyNulls(t *testing.T) {
-	const typ = coltypes.Int64
+	var typ = types.Int
 
 	// Set up the destination vector.
-	dst := NewMemColumn(typ, BatchSize())
+	dst := coldata.NewMemColumn(typ, coldata.BatchSize())
 	dstInts := dst.Int64()
 	for i := range dstInts {
 		dstInts[i] = int64(1)
@@ -364,7 +315,7 @@ func TestCopyNulls(t *testing.T) {
 	}
 
 	// Set up the source vector.
-	src := NewMemColumn(typ, BatchSize())
+	src := coldata.NewMemColumn(typ, coldata.BatchSize())
 	srcInts := src.Int64()
 	for i := range srcInts {
 		srcInts[i] = 2
@@ -374,9 +325,9 @@ func TestCopyNulls(t *testing.T) {
 		src.Nulls().SetNull(i)
 	}
 
-	copyArgs := CopySliceArgs{
-		SliceArgs: SliceArgs{
-			ColType:     typ,
+	copyArgs := coldata.CopySliceArgs{
+		SliceArgs: coldata.SliceArgs{
+			ColType:     typeconv.FromColumnType(typ),
 			Src:         src,
 			DestIdx:     3,
 			SrcStartIdx: 3,
@@ -399,18 +350,18 @@ func TestCopyNulls(t *testing.T) {
 	}
 
 	// Verify that the remaining elements in dst have not been touched.
-	for i := 10; i < BatchSize(); i++ {
+	for i := 10; i < coldata.BatchSize(); i++ {
 		require.True(t, dstInts[i] == 1, "data in dst outside copy range has been changed")
 		require.True(t, !dst.Nulls().NullAt(i), "no extra nulls were added")
 	}
 }
 
 func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
-	const typ = coltypes.Int64
+	var typ = types.Int
 
 	// Set up the destination vector. It is all nulls except for a single
 	// non-null at index 0.
-	dst := NewMemColumn(typ, BatchSize())
+	dst := coldata.NewMemColumn(typ, coldata.BatchSize())
 	dstInts := dst.Int64()
 	for i := range dstInts {
 		dstInts[i] = 1
@@ -419,7 +370,7 @@ func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
 	dst.Nulls().UnsetNull(0)
 
 	// Set up the source vector with two nulls.
-	src := NewMemColumn(typ, BatchSize())
+	src := coldata.NewMemColumn(typ, coldata.BatchSize())
 	srcInts := src.Int64()
 	for i := range srcInts {
 		srcInts[i] = 2
@@ -429,10 +380,10 @@ func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
 
 	// Using a small selection vector and SelOnDest, perform a copy and verify
 	// that nulls in between the selected tuples weren't unset.
-	copyArgs := CopySliceArgs{
+	copyArgs := coldata.CopySliceArgs{
 		SelOnDest: true,
-		SliceArgs: SliceArgs{
-			ColType:     typ,
+		SliceArgs: coldata.SliceArgs{
+			ColType:     typeconv.FromColumnType(typ),
 			Src:         src,
 			SrcStartIdx: 1,
 			SrcEndIdx:   3,
@@ -456,39 +407,39 @@ func TestCopySelOnDestDoesNotUnsetOldNulls(t *testing.T) {
 
 func BenchmarkAppend(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
-	sel := rng.Perm(BatchSize())
+	sel := rng.Perm(coldata.BatchSize())
 
 	benchCases := []struct {
 		name string
-		args SliceArgs
+		args coldata.SliceArgs
 	}{
 		{
 			name: "AppendSimple",
-			args: SliceArgs{},
+			args: coldata.SliceArgs{},
 		},
 		{
 			name: "AppendWithSel",
-			args: SliceArgs{
+			args: coldata.SliceArgs{
 				Sel: sel,
 			},
 		},
 	}
 
-	for _, typ := range []coltypes.T{coltypes.Bytes, coltypes.Decimal, coltypes.Int64} {
+	for _, typ := range []types.T{*types.Bytes, *types.Decimal, *types.Int} {
 		for _, nullProbability := range []float64{0, 0.2} {
-			src := NewMemColumn(typ, BatchSize())
-			RandomVec(rng, typ, 8 /* bytesFixedLength */, src, BatchSize(), nullProbability)
+			src := coldata.NewMemColumn(&typ, coldata.BatchSize())
+			coldatatestutils.RandomVec(rng, &typ, 8 /* bytesFixedLength */, src, coldata.BatchSize(), nullProbability)
 			for _, bc := range benchCases {
 				bc.args.Src = src
-				bc.args.ColType = typ
-				bc.args.SrcEndIdx = BatchSize()
-				dest := NewMemColumn(typ, BatchSize())
-				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", typ, bc.name, nullProbability), func(b *testing.B) {
-					b.SetBytes(8 * int64(BatchSize()))
+				bc.args.ColType = typeconv.FromColumnType(&typ)
+				bc.args.SrcEndIdx = coldata.BatchSize()
+				dest := coldata.NewMemColumn(&typ, coldata.BatchSize())
+				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", &typ, bc.name, nullProbability), func(b *testing.B) {
+					b.SetBytes(8 * int64(coldata.BatchSize()))
 					bc.args.DestIdx = 0
 					for i := 0; i < b.N; i++ {
 						dest.Append(bc.args)
-						bc.args.DestIdx += BatchSize()
+						bc.args.DestIdx += coldata.BatchSize()
 					}
 				})
 			}
@@ -498,40 +449,40 @@ func BenchmarkAppend(b *testing.B) {
 
 func BenchmarkCopy(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
-	sel := rng.Perm(BatchSize())
+	sel := rng.Perm(coldata.BatchSize())
 
 	benchCases := []struct {
 		name string
-		args CopySliceArgs
+		args coldata.CopySliceArgs
 	}{
 		{
 			name: "CopySimple",
-			args: CopySliceArgs{},
+			args: coldata.CopySliceArgs{},
 		},
 		{
 			name: "CopyWithSel",
-			args: CopySliceArgs{
-				SliceArgs: SliceArgs{
+			args: coldata.CopySliceArgs{
+				SliceArgs: coldata.SliceArgs{
 					Sel: sel,
 				},
 			},
 		},
 	}
 
-	for _, typ := range []coltypes.T{coltypes.Bytes, coltypes.Decimal, coltypes.Int64} {
+	for _, typ := range []types.T{*types.Bytes, *types.Decimal, *types.Int} {
 		for _, nullProbability := range []float64{0, 0.2} {
-			src := NewMemColumn(typ, BatchSize())
-			RandomVec(rng, typ, 8 /* bytesFixedLength */, src, BatchSize(), nullProbability)
+			src := coldata.NewMemColumn(&typ, coldata.BatchSize())
+			coldatatestutils.RandomVec(rng, &typ, 8 /* bytesFixedLength */, src, coldata.BatchSize(), nullProbability)
 			for _, bc := range benchCases {
 				bc.args.Src = src
-				bc.args.ColType = typ
-				bc.args.SrcEndIdx = BatchSize()
-				dest := NewMemColumn(typ, BatchSize())
-				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", typ, bc.name, nullProbability), func(b *testing.B) {
-					b.SetBytes(8 * int64(BatchSize()))
+				bc.args.ColType = typeconv.FromColumnType(&typ)
+				bc.args.SrcEndIdx = coldata.BatchSize()
+				dest := coldata.NewMemColumn(&typ, coldata.BatchSize())
+				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", &typ, bc.name, nullProbability), func(b *testing.B) {
+					b.SetBytes(8 * int64(coldata.BatchSize()))
 					for i := 0; i < b.N; i++ {
 						dest.Copy(bc.args)
-						if typ == coltypes.Bytes {
+						if typ.Identical(types.Bytes) {
 							// We need to reset flat bytes so that we could copy into it
 							// (otherwise it'll panic on the second copy due to maxSetIndex
 							// being not zero).

@@ -14,8 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -26,7 +27,7 @@ import (
 // corresponding VectorizedStatsCollectors are also "connected" by sharing a
 // StopWatch.
 type VectorizedStatsCollector struct {
-	Operator
+	colexecbase.Operator
 	NonExplainable
 	execpb.VectorizedStats
 
@@ -44,14 +45,14 @@ type VectorizedStatsCollector struct {
 	diskMonitors []*mon.BytesMonitor
 }
 
-var _ Operator = &VectorizedStatsCollector{}
+var _ colexecbase.Operator = &VectorizedStatsCollector{}
 
 // NewVectorizedStatsCollector creates a new VectorizedStatsCollector which
 // wraps op that corresponds to a processor with ProcessorID id. isStall
 // indicates whether stall or execution time is being measured. inputWatch must
 // be non-nil.
 func NewVectorizedStatsCollector(
-	op Operator,
+	op colexecbase.Operator,
 	id int32,
 	isStall bool,
 	inputWatch *timeutil.StopWatch,
@@ -59,7 +60,7 @@ func NewVectorizedStatsCollector(
 	diskMonitors []*mon.BytesMonitor,
 ) *VectorizedStatsCollector {
 	if inputWatch == nil {
-		execerror.VectorizedInternalPanic("input watch for VectorizedStatsCollector is nil")
+		colexecerror.InternalError("input watch for VectorizedStatsCollector is nil")
 	}
 	return &VectorizedStatsCollector{
 		Operator:        op,

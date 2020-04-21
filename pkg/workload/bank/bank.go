@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -123,10 +123,10 @@ func (b *bank) Hooks() workload.Hooks {
 	}
 }
 
-var bankColTypes = []coltypes.T{
-	coltypes.Int64,
-	coltypes.Int64,
-	coltypes.Bytes,
+var bankTypes = []types.T{
+	*types.Int,
+	*types.Int,
+	*types.Bytes,
 }
 
 // Tables implements the Generator interface.
@@ -144,7 +144,7 @@ func (b *bank) Tables() []workload.Table {
 				if rowEnd > b.rows {
 					rowEnd = b.rows
 				}
-				cb.Reset(bankColTypes, rowEnd-rowBegin)
+				cb.Reset(bankTypes, rowEnd-rowBegin)
 				idCol := cb.ColVec(0).Int64()
 				balanceCol := cb.ColVec(1).Int64()
 				payloadCol := cb.ColVec(2).Bytes()

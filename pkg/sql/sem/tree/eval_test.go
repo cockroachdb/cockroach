@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
@@ -195,8 +195,6 @@ func TestEval(t *testing.T) {
 			// inputTyps has no relation to the actual expression result type. Used
 			// for generating a batch.
 			inputTyps := []types.T{*types.Int}
-			inputColTyps, err := typeconv.FromColumnTypes(inputTyps)
-			require.NoError(t, err)
 
 			batchesReturned := 0
 			args := colexec.NewColOperatorArgs{
@@ -212,14 +210,14 @@ func TestEval(t *testing.T) {
 						RenderExprs: []execinfrapb.Expression{{Expr: d.Input}},
 					},
 				},
-				Inputs: []colexec.Operator{
-					&colexec.CallbackOperator{
+				Inputs: []colexecbase.Operator{
+					&colexecbase.CallbackOperator{
 						NextCb: func(_ context.Context) coldata.Batch {
 							if batchesReturned > 0 {
 								return coldata.ZeroBatch
 							}
 							// It doesn't matter what types we create the input batch with.
-							batch := coldata.NewMemBatch(inputColTyps)
+							batch := coldata.NewMemBatch(inputTyps)
 							batch.SetLength(1)
 							batchesReturned++
 							return batch

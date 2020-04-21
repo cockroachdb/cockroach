@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,7 +33,7 @@ const (
 func TestSelLTInt64Int64ConstOp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tups := tuples{{0}, {1}, {2}, {nil}}
-	runTests(t, []tuples{tups}, tuples{{0}, {1}}, orderedVerifier, func(input []Operator) (Operator, error) {
+	runTests(t, []tuples{tups}, tuples{{0}, {1}}, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 		return &selLTInt64Int64ConstOp{
 			selConstOpBase: selConstOpBase{
 				OneInputNode: NewOneInputNode(input[0]),
@@ -55,7 +55,7 @@ func TestSelLTInt64Int64(t *testing.T) {
 		{-1, nil},
 		{nil, nil},
 	}
-	runTests(t, []tuples{tups}, tuples{{0, 1}}, orderedVerifier, func(input []Operator) (Operator, error) {
+	runTests(t, []tuples{tups}, tuples{{0, 1}}, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 		return &selLTInt64Int64Op{
 			selOpBase: selOpBase{
 				OneInputNode: NewOneInputNode(input[0]),
@@ -69,7 +69,7 @@ func TestSelLTInt64Int64(t *testing.T) {
 func TestGetSelectionConstOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cmpOp := tree.LT
-	var input Operator
+	var input colexecbase.Operator
 	colIdx := 3
 	constVal := int64(31)
 	constArg := tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(constVal))
@@ -92,7 +92,7 @@ func TestGetSelectionConstOperator(t *testing.T) {
 func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cmpOp := tree.LT
-	var input Operator
+	var input colexecbase.Operator
 	colIdx := 3
 	constVal := int16(31)
 	constArg := tree.NewDInt(tree.DInt(constVal))
@@ -116,7 +116,7 @@ func TestGetSelectionOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ct := types.Int2
 	cmpOp := tree.GE
-	var input Operator
+	var input colexecbase.Operator
 	col1Idx := 5
 	col2Idx := 7
 	op, err := GetSelectionOperator(ct, ct, cmpOp, input, col1Idx, col2Idx)
@@ -138,7 +138,8 @@ func TestGetSelectionOperator(t *testing.T) {
 func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64})
+	typs := []types.T{*types.Int}
+	batch := testAllocator.NewMemBatch(typs)
 	col := batch.ColVec(0).Int64()
 	for i := 0; i < coldata.BatchSize(); i++ {
 		if float64(i) < float64(coldata.BatchSize())*selectivity {
@@ -162,7 +163,7 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasN
 			sel[i] = i
 		}
 	}
-	source := NewRepeatableBatchSource(testAllocator, batch)
+	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	source.Init()
 
 	plusOp := &selLTInt64Int64ConstOp{
@@ -194,7 +195,8 @@ func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
 func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
 
-	batch := testAllocator.NewMemBatch([]coltypes.T{coltypes.Int64, coltypes.Int64})
+	typs := []types.T{*types.Int, *types.Int}
+	batch := testAllocator.NewMemBatch(typs)
 	col1 := batch.ColVec(0).Int64()
 	col2 := batch.ColVec(1).Int64()
 	for i := 0; i < coldata.BatchSize(); i++ {
@@ -222,7 +224,7 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 			sel[i] = i
 		}
 	}
-	source := NewRepeatableBatchSource(testAllocator, batch)
+	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	source.Init()
 
 	plusOp := &selLTInt64Int64Op{
