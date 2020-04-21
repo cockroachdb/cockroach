@@ -14,7 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -34,10 +35,10 @@ func (c *CancelChecker) Init() {
 	c.input.Init()
 }
 
-var _ Operator = &CancelChecker{}
+var _ colexecbase.Operator = &CancelChecker{}
 
 // NewCancelChecker creates a new CancelChecker.
-func NewCancelChecker(op Operator) *CancelChecker {
+func NewCancelChecker(op colexecbase.Operator) *CancelChecker {
 	return &CancelChecker{OneInputNode: NewOneInputNode(op)}
 }
 
@@ -71,7 +72,7 @@ func (c *CancelChecker) check(ctx context.Context) {
 func (c *CancelChecker) checkEveryCall(ctx context.Context) {
 	select {
 	case <-ctx.Done():
-		execerror.NonVectorizedPanic(sqlbase.QueryCanceledError)
+		colexecerror.ExpectedError(sqlbase.QueryCanceledError)
 	default:
 	}
 }

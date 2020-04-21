@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -224,7 +224,7 @@ func TestSetAndUnsetNulls(t *testing.T) {
 func TestNullsSet(t *testing.T) {
 	args := SliceArgs{
 		// Neither type nor the length here matter.
-		Src: NewMemColumn(coltypes.Bool, 0),
+		Src: NewMemColumn(types.Bool, 0),
 	}
 	for _, withSel := range []bool{false, true} {
 		t.Run(fmt.Sprintf("WithSel=%t", withSel), func(t *testing.T) {

@@ -16,9 +16,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 const (
@@ -30,12 +33,12 @@ const (
 // columns given in orderingCols and returns the first K rows. The inputTypes
 // must correspond 1-1 with the columns in the input operator.
 func NewTopKSorter(
-	allocator *Allocator,
-	input Operator,
-	inputTypes []coltypes.T,
+	allocator *colmem.Allocator,
+	input colexecbase.Operator,
+	inputTypes []types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	k uint16,
-) Operator {
+) colexecbase.Operator {
 	return &topKSorter{
 		allocator:    allocator,
 		OneInputNode: NewOneInputNode(input),
@@ -62,9 +65,9 @@ const (
 type topKSorter struct {
 	OneInputNode
 
-	allocator    *Allocator
+	allocator    *colmem.Allocator
 	orderingCols []execinfrapb.Ordering_Column
-	inputTypes   []coltypes.T
+	inputTypes   []types.T
 	k            uint16 // TODO(solon): support larger k values
 
 	// state is the current state of the sort.
@@ -97,9 +100,8 @@ func (t *topKSorter) Init() {
 		t.allocator, t.inputTypes, 0, /* initialSize */
 	)
 	t.comparators = make([]vecComparator, len(t.inputTypes))
-	for i := range t.inputTypes {
-		typ := t.inputTypes[i]
-		t.comparators[i] = GetVecComparator(typ, 2)
+	for i, typ := range t.inputTypes {
+		t.comparators[i] = GetVecComparator(&typ, 2)
 	}
 	// TODO(yuzefovich): switch to calling this method on allocator. This will
 	// require plumbing unlimited allocator to work correctly in tests with
@@ -116,7 +118,7 @@ func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
 	case topKSortEmitting:
 		return t.emit()
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid sort state %v", t.state))
+	colexecerror.InternalError(fmt.Sprintf("invalid sort state %v", t.state))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -214,7 +216,7 @@ func (t *topKSorter) emit() coldata.Batch {
 	if toEmit > coldata.BatchSize() {
 		toEmit = coldata.BatchSize()
 	}
-	for i := range t.inputTypes {
+	for i, typ := range t.inputTypes {
 		vec := t.output.ColVec(i)
 		// At this point, we have already fully sorted the input. It is ok to do
 		// this Copy outside of the allocator - the work has been done, but
@@ -224,7 +226,7 @@ func (t *topKSorter) emit() coldata.Batch {
 		vec.Copy(
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
-					ColType:     t.inputTypes[i],
+					ColType:     typeconv.FromColumnType(&typ),
 					Src:         t.topK.ColVec(i),
 					Sel:         t.sel,
 					SrcStartIdx: t.emitted,
@@ -249,7 +251,7 @@ func (t *topKSorter) compareRow(vecIdx1, vecIdx2 int, rowIdx1, rowIdx2 int) int 
 			case execinfrapb.Ordering_Column_DESC:
 				return -res
 			default:
-				execerror.VectorizedInternalPanic(fmt.Sprintf("unexpected direction value %d", d))
+				colexecerror.InternalError(fmt.Sprintf("unexpected direction value %d", d))
 			}
 		}
 	}
@@ -262,7 +264,7 @@ func (t *topKSorter) updateComparators(vecIdx int, batch coldata.Batch) {
 	}
 }
 
-func (t *topKSorter) ExportBuffered(Operator) coldata.Batch {
+func (t *topKSorter) ExportBuffered(colexecbase.Operator) coldata.Batch {
 	topKLen := t.topK.Length()
 	// First, we check whether we have exported all tuples from the topK vector.
 	if t.exportedFromTopK < topKLen {
@@ -271,7 +273,7 @@ func (t *topKSorter) ExportBuffered(Operator) coldata.Batch {
 			newExportedFromTopK = topKLen
 		}
 		for i, typ := range t.inputTypes {
-			window := t.topK.ColVec(i).Window(typ, t.exportedFromTopK, newExportedFromTopK)
+			window := t.topK.ColVec(i).Window(typeconv.FromColumnType(&typ), t.exportedFromTopK, newExportedFromTopK)
 			t.windowedBatch.ReplaceCol(window, i)
 		}
 		t.windowedBatch.SetSelection(false)

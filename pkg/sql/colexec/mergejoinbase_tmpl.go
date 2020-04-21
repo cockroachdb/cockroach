@@ -28,13 +28,15 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
-	// {{/*
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
+
+// Remove unused warning.
+var _ = execgen.UNSAFEGET
 
 // {{/*
 // Declarations to make the template compile properly.
@@ -69,7 +71,7 @@ type _GOTYPE interface{}
 // _ASSIGN_EQ is the template equality function for assigning the first input
 // to the result of the the second input == the third input.
 func _ASSIGN_EQ(_, _, _ interface{}) int {
-	execerror.VectorizedInternalPanic("")
+	colexecerror.InternalError("")
 }
 
 // */}}
@@ -95,9 +97,9 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 	// Check all equality columns in the first row of batch to make sure we're in
 	// the same group.
 	for _, colIdx := range input.eqCols[:len(input.eqCols)] {
-		colTyp := input.sourceTypes[colIdx]
+		typ := input.sourceTypes[colIdx]
 
-		switch colTyp {
+		switch typeconv.FromColumnType(&typ) {
 		// {{ range . }}
 		case _TYPES_T:
 			// We perform this null check on every equality column of the first
@@ -123,7 +125,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 			}
 		// {{end}}
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled type %d", colTyp))
+			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", &typ))
 		}
 	}
 	return false

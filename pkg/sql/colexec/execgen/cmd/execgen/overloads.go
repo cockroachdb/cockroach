@@ -18,7 +18,7 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -213,7 +213,7 @@ func floatToInt(intSize int, floatSize int) func(string, string) string {
 	return func(to, from string) string {
 		convStr := `
 			if math.IsNaN(float64(%[2]s)) || %[2]s <= float%[4]d(math.MinInt%[3]d) || %[2]s >= float%[4]d(math.MaxInt%[3]d) {
-				execerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
+				colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 			}
 			%[1]s = int%[3]d(%[2]s)
 		`
@@ -233,9 +233,9 @@ func floatToDecimal(to, from string) string {
 		{
 			var tmpDec apd.Decimal
 			_, tmpErr := tmpDec.SetFloat64(float64(%[2]s))
-    	if tmpErr != nil {
-    	  execerror.NonVectorizedPanic(tmpErr)
-    	}
+			if tmpErr != nil {
+				colexecerror.ExpectedError(tmpErr)
+			}
 			%[1]s = tmpDec
 		}
 	`
@@ -322,7 +322,7 @@ func init() {
 								}
 							`))
 							if err := t.Execute(&buf, args); err != nil {
-								execerror.VectorizedInternalPanic(err)
+								colexecerror.InternalError(err)
 							}
 							return buf.String()
 						}
@@ -615,7 +615,7 @@ func (boolCustomizer) getCmpOpCompareFunc() compareFunc {
 		`))
 
 		if err := t.Execute(&buf, args); err != nil {
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 		return buf.String()
 	}
@@ -667,15 +667,15 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 			{
 				cond, err := tree.%s.%s(&%s, &%s, &%s)
 				if cond.DivisionByZero() {
-					execerror.NonVectorizedPanic(tree.ErrDivByZero)
+					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				if err != nil {
-					execerror.NonVectorizedPanic(err)
+					colexecerror.ExpectedError(err)
 				}
 			}
 			`, binaryOpDecCtx[op.BinOp], binaryOpDecMethod[op.BinOp], target, l, r)
 		}
-		return fmt.Sprintf("if _, err := tree.%s.%s(&%s, &%s, &%s); err != nil { execerror.NonVectorizedPanic(err) }",
+		return fmt.Sprintf("if _, err := tree.%s.%s(&%s, &%s, &%s); err != nil { colexecerror.ExpectedError(err) }",
 			binaryOpDecCtx[op.BinOp], binaryOpDecMethod[op.BinOp], target, l, r)
 	}
 }
@@ -743,7 +743,7 @@ func getFloatCmpOpCompareFunc(checkLeftNan, checkRightNan bool) compareFunc {
 		`))
 
 		if err := t.Execute(&buf, args); err != nil {
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 		return buf.String()
 	}
@@ -795,7 +795,7 @@ func (c intCustomizer) getCmpOpCompareFunc() compareFunc {
 		`))
 
 		if err := t.Execute(&buf, args); err != nil {
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 		return buf.String()
 	}
@@ -821,7 +821,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				{
 					result := {{.Left}} + {{.Right}}
 					if (result < {{.Left}}) != ({{.Right}} < 0) {
-						execerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
+						colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 					}
 					{{.Target}} = result
 				}
@@ -832,7 +832,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				{
 					result := {{.Left}} - {{.Right}}
 					if (result < {{.Left}}) != ({{.Right}} > 0) {
-						execerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
+						colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 					}
 					{{.Target}} = result
 				}
@@ -857,7 +857,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				upperBound = "math.MaxInt32"
 				lowerBound = "math.MinInt32"
 			default:
-				execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled integer width %d", c.width))
+				colexecerror.InternalError(fmt.Sprintf("unhandled integer width %d", c.width))
 			}
 
 			args["UpperBound"] = upperBound
@@ -869,9 +869,9 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 						if {{.Left}} != 0 && {{.Right}} != 0 {
 							sameSign := ({{.Left}} < 0) == ({{.Right}} < 0)
 							if (result < 0) == sameSign {
-								execerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							} else if result/{{.Right}} != {{.Left}} {
-								execerror.NonVectorizedPanic(tree.ErrIntOutOfRange)
+								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 						}
 					}
@@ -886,23 +886,23 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 			t = template.Must(template.New("").Parse(`
 			{
 				if {{.Right}} == 0 {
-					execerror.NonVectorizedPanic(tree.ErrDivByZero)
+					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				leftTmpDec, rightTmpDec := &decimalScratch.tmpDec1, &decimalScratch.tmpDec2
 				leftTmpDec.SetFinite(int64({{.Left}}), 0)
 				rightTmpDec.SetFinite(int64({{.Right}}), 0)
 				if _, err := tree.{{.Ctx}}.Quo(&{{.Target}}, leftTmpDec, rightTmpDec); err != nil {
-					execerror.NonVectorizedPanic(err)
+					colexecerror.ExpectedError(err)
 				}
 			}
 		`))
 
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
 		}
 
 		if err := t.Execute(&buf, args); err != nil {
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 		return buf.String()
 	}
@@ -916,13 +916,13 @@ func (c decimalFloatCustomizer) getCmpOpCompareFunc() compareFunc {
 			{
 				tmpDec := &decimalScratch.tmpDec1
 				if _, err := tmpDec.SetFloat64(float64({{.Right}})); err != nil {
-					execerror.NonVectorizedPanic(err)
+					colexecerror.ExpectedError(err)
 				}
 				{{.Target}} = tree.CompareDecimals(&{{.Left}}, tmpDec)
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 		return buf.String()
 	}
@@ -940,7 +940,7 @@ func (c decimalIntCustomizer) getCmpOpCompareFunc() compareFunc {
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 		return buf.String()
 	}
@@ -960,18 +960,18 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 			{
 				{{ if .IsDivision }}
 				if {{.Right}} == 0 {
-					execerror.NonVectorizedPanic(tree.ErrDivByZero)
+					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{ end }}
 				tmpDec := &decimalScratch.tmpDec1
 				tmpDec.SetFinite(int64({{.Right}}), 0)
 				if _, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, tmpDec); err != nil {
-					execerror.NonVectorizedPanic(err)
+					colexecerror.ExpectedError(err)
 				}
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 		return buf.String()
 	}
@@ -985,13 +985,13 @@ func (c floatDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 			{
 				tmpDec := &decimalScratch.tmpDec1
 				if _, err := tmpDec.SetFloat64(float64({{.Left}})); err != nil {
-					execerror.NonVectorizedPanic(err)
+					colexecerror.ExpectedError(err)
 				}
 				{{.Target}} = tree.CompareDecimals(tmpDec, &{{.Right}})
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 		return buf.String()
 	}
@@ -1010,7 +1010,7 @@ func (c intDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 		`))
 
 		if err := t.Execute(&buf, args); err != nil {
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 		return buf.String()
 	}
@@ -1033,18 +1033,18 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 				{{ if .IsDivision }}
 				cond, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})
 				if cond.DivisionByZero() {
-					execerror.NonVectorizedPanic(tree.ErrDivByZero)
+					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{ else }}
 				_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})
 				{{ end }}
 				if err != nil {
-					execerror.NonVectorizedPanic(err)
+					colexecerror.ExpectedError(err)
 				}
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 		return buf.String()
 	}
@@ -1077,7 +1077,7 @@ func (c timestampCustomizer) getCmpOpCompareFunc() compareFunc {
       }`))
 
 		if err := t.Execute(&buf, args); err != nil {
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 		return buf.String()
 	}
@@ -1102,7 +1102,7 @@ func (c timestampCustomizer) getBinOpAssignFunc() assignFunc {
 		  `,
 				target, l, r)
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
 		}
 		// This code is unreachable, but the compiler cannot infer that.
 		return ""
@@ -1136,7 +1136,7 @@ func (c intervalCustomizer) getBinOpAssignFunc() assignFunc {
 			return fmt.Sprintf(`%[1]s = %[2]s.Sub(%[3]s)`,
 				target, l, r)
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
 		}
 		// This code is unreachable, but the compiler cannot infer that.
 		return ""
@@ -1153,7 +1153,7 @@ func (c timestampIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 			return fmt.Sprintf(`%[1]s = duration.Add(%[2]s, %[3]s.Mul(-1))`,
 				target, l, r)
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
 		}
 		// This code is unreachable, but the compiler cannot infer that.
 		return ""
@@ -1167,7 +1167,7 @@ func (c intervalTimestampCustomizer) getBinOpAssignFunc() assignFunc {
 			return fmt.Sprintf(`%[1]s = duration.Add(%[3]s, %[2]s)`,
 				target, l, r)
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
 		}
 		return ""
 	}
@@ -1182,12 +1182,12 @@ func (c intervalIntCustomizer) getBinOpAssignFunc() assignFunc {
 		case tree.Div:
 			return fmt.Sprintf(`
 				if %[3]s == 0 {
-					execerror.NonVectorizedPanic(tree.ErrDivByZero)
+					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				%[1]s = %[2]s.Div(int64(%[3]s))`,
 				target, l, r)
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
 		}
 		return ""
 	}
@@ -1200,7 +1200,7 @@ func (c intIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 			return fmt.Sprintf(`%[1]s = %[3]s.Mul(int64(%[2]s))`,
 				target, l, r)
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
 		}
 		return ""
 	}
@@ -1215,12 +1215,12 @@ func (c intervalFloatCustomizer) getBinOpAssignFunc() assignFunc {
 		case tree.Div:
 			return fmt.Sprintf(`
 				if %[3]s == 0.0 {
-					execerror.NonVectorizedPanic(tree.ErrDivByZero)
+					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				%[1]s = %[2]s.DivFloat(float64(%[3]s))`,
 				target, l, r)
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
 		}
 		return ""
 	}
@@ -1233,7 +1233,7 @@ func (c floatIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 			return fmt.Sprintf(`%[1]s = %[3]s.MulFloat(float64(%[2]s))`,
 				target, l, r)
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
 		}
 		return ""
 	}
@@ -1246,12 +1246,12 @@ func (c intervalDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 			return fmt.Sprintf(`
 		  f, err := %[3]s.Float64()
 		  if err != nil {
-		    execerror.VectorizedInternalPanic(err)
+		    colexecerror.InternalError(err)
 		  }
 		  %[1]s = %[2]s.MulFloat(f)`,
 				target, l, r)
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
 		}
 		return ""
 	}
@@ -1264,13 +1264,13 @@ func (c decimalIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 			return fmt.Sprintf(`
 		  f, err := %[2]s.Float64()
 		  if err != nil {
-		    execerror.VectorizedInternalPanic(err)
+		    colexecerror.InternalError(err)
 		  }
 		  %[1]s = %[3]s.MulFloat(f)`,
 				target, l, r)
 
 		default:
-			execerror.VectorizedInternalPanic(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
+			colexecerror.InternalError(fmt.Sprintf("unhandled binary operator %s", op.BinOp.String()))
 		}
 		return ""
 	}

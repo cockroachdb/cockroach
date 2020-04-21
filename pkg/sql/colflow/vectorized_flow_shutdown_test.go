@@ -20,10 +20,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -143,12 +145,11 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				var (
 					err             error
 					wg              sync.WaitGroup
-					typs            = []coltypes.T{coltypes.Int64}
-					semtyps         = []types.T{*types.Int}
-					hashRouterInput = colexec.NewRandomDataOp(
+					typs            = []types.T{*types.Int}
+					hashRouterInput = coldatatestutils.NewRandomDataOp(
 						testAllocator,
 						rng,
-						colexec.RandomDataOpArgs{
+						coldatatestutils.RandomDataOpArgs{
 							DeterministicTyps: typs,
 							// Set a high number of batches to ensure that the HashRouter is
 							// very far from being finished when the flow is shut down.
@@ -160,37 +161,37 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					numInboxes                  = numHashRouterOutputs + 3
 					inboxes                     = make([]*colrpc.Inbox, 0, numInboxes+1)
 					handleStreamErrCh           = make([]chan error, numInboxes+1)
-					synchronizerInputs          = make([]colexec.Operator, 0, numInboxes)
+					synchronizerInputs          = make([]colexecbase.Operator, 0, numInboxes)
 					materializerMetadataSources = make([]execinfrapb.MetadataSource, 0, numInboxes+1)
 					streamID                    = 0
 					addAnotherRemote            = rng.Float64() < 0.5
 				)
 
 				// Create an allocator for each output.
-				allocators := make([]*colexec.Allocator, numHashRouterOutputs)
+				allocators := make([]*colmem.Allocator, numHashRouterOutputs)
 				diskAccounts := make([]*mon.BoundAccount, numHashRouterOutputs)
 				for i := range allocators {
 					acc := testMemMonitor.MakeBoundAccount()
 					defer acc.Close(ctxRemote)
-					allocators[i] = colexec.NewAllocator(ctxRemote, &acc)
+					allocators[i] = colmem.NewAllocator(ctxRemote, &acc)
 					diskAcc := testDiskMonitor.MakeBoundAccount()
 					diskAccounts[i] = &diskAcc
 					defer diskAcc.Close(ctxRemote)
 				}
 				hashRouter, hashRouterOutputs := colexec.NewHashRouter(
 					allocators, hashRouterInput, typs, []uint32{0}, 64<<20, /* 64 MiB */
-					queueCfg, &colexec.TestingSemaphore{}, diskAccounts,
+					queueCfg, &colexecbase.TestingSemaphore{}, diskAccounts,
 				)
 				for i := 0; i < numInboxes; i++ {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxLocal)
 					inbox, err := colrpc.NewInbox(
-						colexec.NewAllocator(ctxLocal, &inboxMemAccount), typs, execinfrapb.StreamID(streamID),
+						colmem.NewAllocator(ctxLocal, &inboxMemAccount), typs, execinfrapb.StreamID(streamID),
 					)
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					materializerMetadataSources = append(materializerMetadataSources, inbox)
-					synchronizerInputs = append(synchronizerInputs, colexec.Operator(inbox))
+					synchronizerInputs = append(synchronizerInputs, colexecbase.Operator(inbox))
 				}
 				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, typs, &wg)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
@@ -205,7 +206,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					ctx context.Context,
 					cancelFn context.CancelFunc,
 					outboxMemAcc *mon.BoundAccount,
-					outboxInput colexec.Operator,
+					outboxInput colexecbase.Operator,
 					inbox *colrpc.Inbox,
 					id int,
 					outboxMetadataSources []execinfrapb.MetadataSource,
@@ -213,7 +214,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					idToClosed.Lock()
 					idToClosed.mapping[id] = false
 					idToClosed.Unlock()
-					outbox, err := colrpc.NewOutbox(colexec.NewAllocator(ctx, outboxMemAcc), outboxInput, typs, append(outboxMetadataSources,
+					outbox, err := colrpc.NewOutbox(colmem.NewAllocator(ctx, outboxMemAcc), outboxInput, typs, append(outboxMetadataSources,
 						execinfrapb.CallbackMetadataSource{
 							DrainMetaCb: func(ctx context.Context) []execinfrapb.ProducerMetadata {
 								return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("%d", id)}}
@@ -263,22 +264,22 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					} else {
 						sourceMemAccount := testMemMonitor.MakeBoundAccount()
 						defer sourceMemAccount.Close(ctxRemote)
-						remoteAllocator := colexec.NewAllocator(ctxRemote, &sourceMemAccount)
+						remoteAllocator := colmem.NewAllocator(ctxRemote, &sourceMemAccount)
 						batch := remoteAllocator.NewMemBatch(typs)
 						batch.SetLength(coldata.BatchSize())
-						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colexec.NewRepeatableBatchSource(remoteAllocator, batch), inboxes[i], streamID, outboxMetadataSources)
+						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, colexecbase.NewRepeatableBatchSource(remoteAllocator, batch, typs), inboxes[i], streamID, outboxMetadataSources)
 					}
 					streamID++
 				}
 
-				var materializerInput colexec.Operator
+				var materializerInput colexecbase.Operator
 				ctxAnotherRemote, cancelAnotherRemote := context.WithCancel(context.Background())
 				if addAnotherRemote {
 					// Add another "remote" node to the flow.
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxAnotherRemote)
 					inbox, err := colrpc.NewInbox(
-						colexec.NewAllocator(ctxAnotherRemote, &inboxMemAccount),
+						colmem.NewAllocator(ctxAnotherRemote, &inboxMemAccount),
 						typs, execinfrapb.StreamID(streamID),
 					)
 					require.NoError(t, err)
@@ -301,7 +302,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					flowCtx,
 					1, /* processorID */
 					materializerInput,
-					semtyps,
+					typs,
 					&execinfrapb.PostProcessSpec{},
 					nil, /* output */
 					materializerMetadataSources,

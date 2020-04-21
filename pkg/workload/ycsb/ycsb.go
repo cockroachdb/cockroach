@@ -24,7 +24,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -267,9 +267,9 @@ func preferColumnFamilies(workload string) bool {
 	}
 }
 
-var usertableColTypes = []coltypes.T{
-	coltypes.Bytes, coltypes.Bytes, coltypes.Bytes, coltypes.Bytes, coltypes.Bytes, coltypes.Bytes,
-	coltypes.Bytes, coltypes.Bytes, coltypes.Bytes, coltypes.Bytes, coltypes.Bytes,
+var usertableTypes = []types.T{
+	*types.Bytes, *types.Bytes, *types.Bytes, *types.Bytes, *types.Bytes, *types.Bytes,
+	*types.Bytes, *types.Bytes, *types.Bytes, *types.Bytes, *types.Bytes,
 }
 
 // Tables implements the Generator interface.
@@ -308,7 +308,7 @@ func (g *ycsb) Tables() []workload.Table {
 		}
 		usertable.InitialRows = workload.TypedTuples(
 			g.insertCount,
-			usertableColTypes,
+			usertableTypes,
 			usertableInitialRowsFn,
 		)
 	}

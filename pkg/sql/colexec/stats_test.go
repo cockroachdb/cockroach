@@ -16,9 +16,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -91,8 +92,8 @@ func TestVectorizedStatsCollector(t *testing.T) {
 
 		mergeJoiner, err := newMergeJoinOp(
 			testAllocator, defaultMemoryLimit, queueCfg,
-			NewTestingSemaphore(4), sqlbase.InnerJoin, leftInput, rightInput,
-			[]coltypes.T{coltypes.Int64}, []coltypes.T{coltypes.Int64},
+			colexecbase.NewTestingSemaphore(4), sqlbase.InnerJoin, leftInput, rightInput,
+			[]types.T{*types.Int}, []types.T{*types.Int},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			testDiskAcc,
@@ -132,14 +133,15 @@ func TestVectorizedStatsCollector(t *testing.T) {
 	}
 }
 
-func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) Operator {
-	batch := testAllocator.NewMemBatchWithSize([]coltypes.T{coltypes.Int64}, batchSize)
+func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) colexecbase.Operator {
+	typs := []types.T{*types.Int}
+	batch := testAllocator.NewMemBatchWithSize(typs, batchSize)
 	vec := batch.ColVec(0).Int64()
 	for i := 0; i < batchSize; i++ {
 		vec[i] = int64(i)
 	}
 	batch.SetLength(batchSize)
-	return newFiniteChunksSource(batch, nBatches, 1 /* matchLen */)
+	return newFiniteChunksSource(batch, typs, nBatches, 1 /* matchLen */)
 }
 
 // timeAdvancingOperator is an Operator that advances the time source upon
@@ -150,7 +152,7 @@ type timeAdvancingOperator struct {
 	timeSource *timeutil.TestTimeSource
 }
 
-var _ Operator = &timeAdvancingOperator{}
+var _ colexecbase.Operator = &timeAdvancingOperator{}
 
 func (o *timeAdvancingOperator) Init() {
 	o.input.Init()

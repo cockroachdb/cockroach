@@ -16,10 +16,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -188,17 +192,18 @@ type mergeJoinInput struct {
 
 	// sourceTypes specify the types of the input columns of the source table for
 	// the merge joiner.
-	sourceTypes []coltypes.T
+	sourceTypes     []types.T
+	sourcePhysTypes []coltypes.T
 
 	// The distincter is used in the finishGroup phase, and is used only to
 	// determine where the current group ends, in the case that the group ended
 	// with a batch.
 	distincterInput *feedOperator
-	distincter      Operator
+	distincter      colexecbase.Operator
 	distinctOutput  []bool
 
 	// source specifies the input operator to the merge join.
-	source Operator
+	source colexecbase.Operator
 }
 
 // The merge join operator uses a probe and build approach to generate the
@@ -221,15 +226,15 @@ type mergeJoinInput struct {
 // sources, based on the equality columns, assuming both inputs are in sorted
 // order.
 func newMergeJoinOp(
-	unlimitedAllocator *Allocator,
+	unlimitedAllocator *colmem.Allocator,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	joinType sqlbase.JoinType,
-	left Operator,
-	right Operator,
-	leftTypes []coltypes.T,
-	rightTypes []coltypes.T,
+	left colexecbase.Operator,
+	right colexecbase.Operator,
+	leftTypes []types.T,
+	rightTypes []types.T,
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
@@ -284,15 +289,15 @@ func (s *mjBuilderCrossProductState) setBuilderColumnState(target mjBuilderCross
 }
 
 func newMergeJoinBase(
-	unlimitedAllocator *Allocator,
+	unlimitedAllocator *colmem.Allocator,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	joinType sqlbase.JoinType,
-	left Operator,
-	right Operator,
-	leftTypes []coltypes.T,
-	rightTypes []coltypes.T,
+	left colexecbase.Operator,
+	right colexecbase.Operator,
+	leftTypes []types.T,
+	rightTypes []types.T,
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
@@ -313,6 +318,14 @@ func newMergeJoinBase(
 
 	diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
 	diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
+	leftPhysTypes, err := typeconv.FromColumnTypes(leftTypes)
+	if err != nil {
+		return nil, err
+	}
+	rightPhysTypes, err := typeconv.FromColumnTypes(rightTypes)
+	if err != nil {
+		return nil, err
+	}
 	base := &mergeJoinBase{
 		twoInputNode:       newTwoInputNode(left, right),
 		unlimitedAllocator: unlimitedAllocator,
@@ -321,20 +334,21 @@ func newMergeJoinBase(
 		fdSemaphore:        fdSemaphore,
 		joinType:           joinType,
 		left: mergeJoinInput{
-			source:      left,
-			sourceTypes: leftTypes,
-			eqCols:      lEqCols,
-			directions:  lDirections,
+			source:          left,
+			sourceTypes:     leftTypes,
+			sourcePhysTypes: leftPhysTypes,
+			eqCols:          lEqCols,
+			directions:      lDirections,
 		},
 		right: mergeJoinInput{
-			source:      right,
-			sourceTypes: rightTypes,
-			eqCols:      rEqCols,
-			directions:  rDirections,
+			source:          right,
+			sourceTypes:     rightTypes,
+			sourcePhysTypes: rightPhysTypes,
+			eqCols:          rEqCols,
+			directions:      rDirections,
 		},
 		diskAcc: diskAcc,
 	}
-	var err error
 	base.left.distincterInput = &feedOperator{}
 	base.left.distincter, base.left.distinctOutput, err = OrderedDistinctColsToOperators(
 		base.left.distincterInput, lEqCols, leftTypes)
@@ -362,7 +376,7 @@ type mergeJoinBase struct {
 	//  Next, which will simplify this model.
 	mu syncutil.Mutex
 
-	unlimitedAllocator *Allocator
+	unlimitedAllocator *colmem.Allocator
 	memoryLimit        int64
 	diskQueueCfg       colcontainer.DiskQueueCfg
 	fdSemaphore        semaphore.Semaphore
@@ -432,7 +446,7 @@ func (o *mergeJoinBase) Init() {
 }
 
 func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
-	outputTypes := append([]coltypes.T{}, o.left.sourceTypes...)
+	outputTypes := append([]types.T{}, o.left.sourceTypes...)
 	if o.joinType != sqlbase.LeftSemiJoin && o.joinType != sqlbase.LeftAntiJoin {
 		outputTypes = append(outputTypes, o.right.sourceTypes...)
 	}
@@ -453,16 +467,16 @@ func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
 		o.diskQueueCfg, o.fdSemaphore, coldata.BatchSize(), o.diskAcc,
 	)
 	o.proberState.lBufferedGroup.firstTuple = make([]coldata.Vec, len(o.left.sourceTypes))
-	for colIdx, colType := range o.left.sourceTypes {
-		o.proberState.lBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(colType, 1)
+	for colIdx, typ := range o.left.sourceTypes {
+		o.proberState.lBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(&typ, 1)
 	}
 	o.proberState.rBufferedGroup.spillingQueue = newRewindableSpillingQueue(
 		o.unlimitedAllocator, o.right.sourceTypes, o.memoryLimit,
 		o.diskQueueCfg, o.fdSemaphore, coldata.BatchSize(), o.diskAcc,
 	)
 	o.proberState.rBufferedGroup.firstTuple = make([]coldata.Vec, len(o.right.sourceTypes))
-	for colIdx, colType := range o.right.sourceTypes {
-		o.proberState.rBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(colType, 1)
+	for colIdx, typ := range o.right.sourceTypes {
+		o.proberState.rBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(&typ, 1)
 	}
 
 	o.builderState.lGroups = make([]group, 1)
@@ -495,7 +509,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	var (
 		bufferedGroup *mjBufferedGroup
 		scratchBatch  coldata.Batch
-		sourceTypes   []coltypes.T
+		sourceTypes   []types.T
 	)
 	if input == &o.left {
 		sourceTypes = o.left.sourceTypes
@@ -519,11 +533,11 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	scratchBatch = o.unlimitedAllocator.NewMemBatchWithSize(sourceTypes, groupLength)
 	if bufferedGroup.numTuples == 0 {
 		o.unlimitedAllocator.PerformOperation(bufferedGroup.firstTuple, func() {
-			for colIdx, colType := range sourceTypes {
+			for colIdx, typ := range sourceTypes {
 				bufferedGroup.firstTuple[colIdx].Copy(
 					coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
-							ColType:     colType,
+							ColType:     typeconv.FromColumnType(&typ),
 							Src:         batch.ColVec(colIdx),
 							Sel:         sel,
 							DestIdx:     0,
@@ -538,12 +552,12 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	bufferedGroup.numTuples += groupLength
 
 	o.unlimitedAllocator.PerformOperation(scratchBatch.ColVecs(), func() {
-		for cIdx, cType := range input.sourceTypes {
-			scratchBatch.ColVec(cIdx).Copy(
+		for colIdx, typ := range input.sourceTypes {
+			scratchBatch.ColVec(colIdx).Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
-						ColType:     cType,
-						Src:         batch.ColVec(cIdx),
+						ColType:     typeconv.FromColumnType(&typ),
+						Src:         batch.ColVec(colIdx),
 						Sel:         sel,
 						DestIdx:     0,
 						SrcStartIdx: groupStartIdx,
@@ -556,7 +570,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	scratchBatch.SetSelection(false)
 	scratchBatch.SetLength(groupLength)
 	if err := bufferedGroup.enqueue(ctx, scratchBatch); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		colexecerror.InternalError(err)
 	}
 }
 
@@ -704,7 +718,7 @@ func (o *mergeJoinBase) IdempotentClose(ctx context.Context) error {
 		return nil
 	}
 	var lastErr error
-	for _, op := range []Operator{o.left.source, o.right.source} {
+	for _, op := range []colexecbase.Operator{o.left.source, o.right.source} {
 		if c, ok := op.(IdempotentCloser); ok {
 			if err := c.IdempotentClose(ctx); err != nil {
 				lastErr = err

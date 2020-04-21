@@ -14,7 +14,7 @@ import React from "react";
 import * as protos from "src/js/protos";
 
 import { AdminUIState } from "src/redux/state";
-import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats, generateTableID} from "src/redux/apiReducers";
+import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats, generateTableID, KeyedCachedDataReducerState} from "src/redux/apiReducers";
 
 import { SortSetting } from "src/views/shared/components/sortabletable";
 
@@ -31,7 +31,7 @@ export interface DatabaseSummaryExplicitData {
 interface DatabaseSummaryConnectedData {
   sortSetting: SortSetting;
   tableInfos: TableInfo[];
-  dbResponse: protos.cockroach.server.serverpb.DatabaseDetailsResponse;
+  dbResponse: KeyedCachedDataReducerState<protos.cockroach.server.serverpb.DatabaseDetailsResponse>;
   grants: protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant[];
 }
 

@@ -17,7 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -70,8 +71,8 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	mat.Start(ctx)
 
 	var meta *execinfrapb.ProducerMetadata
-	require.NotPanics(t, func() { _, meta = mat.Next() }, "VectorizedInternalPanic was not caught")
-	require.NotNil(t, meta.Err, "VectorizedInternalPanic was not propagated as metadata")
+	require.NotPanics(t, func() { _, meta = mat.Next() }, "InternalError was not caught")
+	require.NotNil(t, meta.Err, "InternalError was not propagated as metadata")
 }
 
 // TestNonVectorizedPanicPropagation verifies that materializers do not handle
@@ -121,7 +122,7 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 }
 
 // testVectorizedInternalPanicEmitter is an colexec.Operator that panics with
-// execerror.VectorizedInternalPanic on every odd-numbered invocation of Next()
+// colexecerror.InternalError on every odd-numbered invocation of Next()
 // and returns the next batch from the input on every even-numbered (i.e. it
 // becomes a noop for those iterations). Used for tests only.
 type testVectorizedInternalPanicEmitter struct {
@@ -129,9 +130,9 @@ type testVectorizedInternalPanicEmitter struct {
 	emitBatch bool
 }
 
-var _ colexec.Operator = &testVectorizedInternalPanicEmitter{}
+var _ colexecbase.Operator = &testVectorizedInternalPanicEmitter{}
 
-func newTestVectorizedInternalPanicEmitter(input colexec.Operator) colexec.Operator {
+func newTestVectorizedInternalPanicEmitter(input colexecbase.Operator) colexecbase.Operator {
 	return &testVectorizedInternalPanicEmitter{
 		OneInputNode: colexec.NewOneInputNode(input),
 	}
@@ -146,7 +147,7 @@ func (e *testVectorizedInternalPanicEmitter) Init() {
 func (e *testVectorizedInternalPanicEmitter) Next(ctx context.Context) coldata.Batch {
 	if !e.emitBatch {
 		e.emitBatch = true
-		execerror.VectorizedInternalPanic("")
+		colexecerror.InternalError("")
 	}
 
 	e.emitBatch = false
@@ -162,9 +163,9 @@ type testNonVectorizedPanicEmitter struct {
 	emitBatch bool
 }
 
-var _ colexec.Operator = &testVectorizedInternalPanicEmitter{}
+var _ colexecbase.Operator = &testVectorizedInternalPanicEmitter{}
 
-func newTestNonVectorizedPanicEmitter(input colexec.Operator) colexec.Operator {
+func newTestNonVectorizedPanicEmitter(input colexecbase.Operator) colexecbase.Operator {
 	return &testNonVectorizedPanicEmitter{
 		OneInputNode: colexec.NewOneInputNode(input),
 	}

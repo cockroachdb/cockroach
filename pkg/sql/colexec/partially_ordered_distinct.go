@@ -15,9 +15,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -28,22 +31,22 @@ const partiallyOrderedDistinctNumHashBuckets = 1024
 // distinct columns when we have partial ordering on some of the distinct
 // columns.
 func newPartiallyOrderedDistinct(
-	allocator *Allocator,
-	input Operator,
+	allocator *colmem.Allocator,
+	input colexecbase.Operator,
 	distinctCols []uint32,
 	orderedCols []uint32,
-	colTypes []coltypes.T,
-) (Operator, error) {
+	typs []types.T,
+) (colexecbase.Operator, error) {
 	if len(orderedCols) == 0 || len(orderedCols) == len(distinctCols) {
 		return nil, errors.AssertionFailedf(
 			"partially ordered distinct wrongfully planned: numDistinctCols=%d "+
 				"numOrderedCols=%d", len(distinctCols), len(orderedCols))
 	}
-	chunker, err := newChunker(allocator, input, colTypes, orderedCols)
+	chunker, err := newChunker(allocator, input, typs, orderedCols)
 	if err != nil {
 		return nil, err
 	}
-	chunkerOperator := newChunkerOperator(allocator, chunker, colTypes)
+	chunkerOperator := newChunkerOperator(allocator, chunker, typs)
 	// distinctUnorderedCols will contain distinct columns that are not present
 	// among orderedCols. The unordered distinct operator will use these columns
 	// to find distinct tuples within "chunks" of tuples that are the same on the
@@ -62,7 +65,7 @@ func newPartiallyOrderedDistinct(
 		}
 	}
 	distinct := NewUnorderedDistinct(
-		allocator, chunkerOperator, distinctUnorderedCols, colTypes,
+		allocator, chunkerOperator, distinctUnorderedCols, typs,
 		partiallyOrderedDistinctNumHashBuckets,
 	)
 	return &partiallyOrderedDistinct{
@@ -80,7 +83,7 @@ type partiallyOrderedDistinct struct {
 	distinct resettableOperator
 }
 
-var _ Operator = &partiallyOrderedDistinct{}
+var _ colexecbase.Operator = &partiallyOrderedDistinct{}
 
 func (p *partiallyOrderedDistinct) ChildCount(bool) int {
 	return 1
@@ -90,7 +93,7 @@ func (p *partiallyOrderedDistinct) Child(nth int, _ bool) execinfra.OpNode {
 	if nth == 0 {
 		return p.input
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -116,7 +119,7 @@ func (p *partiallyOrderedDistinct) Next(ctx context.Context) coldata.Batch {
 }
 
 func newChunkerOperator(
-	allocator *Allocator, input *chunker, inputTypes []coltypes.T,
+	allocator *colmem.Allocator, input *chunker, inputTypes []types.T,
 ) *chunkerOperator {
 	return &chunkerOperator{
 		input:         input,
@@ -134,7 +137,7 @@ func newChunkerOperator(
 // that the input has been fully processed).
 type chunkerOperator struct {
 	input      *chunker
-	inputTypes []coltypes.T
+	inputTypes []types.T
 	// haveChunksToEmit indicates whether we have spooled input and still there
 	// are more chunks to emit.
 	haveChunksToEmit bool
@@ -167,7 +170,7 @@ func (c *chunkerOperator) Child(nth int, _ bool) execinfra.OpNode {
 	if nth == 0 {
 		return c.input
 	}
-	execerror.VectorizedInternalPanic(fmt.Sprintf("invalid index %d", nth))
+	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
@@ -211,7 +214,7 @@ func (c *chunkerOperator) Next(ctx context.Context) coldata.Batch {
 		c.currentChunkFinished = true
 	}
 	for i, typ := range c.inputTypes {
-		window := c.input.getValues(i).Window(typ, c.outputTupleStartIdx, outputTupleEndIdx)
+		window := c.input.getValues(i).Window(typeconv.FromColumnType(&typ), c.outputTupleStartIdx, outputTupleEndIdx)
 		c.windowedBatch.ReplaceCol(window, i)
 	}
 	c.windowedBatch.SetSelection(false)

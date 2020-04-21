@@ -16,7 +16,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -56,12 +59,12 @@ func TestSpillingQueue(t *testing.T) {
 				prefix, humanizeutil.IBytes(memoryLimit), diskQueueCacheMode, alwaysCompress, numBatches), func(t *testing.T) {
 				// Create random input.
 				batches := make([]coldata.Batch, 0, numBatches)
-				op := NewRandomDataOp(testAllocator, rng, RandomDataOpArgs{
+				op := coldatatestutils.NewRandomDataOp(testAllocator, rng, coldatatestutils.RandomDataOpArgs{
 					NumBatches: cap(batches),
 					BatchSize:  1 + rng.Intn(coldata.BatchSize()),
 					Nulls:      true,
-					BatchAccumulator: func(b coldata.Batch) {
-						batches = append(batches, CopyBatch(testAllocator, b))
+					BatchAccumulator: func(b coldata.Batch, typs []types.T) {
+						batches = append(batches, coldatatestutils.CopyBatch(b, typs))
 					},
 				})
 				typs := op.Typs()
@@ -75,13 +78,13 @@ func TestSpillingQueue(t *testing.T) {
 				if rewindable {
 					q = newRewindableSpillingQueue(
 						testAllocator, typs, memoryLimit, queueCfg,
-						NewTestingSemaphore(2), coldata.BatchSize(),
+						colexecbase.NewTestingSemaphore(2), coldata.BatchSize(),
 						testDiskAcc,
 					)
 				} else {
 					q = newSpillingQueue(
 						testAllocator, typs, memoryLimit, queueCfg,
-						NewTestingSemaphore(2), coldata.BatchSize(),
+						colexecbase.NewTestingSemaphore(2), coldata.BatchSize(),
 						testDiskAcc,
 					)
 				}

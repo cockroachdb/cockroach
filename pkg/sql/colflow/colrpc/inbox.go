@@ -19,10 +19,11 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/logtags"
@@ -45,8 +46,8 @@ type flowStreamServer interface {
 // RunWithStream (or more specifically, the RPC handler) will unblock Next by
 // closing the stream.
 type Inbox struct {
-	colexec.ZeroInputNode
-	typs []coltypes.T
+	colexecbase.ZeroInputNode
+	typs []types.T
 
 	converter  *colserde.ArrowBatchConverter
 	serializer *colserde.RecordBatchSerializer
@@ -113,11 +114,11 @@ type Inbox struct {
 	}
 }
 
-var _ colexec.Operator = &Inbox{}
+var _ colexecbase.Operator = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(
-	allocator *colexec.Allocator, typs []coltypes.T, streamID execinfrapb.StreamID,
+	allocator *colmem.Allocator, typs []types.T, streamID execinfrapb.StreamID,
 ) (*Inbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
@@ -271,7 +272,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 				i.streamMu.Unlock()
 			}
 			i.closeLocked()
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 	}()
 
@@ -282,7 +283,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 	if err := i.maybeInitLocked(ctx); err != nil {
 		// An error occurred while initializing the Inbox and is likely caused by
 		// the connection issues. It is expected that such an error can occur.
-		execerror.VectorizedExpectedInternalPanic(err)
+		colexecerror.ExpectedError(err)
 	}
 
 	for {
@@ -306,7 +307,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 				return coldata.ZeroBatch
 			}
 			i.errCh <- err
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 		if len(m.Data.Metadata) != 0 {
 			for _, rpm := range m.Data.Metadata {
@@ -325,10 +326,10 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		}
 		i.scratch.data = i.scratch.data[:0]
 		if err := i.serializer.Deserialize(&i.scratch.data, m.Data.RawBytes); err != nil {
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 		if err := i.converter.ArrowToBatch(i.scratch.data, i.scratch.b); err != nil {
-			execerror.VectorizedInternalPanic(err)
+			colexecerror.InternalError(err)
 		}
 		return i.scratch.b
 	}

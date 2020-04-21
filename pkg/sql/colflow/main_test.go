@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -31,7 +31,7 @@ import (
 
 var (
 	// testAllocator is an Allocator with an unlimited budget for use in tests.
-	testAllocator *colexec.Allocator
+	testAllocator *colmem.Allocator
 
 	// testMemMonitor and testMemAcc are a test monitor with an unlimited budget
 	// and a memory account bound to it for use in tests.
@@ -55,7 +55,7 @@ func TestMain(m *testing.M) {
 		defer testMemMonitor.Stop(ctx)
 		memAcc := testMemMonitor.MakeBoundAccount()
 		testMemAcc = &memAcc
-		testAllocator = colexec.NewAllocator(ctx, testMemAcc)
+		testAllocator = colmem.NewAllocator(ctx, testMemAcc)
 		defer testMemAcc.Close(ctx)
 
 		testDiskMonitor = execinfra.NewTestDiskMonitor(ctx, cluster.MakeTestingClusterSettings())

@@ -14,7 +14,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -61,7 +62,7 @@ func TestSimpleProjectOp(t *testing.T) {
 		},
 	}
 	for _, tc := range tcs {
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []Operator) (Operator, error) {
+		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 			return NewSimpleProjectOp(input[0], len(tc.tuples[0]), tc.colsToKeep), nil
 		})
 	}
@@ -69,13 +70,13 @@ func TestSimpleProjectOp(t *testing.T) {
 	// Empty projection. The all nulls injection test case will also return
 	// nothing.
 	runTestsWithoutAllNullsInjection(t, []tuples{{{1, 2, 3}, {1, 2, 3}}}, nil /* typs */, tuples{{}, {}}, orderedVerifier,
-		func(input []Operator) (Operator, error) {
+		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 			return NewSimpleProjectOp(input[0], 3 /* numInputCols */, nil), nil
 		})
 
 	t.Run("RedundantProjectionIsNotPlanned", func(t *testing.T) {
-		typs := []coltypes.T{coltypes.Int64, coltypes.Int64}
-		input := newFiniteBatchSource(testAllocator.NewMemBatch(typs), 1 /* usableCount */)
+		typs := []types.T{*types.Int, *types.Int}
+		input := newFiniteBatchSource(testAllocator.NewMemBatch(typs), typs, 1 /* usableCount */)
 		projectOp := NewSimpleProjectOp(input, len(typs), []uint32{0, 1})
 		require.IsType(t, input, projectOp)
 	})
@@ -93,7 +94,7 @@ func TestSimpleProjectOp(t *testing.T) {
 // batches. See #45686 for detailed discussion.
 func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	inputTypes := []coltypes.T{coltypes.Bytes, coltypes.Float64}
+	inputTypes := []types.T{*types.Bytes, *types.Float}
 	constVal := int64(42)
 	var wg sync.WaitGroup
 	inputTuples := []tuples{
@@ -106,12 +107,12 @@ func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 		{"b", constVal},
 		{"bb", constVal},
 	}
-	runTestsWithoutAllNullsInjection(t, inputTuples, [][]coltypes.T{inputTypes, inputTypes}, expected,
-		unorderedVerifier, func(inputs []Operator) (Operator, error) {
-			var input Operator
+	runTestsWithoutAllNullsInjection(t, inputTuples, [][]types.T{inputTypes, inputTypes}, expected,
+		unorderedVerifier, func(inputs []colexecbase.Operator) (colexecbase.Operator, error) {
+			var input colexecbase.Operator
 			input = NewParallelUnorderedSynchronizer(inputs, inputTypes, &wg)
 			input = NewSimpleProjectOp(input, len(inputTypes), []uint32{0})
-			return NewConstOp(testAllocator, input, coltypes.Int64, constVal, 1)
+			return NewConstOp(testAllocator, input, types.Int, constVal, 1)
 		})
 	wg.Wait()
 }

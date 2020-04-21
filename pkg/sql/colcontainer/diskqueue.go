@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -157,7 +157,7 @@ type diskQueue struct {
 	// dirName is the directory in cfg.Path that holds this queue's files.
 	dirName string
 
-	typs  []coltypes.T
+	typs  []types.T
 	cfg   DiskQueueCfg
 	files []file
 	seqNo int
@@ -327,14 +327,14 @@ func (cfg *DiskQueueCfg) SetDefaultBufferSizeBytesForCacheMode() {
 
 // NewDiskQueue creates a Queue that spills to disk.
 func NewDiskQueue(
-	ctx context.Context, typs []coltypes.T, cfg DiskQueueCfg, diskAcc *mon.BoundAccount,
+	ctx context.Context, typs []types.T, cfg DiskQueueCfg, diskAcc *mon.BoundAccount,
 ) (Queue, error) {
 	return newDiskQueue(ctx, typs, cfg, diskAcc)
 }
 
 // NewRewindableDiskQueue creates a RewindableQueue that spills to disk.
 func NewRewindableDiskQueue(
-	ctx context.Context, typs []coltypes.T, cfg DiskQueueCfg, diskAcc *mon.BoundAccount,
+	ctx context.Context, typs []types.T, cfg DiskQueueCfg, diskAcc *mon.BoundAccount,
 ) (RewindableQueue, error) {
 	d, err := newDiskQueue(ctx, typs, cfg, diskAcc)
 	if err != nil {
@@ -345,7 +345,7 @@ func NewRewindableDiskQueue(
 }
 
 func newDiskQueue(
-	ctx context.Context, typs []coltypes.T, cfg DiskQueueCfg, diskAcc *mon.BoundAccount,
+	ctx context.Context, typs []types.T, cfg DiskQueueCfg, diskAcc *mon.BoundAccount,
 ) (*diskQueue, error) {
 	if err := cfg.EnsureDefaults(); err != nil {
 		return nil, err
@@ -645,7 +645,7 @@ func (d *diskQueue) maybeInitDeserializer(ctx context.Context) (bool, error) {
 		decompressedBytes = d.scratchDecompressedReadBytes
 	}
 
-	deserializer, err := colserde.NewFileDeserializerFromBytes(decompressedBytes)
+	deserializer, err := colserde.NewFileDeserializerFromBytes(d.typs, decompressedBytes)
 	if err != nil {
 		return false, err
 	}
@@ -723,7 +723,7 @@ func (d *diskQueue) Dequeue(ctx context.Context, b coldata.Batch) (bool, error) 
 				// TODO(asubiotto): This is a stop-gap solution. The issue is that
 				//  ownership semantics are a bit murky. Can we do better? Refer to the
 				//  issue.
-				vecs[i] = coldata.NewMemColumn(d.typs[i], coldata.BatchSize())
+				vecs[i] = coldata.NewMemColumn(&d.typs[i], coldata.BatchSize())
 			}
 		}
 		if err := d.deserializerState.GetBatch(d.deserializerState.curBatch, b); err != nil {

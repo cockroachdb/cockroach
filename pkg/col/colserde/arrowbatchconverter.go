@@ -21,6 +21,8 @@ import (
 	"github.com/apache/arrow/go/arrow/memory"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
 )
@@ -28,7 +30,7 @@ import (
 // ArrowBatchConverter converts batches to arrow column data
 // ([]*array.Data) and back again.
 type ArrowBatchConverter struct {
-	typs []coltypes.T
+	typs []types.T
 
 	// builders are the set of builders that need to be kept around in order to
 	// construct arrow representations of certain types when they cannot be simply
@@ -54,10 +56,10 @@ type ArrowBatchConverter struct {
 // NewArrowBatchConverter converts coldata.Batches to []*array.Data and back
 // again according to the schema specified by typs. Converting data that does
 // not conform to typs results in undefined behavior.
-func NewArrowBatchConverter(typs []coltypes.T) (*ArrowBatchConverter, error) {
+func NewArrowBatchConverter(typs []types.T) (*ArrowBatchConverter, error) {
 	for _, t := range typs {
-		if _, supported := supportedTypes[t]; !supported {
-			return nil, errors.Errorf("arrowbatchconverter unsupported type %v", t.String())
+		if converted := typeconv.FromColumnType(&t); converted == coltypes.Unhandled {
+			return nil, errors.Errorf("arrowbatchconverter unsupported type %s", &t)
 		}
 	}
 	c := &ArrowBatchConverter{typs: typs}
@@ -81,24 +83,6 @@ const (
 	sizeOfFloat64 = int(unsafe.Sizeof(float64(0)))
 )
 
-var supportedTypes = func() map[coltypes.T]struct{} {
-	typs := make(map[coltypes.T]struct{})
-	for _, t := range []coltypes.T{
-		coltypes.Bool,
-		coltypes.Bytes,
-		coltypes.Decimal,
-		coltypes.Float64,
-		coltypes.Int16,
-		coltypes.Int32,
-		coltypes.Int64,
-		coltypes.Timestamp,
-		coltypes.Interval,
-	} {
-		typs[t] = struct{}{}
-	}
-	return typs
-}()
-
 // BatchToArrow converts the first batch.Length elements of the batch into an
 // arrow []*array.Data. It is assumed that the batch is not larger than
 // coldata.BatchSize(). The returned []*array.Data may only be used until the
@@ -119,9 +103,10 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			arrowBitmap = n.NullBitmap()
 		}
 
-		if typ == coltypes.Bool || typ == coltypes.Decimal || typ == coltypes.Timestamp || typ == coltypes.Interval {
+		physType := typeconv.FromColumnType(&typ)
+		if physType == coltypes.Bool || physType == coltypes.Decimal || physType == coltypes.Timestamp || physType == coltypes.Interval {
 			var data *array.Data
-			switch typ {
+			switch physType {
 			case coltypes.Bool:
 				c.builders.boolBuilder.AppendValues(vec.Bool()[:n], nil /* valid */)
 				data = c.builders.boolBuilder.NewBooleanArray().Data()
@@ -162,7 +147,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 				}
 				data = c.builders.binaryBuilder.NewBinaryArray().Data()
 			default:
-				panic(fmt.Sprintf("unexpected type %s", typ))
+				panic(fmt.Sprintf("unexpected type %s", &typ))
 			}
 			if arrowBitmap != nil {
 				// Overwrite empty null bitmap with the true bitmap.
@@ -183,7 +168,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			datumSize int
 		)
 
-		switch typ {
+		switch physType {
 		case coltypes.Bytes:
 			var int32Offsets []int32
 			values, int32Offsets = vec.Bytes().ToArrowSerializationFormat(n)
@@ -210,7 +195,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 			dataHeader = (*reflect.SliceHeader)(unsafe.Pointer(&floats))
 			datumSize = sizeOfFloat64
 		default:
-			panic(fmt.Sprintf("unsupported type for conversion to arrow data %s", typ))
+			panic(fmt.Sprintf("unsupported type for conversion to arrow data %s", &typ))
 		}
 
 		// Cast values if not set (mostly for non-byte types).
@@ -273,7 +258,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 		d := data[i]
 
 		var arr array.Interface
-		switch typ {
+		switch physType := typeconv.FromColumnType(&typ); physType {
 		case coltypes.Bool:
 			boolArr := array.NewBooleanData(d)
 			vecArr := vec.Bool()
@@ -358,7 +343,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 			arr = bytesArr
 		default:
 			var col interface{}
-			switch typ {
+			switch physType {
 			case coltypes.Int16:
 				intArr := array.NewInt16Data(d)
 				col = intArr.Int16Values()

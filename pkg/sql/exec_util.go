@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -1853,7 +1854,7 @@ func (m *sessionDataMutator) SetApplicationName(appName string) {
 	m.paramStatusUpdater.AppendParamStatusUpdate("application_name", appName)
 }
 
-func (m *sessionDataMutator) SetBytesEncodeFormat(val sessiondata.BytesEncodeFormat) {
+func (m *sessionDataMutator) SetBytesEncodeFormat(val lex.BytesEncodeFormat) {
 	m.data.DataConversion.BytesEncodeFormat = val
 }
 

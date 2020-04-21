@@ -26,6 +26,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/pkg/errors"
@@ -175,9 +177,9 @@ type BatchedTuples struct {
 
 // Tuples is like TypedTuples except that it tries to guess the type of each
 // datum. However, if the function ever returns nil for one of the datums, you
-// need to use TypedTuples instead and specify the coltypes.
+// need to use TypedTuples instead and specify the types.
 func Tuples(count int, fn func(int) []interface{}) BatchedTuples {
-	return TypedTuples(count, nil /* colTypes */, fn)
+	return TypedTuples(count, nil /* typs */, fn)
 }
 
 const (
@@ -187,12 +189,12 @@ const (
 
 // TypedTuples returns a BatchedTuples where each batch has size 1. It's
 // intended to be easier to use than directly specifying a BatchedTuples, but
-// the tradeoff is some bit of performance. If colTypes is nil, an attempt is
+// the tradeoff is some bit of performance. If typs is nil, an attempt is
 // made to infer them.
-func TypedTuples(count int, colTypes []coltypes.T, fn func(int) []interface{}) BatchedTuples {
+func TypedTuples(count int, typs []types.T, fn func(int) []interface{}) BatchedTuples {
 	// The FillBatch we create has to be concurrency safe, so we can't let it do
-	// the one-time initialization of colTypes without this protection.
-	var colTypesOnce sync.Once
+	// the one-time initialization of typs without this protection.
+	var typesOnce sync.Once
 
 	t := BatchedTuples{
 		NumBatches: count,
@@ -201,9 +203,9 @@ func TypedTuples(count int, colTypes []coltypes.T, fn func(int) []interface{}) B
 		t.FillBatch = func(batchIdx int, cb coldata.Batch, _ *bufalloc.ByteAllocator) {
 			row := fn(batchIdx)
 
-			colTypesOnce.Do(func() {
-				if colTypes == nil {
-					colTypes = make([]coltypes.T, len(row))
+			typesOnce.Do(func() {
+				if typs == nil {
+					typs = make([]types.T, len(row))
 					for i, datum := range row {
 						if datum == nil {
 							panic(fmt.Sprintf(
@@ -211,16 +213,20 @@ func TypedTuples(count int, colTypes []coltypes.T, fn func(int) []interface{}) B
 						} else {
 							switch datum.(type) {
 							case time.Time:
-								colTypes[i] = coltypes.Bytes
+								typs[i] = *types.Bytes
 							default:
-								colTypes[i] = coltypes.FromGoType(datum)
+								t, err := typeconv.UnsafeToSQLType(coltypes.FromGoType(datum))
+								if err != nil {
+									panic(err)
+								}
+								typs[i] = *t
 							}
 						}
 					}
 				}
 			})
 
-			cb.Reset(colTypes, 1)
+			cb.Reset(typs, 1)
 			for colIdx, col := range cb.ColVecs() {
 				switch d := row[colIdx].(type) {
 				case nil:

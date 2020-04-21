@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -814,12 +814,12 @@ func (w *interleavedPartitioned) sessionsInitialRow(rowIdx int) []interface{} {
 	}
 }
 
-var childColTypes = []coltypes.T{
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
+var childTypes = []types.T{
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
 }
 
 func (w *interleavedPartitioned) childInitialRowBatchFunc(
@@ -831,7 +831,7 @@ func (w *interleavedPartitioned) childInitialRowBatchFunc(
 		nowString := timeutil.Now().UTC().Format(time.RFC3339)
 		rng := rand.New(rand.NewSource(int64(sessionRowIdx) + rngFactor))
 
-		cb.Reset(childColTypes, nPerBatch)
+		cb.Reset(childTypes, nPerBatch)
 		sessionIDCol := cb.ColVec(0).Bytes()
 		idCol := cb.ColVec(1).Bytes()
 		valueCol := cb.ColVec(2).Bytes()
@@ -847,17 +847,17 @@ func (w *interleavedPartitioned) childInitialRowBatchFunc(
 	}
 }
 
-var deviceColTypes = []coltypes.T{
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
+var deviceTypes = []types.T{
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
 }
 
 func (w *interleavedPartitioned) deviceInitialRowBatch(
@@ -868,7 +868,7 @@ func (w *interleavedPartitioned) deviceInitialRowBatch(
 	sessionID := randomSessionID(sessionRNG, `east`, w.initEastPercent)
 	nowString := timeutil.Now().UTC().Format(time.RFC3339)
 
-	cb.Reset(deviceColTypes, w.devicesPerSession)
+	cb.Reset(deviceTypes, w.devicesPerSession)
 	sessionIDCol := cb.ColVec(0).Bytes()
 	idCol := cb.ColVec(1).Bytes()
 	deviceIDCol := cb.ColVec(2).Bytes()
@@ -893,11 +893,11 @@ func (w *interleavedPartitioned) deviceInitialRowBatch(
 	}
 }
 
-var queryColTypes = []coltypes.T{
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
-	coltypes.Bytes,
+var queryTypes = []types.T{
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
 }
 
 func (w *interleavedPartitioned) queryInitialRowBatch(
@@ -908,7 +908,7 @@ func (w *interleavedPartitioned) queryInitialRowBatch(
 	sessionID := randomSessionID(sessionRNG, `east`, w.initEastPercent)
 	nowString := timeutil.Now().UTC().Format(time.RFC3339)
 
-	cb.Reset(queryColTypes, w.queriesPerSession)
+	cb.Reset(queryTypes, w.queriesPerSession)
 	sessionIDCol := cb.ColVec(0).Bytes()
 	idCol := cb.ColVec(1).Bytes()
 	createdCol := cb.ColVec(2).Bytes()

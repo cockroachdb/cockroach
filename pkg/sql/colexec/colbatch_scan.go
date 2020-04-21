@@ -15,7 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -35,7 +37,7 @@ import (
 // colBatchScan is the exec.Operator implementation of TableReader. It reads a table
 // from kv, presenting it as coldata.Batches via the exec.Operator interface.
 type colBatchScan struct {
-	ZeroInputNode
+	colexecbase.ZeroInputNode
 	spans     roachpb.Spans
 	flowCtx   *execinfra.FlowCtx
 	rf        *cFetcher
@@ -48,7 +50,7 @@ type colBatchScan struct {
 	init bool
 }
 
-var _ Operator = &colBatchScan{}
+var _ colexecbase.Operator = &colBatchScan{}
 
 func (s *colBatchScan) Init() {
 	s.ctx = context.Background()
@@ -60,17 +62,17 @@ func (s *colBatchScan) Init() {
 		s.ctx, s.flowCtx.Txn, s.spans,
 		limitBatches, s.limitHint, s.flowCtx.TraceKV,
 	); err != nil {
-		execerror.VectorizedInternalPanic(err)
+		colexecerror.InternalError(err)
 	}
 }
 
 func (s *colBatchScan) Next(ctx context.Context) coldata.Batch {
 	bat, err := s.rf.NextBatch(ctx)
 	if err != nil {
-		execerror.VectorizedInternalPanic(err)
+		colexecerror.InternalError(err)
 	}
 	if bat.Selection() != nil {
-		execerror.VectorizedInternalPanic("unexpectedly a selection vector is set on the batch coming from CFetcher")
+		colexecerror.InternalError("unexpectedly a selection vector is set on the batch coming from CFetcher")
 	}
 	return bat
 }
@@ -98,7 +100,7 @@ func (s *colBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 
 // newColBatchScan creates a new colBatchScan operator.
 func newColBatchScan(
-	allocator *Allocator,
+	allocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
@@ -148,7 +150,7 @@ func newColBatchScan(
 
 // initCRowFetcher initializes a row.cFetcher. See initRowFetcher.
 func initCRowFetcher(
-	allocator *Allocator,
+	allocator *colmem.Allocator,
 	fetcher *cFetcher,
 	desc *sqlbase.TableDescriptor,
 	indexIdx int,

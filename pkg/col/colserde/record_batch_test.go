@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -36,7 +38,7 @@ import (
 
 // randomDataFromType creates an *array.Data of length n and type t, filling it
 // with random values and inserting nulls with probability nullProbability.
-func randomDataFromType(rng *rand.Rand, t coltypes.T, n int, nullProbability float64) *array.Data {
+func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float64) *array.Data {
 	if nullProbability < 0 || nullProbability > 1 {
 		panic(fmt.Sprintf("expected a value between 0 and 1 for nullProbability but got %f", nullProbability))
 	}
@@ -55,7 +57,7 @@ func randomDataFromType(rng *rand.Rand, t coltypes.T, n int, nullProbability flo
 	}
 
 	var builder array.Builder
-	switch t {
+	switch typeconv.FromColumnType(t) {
 	case coltypes.Bool:
 		builder = array.NewBooleanBuilder(memory.DefaultAllocator)
 		data := make([]bool, n)
@@ -186,14 +188,14 @@ func TestRecordBatchSerializer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t.Run("UnsupportedSchema", func(t *testing.T) {
-		_, err := colserde.NewRecordBatchSerializer([]coltypes.T{})
+		_, err := colserde.NewRecordBatchSerializer([]types.T{})
 		require.True(t, testutils.IsError(err, "zero length"), err)
 	})
 
 	// Serializing and Deserializing an invalid schema is undefined.
 
 	t.Run("SerializeDifferentColumnLengths", func(t *testing.T) {
-		s, err := colserde.NewRecordBatchSerializer([]coltypes.T{coltypes.Int64, coltypes.Int64})
+		s, err := colserde.NewRecordBatchSerializer([]types.T{*types.Int, *types.Int})
 		require.NoError(t, err)
 		b := array.NewInt64Builder(memory.DefaultAllocator)
 		b.AppendValues([]int64{1, 2}, nil /* valid */)
@@ -216,7 +218,7 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	)
 
 	var (
-		typs            = make([]coltypes.T, rng.Intn(maxTypes)+1)
+		typs            = make([]types.T, rng.Intn(maxTypes)+1)
 		data            = make([]*array.Data, len(typs))
 		dataLen         = rng.Intn(maxDataLen) + 1
 		nullProbability = rng.Float64()
@@ -224,8 +226,8 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	)
 
 	for i := range typs {
-		typs[i] = coltypes.AllTypes[rng.Intn(len(coltypes.AllTypes))]
-		data[i] = randomDataFromType(rng, typs[i], dataLen, nullProbability)
+		typs[i] = typeconv.AllSupportedSQLTypes[rng.Intn(len(typeconv.AllSupportedSQLTypes))]
+		data[i] = randomDataFromType(rng, &typs[i], dataLen, nullProbability)
 	}
 
 	s, err := colserde.NewRecordBatchSerializer(typs)
@@ -272,7 +274,7 @@ func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
 	var (
-		typs             = []coltypes.T{coltypes.Int64}
+		typs             = []types.T{*types.Int}
 		buf              = bytes.Buffer{}
 		deserializedData []*array.Data
 	)
@@ -283,7 +285,7 @@ func BenchmarkRecordBatchSerializerInt64(b *testing.B) {
 	for _, dataLen := range []int{1, 16, 256, 2048, 4096} {
 		// Only calculate useful bytes.
 		numBytes := int64(dataLen * 8)
-		data := []*array.Data{randomDataFromType(rng, typs[0], dataLen, 0 /* nullProbability */)}
+		data := []*array.Data{randomDataFromType(rng, &typs[0], dataLen, 0 /* nullProbability */)}
 		b.Run(fmt.Sprintf("Serialize/dataLen=%d", dataLen), func(b *testing.B) {
 			b.SetBytes(numBytes)
 			for i := 0; i < b.N; i++ {

@@ -28,15 +28,21 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	// {{/*
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
+)
+
+// Remove unused warnings.
+var (
+	_ = execgen.UNSAFEGET
+	_ = colexecerror.InternalError
 )
 
 // {{/*
@@ -63,7 +69,7 @@ var _ bytes.Buffer
 var _ = math.MaxInt64
 
 func _ASSIGN_EQ(_, _, _ interface{}) int {
-	execerror.VectorizedInternalPanic("")
+	colexecerror.InternalError("")
 }
 
 // */}}
@@ -78,17 +84,17 @@ const (
 )
 
 func GetInProjectionOperator(
-	allocator *Allocator,
-	ct *types.T,
-	input Operator,
+	allocator *colmem.Allocator,
+	typ *types.T,
+	input colexecbase.Operator,
 	colIdx int,
 	resultIdx int,
 	datumTuple *tree.DTuple,
 	negate bool,
-) (Operator, error) {
-	input = newVectorTypeEnforcer(allocator, input, coltypes.Bool, resultIdx)
+) (colexecbase.Operator, error) {
+	input = newVectorTypeEnforcer(allocator, input, types.Bool, resultIdx)
 	var err error
-	switch t := typeconv.FromColumnType(ct); t {
+	switch typeconv.FromColumnType(typ) {
 	// {{range .}}
 	case coltypes._TYPE:
 		obj := &projectInOp_TYPE{
@@ -98,22 +104,22 @@ func GetInProjectionOperator(
 			outputIdx:    resultIdx,
 			negate:       negate,
 		}
-		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(ct, datumTuple)
+		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(typ, datumTuple)
 		if err != nil {
 			return nil, err
 		}
 		return obj, nil
 	// {{end}}
 	default:
-		return nil, errors.Errorf("unhandled type: %s", t)
+		return nil, errors.Errorf("unhandled type: %s", typ)
 	}
 }
 
 func GetInOperator(
-	ct *types.T, input Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
-) (Operator, error) {
+	typ *types.T, input colexecbase.Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
+) (colexecbase.Operator, error) {
 	var err error
-	switch t := typeconv.FromColumnType(ct); t {
+	switch typeconv.FromColumnType(typ) {
 	// {{range .}}
 	case coltypes._TYPE:
 		obj := &selectInOp_TYPE{
@@ -121,14 +127,14 @@ func GetInOperator(
 			colIdx:       colIdx,
 			negate:       negate,
 		}
-		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(ct, datumTuple)
+		obj.filterRow, obj.hasNulls, err = fillDatumRow_TYPE(typ, datumTuple)
 		if err != nil {
 			return nil, err
 		}
 		return obj, nil
 	// {{end}}
 	default:
-		return nil, errors.Errorf("unhandled type: %s", t)
+		return nil, errors.Errorf("unhandled type: %s", typ)
 	}
 }
 
@@ -144,7 +150,7 @@ type selectInOp_TYPE struct {
 
 type projectInOp_TYPE struct {
 	OneInputNode
-	allocator *Allocator
+	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
 	filterRow []_GOTYPE
@@ -152,10 +158,10 @@ type projectInOp_TYPE struct {
 	negate    bool
 }
 
-var _ Operator = &projectInOp_TYPE{}
+var _ colexecbase.Operator = &projectInOp_TYPE{}
 
-func fillDatumRow_TYPE(ct *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
-	conv := typeconv.GetDatumToPhysicalFn(ct)
+func fillDatumRow_TYPE(typ *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool, error) {
+	conv := getDatumToPhysicalFn(typ)
 	var result []_GOTYPE
 	hasNulls := false
 	for _, d := range datumTuple.D {

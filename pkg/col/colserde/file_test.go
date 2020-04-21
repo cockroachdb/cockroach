@@ -17,9 +17,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -32,7 +33,7 @@ func TestFileRoundtrip(t *testing.T) {
 	t.Run(`mem`, func(t *testing.T) {
 		// Make a copy of the original batch because the converter modifies and
 		// casts data without copying for performance reasons.
-		original := colexec.CopyBatch(testAllocator, b)
+		original := coldatatestutils.CopyBatch(b, typs)
 
 		var buf bytes.Buffer
 		s, err := colserde.NewFileSerializer(&buf, typs)
@@ -46,7 +47,7 @@ func TestFileRoundtrip(t *testing.T) {
 		for i := 0; i < 2; i++ {
 			func() {
 				roundtrip := coldata.NewMemBatchWithSize(nil, 0)
-				d, err := colserde.NewFileDeserializerFromBytes(buf.Bytes())
+				d, err := colserde.NewFileDeserializerFromBytes(typs, buf.Bytes())
 				require.NoError(t, err)
 				defer func() { require.NoError(t, d.Close()) }()
 				require.Equal(t, typs, d.Typs())
@@ -65,7 +66,7 @@ func TestFileRoundtrip(t *testing.T) {
 
 		// Make a copy of the original batch because the converter modifies and
 		// casts data without copying for performance reasons.
-		original := colexec.CopyBatch(testAllocator, b)
+		original := coldatatestutils.CopyBatch(b, typs)
 
 		f, err := os.Create(path)
 		require.NoError(t, err)
@@ -82,7 +83,7 @@ func TestFileRoundtrip(t *testing.T) {
 		for i := 0; i < 2; i++ {
 			func() {
 				roundtrip := coldata.NewMemBatchWithSize(nil, 0)
-				d, err := colserde.NewFileDeserializerFromPath(path)
+				d, err := colserde.NewFileDeserializerFromPath(typs, path)
 				require.NoError(t, err)
 				defer func() { require.NoError(t, d.Close()) }()
 				require.Equal(t, typs, d.Typs())
@@ -99,7 +100,7 @@ func TestFileIndexing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numInts = 10
-	typs := []coltypes.T{coltypes.Int64}
+	typs := []types.T{*types.Int}
 
 	var buf bytes.Buffer
 	s, err := colserde.NewFileSerializer(&buf, typs)
@@ -113,7 +114,7 @@ func TestFileIndexing(t *testing.T) {
 	}
 	require.NoError(t, s.Finish())
 
-	d, err := colserde.NewFileDeserializerFromBytes(buf.Bytes())
+	d, err := colserde.NewFileDeserializerFromBytes(typs, buf.Bytes())
 	require.NoError(t, err)
 	defer func() { require.NoError(t, d.Close()) }()
 	require.Equal(t, typs, d.Typs())

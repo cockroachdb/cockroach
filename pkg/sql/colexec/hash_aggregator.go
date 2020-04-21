@@ -15,8 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execerror"
+	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,14 +59,15 @@ const (
 type hashAggregator struct {
 	OneInputNode
 
-	allocator *Allocator
+	allocator *colmem.Allocator
 
 	aggCols  [][]uint32
-	aggTypes [][]coltypes.T
+	aggTypes [][]types.T
 	aggFuncs []execinfrapb.AggregatorSpec_Func
 
-	inputTypes  []coltypes.T
-	outputTypes []coltypes.T
+	inputTypes     []types.T
+	inputPhysTypes []coltypes.T
+	outputTypes    []types.T
 
 	// aggFuncMap stores the mapping from hash code to a vector of aggregation
 	// functions. Each aggregation function is stored along with keys that
@@ -148,7 +153,7 @@ type hashAggregator struct {
 	groupCols []uint32
 
 	// groupCols stores the types of the grouping columns.
-	groupTypes []coltypes.T
+	groupTypes []types.T
 
 	// hashBuffer stores hash values for each tuple in the buffered batch.
 	hashBuffer []uint64
@@ -158,20 +163,20 @@ type hashAggregator struct {
 	decimalScratch decimalOverloadScratch
 }
 
-var _ Operator = &hashAggregator{}
+var _ colexecbase.Operator = &hashAggregator{}
 
 // NewHashAggregator creates a hash aggregator on the given grouping columns.
 // The input specifications to this function are the same as that of the
 // NewOrderedAggregator function.
 func NewHashAggregator(
-	allocator *Allocator,
-	input Operator,
-	colTypes []coltypes.T,
+	allocator *colmem.Allocator,
+	input colexecbase.Operator,
+	typs []types.T,
 	aggFns []execinfrapb.AggregatorSpec_Func,
 	groupCols []uint32,
 	aggCols [][]uint32,
-) (Operator, error) {
-	aggTyps := extractAggTypes(aggCols, colTypes)
+) (colexecbase.Operator, error) {
+	aggTyps := extractAggTypes(aggCols, typs)
 	outputTypes, err := makeAggregateFuncsOutputTypes(aggTyps, aggFns)
 	if err != nil {
 		return nil, errors.AssertionFailedf(
@@ -179,14 +184,15 @@ func NewHashAggregator(
 		)
 	}
 
-	groupTypes := make([]coltypes.T, len(groupCols))
+	groupTypes := make([]types.T, len(groupCols))
 	for i, colIdx := range groupCols {
-		groupTypes[i] = colTypes[colIdx]
+		groupTypes[i] = typs[colIdx]
 	}
 
 	// We picked value this as the result of our benchmark.
 	tupleLimit := coldata.BatchSize() * 2
 
+	inputPhysTypes, err := typeconv.FromColumnTypes(typs)
 	return &hashAggregator{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
@@ -198,13 +204,14 @@ func NewHashAggregator(
 
 		batchTupleLimit: tupleLimit,
 
-		state:       hashAggregatorBuffering,
-		inputTypes:  colTypes,
-		outputTypes: outputTypes,
+		state:          hashAggregatorBuffering,
+		inputTypes:     typs,
+		inputPhysTypes: inputPhysTypes,
+		outputTypes:    outputTypes,
 
 		groupCols:  groupCols,
 		groupTypes: groupTypes,
-	}, nil
+	}, err
 }
 
 func (op *hashAggregator) Init() {
@@ -308,7 +315,7 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 		case hashAggregatorDone:
 			return coldata.ZeroBatch
 		default:
-			execerror.VectorizedInternalPanic("hash aggregator in unhandled state")
+			colexecerror.InternalError("hash aggregator in unhandled state")
 			// This code is unreachable, but the compiler cannot infer that.
 			return nil
 		}
@@ -341,7 +348,7 @@ func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context) {
 	for _, colIdx := range op.groupCols {
 		rehash(ctx,
 			hashBuffer,
-			op.inputTypes[colIdx],
+			&op.inputTypes[colIdx],
 			op.scratch.ColVec(int(colIdx)),
 			nKeys,
 			nil, /* sel */
@@ -429,7 +436,7 @@ func (op *hashAggregator) onlineAgg() {
 					// performance.
 					op.keyMapping.ColVec(keyIdx).Append(coldata.SliceArgs{
 						Src:         op.scratch.ColVec(int(colIdx)),
-						ColType:     op.inputTypes[colIdx],
+						ColType:     op.inputPhysTypes[colIdx],
 						DestIdx:     aggFunc.keyIdx,
 						SrcStartIdx: remaining[0],
 						SrcEndIdx:   remaining[0] + 1,
