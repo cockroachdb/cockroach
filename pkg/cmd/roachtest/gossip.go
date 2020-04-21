@@ -484,9 +484,8 @@ func runCheckLocalityIPAddress(ctx context.Context, t *test, c *cluster) {
 				if !strings.Contains(advertiseAddress, "localhost") {
 					t.Fatal("Expected connect address to contain localhost")
 				}
-			} else if c.ExternalAddr(ctx, c.Node(nodeID))[0] != advertiseAddress {
-				t.Fatalf("Connection address is %s but expected %s",
-					advertiseAddress, c.ExternalAddr(ctx, c.Node(nodeID))[0])
+			} else if exp := c.ExternalAddr(ctx, c.Node(nodeID))[0]; exp != advertiseAddress {
+				t.Fatalf("Connection address is %s but expected %s", advertiseAddress, exp)
 			}
 		}
 	}
