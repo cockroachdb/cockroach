@@ -1087,7 +1087,7 @@ func (s *scope) lookupWindowDef(name tree.Name) *tree.WindowDef {
 	panic(pgerror.Newf(pgcode.UndefinedObject, "window %q does not exist", name))
 }
 
-func (s *scope) constructWindowDef(def tree.WindowDef) *tree.WindowDef {
+func (s *scope) constructWindowDef(def tree.WindowDef) tree.WindowDef {
 	switch {
 	case def.RefName != "":
 		// SELECT rank() OVER (w) FROM t WINDOW w AS (...)
@@ -1096,14 +1096,16 @@ func (s *scope) constructWindowDef(def tree.WindowDef) *tree.WindowDef {
 		if err != nil {
 			panic(err)
 		}
-		return &result
+		return result
+
 	case def.Name != "":
 		// SELECT rank() OVER w FROM t WINDOW w AS (...)
 		// Note the lack of parens around w, compared to the first case.
 		// We use the referenced window specification directly, without modification.
-		return s.lookupWindowDef(def.Name)
+		return *s.lookupWindowDef(def.Name)
+
 	default:
-		return &def
+		return def
 	}
 }
 
@@ -1122,9 +1124,12 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 	s.builder.semaCtx.Properties.Require("window",
 		tree.RejectNestedWindowFunctions)
 
-	f.WindowDef = s.constructWindowDef(*f.WindowDef)
+	// Make a copy of f so we can modify the WindowDef.
+	fCopy := *f
+	newWindowDef := s.constructWindowDef(*f.WindowDef)
+	fCopy.WindowDef = &newWindowDef
 
-	expr := f.Walk(s)
+	expr := fCopy.Walk(s)
 
 	typedFunc, err := tree.TypeCheck(expr, s.builder.semaCtx, types.Any)
 	if err != nil {
@@ -1149,17 +1154,25 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 	)
 	s.builder.semaCtx.Properties.Derived.InWindowFunc = true
 
-	for i, e := range f.WindowDef.Partitions {
+	oldPartitions := f.WindowDef.Partitions
+	f.WindowDef.Partitions = make(tree.Exprs, len(oldPartitions))
+	for i, e := range oldPartitions {
 		typedExpr := s.resolveType(e, types.Any)
 		f.WindowDef.Partitions[i] = typedExpr
 	}
-	for i, e := range f.WindowDef.OrderBy {
-		if e.OrderType != tree.OrderByColumn {
+
+	oldOrderBy := f.WindowDef.OrderBy
+	f.WindowDef.OrderBy = make(tree.OrderBy, len(oldOrderBy))
+	for i := range oldOrderBy {
+		ord := *oldOrderBy[i]
+		if ord.OrderType != tree.OrderByColumn {
 			panic(errOrderByIndexInWindow)
 		}
-		typedExpr := s.resolveType(e.Expr, types.Any)
-		f.WindowDef.OrderBy[i].Expr = typedExpr
+		typedExpr := s.resolveType(ord.Expr, types.Any)
+		ord.Expr = typedExpr
+		f.WindowDef.OrderBy[i] = &ord
 	}
+
 	if f.WindowDef.Frame != nil {
 		if err := analyzeWindowFrame(s, f.WindowDef); err != nil {
 			panic(err)
