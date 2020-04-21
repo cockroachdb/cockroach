@@ -23,8 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -353,25 +351,19 @@ func (ef *execFactory) ConstructHashJoin(
 func (ef *execFactory) ConstructApplyJoin(
 	joinType sqlbase.JoinType,
 	left exec.Node,
-	leftBoundColMap opt.ColMap,
-	memo *memo.Memo,
-	rightProps *physical.Required,
-	fakeRight exec.Node,
-	right memo.RelExpr,
+	rightColumns sqlbase.ResultColumns,
 	onCond tree.TypedExpr,
+	planRightSideFn exec.ApplyJoinPlanRightSideFn,
 ) (exec.Node, error) {
 	leftSrc := asDataSource(left)
-	rightSrc := asDataSource(fakeRight)
-	rightSrc.plan.Close(context.TODO())
-	pred, err := makePredicate(joinType, leftSrc.columns, rightSrc.columns)
+	pred, err := makePredicate(joinType, leftSrc.columns, rightColumns)
 	if err != nil {
 		return nil, err
 	}
 	pred.onCond = pred.iVarHelper.Rebind(
 		onCond, false /* alsoReset */, false, /* normalizeToNonNil */
 	)
-	rightCols := rightSrc.columns
-	return newApplyJoinNode(joinType, asDataSource(left), leftBoundColMap, rightProps, rightCols, right, pred, memo)
+	return newApplyJoinNode(joinType, leftSrc, rightColumns, pred, planRightSideFn)
 }
 
 // ConstructMergeJoin is part of the exec.Factory interface.
