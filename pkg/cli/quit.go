@@ -32,24 +32,18 @@ import (
 // quitCmd command shuts down the node server.
 var quitCmd = &cobra.Command{
 	Use:   "quit",
-	Short: "drain and shut down a node\n",
+	Short: "drain and shut down a node (DEPRECATED)\n",
 	Long: `
-Shut down the server. The first stage is drain, where the server
-stops accepting client connections, then stops extant
-connections, and finally pushes range leases onto other nodes,
-subject to various timeout parameters configurable via
-cluster settings. After the first stage completes,
-the server process is shut down.
-
-See also 'cockroach node drain' to drain a server
-without stopping the server process.
-`,
+This command is deprecated.
+Instead, use 'cockroach node drain' to stop all activity on a server
+then use a process manager or orchestration layer to terminate the process.`,
 	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runQuit),
 }
 
 // runQuit accesses the quit shutdown path.
 func runQuit(cmd *cobra.Command, args []string) (err error) {
+	fmt.Fprintf(stderr, "warning: %s\n", strings.ReplaceAll(strings.TrimSpace(cmd.Long), "\n", " "))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

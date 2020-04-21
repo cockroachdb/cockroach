@@ -1387,7 +1387,7 @@ Available Commands:
   start-single-node start a single-node cluster
   init              initialize a cluster
   cert              create ca, node, and client certs
-  quit              drain and shut down a node
+  quit              drain and shut down a node (DEPRECATED)
 
   sql               open a sql shell
   auth-session      log in and out of HTTP sessions
