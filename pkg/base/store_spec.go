@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/errors"
 	humanize "github.com/dustin/go-humanize"
-	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
 
@@ -369,12 +369,23 @@ func PreventedStartupFile(dir string) string {
 	return filepath.Join(dir, "_CRITICAL_ALERT.txt")
 }
 
-// GetPreventedStartupMessage attempts to read the PreventedStartupFile for each
-// store directory and returns their concatenated contents. These files
-// typically request operator intervention after a corruption event by
-// preventing the affected node(s) from starting back up.
-func (ssl StoreSpecList) GetPreventedStartupMessage() (string, error) {
-	var buf strings.Builder
+// PriorCriticalAlertError attempts to read the
+// PreventedStartupFile for each store directory and returns their
+// contents as a structured error.
+//
+// These files typically request operator intervention after a
+// corruption event by preventing the affected node(s) from starting
+// back up.
+func (ssl StoreSpecList) PriorCriticalAlertError() (err error) {
+	addError := func(newErr error) {
+		if err == nil {
+			err = errors.New("startup forbidden by prior critical alert")
+		}
+		// We use WithDetailf here instead of errors.CombineErrors
+		// because we want the details to be printed to the screen
+		// (combined errors only show up via %+v).
+		err = errors.WithDetailf(err, "%v", newErr)
+	}
 	for _, ss := range ssl.Specs {
 		path := ss.PreventedStartupFile()
 		if path == "" {
@@ -383,15 +394,13 @@ func (ssl StoreSpecList) GetPreventedStartupMessage() (string, error) {
 		b, err := ioutil.ReadFile(path)
 		if err != nil {
 			if !os.IsNotExist(err) {
-				return "", err
+				addError(errors.Wrapf(err, "%s", path))
 			}
 			continue
 		}
-		fmt.Fprintf(&buf, "From %s:\n\n", path)
-		_, _ = buf.Write(b)
-		fmt.Fprintln(&buf)
+		addError(errors.Newf("From %s:\n\n%s\n", path, b))
 	}
-	return buf.String(), nil
+	return err
 }
 
 // PreventedStartupFile returns the path to a file which, if it exists, should

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -245,13 +246,13 @@ func TestStoreSpecListPreventedStartupMessage(t *testing.T) {
 		},
 	}
 
-	msg, err := ssl.GetPreventedStartupMessage()
+	err := ssl.PriorCriticalAlertError()
 	require.NoError(t, err)
-	require.Empty(t, msg)
 
 	require.NoError(t, ioutil.WriteFile(ssl.Specs[2].PreventedStartupFile(), []byte("boom"), 0644))
 
-	msg, err = ssl.GetPreventedStartupMessage()
-	require.NoError(t, err)
-	require.Contains(t, msg, "boom")
+	err = ssl.PriorCriticalAlertError()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "startup forbidden by prior critical alert")
+	require.Contains(t, errors.FlattenDetails(err), "boom")
 }
