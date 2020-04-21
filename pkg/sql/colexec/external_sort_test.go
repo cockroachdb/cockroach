@@ -158,7 +158,7 @@ func TestExternalSortRandomized(t *testing.T) {
 	//    memory limit.
 	// memoryToSort is the total amount of memory that will be sorted in this
 	// test.
-	memoryToSort := (nTups / coldata.BatchSize()) * colmem.EstimateBatchSizeBytesFromSQLTypes(typs, coldata.BatchSize())
+	memoryToSort := (nTups / coldata.BatchSize()) * colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize())
 	// partitionSize will be the memory limit passed in to tests with a memory
 	// limit. With a maximum number of partitions of 2 this will result in
 	// repartitioning twice. To make this a total amount of memory, we also need

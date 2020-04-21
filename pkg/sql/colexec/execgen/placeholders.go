@@ -17,6 +17,7 @@ const nonTemplatePanic = "do not call from non-template code"
 // Remove unused warnings.
 var (
 	_ = UNSAFEGET
+	_ = RETURNUNSAFEGET
 	_ = COPYVAL
 	_ = SET
 	_ = SLICE
@@ -32,6 +33,13 @@ var (
 // UNSAFEGET is a template function. Use this if you are not keeping data around
 // (including passing it to SET).
 func UNSAFEGET(target, i interface{}) interface{} {
+	colexecerror.InternalError(nonTemplatePanic)
+	return nil
+}
+
+// RETURNUNSAFEGET is a template function. Use this if you are not keeping data around
+// (including passing it to SET).
+func RETURNUNSAFEGET(target, i interface{}) interface{} {
 	colexecerror.InternalError(nonTemplatePanic)
 	return nil
 }

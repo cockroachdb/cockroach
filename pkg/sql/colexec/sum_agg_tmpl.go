@@ -22,8 +22,6 @@ package colexec
 import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -43,8 +41,11 @@ var _ tree.Datum
 // Dummy import to pull in "duration" package.
 var _ duration.Duration
 
-// Dummy import to pull in "coltypes" package.
-var _ coltypes.T
+// _CANONICAL_TYPE_FAMILY is the template variable.
+const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _TYPE_WIDTH is the template variable.
+const _TYPE_WIDTH = 0
 
 // _ASSIGN_ADD is the template addition function for assigning the first input
 // to the result of the second input + the third input.
@@ -55,17 +56,22 @@ func _ASSIGN_ADD(_, _, _ string) {
 // */}}
 
 func newSumAgg(t *types.T) (aggregateFunc, error) {
-	switch typeconv.FromColumnType(t) {
+	switch t.Family() {
 	// {{range .}}
-	case _TYPES_T:
-		return &sum_TYPEAgg{}, nil
-	// {{end}}
-	default:
-		return nil, errors.Errorf("unsupported sum agg type %s", t)
+	case _CANONICAL_TYPE_FAMILY:
+		switch t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			return &sum_TYPEAgg{}, nil
+			// {{end}}
+		}
+		// {{end}}
 	}
+	return nil, errors.Errorf("unsupported sum agg type %s", t.Name())
 }
 
 // {{range .}}
+// {{range .WidthOverloads}}
 
 type sum_TYPEAgg struct {
 	done bool
@@ -164,6 +170,7 @@ func (a *sum_TYPEAgg) HandleEmptyInputScalar() {
 	a.scratch.nulls.SetNull(0)
 }
 
+// {{end}}
 // {{end}}
 
 // {{/*

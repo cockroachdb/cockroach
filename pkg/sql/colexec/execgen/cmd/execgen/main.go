@@ -70,6 +70,7 @@ func (g *execgen) run(args ...string) bool {
 	g.cmdLine.SetOutput(g.stdErr)
 	g.cmdLine.Usage = g.usage
 	g.cmdLine.BoolVar(&g.useGoFmt, "useGoFmt", true, "run go fmt on generated code")
+	//g.cmdLine.BoolVar(&g.useGoFmt, "useGoFmt", false, "run go fmt on generated code")
 	g.cmdLine.BoolVar(&printDeps, "M", false, "print the dependency list")
 	err := g.cmdLine.Parse(args)
 	if err != nil {

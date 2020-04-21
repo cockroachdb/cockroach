@@ -11,7 +11,7 @@
 // {{/*
 // +build execgen_template
 //
-// This file is the execgen template for orderedsynchronizer.eg.go. It's
+// This file is the execgen template for ordered_synchronizer.eg.go. It's
 // formatted in a special way, so it's both valid Go and a valid text/template
 // input. This permits editing this file with editor support.
 //
@@ -27,8 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -55,14 +54,14 @@ var _ time.Time
 // Dummy import to pull in "duration" package.
 var _ duration.Duration
 
-// _GOTYPESLICE is the template Go type slice variable for this operator. It
-// will be replaced by the Go slice representation for each type in coltypes.T, for
-// example []int64 for coltypes.Int64.
+// _GOTYPESLICE is the template variable.
 type _GOTYPESLICE interface{}
 
-// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
-// coltypes.Foo for each type Foo in the coltypes.T type.
-const _TYPES_T = coltypes.Unhandled
+// _CANONICAL_TYPE_FAMILY is the template variable.
+const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _TYPE_WIDTH is the template variable.
+const _TYPE_WIDTH = 0
 
 // */}}
 
@@ -74,7 +73,6 @@ type OrderedSynchronizer struct {
 	inputs    []colexecbase.Operator
 	ordering  sqlbase.ColumnOrdering
 	typs      []types.T
-	physTypes []coltypes.T
 
 	// inputBatches stores the current batch for each input.
 	inputBatches []coldata.Batch
@@ -92,7 +90,9 @@ type OrderedSynchronizer struct {
 	// In order to reduce the number of interface conversions, we will get access
 	// to the underlying slice for the output vectors and will use them directly.
 	// {{range .}}
+	// {{range .WidthOverloads}}
 	out_TYPECols []_GOTYPESLICE
+	// {{end}}
 	// {{end}}
 	// outColsMap contains the positions of the corresponding vectors in the
 	// slice for the same types. For example, if we have an output batch with
@@ -128,14 +128,12 @@ func NewOrderedSynchronizer(
 	typs []types.T,
 	ordering sqlbase.ColumnOrdering,
 ) (*OrderedSynchronizer, error) {
-	physTypes, err := typeconv.FromColumnTypes(typs)
 	return &OrderedSynchronizer{
 		allocator: allocator,
 		inputs:    inputs,
 		ordering:  ordering,
 		typs:      typs,
-		physTypes: physTypes,
-	}, err
+	}, nil
 }
 
 // Next is part of the Operator interface.
@@ -168,21 +166,26 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				srcRowIdx = sel[srcRowIdx]
 			}
-			for i, physType := range o.physTypes {
+			for i, t := range o.typs {
 				vec := batch.ColVec(i)
 				if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(srcRowIdx) {
 					o.outNulls[i].SetNull(outputIdx)
 				} else {
-					switch physType {
+					switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
 					// {{range .}}
-					case _TYPES_T:
-						srcCol := vec._TYPE()
-						outCol := o.out_TYPECols[o.outColsMap[i]]
-						v := execgen.UNSAFEGET(srcCol, srcRowIdx)
-						execgen.SET(outCol, outputIdx, v)
-					// {{end}}
+					case _CANONICAL_TYPE_FAMILY:
+						switch t.Width() {
+						// {{range .WidthOverloads}}
+						case _TYPE_WIDTH:
+							srcCol := vec._TYPE()
+							outCol := o.out_TYPECols[o.outColsMap[i]]
+							v := execgen.UNSAFEGET(srcCol, srcRowIdx)
+							execgen.SET(outCol, outputIdx, v)
+							// {{end}}
+						}
+						// {{end}}
 					default:
-						colexecerror.InternalError(fmt.Sprintf("unhandled type %s", physType))
+						colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t.Name()))
 					}
 				}
 			}
@@ -217,11 +220,16 @@ func (o *OrderedSynchronizer) Init() {
 	o.outColsMap = make([]int, len(o.typs))
 	for i, outVec := range o.output.ColVecs() {
 		o.outNulls[i] = outVec.Nulls()
-		switch o.physTypes[i] {
+		switch t := o.typs[i]; typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
 		// {{range .}}
-		case _TYPES_T:
-			o.outColsMap[i] = len(o.out_TYPECols)
-			o.out_TYPECols = append(o.out_TYPECols, outVec._TYPE())
+		case _CANONICAL_TYPE_FAMILY:
+			switch t.Width() {
+			// {{range .WidthOverloads}}
+			case _TYPE_WIDTH:
+				o.outColsMap[i] = len(o.out_TYPECols)
+				o.out_TYPECols = append(o.out_TYPECols, outVec._TYPE())
+				// {{end}}
+			}
 		// {{end}}
 		default:
 			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", o.typs[i].String()))

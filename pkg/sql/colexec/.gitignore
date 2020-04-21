@@ -19,7 +19,7 @@ mergejoiner_leftouter.eg.go
 mergejoiner_leftsemi.eg.go
 mergejoiner_rightouter.eg.go
 min_max_agg.eg.go
-orderedsynchronizer.eg.go
+ordered_synchronizer.eg.go
 overloads_test_utils.eg.go
 proj_const_left_ops.eg.go
 proj_const_right_ops.eg.go

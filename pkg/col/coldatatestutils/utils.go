@@ -12,7 +12,6 @@ package coldatatestutils
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -26,7 +25,6 @@ func CopyBatch(original coldata.Batch, typs []types.T) coldata.Batch {
 	for colIdx, col := range original.ColVecs() {
 		b.ColVec(colIdx).Copy(coldata.CopySliceArgs{
 			SliceArgs: coldata.SliceArgs{
-				ColType:   typeconv.FromColumnType(&typs[colIdx]),
 				Src:       col,
 				SrcEndIdx: original.Length(),
 			},

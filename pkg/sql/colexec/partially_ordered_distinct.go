@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -213,8 +212,8 @@ func (c *chunkerOperator) Next(ctx context.Context) coldata.Batch {
 		}
 		c.currentChunkFinished = true
 	}
-	for i, typ := range c.inputTypes {
-		window := c.input.getValues(i).Window(typeconv.FromColumnType(&typ), c.outputTupleStartIdx, outputTupleEndIdx)
+	for i := range c.inputTypes {
+		window := c.input.getValues(i).Window(c.outputTupleStartIdx, outputTupleEndIdx)
 		c.windowedBatch.ReplaceCol(window, i)
 	}
 	c.windowedBatch.SetSelection(false)

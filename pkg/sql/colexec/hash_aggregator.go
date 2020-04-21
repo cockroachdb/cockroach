@@ -14,8 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -60,9 +58,8 @@ type hashAggregator struct {
 	aggTypes [][]types.T
 	aggFuncs []execinfrapb.AggregatorSpec_Func
 
-	inputTypes     []types.T
-	inputPhysTypes []coltypes.T
-	outputTypes    []types.T
+	inputTypes  []types.T
+	outputTypes []types.T
 
 	// aggFuncMap stores the mapping from hash code to a vector of aggregation
 	// functions. Each aggregation function is stored along with keys that
@@ -193,7 +190,6 @@ func NewHashAggregator(
 		groupTypes[i] = typs[colIdx]
 	}
 
-	inputPhysTypes, err := typeconv.FromColumnTypes(typs)
 	return &hashAggregator{
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
@@ -203,10 +199,9 @@ func NewHashAggregator(
 		aggTypes:   aggTyps,
 		aggFuncMap: make(hashAggFuncMap),
 
-		state:          hashAggregatorAggregating,
-		inputTypes:     typs,
-		inputPhysTypes: inputPhysTypes,
-		outputTypes:    outputTypes,
+		state:       hashAggregatorAggregating,
+		inputTypes:  typs,
+		outputTypes: outputTypes,
 
 		groupCols:  groupCols,
 		groupTypes: groupTypes,
@@ -382,7 +377,6 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 					// performance.
 					op.keyMapping.ColVec(keyIdx).Append(coldata.SliceArgs{
 						Src:         b.ColVec(int(colIdx)),
-						ColType:     op.inputPhysTypes[colIdx],
 						DestIdx:     aggFunc.keyIdx,
 						SrcStartIdx: groupStartIdx,
 						SrcEndIdx:   groupStartIdx + 1,

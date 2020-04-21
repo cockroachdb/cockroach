@@ -11,12 +11,14 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 const projConstOpsTmpl = "pkg/sql/colexec/proj_const_ops_tmpl.go"
@@ -39,30 +41,30 @@ func getProjConstOpTmplString(isConstLeft bool) (string, error) {
 // Note that not all template variables can be present in the template, and it
 // is ok - such replacements will be noops.
 func replaceProjTmplVariables(tmpl string) string {
-	tmpl = strings.Replace(tmpl, "_L_UNSAFEGET", "execgen.UNSAFEGET", -1)
-	tmpl = replaceManipulationFuncs(".LTyp", tmpl)
-	tmpl = strings.Replace(tmpl, "_R_UNSAFEGET", "execgen.UNSAFEGET", -1)
-	tmpl = replaceManipulationFuncs(".RTyp", tmpl)
-	tmpl = strings.Replace(tmpl, "_RET_UNSAFEGET", "execgen.UNSAFEGET", -1)
-	tmpl = replaceManipulationFuncs(".RetTyp", tmpl)
+	tmpl = strings.ReplaceAll(tmpl, "_L_UNSAFEGET", "execgen.UNSAFEGET")
+	tmpl = replaceManipulationFuncsAmbiguous(".Left", tmpl)
+	tmpl = strings.ReplaceAll(tmpl, "_R_UNSAFEGET", "execgen.UNSAFEGET")
+	tmpl = replaceManipulationFuncsAmbiguous(".Right", tmpl)
+	tmpl = strings.ReplaceAll(tmpl, "_RETURN_UNSAFEGET", "execgen.RETURNUNSAFEGET")
+	tmpl = replaceManipulationFuncsAmbiguous(".Right", tmpl)
 
-	// The order in which variables are replaced is important - since some
-	// variable names are prefixes of others, we need to replace the longer names
-	// first.
-	tmpl = strings.Replace(tmpl, "_OP_NAME", "proj{{.Name}}{{.LTyp}}{{.RTyp}}Op", -1)
-	tmpl = strings.Replace(tmpl, "_NAME", "{{.Name}}", -1)
-	tmpl = strings.Replace(tmpl, "_L_GO_TYPE", "{{.LGoType}}", -1)
-	tmpl = strings.Replace(tmpl, "_R_GO_TYPE", "{{.RGoType}}", -1)
-	tmpl = strings.Replace(tmpl, "_L_TYP_VAR", "{{$lTyp}}", -1)
-	tmpl = strings.Replace(tmpl, "_R_TYP_VAR", "{{$rTyp}}", -1)
-	tmpl = strings.Replace(tmpl, "_L_TYP", "{{.LTyp}}", -1)
-	tmpl = strings.Replace(tmpl, "_R_TYP", "{{.RTyp}}", -1)
-	tmpl = strings.Replace(tmpl, "_RET_TYP", "{{.RetTyp}}", -1)
+	tmpl = strings.ReplaceAll(tmpl, "_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftFamilies}}")
+	tmpl = strings.ReplaceAll(tmpl, "_LEFT_TYPE_WIDTH", typeWidthReplacement)
+	tmpl = strings.ReplaceAll(tmpl, "_RIGHT_CANONICAL_TYPE_FAMILY", "{{.RightFamilies}}")
+	tmpl = strings.ReplaceAll(tmpl, "_RIGHT_TYPE_WIDTH", typeWidthReplacement)
+
+	tmpl = strings.ReplaceAll(tmpl, "_OP_NAME", "proj{{.Name}}{{.Left.VecMethod}}{{.Right.VecMethod}}Op")
+	tmpl = strings.ReplaceAll(tmpl, "_NAME", "{{.Name}}")
+	tmpl = strings.ReplaceAll(tmpl, "_L_GO_TYPE", "{{.Left.GoType}}")
+	tmpl = strings.ReplaceAll(tmpl, "_R_GO_TYPE", "{{.Right.GoType}}")
+	tmpl = strings.ReplaceAll(tmpl, "_L_TYP", "{{.Left.VecMethod}}")
+	tmpl = strings.ReplaceAll(tmpl, "_R_TYP", "{{.Right.VecMethod}}")
+	tmpl = strings.ReplaceAll(tmpl, "_RET_TYP", "{{.Right.RetVecMethod}}")
 
 	assignRe := makeFunctionRegex("_ASSIGN", 3)
-	tmpl = assignRe.ReplaceAllString(tmpl, makeTemplateFunctionCall("Assign", 3))
+	tmpl = assignRe.ReplaceAllString(tmpl, makeTemplateFunctionCall("Right.Assign", 3))
 
-	tmpl = strings.Replace(tmpl, "_HAS_NULLS", "$hasNulls", -1)
+	tmpl = strings.ReplaceAll(tmpl, "_HAS_NULLS", "$hasNulls")
 	setProjectionRe := makeFunctionRegex("_SET_PROJECTION", 1)
 	tmpl = setProjectionRe.ReplaceAllString(tmpl, `{{template "setProjection" buildDict "Global" $ "HasNulls" $1 "Overload" .}}`)
 	setSingleTupleProjectionRe := makeFunctionRegex("_SET_SINGLE_TUPLE_PROJECTION", 1)
@@ -76,17 +78,17 @@ func replaceProjTmplVariables(tmpl string) string {
 // the constant is on the left side. It should only be used within this file.
 func replaceProjConstTmplVariables(tmpl string, isConstLeft bool) string {
 	if isConstLeft {
-		tmpl = strings.Replace(tmpl, "_CONST_SIDE", "L", -1)
-		tmpl = strings.Replace(tmpl, "_IS_CONST_LEFT", "true", -1)
-		tmpl = strings.Replace(tmpl, "_OP_CONST_NAME", "proj{{.Name}}{{.LTyp}}Const{{.RTyp}}Op", -1)
-		tmpl = strings.Replace(tmpl, "_NON_CONST_GOTYPESLICE", "{{.RTyp.GoTypeSliceName}}", -1)
-		tmpl = replaceManipulationFuncs(".RTyp", tmpl)
+		tmpl = strings.ReplaceAll(tmpl, "_CONST_SIDE", "L")
+		tmpl = strings.ReplaceAll(tmpl, "_IS_CONST_LEFT", "true")
+		tmpl = strings.ReplaceAll(tmpl, "_OP_CONST_NAME", "proj{{.Name}}{{.Left.VecMethod}}Const{{.Right.VecMethod}}Op")
+		tmpl = strings.ReplaceAll(tmpl, "_NON_CONST_GOTYPESLICE", "{{.Right.GoTypeSliceName}}")
+		tmpl = replaceManipulationFuncsAmbiguous(".Right", tmpl)
 	} else {
-		tmpl = strings.Replace(tmpl, "_CONST_SIDE", "R", -1)
-		tmpl = strings.Replace(tmpl, "_IS_CONST_LEFT", "false", -1)
-		tmpl = strings.Replace(tmpl, "_OP_CONST_NAME", "proj{{.Name}}{{.LTyp}}{{.RTyp}}ConstOp", -1)
-		tmpl = strings.Replace(tmpl, "_NON_CONST_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
-		tmpl = replaceManipulationFuncs(".LTyp", tmpl)
+		tmpl = strings.ReplaceAll(tmpl, "_CONST_SIDE", "R")
+		tmpl = strings.ReplaceAll(tmpl, "_IS_CONST_LEFT", "false")
+		tmpl = strings.ReplaceAll(tmpl, "_OP_CONST_NAME", "proj{{.Name}}{{.Left.VecMethod}}{{.Right.VecMethod}}ConstOp")
+		tmpl = strings.ReplaceAll(tmpl, "_NON_CONST_GOTYPESLICE", "{{.Left.GoTypeSliceName}}")
+		tmpl = replaceManipulationFuncsAmbiguous(".Left", tmpl)
 	}
 	return replaceProjTmplVariables(tmpl)
 }
@@ -108,26 +110,155 @@ func genProjNonConstOps(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, getLTypToRTypToOverloads())
+	return tmpl.Execute(wr, getProjTmplInfo())
 }
 
-func getLTypToRTypToOverloads() map[coltypes.T]map[coltypes.T][]*overload {
-	var allOverloads []*overload
-	allOverloads = append(allOverloads, binaryOpOverloads...)
-	allOverloads = append(allOverloads, comparisonOpOverloads...)
+type twoArgsResolved struct {
+	*overloadBase
+	Left  *argWidthOverload
+	Right *lastArgWidthOverload
+}
 
-	lTypToRTypToOverloads := make(map[coltypes.T]map[coltypes.T][]*overload)
-	for _, ov := range allOverloads {
-		lTyp := ov.LTyp
-		rTyp := ov.RTyp
-		rTypToOverloads := lTypToRTypToOverloads[lTyp]
-		if rTypToOverloads == nil {
-			rTypToOverloads = make(map[coltypes.T][]*overload)
-			lTypToRTypToOverloads[lTyp] = rTypToOverloads
+type projTmplInfoRightWidth struct {
+	Width int32
+	*twoArgsResolved
+}
+
+type projTmplInfoRightFamily struct {
+	RightCanonicalFamily types.Family
+	RightFamilies        string
+	RightWidths          []*projTmplInfoRightWidth
+}
+
+type projTmplInfoLeftWidth struct {
+	Width         int32
+	RightFamilies []*projTmplInfoRightFamily
+}
+
+type projTmplInfoLeftFamily struct {
+	LeftCanonicalFamily types.Family
+	LeftFamilies        string
+	LeftWidths          []*projTmplInfoLeftWidth
+}
+
+type projTmplInfoOp struct {
+	*overloadBase
+	LeftFamilies []*projTmplInfoLeftFamily
+}
+
+type projTmplInfo struct {
+	BinOps            []*projTmplInfoOp
+	CmpOps            []*projTmplInfoOp
+	CastOverloads     *projTmplInfoOp
+	ResolvedBinCmpOps []*twoArgsResolved
+}
+
+func getProjTmplInfo() projTmplInfo {
+	var result projTmplInfo
+	for _, overloads := range twoArgsOverloads {
+		ov := overloads.Left[0].overloadBase
+		var info *projTmplInfoOp
+		if ov.IsBinOp {
+			for _, existingInfo := range result.BinOps {
+				if existingInfo.Name == ov.Name {
+					info = existingInfo
+					break
+				}
+			}
+			if info == nil {
+				info = &projTmplInfoOp{
+					overloadBase: ov,
+				}
+				result.BinOps = append(result.BinOps, info)
+			}
+		} else if ov.IsCmpOp {
+			for _, existingInfo := range result.CmpOps {
+				if existingInfo.Name == ov.Name {
+					info = existingInfo
+					break
+				}
+			}
+			if info == nil {
+				info = &projTmplInfoOp{
+					overloadBase: ov,
+				}
+				result.CmpOps = append(result.CmpOps, info)
+			}
+		} else if ov.IsCastOp {
+			info = result.CastOverloads
+			if info == nil {
+				info = &projTmplInfoOp{
+					overloadBase: ov,
+				}
+				result.CastOverloads = info
+			}
+		} else {
+			colexecerror.InternalError(fmt.Sprintf("unexpectedly neither binary, comparison, nor cast overload: %s", ov))
 		}
-		rTypToOverloads[rTyp] = append(rTypToOverloads[rTyp], ov)
+		for overloadIdx := range overloads.Left {
+			leftTypeOverload := overloads.Left[overloadIdx]
+			leftWidthOverload := leftTypeOverload.WidthOverload
+			rightTypeOverload := overloads.Right[overloadIdx]
+			rightWidthOverloads := rightTypeOverload.WidthOverloads
+			var leftFamilies *projTmplInfoLeftFamily
+			for _, lf := range info.LeftFamilies {
+				if lf.LeftCanonicalFamily == leftTypeOverload.CanonicalTypeFamily {
+					leftFamilies = lf
+					break
+				}
+			}
+			if leftFamilies == nil {
+				leftFamilies = &projTmplInfoLeftFamily{
+					LeftCanonicalFamily: leftTypeOverload.CanonicalTypeFamily,
+					LeftFamilies:        leftTypeOverload.CanonicalTypeFamilyStr,
+				}
+				info.LeftFamilies = append(info.LeftFamilies, leftFamilies)
+			}
+			var leftWidths *projTmplInfoLeftWidth
+			for _, lw := range leftFamilies.LeftWidths {
+				if lw.Width == leftWidthOverload.Width {
+					leftWidths = lw
+					break
+				}
+			}
+			if leftWidths == nil {
+				leftWidths = &projTmplInfoLeftWidth{
+					Width: leftWidthOverload.Width,
+				}
+				leftFamilies.LeftWidths = append(leftFamilies.LeftWidths, leftWidths)
+			}
+			var rightFamilies *projTmplInfoRightFamily
+			for _, rf := range leftWidths.RightFamilies {
+				if rf.RightCanonicalFamily == rightTypeOverload.CanonicalTypeFamily {
+					rightFamilies = rf
+					break
+				}
+			}
+			if rightFamilies == nil {
+				rightFamilies = &projTmplInfoRightFamily{
+					RightCanonicalFamily: rightTypeOverload.CanonicalTypeFamily,
+					RightFamilies:        rightTypeOverload.CanonicalTypeFamilyStr,
+				}
+				leftWidths.RightFamilies = append(leftWidths.RightFamilies, rightFamilies)
+			}
+			for _, rightWidthOverload := range rightWidthOverloads {
+				tar := &twoArgsResolved{
+					overloadBase: leftTypeOverload.overloadBase,
+					Left:         leftWidthOverload,
+					Right:        rightWidthOverload,
+				}
+				rightFamilies.RightWidths = append(rightFamilies.RightWidths,
+					&projTmplInfoRightWidth{
+						Width:           rightWidthOverload.Width,
+						twoArgsResolved: tar,
+					})
+				if ov.IsBinOp || ov.IsCmpOp {
+					result.ResolvedBinCmpOps = append(result.ResolvedBinCmpOps, tar)
+				}
+			}
+		}
 	}
-	return lTypToRTypToOverloads
+	return result
 }
 
 func init() {
@@ -141,7 +272,7 @@ func init() {
 			if err != nil {
 				return err
 			}
-			return tmpl.Execute(wr, getLTypToRTypToOverloads())
+			return tmpl.Execute(wr, getProjTmplInfo())
 		}
 	}
 

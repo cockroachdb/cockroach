@@ -27,8 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -61,8 +60,14 @@ var _ tree.Datum
 // Dummy import to pull in "math" package.
 var _ = math.MaxInt64
 
-// Dummy import to pull in "coltypes" package.
-var _ coltypes.T
+// _GOTYPESLICE is the template variable.
+type _GOTYPESLICE interface{}
+
+// _CANONICAL_TYPE_FAMILY is the template variable.
+const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _TYPE_WIDTH is the template variable.
+const _TYPE_WIDTH = 0
 
 // _COMPARE is the template equality function for assigning the first input
 // to the result of comparing second and third inputs.
@@ -92,6 +97,7 @@ type vecComparator interface {
 }
 
 // {{range .}}
+// {{range .WidthOverloads}}
 type _TYPEVecComparator struct {
 	vecs  []_GOTYPESLICE
 	nulls []*coldata.Nulls
@@ -124,7 +130,7 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
-		// {{if eq .LTyp.String "Bytes"}}
+		// {{if eq .VecMethod "Bytes"}}
 		// Since flat Bytes cannot be set at arbitrary indices (data needs to be
 		// moved around), we use CopySlice to accept the performance hit.
 		// Specifically, this is a performance hit because we are overwriting the
@@ -140,18 +146,24 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 }
 
 // {{end}}
+// {{end}}
 
 func GetVecComparator(t *types.T, numVecs int) vecComparator {
-	switch typeconv.FromColumnType(t) {
+	switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
 	// {{range .}}
-	case coltypes._TYPE:
-		return &_TYPEVecComparator{
-			vecs:  make([]_GOTYPESLICE, numVecs),
-			nulls: make([]*coldata.Nulls, numVecs),
+	case _CANONICAL_TYPE_FAMILY:
+		switch t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			return &_TYPEVecComparator{
+				vecs:  make([]_GOTYPESLICE, numVecs),
+				nulls: make([]*coldata.Nulls, numVecs),
+			}
+			// {{end}}
 		}
 		// {{end}}
 	}
-	colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t.Name()))
+	colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

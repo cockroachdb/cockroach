@@ -20,18 +20,18 @@
 package colexec
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/errors"
 )
 
 // Remove unused warning.
@@ -48,10 +48,11 @@ var _ time.Time
 // Dummy import to pull in "duration" package.
 var _ duration.Duration
 
-const (
-	_FAMILY = types.Family(0)
-	_WIDTH  = int32(0)
-)
+// _CANONICAL_TYPE_FAMILY is the template variable.
+const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _TYPE_WIDTH is the template variable.
+const _TYPE_WIDTH = 0
 
 type _GOTYPE interface{}
 
@@ -60,11 +61,12 @@ func _ROWS_TO_COL_VEC(
 ) error { // */}}
 	// {{define "rowsToColVec" -}}
 	col := vec.TemplateType()
-	datumToPhysicalFn := getDatumToPhysicalFn(typ)
+	datumToPhysicalFn := getDatumToPhysicalFn(t)
+	var v interface{}
 	for i := range rows {
 		row := rows[i]
 		if row[columnIdx].Datum == nil {
-			if err = row[columnIdx].EnsureDecoded(typ, alloc); err != nil {
+			if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
 				return
 			}
 		}
@@ -72,7 +74,7 @@ func _ROWS_TO_COL_VEC(
 		if datum == tree.DNull {
 			vec.Nulls().SetNull(i)
 		} else {
-			v, err := datumToPhysicalFn(datum)
+			v, err = datumToPhysicalFn(datum)
 			if err != nil {
 				return
 			}
@@ -94,31 +96,28 @@ func EncDatumRowsToColVec(
 	rows sqlbase.EncDatumRows,
 	vec coldata.Vec,
 	columnIdx int,
-	typ *types.T,
+	t *types.T,
 	alloc *sqlbase.DatumAlloc,
 ) error {
 	var err error
 	allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
-			switch typ.Family() {
+			converted := false
+			switch typeconv.TypeFamilyToCanonicalTypeFamily[t.Family()] {
 			// {{range .}}
-			case _FAMILY:
-				// {{if .Widths}}
-				switch typ.Width() {
-				// {{range .Widths}}
-				case _WIDTH:
-					_ROWS_TO_COL_VEC(rows, vec, columnIdx, typ, alloc)
-				// {{end}}
-				default:
-					colexecerror.InternalError(fmt.Sprintf("unsupported width %d for type %s", typ.Width(), typ.String()))
+			case _CANONICAL_TYPE_FAMILY:
+				switch t.Width() {
+				// {{range .WidthOverloads}}
+				case _TYPE_WIDTH:
+					converted = true
+					_ROWS_TO_COL_VEC(rows, vec, columnIdx, t, alloc)
+					// {{end}}
 				}
-				// {{else}}
-				_ROWS_TO_COL_VEC(rows, vec, columnIdx, typ, alloc)
 				// {{end}}
-			// {{end}}
-			default:
-				colexecerror.InternalError(fmt.Sprintf("unsupported type %s", typ.String()))
+			}
+			if !converted {
+				err = errors.Errorf("didn't convert EncDatumRows to ColVec for %s", t.Name())
 			}
 		},
 	)

@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -301,7 +300,7 @@ func (hj *hashJoiner) emitUnmatched() {
 	}
 
 	outCols := hj.output.ColVecs()[len(hj.spec.left.sourceTypes) : len(hj.spec.left.sourceTypes)+len(hj.spec.right.sourceTypes)]
-	for i, typ := range hj.spec.right.sourceTypes {
+	for i := range hj.spec.right.sourceTypes {
 		outCol := outCols[i]
 		valCol := hj.ht.vals.ColVec(i)
 		// NOTE: this Copy is not accounted for because we don't want for memory
@@ -316,7 +315,6 @@ func (hj *hashJoiner) emitUnmatched() {
 		outCol.Copy(
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
-					ColType:   typeconv.FromColumnType(&typ),
 					Src:       valCol,
 					SrcEndIdx: nResults,
 					Sel:       hj.probeState.buildIdx,
@@ -460,7 +458,7 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch, batchSize in
 		// will be set below.
 		if hj.ht.vals.Length() > 0 {
 			outCols := hj.output.ColVecs()[rightColOffset : rightColOffset+len(hj.spec.right.sourceTypes)]
-			for i, typ := range hj.spec.right.sourceTypes {
+			for i := range hj.spec.right.sourceTypes {
 				outCol := outCols[i]
 				valCol := hj.ht.vals.ColVec(i)
 				// Note that if for some index i, probeRowUnmatched[i] is true, then
@@ -469,7 +467,6 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch, batchSize in
 				outCol.Copy(
 					coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
-							ColType:   typeconv.FromColumnType(&typ),
 							Src:       valCol,
 							SrcEndIdx: nResults,
 							Sel:       hj.probeState.buildIdx,
@@ -493,13 +490,12 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch, batchSize in
 	}
 
 	outCols := hj.output.ColVecs()[:len(hj.spec.left.sourceTypes)]
-	for i, typ := range hj.spec.left.sourceTypes {
+	for i := range hj.spec.left.sourceTypes {
 		outCol := outCols[i]
 		valCol := batch.ColVec(i)
 		outCol.Copy(
 			coldata.CopySliceArgs{
 				SliceArgs: coldata.SliceArgs{
-					ColType:   typeconv.FromColumnType(&typ),
 					Src:       valCol,
 					Sel:       hj.probeState.probeIdx,
 					SrcEndIdx: nResults,
@@ -545,8 +541,8 @@ func (hj *hashJoiner) ExportBuffered(input colexecbase.Operator) coldata.Batch {
 		b := hj.exportBufferedState.rightWindowedBatch
 		// We don't need to worry about selection vectors on hj.ht.vals because the
 		// tuples have been already selected during building of the hash table.
-		for i, t := range hj.spec.right.sourceTypes {
-			window := hj.ht.vals.ColVec(i).Window(typeconv.FromColumnType(&t), startIdx, endIdx)
+		for i := range hj.spec.right.sourceTypes {
+			window := hj.ht.vals.ColVec(i).Window(startIdx, endIdx)
 			b.ReplaceCol(window, i)
 		}
 		b.SetLength(endIdx - startIdx)

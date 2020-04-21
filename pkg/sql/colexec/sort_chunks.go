@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -120,8 +119,8 @@ func (c *sortChunksOp) ExportBuffered(colexecbase.Operator) coldata.Batch {
 			if newExportedFromBuffer > c.input.bufferedTuples.Length() {
 				newExportedFromBuffer = c.input.bufferedTuples.Length()
 			}
-			for i, t := range c.input.inputTypes {
-				window := c.input.bufferedTuples.ColVec(i).Window(typeconv.FromColumnType(&t), c.exportedFromBuffer, newExportedFromBuffer)
+			for i := range c.input.inputTypes {
+				window := c.input.bufferedTuples.ColVec(i).Window(c.exportedFromBuffer, newExportedFromBuffer)
 				c.windowedBatch.ReplaceCol(window, i)
 			}
 			c.windowedBatch.SetLength(newExportedFromBuffer - c.exportedFromBuffer)
@@ -436,9 +435,9 @@ func (s *chunker) spool(ctx context.Context) {
 func (s *chunker) getValues(i int) coldata.Vec {
 	switch s.readFrom {
 	case chunkerReadFromBuffer:
-		return s.bufferedTuples.ColVec(i).Window(typeconv.FromColumnType(&s.inputTypes[i]), 0 /* start */, s.bufferedTuples.Length())
+		return s.bufferedTuples.ColVec(i).Window(0 /* start */, s.bufferedTuples.Length())
 	case chunkerReadFromBatch:
-		return s.batch.ColVec(i).Window(typeconv.FromColumnType(&s.inputTypes[i]), s.chunks[s.chunksStartIdx], s.chunks[len(s.chunks)-1])
+		return s.batch.ColVec(i).Window(s.chunks[s.chunksStartIdx], s.chunks[len(s.chunks)-1])
 	default:
 		colexecerror.InternalError(fmt.Sprintf("unexpected chunkerReadingState in getValues: %v", s.state))
 		// This code is unreachable, but the compiler cannot infer that.

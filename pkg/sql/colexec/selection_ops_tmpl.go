@@ -27,8 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -62,8 +61,17 @@ var _ time.Time
 // Dummy import to pull in "duration" package.
 var _ duration.Duration
 
-// Dummy import to pull in "coltypes" package.
-var _ coltypes.T
+// _LEFT_CANONICAL_TYPE_FAMILY is the template variable.
+const _LEFT_CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _LEFT_TYPE_WIDTH is the template variable.
+const _LEFT_TYPE_WIDTH = 0
+
+// _RIGHT_CANONICAL_TYPE_FAMILY is the template variable.
+const _RIGHT_CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _RIGHT_TYPE_WIDTH is the template variable.
+const _RIGHT_TYPE_WIDTH = 0
 
 // _ASSIGN_CMP is the template function for assigning the result of comparing
 // the second input to the third input into the first input.
@@ -143,7 +151,7 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 	} else {
 		batch.SetSelection(true)
 		sel := batch.Selection()
-		// {{if not (eq .LTyp.String "Bytes")}}
+		// {{if not (eq .Left.VecMethod "Bytes")}}
 		// {{/* Slice is a noop for Bytes type, so col1Len below might contain an
 		// incorrect value. In order to keep bounds check elimination for all other
 		// types, we simply omit this code snippet for Bytes. */}}
@@ -276,16 +284,17 @@ func (p *_OP_NAME) Init() {
 
 // {{end}}
 
-// {{/*
-// The outer range is a coltypes.T (the left type). The middle range is also a
-// coltypes.T (the right type). The inner is the overloads associated with
-// those two types.
-// */}}
-// {{range .}}
-// {{range .}}
-// {{range .}}
+// {{range .CmpOps}}
+// {{range .LeftFamilies}}
+// {{range .LeftWidths}}
+// {{range .RightFamilies}}
+// {{range .RightWidths}}
+
 // {{template "selConstOp" .}}
 // {{template "selOp" .}}
+
+// {{end}}
+// {{end}}
 // {{end}}
 // {{end}}
 // {{end}}
@@ -308,28 +317,33 @@ func GetSelectionConstOperator(
 		OneInputNode: NewOneInputNode(input),
 		colIdx:       colIdx,
 	}
-	switch typeconv.FromColumnType(leftType) {
-	// {{range $lTyp, $rTypToOverloads := .}}
-	case coltypes._L_TYP_VAR:
-		switch typeconv.FromColumnType(constType) {
-		// {{range $rTyp, $overloads := $rTypToOverloads}}
-		case coltypes._R_TYP_VAR:
-			switch cmpOp {
-			// {{range $overloads}}
-			case tree._NAME:
-				return &_OP_CONST_NAME{selConstOpBase: selConstOpBase, constArg: c.(_R_GO_TYPE)}, nil
+	switch cmpOp {
+	// {{range .CmpOps}}
+	case tree._NAME:
+		switch typeconv.TypeFamilyToCanonicalTypeFamily[leftType.Family()] {
+		// {{range .LeftFamilies}}
+		case _LEFT_CANONICAL_TYPE_FAMILY:
+			switch leftType.Width() {
+			// {{range .LeftWidths}}
+			case _LEFT_TYPE_WIDTH:
+				switch typeconv.TypeFamilyToCanonicalTypeFamily[constType.Family()] {
+				// {{range .RightFamilies}}
+				case _RIGHT_CANONICAL_TYPE_FAMILY:
+					switch constType.Width() {
+					// {{range .RightWidths}}
+					case _RIGHT_TYPE_WIDTH:
+						return &_OP_CONST_NAME{selConstOpBase: selConstOpBase, constArg: c.(_R_GO_TYPE)}, nil
+						// {{end}}
+					}
+					// {{end}}
+				}
 				// {{end}}
-			default:
-				return nil, errors.Errorf("unhandled comparison operator: %s", cmpOp)
 			}
 			// {{end}}
-		default:
-			return nil, errors.Errorf("unhandled const type: %s", constType)
 		}
 		// {{end}}
-	default:
-		return nil, errors.Errorf("unhandled left type: %s", leftType)
 	}
+	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), cmpOp, constType.Name())
 }
 
 // GetSelectionOperator returns the appropriate two column selection operator
@@ -347,26 +361,31 @@ func GetSelectionOperator(
 		col1Idx:      col1Idx,
 		col2Idx:      col2Idx,
 	}
-	switch typeconv.FromColumnType(leftType) {
-	// {{range $lTyp, $rTypToOverloads := .}}
-	case coltypes._L_TYP_VAR:
-		switch typeconv.FromColumnType(rightType) {
-		// {{range $rTyp, $overloads := $rTypToOverloads}}
-		case coltypes._R_TYP_VAR:
-			switch cmpOp {
-			// {{range $overloads}}
-			case tree._NAME:
-				return &_OP_NAME{selOpBase: selOpBase}, nil
+	switch cmpOp {
+	// {{range .CmpOps}}
+	case tree._NAME:
+		switch typeconv.TypeFamilyToCanonicalTypeFamily[leftType.Family()] {
+		// {{range .LeftFamilies}}
+		case _LEFT_CANONICAL_TYPE_FAMILY:
+			switch leftType.Width() {
+			// {{range .LeftWidths}}
+			case _LEFT_TYPE_WIDTH:
+				switch typeconv.TypeFamilyToCanonicalTypeFamily[rightType.Family()] {
+				// {{range .RightFamilies}}
+				case _RIGHT_CANONICAL_TYPE_FAMILY:
+					switch rightType.Width() {
+					// {{range .RightWidths}}
+					case _RIGHT_TYPE_WIDTH:
+						return &_OP_NAME{selOpBase: selOpBase}, nil
+						// {{end}}
+					}
+					// {{end}}
+				}
 				// {{end}}
-			default:
-				return nil, errors.Errorf("unhandled comparison operator: %s", cmpOp)
 			}
 			// {{end}}
-		default:
-			return nil, errors.Errorf("unhandled right type: %s", rightType)
 		}
 		// {{end}}
-	default:
-		return nil, errors.Errorf("unhandled left type: %s", leftType)
 	}
+	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), cmpOp, rightType.Name())
 }
