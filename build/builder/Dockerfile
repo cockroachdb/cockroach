@@ -266,6 +266,12 @@ RUN curl -fsSL "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-b
   ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws && \
   rm -rf awscli-bundle.zip awscli-bundle
 
+# git - Upgrade to a more modern version
+RUN apt-get install -y python-software-properties software-properties-common && \
+    add-apt-repository ppa:git-core/ppa -y && \
+    apt-get update && \
+    apt-get install -y git
+
 ENV PATH /opt/backtrace/bin:$PATH
 
 RUN apt-get purge -y \
