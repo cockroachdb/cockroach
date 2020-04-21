@@ -126,6 +126,7 @@ const (
 	PgCatalogDescriptionTableID
 	PgCatalogSharedDescriptionTableID
 	PgCatalogEnumTableID
+	pgCatalogEventTriggerTableID
 	PgCatalogExtensionTableID
 	PgCatalogForeignDataWrapperTableID
 	PgCatalogForeignServerTableID
