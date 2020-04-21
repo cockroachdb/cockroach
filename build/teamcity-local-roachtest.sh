@@ -12,9 +12,11 @@ maybe_ccache
 tc_end_block "Prepare environment"
 
 tc_start_block "Compile CockroachDB"
+# Force refreshing of buildinfo compiled into the binary.
+make IGNORE_GOVERS=1 .buildinfo/tag .buildinfo/rev
 # Buffer noisy output and only print it on failure.
-run build/builder.sh make build &> artifacts/roachtests-compile.log || (cat artifacts/roachtests-compile.log && false)
-rm artifacts/roachtests-compile.log
+run build/builder.sh make GIT_DIR= build &> artifacts/roachtests-compile.log || (cat artifacts/roachtests-compile.log && false)
+build/builder.sh ./cockroach version
 tc_end_block "Compile CockroachDB"
 
 tc_start_block "Compile roachprod/workload/roachtest"
@@ -43,3 +45,5 @@ build/builder.sh env \
   --artifacts artifacts \
   --teamcity
 tc_end_block "Run local roachtests"
+
+rm artifacts/roachtests-compile.log
