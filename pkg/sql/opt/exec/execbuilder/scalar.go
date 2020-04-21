@@ -137,9 +137,6 @@ func (b *Builder) indexedVar(
 ) tree.TypedExpr {
 	idx, ok := ctx.ivarMap.Get(int(colID))
 	if !ok {
-		if b.nullifyMissingVarExprs > 0 {
-			return tree.ReType(tree.DNull, md.ColumnMeta(colID).Type)
-		}
 		panic(errors.AssertionFailedf("cannot map variable %d to an indexed var", log.Safe(colID)))
 	}
 	return ctx.ivh.IndexedVarWithType(idx, md.ColumnMeta(colID).Type)

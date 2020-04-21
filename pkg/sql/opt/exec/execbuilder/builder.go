@@ -40,12 +40,6 @@ type Builder struct {
 	// postqueries accumulates check queries that are run after the main query.
 	postqueries []exec.Node
 
-	// nullifyMissingVarExprs, if greater than 0, tells the builder to replace
-	// VariableExprs that have no bindings with DNull. This is useful for apply
-	// join, which needs to be able to create a plan that has outer columns.
-	// The number indicates the depth of apply joins.
-	nullifyMissingVarExprs int
-
 	// nameGen is used to generate names for the tables that will be created for
 	// each relational subexpression when evalCtx.SessionData.SaveTablesPrefix is
 	// non-empty.
@@ -98,11 +92,6 @@ func New(
 		b.allowInsertFastPath = evalCtx.SessionData.InsertFastPath
 	}
 	return b
-}
-
-// DisableTelemetry prevents the execbuilder from updating telemetry counters.
-func (b *Builder) DisableTelemetry() {
-	b.disableTelemetry = true
 }
 
 // Build constructs the execution node tree and returns its root node if no
