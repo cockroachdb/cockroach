@@ -35,15 +35,13 @@ INSERT INTO t VALUES
   ('2015-08-30 03:34:45.34567-07:00', '2015-08-31', '35h2s')
 
 # Check that time/date/interval representations outside of the index are okay.
-# TODO(mjibson): Remove family definition once #41283 is fixed.
 statement ok
 CREATE TABLE u (
   a BIGINT PRIMARY KEY,
   b TIMESTAMP,
   c TIMESTAMPTZ,
   d DATE,
-  e INTERVAL,
-  FAMILY "primary" (a, b, c, d, e)
+  e INTERVAL
 )
 
 statement ok
