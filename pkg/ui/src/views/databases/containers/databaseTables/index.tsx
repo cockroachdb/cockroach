@@ -8,9 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import tableIcon from "!!raw-loader!assets/tableIcon.svg";
 import _ from "lodash";
-import { SummaryCard } from "src/views/shared/components/summaryCard";
 import React from "react";
 import { connect } from "react-redux";
 import { Link } from "react-router-dom";
@@ -22,55 +20,17 @@ import { databaseDetails, DatabaseSummaryBase, DatabaseSummaryExplicitData, gran
 import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
-import { SummaryBar, SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
 import "./databaseTables.styl";
-import { trustIcon } from "src/util/trust";
+import { DatabaseIcon } from "oss/src/components/icon/databaseIcon";
+import Stack from "assets/stack.svg";
+import { SummaryCard } from "oss/src/views/shared/components/summaryCard";
+import { Row, Col } from "antd";
 
 const databaseTablesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "databases/sort_setting/tables", (s) => s.localSettings,
 );
 
 class DatabaseTableListSortedTable extends SortedTable<TableInfo> {}
-
-class DatabaseTableListEmpty extends React.Component {
-  render() {
-    return (
-      <table className="sort-table">
-        <thead>
-          <tr className="sort-table__row sort-table__row--header">
-            <th className="sort-table__cell sort-table__cell--sortable">
-              Table Name
-            </th>
-            <th className="sort-table__cell sort-table__cell--sortable">
-              Size
-            </th>
-            <th className="sort-table__cell sort-table__cell--sortable">
-              Ranges
-            </th>
-            <th className="sort-table__cell sort-table__cell--sortable">
-              # of Columns
-            </th>
-            <th className="sort-table__cell sort-table__cell--sortable">
-              # of Indices
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr className="sort-table__row sort-table__row--body">
-            <td className="sort-table__cell" colSpan={5}>
-              <div className="empty-state">
-                <div className="empty-state__line">
-                  <span className="table-icon" dangerouslySetInnerHTML={trustIcon(tableIcon)} />
-                  This database has no tables.
-                </div>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    );
-  }
-}
 
 // DatabaseSummaryTables displays a summary section describing the tables
 // contained in a single database.
@@ -85,6 +45,12 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
     return _.sumBy(tableInfos, (ti) => ti.rangeCount);
   }
 
+  noDatabaseResults = () => (
+    <>
+      <h3 className="table__no-results--title"><DatabaseIcon />This database has no tables.</h3>
+    </>
+  )
+
   render() {
     const { tableInfos, dbResponse, sortSetting } = this.props;
     const dbID = this.props.name;
@@ -92,77 +58,85 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
     const numTables = tableInfos && tableInfos.length || 0;
     return (
       <div className="database-summary">
-        <SummaryCard>
-          <div className="database-summary-title">
-            <h2 className="base-heading">{dbID}</h2>
+        <div className="database-summary-title">
+          <h2 className="base-heading"><img src={Stack} alt="Stack" />{dbID}</h2>
+        </div>
+        <div className="l-columns">
+          <div className="l-columns__left">
+            <DatabaseTableListSortedTable
+              data={tableInfos}
+              sortSetting={sortSetting}
+              onChangeSortSetting={(setting) => this.props.setSort(setting)}
+              firstCellBordered
+              columns={[
+                {
+                  title: "Table Name",
+                  cell: (tableInfo) => {
+                    return (
+                      <div className="sort-table__unbounded-column">
+                        <Link to={`/database/${dbID}/table/${tableInfo.name}`}><DatabaseIcon /> {tableInfo.name}</Link>
+                      </div>
+                    );
+                  },
+                  sort: (tableInfo) => tableInfo.name,
+                  className: "expand-link", // don't pad the td element to allow the link to expand
+                },
+                {
+                  title: "Size",
+                  cell: (tableInfo) => Bytes(tableInfo.physicalSize),
+                  sort: (tableInfo) => tableInfo.physicalSize,
+                },
+                {
+                  title: "Ranges",
+                  cell: (tableInfo) => tableInfo.rangeCount,
+                  sort: (tableInfo) => tableInfo.rangeCount,
+                },
+                {
+                  title: "# of Columns",
+                  cell: (tableInfo) => tableInfo.numColumns,
+                  sort: (tableInfo) => tableInfo.numColumns,
+                },
+                {
+                  title: "# of Indices",
+                  cell: (tableInfo) => tableInfo.numIndices,
+                  sort: (tableInfo) => tableInfo.numIndices,
+                },
+              ]}
+              // empty={tableInfos.length}
+              // emptyProps={{
+              //   title: "There are no statements since this page was last cleared.",
+              //   description: "Statements help you identify frequently executed or high latency SQL statements. Statements are cleared every hour by default, or according to your configuration.",
+              //   label: "Learn more",
+              //   onClick: () => window.open("https://www.cockroachlabs.com/docs/stable/admin-ui-databases-page.html"),
+              // }}
+              renderNoResult={this.noDatabaseResults()}
+          />
           </div>
-          <div className="l-columns">
-            <div className="l-columns__left">
-              <div className="database-summary-table sql-table">
-                {!loading && numTables === 0 ? <DatabaseTableListEmpty /> : (
-                  <DatabaseTableListSortedTable
-                    data={tableInfos}
-                    sortSetting={sortSetting}
-                    onChangeSortSetting={(setting) => this.props.setSort(setting)}
-                    loading={loading as boolean}
-                    loadingLabel="Loading tables..."
-                    columns={[
-                      {
-                        title: "Table Name",
-                        cell: (tableInfo) => {
-                          return (
-                            <div className="sort-table__unbounded-column">
-                              <Link to={`/database/${dbID}/table/${tableInfo.name}`}>{tableInfo.name}</Link>
-                            </div>
-                          );
-                        },
-                        sort: (tableInfo) => tableInfo.name,
-                        className: "expand-link", // don't pad the td element to allow the link to expand
-                      },
-                      {
-                        title: "Size",
-                        cell: (tableInfo) => Bytes(tableInfo.physicalSize),
-                        sort: (tableInfo) => tableInfo.physicalSize,
-                      },
-                      {
-                        title: "Ranges",
-                        cell: (tableInfo) => tableInfo.rangeCount,
-                        sort: (tableInfo) => tableInfo.rangeCount,
-                      },
-                      {
-                        title: "# of Columns",
-                        cell: (tableInfo) => tableInfo.numColumns,
-                        sort: (tableInfo) => tableInfo.numColumns,
-                      },
-                      {
-                        title: "# of Indices",
-                        cell: (tableInfo) => tableInfo.numIndices,
-                        sort: (tableInfo) => tableInfo.numIndices,
-                      },
-                    ]}
-                  />
-                )}
-              </div>
-            </div>
-            <div className="l-columns__right">
-              <SummaryBar>
-                <SummaryHeadlineStat
-                  title="Database Size"
-                  tooltip="Approximate total disk size of this database across all table replicas."
-                  value={this.totalSize()}
-                  format={Bytes} />
-                <SummaryHeadlineStat
-                  title={(numTables === 1) ? "Table" : "Tables"}
-                  tooltip="The total number of tables in this database."
-                  value={numTables} />
-                <SummaryHeadlineStat
-                  title="Total Range Count"
-                  tooltip="The total ranges across all tables in this database."
-                  value={this.totalRangeCount()} />
-              </SummaryBar>
-            </div>
+          <div className="l-columns__right">
+            <SummaryCard>
+              <Row>
+                <Col span={24}>
+                  <div className="summary--card__counting">
+                    <h3 className="summary--card__counting--value">{Bytes(this.totalSize())}</h3>
+                    <p className="summary--card__counting--label">Database Size</p>
+                  </div>
+                </Col>
+                <Col span={24}>
+                  <div className="summary--card__counting">
+                    <h3 className="summary--card__counting--value">{numTables}</h3>
+                    <p className="summary--card__counting--label">{(numTables === 1) ? "Table" : "Tables"}</p>
+                  </div>
+                </Col>
+                <Col span={24}>
+                  <div className="summary--card__counting">
+                    <h3 className="summary--card__counting--value">{this.totalRangeCount()}</h3>
+                    <p className="summary--card__counting--label">Total Range Count</p>
+                  </div>
+                </Col>
+              </Row>
+            </SummaryCard>
           </div>
-        </SummaryCard>
+        </div>
       </div>
     );
   }
