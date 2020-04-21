@@ -535,7 +535,7 @@ func (s *scope) removeHiddenCols() {
 // isAnonymousTable returns true if the table name of the first column
 // in this scope is empty.
 func (s *scope) isAnonymousTable() bool {
-	return len(s.cols) > 0 && s.cols[0].table.TableName == ""
+	return len(s.cols) > 0 && s.cols[0].table.ObjectName == ""
 }
 
 // setTableAlias qualifies the names of all columns in this scope with the
@@ -703,7 +703,7 @@ func (s *scope) FindSourceProvidingColumn(
 				continue
 			}
 
-			if col.table.TableName == "" && !col.hidden {
+			if col.table.ObjectName == "" && !col.hidden {
 				if candidateFromAnonSource != nil {
 					moreThanOneCandidateFromAnonSource = true
 					break
@@ -808,7 +808,7 @@ func (s *scope) FindSourceMatchingName(
 // - a request for "kv" is matched by a source named "db1.public.kv"
 // - a request for "public.kv" is not matched by a source named just "kv"
 func sourceNameMatches(srcName tree.TableName, toFind tree.TableName) bool {
-	if srcName.TableName != toFind.TableName {
+	if srcName.ObjectName != toFind.ObjectName {
 		return false
 	}
 	if toFind.ExplicitSchema {
@@ -1418,7 +1418,7 @@ func (s *scope) newAmbiguousColumnError(
 	for i := range s.cols {
 		col := &s.cols[i]
 		if col.name == n && (allowHidden || !col.hidden) {
-			if col.table.TableName == "" && !col.hidden {
+			if col.table.ObjectName == "" && !col.hidden {
 				if moreThanOneCandidateFromAnonSource {
 					// Only print first anonymous source, since other(s) are identical.
 					fmtCandidate(col.table)
@@ -1451,7 +1451,7 @@ func newAmbiguousSourceError(tn *tree.TableName) error {
 	}
 	return pgerror.Newf(pgcode.AmbiguousAlias,
 		"ambiguous source name: %q (within database %q)",
-		tree.ErrString(&tn.TableName), tree.ErrString(&tn.CatalogName))
+		tree.ErrString(&tn.ObjectName), tree.ErrString(&tn.CatalogName))
 }
 
 func (s *scope) String() string {

@@ -56,7 +56,7 @@ func classifyTablePattern(n *UnresolvedName) (TablePattern, error) {
 
 	// Construct the result.
 	if n.Star {
-		return &AllTablesSelector{makeTableNamePrefixFromUnresolvedName(n)}, nil
+		return &AllTablesSelector{makeObjectNamePrefixFromUnresolvedName(n)}, nil
 	}
 	tb := makeTableNameFromUnresolvedName(n)
 	return &tb, nil
@@ -383,7 +383,7 @@ func (t *TableName) ResolveTarget(
 
 // Resolve is used for table prefixes. This is adequate for table
 // patterns with stars, e.g. AllTablesSelector.
-func (tp *TableNamePrefix) Resolve(
+func (tp *ObjectNamePrefix) Resolve(
 	ctx context.Context, r TableNameTargetResolver, curDb string, searchPath sessiondata.SearchPath,
 ) (found bool, scMeta SchemaMeta, err error) {
 	if tp.ExplicitSchema {

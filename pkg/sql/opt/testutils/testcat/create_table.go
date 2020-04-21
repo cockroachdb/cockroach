@@ -164,7 +164,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 			if def.Unique {
 				tab.addIndex(
 					&tree.IndexTableDef{
-						Name:    tree.Name(fmt.Sprintf("%s_%s_key", stmt.Table.TableName, def.Name)),
+						Name:    tree.Name(fmt.Sprintf("%s_%s_key", stmt.Table.ObjectName, def.Name)),
 						Columns: tree.IndexElemList{{Column: def.Name}},
 					},
 					uniqueIndex,
@@ -277,7 +277,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	}
 
 	var targetTable *Table
-	if d.Table.TableName == tab.Name() {
+	if d.Table.ObjectName == tab.Name() {
 		targetTable = tab
 	} else {
 		targetTable = tc.Table(&d.Table)

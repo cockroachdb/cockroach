@@ -218,7 +218,7 @@ type UnresolvedObjectName struct {
 	// (the number of parts specified) is populated in NumParts above.
 	Parts [3]string
 
-	// UnresolvedObjectName cam be annotated with a *TableName.
+	// UnresolvedObjectName can be annotated with a *TableName.
 	AnnotatedNode
 }
 
@@ -306,9 +306,9 @@ func (u *UnresolvedObjectName) String() string { return AsString(u) }
 // would only figure that out during name resolution. This method is temporary,
 // while we change all the code paths to only use TableName after resolution.
 func (u *UnresolvedObjectName) ToTableName() TableName {
-	return TableName{tblName{
-		TableName: Name(u.Parts[0]),
-		TableNamePrefix: TableNamePrefix{
+	return TableName{objName{
+		ObjectName: Name(u.Parts[0]),
+		ObjectNamePrefix: ObjectNamePrefix{
 			SchemaName:      Name(u.Parts[1]),
 			CatalogName:     Name(u.Parts[2]),
 			ExplicitSchema:  u.NumParts >= 2,

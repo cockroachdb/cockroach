@@ -72,7 +72,7 @@ func ProcessTargetColumns(
 // - a request for "kv" is matched by a source named "db1.public.kv"
 // - a request for "public.kv" is not matched by a source named just "kv"
 func sourceNameMatches(srcName *tree.TableName, toFind tree.TableName) bool {
-	if srcName.TableName != toFind.TableName {
+	if srcName.ObjectName != toFind.ObjectName {
 		return false
 	}
 	if toFind.ExplicitSchema {

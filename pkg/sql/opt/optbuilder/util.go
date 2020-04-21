@@ -457,7 +457,7 @@ func resolveTemporaryStatus(name *tree.TableName, explicitTemp bool) bool {
 // CREATE privilege, then resolveSchemaForCreate raises an error.
 func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.SchemaName) {
 	flags := cat.Flags{AvoidDescriptorCaches: true}
-	sch, resName, err := b.catalog.ResolveSchema(b.ctx, flags, &name.TableNamePrefix)
+	sch, resName, err := b.catalog.ResolveSchema(b.ctx, flags, &name.ObjectNamePrefix)
 	if err != nil {
 		// Remap invalid schema name error text so that it references the catalog
 		// object that could not be created.

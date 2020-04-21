@@ -138,7 +138,7 @@ func (lm lockingSpec) filter(alias tree.Name) lockingSpec {
 		} else {
 			// If targets are specified, the clause affects only those tables.
 			for _, target := range li.Targets {
-				if target.TableName == alias {
+				if target.ObjectName == alias {
 					updateRet(li, len1)
 					break
 				}

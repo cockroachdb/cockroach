@@ -40,11 +40,11 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 		// resolved correctly.
 		// TODO(solon): Once it is possible to drop schemas, it will no longer be
 		// safe to set the schema name to `public`, as it may have been dropped.
-		ct.Table.TableNamePrefix.SchemaName = tree.PublicSchemaName
+		ct.Table.ObjectNamePrefix.SchemaName = tree.PublicSchemaName
 		ct.Temporary = true
 	}
 	sch, resName := b.resolveSchemaForCreate(&ct.Table)
-	ct.Table.TableNamePrefix = resName
+	ct.Table.ObjectNamePrefix = resName
 	schID := b.factory.Metadata().AddSchema(sch)
 
 	// HoistConstraints normalizes any column constraints in the CreateTable AST

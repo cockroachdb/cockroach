@@ -2437,7 +2437,7 @@ CREATE TABLE crdb_internal.zones (
 				if p.CheckAnyPrivilege(ctx, database) != nil {
 					continue
 				}
-			} else if zoneSpecifier.TableOrIndex.Table.TableName != "" {
+			} else if zoneSpecifier.TableOrIndex.Table.ObjectName != "" {
 				table, err = sqlbase.GetTableDescFromID(ctx, p.txn, sqlbase.ID(id))
 				if err != nil {
 					return err

@@ -144,7 +144,7 @@ func (b *Builder) validateJoinTableNames(leftScope, rightScope *scope) {
 			rightName := &rightScope.cols[right].table
 
 			// Must match all name parts.
-			if leftName.TableName != rightName.TableName ||
+			if leftName.ObjectName != rightName.ObjectName ||
 				leftName.SchemaName != rightName.SchemaName ||
 				leftName.CatalogName != rightName.CatalogName {
 				continue
@@ -153,7 +153,7 @@ func (b *Builder) validateJoinTableNames(leftScope, rightScope *scope) {
 			panic(pgerror.Newf(
 				pgcode.DuplicateAlias,
 				"source name %q specified more than once (missing AS clause)",
-				tree.ErrString(&leftName.TableName),
+				tree.ErrString(&leftName.ObjectName),
 			))
 		}
 	}
@@ -170,7 +170,7 @@ func (b *Builder) findJoinColsToValidate(scope *scope) util.FastIntSet {
 		// associated table name. At worst, the USING/NATURAL
 		// detection code or expression analysis for ON will detect an
 		// ambiguity later.
-		if scope.cols[i].table.TableName == "" {
+		if scope.cols[i].table.ObjectName == "" {
 			continue
 		}
 
