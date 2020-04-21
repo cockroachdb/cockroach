@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -3375,7 +3376,31 @@ may increase either contention or retry errors, or both.`,
 					return nil, errors.AssertionFailedf("notice sender not set")
 				}
 				msg := string(*args[0].(*tree.DString))
-				ctx.ClientNoticeSender.SendClientNotice(ctx.Context, pgerror.Noticef("%s", msg))
+				ctx.ClientNoticeSender.SendClientNotice(
+					ctx.Context,
+					pgnotice.Newf("%s", msg),
+				)
+				return tree.NewDInt(0), nil
+			},
+			Info: "This function is used only by CockroachDB's developers for testing purposes.",
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"severity", types.String}, {"msg", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if ctx.ClientNoticeSender == nil {
+					return nil, errors.AssertionFailedf("notice sender not set")
+				}
+				severityString := string(*args[0].(*tree.DString))
+				severity, ok := pgnotice.ParseDisplaySeverity(severityString)
+				if !ok {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "severity %s is invalid", severityString)
+				}
+				msg := string(*args[1].(*tree.DString))
+				ctx.ClientNoticeSender.SendClientNotice(
+					ctx.Context,
+					pgnotice.NewWithSeverityf(strings.ToUpper(severity.String()), "%s", msg),
+				)
 				return tree.NewDInt(0), nil
 			},
 			Info: "This function is used only by CockroachDB's developers for testing purposes.",
