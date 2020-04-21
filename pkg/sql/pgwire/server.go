@@ -514,6 +514,17 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		return err
 	}
 
+	if version == versionCancel {
+		// The cancel message is rather peculiar: it is sent without
+		// authentication, always over an unencrypted channel.
+		//
+		// Since we don't support this, close the door in the client's
+		// face. Make a note of that use in telemetry.
+		telemetry.Inc(sqltelemetry.CancelRequestCounter)
+		_ = conn.Close()
+		return nil
+	}
+
 	// If the server is shutting down, terminate the connection early.
 	if draining {
 		return s.sendErr(ctx, conn, newAdminShutdownErr(ErrDrainingNewConn))
@@ -538,14 +549,6 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 
 	// What does the client want to do?
 	switch version {
-	case versionCancel:
-		// If the client is really issuing a cancel request, close the door
-		// in their face (we don't support it yet). Make a note of that use
-		// in telemetry.
-		telemetry.Inc(sqltelemetry.CancelRequestCounter)
-		_ = conn.Close()
-		return nil
-
 	case version30:
 		// Normal SQL connection. Proceed normally below.
 
