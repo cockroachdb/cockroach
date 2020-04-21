@@ -568,6 +568,27 @@ SELECT * FROM v1
 2  2  true
 3  3  true
 
+# Regression test for #47704: the columns inside PARITION BY and ORDER BY were
+# losing their qualification.
+statement ok
+CREATE TABLE a47704 (foo UUID);
+CREATE TABLE b47704 (foo UUID)
+
+statement ok
+CREATE VIEW v47704 AS
+  SELECT first_value(a47704.foo) OVER (PARTITION BY a47704.foo ORDER BY a47704.foo)
+  FROM a47704 JOIN b47704 ON a47704.foo = b47704.foo
+
+# Verify that the descriptor did not "lose" the column qualification inside
+# PARITION BY and ORDER BY.
+query T
+SELECT create_statement FROM [ SHOW CREATE VIEW v47704 ]
+----
+CREATE VIEW v47704 (first_value) AS SELECT first_value(a47704.foo) OVER (PARTITION BY a47704.foo ORDER BY a47704.foo) FROM test.public.a47704 JOIN test.public.b47704 ON a47704.foo = b47704.foo
+
+statement ok
+SELECT * FROM v47704
+
 subtest create_or_replace
 
 user root
