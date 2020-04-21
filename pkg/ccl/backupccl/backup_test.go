@@ -3633,7 +3633,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 		// backup fails. This test does not particularly care if the BACKUP
 		// completes with a success or failure, as long as the timestamp is released
 		// shortly after the BACKUP is unblocked.
-		_, err := conn.Exec(`BACKUP TABLE FOO TO 'nodelocal://1/foo'`)
+		_, _ = conn.Exec(`BACKUP TABLE FOO TO 'nodelocal://1/foo'`) // ignore error.
 	}()
 
 	var jobID string
