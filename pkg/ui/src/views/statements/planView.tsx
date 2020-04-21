@@ -151,7 +151,10 @@ export function flattenAttributes(attrs: IAttr[]|null): FlatPlanNodeAttribute[] 
 }
 
 function warnForAttribute(attr: IAttr): boolean {
-  if (attr.key === "spans" && attr.value === "ALL") {
+  // TODO(yuzefovich): 'spans ALL' is pre-20.1 attribute (and it might show up
+  // during an upgrade), so we should remove the check for it after 20.2
+  // release.
+  if (attr.key === "spans" && (attr.value === "FULL SCAN" || attr.value === "ALL")) {
     return true;
   }
   return false;

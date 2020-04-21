@@ -344,7 +344,7 @@ describe("flattenAttributes", () => {
       );
     });
   });
-  describe("when attribute key/value is `spans ALL`", () => {
+  describe("when attribute key/value is `spans FULL SCAN`", () => {
     it("sets warn to true", () => {
       const testAttrs: IAttr[] = [
         {
@@ -353,7 +353,7 @@ describe("flattenAttributes", () => {
         },
         {
           key: "spans",
-          value: "ALL",
+          value: "FULL SCAN",
         },
       ];
       const expectedTestAttrs: FlatPlanNodeAttribute[] = [
@@ -364,7 +364,7 @@ describe("flattenAttributes", () => {
         },
         {
           key: "spans",
-          values: ["ALL"],
+          values: ["FULL SCAN"],
           warn: true,
         },
       ];
