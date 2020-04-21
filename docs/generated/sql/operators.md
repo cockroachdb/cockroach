@@ -450,6 +450,12 @@
 <tr><td>varbit <code>|</code> varbit</td><td>varbit</td></tr>
 </tbody></table>
 <table><thead>
+<tr><td><code>|/</code></td><td>Return</td></tr>
+</thead><tbody>
+<tr><td><code>|/</code><a href="decimal.html">decimal</a></td><td><a href="decimal.html">decimal</a></td></tr>
+<tr><td><code>|/</code><a href="float.html">float</a></td><td><a href="float.html">float</a></td></tr>
+</tbody></table>
+<table><thead>
 <tr><td><code>||</code></td><td>Return</td></tr>
 </thead><tbody>
 <tr><td><a href="bool.html">bool</a> <code>||</code> <a href="bool.html">bool[]</a></td><td><a href="bool.html">bool[]</a></td></tr>
@@ -499,6 +505,12 @@
 <tr><td><a href="uuid.html">uuid[]</a> <code>||</code> <a href="uuid.html">uuid</a></td><td><a href="uuid.html">uuid[]</a></td></tr>
 <tr><td><a href="uuid.html">uuid[]</a> <code>||</code> <a href="uuid.html">uuid[]</a></td><td><a href="uuid.html">uuid[]</a></td></tr>
 <tr><td>varbit <code>||</code> varbit</td><td>varbit</td></tr>
+</tbody></table>
+<table><thead>
+<tr><td><code>||/</code></td><td>Return</td></tr>
+</thead><tbody>
+<tr><td><code>||/</code><a href="decimal.html">decimal</a></td><td><a href="decimal.html">decimal</a></td></tr>
+<tr><td><code>||/</code><a href="float.html">float</a></td><td><a href="float.html">float</a></td></tr>
 </tbody></table>
 <table><thead>
 <tr><td><code>~</code></td><td>Return</td></tr>
