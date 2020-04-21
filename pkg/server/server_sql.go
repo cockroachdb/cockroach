@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
@@ -82,14 +83,13 @@ type sqlServer struct {
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
 }
 
-type sqlServerArgs struct {
-	*Config
-	stopper *stop.Stopper
-
-	// SQL uses the clock to assign timestamps to transactions, among many
-	// others.
-	clock *hlc.Clock
-
+// sqlServerOptionalArgs are the arguments supplied to newSQLServer which
+// are only available if the SQL server runs as part of a KV node.
+//
+// TODO(tbg): give all of these fields a wrapper that can signal whether the
+// respective object is available. When it is not, return
+// UnsupportedWithMultiTenancy.
+type sqlServerOptionalArgs struct {
 	// DistSQL uses rpcContext to set up flows. Less centrally, the executor
 	// also uses rpcContext in a number of places to learn whether the server
 	// is running insecure, and to read the cluster name.
@@ -99,16 +99,16 @@ type sqlServerArgs struct {
 	// uses range descriptors and leaseholders, which DistSender maintains,
 	// for debugging and DistSQL planning purposes.
 	distSender *kvcoord.DistSender
-	// The executorConfig depends on the status server.
-	// The status server is handed the stmtDiagnosticsRegistry.
-	status *statusServer
+	// statusServer gives access to the Status service.
+	//
+	// In a SQL tenant server, this is not available (returning false) and
+	// pgerror.UnsupportedWithMultiTenancy should be returned.
+	statusServer func() (*statusServer, bool)
 	// Narrowed down version of *NodeLiveness.
 	nodeLiveness interface {
 		jobs.NodeLiveness                    // jobs uses this
 		IsLive(roachpb.NodeID) (bool, error) // DistSQLPlanner wants this
 	}
-	// The executorConfig uses the provider.
-	protectedtsProvider protectedts.Provider
 	// Gossip is relied upon by distSQLCfg (execinfra.ServerConfig), the executor
 	// config, the DistSQL planner, the table statistics cache, the statements
 	// diagnostics registry, and the lease manager.
@@ -121,6 +121,26 @@ type sqlServerArgs struct {
 	recorder *status.MetricsRecorder
 	// For the temporaryObjectCleaner.
 	isMeta1Leaseholder func(hlc.Timestamp) (bool, error)
+	// DistSQL, lease management, and others want to know the node they're on.
+	nodeIDContainer *base.NodeIDContainer
+
+	// Used by backup/restore.
+	externalStorage        cloud.ExternalStorageFactory
+	externalStorageFromURI cloud.ExternalStorageFromURIFactory
+}
+
+type sqlServerArgs struct {
+	sqlServerOptionalArgs
+
+	*Config
+	stopper *stop.Stopper
+
+	// SQL uses the clock to assign timestamps to transactions, among many
+	// others.
+	clock *hlc.Clock
+
+	// The executorConfig uses the provider.
+	protectedtsProvider protectedts.Provider
 	// DistSQLCfg holds on to this to check for node CPU utilization in
 	// samplerProcessor.
 	runtime *status.RuntimeStatSampler
@@ -136,23 +156,21 @@ type sqlServerArgs struct {
 	//
 	// TODO(tbg): make this less hacky.
 	circularInternalExecutor *sql.InternalExecutor // empty initially
-	// DistSQL, lease management, and others want to know the node they're on.
-	//
-	// TODO(tbg): replace this with a method that can refuse to return a result
-	// because once we have multi-tenancy, a NodeID will not be available.
-	nodeIDContainer *base.NodeIDContainer
 
-	// Used by backup/restore.
-	externalStorage        cloud.ExternalStorageFactory
-	externalStorageFromURI cloud.ExternalStorageFromURIFactory
-
-	// The protected timestamps KV subsystem depends on this, so it is bound
-	// early but only gets filled in newSQLServer.
+	// The protected timestamps KV subsystem depends on this, so we pass a
+	// pointer to an empty struct in this configuration, which newSQLServer
+	// fills.
 	jobRegistry *jobs.Registry
 }
 
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
-	sessionRegistry := cfg.status.sessionRegistry
+	var sessionRegistry *sql.SessionRegistry
+	if statusServer, ok := cfg.statusServer(); ok {
+		sessionRegistry = statusServer.sessionRegistry
+	} else {
+		sessionRegistry = sql.NewSessionRegistry()
+	}
+
 	execCfg := &sql.ExecutorConfig{}
 	var jobAdoptionStopFile string
 	for _, spec := range cfg.Stores.Specs {
@@ -364,7 +382,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		LeaseManager:            leaseMgr,
 		Clock:                   cfg.clock,
 		DistSQLSrv:              distSQLServer,
-		StatusServer:            cfg.status,
+		StatusServer:            func() (serverpb.StatusServer, bool) { return cfg.statusServer() },
 		SessionRegistry:         sessionRegistry,
 		JobRegistry:             jobRegistry,
 		VirtualSchemas:          virtualSchemas,
@@ -511,7 +529,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	execCfg.InternalExecutor = cfg.circularInternalExecutor
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
 		cfg.circularInternalExecutor, cfg.db, cfg.gossip, cfg.Settings)
-	cfg.status.setStmtDiagnosticsRequester(stmtDiagnosticsRegistry)
+	if statusServer, ok := cfg.statusServer(); ok {
+		statusServer.setStmtDiagnosticsRequester(stmtDiagnosticsRegistry)
+	}
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
 	leaseMgr.RefreshLeases(cfg.stopper, cfg.db, cfg.gossip)
@@ -522,7 +542,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		cfg.db,
 		cfg.registry,
 		distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
-		cfg.status,
+		func() (serverpb.StatusServer, bool) {
+			return cfg.statusServer()
+		},
 		cfg.isMeta1Leaseholder,
 		sqlExecutorTestingKnobs,
 	)

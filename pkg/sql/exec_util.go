@@ -563,20 +563,24 @@ type ExecutorConfig struct {
 	LeaseManager      *LeaseManager
 	Clock             *hlc.Clock
 	DistSQLSrv        *distsql.ServerImpl
-	StatusServer      serverpb.StatusServer
-	MetricsRecorder   nodeStatusGenerator
-	SessionRegistry   *SessionRegistry
-	JobRegistry       *jobs.Registry
-	VirtualSchemas    *VirtualSchemaHolder
-	DistSQLPlanner    *DistSQLPlanner
-	TableStatsCache   *stats.TableStatisticsCache
-	StatsRefresher    *stats.Refresher
-	ExecLogger        *log.SecondaryLogger
-	AuditLogger       *log.SecondaryLogger
-	SlowQueryLogger   *log.SecondaryLogger
-	AuthLogger        *log.SecondaryLogger
-	InternalExecutor  *InternalExecutor
-	QueryCache        *querycache.C
+	// StatusServer gives access to the Status service.
+	//
+	// In a SQL tenant server, this is not available (returning false) and
+	// pgerror.UnsupportedWithMultiTenancy should be returned.
+	StatusServer     func() (serverpb.StatusServer, bool)
+	MetricsRecorder  nodeStatusGenerator
+	SessionRegistry  *SessionRegistry
+	JobRegistry      *jobs.Registry
+	VirtualSchemas   *VirtualSchemaHolder
+	DistSQLPlanner   *DistSQLPlanner
+	TableStatsCache  *stats.TableStatisticsCache
+	StatsRefresher   *stats.Refresher
+	ExecLogger       *log.SecondaryLogger
+	AuditLogger      *log.SecondaryLogger
+	SlowQueryLogger  *log.SecondaryLogger
+	AuthLogger       *log.SecondaryLogger
+	InternalExecutor *InternalExecutor
+	QueryCache       *querycache.C
 
 	TestingKnobs              ExecutorTestingKnobs
 	PGWireTestingKnobs        *PGWireTestingKnobs

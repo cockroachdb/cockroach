@@ -44,7 +44,10 @@ func (n *cancelSessionsNode) Next(params runParams) (bool, error) {
 		return true, nil
 	}
 
-	statusServer := params.extendedEvalCtx.StatusServer
+	statusServer, ok := params.extendedEvalCtx.StatusServer()
+	if !ok {
+		return false, pgerror.UnsupportedWithMultiTenancy()
+	}
 	sessionIDString, ok := tree.AsDString(datum)
 	if !ok {
 		return false, errors.AssertionFailedf("%q: expected *DString, found %T", datum, datum)
