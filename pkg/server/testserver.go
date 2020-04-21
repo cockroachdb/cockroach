@@ -485,7 +485,7 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 		stopper:                  stopper,
 		clock:                    clock,
 		protectedtsProvider:      protectedTSProvider,
-		runtime:                  &status.RuntimeStatSampler{}, // dummy
+		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),
 		db:                       ts.DB(),
 		registry:                 registry,
 		circularInternalExecutor: &sql.InternalExecutor{},
