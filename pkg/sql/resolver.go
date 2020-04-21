@@ -240,7 +240,7 @@ func ResolveTargetObject(
 	}
 	if tn.Schema() != tree.PublicSchema {
 		return nil, pgerror.Newf(pgcode.InvalidName,
-			"schema cannot be modified: %q", tree.ErrString(&tn.TableNamePrefix))
+			"schema cannot be modified: %q", tree.ErrString(&tn.ObjectNamePrefix))
 	}
 	return descI.(*DatabaseDescriptor), nil
 }
@@ -487,7 +487,7 @@ func expandIndexName(
 	// references the table name.
 
 	// Look up the table prefix.
-	found, _, err := tn.TableNamePrefix.Resolve(ctx, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
+	found, _, err := tn.ObjectNamePrefix.Resolve(ctx, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -694,7 +694,7 @@ func (l *internalLookupCtx) getParentAsTableName(
 	return parentName, nil
 }
 
-// getTableAsTableName returns a TableName object fot a given TableDescriptor.
+// getTableAsTableName returns a TableName object for a given TableDescriptor.
 func (l *internalLookupCtx) getTableAsTableName(
 	table *sqlbase.TableDescriptor, dbPrefix string,
 ) (tree.TableName, error) {

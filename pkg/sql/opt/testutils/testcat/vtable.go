@@ -49,7 +49,7 @@ func init() {
 		ct.Table.ExplicitCatalog = true
 
 		name := ct.Table
-		informationSchemaMap[name.TableName.String()] = ct
+		informationSchemaMap[name.ObjectName.String()] = ct
 	}
 }
 
@@ -58,7 +58,7 @@ func init() {
 func resolveVTable(name *tree.TableName) (*tree.CreateTable, bool) {
 	switch name.SchemaName {
 	case "information_schema":
-		schema, ok := informationSchemaMap[name.TableName.String()]
+		schema, ok := informationSchemaMap[name.ObjectName.String()]
 		return schema, ok
 	}
 

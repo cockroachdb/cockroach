@@ -52,12 +52,12 @@ func (t *TableName) NormalizeTablePattern() (TablePattern, error) { return t, ni
 // AllTablesSelector corresponds to a selection of all
 // tables in a database, e.g. when used with GRANT.
 type AllTablesSelector struct {
-	TableNamePrefix
+	ObjectNamePrefix
 }
 
 // Format implements the NodeFormatter interface.
 func (at *AllTablesSelector) Format(ctx *FmtCtx) {
-	at.TableNamePrefix.Format(ctx)
+	at.ObjectNamePrefix.Format(ctx)
 	if at.ExplicitSchema || ctx.alwaysFormatTablePrefix() {
 		ctx.WriteByte('.')
 	}

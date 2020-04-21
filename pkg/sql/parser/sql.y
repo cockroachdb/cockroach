@@ -3867,7 +3867,7 @@ show_sessions_stmt:
 show_tables_stmt:
   SHOW TABLES FROM name '.' name with_comment
   {
-    $$.val = &tree.ShowTables{TableNamePrefix:tree.TableNamePrefix{
+    $$.val = &tree.ShowTables{ObjectNamePrefix:tree.ObjectNamePrefix{
         CatalogName: tree.Name($4),
         ExplicitCatalog: true,
         SchemaName: tree.Name($6),
@@ -3877,7 +3877,7 @@ show_tables_stmt:
   }
 | SHOW TABLES FROM name with_comment
   {
-    $$.val = &tree.ShowTables{TableNamePrefix:tree.TableNamePrefix{
+    $$.val = &tree.ShowTables{ObjectNamePrefix:tree.ObjectNamePrefix{
         // Note: the schema name may be interpreted as database name,
         // see name_resolution.go.
         SchemaName: tree.Name($4),
@@ -9555,10 +9555,10 @@ table_index_name:
   }
 | standalone_index_name
   {
-    // Treat it as a table name, then pluck out the TableName.
+    // Treat it as a table name, then pluck out the ObjectName.
     name := $1.unresolvedObjectName().ToTableName()
-    indexName := tree.UnrestrictedName(name.TableName)
-    name.TableName = ""
+    indexName := tree.UnrestrictedName(name.ObjectName)
+    name.ObjectName = ""
     $$.val = tree.TableIndexName{
         Table: name,
         Index: indexName,

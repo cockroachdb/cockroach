@@ -228,7 +228,7 @@ func (f *fakeSource) FindSourceMatchingName(
 	var columns colsRes
 	for i := range f.knownTables {
 		t := &f.knownTables[i]
-		if t.srcName.TableName != tn.TableName {
+		if t.srcName.ObjectName != tn.ObjectName {
 			continue
 		}
 		if tn.ExplicitSchema {
@@ -788,7 +788,7 @@ func TestResolveTablePatternOrName(t *testing.T) {
 				ctx := context.Background()
 				switch tpv := tp.(type) {
 				case *tree.AllTablesSelector:
-					found, scMeta, err = tpv.TableNamePrefix.Resolve(ctx, fakeResolver, tc.curDb, tc.searchPath)
+					found, scMeta, err = tpv.ObjectNamePrefix.Resolve(ctx, fakeResolver, tc.curDb, tc.searchPath)
 					scPrefix = tpv.Schema()
 					ctPrefix = tpv.Catalog()
 				case *tree.TableName:
@@ -840,11 +840,11 @@ func TestResolveTablePatternOrName(t *testing.T) {
 			}
 			switch tpv := tp.(type) {
 			case *tree.AllTablesSelector:
-				tpv.TableNamePrefix.ExplicitCatalog = true
-				tpv.TableNamePrefix.ExplicitSchema = true
+				tpv.ObjectNamePrefix.ExplicitCatalog = true
+				tpv.ObjectNamePrefix.ExplicitSchema = true
 			case *tree.TableName:
-				tpv.TableNamePrefix.ExplicitCatalog = true
-				tpv.TableNamePrefix.ExplicitSchema = true
+				tpv.ObjectNamePrefix.ExplicitCatalog = true
+				tpv.ObjectNamePrefix.ExplicitSchema = true
 			}
 			if out := tp.String(); tc.expanded != out {
 				t.Errorf("%s: expected full %s, but found %s", t.Name(), tc.expanded, out)

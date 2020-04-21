@@ -293,7 +293,7 @@ func (node *ShowSequences) Format(ctx *FmtCtx) {
 
 // ShowTables represents a SHOW TABLES statement.
 type ShowTables struct {
-	TableNamePrefix
+	ObjectNamePrefix
 	WithComment bool
 }
 
@@ -302,7 +302,7 @@ func (node *ShowTables) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW TABLES")
 	if node.ExplicitSchema {
 		ctx.WriteString(" FROM ")
-		ctx.FormatNode(&node.TableNamePrefix)
+		ctx.FormatNode(&node.ObjectNamePrefix)
 	}
 
 	if node.WithComment {

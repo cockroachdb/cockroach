@@ -136,8 +136,8 @@ func (oc *optCatalog) ResolveSchema(
 	// assumes that a data source object is being resolved, which is not the case
 	// for ResolveSchema. Therefore, call ResolveTarget directly and produce a
 	// more general error.
-	oc.tn.TableName = ""
-	oc.tn.TableNamePrefix = *name
+	oc.tn.ObjectName = ""
+	oc.tn.ObjectNamePrefix = *name
 
 	found, desc, err := oc.tn.ResolveTarget(
 		ctx,
@@ -161,8 +161,8 @@ func (oc *optCatalog) ResolveSchema(
 	return &optSchema{
 		planner: oc.planner,
 		desc:    desc.(*DatabaseDescriptor),
-		name:    oc.tn.TableNamePrefix,
-	}, oc.tn.TableNamePrefix, nil
+		name:    oc.tn.ObjectNamePrefix,
+	}, oc.tn.ObjectNamePrefix, nil
 }
 
 // ResolveDataSource is part of the cat.Catalog interface.
@@ -1338,7 +1338,7 @@ func (ot *optVirtualTable) Equals(other cat.Object) bool {
 
 // Name is part of the cat.Table interface.
 func (ot *optVirtualTable) Name() tree.Name {
-	return ot.name.TableName
+	return ot.name.ObjectName
 }
 
 // IsVirtualTable is part of the cat.Table interface.
