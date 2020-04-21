@@ -51,7 +51,10 @@ type extendedEvalContext struct {
 	// tracing state should be done through the sessionDataMutator.
 	Tracing *SessionTracing
 
-	// StatusServer gives access to the Status service. Used to cancel queries.
+	// StatusServer gives access to the Status service.
+	//
+	// In a SQL tenant server, this is not available (returning false) and
+	// pgerror.UnsupportedWithMultiTenancy should be returned.
 	StatusServer func() (serverpb.StatusServer, bool)
 
 	// MemMetrics represent the group of metrics to which execution should

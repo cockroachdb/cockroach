@@ -364,10 +364,14 @@ type TemporaryObjectCleaner struct {
 	settings                         *cluster.Settings
 	db                               *kv.DB
 	makeSessionBoundInternalExecutor sqlutil.SessionBoundInternalExecutorFactory
-	statusServer                     func() (serverpb.StatusServer, bool)
-	isMeta1LeaseholderFunc           isMeta1LeaseholderFunc
-	testingKnobs                     ExecutorTestingKnobs
-	metrics                          *temporaryObjectCleanerMetrics
+	// statusServer gives access to the Status service.
+	//
+	// In a SQL tenant server, this is not available (returning false) and
+	// pgerror.UnsupportedWithMultiTenancy should be returned.
+	statusServer           func() (serverpb.StatusServer, bool)
+	isMeta1LeaseholderFunc isMeta1LeaseholderFunc
+	testingKnobs           ExecutorTestingKnobs
+	metrics                *temporaryObjectCleanerMetrics
 }
 
 // temporaryObjectCleanerMetrics are the metrics for TemporaryObjectCleaner

@@ -464,7 +464,7 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 		sqlServerOptionalArgs: sqlServerOptionalArgs{
 			rpcContext:   rpcContext,
 			distSender:   ds,
-			status:       noStatusServer,
+			statusServer: noStatusServer,
 			nodeLiveness: nl,
 			gossip:       g,
 			nodeDialer:   nd,
