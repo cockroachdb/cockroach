@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"runtime"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
@@ -98,6 +100,12 @@ var (
 		Measurement: "Range Lookups",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderSlowRPCs = metric.Metadata{
+		Name:        "requests.slow.distsender",
+		Help:        "Number of RPCs stuck or retrying for a long time",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // CanSendToFollower is used by the DistSender to determine if it needs to look
@@ -148,6 +156,7 @@ type DistSenderMetrics struct {
 	NotLeaseHolderErrCount  *metric.Counter
 	InLeaseTransferBackoffs *metric.Counter
 	RangeLookups            *metric.Counter
+	SlowRPCs                *metric.Gauge
 }
 
 func makeDistSenderMetrics() DistSenderMetrics {
@@ -162,6 +171,7 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		NotLeaseHolderErrCount:  metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
 		InLeaseTransferBackoffs: metric.NewCounter(metaDistSenderInLeaseTransferBackoffsCount),
 		RangeLookups:            metric.NewCounter(metaDistSenderRangeLookups),
+		SlowRPCs:                metric.NewGauge(metaDistSenderSlowRPCs),
 	}
 }
 
@@ -1333,6 +1343,16 @@ func (ds *DistSender) sendPartialBatchAsync(
 	return true
 }
 
+func slowRangeRPCWarningStr(
+	dur time.Duration, attempts int64, desc *roachpb.RangeDescriptor, pErr *roachpb.Error,
+) string {
+	return fmt.Sprintf("have been waiting %.2fs (%d attempts) for RPC to %s: %s", dur.Seconds(), attempts, desc, pErr)
+}
+
+func slowRangeRPCReturnWarningStr(dur time.Duration, attempts int64) string {
+	return fmt.Sprintf("slow RPC finished after %.2fs (%d attempts)", dur.Seconds(), attempts)
+}
+
 // sendPartialBatch sends the supplied batch to the range specified by
 // desc. The batch request is first truncated so that it contains only
 // requests which intersect the range descriptor and keys for each
@@ -1385,7 +1405,9 @@ func (ds *DistSender) sendPartialBatch(
 	}
 
 	// Start a retry loop for sending the batch to the range.
+	tBegin, attempts := timeutil.Now(), int64(0) // for slow log message
 	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
+		attempts++
 		// If we've cleared the descriptor on a send failure, re-lookup.
 		if desc == nil {
 			var descKey roachpb.RKey
@@ -1417,6 +1439,17 @@ func (ds *DistSender) sendPartialBatch(
 			pErr.Index.Index = int32(positions[pErr.Index.Index])
 		}
 
+		const slowDistSenderThreshold = time.Minute
+		if dur := timeutil.Since(tBegin); dur > slowDistSenderThreshold && !tBegin.IsZero() {
+			ds.metrics.SlowRPCs.Inc(1)
+			dur := dur // leak dur to heap only when branch taken
+			log.Warning(ctx, slowRangeRPCWarningStr(dur, attempts, desc, pErr))
+			defer func(tBegin time.Time, attempts int64) {
+				ds.metrics.SlowRPCs.Dec(1)
+				log.Warning(ctx, slowRangeRPCReturnWarningStr(timeutil.Since(tBegin), attempts))
+			}(tBegin, attempts)
+			tBegin = time.Time{} // prevent reentering branch for this RPC
+		}
 		log.VErrEventf(ctx, 2, "reply error %s: %s", ba, pErr)
 
 		// Error handling: If the error indicates that our range
