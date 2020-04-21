@@ -92,7 +92,7 @@ var MVCCComparer = &pebble.Comparer{
 		return pebble.DefaultComparer.AbbreviatedKey(key)
 	},
 
-	Format: func(k []byte) fmt.Formatter {
+	FormatKey: func(k []byte) fmt.Formatter {
 		decoded, err := DecodeMVCCKey(k)
 		if err != nil {
 			return mvccKeyFormatter{err: err}
