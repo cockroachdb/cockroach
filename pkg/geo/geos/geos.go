@@ -14,6 +14,16 @@
 // Operations will error if the GEOS library was not found.
 package geos
 
+import "flag"
+
+var (
+	GEOSLocation = flag.String(
+		"geos",
+		"",
+		"The location where the GEOS library is available.",
+	)
+)
+
 // EnsureInitErrorDisplay is used to control the error message displayed by
 // EnsureInit.
 type EnsureInitErrorDisplay int
