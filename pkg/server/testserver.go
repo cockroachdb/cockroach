@@ -33,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -423,6 +425,14 @@ func (allErrorsFakeLiveness) IsLive(roachpb.NodeID) (bool, error) {
 	return false, errors.New("fake liveness")
 }
 
+type dummyProtectedTSProvider struct {
+	protectedts.Provider
+}
+
+func (d dummyProtectedTSProvider) Protect(context.Context, *kv.Txn, *ptpb.Record) error {
+	return errors.New("fake protectedts.Provider")
+}
+
 func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 	st := cluster.MakeTestingClusterSettings()
 	stopper := ts.Stopper()
@@ -436,11 +446,21 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 
 	ds := ts.DistSender()
 
+	circularInternalExecutor := &sql.InternalExecutor{}
 	// Protected timestamps won't be available (at first) in multi-tenant
-	// clusters. TODO(tbg): fail with an error instead of a crash when it's
-	// used. I believe IMPORT INTO is the only use that needs it for correct-
-	// ness, everywhere else we can just not protect the timestamp and continue.
+	// clusters.
 	var protectedTSProvider protectedts.Provider
+	{
+		pp, err := ptprovider.New(ptprovider.Config{
+			DB:               ts.DB(),
+			InternalExecutor: circularInternalExecutor,
+			Settings:         st,
+		})
+		if err != nil {
+			panic(err)
+		}
+		protectedTSProvider = dummyProtectedTSProvider{pp}
+	}
 
 	registry := metric.NewRegistry()
 
@@ -485,10 +505,10 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 		stopper:                  stopper,
 		clock:                    clock,
 		protectedtsProvider:      protectedTSProvider,
-		runtime:                  &status.RuntimeStatSampler{}, // dummy
+		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),
 		db:                       ts.DB(),
 		registry:                 registry,
-		circularInternalExecutor: &sql.InternalExecutor{},
+		circularInternalExecutor: circularInternalExecutor,
 		jobRegistry:              &jobs.Registry{},
 	}
 }
