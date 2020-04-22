@@ -215,9 +215,9 @@ func isSupported(
 			if len(agg.Arguments) > 0 {
 				return false, errors.Newf("aggregates with arguments not supported")
 			}
-			var inputTypes []types.T
-			for _, colIdx := range agg.ColIdx {
-				inputTypes = append(inputTypes, spec.Input[0].ColumnTypes[colIdx])
+			inputTypes := make([]types.T, len(agg.ColIdx))
+			for pos, colIdx := range agg.ColIdx {
+				inputTypes[pos] = spec.Input[0].ColumnTypes[colIdx]
 			}
 			if supported, err := isAggregateSupported(agg.Func, inputTypes); !supported {
 				return false, err
@@ -513,6 +513,31 @@ func (r *NewColOperatorResult) createAndWrapRowSource(
 	return nil
 }
 
+// NOTE: throughout this file we do not append an output type of a projecting
+// operator to the passed-in type schema - we, instead, always allocate a new
+// type slice and copy over the old schema and set the output column of a
+// projecting operator in the next slot. We attempt to enforce this by a linter
+// rule, and such behavior prevents the type schema corruption scenario as
+// described below.
+//
+// Without explicit new allocations, it is possible that planSelectionOperators
+// (and other planning functions) reuse the same array for filterColumnTypes as
+// result.ColumnTypes is using because there was enough capacity to do so.
+// As an example, consider the following scenario in the context of
+// planFilterExpr method:
+// 1. r.ColumnTypes={*types.Bool} with len=1 and cap=4
+// 2. planSelectionOperators adds another types.Int column, so
+//    filterColumnTypes={*types.Bool, *types.Int} with len=2 and cap=4
+//    Crucially, it uses exact same underlying array as r.ColumnTypes
+//    uses.
+// 3. we project out second column, so r.ColumnTypes={*types.Bool}
+// 4. later, we add another *types.Float column, so
+//    r.ColumnTypes={*types.Bool, *types.Float}, but there is enough
+//    capacity in the array, so we simply overwrite the second slot
+//    with the new type which corrupts filterColumnTypes to become
+//    {*types.Bool, *types.Float}, and we can get into a runtime type
+//    mismatch situation.
+
 // NewColOperator creates a new columnar operator according to the given spec.
 func NewColOperator(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, args NewColOperatorArgs,
@@ -578,9 +603,10 @@ func NewColOperator(
 
 		log.VEventf(ctx, 1, "planning a wrapped processor because %s", err.Error())
 
-		inputTypes := make([][]types.T, 0, len(spec.Input))
-		for _, input := range spec.Input {
-			inputTypes = append(inputTypes, input.ColumnTypes)
+		inputTypes := make([][]types.T, len(spec.Input))
+		for inputIdx, input := range spec.Input {
+			inputTypes[inputIdx] = make([]types.T, len(input.ColumnTypes))
+			copy(inputTypes[inputIdx], input.ColumnTypes)
 		}
 
 		err = result.createAndWrapRowSource(ctx, flowCtx, inputs, inputTypes, streamingMemAccount, spec, processorConstructor)
@@ -597,7 +623,8 @@ func NewColOperator(
 				return result, err
 			}
 			result.Op, result.IsStreaming = NewNoop(inputs[0]), true
-			result.ColumnTypes = append([]types.T{}, spec.Input[0].ColumnTypes...)
+			result.ColumnTypes = make([]types.T, len(spec.Input[0].ColumnTypes))
+			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
 		case core.TableReader != nil:
 			if err := checkNumIn(inputs, 0); err != nil {
 				return result, err
@@ -639,7 +666,7 @@ func NewColOperator(
 				// Ideally the optimizer would not plan a scan in this unusual case.
 				result.Op, result.IsStreaming, err = NewSingleTupleNoInputOp(colmem.NewAllocator(ctx, streamingMemAccount)), true, nil
 				// We make ColumnTypes non-nil so that sanity check doesn't panic.
-				result.ColumnTypes = make([]types.T, 0)
+				result.ColumnTypes = []types.T{}
 				break
 			}
 			if aggSpec.IsRowCount() {
@@ -682,7 +709,8 @@ func NewColOperator(
 				}
 				result.ColumnTypes[i] = *retType
 			}
-			typs := append([]types.T{}, spec.Input[0].ColumnTypes...)
+			typs := make([]types.T, len(spec.Input[0].ColumnTypes))
+			copy(typs, spec.Input[0].ColumnTypes)
 			if _, err = typeconv.FromColumnTypes(typs); err != nil {
 				return result, err
 			}
@@ -713,7 +741,8 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 1); err != nil {
 				return result, err
 			}
-			result.ColumnTypes = append([]types.T{}, spec.Input[0].ColumnTypes...)
+			result.ColumnTypes = make([]types.T, len(spec.Input[0].ColumnTypes))
+			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
 			if _, err = typeconv.FromColumnTypes(result.ColumnTypes); err != nil {
 				return result, err
 			}
@@ -759,11 +788,13 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 2); err != nil {
 				return result, err
 			}
-			leftTypes := append([]types.T{}, spec.Input[0].ColumnTypes...)
+			leftTypes := make([]types.T, len(spec.Input[0].ColumnTypes))
+			copy(leftTypes, spec.Input[0].ColumnTypes)
 			if _, err := typeconv.FromColumnTypes(leftTypes); err != nil {
 				return result, err
 			}
-			rightTypes := append([]types.T{}, spec.Input[1].ColumnTypes...)
+			rightTypes := make([]types.T, len(spec.Input[1].ColumnTypes))
+			copy(rightTypes, spec.Input[1].ColumnTypes)
 			if _, err := typeconv.FromColumnTypes(rightTypes); err != nil {
 				return result, err
 			}
@@ -848,7 +879,9 @@ func NewColOperator(
 					args.TestingKnobs.SpillingCallbackFn,
 				)
 			}
-			result.ColumnTypes = append(leftTypes, rightTypes...)
+			result.ColumnTypes = make([]types.T, len(leftTypes)+len(rightTypes))
+			copy(result.ColumnTypes, leftTypes)
+			copy(result.ColumnTypes[len(leftTypes):], rightTypes)
 
 			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == sqlbase.JoinType_INNER {
 				if err = result.planAndMaybeWrapOnExprAsFilter(ctx, flowCtx, core.HashJoiner.OnExpr, streamingMemAccount, processorConstructor); err != nil {
@@ -864,11 +897,13 @@ func NewColOperator(
 			// for both of the inputs.
 			result.IsStreaming = core.MergeJoiner.LeftEqColumnsAreKey && core.MergeJoiner.RightEqColumnsAreKey
 
-			leftTypes := append([]types.T{}, spec.Input[0].ColumnTypes...)
+			leftTypes := make([]types.T, len(spec.Input[0].ColumnTypes))
+			copy(leftTypes, spec.Input[0].ColumnTypes)
 			if _, err := typeconv.FromColumnTypes(leftTypes); err != nil {
 				return result, err
 			}
-			rightTypes := append([]types.T{}, spec.Input[1].ColumnTypes...)
+			rightTypes := make([]types.T, len(spec.Input[1].ColumnTypes))
+			copy(rightTypes, spec.Input[1].ColumnTypes)
 			if _, err := typeconv.FromColumnTypes(rightTypes); err != nil {
 				return result, err
 			}
@@ -907,7 +942,9 @@ func NewColOperator(
 
 			result.Op = mj
 			result.ToClose = append(result.ToClose, mj.(IdempotentCloser))
-			result.ColumnTypes = append(leftTypes, rightTypes...)
+			result.ColumnTypes = make([]types.T, len(leftTypes)+len(rightTypes))
+			copy(result.ColumnTypes, leftTypes)
+			copy(result.ColumnTypes[len(leftTypes):], rightTypes)
 
 			if onExpr != nil {
 				if err = result.planAndMaybeWrapOnExprAsFilter(ctx, flowCtx, *onExpr, streamingMemAccount, processorConstructor); err != nil {
@@ -920,17 +957,17 @@ func NewColOperator(
 				return result, err
 			}
 			input := inputs[0]
-			inputTypes := append([]types.T{}, spec.Input[0].ColumnTypes...)
-			if _, err = typeconv.FromColumnTypes(inputTypes); err != nil {
+			result.ColumnTypes = make([]types.T, len(spec.Input[0].ColumnTypes))
+			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
+			if _, err = typeconv.FromColumnTypes(result.ColumnTypes); err != nil {
 				return result, err
 			}
 			ordering := core.Sorter.OutputOrdering
 			matchLen := core.Sorter.OrderingMatchLen
 			result.Op, err = result.createDiskBackedSort(
-				ctx, flowCtx, args, input, inputTypes, ordering, matchLen, 0, /* maxNumberPartitions */
+				ctx, flowCtx, args, input, result.ColumnTypes, ordering, matchLen, 0, /* maxNumberPartitions */
 				spec.ProcessorID, post, "", /* memMonitorNamePrefix */
 			)
-			result.ColumnTypes = inputTypes
 
 		case core.Windower != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
@@ -938,9 +975,13 @@ func NewColOperator(
 			}
 			memMonitorsPrefix := "window-"
 			input := inputs[0]
-			result.ColumnTypes = append([]types.T{}, spec.Input[0].ColumnTypes...)
+			result.ColumnTypes = make([]types.T, len(spec.Input[0].ColumnTypes))
+			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
 			for _, wf := range core.Windower.WindowFns {
-				typs := append([]types.T{}, result.ColumnTypes...)
+				// We allocate the capacity for two extra types because of the
+				// temporary columns that can be appended below.
+				typs := make([]types.T, len(result.ColumnTypes), len(result.ColumnTypes)+2)
+				copy(typs, result.ColumnTypes)
 				if _, err = typeconv.FromColumnTypes(typs); err != nil {
 					return result, err
 				}
@@ -965,7 +1006,8 @@ func NewColOperator(
 					)
 					// Window partitioner will append a boolean column.
 					tempColOffset++
-					typs = append(typs, *types.Bool)
+					typs = typs[:len(typs)+1]
+					typs[len(typs)-1] = *types.Bool
 				} else {
 					if len(wf.Ordering.Columns) > 0 {
 						input, err = result.createDiskBackedSort(
@@ -987,7 +1029,8 @@ func NewColOperator(
 					)
 					// Window peer grouper will append a boolean column.
 					tempColOffset++
-					typs = append(typs, *types.Bool)
+					typs = typs[:len(typs)+1]
+					typs[len(typs)-1] = *types.Bool
 				}
 
 				outputIdx := int(wf.OutputColIdx + tempColOffset)
@@ -1041,7 +1084,10 @@ func NewColOperator(
 				if err != nil {
 					return result, err
 				}
-				result.ColumnTypes = append(result.ColumnTypes, *returnType)
+				oldColumnTypes := result.ColumnTypes
+				result.ColumnTypes = make([]types.T, len(oldColumnTypes)+1)
+				copy(result.ColumnTypes, oldColumnTypes)
+				result.ColumnTypes[len(oldColumnTypes)] = *returnType
 				input = result.Op
 			}
 
@@ -1082,9 +1128,10 @@ func NewColOperator(
 			// wrap an unsupported post-processing spec, a Materializer would naively
 			// decode these columns, which would return errors (e.g. UUIDs require 16
 			// bytes, coltypes.Unhandled may not be decoded).
-			inputTypes := make([][]types.T, 0, len(spec.Input))
-			for _, input := range spec.Input {
-				inputTypes = append(inputTypes, input.ColumnTypes)
+			inputTypes := make([][]types.T, len(spec.Input))
+			for inputIdx, input := range spec.Input {
+				inputTypes[inputIdx] = make([]types.T, len(input.ColumnTypes))
+				copy(inputTypes[inputIdx], input.ColumnTypes)
 			}
 			result.resetToState(ctx, resultPreSpecPlanningStateShallowCopy)
 			err = result.createAndWrapRowSource(
@@ -1208,9 +1255,9 @@ func (r *postProcessResult) planPostProcessSpec(
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}
 		r.Op = NewSimpleProjectOp(r.Op, len(r.ColumnTypes), renderedCols)
-		newTypes := make([]types.T, 0, len(renderedCols))
-		for _, j := range renderedCols {
-			newTypes = append(newTypes, r.ColumnTypes[j])
+		newTypes := make([]types.T, len(renderedCols))
+		for i, j := range renderedCols {
+			newTypes[i] = r.ColumnTypes[j]
 		}
 		r.ColumnTypes = newTypes
 	}
@@ -1314,7 +1361,8 @@ type postProcessResult struct {
 
 func (r *NewColOperatorResult) updateWithPostProcessResult(ppr postProcessResult) {
 	r.Op = ppr.Op
-	r.ColumnTypes = ppr.ColumnTypes
+	r.ColumnTypes = make([]types.T, len(ppr.ColumnTypes))
+	copy(r.ColumnTypes, ppr.ColumnTypes)
 	r.InternalMemUsage += ppr.InternalMemUsage
 }
 
@@ -1363,9 +1411,9 @@ func (r *postProcessResult) planFilterExpr(
 func (r *postProcessResult) addProjection(projection []uint32) {
 	r.Op = NewSimpleProjectOp(r.Op, len(r.ColumnTypes), projection)
 	// Update output ColumnTypes.
-	newTypes := make([]types.T, 0, len(projection))
-	for _, j := range projection {
-		newTypes = append(newTypes, r.ColumnTypes[j])
+	newTypes := make([]types.T, len(projection))
+	for i, j := range projection {
+		newTypes[i] = r.ColumnTypes[j]
 	}
 	r.ColumnTypes = newTypes
 }
@@ -1497,7 +1545,9 @@ func planTypedMaybeNullProjectionOperators(
 	if expr == tree.DNull {
 		resultIdx = len(columnTypes)
 		op = NewConstNullOp(colmem.NewAllocator(ctx, acc), input, resultIdx, exprTyp)
-		typs = append(columnTypes, *exprTyp)
+		typs = make([]types.T, len(columnTypes)+1)
+		copy(typs, columnTypes)
+		typs[len(columnTypes)] = *exprTyp
 		return op, resultIdx, typs, internalMemUsed, nil
 	}
 	return planProjectionOperators(ctx, evalCtx, expr, columnTypes, input, acc)
@@ -1534,7 +1584,9 @@ func planCastOperator(
 	}
 	outputIdx := len(columnTypes)
 	op, err = GetCastOperator(colmem.NewAllocator(ctx, acc), input, inputIdx, outputIdx, fromType, toType)
-	typs = append(columnTypes, *toType)
+	typs = make([]types.T, len(columnTypes)+1)
+	copy(typs, columnTypes)
+	typs[len(columnTypes)] = *toType
 	return op, outputIdx, typs, err
 }
 
@@ -1579,7 +1631,8 @@ func planProjectionOperators(
 			inputCols             []int
 			projectionInternalMem int
 		)
-		typs = columnTypes
+		typs = make([]types.T, len(columnTypes))
+		copy(typs, columnTypes)
 		op = input
 		for _, e := range t.Exprs {
 			var err error
@@ -1597,16 +1650,20 @@ func planProjectionOperators(
 		}
 		funcOutputType := t.ResolvedType()
 		resultIdx = len(typs)
-		typs = append(typs, *funcOutputType)
+		oldTyps := typs
+		typs = make([]types.T, len(oldTyps)+1)
+		copy(typs, oldTyps)
+		typs[len(oldTyps)] = *funcOutputType
 		op, err = NewBuiltinFunctionOperator(
 			colmem.NewAllocator(ctx, acc), evalCtx, t, typs, inputCols, resultIdx, op,
 		)
 		return op, resultIdx, typs, internalMemUsed, err
 	case tree.Datum:
 		datumType := t.ResolvedType()
-		typs = columnTypes
-		resultIdx = len(typs)
-		typs = append(typs, *datumType)
+		typs = make([]types.T, len(columnTypes)+1)
+		copy(typs, columnTypes)
+		resultIdx = len(columnTypes)
+		typs[resultIdx] = *datumType
 		if datumType.Family() == types.UnknownFamily {
 			return nil, resultIdx, typs, internalMemUsed, errors.New("cannot plan null type unknown")
 		}
@@ -1644,7 +1701,9 @@ func planProjectionOperators(
 				"unsupported type %s", caseOutputType)
 		}
 		caseOutputIdx := len(columnTypes)
-		typs = append(columnTypes, *caseOutputType)
+		typs = make([]types.T, len(columnTypes)+1)
+		copy(typs, columnTypes)
+		typs[caseOutputIdx] = *caseOutputType
 		thenIdxs := make([]int, len(t.Whens)+1)
 		for i, when := range t.Whens {
 			// The case operator is assembled from n WHEN arms, n THEN arms, and an
@@ -1899,7 +1958,10 @@ func planProjectionExpr(
 	if sMem, ok := op.(InternalMemoryOperator); ok {
 		internalMemUsed += sMem.InternalMemoryUsage()
 	}
-	typs = append(typs, *actualOutputType)
+	oldTyps := typs
+	typs = make([]types.T, len(oldTyps)+1)
+	copy(typs, oldTyps)
+	typs[len(oldTyps)] = *actualOutputType
 	if !outputType.Identical(actualOutputType) {
 		// The projection operator outputs a column of a different type than
 		// the expected logical type. In order to "synchronize" the reality and
@@ -1931,7 +1993,9 @@ func planLogicalProjectionOp(
 ) (op colexecbase.Operator, resultIdx int, typs []types.T, internalMemUsed int, err error) {
 	// Add a new boolean column that will store the result of the projection.
 	resultIdx = len(columnTypes)
-	typs = append(columnTypes, *types.Bool)
+	typs = make([]types.T, resultIdx+1)
+	copy(typs, columnTypes)
+	typs[resultIdx] = *types.Bool
 	var (
 		typedLeft, typedRight                       tree.TypedExpr
 		leftProjOpChain, rightProjOpChain, outputOp colexecbase.Operator
