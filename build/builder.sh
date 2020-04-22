@@ -120,10 +120,15 @@ vols="${vols} --volume=${HOME}/.yarn-cache:${container_home}/.yarn-cache${cached
 
 # If we're running in an environment that's using git alternates, like TeamCity,
 # we must mount the path to the real git objects for git to work in the container.
-alternates_file=${cockroach_toplevel}/.git/objects/info/alternates
-if test -e "${alternates_file}"; then
-  alternates_path=$(cat "${alternates_file}")
-  vols="${vols} --volume=${alternates_path}:${alternates_path}${cached_volume_mode}"
+# alternates_file=${cockroach_toplevel}/.git/objects/info/alternates
+# if test -e "${alternates_file}"; then
+#   alternates_path=$(cat "${alternates_file}")
+#   vols="${vols} --volume=${alternates_path}:${alternates_path}${cached_volume_mode}"
+# fi
+
+teamcity_alternates="/home/agent/system/git/"
+if test -d "${teamcity_alternates}"; then
+    vols="${vols} --volume=${teamcity_alternates}:${teamcity_alternates}${cached_volume_mode}"
 fi
 
 if [ "${BUILDER_HIDE_GOPATH_SRC:-}" != "1" ]; then
