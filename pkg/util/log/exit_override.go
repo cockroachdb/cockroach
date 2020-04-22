@@ -21,8 +21,11 @@ import (
 // if true, suppresses the stack trace, which is useful for test
 // callers wishing to keep the logs reasonably clean.
 //
-// Call with a nil function to undo.
+// Use ResetExitFunc() to reset.
 func SetExitFunc(hideStack bool, f func(int)) {
+	if f == nil {
+		panic("nil exit func invalid")
+	}
 	setExitErrFunc(hideStack, func(x int, err error) { f(x) })
 }
 
