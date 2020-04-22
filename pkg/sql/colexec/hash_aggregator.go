@@ -94,17 +94,33 @@ type hashAggregator struct {
 		//
 		// Instead of having a map from hashCode to []int (which could result
 		// in having many int slices), we are using a constant number of such
-		// slices and have a map from hashCode to a "slot" in sels that does
+		// slices and have a "map" from hashCode to a "slot" in sels that does
 		// the "translation." The key insight here is that we will have at most
 		// batchTupleLimit (plus - possibly - constant excess) different
 		// hashCodes at once.
 		sels [][]int
-		// hashCodeToSelsSlot is a mapping from the hashCode to a slot in sels
-		// slice. New keys are added to this map when building the selections
-		// when new hashCode is encountered, and keys are deleted from the map
-		// in online aggregation phase once the tuples with the corresponding
-		// hash codes have been processed.
-		hashCodeToSelsSlot map[uint64]int
+		// hashCodeForSelsSlot stores the hashCode that corresponds to a slot
+		// in sels slice. For example, if we have tuples with the following
+		// hashCodes = {0, 2, 0, 0, 1, 2, 1}, then we will have:
+		//   hashCodeForSelsSlot = {0, 2, 1}
+		//   sels[0] = {0, 2, 3}
+		//   sels[1] = {1, 5}
+		//   sels[2] = {4, 6}
+		// Note that we're not using Golang's map for this purpose because
+		// although, in theory, it has O(1) amortized lookup cost, in practice,
+		// it is faster to do a linear search for a particular hashCode in this
+		// slice: given that we have at most coldata.BatchSize() number of
+		// different hashCodes - which is a constant - we get
+		// O(coldata.BatchSize()) = O(1) lookup cost. And now we have two cases
+		// to consider:
+		// 1. we have few distinct hashCodes (large group sizes), then the
+		// overhead of linear search will be significantly lower than of a
+		// lookup in map
+		// 2. we have many distinct hashCodes (small group sizes), then the
+		// map *might* outperform the linear search, but the time spent in
+		// other parts of the hash aggregator will dominate the total runtime,
+		// so this would not matter.
+		hashCodeForSelsSlot []uint64
 
 		// group is a boolean vector where "true" represent the beginning of a group
 		// in the column. It is shared among all aggregation functions. Since
@@ -227,7 +243,7 @@ func (op *hashAggregator) Init() {
 		op.allocator, op.inputTypes, maxBufferedTuples,
 	)
 	op.scratch.sels = make([][]int, maxBufferedTuples)
-	op.scratch.hashCodeToSelsSlot = make(map[uint64]int)
+	op.scratch.hashCodeForSelsSlot = make([]uint64, maxBufferedTuples)
 	op.scratch.group = make([]bool, maxBufferedTuples)
 	// Eventually, op.keyMapping will contain as many tuples as there are
 	// groups in the input, but we don't know that number upfront, so we
@@ -364,15 +380,24 @@ func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context) {
 	// they all are of zero length here (see the comment for op.scratch.sels
 	// for context).
 
-	nextSelsSlot := 0
 	// We can use selIdx to index into op.scratch since op.scratch never has a
 	// a selection vector.
+	op.scratch.hashCodeForSelsSlot = op.scratch.hashCodeForSelsSlot[:0]
 	for selIdx, hashCode := range hashBuffer {
-		selsSlot, ok := op.scratch.hashCodeToSelsSlot[hashCode]
-		if !ok {
-			selsSlot = nextSelsSlot
-			op.scratch.hashCodeToSelsSlot[hashCode] = selsSlot
-			nextSelsSlot++
+		selsSlot := -1
+		for slot, hash := range op.scratch.hashCodeForSelsSlot {
+			if hash == hashCode {
+				// We have already seen a tuple with the same hashCode
+				// previously, so we will append into the same sels slot.
+				selsSlot = slot
+				break
+			}
+		}
+		if selsSlot < 0 {
+			// This is the first tuple in hashBuffer with this hashCode, so we
+			// will add this tuple to the next available sels slot.
+			selsSlot = len(op.scratch.hashCodeForSelsSlot)
+			op.scratch.hashCodeForSelsSlot = append(op.scratch.hashCodeForSelsSlot, hashCode)
 		}
 		op.scratch.sels[selsSlot] = append(op.scratch.sels[selsSlot], selIdx)
 	}
@@ -382,14 +407,7 @@ func (op *hashAggregator) buildSelectionForEachHashCode(ctx context.Context) {
 // aggFunctions for each group if it doesn't not exist. Then it calls Compute()
 // on each aggregation function to perform aggregation.
 func (op *hashAggregator) onlineAgg() {
-	for _, hashCode := range op.hashBuffer {
-		selsSlot, ok := op.scratch.hashCodeToSelsSlot[hashCode]
-		if !ok {
-			// It is possible that multiple tuples have the same hashCode, and
-			// we process all such tuples when we encounter the first of these
-			// tuples.
-			continue
-		}
+	for selsSlot, hashCode := range op.scratch.hashCodeForSelsSlot {
 		remaining := op.scratch.sels[selsSlot]
 
 		var anyMatched bool
@@ -459,7 +477,7 @@ func (op *hashAggregator) onlineAgg() {
 			// Hack required to get aggregation function working. See '.scratch.group'
 			// field comment in hashAggregator for more details.
 			op.scratch.group[groupStartIdx] = true
-			aggFunc.init(op.scratch.group, op.output)
+			aggFunc.init(op.scratch.group, op.output.Batch)
 			aggFunc.compute(op.scratch, op.aggCols)
 			op.scratch.group[groupStartIdx] = false
 		}
@@ -467,8 +485,6 @@ func (op *hashAggregator) onlineAgg() {
 		// We have processed all tuples with this hashCode, so we should reset
 		// the length of the corresponding slice.
 		op.scratch.sels[selsSlot] = op.scratch.sels[selsSlot][:0]
-		// We also need to delete the hashCode from the mapping.
-		delete(op.scratch.hashCodeToSelsSlot, hashCode)
 	}
 }
 
