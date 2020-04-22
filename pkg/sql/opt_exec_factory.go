@@ -66,7 +66,7 @@ func (ef *execFactory) ConstructValues(
 func (ef *execFactory) ConstructScan(
 	table cat.Table,
 	index cat.Index,
-	needed exec.ColumnOrdinalSet,
+	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
 	hardLimit int64,
 	softLimit int64,
@@ -136,7 +136,7 @@ func (ef *execFactory) ConstructScan(
 func (ef *execFactory) constructVirtualScan(
 	table cat.Table,
 	index cat.Index,
-	needed exec.ColumnOrdinalSet,
+	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
 	hardLimit int64,
 	softLimit int64,
@@ -170,10 +170,10 @@ func (ef *execFactory) constructVirtualScan(
 	}
 	if needed.Len() != len(columns) {
 		// We are selecting a subset of columns; we need a projection.
-		cols := make([]exec.ColumnOrdinal, 0, needed.Len())
+		cols := make([]exec.NodeColumnOrdinal, 0, needed.Len())
 		colNames := make([]string, len(cols))
 		for ord, ok := needed.Next(0); ok; ord, ok = needed.Next(ord + 1) {
-			cols = append(cols, exec.ColumnOrdinal(ord-1))
+			cols = append(cols, exec.NodeColumnOrdinal(ord-1))
 			colNames = append(colNames, columns[ord-1].Name)
 		}
 		n, err = ef.ConstructSimpleProject(n, cols, colNames, nil /* reqOrdering */)
@@ -234,7 +234,7 @@ func (ef *execFactory) ConstructFilter(
 
 // ConstructSimpleProject is part of the exec.Factory interface.
 func (ef *execFactory) ConstructSimpleProject(
-	n exec.Node, cols []exec.ColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
+	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	// If the top node is already a renderNode, just rearrange the columns. But
 	// we don't want to duplicate a rendering expression (in case it is expensive
@@ -273,7 +273,7 @@ func (ef *execFactory) ConstructSimpleProject(
 	return rb.res, nil
 }
 
-func hasDuplicates(cols []exec.ColumnOrdinal) bool {
+func hasDuplicates(cols []exec.NodeColumnOrdinal) bool {
 	var set util.FastIntSet
 	for _, c := range cols {
 		if set.Contains(int(c)) {
@@ -310,7 +310,7 @@ func (ef *execFactory) RenameColumns(n exec.Node, colNames []string) (exec.Node,
 func (ef *execFactory) ConstructHashJoin(
 	joinType sqlbase.JoinType,
 	left, right exec.Node,
-	leftEqCols, rightEqCols []exec.ColumnOrdinal,
+	leftEqCols, rightEqCols []exec.NodeColumnOrdinal,
 	leftEqColsAreKey, rightEqColsAreKey bool,
 	extraOnCond tree.TypedExpr,
 ) (exec.Node, error) {
@@ -440,7 +440,7 @@ func (ef *execFactory) ConstructScalarGroupBy(
 // ConstructGroupBy is part of the exec.Factory interface.
 func (ef *execFactory) ConstructGroupBy(
 	input exec.Node,
-	groupCols []exec.ColumnOrdinal,
+	groupCols []exec.NodeColumnOrdinal,
 	groupColOrdering sqlbase.ColumnOrdering,
 	aggregations []exec.AggInfo,
 	reqOrdering exec.OutputOrdering,
@@ -524,7 +524,7 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 // ConstructDistinct is part of the exec.Factory interface.
 func (ef *execFactory) ConstructDistinct(
 	input exec.Node,
-	distinctCols, orderedCols exec.ColumnOrdinalSet,
+	distinctCols, orderedCols exec.NodeColumnOrdinalSet,
 	reqOrdering exec.OutputOrdering,
 	nullsAreDistinct bool,
 	errorOnDup string,
@@ -581,8 +581,8 @@ func (ef *execFactory) ConstructOrdinality(input exec.Node, colName string) (exe
 func (ef *execFactory) ConstructIndexJoin(
 	input exec.Node,
 	table cat.Table,
-	keyCols []exec.ColumnOrdinal,
-	tableCols exec.ColumnOrdinalSet,
+	keyCols []exec.NodeColumnOrdinal,
+	tableCols exec.TableColumnOrdinalSet,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
@@ -622,9 +622,9 @@ func (ef *execFactory) ConstructLookupJoin(
 	input exec.Node,
 	table cat.Table,
 	index cat.Index,
-	eqCols []exec.ColumnOrdinal,
+	eqCols []exec.NodeColumnOrdinal,
 	eqColsAreKey bool,
-	lookupCols exec.ColumnOrdinalSet,
+	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
@@ -671,7 +671,7 @@ func (ef *execFactory) ConstructLookupJoin(
 func (ef *execFactory) constructScanForZigzag(
 	indexDesc *sqlbase.IndexDescriptor,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	cols exec.ColumnOrdinalSet,
+	cols exec.NodeColumnOrdinalSet,
 ) (*scanNode, error) {
 
 	colCfg := scanColumnsConfig{
@@ -699,10 +699,10 @@ func (ef *execFactory) ConstructZigzagJoin(
 	leftIndex cat.Index,
 	rightTable cat.Table,
 	rightIndex cat.Index,
-	leftEqCols []exec.ColumnOrdinal,
-	rightEqCols []exec.ColumnOrdinal,
-	leftCols exec.ColumnOrdinalSet,
-	rightCols exec.ColumnOrdinalSet,
+	leftEqCols []exec.NodeColumnOrdinal,
+	rightEqCols []exec.NodeColumnOrdinal,
+	leftCols exec.NodeColumnOrdinalSet,
+	rightCols exec.NodeColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	fixedVals []exec.Node,
 	reqOrdering exec.OutputOrdering,
@@ -802,7 +802,7 @@ func (ef *execFactory) ConstructMax1Row(input exec.Node, errorText string) (exec
 }
 
 // ConstructBuffer is part of the exec.Factory interface.
-func (ef *execFactory) ConstructBuffer(input exec.Node, label string) (exec.Node, error) {
+func (ef *execFactory) ConstructBuffer(input exec.Node, label string) (exec.BufferNode, error) {
 	return &bufferNode{
 		plan:  input.(planNode),
 		label: label,
@@ -810,7 +810,7 @@ func (ef *execFactory) ConstructBuffer(input exec.Node, label string) (exec.Node
 }
 
 // ConstructScanBuffer is part of the exec.Factory interface.
-func (ef *execFactory) ConstructScanBuffer(ref exec.Node, label string) (exec.Node, error) {
+func (ef *execFactory) ConstructScanBuffer(ref exec.BufferNode, label string) (exec.Node, error) {
 	return &scanBufferNode{
 		buffer: ref.(*bufferNode),
 		label:  label,
@@ -1164,8 +1164,8 @@ func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) 
 func (ef *execFactory) ConstructInsert(
 	input exec.Node,
 	table cat.Table,
-	insertColOrdSet exec.ColumnOrdinalSet,
-	returnColOrdSet exec.ColumnOrdinalSet,
+	insertColOrdSet exec.TableColumnOrdinalSet,
+	returnColOrdSet exec.TableColumnOrdinalSet,
 	checkOrdSet exec.CheckOrdinalSet,
 	allowAutoCommit bool,
 	skipFKChecks bool,
@@ -1241,8 +1241,8 @@ func (ef *execFactory) ConstructInsert(
 func (ef *execFactory) ConstructInsertFastPath(
 	rows [][]tree.TypedExpr,
 	table cat.Table,
-	insertColOrdSet exec.ColumnOrdinalSet,
-	returnColOrdSet exec.ColumnOrdinalSet,
+	insertColOrdSet exec.TableColumnOrdinalSet,
+	returnColOrdSet exec.TableColumnOrdinalSet,
 	checkOrdSet exec.CheckOrdinalSet,
 	fkChecks []exec.InsertFastPathFKCheck,
 ) (exec.Node, error) {
@@ -1319,9 +1319,9 @@ func (ef *execFactory) ConstructInsertFastPath(
 func (ef *execFactory) ConstructUpdate(
 	input exec.Node,
 	table cat.Table,
-	fetchColOrdSet exec.ColumnOrdinalSet,
-	updateColOrdSet exec.ColumnOrdinalSet,
-	returnColOrdSet exec.ColumnOrdinalSet,
+	fetchColOrdSet exec.TableColumnOrdinalSet,
+	updateColOrdSet exec.TableColumnOrdinalSet,
+	returnColOrdSet exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	passthrough sqlbase.ResultColumns,
 	allowAutoCommit bool,
@@ -1472,11 +1472,11 @@ func (ef *execFactory) makeFkMetadata(
 func (ef *execFactory) ConstructUpsert(
 	input exec.Node,
 	table cat.Table,
-	canaryCol exec.ColumnOrdinal,
-	insertColOrdSet exec.ColumnOrdinalSet,
-	fetchColOrdSet exec.ColumnOrdinalSet,
-	updateColOrdSet exec.ColumnOrdinalSet,
-	returnColOrdSet exec.ColumnOrdinalSet,
+	canaryCol exec.NodeColumnOrdinal,
+	insertColOrdSet exec.TableColumnOrdinalSet,
+	fetchColOrdSet exec.TableColumnOrdinalSet,
+	updateColOrdSet exec.TableColumnOrdinalSet,
+	returnColOrdSet exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	allowAutoCommit bool,
 	skipFKChecks bool,
@@ -1595,8 +1595,8 @@ func (ef *execFactory) ConstructUpsert(
 func (ef *execFactory) ConstructDelete(
 	input exec.Node,
 	table cat.Table,
-	fetchColOrdSet exec.ColumnOrdinalSet,
-	returnColOrdSet exec.ColumnOrdinalSet,
+	fetchColOrdSet exec.TableColumnOrdinalSet,
+	returnColOrdSet exec.TableColumnOrdinalSet,
 	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
@@ -1689,7 +1689,7 @@ func (ef *execFactory) ConstructDelete(
 
 func (ef *execFactory) ConstructDeleteRange(
 	table cat.Table,
-	needed exec.ColumnOrdinalSet,
+	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
 	maxReturnedKeys int,
 	allowAutoCommit bool,
@@ -1933,7 +1933,7 @@ func (rb *renderBuilder) addExpr(expr tree.TypedExpr, colName string) {
 
 // makeColDescList returns a list of table column descriptors. Columns are
 // included if their ordinal position in the table schema is in the cols set.
-func makeColDescList(table cat.Table, cols exec.ColumnOrdinalSet) []sqlbase.ColumnDescriptor {
+func makeColDescList(table cat.Table, cols exec.TableColumnOrdinalSet) []sqlbase.ColumnDescriptor {
 	colDescs := make([]sqlbase.ColumnDescriptor, 0, cols.Len())
 	for i, n := 0, table.DeletableColumnCount(); i < n; i++ {
 		if !cols.Contains(i) {
@@ -1947,7 +1947,7 @@ func makeColDescList(table cat.Table, cols exec.ColumnOrdinalSet) []sqlbase.Colu
 // makeScanColumnsConfig builds a scanColumnsConfig struct by constructing a
 // list of descriptor IDs for columns in the given cols set. Columns are
 // identified by their ordinal position in the table schema.
-func makeScanColumnsConfig(table cat.Table, cols exec.ColumnOrdinalSet) scanColumnsConfig {
+func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) scanColumnsConfig {
 	// Set visibility=publicAndNonPublicColumns, since all columns in the "cols"
 	// set should be projected, regardless of whether they're public or non-
 	// public. The caller decides which columns to include (or not include). Note

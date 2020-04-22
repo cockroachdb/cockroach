@@ -197,7 +197,7 @@ func (s *Builder) CanSplitSpanIntoSeparateFamilies(
 // TODO (rohany): In future work, there should be a single API to generate spans
 //  from constraints, datums and encdatums.
 func (s *Builder) SpansFromConstraint(
-	c *constraint.Constraint, needed util.FastIntSet, forDelete bool,
+	c *constraint.Constraint, needed exec.TableColumnOrdinalSet, forDelete bool,
 ) (roachpb.Spans, error) {
 	var spans roachpb.Spans
 	var err error
@@ -223,7 +223,7 @@ func (s *Builder) SpansFromConstraint(
 // UnconstrainedSpans returns the full span corresponding to the Builder's
 // table and index.
 func (s *Builder) UnconstrainedSpans(forDelete bool) (roachpb.Spans, error) {
-	return s.SpansFromConstraint(nil, exec.ColumnOrdinalSet{}, forDelete)
+	return s.SpansFromConstraint(nil, exec.TableColumnOrdinalSet{}, forDelete)
 }
 
 // appendSpansFromConstraintSpan converts a constraint.Span to one or more
@@ -232,7 +232,7 @@ func (s *Builder) UnconstrainedSpans(forDelete bool) (roachpb.Spans, error) {
 // scanned. The forDelete parameter indicates whether these spans will be used
 // for row deletion.
 func (s *Builder) appendSpansFromConstraintSpan(
-	appendTo roachpb.Spans, cs *constraint.Span, needed util.FastIntSet, forDelete bool,
+	appendTo roachpb.Spans, cs *constraint.Span, needed exec.TableColumnOrdinalSet, forDelete bool,
 ) (roachpb.Spans, error) {
 	var span roachpb.Span
 	var err error

@@ -59,12 +59,13 @@ func (b *Builder) buildMutationInput(
 
 	if p.WithID != 0 {
 		label := fmt.Sprintf("buffer %d", p.WithID)
-		input.root, err = b.factory.ConstructBuffer(input.root, label)
+		bufferNode, err := b.factory.ConstructBuffer(input.root, label)
 		if err != nil {
 			return execPlan{}, err
 		}
 
-		b.addBuiltWithExpr(p.WithID, input.outputCols, input.root)
+		b.addBuiltWithExpr(p.WithID, input.outputCols, bufferNode)
+		input.root = bufferNode
 	}
 	return input, nil
 }
@@ -176,7 +177,7 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		}
 
 		out := &fkChecks[i]
-		out.InsertCols = make([]exec.ColumnOrdinal, len(lookupJoin.KeyCols))
+		out.InsertCols = make([]exec.TableColumnOrdinal, len(lookupJoin.KeyCols))
 		findCol := func(cols opt.ColList, col opt.ColumnID) int {
 			res, ok := cols.Find(col)
 			if !ok {
@@ -189,7 +190,7 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 			// column in the mutation input.
 			withColOrd := findCol(withScan.OutCols, keyCol)
 			inputCol := withScan.InCols[withColOrd]
-			out.InsertCols[i] = exec.ColumnOrdinal(findCol(ins.InsertCols, inputCol))
+			out.InsertCols[i] = exec.TableColumnOrdinal(findCol(ins.InsertCols, inputCol))
 		}
 
 		out.ReferencedTable = md.Table(lookupJoin.Table)
@@ -374,9 +375,9 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	// Construct the Upsert node.
 	md := b.mem.Metadata()
 	tab := md.Table(ups.Table)
-	canaryCol := exec.ColumnOrdinal(-1)
+	canaryCol := exec.NodeColumnOrdinal(-1)
 	if ups.CanaryCol != 0 {
-		canaryCol = input.getColumnOrdinal(ups.CanaryCol)
+		canaryCol = input.getNodeColumnOrdinal(ups.CanaryCol)
 	}
 	insertColOrds := ordinalSetFromColList(ups.InsertCols)
 	fetchColOrds := ordinalSetFromColList(ups.FetchCols)
@@ -539,7 +540,7 @@ func appendColsWhenPresent(dst, src opt.ColList) opt.ColList {
 // column ID in the given list. This is used with mutation operators, which
 // maintain lists that correspond to the target table, with zero column IDs
 // indicating columns that are not involved in the mutation.
-func ordinalSetFromColList(colList opt.ColList) exec.ColumnOrdinalSet {
+func ordinalSetFromColList(colList opt.ColList) util.FastIntSet {
 	var res util.FastIntSet
 	if colList == nil {
 		return res
@@ -595,7 +596,7 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 		mkErr := func(row tree.Datums) error {
 			keyVals := make(tree.Datums, len(c.KeyCols))
 			for i, col := range c.KeyCols {
-				keyVals[i] = row[query.getColumnOrdinal(col)]
+				keyVals[i] = row[query.getNodeColumnOrdinal(col)]
 			}
 			return mkFKCheckErr(md, c, keyVals)
 		}
