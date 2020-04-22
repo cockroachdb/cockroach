@@ -1151,6 +1151,8 @@ func (UnaryOperator) operator() {}
 const (
 	UnaryMinus UnaryOperator = iota
 	UnaryComplement
+	UnarySqrt
+	UnaryCbrt
 
 	NumUnaryOperators
 )
@@ -1160,6 +1162,8 @@ var _ = NumUnaryOperators
 var unaryOpName = [...]string{
 	UnaryMinus:      "-",
 	UnaryComplement: "~",
+	UnarySqrt:       "|/",
+	UnaryCbrt:       "||/",
 }
 
 func (i UnaryOperator) String() string {

@@ -168,6 +168,8 @@ var BinaryOpReverseMap = map[Operator]tree.BinaryOperator{
 var UnaryOpReverseMap = map[Operator]tree.UnaryOperator{
 	UnaryMinusOp:      tree.UnaryMinus,
 	UnaryComplementOp: tree.UnaryComplement,
+	UnarySqrtOp:       tree.UnarySqrt,
+	UnaryCbrtOp:       tree.UnaryCbrt,
 }
 
 // AggregateOpReverseMap maps from an optimizer operator type to the name of an

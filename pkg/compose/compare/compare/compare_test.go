@@ -41,24 +41,24 @@ func TestCompare(t *testing.T) {
 		init []string
 	}{
 		"postgres": {
-			addr: "postgresql://postgres@postgres:5432/",
+			addr: "postgresql://postgres@postgres:5432/postgres",
 			init: []string{
 				"drop schema if exists public cascade",
 				"create schema public",
 			},
 		},
 		"cockroach1": {
-			addr: "postgresql://root@cockroach1:26257/?sslmode=disable",
+			addr: "postgresql://root@cockroach1:26257/postgres?sslmode=disable",
 			init: []string{
-				"drop database if exists defaultdb",
-				"create database defaultdb",
+				"drop database if exists postgres",
+				"create database postgres",
 			},
 		},
 		"cockroach2": {
-			addr: "postgresql://root@cockroach2:26257/?sslmode=disable",
+			addr: "postgresql://root@cockroach2:26257/postgres?sslmode=disable",
 			init: []string{
-				"drop database if exists defaultdb",
-				"create database defaultdb",
+				"drop database if exists postgres",
+				"create database postgres",
 			},
 		},
 	}
