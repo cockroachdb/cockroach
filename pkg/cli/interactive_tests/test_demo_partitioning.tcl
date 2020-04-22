@@ -5,9 +5,15 @@ source [file join [file dirname $argv0] common.tcl]
 # The following tests want to access the licensing server.
 set env(COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING) "false"
 
+spawn /bin/bash
+send "PS1=':''/# '\r"
+
+set prompt ":/# "
+eexpect $prompt
+
 start_test "Expect partitioning succeeds"
 # test that partitioning works if a license could be acquired
-spawn $argv demo --geo-partitioned-replicas
+send "$argv demo --geo-partitioned-replicas\r"
 
 # wait for the shell to start up
 expect {
@@ -80,39 +86,40 @@ eexpect "(1 row)"
 eexpect "movr>"
 
 interrupt
-eexpect eof
+eexpect $prompt
 end_test
 
 # Test interaction of -e and license acquisition.
 start_test "Ensure we can run licensed commands with -e"
-spawn $argv demo -e "ALTER TABLE users PARTITION BY LIST (city) (PARTITION p1 VALUES IN ('new york'))"
+send "$argv demo -e \"ALTER TABLE users PARTITION BY LIST (city) (PARTITION p1 VALUES IN ('new york'))\"\r"
 eexpect "ALTER TABLE"
-eexpect eof
+eexpect $prompt
 end_test
 
 start_test "Ensure that licensed commands with -e error when license acquisition is disabled"
-spawn $argv demo --disable-demo-license -e "ALTER TABLE users PARTITION BY LIST (city) (PARTITION p1 VALUES IN ('new york'))"
+send "$argv demo --disable-demo-license -e \"ALTER TABLE users PARTITION BY LIST (city) (PARTITION p1 VALUES IN ('new york'))\"\r"
 eexpect "ERROR: use of partitions requires an enterprise license"
-eexpect eof
+eexpect $prompt
 end_test
 
 start_test "Expect an error if geo-partitioning is requested and a license cannot be acquired"
-set env(COCKROACH_DEMO_LICENSE_URL) "https://127.0.0.1:9999/"
-spawn $argv demo --geo-partitioned-replicas
+send "export COCKROACH_DEMO_LICENSE_URL=https://127.0.0.1:9999/\r"
+eexpect $prompt
+send "$argv demo --geo-partitioned-replicas\r"
 eexpect "error while contacting licensing server"
 eexpect "Enterprise features are needed for this demo"
-eexpect eof
+eexpect $prompt
 end_test
 
 start_test "Expect an error if geo-partitioning is requested and license acquisition is disabled"
 
 # set the proper environment variable
-set env(COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING) "true"
-spawn $argv demo --geo-partitioned-replicas
+send "export COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=true\r"
+send "$argv demo --geo-partitioned-replicas\r"
 # expect a failure
 eexpect ERROR:
 eexpect "enterprise features are needed for this demo"
 # clean up after the test
-eexpect eof
+eexpect $prompt
 
 end_test
