@@ -133,11 +133,11 @@ func cast(fromType, toType *types.T, inputVec, outputVec coldata.Vec, n int, sel
 			// {{end}}
 			// {{end}}
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unhandled cast FROM -> TO type: %s -> %s", fromType, toType))
+			colexecerror.InternalError(fmt.Sprintf("unhandled cast FROM -> TO type: %s -> %s", fromType.Name(), toType.Name()))
 		}
 		// {{end}}
 	default:
-		colexecerror.InternalError(fmt.Sprintf("unhandled FROM type: %s", fromType))
+		colexecerror.InternalError(fmt.Sprintf("unhandled FROM type: %s", fromType.Name()))
 	}
 }
 

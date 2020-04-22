@@ -138,6 +138,6 @@ func rehash(
 
 	// {{end}}
 	default:
-		colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t))
+		colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t.Name()))
 	}
 }

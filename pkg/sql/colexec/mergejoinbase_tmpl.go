@@ -125,7 +125,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 			}
 		// {{end}}
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", &typ))
+			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", typ.Name()))
 		}
 	}
 	return false

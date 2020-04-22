@@ -217,7 +217,7 @@ func (v hashAggFuncs) match(
 				}
 			// {{end}}
 			default:
-				colexecerror.InternalError(fmt.Sprintf("unhandled type %s", &keyTyp))
+				colexecerror.InternalError(fmt.Sprintf("unhandled type %s", keyTyp.Name()))
 			}
 		}
 	}
