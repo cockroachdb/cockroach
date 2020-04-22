@@ -117,7 +117,7 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 			w, _, g := setupLockTableWaiterTest()
 			defer w.stopper.Stop(ctx)
 
-			g.state = waitingState{stateKind: doneWaiting}
+			g.state = waitingState{kind: doneWaiting}
 			g.notify()
 
 			err := w.WaitOn(ctx, makeReq(), g)
@@ -187,7 +187,7 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 			w, _, g := setupLockTableWaiterTest()
 			defer w.stopper.Stop(ctx)
 
-			g.state = waitingState{stateKind: doneWaiting}
+			g.state = waitingState{kind: doneWaiting}
 			g.notify()
 
 			err := w.WaitOn(ctx, makeReq(), g)
@@ -221,7 +221,7 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 	})
 }
 
-func testWaitPush(t *testing.T, k stateKind, makeReq func() Request, expPushTS hlc.Timestamp) {
+func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hlc.Timestamp) {
 	ctx := context.Background()
 	keyA := roachpb.Key("keyA")
 	testutils.RunTrueAndFalse(t, "lockHeld", func(t *testing.T, lockHeld bool) {
@@ -232,12 +232,10 @@ func testWaitPush(t *testing.T, k stateKind, makeReq func() Request, expPushTS h
 
 			req := makeReq()
 			g.state = waitingState{
-				stateKind:   k,
+				kind:        k,
 				txn:         &pusheeTxn.TxnMeta,
-				ts:          pusheeTxn.WriteTimestamp,
 				key:         keyA,
 				held:        lockHeld,
-				access:      spanset.SpanReadWrite,
 				guardAccess: spanset.SpanReadOnly,
 			}
 			if waitAsWrite {
@@ -287,12 +285,12 @@ func testWaitPush(t *testing.T, k stateKind, makeReq func() Request, expPushTS h
 						require.Equal(t, keyA, intent.Key)
 						require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
 						require.Equal(t, roachpb.ABORTED, intent.Status)
-						g.state = waitingState{stateKind: doneWaiting}
+						g.state = waitingState{kind: doneWaiting}
 						g.notify()
 						return nil
 					}
 				} else {
-					g.state = waitingState{stateKind: doneWaiting}
+					g.state = waitingState{kind: doneWaiting}
 					g.notify()
 				}
 				return resp, nil
@@ -304,12 +302,12 @@ func testWaitPush(t *testing.T, k stateKind, makeReq func() Request, expPushTS h
 	})
 }
 
-func testWaitNoopUntilDone(t *testing.T, k stateKind, makeReq func() Request) {
+func testWaitNoopUntilDone(t *testing.T, k waitKind, makeReq func() Request) {
 	ctx := context.Background()
 	w, _, g := setupLockTableWaiterTest()
 	defer w.stopper.Stop(ctx)
 
-	g.state = waitingState{stateKind: k}
+	g.state = waitingState{kind: k}
 	g.notify()
 	defer notifyUntilDone(t, g)()
 
@@ -326,7 +324,7 @@ func notifyUntilDone(t *testing.T, g *mockLockTableGuard) func() {
 		<-g.stateObserved
 		g.notify()
 		<-g.stateObserved
-		g.state = waitingState{stateKind: doneWaiting}
+		g.state = waitingState{kind: doneWaiting}
 		g.notify()
 		<-g.stateObserved
 		close(done)
@@ -359,12 +357,10 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 		pusheeTxn := makeTxnProto("pushee")
 		lockHeld := sync
 		g.state = waitingState{
-			stateKind:   waitForDistinguished,
+			kind:        waitForDistinguished,
 			txn:         &pusheeTxn.TxnMeta,
-			ts:          pusheeTxn.WriteTimestamp,
 			key:         keyA,
 			held:        lockHeld,
-			access:      spanset.SpanReadWrite,
 			guardAccess: spanset.SpanReadWrite,
 		}
 

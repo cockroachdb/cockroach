@@ -136,7 +136,7 @@ type sqlServerArgs struct {
 	stopper *stop.Stopper
 
 	// SQL uses the clock to assign timestamps to transactions, among many
-	// others.
+	// other things.
 	clock *hlc.Clock
 
 	// The executorConfig uses the provider.
@@ -300,7 +300,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		RuntimeStats:   cfg.runtime,
 		DB:             cfg.db,
 		Executor:       cfg.circularInternalExecutor,
-		FlowDB:         cfg.db,
 		RPCContext:     cfg.rpcContext,
 		Stopper:        cfg.stopper,
 		NodeID:         cfg.nodeIDContainer,

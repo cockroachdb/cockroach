@@ -11,6 +11,8 @@
 #        txn2 proceeds and commits
 # -------------------------------------------------------------
 
+subtest lock_ordering
+
 new-txn name=txn1 ts=10,1 epoch=0
 ----
 
@@ -190,6 +192,8 @@ on-txn-updated txn=txn2 status=committed
 reset namespace
 ----
 
+subtest end
+
 # -------------------------------------------------------------
 # More complex deadlock due to lock ordering where not all of
 # the members of the deadlock are distinguished waiters.
@@ -204,6 +208,8 @@ reset namespace
 #        txn3 proceeds and commits
 #        txn2 proceeds and commits
 # -------------------------------------------------------------
+
+subtest lock_ordering_complex
 
 new-txn name=txn1 ts=10,1 epoch=0
 ----
@@ -412,6 +418,8 @@ on-txn-updated txn=txn2 status=committed
 reset namespace
 ----
 
+subtest end
+
 # -------------------------------------------------------------
 # Deadlock due to request ordering.
 #
@@ -428,6 +436,8 @@ reset namespace
 #        txn1 proceeds and commits
 #        txn3 proceeds and commits
 # -------------------------------------------------------------
+
+subtest request_ordering_reservation_aborted_pushing_lock_holder
 
 new-txn name=txn1 ts=10,1 epoch=0
 ----
@@ -632,6 +642,8 @@ on-txn-updated txn=txn3 status=committed
 reset namespace
 ----
 
+subtest end
+
 # -------------------------------------------------------------
 # Deadlock due to request ordering.
 #
@@ -648,6 +660,8 @@ reset namespace
 #        txn3 proceeds and commits
 #        txn4 proceeds and commits
 # -------------------------------------------------------------
+
+subtest request_ordering_lock_holder_aborted_pushing_reservation
 
 new-txn name=txn1 ts=10,1 epoch=0
 ----
@@ -853,6 +867,8 @@ on-txn-updated txn=txn4 status=committed
 reset namespace
 ----
 
+subtest end
+
 # -------------------------------------------------------------
 # Deadlock due to request ordering.
 #
@@ -872,6 +888,8 @@ reset namespace
 #        txn3 proceeds and commits
 #        txn5 proceeds and commits
 # -------------------------------------------------------------
+
+subtest request_ordering_reservation_aborted_pushing_reservation
 
 new-txn name=txn1 ts=10,1 epoch=0
 ----
@@ -1092,3 +1110,5 @@ on-txn-updated txn=txn5 status=committed
 
 reset namespace
 ----
+
+subtest end

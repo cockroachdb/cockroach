@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -1134,10 +1133,9 @@ func removeDeadReplicas(
 				return nil, err
 			}
 			update := roachpb.LockUpdate{
-				Span:       roachpb.Span{Key: intent.Key},
-				Txn:        intent.Txn,
-				Status:     roachpb.ABORTED,
-				Durability: lock.Replicated,
+				Span:   roachpb.Span{Key: intent.Key},
+				Txn:    intent.Txn,
+				Status: roachpb.ABORTED,
 			}
 			if _, err := storage.MVCCResolveWriteIntent(ctx, batch, &ms, update); err != nil {
 				return nil, err

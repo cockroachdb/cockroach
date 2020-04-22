@@ -375,7 +375,7 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				state := g.CurState()
 				var typeStr string
-				switch state.stateKind {
+				switch state.kind {
 				case waitForDistinguished:
 					typeStr = "waitForDistinguished"
 				case waitFor:
@@ -398,12 +398,8 @@ func TestLockTableBasic(t *testing.T) {
 				if txnS == "" {
 					txnS = fmt.Sprintf("unknown txn with ID: %v", state.txn.ID)
 				}
-				tsS := fmt.Sprintf("%d", state.ts.WallTime)
-				if state.ts.Logical != 0 {
-					tsS += fmt.Sprintf(",%d", state.ts.Logical)
-				}
-				return fmt.Sprintf("%sstate=%s txn=%s ts=%s key=%s held=%t guard-access=%s",
-					str, typeStr, txnS, tsS, state.key, state.held, state.guardAccess)
+				return fmt.Sprintf("%sstate=%s txn=%s key=%s held=%t guard-access=%s",
+					str, typeStr, txnS, state.key, state.held, state.guardAccess)
 
 			case "enable":
 				lt.Enable()
@@ -538,7 +534,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 					return ctx.Err()
 				}
 				state := g.CurState()
-				switch state.stateKind {
+				switch state.kind {
 				case doneWaiting:
 					if !lastID.Equal(uuid.UUID{}) && item.request.Txn != nil {
 						_, err = e.waitingFor(item.request.Txn.ID, lastID, uuid.UUID{})
@@ -566,7 +562,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 						}
 					}
 				default:
-					return errors.Errorf("unexpected state: %v", state.stateKind)
+					return errors.Errorf("unexpected state: %v", state.kind)
 				}
 			}
 		}
@@ -1079,7 +1075,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		for {
 			<-g.NewStateChan()
 			state := g.CurState()
-			if state.stateKind == doneWaiting {
+			if state.kind == doneWaiting {
 				break
 			}
 		}

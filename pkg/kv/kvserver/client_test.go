@@ -970,7 +970,7 @@ func (m *multiTestContext) addStore(idx int) {
 	}{
 		ch: make(chan struct{}),
 	}
-	m.nodeLivenesses[idx].StartHeartbeat(ctx, stopper, func(ctx context.Context) {
+	m.nodeLivenesses[idx].StartHeartbeat(ctx, stopper, m.engines[idx:idx+1], func(ctx context.Context) {
 		now := clock.Now()
 		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
 			log.Warning(ctx, err)
@@ -978,7 +978,7 @@ func (m *multiTestContext) addStore(idx int) {
 		ran.Do(func() {
 			close(ran.ch)
 		})
-	}, []storage.Engine{m.engines[idx]})
+	})
 
 	store.WaitForInit()
 
@@ -1067,12 +1067,12 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	m.transport.GetCircuitBreaker(m.idents[i].NodeID, rpc.DefaultClass).Reset()
 	m.transport.GetCircuitBreaker(m.idents[i].NodeID, rpc.SystemClass).Reset()
 	m.mu.Unlock()
-	cfg.NodeLiveness.StartHeartbeat(ctx, stopper, func(ctx context.Context) {
+	cfg.NodeLiveness.StartHeartbeat(ctx, stopper, m.engines[i:i+1], func(ctx context.Context) {
 		now := m.clocks[i].Now()
 		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
 			log.Warning(ctx, err)
 		}
-	}, []storage.Engine{m.engines[i]})
+	})
 }
 
 // restartStore restarts a store previously stopped with StopStore.
