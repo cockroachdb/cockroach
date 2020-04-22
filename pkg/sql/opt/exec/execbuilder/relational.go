@@ -41,7 +41,7 @@ import (
 type execPlan struct {
 	root exec.Node
 
-	// outputCols is a map from opt.ColumnID to exec.ColumnOrdinal. It maps
+	// outputCols is a map from opt.ColumnID to exec.NodeColumnOrdinal. It maps
 	// columns in the output set of a relational expression to indices in the
 	// result columns of the exec.Node.
 	//
@@ -94,21 +94,21 @@ func (ep *execPlan) makeBuildScalarCtx() buildScalarCtx {
 	}
 }
 
-// getColumnOrdinal takes a column that is known to be produced by the execPlan
+// getNodeColumnOrdinal takes a column that is known to be produced by the execPlan
 // and returns the ordinal index of that column in the result columns of the
 // node.
-func (ep *execPlan) getColumnOrdinal(col opt.ColumnID) exec.ColumnOrdinal {
+func (ep *execPlan) getNodeColumnOrdinal(col opt.ColumnID) exec.NodeColumnOrdinal {
 	ord, ok := ep.outputCols.Get(int(col))
 	if !ok {
 		panic(errors.AssertionFailedf("column %d not in input", log.Safe(col)))
 	}
-	return exec.ColumnOrdinal(ord)
+	return exec.NodeColumnOrdinal(ord)
 }
 
-func (ep *execPlan) getColumnOrdinalSet(cols opt.ColSet) exec.ColumnOrdinalSet {
-	var res exec.ColumnOrdinalSet
+func (ep *execPlan) getNodeColumnOrdinalSet(cols opt.ColSet) exec.NodeColumnOrdinalSet {
+	var res exec.NodeColumnOrdinalSet
 	cols.ForEach(func(colID opt.ColumnID) {
-		res.Add(int(ep.getColumnOrdinal(colID)))
+		res.Add(int(ep.getNodeColumnOrdinal(colID)))
 	})
 	return res
 }
@@ -127,7 +127,7 @@ func (ep *execPlan) sqlOrdering(ordering opt.Ordering) sqlbase.ColumnOrdering {
 	}
 	colOrder := make(sqlbase.ColumnOrdering, len(ordering))
 	for i := range ordering {
-		colOrder[i].ColIdx = int(ep.getColumnOrdinal(ordering[i].ID()))
+		colOrder[i].ColIdx = int(ep.getNodeColumnOrdinal(ordering[i].ID()))
 		if ordering[i].Descending() {
 			colOrder[i].Direction = encoding.Descending
 		} else {
@@ -400,9 +400,9 @@ func (b *Builder) constructValues(rows [][]tree.TypedExpr, cols opt.ColList) (ex
 // (starting with outputOrdinalStart).
 func (b *Builder) getColumns(
 	cols opt.ColSet, tableID opt.TableID,
-) (exec.ColumnOrdinalSet, opt.ColMap) {
-	needed := exec.ColumnOrdinalSet{}
-	output := opt.ColMap{}
+) (exec.TableColumnOrdinalSet, opt.ColMap) {
+	var needed exec.TableColumnOrdinalSet
+	var output opt.ColMap
 
 	columnCount := b.mem.Metadata().Table(tableID).DeletableColumnCount()
 	n := 0
@@ -531,11 +531,11 @@ func (b *Builder) applySimpleProject(
 	input execPlan, cols opt.ColSet, providedOrd opt.Ordering,
 ) (execPlan, error) {
 	// We have only pass-through columns.
-	colList := make([]exec.ColumnOrdinal, 0, cols.Len())
+	colList := make([]exec.NodeColumnOrdinal, 0, cols.Len())
 	var res execPlan
 	cols.ForEach(func(i opt.ColumnID) {
 		res.outputCols.Set(int(i), len(colList))
-		colList = append(colList, input.getColumnOrdinal(i))
+		colList = append(colList, input.getNodeColumnOrdinal(i))
 	})
 	var err error
 	res.root, err = b.factory.ConstructSimpleProject(
@@ -785,12 +785,12 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 	ep := execPlan{outputCols: outputCols}
 
 	// Convert leftEq/rightEq to ordinals.
-	eqColsBuf := make([]exec.ColumnOrdinal, 2*len(leftEq))
+	eqColsBuf := make([]exec.NodeColumnOrdinal, 2*len(leftEq))
 	leftEqOrdinals := eqColsBuf[:len(leftEq):len(leftEq)]
 	rightEqOrdinals := eqColsBuf[len(leftEq):]
 	for i := range leftEq {
-		leftEqOrdinals[i] = left.getColumnOrdinal(leftEq[i])
-		rightEqOrdinals[i] = right.getColumnOrdinal(rightEq[i])
+		leftEqOrdinals[i] = left.getNodeColumnOrdinal(leftEq[i])
+		rightEqOrdinals[i] = right.getNodeColumnOrdinal(rightEq[i])
 	}
 
 	leftEqColsAreKey := leftExpr.Relational().FuncDeps.ColsAreStrictKey(leftEq.ToSet())
@@ -924,10 +924,10 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 
 	var ep execPlan
 	groupingCols := groupBy.Private().(*memo.GroupingPrivate).GroupingCols
-	groupingColIdx := make([]exec.ColumnOrdinal, 0, groupingCols.Len())
+	groupingColIdx := make([]exec.NodeColumnOrdinal, 0, groupingCols.Len())
 	for i, ok := groupingCols.Next(0); ok; i, ok = groupingCols.Next(i + 1) {
 		ep.outputCols.Set(int(i), len(groupingColIdx))
-		groupingColIdx = append(groupingColIdx, input.getColumnOrdinal(i))
+		groupingColIdx = append(groupingColIdx, input.getNodeColumnOrdinal(i))
 	}
 
 	aggregations := *groupBy.Child(1).(*memo.AggregationsExpr)
@@ -936,13 +936,13 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 		item := &aggregations[i]
 		agg := item.Agg
 
-		var filterOrd exec.ColumnOrdinal = -1
+		var filterOrd exec.NodeColumnOrdinal = -1
 		if aggFilter, ok := agg.(*memo.AggFilterExpr); ok {
 			filter, ok := aggFilter.Filter.(*memo.VariableExpr)
 			if !ok {
 				return execPlan{}, errors.AssertionFailedf("only VariableOp args supported")
 			}
-			filterOrd = input.getColumnOrdinal(filter.Col)
+			filterOrd = input.getNodeColumnOrdinal(filter.Col)
 			agg = aggFilter.Input
 		}
 
@@ -956,7 +956,7 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 
 		// Accumulate variable arguments in argCols and constant arguments in
 		// constArgs. Constant arguments must follow variable arguments.
-		var argCols []exec.ColumnOrdinal
+		var argCols []exec.NodeColumnOrdinal
 		var constArgs tree.Datums
 		for j, n := 0, agg.ChildCount(); j < n; j++ {
 			child := agg.Child(j)
@@ -964,7 +964,7 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 				if len(constArgs) != 0 {
 					return execPlan{}, errors.Errorf("constant args must come after variable args")
 				}
-				argCols = append(argCols, input.getColumnOrdinal(variable.Col))
+				argCols = append(argCols, input.getNodeColumnOrdinal(variable.Col))
 			} else {
 				if len(argCols) == 0 {
 					return execPlan{}, errors.Errorf("a constant arg requires at least one variable arg")
@@ -1016,13 +1016,13 @@ func (b *Builder) buildDistinct(distinct memo.RelExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	distinctCols := input.getColumnOrdinalSet(private.GroupingCols)
-	var orderedCols exec.ColumnOrdinalSet
+	distinctCols := input.getNodeColumnOrdinalSet(private.GroupingCols)
+	var orderedCols exec.NodeColumnOrdinalSet
 	ordering := ordering.StreamingGroupingColOrdering(
 		private, &distinct.RequiredPhysical().Ordering,
 	)
 	for i := range ordering {
-		orderedCols.Add(int(input.getColumnOrdinal(ordering[i].ID())))
+		orderedCols.Add(int(input.getNodeColumnOrdinal(ordering[i].ID())))
 	}
 	ep := execPlan{outputCols: input.outputCols}
 
@@ -1093,7 +1093,7 @@ func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
 	}
 
 	// The input is producing columns that are not useful; set up a projection.
-	cols := make([]exec.ColumnOrdinal, 0, neededCols.Len())
+	cols := make([]exec.NodeColumnOrdinal, 0, neededCols.Len())
 	var newOutputCols opt.ColMap
 	for colID, ok := neededCols.Next(0); ok; colID, ok = neededCols.Next(colID + 1) {
 		ordinal, ordOk := input.outputCols.Get(int(colID))
@@ -1101,7 +1101,7 @@ func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
 			panic(errors.AssertionFailedf("needed column not produced by group-by input"))
 		}
 		newOutputCols.Set(int(colID), len(cols))
-		cols = append(cols, exec.ColumnOrdinal(ordinal))
+		cols = append(cols, exec.NodeColumnOrdinal(ordinal))
 	}
 
 	input.outputCols = newOutputCols
@@ -1274,9 +1274,9 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 	// TODO(radu): the distsql implementation of index join assumes that the input
 	// starts with the PK columns in order (#40749).
 	pri := tab.Index(cat.PrimaryIndex)
-	keyCols := make([]exec.ColumnOrdinal, pri.KeyColumnCount())
+	keyCols := make([]exec.NodeColumnOrdinal, pri.KeyColumnCount())
 	for i := range keyCols {
-		keyCols[i] = input.getColumnOrdinal(join.Table.ColumnID(pri.Column(i).Ordinal))
+		keyCols[i] = input.getNodeColumnOrdinal(join.Table.ColumnID(pri.Column(i).Ordinal))
 	}
 
 	cols := join.Cols
@@ -1305,9 +1305,9 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 
 	md := b.mem.Metadata()
 
-	keyCols := make([]exec.ColumnOrdinal, len(join.KeyCols))
+	keyCols := make([]exec.NodeColumnOrdinal, len(join.KeyCols))
 	for i, c := range join.KeyCols {
-		keyCols[i] = input.getColumnOrdinal(c)
+		keyCols[i] = input.getNodeColumnOrdinal(c)
 	}
 
 	inputCols := join.Input.Relational().OutputCols
@@ -1368,11 +1368,11 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 	leftIndex := leftTable.Index(join.LeftIndex)
 	rightIndex := rightTable.Index(join.RightIndex)
 
-	leftEqCols := make([]exec.ColumnOrdinal, len(join.LeftEqCols))
-	rightEqCols := make([]exec.ColumnOrdinal, len(join.RightEqCols))
+	leftEqCols := make([]exec.NodeColumnOrdinal, len(join.LeftEqCols))
+	rightEqCols := make([]exec.NodeColumnOrdinal, len(join.RightEqCols))
 	for i := range join.LeftEqCols {
-		leftEqCols[i] = exec.ColumnOrdinal(join.LeftTable.ColumnOrdinal(join.LeftEqCols[i]))
-		rightEqCols[i] = exec.ColumnOrdinal(join.RightTable.ColumnOrdinal(join.RightEqCols[i]))
+		leftEqCols[i] = exec.NodeColumnOrdinal(join.LeftTable.ColumnOrdinal(join.LeftEqCols[i]))
+		rightEqCols[i] = exec.NodeColumnOrdinal(join.RightTable.ColumnOrdinal(join.RightEqCols[i]))
 	}
 	leftCols := md.TableMeta(join.LeftTable).IndexColumns(join.LeftIndex).Intersection(join.Cols)
 	rightCols := md.TableMeta(join.RightTable).IndexColumns(join.RightIndex).Intersection(join.Cols)
@@ -1521,7 +1521,7 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 		withExprs: b.withExprs[:len(b.withExprs):len(b.withExprs)],
 	}
 
-	fn := func(bufferRef exec.Node) (exec.Plan, error) {
+	fn := func(bufferRef exec.BufferNode) (exec.Plan, error) {
 		// Use a separate builder each time.
 		innerBld := *innerBldTemplate
 		innerBld.addBuiltWithExpr(rec.WithID, initial.outputCols, bufferRef)
@@ -1589,13 +1589,13 @@ func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
 		}
 	} else {
 		// We need a projection.
-		cols := make([]exec.ColumnOrdinal, len(withScan.InCols))
+		cols := make([]exec.NodeColumnOrdinal, len(withScan.InCols))
 		for i := range withScan.InCols {
 			col, ok := e.outputCols.Get(int(withScan.InCols[i]))
 			if !ok {
 				panic(errors.AssertionFailedf("column %d not in input", log.Safe(withScan.InCols[i])))
 			}
-			cols[i] = exec.ColumnOrdinal(col)
+			cols[i] = exec.NodeColumnOrdinal(col)
 			res.outputCols.Set(int(withScan.OutCols[i]), i)
 		}
 		res.root, err = b.factory.ConstructSimpleProject(
@@ -1795,18 +1795,18 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		}
 	}
 
-	partitionIdxs := make([]exec.ColumnOrdinal, w.Partition.Len())
+	partitionIdxs := make([]exec.NodeColumnOrdinal, w.Partition.Len())
 	partitionExprs := make(tree.Exprs, w.Partition.Len())
 
 	i := 0
 	w.Partition.ForEach(func(col opt.ColumnID) {
 		ordinal, _ := input.outputCols.Get(int(col))
-		partitionIdxs[i] = exec.ColumnOrdinal(ordinal)
+		partitionIdxs[i] = exec.NodeColumnOrdinal(ordinal)
 		partitionExprs[i] = b.indexedVar(&ctx, b.mem.Metadata(), col)
 		i++
 	})
 
-	argIdxs := make([][]exec.ColumnOrdinal, len(w.Windows))
+	argIdxs := make([][]exec.NodeColumnOrdinal, len(w.Windows))
 	filterIdxs := make([]int, len(w.Windows))
 	exprs := make([]*tree.FuncExpr, len(w.Windows))
 
@@ -1820,12 +1820,12 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		props, _ := builtins.GetBuiltinProperties(name)
 
 		args := make([]tree.TypedExpr, fn.ChildCount())
-		argIdxs[i] = make([]exec.ColumnOrdinal, fn.ChildCount())
+		argIdxs[i] = make([]exec.NodeColumnOrdinal, fn.ChildCount())
 		for j, n := 0, fn.ChildCount(); j < n; j++ {
 			col := fn.Child(j).(*memo.VariableExpr).Col
 			args[j] = b.indexedVar(&ctx, b.mem.Metadata(), col)
 			idx, _ := input.outputCols.Get(int(col))
-			argIdxs[i][j] = exec.ColumnOrdinal(idx)
+			argIdxs[i][j] = exec.NodeColumnOrdinal(idx)
 		}
 
 		frame, err := b.buildFrame(input, item)
@@ -1893,10 +1893,10 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		outputIdxs[i] = windowStart + i
 	}
 
-	var rangeOffsetColumn exec.ColumnOrdinal
+	var rangeOffsetColumn exec.NodeColumnOrdinal
 	if ord.Empty() {
 		idx, _ := input.outputCols.Get(int(w.RangeOffsetColumn))
-		rangeOffsetColumn = exec.ColumnOrdinal(idx)
+		rangeOffsetColumn = exec.NodeColumnOrdinal(idx)
 	}
 	node, err := b.factory.ConstructWindow(input.root, exec.WindowInfo{
 		Cols:              resultCols,
@@ -1975,7 +1975,7 @@ func (b *Builder) buildOpaque(opaque *memo.OpaqueRelPrivate) (execPlan, error) {
 // the columns (in the same order), returns needProj=false.
 func (b *Builder) needProjection(
 	input execPlan, colList opt.ColList,
-) (_ []exec.ColumnOrdinal, needProj bool) {
+) (_ []exec.NodeColumnOrdinal, needProj bool) {
 	if input.numOutputCols() == len(colList) {
 		identity := true
 		for i, col := range colList {
@@ -1988,10 +1988,10 @@ func (b *Builder) needProjection(
 			return nil, false
 		}
 	}
-	cols := make([]exec.ColumnOrdinal, 0, len(colList))
+	cols := make([]exec.NodeColumnOrdinal, 0, len(colList))
 	for _, col := range colList {
 		if col != 0 {
-			cols = append(cols, input.getColumnOrdinal(col))
+			cols = append(cols, input.getNodeColumnOrdinal(col))
 		}
 	}
 	return cols, true

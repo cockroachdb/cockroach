@@ -33,7 +33,7 @@ func (f *stubFactory) ConstructValues(
 func (f *stubFactory) ConstructScan(
 	table cat.Table,
 	index cat.Index,
-	needed exec.ColumnOrdinalSet,
+	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
 	hardLimit int64,
 	softLimit int64,
@@ -53,7 +53,7 @@ func (f *stubFactory) ConstructFilter(
 }
 
 func (f *stubFactory) ConstructSimpleProject(
-	n exec.Node, cols []exec.ColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
+	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
@@ -67,7 +67,7 @@ func (f *stubFactory) ConstructRender(
 func (f *stubFactory) ConstructHashJoin(
 	joinType sqlbase.JoinType,
 	left, right exec.Node,
-	leftEqCols, rightEqCols []exec.ColumnOrdinal,
+	leftEqCols, rightEqCols []exec.NodeColumnOrdinal,
 	leftEqColsAreKey, rightEqColsAreKey bool,
 	extraOnCond tree.TypedExpr,
 ) (exec.Node, error) {
@@ -97,7 +97,7 @@ func (f *stubFactory) ConstructMergeJoin(
 
 func (f *stubFactory) ConstructGroupBy(
 	input exec.Node,
-	groupCols []exec.ColumnOrdinal,
+	groupCols []exec.NodeColumnOrdinal,
 	groupColOrdering sqlbase.ColumnOrdering,
 	aggregations []exec.AggInfo,
 	reqOrdering exec.OutputOrdering,
@@ -113,7 +113,7 @@ func (f *stubFactory) ConstructScalarGroupBy(
 
 func (f *stubFactory) ConstructDistinct(
 	input exec.Node,
-	distinctCols, orderedCols exec.ColumnOrdinalSet,
+	distinctCols, orderedCols exec.NodeColumnOrdinalSet,
 	reqOrdering exec.OutputOrdering,
 	nullsAreDistinct bool,
 	errorOnDup string,
@@ -140,8 +140,8 @@ func (f *stubFactory) ConstructOrdinality(input exec.Node, colName string) (exec
 func (f *stubFactory) ConstructIndexJoin(
 	input exec.Node,
 	table cat.Table,
-	keyCols []exec.ColumnOrdinal,
-	tableCols exec.ColumnOrdinalSet,
+	keyCols []exec.NodeColumnOrdinal,
+	tableCols exec.TableColumnOrdinalSet,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	return struct{}{}, nil
@@ -152,9 +152,9 @@ func (f *stubFactory) ConstructLookupJoin(
 	input exec.Node,
 	table cat.Table,
 	index cat.Index,
-	eqCols []exec.ColumnOrdinal,
+	eqCols []exec.NodeColumnOrdinal,
 	eqColsAreKey bool,
-	lookupCols exec.ColumnOrdinalSet,
+	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
@@ -166,10 +166,10 @@ func (f *stubFactory) ConstructZigzagJoin(
 	leftIndex cat.Index,
 	rightTable cat.Table,
 	rightIndex cat.Index,
-	leftEqCols []exec.ColumnOrdinal,
-	rightEqCols []exec.ColumnOrdinal,
-	leftCols exec.ColumnOrdinalSet,
-	rightCols exec.ColumnOrdinalSet,
+	leftEqCols []exec.NodeColumnOrdinal,
+	rightEqCols []exec.NodeColumnOrdinal,
+	leftCols exec.NodeColumnOrdinalSet,
+	rightCols exec.NodeColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	fixedVals []exec.Node,
 	reqOrdering exec.OutputOrdering,
@@ -226,8 +226,8 @@ func (f *stubFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) (
 func (f *stubFactory) ConstructInsert(
 	input exec.Node,
 	table cat.Table,
-	insertCols exec.ColumnOrdinalSet,
-	returnCols exec.ColumnOrdinalSet,
+	insertCols exec.TableColumnOrdinalSet,
+	returnCols exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	allowAutoCommit bool,
 	skipFKChecks bool,
@@ -238,8 +238,8 @@ func (f *stubFactory) ConstructInsert(
 func (f *stubFactory) ConstructInsertFastPath(
 	rows [][]tree.TypedExpr,
 	table cat.Table,
-	insertCols exec.ColumnOrdinalSet,
-	returnCols exec.ColumnOrdinalSet,
+	insertCols exec.TableColumnOrdinalSet,
+	returnCols exec.TableColumnOrdinalSet,
 	checkCols exec.CheckOrdinalSet,
 	fkChecks []exec.InsertFastPathFKCheck,
 ) (exec.Node, error) {
@@ -249,9 +249,9 @@ func (f *stubFactory) ConstructInsertFastPath(
 func (f *stubFactory) ConstructUpdate(
 	input exec.Node,
 	table cat.Table,
-	fetchCols exec.ColumnOrdinalSet,
-	updateCols exec.ColumnOrdinalSet,
-	returnCols exec.ColumnOrdinalSet,
+	fetchCols exec.TableColumnOrdinalSet,
+	updateCols exec.TableColumnOrdinalSet,
+	returnCols exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	passthrough sqlbase.ResultColumns,
 	allowAutoCommit bool,
@@ -263,11 +263,11 @@ func (f *stubFactory) ConstructUpdate(
 func (f *stubFactory) ConstructUpsert(
 	input exec.Node,
 	table cat.Table,
-	canaryCol exec.ColumnOrdinal,
-	insertCols exec.ColumnOrdinalSet,
-	fetchCols exec.ColumnOrdinalSet,
-	updateCols exec.ColumnOrdinalSet,
-	returnCols exec.ColumnOrdinalSet,
+	canaryCol exec.NodeColumnOrdinal,
+	insertCols exec.TableColumnOrdinalSet,
+	fetchCols exec.TableColumnOrdinalSet,
+	updateCols exec.TableColumnOrdinalSet,
+	returnCols exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	allowAutoCommit bool,
 	skipFKChecks bool,
@@ -278,8 +278,8 @@ func (f *stubFactory) ConstructUpsert(
 func (f *stubFactory) ConstructDelete(
 	input exec.Node,
 	table cat.Table,
-	fetchCols exec.ColumnOrdinalSet,
-	returnCols exec.ColumnOrdinalSet,
+	fetchCols exec.TableColumnOrdinalSet,
+	returnCols exec.TableColumnOrdinalSet,
 	allowAutoCommit bool,
 	skipFKChecks bool,
 ) (exec.Node, error) {
@@ -288,7 +288,7 @@ func (f *stubFactory) ConstructDelete(
 
 func (f *stubFactory) ConstructDeleteRange(
 	table cat.Table,
-	needed exec.ColumnOrdinalSet,
+	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
 	maxReturnedKeys int,
 	allowAutoCommit bool,
@@ -344,11 +344,11 @@ func (f *stubFactory) ConstructAlterTableRelocate(
 	return struct{}{}, nil
 }
 
-func (f *stubFactory) ConstructBuffer(value exec.Node, label string) (exec.Node, error) {
-	return struct{}{}, nil
+func (f *stubFactory) ConstructBuffer(value exec.Node, label string) (exec.BufferNode, error) {
+	return struct{ exec.BufferNode }{}, nil
 }
 
-func (f *stubFactory) ConstructScanBuffer(ref exec.Node, label string) (exec.Node, error) {
+func (f *stubFactory) ConstructScanBuffer(ref exec.BufferNode, label string) (exec.Node, error) {
 	return struct{}{}, nil
 }
 
