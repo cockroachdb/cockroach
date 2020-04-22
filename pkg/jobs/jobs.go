@@ -846,6 +846,8 @@ func (sj *StartableJob) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	jobCompletedOk := false
+
 	var r tree.Datums // stores a row if we've received one.
 	for {
 		// Alternate between receiving rows and sending them. Nil channels block.
@@ -868,6 +870,9 @@ func (sj *StartableJob) Run(ctx context.Context) error {
 			}
 		case toClient <- r:
 			r = nil
+			if jobCompletedOk {
+				return nil
+			}
 		case <-ctx.Done():
 			// Launch a goroutine to continue consuming results from the job.
 			if resultsFromJob != nil {
@@ -887,6 +892,11 @@ func (sj *StartableJob) Run(ctx context.Context) error {
 			return ctx.Err()
 		case err := <-errCh:
 			// The job has completed, return its final error.
+			if err == nil && r != nil {
+				// We still have data to send to the client.
+				jobCompletedOk = true
+				continue
+			}
 			return err
 		}
 	}
