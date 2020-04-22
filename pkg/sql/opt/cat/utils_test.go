@@ -46,17 +46,17 @@ func TestExpandDataSourceGlob(t *testing.T) {
 			expected: `error: no data source matches prefix: "t.public.z"`,
 		},
 		{
-			pattern:  &tree.AllTablesSelector{TableNamePrefix: tree.TableNamePrefix{}},
+			pattern:  &tree.AllTablesSelector{ObjectNamePrefix: tree.ObjectNamePrefix{}},
 			expected: `[t.public.a t.public.b t.public.c]`,
 		},
 		{
-			pattern: &tree.AllTablesSelector{TableNamePrefix: tree.TableNamePrefix{
+			pattern: &tree.AllTablesSelector{ObjectNamePrefix: tree.ObjectNamePrefix{
 				SchemaName: "t", ExplicitSchema: true,
 			}},
 			expected: `[t.public.a t.public.b t.public.c]`,
 		},
 		{
-			pattern: &tree.AllTablesSelector{TableNamePrefix: tree.TableNamePrefix{
+			pattern: &tree.AllTablesSelector{ObjectNamePrefix: tree.ObjectNamePrefix{
 				SchemaName: "z", ExplicitSchema: true,
 			}},
 			expected: `error: target database or schema does not exist`,

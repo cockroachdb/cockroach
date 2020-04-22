@@ -758,7 +758,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 }
 
 func writeInserts(w io.Writer, tmd tableMetadata, inserts []string) {
-	fmt.Fprintf(w, "\nINSERT INTO %s (%s) VALUES", &tmd.name.TableName, tmd.columnNames)
+	fmt.Fprintf(w, "\nINSERT INTO %s (%s) VALUES", &tmd.name.ObjectName, tmd.columnNames)
 	for idx, values := range inserts {
 		if idx > 0 {
 			fmt.Fprint(w, ",")

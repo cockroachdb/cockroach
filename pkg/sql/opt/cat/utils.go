@@ -37,7 +37,7 @@ func ExpandDataSourceGlob(
 		return []DataSourceName{name}, nil
 
 	case *tree.AllTablesSelector:
-		schema, _, err := catalog.ResolveSchema(ctx, flags, &p.TableNamePrefix)
+		schema, _, err := catalog.ResolveSchema(ctx, flags, &p.ObjectNamePrefix)
 		if err != nil {
 			return nil, err
 		}
@@ -53,7 +53,7 @@ func ExpandDataSourceGlob(
 func ResolveTableIndex(
 	ctx context.Context, catalog Catalog, flags Flags, name *tree.TableIndexName,
 ) (Index, DataSourceName, error) {
-	if name.Table.TableName != "" {
+	if name.Table.ObjectName != "" {
 		ds, tn, err := catalog.ResolveDataSource(ctx, flags, &name.Table)
 		if err != nil {
 			return nil, DataSourceName{}, err
@@ -61,7 +61,7 @@ func ResolveTableIndex(
 		table, ok := ds.(Table)
 		if !ok {
 			return nil, DataSourceName{}, pgerror.Newf(
-				pgcode.WrongObjectType, "%q is not a table", name.Table.TableName,
+				pgcode.WrongObjectType, "%q is not a table", name.Table.ObjectName,
 			)
 		}
 		if name.Index == "" {
@@ -79,7 +79,7 @@ func ResolveTableIndex(
 	}
 
 	// We have to search for a table that has an index with the given name.
-	schema, _, err := catalog.ResolveSchema(ctx, flags, &name.Table.TableNamePrefix)
+	schema, _, err := catalog.ResolveSchema(ctx, flags, &name.Table.ObjectNamePrefix)
 	if err != nil {
 		return nil, DataSourceName{}, err
 	}

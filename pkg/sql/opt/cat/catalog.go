@@ -42,9 +42,9 @@ import (
 // databases.
 type StableID uint64
 
-// SchemaName is an alias for tree.TableNamePrefix, since it consists of the
+// SchemaName is an alias for tree.ObjectNamePrefix, since it consists of the
 // catalog + schema name.
-type SchemaName = tree.TableNamePrefix
+type SchemaName = tree.ObjectNamePrefix
 
 // Flags allows controlling aspects of some Catalog operations.
 type Flags struct {

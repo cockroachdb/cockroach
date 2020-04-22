@@ -202,7 +202,7 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 	}
 	tableDesc, err := p.resolveTableForZone(ctx, &zs)
 	if err != nil {
-		if zs.TargetsIndex() && zs.TableOrIndex.Table.TableName == "" {
+		if zs.TargetsIndex() && zs.TableOrIndex.Table.ObjectName == "" {
 			err = errors.WithHint(err, "try specifying the index as <tablename>@<indexname>")
 		}
 		return err

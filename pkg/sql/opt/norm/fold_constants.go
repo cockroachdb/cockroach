@@ -125,7 +125,7 @@ func (c *CustomFuncs) foldStringToRegclassCast(
 
 	c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
 
-	regclassOid := tree.NewDOidWithName(tree.DInt(ds.PostgresDescriptorID()), types.RegClass, string(tn.TableName))
+	regclassOid := tree.NewDOidWithName(tree.DInt(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName))
 	return c.f.ConstructConstVal(regclassOid, typ), nil
 
 }

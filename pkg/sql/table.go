@@ -335,7 +335,7 @@ func (tc *TableCollection) getTableVersion(
 	// system.users. For now we're sticking to disabling caching of
 	// all system descriptors except the role-members-table.
 	avoidCache := flags.AvoidCached || testDisableTableLeases ||
-		(tn.Catalog() == sqlbase.SystemDB.Name && tn.TableName.String() != sqlbase.RoleMembersTable.Name)
+		(tn.Catalog() == sqlbase.SystemDB.Name && tn.ObjectName.String() != sqlbase.RoleMembersTable.Name)
 
 	if refuseFurtherLookup, table, err := tc.getUncommittedTable(
 		dbID,
@@ -663,7 +663,7 @@ func (tc *TableCollection) getUncommittedTable(
 		// transaction has already committed and this transaction is seeing the
 		// effect of it.
 		for _, drain := range mutTbl.DrainingNames {
-			if drain.Name == string(tn.TableName) &&
+			if drain.Name == string(tn.ObjectName) &&
 				drain.ParentID == dbID &&
 				drain.ParentSchemaID == schemaID {
 				// Table name has gone away.

@@ -242,7 +242,7 @@ func descriptorsMatchingTargets(
 			}
 
 		case *tree.AllTablesSelector:
-			found, descI, err := p.TableNamePrefix.Resolve(ctx, resolver, currentDatabase, searchPath)
+			found, descI, err := p.ObjectNamePrefix.Resolve(ctx, resolver, currentDatabase, searchPath)
 			if err != nil {
 				return ret, err
 			}

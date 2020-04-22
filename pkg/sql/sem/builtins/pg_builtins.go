@@ -1114,7 +1114,7 @@ SELECT description
 			} else {
 				pred = fmt.Sprintf(
 					"table_catalog = '%s' AND table_schema = '%s' AND table_name = '%s'",
-					tn.CatalogName, tn.SchemaName, tn.TableName)
+					tn.CatalogName, tn.SchemaName, tn.ObjectName)
 			}
 
 			return parsePrivilegeStr(args[1], pgPrivList{
@@ -1168,7 +1168,7 @@ SELECT description
 			} else {
 				pred = fmt.Sprintf(
 					"table_catalog = '%s' AND table_schema = '%s' AND table_name = '%s'",
-					tn.CatalogName, tn.SchemaName, tn.TableName)
+					tn.CatalogName, tn.SchemaName, tn.ObjectName)
 
 				// Verify that the column exists in the table.
 				var colPred string
@@ -1190,7 +1190,7 @@ SELECT description
 					fmt.Sprintf(`
 					SELECT attname FROM pg_attribute
 					 WHERE attrelid = '%s.%s.%s'::REGCLASS AND %s`,
-						tn.CatalogName, tn.SchemaName, tn.TableName, colPred), colArg,
+						tn.CatalogName, tn.SchemaName, tn.ObjectName, colPred), colArg,
 				); err != nil {
 					return nil, err
 				} else if r == nil {
@@ -1462,7 +1462,7 @@ SELECT description
 					ctx.Txn,
 					`SELECT sequence_name FROM information_schema.sequences `+
 						`WHERE sequence_catalog = $1 AND sequence_schema = $2 AND sequence_name = $3`,
-					tn.CatalogName, tn.SchemaName, tn.TableName); err != nil {
+					tn.CatalogName, tn.SchemaName, tn.ObjectName); err != nil {
 					return nil, err
 				} else if r == nil {
 					return nil, pgerror.Newf(pgcode.WrongObjectType,
@@ -1471,7 +1471,7 @@ SELECT description
 
 				pred = fmt.Sprintf(
 					"table_catalog = '%s' AND table_schema = '%s' AND table_name = '%s'",
-					tn.CatalogName, tn.SchemaName, tn.TableName)
+					tn.CatalogName, tn.SchemaName, tn.ObjectName)
 			}
 
 			return parsePrivilegeStr(args[1], pgPrivList{
@@ -1547,7 +1547,7 @@ SELECT description
 			} else {
 				pred = fmt.Sprintf(
 					"table_catalog = '%s' AND table_schema = '%s' AND table_name = '%s'",
-					tn.CatalogName, tn.SchemaName, tn.TableName)
+					tn.CatalogName, tn.SchemaName, tn.ObjectName)
 			}
 
 			return parsePrivilegeStr(args[1], pgPrivList{

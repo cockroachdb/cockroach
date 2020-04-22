@@ -116,10 +116,10 @@ func (p *planner) processSerialInColumnDef(
 		return nil, nil, nil, nil, err
 	}
 	// Now skip over all names that are already taken.
-	nameBase := seqName.TableName
+	nameBase := seqName.ObjectName
 	for i := 0; ; i++ {
 		if i > 0 {
-			seqName.TableName = tree.Name(fmt.Sprintf("%s%d", nameBase, i))
+			seqName.ObjectName = tree.Name(fmt.Sprintf("%s%d", nameBase, i))
 		}
 		res, err := p.ResolveUncachedTableDescriptor(ctx, seqName, false /*required*/, ResolveAnyDescType)
 		if err != nil {

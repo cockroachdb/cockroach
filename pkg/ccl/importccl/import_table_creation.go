@@ -131,7 +131,7 @@ func MakeSimpleTableDescriptor(
 				continue
 			}
 			// Strip the schema/db prefix.
-			def.Table = tree.MakeUnqualifiedTableName(def.Table.TableName)
+			def.Table = tree.MakeUnqualifiedTableName(def.Table.ObjectName)
 
 		default:
 			return nil, unimplemented.Newf(fmt.Sprintf("import.%T", def), "unsupported table definition: %s", tree.AsString(def))

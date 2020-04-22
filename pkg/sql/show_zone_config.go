@@ -95,7 +95,7 @@ func getShowZoneConfigRow(
 		return nil, err
 	}
 
-	if zoneSpecifier.TableOrIndex.Table.TableName != "" {
+	if zoneSpecifier.TableOrIndex.Table.ObjectName != "" {
 		if err = p.CheckAnyPrivilege(ctx, tblDesc); err != nil {
 			return nil, err
 		}
@@ -249,9 +249,9 @@ func generateZoneConfigIntrospectionValues(
 		if zs.Database != "" {
 			values[databaseNameCol] = tree.NewDString(string(zs.Database))
 		}
-		if zs.TableOrIndex.Table.TableName != "" {
+		if zs.TableOrIndex.Table.ObjectName != "" {
 			values[databaseNameCol] = tree.NewDString(string(zs.TableOrIndex.Table.CatalogName))
-			values[tableNameCol] = tree.NewDString(string(zs.TableOrIndex.Table.TableName))
+			values[tableNameCol] = tree.NewDString(string(zs.TableOrIndex.Table.ObjectName))
 		}
 		if zs.TableOrIndex.Index != "" {
 			values[indexNameCol] = tree.NewDString(string(zs.TableOrIndex.Index))

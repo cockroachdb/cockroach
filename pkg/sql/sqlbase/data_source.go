@@ -146,7 +146,7 @@ var AnonymousTable = tree.TableName{}
 // NewSourceInfoForSingleTable creates a simple DataSourceInfo
 // which maps the same tableAlias to all columns.
 func NewSourceInfoForSingleTable(tn tree.TableName, columns ResultColumns) *DataSourceInfo {
-	if tn.TableName != "" && tn.SchemaName != "" {
+	if tn.ObjectName != "" && tn.SchemaName != "" {
 		// When we're not looking at an unqualified table, we make sure that
 		// the table name in the data source struct is fully qualified. This
 		// ensures that queries like this are valid:
@@ -168,7 +168,7 @@ type varFormatter struct {
 
 // Format implements the NodeFormatter interface.
 func (c *varFormatter) Format(ctx *tree.FmtCtx) {
-	if ctx.HasFlags(tree.FmtShowTableAliases) && c.TableName.TableName != "" {
+	if ctx.HasFlags(tree.FmtShowTableAliases) && c.TableName.ObjectName != "" {
 		// This logic is different from (*TableName).Format() with
 		// FmtAlwaysQualify, because FmtShowTableAliases only wants to
 		// prefixes the table names for vars in expressions, not table
@@ -182,7 +182,7 @@ func (c *varFormatter) Format(ctx *tree.FmtCtx) {
 			ctx.WriteByte('.')
 		}
 
-		ctx.FormatNode(&c.TableName.TableName)
+		ctx.FormatNode(&c.TableName.ObjectName)
 		ctx.WriteByte('.')
 	}
 	ctx.FormatNode(&c.ColumnName)
