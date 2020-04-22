@@ -64,7 +64,7 @@ type schemaChange struct {
 	concurrency     int
 	maxOpsPerWorker int
 	existingPct     int
-	verbose         bool
+	verbose         int
 	dryRun          bool
 }
 
@@ -83,7 +83,7 @@ var schemaChangeMeta = workload.Meta{
 			`Number of operations to execute in a single transaction`)
 		s.flags.IntVar(&s.existingPct, `existing-pct`, defaultExistingPct,
 			`Percentage of times to use existing name`)
-		s.flags.BoolVarP(&s.verbose, `verbose`, `v`, true, ``)
+		s.flags.IntVarP(&s.verbose, `verbose`, `v`, 0, ``)
 		s.flags.BoolVarP(&s.dryRun, `dry-run`, `n`, false, ``)
 		return s
 	},
@@ -233,7 +233,7 @@ SELECT max(regexp_extract(name, '[0-9]+$')::int)
 }
 
 type schemaChangeWorker struct {
-	verbose         bool
+	verbose         int
 	dryRun          bool
 	maxOpsPerWorker int
 	existingPct     int
@@ -249,14 +249,15 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) (string, error) {
 	// Run between 1 and maxOpsPerWorker schema change operations.
 	n := 1 + w.rng.Intn(w.maxOpsPerWorker)
 	for i := 0; i < n; i++ {
-		op, err := w.randOp(tx)
+		op, noops, err := w.randOp(tx)
 		if err != nil {
-			return log.String(), err
+			return noops, errors.Wrap(err, "randOp")
 		}
+		log.WriteString(noops)
 		log.WriteString(fmt.Sprintf("  %s;\n", op))
 		if !w.dryRun {
 			if _, err := tx.Exec(op); err != nil {
-				return log.String(), err
+				return log.String(), errors.Wrapf(err, "%s failed", op)
 			}
 		}
 	}
@@ -267,27 +268,32 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 	start := timeutil.Now()
 	tx, err := w.pool.Get().Begin()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "cannot get a connection and begin a txn")
 	}
 
 	var histBin string
 	log, err := w.runInTxn(tx)
 	elapsed := timeutil.Since(start)
 	if err != nil {
-		_ = tx.Rollback()
+		rbkErr := tx.Rollback()
+		if rbkErr != nil {
+			w.hists.Get("rbk").Record(elapsed)
+			err = errors.Wrapf(err, "ROLLBACK: %v", rbkErr)
+		}
 		log = log + "ROLLBACK;\n"
 		histBin = "err"
 		// TODO(spaskob): should we log the ROLLBACK error as well?
 	} else {
 		log = log + "COMMIT;\n"
 		if err = tx.Commit(); err != nil {
-			histBin = "err"
+			histBin = "cmt_err"
+			err = errors.Wrap(err, "COMMIT")
 		} else {
 			histBin = "ok"
 		}
 	}
 	w.hists.Get(histBin).Record(elapsed)
-	if w.verbose {
+	if w.verbose >= 1 {
 		fmt.Print("BEGIN\n")
 		fmt.Print(log)
 		if err != nil {
@@ -298,7 +304,13 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 	return nil
 }
 
-func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, error) {
+// randOp attempts to produce a random schema change operation. It returns a
+// triple `(randOp, log, error)`. On success `randOp` is the random schema
+// change constructed. Constructing a random schema change may require a few
+// stochastic attempts and if verbosity is >= 2 the unsuccessful attempts are
+// recorded in `log` to help with debugging of the workload.
+func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, string, error) {
+	var log strings.Builder
 	for {
 		var stmt string
 		var err error
@@ -379,12 +391,12 @@ func (w *schemaChangeWorker) randOp(tx *pgx.Tx) (string, error) {
 
 		// TODO(spaskob): use more fine-grained error reporting.
 		if stmt == "" || err == pgx.ErrNoRows {
-			if w.verbose {
-				fmt.Printf("NOOP: %s -> %v\n", op, err)
+			if w.verbose >= 2 {
+				log.WriteString(fmt.Sprintf("NOOP: %s -> %v\n", op, err))
 			}
 			continue
 		}
-		return stmt, err
+		return stmt, log.String(), err
 	}
 }
 
@@ -422,10 +434,6 @@ func (w *schemaChangeWorker) createIndex(tx *pgx.Tx) (string, error) {
 	columnNames, err := w.tableColumnsShuffled(tx, tableName)
 	if err != nil {
 		return "", err
-	}
-
-	if len(columnNames) <= 0 {
-		return "", errors.Errorf("table %s has no columns", tableName)
 	}
 
 	indexName, err := w.randIndex(tx, tableName, w.existingPct)
@@ -851,7 +859,7 @@ ORDER BY random()
 func (w *schemaChangeWorker) tableColumnsShuffled(tx *pgx.Tx, tableName string) ([]string, error) {
 	q := fmt.Sprintf(`
 SELECT column_name
-  FROM [SHOW COLUMNS FROM "%s"];
+FROM [SHOW COLUMNS FROM "%s"];
 `, tableName)
 
 	rows, err := tx.Query(q)
@@ -869,11 +877,15 @@ SELECT column_name
 		columnNames = append(columnNames, name)
 	}
 	if rows.Err() != nil {
-		return nil, err
+		return nil, rows.Err()
 	}
 
 	w.rng.Shuffle(len(columnNames), func(i, j int) {
 		columnNames[i], columnNames[j] = columnNames[j], columnNames[i]
 	})
+
+	if len(columnNames) <= 0 {
+		return nil, errors.Errorf("table %s has no columns", tableName)
+	}
 	return columnNames, nil
 }

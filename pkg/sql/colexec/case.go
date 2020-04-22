@@ -130,6 +130,15 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 		copy(c.prevSel[:origLen], sel[:origLen])
 	}
 	outputCol := c.buffer.batch.ColVec(c.outputIdx)
+	if outputCol.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		// Note: technically, this is not necessary because we're using
+		// Vec.Copy method when populating the output vector which itself
+		// handles the null values, but we want to be on the safe side, so we
+		// have this (at the moment) redundant resetting behavior.
+		outputCol.Nulls().UnsetNulls()
+	}
 	c.allocator.PerformOperation([]coldata.Vec{outputCol}, func() {
 		for i := range c.caseOps {
 			// Run the next case operator chain. It will project its THEN expression

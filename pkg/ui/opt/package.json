@@ -1,5 +1,7 @@
 {
   "devDependencies": {
+    "@cypress/webpack-preprocessor": "^5.1.2",
+    "cypress": "^4.4.1",
     "webpack-dashboard": "^3.2.0"
   }
 }

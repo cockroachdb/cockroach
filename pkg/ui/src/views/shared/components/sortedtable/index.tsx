@@ -14,6 +14,7 @@ import { Moment } from "moment";
 import React from "react";
 import { createSelector } from "reselect";
 import { ExpandableConfig, SortableColumn, SortableTable, SortSetting } from "src/views/shared/components/sortabletable";
+import { IEmptyProps } from "oss/src/components/empty";
 
 export interface ISortedTablePagination {
   current: number;
@@ -82,6 +83,9 @@ interface SortedTableProps<T> {
   pagination?: ISortedTablePagination;
   loading?: boolean;
   loadingLabel?: string;
+  // empty state for table
+  empty?: boolean;
+  emptyProps?: IEmptyProps;
 }
 
 interface SortedTableState {
@@ -212,7 +216,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
   }
 
   render() {
-    const { data, loading, sortSetting, onChangeSortSetting, firstCellBordered, renderNoResult, loadingLabel } = this.props;
+    const { data, loading, sortSetting, onChangeSortSetting, firstCellBordered, renderNoResult, loadingLabel, empty, emptyProps } = this.props;
     let expandableConfig: ExpandableConfig = null;
     if (this.props.expandableConfig) {
       expandableConfig = {
@@ -221,7 +225,6 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
         onChangeExpansion: this.onChangeExpansion,
       };
     }
-
     return (
       <SortableTable
         count={data ? this.paginatedData().length : 0}
@@ -236,6 +239,8 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
         renderNoResult={renderNoResult}
         loading={loading}
         loadingLabel={loadingLabel}
+        empty={empty}
+        emptyProps={emptyProps}
       />
     );
   }

@@ -109,6 +109,11 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec._TemplateType()
+	if vec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		vec.Nulls().UnsetNulls()
+	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{vec},
 		func() {
@@ -163,6 +168,11 @@ func (c constNullOp) Next(ctx context.Context) coldata.Batch {
 
 	col := batch.ColVec(c.outputIdx)
 	nulls := col.Nulls()
+	if col.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		nulls.UnsetNulls()
+	}
 	if sel := batch.Selection(); sel != nil {
 		for _, i := range sel[:n] {
 			nulls.SetNull(i)

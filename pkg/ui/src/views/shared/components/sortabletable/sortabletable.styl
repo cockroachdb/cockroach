@@ -84,20 +84,27 @@
     div
       width 15px
 
+
+.cl-table-container
+  padding 18px 24px
+.cl-table-wrapper
+  padding 20px
+  background-color $adminui-white
+
 .table__no-results
   display flex
   justify-content center
   align-items center
   flex-direction column
   padding 50px 0
-  p
-    font-family SourceSansPro-Regular
-    font-size 16px
-    line-height 1.5
-    color $colors--neutral-8
+  &--title, &--description
+    font-family $font-family--base
     margin 0
-  a
-    font-family SourceSansPro-Regular
+  &--title
+    font-size 20px
+    line-height 32px
+    color $colors--neutral-7
+  &--description
     font-size 14px
     line-height 1.57
     letter-spacing 0.1px
@@ -109,6 +116,12 @@
   color $colors--neutral-1
   white-space pre-wrap
   margin-bottom 0
+  line-height 22px
+  color $colors--neutral-6
+  span
+    margin-right 6px
+  a
+    color $colors--primary-blue-3
 
 .table__loading
   display flex
