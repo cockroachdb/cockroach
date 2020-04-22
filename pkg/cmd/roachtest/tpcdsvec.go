@@ -80,7 +80,7 @@ func registerTPCDSVec(r *testRegistry) {
 		85: true,
 	}
 
-	TPCDSTables := []string{
+	tpcdsTables := []string{
 		`call_center`, `catalog_page`, `catalog_returns`, `catalog_sales`,
 		`customer`, `customer_address`, `customer_demographics`, `date_dim`,
 		`dbgen_version`, `household_demographics`, `income_band`, `inventory`,
@@ -94,12 +94,7 @@ func registerTPCDSVec(r *testRegistry) {
 		c.Start(ctx, t)
 
 		clusterConn := c.Conn(ctx, 1)
-		t.Status("disabling automatic collection of stats")
-		if _, err := clusterConn.Exec(
-			`SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false;`,
-		); err != nil {
-			t.Fatal(err)
-		}
+		disableAutoStats(t, clusterConn)
 		t.Status("restoring TPCDS dataset for Scale Factor 1")
 		if _, err := clusterConn.Exec(
 			`RESTORE DATABASE tpcds FROM 'gs://cockroach-fixtures/workload/tpcds/scalefactor=1/backup';`,
@@ -107,16 +102,10 @@ func registerTPCDSVec(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		t.Status("scattering the data")
 		if _, err := clusterConn.Exec("USE tpcds;"); err != nil {
 			t.Fatal(err)
 		}
-		for _, table := range TPCDSTables {
-			scatter := fmt.Sprintf("ALTER TABLE %s SCATTER;", table)
-			if _, err := clusterConn.Exec(scatter); err != nil {
-				t.Fatal(err)
-			}
-		}
+		scatterTables(t, clusterConn, tpcdsTables)
 		t.Status("waiting for full replication")
 		waitForFullReplication(t, clusterConn)
 
@@ -206,14 +195,7 @@ func registerTPCDSVec(r *testRegistry) {
 			}
 
 			if !haveStats {
-				for _, tableName := range TPCDSTables {
-					t.Status(fmt.Sprintf("creating statistics from table %q", tableName))
-					if _, err := clusterConn.Exec(
-						fmt.Sprintf(`CREATE STATISTICS %s FROM %s;`, tableName, tableName),
-					); err != nil {
-						t.Fatal(err)
-					}
-				}
+				createStatsFromTables(t, clusterConn, tpcdsTables)
 			}
 		}
 		if encounteredErrors {
