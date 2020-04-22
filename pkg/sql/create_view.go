@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -65,8 +66,9 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 		if !isTemporary && backRefMutable.Temporary {
 			// This notice is sent from pg, let's imitate.
-			params.p.SendClientNotice(params.ctx,
-				pgerror.Noticef(`view "%s" will be a temporary view`, viewName),
+			params.p.SendClientNotice(
+				params.ctx,
+				pgnotice.Newf(`view "%s" will be a temporary view`, viewName),
 			)
 			isTemporary = true
 		}

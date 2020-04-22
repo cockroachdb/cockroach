@@ -7,3 +7,19 @@ SELECT crdb_internal.notice('hi'), crdb_internal.notice('i am....'), crdb_intern
 NOTICE: hi
 NOTICE: i am....
 NOTICE: otan!!!
+
+subtest test_notice_severity
+
+query T noticetrace
+SELECT crdb_internal.notice('debug1', 'do not see this'), crdb_internal.notice('warning', 'but you see this'), crdb_internal.notice('debug2', 'and never this')
+----
+WARNING: but you see this
+
+statement ok
+SET client_min_messages = 'debug1'
+
+query T noticetrace
+SELECT crdb_internal.notice('debug1', 'now you see this'), crdb_internal.notice('warning', 'and you see this'), crdb_internal.notice('debug2', 'and never this')
+----
+DEBUG1: now you see this
+WARNING: and you see this
