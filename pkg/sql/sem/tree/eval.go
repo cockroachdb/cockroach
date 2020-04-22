@@ -3925,7 +3925,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				return &DOid{
 					semanticType: t,
 					DInt:         DInt(id),
-					name:         tn.TableName.String(),
+					name:         tn.ObjectName.String(),
 				}, nil
 			default:
 				return queryOid(ctx, t, NewDString(s))

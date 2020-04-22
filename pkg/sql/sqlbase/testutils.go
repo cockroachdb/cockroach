@@ -1248,7 +1248,7 @@ func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 			if ast.Inverted {
 				continue
 			}
-			tableInfo, ok := tables[ast.Table.TableName]
+			tableInfo, ok := tables[ast.Table.ObjectName]
 			if !ok {
 				continue
 			}
@@ -1264,7 +1264,7 @@ func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 		case *tree.CreateTable:
 			// Write down this table for later.
 			tableInfo := getTableInfoFromCreateStatement(ast)
-			tables[ast.Table.TableName] = tableInfo
+			tables[ast.Table.ObjectName] = tableInfo
 			for _, def := range ast.Defs {
 				var idx *tree.IndexTableDef
 				switch defType := def.(type) {

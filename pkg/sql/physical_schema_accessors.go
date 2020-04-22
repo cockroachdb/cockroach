@@ -95,7 +95,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	if !ok {
 		if flags.Required {
 			tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.Name), tree.Name(scName), "")
-			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(&tn.TableNamePrefix))
+			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(&tn.ObjectNamePrefix))
 		}
 		return nil, nil
 	}

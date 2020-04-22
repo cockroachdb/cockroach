@@ -495,7 +495,7 @@ func (tv *View) Equals(other cat.Object) bool {
 
 // Name is part of the cat.DataSource interface.
 func (tv *View) Name() tree.Name {
-	return tv.ViewName.TableName
+	return tv.ViewName.ObjectName
 }
 
 // fqName is part of the dataSource interface.
@@ -581,7 +581,7 @@ func (tt *Table) Equals(other cat.Object) bool {
 
 // Name is part of the cat.DataSource interface.
 func (tt *Table) Name() tree.Name {
-	return tt.TabName.TableName
+	return tt.TabName.ObjectName
 }
 
 // fqName is part of the dataSource interface.
@@ -1146,7 +1146,7 @@ func (ts *Sequence) Equals(other cat.Object) bool {
 
 // Name is part of the cat.DataSource interface.
 func (ts *Sequence) Name() tree.Name {
-	return ts.SeqName.TableName
+	return ts.SeqName.ObjectName
 }
 
 // fqName is part of the dataSource interface.

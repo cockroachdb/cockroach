@@ -103,7 +103,7 @@ func (c *scopeColumn) Format(ctx *tree.FmtCtx) {
 		return
 	}
 
-	if ctx.HasFlags(tree.FmtShowTableAliases) && c.table.TableName != "" {
+	if ctx.HasFlags(tree.FmtShowTableAliases) && c.table.ObjectName != "" {
 		if c.table.ExplicitSchema && c.table.SchemaName != "" {
 			if c.table.ExplicitCatalog && c.table.CatalogName != "" {
 				ctx.FormatNode(&c.table.CatalogName)
@@ -113,7 +113,7 @@ func (c *scopeColumn) Format(ctx *tree.FmtCtx) {
 			ctx.WriteByte('.')
 		}
 
-		ctx.FormatNode(&c.table.TableName)
+		ctx.FormatNode(&c.table.ObjectName)
 		ctx.WriteByte('.')
 	}
 	ctx.FormatNode(&c.name)

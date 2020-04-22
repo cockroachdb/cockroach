@@ -110,7 +110,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 	tn := n.Index.Table
 
 	// Throw a more descriptive error if the user did not use the index hint syntax.
-	if tn.TableName == "" {
+	if tn.ObjectName == "" {
 		err := errors.New("no table specified")
 		err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 		err = errors.WithHint(err, "Specify a table using the hint syntax of table@index")

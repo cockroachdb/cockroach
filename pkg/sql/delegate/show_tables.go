@@ -25,7 +25,7 @@ import (
 //          mysql only returns tables you have privileges on.
 func (d *delegator) delegateShowTables(n *tree.ShowTables) (tree.Statement, error) {
 	flags := cat.Flags{AvoidDescriptorCaches: true}
-	_, name, err := d.catalog.ResolveSchema(d.ctx, flags, &n.TableNamePrefix)
+	_, name, err := d.catalog.ResolveSchema(d.ctx, flags, &n.ObjectNamePrefix)
 	if err != nil {
 		return nil, err
 	}

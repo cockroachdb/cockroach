@@ -623,7 +623,7 @@ func mkFKCheckErr(md *opt.Metadata, c *memo.FKChecksItem, keyVals tree.Datums) e
 		//   DETAIL: Key (child_p)=(2) is not present in table "parent".
 		fk := origin.Table.OutboundForeignKey(c.FKOrdinal)
 		fmt.Fprintf(&msg, "%s on table ", c.OpName)
-		lex.EncodeEscapedSQLIdent(&msg, string(origin.Alias.TableName))
+		lex.EncodeEscapedSQLIdent(&msg, string(origin.Alias.ObjectName))
 		msg.WriteString(" violates foreign key constraint ")
 		lex.EncodeEscapedSQLIdent(&msg, fk.Name())
 
@@ -654,7 +654,7 @@ func mkFKCheckErr(md *opt.Metadata, c *memo.FKChecksItem, keyVals tree.Datums) e
 			details.WriteString("MATCH FULL does not allow mixing of null and nonnull key values.")
 		} else {
 			details.WriteString(") is not present in table ")
-			lex.EncodeEscapedSQLIdent(&details, string(referenced.Alias.TableName))
+			lex.EncodeEscapedSQLIdent(&details, string(referenced.Alias.ObjectName))
 			details.WriteByte('.')
 		}
 	} else {
@@ -664,11 +664,11 @@ func mkFKCheckErr(md *opt.Metadata, c *memo.FKChecksItem, keyVals tree.Datums) e
 		//   DETAIL: Key (p)=(1) is still referenced from table "child".
 		fk := referenced.Table.InboundForeignKey(c.FKOrdinal)
 		fmt.Fprintf(&msg, "%s on table ", c.OpName)
-		lex.EncodeEscapedSQLIdent(&msg, string(referenced.Alias.TableName))
+		lex.EncodeEscapedSQLIdent(&msg, string(referenced.Alias.ObjectName))
 		msg.WriteString(" violates foreign key constraint ")
 		lex.EncodeEscapedSQLIdent(&msg, fk.Name())
 		msg.WriteString(" on table ")
-		lex.EncodeEscapedSQLIdent(&msg, string(origin.Alias.TableName))
+		lex.EncodeEscapedSQLIdent(&msg, string(origin.Alias.ObjectName))
 
 		details.WriteString("Key (")
 		for i := 0; i < fk.ColumnCount(); i++ {
@@ -686,7 +686,7 @@ func mkFKCheckErr(md *opt.Metadata, c *memo.FKChecksItem, keyVals tree.Datums) e
 			details.WriteString(d.String())
 		}
 		details.WriteString(") is still referenced from table ")
-		lex.EncodeEscapedSQLIdent(&details, string(origin.Alias.TableName))
+		lex.EncodeEscapedSQLIdent(&details, string(origin.Alias.ObjectName))
 		details.WriteByte('.')
 	}
 

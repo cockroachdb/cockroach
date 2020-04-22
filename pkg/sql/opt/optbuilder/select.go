@@ -106,7 +106,7 @@ func (b *Builder) buildDataSource(
 		}
 
 		priv := privilege.SELECT
-		locking = locking.filter(tn.TableName)
+		locking = locking.filter(tn.ObjectName)
 		if locking.isSet() {
 			// SELECT ... FOR [KEY] UPDATE/SHARE requires UPDATE privileges.
 			priv = privilege.UPDATE
@@ -1291,7 +1291,7 @@ func (b *Builder) validateLockingInFrom(
 			// columns to be small enough that doing so is likely not worth it.
 			found := false
 			for _, col := range fromScope.cols {
-				if target.TableName == col.table.TableName {
+				if target.ObjectName == col.table.ObjectName {
 					found = true
 					break
 				}
@@ -1300,7 +1300,7 @@ func (b *Builder) validateLockingInFrom(
 				panic(pgerror.Newf(
 					pgcode.UndefinedTable,
 					"relation %q in %s clause not found in FROM clause",
-					target.TableName, li.Strength,
+					target.ObjectName, li.Strength,
 				))
 			}
 		}
