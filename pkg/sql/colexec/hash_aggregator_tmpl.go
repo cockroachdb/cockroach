@@ -194,9 +194,7 @@ func (v hashAggFuncs) match(
 			rhs := b.ColVec(int(colIdx))
 			rhsHasNull := rhs.MaybeHasNulls()
 
-			keyTyp := keyTypes[keyIdx]
-
-			switch typeconv.FromColumnType(&keyTyp) {
+			switch typeconv.FromColumnType(&keyTypes[keyIdx]) {
 			// {{range .}}
 			case _TYPES_T:
 				lhsCol := lhs._TemplateType()
@@ -217,7 +215,7 @@ func (v hashAggFuncs) match(
 				}
 			// {{end}}
 			default:
-				colexecerror.InternalError(fmt.Sprintf("unhandled type %s", &keyTyp))
+				colexecerror.InternalError(fmt.Sprintf("unhandled type %s", keyTypes[keyIdx].String()))
 			}
 		}
 	}
