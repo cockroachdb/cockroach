@@ -336,7 +336,7 @@ func observePlan(
 
 	// Explain the subqueries.
 	for i := range subqueryPlans {
-		if _, err := observer.enterNode(ctx, "subquery", plan); err != nil && returnError {
+		if _, err := observer.enterNode(ctx, "subquery", subqueryPlans[i].plan); err != nil && returnError {
 			return err
 		}
 		observer.attr("subquery", "id", fmt.Sprintf("@S%d", i+1))
@@ -362,7 +362,7 @@ func observePlan(
 
 	// Explain the postqueries.
 	for i := range postqueryPlans {
-		if _, err := observer.enterNode(ctx, "postquery", plan); err != nil && returnError {
+		if _, err := observer.enterNode(ctx, "postquery", postqueryPlans[i].plan); err != nil && returnError {
 			return err
 		}
 		if postqueryPlans[i].plan != nil {

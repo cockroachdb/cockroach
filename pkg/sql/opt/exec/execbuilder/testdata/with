@@ -19,7 +19,7 @@ root                        ·             ·                (a, a)  ·
  │    │                     label         buffer 1 (t)     ·       ·
  │    └── scan buffer node  ·             ·                (a)     ·
  │                          label         buffer 1 (t)     ·       ·
- └── subquery               ·             ·                (a, a)  ·
+ └── subquery               ·             ·                (a)     ·
       │                     id            @S1              ·       ·
       │                     original sql  SELECT a FROM y  ·       ·
       │                     exec mode     all rows         ·       ·
