@@ -104,7 +104,7 @@ const (
 
 // vLevel returns the vmodule log level at which logs from the given executor
 // should be written to the logs.
-func (s executorType) vLevel() int32 { return int32(s) + 2 }
+func (s executorType) vLevel() log.Level { return log.Level(s) + 2 }
 
 var logLabels = []string{"exec", "exec-internal"}
 
