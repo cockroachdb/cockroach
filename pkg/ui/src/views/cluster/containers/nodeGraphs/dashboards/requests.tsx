@@ -25,6 +25,12 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
+    <LineGraph title="Slow DistSender RPCs" sources={storeSources}>
+      <Axis label="proposals">
+        <Metric name="cr.node.requests.slow.distsender" title="Slow DistSender RPCs" downsampleMax />
+      </Axis>
+    </LineGraph>,
+
     <LineGraph title="Slow Lease Acquisitions" sources={storeSources}>
       <Axis label="lease acquisitions">
         <Metric name="cr.store.requests.slow.lease" title="Slow Lease Acquisitions" downsampleMax />
