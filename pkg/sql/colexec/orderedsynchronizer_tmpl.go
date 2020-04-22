@@ -224,7 +224,7 @@ func (o *OrderedSynchronizer) Init() {
 			o.out_TYPECols = append(o.out_TYPECols, outVec._TYPE())
 		// {{end}}
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", &o.typs[i]))
+			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", o.typs[i].String()))
 		}
 	}
 	for i := range o.inputs {

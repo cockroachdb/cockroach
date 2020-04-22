@@ -97,9 +97,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 	// Check all equality columns in the first row of batch to make sure we're in
 	// the same group.
 	for _, colIdx := range input.eqCols[:len(input.eqCols)] {
-		typ := input.sourceTypes[colIdx]
-
-		switch typeconv.FromColumnType(&typ) {
+		switch typeconv.FromColumnType(&input.sourceTypes[colIdx]) {
 		// {{ range . }}
 		case _TYPES_T:
 			// We perform this null check on every equality column of the first
@@ -125,7 +123,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 			}
 		// {{end}}
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", &typ))
+			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
 		}
 	}
 	return false
