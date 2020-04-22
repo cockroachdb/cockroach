@@ -15,7 +15,7 @@ import { withRouterProvider } from ".storybook/decorators";
 import {makeStatementsColumns, StatementsSortedTable} from "./statementsTable";
 import statementsPagePropsFixture from "./statementsPage.fixture";
 
-const { statements } = statementsPagePropsFixture
+const { statements } = statementsPagePropsFixture;
 
 storiesOf("StatementsTable", module)
   .addDecorator(withRouterProvider)

@@ -65,7 +65,7 @@ module.exports = (env, argv) => {
 
     resolve: {
       // Add resolvable extensions.
-      extensions: [".ts", ".tsx", ".js", ".json", ".styl", ".css"],
+      extensions: [".ts", ".tsx", ".js", ".json", ".styl", ".css", ".less"],
       // First check for local modules, then for third-party modules from
       // node_modules.
       //
@@ -152,6 +152,23 @@ module.exports = (env, argv) => {
           loader: "source-map-loader",
           include: localRoots,
           exclude: /\/node_modules/,
+        },
+        {
+          use: [
+            "cache-loader",
+            "style-loader",
+            "css-loader",
+            {
+              loader: "less-loader",
+              options: {
+                javascriptEnabled: true,
+                modifyVars: {
+                  "hack": `true; @import "~styl/ant-custom.less";`,
+                },
+              },
+            },
+          ],
+          test: /\.less$/,
         },
       ],
     },

@@ -20,3 +20,6 @@ export const statementAttr = "statement";
 export const tableNameAttr = "table_name";
 
 export const REMOTE_DEBUGGING_ERROR_TEXT = "This information is not available due to the current value of the 'server.remote_debugging.mode' setting.";
+
+// Has to be the same as defined in ~styl/ant-custom.css and ~styl/ant-custom.less
+export const ANT_DESIGN_PREFIX = "crl-ant";

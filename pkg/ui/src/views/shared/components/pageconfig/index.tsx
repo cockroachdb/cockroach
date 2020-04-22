@@ -23,8 +23,6 @@ export function PageConfig(props: PageConfigProps) {
     [styles.pageConfig__spread]: props.layout === "spread",
   });
 
-  console.log(styles)
-
   return (
     <div className={styles.pageConfig}>
       <ul className={ classes }>

@@ -10,17 +10,18 @@
 
 @require '~styl/base/palette.styl'
 @require "~src/components/core/index.styl"
+@require "~styl/ant-custom.styl"
 
 ._search-form
   width 280px
   height 40px
-  :global(.ant-input-affix-wrapper)
+  :global(.{$ant-prefix}-input-affix-wrapper)
     height 40px
     &:hover
-      :global(.ant-input:not(.ant-input-disabled))
+      :global(.{$ant-prefix}-input:not(.{$ant-prefix}-input-disabled))
         border-color $adminui-blue-1-base
         border-right-width 2px !important
-  :global(.ant-btn)
+  :global(.{$ant-prefix}-btn)
     margin 0
     padding 0
     width auto
@@ -45,7 +46,7 @@
     line-height 0px !important
     &:hover
       color $adminui-grey-2
-  :global(.ant-input)
+  :global(.{$ant-prefix}-input)
     font-size 14px
     font-family $font-family--base
     color $adminui-grey-1
@@ -61,6 +62,6 @@
       padding-left 35px
       padding-right 60px
   ._submitted
-    :global(.ant-input)
+    :global(.{$ant-prefix}-input)
       &:not(:first-child)
         padding-right 40px

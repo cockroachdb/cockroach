@@ -8,11 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Button, Form, Input } from "antd";
+import React from "react";
+import { Button, Form, Input, ConfigProvider } from "antd";
 import { InputProps } from "antd/lib/input";
+import { ANT_DESIGN_PREFIX } from "src/util/constants";
 import CancelIcon from "assets/cancel.svg";
 import SearchIcon from "assets/search.svg";
-import React from "react";
+import "antd/es/input/style";
+import "antd/es/form/style";
+import "antd/es/button/style";
 import styles from  "./search.module.styl";
 
 interface ISearchProps {
@@ -89,19 +93,21 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
     const { value, submitted } = this.state;
     const className = submitted ? styles._submitted : "";
     return (
-      <Form onSubmit={this.onSubmit} className={styles._searchForm}>
-        <Form.Item>
-          <Input
-            className={className}
-            placeholder="Search Statement"
-            onChange={this.onChange}
-            prefix={<img className={styles._prefixIcon} src={SearchIcon} />}
-            suffix={this.renderSuffix()}
-            value={value}
-            {...this.props}
-         />
-        </Form.Item>
-      </Form>
+      <ConfigProvider prefixCls={ANT_DESIGN_PREFIX}>
+        <Form onSubmit={this.onSubmit} className={styles._searchForm}>
+          <Form.Item>
+            <Input
+              className={className}
+              placeholder="Search Statement"
+              onChange={this.onChange}
+              prefix={<img className={styles._prefixIcon} src={SearchIcon} />}
+              suffix={this.renderSuffix()}
+              value={value}
+              {...this.props}
+           />
+          </Form.Item>
+        </Form>
+      </ConfigProvider>
     );
   }
 }

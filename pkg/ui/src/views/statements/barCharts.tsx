@@ -18,7 +18,7 @@ import { FixLong } from "src/util/fixLong";
 import { Duration } from "src/util/format";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import classNames from "classnames";
-import styles from './barCharts.module.styl';
+import styles from "./barCharts.module.styl";
 
 type StatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
@@ -109,7 +109,7 @@ const makeBarChart = (
         return (
           <div
             key={ name + v }
-            className={ name + ` ${styles.bar}` " bar-chart__bar" }
+            className={ name + ` ${styles["bar-chart__bar"]}` }
             style={{ width: scale(v) + "%" }}
           />
         );
