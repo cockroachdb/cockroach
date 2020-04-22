@@ -225,9 +225,8 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
         onChangeExpansion: this.onChangeExpansion,
       };
     }
-    if (data) {
-      return (
-        <SortableTable
+    return (
+      <SortableTable
         count={data ? this.paginatedData().length : 0}
         sortSetting={sortSetting}
         onChangeSortSetting={onChangeSortSetting}
@@ -240,9 +239,9 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedT
         renderNoResult={renderNoResult}
         loading={loading}
         loadingLabel={loadingLabel}
+        empty={empty}
+        emptyProps={emptyProps}
       />
-      );
-    }
-    return <div>No results.</div>;
+    );
   }
 }

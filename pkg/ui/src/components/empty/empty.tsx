@@ -33,7 +33,7 @@ export const Empty = ({
   link,
   backgroundImage,
 }: IEmptyProps) => (
-  <div className="cl-empty-view">
+  <div className="cl-empty-view" style={{ backgroundImage: `url(${backgroundImage})` }}>
     <Text
       className="cl-empty-view__title"
       textType={TextTypes.Heading3}
@@ -58,7 +58,6 @@ export const Empty = ({
         </Button>
       </footer>
     </div>
-    <img className="cl-empty-view__banner" src={backgroundImage} alt="Banner" />
   </div>
 );
 
