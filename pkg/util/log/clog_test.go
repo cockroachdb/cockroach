@@ -354,7 +354,7 @@ func TestVmoduleOff(t *testing.T) {
 	_ = SetVModule("notthisfile=2")
 	defer func() { _ = SetVModule("") }()
 	for i := 1; i <= 3; i++ {
-		if V(int32(i)) {
+		if V(Level(i)) {
 			t.Errorf("V enabled for %d", i)
 		}
 	}
