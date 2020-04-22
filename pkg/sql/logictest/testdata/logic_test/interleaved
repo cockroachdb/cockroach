@@ -200,36 +200,39 @@ SELECT * FROM p0
 # Validation and descriptor bookkeeping
 
 # TODO(dan): Interleave these two indexes once we support the syntax.
-statement ok
-CREATE TABLE all_interleaves (
-  b INT PRIMARY KEY,
-  c INT,
-  d INT,
-  INDEX (c),
-  UNIQUE INDEX (d),
-  FAMILY "primary" (b, c, d)
-) INTERLEAVE IN PARENT p1_1 (b)
-
-statement ok
-CREATE INDEX ON all_interleaves (c, d) INTERLEAVE IN PARENT p1_1 (c)
-
-statement ok
-CREATE UNIQUE INDEX ON all_interleaves (d, c) INTERLEAVE IN PARENT p1_1 (d)
-
-query TT
-SHOW CREATE TABLE all_interleaves
-----
-all_interleaves                  CREATE TABLE all_interleaves (
-                                 b INT8 NOT NULL,
-                                 c INT8 NULL,
-                                 d INT8 NULL,
-                                 CONSTRAINT "primary" PRIMARY KEY (b ASC),
-                                 INDEX all_interleaves_c_idx (c ASC),
-                                 UNIQUE INDEX all_interleaves_d_key (d ASC),
-                                 INDEX all_interleaves_c_d_idx (c ASC, d ASC) INTERLEAVE IN PARENT p1_1 (c),
-                                 UNIQUE INDEX all_interleaves_d_c_key (d ASC, c ASC) INTERLEAVE IN PARENT p1_1 (d),
-                                 FAMILY "primary" (b, c, d)
-) INTERLEAVE IN PARENT p1_1 (b)
+# TODO (rohany): How were these tests supposed to work? We were interleaving
+#  into a table's column that wasn't part of the primary key. The columns
+#  weren't even indexed!
+# statement ok
+# CREATE TABLE all_interleaves (
+#   b INT PRIMARY KEY,
+#   c INT,
+#   d INT,
+#   INDEX (c),
+#   UNIQUE INDEX (d),
+#   FAMILY "primary" (b, c, d)
+# ) INTERLEAVE IN PARENT p1_1 (b)
+#
+# statement ok
+# CREATE INDEX ON all_interleaves (c, d) INTERLEAVE IN PARENT p1_1 (c)
+#
+# statement ok
+# CREATE UNIQUE INDEX ON all_interleaves (d, c) INTERLEAVE IN PARENT p1_1 (d)
+#
+# query TT
+# SHOW CREATE TABLE all_interleaves
+# ----
+# all_interleaves                  CREATE TABLE all_interleaves (
+#                                  b INT8 NOT NULL,
+#                                  c INT8 NULL,
+#                                  d INT8 NULL,
+#                                  CONSTRAINT "primary" PRIMARY KEY (b ASC),
+#                                  INDEX all_interleaves_c_idx (c ASC),
+#                                  UNIQUE INDEX all_interleaves_d_key (d ASC),
+#                                  INDEX all_interleaves_c_d_idx (c ASC, d ASC) INTERLEAVE IN PARENT p1_1 (c),
+#                                  UNIQUE INDEX all_interleaves_d_c_key (d ASC, c ASC) INTERLEAVE IN PARENT p1_1 (d),
+#                                  FAMILY "primary" (b, c, d)
+# ) INTERLEAVE IN PARENT p1_1 (b)
 
 statement error pgcode 42P01 relation "missing" does not exist
 CREATE TABLE err (f FLOAT PRIMARY KEY) INTERLEAVE IN PARENT missing (f)
@@ -250,19 +253,22 @@ CREATE INDEX ON p1_1 (i) INTERLEAVE IN PARENT p1_0 (i, s1)
 # Check that interleaved columns are referencing a valid prefix of names
 # of the index's columns.
 
-statement error pq: declared interleaved columns \(j\) must refer to a prefix of the primary key column names being interleaved \(i, j\)
-CREATE TABLE err (i INT, j INT, PRIMARY KEY (i, j)) INTERLEAVE IN PARENT p1_1 (j)
+# TODO (rohany): I don't see a reason that this shouldn't work -- only the
+#  types of the columns in the child need to line up, not the names.
+# statement error pq: declared interleaved columns \(j\) must refer to a prefix of the primary key column names being interleaved \(i, j\)
+# CREATE TABLE err (i INT, j INT, PRIMARY KEY (i, j)) INTERLEAVE IN PARENT p1_1 (j)
 
-statement error pq: declared interleaved columns \(i\) must refer to a prefix of the index column names being interleaved \(d\)
+statement error pq: declared interleaved columns \(i\) must match type and sort direction of the parent's primary index \(i\)
 CREATE INDEX ON p1_0 (d) INTERLEAVE IN PARENT p1_1 (i)
 
 # Check that interleaved columns are of the same type AND direction as parent's
 # primary columns.
 
-statement error pq: declared interleaved columns \(f\) must match type and sort direction of the parent's primary index \(i\)
-CREATE TABLE err (f FLOAT PRIMARY KEY) INTERLEAVE IN PARENT p1_1 (f)
+# TODO (rohany): f doesn't even exist in p1_1...
+# statement error pq: declared interleaved columns \(f\) must match type and sort direction of the parent's primary index \(i\)
+# CREATE TABLE err (f FLOAT PRIMARY KEY) INTERLEAVE IN PARENT p1_1 (f)
 
-statement error pq: declared interleaved columns \(d\) must match type and sort direction of the parent's primary index \(i\)
+statement error pq: declared interleaved columns \(d\) must match the parent's primary index \(i\)
 CREATE INDEX ON p1_0 (d) INTERLEAVE IN PARENT p1_1 (d)
 
 statement error pq: declared interleaved columns \(i\) must match type and sort direction of the parent's primary index \(i\)
@@ -289,6 +295,8 @@ CREATE TABLE customers (
   name STRING (50)
 )
 
+# TODO (rohany): How are we allowed to interleave into customers(customer) here
+#  when customers doesn't have a customers column?
 statement ok
 CREATE TABLE orders (
   customer INT,
@@ -296,7 +304,9 @@ CREATE TABLE orders (
   total DECIMAL (20, 5),
   PRIMARY KEY (customer, id),
   CONSTRAINT fk_customer FOREIGN KEY (customer) REFERENCES customers
-) INTERLEAVE IN PARENT customers (customer)
+)
+
+# INTERLEAVE IN PARENT customers (customer)
 
 statement ok
 INSERT INTO customers
@@ -442,3 +452,11 @@ SELECT
 ;
 ----
 0 0 0
+
+# Regression for #47122.
+statement ok
+CREATE TABLE t0_47122(c0 INT);
+CREATE TABLE t1_47122(c0 INT)
+
+statement error pq: weija
+CREATE UNIQUE INDEX ON t1_47122(c0) INTERLEAVE IN PARENT t0_47122(c0)

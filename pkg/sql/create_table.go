@@ -921,6 +921,19 @@ func addInterleave(
 			strings.Join(parentIndex.ColumnNames, ", "),
 		)
 	}
+
+	// Ensure that the interleave columns are actually the PK columns.
+	for i := range parentIndex.ColumnNames {
+		if parentIndex.ColumnNames[i] != string(interleave.Fields[i]) {
+			return pgerror.Newf(
+				pgcode.InvalidSchemaDefinition,
+				"declared interleaved columns (%s) must match the parent's primary index (%s)",
+				&interleave.Fields,
+				strings.Join(parentIndex.ColumnNames, ", "),
+			)
+		}
+	}
+
 	if len(interleave.Fields) > len(index.ColumnIDs) {
 		return pgerror.Newf(
 			pgcode.InvalidSchemaDefinition,
@@ -939,15 +952,6 @@ func addInterleave(
 		col, err := desc.FindColumnByID(index.ColumnIDs[i])
 		if err != nil {
 			return err
-		}
-		if string(interleave.Fields[i]) != col.Name {
-			return pgerror.Newf(
-				pgcode.InvalidSchemaDefinition,
-				"declared interleaved columns (%s) must refer to a prefix of the %s column names being interleaved (%s)",
-				&interleave.Fields,
-				typeOfIndex,
-				strings.Join(index.ColumnNames, ", "),
-			)
 		}
 		if !col.Type.Identical(&targetCol.Type) || index.ColumnDirections[i] != parentIndex.ColumnDirections[i] {
 			return pgerror.Newf(
