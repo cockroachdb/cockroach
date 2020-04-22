@@ -721,7 +721,7 @@ root                          ·              ·                                
  ├── values                   ·              ·                                                ("array")          ·
  │                            size           1 column, 1 row                                  ·                  ·
  │                            row 0, expr 0  ARRAY @S1                                        ·                  ·
- └── subquery                 ·              ·                                                ("array")          ·
+ └── subquery                 ·              ·                                                ·                  ·
       │                       id             @S1                                              ·                  ·
       │                       original sql   (SELECT generate_series(1, 10) ORDER BY 1 DESC)  ·                  ·
       │                       exec mode      all rows                                         ·                  ·
@@ -740,7 +740,7 @@ root                      ·              ·                             ("array
  ├── values               ·              ·                             ("array")  ·
  │                        size           1 column, 1 row               ·          ·
  │                        row 0, expr 0  ARRAY @S1                     ·          ·
- └── subquery             ·              ·                             ("array")  ·
+ └── subquery             ·              ·                             ·          ·
       │                   id             @S1                           ·          ·
       │                   original sql   (SELECT a FROM t ORDER BY b)  ·          ·
       │                   exec mode      all rows                      ·          ·
