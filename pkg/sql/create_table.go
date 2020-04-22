@@ -115,7 +115,9 @@ var storageParamExpectedTypes = map[string]storageParamType{
 // minimumTypeUsageVersions defines the minimum version needed for a new
 // data type.
 var minimumTypeUsageVersions = map[types.Family]clusterversion.VersionKey{
-	types.TimeTZFamily: clusterversion.VersionTimeTZType,
+	types.TimeTZFamily:    clusterversion.VersionTimeTZType,
+	types.GeographyFamily: clusterversion.VersionGeospatialType,
+	types.GeometryFamily:  clusterversion.VersionGeospatialType,
 }
 
 // isTypeSupportedInVersion returns whether a given type is supported in the given version.
