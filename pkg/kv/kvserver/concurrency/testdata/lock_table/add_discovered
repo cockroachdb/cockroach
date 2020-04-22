@@ -82,7 +82,7 @@ new: state=doneWaiting
 
 guard-state r=req3
 ----
-new: state=waitForDistinguished txn=txn2 ts=10,1 key="a" held=false guard-access=write
+new: state=waitForDistinguished txn=txn2 key="a" held=false guard-access=write
 
 # --------------------------------
 # Setup complete, test starts here
@@ -103,7 +103,7 @@ start-waiting: true
 
 guard-state r=req2
 ----
-new: state=waitForDistinguished txn=txn3 ts=10,1 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn3 key="a" held=true guard-access=write
 
 guard-state r=req3
 ----

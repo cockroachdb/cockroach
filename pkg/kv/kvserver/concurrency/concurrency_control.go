@@ -232,7 +232,7 @@ type ContentionHandler interface {
 type LockManager interface {
 	// OnLockAcquired informs the concurrency manager that a transaction has
 	// acquired a new lock or re-acquired an existing lock that it already held.
-	OnLockAcquired(context.Context, *roachpb.LockUpdate)
+	OnLockAcquired(context.Context, *roachpb.LockAcquisition)
 
 	// OnLockUpdated informs the concurrency manager that a transaction has
 	// updated or released a lock or range of locks that it previously held.

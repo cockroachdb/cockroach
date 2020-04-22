@@ -65,7 +65,7 @@ start-waiting: true
 
 guard-state r=req2
 ----
-new: state=waitForDistinguished txn=txn1 ts=10,1 key="a" held=true guard-access=read
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
 
 scan r=req3
 ----
@@ -73,7 +73,7 @@ start-waiting: true
 
 guard-state r=req3
 ----
-new: state=waitFor txn=txn1 ts=10,1 key="a" held=true guard-access=write
+new: state=waitFor txn=txn1 key="a" held=true guard-access=write
 
 scan r=req4
 ----
@@ -81,7 +81,7 @@ start-waiting: true
 
 guard-state r=req4
 ----
-new: state=waitFor txn=txn1 ts=10,1 key="a" held=true guard-access=read
+new: state=waitFor txn=txn1 key="a" held=true guard-access=read
 
 scan r=req5
 ----
@@ -89,7 +89,7 @@ start-waiting: true
 
 guard-state r=req5
 ----
-new: state=waitFor txn=txn1 ts=10,1 key="a" held=true guard-access=write
+new: state=waitFor txn=txn1 key="a" held=true guard-access=write
 
 print
 ----
@@ -276,7 +276,7 @@ start-waiting: false
 
 guard-state r=req5
 ----
-new: state=waitForDistinguished txn=txn3 ts=14,1 key="a" held=false guard-access=write
+new: state=waitForDistinguished txn=txn3 key="a" held=false guard-access=write
 
 dequeue r=req3
 ----

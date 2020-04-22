@@ -88,7 +88,7 @@ start-waiting: true
 
 guard-state r=req2
 ----
-new: state=waitForDistinguished txn=txn2 ts=10,1 key="a" held=true guard-access=write
+new: state=waitForDistinguished txn=txn2 key="a" held=true guard-access=write
 
 release txn=txn2 span=a
 ----

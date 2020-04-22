@@ -565,6 +565,16 @@ message Intent {
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
 }
 
+// A LockAcquisition represents the action of a Transaction acquiring a lock
+// with a specified durbility level over a Span of keys.
+message LockAcquisition {
+  option (gogoproto.equal) = true;
+
+  Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  kv.kvserver.concurrency.lock.Durability durability = 3;
+}
+
 // A LockUpdate is a Span together with Transaction state. LockUpdate messages
 // are used to update all locks held by the transaction within the span to the
 // transaction's authoritative state. As such, the message is used as input
@@ -577,7 +587,6 @@ message LockUpdate {
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   TransactionStatus status = 3;
   repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
-  kv.kvserver.concurrency.lock.Durability durability = 5;
 }
 
 // A SequencedWrite is a point write to a key with a certain sequence number.
