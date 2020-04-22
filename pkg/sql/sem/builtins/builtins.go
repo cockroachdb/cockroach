@@ -83,6 +83,7 @@ const (
 	categoryCompatibility = "Compatibility"
 	categoryDateAndTime   = "Date and time"
 	categoryIDGeneration  = "ID generation"
+	categoryGeospatial    = "Geospatial"
 	categorySequences     = "Sequence"
 	categoryMath          = "Math and numeric"
 	categoryString        = "String and byte"
