@@ -356,7 +356,7 @@ root                                               ·             ·            
  │    │                                            order         +z                                                   ·                            ·
  │    └── scan buffer node                         ·             ·                                                    (z)                          ·
  │                                                 label         buffer 1                                             ·                            ·
- └── subquery                                      ·             ·                                                    (z)                          +z
+ └── subquery                                      ·             ·                                                    ·                            ·
       │                                            id            @S1                                                  ·                            ·
       │                                            original sql  UPSERT INTO xyz SELECT a, b, c FROM abc RETURNING z  ·                            ·
       │                                            exec mode     all rows                                             ·                            ·
