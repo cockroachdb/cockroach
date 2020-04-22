@@ -143,7 +143,7 @@ type sqlServerArgs struct {
 	protectedtsProvider protectedts.Provider
 	// DistSQLCfg holds on to this to check for node CPU utilization in
 	// samplerProcessor.
-	runtime *status.RuntimeStatSampler
+	runtime execinfra.RuntimeStats
 
 	// SQL uses KV, both for non-DistSQL and DistSQL execution.
 	db *kv.DB
