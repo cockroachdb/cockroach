@@ -56,6 +56,11 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 
 	sel := batch.Selection()
 	output := batch.ColVec(b.outputIdx)
+	if output.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		output.Nulls().UnsetNulls()
+	}
 	b.allocator.PerformOperation(
 		[]coldata.Vec{output},
 		func() {

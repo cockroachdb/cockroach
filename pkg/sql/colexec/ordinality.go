@@ -58,20 +58,26 @@ func (c *ordinalityOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 
-	vec := bat.ColVec(c.outputIdx).Int64()
+	outputVec := bat.ColVec(c.outputIdx)
+	if outputVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		outputVec.Nulls().UnsetNulls()
+	}
+	col := outputVec.Int64()
 	sel := bat.Selection()
 
 	if sel != nil {
 		// Bounds check elimination.
 		for _, i := range sel[:bat.Length()] {
-			vec[i] = c.counter
+			col[i] = c.counter
 			c.counter++
 		}
 	} else {
 		// Bounds check elimination.
-		vec = vec[:bat.Length()]
-		for i := range vec {
-			vec[i] = c.counter
+		col = col[:bat.Length()]
+		for i := range col {
+			col[i] = c.counter
 			c.counter++
 		}
 	}
