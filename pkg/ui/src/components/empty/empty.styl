@@ -22,6 +22,9 @@
   background-color $colors--white
   position relative
   padding $spacing-large 0 $spacing-large $spacing-large
+  background-position top right
+  background-size contain
+  background-repeat no-repeat
 
   &__title
     display flex
@@ -31,14 +34,12 @@
     color $colors--neutral-7
     line-height $line-height--x-large
     margin-bottom 0
-    z-index 2
 
   &__footer
     margin 20px 0 0
 
   &__content
     max-width 600px
-    z-index 2
 
   &__main
     .text
@@ -47,13 +48,6 @@
       line-height $line-height--medium-small
     .crl-anchor
       margin-left 6px
-  
-  &__banner
-    position absolute
-    right 0
-    top 0
-    height 100%
-    z-index 1
 
   &__actions-column
     display flex
