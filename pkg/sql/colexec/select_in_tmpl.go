@@ -285,6 +285,11 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()
 	projNulls := projVec.Nulls()
+	if projVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		projNulls.UnsetNulls()
+	}
 
 	n := batch.Length()
 

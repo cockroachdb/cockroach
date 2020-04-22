@@ -207,6 +207,11 @@ func (c *castOpNullAny) Next(ctx context.Context) coldata.Batch {
 	projVec := batch.ColVec(c.outputIdx)
 	vecNulls := vec.Nulls()
 	projNulls := projVec.Nulls()
+	if projVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over nulls values in the
+		// output vector.
+		projNulls.UnsetNulls()
+	}
 	if sel := batch.Selection(); sel != nil {
 		sel = sel[:n]
 		for _, i := range sel {
@@ -251,6 +256,11 @@ func (c *castOp) Next(ctx context.Context) coldata.Batch {
 	}
 	vec := batch.ColVec(c.colIdx)
 	projVec := batch.ColVec(c.outputIdx)
+	if projVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		projVec.Nulls().UnsetNulls()
+	}
 	c.allocator.PerformOperation(
 		[]coldata.Vec{projVec}, func() { cast(c.fromType, c.toType, vec, projVec, n, batch.Selection()) },
 	)

@@ -124,18 +124,24 @@ func (p *_PEER_GROUPER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	partitionCol := b.ColVec(p.partitionColIdx).Bool()
 	// {{end}}
 	sel := b.Selection()
-	peersVec := b.ColVec(p.outputColIdx).Bool()
+	peersVec := b.ColVec(p.outputColIdx)
+	if peersVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		peersVec.Nulls().UnsetNulls()
+	}
+	peersCol := peersVec.Bool()
 	if sel != nil {
 		for _, i := range sel[:n] {
 			// {{if .AllPeers}}
 			// {{if .HasPartition}}
 			// All tuples within the partition are peers, so we simply need to copy
 			// over partitionCol according to sel.
-			peersVec[i] = partitionCol[i]
+			peersCol[i] = partitionCol[i]
 			// {{else}}
 			// There is only one partition and all tuples within it are peers, so we
 			// need to set 'true' to only the first tuple ever seen.
-			peersVec[i] = !p.seenFirstTuple
+			peersCol[i] = !p.seenFirstTuple
 			p.seenFirstTuple = true
 			// {{end}}
 			// {{else}}
@@ -143,11 +149,11 @@ func (p *_PEER_GROUPER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			// The new peer group begins either when a new partition begins (in which
 			// case partitionCol[i] is 'true') or when i'th tuple is different from
 			// i-1'th (in which case p.distinctCol[i] is 'true').
-			peersVec[i] = partitionCol[i] || p.distinctCol[i]
+			peersCol[i] = partitionCol[i] || p.distinctCol[i]
 			// {{else}}
 			// The new peer group begins when i'th tuple is different from i-1'th (in
 			// which case p.distinctCol[i] is 'true').
-			peersVec[i] = p.distinctCol[i]
+			peersCol[i] = p.distinctCol[i]
 			// {{end}}
 			// {{end}}
 		}
@@ -156,12 +162,12 @@ func (p *_PEER_GROUPER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 		// {{if .HasPartition}}
 		// All tuples within the partition are peers, so we simply need to copy
 		// over partitionCol.
-		copy(peersVec[:n], partitionCol[:n])
+		copy(peersCol[:n], partitionCol[:n])
 		// {{else}}
 		// There is only one partition and all tuples within it are peers, so we
 		// need to set 'true' to only the first tuple ever seen.
-		copy(peersVec[:n], zeroBoolColumn[:n])
-		peersVec[0] = !p.seenFirstTuple
+		copy(peersCol[:n], zeroBoolColumn[:n])
+		peersCol[0] = !p.seenFirstTuple
 		p.seenFirstTuple = true
 		// {{end}}
 		// {{else}}
@@ -169,14 +175,14 @@ func (p *_PEER_GROUPER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 		// The new peer group begins either when a new partition begins (in which
 		// case partitionCol[i] is 'true') or when i'th tuple is different from
 		// i-1'th (in which case p.distinctCol[i] is 'true').
-		for i := range peersVec[:n] {
-			peersVec[i] = partitionCol[i] || p.distinctCol[i]
+		for i := range peersCol[:n] {
+			peersCol[i] = partitionCol[i] || p.distinctCol[i]
 		}
 		// {{else}}
 		// The new peer group begins when i'th tuple is different from i-1'th (in
 		// which case p.distinctCol[i] is 'true'), so we simply need to copy over
 		// p.distinctCol.
-		copy(peersVec[:n], p.distinctCol[:n])
+		copy(peersCol[:n], p.distinctCol[:n])
 		// {{end}}
 		// {{end}}
 	}

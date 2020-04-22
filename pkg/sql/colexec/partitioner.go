@@ -79,14 +79,20 @@ func (p *windowSortingPartitioner) Next(ctx context.Context) coldata.Batch {
 	if b.Length() == 0 {
 		return coldata.ZeroBatch
 	}
-	partitionVec := b.ColVec(p.partitionColIdx).Bool()
+	partitionVec := b.ColVec(p.partitionColIdx)
+	if partitionVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		partitionVec.Nulls().UnsetNulls()
+	}
+	partitionCol := partitionVec.Bool()
 	sel := b.Selection()
 	if sel != nil {
 		for i := 0; i < b.Length(); i++ {
-			partitionVec[sel[i]] = p.distinctCol[sel[i]]
+			partitionCol[sel[i]] = p.distinctCol[sel[i]]
 		}
 	} else {
-		copy(partitionVec, p.distinctCol[:b.Length()])
+		copy(partitionCol, p.distinctCol[:b.Length()])
 	}
 	return b
 }

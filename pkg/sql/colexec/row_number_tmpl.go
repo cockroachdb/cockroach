@@ -82,7 +82,13 @@ func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	// {{ if .HasPartition }}
 	partitionCol := batch.ColVec(r.partitionColIdx).Bool()
 	// {{ end }}
-	rowNumberCol := batch.ColVec(r.outputColIdx).Int64()
+	rowNumberVec := batch.ColVec(r.outputColIdx)
+	if rowNumberVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		rowNumberVec.Nulls().UnsetNulls()
+	}
+	rowNumberCol := rowNumberVec.Int64()
 	sel := batch.Selection()
 	if sel != nil {
 		for i := 0; i < batch.Length(); i++ {
