@@ -735,31 +735,22 @@ func TempStorageConfigFromEnv(
 	specIdx int,
 ) TempStorageConfig {
 	inMem := parentDir == "" && firstStore.InMemory
-	var monitor mon.BytesMonitor
+	var monitorName string
 	if inMem {
-		monitor = mon.MakeMonitor(
-			"in-mem temp storage",
-			mon.MemoryResource,
-			nil,             /* curCount */
-			nil,             /* maxHist */
-			1024*1024,       /* increment */
-			maxSizeBytes/10, /* noteworthy */
-			st,
-		)
-		monitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
+		monitorName = "in-mem temp storage"
 	} else {
-		monitor = mon.MakeMonitor(
-			"temp disk storage",
-			mon.DiskResource,
-			nil,             /* curCount */
-			nil,             /* maxHist */
-			1024*1024,       /* increment */
-			maxSizeBytes/10, /* noteworthy */
-			st,
-		)
-		monitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
+		monitorName = "temp disk storage"
 	}
-
+	monitor := mon.MakeMonitor(
+		monitorName,
+		mon.DiskResource,
+		nil,             /* curCount */
+		nil,             /* maxHist */
+		1024*1024,       /* increment */
+		maxSizeBytes/10, /* noteworthy */
+		st,
+	)
+	monitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
 	return TempStorageConfig{
 		InMemory: inMem,
 		Mon:      &monitor,
