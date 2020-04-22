@@ -718,6 +718,8 @@ func TestParse(t *testing.T) {
 		{`SELECT (a->'x')->'y'`},
 		{`SELECT (a->'x')->>'y'`},
 		{`SELECT b && c`},
+		{`SELECT |/a`},
+		{`SELECT ||/a`},
 
 		{`SELECT 1 FROM t`},
 		{`SELECT 1, 2 FROM t`},

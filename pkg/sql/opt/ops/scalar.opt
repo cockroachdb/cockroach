@@ -574,6 +574,16 @@ define UnaryComplement {
     Input ScalarExpr
 }
 
+[Scalar, Unary]
+define UnarySqrt {
+    Input ScalarExpr
+}
+
+[Scalar, Unary]
+define UnaryCbrt {
+    Input ScalarExpr
+}
+
 # Cast converts the input expression into an expression of the target type.
 # Note that the conversion may cause trunction based on the target types' width,
 # such as in this example:
