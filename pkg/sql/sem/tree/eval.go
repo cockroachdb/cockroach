@@ -55,7 +55,8 @@ var (
 	errDecOutOfRange   = pgerror.New(pgcode.NumericValueOutOfRange, "decimal out of range")
 
 	// ErrDivByZero is reported on a division by zero.
-	ErrDivByZero = pgerror.New(pgcode.DivisionByZero, "division by zero")
+	ErrDivByZero       = pgerror.New(pgcode.DivisionByZero, "division by zero")
+	errSqrtOfNegNumber = pgerror.New(pgcode.InvalidArgumentForPowerFunction, "cannot take square root of a negative number")
 	// ErrZeroModulus is reported when computing the rest of a division by zero.
 	ErrZeroModulus = pgerror.New(pgcode.DivisionByZero, "zero modulus")
 
@@ -177,6 +178,42 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				ipAddr := MustBeDIPAddr(d).IPAddr
 				return NewDIPAddr(DIPAddr{ipAddr.Complement()}), nil
+			},
+		},
+	},
+
+	UnarySqrt: {
+		&UnaryOp{
+			Typ:        types.Float,
+			ReturnType: types.Float,
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				return Sqrt(float64(*d.(*DFloat)))
+			},
+		},
+		&UnaryOp{
+			Typ:        types.Decimal,
+			ReturnType: types.Decimal,
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				dec := &d.(*DDecimal).Decimal
+				return DecimalSqrt(dec)
+			},
+		},
+	},
+
+	UnaryCbrt: {
+		&UnaryOp{
+			Typ:        types.Float,
+			ReturnType: types.Float,
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				return Cbrt(float64(*d.(*DFloat)))
+			},
+		},
+		&UnaryOp{
+			Typ:        types.Decimal,
+			ReturnType: types.Decimal,
+			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				dec := &d.(*DDecimal).Decimal
+				return DecimalCbrt(dec)
 			},
 		},
 	},
@@ -5460,3 +5497,34 @@ func (c *CallbackValueGenerator) Values() Datums {
 
 // Close is part of the ValueGenerator interface.
 func (c *CallbackValueGenerator) Close() {}
+
+// Sqrt returns the square root of x.
+func Sqrt(x float64) (*DFloat, error) {
+	// TODO(mjibson): see #13642
+	if x < 0.0 {
+		return nil, errSqrtOfNegNumber
+	}
+	return NewDFloat(DFloat(math.Sqrt(x))), nil
+}
+
+// DecimalSqrt returns the square root of x.
+func DecimalSqrt(x *apd.Decimal) (*DDecimal, error) {
+	if x.Sign() < 0 {
+		return nil, errSqrtOfNegNumber
+	}
+	dd := &DDecimal{}
+	_, err := DecimalCtx.Sqrt(&dd.Decimal, x)
+	return dd, err
+}
+
+// Cbrt returns the cube root of x.
+func Cbrt(x float64) (*DFloat, error) {
+	return NewDFloat(DFloat(math.Cbrt(x))), nil
+}
+
+// DecimalCbrt returns the cube root of x.
+func DecimalCbrt(x *apd.Decimal) (*DDecimal, error) {
+	dd := &DDecimal{}
+	_, err := DecimalCtx.Cbrt(&dd.Decimal, x)
+	return dd, err
+}

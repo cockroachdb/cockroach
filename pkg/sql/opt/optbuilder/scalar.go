@@ -705,6 +705,10 @@ func (b *Builder) constructUnary(
 		return b.factory.ConstructUnaryMinus(input)
 	case tree.UnaryComplement:
 		return b.factory.ConstructUnaryComplement(input)
+	case tree.UnarySqrt:
+		return b.factory.ConstructUnarySqrt(input)
+	case tree.UnaryCbrt:
+		return b.factory.ConstructUnaryCbrt(input)
 	}
 	panic(errors.AssertionFailedf("unhandled unary operator: %s", log.Safe(un)))
 }

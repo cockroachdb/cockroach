@@ -299,7 +299,17 @@ func (s *scanner) scan(lval *sqlSymType) {
 		switch s.peek() {
 		case '|': // ||
 			s.pos++
+			switch s.peek() {
+			case '/': // ||/
+				s.pos++
+				lval.id = CBRT
+				return
+			}
 			lval.id = CONCAT
+			return
+		case '/': // |/
+			s.pos++
+			lval.id = SQRT
 			return
 		}
 		return

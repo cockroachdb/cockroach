@@ -544,7 +544,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BUNDLE BY
 
-%token <str> CACHE CANCEL CASCADE CASE CAST CHANGEFEED CHAR
+%token <str> CACHE CANCEL CASCADE CASE CAST CBRT CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
@@ -613,7 +613,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
 %token <str> START STATISTICS STATUS STDIN STRICT STRING STORAGE STORE STORED STORING SUBSTRING
-%token <str> SYMMETRIC SYNTAX SYSTEM SUBSCRIPTION
+%token <str> SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION
 
 %token <str> TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE TRANSACTION TREAT TRIGGER TRIM TRUE
@@ -1123,7 +1123,7 @@ func newNameFromStr(s string) *tree.Name {
 %left      '|'
 %left      '#'
 %left      '&'
-%left      LSHIFT RSHIFT INET_CONTAINS_OR_EQUALS INET_CONTAINED_BY_OR_EQUALS AND_AND
+%left      LSHIFT RSHIFT INET_CONTAINS_OR_EQUALS INET_CONTAINED_BY_OR_EQUALS AND_AND SQRT CBRT
 %left      '+' '-'
 %left      '*' '/' FLOORDIV '%'
 %left      '^'
@@ -7965,6 +7965,14 @@ a_expr:
 | '~' a_expr %prec UMINUS
   {
     $$.val = &tree.UnaryExpr{Operator: tree.UnaryComplement, Expr: $2.expr()}
+  }
+| SQRT a_expr
+  {
+    $$.val = &tree.UnaryExpr{Operator: tree.UnarySqrt, Expr: $2.expr()}
+  }
+| CBRT a_expr
+  {
+    $$.val = &tree.UnaryExpr{Operator: tree.UnaryCbrt, Expr: $2.expr()}
   }
 | a_expr '+' a_expr
   {

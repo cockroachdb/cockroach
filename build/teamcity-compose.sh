@@ -17,7 +17,7 @@ rm artifacts/compose-compile.log
 tc_end_block "Compile CockroachDB"
 
 tc_start_block "Compile compose tests"
-run build/builder.sh mkrelease "$type" -Otarget testbuild PKG=./pkg/compose
+run build/builder.sh mkrelease "$type" -Otarget testbuild PKG=./pkg/compose TAGS=compose
 tc_end_block "Compile compose tests"
 
 tc_start_block "Run compose tests"
