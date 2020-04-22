@@ -59,12 +59,13 @@ func (b *Builder) buildMutationInput(
 
 	if p.WithID != 0 {
 		label := fmt.Sprintf("buffer %d", p.WithID)
-		input.root, err = b.factory.ConstructBuffer(input.root, label)
+		bufferNode, err := b.factory.ConstructBuffer(input.root, label)
 		if err != nil {
 			return execPlan{}, err
 		}
 
-		b.addBuiltWithExpr(p.WithID, input.outputCols, input.root)
+		b.addBuiltWithExpr(p.WithID, input.outputCols, bufferNode)
+		input.root = bufferNode
 	}
 	return input, nil
 }

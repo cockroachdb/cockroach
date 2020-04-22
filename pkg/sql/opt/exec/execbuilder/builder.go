@@ -156,10 +156,12 @@ type builtWithExpr struct {
 	// outputCols maps the output ColumnIDs of the With expression to the ordinal
 	// positions they are output to. See execPlan.outputCols for more details.
 	outputCols opt.ColMap
-	bufferNode exec.Node
+	bufferNode exec.BufferNode
 }
 
-func (b *Builder) addBuiltWithExpr(id opt.WithID, outputCols opt.ColMap, bufferNode exec.Node) {
+func (b *Builder) addBuiltWithExpr(
+	id opt.WithID, outputCols opt.ColMap, bufferNode exec.BufferNode,
+) {
 	b.withExprs = append(b.withExprs, builtWithExpr{
 		id:         id,
 		outputCols: outputCols,
