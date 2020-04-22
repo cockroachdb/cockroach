@@ -363,6 +363,7 @@ func init() {
 		StringFlag(f, &startCtx.listeningURLFile, cliflags.ListeningURLFile, startCtx.listeningURLFile)
 
 		StringFlag(f, &startCtx.pidFile, cliflags.PIDFile, startCtx.pidFile)
+		StringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir, startCtx.geoLibsDir)
 
 		// Use a separate variable to store the value of ServerInsecure.
 		// We share the default with the ClientInsecure flag.
@@ -657,6 +658,7 @@ func init() {
 	// The --empty flag is only valid for the top level demo command,
 	// so we use the regular flag set.
 	BoolFlag(demoCmd.Flags(), &demoCtx.useEmptyDatabase, cliflags.UseEmptyDatabase, demoCtx.useEmptyDatabase)
+	StringFlag(demoFlags, &demoCtx.geoLibsDir, cliflags.GeoLibsDir, demoCtx.geoLibsDir)
 
 	// sqlfmt command.
 	fmtFlags := sqlfmtCmd.Flags()

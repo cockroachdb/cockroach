@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -659,6 +660,15 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			// the time this function gets called.
 			log.Warningf(ctx, msg)
 		}
+	}
+
+	// Set up the Geospatial library.
+	// We need to make sure this happens before any queries involving geospatial data is executed.
+	loc, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, demoCtx.geoLibsDir)
+	if err != nil {
+		log.Infof(ctx, "could not initialize GEOS - geospatial functions may not be available: %v", err)
+	} else {
+		log.Infof(ctx, "GEOS initialized at %s", loc)
 	}
 
 	// Beyond this point, the configuration is set and the server is
