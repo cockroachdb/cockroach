@@ -802,7 +802,7 @@ func (ef *execFactory) ConstructMax1Row(input exec.Node, errorText string) (exec
 }
 
 // ConstructBuffer is part of the exec.Factory interface.
-func (ef *execFactory) ConstructBuffer(input exec.Node, label string) (exec.Node, error) {
+func (ef *execFactory) ConstructBuffer(input exec.Node, label string) (exec.BufferNode, error) {
 	return &bufferNode{
 		plan:  input.(planNode),
 		label: label,
@@ -810,7 +810,7 @@ func (ef *execFactory) ConstructBuffer(input exec.Node, label string) (exec.Node
 }
 
 // ConstructScanBuffer is part of the exec.Factory interface.
-func (ef *execFactory) ConstructScanBuffer(ref exec.Node, label string) (exec.Node, error) {
+func (ef *execFactory) ConstructScanBuffer(ref exec.BufferNode, label string) (exec.Node, error) {
 	return &scanBufferNode{
 		buffer: ref.(*bufferNode),
 		label:  label,

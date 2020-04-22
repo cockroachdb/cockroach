@@ -24,6 +24,13 @@ import (
 // (currently maps to sql.planNode).
 type Node interface{}
 
+// BufferNode is a node returned by ConstructBuffer.
+type BufferNode interface {
+	Node
+
+	BufferNodeMarker()
+}
+
 // Plan represents the plan for a query (currently maps to sql.planTop).
 // For simple queries, the plan is associated with a single Node tree.
 // For queries containing subqueries, the plan is associated with multiple Node
@@ -503,11 +510,11 @@ type Factory interface {
 
 	// ConstructBuffer constructs a node whose input can be referenced from
 	// elsewhere in the query.
-	ConstructBuffer(input Node, label string) (Node, error)
+	ConstructBuffer(input Node, label string) (BufferNode, error)
 
 	// ConstructScanBuffer constructs a node which refers to a node constructed by
 	// ConstructBuffer or passed to RecursiveCTEIterationFn.
-	ConstructScanBuffer(ref Node, label string) (Node, error)
+	ConstructScanBuffer(ref BufferNode, label string) (Node, error)
 
 	// ConstructRecursiveCTE constructs a node that executes a recursive CTE:
 	//   * the initial plan is run first; the results are emitted and also saved
@@ -666,9 +673,8 @@ type KVOption struct {
 }
 
 // RecursiveCTEIterationFn creates a plan for an iteration of WITH RECURSIVE,
-// given the result of the last iteration (as a Buffer that can be used with
-// ConstructScanBuffer).
-type RecursiveCTEIterationFn func(bufferRef Node) (Plan, error)
+// given the result of the last iteration (as a BufferNode).
+type RecursiveCTEIterationFn func(bufferRef BufferNode) (Plan, error)
 
 // ApplyJoinPlanRightSideFn creates a plan for an iteration of ApplyJoin, given
 // a row produced from the left side. The plan is guaranteed to produce the

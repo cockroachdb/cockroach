@@ -1521,7 +1521,7 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 		withExprs: b.withExprs[:len(b.withExprs):len(b.withExprs)],
 	}
 
-	fn := func(bufferRef exec.Node) (exec.Plan, error) {
+	fn := func(bufferRef exec.BufferNode) (exec.Plan, error) {
 		// Use a separate builder each time.
 		innerBld := *innerBldTemplate
 		innerBld.addBuiltWithExpr(rec.WithID, initial.outputCols, bufferRef)
