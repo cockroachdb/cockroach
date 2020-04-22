@@ -207,15 +207,15 @@ func (d directions) get(i int) (encoding.Direction, error) {
 // key.  An example of one level of interleaving (a parent):
 // /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
 func MakeSpanFromEncDatums(
-	keyPrefix []byte,
 	values EncDatumRow,
 	types []types.T,
 	dirs []IndexDescriptor_Direction,
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
 	alloc *DatumAlloc,
+	keyPrefix []byte,
 ) (_ roachpb.Span, containsNull bool, _ error) {
-	startKey, complete, containsNull, err := makeKeyFromEncDatums(keyPrefix, values, types, dirs, tableDesc, index, alloc)
+	startKey, complete, containsNull, err := makeKeyFromEncDatums(values, types, dirs, tableDesc, index, alloc, keyPrefix)
 	if err != nil {
 		return roachpb.Span{}, false, err
 	}
@@ -393,13 +393,13 @@ func SplitSpanIntoSeparateFamilies(
 // key.  An example of one level of interleaving (a parent):
 // /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
 func makeKeyFromEncDatums(
-	keyPrefix []byte,
 	values EncDatumRow,
 	types []types.T,
 	dirs []IndexDescriptor_Direction,
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
 	alloc *DatumAlloc,
+	keyPrefix []byte,
 ) (_ roachpb.Key, complete bool, containsNull bool, _ error) {
 	// Values may be a prefix of the index columns.
 	if len(values) > len(dirs) {
