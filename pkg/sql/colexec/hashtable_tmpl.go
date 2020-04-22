@@ -286,7 +286,7 @@ func (ht *hashTable) checkColForDistinctTuples(
 		// {{end}}
 		// {{end}}
 	default:
-		colexecerror.InternalError(fmt.Sprintf("unhandled type %s", probeType))
+		colexecerror.InternalError(fmt.Sprintf("unhandled type %s", probeType.Name()))
 	}
 }
 
