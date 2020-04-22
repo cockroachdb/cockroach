@@ -43,6 +43,14 @@ var AutomaticStatisticsClusterMode = settings.RegisterPublicBoolSetting(
 	true,
 )
 
+// MultiColumnStatisticsClusterMode controls the cluster setting for enabling
+// automatic collection of multi-column statistics.
+var MultiColumnStatisticsClusterMode = settings.RegisterPublicBoolSetting(
+	"sql.stats.multi_column_collection.enabled",
+	"multi-column statistics collection mode",
+	true,
+)
+
 // AutomaticStatisticsMaxIdleTime controls the maximum fraction of time that
 // the sampler processors will be idle when scanning large tables for automatic
 // statistics (in high load scenarios). This value can be tuned to trade off

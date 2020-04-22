@@ -23,6 +23,8 @@ SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {a,b}         1000       100             0
 __auto__         {a}           1000       10              0
 __auto__         {b}           1000       10              0
 __auto__         {c}           1000       10              0
@@ -42,6 +44,8 @@ SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {a,b}         1000       100             0
 __auto__         {a}           1000       10              0
 __auto__         {b}           1000       10              0
 __auto__         {c}           1000       10              0
@@ -60,6 +64,10 @@ SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {a,b}         1000       100             0
+__auto__         {a,b}         1000       100             0
 __auto__         {a}           1000       10              0
 __auto__         {a}           1000       10              0
 __auto__         {b}           1000       10              0
@@ -81,6 +89,12 @@ SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {a,b,c}       1050       1050            0
+__auto__         {a,b}         1000       100             0
+__auto__         {a,b}         1000       100             0
+__auto__         {a,b}         1050       110             0
 __auto__         {a}           1000       10              0
 __auto__         {a}           1000       10              0
 __auto__         {a}           1050       11              0
@@ -103,6 +117,14 @@ SELECT statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {a,b,c}       1000       1000            0
+__auto__         {a,b,c}       1050       1050            0
+__auto__         {a,b,c}       550        550             0
+__auto__         {a,b}         1000       100             0
+__auto__         {a,b}         1000       100             0
+__auto__         {a,b}         1050       110             0
+__auto__         {a,b}         550        110             0
 __auto__         {a}           1000       10              0
 __auto__         {a}           1000       10              0
 __auto__         {a}           1050       11              0
