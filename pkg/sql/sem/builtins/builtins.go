@@ -2864,7 +2864,7 @@ may increase either contention or retry errors, or both.`,
 				}
 
 				if indexDesc.ID == tableDesc.PrimaryIndex.ID {
-					keyPrefix := tableDesc.IndexSpan(indexDesc.ID).Key
+					keyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, indexDesc.ID)
 					res, _, err := sqlbase.EncodeIndexKey(tableDesc, indexDesc, colMap, datums, keyPrefix)
 					if err != nil {
 						return nil, err
