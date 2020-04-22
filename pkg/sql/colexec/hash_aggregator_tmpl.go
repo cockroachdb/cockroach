@@ -49,8 +49,9 @@ var _ tree.Operator
 // Dummy import to pull in "math" package.
 var _ int = math.MaxInt16
 
-// Dummy import to pull in "coltypes" package.
-var _ coltypes.T
+// _TYPES_T is the template type variable for coltypes.T. It will be replaced by
+// coltypes.Foo for each type Foo in the coltypes.T type.
+const _TYPES_T = coltypes.Unhandled
 
 // _ASSIGN_NE is the template function for assigning the result of comparing
 // the second input to the third input into the first input.
@@ -114,6 +115,9 @@ func _MATCH_LOOP(
 // This slice need to be allocated to be at at least as big as sel and set to
 // all false. diff will be reset to all false when match returns. This is to
 // avoid additional slice allocation.
+// - firstDefiniteMatch indicates whether we know that tuple with index sel[0]
+//   matches the key of the aggregation function and whether we can short
+//   circuit probing that tuple.
 // NOTE: the return vector will reuse the memory allocated for the selection
 //       vector.
 func (v hashAggFuncs) match(
@@ -123,60 +127,67 @@ func (v hashAggFuncs) match(
 	keyTypes []types.T,
 	keyMapping coldata.Batch,
 	diff []bool,
+	firstDefiniteMatch bool,
 ) (bool, []int) {
 	// We want to directly write to the selection vector to avoid extra
 	// allocation.
 	b.SetSelection(true)
-	matched := b.Selection()
-	matched = matched[:0]
+	matched := b.Selection()[:0]
 
 	aggKeyIdx := v.keyIdx
 
-	for keyIdx, colIdx := range keyCols {
-		lhs := keyMapping.ColVec(keyIdx)
-		lhsHasNull := lhs.MaybeHasNulls()
+	if firstDefiniteMatch {
+		matched = append(matched, sel[0])
+		sel = sel[1:]
+		diff = diff[:len(diff)-1]
+	}
 
-		rhs := b.ColVec(int(colIdx))
-		rhsHasNull := rhs.MaybeHasNulls()
+	if len(sel) > 0 {
+		for keyIdx, colIdx := range keyCols {
+			lhs := keyMapping.ColVec(keyIdx)
+			lhsHasNull := lhs.MaybeHasNulls()
 
-		keyTyp := keyTypes[keyIdx]
+			rhs := b.ColVec(int(colIdx))
+			rhsHasNull := rhs.MaybeHasNulls()
 
-		switch typeconv.FromColumnType(&keyTyp) {
-		// {{range .}}
-		case _TYPES_T:
-			lhsCol := lhs._TemplateType()
-			rhsCol := rhs._TemplateType()
-			if lhsHasNull {
-				lhsNull := lhs.Nulls().NullAt(v.keyIdx)
-				if rhsHasNull {
-					_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, true, true)
+			keyTyp := keyTypes[keyIdx]
+
+			switch typeconv.FromColumnType(&keyTyp) {
+			// {{range .}}
+			case _TYPES_T:
+				lhsCol := lhs._TemplateType()
+				rhsCol := rhs._TemplateType()
+				if lhsHasNull {
+					lhsNull := lhs.Nulls().NullAt(v.keyIdx)
+					if rhsHasNull {
+						_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, true, true)
+					} else {
+						_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, true, false)
+					}
 				} else {
-					_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, true, false)
+					if rhsHasNull {
+						_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, false, true)
+					} else {
+						_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, false, false)
+					}
 				}
-			} else {
-				if rhsHasNull {
-					_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, false, true)
-				} else {
-					_MATCH_LOOP(sel, lhs, rhs, aggKeyIdx, lhsNull, diff, false, false)
-				}
+			// {{end}}
+			default:
+				colexecerror.InternalError(fmt.Sprintf("unhandled type %s", &keyTyp))
 			}
-		// {{end}}
-		default:
-			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", &keyTyp))
 		}
 	}
 
 	remaining := sel[:0]
-	anyMatched := false
-
-	for selIdx, isDiff := range diff {
-		if isDiff {
-			remaining = append(remaining, sel[selIdx])
+	for selIdx, tupleIdx := range sel {
+		if diff[selIdx] {
+			remaining = append(remaining, tupleIdx)
 		} else {
-			matched = append(matched, sel[selIdx])
+			matched = append(matched, tupleIdx)
 		}
 	}
 
+	anyMatched := false
 	if len(matched) > 0 {
 		b.SetLength(len(matched))
 		anyMatched = true
