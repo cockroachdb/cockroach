@@ -129,7 +129,7 @@ func (s *Builder) SpanFromEncDatums(
 	values sqlbase.EncDatumRow, prefixLen int,
 ) (_ roachpb.Span, containsNull bool, _ error) {
 	return sqlbase.MakeSpanFromEncDatums(
-		s.KeyPrefix, values[:prefixLen], s.indexColTypes[:prefixLen], s.indexColDirs[:prefixLen], s.table, s.index, &s.alloc)
+		values[:prefixLen], s.indexColTypes[:prefixLen], s.indexColDirs[:prefixLen], s.table, s.index, &s.alloc, s.KeyPrefix)
 }
 
 // SpanFromDatumRow generates an index span with prefixLen constraint columns from the index.
