@@ -111,7 +111,10 @@ func initGEOS(locs []string) (*C.CR_GEOS, error) {
 			),
 		)
 	}
-	return nil, errors.Wrap(err, "geos: could not find location to init GEOS")
+	if err != nil {
+		return nil, errors.Wrap(err, "geos: error during GEOS init")
+	}
+	return nil, errors.Newf("geos: no locations to init GEOS")
 }
 
 // goToCSlice returns a CR_GEOS_Slice from a given Go byte slice.

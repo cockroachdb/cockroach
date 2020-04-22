@@ -20,6 +20,11 @@ import (
 )
 
 func TestInitGEOS(t *testing.T) {
+	t.Run("test no initGEOS paths", func(t *testing.T) {
+		_, err := initGEOS([]string{})
+		require.Error(t, err)
+	})
+
 	t.Run("test invalid initGEOS paths", func(t *testing.T) {
 		_, err := initGEOS([]string{"/invalid/path"})
 		require.Error(t, err)
