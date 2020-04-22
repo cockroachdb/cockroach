@@ -204,3 +204,16 @@ CREATE TABLE regression_47110_not_ok(interval_not_ok INTERVAL(3))
 
 statement error type INTERVAL DAY is not supported until version upgrade is finalized
 CREATE TABLE regression_47110_not_ok(interval_not_ok INTERVAL DAY)
+
+# TODO(otan): move this to mixed 20.1-20.2 tests when available.
+statement error type GEOMETRY is not supported until version upgrade is finalized
+CREATE TABLE geo_test(a GEOMETRY)
+
+statement error type GEOGRAPHY.* is not supported until version upgrade is finalized
+CREATE TABLE geo_test(a GEOGRAPHY)
+
+statement error type GEOMETRY is not supported until version upgrade is finalized
+ALTER TABLE t ADD COLUMN geo GEOMETRY
+
+statement error type GEOGRAPHY.* is not supported until version upgrade is finalized
+ALTER TABLE t ADD COLUMN geo GEOGRAPHY
