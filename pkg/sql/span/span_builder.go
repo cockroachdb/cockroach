@@ -71,7 +71,7 @@ func MakeBuilder(table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor)
 	}
 
 	// Set up the interstices for encoding interleaved tables later.
-	s.interstices[0] = sqlbase.MakeIndexKeyPrefix(table, index.ID)
+	s.interstices[0] = s.KeyPrefix
 	if len(index.Interleave.Ancestors) > 0 {
 		// TODO(rohany): too much of this code is copied from EncodePartialIndexKey.
 		sharedPrefixLen := 0
