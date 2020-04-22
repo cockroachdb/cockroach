@@ -232,7 +232,7 @@ root                                                                            
  │    └── scan                                                                     (id int, title string)
  │                   table         movies@primary
  │                   spans         FULL SCAN
- └── subquery                                                                      (movie_id int, title string, name string)
+ └── subquery
       │              id            @S1
       │              original sql  (SELECT name FROM t.actors WHERE name = 'Foo')
       │              exec mode     one row
