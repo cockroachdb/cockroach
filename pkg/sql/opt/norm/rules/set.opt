@@ -4,6 +4,12 @@
 
 # EliminateUnionAllLeft replaces a union all with a right side having a
 # cardinality of zero, with just the left side operand.
+#
+# It is possible for the left and right sides of the UnionAll to have column
+# IDs that are also present in the output columns of the UnionAll, e.g. after
+# the SplitDisjunction exploration rule has been applied. These columns are
+# included as passthrough columns in the generated Project because they do not
+# need to be projected. All other column IDs are added to the ProjectionsExpr.
 [EliminateUnionAllLeft, Normalize]
 (UnionAll
     $left:*
@@ -14,11 +20,14 @@
 (Project
     $left
     (ProjectColMapLeft $colmap)
-    (MakeEmptyColSet)
+    (ProjectPassthroughLeft $colmap)
 )
 
 # EliminateUnionAllRight replaces a union all with a left side having a
 # cardinality of zero, with just the right side operand.
+#
+# See the comment above EliminateUnionAllLeft which describes when columns are
+# projected vs. passed-through.
 [EliminateUnionAllRight, Normalize]
 (UnionAll
     $left:* & (HasZeroRows $left)
@@ -29,5 +38,5 @@
 (Project
     $right
     (ProjectColMapRight $colmap)
-    (MakeEmptyColSet)
+    (ProjectPassthroughRight $colmap)
 )
