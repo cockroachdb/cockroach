@@ -211,6 +211,16 @@ func (l *loggerT) outputLogEntry(s Severity, file string, line int, msg string) 
 		case tracebackAll:
 			stacks = getStacks(true)
 		}
+
+		// Since the Fatal output will be copied to stderr below, it may
+		// show up to a (human) observer through a different channel than
+		// a file in the log directory. So remind them where to look for
+		// more.
+		if logDir := l.logDir.String(); logDir != "" {
+			stacks = append(stacks, []byte(fmt.Sprintf("\nFor more context, check log files in: %s\n", l.logDir.String()))...)
+		}
+
+		// Explain to the (human) user that we would like to hear from them.
 		stacks = append(stacks, []byte(fatalErrorPostamble)...)
 
 		// We don't want to hang forever writing our final log message. If
