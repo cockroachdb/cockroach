@@ -24,7 +24,6 @@ func TestSeverity(t *testing.T) {
 		err              error
 		expectedSeverity string
 	}{
-		{Noticef("notice me"), "NOTICE"},
 		{WithSeverity(fmt.Errorf("notice me"), "NOTICE ME"), "NOTICE ME"},
 		{WithSeverity(WithSeverity(fmt.Errorf("notice me"), "IGNORE ME"), "NOTICE ME"), "NOTICE ME"},
 		{WithSeverity(WithCandidateCode(fmt.Errorf("notice me"), pgcode.FeatureNotSupported), "NOTICE ME"), "NOTICE ME"},

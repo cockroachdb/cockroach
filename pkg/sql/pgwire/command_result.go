@@ -206,7 +206,9 @@ func (r *commandResult) AppendParamStatusUpdate(param string, val string) {
 func (r *commandResult) AppendNotice(noticeErr error) {
 	r.flushBeforeCloseFuncs = append(
 		r.flushBeforeCloseFuncs,
-		func(ctx context.Context) error { return r.conn.bufferNotice(ctx, noticeErr) },
+		func(ctx context.Context) error {
+			return r.conn.bufferNotice(ctx, noticeErr)
+		},
 	)
 }
 

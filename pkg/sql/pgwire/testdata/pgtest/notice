@@ -1,7 +1,5 @@
-# Test notices work as expected by creating a VIEW on a TEMP TABLE.
-
 send
-Parse {"Query": "CREATE TABLE t(x INT, y INT, INDEX (x), INDEX (y))"}
+Parse {"Query": "SELECT crdb_internal.notice('hello')"}
 Bind
 Execute
 Sync
@@ -12,25 +10,9 @@ ReadyForQuery
 ----
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
-{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-
-
-send
-Parse {"Query": "DROP INDEX t@t_x_idx"}
-Bind
-Execute
-Sync
-----
-
-until
-ReadyForQuery
-----
-{"Type":"ParseComplete"}
-{"Type":"BindComplete"}
-{"Severity":"NOTICE","Code":"00000","Message":"the data for dropped indexes is reclaimed asynchronously","Detail":"","Hint":"The reclamation delay can be customized in the zone configuration for the table.","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"drop_index.go","Line":482,"Routine":"dropIndexByName","UnknownFields":null}
-{"Type":"CommandComplete","CommandTag":"DROP INDEX"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Severity":"NOTICE","Code":"00000","Message":"hello","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"notice.go","Line":32,"Routine":"crdbInternalSendNotice","UnknownFields":null}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Disable notices and assert now it is not sent.
@@ -50,7 +32,7 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
-Parse {"Query": "DROP INDEX t@t_y_idx"}
+Parse {"Query": "SELECT crdb_internal.notice('goodbye')"}
 Bind
 Execute
 Sync
@@ -61,5 +43,6 @@ ReadyForQuery
 ----
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
-{"Type":"CommandComplete","CommandTag":"DROP INDEX"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
