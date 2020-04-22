@@ -10,7 +10,7 @@
 
 import { Icon, Pagination } from "antd";
 import * as React from "react";
-import { getMatchParamByName } from "oss/src/util/query";
+import { getMatchParamByName } from "src/util/query";
 import { match } from "react-router";
 
 export interface PaginationSettings {

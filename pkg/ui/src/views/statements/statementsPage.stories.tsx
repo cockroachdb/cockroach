@@ -9,21 +9,14 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { configure, addDecorator } from "@storybook/react";
+import { storiesOf } from "@storybook/react";
 
-// Import global styles here
-import "styl/app.styl";
+import { withRouterProvider } from ".storybook/decorators";
+import { StatementsPage } from "./statementsPage";
+import statementsPagePropsFixture from "./statementsPage.fixture";
 
-const req = require.context("../src/", true, /.stories.tsx$/);
-
-function loadStories() {
-  req.keys().forEach(filename => req(filename));
-}
-
-addDecorator(storyFn => (
-  <div style={{padding: "24px"}}>
-    {storyFn()}
-  </div>
-));
-
-configure(loadStories, module);
+storiesOf("StatementsPage", module)
+  .addDecorator(withRouterProvider)
+  .add("with data", () => (
+    <StatementsPage {...statementsPagePropsFixture}/>
+  ));

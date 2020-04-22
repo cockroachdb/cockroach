@@ -36,7 +36,6 @@ import Empty from "../app/components/empty";
 import { Search } from "../app/components/Search";
 import { AggregateStatistics, makeStatementsColumns, StatementsSortedTable } from "./statementsTable";
 import ActivateDiagnosticsModal, { ActivateDiagnosticsModalRef } from "src/views/statements/diagnostics/activateDiagnosticsModal";
-import "./statements.styl";
 import {
   selectLastDiagnosticsReportPerStatement,
 } from "src/redux/statements/statementsSelectors";
@@ -44,7 +43,8 @@ import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
 import { trackPaginate, trackSearch } from "src/util/analytics";
 
-import "./statements.styl";
+import styles from "./statements.module.styl";
+
 import { ISortedTablePagination } from "../shared/components/sortedtable";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -199,16 +199,16 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     switch (type) {
       case "jump-prev":
         return (
-          <div className="_pg-jump">
+          <div className={styles._pgJump}>
             <Icon type="left" />
-            <span className="_jump-dots">•••</span>
+            <span className={styles._jumpDots}>•••</span>
           </div>
         );
       case "jump-next":
         return (
-          <div className="_pg-jump">
+          <div className={styles._pgJump}>
             <Icon type="right" />
-            <span className="_jump-dots">•••</span>
+            <span className={styles._jumpDots}>•••</span>
           </div>
         );
       default:
@@ -255,12 +255,12 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
             />
           </PageConfigItem>
         </PageConfig>
-        <section className="cl-table-container">
-          <div className="cl-table-statistic">
-            <h4 className="cl-count-title">
+        <section className={styles.clTableContainer}>
+          <div className={styles.clTableStatistic}>
+            <h4 className={styles.clCountTitle}>
               {paginationPageCount({ ...pagination, total: this.filteredStatementsData().length }, "statements", match, appAttr, search)}
             </h4>
-            <h4 className="last-cleared-title">
+            <h4 className={styles.lastClearedTitle}>
               {this.renderLastCleared()}
             </h4>
           </div>
@@ -272,9 +272,9 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
             />
           )}
           {(data.length > 0 || search.length > 0) && (
-            <div className="cl-table-wrapper">
+            <div className={styles.clTableWrapper}>
               <StatementsSortedTable
-                className="statements-table"
+                className={styles.statementsTable}
                 data={data}
                 columns={
                   makeStatementsColumns(
@@ -309,11 +309,11 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
     const { match } = this.props;
     const app = getMatchParamByName(match, appAttr);
     return (
-      <React.Fragment>
+      <div className={styles.root}>
         <Helmet title={app ? `${app} App | Statements` : "Statements"} />
 
-        <section className="section">
-          <h1 className="base-heading">Statements</h1>
+        <section className={styles.section}>
+          <h1 className={styles.baseHeading}>Statements</h1>
         </section>
 
         <Loading
@@ -322,7 +322,7 @@ export class StatementsPage extends React.Component<StatementsPageProps, Stateme
           render={this.renderStatements}
         />
         <ActivateDiagnosticsModal ref={this.activateDiagnosticsRef} />
-      </React.Fragment>
+      </div>
     );
   }
 }

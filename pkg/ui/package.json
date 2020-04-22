@@ -104,6 +104,8 @@
     "karma-sinon": "^1.0.5",
     "karma-sourcemap-loader": "^0.3.7",
     "karma-webpack": "^2.0.13",
+    "less": "^3.11.1",
+    "less-loader": "^5.0.0",
     "mocha": "^6.2.1",
     "nib": "^1.1.2",
     "prop-types": "^15.5.10",
