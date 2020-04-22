@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -247,7 +246,7 @@ func (tc *TableCollection) resolveSchemaID(
 ) (bool, sqlbase.ID, error) {
 	// Fast path public schema, as it is always found.
 	if schemaName == tree.PublicSchema {
-		return true, keys.PublicSchemaID, nil
+		return true, sqlbase.PublicSchemaID, nil
 	}
 
 	type schemaCacheKey struct {

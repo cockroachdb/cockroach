@@ -15,7 +15,6 @@ package schema
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -31,7 +30,7 @@ func ResolveNameByID(
 	ctx context.Context, txn *kv.Txn, dbID sqlbase.ID, schemaID sqlbase.ID,
 ) (string, error) {
 	// Fast-path for public schema, to avoid hot lookups.
-	if schemaID == keys.PublicSchemaID {
+	if schemaID == sqlbase.PublicSchemaID {
 		return string(tree.PublicSchemaName), nil
 	}
 	schemas, err := GetForDatabase(ctx, txn, dbID)
@@ -61,7 +60,7 @@ func GetForDatabase(
 	// TODO(solon): This can be removed in 20.2, when this is always written.
 	// In 20.1, in a migrating state, it may be not included yet.
 	ret := make(map[sqlbase.ID]string, len(kvs)+1)
-	ret[sqlbase.ID(keys.PublicSchemaID)] = tree.PublicSchema
+	ret[sqlbase.ID(sqlbase.PublicSchemaID)] = tree.PublicSchema
 
 	for _, kv := range kvs {
 		id := sqlbase.ID(kv.ValueInt())

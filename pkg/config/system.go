@@ -258,7 +258,7 @@ func DecodeKeyIntoZoneIDAndSuffix(key roachpb.RKey) (id uint32, keySuffix []byte
 	if !ok {
 		// Not in the structured data namespace.
 		objectID = keys.RootNamespaceID
-	} else if objectID <= keys.MaxSystemConfigDescID || isPseudoTableID(objectID) {
+	} else if objectID <= keys.MaxSystemConfigDescID {
 		// For now, you cannot set the zone config on gossiped tables. The only
 		// way to set a zone config on these tables is to modify config for the
 		// system database as a whole. This is largely because all the

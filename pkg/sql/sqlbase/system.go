@@ -375,7 +375,7 @@ var (
 		Name:                    NamespaceTableName,
 		ID:                      keys.DeprecatedNamespaceTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "parentID", ID: 1, Type: *types.Int},
@@ -419,7 +419,7 @@ var (
 		Name:                    "namespace2",
 		ID:                      keys.NamespaceTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "parentID", ID: 1, Type: *types.Int},
@@ -454,7 +454,7 @@ var (
 		ID:                      keys.DescriptorTableID,
 		Privileges:              NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DescriptorTableID]),
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Int},
@@ -483,7 +483,7 @@ var (
 		Name:                    "users",
 		ID:                      keys.UsersTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "username", ID: 1, Type: *types.String},
@@ -509,7 +509,7 @@ var (
 		Name:                    "zones",
 		ID:                      keys.ZonesTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Int},
@@ -543,7 +543,7 @@ var (
 		Name:                    "settings",
 		ID:                      keys.SettingsTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "name", ID: 1, Type: *types.String},
@@ -580,7 +580,7 @@ var (
 		Name:                    "lease",
 		ID:                      keys.LeaseTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "descID", ID: 1, Type: *types.Int},
@@ -615,7 +615,7 @@ var (
 		Name:                    "eventlog",
 		ID:                      keys.EventLogTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "timestamp", ID: 1, Type: *types.Timestamp},
@@ -656,7 +656,7 @@ var (
 		Name:                    "rangelog",
 		ID:                      keys.RangeEventTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "timestamp", ID: 1, Type: *types.Timestamp},
@@ -697,7 +697,7 @@ var (
 		Name:                    "ui",
 		ID:                      keys.UITableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "key", ID: 1, Type: *types.String},
@@ -725,7 +725,7 @@ var (
 		Name:                    "jobs",
 		ID:                      keys.JobsTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Int, DefaultExpr: &uniqueRowIDString},
@@ -775,7 +775,7 @@ var (
 		Name:                    "web_sessions",
 		ID:                      keys.WebSessionsTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Int, DefaultExpr: &uniqueRowIDString},
@@ -840,7 +840,7 @@ var (
 		Name:                    "table_statistics",
 		ID:                      keys.TableStatisticsTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "tableID", ID: 1, Type: *types.Int},
@@ -895,7 +895,7 @@ var (
 		Name:                    "locations",
 		ID:                      keys.LocationsTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "localityKey", ID: 1, Type: *types.String},
@@ -933,7 +933,7 @@ var (
 		Name:                    "role_members",
 		ID:                      keys.RoleMembersTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "role", ID: 1, Type: *types.String},
@@ -999,7 +999,7 @@ var (
 		Name:                    "comments",
 		ID:                      keys.CommentsTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "type", ID: 1, Type: *types.Int},
@@ -1032,7 +1032,7 @@ var (
 		Name:                    "reports_meta",
 		ID:                      keys.ReportsMetaTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Int},
@@ -1073,7 +1073,7 @@ var (
 		Name:                    "replication_constraint_stats",
 		ID:                      keys.ReplicationConstraintStatsTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "zone_id", ID: 1, Type: *types.Int},
@@ -1126,7 +1126,7 @@ var (
 		Name:                    "replication_critical_localities",
 		ID:                      keys.ReplicationCriticalLocalitiesTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "zone_id", ID: 1, Type: *types.Int},
@@ -1176,7 +1176,7 @@ var (
 		Name:                    "replication_stats",
 		ID:                      keys.ReplicationStatsTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "zone_id", ID: 1, Type: *types.Int},
@@ -1224,7 +1224,7 @@ var (
 		Name:                    "protected_ts_meta",
 		ID:                      keys.ProtectedTimestampsMetaTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{
@@ -1275,7 +1275,7 @@ var (
 		Name:                    "protected_ts_records",
 		ID:                      keys.ProtectedTimestampsRecordsTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Uuid},
@@ -1317,7 +1317,7 @@ var (
 		Name:                    "role_options",
 		ID:                      keys.RoleOptionsTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "username", ID: 1, Type: *types.String},
@@ -1353,7 +1353,7 @@ var (
 		Name:                    "statement_bundle_chunks",
 		ID:                      keys.StatementBundleChunksTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Int, DefaultExpr: &uniqueRowIDString},
@@ -1382,7 +1382,7 @@ var (
 		Name:                    "statement_diagnostics_requests",
 		ID:                      keys.StatementDiagnosticsRequestsTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
@@ -1426,7 +1426,7 @@ var (
 		Name:                    "statement_diagnostics",
 		ID:                      keys.StatementDiagnosticsTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: PublicSchemaID,
 		Version:                 1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: *types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},

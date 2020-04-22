@@ -105,7 +105,7 @@ func (p *planner) createDatabase(
 	// be created in every database in >= 20.2.
 	if shouldCreatePublicSchema {
 		// Every database must be initialized with the public schema.
-		if err := p.createSchemaWithID(ctx, sqlbase.NewPublicSchemaKey(id).Key(), keys.PublicSchemaID); err != nil {
+		if err := p.createSchemaWithID(ctx, sqlbase.NewPublicSchemaKey(id).Key(), sqlbase.PublicSchemaID); err != nil {
 			return true, err
 		}
 	}
@@ -192,7 +192,7 @@ func resolveSchemaID(
 	// Try to use the system name resolution bypass. Avoids a hotspot by explicitly
 	// checking for public schema.
 	if scName == tree.PublicSchema {
-		return true, keys.PublicSchemaID, nil
+		return true, sqlbase.PublicSchemaID, nil
 	}
 
 	sKey := sqlbase.NewSchemaKey(dbID, scName)

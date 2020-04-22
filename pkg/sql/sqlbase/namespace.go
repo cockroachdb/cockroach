@@ -91,7 +91,7 @@ func RemoveObjectNamespaceEntry(
 func RemovePublicTableNamespaceEntry(
 	ctx context.Context, txn *kv.Txn, parentID ID, name string,
 ) error {
-	return RemoveObjectNamespaceEntry(ctx, txn, parentID, keys.PublicSchemaID, name, false /* KVTrace */)
+	return RemoveObjectNamespaceEntry(ctx, txn, parentID, PublicSchemaID, name, false /* KVTrace */)
 }
 
 // RemoveSchemaNamespaceEntry is a wrapper around RemoveObjectNamespaceEntry
@@ -135,7 +135,7 @@ func MakeObjectNameKey(
 func MakePublicTableNameKey(
 	ctx context.Context, settings *cluster.Settings, parentID ID, name string,
 ) DescriptorKey {
-	return MakeObjectNameKey(ctx, settings, parentID, keys.PublicSchemaID, name)
+	return MakeObjectNameKey(ctx, settings, parentID, PublicSchemaID, name)
 }
 
 // MakeDatabaseNameKey is a wrapper around MakeObjectNameKey for databases.
@@ -180,7 +180,7 @@ func LookupObjectID(
 	// valid temporary schema.
 	// - If this session explicitly accesses `pg_temp.t`, it should fail -- but
 	// without this check, `pg_temp.t` will return the permanent table instead.
-	if parentSchemaID != keys.PublicSchemaID && parentSchemaID != keys.RootNamespaceID {
+	if parentSchemaID != PublicSchemaID && parentSchemaID != keys.RootNamespaceID {
 		return false, InvalidID, nil
 	}
 
@@ -205,7 +205,7 @@ func LookupObjectID(
 func LookupPublicTableID(
 	ctx context.Context, txn *kv.Txn, parentID ID, name string,
 ) (bool, ID, error) {
-	return LookupObjectID(ctx, txn, parentID, keys.PublicSchemaID, name)
+	return LookupObjectID(ctx, txn, parentID, PublicSchemaID, name)
 }
 
 // LookupDatabaseID is  a wrapper around LookupObjectID for databases.

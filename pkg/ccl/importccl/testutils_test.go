@@ -55,7 +55,7 @@ func descForTable(
 			name,
 			tree.SequenceOptions{},
 			parent,
-			keys.PublicSchemaID,
+			sqlbase.PublicSchemaID,
 			id-1,
 			ts,
 			priv,

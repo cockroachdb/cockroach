@@ -1385,7 +1385,7 @@ func migrateSystemNamespace(ctx context.Context, r runner) error {
 			}
 			// Also create a 'public' schema for this database.
 			schemaKey := sqlbase.NewSchemaKey(id, "public")
-			if err := r.db.Put(ctx, schemaKey.Key(), keys.PublicSchemaID); err != nil {
+			if err := r.db.Put(ctx, schemaKey.Key(), sqlbase.PublicSchemaID); err != nil {
 				return err
 			}
 		} else {
@@ -1397,7 +1397,7 @@ func migrateSystemNamespace(ctx context.Context, r runner) error {
 				// deprecated ID.
 				continue
 			}
-			tableKey := sqlbase.NewTableKey(parentID, keys.PublicSchemaID, name)
+			tableKey := sqlbase.NewTableKey(parentID, sqlbase.PublicSchemaID, name)
 			if err := r.db.Put(ctx, tableKey.Key(), id); err != nil {
 				return err
 			}

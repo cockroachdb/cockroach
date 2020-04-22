@@ -353,7 +353,6 @@ const (
 	ReplicationCriticalLocalitiesTableID = 26
 	ReplicationStatsTableID              = 27
 	ReportsMetaTableID                   = 28
-	PublicSchemaID                       = 29
 	// New NamespaceTableID for cluster version >= 20.1
 	// Ensures that NamespaceTable does not get gossiped again
 	NamespaceTableID = 30
@@ -377,5 +376,6 @@ const (
 // PseudoTableIDs is the list of ids from above that are not real tables (i.e.
 // there's no table descriptor). They're grouped here because the cluster
 // bootstrap process needs to create splits for them; splits for the tables
-// happen separately.
-var PseudoTableIDs = []uint32{MetaRangesID, SystemRangesID, TimeseriesRangesID, LivenessRangesID, PublicSchemaID}
+// happen separately. Additionally each of these ranges support custom zone
+// configs using `ALTER RANGE`.
+var PseudoTableIDs = []uint32{MetaRangesID, SystemRangesID, TimeseriesRangesID, LivenessRangesID}

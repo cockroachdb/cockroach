@@ -155,7 +155,7 @@ func MakeSimpleTableDescriptor(
 		st,
 		create,
 		parentID,
-		keys.PublicSchemaID,
+		sqlbase.PublicSchemaID,
 		tableID,
 		hlc.Timestamp{WallTime: walltime},
 		sqlbase.NewDefaultPrivilegeDescriptor(),

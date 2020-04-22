@@ -46,6 +46,10 @@ const InternalAppNamePrefix = ReportableAppNamePrefix + "internal"
 // DelegatedAppNamePrefix should be scrubbed in reporting.
 const DelegatedAppNamePrefix = "$$ "
 
+// PublicSchemaID is a constant descriptor ID used to refer to the public schema
+// in all databases.
+const PublicSchemaID = 29
+
 // Oid for virtual database and table.
 const (
 	CrdbInternalID = math.MaxUint32 - iota
