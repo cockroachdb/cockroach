@@ -12,10 +12,19 @@
 @require '~src/views/shared/util/table.styl'
 @require '~src/components/core/index'
 
+$medium-screen-width = 1440px
+
+.cl-statements-table-wrapper
+  overflow-y auto
+
 .statements-table
   &__col-query-text
     font-family $font-family--monospace
     white-space pre-wrap
+
+  @media (max-width: $medium-screen-width)
+    .sort-table__cell
+      padding 10px 16px
 
 .statements
   &__last-hour-note
@@ -169,6 +178,13 @@
 
   &__parse-dev, &__plan-dev, &__run-dev, &__overhead-dev, &__overall-dev
       background-color $colors--primary-blue-3
+
+@media (max-width: $medium-screen-width)
+  .statements-table__col-rows, .statements-table__col-latency
+    .bar-chart
+      min-width 0
+  .bar-chart > div[class^='bar-chart__'], div[class*=' bar-chart__']
+      display none
 
 .numeric-stats-table
   @extend $table-base
