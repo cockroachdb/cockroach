@@ -110,6 +110,11 @@ func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 	col := vec._L_TYP()
 	// {{end}}
 	projVec := batch.ColVec(p.outputIdx)
+	if projVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		projVec.Nulls().UnsetNulls()
+	}
 	projCol := projVec._RET_TYP()
 	if vec.Nulls().MaybeHasNulls() {
 		_SET_PROJECTION(true)

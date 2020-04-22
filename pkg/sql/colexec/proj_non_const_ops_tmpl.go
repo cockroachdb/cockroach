@@ -126,6 +126,11 @@ func (p _OP_NAME) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	projVec := batch.ColVec(p.outputIdx)
+	if projVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		projVec.Nulls().UnsetNulls()
+	}
 	projCol := projVec._RET_TYP()
 	vec1 := batch.ColVec(p.col1Idx)
 	vec2 := batch.ColVec(p.col2Idx)
