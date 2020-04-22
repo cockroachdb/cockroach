@@ -141,7 +141,7 @@ func (severity *logger) V(i int) bool {
 	if i > math.MaxInt32 {
 		i = math.MaxInt32
 	}
-	return log.VDepth(int32(i) /* level */, 1 /* depth */)
+	return log.VDepth(log.Level(i) /* level */, 1 /* depth */)
 }
 
 // https://github.com/grpc/grpc-go/blob/v1.7.0/clientconn.go#L937

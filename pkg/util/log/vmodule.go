@@ -31,7 +31,7 @@ type vmoduleConfig struct {
 
 	// V logging level, the value of the --verbosity flag. Updated with
 	// atomics.
-	verbosity level
+	verbosity Level
 
 	mu struct {
 		// These flags are modified only under lock.
@@ -39,7 +39,7 @@ type vmoduleConfig struct {
 
 		// vmap is a cache of the V Level for each V() call site, identified by PC.
 		// It is wiped whenever the vmodule flag changes state.
-		vmap map[uintptr]level
+		vmap map[uintptr]Level
 
 		// filterLength stores the length of the vmodule filter
 		// chain. If greater than zero, it means vmodule is enabled. It is
@@ -67,16 +67,16 @@ func SetVModule(value string) error {
 
 // VDepth reports whether verbosity at the call site is at least the requested
 // level.
-func VDepth(l int32, depth int) bool {
+func VDepth(l Level, depth int) bool {
 	return logging.vmoduleConfig.vDepth(l, depth+1)
 }
 
-func (c *vmoduleConfig) vDepth(l int32, depth int) bool {
+func (c *vmoduleConfig) vDepth(l Level, depth int) bool {
 	// This function tries hard to be cheap unless there's work to do.
 	// The fast path is three atomic loads and compares.
 
 	// Here is a cheap but safe test to see if V logging is enabled globally.
-	if c.verbosity.get() >= level(l) {
+	if c.verbosity.get() >= l {
 		return true
 	}
 
@@ -108,14 +108,14 @@ func (c *vmoduleConfig) vDepth(l int32, depth int) bool {
 		}
 		c.mu.Unlock()
 		c.pcsPool.Put(poolObj)
-		return v >= level(l)
+		return v >= l
 	}
 	return false
 }
 
 // setVState sets a consistent state for V logging.
 // l.mu is held.
-func (c *vmoduleConfig) setVState(verbosity level, filter []modulePat, setFilter bool) {
+func (c *vmoduleConfig) setVState(verbosity Level, filter []modulePat, setFilter bool) {
 	// Turn verbosity off so V will not fire while we are in transition.
 	c.verbosity.set(0)
 	// Ditto for filter length.
@@ -124,7 +124,7 @@ func (c *vmoduleConfig) setVState(verbosity level, filter []modulePat, setFilter
 	// Set the new filters and wipe the pc->Level map if the filter has changed.
 	if setFilter {
 		c.mu.vmodule.filter = filter
-		c.mu.vmap = make(map[uintptr]level)
+		c.mu.vmap = make(map[uintptr]Level)
 	}
 
 	// Things are consistent now, so enable filtering and verbosity.
@@ -140,7 +140,7 @@ func (c *vmoduleConfig) setVState(verbosity level, filter []modulePat, setFilter
 // general than the *? matching used in C++.
 //
 // c.mu is held.
-func (c *vmoduleConfig) setV(pc [1]uintptr) level {
+func (c *vmoduleConfig) setV(pc [1]uintptr) Level {
 	frame, _ := runtime.CallersFrames(pc[:]).Next()
 	file := frame.File
 	// The file is something like /a/b/c/d.go. We want just the d.
@@ -170,7 +170,7 @@ type moduleSpec struct {
 type modulePat struct {
 	pattern string
 	literal bool // The pattern is a literal string
-	level   level
+	level   Level
 }
 
 // match reports whether the file matches the pattern. It uses a string
@@ -223,7 +223,7 @@ func (m *moduleSpec) Set(value string) error {
 			continue // Ignore. It's harmless but no point in paying the overhead.
 		}
 		// TODO: check syntax of filter?
-		filter = append(filter, modulePat{pattern, isLiteral(pattern), level(v)})
+		filter = append(filter, modulePat{pattern, isLiteral(pattern), Level(v)})
 	}
 
 	logging.vmoduleConfig.mu.Lock()
@@ -250,31 +250,31 @@ func isLiteral(pattern string) bool {
 // Level specifies a level of verbosity for V logs. *Level implements
 // flag.Value; the --verbosity flag is of type Level and should be modified
 // only through the flag.Value interface.
-type level int32
+type Level int32
 
 // get returns the value of the Level.
-func (l *level) get() level {
-	return level(atomic.LoadInt32((*int32)(l)))
+func (l *Level) get() Level {
+	return Level(atomic.LoadInt32((*int32)(l)))
 }
 
 // set sets the value of the Level.
-func (l *level) set(val level) {
+func (l *Level) set(val Level) {
 	atomic.StoreInt32((*int32)(l), int32(val))
 }
 
 // String is part of the flag.Value interface.
-func (l *level) String() string {
+func (l *Level) String() string {
 	return strconv.FormatInt(int64(*l), 10)
 }
 
 // Set is part of the flag.Value interface.
-func (l *level) Set(value string) error {
+func (l *Level) Set(value string) error {
 	v, err := strconv.Atoi(value)
 	if err != nil {
 		return err
 	}
 	logging.vmoduleConfig.mu.Lock()
 	defer logging.vmoduleConfig.mu.Unlock()
-	logging.vmoduleConfig.setVState(level(v), logging.vmoduleConfig.mu.vmodule.filter, false)
+	logging.vmoduleConfig.setVState(Level(v), logging.vmoduleConfig.mu.vmodule.filter, false)
 	return nil
 }
