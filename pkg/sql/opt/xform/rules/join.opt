@@ -78,9 +78,9 @@
         (DistinctOn
             $right
             []
-            (MakeGrouping (IntersectionCols
-                (OutputCols $right)
-                (FilterOuterCols $on))
+            (MakeGrouping
+                (IntersectionCols (OutputCols $right) (FilterOuterCols $on))
+                (EmptyOrdering)
             )
         )
         $on

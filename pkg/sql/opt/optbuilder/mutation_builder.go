@@ -300,7 +300,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 
 		if !pkCols.Empty() {
 			mb.outScope = mb.b.buildDistinctOn(
-				pkCols, mb.outScope, false /* nullsAreDistinct */, false /* errorOnDup */)
+				pkCols, mb.outScope, false /* nullsAreDistinct */, "" /* errorOnDup */)
 		}
 	}
 

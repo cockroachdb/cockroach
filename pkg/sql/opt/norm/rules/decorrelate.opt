@@ -477,7 +477,7 @@
                     ConstAgg (NonKeyCols $leftWithKey)
                     AnyNotNullAgg (CanaryColSet $canaryCol)
                 )
-                (MakeOrderedGrouping (KeyCols $leftWithKey) (ExtractGroupingOrdering $groupingPrivate))
+                (MakeGrouping (KeyCols $leftWithKey) (ExtractGroupingOrdering $groupingPrivate))
             )
             $translatedAggs
             $rightWithCanary
@@ -518,8 +518,13 @@
         (MakeAggCols ConstAgg (NonKeyCols $newLeft))
         (MakeGrouping (KeyCols $newLeft))
     )
+<<<<<<< HEAD
     []
     (OutputCols2 $left $right)
+=======
+    (MakeAggCols ConstAgg (NonKeyCols $newLeft))
+    (MakeGrouping (KeyCols $newLeft) (EmptyOrdering))
+>>>>>>> 24ad8f2d0b... sql: modify GroupingPrivate and refactor GroupingPrivate functions
 )
 
 # TryDecorrelateLimitOne "pushes down" a Join into a Limit 1 operator, in an
@@ -560,8 +565,12 @@
         )
         (MakeOrderedGrouping (KeyCols $newLeft) $ordering)
     )
+<<<<<<< HEAD
     []
     (OutputCols2 $left $right)
+=======
+    (MakeGrouping (KeyCols $newLeft) $ordering)
+>>>>>>> 24ad8f2d0b... sql: modify GroupingPrivate and refactor GroupingPrivate functions
 )
 
 # TryDecorrelateProjectSet "pushes down" an InnerJoinApply operator into a

@@ -308,7 +308,7 @@ upsert nullablecols
       │    ├── upsert-distinct-on
       │    │    ├── columns: i:6!null
       │    │    ├── grouping columns: i:6!null
-      │    │    ├── error-on-dup
+      │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    │    ├── key: (6)
       │    │    └── select
       │    │         ├── columns: k:5!null i:6!null
@@ -571,7 +571,7 @@ upsert xy
       │    ├── upsert-distinct-on
       │    │    ├── columns: y:4 column5:5
       │    │    ├── grouping columns: y:4
-      │    │    ├── error-on-dup
+      │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    │    ├── lax-key: (4)
       │    │    ├── fd: ()-->(4,5)
       │    │    ├── project
@@ -623,7 +623,7 @@ upsert abc
       ├── upsert-distinct-on
       │    ├── columns: b:5!null "?column?":7!null "?column?":8!null
       │    ├── grouping columns: b:5!null
-      │    ├── error-on-dup
+      │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    ├── key: (5)
       │    ├── fd: ()-->(7,8)
       │    ├── project
@@ -676,7 +676,7 @@ upsert abc
       │    ├── upsert-distinct-on
       │    │    ├── columns: b:5!null c:6!null "?column?":7
       │    │    ├── grouping columns: c:6!null "?column?":7
-      │    │    ├── error-on-dup
+      │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    │    ├── lax-key: (6,7)
       │    │    ├── fd: ()-->(5,7)
       │    │    ├── project
@@ -1593,7 +1593,7 @@ upsert a
       │    ├── upsert-distinct-on
       │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10
       │    │    ├── grouping columns: column2:7!null column3:8!null
-      │    │    ├── error-on-dup
+      │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    │    ├── cardinality: [1 - 3]
       │    │    ├── key: (7,8)
       │    │    ├── fd: ()-->(9,10), (7,8)-->(6,9,10)

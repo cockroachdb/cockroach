@@ -1032,16 +1032,9 @@ func (b *Builder) buildDistinct(distinct memo.RelExpr) (execPlan, error) {
 		nullsAreDistinct = true
 	}
 
-	// If duplicate input rows are not allowed, raise an error at runtime if
-	// duplicates are detected.
-	var errorOnDup string
-	if private.ErrorOnDup {
-		errorOnDup = sqlbase.DuplicateUpsertErrText
-	}
-
 	reqOrdering := ep.reqOrdering(distinct)
 	ep.root, err = b.factory.ConstructDistinct(
-		input.root, distinctCols, orderedCols, reqOrdering, nullsAreDistinct, errorOnDup)
+		input.root, distinctCols, orderedCols, reqOrdering, nullsAreDistinct, private.ErrorOnDup)
 	if err != nil {
 		return execPlan{}, err
 	}

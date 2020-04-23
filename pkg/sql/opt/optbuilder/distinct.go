@@ -56,7 +56,7 @@ func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 // controls whether multiple rows in the same distinct group trigger an error.
 // This can only be set to true in the UpsertDistinctOn case.
 func (b *Builder) buildDistinctOn(
-	distinctOnCols opt.ColSet, inScope *scope, nullsAreDistinct, errorOnDup bool,
+	distinctOnCols opt.ColSet, inScope *scope, nullsAreDistinct bool, errorOnDup string,
 ) (outScope *scope) {
 	// When there is a DISTINCT ON clause, the ORDER BY clause is restricted to either:
 	//  1. Contain a subset of columns from the ON list, or
