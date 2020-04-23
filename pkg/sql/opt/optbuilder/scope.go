@@ -116,6 +116,7 @@ type cteSource struct {
 	originalExpr tree.Statement
 	bindingProps *props.Relational
 	expr         memo.RelExpr
+	mtr          tree.MaterializeClause
 	// If set, this function is called when a CTE is referenced. It can throw an
 	// error.
 	onRef func()

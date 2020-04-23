@@ -1048,6 +1048,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.With> with_clause opt_with_clause
 %type <[]*tree.CTE> cte_list
 %type <*tree.CTE> common_table_expr
+%type <bool> materialize_clause
 
 %type <empty> within_group_clause
 %type <tree.Expr> filter_clause
@@ -6520,7 +6521,7 @@ table_clause:
 // SQL standard WITH clause looks like:
 //
 // WITH [ RECURSIVE ] <query name> [ (<column> [, ...]) ]
-//        AS (query) [ SEARCH or CYCLE clause ]
+//        AS [ [ NOT ] MATERIALIZED ] (query) [ SEARCH or CYCLE clause ]
 //
 // We don't currently support the SEARCH or CYCLE clause.
 //
@@ -6550,14 +6551,38 @@ cte_list:
     $$.val = append($1.ctes(), $3.cte())
   }
 
+materialize_clause:
+  MATERIALIZED
+  {
+    $$.val = true
+  }
+| NOT MATERIALIZED
+  {
+    $$.val = false
+  }
+
 common_table_expr:
   table_alias_name opt_column_list AS '(' preparable_stmt ')'
-  {
-    $$.val = &tree.CTE{
-      Name: tree.AliasClause{Alias: tree.Name($1), Cols: $2.nameList() },
-      Stmt: $5.stmt(),
+    {
+      $$.val = &tree.CTE{
+        Name: tree.AliasClause{Alias: tree.Name($1), Cols: $2.nameList() },
+        Mtr: tree.MaterializeClause{
+          Set: false,
+        },
+        Stmt: $5.stmt(),
+      }
     }
-  }
+| table_alias_name opt_column_list AS materialize_clause '(' preparable_stmt ')'
+    {
+      $$.val = &tree.CTE{
+        Name: tree.AliasClause{Alias: tree.Name($1), Cols: $2.nameList() },
+        Mtr: tree.MaterializeClause{
+          Materialize: $4.bool(),
+          Set: true,
+        },
+        Stmt: $6.stmt(),
+      }
+    }
 
 opt_with:
   WITH {}

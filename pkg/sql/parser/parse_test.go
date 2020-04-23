@@ -1455,6 +1455,11 @@ func TestParse(t *testing.T) {
 		{`WITH cte AS (SELECT 1) SELECT * FROM cte`},
 		{`WITH cte (x) AS (INSERT INTO abc VALUES (1, 2)), cte2 (y) AS (SELECT x + 1 FROM cte) SELECT * FROM cte, cte2`},
 		{`WITH RECURSIVE cte (x) AS (SELECT 1), cte2 (y) AS (SELECT x + 1 FROM cte) SELECT 1`},
+		{`WITH cte AS MATERIALIZED (SELECT 1) SELECT * FROM cte`},
+		{`WITH RECURSIVE cte AS MATERIALIZED (SELECT 1) SELECT * FROM cte`},
+		{`WITH cte AS NOT MATERIALIZED (SELECT 1) SELECT * FROM cte`},
+		{`WITH cte (x) AS MATERIALIZED (INSERT INTO abc VALUES (1, 2)), cte2 (y) AS NOT MATERIALIZED (SELECT x + 1 FROM cte) SELECT * FROM cte, cte2`},
+		{`WITH RECURSIVE cte (x) AS MATERIALIZED (INSERT INTO abc VALUES (1, 2)), cte2 (y) AS NOT MATERIALIZED (SELECT x + 1 FROM cte) SELECT * FROM cte, cte2`},
 	}
 	var p parser.Parser // Verify that the same parser can be reused.
 	for _, d := range testData {
