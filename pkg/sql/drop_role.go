@@ -89,7 +89,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	// Now check whether the user still has permission on any object in the database.
 
 	// First check all the databases.
-	if err := forEachDatabaseDesc(params.ctx, params.p, nil, /*nil prefix = all databases*/
+	if err := forEachDatabaseDesc(params.ctx, params.p, nil /*nil prefix = all databases*/, true, /* requiresPrivileges */
 		func(db *sqlbase.DatabaseDescriptor) error {
 			for _, u := range db.GetPrivileges().Users {
 				if _, ok := userNames[u.User]; ok {
