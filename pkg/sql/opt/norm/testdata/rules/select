@@ -1994,3 +1994,77 @@ select
  │         └── (1.00,)
  └── filters
       └── column1:1::STRING != '1.00' [outer=(1)]
+
+# --------------------------------------------------
+# SimplifySelectSameVarEqualities
+# --------------------------------------------------
+
+# SimplifySelectSameVarEqualities converts k=k into k IS NOT NULL, which is
+# then further reduced since k is in the primary key and thus not null.
+norm expect=SimplifySelectSameVarEqualities
+SELECT k FROM a WHERE k = k
+----
+scan a
+ ├── columns: k:1!null
+ └── key: (1)
+
+norm expect=SimplifySelectSameVarEqualities
+SELECT k FROM a WHERE k >= k
+----
+scan a
+ ├── columns: k:1!null
+ └── key: (1)
+
+norm expect=SimplifySelectSameVarEqualities
+SELECT k FROM a WHERE k <= k
+----
+scan a
+ ├── columns: k:1!null
+ └── key: (1)
+
+# --------------------------------------------------
+# SimplifySelectSameVarInequalities
+# --------------------------------------------------
+
+# Inequalities convert to IS NULL.
+norm expect=SimplifySelectSameVarInequalities
+SELECT k FROM a WHERE k != k
+----
+select
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 IS NOT DISTINCT FROM CAST(NULL AS INT8) [outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+
+norm expect=SimplifySelectSameVarInequalities
+SELECT k FROM a WHERE k > k
+----
+select
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 IS NOT DISTINCT FROM CAST(NULL AS INT8) [outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+
+norm expect=SimplifySelectSameVarInequalities
+SELECT k FROM a WHERE k < k
+----
+select
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 IS NOT DISTINCT FROM CAST(NULL AS INT8) [outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]

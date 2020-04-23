@@ -1726,6 +1726,25 @@ func (c *CustomFuncs) NormalizeTupleEquality(left, right memo.ScalarListExpr) op
 	return result
 }
 
+// VarsAreSame returns true if the two variables are the same.
+func (c *CustomFuncs) VarsAreSame(left, right opt.ScalarExpr) bool {
+	lv := left.(*memo.VariableExpr)
+	rv := right.(*memo.VariableExpr)
+	return lv.Col == rv.Col
+}
+
+// SimplifySameVarEqualities constructs an IS NOT NULL expression. This is
+// needed until there's a way to do like (Null (TypeOf $var)) in .opt files.
+func (c *CustomFuncs) SimplifySameVarEqualities(e opt.ScalarExpr) opt.ScalarExpr {
+	return c.f.ConstructIsNot(e, c.f.ConstructNull(e.DataType()))
+}
+
+// SimplifySameVarInequalities constructs an IS NULL expression. This is needed
+// until there's a way to do like (Null (TypeOf $var)) in .opt files.
+func (c *CustomFuncs) SimplifySameVarInequalities(e opt.ScalarExpr) opt.ScalarExpr {
+	return c.f.ConstructIs(e, c.f.ConstructNull(e.DataType()))
+}
+
 // ----------------------------------------------------------------------
 //
 // Scalar Rules

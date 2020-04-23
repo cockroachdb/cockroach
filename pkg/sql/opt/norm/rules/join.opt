@@ -582,3 +582,51 @@ $left
     (SortFilters $on)
     $private
 )
+
+# SimplifyJoinSameVarEqualities simplifies same variable equalities (i.e.,
+# x = x) to x IS NOT NULL. Although by itself that is not an equivalent
+# conversion, since it is in a filter it is correctly simplified by
+# other rules.
+[SimplifyJoinSameVarEqualities, Normalize]
+(Join
+    $left:*
+    $right:*
+    $on:[ ...
+        $item:(FiltersItem( Eq | Le | Ge
+            $a:(Variable)
+            $b:(Variable) & (VarsAreSame $a $b)
+        ))
+    ... ]
+    $private:*
+)
+=>
+((OpName)
+    $left
+    $right
+    (ReplaceFiltersItem $on $item (SimplifySameVarEqualities $a))
+    $private
+)
+
+# SimplifyJoinSameVarInequalities simplifies same variable equalities
+# (i.e., x != x) to x IS NULL. Although by itself that is not an
+# equivalent conversion, since it is in a filter it is correctly
+# simplified by other rules.
+[SimplifyJoinSameVarInequalities, Normalize]
+(Join
+    $left:*
+    $right:*
+    $on:[ ...
+        $item:(FiltersItem( Ne | Lt | Gt
+            $a:(Variable)
+            $b:(Variable) & (VarsAreSame $a $b)
+        ))
+    ... ]
+    $private:*
+)
+=>
+((OpName)
+    $left
+    $right
+    (ReplaceFiltersItem $on $item (SimplifySameVarInequalities $a))
+    $private
+)
