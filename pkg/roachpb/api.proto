@@ -163,7 +163,15 @@ message PutResponse {
 // - Returns true and sets value if exp_value equals existing value.
 // - If key doesn't exist and exp_value is nil, sets value.
 // - If key exists, but value is empty and exp_value is not nil but empty, sets value.
-// - Otherwise, returns an error containing the actual value of the key.
+// - Otherwise, returns a ConditionFailedError containing the actual value of the key.
+//
+// Note that the client is free to send more requests after a
+// ConditionFailedError. This is not generally allowed after other errors
+// because of fears over the ambiguity of the side-effects of failed requests
+// (in particular, the timestamps at which intents might have been written).
+// ConditionFailedError is a special case as we ensure there's no ambiguity; the
+// error carries a WriteTimestamp that's the upper bound of the timestamps
+// intents were written at.
 message ConditionalPutRequest {
   option (gogoproto.equal) = true;
 

@@ -1462,10 +1462,11 @@ func (ds *DistSender) sendPartialBatch(
 		// to our caller.
 		switch tErr := pErr.GetDetail().(type) {
 		case *roachpb.SendError:
-			// We've tried all the replicas without success. Either
-			// they're all down, or we're using an out-of-date range
-			// descriptor. Invalidate the cache and try again with the new
-			// metadata.
+			// We've tried all the replicas without success. Either they're all down,
+			// or we're using an out-of-date range descriptor. Invalidate the cache
+			// and try again with the new metadata. Re-sending the request is ok even
+			// though it might have succeeded the first time around because of
+			// idempotency.
 			log.VEventf(ctx, 1, "evicting range descriptor on %T and backoff for re-lookup: %+v", tErr, desc)
 			if err := evictToken.Evict(ctx); err != nil {
 				return response{pErr: roachpb.NewError(err)}
@@ -1683,10 +1684,27 @@ func (ds *DistSender) sendToReplicas(
 	var ambiguousError error
 	for {
 		if err != nil {
-			// For most connection errors, we cannot tell whether or not
-			// the request may have succeeded on the remote server, so we
-			// set the ambiguous commit flag (exceptions are captured in
-			// the grpcutil.RequestDidNotStart function).
+			// For most connection errors, we cannot tell whether or not the request
+			// may have succeeded on the remote server (exceptions are captured in the
+			// grpcutil.RequestDidNotStart function). We'll retry the request in order
+			// to attempt to eliminate the ambiguity; see below. If there's a commit
+			// in the batch, we track the ambiguity more explicitly by setting
+			// ambiguousError. This serves two purposes:
+			// 1) the higher-level retries in the DistSender will not forget the
+			// ambiguity, like they forget it for non-commit batches. This in turn
+			// will ensure that TxnCoordSender-level retries don't happen across
+			// commits; that'd be bad since requests are not idempotent across
+			// commits.
+			// TODO(andrei): This higher-level does things too bluntly, retrying only
+			// in case of SendError. It should also retry in case of
+			// AmbiguousRetryError as long as it makes sure to not forget about the
+			// ambiguity.
+			// 2) SQL recognizes AmbiguousResultErrors and gives them a special code
+			// (StatementCompletionUnknown).
+			// TODO(andrei): The use of this code is inconsistent because a) the
+			// DistSender tries to only return the code for commits, but it'll happily
+			// forward along AmbiguousResultErrors coming from the replica and b) we
+			// probably should be returning that code for non-commit statements too.
 			//
 			// We retry requests in order to avoid returning errors (in particular,
 			// AmbiguousResultError). Retrying the batch will either:
@@ -1709,7 +1727,7 @@ func (ds *DistSender) sendToReplicas(
 			//
 			// TODO(andrei): Case c) is broken for non-transactional requests: nothing
 			// prevents them from double evaluation. This can result in, for example,
-			// an increment applying twice, ormore subtle problems like a blind write
+			// an increment applying twice, or more subtle problems like a blind write
 			// evaluating twice, overwriting another unrelated write that fell
 			// in-between.
 			//
