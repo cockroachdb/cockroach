@@ -207,10 +207,7 @@ type externalHashJoiner struct {
 	// recursively repartition another partition because the latter was too big
 	// to join.
 	numRepartitions int
-	// scratch and recursiveScratch are helper structs. Note that batches in
-	// scratch are fully-allocated whereas batches in recursiveScratch are
-	// simply "skeletons". The latter are intended to be used to dequeue into
-	// from colcontainer.PartitionedQueues.
+	// scratch and recursiveScratch are helper structs.
 	scratch, recursiveScratch struct {
 		// Input sources can have different schemas, so when distributing tuples
 		// (i.e. copying them into scratch batch to be spilled) we might need two
@@ -399,7 +396,7 @@ func newExternalHashJoiner(
 		ehj.memState.maxRightPartitionSizeToJoin = externalHJMinimalMaxRightPartitionSize
 	}
 	ehj.scratch.leftBatch = unlimitedAllocator.NewMemBatch(spec.left.sourceTypes)
-	ehj.recursiveScratch.leftBatch = unlimitedAllocator.NewMemBatchNoCols(spec.left.sourceTypes, 0 /* size */)
+	ehj.recursiveScratch.leftBatch = unlimitedAllocator.NewMemBatch(spec.left.sourceTypes)
 	sameSourcesSchema := len(spec.left.sourceTypes) == len(spec.right.sourceTypes)
 	for i, leftType := range spec.left.sourceTypes {
 		if i < len(spec.right.sourceTypes) && !leftType.Identical(&spec.right.sourceTypes[i]) {
@@ -413,7 +410,7 @@ func newExternalHashJoiner(
 		ehj.recursiveScratch.rightBatch = ehj.recursiveScratch.leftBatch
 	} else {
 		ehj.scratch.rightBatch = unlimitedAllocator.NewMemBatch(spec.right.sourceTypes)
-		ehj.recursiveScratch.rightBatch = unlimitedAllocator.NewMemBatchNoCols(spec.right.sourceTypes, 0 /* size */)
+		ehj.recursiveScratch.rightBatch = unlimitedAllocator.NewMemBatch(spec.right.sourceTypes)
 	}
 	ehj.testingKnobs.numForcedRepartitions = numForcedRepartitions
 	ehj.testingKnobs.delegateFDAcquisitions = delegateFDAcquisitions

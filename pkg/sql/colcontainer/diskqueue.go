@@ -711,19 +711,15 @@ func (d *diskQueue) Dequeue(ctx context.Context, b coldata.Batch) (bool, error) 
 			// told about.
 			vecs := b.ColVecs()[:len(d.typs)]
 			for i := range vecs {
-				// When we deserialize a new memory region, we create new memory that
-				// the batch to deserialize into will point to. This is due to
-				// https://github.com/cockroachdb/cockroach/issues/43964, which could
-				// result in corrupting memory if we naively allow the arrow batch
-				// converter to call Reset() on a batch that points to memory that has
-				// still not been read. Doing this avoids reallocating a new
-				// scratchDecompressedReadBytes every time we perform a read from the
-				// file and constrains the downside to allocating a new batch every
-				// couple of batches.
-				// TODO(asubiotto): This is a stop-gap solution. The issue is that
-				//  ownership semantics are a bit murky. Can we do better? Refer to the
-				//  issue.
-				vecs[i] = coldata.NewMemColumn(&d.typs[i], coldata.BatchSize())
+				// When we deserialize a new memory region, we allocate a new null
+				// bitmap for the batch which deserializer will write to. If we naively
+				// allow the arrow batch converter to directly overwrite null bitmap of
+				// each column, it could lead to memory corruption. Doing this avoids
+				// reallocating a new scratchDecompressedReadBytes every time we perform
+				// a read from the file and constrains the downside to allocating a new
+				// null bitmap every couple of batches.
+				nulls := coldata.NewNulls(coldata.BatchSize())
+				vecs[i].SetNulls(&nulls)
 			}
 		}
 		if err := d.deserializerState.GetBatch(d.deserializerState.curBatch, b); err != nil {

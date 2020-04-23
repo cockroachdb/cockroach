@@ -229,16 +229,6 @@ func (m *MemBatch) ReplaceCol(col Vec, colIdx int) {
 
 // Reset implements the Batch interface.
 func (m *MemBatch) Reset(types []types.T, length int) {
-	ResetNoTruncation(m, types, length)
-	m.b = m.b[:len(types)]
-}
-
-// ResetNoTruncation is the same as Reset, but if the batch has enough
-// capacity for length and has more columns than the given coltypes, yet
-// the prefix of already present columns matches the desired type schema,
-// the batch will be reused (meaning this method does *not* truncate the
-// type schema).
-func ResetNoTruncation(m *MemBatch, types []types.T, length int) {
 	// The columns are always sized the same as the selection vector, so use it as
 	// a shortcut for the capacity (like a go slice, the batch's `Length` could be
 	// shorter than the capacity). We could be more defensive and type switch
@@ -258,14 +248,9 @@ func ResetNoTruncation(m *MemBatch, types []types.T, length int) {
 	// Yay! We can reuse m. NB It's not specified in the Reset contract, but
 	// probably a good idea to keep all modifications below this line.
 	m.SetLength(length)
-	m.SetSelection(false)
 	m.sel = m.sel[:length]
-	for _, col := range m.ColVecs() {
-		col.Nulls().UnsetNulls()
-		if col.Type() == coltypes.Bytes {
-			col.Bytes().Reset()
-		}
-	}
+	m.b = m.b[:len(types)]
+	m.ResetInternalBatch()
 }
 
 // ResetInternalBatch implements the Batch interface.

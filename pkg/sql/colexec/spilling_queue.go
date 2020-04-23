@@ -99,7 +99,7 @@ func newSpillingQueue(
 		items:              make([]coldata.Batch, itemsLen),
 		diskQueueCfg:       cfg,
 		fdSemaphore:        fdSemaphore,
-		dequeueScratch:     unlimitedAllocator.NewMemBatchWithSize(typs, 0 /* size */),
+		dequeueScratch:     unlimitedAllocator.NewMemBatchWithSize(typs, coldata.BatchSize()),
 		diskAcc:            diskAcc,
 	}
 }
