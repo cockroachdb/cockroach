@@ -633,6 +633,11 @@ func (h *hasher) HashPointer(val unsafe.Pointer) {
 	h.HashUint64(uint64(uintptr(val)))
 }
 
+func (h *hasher) HashMaterializeClause(val tree.MaterializeClause) {
+	h.HashBool(val.Set)
+	h.HashBool(val.Materialize)
+}
+
 // ----------------------------------------------------------------------
 //
 // Equality functions
@@ -1004,6 +1009,10 @@ func (h *hasher) IsPresentationEqual(l, r physical.Presentation) bool {
 
 func (h *hasher) IsOpaqueMetadataEqual(l, r opt.OpaqueMetadata) bool {
 	return l == r
+}
+
+func (h *hasher) IsMaterializeClauseEqual(l, r tree.MaterializeClause) bool {
+	return l.Set == r.Set && l.Materialize == r.Materialize
 }
 
 // encodeDatum turns the given datum into an encoded string of bytes. If two

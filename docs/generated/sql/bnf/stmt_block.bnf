@@ -1813,6 +1813,7 @@ enum_val_list ::=
 
 common_table_expr ::=
 	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'
+	| table_alias_name opt_column_list 'AS' materialize_clause '(' preparable_stmt ')'
 
 iconst64 ::=
 	'ICONST'
@@ -2102,6 +2103,10 @@ create_as_col_qual_list ::=
 
 create_as_constraint_def ::=
 	create_as_constraint_elem
+
+materialize_clause ::=
+	'MATERIALIZED'
+	| 'NOT' 'MATERIALIZED'
 
 index_flags_param ::=
 	'FORCE_INDEX' '=' index_name

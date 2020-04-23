@@ -1445,3 +1445,59 @@ with &1 (a)
       ├── columns: testval:2!null
       └── mapping:
            └──  testval:1 => testval:2
+
+build
+WITH t AS MATERIALIZED (SELECT a FROM y WHERE a < 3)
+  SELECT * FROM x NATURAL JOIN t
+----
+with &1 (t)
+ ├── columns: a:3!null b:4
+ ├── materialized
+ ├── project
+ │    ├── columns: y.a:1!null
+ │    └── select
+ │         ├── columns: y.a:1!null y.rowid:2!null
+ │         ├── scan y
+ │         │    └── columns: y.a:1 y.rowid:2!null
+ │         └── filters
+ │              └── y.a:1 < 3
+ └── project
+      ├── columns: x.a:3!null b:4
+      └── inner-join (hash)
+           ├── columns: x.a:3!null b:4 x.rowid:5!null a:6!null
+           ├── scan x
+           │    └── columns: x.a:3 b:4 x.rowid:5!null
+           ├── with-scan &1 (t)
+           │    ├── columns: a:6!null
+           │    └── mapping:
+           │         └──  y.a:1 => a:6
+           └── filters
+                └── x.a:3 = a:6
+
+build
+WITH t AS NOT MATERIALIZED (SELECT a FROM y WHERE a < 3)
+  SELECT * FROM x NATURAL JOIN t
+----
+with &1 (t)
+ ├── columns: a:3!null b:4
+ ├── not-materialized
+ ├── project
+ │    ├── columns: y.a:1!null
+ │    └── select
+ │         ├── columns: y.a:1!null y.rowid:2!null
+ │         ├── scan y
+ │         │    └── columns: y.a:1 y.rowid:2!null
+ │         └── filters
+ │              └── y.a:1 < 3
+ └── project
+      ├── columns: x.a:3!null b:4
+      └── inner-join (hash)
+           ├── columns: x.a:3!null b:4 x.rowid:5!null a:6!null
+           ├── scan x
+           │    └── columns: x.a:3 b:4 x.rowid:5!null
+           ├── with-scan &1 (t)
+           │    ├── columns: a:6!null
+           │    └── mapping:
+           │         └──  y.a:1 => a:6
+           └── filters
+                └── x.a:3 = a:6

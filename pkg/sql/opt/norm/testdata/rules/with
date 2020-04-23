@@ -674,3 +674,212 @@ with &2 (cte)
                 └── plus [as="?column?":9, type=int, outer=(8)]
                      ├── variable: c:8 [type=int]
                      └── const: 1 [type=int]
+
+# Original CTE is inlined, adding "NOT MATERIALIZED" should not change the behavior.
+norm format=show-all expect=InlineWith
+WITH foo AS NOT MATERIALIZED (SELECT 1) SELECT * FROM foo
+----
+values
+ ├── columns: "?column?":2(int!null)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 0.02
+ ├── key: ()
+ ├── fd: ()-->(2)
+ ├── prune: (2)
+ └── tuple [type=tuple{int}]
+      └── const: 1 [type=int]
+
+# Original CTE is inlined, adding "MATERIALIZED" should prevent inlining.
+norm format=show-all expect-not=InlineWith
+WITH foo AS MATERIALIZED (SELECT 1) SELECT * FROM foo
+----
+with &1 (foo)
+ ├── columns: "?column?":2(int!null)
+ ├── materialized
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 0.04
+ ├── key: ()
+ ├── fd: ()-->(2)
+ ├── prune: (2)
+ ├── values
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── cost: 0.02
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── prune: (1)
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 1 [type=int]
+ └── with-scan &1 (foo)
+      ├── columns: "?column?":2(int!null)
+      ├── mapping:
+      │    └──  "?column?":1(int) => "?column?":2(int)
+      ├── cardinality: [1 - 1]
+      ├── stats: [rows=1]
+      ├── cost: 0.01
+      ├── key: ()
+      ├── fd: ()-->(2)
+      └── prune: (2)
+
+# Original CTE is not inlined, adding "MATERIALIZED" should not change the behavior.
+norm expect-not=InlineWith
+WITH foo AS MATERIALIZED (SELECT 1/0) SELECT * FROM foo
+----
+with &1 (foo)
+ ├── columns: "?column?":2
+ ├── materialized
+ ├── cardinality: [1 - 1]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(2)
+ ├── values
+ │    ├── columns: "?column?":1
+ │    ├── cardinality: [1 - 1]
+ │    ├── side-effects
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (1 / 0,)
+ └── with-scan &1 (foo)
+      ├── columns: "?column?":2
+      ├── mapping:
+      │    └──  "?column?":1 => "?column?":2
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      └── fd: ()-->(2)
+
+# Original CTE is not inlined, adding "NOT MATERIALIZED" should force the inline.
+norm expect=InlineWith
+WITH foo AS NOT MATERIALIZED (SELECT 1/0) SELECT * FROM foo
+----
+project
+ ├── columns: "?column?":2
+ ├── cardinality: [1 - 1]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(2)
+ ├── values
+ │    ├── columns: "?column?":1
+ │    ├── cardinality: [1 - 1]
+ │    ├── side-effects
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (1 / 0,)
+ └── projections
+      └── "?column?":1 [as="?column?":2, outer=(1)]
+
+# Original CTE is not inlined, adding "NOT MATERIALIZED" should force the inline.
+norm expect=InlineWith
+WITH foo AS NOT MATERIALIZED (SELECT 1) SELECT * FROM foo UNION ALL SELECT * FROM foo;
+----
+union-all
+ ├── columns: "?column?":4!null
+ ├── left columns: "?column?":2
+ ├── right columns: "?column?":3
+ ├── cardinality: [2 - 2]
+ ├── values
+ │    ├── columns: "?column?":2!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    └── (1,)
+ └── values
+      ├── columns: "?column?":3!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(3)
+      └── (1,)
+
+# Recursive CTEs should respect "MATERIALIZED".
+norm expect-not=InlineWith
+WITH RECURSIVE t(n) AS MATERIALIZED (VALUES (1) UNION ALL SELECT n+1 FROM t WHERE n < 100 ) SELECT sum(n) FROM t;
+----
+with &2 (t)
+ ├── columns: sum:6
+ ├── materialized
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── recursive-c-t-e
+ │    ├── columns: n:2
+ │    ├── working table binding: &1
+ │    ├── initial columns: column1:1
+ │    ├── recursive columns: "?column?":4
+ │    ├── cardinality: [1 - ]
+ │    ├── values
+ │    │    ├── columns: column1:1!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    └── (1,)
+ │    └── project
+ │         ├── columns: "?column?":4!null
+ │         ├── select
+ │         │    ├── columns: n:3!null
+ │         │    ├── with-scan &1 (t)
+ │         │    │    ├── columns: n:3
+ │         │    │    ├── mapping:
+ │         │    │    │    └──  n:2 => n:3
+ │         │    │    └── cardinality: [1 - ]
+ │         │    └── filters
+ │         │         └── n:3 < 100 [outer=(3), constraints=(/3: (/NULL - /99]; tight)]
+ │         └── projections
+ │              └── n:3 + 1 [as="?column?":4, outer=(3)]
+ └── scalar-group-by
+      ├── columns: sum:6
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6)
+      ├── with-scan &2 (t)
+      │    ├── columns: n:5
+      │    ├── mapping:
+      │    │    └──  n:2 => n:5
+      │    └── cardinality: [1 - ]
+      └── aggregations
+           └── sum [as=sum:6, outer=(5)]
+                └── n:5
+
+# Recursive CTEs should respect "NOT MATERIALIZED".
+norm expect=InlineWith
+WITH RECURSIVE t(n) AS NOT MATERIALIZED (VALUES (1) UNION ALL SELECT n+1 FROM t WHERE n < 100 ) SELECT sum(n) FROM t;
+----
+scalar-group-by
+ ├── columns: sum:6
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── project
+ │    ├── columns: n:5
+ │    ├── cardinality: [1 - ]
+ │    ├── recursive-c-t-e
+ │    │    ├── columns: n:2
+ │    │    ├── working table binding: &1
+ │    │    ├── initial columns: column1:1
+ │    │    ├── recursive columns: "?column?":4
+ │    │    ├── cardinality: [1 - ]
+ │    │    ├── values
+ │    │    │    ├── columns: column1:1!null
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(1)
+ │    │    │    └── (1,)
+ │    │    └── project
+ │    │         ├── columns: "?column?":4!null
+ │    │         ├── select
+ │    │         │    ├── columns: n:3!null
+ │    │         │    ├── with-scan &1 (t)
+ │    │         │    │    ├── columns: n:3
+ │    │         │    │    ├── mapping:
+ │    │         │    │    │    └──  n:2 => n:3
+ │    │         │    │    └── cardinality: [1 - ]
+ │    │         │    └── filters
+ │    │         │         └── n:3 < 100 [outer=(3), constraints=(/3: (/NULL - /99]; tight)]
+ │    │         └── projections
+ │    │              └── n:3 + 1 [as="?column?":4, outer=(3)]
+ │    └── projections
+ │         └── n:2 [as=n:5, outer=(2)]
+ └── aggregations
+      └── sum [as=sum:6, outer=(5)]
+           └── n:5

@@ -870,6 +870,10 @@ define WithPrivate {
     # it in the EXPLAIN plan).
     OriginalExpr Statement
 
+    # Mtr is used to specify whether or not to override the optimizer's
+    # default decision for materializing or not materializing tables.
+    Mtr MaterializeClause
+
     # Name is used to identify the with for debugging purposes.
     Name string
 }
