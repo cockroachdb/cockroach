@@ -36,6 +36,9 @@ func genHashAggregator(wr io.Writer) error {
 	assignCmpRe := makeFunctionRegex("_ASSIGN_NE", 3)
 	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 3))
 
+	populateSels := makeFunctionRegex("_POPULATE_SELS", 3)
+	s = populateSels.ReplaceAllString(s, `{{template "populateSels" buildDict "Global" . "BatchHasSelection" $3}}`)
+
 	matchLoop := makeFunctionRegex("_MATCH_LOOP", 8)
 	s = matchLoop.ReplaceAllString(
 		s, `{{template "matchLoop" buildDict "Global" . "LhsMaybeHasNulls" $7 "RhsMaybeHasNulls" $8}}`)
