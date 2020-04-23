@@ -169,7 +169,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	ctx context.Context,
 	txn *kv.Txn,
 	settings *cluster.Settings,
-	name *ObjectName,
+	name *TableName,
 	flags tree.ObjectLookupFlags,
 ) (ObjectDescriptor, error) {
 	// Look up the database ID.
@@ -295,7 +295,7 @@ func (a *CachedPhysicalAccessor) GetObjectDesc(
 	ctx context.Context,
 	txn *kv.Txn,
 	settings *cluster.Settings,
-	name *ObjectName,
+	name *TableName,
 	flags tree.ObjectLookupFlags,
 ) (ObjectDescriptor, error) {
 	if flags.RequireMutable {

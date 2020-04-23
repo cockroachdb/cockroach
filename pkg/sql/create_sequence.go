@@ -75,7 +75,7 @@ func doCreateSequence(
 	context string,
 	dbDesc *DatabaseDescriptor,
 	schemaID sqlbase.ID,
-	name *ObjectName,
+	name *TableName,
 	isTemporary bool,
 	opts tree.SequenceOptions,
 	jobDesc string,

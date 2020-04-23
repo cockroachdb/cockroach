@@ -74,7 +74,7 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 	ctx context.Context,
 	txn *kv.Txn,
 	settings *cluster.Settings,
-	name *ObjectName,
+	name *TableName,
 	flags tree.ObjectLookupFlags,
 ) (ObjectDescriptor, error) {
 	if scEntry, ok := l.vt.getVirtualSchemaEntry(name.Schema()); ok {

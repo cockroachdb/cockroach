@@ -36,8 +36,8 @@ import (
 // use a different plan builder.
 // TODO(rytaft,andyk): study and reuse this.
 type SchemaResolver interface {
-	tree.TableNameExistingResolver
-	tree.TableNameTargetResolver
+	tree.ObjectNameExistingResolver
+	tree.ObjectNameTargetResolver
 
 	Txn() *kv.Txn
 	LogicalSchemaAccessor() SchemaAccessor
@@ -90,7 +90,7 @@ func GetObjectNames(
 func ResolveExistingObject(
 	ctx context.Context,
 	sc SchemaResolver,
-	tn *ObjectName,
+	tn *TableName,
 	lookupFlags tree.ObjectLookupFlags,
 	requiredType ResolveRequiredType,
 ) (res *ImmutableTableDescriptor, err error) {
@@ -111,7 +111,7 @@ func ResolveExistingObject(
 func ResolveMutableExistingObject(
 	ctx context.Context,
 	sc SchemaResolver,
-	tn *ObjectName,
+	tn *TableName,
 	required bool,
 	requiredType ResolveRequiredType,
 ) (res *MutableTableDescriptor, err error) {
@@ -129,11 +129,11 @@ func ResolveMutableExistingObject(
 func resolveExistingObjectImpl(
 	ctx context.Context,
 	sc SchemaResolver,
-	tn *ObjectName,
+	tn *TableName,
 	lookupFlags tree.ObjectLookupFlags,
 	requiredType ResolveRequiredType,
 ) (res tree.NameResolutionResult, err error) {
-	found, descI, err := tn.ResolveExisting(ctx, sc, lookupFlags, sc.CurrentDatabase(), sc.CurrentSearchPath())
+	found, descI, err := tree.ResolveExisting(ctx, tn, sc, lookupFlags, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
 		return nil, err
 	}
@@ -200,13 +200,13 @@ type resolveFlags struct {
 }
 
 func (p *planner) ResolveMutableTableDescriptor(
-	ctx context.Context, tn *ObjectName, required bool, requiredType ResolveRequiredType,
+	ctx context.Context, tn *TableName, required bool, requiredType ResolveRequiredType,
 ) (table *MutableTableDescriptor, err error) {
 	return ResolveMutableExistingObject(ctx, p, tn, required, requiredType)
 }
 
 func (p *planner) ResolveUncachedTableDescriptor(
-	ctx context.Context, tn *ObjectName, required bool, requiredType ResolveRequiredType,
+	ctx context.Context, tn *TableName, required bool, requiredType ResolveRequiredType,
 ) (table *ImmutableTableDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		lookupFlags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: required}}
@@ -222,9 +222,9 @@ func (p *planner) ResolveUncachedTableDescriptor(
 // The object name is modified in-place with the result of the name
 // resolution.
 func ResolveTargetObject(
-	ctx context.Context, sc SchemaResolver, tn *ObjectName,
+	ctx context.Context, sc SchemaResolver, tn *TableName,
 ) (res *DatabaseDescriptor, err error) {
-	found, descI, err := tn.ResolveTarget(ctx, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
+	found, descI, err := tree.ResolveTarget(ctx, tn, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +246,7 @@ func ResolveTargetObject(
 }
 
 func (p *planner) ResolveUncachedDatabase(
-	ctx context.Context, tn *ObjectName,
+	ctx context.Context, tn *TableName,
 ) (res *UncachedDatabaseDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		res, err = ResolveTargetObject(ctx, p, tn)
@@ -274,7 +274,7 @@ var requiredTypeNames = [...]string{
 	ResolveRequireSequenceDesc:    "sequence",
 }
 
-// LookupSchema implements the tree.TableNameTargetResolver interface.
+// LookupSchema implements the tree.ObjectNameTargetResolver interface.
 func (p *planner) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (found bool, scMeta tree.SchemaMeta, err error) {
@@ -290,7 +290,7 @@ func (p *planner) LookupSchema(
 	return found, dbDesc, nil
 }
 
-// LookupObject implements the tree.TableNameExistingResolver interface.
+// LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (p *planner) LookupObject(
 	ctx context.Context, lookupFlags tree.ObjectLookupFlags, dbName, scName, tbName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
@@ -566,7 +566,7 @@ type fkSelfResolver struct {
 
 var _ SchemaResolver = &fkSelfResolver{}
 
-// LookupObject implements the tree.TableNameExistingResolver interface.
+// LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (r *fkSelfResolver) LookupObject(
 	ctx context.Context, lookupFlags tree.ObjectLookupFlags, dbName, scName, tbName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {

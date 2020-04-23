@@ -139,8 +139,9 @@ func (oc *optCatalog) ResolveSchema(
 	oc.tn.ObjectName = ""
 	oc.tn.ObjectNamePrefix = *name
 
-	found, desc, err := oc.tn.ResolveTarget(
+	found, desc, err := tree.ResolveTarget(
 		ctx,
+		&oc.tn,
 		oc.planner,
 		oc.planner.CurrentDatabase(),
 		oc.planner.CurrentSearchPath(),
