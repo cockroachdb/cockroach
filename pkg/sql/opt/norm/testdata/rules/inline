@@ -361,7 +361,7 @@ project
  │    ├── scan a
  │    │    └── columns: f:3
  │    └── filters
- │         └── (f:3 + 1.0) = (f:3 + 1.0) [outer=(3)]
+ │         └── (f:3 + 1.0) IS DISTINCT FROM CAST(NULL AS FLOAT8) [outer=(3)]
  └── projections
       └── f:3 + 1.0 [as=expr:6, outer=(3)]
 
