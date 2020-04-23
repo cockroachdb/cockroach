@@ -81,12 +81,13 @@ func _REHASH_BODY(
 	// {{ else }}
 	_ = execgen.UNSAFEGET(keys, nKeys-1)
 	// {{ end }}
+	var selIdx int
 	for i := 0; i < nKeys; i++ {
 		cancelChecker.check(ctx)
 		// {{ if .HasSel }}
-		selIdx := sel[i]
+		selIdx = sel[i]
 		// {{ else }}
-		selIdx := i
+		selIdx = i
 		// {{ end }}
 		// {{ if .HasNulls }}
 		if nulls.NullAt(selIdx) {
@@ -121,7 +122,7 @@ func rehash(
 	switch typeconv.FromColumnType(t) {
 	// {{range $hashType := .}}
 	case _TYPES_T:
-		keys, nulls := col._TemplateType(), col.Nulls()
+		keys, nulls := col.TemplateType(), col.Nulls()
 		if col.MaybeHasNulls() {
 			if sel != nil {
 				_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, true, true)

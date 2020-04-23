@@ -236,7 +236,7 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	if vec.MaybeHasNulls() {
 		nulls = vec.Nulls()
 	}
-	col := vec._TemplateType()
+	col := vec.TemplateType()
 
 	// We always output the first row.
 	lastVal := p.lastVal
@@ -311,7 +311,7 @@ func (p partitioner_TYPE) partitionWithOrder(
 		nulls = colVec.Nulls()
 	}
 
-	col := colVec._TemplateType()
+	col := colVec.TemplateType()
 	col = execgen.SLICE(col, 0, n)
 	outputCol = outputCol[:n]
 	outputCol[0] = true
@@ -336,7 +336,7 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n int)
 		nulls = colVec.Nulls()
 	}
 
-	col := colVec._TemplateType()
+	col := colVec.TemplateType()
 	col = execgen.SLICE(col, 0, n)
 	outputCol = outputCol[:n]
 	outputCol[0] = true

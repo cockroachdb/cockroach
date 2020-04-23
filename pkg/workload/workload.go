@@ -411,7 +411,8 @@ func FromFlags(meta Meta, flags ...string) Generator {
 		if !ok {
 			panic(fmt.Sprintf(`generator %s does not accept flags: %v`, meta.Name, flags))
 		}
-		if err := f.Flags().Parse(flags); err != nil {
+		flagsStruct := f.Flags()
+		if err := flagsStruct.Parse(flags); err != nil {
 			panic(fmt.Sprintf(`generator %s parsing flags %v: %v`, meta.Name, flags, err))
 		}
 	}

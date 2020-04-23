@@ -32,7 +32,7 @@ func genVec(wr io.Writer) error {
 	// Replace the template variables.
 	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
 	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
+	s = strings.Replace(s, "TemplateType", "{{.LTyp}}", -1)
 	s = replaceManipulationFuncs(".LTyp", s)
 
 	copyWithSel := makeFunctionRegex("_COPY_WITH_SEL", 6)

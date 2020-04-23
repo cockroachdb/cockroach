@@ -59,7 +59,7 @@ func _ROWS_TO_COL_VEC(
 	rows sqlbase.EncDatumRows, vec coldata.Vec, columnIdx int, alloc *sqlbase.DatumAlloc,
 ) error { // */}}
 	// {{define "rowsToColVec" -}}
-	col := vec._TemplateType()
+	col := vec.TemplateType()
 	datumToPhysicalFn := getDatumToPhysicalFn(typ)
 	for i := range rows {
 		row := rows[i]

@@ -155,8 +155,8 @@ func (v hashAggFuncs) match(
 			switch typeconv.FromColumnType(&keyTyp) {
 			// {{range .}}
 			case _TYPES_T:
-				lhsCol := lhs._TemplateType()
-				rhsCol := rhs._TemplateType()
+				lhsCol := lhs.TemplateType()
+				rhsCol := rhs.TemplateType()
 				if lhsHasNull {
 					lhsNull := lhs.Nulls().NullAt(v.keyIdx)
 					if rhsHasNull {

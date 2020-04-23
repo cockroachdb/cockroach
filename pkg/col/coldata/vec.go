@@ -90,7 +90,7 @@ type Vec interface {
 
 	// TemplateType returns an []interface{} and is used for operator templates.
 	// Do not call this from normal code - it'll always panic.
-	_TemplateType() []interface{}
+	TemplateType() []interface{}
 
 	// Append uses SliceArgs to append elements of a source Vec into this Vec.
 	// It is logically equivalent to:
@@ -226,7 +226,7 @@ func (m *memColumn) Col() interface{} {
 	return m.col
 }
 
-func (m *memColumn) _TemplateType() []interface{} {
+func (m *memColumn) TemplateType() []interface{} {
 	panic("don't call this from non template code")
 }
 
