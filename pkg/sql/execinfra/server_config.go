@@ -138,7 +138,7 @@ type ServerConfig struct {
 
 	// A handle to gossip used to broadcast the node's DistSQL version and
 	// draining state.
-	Gossip *gossip.Gossip
+	Gossip gossip.DeprecatedGossip
 
 	NodeDialer *nodedialer.Dialer
 

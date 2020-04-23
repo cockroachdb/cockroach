@@ -112,7 +112,7 @@ type sqlServerOptionalArgs struct {
 	// Gossip is relied upon by distSQLCfg (execinfra.ServerConfig), the executor
 	// config, the DistSQL planner, the table statistics cache, the statements
 	// diagnostics registry, and the lease manager.
-	gossip *gossip.Gossip
+	gossip gossip.DeprecatedGossip
 	// Used by DistSQLConfig and DistSQLPlanner.
 	nodeDialer *nodedialer.Dialer
 	// To register blob and DistSQL servers.
@@ -400,7 +400,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.rpcContext,
 			distSQLServer,
 			cfg.distSender,
-			cfg.gossip,
+			cfg.gossip.Deprecated(47900),
 			cfg.stopper,
 			cfg.nodeLiveness,
 			cfg.nodeDialer,
@@ -408,7 +408,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 
 		TableStatsCache: stats.NewTableStatisticsCache(
 			cfg.SQLTableStatCacheSize,
-			cfg.gossip,
+			cfg.gossip.Deprecated(47925),
 			cfg.db,
 			cfg.circularInternalExecutor,
 		),
@@ -527,13 +527,17 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	)
 	execCfg.InternalExecutor = cfg.circularInternalExecutor
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
-		cfg.circularInternalExecutor, cfg.db, cfg.gossip, cfg.Settings)
+		cfg.circularInternalExecutor,
+		cfg.db,
+		cfg.gossip.Deprecated(47893),
+		cfg.Settings,
+	)
 	if statusServer, ok := cfg.statusServer(); ok {
 		statusServer.setStmtDiagnosticsRequester(stmtDiagnosticsRegistry)
 	}
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
-	leaseMgr.RefreshLeases(cfg.stopper, cfg.db, cfg.gossip)
+	leaseMgr.RefreshLeases(cfg.stopper, cfg.db, cfg.gossip.Deprecated(47150))
 	leaseMgr.PeriodicallyRefreshSomeLeases()
 
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(

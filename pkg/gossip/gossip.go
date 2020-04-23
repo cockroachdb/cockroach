@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1613,4 +1614,40 @@ func (g *Gossip) findClient(match func(*client) bool) *client {
 		}
 	}
 	return nil
+}
+
+// MakeDeprecatedGossip initializes a DeprecatedGossip instance. See
+// MakeTenantSQLDeprecatedWrapper for details.
+func MakeDeprecatedGossip(g *Gossip, tenant bool) DeprecatedGossip {
+	return DeprecatedGossip{
+		w: errorutil.MakeTenantSQLDeprecatedWrapper(g, tenant),
+	}
+}
+
+// DeprecatedGossip is a Gossip instance in a SQL tenant server, which is in the
+// process of being phased out.
+//
+// See the comments on TenantSQLDeprecatedWrapper for details.
+type DeprecatedGossip struct {
+	w errorutil.TenantSQLDeprecatedWrapper
+}
+
+// Deprecated trades a Github issue tracking the removal of the call for the
+// wrapped Gossip instance.
+func (dg DeprecatedGossip) Deprecated(issueNo int) *Gossip {
+	// NB: some tests use a nil Gossip.
+	g, _ := dg.w.Deprecated(issueNo).(*Gossip)
+	return g
+}
+
+// Optional returns the Gossip instance if the wrapper was set up to allow it.
+// Otherwise, it returns an error referring to the optionally passed in issues.
+func (dg DeprecatedGossip) Optional(issueNos ...int) (*Gossip, error) {
+	v, err := dg.w.Optional(issueNos...)
+	if err != nil {
+		return nil, err
+	}
+	// NB: some tests use a nil Gossip.
+	g, _ := v.(*Gossip)
+	return g, nil
 }

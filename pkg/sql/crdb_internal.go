@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -927,7 +928,7 @@ var crdbInternalLocalTxnsTable = virtualSchemaTable{
 		req := p.makeSessionsRequest(ctx)
 		ss, ok := p.extendedEvalCtx.StatusServer()
 		if !ok {
-			return pgerror.UnsupportedWithMultiTenancy()
+			return errorutil.UnsupportedWithMultiTenancy()
 		}
 		response, err := ss.ListLocalSessions(ctx, &req)
 		if err != nil {
@@ -947,7 +948,7 @@ var crdbInternalClusterTxnsTable = virtualSchemaTable{
 		req := p.makeSessionsRequest(ctx)
 		ss, ok := p.extendedEvalCtx.StatusServer()
 		if !ok {
-			return pgerror.UnsupportedWithMultiTenancy()
+			return errorutil.UnsupportedWithMultiTenancy()
 		}
 		response, err := ss.ListSessions(ctx, &req)
 		if err != nil {
@@ -1057,7 +1058,7 @@ var crdbInternalLocalQueriesTable = virtualSchemaTable{
 		req := p.makeSessionsRequest(ctx)
 		ss, ok := p.extendedEvalCtx.StatusServer()
 		if !ok {
-			return pgerror.UnsupportedWithMultiTenancy()
+			return errorutil.UnsupportedWithMultiTenancy()
 		}
 		response, err := ss.ListLocalSessions(ctx, &req)
 		if err != nil {
@@ -1076,7 +1077,7 @@ var crdbInternalClusterQueriesTable = virtualSchemaTable{
 		req := p.makeSessionsRequest(ctx)
 		ss, ok := p.extendedEvalCtx.StatusServer()
 		if !ok {
-			return pgerror.UnsupportedWithMultiTenancy()
+			return errorutil.UnsupportedWithMultiTenancy()
 		}
 		response, err := ss.ListSessions(ctx, &req)
 		if err != nil {
@@ -1188,7 +1189,7 @@ var crdbInternalLocalSessionsTable = virtualSchemaTable{
 		req := p.makeSessionsRequest(ctx)
 		ss, ok := p.extendedEvalCtx.StatusServer()
 		if !ok {
-			return pgerror.UnsupportedWithMultiTenancy()
+			return errorutil.UnsupportedWithMultiTenancy()
 		}
 		response, err := ss.ListLocalSessions(ctx, &req)
 		if err != nil {
@@ -1207,7 +1208,7 @@ var crdbInternalClusterSessionsTable = virtualSchemaTable{
 		req := p.makeSessionsRequest(ctx)
 		ss, ok := p.extendedEvalCtx.StatusServer()
 		if !ok {
-			return pgerror.UnsupportedWithMultiTenancy()
+			return errorutil.UnsupportedWithMultiTenancy()
 		}
 		response, err := ss.ListSessions(ctx, &req)
 		if err != nil {
@@ -2566,7 +2567,10 @@ CREATE TABLE crdb_internal.zones (
 }
 
 func getAllNodeDescriptors(p *planner) ([]roachpb.NodeDescriptor, error) {
-	g := p.ExecCfg().Gossip
+	g, err := p.ExecCfg().Gossip.Optional(47899)
+	if err != nil {
+		return nil, err
+	}
 	var descriptors []roachpb.NodeDescriptor
 	if err := g.IterateInfos(gossip.KeyNodeIDPrefix, func(key string, i gossip.Info) error {
 		bytes, err := i.Value.GetBytes()
@@ -2621,7 +2625,11 @@ CREATE TABLE crdb_internal.gossip_nodes (
 			return err
 		}
 
-		g := p.ExecCfg().Gossip
+		g, err := p.ExecCfg().Gossip.Optional(47899)
+		if err != nil {
+			return err
+		}
+
 		descriptors, err := getAllNodeDescriptors(p)
 		if err != nil {
 			return err
@@ -2741,7 +2749,10 @@ CREATE TABLE crdb_internal.gossip_liveness (
 			return err
 		}
 
-		g := p.ExecCfg().Gossip
+		g, err := p.ExecCfg().Gossip.Optional(47899)
+		if err != nil {
+			return err
+		}
 
 		type nodeInfo struct {
 			liveness  storagepb.Liveness
@@ -2813,7 +2824,10 @@ CREATE TABLE crdb_internal.gossip_alerts (
 			return err
 		}
 
-		g := p.ExecCfg().Gossip
+		g, err := p.ExecCfg().Gossip.Optional(47899)
+		if err != nil {
+			return err
+		}
 
 		type resultWithNodeID struct {
 			roachpb.NodeID
@@ -2879,7 +2893,12 @@ CREATE TABLE crdb_internal.gossip_network (
 			return err
 		}
 
-		c := p.ExecCfg().Gossip.Connectivity()
+		g, err := p.ExecCfg().Gossip.Optional(47899)
+		if err != nil {
+			return err
+		}
+
+		c := g.Connectivity()
 		for _, conn := range c.ClientConns {
 			if err := addRow(
 				tree.NewDInt(tree.DInt(conn.SourceID)),
@@ -3113,7 +3132,7 @@ CREATE TABLE crdb_internal.kv_node_status (
 		}
 		ss, ok := p.extendedEvalCtx.StatusServer()
 		if !ok {
-			return pgerror.UnsupportedWithMultiTenancy()
+			return errorutil.UnsupportedWithMultiTenancy()
 		}
 		response, err := ss.Nodes(ctx, &serverpb.NodesRequest{})
 		if err != nil {
@@ -3227,7 +3246,7 @@ CREATE TABLE crdb_internal.kv_store_status (
 		}
 		ss, ok := p.ExecCfg().StatusServer()
 		if !ok {
-			return pgerror.UnsupportedWithMultiTenancy()
+			return errorutil.UnsupportedWithMultiTenancy()
 		}
 		response, err := ss.Nodes(ctx, &serverpb.NodesRequest{})
 		if err != nil {
