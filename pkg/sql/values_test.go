@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func makeTestPlanner() *planner {
@@ -236,9 +237,10 @@ func TestGolangQueryArgs(t *testing.T) {
 	}
 
 	for i, tcase := range testCases {
-		datums := golangFillQueryArguments(tcase.value)
+		datums, err := golangFillQueryArguments(tcase.value)
+		require.NoError(t, err)
 		if len(datums) != 1 {
-			t.Fatalf("epected 1 datum, got: %d", len(datums))
+			t.Fatalf("expected 1 datum, got: %d", len(datums))
 		}
 		d := datums[0]
 		if a, e := reflect.TypeOf(d.ResolvedType()), tcase.expectedType; a != e {

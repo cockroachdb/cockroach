@@ -477,12 +477,12 @@ func TestMarshalColumnValue(t *testing.T) {
 		},
 		{
 			typ:   types.Timestamp,
-			datum: tree.MakeDTimestamp(timeutil.Unix(314159, 1000), time.Microsecond),
+			datum: tree.MustMakeDTimestamp(timeutil.Unix(314159, 1000), time.Microsecond),
 			exp:   func() (v roachpb.Value) { v.SetTime(timeutil.Unix(314159, 1000)); return }(),
 		},
 		{
 			typ:   types.TimestampTZ,
-			datum: tree.MakeDTimestampTZ(timeutil.Unix(314159, 1000), time.Microsecond),
+			datum: tree.MustMakeDTimestampTZ(timeutil.Unix(314159, 1000), time.Microsecond),
 			exp:   func() (v roachpb.Value) { v.SetTime(timeutil.Unix(314159, 1000)); return }(),
 		},
 		{

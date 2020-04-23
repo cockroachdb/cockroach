@@ -162,7 +162,11 @@ func (n *projectSetNode) Next(params runParams) (bool, error) {
 					}
 					if hasVals {
 						// This source has values, use them.
-						copy(n.run.rowBuffer[colIdx:colIdx+numCols], gen.Values())
+						values, err := gen.Values()
+						if err != nil {
+							return false, err
+						}
+						copy(n.run.rowBuffer[colIdx:colIdx+numCols], values)
 						newValAvail = true
 					} else {
 						n.run.done[i] = true

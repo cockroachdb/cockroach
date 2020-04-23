@@ -239,15 +239,21 @@ CREATE TABLE crdb_internal.tables (
 				leaseExpDatum := tree.DNull
 				if table.Lease != nil {
 					leaseNodeDatum = tree.NewDInt(tree.DInt(int64(table.Lease.NodeID)))
-					leaseExpDatum = tree.MakeDTimestamp(
+					leaseExpDatum, err = tree.MakeDTimestamp(
 						timeutil.Unix(0, table.Lease.ExpirationTime), time.Nanosecond,
 					)
+					if err != nil {
+						return err
+					}
 				}
 				dropTimeDatum := tree.DNull
 				if table.DropTime != 0 {
-					dropTimeDatum = tree.MakeDTimestamp(
+					dropTimeDatum, err = tree.MakeDTimestamp(
 						timeutil.Unix(0, table.DropTime), time.Nanosecond,
 					)
+					if err != nil {
+						return err
+					}
 				}
 				row = row[:0]
 				row = append(row,
@@ -433,9 +439,9 @@ CREATE TABLE crdb_internal.leases (
 	},
 }
 
-func tsOrNull(micros int64) tree.Datum {
+func tsOrNull(micros int64) (tree.Datum, error) {
 	if micros == 0 {
-		return tree.DNull
+		return tree.DNull, nil
 	}
 	ts := timeutil.Unix(0, micros*time.Microsecond.Nanoseconds())
 	return tree.MakeDTimestamp(ts, time.Microsecond)
@@ -544,8 +550,14 @@ CREATE TABLE crdb_internal.jobs (
 						}
 					}
 					descriptorIDs = descriptorIDsArr
-					started = tsOrNull(payload.StartedMicros)
-					finished = tsOrNull(payload.FinishedMicros)
+					started, err = tsOrNull(payload.StartedMicros)
+					if err != nil {
+						return nil, err
+					}
+					finished, err = tsOrNull(payload.FinishedMicros)
+					if err != nil {
+						return nil, err
+					}
 					if payload.Lease != nil {
 						leaseNode = tree.NewDInt(tree.DInt(payload.Lease.NodeID))
 					}
@@ -572,7 +584,10 @@ CREATE TABLE crdb_internal.jobs (
 						} else {
 							fractionCompleted = tree.NewDFloat(tree.DFloat(progress.GetFractionCompleted()))
 						}
-						modified = tsOrNull(progress.ModifiedMicros)
+						modified, err = tsOrNull(progress.ModifiedMicros)
+						if err != nil {
+							return nil, err
+						}
 
 						if len(progress.RunningStatus) > 0 {
 							if s, ok := status.(*tree.DString); ok {
@@ -948,11 +963,15 @@ func populateTransactionsTable(
 	for _, session := range response.Sessions {
 		sessionID := getSessionID(session)
 		if txn := session.ActiveTxn; txn != nil {
+			ts, err := tree.MakeDTimestamp(txn.Start, time.Microsecond)
+			if err != nil {
+				return err
+			}
 			if err := addRow(
 				tree.NewDUuid(tree.DUuid{UUID: txn.ID}),
 				tree.NewDInt(tree.DInt(session.NodeID)),
 				sessionID,
-				tree.MakeDTimestamp(txn.Start, time.Microsecond),
+				ts,
 				tree.NewDString(txn.TxnDescription),
 				tree.NewDString(session.ApplicationName),
 			); err != nil {
@@ -1096,13 +1115,17 @@ func populateQueriesTable(
 				txnID = tree.NewDUuid(tree.DUuid{UUID: query.TxnID})
 			}
 
+			ts, err := tree.MakeDTimestamp(query.Start, time.Microsecond)
+			if err != nil {
+				return err
+			}
 			if err := addRow(
 				tree.NewDString(query.ID),
 				txnID,
 				tree.NewDInt(tree.DInt(session.NodeID)),
 				sessionID,
 				tree.NewDString(session.Username),
-				tree.MakeDTimestamp(query.Start, time.Microsecond),
+				ts,
 				tree.NewDString(query.Sql),
 				tree.NewDString(session.ClientAddress),
 				tree.NewDString(session.ApplicationName),
@@ -1214,10 +1237,14 @@ func populateSessionsTable(
 			}
 		}
 
+		var err error
 		if oldestStart.IsZero() {
 			oldestStartDatum = tree.DNull
 		} else {
-			oldestStartDatum = tree.MakeDTimestamp(oldestStart, time.Microsecond)
+			oldestStartDatum, err = tree.MakeDTimestamp(oldestStart, time.Microsecond)
+			if err != nil {
+				return err
+			}
 		}
 
 		kvTxnIDDatum := tree.DNull
@@ -1226,7 +1253,10 @@ func populateSessionsTable(
 		}
 
 		sessionID := getSessionID(session)
-
+		startTSDatum, err := tree.MakeDTimestamp(session.Start, time.Microsecond)
+		if err != nil {
+			return err
+		}
 		if err := addRow(
 			tree.NewDInt(tree.DInt(session.NodeID)),
 			sessionID,
@@ -1235,7 +1265,7 @@ func populateSessionsTable(
 			tree.NewDString(session.ApplicationName),
 			tree.NewDString(activeQueries.String()),
 			tree.NewDString(session.LastActiveQuery),
-			tree.MakeDTimestamp(session.Start, time.Microsecond),
+			startTSDatum,
 			oldestStartDatum,
 			kvTxnIDDatum,
 			tree.NewDInt(tree.DInt(session.AllocBytes)),
@@ -2658,6 +2688,10 @@ CREATE TABLE crdb_internal.gossip_nodes (
 				return err
 			}
 
+			startTSDatum, err := tree.MakeDTimestamp(timeutil.Unix(0, d.StartedAt), time.Microsecond)
+			if err != nil {
+				return err
+			}
 			if err := addRow(
 				tree.NewDInt(tree.DInt(d.NodeID)),
 				tree.NewDString(listenAddrRPC.NetworkField),
@@ -2671,7 +2705,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 				tree.NewDString(d.ClusterName),
 				tree.NewDString(d.ServerVersion.String()),
 				tree.NewDString(d.BuildTag),
-				tree.MakeDTimestamp(timeutil.Unix(0, d.StartedAt), time.Microsecond),
+				startTSDatum,
 				tree.MakeDBool(alive[d.NodeID]),
 				tree.NewDInt(tree.DInt(stats[d.NodeID].ranges)),
 				tree.NewDInt(tree.DInt(stats[d.NodeID].leases)),
@@ -2743,13 +2777,17 @@ CREATE TABLE crdb_internal.gossip_liveness (
 		for i := range nodes {
 			n := &nodes[i]
 			l := &n.liveness
+			updatedTSDatum, err := tree.MakeDTimestamp(timeutil.Unix(0, n.updatedAt), time.Microsecond)
+			if err != nil {
+				return err
+			}
 			if err := addRow(
 				tree.NewDInt(tree.DInt(l.NodeID)),
 				tree.NewDInt(tree.DInt(l.Epoch)),
 				tree.NewDString(l.Expiration.String()),
 				tree.MakeDBool(tree.DBool(l.Draining)),
 				tree.MakeDBool(tree.DBool(l.Decommissioning)),
-				tree.MakeDTimestamp(timeutil.Unix(0, n.updatedAt), time.Microsecond),
+				updatedTSDatum,
 			); err != nil {
 				return err
 			}
@@ -3123,6 +3161,14 @@ CREATE TABLE crdb_internal.kv_node_status (
 				activity.Add(nodeID.String(), b.Build())
 			}
 
+			startTSDatum, err := tree.MakeDTimestamp(timeutil.Unix(0, n.StartedAt), time.Microsecond)
+			if err != nil {
+				return err
+			}
+			endTSDatum, err := tree.MakeDTimestamp(timeutil.Unix(0, n.UpdatedAt), time.Microsecond)
+			if err != nil {
+				return err
+			}
 			if err := addRow(
 				tree.NewDInt(tree.DInt(n.Desc.NodeID)),
 				tree.NewDString(n.Desc.Address.NetworkField),
@@ -3139,8 +3185,8 @@ CREATE TABLE crdb_internal.kv_node_status (
 				tree.NewDString(n.BuildInfo.Distribution),
 				tree.NewDString(n.BuildInfo.Type),
 				tree.NewDString(dependencies),
-				tree.MakeDTimestamp(timeutil.Unix(0, n.StartedAt), time.Microsecond),
-				tree.MakeDTimestamp(timeutil.Unix(0, n.UpdatedAt), time.Microsecond),
+				startTSDatum,
+				endTSDatum,
 				tree.NewDJSON(metrics.Build()),
 				tree.NewDJSON(args.Build()),
 				tree.NewDJSON(env.Build()),

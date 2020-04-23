@@ -15,13 +15,16 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/prop"
+	"github.com/stretchr/testify/require"
 )
 
 func genColumnType() gopter.Gen {
@@ -238,4 +241,44 @@ func TestMarshalColumnValueRoundtrip(t *testing.T) {
 		),
 	)
 	properties.TestingRun(t)
+}
+
+// TestDecodeTableKeyOutOfRangeTimestamp deliberately tests out of range timestamps
+// can still be decoded from disk. See #46973.
+func TestDecodeTableKeyOutOfRangeTimestamp(t *testing.T) {
+	for _, d := range []tree.Datum{
+		&tree.DTimestamp{Time: timeutil.Unix(-9223372036854775808, 0).In(time.UTC)},
+		&tree.DTimestampTZ{Time: timeutil.Unix(-9223372036854775808, 0).In(time.UTC)},
+	} {
+		for _, dir := range []encoding.Direction{encoding.Ascending, encoding.Descending} {
+			t.Run(fmt.Sprintf("%s/direction:%d", d.String(), dir), func(t *testing.T) {
+				encoded, err := EncodeTableKey([]byte{}, d, dir)
+				require.NoError(t, err)
+				a := &DatumAlloc{}
+				decoded, _, err := DecodeTableKey(a, d.ResolvedType(), encoded, dir)
+				require.NoError(t, err)
+				require.Equal(t, d, decoded)
+			})
+		}
+	}
+}
+
+// TestDecodeTableValueOutOfRangeTimestamp deliberately tests out of range timestamps
+// can still be decoded from disk. See #46973.
+func TestDecodeTableValueOutOfRangeTimestamp(t *testing.T) {
+	for _, d := range []tree.Datum{
+		&tree.DTimestamp{Time: timeutil.Unix(-9223372036854775808, 0).In(time.UTC)},
+		&tree.DTimestampTZ{Time: timeutil.Unix(-9223372036854775808, 0).In(time.UTC)},
+	} {
+		t.Run(d.String(), func(t *testing.T) {
+			var b []byte
+			colID := ColumnID(1)
+			encoded, err := EncodeTableValue(b, colID, d, []byte{})
+			require.NoError(t, err)
+			a := &DatumAlloc{}
+			decoded, _, err := DecodeTableValue(a, d.ResolvedType(), encoded)
+			require.NoError(t, err)
+			require.Equal(t, d, decoded)
+		})
+	}
 }
