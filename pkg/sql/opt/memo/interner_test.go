@@ -74,10 +74,10 @@ func TestInterner(t *testing.T) {
 	coll3, _ := tree.NewDCollatedString("foo", "en_US", &tree.CollationEnvironment{})
 	coll4, _ := tree.NewDCollatedString("food", "en_US", &tree.CollationEnvironment{})
 
-	tz1 := tree.MakeDTimestampTZ(time.Date(2018, 10, 6, 11, 49, 30, 123, time.UTC), 0)
-	tz2 := tree.MakeDTimestampTZ(time.Date(2018, 10, 6, 11, 49, 30, 123, time.UTC), 0)
-	tz3 := tree.MakeDTimestampTZ(time.Date(2018, 10, 6, 11, 49, 30, 124, time.UTC), 0)
-	tz4 := tree.MakeDTimestampTZ(time.Date(2018, 10, 6, 11, 49, 30, 124, time.FixedZone("PDT", -7)), 0)
+	tz1 := tree.MustMakeDTimestampTZ(time.Date(2018, 10, 6, 11, 49, 30, 123, time.UTC), 0)
+	tz2 := tree.MustMakeDTimestampTZ(time.Date(2018, 10, 6, 11, 49, 30, 123, time.UTC), 0)
+	tz3 := tree.MustMakeDTimestampTZ(time.Date(2018, 10, 6, 11, 49, 30, 124, time.UTC), 0)
+	tz4 := tree.MustMakeDTimestampTZ(time.Date(2018, 10, 6, 11, 49, 30, 124, time.FixedZone("PDT", -7)), 0)
 
 	explain1 := tree.ExplainOptions{Mode: tree.ExplainPlan}
 	explain1.Flags[1] = true

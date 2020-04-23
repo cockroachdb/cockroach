@@ -15,6 +15,7 @@ import (
 	"math"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -58,23 +59,38 @@ func TestRandParseDatumStringAs(t *testing.T) {
 		t.Run(typ.String(), func(t *testing.T) {
 			for i := 0; i < testsForTyp; i++ {
 				datum := RandDatumWithNullChance(rng, typ, 0)
+				ds := tree.AsStringWithFlags(datum, tree.FmtExport)
 
 				// Because of how RandDatumWithNullChanceWorks, we might
 				// get an interesting datum for a time related type that
 				// doesn't have the precision that we requested. In these
 				// cases, manually correct the type ourselves.
+				var err error
 				switch d := datum.(type) {
 				case *tree.DTimestampTZ:
-					datum = d.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
+					roundTo := tree.TimeFamilyPrecisionToRoundDuration(typ.Precision())
+					// We can't round the max time, as it exceeds bounds.
+					if roundTo > time.Microsecond && d.Time.Round(roundTo).Equal(tree.MaxSupportedTime.Round(roundTo)) {
+						continue
+					}
+					datum, err = d.Round(roundTo)
 				case *tree.DTimestamp:
-					datum = d.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
+					roundTo := tree.TimeFamilyPrecisionToRoundDuration(typ.Precision())
+					// We can't round the max time, as it exceeds bounds.
+					if roundTo > time.Microsecond && d.Time.Round(roundTo).Equal(tree.MaxSupportedTime.Round(roundTo)) {
+						continue
+					}
+					datum, err = d.Round(roundTo)
 				case *tree.DTime:
 					datum = d.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 				case *tree.DTimeTZ:
 					datum = d.Round(tree.TimeFamilyPrecisionToRoundDuration(typ.Precision()))
 				}
 
-				ds := tree.AsStringWithFlags(datum, tree.FmtExport)
+				if err != nil {
+					t.Fatal(ds, err)
+				}
+
 				parsed, err := ParseDatumStringAs(typ, ds, evalCtx)
 				if err != nil {
 					t.Fatal(ds, err)
