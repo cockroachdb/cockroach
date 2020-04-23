@@ -12,6 +12,7 @@ package keys
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"reflect"
 	"testing"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStoreKeyEncodeDecode(t *testing.T) {
@@ -586,5 +588,40 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 		if !testutils.IsError(err, d.err) {
 			t.Fatalf("%d: %s: expected %q, but got %v", i, d.in, d.err, err)
 		}
+	}
+}
+
+func TestTenantPrefix(t *testing.T) {
+	tIDs := []roachpb.TenantID{
+		roachpb.SystemTenantID,
+		roachpb.MakeTenantID(2),
+		roachpb.MakeTenantID(999),
+		roachpb.MakeTenantID(math.MaxUint64),
+	}
+	for _, tID := range tIDs {
+		t.Run(fmt.Sprintf("%v", tID), func(t *testing.T) {
+			// Encode tenant ID.
+			k := MakeTenantPrefix(tID)
+
+			// The system tenant has no tenant prefix.
+			if tID == roachpb.SystemTenantID {
+				require.Len(t, k, 0)
+			}
+
+			// Encode table prefix.
+			const tableID = 5
+			k = encoding.EncodeUvarintAscending(k, tableID)
+
+			// Decode tenant ID.
+			rem, retTID, err := DecodeTenantPrefix(k)
+			require.Equal(t, tID, retTID)
+			require.NoError(t, err)
+
+			// Decode table prefix.
+			rem, retTableID, err := encoding.DecodeUvarintAscending(rem)
+			require.Len(t, rem, 0)
+			require.Equal(t, uint64(tableID), retTableID)
+			require.NoError(t, err)
+		})
 	}
 }
