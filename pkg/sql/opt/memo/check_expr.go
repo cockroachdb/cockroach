@@ -295,7 +295,7 @@ func checkFilters(filters FiltersExpr) {
 
 func checkErrorOnDup(e RelExpr) {
 	// Only UpsertDistinctOn should set the ErrorOnDup field to true.
-	if e.Op() != opt.UpsertDistinctOnOp && e.Private().(*GroupingPrivate).ErrorOnDup {
+	if e.Op() != opt.UpsertDistinctOnOp && e.Private().(*GroupingPrivate).ErrorOnDup != "" {
 		panic(errors.AssertionFailedf("%s should never set ErrorOnDup to true", log.Safe(e.Op())))
 	}
 }

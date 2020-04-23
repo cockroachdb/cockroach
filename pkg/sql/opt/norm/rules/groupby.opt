@@ -174,7 +174,7 @@
 )
 =>
 (ConstructProjectionFromDistinctOn
-    (Max1Row $input (DuplicateUpsertErrText))
+    (Max1Row $input (ErrorOnDup $groupingPrivate))
     (MakeEmptyColSet)
     $aggregations
 )
@@ -218,7 +218,7 @@
     (DistinctOn
         $input
         []
-        (MakeUnorderedGrouping (ExtractAggInputColumns $agg))
+        (MakeGrouping (ExtractAggInputColumns $agg) (EmptyOrdering))
     )
     [ (AggregationsItem $agg $aggColID) ]
     $groupingPrivate
