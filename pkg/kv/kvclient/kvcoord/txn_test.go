@@ -689,3 +689,21 @@ func TestTxnLeavesIntentBehindAfterWriteTooOldError(t *testing.T) {
 	// Cleanup.
 	require.NoError(t, txn.Rollback(ctx))
 }
+
+// Test that a transaction can be used after a CPut returns a
+// ConditionFailedError. This is not generally allowed for other errors, but
+// ConditionFailedError is special.
+func TestTxnContinueAfterCputError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	s := createTestDB(t)
+	defer s.Stop()
+
+	txn := s.DB.NewTxn(ctx, "test txn")
+	expVal := roachpb.MakeValueFromString("dummy")
+	err := txn.CPut(ctx, "a", "val", &expVal)
+	require.IsType(t, &roachpb.ConditionFailedError{}, err)
+
+	require.NoError(t, txn.Put(ctx, "a", "b'"))
+	require.NoError(t, txn.Commit(ctx))
+}
