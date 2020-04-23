@@ -170,6 +170,11 @@ func (c *CustomFuncs) BinaryType(op opt.Operator, left, right opt.ScalarExpr) *t
 	return o.ReturnType
 }
 
+// TypeOf returns the type of the expression.
+func (c *CustomFuncs) TypeOf(e opt.ScalarExpr) *types.T {
+	return e.DataType()
+}
+
 // ----------------------------------------------------------------------
 //
 // Property functions
@@ -1724,6 +1729,13 @@ func (c *CustomFuncs) NormalizeTupleEquality(left, right memo.ScalarListExpr) op
 		}
 	}
 	return result
+}
+
+// VarsAreSame returns true if the two variables are the same.
+func (c *CustomFuncs) VarsAreSame(left, right opt.ScalarExpr) bool {
+	lv := left.(*memo.VariableExpr)
+	rv := right.(*memo.VariableExpr)
+	return lv.Col == rv.Col
 }
 
 // ----------------------------------------------------------------------

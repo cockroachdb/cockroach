@@ -2060,8 +2060,8 @@ full-join (hash)
  │    └── fd: (6)-->(7-10)
  └── filters
       ├── a.k:1 = a2.k:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      ├── a.f:3 = a.f:3 [outer=(3), constraints=(/3: (/NULL - ])]
-      └── a2.f:8 = a2.f:8 [outer=(8), constraints=(/8: (/NULL - ])]
+      ├── a.f:3 IS DISTINCT FROM CAST(NULL AS FLOAT8) [outer=(3), constraints=(/3: (/NULL - ]; tight)]
+      └── a2.f:8 IS DISTINCT FROM CAST(NULL AS FLOAT8) [outer=(8), constraints=(/8: (/NULL - ]; tight)]
 
 # Can't simplify: equality conditions have columns from different tables.
 norm expect-not=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
@@ -2917,3 +2917,86 @@ full-join (cross)
  │    └── fd: (3)-->(4)
  └── filters
       └── (substring('', ')') = '') = (u:3 > 0) [outer=(3)]
+
+# --------------------------------------------------
+# SimplifyJoinSameVarEqualities
+# --------------------------------------------------
+
+# SimplifyJoinSameVarEqualities converts k=k into k IS NOT NULL, which is
+# then further reduced since k is in the primary key and thus not null.
+norm expect=SimplifyJoinSameVarEqualities
+SELECT a.k FROM a FULL OUTER JOIN c ON a.k = a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan c
+ └── filters
+      └── k:1 IS DISTINCT FROM CAST(NULL AS INT8) [outer=(1), constraints=(/1: (/NULL - ]; tight)]
+
+norm expect=SimplifyJoinSameVarEqualities
+SELECT a.k FROM a FULL OUTER JOIN c ON a.k >= a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan c
+ └── filters
+      └── k:1 IS DISTINCT FROM CAST(NULL AS INT8) [outer=(1), constraints=(/1: (/NULL - ]; tight)]
+
+norm expect=SimplifyJoinSameVarEqualities
+SELECT a.k FROM a FULL OUTER JOIN c ON a.k <= a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan c
+ └── filters
+      └── k:1 IS DISTINCT FROM CAST(NULL AS INT8) [outer=(1), constraints=(/1: (/NULL - ]; tight)]
+
+# --------------------------------------------------
+# SimplifyJoinSameVarInequalities
+# --------------------------------------------------
+
+# Inequalities convert to IS NULL.
+norm expect=SimplifyJoinSameVarInequalities
+SELECT a.k FROM a FULL OUTER JOIN c ON a.k != a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan c
+ └── filters
+      └── false
+
+norm expect=SimplifyJoinSameVarInequalities
+SELECT a.k FROM a FULL OUTER JOIN c ON a.k > a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan c
+ └── filters
+      └── false
+
+norm expect=SimplifyJoinSameVarInequalities
+SELECT a.k FROM a FULL OUTER JOIN c ON a.k < a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan c
+ └── filters
+      └── false

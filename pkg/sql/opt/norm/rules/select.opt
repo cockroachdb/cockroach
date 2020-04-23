@@ -408,3 +408,43 @@
   )
   (RemoveFiltersItem $filter $item)
 )
+
+# SimplifySelectSameVarEqualities simplifies same variable equalities
+# (i.e., x = x) to x IS NOT NULL. Although by itself that is not
+# an equivalent conversion, since it is in a filter it is correctly
+# simplified by other rules.
+[SimplifySelectSameVarEqualities, Normalize]
+(Select
+  $input:*
+  $filters:[ ...
+    $item:(FiltersItem( Eq | Le | Ge
+      $left:(Variable)
+      $right:(Variable) & (VarsAreSame $left $right)
+    ))
+  ... ]
+)
+=>
+(Select
+    $input
+    (ReplaceFiltersItem $filters $item (IsNot $left (Null (TypeOf $left))))
+)
+
+# SimplifySelectSameVarInequalities simplifies same variable equalities
+# (i.e., x != x) to FALSE. Although by itself that is not an equivalent
+# conversion, since it is in a filter it is correctly simplified by
+# other rules.
+[SimplifySelectSameVarInequalities, Normalize]
+(Select
+  $input:*
+  [ ...
+    (FiltersItem( Ne | Lt | Gt
+      $left:(Variable)
+      $right:(Variable) & (VarsAreSame $left $right)
+    ))
+  ... ]
+)
+=>
+(Select
+    $input
+    [ (FiltersItem (False)) ]
+)
