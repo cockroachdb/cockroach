@@ -78,18 +78,15 @@ func MakeBuilder(table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor)
 		for i, ancestor := range index.Interleave.Ancestors {
 			// The first ancestor is already encoded in interstices[0].
 			if i != 0 {
-				s.interstices[sharedPrefixLen] =
-					encoding.EncodeUvarintAscending(s.interstices[sharedPrefixLen], uint64(ancestor.TableID))
-				s.interstices[sharedPrefixLen] =
-					encoding.EncodeUvarintAscending(s.interstices[sharedPrefixLen], uint64(ancestor.IndexID))
+				s.interstices[sharedPrefixLen] = sqlbase.EncodePartialTableIDIndexID(
+					s.interstices[sharedPrefixLen], ancestor.TableID, ancestor.IndexID)
 			}
 			sharedPrefixLen += int(ancestor.SharedPrefixLen)
-			s.interstices[sharedPrefixLen] = encoding.EncodeInterleavedSentinel(s.interstices[sharedPrefixLen])
+			s.interstices[sharedPrefixLen] = encoding.EncodeInterleavedSentinel(
+				s.interstices[sharedPrefixLen])
 		}
-		s.interstices[sharedPrefixLen] =
-			encoding.EncodeUvarintAscending(s.interstices[sharedPrefixLen], uint64(table.ID))
-		s.interstices[sharedPrefixLen] =
-			encoding.EncodeUvarintAscending(s.interstices[sharedPrefixLen], uint64(index.ID))
+		s.interstices[sharedPrefixLen] = sqlbase.EncodePartialTableIDIndexID(
+			s.interstices[sharedPrefixLen], table.ID, index.ID)
 	}
 
 	return s

@@ -121,6 +121,8 @@ WARN_UNUSED_RESULT bool IsInt(rocksdb::Slice* buf);
 // DecodeTablePrefix validates that the given key has a table prefix. On
 // completion, buf holds the remainder of the key (with the prefix removed) and
 // tbl stores the decoded descriptor ID of the table.
+//
+// TODO(nvanbenschoten): support tenant ID prefix.
 WARN_UNUSED_RESULT bool DecodeTablePrefix(rocksdb::Slice* buf, uint64_t* tbl);
 
 }  // namespace cockroach
