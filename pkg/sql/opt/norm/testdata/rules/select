@@ -1999,3 +1999,84 @@ select
  │         └── (1.00,)
  └── filters
       └── column1:1::STRING != '1.00' [outer=(1)]
+
+# --------------------------------------------------
+# SimplifySameVarEqualities
+# --------------------------------------------------
+
+# We expect the k = k to simplify into k IS NOT NULL.
+norm expect=SimplifySameVarEqualities
+SELECT k FROM a WHERE k = k
+----
+scan a
+ ├── columns: k:1!null
+ └── key: (1)
+
+norm expect=SimplifySameVarEqualities
+SELECT k FROM a WHERE k >= k
+----
+scan a
+ ├── columns: k:1!null
+ └── key: (1)
+
+norm expect=SimplifySameVarEqualities
+SELECT k FROM a WHERE k <= k
+----
+scan a
+ ├── columns: k:1!null
+ └── key: (1)
+
+# Should also work in projections.
+norm expect=SimplifySameVarEqualities
+SELECT k = k FROM a
+----
+project
+ ├── columns: "?column?":6
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── (k:1 IS DISTINCT FROM CAST(NULL AS INT8)) OR CAST(NULL AS INT8) [as="?column?":6, outer=(1)]
+
+# --------------------------------------------------
+# SimplifySameVarInequalities
+# --------------------------------------------------
+
+norm expect=SimplifySameVarInequalities
+SELECT k FROM a WHERE k != k
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+norm expect=SimplifySameVarInequalities
+SELECT k FROM a WHERE k > k
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+norm expect=SimplifySameVarInequalities
+SELECT k FROM a WHERE k < k
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+# Should also work in projections.
+norm expect=SimplifySameVarInequalities
+SELECT k != k FROM a
+----
+project
+ ├── columns: "?column?":6
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── (k:1 IS NOT DISTINCT FROM CAST(NULL AS INT8)) AND CAST(NULL AS INT8) [as="?column?":6, outer=(1)]

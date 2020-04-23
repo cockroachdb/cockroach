@@ -170,6 +170,11 @@ func (c *CustomFuncs) BinaryType(op opt.Operator, left, right opt.ScalarExpr) *t
 	return o.ReturnType
 }
 
+// TypeOf returns the type of the expression.
+func (c *CustomFuncs) TypeOf(e opt.ScalarExpr) *types.T {
+	return e.DataType()
+}
+
 // ----------------------------------------------------------------------
 //
 // Property functions
@@ -1181,6 +1186,28 @@ func (c *CustomFuncs) SimplifyFilters(filters memo.FiltersExpr) memo.FiltersExpr
 	return newFilters
 }
 
+// CanSimplifyOr returns false iff this is an OR where neither side is FALSE
+// or NULL. SimplifyFilters simplifies ORs with a FALSE or NULL on one side to
+// its other side. However other ORs don't simplify. This function is used to
+// prevent infinite recursion during ConstructFilterItem in SimplifyFilters.
+func (c *CustomFuncs) CanSimplifyOr(item *memo.FiltersItem) bool {
+	or, ok := item.Condition.(*memo.OrExpr)
+	if !ok {
+		return true
+	}
+	switch or.Left.(type) {
+	case *memo.NullExpr, *memo.FalseExpr:
+		return true
+	default:
+		switch or.Right.(type) {
+		case *memo.NullExpr, *memo.FalseExpr:
+			return true
+		default:
+			return false
+		}
+	}
+}
+
 // addConjuncts recursively walks a scalar expression as long as it continues to
 // find nested And operators. It adds any conjuncts (ignoring True operators) to
 // the given FiltersExpr and returns true. If it finds a False or Null operator,
@@ -1203,6 +1230,20 @@ func (c *CustomFuncs) addConjuncts(
 
 	case *memo.TrueExpr:
 		// Filters operator skips True operands.
+
+	case *memo.OrExpr:
+		// If NULL or FALSE are on either side, take the other side.
+		switch t.Left.(type) {
+		case *memo.NullExpr, *memo.FalseExpr:
+			filters = append(filters, c.f.ConstructFiltersItem(t.Right))
+		default:
+			switch t.Right.(type) {
+			case *memo.NullExpr, *memo.FalseExpr:
+				filters = append(filters, c.f.ConstructFiltersItem(t.Left))
+			default:
+				filters = append(filters, c.f.ConstructFiltersItem(t))
+			}
+		}
 
 	default:
 		filters = append(filters, c.f.ConstructFiltersItem(t))
@@ -1808,6 +1849,13 @@ func (c *CustomFuncs) NormalizeTupleEquality(left, right memo.ScalarListExpr) op
 		}
 	}
 	return result
+}
+
+// VarsAreSame returns true if the two variables are the same.
+func (c *CustomFuncs) VarsAreSame(left, right opt.ScalarExpr) bool {
+	lv := left.(*memo.VariableExpr)
+	rv := right.(*memo.VariableExpr)
+	return lv.Col == rv.Col
 }
 
 // ----------------------------------------------------------------------

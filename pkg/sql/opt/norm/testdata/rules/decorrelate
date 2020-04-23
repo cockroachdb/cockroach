@@ -2318,24 +2318,19 @@ project
  ├── group-by
  │    ├── columns: k:1!null i:2 y:7 array_agg:10
  │    ├── grouping columns: k:1!null
- │    ├── internal-ordering: +7
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,7,10)
- │    ├── sort
+ │    ├── left-join (hash)
  │    │    ├── columns: k:1!null i:2 y:7
  │    │    ├── fd: (1)-->(2)
- │    │    ├── ordering: +7
- │    │    └── left-join (cross)
- │    │         ├── columns: k:1!null i:2 y:7
- │    │         ├── fd: (1)-->(2)
- │    │         ├── scan a
- │    │         │    ├── columns: k:1!null i:2
- │    │         │    ├── key: (1)
- │    │         │    └── fd: (1)-->(2)
- │    │         ├── scan xy
- │    │         │    └── columns: y:7
- │    │         └── filters
- │    │              └── (y:7 = k:1) OR NULL [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    ├── scan xy
+ │    │    │    └── columns: y:7
+ │    │    └── filters
+ │    │         └── y:7 = k:1 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
  │    └── aggregations
  │         ├── array-agg [as=array_agg:10, outer=(7)]
  │         │    └── y:7

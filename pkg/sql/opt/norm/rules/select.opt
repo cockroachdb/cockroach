@@ -15,7 +15,7 @@
 [SimplifySelectFilters, Normalize, HighPriority]
 (Select
     $input:*
-    $filters:[ ... (FiltersItem (And | True | False | Null)) ... ] & ^(IsFilterFalse $filters)
+    $filters:[ ... $item:(FiltersItem (And | True | False | Null | Or )) & (CanSimplifyOr $item) ... ] & ^(IsFilterFalse $filters)
 )
 =>
 (Select
@@ -411,4 +411,30 @@
       $colmap
   )
   (RemoveFiltersItem $filter $item)
+)
+
+# SimplifySameVarEqualities converts `x = x` and other equality
+# comparisons into `x IS NOT NULL OR NULL`.
+[SimplifySameVarEqualities, Normalize]
+(Eq | Le | Ge
+    $left:(Variable)
+    $right:(Variable) & (VarsAreSame $left $right)
+)
+=>
+(Or
+    (IsNot $left (Null (TypeOf $left)))
+    (Null (TypeOf $left))
+)
+
+# SimplifySameVarInequalities converts `x != x` and other inequality
+# comparisons into `x IS NULL AND NULL`.
+[SimplifySameVarInequalities, Normalize]
+(Ne | Lt | Gt
+    $left:(Variable)
+    $right:(Variable) & (VarsAreSame $left $right)
+)
+=>
+(And
+    (Is $left (Null (TypeOf $left)))
+    (Null (TypeOf $left))
 )
