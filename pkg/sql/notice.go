@@ -14,6 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -36,10 +38,17 @@ func (p *planner) SendClientNotice(ctx context.Context, err error) {
 	if log.V(2) {
 		log.Infof(ctx, "out-of-band notice: %+v", err)
 	}
+	noticeSeverity, ok := pgnotice.ParseDisplaySeverity(pgerror.GetSeverity(err))
+	if !ok {
+		noticeSeverity = pgnotice.DisplaySeverityNotice
+	}
 	if p.noticeSender == nil ||
+		noticeSeverity > p.SessionData().NoticeDisplaySeverity ||
 		!NoticesEnabled.Get(&p.execCfg.Settings.SV) {
-		// Notice cannot flow to the client - either because there is no
-		// client, or the notice protocol was disabled.
+		// Notice cannot flow to the client - because of one of these conditions:
+		// * there is no client
+		// * the session's NoticeDisplaySeverity is higher than the severity of the notice.
+		// * the notice protocol was disabled
 		return
 	}
 	p.noticeSender.AppendNotice(err)

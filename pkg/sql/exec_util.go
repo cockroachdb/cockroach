@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1977,6 +1978,11 @@ func (m *sessionDataMutator) SetHashShardedIndexesEnabled(val bool) {
 // a sequence.
 func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {
 	m.data.SequenceState.RecordValue(seqID, val)
+}
+
+// SetNoticeDisplaySeverity sets the NoticeDisplaySeverity for the given session.
+func (m *sessionDataMutator) SetNoticeDisplaySeverity(severity pgnotice.DisplaySeverity) {
+	m.data.NoticeDisplaySeverity = severity
 }
 
 type sqlStatsCollector struct {

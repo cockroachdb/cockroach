@@ -1113,7 +1113,7 @@ func (t *logicTest) setUser(user string) func() {
 	}
 
 	connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
-		t.noticeBuffer = append(t.noticeBuffer, "NOTICE: "+notice.Message)
+		t.noticeBuffer = append(t.noticeBuffer, notice.Severity+": "+notice.Message)
 		if notice.Detail != "" {
 			t.noticeBuffer = append(t.noticeBuffer, "DETAIL: "+notice.Detail)
 		}
