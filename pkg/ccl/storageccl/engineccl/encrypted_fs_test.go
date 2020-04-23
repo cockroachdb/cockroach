@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -218,15 +220,31 @@ func TestPebbleEncryption(t *testing.T) {
 			Opts: opts,
 		})
 	require.NoError(t, err)
-	// Only exercising the stats code paths and not checking the returned values.
-	// TODO(sbhola): Make this better once stats are complete. Also ensure that we are
-	// not returning the secret data keys by mistake.
+	// TODO(sbhola): Ensure that we are not returning the secret data keys by mistake.
 	r, err := db.GetEncryptionRegistries()
 	require.NoError(t, err)
 	t.Logf("FileRegistry:\n%s\n\n", r.FileRegistry)
 	t.Logf("KeyRegistry:\n%s\n\n", r.KeyRegistry)
+
 	stats, err := db.GetEnvStats()
 	require.NoError(t, err)
+	// Opening the DB should've created OPTIONS, CURRENT, MANIFEST and the
+	// WAL, all under the active key.
+	if stats.TotalFiles != 4 {
+		t.Errorf("stats.TotalFiles = %d, want %d", stats.TotalFiles, 4)
+	}
+	if stats.ActiveKeyFiles != 4 {
+		t.Errorf("stats.ActiveKeyFiles = %d, want %d", stats.ActiveKeyFiles, 4)
+	}
+	var s enginepbccl.EncryptionStatus
+	require.NoError(t, proto.UnmarshalText(string(stats.EncryptionStatus), &s))
+	if s.ActiveStoreKey.Source != "16.key" {
+		t.Errorf("stats.EncryptionStatus.ActiveStoreKey.Source = %q, want %q",
+			s.ActiveStoreKey.Source, "16.key")
+	}
+	if stats.EncryptionType != int32(enginepbccl.EncryptionType_AES128_CTR) {
+		t.Errorf("stats.EncryptionType = %d, want %d", stats.EncryptionType, int32(enginepbccl.EncryptionType_AES128_CTR))
+	}
 	t.Logf("EnvStats:\n%+v\n\n", *stats)
 
 	batch := db.NewWriteOnlyBatch()
@@ -258,5 +276,20 @@ func TestPebbleEncryption(t *testing.T) {
 	val, err = db.Get(storage.MVCCKey{Key: roachpb.Key("a")})
 	require.NoError(t, err)
 	require.Equal(t, "a", string(val))
+
+	// Flushing should've created a new sstable under the active key.
+	stats, err = db.GetEnvStats()
+	require.NoError(t, err)
+	if stats.TotalFiles != 5 {
+		t.Errorf("stats.TotalFiles = %d, want 5", stats.TotalFiles)
+	}
+	if stats.ActiveKeyFiles != 5 {
+		t.Errorf("stats.ActiveKeyFiles = %d, want 5", stats.ActiveKeyFiles)
+	}
+	if stats.TotalBytes != stats.TotalBytes {
+		t.Errorf("stats.TotalBytes (%d) ≠ stats.ActiveKeyBytes (%d)", stats.TotalBytes, stats.ActiveKeyBytes)
+	}
+	t.Logf("EnvStats:\n%+v\n\n", *stats)
+
 	db.Close()
 }
