@@ -1803,7 +1803,7 @@ func TestReplicateRestartAfterTruncation(t *testing.T) {
 func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReAdd bool) {
 	sc := kvserver.TestStoreConfig(nil)
 	// Don't timeout raft leaders or range leases (see the relation between
-	// RaftElectionTimeoutTicks and rangeLeaseActiveDuration). This test expects
+	// RaftElectionTimeoutTicks and RangeLeaseActiveDuration). This test expects
 	// mtc.stores[0] to hold the range lease for range 1.
 	sc.RaftElectionTimeoutTicks = 1000000
 	sc.Clock = nil // manual clock
@@ -3914,6 +3914,12 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	// Don't timeout range leases (see the relation between
+	// RaftElectionTimeoutTicks and RangeLeaseActiveDuration). This test expects
+	// the replica that holds the lease before the cluster is restarted to
+	// continue holding it after the restart, regardless of how long the restart
+	// takes.
+	storeCfg.RaftElectionTimeoutTicks = 1000000
 	// Disable async intent resolution. This can lead to flakiness in the test
 	// because it allows for the intents written by the split transaction to be
 	// resolved at any time, including after the nodes are restarted. The intent
