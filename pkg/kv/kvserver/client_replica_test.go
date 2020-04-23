@@ -3138,6 +3138,203 @@ func TestStrictGCEnforcement(t *testing.T) {
 	})
 }
 
+// TestUninitializedReplicaIsEventuallyCleanedUp exercises cases where an
+// uninitialized replica is created in response to a raft message but is
+// removed from the range before it receives a snapshot. The scenarios in which
+// this can happen are:
+//
+//   (1) A split occurs, both the LHS and RHS are removed, then the LHS is
+//       added back at a higher replica ID prior to applying the split. The RHS
+//       receives a message during the period it is still a part of the group
+//       but is never initialized by the split.
+//
+//   (2) A learner is added but never receives a snapshot, some other node sends
+//       it a message but then removes it.
+//
+// This was historically problematic because we had no mechanism to detect and
+// remove these replicas, making them a slow, rare memory leak. They don't
+// really cause problems but they can show up in range reports which is
+// confusing to users.
+func TestUninitializedReplicaIsEventuallyCleanedUp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	gcTimeoutArgs := func() (
+		uninitializedTimeout *atomic.Value,
+		args base.TestClusterArgs,
+	) {
+		uninitializedTimeout = &atomic.Value{}
+		uninitializedTimeout.Store(kvserver.ReplicaGCQueueUninitializedTimeout)
+		args = base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						ReplicaGCQueueUninitializedTimeout: func() time.Duration {
+							return uninitializedTimeout.Load().(time.Duration)
+						},
+					},
+				},
+			},
+			ReplicationMode: base.ReplicationManual,
+		}
+		return uninitializedTimeout, args
+	}
+
+	t.Run("(1) Post-split abandoned RHS", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+		ctx := context.Background()
+		uninitializedTimeout, args := gcTimeoutArgs()
+		tc := testcluster.StartTestCluster(t, 3, args)
+		defer tc.Stopper().Stop(ctx)
+
+		key := tc.ScratchRange(t)
+		require.NoError(t, tc.WaitForSplitAndInitialization(key))
+
+		// Up-replicate our scratch range to all three nodes.
+		tc.AddReplicasOrFatal(t, key, tc.Target(1), tc.Target(2))
+		require.NoError(t, tc.WaitForVoters(key, tc.Target(1), tc.Target(2)))
+		desc, err := tc.LookupRange(key)
+		require.NoError(t, err)
+
+		// We're going to use the node at index 2 as the partitioned node.
+		// We want to split the range and block all traffic from both sides to the
+		// partitioned node. We'll then remove the LHS on the node from the range
+		// and let the LHS (pre-split) get removed. We then will let a message
+		// through to the RHS, and then remove it.
+
+		// Prepare the LHS to drop drop MsgApps so it does not apply the split.
+		fmt.Println("got those voters")
+		store, _ := getFirstStoreReplica(t, tc.Server(2), key)
+		lhsHandlerFuncs := noopRaftHandlerFuncs()
+		lhsHandlerFuncs.dropResp = func(response *kvserver.RaftMessageResponse) bool {
+			return true
+		}
+		lhsHandlerFuncs.dropHB = func(heartbeat *kvserver.RaftHeartbeat) bool {
+			return true
+		}
+		lhsHandlerFuncs.dropReq = func(request *kvserver.RaftMessageRequest) bool {
+			return request.Message.Type == raftpb.MsgApp
+		}
+		lhsHandler := &unreliableRaftHandler{
+			rangeID:                    desc.RangeID,
+			RaftMessageHandler:         store,
+			unreliableRaftHandlerFuncs: lhsHandlerFuncs,
+		}
+		tc.Servers[2].RaftTransport().Listen(store.StoreID(), lhsHandler)
+
+		// Split the range and then prepare the raft transport on the RHS of the
+		// partitioned node to properly drop messages.
+		splitPoint := append(key, []byte("foo")...)
+		_, rhs := tc.SplitRangeOrFatal(t, splitPoint)
+
+		// While the LHS can't hear about anything and thus covers the RHS, we'll
+		// block snapshots to the RHS so it never becomes initialized.
+		rhsHandlerFuncs := noopRaftHandlerFuncs()
+		rhsHandlerFuncs.dropReq = func(request *kvserver.RaftMessageRequest) bool {
+			// It's important to drop MsgApps because if we didn't then the behavior
+			// of the replicaMsgAppDropper can get in the way. If we let the RHS get
+			// to a point where it needs a snapshot, that snapshot may end up
+			// preventing the LHS from getting removed if both find themselves in
+			// need of snapshots.
+			return request.Message.Type == raftpb.MsgApp
+		}
+		rhsHandlerFuncs.snapErr = func(header *kvserver.SnapshotRequest_Header) error {
+			return errors.New("boom")
+		}
+		rhsHandlerFuncs.dropResp = func(response *kvserver.RaftMessageResponse) bool {
+			return true
+		}
+		rhsHander := &unreliableRaftHandler{
+			rangeID:                    rhs.RangeID,
+			RaftMessageHandler:         lhsHandler,
+			unreliableRaftHandlerFuncs: rhsHandlerFuncs,
+		}
+		tc.Servers[2].RaftTransport().Listen(store.StoreID(), rhsHander)
+
+		// Remove the LHS and destroy it by sending a ReplicaTooOldError.
+		// Waiting for it to campaign and then having the replica GC queue takes
+		// too long.
+		tc.RemoveReplicasOrFatal(t, key, tc.Target(2))
+		// The replica might already be destroyed, if not, this will destroy it.
+		_ = store.HandleRaftResponse(ctx, &kvserver.RaftMessageResponse{
+			RangeID:     desc.RangeID,
+			FromReplica: desc.Replicas().Voters()[0],
+			ToReplica:   desc.Replicas().Voters()[2],
+			Union: kvserver.RaftMessageResponseUnion{
+				Error: roachpb.NewError(roachpb.NewReplicaTooOldError(3)),
+			},
+		})
+		_, err = store.GetReplica(desc.RangeID)
+		require.True(t, roachpb.IsRangeNotFoundError(err))
+
+		// At this point we expect to see an uninitialized RHS on node 2.
+		var rhsReplica *kvserver.Replica
+		testutils.SucceedsSoon(t, func() (err error) {
+			rhsReplica, err = store.GetReplica(rhs.RangeID)
+			return err
+		})
+		require.False(t, rhsReplica.IsInitialized())
+
+		// Remove the RHS. We have blocked it from getting responses to avoid the
+		// case where it gets removed with a ReplicaTooOldError.
+		tc.RemoveReplicasOrFatal(t, rhs.StartKey.AsRawKey(), tc.Target(2))
+		uninitializedTimeout.Store(time.Nanosecond)
+		store.MustForceReplicaGCScanAndProcess()
+		_, err = store.GetReplica(rhs.RangeID)
+		require.True(t, roachpb.IsRangeNotFoundError(err))
+	})
+	t.Run("(2) abandoned learner", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+		ctx := context.Background()
+		uninitializedTimeout, args := gcTimeoutArgs()
+		tc := testcluster.StartTestCluster(t, 3, args)
+		defer tc.Stopper().Stop(ctx)
+
+		key := tc.ScratchRange(t)
+		require.NoError(t, tc.WaitForSplitAndInitialization(key))
+		tc.AddReplicasOrFatal(t, key, tc.Target(1))
+		require.NoError(t, tc.WaitForVoters(key, tc.Target(1)))
+		_, repl := getFirstStoreReplica(t, tc.Server(0), key)
+		desc := repl.Desc()
+		handlerFuncs := noopRaftHandlerFuncs()
+		handlerFuncs.dropResp = func(request *kvserver.RaftMessageResponse) bool {
+			return true
+		}
+		// Prevent a snapshot.
+		blockSnapshot := make(chan struct{})
+		handlerFuncs.snapErr = func(header *kvserver.SnapshotRequest_Header) error {
+			<-blockSnapshot
+			return errors.New("boom")
+		}
+		s2, err := tc.Server(2).GetStores().(*kvserver.Stores).GetStore(tc.Server(2).GetFirstStoreID())
+		require.NoError(t, err)
+		tc.Servers[2].RaftTransport().Listen(s2.StoreID(), &unreliableRaftHandler{
+			rangeID:                    desc.RangeID,
+			RaftMessageHandler:         s2,
+			unreliableRaftHandlerFuncs: handlerFuncs,
+		})
+		replicateErrChan := make(chan error)
+		go func() {
+			_, err := tc.AddReplicas(key, tc.Target(2))
+			replicateErrChan <- err
+		}()
+		// Try to up-replicate to s2, which will eventually fail, but first make sure
+		// that a replica gets created.
+		testutils.SucceedsSoon(t, func() error {
+			repl, err := s2.GetReplica(desc.RangeID)
+			if err == nil {
+				require.False(t, repl.IsInitialized())
+			}
+			return err
+		})
+		close(blockSnapshot)
+		require.Error(t, <-replicateErrChan)
+		uninitializedTimeout.Store(time.Nanosecond)
+		s2.MustForceReplicaGCScanAndProcess()
+		_, err = s2.GetReplica(desc.RangeID)
+		require.True(t, roachpb.IsRangeNotFoundError(err))
+	})
+}
+
 // getRangeInfo retreives range info by performing a get against the provided
 // key and setting the ReturnRangeInfo flag to true.
 func getRangeInfo(

@@ -200,6 +200,9 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		// our state that was tracking it. This is unrelated to managing proposal
 		// quota, but this is a convenient place to do so.
 		if rep.ReplicaID == r.mu.lastReplicaAdded && progress.Match >= commitIndex {
+			if !r.isInitializedRLocked() {
+				panic("here")
+			}
 			r.mu.lastReplicaAdded = 0
 			r.mu.lastReplicaAddedTime = time.Time{}
 		}

@@ -37,7 +37,7 @@ func (rd *replicaMsgAppDropper) ShouldDrop(startKey roachpb.RKey) (fmt.Stringer,
 	if lhsRepl == nil {
 		return nil, false
 	}
-	lhsRepl.store.gcQueue.AddAsync(context.Background(), lhsRepl, replicaGCPriorityDefault)
+	lhsRepl.store.replicaGCQueue.AddAsync(context.Background(), lhsRepl, replicaGCPriorityDefault)
 	return lhsRepl, true
 }
 
