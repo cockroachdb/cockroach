@@ -246,6 +246,14 @@ func (p *planner) dropIndexByName(
 		return nil
 	}
 
+	if idx.Unique && behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint && !idx.CreatedExplicitly {
+		return errors.WithHint(
+			pgerror.Newf(pgcode.DependentObjectsStillExist,
+				"index %q is in use as unique constraint", idx.Name),
+			"use CASCADE if you really want to drop it.",
+		)
+	}
+
 	// Check if requires CCL binary for eventual zone config removal.
 	_, zone, _, err := GetZoneConfigInTxn(ctx, p.txn, uint32(tableDesc.ID), nil, "", false)
 	if err != nil {
@@ -389,10 +397,6 @@ func (p *planner) dropIndexByName(
 		if err := p.removeInterleave(ctx, ref); err != nil {
 			return err
 		}
-	}
-
-	if idx.Unique && behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint && !idx.CreatedExplicitly {
-		return errors.Errorf("index %q is in use as unique constraint (use CASCADE if you really want to drop it)", idx.Name)
 	}
 
 	var droppedViews []string
