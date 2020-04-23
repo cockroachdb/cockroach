@@ -52,7 +52,7 @@ root                         ·             ·                                  
  │                           table         abc@primary                                                                  ·               ·
  │                           spans         FULL SCAN                                                                    ·               ·
  │                           filter        a = @S2                                                                      ·               ·
- ├── subquery                ·             ·                                                                            (a, b, c)       ·
+ ├── subquery                ·             ·                                                                            ·               ·
  │    │                      id            @S1                                                                          ·               ·
  │    │                      original sql  EXISTS (SELECT * FROM abc WHERE c = (a + 3))                                 ·               ·
  │    │                      exec mode     exists                                                                       ·               ·
@@ -62,7 +62,7 @@ root                         ·             ·                                  
  │                           table         abc@primary                                                                  ·               ·
  │                           spans         FULL SCAN                                                                    ·               ·
  │                           filter        c = (a + 3)                                                                  ·               ·
- └── subquery                ·             ·                                                                            (a, b, c)       ·
+ └── subquery                ·             ·                                                                            ·               ·
       │                      id            @S2                                                                          ·               ·
       │                      original sql  (SELECT max(a) FROM abc WHERE EXISTS (SELECT * FROM abc WHERE c = (a + 3)))  ·               ·
       │                      exec mode     one row                                                                      ·               ·
@@ -239,7 +239,7 @@ root            ·              ·                  ("array")  ·
  ├── values     ·              ·                  ("array")  ·
  │              size           1 column, 1 row    ·          ·
  │              row 0, expr 0  ARRAY @S1          ·          ·
- └── subquery   ·              ·                  ("array")  ·
+ └── subquery   ·              ·                  ·          ·
       │         id             @S1                ·          ·
       │         original sql   (SELECT x FROM b)  ·          ·
       │         exec mode      all rows           ·          ·

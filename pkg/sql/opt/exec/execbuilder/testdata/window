@@ -420,7 +420,7 @@ root                 ·             ·                                          
  │         └── scan  ·             ·                                                                          (v, w)        ·
  │                   table         kv@primary                                                                 ·             ·
  │                   spans         FULL SCAN                                                                  ·             ·
- └── subquery        ·             ·                                                                          (avg)         ·
+ └── subquery        ·             ·                                                                          ·             ·
       │              id            @S1                                                                        ·             ·
       │              original sql  (SELECT count(*) FROM kv)                                                  ·             ·
       │              exec mode     one row                                                                    ·             ·

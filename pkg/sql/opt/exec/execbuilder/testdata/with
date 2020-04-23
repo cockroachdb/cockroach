@@ -19,7 +19,7 @@ root                        ·             ·                (a, a)  ·
  │    │                     label         buffer 1 (t)     ·       ·
  │    └── scan buffer node  ·             ·                (a)     ·
  │                          label         buffer 1 (t)     ·       ·
- └── subquery               ·             ·                (a, a)  ·
+ └── subquery               ·             ·                ·       ·
       │                     id            @S1              ·       ·
       │                     original sql  SELECT a FROM y  ·       ·
       │                     exec mode     all rows         ·       ·
@@ -50,7 +50,7 @@ EXPLAIN (VERBOSE)
 root                                       ·              ·                                     (a)                 ·
  ├── scan buffer node                      ·              ·                                     (a)                 ·
  │                                         label          buffer 1 (t)                          ·                   ·
- └── subquery                              ·              ·                                     (a)                 ·
+ └── subquery                              ·              ·                                     ·                   ·
       │                                    id             @S1                                   ·                   ·
       │                                    original sql   INSERT INTO x VALUES (1) RETURNING a  ·                   ·
       │                                    exec mode      all rows                              ·                   ·

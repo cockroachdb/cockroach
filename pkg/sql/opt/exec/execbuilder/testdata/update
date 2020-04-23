@@ -346,7 +346,7 @@ root                                          ·                 ·             
  │    │                                       order             +a                                ·                         ·
  │    └── scan buffer node                    ·                 ·                                 (a)                       ·
  │                                            label             buffer 1                          ·                         ·
- └── subquery                                 ·                 ·                                 (a)                       +a
+ └── subquery                                 ·                 ·                                 ·                         ·
       │                                       id                @S1                               ·                         ·
       │                                       original sql      UPDATE abc SET a = c RETURNING a  ·                         ·
       │                                       exec mode         all rows                          ·                         ·
