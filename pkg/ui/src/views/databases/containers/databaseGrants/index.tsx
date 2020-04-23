@@ -71,13 +71,6 @@ class DatabaseSummaryGrants extends DatabaseSummaryBase {
                   cell: (grant) => grant.privileges.join(", "),
                 },
               ]}
-              // empty={tableInfos.length}
-              // emptyProps={{
-              //   title: "There are no statements since this page was last cleared.",
-              //   description: "Statements help you identify frequently executed or high latency SQL statements. Statements are cleared every hour by default, or according to your configuration.",
-              //   label: "Learn more",
-              //   onClick: () => window.open("https://www.cockroachlabs.com/docs/stable/admin-ui-databases-page.html"),
-              // }}
               renderNoResult={this.noDatabaseResults()}
             />
           </div>

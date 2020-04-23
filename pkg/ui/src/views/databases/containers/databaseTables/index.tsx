@@ -54,7 +54,7 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
   render() {
     const { tableInfos, dbResponse, sortSetting } = this.props;
     const dbID = this.props.name;
-    const loading = dbResponse ? dbResponse.inFlight : true;
+    const loading = dbResponse ? !!dbResponse.inFlight : true;
     const numTables = tableInfos && tableInfos.length || 0;
     return (
       <div className="database-summary">
@@ -102,14 +102,8 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
                   sort: (tableInfo) => tableInfo.numIndices,
                 },
               ]}
-              // empty={tableInfos.length}
-              // emptyProps={{
-              //   title: "There are no statements since this page was last cleared.",
-              //   description: "Statements help you identify frequently executed or high latency SQL statements. Statements are cleared every hour by default, or according to your configuration.",
-              //   label: "Learn more",
-              //   onClick: () => window.open("https://www.cockroachlabs.com/docs/stable/admin-ui-databases-page.html"),
-              // }}
-              renderNoResult={this.noDatabaseResults()}
+              loading={loading}
+              renderNoResult={loading ? undefined : this.noDatabaseResults()}
           />
           </div>
           <div className="l-columns__right">
