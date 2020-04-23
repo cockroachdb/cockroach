@@ -49,12 +49,16 @@ func newCSVInputReader(
 	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
 ) *csvInputReader {
+	expectedLen := len(targetCols)
+	if len(targetCols) == 0 {
+		expectedLen = len(tableDesc.VisibleColumns())
+	}
 	return &csvInputReader{
 		evalCtx:      evalCtx,
 		opts:         opts,
 		walltime:     walltime,
 		kvCh:         kvCh,
-		expectedCols: len(tableDesc.VisibleColumns()),
+		expectedCols: expectedLen,
 		tableDesc:    tableDesc,
 		targetCols:   targetCols,
 		recordCh:     make(chan csvRecord),
@@ -144,6 +148,7 @@ func (c *csvInputReader) readFile(
 		if uint32(i) <= c.opts.Skip {
 			continue
 		}
+
 		if len(record) == c.expectedCols {
 			// Expected number of columns.
 		} else if len(record) == c.expectedCols+1 && record[c.expectedCols] == "" {
