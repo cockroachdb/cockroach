@@ -78,7 +78,7 @@
     (MakeAggCols
         ConstAgg (NonKeyCols $input)
     )
-    (MakeGrouping (KeyCols $input))
+    (MakeGrouping (KeyCols $input) (EmptyOrdering))
 )
 
 # SplitDisjunctionAddKey performs a transformation similar to
@@ -146,7 +146,7 @@
         (MakeAggCols
             ConstAgg (NonKeyCols $leftScan)
         )
-        (MakeGrouping (KeyCols $leftScan))
+        (MakeGrouping (KeyCols $leftScan) (EmptyOrdering))
     )
     []
     (OutputCols $input)

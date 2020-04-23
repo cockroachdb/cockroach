@@ -348,7 +348,7 @@
                         (MakeArrayAggCol (ArrayType $requestedCol))
                     )
                 ]
-                (MakeOrderedGrouping
+                (MakeGrouping
                     (MakeEmptyColSet)
                     (SubqueryOrdering $subquery)
                 )
