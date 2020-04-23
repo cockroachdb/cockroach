@@ -298,10 +298,11 @@ func (e *NotBootstrappedError) Error() string {
 // initialized Replicas (in unspecified order). It provides an option
 // to visit replicas in increasing RangeID order.
 type storeReplicaVisitor struct {
-	store   *Store
-	repls   []*Replica // Replicas to be visited
-	ordered bool       // Option to visit replicas in sorted order
-	visited int        // Number of visited ranges, -1 before first call to Visit()
+	store              *Store
+	repls              []*Replica // Replicas to be visited
+	visitUninitialized bool       // Option to visit uninitialized replicas
+	ordered            bool       // Option to visit replicas in sorted order
+	visited            int        // Number of visited ranges, -1 before first call to Visit()
 }
 
 // Len implements sort.Interface.
@@ -321,9 +322,9 @@ func newStoreReplicaVisitor(store *Store) *storeReplicaVisitor {
 	}
 }
 
-// InOrder tells the visitor to visit replicas in increasing RangeID order.
-func (rs *storeReplicaVisitor) InOrder() *storeReplicaVisitor {
-	rs.ordered = true
+// includeUnitialized tells the visitor to visit uninitialized replicas.
+func (rs *storeReplicaVisitor) includeUninitialized() *storeReplicaVisitor {
+	rs.visitUninitialized = true
 	return rs
 }
 
@@ -363,7 +364,7 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 		destroyed := repl.mu.destroyStatus
 		initialized := repl.isInitializedRLocked()
 		repl.mu.RUnlock()
-		if initialized && destroyed.IsAlive() && !visitor(repl) {
+		if (initialized || rs.visitUninitialized) && destroyed.IsAlive() && !visitor(repl) {
 			break
 		}
 	}
@@ -912,7 +913,8 @@ func NewStore(
 		// Add range scanner and configure with queues.
 		s.scanner = newReplicaScanner(
 			s.cfg.AmbientCtx, s.cfg.Clock, cfg.ScanInterval,
-			cfg.ScanMinIdleTime, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
+			cfg.ScanMinIdleTime, cfg.ScanMaxIdleTime,
+			newStoreReplicaVisitor(s).includeUninitialized(),
 		)
 		s.gcQueue = newGCQueue(s, s.cfg.Gossip)
 		s.mergeQueue = newMergeQueue(s, s.db, s.cfg.Gossip)
@@ -1918,13 +1920,6 @@ func (s *Store) recordNewPerSecondStats(newQPS, newWPS float64) {
 	// TODO(a-robinson): Use the provided values to avoid having to recalculate
 	// them in GossipStore.
 	s.asyncGossipStore(context.TODO(), message, false /* useCached */)
-}
-
-// VisitReplicas invokes the visitor on the Store's Replicas until the visitor returns false.
-// Replicas which are added to the Store after iteration begins may or may not be observed.
-func (s *Store) VisitReplicas(visitor func(*Replica) bool) {
-	v := newStoreReplicaVisitor(s)
-	v.Visit(visitor)
 }
 
 // WriteLastUpTimestamp records the supplied timestamp into the "last up" key

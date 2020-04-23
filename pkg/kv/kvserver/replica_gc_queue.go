@@ -44,6 +44,17 @@ const (
 	// learned about its promotion but that state shouldn't last long so we
 	// also treat idle replicas in that state as suspect.
 	ReplicaGCQueueSuspectTimeout = 1 * time.Second
+
+	// Uninitialized replicas exist while a replica is in the process of receiving
+	// a snapshot. Uninitialized replicas can be orphaned in cases where the
+	// snapshot fails. In some cases those uninitialized replicas will receive
+	// a ReplicaTooOldError in response to a heartbeat but this is not guaranteed.
+	// Furthermore, uninitialized replicas will not campaign and thus will not
+	// be considered suspect.
+	//
+	// This value is chosen conservatively as no snapshot should take this long.
+	// If it does, then it will fail, but that's fine.
+	ReplicaGCQueueUninitializedTimeout = 60 * time.Minute
 )
 
 // Priorities for the replica GC queue.
@@ -89,6 +100,35 @@ type replicaGCQueue struct {
 	*baseQueue
 	metrics ReplicaGCQueueMetrics
 	db      *kv.DB
+	cfg     replicaGCQueueConfig
+}
+
+// replicaGCQueueConfig controls the timeouts used by the queue. It primarily
+// exists so that it can be overridden by testing knobs.
+type replicaGCQueueConfig struct {
+	inactivityThreshold          time.Duration
+	suspectTimeout               time.Duration
+	uninitializedTimeout         time.Duration
+	uninitializedTimeoutOverride func() time.Duration
+}
+
+func makeReplicaGCQueueConfig(knobs *StoreTestingKnobs) replicaGCQueueConfig {
+	cfg := replicaGCQueueConfig{
+		inactivityThreshold:  ReplicaGCQueueInactivityThreshold,
+		suspectTimeout:       ReplicaGCQueueSuspectTimeout,
+		uninitializedTimeout: ReplicaGCQueueUninitializedTimeout,
+	}
+	if knobs != nil {
+		cfg.uninitializedTimeoutOverride = knobs.ReplicaGCQueueUninitializedTimeout
+	}
+	return cfg
+}
+
+func (c replicaGCQueueConfig) getUninitializedTimeout() time.Duration {
+	if c.uninitializedTimeoutOverride != nil {
+		return c.uninitializedTimeoutOverride()
+	}
+	return c.uninitializedTimeout
 }
 
 // newReplicaGCQueue returns a new instance of replicaGCQueue.
@@ -96,21 +136,24 @@ func newReplicaGCQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *replicaG
 	rgcq := &replicaGCQueue{
 		metrics: makeReplicaGCQueueMetrics(),
 		db:      db,
+		cfg:     makeReplicaGCQueueConfig(store.TestingKnobs()),
 	}
+
 	store.metrics.registry.AddMetricStruct(&rgcq.metrics)
 	rgcq.baseQueue = newBaseQueue(
 		"replicaGC", rgcq, store, gossip,
 		queueConfig{
-			maxSize:                  defaultQueueMaxSize,
-			needsLease:               false,
-			needsRaftInitialized:     true,
-			needsSystemConfig:        false,
-			acceptsUnsplitRanges:     true,
-			processDestroyedReplicas: true,
-			successes:                store.metrics.ReplicaGCQueueSuccesses,
-			failures:                 store.metrics.ReplicaGCQueueFailures,
-			pending:                  store.metrics.ReplicaGCQueuePending,
-			processingNanos:          store.metrics.ReplicaGCQueueProcessingNanos,
+			maxSize:                      defaultQueueMaxSize,
+			needsLease:                   false,
+			needsRaftInitialized:         true,
+			needsSystemConfig:            false,
+			acceptsUnsplitRanges:         true,
+			processDestroyedReplicas:     true,
+			processUninitializedReplicas: true,
+			successes:                    store.metrics.ReplicaGCQueueSuccesses,
+			failures:                     store.metrics.ReplicaGCQueueFailures,
+			pending:                      store.metrics.ReplicaGCQueuePending,
+			processingNanos:              store.metrics.ReplicaGCQueueProcessingNanos,
 		},
 	)
 	return rgcq
@@ -125,33 +168,50 @@ func newReplicaGCQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *replicaG
 func (rgcq *replicaGCQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, _ *config.SystemConfig,
 ) (shouldQ bool, prio float64) {
-
 	lastCheck, err := repl.GetLastReplicaGCTimestamp(ctx)
 	if err != nil {
 		log.Errorf(ctx, "could not read last replica GC timestamp: %+v", err)
 		return false, 0
 	}
+	desc := repl.Desc()
 	replDesc, currentMember := repl.Desc().GetReplicaDescriptor(repl.store.StoreID())
-	if !currentMember {
+	if !currentMember && desc.IsInitialized() {
+		// TODO(ajwerner): This case should not happen as of 19.2. Validate that
+		// and remove it.
 		return true, replicaGCPriorityRemoved
 	}
 
 	lastActivity := hlc.Timestamp{
 		WallTime: repl.store.startedAt,
 	}
-
 	if lease, _ := repl.GetLease(); lease.ProposedTS != nil {
 		lastActivity.Forward(*lease.ProposedTS)
 	}
+	if !desc.IsInitialized() {
+		// The replicaID for an uninitialized replica will be the current
+		// replica's ID.
+		replicaID, addedAt := repl.LastReplicaAdded()
+		if replicaID != repl.ReplicaID() {
+			log.Fatalf(ctx, "uninitialized replica did not have itself as the"+
+				" last replica added: %v %v %v", replicaID, addedAt, repl)
+		}
+		lastActivity.Forward(hlc.Timestamp{
+			WallTime: addedAt.UnixNano(),
+		})
+	}
 
-	// It is critical to think of the replica as suspect if it is a learner as
-	// it both shouldn't be a learner for long but will never become a candidate.
-	// It is less critical to consider joint configuration members as suspect
-	// but in cases where a replica is removed but only ever hears about the
-	// command which sets it to VOTER_OUTGOING we would conservatively wait
-	// 10 days before removing the node. Finally we consider replicas which are
-	// VOTER_INCOMING as suspect because no replica should stay in that state for
-	// too long and being conservative here doesn't seem worthwhile.
+	// If a replica has not been initialized we should consider it as suspect if
+	// it has not had recent activity. We expect replicas to become initialized
+	// via a snapshot soon after they are constructed. If not, the uninitialized
+	// replica may become orphaned and will be leaked. It is critical to think of
+	// the replica as suspect if it is a learner as it both shouldn't be a learner
+	// for long but will never become a candidate. It is less critical to consider
+	// joint configuration members as suspect but in cases where a replica is
+	// removed but only ever hears about the command which sets it to
+	// VOTER_OUTGOING we would conservatively wait 10 days before removing the
+	// node. We consider replicas which are VOTER_INCOMING as suspect because no
+	// replica should stay in that state for too long and being conservative here
+	// doesn't seem worthwhile.
 	isSuspect := replDesc.GetType() != roachpb.VOTER_FULL
 	if raftStatus := repl.RaftStatus(); raftStatus != nil {
 		isSuspect = isSuspect ||
@@ -169,32 +229,37 @@ func (rgcq *replicaGCQueue) shouldQueue(
 			}
 		}
 	}
-	return replicaGCShouldQueueImpl(now, lastCheck, lastActivity, isSuspect)
+	return replicaGCShouldQueueImpl(rgcq.cfg, now, lastCheck, lastActivity,
+		isSuspect, desc.IsInitialized())
 }
 
 func replicaGCShouldQueueImpl(
-	now, lastCheck, lastActivity hlc.Timestamp, isSuspect bool,
+	cfg replicaGCQueueConfig,
+	now, lastCheck, lastActivity hlc.Timestamp,
+	isSuspect, isInitialized bool,
 ) (bool, float64) {
-	timeout := ReplicaGCQueueInactivityThreshold
+	timeout := cfg.inactivityThreshold
 	priority := replicaGCPriorityDefault
 
 	if isSuspect {
 		// If the range is suspect (which happens if its former replica set
 		// ignores it), let it expire much earlier.
-		timeout = ReplicaGCQueueSuspectTimeout
+		timeout = cfg.suspectTimeout
 		priority = replicaGCPrioritySuspect
-	} else if now.Less(lastCheck.Add(ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0)) {
-		// Return false immediately if the previous check was less than the
-		// check interval in the past. Note that we don't do this if the
-		// replica is in candidate state, in which case we want to be more
-		// aggressive - a failed rebalance attempt could have checked this
-		// range, and candidate state suggests that a retry succeeded. See
-		// #7489.
+	} else if !isInitialized {
+		timeout = cfg.getUninitializedTimeout()
+		priority = replicaGCPrioritySuspect
+	}
+	if !isSuspect && now.Less(lastCheck.Add(timeout.Nanoseconds(), 0)) {
+		// Return false immediately if the previous check was less than the check
+		// interval in the past. Note that we don't do this if the replica is in
+		// candidate state(suspect), in which case we want to be more aggressive.
+		// A failed rebalance attempt could have checked this range, and candidate
+		// state suggests that a retry succeeded. See #7489.
 		return false, 0
 	}
 
 	shouldQ := lastActivity.Add(timeout.Nanoseconds(), 0).Less(now)
-
 	if !shouldQ {
 		return false, 0
 	}
@@ -206,7 +271,7 @@ func replicaGCShouldQueueImpl(
 // still a member of the range.
 func (rgcq *replicaGCQueue) process(
 	ctx context.Context, repl *Replica, _ *config.SystemConfig,
-) error {
+) (err error) {
 	// Note that the Replicas field of desc is probably out of date, so
 	// we should only use `desc` for its static fields like RangeID and
 	// StartKey (and avoid rng.GetReplica() for the same reason).
@@ -299,10 +364,7 @@ func (rgcq *replicaGCQueue) process(
 		// we pass in the NextReplicaID to detect situations in which the
 		// replica became "non-gc'able" in the meantime by checking (with raftMu
 		// held throughout) whether the replicaID is still smaller than the
-		// NextReplicaID. Given non-zero replica IDs don't change, this is only
-		// possible if we currently think we're processing a pre-emptive snapshot
-		// but discover in RemoveReplica that this range has since been added and
-		// knows that.
+		// NextReplicaID. Given replica IDs don't change, this is not possible.
 		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
