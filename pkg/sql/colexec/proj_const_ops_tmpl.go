@@ -66,6 +66,9 @@ var _ duration.Duration
 // Dummy import to pull in "coltypes" package.
 var _ coltypes.T
 
+// _NON_CONST_GOTYPESLICE is a template Go type slice variable.
+type _NON_CONST_GOTYPESLICE interface{}
+
 // _ASSIGN is the template function for assigning the first input to the result
 // of computation an operation on the second and the third inputs.
 func _ASSIGN(_, _, _ interface{}) {
@@ -104,10 +107,11 @@ func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(p.colIdx)
+	var col _NON_CONST_GOTYPESLICE
 	// {{if _IS_CONST_LEFT}}
-	col := vec._R_TYP()
+	col = vec._R_TYP()
 	// {{else}}
-	col := vec._L_TYP()
+	col = vec._L_TYP()
 	// {{end}}
 	projVec := batch.ColVec(p.outputIdx)
 	if projVec.MaybeHasNulls() {
@@ -225,10 +229,14 @@ func GetProjection_CONST_SIDEConstOperator(
 		colIdx:       colIdx,
 		outputIdx:    outputIdx,
 	}
+	var (
+		c   interface{}
+		err error
+	)
 	// {{if _IS_CONST_LEFT}}
-	c, err := getDatumToPhysicalFn(leftType)(constArg)
+	c, err = getDatumToPhysicalFn(leftType)(constArg)
 	// {{else}}
-	c, err := getDatumToPhysicalFn(rightType)(constArg)
+	c, err = getDatumToPhysicalFn(rightType)(constArg)
 	// {{end}}
 	if err != nil {
 		return nil, err

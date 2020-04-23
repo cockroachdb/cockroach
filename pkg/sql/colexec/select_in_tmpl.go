@@ -210,7 +210,7 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 		}
 
 		vec := batch.ColVec(si.colIdx)
-		col := vec._TemplateType()
+		col := vec.TemplateType()
 		var idx int
 		n := batch.Length()
 
@@ -280,7 +280,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 	}
 
 	vec := batch.ColVec(pi.colIdx)
-	col := vec._TemplateType()
+	col := vec.TemplateType()
 
 	projVec := batch.ColVec(pi.outputIdx)
 	projCol := projVec.Bool()

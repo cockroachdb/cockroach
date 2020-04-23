@@ -110,13 +110,13 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 			if bufferedGroup.firstTuple[colIdx].Nulls().NullAt(0) {
 				return true
 			}
-			bufferedCol := bufferedGroup.firstTuple[colIdx]._TemplateType()
+			bufferedCol := bufferedGroup.firstTuple[colIdx].TemplateType()
 			prevVal := execgen.UNSAFEGET(bufferedCol, 0)
 			var curVal _GOTYPE
 			if batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt(tupleToLookAtIdx) {
 				return true
 			}
-			col := batch.ColVec(int(colIdx))._TemplateType()
+			col := batch.ColVec(int(colIdx)).TemplateType()
 			curVal = execgen.UNSAFEGET(col, tupleToLookAtIdx)
 			var match bool
 			_ASSIGN_EQ(match, prevVal, curVal)

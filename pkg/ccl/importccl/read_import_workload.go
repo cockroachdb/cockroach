@@ -138,7 +138,8 @@ func (w *workloadReader) readFiles(
 		}
 		gen := meta.New()
 		if f, ok := gen.(workload.Flagser); ok {
-			if err := f.Flags().Parse(conf.Flags); err != nil {
+			flags := f.Flags()
+			if err := flags.Parse(conf.Flags); err != nil {
 				return errors.Wrapf(err, `parsing parameters %s`, strings.Join(conf.Flags, ` `))
 			}
 		}

@@ -90,7 +90,7 @@ type anyNotNull_TYPEAgg struct {
 func (a *anyNotNull_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 	a.groups = groups
 	a.vec = vec
-	a.col = vec._TemplateType()
+	a.col = vec.TemplateType()
 	a.nulls = vec.Nulls()
 	a.Reset()
 }
@@ -131,7 +131,7 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		return
 	}
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
-	col, nulls := vec._TemplateType(), vec.Nulls()
+	col, nulls := vec.TemplateType(), vec.Nulls()
 
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},

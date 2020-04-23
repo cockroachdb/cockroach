@@ -69,7 +69,7 @@ func genAvgAgg(wr io.Writer) error {
 	s = strings.Replace(s, "_GOTYPE", "{{.Type.GoTypeName}}", -1)
 	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.Type}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.Type}}", -1)
-	s = strings.Replace(s, "_TemplateType", "{{.Type}}", -1)
+	s = strings.Replace(s, "TemplateType", "{{.Type}}", -1)
 
 	assignDivRe := makeFunctionRegex("_ASSIGN_DIV_INT64", 3)
 	s = assignDivRe.ReplaceAllString(s, makeTemplateFunctionCall("AssignDivInt64", 3))

@@ -32,7 +32,7 @@ func genSumAgg(wr io.Writer) error {
 	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
 	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
+	s = strings.Replace(s, "TemplateType", "{{.LTyp}}", -1)
 
 	assignAddRe := makeFunctionRegex("_ASSIGN_ADD", 3)
 	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Assign", 3))

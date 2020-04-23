@@ -71,7 +71,7 @@ func (u unknown) SetCol(interface{}) {
 	panic("Vec is of unknown type and should not be accessed")
 }
 
-func (u unknown) _TemplateType() []interface{} {
+func (u unknown) TemplateType() []interface{} {
 	panic("Vec is of unknown type and should not be accessed")
 }
 

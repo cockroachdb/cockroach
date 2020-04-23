@@ -108,7 +108,7 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 		return coldata.ZeroBatch
 	}
 	vec := batch.ColVec(c.outputIdx)
-	col := vec._TemplateType()
+	col := vec.TemplateType()
 	if vec.MaybeHasNulls() {
 		// We need to make sure that there are no left over null values in the
 		// output vector.

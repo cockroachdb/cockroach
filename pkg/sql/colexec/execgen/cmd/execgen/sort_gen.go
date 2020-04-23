@@ -52,7 +52,7 @@ func genSortOps(wr io.Writer) error {
 	s = strings.Replace(s, "_TYPE", "{{$typ}}", -1)
 	s = strings.Replace(s, "_DIR_ENUM", "{{.Dir}}", -1)
 	s = strings.Replace(s, "_DIR", "{{.DirString}}", -1)
-	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
+	s = strings.Replace(s, "TemplateType", "{{.LTyp}}", -1)
 	s = strings.Replace(s, "_ISNULL", "{{$isNull}}", -1)
 	s = strings.Replace(s, "_HANDLES_NULLS", "{{if .Nulls}}WithNulls{{else}}{{end}}", -1)
 
