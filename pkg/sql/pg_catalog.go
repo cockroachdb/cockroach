@@ -773,7 +773,7 @@ CREATE TABLE pg_catalog.pg_collation (
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachDatabaseDesc(ctx, p, dbContext, func(db *DatabaseDescriptor) error {
+		return forEachDatabaseDesc(ctx, p, dbContext, false /* requiresPrivileges */, func(db *DatabaseDescriptor) error {
 			namespaceOid := h.NamespaceOid(db, pgCatalogName)
 			for _, tag := range collate.Supported() {
 				collName := tag.String()
@@ -1175,26 +1175,27 @@ CREATE TABLE pg_catalog.pg_database (
 	datacl STRING[]
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachDatabaseDesc(ctx, p, nil /*all databases*/, func(db *sqlbase.DatabaseDescriptor) error {
-			return addRow(
-				dbOid(db.ID),           // oid
-				tree.NewDName(db.Name), // datname
-				tree.DNull,             // datdba
-				// If there is a change in encoding value for the database we must update
-				// the definitions of getdatabaseencoding within pg_builtin.
-				builtins.DatEncodingUTFId,  // encoding
-				builtins.DatEncodingEnUTF8, // datcollate
-				builtins.DatEncodingEnUTF8, // datctype
-				tree.DBoolFalse,            // datistemplate
-				tree.DBoolTrue,             // datallowconn
-				negOneVal,                  // datconnlimit
-				oidZero,                    // datlastsysoid
-				tree.DNull,                 // datfrozenxid
-				tree.DNull,                 // datminmxid
-				oidZero,                    // dattablespace
-				tree.DNull,                 // datacl
-			)
-		})
+		return forEachDatabaseDesc(ctx, p, nil /*all databases*/, true, /* requiresPrivileges */
+			func(db *sqlbase.DatabaseDescriptor) error {
+				return addRow(
+					dbOid(db.ID),           // oid
+					tree.NewDName(db.Name), // datname
+					tree.DNull,             // datdba
+					// If there is a change in encoding value for the database we must update
+					// the definitions of getdatabaseencoding within pg_builtin.
+					builtins.DatEncodingUTFId,  // encoding
+					builtins.DatEncodingEnUTF8, // datcollate
+					builtins.DatEncodingEnUTF8, // datctype
+					tree.DBoolFalse,            // datistemplate
+					tree.DBoolTrue,             // datallowconn
+					negOneVal,                  // datconnlimit
+					oidZero,                    // datlastsysoid
+					tree.DNull,                 // datfrozenxid
+					tree.DNull,                 // datminmxid
+					oidZero,                    // dattablespace
+					tree.DNull,                 // datacl
+				)
+			})
 	},
 }
 
@@ -1845,16 +1846,17 @@ CREATE TABLE pg_catalog.pg_namespace (
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachDatabaseDesc(ctx, p, dbContext, func(db *sqlbase.DatabaseDescriptor) error {
-			return forEachSchemaName(ctx, p, db, func(s string) error {
-				return addRow(
-					h.NamespaceOid(db, s), // oid
-					tree.NewDString(s),    // nspname
-					tree.DNull,            // nspowner
-					tree.DNull,            // nspacl
-				)
+		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
+			func(db *sqlbase.DatabaseDescriptor) error {
+				return forEachSchemaName(ctx, p, db, func(s string) error {
+					return addRow(
+						h.NamespaceOid(db, s), // oid
+						tree.NewDString(s),    // nspname
+						tree.DNull,            // nspowner
+						tree.DNull,            // nspacl
+					)
+				})
 			})
-		})
 	},
 }
 
@@ -2097,123 +2099,124 @@ CREATE TABLE pg_catalog.pg_proc (
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachDatabaseDesc(ctx, p, dbContext, func(db *DatabaseDescriptor) error {
-			nspOid := h.NamespaceOid(db, pgCatalogName)
-			for _, name := range builtins.AllBuiltinNames {
-				// parser.Builtins contains duplicate uppercase and lowercase keys.
-				// Only return the lowercase ones for compatibility with postgres.
-				var first rune
-				for _, c := range name {
-					first = c
-					break
-				}
-				if unicode.IsUpper(first) {
-					continue
-				}
-				props, overloads := builtins.GetBuiltinProperties(name)
-				isAggregate := props.Class == tree.AggregateClass
-				isWindow := props.Class == tree.WindowClass
-				for _, builtin := range overloads {
-					dName := tree.NewDName(name)
-					dSrc := tree.NewDString(name)
-
-					var retType tree.Datum
-					isRetSet := false
-					if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
-						var retOid oid.Oid
-						if fixedRetType.Family() == types.TupleFamily && builtin.Generator != nil {
-							isRetSet = true
-							// Functions returning tables with zero, or more than one
-							// columns are marked to return "anyelement"
-							// (e.g. `unnest`)
-							retOid = oid.T_anyelement
-							if len(fixedRetType.TupleContents()) == 1 {
-								// Functions returning tables with exactly one column
-								// are marked to return the type of that column
-								// (e.g. `generate_series`).
-								retOid = fixedRetType.TupleContents()[0].Oid()
-							}
-						} else {
-							retOid = fixedRetType.Oid()
-						}
-						retType = tree.NewDOid(tree.DInt(retOid))
+		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
+			func(db *DatabaseDescriptor) error {
+				nspOid := h.NamespaceOid(db, pgCatalogName)
+				for _, name := range builtins.AllBuiltinNames {
+					// parser.Builtins contains duplicate uppercase and lowercase keys.
+					// Only return the lowercase ones for compatibility with postgres.
+					var first rune
+					for _, c := range name {
+						first = c
+						break
 					}
+					if unicode.IsUpper(first) {
+						continue
+					}
+					props, overloads := builtins.GetBuiltinProperties(name)
+					isAggregate := props.Class == tree.AggregateClass
+					isWindow := props.Class == tree.WindowClass
+					for _, builtin := range overloads {
+						dName := tree.NewDName(name)
+						dSrc := tree.NewDString(name)
 
-					argTypes := builtin.Types
-					dArgTypes := tree.NewDArray(types.Oid)
-					for _, argType := range argTypes.Types() {
-						if err := dArgTypes.Append(tree.NewDOid(tree.DInt(argType.Oid()))); err != nil {
+						var retType tree.Datum
+						isRetSet := false
+						if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
+							var retOid oid.Oid
+							if fixedRetType.Family() == types.TupleFamily && builtin.Generator != nil {
+								isRetSet = true
+								// Functions returning tables with zero, or more than one
+								// columns are marked to return "anyelement"
+								// (e.g. `unnest`)
+								retOid = oid.T_anyelement
+								if len(fixedRetType.TupleContents()) == 1 {
+									// Functions returning tables with exactly one column
+									// are marked to return the type of that column
+									// (e.g. `generate_series`).
+									retOid = fixedRetType.TupleContents()[0].Oid()
+								}
+							} else {
+								retOid = fixedRetType.Oid()
+							}
+							retType = tree.NewDOid(tree.DInt(retOid))
+						}
+
+						argTypes := builtin.Types
+						dArgTypes := tree.NewDArray(types.Oid)
+						for _, argType := range argTypes.Types() {
+							if err := dArgTypes.Append(tree.NewDOid(tree.DInt(argType.Oid()))); err != nil {
+								return err
+							}
+						}
+
+						var argmodes tree.Datum
+						var variadicType tree.Datum
+						switch v := argTypes.(type) {
+						case tree.VariadicType:
+							if len(v.FixedTypes) == 0 {
+								argmodes = proArgModeVariadic
+							} else {
+								ary := tree.NewDArray(types.String)
+								for range v.FixedTypes {
+									if err := ary.Append(tree.NewDString("i")); err != nil {
+										return err
+									}
+								}
+								if err := ary.Append(tree.NewDString("v")); err != nil {
+									return err
+								}
+								argmodes = ary
+							}
+							variadicType = tree.NewDOid(tree.DInt(v.VarType.Oid()))
+						case tree.HomogeneousType:
+							argmodes = proArgModeVariadic
+							argType := types.Any
+							oid := argType.Oid()
+							variadicType = tree.NewDOid(tree.DInt(oid))
+						default:
+							argmodes = tree.DNull
+							variadicType = oidZero
+						}
+						err := addRow(
+							h.BuiltinOid(name, &builtin),            // oid
+							dName,                                   // proname
+							nspOid,                                  // pronamespace
+							tree.DNull,                              // proowner
+							oidZero,                                 // prolang
+							tree.DNull,                              // procost
+							tree.DNull,                              // prorows
+							variadicType,                            // provariadic
+							tree.DNull,                              // protransform
+							tree.MakeDBool(tree.DBool(isAggregate)), // proisagg
+							tree.MakeDBool(tree.DBool(isWindow)),    // proiswindow
+							tree.DBoolFalse,                         // prosecdef
+							tree.MakeDBool(tree.DBool(!props.Impure)), // proleakproof
+							tree.DBoolFalse,                      // proisstrict
+							tree.MakeDBool(tree.DBool(isRetSet)), // proretset
+							tree.DNull,                           // provolatile
+							tree.DNull,                           // proparallel
+							tree.NewDInt(tree.DInt(builtin.Types.Length())), // pronargs
+							tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
+							retType,                                         // prorettype
+							tree.NewDOidVectorFromDArray(dArgTypes),         // proargtypes
+							tree.DNull,                                      // proallargtypes
+							argmodes,                                        // proargmodes
+							tree.DNull,                                      // proargnames
+							tree.DNull,                                      // proargdefaults
+							tree.DNull,                                      // protrftypes
+							dSrc,                                            // prosrc
+							tree.DNull,                                      // probin
+							tree.DNull,                                      // proconfig
+							tree.DNull,                                      // proacl
+						)
+						if err != nil {
 							return err
 						}
 					}
-
-					var argmodes tree.Datum
-					var variadicType tree.Datum
-					switch v := argTypes.(type) {
-					case tree.VariadicType:
-						if len(v.FixedTypes) == 0 {
-							argmodes = proArgModeVariadic
-						} else {
-							ary := tree.NewDArray(types.String)
-							for range v.FixedTypes {
-								if err := ary.Append(tree.NewDString("i")); err != nil {
-									return err
-								}
-							}
-							if err := ary.Append(tree.NewDString("v")); err != nil {
-								return err
-							}
-							argmodes = ary
-						}
-						variadicType = tree.NewDOid(tree.DInt(v.VarType.Oid()))
-					case tree.HomogeneousType:
-						argmodes = proArgModeVariadic
-						argType := types.Any
-						oid := argType.Oid()
-						variadicType = tree.NewDOid(tree.DInt(oid))
-					default:
-						argmodes = tree.DNull
-						variadicType = oidZero
-					}
-					err := addRow(
-						h.BuiltinOid(name, &builtin),            // oid
-						dName,                                   // proname
-						nspOid,                                  // pronamespace
-						tree.DNull,                              // proowner
-						oidZero,                                 // prolang
-						tree.DNull,                              // procost
-						tree.DNull,                              // prorows
-						variadicType,                            // provariadic
-						tree.DNull,                              // protransform
-						tree.MakeDBool(tree.DBool(isAggregate)), // proisagg
-						tree.MakeDBool(tree.DBool(isWindow)),    // proiswindow
-						tree.DBoolFalse,                         // prosecdef
-						tree.MakeDBool(tree.DBool(!props.Impure)), // proleakproof
-						tree.DBoolFalse,                      // proisstrict
-						tree.MakeDBool(tree.DBool(isRetSet)), // proretset
-						tree.DNull,                           // provolatile
-						tree.DNull,                           // proparallel
-						tree.NewDInt(tree.DInt(builtin.Types.Length())), // pronargs
-						tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
-						retType,                                         // prorettype
-						tree.NewDOidVectorFromDArray(dArgTypes),         // proargtypes
-						tree.DNull,                                      // proallargtypes
-						argmodes,                                        // proargmodes
-						tree.DNull,                                      // proargnames
-						tree.DNull,                                      // proargdefaults
-						tree.DNull,                                      // protrftypes
-						dSrc,                                            // prosrc
-						tree.DNull,                                      // probin
-						tree.DNull,                                      // proconfig
-						tree.DNull,                                      // proacl
-					)
-					if err != nil {
-						return err
-					}
 				}
-			}
-			return nil
-		})
+				return nil
+			})
 	},
 }
 
@@ -2629,82 +2632,83 @@ CREATE TABLE pg_catalog.pg_type (
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachDatabaseDesc(ctx, p, dbContext, func(db *DatabaseDescriptor) error {
-			nspOid := h.NamespaceOid(db, pgCatalogName)
+		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
+			func(db *DatabaseDescriptor) error {
+				nspOid := h.NamespaceOid(db, pgCatalogName)
 
-			for o, typ := range types.OidToType {
-				cat := typCategory(typ)
-				typType := typTypeBase
-				typElem := oidZero
-				typArray := oidZero
-				builtinPrefix := builtins.PGIOBuiltinPrefix(typ)
-				if typ.Family() == types.ArrayFamily {
-					switch typ.Oid() {
-					case oid.T_int2vector:
-						// IntVector needs a special case because it's a special snowflake
-						// type that behaves in some ways like a scalar type and in others
-						// like an array type.
-						typElem = tree.NewDOid(tree.DInt(oid.T_int2))
-						typArray = tree.NewDOid(tree.DInt(oid.T__int2vector))
-					case oid.T_oidvector:
-						// Same story as above for OidVector.
-						typElem = tree.NewDOid(tree.DInt(oid.T_oid))
-						typArray = tree.NewDOid(tree.DInt(oid.T__oidvector))
-					case oid.T_anyarray:
-						// AnyArray does not use a prefix or element type.
-					default:
-						builtinPrefix = "array_"
-						typElem = tree.NewDOid(tree.DInt(typ.ArrayContents().Oid()))
+				for o, typ := range types.OidToType {
+					cat := typCategory(typ)
+					typType := typTypeBase
+					typElem := oidZero
+					typArray := oidZero
+					builtinPrefix := builtins.PGIOBuiltinPrefix(typ)
+					if typ.Family() == types.ArrayFamily {
+						switch typ.Oid() {
+						case oid.T_int2vector:
+							// IntVector needs a special case because it's a special snowflake
+							// type that behaves in some ways like a scalar type and in others
+							// like an array type.
+							typElem = tree.NewDOid(tree.DInt(oid.T_int2))
+							typArray = tree.NewDOid(tree.DInt(oid.T__int2vector))
+						case oid.T_oidvector:
+							// Same story as above for OidVector.
+							typElem = tree.NewDOid(tree.DInt(oid.T_oid))
+							typArray = tree.NewDOid(tree.DInt(oid.T__oidvector))
+						case oid.T_anyarray:
+							// AnyArray does not use a prefix or element type.
+						default:
+							builtinPrefix = "array_"
+							typElem = tree.NewDOid(tree.DInt(typ.ArrayContents().Oid()))
+						}
+					} else {
+						typArray = tree.NewDOid(tree.DInt(types.MakeArray(typ).Oid()))
 					}
-				} else {
-					typArray = tree.NewDOid(tree.DInt(types.MakeArray(typ).Oid()))
-				}
-				if cat == typCategoryPseudo {
-					typType = typTypePseudo
-				}
-				typname := typ.PGName()
+					if cat == typCategoryPseudo {
+						typType = typTypePseudo
+					}
+					typname := typ.PGName()
 
-				if err := addRow(
-					tree.NewDOid(tree.DInt(o)), // oid
-					tree.NewDName(typname),     // typname
-					nspOid,                     // typnamespace
-					tree.DNull,                 // typowner
-					typLen(typ),                // typlen
-					typByVal(typ),              // typbyval
-					typType,                    // typtype
-					cat,                        // typcategory
-					tree.DBoolFalse,            // typispreferred
-					tree.DBoolTrue,             // typisdefined
-					typDelim,                   // typdelim
-					oidZero,                    // typrelid
-					typElem,                    // typelem
-					typArray,                   // typarray
+					if err := addRow(
+						tree.NewDOid(tree.DInt(o)), // oid
+						tree.NewDName(typname),     // typname
+						nspOid,                     // typnamespace
+						tree.DNull,                 // typowner
+						typLen(typ),                // typlen
+						typByVal(typ),              // typbyval
+						typType,                    // typtype
+						cat,                        // typcategory
+						tree.DBoolFalse,            // typispreferred
+						tree.DBoolTrue,             // typisdefined
+						typDelim,                   // typdelim
+						oidZero,                    // typrelid
+						typElem,                    // typelem
+						typArray,                   // typarray
 
-					// regproc references
-					h.RegProc(builtinPrefix+"in"),   // typinput
-					h.RegProc(builtinPrefix+"out"),  // typoutput
-					h.RegProc(builtinPrefix+"recv"), // typreceive
-					h.RegProc(builtinPrefix+"send"), // typsend
-					oidZero,                         // typmodin
-					oidZero,                         // typmodout
-					oidZero,                         // typanalyze
+						// regproc references
+						h.RegProc(builtinPrefix+"in"),   // typinput
+						h.RegProc(builtinPrefix+"out"),  // typoutput
+						h.RegProc(builtinPrefix+"recv"), // typreceive
+						h.RegProc(builtinPrefix+"send"), // typsend
+						oidZero,                         // typmodin
+						oidZero,                         // typmodout
+						oidZero,                         // typanalyze
 
-					tree.DNull,      // typalign
-					tree.DNull,      // typstorage
-					tree.DBoolFalse, // typnotnull
-					oidZero,         // typbasetype
-					negOneVal,       // typtypmod
-					zeroVal,         // typndims
-					typColl(typ, h), // typcollation
-					tree.DNull,      // typdefaultbin
-					tree.DNull,      // typdefault
-					tree.DNull,      // typacl
-				); err != nil {
-					return err
+						tree.DNull,      // typalign
+						tree.DNull,      // typstorage
+						tree.DBoolFalse, // typnotnull
+						oidZero,         // typbasetype
+						negOneVal,       // typtypmod
+						zeroVal,         // typndims
+						typColl(typ, h), // typcollation
+						tree.DNull,      // typdefaultbin
+						tree.DNull,      // typdefault
+						tree.DNull,      // typacl
+					); err != nil {
+						return err
+					}
 				}
-			}
-			return nil
-		})
+				return nil
+			})
 	},
 }
 
