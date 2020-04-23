@@ -208,9 +208,9 @@ export function doLogin(username: string, password: string): ThunkAction<Promise
     });
     return userLogin(loginReq)
       .then(
-        (res) => {
+        () => {
           dispatch(loginSuccess(username));
-          return res;
+          return { status: 200 };
         },
         (err) => {
           dispatch(loginFailure(err));
