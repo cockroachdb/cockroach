@@ -104,8 +104,15 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 			"not all nodes are the correct version for ENUM type creation")
 	}
 
-	if len(n.EnumLabels) > 0 {
-		return unimplemented.NewWithIssue(24873, "CREATE TYPE")
+	// Ensure there are no duplicates in the input enum values.
+	seenVals := make(map[string]struct{})
+	for _, value := range n.EnumLabels {
+		_, ok := seenVals[value]
+		if ok {
+			return pgerror.Newf(pgcode.InvalidObjectDefinition,
+				"enum definition contains duplicate value %q", value)
+		}
+		seenVals[value] = struct{}{}
 	}
 
 	// Resolve the desired new type name.
@@ -121,6 +128,15 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 		return err
 	}
 
+	// TODO (rohany): actually use the byte generation methods.
+	members := make([]sqlbase.TypeDescriptor_EnumMember, len(n.EnumLabels))
+	for i := range n.EnumLabels {
+		members[i] = sqlbase.TypeDescriptor_EnumMember{
+			LogicalRepresentation:  n.EnumLabels[i],
+			PhysicalRepresentation: []byte{byte(i)},
+		}
+	}
+
 	// TODO (rohany): We need to generate an oid for this type!
 	typeDesc := &sqlbase.TypeDescriptor{
 		ParentID:       db.ID,
@@ -128,7 +144,9 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 		Name:           typeName.Type(),
 		ID:             id,
 		Kind:           sqlbase.TypeDescriptor_ENUM,
+		EnumMembers:    members,
 	}
+
 	return p.createDescriptorWithID(
 		params.ctx,
 		typeKey.Key(params.ExecCfg().Codec),
