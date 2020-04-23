@@ -55,7 +55,7 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 		// No relevant FKs.
 		return
 	}
-	if !mb.b.evalCtx.SessionData.OptimizerFKs {
+	if !mb.b.evalCtx.SessionData.OptimizerFKChecks {
 		mb.fkFallback = true
 		telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
 		return
@@ -108,7 +108,7 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 		// No relevant FKs.
 		return
 	}
-	if !mb.b.evalCtx.SessionData.OptimizerFKs {
+	if !mb.b.evalCtx.SessionData.OptimizerFKChecks {
 		mb.fkFallback = true
 		telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
 		return
@@ -200,7 +200,7 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 	if mb.tab.OutboundForeignKeyCount() == 0 && mb.tab.InboundForeignKeyCount() == 0 {
 		return
 	}
-	if !mb.b.evalCtx.SessionData.OptimizerFKs {
+	if !mb.b.evalCtx.SessionData.OptimizerFKChecks {
 		mb.fkFallback = true
 		telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
 		return
@@ -333,7 +333,7 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 		return
 	}
 
-	if !mb.b.evalCtx.SessionData.OptimizerFKs {
+	if !mb.b.evalCtx.SessionData.OptimizerFKChecks {
 		mb.fkFallback = true
 		telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
 		return
