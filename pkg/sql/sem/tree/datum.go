@@ -3740,6 +3740,137 @@ func (d *DArray) Append(v Datum) error {
 	return d.Validate()
 }
 
+// DEnum represents an ENUM value.
+type DEnum struct {
+	EnumTyp     *types.T
+	PhysicalRep []byte
+	LogicalRep  string
+}
+
+// Size implements the Datum interface.
+func (d *DEnum) Size() uintptr {
+	// When creating DEnums, we store pointers back into the type enum
+	// metadata, so enums themselves don't pay for the memory of their
+	// physical and logical representations.
+	return unsafe.Sizeof(d.EnumTyp) +
+		unsafe.Sizeof(d.PhysicalRep) +
+		unsafe.Sizeof(d.LogicalRep)
+}
+
+// MakeDEnumFromPhysicalRepresentation creates a DEnum of the input type
+// and the input physical representation.
+func MakeDEnumFromPhysicalRepresentation(typ *types.T, rep []byte) *DEnum {
+	// Take a pointer into the enum metadata rather than holding on
+	// to a pointer to the input bytes.
+	idx := typ.EnumGetIdxOfPhysical(rep)
+	return &DEnum{
+		EnumTyp:     typ,
+		PhysicalRep: typ.TypeMeta.EnumData.PhysicalRepresentations[idx],
+		LogicalRep:  typ.TypeMeta.EnumData.LogicalRepresentations[idx],
+	}
+}
+
+// MakeDEnumFromLogicalRepresentation creates a DEnum of the input type
+// and input logical representation. It returns an error if the input
+// logical representation is invalid.
+func MakeDEnumFromLogicalRepresentation(typ *types.T, rep string) (*DEnum, error) {
+	// Take a pointer into the enum metadata rather than holding on
+	// to a pointer to the input string.
+	idx, err := typ.EnumGetIdxOfLogical(rep)
+	if err != nil {
+		return nil, err
+	}
+	return &DEnum{
+		EnumTyp:     typ,
+		PhysicalRep: typ.TypeMeta.EnumData.PhysicalRepresentations[idx],
+		LogicalRep:  typ.TypeMeta.EnumData.LogicalRepresentations[idx],
+	}, nil
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DEnum) Format(ctx *FmtCtx) {
+	s := DString(d.LogicalRep)
+	s.Format(ctx)
+}
+
+func (d *DEnum) String() string {
+	return AsString(d)
+}
+
+// ResolvedType implements the Datum interface.
+func (d *DEnum) ResolvedType() *types.T {
+	return d.EnumTyp
+}
+
+// Compare implements the Datum interface.
+func (d *DEnum) Compare(ctx *EvalContext, other Datum) int {
+	if other == DNull {
+		return 1
+	}
+	v, ok := UnwrapDatum(ctx, other).(*DEnum)
+	if !ok {
+		panic(makeUnsupportedComparisonMessage(d, other))
+	}
+	return bytes.Compare(d.PhysicalRep, v.PhysicalRep)
+}
+
+// Prev implements the Datum interface.
+func (d *DEnum) Prev(ctx *EvalContext) (Datum, bool) {
+	idx := d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep)
+	if idx == 0 {
+		return nil, false
+	}
+	return MakeDEnumFromPhysicalRepresentation(
+		d.EnumTyp,
+		d.EnumTyp.TypeMeta.EnumData.PhysicalRepresentations[idx-1],
+	), true
+}
+
+// Next implements the Datum interface.
+func (d *DEnum) Next(ctx *EvalContext) (Datum, bool) {
+	idx := d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep)
+	physReps := d.EnumTyp.TypeMeta.EnumData.PhysicalRepresentations
+	if idx == len(physReps)-1 {
+		return nil, false
+	}
+	return MakeDEnumFromPhysicalRepresentation(d.EnumTyp, physReps[idx+1]), true
+}
+
+// Max implements the Datum interface.
+func (d *DEnum) Max(ctx *EvalContext) (Datum, bool) {
+	physReps := d.EnumTyp.TypeMeta.EnumData.PhysicalRepresentations
+	if len(physReps) == 0 {
+		return nil, false
+	}
+	idx := len(physReps) - 1
+	return MakeDEnumFromPhysicalRepresentation(d.EnumTyp, physReps[idx]), true
+}
+
+// Min implements the Datum interface.
+func (d *DEnum) Min(ctx *EvalContext) (Datum, bool) {
+	physReps := d.EnumTyp.TypeMeta.EnumData.PhysicalRepresentations
+	if len(physReps) == 0 {
+		return nil, false
+	}
+	return MakeDEnumFromPhysicalRepresentation(d.EnumTyp, physReps[0]), true
+}
+
+// IsMax implements the Datum interface.
+func (d *DEnum) IsMax(_ *EvalContext) bool {
+	physReps := d.EnumTyp.TypeMeta.EnumData.PhysicalRepresentations
+	return d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep) == len(physReps)-1
+}
+
+// IsMin implements the Datum interface.
+func (d *DEnum) IsMin(_ *EvalContext) bool {
+	return d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep) == 0
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (d *DEnum) AmbiguousFormat() bool {
+	return true
+}
+
 // DOid is the Postgres OID datum. It can represent either an OID type or any
 // of the reg* types, such as regproc or regclass.
 type DOid struct {
@@ -4242,6 +4373,9 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.UuidFamily:           {unsafe.Sizeof(DUuid{}), fixedSize},
 	types.INetFamily:           {unsafe.Sizeof(DIPAddr{}), fixedSize},
 	types.OidFamily:            {unsafe.Sizeof(DInt(0)), fixedSize},
+	// TODO (rohany): Maybe this should be fixed size, since the DEnum datum
+	//  doesn't store its own copies of the representations.
+	types.EnumFamily: {unsafe.Sizeof(DEnum{}), variableSize},
 
 	// TODO(jordan,justin): This seems suspicious.
 	types.ArrayFamily: {unsafe.Sizeof(DString("")), variableSize},

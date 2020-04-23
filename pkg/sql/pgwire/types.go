@@ -178,6 +178,10 @@ func (b *writeBuffer) writeTextDatum(
 	case *tree.DOid:
 		b.writeLengthPrefixedDatum(v)
 
+	case *tree.DEnum:
+		// Enums are serialized with their logical representation.
+		b.writeLengthPrefixedString(v.LogicalRep)
+
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
 	}

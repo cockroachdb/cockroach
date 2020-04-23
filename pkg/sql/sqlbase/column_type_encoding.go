@@ -419,6 +419,8 @@ func EncodeTableValue(
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(t.Contents)), nil
 	case *tree.DOid:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.DInt)), nil
+	case *tree.DEnum:
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.PhysicalRep), nil
 	default:
 		return nil, errors.Errorf("unable to encode table value: %T", t)
 	}
@@ -567,6 +569,12 @@ func decodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 		return decodeArray(a, t.ArrayContents(), buf)
 	case types.TupleFamily:
 		return decodeTuple(a, t, buf)
+	case types.EnumFamily:
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return tree.MakeDEnumFromPhysicalRepresentation(t, data), b, nil
 	default:
 		return nil, buf, errors.Errorf("couldn't decode type %s", t)
 	}

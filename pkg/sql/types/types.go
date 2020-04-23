@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -155,6 +157,15 @@ import (
 // When these types are themselves made into arrays, the Oids become T__int2vector and
 // T__oidvector, respectively.
 //
+// User defined types
+// ------------------
+//
+// * Enums
+// | Field         | Description                                |
+// |---------------|--------------------------------------------|
+// | Family        | EnumFamily                                 |
+// | Oid           | A unique OID generated upon enum creation  |
+//
 // See types.proto for the corresponding proto definition. Its automatic
 // type declaration is suppressed in the proto so that it is possible to
 // add additional fields to T without serializing them.
@@ -164,6 +175,41 @@ type T struct {
 	// string representation of an unexported field. This is a problem when this
 	// struct is embedded in a larger struct (like a ColumnDescriptor).
 	InternalType InternalType
+
+	// Fields that are only populated when hydrating from a user defined
+	// type descriptor. It is assumed that a user defined type is only used
+	// once its metadata has been hydrated through the process of type resolution.
+	TypeMeta UserDefinedTypeMetadata
+}
+
+// UserDefinedTypeMetadata contains metadata needed for runtime
+// operations on user defined types. The metadata must be read only.
+type UserDefinedTypeMetadata struct {
+	Name UserDefinedTypeName
+
+	// enumData is non-nil iff the metadata is for an ENUM type.
+	EnumData *EnumMetadata
+}
+
+type EnumMetadata struct {
+	// PhysicalRepresentations is a slice of the byte array
+	// physical representations of enum members.
+	PhysicalRepresentations [][]byte
+	// LogicalRepresentations is a slice of the string logical
+	// representations of enum members.
+	LogicalRepresentations []string
+	// TODO (rohany): For small enums, having a map would be slower
+	//  than just an array. Investigate at what point the tradeoff
+	//  should occur, if at all.
+}
+
+// UserDefinedTypeName is an interface for the types package to manipulate
+// qualified type names from higher level packages for name display.
+type UserDefinedTypeName interface {
+	// Basename returns the unqualified name of the type.
+	Basename() string
+	// FQName returns the fully qualified name of the type.
+	FQName() string
 }
 
 // Convenience list of pre-constructed types. Caller code can use any of these
@@ -395,6 +441,12 @@ var (
 	// nested array types). Execution-time values should never have this type.
 	AnyArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: Any, Oid: oid.T_anyarray, Locale: &emptyLocale}}
+
+	// AnyEnum is a special type only used during static analysis as a wildcard
+	// type that matches an possible enum value. Execution-time values should
+	// never have this type.
+	AnyEnum = &T{InternalType: InternalType{
+		Family: EnumFamily, Locale: &emptyLocale, Oid: oid.T_anyenum}}
 
 	// AnyTuple is a special type used only during static analysis as a wildcard
 	// type that matches a tuple with any number of fields of any type (including
@@ -874,6 +926,16 @@ func MakeTimestampTZ(precision int32) *T {
 	}}
 }
 
+// MakeEnum constructs a new instance of an EnumFamily type with the given
+// stable type ID. Note that it does not hydrate cached fields on the type.
+func MakeEnum(typeID uint32) *T {
+	return &T{InternalType: InternalType{
+		Family:       EnumFamily,
+		StableTypeID: typeID,
+		Locale:       &emptyLocale,
+	}}
+}
+
 // MakeArray constructs a new instance of an ArrayFamily type with the given
 // element type (which may itself be an ArrayFamily type).
 func MakeArray(typ *T) *T {
@@ -1023,6 +1085,17 @@ func (t *T) TupleLabels() []string {
 	return t.InternalType.TupleLabels
 }
 
+// StableTypeID returns the stable ID of the TypeDescriptor that backs this
+// type. This function only returns non-zero data for user defined types.
+func (t *T) StableTypeID() uint32 {
+	return t.InternalType.StableTypeID
+}
+
+// UserDefined returns whether or not t is a user defined type.
+func (t *T) UserDefined() bool {
+	return t.StableTypeID() != 0
+}
+
 // Name returns a single word description of the type that describes it
 // succinctly, but without all the details, such as width, locale, etc. The name
 // is sometimes the same as the name returned by SQLStandardName, but is more
@@ -1116,6 +1189,15 @@ func (t *T) Name() string {
 		return "unknown"
 	case UuidFamily:
 		return "uuid"
+	case EnumFamily:
+		if t.Oid() == oid.T_anyenum {
+			return "anyenum"
+		}
+		// This can be nil during unit testing.
+		if t.TypeMeta.Name == nil {
+			return "unknown_enum"
+		}
+		return t.TypeMeta.Name.Basename()
 	default:
 		panic(errors.AssertionFailedf("unexpected Family: %s", t.Family()))
 	}
@@ -1136,6 +1218,11 @@ func (t *T) PGName() string {
 	name, ok := oidext.TypeName(t.Oid())
 	if ok {
 		return strings.ToLower(name)
+	}
+
+	// For user defined types, return the basename.
+	if t.UserDefined() {
+		return t.TypeMeta.Name.Basename()
 	}
 
 	// Postgres does not have an UNKNOWN[] type. However, CRDB does, so
@@ -1333,6 +1420,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		return "unknown"
 	case UuidFamily:
 		return "uuid"
+	case EnumFamily:
+		return t.TypeMeta.Name.FQName()
 	default:
 		panic(errors.AssertionFailedf("unexpected Family: %v", errors.Safe(t.Family())))
 	}
@@ -1444,6 +1533,8 @@ func (t *T) SQLString() string {
 			return t.ArrayContents().collatedStringTypeSQL(true /* isArray */)
 		}
 		return t.ArrayContents().SQLString() + "[]"
+	case EnumFamily:
+		return t.TypeMeta.Name.FQName()
 	}
 	return strings.ToUpper(t.Name())
 }
@@ -1491,6 +1582,16 @@ func (t *T) Equivalent(other *T) bool {
 
 	case ArrayFamily:
 		if !t.ArrayContents().Equivalent(other.ArrayContents()) {
+			return false
+		}
+
+	case EnumFamily:
+		// If one of the types is anyenum, then allow the comparison to
+		// go through -- anyenum is used when matching overloads.
+		if t.Oid() == oid.T_anyenum || other.Oid() == oid.T_anyenum {
+			return true
+		}
+		if t.StableTypeID() != other.StableTypeID() {
 			return false
 		}
 	}
@@ -1598,6 +1699,9 @@ func (t *InternalType) Identical(other *InternalType) bool {
 		if t.TupleLabels[i] != other.TupleLabels[i] {
 			return false
 		}
+	}
+	if t.StableTypeID != other.StableTypeID {
+		return false
 	}
 	return t.Oid == other.Oid
 }
@@ -1990,8 +2094,45 @@ func (t *T) IsAmbiguous() bool {
 		return false
 	case ArrayFamily:
 		return t.ArrayContents().IsAmbiguous()
+	case EnumFamily:
+		return t.Oid() == oid.T_anyenum
 	}
 	return false
+}
+
+// EnumGetIdxOfPhysical returns the index within the TypeMeta's slice of
+// enum physical representations that matches the input byte slice.
+func (t *T) EnumGetIdxOfPhysical(phys []byte) int {
+	t.ensureHydratedEnum()
+	// TODO (rohany): We can either use a map or just binary search here
+	//  since the physical representations are sorted.
+	reps := t.TypeMeta.EnumData.PhysicalRepresentations
+	for i := range reps {
+		if bytes.Compare(phys, reps[i]) == 0 {
+			return i
+		}
+	}
+	panic("could not match physical enum representation")
+}
+
+// EnumGetIdxOfLogical returns the index within the TypeMeta's slice of
+// enum logical representations that matches the input string.
+func (t *T) EnumGetIdxOfLogical(logical string) (int, error) {
+	t.ensureHydratedEnum()
+	reps := t.TypeMeta.EnumData.LogicalRepresentations
+	for i := range reps {
+		if reps[i] == logical {
+			return i, nil
+		}
+	}
+	return 0, pgerror.Newf(
+		pgcode.InvalidTextRepresentation, "invalid input value for enum %s: %q", t, logical)
+}
+
+func (t *T) ensureHydratedEnum() {
+	if t.TypeMeta.EnumData == nil {
+		panic("use of enum metadata before hydration as an enum")
+	}
 }
 
 // IsStringType returns true iff the given type is String or a collated string

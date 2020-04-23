@@ -1509,7 +1509,7 @@ var (
 		types.VarBit,
 		types.AnyArray, types.AnyTuple,
 		types.Geometry, types.Geography,
-		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.Uuid, types.Date, types.Time, types.TimeTZ, types.Oid, types.INet, types.Jsonb})
+		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.Uuid, types.Date, types.Time, types.TimeTZ, types.Oid, types.INet, types.Jsonb, types.AnyEnum})
 	bytesCastTypes = annotateCast(types.Bytes, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Bytes, types.Uuid})
 	dateCastTypes  = annotateCast(types.Date, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
 	timeCastTypes  = annotateCast(types.Time, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.Time, types.TimeTZ,
@@ -1522,6 +1522,7 @@ var (
 	inetCastTypes      = annotateCast(types.INet, []*types.T{types.Unknown, types.String, types.AnyCollatedString, types.INet})
 	arrayCastTypes     = annotateCast(types.AnyArray, []*types.T{types.Unknown, types.String})
 	jsonCastTypes      = annotateCast(types.Jsonb, []*types.T{types.Unknown, types.String, types.Jsonb})
+	enumCastTypes      = annotateCast(types.AnyEnum, []*types.T{types.Unknown, types.String, types.AnyEnum})
 )
 
 // validCastTypes returns a set of types that can be cast into the provided type.
@@ -1567,6 +1568,9 @@ func validCastTypes(t *types.T) []castInfo {
 		ret := make([]castInfo, len(arrayCastTypes))
 		copy(ret, arrayCastTypes)
 		return ret
+	case types.EnumFamily:
+		// TODO (rohany): we need a copy like the array case??
+		return enumCastTypes
 	default:
 		return nil
 	}

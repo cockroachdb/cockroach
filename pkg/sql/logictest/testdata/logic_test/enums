@@ -1,6 +1,3 @@
-statement error pq: unimplemented: CREATE TYPE
-CREATE TYPE mytype AS ENUM ('val1', 'val2')
-
 statement error pq: unimplemented: DROP TYPE
 DROP TYPE mytype
 
@@ -34,3 +31,63 @@ SELECT * FROM db2.t
 
 statement error pq: type "db2.public.t" already exists
 CREATE TYPE db2.t AS ENUM ()
+
+# Test some expression evaluation on enums.
+# These test should live in TestEval, but it is difficult to adjust the
+# test to handle creation of user defined types.
+statement ok
+CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi')
+
+query TTT
+SELECT 'hello'::greeting, 'howdy'::greeting, 'hi'::greeting
+----
+hello howdy hi
+
+statement error pq: invalid input value for enum greeting: "goodbye"
+SELECT 'goodbye'::greeting
+
+query T
+SELECT 'hello'::greeting::string
+----
+hello
+
+query BBBBBBBBBBB
+SELECT 'hello'::greeting < 'howdy'::greeting,
+       'howdy'::greeting < 'hi':: greeting,
+       'hi'::greeting > 'hello'::greeting,
+       'howdy'::greeting < 'hello'::greeting,
+       'hi'::greeting <= 'hi'::greeting,
+       NULL < 'hello'::greeting,
+       'hi'::greeting < NULL,
+       'hello'::greeting = 'hello'::greeting,
+       'hello'::greeting != 'hi'::greeting,
+       'howdy'::greeting IS NOT DISTINCT FROM NULL,
+       'hello'::greeting IN ('hi'::greeting, 'howdy'::greeting, 'hello'::greeting)
+----
+true true true false true NULL NULL true true false true
+
+statement ok
+CREATE TYPE farewell AS ENUM ('bye', 'seeya')
+
+statement error pq: unsupported comparison operator: <greeting> = <farewell>
+SELECT 'hello'::greeting = 'bye'::farewell
+
+statement error pq: unsupported comparison operator: <greeting> < <farewell>
+SELECT 'hello'::greeting < 'bye'::farewell
+
+statement error pq: unsupported comparison operator: <greeting> <= <farewell>
+SELECT 'hello'::greeting <= 'bye'::farewell
+
+query T
+SELECT 'hello'::greeting::greeting
+----
+hello
+
+statement ok
+CREATE TYPE greeting2 AS ENUM ('hello')
+
+statement error pq: invalid cast: greeting -> greeting2
+SELECT 'hello'::greeting::greeting2
+
+statement error pq: value type greeting cannot be used for table columns
+CREATE TABLE bad (x greeting)

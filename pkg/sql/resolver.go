@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -137,6 +138,35 @@ func ResolveMutableExistingTableObject(
 	}
 	tn.ObjectNamePrefix = prefix
 	return desc.(*MutableTableDescriptor), nil
+}
+
+// ResolveType implements the TypeReferenceResolver interface.
+func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error) {
+	lookupFlags := tree.ObjectLookupFlags{
+		CommonLookupFlags: tree.CommonLookupFlags{Required: true},
+		DesiredObjectKind: tree.TypeObject,
+	}
+	// TODO (rohany): The ResolveAnyDescType argument doesn't do anything here
+	//  if we are looking for a type. This should be cleaned up.
+	desc, prefix, err := resolveExistingObjectImpl(context.Background(), p, name, lookupFlags, ResolveAnyDescType)
+	if err != nil {
+		return nil, err
+	}
+	tn := tree.MakeTypeNameFromPrefix(prefix, tree.Name(name.Object()))
+	tdesc := desc.(*sqlbase.TypeDescriptor)
+	// Hydrate the types.T from the resolved descriptor. Once we cache
+	// descriptors, this hydration should install pointers to cached data.
+	switch t := tdesc.Kind; t {
+	case sqlbase.TypeDescriptor_ENUM:
+		typ := types.MakeEnum(uint32(tdesc.ID))
+		if err := tdesc.HydrateTypeInfo(typ); err != nil {
+			return nil, err
+		}
+		typ.TypeMeta.Name = &tn
+		return typ, nil
+	default:
+		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
+	}
 }
 
 func resolveExistingObjectImpl(

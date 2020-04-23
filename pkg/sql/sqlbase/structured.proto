@@ -1016,6 +1016,14 @@ message TypeDescriptor {
 
   // The fields below are used only when this type is an ENUM type.
   // TODO (rohany): Leaving this empty until we actually store enum values.
+  message EnumMember {
+    option (gogoproto.equal) = true;
+    optional bytes physical_representation = 1;
+    optional string logical_representation = 2 [(gogoproto.nullable) = false];
+    // TODO (rohany): Add the state here.
+  }
+
+  repeated EnumMember enum_members = 7 [(gogoproto.nullable) = false];
 
   // TODO (rohany): Do we need a draining names like the table descriptor?
 }
