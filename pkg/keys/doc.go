@@ -21,26 +21,37 @@
 //
 // This is the ten-thousand foot view of the keyspace:
 //
-//    +----------+
-//    | (empty)  | /Min
-//    | \x01...  | /Local    ----+
-//    |          |               |
-//    | ...      |               |	local keys
-//    |          |               |
-//    |          |           ----+
-//    | \x02...  | /Meta1    ----+
-//    | \x03...  | /Meta2        |
-//    | \x04...  | /System       |
-//    |          |               |
-//    | ...      |               |
-//    |          |               | global keys
-//    | \x89...  | /Table/1      |
-//    | \x8a...  | /Table/2      |
-//    |          |               |
-//    | ...      |               |
-//    |          |               |
-//    | \xff\xff | /Max      ----+
-//    +----------+
+//    +------------------+
+//    | (empty)          | /Min
+//    | \x01...          | /Local            ---------------------+
+//    |                  |                                        |
+//    | ...              |                                        | local keys
+//    |                  |                                        |
+//    |                  |                   ---------------------+
+//    |                  |                   ---------------------+
+//    | \x02...          | /Meta1            ----+                |
+//    | \x03...          | /Meta2                |                |
+//    | \x04...          | /System               |                |
+//    |                  |                       | system keys    |
+//    | ...              |                       |                |
+//    |                  |                   ----+                |
+//    | \x89...          | /Table/1          ----+                |
+//    | \x8a...          | /Table/2              |                |
+//    |                  |                       | system tenant  |
+//    | ...              |                       |                | global keys
+//    |                  |                   ----+                |
+//    | \xff\x8a\x89...  | /Tenant/2/Table/1 ----+                |
+//    | \xff\x8a\x8a...  | /Tenant/2/Table/2     |                |
+//    |                  |                       | tenant 2       |
+//    | ...              |                       |                |
+//    |                  |                   ----+                |
+//    | \xff...          | /Tenant/...       ----+                |
+//    | \xff...          |                       |                |
+//    |                  |                       | tenant ...     |
+//    | ...              |                       |                |
+//    |                  |                   ----+                |
+//    | \xff\xff         | /Max              ---------------------+
+//    +------------------+
 //
 // When keys are pretty printed, the logical name to the right of the table is
 // shown instead of the raw byte sequence.

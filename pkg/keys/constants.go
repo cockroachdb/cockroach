@@ -29,6 +29,7 @@ const (
 	metaMaxByte      = '\x04'
 	systemPrefixByte = metaMaxByte
 	systemMaxByte    = '\x05'
+	tenantPrefixByte = '\xff'
 )
 
 // Constants for system-reserved keys in the KV map.
@@ -282,6 +283,9 @@ var (
 	//
 	// UserTableDataMin is the start key of user structured data.
 	UserTableDataMin = roachpb.Key(MakeTablePrefix(MinUserDescID))
+
+	// tenantPrefix is the prefix for all non-system tenant keys.
+	tenantPrefix = roachpb.Key{tenantPrefixByte}
 )
 
 // Various IDs used by the structured data layer.
