@@ -151,6 +151,7 @@ func (e *explainPlanNode) Close(ctx context.Context) {
 // explainEntry is a representation of the info that makes it into an output row
 // of an EXPLAIN statement.
 type explainEntry struct {
+	isNode                bool
 	level                 int
 	node, field, fieldVal string
 	plan                  planNode
@@ -336,7 +337,7 @@ func observePlan(
 
 	// Explain the subqueries.
 	for i := range subqueryPlans {
-		if _, err := observer.enterNode(ctx, "subquery", plan); err != nil && returnError {
+		if _, err := observer.enterNode(ctx, "subquery", nil /* plan */); err != nil && returnError {
 			return err
 		}
 		observer.attr("subquery", "id", fmt.Sprintf("@S%d", i+1))
@@ -355,14 +356,14 @@ func observePlan(
 		} else if subqueryPlans[i].started {
 			observer.expr(observeAlways, "subquery", "result", -1, subqueryPlans[i].result)
 		}
-		if err := observer.leaveNode("subquery", subqueryPlans[i].plan); err != nil && returnError {
+		if err := observer.leaveNode("subquery", nil /* plan */); err != nil && returnError {
 			return err
 		}
 	}
 
 	// Explain the postqueries.
 	for i := range postqueryPlans {
-		if _, err := observer.enterNode(ctx, "postquery", plan); err != nil && returnError {
+		if _, err := observer.enterNode(ctx, "postquery", nil /* plan */); err != nil && returnError {
 			return err
 		}
 		if postqueryPlans[i].plan != nil {
@@ -370,7 +371,7 @@ func observePlan(
 				return err
 			}
 		}
-		if err := observer.leaveNode("postquery", postqueryPlans[i].plan); err != nil && returnError {
+		if err := observer.leaveNode("postquery", nil /* plan */); err != nil && returnError {
 			return err
 		}
 	}
@@ -394,7 +395,7 @@ func (e *explainer) emitRows(emitRow emitExplainRowFn) error {
 	n := []treeprinter.Node{tp}
 
 	for _, entry := range e.entries {
-		if entry.plan != nil {
+		if entry.isNode {
 			n = append(n[:entry.level+1], n[entry.level].Child(entry.node))
 		} else {
 			tp.AddEmptyLine()
@@ -503,9 +504,10 @@ func (e *explainer) expr(v observeVerbosity, nodeName, fieldName string, n int, 
 // enterNode implements the planObserver interface.
 func (e *explainer) enterNode(_ context.Context, name string, plan planNode) (bool, error) {
 	e.entries = append(e.entries, explainEntry{
-		level: e.level,
-		node:  name,
-		plan:  plan,
+		isNode: true,
+		level:  e.level,
+		node:   name,
+		plan:   plan,
 	})
 
 	e.level++
@@ -515,6 +517,7 @@ func (e *explainer) enterNode(_ context.Context, name string, plan planNode) (bo
 // attr implements the planObserver interface.
 func (e *explainer) attr(nodeName, fieldName, attr string) {
 	e.entries = append(e.entries, explainEntry{
+		isNode:   false,
 		level:    e.level - 1,
 		field:    fieldName,
 		fieldVal: attr,
