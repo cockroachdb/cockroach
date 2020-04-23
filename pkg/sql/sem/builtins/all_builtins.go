@@ -36,6 +36,7 @@ func init() {
 	initGeneratorBuiltins()
 	initGeoBuiltins()
 	initPGBuiltins()
+	initMathBuiltins()
 
 	AllBuiltinNames = make([]string, 0, len(builtins))
 	AllAggregateBuiltinNames = make([]string, 0, len(aggregates))
