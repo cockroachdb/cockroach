@@ -33,15 +33,12 @@ import (
 // need the corresponding Span, prefer desc.IndexSpan(indexID) or
 // desc.PrimaryIndexSpan().
 func MakeIndexKeyPrefix(desc *TableDescriptor, indexID IndexID) []byte {
-	var key []byte
+	keyGen := &keys.TODOTenantKeyGen
 	if i, err := desc.FindIndexByID(indexID); err == nil && len(i.Interleave.Ancestors) > 0 {
-		key = encoding.EncodeUvarintAscending(key, uint64(i.Interleave.Ancestors[0].TableID))
-		key = encoding.EncodeUvarintAscending(key, uint64(i.Interleave.Ancestors[0].IndexID))
-		return key
+		ancestor := &i.Interleave.Ancestors[0]
+		return keyGen.IndexPrefix(uint32(ancestor.TableID), uint32(ancestor.IndexID))
 	}
-	key = encoding.EncodeUvarintAscending(key, uint64(desc.ID))
-	key = encoding.EncodeUvarintAscending(key, uint64(indexID))
-	return key
+	return keyGen.IndexPrefix(uint32(desc.ID), uint32(indexID))
 }
 
 // EncodeIndexKey creates a key by concatenating keyPrefix with the
@@ -138,8 +135,7 @@ func EncodePartialIndexKey(
 		for i, ancestor := range index.Interleave.Ancestors {
 			// The first ancestor is assumed to already be encoded in keyPrefix.
 			if i != 0 {
-				key = encoding.EncodeUvarintAscending(key, uint64(ancestor.TableID))
-				key = encoding.EncodeUvarintAscending(key, uint64(ancestor.IndexID))
+				key = EncodePartialTableIDIndexID(key, ancestor.TableID, ancestor.IndexID)
 			}
 
 			partial := false
@@ -166,8 +162,7 @@ func EncodePartialIndexKey(
 			key = encoding.EncodeInterleavedSentinel(key)
 		}
 
-		key = encoding.EncodeUvarintAscending(key, uint64(tableDesc.ID))
-		key = encoding.EncodeUvarintAscending(key, uint64(index.ID))
+		key = EncodePartialTableIDIndexID(key, tableDesc.ID, index.ID)
 	}
 
 	var n bool
@@ -417,8 +412,7 @@ func makeKeyFromEncDatums(
 		for i, ancestor := range index.Interleave.Ancestors {
 			// The first ancestor is assumed to already be encoded in keyPrefix.
 			if i != 0 {
-				key = encoding.EncodeUvarintAscending(key, uint64(ancestor.TableID))
-				key = encoding.EncodeUvarintAscending(key, uint64(ancestor.IndexID))
+				key = EncodePartialTableIDIndexID(key, ancestor.TableID, ancestor.IndexID)
 			}
 
 			partial := false
@@ -448,8 +442,7 @@ func makeKeyFromEncDatums(
 			key = encoding.EncodeInterleavedSentinel(key)
 		}
 
-		key = encoding.EncodeUvarintAscending(key, uint64(tableDesc.ID))
-		key = encoding.EncodeUvarintAscending(key, uint64(index.ID))
+		key = EncodePartialTableIDIndexID(key, tableDesc.ID, index.ID)
 	}
 	var (
 		err error
@@ -500,29 +493,17 @@ func appendEncDatumsToKey(
 	return key, containsNull, nil
 }
 
-// EncodeTableIDIndexID encodes a table id followed by an index id.
-func EncodeTableIDIndexID(key []byte, tableID ID, indexID IndexID) []byte {
-	key = encoding.EncodeUvarintAscending(key, uint64(tableID))
-	key = encoding.EncodeUvarintAscending(key, uint64(indexID))
-	return key
+// EncodePartialTableIDIndexID encodes a table id followed by an index id to an
+// existing key. The key must already contain a tenant id.
+func EncodePartialTableIDIndexID(key []byte, tableID ID, indexID IndexID) []byte {
+	return keys.MakeTableIDIndexID(key, uint32(tableID), uint32(indexID))
 }
 
-// DecodeTableIDIndexID decodes a table id followed by an index id.
-func DecodeTableIDIndexID(key []byte) ([]byte, ID, IndexID, error) {
-	var tableID uint64
-	var indexID uint64
-	var err error
-
-	key, tableID, err = encoding.DecodeUvarintAscending(key)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	key, indexID, err = encoding.DecodeUvarintAscending(key)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-
-	return key, ID(tableID), IndexID(indexID), nil
+// DecodePartialTableIDIndexID decodes a table id followed by an index id. The
+// input key must already have its tenant id removed.
+func DecodePartialTableIDIndexID(key []byte) ([]byte, ID, IndexID, error) {
+	key, tableID, indexID, err := keys.DecodeTableIDIndexID(key)
+	return key, ID(tableID), IndexID(indexID), err
 }
 
 // DecodeIndexKeyPrefix decodes the prefix of an index key and returns the
@@ -532,6 +513,11 @@ func DecodeTableIDIndexID(key []byte) ([]byte, ID, IndexID, error) {
 func DecodeIndexKeyPrefix(
 	desc *TableDescriptor, key []byte,
 ) (indexID IndexID, remaining []byte, err error) {
+	key, err = keys.TODOTenantKeyGen.StripTenantPrefix(key)
+	if err != nil {
+		return 0, nil, err
+	}
+
 	// TODO(dan): This whole operation is n^2 because of the interleaves
 	// bookkeeping. We could improve it to n with a prefix tree of components.
 
@@ -539,7 +525,7 @@ func DecodeIndexKeyPrefix(
 
 	for component := 0; ; component++ {
 		var tableID ID
-		key, tableID, indexID, err = DecodeTableIDIndexID(key)
+		key, tableID, indexID, err = DecodePartialTableIDIndexID(key)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -602,7 +588,11 @@ func DecodeIndexKey(
 	colDirs []IndexDescriptor_Direction,
 	key []byte,
 ) (remainingKey []byte, matches bool, foundNull bool, _ error) {
-	key, _, _, err := DecodeTableIDIndexID(key)
+	key, err := keys.TODOTenantKeyGen.StripTenantPrefix(key)
+	if err != nil {
+		return nil, false, false, err
+	}
+	key, _, _, err = DecodePartialTableIDIndexID(key)
 	if err != nil {
 		return nil, false, false, err
 	}
@@ -610,8 +600,8 @@ func DecodeIndexKey(
 }
 
 // DecodeIndexKeyWithoutTableIDIndexIDPrefix is the same as DecodeIndexKey,
-// except it expects its index key is missing its first table id / index id
-// key prefix.
+// except it expects its index key is missing in its tenant id and first table
+// id / index id key prefix.
 func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 	desc *TableDescriptor,
 	index *IndexDescriptor,
@@ -629,7 +619,7 @@ func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 			// Our input key had its first table id / index id chopped off, so
 			// don't try to decode those for the first ancestor.
 			if i != 0 {
-				key, decodedTableID, decodedIndexID, err = DecodeTableIDIndexID(key)
+				key, decodedTableID, decodedIndexID, err = DecodePartialTableIDIndexID(key)
 				if err != nil {
 					return nil, false, false, err
 				}
@@ -655,7 +645,7 @@ func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 			}
 		}
 
-		key, decodedTableID, decodedIndexID, err = DecodeTableIDIndexID(key)
+		key, decodedTableID, decodedIndexID, err = DecodePartialTableIDIndexID(key)
 		if err != nil {
 			return nil, false, false, err
 		}
@@ -1404,8 +1394,7 @@ func TableEquivSignatures(
 
 	// Encode the table's ancestors' TableIDs and IndexIDs.
 	for i, ancestor := range index.Interleave.Ancestors {
-		fullSignature = encoding.EncodeUvarintAscending(fullSignature, uint64(ancestor.TableID))
-		fullSignature = encoding.EncodeUvarintAscending(fullSignature, uint64(ancestor.IndexID))
+		fullSignature = EncodePartialTableIDIndexID(fullSignature, ancestor.TableID, ancestor.IndexID)
 		// Create a reference up to this point for the ancestor's
 		// signature.
 		signatures[i] = fullSignature
@@ -1414,8 +1403,7 @@ func TableEquivSignatures(
 	}
 
 	// Encode the table's table and index IDs.
-	fullSignature = encoding.EncodeUvarintAscending(fullSignature, uint64(desc.ID))
-	fullSignature = encoding.EncodeUvarintAscending(fullSignature, uint64(index.ID))
+	fullSignature = EncodePartialTableIDIndexID(fullSignature, desc.ID, index.ID)
 	// Create a reference for the given table's signature as the last
 	// element of signatures.
 	signatures[len(signatures)-1] = fullSignature
@@ -1489,7 +1477,13 @@ func maxKeyTokens(index *IndexDescriptor, containsNull bool) int {
 // was /1, we cannot push this forwards since that is the first key we want
 // to read.
 func AdjustStartKeyForInterleave(index *IndexDescriptor, start roachpb.Key) (roachpb.Key, error) {
-	keyTokens, containsNull, err := encoding.DecomposeKeyTokens(start)
+	// Remove the tenant prefix before decomposing.
+	strippedStart, err := keys.TODOTenantKeyGen.StripTenantPrefix(start)
+	if err != nil {
+		return roachpb.Key{}, err
+	}
+
+	keyTokens, containsNull, err := encoding.DecomposeKeyTokens(strippedStart)
 	if err != nil {
 		return roachpb.Key{}, err
 	}
@@ -1531,12 +1525,18 @@ func AdjustEndKeyForInterleave(
 		return end.PrefixEnd(), nil
 	}
 
+	// Remove the tenant prefix before decomposing.
+	strippedEnd, err := keys.TODOTenantKeyGen.StripTenantPrefix(end)
+	if err != nil {
+		return roachpb.Key{}, err
+	}
+
 	// To illustrate, suppose we have the interleaved hierarchy
 	//    parent
 	//	child
 	//	  grandchild
 	// Suppose our target index is child.
-	keyTokens, containsNull, err := encoding.DecomposeKeyTokens(end)
+	keyTokens, containsNull, err := encoding.DecomposeKeyTokens(strippedEnd)
 	if err != nil {
 		return roachpb.Key{}, err
 	}

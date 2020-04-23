@@ -643,57 +643,12 @@ func MetaReverseScanBounds(key roachpb.RKey) (roachpb.RSpan, error) {
 	return roachpb.RSpan{Key: start, EndKey: end}, nil
 }
 
-// MakeTablePrefix returns the key prefix used for the table's data.
-func MakeTablePrefix(tableID uint32) []byte {
-	return encoding.EncodeUvarintAscending(nil, uint64(tableID))
-}
-
-// DecodeTablePrefix validates that the given key has a table prefix, returning
-// the remainder of the key (with the prefix removed) and the decoded descriptor
-// ID of the table.
-func DecodeTablePrefix(key roachpb.Key) ([]byte, uint64, error) {
-	if encoding.PeekType(key) != encoding.Int {
-		return key, 0, errors.Errorf("invalid key prefix: %q", key)
-	}
-	return encoding.DecodeUvarintAscending(key)
-}
-
-// DescMetadataPrefix returns the key prefix for all descriptors.
-func DescMetadataPrefix() []byte {
-	k := MakeTablePrefix(uint32(DescriptorTableID))
-	return encoding.EncodeUvarintAscending(k, DescriptorTablePrimaryKeyIndexID)
-}
-
-// DescMetadataKey returns the key for the descriptor.
-func DescMetadataKey(descID uint32) roachpb.Key {
-	k := DescMetadataPrefix()
-	k = encoding.EncodeUvarintAscending(k, uint64(descID))
-	return MakeFamilyKey(k, DescriptorTableDescriptorColFamID)
-}
-
-// DecodeDescMetadataID decodes a descriptor ID from a descriptor metadata key.
-func DecodeDescMetadataID(key roachpb.Key) (uint64, error) {
-	// Extract object ID from key.
-	// TODO(marc): move sql/keys.go to keys (or similar) and use a DecodeDescMetadataKey.
-	// We should also check proper encoding.
-	remaining, tableID, err := DecodeTablePrefix(key)
-	if err != nil {
-		return 0, err
-	}
-	if tableID != DescriptorTableID {
-		return 0, errors.Errorf("key is not a descriptor table entry: %v", key)
-	}
-	// DescriptorTable.PrimaryIndex.ID
-	remaining, _, err = encoding.DecodeUvarintAscending(remaining)
-	if err != nil {
-		return 0, err
-	}
-	// descID
-	_, id, err := encoding.DecodeUvarintAscending(remaining)
-	if err != nil {
-		return 0, err
-	}
-	return id, nil
+// MakeTableIDIndexID returns the key for the table id and index id by appending
+// to the passed key. The key must already contain a tenant id.
+func MakeTableIDIndexID(key []byte, tableID uint32, indexID uint32) []byte {
+	key = encoding.EncodeUvarintAscending(key, uint64(tableID))
+	key = encoding.EncodeUvarintAscending(key, uint64(indexID))
+	return key
 }
 
 // MakeFamilyKey returns the key for the family in the given row by appending to
@@ -711,22 +666,22 @@ func MakeFamilyKey(key []byte, famID uint32) []byte {
 	return encoding.EncodeUvarintAscending(key, uint64(len(key)-size))
 }
 
-const (
-	// SequenceIndexID is the ID of the single index on each special single-column,
-	// single-row sequence table.
-	SequenceIndexID = 1
-	// SequenceColumnFamilyID is the ID of the column family on each special single-column,
-	// single-row sequence table.
-	SequenceColumnFamilyID = 0
-)
+// DecodeTableIDIndexID decodes a table id followed by an index id from the
+// provided key. The input key must already have its tenant id removed.
+func DecodeTableIDIndexID(key []byte) ([]byte, uint32, uint32, error) {
+	var tableID uint64
+	var indexID uint64
+	var err error
 
-// MakeSequenceKey returns the key used to store the value of a sequence.
-func MakeSequenceKey(tableID uint32) []byte {
-	key := MakeTablePrefix(tableID)
-	key = encoding.EncodeUvarintAscending(key, SequenceIndexID)        // Index id
-	key = encoding.EncodeUvarintAscending(key, 0)                      // Primary key value
-	key = encoding.EncodeUvarintAscending(key, SequenceColumnFamilyID) // Column family
-	return key
+	key, tableID, err = encoding.DecodeUvarintAscending(key)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	key, indexID, err = encoding.DecodeUvarintAscending(key)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return key, uint32(tableID), uint32(indexID), nil
 }
 
 // GetRowPrefixLength returns the length of the row prefix of the key. A table
@@ -734,6 +689,8 @@ func MakeSequenceKey(tableID uint32) []byte {
 // prefix of every key for the same row. (Any key with this maximal prefix is
 // also guaranteed to be part of the input key's row.)
 // For secondary index keys, the row prefix is defined as the entire key.
+//
+// TODO(nvanbenschoten): support tenant ID prefix.
 func GetRowPrefixLength(key roachpb.Key) (int, error) {
 	n := len(key)
 	if encoding.PeekType(key) != encoding.Int {
@@ -927,17 +884,4 @@ func (b RangeIDPrefixBuf) RaftLogKey(logIndex uint64) roachpb.Key {
 // the range's last replica GC timestamp.
 func (b RangeIDPrefixBuf) RangeLastReplicaGCTimestampKey() roachpb.Key {
 	return append(b.unreplicatedPrefix(), LocalRangeLastReplicaGCTimestampSuffix...)
-}
-
-// ZoneKeyPrefix returns the key prefix for id's row in the system.zones table.
-func ZoneKeyPrefix(id uint32) roachpb.Key {
-	k := MakeTablePrefix(uint32(ZonesTableID))
-	k = encoding.EncodeUvarintAscending(k, uint64(ZonesTablePrimaryIndexID))
-	return encoding.EncodeUvarintAscending(k, uint64(id))
-}
-
-// ZoneKey returns the key for id's entry in the system.zones table.
-func ZoneKey(id uint32) roachpb.Key {
-	k := ZoneKeyPrefix(id)
-	return MakeFamilyKey(k, uint32(ZonesTableConfigColumnID))
 }

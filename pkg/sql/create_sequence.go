@@ -124,7 +124,7 @@ func doCreateSequence(
 	}
 
 	// Initialize the sequence value.
-	seqValueKey := keys.MakeSequenceKey(uint32(id))
+	seqValueKey := keys.TODOTenantKeyGen.SequenceKey(uint32(id))
 	b := &kv.Batch{}
 	b.Inc(seqValueKey, desc.SequenceOpts.Start-desc.SequenceOpts.Increment)
 	if err := params.p.txn.Run(params.ctx, b); err != nil {
