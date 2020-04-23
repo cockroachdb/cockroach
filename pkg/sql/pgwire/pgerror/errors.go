@@ -99,14 +99,6 @@ func Newf(code string, format string, args ...interface{}) error {
 	return err
 }
 
-// Noticef generates a Notice with a format string.
-func Noticef(format string, args ...interface{}) error {
-	err := errors.NewWithDepthf(1, format, args...)
-	err = WithCandidateCode(err, pgcode.SuccessfulCompletion)
-	err = WithSeverity(err, "NOTICE")
-	return err
-}
-
 // DangerousStatementf creates a new error for "rejected dangerous
 // statements".
 func DangerousStatementf(format string, args ...interface{}) error {

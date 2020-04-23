@@ -115,7 +115,7 @@ statement error 123 is outside the valid range for parameter "extra_float_digits
 SET extra_float_digits = 123
 
 statement ok
-SET client_min_messages = 'debug'
+SET client_min_messages = 'debug1'
 
 statement ok
 SET standard_conforming_strings = 'on'
