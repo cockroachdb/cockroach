@@ -149,7 +149,7 @@ func registerTPCDSVec(r *testRegistry) {
 		}
 
 		noStatsRunTimes := make(map[int]float64)
-		encounteredErrors := false
+		var lastErr error
 		// We will run all queries in two scenarios: without stats and with
 		// auto stats. The idea is that the plans are likely to be different,
 		// so we will be testing different execution scenarios. We additionally
@@ -175,7 +175,7 @@ func registerTPCDSVec(r *testRegistry) {
 					ctx, 3*timeout, conns, "", query, false, /* ignoreSQLErrors */
 				); err != nil {
 					t.Status(fmt.Sprintf("encountered an error: %s\n", err))
-					encounteredErrors = true
+					lastErr = err
 				} else {
 					runTimeInSeconds := timeutil.Since(start).Seconds()
 					t.Status(
@@ -198,8 +198,8 @@ func registerTPCDSVec(r *testRegistry) {
 				createStatsFromTables(t, clusterConn, tpcdsTables)
 			}
 		}
-		if encounteredErrors {
-			t.FailNow()
+		if lastErr != nil {
+			t.Fatal(lastErr)
 		}
 	}
 
