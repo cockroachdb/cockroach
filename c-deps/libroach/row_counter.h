@@ -23,6 +23,8 @@ const int MaxReservedDescID = 49;
 // RowCounter counts how many distinct rows appear in the KVs that is is shown
 // via `Count`. Note: the `DataSize` field of the BulkOpSummary is *not*
 // populated by this and should be set separately.
+//
+// TODO(nvanbenschoten): support tenant ID prefix.
 struct RowCounter {
   RowCounter(cockroach::roachpb::BulkOpSummary* summary) : summary(summary) {}
   bool Count(const rocksdb::Slice& key);

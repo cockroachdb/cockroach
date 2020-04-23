@@ -132,6 +132,7 @@ var (
 		{Name: "/Table", start: TableDataMin, end: TableDataMax, Entries: []DictEntry{
 			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: tableKeyParse},
 		}},
+		// TODO(nvanbenschoten): support tenant SQL keys.
 	}
 
 	// keyofKeyDict means the key of suffix which is itself a key,
@@ -253,7 +254,7 @@ func tableKeyParse(input string) (remainder string, output roachpb.Key) {
 	if err != nil {
 		panic(&ErrUglifyUnsupported{err})
 	}
-	output = roachpb.Key(MakeTablePrefix(uint32(tableID)))
+	output = TODOTenantKeyGen.TablePrefix(uint32(tableID))
 	if remainder != "" {
 		var indexKey roachpb.Key
 		remainder, indexKey = tableIndexParse(remainder)
