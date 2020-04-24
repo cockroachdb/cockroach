@@ -171,6 +171,8 @@ func initCLIDefaults() {
 
 	authCtx.validityPeriod = 1 * time.Hour
 
+	certCtx.certPrincipalMap = nil
+
 	initPreFlagsDefaults()
 
 	// Clear the "Changed" state of all the registered command-line flags.
@@ -393,4 +395,10 @@ var demoCtx struct {
 	simulateLatency           bool
 	transientCluster          *transientCluster
 	insecure                  bool
+}
+
+// certCtx captures the command-line parameters of the `cert` command.
+// Defaults set by InitCLIDefaults() above.
+var certCtx struct {
+	certPrincipalMap []string
 }
