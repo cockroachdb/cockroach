@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
-func EnsureInit(errDisplay EnsureInitErrorDisplay) error {
-	return nil
+func EnsureInit(errDisplay EnsureInitErrorDisplay, flagGEOSLocationValue string) (string, error) {
+	return "", nil
 }
 
 func WKTToEWKB(wkt geopb.WKT, srid geopb.SRID) (geopb.EWKB, error) {

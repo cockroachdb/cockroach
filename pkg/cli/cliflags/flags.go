@@ -1050,6 +1050,12 @@ Start with an empty database: avoid pre-loading a default dataset in
 the demo shell.`,
 	}
 
+	GeoLibsDir = FlagInfo{
+		Name: "geo-libs",
+		Description: `
+The location where all libraries for Geospatial operations is located.`,
+	}
+
 	Global = FlagInfo{
 		Name: "global",
 		Description: `
