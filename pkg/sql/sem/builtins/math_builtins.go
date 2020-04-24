@@ -617,7 +617,6 @@ func decimalLogFn(
 	logFn func(*apd.Decimal, *apd.Decimal) (apd.Condition, error), info string,
 ) tree.Overload {
 	return decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
-		// TODO(mjibson): see #13642
 		switch x.Sign() {
 		case -1:
 			return nil, errLogOfNegNumber
