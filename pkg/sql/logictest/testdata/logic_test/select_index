@@ -632,3 +632,24 @@ SELECT * FROM t38878 WHERE (k1 = 'd' AND k2 = 'x') OR k1 = 'b' OR (k1 > 'b' AND 
 b  v  2
 c  w  3
 d  x  4
+
+# Regression test for #47976 (optimizer OOM and timeouts with many ORs).
+statement ok
+CREATE TABLE t47976 (
+  k INT PRIMARY KEY,
+  a INT,
+  b FLOAT,
+  c INT,
+  INDEX (a),
+  INDEX (b),
+  INDEX (c)
+)
+
+statement ok
+SELECT k FROM t47976 WHERE
+  (a >= 6 OR b < 8 OR c IN (23, 27, 53)) AND
+  (a = 1 OR b >= 12 OR c IS NULL) AND
+  (a < 1 OR b = 6.8 OR c = 12) AND
+  (a > 4 OR b <= 5.23 OR c IN (1, 2, 3)) AND
+  (a = 12 OR b = 15.23 OR c = 14) AND
+  (a > 58 OR b < 0 OR c >= 13)

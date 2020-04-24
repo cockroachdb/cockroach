@@ -2262,8 +2262,9 @@ func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
 // returns ExprPair, which can be deconstructed later, to avoid extra
 // computation in determining the left and right expression groups.
 type ExprPair struct {
-	left  opt.ScalarExpr
-	right opt.ScalarExpr
+	left          opt.ScalarExpr
+	right         opt.ScalarExpr
+	itemToReplace *memo.FiltersItem
 }
 
 // ExprPairLeft returns the left ScalarExpr in an ExprPair.
@@ -2276,23 +2277,48 @@ func (c *CustomFuncs) ExprPairRight(ep ExprPair) opt.ScalarExpr {
 	return ep.right
 }
 
+// ExprPairFiltersItemToReplace returns the original FiltersItem that the
+// ExprPair was generated from. This FiltersItem should be replaced by
+// ExprPairLeft and ExprPairRight in the newly generated filters in
+// SplitDisjunction(AddKey).
+func (c *CustomFuncs) ExprPairFiltersItemToReplace(ep ExprPair) *memo.FiltersItem {
+	return ep.itemToReplace
+}
+
 // ExprPairSucceeded returns true if the ExprPair is not nil.
 func (c *CustomFuncs) ExprPairSucceeded(ep ExprPair) bool {
 	return ep != ExprPair{}
 }
 
-// ExprPairForSplitDisjunction returns an ExprPair that groups all
-// sub-expressions adjacent to the input OrExpr into left and right expression
-// groups. These two groups form the new filter expressions on the left and
-// right side of the generated Union.
+// ExprPairForSplitDisjunction finds the first non-empty ExprPair that can be
+// generated from a FiltersItem with a top-level OrExpr. If such an ExprPair is
+// found, it is returned. If one is not found, an empty ExprPair is returned.
+//
+// See buildExprPairForSplitDisjunction for details on how the ExprPair is created.
+func (c *CustomFuncs) ExprPairForSplitDisjunction(filters memo.FiltersExpr) ExprPair {
+	for i := range filters {
+		if filters[i].Condition.Op() == opt.OrOp {
+			ep := c.buildExprPairForSplitDisjunction(&filters[i])
+			if (ep != ExprPair{}) {
+				return ep
+			}
+		}
+	}
+	return ExprPair{}
+}
+
+// buildExprPairForSplitDisjunction returns an ExprPair that groups all
+// sub-expressions adjacent to the input's top-level OrExpr into left and right
+// expression groups. These two groups form the new filter expressions on the
+// left and right side of the generated UnionAll.
 //
 // All sub-expressions with the same columns as the left-most sub-expression
 // are grouped in the left group. All other sub-expressions are grouped in the
 // right group.
 //
-// ExprPairForSplitDisjunction returns nil if all sub-expressions have the same
-// columns.
-func (c *CustomFuncs) ExprPairForSplitDisjunction(or opt.ScalarExpr) ExprPair {
+// buildExprPairForSplitDisjunction returns an empty ExprPair if all
+// sub-expressions have the same columns.
+func (c *CustomFuncs) buildExprPairForSplitDisjunction(filter *memo.FiltersItem) ExprPair {
 	var leftExprs memo.ScalarListExpr
 	var rightExprs memo.ScalarListExpr
 	var leftColSet opt.ColSet
@@ -2323,7 +2349,7 @@ func (c *CustomFuncs) ExprPairForSplitDisjunction(or opt.ScalarExpr) ExprPair {
 			rightExprs = append(rightExprs, expr)
 		}
 	}
-	collect(or)
+	collect(filter.Condition)
 
 	// Return an empty pair if one of the groups has no expressions.
 	if len(leftExprs) == 0 || len(rightExprs) == 0 {
@@ -2331,8 +2357,9 @@ func (c *CustomFuncs) ExprPairForSplitDisjunction(or opt.ScalarExpr) ExprPair {
 	}
 
 	return ExprPair{
-		left:  c.constructOr(leftExprs),
-		right: c.constructOr(rightExprs),
+		left:          c.constructOr(leftExprs),
+		right:         c.constructOr(rightExprs),
+		itemToReplace: filter,
 	}
 }
 
