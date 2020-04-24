@@ -305,10 +305,17 @@ func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
 	}
 
 	if desc {
-		// Add an empty bucket to indicate that the remaining buckets from the
-		// original histogram have been removed.
+		// After we reverse the buckets below, the last bucket will become the
+		// first bucket. NumRange of the first bucket must be 0, so add an empty
+		// bucket if needed.
 		if iter.next() {
+			// The remaining buckets from the original histogram have been removed.
 			filtered.addEmptyBucket(iter.lb, desc)
+		} else if lastBucket := filtered.buckets[len(filtered.buckets)-1]; lastBucket.NumRange != 0 {
+			iter.setIdx(0)
+			span := makeSpanFromBucket(&iter, prefix)
+			ub := h.getPrevUpperBound(span.EndKey(), span.EndBoundary(), colOffset)
+			filtered.addEmptyBucket(ub, desc)
 		}
 
 		// Reverse the buckets so they are in ascending order.
