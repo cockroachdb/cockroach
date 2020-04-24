@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -41,14 +42,16 @@ func TestLocalityReport(t *testing.T) {
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{})
 
 	// Add several localities and verify the result
-	r := makeReplicationCriticalLocalitiesReportSaver()
-	r.AddCriticalLocality(MakeZoneKey(1, 3), "region=US")
-	r.AddCriticalLocality(MakeZoneKey(5, 6), "dc=A")
-	r.AddCriticalLocality(MakeZoneKey(7, 8), "dc=B")
-	r.AddCriticalLocality(MakeZoneKey(7, 8), "dc=B")
+	report := make(LocalityReport)
+	report.CountRangeAtRisk(MakeZoneKey(1, 3), "region=US")
+	report.CountRangeAtRisk(MakeZoneKey(5, 6), "dc=A")
+	report.CountRangeAtRisk(MakeZoneKey(7, 8), "dc=B")
+	report.CountRangeAtRisk(MakeZoneKey(7, 8), "dc=B")
 
 	time1 := time.Date(2001, 1, 1, 10, 0, 0, 0, time.UTC)
-	require.NoError(t, r.Save(ctx, time1, db, con))
+	saver := makeReplicationCriticalLocalitiesReportSaver()
+	require.NoError(t, saver.Save(ctx, report, time1, db, con))
+	report = make(LocalityReport)
 
 	require.ElementsMatch(t, TableData(ctx, "system.replication_critical_localities", con), [][]string{
 		{"1", "3", "'region=US'", "2", "1"},
@@ -58,17 +61,18 @@ func TestLocalityReport(t *testing.T) {
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
 		{"2", "'2001-01-01 10:00:00+00:00'"},
 	})
-	require.Equal(t, 3, r.LastUpdatedRowCount())
+	require.Equal(t, 3, saver.LastUpdatedRowCount())
 
 	// Add new set of localities and verify the old ones are deleted
-	r.AddCriticalLocality(MakeZoneKey(5, 6), "dc=A")
-	r.AddCriticalLocality(MakeZoneKey(5, 6), "dc=A")
-	r.AddCriticalLocality(MakeZoneKey(7, 8), "dc=B")
-	r.AddCriticalLocality(MakeZoneKey(7, 8), "dc=B")
-	r.AddCriticalLocality(MakeZoneKey(15, 6), "dc=A")
+	report.CountRangeAtRisk(MakeZoneKey(5, 6), "dc=A")
+	report.CountRangeAtRisk(MakeZoneKey(5, 6), "dc=A")
+	report.CountRangeAtRisk(MakeZoneKey(7, 8), "dc=B")
+	report.CountRangeAtRisk(MakeZoneKey(7, 8), "dc=B")
+	report.CountRangeAtRisk(MakeZoneKey(15, 6), "dc=A")
 
 	time2 := time.Date(2001, 1, 1, 11, 0, 0, 0, time.UTC)
-	require.NoError(t, r.Save(ctx, time2, db, con))
+	require.NoError(t, saver.Save(ctx, report, time2, db, con))
+	report = make(LocalityReport)
 
 	require.ElementsMatch(t, TableData(ctx, "system.replication_critical_localities", con), [][]string{
 		{"5", "6", "'dc=A'", "2", "2"},
@@ -78,7 +82,7 @@ func TestLocalityReport(t *testing.T) {
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
 		{"2", "'2001-01-01 11:00:00+00:00'"},
 	})
-	require.Equal(t, 3, r.LastUpdatedRowCount())
+	require.Equal(t, 3, saver.LastUpdatedRowCount())
 
 	time3 := time.Date(2001, 1, 1, 11, 30, 0, 0, time.UTC)
 	// If some other server takes over and does an update.
@@ -99,15 +103,16 @@ func TestLocalityReport(t *testing.T) {
 	require.Equal(t, 1, rows)
 
 	// Add new set of localities and verify the old ones are deleted
-	r.AddCriticalLocality(MakeZoneKey(5, 6), "dc=A")
-	r.AddCriticalLocality(MakeZoneKey(5, 6), "dc=A")
-	r.AddCriticalLocality(MakeZoneKey(5, 6), "dc=A")
-	r.AddCriticalLocality(MakeZoneKey(7, 8), "dc=B")
-	r.AddCriticalLocality(MakeZoneKey(7, 8), "dc=B")
-	r.AddCriticalLocality(MakeZoneKey(15, 6), "dc=A")
+	report.CountRangeAtRisk(MakeZoneKey(5, 6), "dc=A")
+	report.CountRangeAtRisk(MakeZoneKey(5, 6), "dc=A")
+	report.CountRangeAtRisk(MakeZoneKey(5, 6), "dc=A")
+	report.CountRangeAtRisk(MakeZoneKey(7, 8), "dc=B")
+	report.CountRangeAtRisk(MakeZoneKey(7, 8), "dc=B")
+	report.CountRangeAtRisk(MakeZoneKey(15, 6), "dc=A")
 
 	time4 := time.Date(2001, 1, 1, 12, 0, 0, 0, time.UTC)
-	require.NoError(t, r.Save(ctx, time4, db, con))
+	require.NoError(t, saver.Save(ctx, report, time4, db, con))
+	report = make(LocalityReport)
 
 	require.ElementsMatch(t, TableData(ctx, "system.replication_critical_localities", con), [][]string{
 		{"5", "6", "'dc=A'", "2", "3"},
@@ -117,14 +122,14 @@ func TestLocalityReport(t *testing.T) {
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
 		{"2", "'2001-01-01 12:00:00+00:00'"},
 	})
-	require.Equal(t, 2, r.LastUpdatedRowCount())
+	require.Equal(t, 2, saver.LastUpdatedRowCount())
 
 	// A brand new report (after restart for example) - still works.
-	r = makeReplicationCriticalLocalitiesReportSaver()
-	r.AddCriticalLocality(MakeZoneKey(5, 6), "dc=A")
+	saver = makeReplicationCriticalLocalitiesReportSaver()
+	report.CountRangeAtRisk(MakeZoneKey(5, 6), "dc=A")
 
 	time5 := time.Date(2001, 1, 1, 12, 30, 0, 0, time.UTC)
-	require.NoError(t, r.Save(ctx, time5, db, con))
+	require.NoError(t, saver.Save(ctx, report, time5, db, con))
 
 	require.ElementsMatch(t, TableData(ctx, "system.replication_critical_localities", con), [][]string{
 		{"5", "6", "'dc=A'", "2", "1"},
@@ -132,9 +137,10 @@ func TestLocalityReport(t *testing.T) {
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
 		{"2", "'2001-01-01 12:30:00+00:00'"},
 	})
-	require.Equal(t, 3, r.LastUpdatedRowCount())
+	require.Equal(t, 3, saver.LastUpdatedRowCount())
 }
 
+// TableData reads a table and returns the rows as strings.
 func TableData(
 	ctx context.Context, tableName string, executor sqlutil.InternalExecutor,
 ) [][]string {
@@ -151,4 +157,37 @@ func TableData(
 		return result
 	}
 	return nil
+}
+
+func TestExpandLocalities(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	nodeLocalities := map[roachpb.NodeID]roachpb.Locality{
+		roachpb.NodeID(1): {Tiers: []roachpb.Tier{
+			{Key: "region", Value: "r1"},
+			{Key: "dc", Value: "dc1"},
+			{Key: "az", Value: "az1"},
+		}},
+		roachpb.NodeID(2): {Tiers: []roachpb.Tier{
+			{Key: "region", Value: "r2"},
+			{Key: "dc", Value: "dc2"},
+			{Key: "az", Value: "az2"},
+		}},
+	}
+	expanded := expandLocalities(nodeLocalities)
+	require.Equal(t,
+		map[roachpb.NodeID]map[string]roachpb.Locality{
+			1: {
+				"region=r1":               {Tiers: []roachpb.Tier{{Key: "region", Value: "r1"}}},
+				"region=r1,dc=dc1":        {Tiers: []roachpb.Tier{{Key: "region", Value: "r1"}, {Key: "dc", Value: "dc1"}}},
+				"region=r1,dc=dc1,az=az1": {Tiers: []roachpb.Tier{{Key: "region", Value: "r1"}, {Key: "dc", Value: "dc1"}, {Key: "az", Value: "az1"}}},
+			},
+			2: {
+				"region=r2":               {Tiers: []roachpb.Tier{{Key: "region", Value: "r2"}}},
+				"region=r2,dc=dc2":        {Tiers: []roachpb.Tier{{Key: "region", Value: "r2"}, {Key: "dc", Value: "dc2"}}},
+				"region=r2,dc=dc2,az=az2": {Tiers: []roachpb.Tier{{Key: "region", Value: "r2"}, {Key: "dc", Value: "dc2"}, {Key: "az", Value: "az2"}}},
+			},
+		},
+		expanded,
+	)
 }

@@ -12,8 +12,6 @@ package reports
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -47,10 +45,11 @@ type localityStatus struct {
 // applicable zone.
 type LocalityReport map[localityKey]localityStatus
 
-// ReplicationCriticalLocalitiesReportSaver manages the content and the saving
-// of the report.
+// replicationCriticalLocalitiesReportSaver deals with saving a LocalityReport
+// to the database. The idea is for it to be used to save new version of the
+// report over and over. It maintains the previously-saved version of the report
+// in order to speed-up the saving of the next one.
 type replicationCriticalLocalitiesReportSaver struct {
-	localities          LocalityReport
 	previousVersion     LocalityReport
 	lastGenerated       time.Time
 	lastUpdatedRowCount int
@@ -58,14 +57,7 @@ type replicationCriticalLocalitiesReportSaver struct {
 
 // makeReplicationCriticalLocalitiesReportSaver creates a new report saver.
 func makeReplicationCriticalLocalitiesReportSaver() replicationCriticalLocalitiesReportSaver {
-	return replicationCriticalLocalitiesReportSaver{
-		localities: LocalityReport{},
-	}
-}
-
-// resetReport resets the report to an empty state.
-func (r *replicationCriticalLocalitiesReportSaver) resetReport() {
-	r.localities = LocalityReport{}
+	return replicationCriticalLocalitiesReportSaver{}
 }
 
 // LastUpdatedRowCount is the count of the rows that were touched during the last save.
@@ -73,20 +65,21 @@ func (r *replicationCriticalLocalitiesReportSaver) LastUpdatedRowCount() int {
 	return r.lastUpdatedRowCount
 }
 
-// AddCriticalLocality will add locality to the list of the critical localities.
-func (r *replicationCriticalLocalitiesReportSaver) AddCriticalLocality(
-	zKey ZoneKey, loc LocalityRepr,
-) {
+// CountRangeAtRisk increments the number of ranges at-risk for the report entry
+// corresponding to the given zone and locality. In other words, the report will
+// count the respective locality as critical for one more range in the given
+// zone.
+func (r LocalityReport) CountRangeAtRisk(zKey ZoneKey, loc LocalityRepr) {
 	lKey := localityKey{
 		ZoneKey:  zKey,
 		locality: loc,
 	}
-	if _, ok := r.localities[lKey]; !ok {
-		r.localities[lKey] = localityStatus{}
+	if _, ok := r[lKey]; !ok {
+		r[lKey] = localityStatus{}
 	}
-	lStat := r.localities[lKey]
+	lStat := r[lKey]
 	lStat.atRiskRanges++
-	r.localities[lKey] = lStat
+	r[lKey] = lStat
 }
 
 func (r *replicationCriticalLocalitiesReportSaver) loadPreviousVersion(
@@ -129,11 +122,6 @@ func (r *replicationCriticalLocalitiesReportSaver) loadPreviousVersion(
 	return nil
 }
 
-func (r *replicationCriticalLocalitiesReportSaver) updatePreviousVersion() {
-	r.previousVersion = r.localities
-	r.localities = make(LocalityReport, len(r.previousVersion))
-}
-
 func (r *replicationCriticalLocalitiesReportSaver) updateTimestamp(
 	ctx context.Context, ex sqlutil.InternalExecutor, txn *kv.Txn, reportTS time.Time,
 ) error {
@@ -156,11 +144,17 @@ func (r *replicationCriticalLocalitiesReportSaver) updateTimestamp(
 	return err
 }
 
-// Save the report.
+// Save the report to the database.
 //
+// report should not be used by the caller any more after this call; the callee
+// takes ownership.
 // reportTS is the time that will be set in the updated_at column for every row.
 func (r *replicationCriticalLocalitiesReportSaver) Save(
-	ctx context.Context, reportTS time.Time, db *kv.DB, ex sqlutil.InternalExecutor,
+	ctx context.Context,
+	report LocalityReport,
+	reportTS time.Time,
+	db *kv.DB,
+	ex sqlutil.InternalExecutor,
 ) error {
 	r.lastUpdatedRowCount = 0
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -174,7 +168,7 @@ func (r *replicationCriticalLocalitiesReportSaver) Save(
 			return err
 		}
 
-		for key, status := range r.localities {
+		for key, status := range report {
 			if err := r.upsertLocality(
 				ctx, reportTS, txn, key, status, db, ex,
 			); err != nil {
@@ -183,7 +177,7 @@ func (r *replicationCriticalLocalitiesReportSaver) Save(
 		}
 
 		for key := range r.previousVersion {
-			if _, ok := r.localities[key]; !ok {
+			if _, ok := report[key]; !ok {
 				_, err := ex.Exec(
 					ctx,
 					"delete-old-replication-critical-localities",
@@ -208,7 +202,7 @@ func (r *replicationCriticalLocalitiesReportSaver) Save(
 	}
 
 	r.lastGenerated = reportTS
-	r.updatePreviousVersion()
+	r.previousVersion = report
 
 	return nil
 }
@@ -252,12 +246,14 @@ func (r *replicationCriticalLocalitiesReportSaver) upsertLocality(
 // criticalLocalitiesVisitor is a visitor that, when passed to visitRanges(), builds
 // a LocalityReport.
 type criticalLocalitiesVisitor struct {
-	localityConstraints []zonepb.ConstraintsConjunction
-	cfg                 *config.SystemConfig
-	storeResolver       StoreResolver
-	nodeChecker         nodeChecker
+	allLocalities map[roachpb.NodeID]map[string]roachpb.Locality
+	cfg           *config.SystemConfig
+	storeResolver StoreResolver
+	nodeChecker   nodeChecker
 
-	report   *replicationCriticalLocalitiesReportSaver
+	// report is the output of the visitor. visit*() methods populate it.
+	// After visiting all the ranges, it can be retrieved with Report().
+	report   LocalityReport
 	visitErr bool
 
 	// prevZoneKey maintains state from one range to the next. This state can be
@@ -268,22 +264,47 @@ type criticalLocalitiesVisitor struct {
 
 var _ rangeVisitor = &criticalLocalitiesVisitor{}
 
-func makeLocalityStatsVisitor(
+func makeCriticalLocalitiesVisitor(
 	ctx context.Context,
-	localityConstraints []zonepb.ConstraintsConjunction,
+	nodeLocalities map[roachpb.NodeID]roachpb.Locality,
 	cfg *config.SystemConfig,
 	storeResolver StoreResolver,
 	nodeChecker nodeChecker,
-	saver *replicationCriticalLocalitiesReportSaver,
 ) criticalLocalitiesVisitor {
+	allLocalities := expandLocalities(nodeLocalities)
 	v := criticalLocalitiesVisitor{
-		localityConstraints: localityConstraints,
-		cfg:                 cfg,
-		storeResolver:       storeResolver,
-		nodeChecker:         nodeChecker,
-		report:              saver,
+		allLocalities: allLocalities,
+		cfg:           cfg,
+		storeResolver: storeResolver,
+		nodeChecker:   nodeChecker,
 	}
+	v.reset(ctx)
 	return v
+}
+
+// expandLocalities expands each locality in its input into multiple localities,
+// each at a different level of granularity. For example the locality
+// "region=r1,dc=dc1,az=az1" is expanded into ["region=r1", "region=r1,dc=dc1",
+// "region=r1,dc=dc1,az=az1"].
+// The localities are returned in a format convenient for the
+// criticalLocalitiesVisitor.
+func expandLocalities(
+	nodeLocalities map[roachpb.NodeID]roachpb.Locality,
+) map[roachpb.NodeID]map[string]roachpb.Locality {
+	res := make(map[roachpb.NodeID]map[string]roachpb.Locality)
+	for nid, loc := range nodeLocalities {
+		if len(loc.Tiers) == 0 {
+			res[nid] = nil
+			continue
+		}
+		res[nid] = make(map[string]roachpb.Locality, len(loc.Tiers))
+		for i := range loc.Tiers {
+			partialLoc := roachpb.Locality{Tiers: make([]roachpb.Tier, i+1)}
+			copy(partialLoc.Tiers, loc.Tiers[:i+1])
+			res[nid][partialLoc.String()] = partialLoc
+		}
+	}
+	return res
 }
 
 // failed is part of the rangeVisitor interface.
@@ -291,10 +312,21 @@ func (v *criticalLocalitiesVisitor) failed() bool {
 	return v.visitErr
 }
 
+// Report returns the LocalityReport that was populated by previous visit*()
+// calls.
+func (v *criticalLocalitiesVisitor) Report() LocalityReport {
+	return v.report
+}
+
 // reset is part of the rangeVisitor interface.
 func (v *criticalLocalitiesVisitor) reset(ctx context.Context) {
-	v.visitErr = false
-	v.report.resetReport()
+	*v = criticalLocalitiesVisitor{
+		allLocalities: v.allLocalities,
+		cfg:           v.cfg,
+		storeResolver: v.storeResolver,
+		nodeChecker:   v.nodeChecker,
+		report:        make(LocalityReport, len(v.report)),
+	}
 }
 
 // visitNewZone is part of the rangeVisitor interface.
@@ -324,33 +356,39 @@ func (v *criticalLocalitiesVisitor) visitNewZone(
 	}
 	v.prevZoneKey = zKey
 
-	return v.countRange(ctx, zKey, r)
+	v.countRange(ctx, zKey, r)
+	return nil
 }
 
 // visitSameZone is part of the rangeVisitor interface.
-func (v *criticalLocalitiesVisitor) visitSameZone(
-	ctx context.Context, r *roachpb.RangeDescriptor,
-) (retErr error) {
-	defer func() {
-		if retErr != nil {
-			v.visitErr = true
-		}
-	}()
-	return v.countRange(ctx, v.prevZoneKey, r)
+func (v *criticalLocalitiesVisitor) visitSameZone(ctx context.Context, r *roachpb.RangeDescriptor) {
+	v.countRange(ctx, v.prevZoneKey, r)
 }
 
 func (v *criticalLocalitiesVisitor) countRange(
 	ctx context.Context, zoneKey ZoneKey, r *roachpb.RangeDescriptor,
-) error {
+) {
 	stores := v.storeResolver(r)
-	for _, c := range v.localityConstraints {
-		if err := processLocalityForRange(
-			ctx, r, zoneKey, v.report, &c, v.nodeChecker, stores,
-		); err != nil {
-			return err
+
+	// Collect all the localities of all the replicas. Note that we collect
+	// "expanded" localities: if a replica has a multi-tier locality like
+	// "region:us-east,dc=new-york", we collect both "region:us-east" and
+	// "region:us-east,dc=new-york".
+	dedupLocal := make(map[string]roachpb.Locality)
+	for _, rep := range r.Replicas().All() {
+		for s, loc := range v.allLocalities[rep.NodeID] {
+			if _, ok := dedupLocal[s]; ok {
+				continue
+			}
+			dedupLocal[s] = loc
 		}
 	}
-	return nil
+
+	// Any of the localities of any of the nodes could be critical. We'll check
+	// them one by one.
+	for _, loc := range dedupLocal {
+		processLocalityForRange(ctx, r, zoneKey, v.report, loc, v.nodeChecker, stores)
+	}
 }
 
 // processLocalityForRange checks a single locality constraint against a
@@ -359,11 +397,11 @@ func processLocalityForRange(
 	ctx context.Context,
 	r *roachpb.RangeDescriptor,
 	zoneKey ZoneKey,
-	rep *replicationCriticalLocalitiesReportSaver,
-	c *zonepb.ConstraintsConjunction,
+	rep LocalityReport,
+	loc roachpb.Locality,
 	nodeChecker nodeChecker,
 	storeDescs []roachpb.StoreDescriptor,
-) error {
+) {
 	// Compute the required quorum and the number of live nodes. If the number of
 	// live nodes gets lower than the required quorum then the range is already
 	// unavailable.
@@ -381,12 +419,20 @@ func processLocalityForRange(
 		}
 	}
 
-	cstrs := make([]string, 0, len(c.Constraints))
-	for _, con := range c.Constraints {
-		cstrs = append(cstrs, fmt.Sprintf("%s=%s", con.Key, con.Value))
+	localityToConstraints := func(loc roachpb.Locality) zonepb.ConstraintsConjunction {
+		c := zonepb.ConstraintsConjunction{
+			Constraints: make([]zonepb.Constraint, 0, len(loc.Tiers)),
+		}
+		for _, tier := range loc.Tiers {
+			c.Constraints = append(c.Constraints, zonepb.Constraint{
+				Type: zonepb.Constraint_REQUIRED, Key: tier.Key, Value: tier.Value,
+			})
+		}
+		return c
 	}
-	loc := LocalityRepr(strings.Join(cstrs, ","))
 
+	locStr := LocalityRepr(loc.String())
+	c := localityToConstraints(loc)
 	passCount := 0
 	for _, storeDesc := range storeDescs {
 		storeHasConstraint := true
@@ -406,7 +452,6 @@ func processLocalityForRange(
 	// If the live nodes outside of the given locality are not enough to
 	// form quorum then this locality is critical.
 	if quorumCount > liveNodeCount-passCount {
-		rep.AddCriticalLocality(zoneKey, loc)
+		rep.CountRangeAtRisk(zoneKey, locStr)
 	}
-	return nil
 }
