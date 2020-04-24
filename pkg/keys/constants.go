@@ -288,7 +288,9 @@ var (
 	UserTableDataMin = SystemTenantKeyGen.TablePrefix(MinUserDescID)
 
 	// tenantPrefix is the prefix for all non-system tenant keys.
-	tenantPrefix = roachpb.Key{tenantPrefixByte}
+	tenantPrefix       = roachpb.Key{tenantPrefixByte}
+	TenantTableDataMin = MakeTenantPrefix(roachpb.MinTenantID)
+	TenantTableDataMax = MakeTenantPrefix(roachpb.MaxTenantID).PrefixEnd()
 )
 
 // Various IDs used by the structured data layer.

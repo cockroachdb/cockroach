@@ -10,7 +10,10 @@
 
 package roachpb
 
-import "strconv"
+import (
+	"math"
+	"strconv"
+)
 
 // A TenantID is a unique ID associated with a tenant in a multi-tenant cluster.
 // Each tenant is granted exclusive access to a portion of the keyspace and a
@@ -20,13 +23,22 @@ import "strconv"
 type TenantID struct{ id uint64 }
 
 // SystemTenantID is the ID associated with the system's internal tenant in a
-// multi-tenant cluster and the only tenant in a single-tenant cluster. The
-// system tenant differs from all other tenants in four important ways:
+// multi-tenant cluster and the only tenant in a single-tenant cluster.
+//
+// The system tenant differs from all other tenants in four important ways:
 // 1. the system tenant's keyspace is not prefixed with a tenant specifier.
 // 2. the system tenant is created by default during cluster initialization.
 // 3. the system tenant is always present and can never be destroyed.
 // 4. the system tenant has the ability to create and destroy other tenants.
 var SystemTenantID = MakeTenantID(1)
+
+// MinTenantID is the minimum ID of a (non-system) tenant in a multi-tenant
+// cluster.
+var MinTenantID = MakeTenantID(2)
+
+// MaxTenantID is the maximum ID of a (non-system) tenant in a multi-tenant
+// cluster.
+var MaxTenantID = MakeTenantID(math.MaxUint64)
 
 // MakeTenantID constructs a new TenantID from the provided uint64.
 func MakeTenantID(id uint64) TenantID {
