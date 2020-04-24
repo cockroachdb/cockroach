@@ -167,8 +167,8 @@ CREATE INDEX child_name_collision_auto_index_fk_id ON child_name_collision (othe
 # Testing the unusual case where an index already exists that has the same name
 # as the index to be auto-generated when adding a fk constraint to an empty
 # table (but the existing index is not on the referencing column), in which
-# case the ALTER TABLE will fail due to the name collision.
-statement error duplicate index name: "child_name_collision_auto_index_fk_id"
+# case the ALTER TABLE generate another unique name for the index.
+statement ok
 ALTER TABLE child_name_collision ADD CONSTRAINT fk_id FOREIGN KEY (parent_id) references parent_name_collision
 
 statement ok
