@@ -443,6 +443,10 @@ func init() {
 		StringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, baseCfg.SSLCertsDir)
 	}
 
+	// The list certs command needs the certificate principal map.
+	StringSlice(listCertsCmd.Flags(), &certCtx.certPrincipalMap,
+		cliflags.CertPrincipalMap, certCtx.certPrincipalMap)
+
 	for _, cmd := range []*cobra.Command{createCACertCmd, createClientCACertCmd} {
 		f := cmd.Flags()
 		// CA certificates have a longer expiration time.
