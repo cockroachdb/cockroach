@@ -1979,13 +1979,16 @@ func (desc *TableDescriptor) validateTableIndexes(columnNames map[string]ColumnI
 			return fmt.Errorf("invalid index ID %d", index.ID)
 		}
 
-		if _, ok := indexNames[index.Name]; ok {
+		if _, indexNameExists := indexNames[index.Name]; indexNameExists {
 			for i := range desc.Indexes {
 				if desc.Indexes[i].Name == index.Name {
-					return fmt.Errorf("duplicate index name: %q", index.Name)
+					// This error should be caught in MakeIndexDescriptor.
+					return errors.HandleAsAssertionFailure(fmt.Errorf("duplicate index name: %q", index.Name))
 				}
 			}
-			return fmt.Errorf("duplicate: index %q in the middle of being added, not yet public", index.Name)
+			// This error should be caught in MakeIndexDescriptor.
+			return errors.HandleAsAssertionFailure(fmt.Errorf(
+				"duplicate: index %q in the middle of being added, not yet public", index.Name))
 		}
 		indexNames[index.Name] = struct{}{}
 

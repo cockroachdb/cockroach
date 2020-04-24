@@ -829,9 +829,14 @@ func addIndexForFK(
 	constraintName string,
 	ts FKTableState,
 ) (sqlbase.IndexID, error) {
+	autoIndexName := fmt.Sprintf("%s_auto_index_%s", tbl.Name, constraintName)
+	// Ensure that the index name does not exist before trying to create the index.
+	if err := validateIndexNameIsUnique(tbl, autoIndexName); err != nil {
+		return 0, err
+	}
 	// No existing index for the referencing columns found, so we add one.
 	idx := sqlbase.IndexDescriptor{
-		Name:             fmt.Sprintf("%s_auto_index_%s", tbl.Name, constraintName),
+		Name:             autoIndexName,
 		ColumnNames:      make([]string, len(srcCols)),
 		ColumnDirections: make([]sqlbase.IndexDescriptor_Direction, len(srcCols)),
 	}

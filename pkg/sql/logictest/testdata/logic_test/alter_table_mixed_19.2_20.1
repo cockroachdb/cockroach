@@ -89,7 +89,7 @@ statement ok
 CREATE INDEX IF NOT EXISTS t_b_idx ON t (b)
 
 # Errors during validation should still occur.
-statement error duplicate index name
+statement error pq: relation "t_b_idx" already exists
 CREATE INDEX t_b_idx ON t (b)
 
 query TT

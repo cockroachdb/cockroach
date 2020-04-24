@@ -120,6 +120,11 @@ func MakeIndexDescriptor(
 	if err := validateIndexColumnsExist(tableDesc, n.Columns); err != nil {
 		return nil, err
 	}
+
+	// Ensure that the index name does not exist before trying to create the index.
+	if err := validateIndexNameIsUnique(tableDesc, string(n.Name)); err != nil {
+		return nil, err
+	}
 	indexDesc := sqlbase.IndexDescriptor{
 		Name:              string(n.Name),
 		Unique:            n.Unique,
@@ -198,6 +203,16 @@ func validateIndexColumnsExist(
 		}
 		if dropping {
 			return sqlbase.NewUndefinedColumnError(string(column.Column))
+		}
+	}
+	return nil
+}
+
+// validateIndexNameIsUnique validates that the index name does not exist.
+func validateIndexNameIsUnique(desc *sqlbase.MutableTableDescriptor, indexName string) error {
+	for _, index := range desc.AllNonDropIndexes() {
+		if indexName == index.Name {
+			return sqlbase.NewRelationAlreadyExistsError(indexName)
 		}
 	}
 	return nil
