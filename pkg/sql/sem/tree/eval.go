@@ -5526,7 +5526,6 @@ func (c *CallbackValueGenerator) Close() {}
 
 // Sqrt returns the square root of x.
 func Sqrt(x float64) (*DFloat, error) {
-	// TODO(mjibson): see #13642
 	if x < 0.0 {
 		return nil, errSqrtOfNegNumber
 	}
