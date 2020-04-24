@@ -511,14 +511,33 @@ var varGen = map[string]sessionVar{
 			if err != nil {
 				return err
 			}
-			m.SetOptimizerFKs(b)
+			m.SetOptimizerFKChecks(b)
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData.OptimizerFKs)
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.OptimizerFKChecks)
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(optDrivenFKClusterMode.Get(sv))
+			return formatBoolAsPostgresSetting(optDrivenFKChecksClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
+	`experimental_optimizer_foreign_key_cascades`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_optimizer_foreign_key_cascades`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := parseBoolVar("optimizer_foreign_key_cascades", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerFKCascades(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.OptimizerFKCascades)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(optDrivenFKCascadesClusterMode.Get(sv))
 		},
 	},
 

@@ -41,9 +41,12 @@ type SessionData struct {
 	// DistSQLMode indicates whether to run queries using the distributed
 	// execution engine.
 	DistSQLMode DistSQLExecMode
-	// OptimizerFKs indicates whether we should use the new paths to plan foreign
+	// OptimizerFKChecks indicates whether we should use the new paths to plan foreign
 	// key checks in the optimizer.
-	OptimizerFKs bool
+	OptimizerFKChecks bool
+	// OptimizerFKCascades indicates whether we should use the new paths to plan foreign
+	// key cascades in the optimizer.
+	OptimizerFKCascades bool
 	// SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
 	SerialNormalizationMode SerialNormalizationMode
 	// SearchPath is a list of namespaces to search builtins in.

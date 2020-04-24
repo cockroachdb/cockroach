@@ -482,7 +482,8 @@ func (c *stmtEnvCollector) PrintSettings(w io.Writer) error {
 	}{
 		{sessionSetting: "reorder_joins_limit", clusterSetting: ReorderJoinsLimitClusterValue},
 		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode},
-		{sessionSetting: "optimizer_foreign_keys", clusterSetting: optDrivenFKClusterMode},
+		{sessionSetting: "optimizer_foreign_keys", clusterSetting: optDrivenFKChecksClusterMode},
+		{sessionSetting: "experimental_optimizer_foreign_key_cascades", clusterSetting: optDrivenFKCascadesClusterMode},
 	}
 
 	for _, s := range relevantSettings {
