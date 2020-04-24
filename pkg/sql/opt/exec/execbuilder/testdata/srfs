@@ -229,18 +229,36 @@ EXPLAIN (VERBOSE) SELECT
 FROM
   groups g
 ----
-·                     distributed  false                     ·                                         ·
-·                     vectorized   false                     ·                                         ·
-render                ·            ·                         (group_name, jsonb_array_elements)        ·
- │                    render 0     data->>'name'             ·                                         ·
- │                    render 1     jsonb_array_elements      ·                                         ·
- └── project set      ·            ·                         (data, "?column?", jsonb_array_elements)  ·
-      │               render 0     jsonb_array_elements(@2)  ·                                         ·
-      └── apply-join  ·            ·                         (data, "?column?")                        ·
-           │          type         left outer                ·                                         ·
-           └── scan   ·            ·                         (data)                                    ·
-·                     table        groups@primary            ·                                         ·
-·                     spans        FULL SCAN                 ·                                         ·
+·                                   distributed         false                     ·                                             ·
+·                                   vectorized          false                     ·                                             ·
+render                              ·                   ·                         (group_name, jsonb_array_elements)            ·
+ │                                  render 0            data->>'name'             ·                                             ·
+ │                                  render 1            jsonb_array_elements      ·                                             ·
+ └── project set                    ·                   ·                         (id, data, "?column?", jsonb_array_elements)  ·
+      │                             render 0            jsonb_array_elements(@3)  ·                                             ·
+      └── distinct                  ·                   ·                         (id, data, "?column?")                        ·
+           │                        distinct on         id                        ·                                             ·
+           │                        error on duplicate  ·                         ·                                             ·
+           └── render               ·                   ·                         (id, data, "?column?")                        ·
+                │                   render 0            id                        ·                                             ·
+                │                   render 1            data                      ·                                             ·
+                │                   render 2            "?column?"                ·                                             ·
+                └── hash-join       ·                   ·                         (column8, id, data, column9, "?column?")      ·
+                     │              type                left outer                ·                                             ·
+                     │              equality            (column8) = (column9)     ·                                             ·
+                     ├── render     ·                   ·                         (column8, id, data)                           ·
+                     │    │         render 0            data->>'name'             ·                                             ·
+                     │    │         render 1            id                        ·                                             ·
+                     │    │         render 2            data                      ·                                             ·
+                     │    └── scan  ·                   ·                         (id, data)                                    ·
+                     │              table               groups@primary            ·                                             ·
+                     │              spans               FULL SCAN                 ·                                             ·
+                     └── render     ·                   ·                         (column9, "?column?")                         ·
+                          │         render 0            data->>'name'             ·                                             ·
+                          │         render 1            data->'members'           ·                                             ·
+                          └── scan  ·                   ·                         (data)                                        ·
+·                                   table               groups@primary            ·                                             ·
+·                                   spans               FULL SCAN                 ·                                             ·
 
 # Regression test for #32162.
 query TTTTT

@@ -196,6 +196,37 @@ values
                 ├── key: ()
                 └── fd: ()-->(3)
 
+# EnsureDistinctOn case.
+# EliminateMax1Row is disabled to ensure that an EnsureDistinctOn operator is
+# created.
+norm expect=EliminateDistinct disable=EliminateMax1Row
+SELECT (SELECT y FROM xy WHERE x=k AND k=5) FROM a
+----
+project
+ ├── columns: y:8
+ ├── left-join (cross)
+ │    ├── columns: k:1!null x:6 xy.y:7
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(6,7)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null
+ │    │    └── key: (1)
+ │    ├── select
+ │    │    ├── columns: x:6!null xy.y:7
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(6,7)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:6!null xy.y:7
+ │    │    │    ├── key: (6)
+ │    │    │    └── fd: (6)-->(7)
+ │    │    └── filters
+ │    │         └── x:6 = 5 [outer=(6), constraints=(/6: [/5 - /5]; tight), fd=()-->(6)]
+ │    └── filters
+ │         └── k:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+ └── projections
+      └── xy.y:7 [as=y:8, outer=(7)]
+
 # --------------------------------------------------
 # EliminateGroupByProject
 # --------------------------------------------------
@@ -277,6 +308,39 @@ distinct-on
  └── aggregations
       └── first-agg [as=s:14, outer=(14)]
            └── s:14
+
+# EnsureDistinctOn case.
+# EliminateMax1Row is disabled to ensure that an EnsureDistinctOn operator is
+# created.
+norm expect=EliminateGroupByProject disable=EliminateMax1Row
+SELECT (SELECT y FROM xy WHERE x=k) FROM a
+----
+project
+ ├── columns: y:8
+ ├── ensure-distinct-on
+ │    ├── columns: k:1!null xy.y:7
+ │    ├── grouping columns: k:1!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(7)
+ │    ├── left-join (hash)
+ │    │    ├── columns: k:1!null x:6 xy.y:7
+ │    │    ├── key: (1,6)
+ │    │    ├── fd: (6)-->(7)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null
+ │    │    │    └── key: (1)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:6!null xy.y:7
+ │    │    │    ├── key: (6)
+ │    │    │    └── fd: (6)-->(7)
+ │    │    └── filters
+ │    │         └── x:6 = k:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    └── aggregations
+ │         └── const-agg [as=xy.y:7, outer=(7)]
+ │              └── xy.y:7
+ └── projections
+      └── xy.y:7 [as=y:8, outer=(7)]
 
 # UpsertDistinctOn case.
 norm expect=EliminateGroupByProject
@@ -1178,9 +1242,50 @@ insert a
            └── 1
 
 # --------------------------------------------------
-# EliminateErrorDistinctNoColumns
+# EliminateEnsureDistinctNoColumns
 # --------------------------------------------------
-norm expect=EliminateErrorDistinctNoColumns
+
+# EnsureDistinctOn case.
+norm expect=EliminateEnsureDistinctNoColumns
+SELECT (SELECT x FROM xy WHERE y=i) FROM a WHERE k=5
+----
+project
+ ├── columns: x:8
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(8)
+ ├── max1-row
+ │    ├── columns: k:1!null i:2!null xy.x:6 y:7
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2,6,7)
+ │    └── left-join (hash)
+ │         ├── columns: k:1!null i:2!null xy.x:6 y:7
+ │         ├── key: (6)
+ │         ├── fd: ()-->(1,2), (6)-->(7)
+ │         ├── select
+ │         │    ├── columns: k:1!null i:2!null
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(1,2)
+ │         │    ├── scan a
+ │         │    │    ├── columns: k:1!null i:2!null
+ │         │    │    ├── key: (1)
+ │         │    │    └── fd: (1)-->(2)
+ │         │    └── filters
+ │         │         └── k:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+ │         ├── scan xy
+ │         │    ├── columns: xy.x:6!null y:7
+ │         │    ├── key: (6)
+ │         │    └── fd: (6)-->(7)
+ │         └── filters
+ │              └── y:7 = i:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+ └── projections
+      └── xy.x:6 [as=x:8, outer=(6)]
+
+# UpsertDistinctOn case.
+norm expect=EliminateEnsureDistinctNoColumns
 INSERT INTO a (k, i, s) SELECT 1, i, 'foo' FROM a WHERE i = 1
 ON CONFLICT (s, i) DO UPDATE SET f=1.1
 ----

@@ -149,57 +149,55 @@ inner-join (cross)
  │    └── fd: (1)-->(2-4)
  └── filters (true)
 
-# Apply operators.
-norm expect=(RejectNullsLeftJoin,RejectNullsRightJoin)
-SELECT *
-FROM (SELECT * FROM a FULL JOIN xy ON True)
-WHERE (SELECT u FROM uv WHERE v=k)=i
+# Left-join-apply operator.
+norm expect=RejectNullsLeftJoin
+SELECT * FROM a LEFT JOIN LATERAL (SELECT * FROM (VALUES (i), (i)) v(y)) ON y>10 WHERE i=y
 ----
-project
- ├── columns: k:1!null i:2 f:3 s:4 x:5 y:6
+inner-join-apply
+ ├── columns: k:1!null i:2!null f:3 s:4 y:5
+ ├── fd: (1)-->(2-4), (2)==(5), (5)==(2)
+ ├── select
+ │    ├── columns: k:1!null i:2!null f:3 s:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4)
+ │    └── filters
+ │         └── i:2 > 10 [outer=(2), constraints=(/2: [/11 - ]; tight)]
+ ├── values
+ │    ├── columns: column1:5
+ │    ├── outer: (2)
+ │    ├── cardinality: [2 - 2]
+ │    ├── (i:2,)
+ │    └── (i:2,)
+ └── filters
+      └── i:2 = column1:5 [outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+
+# Full-join operator.
+norm expect=RejectNullsRightJoin
+SELECT * FROM a FULL JOIN xy ON true WHERE i IS NOT NULL
+----
+left-join (cross)
+ ├── columns: k:1!null i:2!null f:3 s:4 x:5 y:6
  ├── key: (1,5)
  ├── fd: (1)-->(2-4), (5)-->(6)
- └── left-join (cross)
-      ├── columns: k:1!null i:2 f:3 s:4 x:5 y:6 u:7!null
-      ├── key: (1,5)
-      ├── fd: (1)-->(2-4,7), (2)==(7), (7)==(2), (5)-->(6)
-      ├── inner-join-apply
-      │    ├── columns: k:1!null i:2 f:3 s:4 u:7!null
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-4,7), (2)==(7), (7)==(2)
-      │    ├── scan a
-      │    │    ├── columns: k:1!null i:2 f:3 s:4
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2-4)
-      │    ├── max1-row
-      │    │    ├── columns: u:7!null
-      │    │    ├── error: "more than one row returned by a subquery used as an expression"
-      │    │    ├── outer: (1)
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(7)
-      │    │    └── project
-      │    │         ├── columns: u:7!null
-      │    │         ├── outer: (1)
-      │    │         ├── key: (7)
-      │    │         └── select
-      │    │              ├── columns: u:7!null v:8!null
-      │    │              ├── outer: (1)
-      │    │              ├── key: (7)
-      │    │              ├── fd: ()-->(8)
-      │    │              ├── scan uv
-      │    │              │    ├── columns: u:7!null v:8
-      │    │              │    ├── key: (7)
-      │    │              │    └── fd: (7)-->(8)
-      │    │              └── filters
-      │    │                   └── v:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      │    └── filters
-      │         └── i:2 = u:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-      ├── scan xy
-      │    ├── columns: x:5!null y:6
-      │    ├── key: (5)
-      │    └── fd: (5)-->(6)
-      └── filters (true)
+ ├── select
+ │    ├── columns: k:1!null i:2!null f:3 s:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4)
+ │    └── filters
+ │         └── i:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ ├── scan xy
+ │    ├── columns: x:5!null y:6
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
+ └── filters (true)
 
 # ----------------------------------------------------------
 # RejectNullsGroupBy

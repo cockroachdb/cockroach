@@ -915,7 +915,7 @@ func (o *Optimizer) disableRules(probability float64) {
 		// TODO(radu): the DistinctOn execution path should be fixed up so it
 		// supports distinct on an empty column set.
 		int(opt.EliminateDistinctNoColumns),
-		int(opt.EliminateErrorDistinctNoColumns),
+		int(opt.EliminateEnsureDistinctNoColumns),
 	)
 
 	for i := opt.RuleName(1); i < opt.NumRuleNames; i++ {

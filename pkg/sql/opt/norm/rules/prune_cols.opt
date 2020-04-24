@@ -269,7 +269,7 @@
 # used.
 [PruneAggCols, Normalize]
 (Project
-    $input:(GroupBy | ScalarGroupBy | DistinctOn
+    $input:(GroupBy | ScalarGroupBy | DistinctOn | EnsureDistinctOn
         $innerInput:*
         $aggregations:*
         $groupingPrivate:*
@@ -295,7 +295,7 @@
 # PruneGroupByCols discards GroupBy input columns that are never used. Note that
 # UpsertDistinctOn is not included here because its columns are always used.
 [PruneGroupByCols, Normalize]
-(GroupBy | ScalarGroupBy | DistinctOn
+(GroupBy | ScalarGroupBy | DistinctOn | EnsureDistinctOn
     $input:*
     $aggregations:*
     $groupingPrivate:* &
