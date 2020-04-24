@@ -51,7 +51,10 @@ func TestSampleAggregator(t *testing.T) {
 				Settings: st,
 				DB:       kvDB,
 				Executor: server.InternalExecutor().(sqlutil.InternalExecutor),
-				Gossip:   server.GossipI().(*gossip.Gossip),
+				Gossip: gossip.MakeDeprecatedGossip(
+					server.GossipI().(*gossip.Gossip),
+					true, /* exposed */
+				),
 			},
 		}
 		// Override the default memory limit. If memLimitBytes is small but

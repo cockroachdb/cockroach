@@ -120,14 +120,6 @@ func WrongNumberOfPreparedStatements(n int) error {
 	return err
 }
 
-// UnsupportedWithMultiTenancy returns an error suitable for returning when an
-// operation could not be carried out due to the SQL server running in
-// multi-tenancy mode. In that mode, Gossip and other components of the KV layer
-// are not available.
-func UnsupportedWithMultiTenancy() error {
-	return New(pgcode.Internal, "operation is unsupported in multi-tenancy mode")
-}
-
 var _ fmt.Formatter = &Error{}
 
 // Format implements the fmt.Formatter interface.

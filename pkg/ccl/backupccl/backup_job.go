@@ -140,13 +140,19 @@ func splitAndFilterSpans(
 }
 
 // clusterNodeCount returns the approximate number of nodes in the cluster.
-func clusterNodeCount(g *gossip.Gossip) int {
+func clusterNodeCount(gw gossip.DeprecatedGossip) (int, error) {
+	g, err := gw.OptionalErr(47970)
+	if err != nil {
+		return 0, err
+	}
 	var nodes int
-	_ = g.IterateInfos(gossip.KeyNodeIDPrefix, func(_ string, _ gossip.Info) error {
-		nodes++
-		return nil
-	})
-	return nodes
+	_ = g.IterateInfos(
+		gossip.KeyNodeIDPrefix, func(_ string, _ gossip.Info) error {
+			nodes++
+			return nil
+		},
+	)
+	return nodes, nil
 }
 
 type spanAndTime struct {
@@ -516,7 +522,10 @@ func (b *backupResumer) Resume(
 		log.Warningf(ctx, "unable to load backup checkpoint while resuming job %d: %v", *b.job.ID(), err)
 	}
 
-	numClusterNodes := clusterNodeCount(p.ExecCfg().Gossip)
+	numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
+	if err != nil {
+		return err
+	}
 
 	res, err := backup(
 		ctx,
