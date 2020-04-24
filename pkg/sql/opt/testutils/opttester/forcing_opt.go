@@ -74,6 +74,9 @@ func newForcingOptimizer(
 		if fo.remaining == 0 {
 			return false
 		}
+		if tester.Flags.DisableRules.Contains(int(ruleName)) {
+			return false
+		}
 		fo.remaining--
 		fo.lastMatched = ruleName
 		return true
