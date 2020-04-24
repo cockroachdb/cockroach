@@ -352,25 +352,24 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobuf
 # change.
 bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
 	@$(GO_INSTALL) -v \
-		./vendor/github.com/client9/misspell/cmd/misspell \
-		./vendor/github.com/cockroachdb/crlfmt \
-		./vendor/github.com/cockroachdb/gostdlib/cmd/gofmt \
-		./vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
-		./vendor/github.com/cockroachdb/stress \
-		./vendor/github.com/golang/dep/cmd/dep \
-		./vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
-		./vendor/github.com/kevinburke/go-bindata/go-bindata \
-		./vendor/github.com/kisielk/errcheck \
-		./vendor/github.com/mattn/goveralls \
-		./vendor/github.com/mibk/dupl \
-		./vendor/github.com/mmatczuk/go_generics/cmd/go_generics \
-		./vendor/github.com/wadey/gocovmerge \
-		./vendor/golang.org/x/lint/golint \
-		./vendor/golang.org/x/perf/cmd/benchstat \
-		./vendor/golang.org/x/tools/cmd/goyacc \
-		./vendor/golang.org/x/tools/cmd/stringer \
-		./vendor/golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow \
-		./vendor/honnef.co/go/tools/cmd/staticcheck
+		github.com/client9/misspell/cmd/misspell \
+		github.com/cockroachdb/crlfmt \
+		github.com/cockroachdb/gostdlib/cmd/gofmt \
+		github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
+		github.com/cockroachdb/stress \
+		github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
+		github.com/kevinburke/go-bindata/go-bindata \
+		github.com/kisielk/errcheck \
+		github.com/mattn/goveralls \
+		github.com/mibk/dupl \
+		github.com/mmatczuk/go_generics/cmd/go_generics \
+		github.com/wadey/gocovmerge \
+		golang.org/x/lint/golint \
+		golang.org/x/perf/cmd/benchstat \
+		golang.org/x/tools/cmd/goyacc \
+		golang.org/x/tools/cmd/stringer \
+		golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow \
+		honnef.co/go/tools/cmd/staticcheck
 	touch $@
 
 IGNORE_GOVERS :=
@@ -1066,8 +1065,8 @@ testslow testraceslow:
 
 .PHONY: upload-coverage
 upload-coverage: bin/.bootstrap
-	$(GO) install ./vendor/github.com/wadey/gocovmerge
-	$(GO) install ./vendor/github.com/mattn/goveralls
+	$(GO) install github.com/wadey/gocovmerge
+	$(GO) install github.com/mattn/goveralls
 	@build/upload-coverage.sh
 
 .PHONY: acceptance
