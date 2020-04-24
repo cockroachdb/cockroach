@@ -329,7 +329,7 @@
     $private:*
 )
 =>
-(Project
+(Project # Needed to project away any columns added by EnsureKey.
     (Select
         ((OpName $right)
             (InnerJoinApply
@@ -453,35 +453,39 @@
 )
 =>
 (Select
-    # TranslateNonIgnoreAggs is where the actual discriminating CASE
-    # expressions are introduced.
-    (TranslateNonIgnoreAggs
-        (GroupBy
-            (LeftJoinApply
-                $leftWithKey:(EnsureKey $left)
-                # canaryCol might be 0 if no canary is necessary, in which case
-                # this function does nothing.
-                $rightWithCanary:(EnsureCanary
-                    $input
-                    $canaryCol:(EnsureCanaryCol $input $aggregations)
+    (Project # Needed to project away any columns added by EnsureKey.
+        # TranslateNonIgnoreAggs is where the actual discriminating CASE
+        # expressions are introduced.
+        (TranslateNonIgnoreAggs
+            (GroupBy
+                (LeftJoinApply
+                    $leftWithKey:(EnsureKey $left)
+                    # canaryCol might be 0 if no canary is necessary, in which case
+                    # this function does nothing.
+                    $rightWithCanary:(EnsureCanary
+                        $input
+                        $canaryCol:(EnsureCanaryCol $input $aggregations)
+                    )
+                    []
+                    $private
                 )
-                []
-                $private
-            )
-            (AppendAggCols2
-                $translatedAggs:(EnsureAggsCanIgnoreNulls
-                    $rightWithCanary
-                    $aggregations
+                (AppendAggCols2
+                    $translatedAggs:(EnsureAggsCanIgnoreNulls
+                        $rightWithCanary
+                        $aggregations
+                    )
+                    ConstAgg (NonKeyCols $leftWithKey)
+                    AnyNotNullAgg (CanaryColSet $canaryCol)
                 )
-                ConstAgg (NonKeyCols $leftWithKey)
-                AnyNotNullAgg (CanaryColSet $canaryCol)
+                (MakeOrderedGrouping (KeyCols $leftWithKey) (ExtractGroupingOrdering $groupingPrivate))
             )
-            (MakeOrderedGrouping (KeyCols $leftWithKey) (ExtractGroupingOrdering $groupingPrivate))
+            $translatedAggs
+            $rightWithCanary
+            $aggregations
+            $canaryCol
         )
-        $translatedAggs
-        $rightWithCanary
-        $aggregations
-        $canaryCol
+        []
+        (OutputCols2 $left $right)
     )
     $on
 )
@@ -503,15 +507,19 @@
     $private:*
 )
 =>
-(GroupBy
-    (InnerJoinApply
-        $newLeft:(EnsureKey $left)
-        $right
-        $on
-        $private
+(Project # Needed to project away any columns added by EnsureKey.
+    (GroupBy
+        (InnerJoinApply
+            $newLeft:(EnsureKey $left)
+            $right
+            $on
+            $private
+        )
+        (MakeAggCols ConstAgg (NonKeyCols $newLeft))
+        (MakeGrouping (KeyCols $newLeft))
     )
-    (MakeAggCols ConstAgg (NonKeyCols $newLeft))
-    (MakeGrouping (KeyCols $newLeft))
+    []
+    (OutputCols2 $left $right)
 )
 
 # TryDecorrelateLimitOne "pushes down" a Join into a Limit 1 operator, in an
@@ -538,18 +546,22 @@
     $private:*
 )
 =>
-(DistinctOn
-    ((OpName)
-        $newLeft:(EnsureKey $left)
-        $input
-        $on
-        $private
+(Project # Needed to project away any columns added by EnsureKey.
+    (DistinctOn
+        ((OpName)
+            $newLeft:(EnsureKey $left)
+            $input
+            $on
+            $private
+        )
+        (MakeAggCols2
+            ConstAgg (NonKeyCols $newLeft)
+            FirstAgg (OutputCols $input)
+        )
+        (MakeOrderedGrouping (KeyCols $newLeft) $ordering)
     )
-    (MakeAggCols2
-        ConstAgg (NonKeyCols $newLeft)
-        FirstAgg (OutputCols $input)
-    )
-    (MakeOrderedGrouping (KeyCols $newLeft) $ordering)
+    []
+    (OutputCols2 $left $right)
 )
 
 # TryDecorrelateProjectSet "pushes down" an InnerJoinApply operator into a
@@ -672,7 +684,7 @@
     $joinPrivate:*
 )
 =>
-(Project
+(Project # Needed to project away any columns added by EnsureKey.
     (Select
         (Window
             ((OpName)
