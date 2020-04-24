@@ -784,10 +784,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	}
 	mb.outScope.ordering = nil
 	mb.outScope = mb.b.buildDistinctOn(
-		conflictCols,
-		mb.outScope,
-		true, /* nullsAreDistinct */
-		duplicateUpsertErrText /* errorOnDup */)
+		conflictCols, mb.outScope, true /* nullsAreDistinct */, duplicateUpsertErrText)
 
 	// Re-alias all INSERT columns so that they are accessible as if they were
 	// part of a special data source named "crdb_internal.excluded".
