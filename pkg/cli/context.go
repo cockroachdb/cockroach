@@ -393,3 +393,9 @@ var demoCtx struct {
 	transientCluster          *transientCluster
 	insecure                  bool
 }
+
+// certCtx captures the command-line parameters of the `cert` command.
+// Defaults set by InitCLIDefaults() above.
+var certCtx struct {
+	certPrincipalMap []string
+}
