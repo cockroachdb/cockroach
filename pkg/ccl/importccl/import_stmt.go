@@ -276,12 +276,14 @@ func importPlanHook(
 		var parentID sqlbase.ID
 		if table != nil {
 			// We have a target table, so it might specify a DB in its name.
-			found, descI, err := table.ResolveTarget(ctx,
+			un := table.ToUnresolvedObjectName()
+			found, prefix, descI, err := un.ResolveTarget(ctx,
 				p, p.SessionData().Database, p.SessionData().SearchPath)
 			if err != nil {
 				return pgerror.Wrap(err, pgcode.UndefinedTable,
 					"resolving target import name")
 			}
+			table.ObjectNamePrefix = prefix
 			if !found {
 				// Check if database exists right now. It might not after the import is done,
 				// but it's better to fail fast than wait until restore.

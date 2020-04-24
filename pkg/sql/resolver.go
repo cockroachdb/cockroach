@@ -133,7 +133,8 @@ func resolveExistingObjectImpl(
 	lookupFlags tree.ObjectLookupFlags,
 	requiredType ResolveRequiredType,
 ) (res tree.NameResolutionResult, err error) {
-	found, descI, err := tn.ResolveExisting(ctx, sc, lookupFlags, sc.CurrentDatabase(), sc.CurrentSearchPath())
+	un := tn.ToUnresolvedObjectName()
+	found, prefix, descI, err := un.ResolveExisting(ctx, sc, lookupFlags, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
 		return nil, err
 	}
@@ -143,6 +144,10 @@ func resolveExistingObjectImpl(
 		}
 		return nil, nil
 	}
+	// ResolveExisting no longer mutates the input table name, we need to
+	// mutate it so that callers that depend on the mutation are still happy.
+	tn.ObjectNamePrefix = prefix
+
 	obj := descI.(ObjectDescriptor)
 
 	goodType := true
@@ -224,10 +229,12 @@ func (p *planner) ResolveUncachedTableDescriptor(
 func ResolveTargetObject(
 	ctx context.Context, sc SchemaResolver, tn *ObjectName,
 ) (res *DatabaseDescriptor, err error) {
-	found, descI, err := tn.ResolveTarget(ctx, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
+	un := tn.ToUnresolvedObjectName()
+	found, prefix, descI, err := un.ResolveTarget(ctx, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
 		return nil, err
 	}
+	tn.ObjectNamePrefix = prefix
 	if !found {
 		if !tn.ExplicitSchema && !tn.ExplicitCatalog {
 			return nil, pgerror.New(pgcode.InvalidName, "no database specified")
