@@ -71,3 +71,9 @@ interrupt
 eexpect "interrupted"
 expect $prompt
 end_test
+
+start_test "Check that 'cert list' can utilize cert principal map."
+send "$argv cert list --certs-dir=$certs_dir --cert-principal-map=foo.bar:node\r"
+eexpect "Certificate directory:"
+expect $prompt
+end_test
