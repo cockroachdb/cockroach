@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -856,7 +857,7 @@ func (tc *TableCollection) validatePrimaryKeys() error {
 	for i := range modifiedTables {
 		table := tc.getUncommittedTableByID(modifiedTables[i].id).MutableTableDescriptor
 		if !table.HasPrimaryKey() {
-			return errors.Errorf(
+			return unimplemented.NewWithIssuef(48026,
 				"primary key of table %s dropped without subsequent addition of new primary key",
 				table.Name,
 			)
