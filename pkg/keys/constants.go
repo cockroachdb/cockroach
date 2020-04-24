@@ -29,6 +29,13 @@ const (
 	metaMaxByte      = '\x04'
 	systemPrefixByte = metaMaxByte
 	systemMaxByte    = '\x05'
+	// TODO DURING REVIEW: let's discuss if we actually want this to be \xff.
+	// The maximum value for a Uint64 encoded table ID is:
+	//  \xfd\xff\xff\xff\xff\xff\xff\xff\xff
+	// So we could also set this to be \xfe without issue. That would prevent
+	// us from getting too close to KeyMax (\xff\xff), which would cause all
+	// kinds of issues. It also gives us a bit more flexibility to extend the
+	// keyspace further in the future and let's us PrefixEnd() more easily.
 	tenantPrefixByte = '\xff'
 )
 
@@ -269,6 +276,9 @@ var (
 	// TableDataMin is the start of the range of table data keys.
 	TableDataMin = SystemTenantKeyGen.TablePrefix(0)
 	// TableDataMin is the end of the range of table data keys.
+	// TODO(nvanbenschoten): is this correct? Is table ID = MaxUint32 exclusive?
+	// Should this be TablePrefix(math.MaxUint32 + 1)? Should we just set it to
+	// tenantPrefix?
 	TableDataMax = SystemTenantKeyGen.TablePrefix(math.MaxUint32)
 	//
 	// SystemConfigSplitKey is the key to split at immediately prior to the
@@ -288,7 +298,9 @@ var (
 	UserTableDataMin = SystemTenantKeyGen.TablePrefix(MinUserDescID)
 
 	// tenantPrefix is the prefix for all non-system tenant keys.
-	tenantPrefix = roachpb.Key{tenantPrefixByte}
+	tenantPrefix       = roachpb.Key{tenantPrefixByte}
+	TenantTableDataMin = MakeTenantPrefix(roachpb.MinTenantID)
+	TenantTableDataMax = MakeTenantPrefix(roachpb.MaxTenantID) // WIP: not quite correct. See TableDataMax.
 )
 
 // Various IDs used by the structured data layer.
