@@ -131,15 +131,8 @@ func (oc *optCatalog) ResolveSchema(
 		oc.planner.avoidCachedDescriptors = true
 	}
 
-	// ResolveTargetObject wraps ResolveTarget in order to raise "schema not
-	// found" and "schema cannot be modified" errors. However, ResolveTargetObject
-	// assumes that a data source object is being resolved, which is not the case
-	// for ResolveSchema. Therefore, call ResolveTarget directly and produce a
-	// more general error.
-	oc.tn.ObjectName = ""
 	oc.tn.ObjectNamePrefix = *name
-
-	found, desc, err := oc.tn.ResolveTarget(
+	found, desc, err := oc.tn.ObjectNamePrefix.Resolve(
 		ctx,
 		oc.planner,
 		oc.planner.CurrentDatabase(),

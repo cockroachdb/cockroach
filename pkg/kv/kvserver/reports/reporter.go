@@ -174,8 +174,6 @@ func (stats *Reporter) update(
 		return nil
 	}
 
-	localityConstraints := stats.computeLocalityConstraints()
-
 	allStores := stats.storePool.GetStores()
 	var getStoresFromGossip StoreResolver = func(
 		r *roachpb.RangeDescriptor,
@@ -197,21 +195,28 @@ func (stats *Reporter) update(
 		return isLiveMap[nodeID].IsLive
 	}
 
+	nodeLocalities := make(map[roachpb.NodeID]roachpb.Locality, len(allStores))
+	for _, storeDesc := range allStores {
+		nodeDesc := storeDesc.Node
+		// Note: We might overwrite the node's localities here. We assume that all
+		// the stores for a node have the same node descriptor.
+		nodeLocalities[nodeDesc.NodeID] = nodeDesc.Locality
+	}
+
 	// Create the visitors that we're going to pass to visitRanges() below.
 	constraintConfVisitor := makeConstraintConformanceVisitor(
-		ctx, stats.latestConfig, getStoresFromGossip, constraintsSaver)
-	localityStatsVisitor := makeLocalityStatsVisitor(
-		ctx, localityConstraints, stats.latestConfig,
-		getStoresFromGossip, isNodeLive, locSaver)
-	statusVisitor := makeReplicationStatsVisitor(
-		ctx, stats.latestConfig, isNodeLive, replStatsSaver)
+		ctx, stats.latestConfig, getStoresFromGossip)
+	localityStatsVisitor := makeCriticalLocalitiesVisitor(
+		ctx, nodeLocalities, stats.latestConfig,
+		getStoresFromGossip, isNodeLive)
+	replicationStatsVisitor := makeReplicationStatsVisitor(ctx, stats.latestConfig, isNodeLive)
 
 	// Iterate through all the ranges.
 	const descriptorReadBatchSize = 10000
 	rangeIter := makeMeta2RangeIter(stats.db, descriptorReadBatchSize)
 	if err := visitRanges(
 		ctx, &rangeIter, stats.latestConfig,
-		&constraintConfVisitor, &localityStatsVisitor, &statusVisitor,
+		&constraintConfVisitor, &localityStatsVisitor, &replicationStatsVisitor,
 	); err != nil {
 		if _, ok := err.(visitorError); ok {
 			log.Errorf(ctx, "some reports have not been generated: %s", err)
@@ -221,22 +226,23 @@ func (stats *Reporter) update(
 	}
 
 	if !constraintConfVisitor.failed() {
-		if err := constraintConfVisitor.report.Save(
-			ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
+		if err := constraintsSaver.Save(
+			ctx, constraintConfVisitor.report, timeutil.Now() /* reportTS */, stats.db, stats.executor,
 		); err != nil {
 			return errors.Wrap(err, "failed to save constraint report")
 		}
 	}
 	if !localityStatsVisitor.failed() {
-		if err := localityStatsVisitor.report.Save(
-			ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
+		if err := locSaver.Save(
+			ctx, localityStatsVisitor.Report(), timeutil.Now() /* reportTS */, stats.db, stats.executor,
 		); err != nil {
 			return errors.Wrap(err, "failed to save locality report")
 		}
 	}
-	if !localityStatsVisitor.failed() {
-		if err := statusVisitor.report.Save(
-			ctx, timeutil.Now() /* reportTS */, stats.db, stats.executor,
+	if !replicationStatsVisitor.failed() {
+		if err := replStatsSaver.Save(
+			ctx, replicationStatsVisitor.Report(),
+			timeutil.Now() /* reportTS */, stats.db, stats.executor,
 		); err != nil {
 			return errors.Wrap(err, "failed to save range status report")
 		}
@@ -263,35 +269,6 @@ func (stats *Reporter) meta1LeaseHolderStore() *kvserver.Store {
 
 func (stats *Reporter) updateLatestConfig() {
 	stats.latestConfig = stats.meta1LeaseHolder.Gossip().GetSystemConfig()
-}
-
-// computeLocalityConstraints returns a set of synthetic constraints for all the
-// localities in the cluster. They will be used to check whether any locality is
-// critical. If a node has a tiered locality like "region:us-east,dc:new-york",
-// we'll return constraints {"region:us-east", "region:us-east,dc:new-york"}.
-func (stats *Reporter) computeLocalityConstraints() []zonepb.ConstraintsConjunction {
-	// localityConstraintsByName de-duplicates localities across nodes.
-	localityConstraintsByName := make(map[string]zonepb.ConstraintsConjunction, 16)
-	for _, sd := range stats.storePool.GetStores() {
-		// For each tier t, return a constraint covering all the higher-order tiers
-		// up to and including t.
-		for i := range sd.Node.Locality.Tiers {
-			c := zonepb.ConstraintsConjunction{
-				Constraints: make([]zonepb.Constraint, 0, i+1),
-			}
-			for _, highTier := range sd.Node.Locality.Tiers[:i+1] {
-				c.Constraints = append(c.Constraints, zonepb.Constraint{
-					Type: zonepb.Constraint_REQUIRED, Key: highTier.Key, Value: highTier.Value,
-				})
-			}
-			localityConstraintsByName[c.String()] = c
-		}
-	}
-	res := make([]zonepb.ConstraintsConjunction, 0, len(localityConstraintsByName))
-	for _, c := range localityConstraintsByName {
-		res = append(res, c)
-	}
-	return res
 }
 
 // nodeChecker checks whether a node is to be considered alive or not.
@@ -534,7 +511,7 @@ type rangeVisitor interface {
 	// to multiple ranges, and so visitSameZone() allows them to efficiently reuse
 	// that state (in particular, not unmarshall ZoneConfigs again).
 	visitNewZone(context.Context, *roachpb.RangeDescriptor) error
-	visitSameZone(context.Context, *roachpb.RangeDescriptor) error
+	visitSameZone(context.Context, *roachpb.RangeDescriptor)
 
 	// failed returns true if an error was encountered by the last visit() call
 	// (and reset( ) wasn't called since).
@@ -609,7 +586,7 @@ func visitRanges(
 		for i, v := range visitors {
 			var err error
 			if sameZoneAsPrevRange {
-				err = v.visitSameZone(ctx, &rd)
+				v.visitSameZone(ctx, &rd)
 			} else {
 				err = v.visitNewZone(ctx, &rd)
 			}
