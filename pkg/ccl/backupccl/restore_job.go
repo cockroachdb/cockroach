@@ -975,7 +975,11 @@ func (r *restoreResumer) Resume(
 		return nil
 	}
 
-	numClusterNodes := clusterNodeCount(p.ExecCfg().Gossip)
+	numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
+	if err != nil {
+		return err
+	}
+
 	res, err := restore(
 		ctx,
 		p.ExecCfg().DB,

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -46,7 +47,7 @@ func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
 
 	statusServer, ok := params.extendedEvalCtx.StatusServer()
 	if !ok {
-		return false, pgerror.UnsupportedWithMultiTenancy()
+		return false, errorutil.UnsupportedWithMultiTenancy()
 	}
 
 	queryIDString, ok := tree.AsDString(datum)
