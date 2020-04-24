@@ -216,7 +216,8 @@ var _ = [...]interface{}{
 	StoreIdentKey,               // "iden"
 	StoreLastUpKey,              // "uptm"
 
-	// The global keyspace includes the meta{1,2}, system, and SQL keys.
+	// The global keyspace includes the meta{1,2}, system, system tenant SQL
+	// keys, and non-system tenant SQL keys.
 	//
 	// 	1. Meta keys: This is where we store all key addressing data.
 	MetaMin,
@@ -240,11 +241,17 @@ var _ = [...]interface{}{
 	TimeseriesPrefix,    // "tsd"
 	SystemMax,
 
-	// 	3. SQL keys: This is where we store all table data.
+	// 	3. System tenant SQL keys: This is where we store all system-tenant
+	// 	table data.
 	TableDataMin,
 	NamespaceTableMin,
 	UserTableDataMin,
 	TableDataMax,
+
+	//  4. Non-system tenant SQL keys: This is where we store all non-system
+	//  tenant table data.
+	TenantTableDataMin,
+	TenantTableDataMax,
 
 	MaxKey,
 }
