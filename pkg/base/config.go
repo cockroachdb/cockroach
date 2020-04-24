@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // Base config defaults.
@@ -266,8 +267,8 @@ func (cfg *Config) AdminURL() *url.URL {
 	}
 }
 
-// getClientCertPaths returns the paths to the client cert and key.
-func (cfg *Config) getClientCertPaths(user string) (string, string, error) {
+// GetClientCertPaths returns the paths to the client cert and key.
+func (cfg *Config) GetClientCertPaths(user string) (string, string, error) {
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
 		return "", "", err
@@ -275,8 +276,8 @@ func (cfg *Config) getClientCertPaths(user string) (string, string, error) {
 	return cm.GetClientCertPaths(user)
 }
 
-// getCACertPath returns the path to the CA certificate.
-func (cfg *Config) getCACertPath() (string, error) {
+// GetCACertPath returns the path to the CA certificate.
+func (cfg *Config) GetCACertPath() (string, error) {
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
 		return "", err
@@ -303,7 +304,7 @@ func (cfg *Config) LoadSecurityOptions(options url.Values, username string) erro
 			// verify-ca and verify-full need a CA certificate.
 			if options.Get("sslrootcert") == "" {
 				// Fetch CA cert. This is required.
-				caCertPath, err := cfg.getCACertPath()
+				caCertPath, err := cfg.GetCACertPath()
 				if err != nil {
 					return wrapError(err)
 				}
@@ -315,7 +316,7 @@ func (cfg *Config) LoadSecurityOptions(options url.Values, username string) erro
 		}
 
 		// Fetch certs, but don't fail, we may be using a password.
-		certPath, keyPath, err := cfg.getClientCertPaths(username)
+		certPath, keyPath, err := cfg.GetClientCertPaths(username)
 		if err == nil {
 			if options.Get("sslcert") == "" {
 				options.Set("sslcert", certPath)
@@ -353,6 +354,36 @@ func (cfg *Config) GetCertificateManager() (*security.CertificateManager, error)
 	return cfg.certificateManager.cm, cfg.certificateManager.err
 }
 
+// InitializeNodeTLSConfigs tries to load client and server-side TLS configs.
+// It also enables the reload-on-SIGHUP functionality on the certificate manager.
+// This should be called early in the life of the server to make sure there are no
+// issues with TLS configs.
+// Returns the certificate manager if successfully created and in secure mode.
+func (cfg *Config) InitializeNodeTLSConfigs(
+	stopper *stop.Stopper,
+) (*security.CertificateManager, error) {
+	if cfg.Insecure {
+		return nil, nil
+	}
+
+	if _, err := cfg.GetServerTLSConfig(); err != nil {
+		return nil, err
+	}
+	if _, err := cfg.GetUIServerTLSConfig(); err != nil {
+		return nil, err
+	}
+	if _, err := cfg.GetClientTLSConfig(); err != nil {
+		return nil, err
+	}
+
+	cm, err := cfg.GetCertificateManager()
+	if err != nil {
+		return nil, err
+	}
+	cm.RegisterSignalHandler(stopper)
+	return cm, nil
+}
+
 // GetClientTLSConfig returns the client TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise ask the certificate
 // manager for a TLS config using certs for the config.User.
@@ -375,11 +406,11 @@ func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
 	return tlsCfg, nil
 }
 
-// getUIClientTLSConfig returns the client TLS config for Admin UI clients, initializing it if needed.
+// GetUIClientTLSConfig returns the client TLS config for Admin UI clients, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise ask the certificate
 // manager for a TLS config configured to talk to the Admin UI.
 // This TLSConfig is **NOT** suitable to talk to the GRPC or SQL servers, use GetClientTLSConfig instead.
-func (cfg *Config) getUIClientTLSConfig() (*tls.Config, error) {
+func (cfg *Config) GetUIClientTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if cfg.Insecure {
 		return nil, nil
@@ -421,9 +452,6 @@ func (cfg *Config) GetServerTLSConfig() (*tls.Config, error) {
 // GetUIServerTLSConfig returns the server TLS config for the Admin UI, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise ask the certificate
 // manager for a server UI TLS config.
-//
-// TODO(peter): This method is only used by `server.NewServer` and
-// `Server.Start`. Move it.
 func (cfg *Config) GetUIServerTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if cfg.Insecure || cfg.DisableTLSForHTTP {
@@ -449,7 +477,7 @@ func (cfg *Config) GetHTTPClient() (http.Client, error) {
 		cfg.httpClient.httpClient.Timeout = 10 * time.Second
 		var transport http.Transport
 		cfg.httpClient.httpClient.Transport = &transport
-		transport.TLSClientConfig, cfg.httpClient.err = cfg.getUIClientTLSConfig()
+		transport.TLSClientConfig, cfg.httpClient.err = cfg.GetUIClientTLSConfig()
 	})
 
 	return cfg.httpClient.httpClient, cfg.httpClient.err
