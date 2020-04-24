@@ -422,6 +422,96 @@ func TestPebbleMultiMap(t *testing.T) {
 
 }
 
+func TestPebbleMapClose(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	e, _, err := newPebbleTempEngine(ctx, base.TempStorageConfig{Path: dir}, base.StoreSpec{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+
+	decodeKey := func(v []byte) []byte {
+		var err error
+		v, _, err = encoding.DecodeUvarintAscending(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+
+	getSSTables := func() string {
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "\n")
+		for l, ssts := range e.db.SSTables() {
+			for _, sst := range ssts {
+				fmt.Fprintf(&buf, "%d: %s - %s\n",
+					l, decodeKey(sst.Smallest.UserKey), decodeKey(sst.Largest.UserKey))
+			}
+		}
+		return buf.String()
+	}
+
+	verifySSTables := func(expected string) {
+		actual := getSSTables()
+		if expected != actual {
+			t.Fatalf("expected%sgot%s", expected, actual)
+		}
+		if testing.Verbose() {
+			fmt.Printf("%s", actual)
+		}
+	}
+
+	diskMap := newPebbleMap(e.db, false /* allowDuplicates */)
+
+	// Put a small amount of data into the disk map.
+	bw := diskMap.NewBatchWriter()
+	const letters = "abcdefghijklmnopqrstuvwxyz"
+	for i := range letters {
+		k := []byte{letters[i]}
+		if err := bw.Put(k, k); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := bw.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// Force the data to disk.
+	if err := e.db.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Force it to a lower-level. This is done so as to avoid the automatic
+	// compactions out of L0 that would normally occur.
+	if err := e.db.Compact(diskMap.makeKey([]byte{'a'}), diskMap.makeKey([]byte{'z'})); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify we have a single sstable.
+	verifySSTables(`
+6: a - z
+`)
+
+	// Close the disk map. This should both delete the data, and initiate
+	// compactions for the deleted data.
+	diskMap.Close(ctx)
+
+	// Wait for the data stored in the engine to disappear.
+	testutils.SucceedsSoon(t, func() error {
+		actual := getSSTables()
+		if testing.Verbose() {
+			fmt.Printf("%s", actual)
+		}
+		if actual != "\n" {
+			return fmt.Errorf("%s", actual)
+		}
+		return nil
+	})
+}
+
 func BenchmarkPebbleMapWrite(b *testing.B) {
 	dir, err := ioutil.TempDir("", "BenchmarkPebbleMapWrite")
 	if err != nil {
