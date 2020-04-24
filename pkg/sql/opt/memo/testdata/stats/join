@@ -1136,40 +1136,45 @@ SELECT (
 ----
 project
  ├── columns: "?column?":16(int)
- ├── stats: [rows=1000]
- ├── left-join-apply
- │    ├── columns: t0.col1:2(bool) "?column?":15(int)
- │    ├── stats: [rows=1000]
- │    ├── scan t0
- │    │    ├── columns: t0.col1:2(bool)
- │    │    └── stats: [rows=1000]
- │    ├── max1-row
- │    │    ├── columns: "?column?":15(int!null)
- │    │    ├── error: "more than one row returned by a subquery used as an expression"
- │    │    ├── outer: (2)
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── stats: [rows=1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(15)
- │    │    └── project
- │    │         ├── columns: "?column?":15(int!null)
- │    │         ├── outer: (2)
- │    │         ├── stats: [rows=1000]
- │    │         ├── fd: ()-->(15)
- │    │         ├── left-join (cross)
- │    │         │    ├── outer: (2)
- │    │         │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
- │    │         │    ├── scan table1
- │    │         │    │    └── stats: [rows=1000]
- │    │         │    ├── values
- │    │         │    │    ├── cardinality: [0 - 0]
- │    │         │    │    ├── stats: [rows=0]
- │    │         │    │    └── key: ()
- │    │         │    └── filters
- │    │         │         └── t0.col1:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
- │    │         └── projections
- │    │              └── 1 [as="?column?":15, type=int]
- │    └── filters (true)
+ ├── stats: [rows=1000000]
+ ├── ensure-distinct-on
+ │    ├── columns: t0.rowid:4(int!null) "?column?":15(int)
+ │    ├── grouping columns: t0.rowid:4(int!null)
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── stats: [rows=1000000]
+ │    ├── key: (4)
+ │    ├── fd: (4)-->(15)
+ │    ├── left-join-apply
+ │    │    ├── columns: t0.col1:2(bool) t0.rowid:4(int!null) "?column?":15(int)
+ │    │    ├── stats: [rows=1000000]
+ │    │    ├── fd: (4)-->(2)
+ │    │    ├── scan t0
+ │    │    │    ├── columns: t0.col1:2(bool) t0.rowid:4(int!null)
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── key: (4)
+ │    │    │    └── fd: (4)-->(2)
+ │    │    ├── project
+ │    │    │    ├── columns: "?column?":15(int!null)
+ │    │    │    ├── outer: (2)
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── fd: ()-->(15)
+ │    │    │    ├── left-join (cross)
+ │    │    │    │    ├── outer: (2)
+ │    │    │    │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+ │    │    │    │    ├── scan table1
+ │    │    │    │    │    └── stats: [rows=1000]
+ │    │    │    │    ├── values
+ │    │    │    │    │    ├── cardinality: [0 - 0]
+ │    │    │    │    │    ├── stats: [rows=0]
+ │    │    │    │    │    └── key: ()
+ │    │    │    │    └── filters
+ │    │    │    │         └── t0.col1:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+ │    │    │    └── projections
+ │    │    │         └── 1 [as="?column?":15, type=int]
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         └── const-agg [as="?column?":15, type=int, outer=(15)]
+ │              └── "?column?":15 [type=int]
  └── projections
       └── "?column?":15 [as="?column?":16, type=int, outer=(15)]
 

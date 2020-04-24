@@ -423,6 +423,12 @@ func (b *logicalPropsBuilder) buildDistinctOnProps(
 	b.buildGroupingExprProps(distinctOn, rel)
 }
 
+func (b *logicalPropsBuilder) buildEnsureDistinctOnProps(
+	distinctOn *EnsureDistinctOnExpr, rel *props.Relational,
+) {
+	b.buildGroupingExprProps(distinctOn, rel)
+}
+
 func (b *logicalPropsBuilder) buildUpsertDistinctOnProps(
 	distinctOn *UpsertDistinctOnExpr, rel *props.Relational,
 ) {
