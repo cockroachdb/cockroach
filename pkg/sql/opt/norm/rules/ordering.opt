@@ -40,6 +40,10 @@
 
 # SimplifyGroupByOrdering removes redundant columns from the GroupBy operators'
 # input ordering.
+#
+# Note: Doesn't match EnsureDistinctOn because test cases were too difficult to
+# find. If a test case for EnsureDistinctOn is found, it should be added to the
+# match pattern.
 [SimplifyGroupByOrdering, Normalize]
 (GroupBy | ScalarGroupBy | DistinctOn
     $input:*

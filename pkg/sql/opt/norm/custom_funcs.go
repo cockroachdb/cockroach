@@ -1937,9 +1937,9 @@ func (c *CustomFuncs) MakeGrouping(
 	return &memo.GroupingPrivate{GroupingCols: groupingCols, Ordering: ordering}
 }
 
-// MakeDupErrorGrouping constructs a new GroupingPrivate using the given
+// MakeErrorOnDupGrouping constructs a new GroupingPrivate using the given
 // grouping columns, OrderingChoice, and ErrorOnDup text.
-func (c *CustomFuncs) MakeDupErrorGrouping(
+func (c *CustomFuncs) MakeErrorOnDupGrouping(
 	groupingCols opt.ColSet, ordering physical.OrderingChoice, errorText string,
 ) *memo.GroupingPrivate {
 	return &memo.GroupingPrivate{

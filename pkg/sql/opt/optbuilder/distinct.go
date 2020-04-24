@@ -156,8 +156,10 @@ func (b *Builder) buildDistinctOn(
 	input := inScope.expr.(memo.RelExpr)
 	if nullsAreDistinct {
 		outScope.expr = b.factory.ConstructUpsertDistinctOn(input, aggs, &private)
-	} else {
+	} else if errorOnDup == "" {
 		outScope.expr = b.factory.ConstructDistinctOn(input, aggs, &private)
+	} else {
+		outScope.expr = b.factory.ConstructEnsureDistinctOn(input, aggs, &private)
 	}
 	return outScope
 }
