@@ -11,12 +11,21 @@
 package roachpb
 
 import (
+	"context"
+	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/confchange"
+	"go.etcd.io/etcd/raft/quorum"
+	"go.etcd.io/etcd/raft/tracker"
 )
 
 func rd(typ *ReplicaType, id uint64) ReplicaDescriptor {
@@ -232,13 +241,20 @@ func TestReplicaDescriptorsCanMakeProgress(t *testing.T) {
 			{false, rd(v, 2)},
 			{true, rd(v, 3)},
 		}, true},
-		// Two out of three voters alive, but one is an incoming voter. (This
-		// still uses the fast path).
+		// Two out of three voters alive, but one is an incoming voter. The outgoing
+		// group doesn't have quorum.
 		{[]descWithLiveness{
 			{true, rd(v, 1)},
 			{false, rd(v, 2)},
 			{true, rd(vi, 3)},
-		}, true},
+		}, false},
+		// Two out of three voters alive, but one is an outgoing voter. The incoming
+		// group doesn't have quorum.
+		{[]descWithLiveness{
+			{true, rd(v, 1)},
+			{false, rd(v, 2)},
+			{true, rd(vd, 3)},
+		}, false},
 		// Two out of three voters dead, and they're all incoming voters. (This
 		// can't happen in practice because it means there were zero voters prior
 		// to the conf change, but still this result is correct, similar to others
@@ -303,4 +319,72 @@ func TestReplicaDescriptorsCanMakeProgress(t *testing.T) {
 			require.Equal(t, test.exp, act, "input: %+v", test)
 		})
 	}
+}
+
+// Test that ReplicaDescriptors.CanMakeProgress() agrees with the equivalent
+// etcd/raft's code. We generate random configs and then see whether out
+// determination for unavailability matches etcd/raft.
+func TestReplicaDescriptorsCanMakeProgressRandom(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	randutil.SeedForTests()
+
+	var progress, noProgress, skipped int
+
+	start := timeutil.Now()
+	for timeutil.Now().Sub(start) < 100*time.Millisecond {
+		// Generate a random range configuration with between 1 and 7 replicas.
+		size := 1 + rand.Intn(6)
+		rds := make([]ReplicaDescriptor, size)
+		liveness := make([]bool, size)
+		// Generate a bunch of bits, each one representing the liveness of a different replica.
+		livenessBits := rand.Int31()
+		for i := range rds {
+			rds[i].ReplicaID = ReplicaID(i + 1)
+			typ := ReplicaType(rand.Intn(len(ReplicaType_name)))
+			rds[i].Type = &typ
+			liveness[i] = (livenessBits >> i & 1) == 0
+		}
+
+		rng := MakeReplicaDescriptors(rds)
+
+		crdbCanMakeProgress := rng.CanMakeProgress(func(rd ReplicaDescriptor) bool {
+			return liveness[rd.ReplicaID-1]
+		})
+
+		raftCanMakeProgress, skip := func() (res bool, skip bool) {
+			cfg, _, err := confchange.Restore(
+				confchange.Changer{Tracker: tracker.MakeProgressTracker(1)},
+				rng.ConfState(),
+			)
+			if err != nil {
+				if err.Error() != "removed all voters" {
+					t.Fatal(err)
+				}
+				return false, true
+			}
+			votes := make(map[uint64]bool, len(rng.wrapped))
+			for _, rDesc := range rng.wrapped {
+				if liveness[rDesc.ReplicaID-1] {
+					votes[uint64(rDesc.ReplicaID)] = true
+				}
+			}
+			return cfg.Voters.VoteResult(votes) == quorum.VoteWon, false
+		}()
+
+		if skip {
+			// Going to an empty config, which is non-sensical. Skipping input.
+			skipped++
+			continue
+		}
+		require.Equalf(t, raftCanMakeProgress, crdbCanMakeProgress,
+			"input: %s liveness: %v", rng, liveness)
+		if crdbCanMakeProgress {
+			progress++
+		} else {
+			noProgress++
+		}
+	}
+	log.Infof(ctx, "progress: %d cases. no progress: %d cases. skipped: %d cases.",
+		progress, noProgress, skipped)
 }
