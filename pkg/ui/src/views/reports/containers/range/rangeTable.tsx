@@ -153,11 +153,18 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     };
   }
 
-  contentBytes(bytes: Long): RangeTableCellContent {
+  contentBytes(bytes: Long, className: string = null): RangeTableCellContent {
     const humanized = Bytes(bytes.toNumber());
+    if (_.isNull(className)) {
+      return {
+        value: [humanized],
+        title: [humanized, bytes.toString()],
+      };
+    }
     return {
       value: [humanized],
       title: [humanized, bytes.toString()],
+      className: [className],
     };
   }
 
@@ -499,7 +506,10 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         applied: this.contentIf(!dormant, () => this.createContent(FixLong(info.raft_state.applied))),
         commit: this.contentIf(!dormant, () => this.createContent(FixLong(info.raft_state.hard_state.commit))),
         lastIndex: this.createContent(FixLong(info.state.last_index)),
-        logSize: this.contentBytes(FixLong(info.state.raft_log_size)),
+        logSize: this.contentBytes(
+          FixLong(info.state.raft_log_size),
+          info.state.raft_log_size_trusted ? "" : "range-table__cell--dormant",
+        ),
         logSizeTrusted: this.createContent(info.state.raft_log_size_trusted.toString()),
         leaseHolderQPS: leaseHolder ? this.createContent(info.stats.queries_per_second.toFixed(4)) : rangeTableEmptyContent,
         keysWrittenPS: this.createContent(info.stats.writes_per_second.toFixed(4)),
