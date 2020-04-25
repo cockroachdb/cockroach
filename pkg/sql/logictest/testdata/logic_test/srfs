@@ -1141,7 +1141,101 @@ SELECT * FROM unnest(array[1,2], array[3,4,5]) AS t(a, b);
 a    b
 1    3  
 2    4  
-NULL 5 
+NULL 5
+
+query I rowsort
+SELECT unnest(ARRAY[1,2,3]) FROM unnest(ARRAY[4,5,6])
+----
+1
+1
+1
+2
+2
+2
+3
+3
+3
+
+query I rowsort
+SELECT unnest(ARRAY[NULL,2,3]) FROM unnest(ARRAY[NULL,NULL,NULL])
+----
+NULL
+NULL
+NULL
+2
+2
+2
+3
+3
+3
+
+query I rowsort
+SELECT unnest(ARRAY[1,2,NULL]) FROM unnest(ARRAY[NULL,NULL,NULL])
+----
+1
+1
+1
+2
+2
+2
+NULL
+NULL
+NULL
+
+query I rowsort
+SELECT unnest(ARRAY[NULL,NULL,NULL]) FROM unnest(ARRAY[NULL,NULL,NULL])
+----
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+
+statement ok
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+
+statement ok
+INSERT INTO xy (VALUES (1,1), (2,2), (3,4), (4,8), (5,NULL))
+
+query II rowsort
+SELECT * FROM xy WHERE x IN (SELECT unnest(ARRAY[NULL,x]))
+----
+1  1
+2  2
+3  4
+4  8
+5  NULL
+
+query II rowsort
+SELECT * FROM xy
+WHERE EXISTS
+(SELECT t
+  FROM unnest(ARRAY[NULL,2,NULL,4,5,x])
+  AS f(t)
+  WHERE t=y
+)
+----
+1  1
+2  2
+3  4
+
+query IT rowsort
+SELECT unnest(ARRAY[1,2,3,4]), unnest(ARRAY['one','two'])
+----
+1  one
+2  two
+3  NULL
+4  NULL
+
+query error expected 1 to be of type varbit, found type int
+SELECT unnest(ARRAY[1,2,3::varbit])
+
+query error expected 2 to be of type varbit, found type int
+SELECT unnest(ARRAY[NULL,2,3::varbit])
 
 query error pq: could not determine polymorphic type
 SELECT unnest(NULL, NULL)
