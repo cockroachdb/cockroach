@@ -1356,6 +1356,90 @@ func (c *CustomFuncs) ZipOuterCols(zip memo.ZipExpr) opt.ColSet {
 	return colSet
 }
 
+// CanConstructValuesFromZips takes in an input ZipExpr and returns true if the
+// ProjectSet to which the zip belongs can be converted to an InnerJoinApply
+// with a Values operator on the right input.
+func (c *CustomFuncs) CanConstructValuesFromZips(zip memo.ZipExpr) bool {
+	for _, zipItem := range zip {
+		fn, ok := zipItem.Fn.(*memo.FunctionExpr)
+		if !ok || fn.Name != "unnest" {
+			// Not an unnest function.
+			return false
+		}
+		if len(fn.Args) != 1 {
+			// Unnest has more than one argument.
+			return false
+		}
+		if !c.IsArray(fn.Args[0]) {
+			// Unnest argument is not an ArrayExpr or ConstExpr wrapping a DArray.
+			return false
+		}
+	}
+	return true
+}
+
+// ConstructValuesFromZips constructs a Values operator with the elements from
+// the given ArrayExpr(s) (or ConstExpr(s) that wrap a DArray) in the given
+// ZipExpr.
+//
+// The functions contained in the ZipExpr must be unnest functions with a single
+// parameter each. The parameters of the unnest functions must be either
+// ArrayExpr's or ConstExpr's wrapping DArrays.
+func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
+	numCols := len(zip)
+	outColTypes := make([]types.T, numCols)
+	outColIDs := make(opt.ColList, numCols)
+	var outRows []memo.ScalarListExpr
+
+	// Get type and ColumnID of each column.
+	for i, zipItem := range zip {
+		arrExpr := zipItem.Fn.(*memo.FunctionExpr).Args[0]
+		outColTypes[i] = *arrExpr.DataType().ArrayContents()
+		outColIDs[i] = zipItem.Cols[0]
+	}
+
+	// addValToOutRows inserts a value into outRows at the given index.
+	addValToOutRows := func(expr opt.ScalarExpr, rIndex, cIndex int) {
+		if rIndex >= len(outRows) {
+			// If this is the largest column encountered so far, make a new row and
+			// fill with NullExpr's.
+			outRows = append(outRows, make(memo.ScalarListExpr, numCols))
+			for i := 0; i < numCols; i++ {
+				outRows[rIndex][i] = c.f.ConstructNull(&outColTypes[cIndex])
+			}
+		}
+		outRows[rIndex][cIndex] = expr // Insert value into outRows.
+	}
+
+	// Fill outRows with values from the arrays in the ZipExpr.
+	for i, zipItem := range zip {
+		arrExpr := zipItem.Fn.(*memo.FunctionExpr).Args[0]
+		switch t := arrExpr.(type) {
+		case *memo.ArrayExpr:
+			for j, val := range t.Elems {
+				addValToOutRows(val, j, i)
+			}
+		case *memo.ConstExpr:
+			dArray := t.Value.(*tree.DArray)
+			for j, elem := range dArray.Array {
+				val := c.f.ConstructConstVal(elem, dArray.ParamTyp)
+				addValToOutRows(val, j, i)
+			}
+		}
+	}
+
+	// Convert outRows (a slice of ScalarListExpr's) into a ScalarListExpr
+	// containing a tuple for each row.
+	tuples := make(memo.ScalarListExpr, len(outRows))
+	for i, row := range outRows {
+		tuples[i] = c.f.ConstructTuple(row, types.MakeTuple(outColTypes))
+	}
+
+	// Construct and return a Values operator.
+	valuesPrivate := &memo.ValuesPrivate{Cols: outColIDs, ID: c.f.Metadata().NextUniqueID()}
+	return c.f.ConstructValues(tuples, valuesPrivate)
+}
+
 // ----------------------------------------------------------------------
 //
 // Set Rules
@@ -1860,6 +1944,15 @@ func (c *CustomFuncs) IsConstArray(scalar opt.ScalarExpr) bool {
 		}
 	}
 	return false
+}
+
+// IsArray returns true if the expression is either a constant array or a normal
+// array.
+func (c *CustomFuncs) IsArray(scalar opt.ScalarExpr) bool {
+	if _, ok := scalar.(*memo.ArrayExpr); ok {
+		return true
+	}
+	return c.IsConstArray(scalar)
 }
 
 // ConvertConstArrayToTuple converts a constant ARRAY datum to the equivalent
