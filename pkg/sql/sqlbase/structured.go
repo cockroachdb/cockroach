@@ -1299,12 +1299,14 @@ func DatumTypeHasCompositeKeyEncoding(typ *types.T) bool {
 
 // MustBeValueEncoded returns true if columns of the given kind can only be value
 // encoded.
-func MustBeValueEncoded(semanticType types.Family) bool {
-	return semanticType == types.ArrayFamily ||
-		semanticType == types.JsonFamily ||
-		semanticType == types.TupleFamily ||
-		semanticType == types.GeometryFamily ||
-		semanticType == types.GeographyFamily
+func MustBeValueEncoded(semanticType *types.T) bool {
+	switch semanticType.Family() {
+	case types.ArrayFamily:
+		return MustBeValueEncoded(semanticType.ArrayContents())
+	case types.JsonFamily, types.TupleFamily, types.GeographyFamily, types.GeometryFamily:
+		return true
+	}
+	return false
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
@@ -2273,7 +2275,7 @@ func fitColumnToFamily(desc *MutableTableDescriptor, col ColumnDescriptor) (int,
 
 // ColumnTypeIsIndexable returns whether the type t is valid as an indexed column.
 func ColumnTypeIsIndexable(t *types.T) bool {
-	return !MustBeValueEncoded(t.Family())
+	return !MustBeValueEncoded(t)
 }
 
 // ColumnTypeIsInvertedIndexable returns whether the type t is valid to be indexed

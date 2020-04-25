@@ -391,22 +391,70 @@ error (42P01): no data source matches prefix: a
 build
 SELECT generate_series FROM generate_series(1, 100) ORDER BY ARRAY[generate_series]
 ----
-error (0A000): unimplemented: can't order by column type int[]
+sort
+ ├── columns: generate_series:1  [hidden: column2:2]
+ ├── ordering: +2
+ └── project
+      ├── columns: column2:2 generate_series:1
+      ├── project-set
+      │    ├── columns: generate_series:1
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(1, 100)
+      └── projections
+           └── ARRAY[generate_series:1] [as=column2:2]
 
 build
 SELECT ARRAY[generate_series] FROM generate_series(1, 100) ORDER BY ARRAY[generate_series]
 ----
-error (0A000): unimplemented: can't order by column type int[]
+sort
+ ├── columns: array:2
+ ├── ordering: +2
+ └── project
+      ├── columns: array:2
+      ├── project-set
+      │    ├── columns: generate_series:1
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(1, 100)
+      └── projections
+           └── ARRAY[generate_series:1] [as=array:2]
 
 build
 SELECT ARRAY[generate_series] FROM generate_series(1, 100) ORDER BY 1
 ----
-error (0A000): unimplemented: can't order by column type int[]
+sort
+ ├── columns: array:2
+ ├── ordering: +2
+ └── project
+      ├── columns: array:2
+      ├── project-set
+      │    ├── columns: generate_series:1
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(1, 100)
+      └── projections
+           └── ARRAY[generate_series:1] [as=array:2]
 
 build
 SELECT ARRAY[generate_series] AS a FROM generate_series(1, 100) ORDER BY a
 ----
-error (0A000): unimplemented: can't order by column type int[]
+sort
+ ├── columns: a:2
+ ├── ordering: +2
+ └── project
+      ├── columns: a:2
+      ├── project-set
+      │    ├── columns: generate_series:1
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── generate_series(1, 100)
+      └── projections
+           └── ARRAY[generate_series:1] [as=a:2]
 
 build
 SELECT generate_series, ARRAY[generate_series] FROM generate_series(1, 1) ORDER BY 1
@@ -988,4 +1036,12 @@ project
 build
 SELECT ARRAY[a] FROM abcd ORDER BY 1
 ----
-error (0A000): unimplemented: can't order by column type int[]
+sort
+ ├── columns: array:5!null
+ ├── ordering: +5
+ └── project
+      ├── columns: array:5!null
+      ├── scan abcd
+      │    └── columns: a:1!null b:2 c:3 d:4
+      └── projections
+           └── ARRAY[a:1] [as=array:5]

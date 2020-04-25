@@ -83,6 +83,14 @@ const (
 	timeTZMarker = bitArrayDescMarker + 1
 	geoMarker    = timeTZMarker + 1
 
+	// Markers for key encoding Datum arrays in sorted order.
+	arrayKeyMarker                  = geoMarker + 1
+	arrayKeyElementMarker           = arrayKeyMarker + 1
+	arrayKeyDescendingMarker        = arrayKeyElementMarker + 1
+	arrayKeyDescendingElementMarker = arrayKeyDescendingMarker + 1
+	arrayKeyTerminator              = 0x00
+	arrayKeyDescendingTerminator    = 0xFF
+
 	// IntMin is chosen such that the range of int tags does not overlap the
 	// ascii character set that is frequently used in testing.
 	IntMin      = 0x80 // 128
@@ -1277,6 +1285,8 @@ const (
 	BitArrayDesc Type = 18 // BitArray encoded descendingly
 	TimeTZ       Type = 19
 	Geo          Type = 20
+	ArrayKeyAsc  Type = 21 // Array key encoding
+	ArrayKeyDesc Type = 22 // Array key encoded descendingly
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -1309,6 +1319,10 @@ func slowPeekType(b []byte) Type {
 			return Null
 		case m == encodedNotNull, m == encodedNotNullDesc:
 			return NotNull
+		case m == arrayKeyMarker:
+			return ArrayKeyAsc
+		case m == arrayKeyDescendingMarker:
+			return ArrayKeyDesc
 		case m == bytesMarker:
 			return Bytes
 		case m == bytesDescMarker:
@@ -1369,6 +1383,36 @@ func getMultiNonsortingVarintLen(b []byte, num int) (int, error) {
 	return p, nil
 }
 
+// getArrayLength returns the length of a key encoded array. The input
+// must have had the array type marker stripped from the front.
+func getArrayLength(buf []byte, dir Direction) (int, error) {
+	result := 0
+	for {
+		if len(buf) == 0 {
+			return 0, errors.AssertionFailedf("invalid array encoding (unterminated)")
+		}
+		var more bool
+		var err error
+		buf, more, err = ConsumeNextArrayElementMarker(buf, dir)
+		if err != nil {
+			return 0, err
+		}
+		// Increment to include the consumed marker byte.
+		result++
+		if !more {
+			break
+		}
+		next, err := PeekLength(buf)
+		if err != nil {
+			return 0, err
+		}
+		// Shift buf over by the encoded data amount.
+		buf = buf[next:]
+		result += next
+	}
+	return result, nil
+}
+
 // PeekLength returns the length of the encoded value at the start of b.  Note:
 // if this function succeeds, it's not a guarantee that decoding the value will
 // succeed. PeekLength is meant to be used on key encoded data only.
@@ -1398,6 +1442,13 @@ func PeekLength(b []byte) (int, error) {
 			return 1 + n + m + 1, err
 		}
 		return 1 + n + m + 1, nil
+	case arrayKeyMarker, arrayKeyDescendingMarker:
+		dir := Ascending
+		if m == arrayKeyDescendingMarker {
+			dir = Descending
+		}
+		length, err := getArrayLength(b[1:], dir)
+		return 1 + length, err
 	case bytesMarker:
 		return getBytesLength(b, ascendingEscapes)
 	case jsonInvertedIndex:
@@ -1510,7 +1561,7 @@ func prettyPrintValueImpl(valDirs []Direction, b []byte, sep string) (string, bo
 // even if we don't have directions for the child index's columns.
 func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 	var err error
-	switch PeekType(b) {
+	switch typ := PeekType(b); typ {
 	case Null:
 		b, _ = DecodeIfNull(b)
 		return b, "NULL", nil
@@ -1520,6 +1571,48 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 		return b[1:], "False", nil
 	case Array:
 		return b[1:], "Arr", nil
+	case ArrayKeyAsc, ArrayKeyDesc:
+		// TODO (rohany): I'm not sure what is the best way to remove this duplication
+		//  with the standard decoding logic for array keys. Because the decoding depends
+		//  on the sqlbase {Encode,Decode}TableKey functions, we can't use them here.
+		encDir := Ascending
+		if typ == ArrayKeyDesc {
+			encDir = Descending
+		}
+		var build strings.Builder
+		buf, err := ValidateAndConsumeArrayKeyMarker(b, encDir)
+		if err != nil {
+			return nil, "", err
+		}
+		build.WriteString("ARRAY[")
+		first := true
+		// Use the array key decoding logic, but instead of calling out
+		// to DecodeTableKey, just make a recursive call.
+		for {
+			if len(buf) == 0 {
+				return nil, "", errors.AssertionFailedf("invalid array (unterminated)")
+			}
+			var more bool
+			buf, more, err = ConsumeNextArrayElementMarker(buf, encDir)
+			if err != nil {
+				return nil, "", err
+			}
+			if !more {
+				break
+			}
+			var next string
+			buf, next, err = prettyPrintFirstValue(dir, buf)
+			if err != nil {
+				return nil, "", err
+			}
+			if !first {
+				build.WriteString(",")
+			}
+			build.WriteString(next)
+			first = false
+		}
+		build.WriteString("]")
+		return buf, build.String(), nil
 	case NotNull:
 		// The tag can be either encodedNotNull or encodedNotNullDesc. The
 		// latter can be an interleaved sentinel.
@@ -2601,5 +2694,86 @@ func getJSONInvertedIndexKeyLength(buf []byte) (int, error) {
 		}
 
 		return len + valLen, nil
+	}
+}
+
+// EncodeArrayKeyMarker adds the array key encoding marker to buf and
+// returns the new buffer.
+func EncodeArrayKeyMarker(buf []byte, dir Direction) []byte {
+	switch dir {
+	case Ascending:
+		return append(buf, arrayKeyMarker)
+	case Descending:
+		return append(buf, arrayKeyDescendingMarker)
+	default:
+		panic("invalid direction")
+	}
+}
+
+// EncodeArrayKeyTerminator adds the array key terminator to buf and
+// returns the new buffer.
+func EncodeArrayKeyTerminator(buf []byte, dir Direction) []byte {
+	switch dir {
+	case Ascending:
+		return append(buf, arrayKeyTerminator)
+	case Descending:
+		return append(buf, arrayKeyDescendingTerminator)
+	default:
+		panic("invalid direction")
+	}
+}
+
+// EncodeArrayKeyElementMarker adds the array key element marker to
+// buf and returns the new buffer.
+func EncodeArrayKeyElementMarker(buf []byte, dir Direction) []byte {
+	switch dir {
+	case Ascending:
+		return append(buf, arrayKeyElementMarker)
+	case Descending:
+		return append(buf, arrayKeyDescendingElementMarker)
+	default:
+		panic("invalid direction")
+	}
+}
+
+// ValidateAndConsumeArrayKeyMarker checks that the marker at the front
+// of buf is valid for an array of the given direction, and consumes it
+// if so. It returns an error if the tag is invalid.
+func ValidateAndConsumeArrayKeyMarker(buf []byte, dir Direction) ([]byte, error) {
+	typ := PeekType(buf)
+	expected := ArrayKeyAsc
+	if dir == Descending {
+		expected = ArrayKeyDesc
+	}
+	if typ != expected {
+		return nil, errors.Newf("invalid type found %s", typ)
+	}
+	return buf[1:], nil
+}
+
+// ConsumeNextArrayElementMarker reads the first byte in buf and sees whether
+// it is an element marker or a terminator. It consumes the first byte, and
+// returns whether the array is finished (read a terminator), or there are
+// elements to decode (read an element marker).
+func ConsumeNextArrayElementMarker(buf []byte, dir Direction) ([]byte, bool, error) {
+	var elementMarker, terminator byte
+	switch dir {
+	case Ascending:
+		elementMarker, terminator = arrayKeyElementMarker, arrayKeyTerminator
+	case Descending:
+		elementMarker, terminator = arrayKeyDescendingElementMarker, arrayKeyDescendingTerminator
+	default:
+		panic("invalid direction")
+	}
+	if len(buf) == 0 {
+		return nil, false, errors.AssertionFailedf("invalid array encoding (unterminated)")
+	}
+	switch buf[0] {
+	case elementMarker:
+		return buf[1:], true, nil
+	case terminator:
+		return buf[1:], false, nil
+	default:
+		return nil, false, errors.AssertionFailedf("invalid array encoding (unknown marker)")
 	}
 }

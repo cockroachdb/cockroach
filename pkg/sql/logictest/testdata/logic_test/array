@@ -429,17 +429,6 @@ SELECT ARRAY[ARRAY[1,2,3]]
 query error VECTOR column types are unsupported
 CREATE TABLE badtable (b INT2VECTOR)
 
-# Using an array as a primary key should be disallowed. #17154
-
-statement error column b is of type int\[\] and thus is not indexable
-CREATE TABLE badtable (b INT[] PRIMARY KEY)
-
-# Indexing an array column should be disallowed. #17154
-
-statement error column b is of type int\[\] and thus is not indexable
-CREATE TABLE a (b INT[] UNIQUE)
-
-
 # Regression test for #18745
 
 statement ok
@@ -448,18 +437,6 @@ CREATE TABLE ident (x INT)
 query T
 SELECT ARRAY[ROW()] FROM ident
 ----
-
-statement error column b is of type int\[\] and thus is not indexable
-CREATE TABLE a (
-  b INT[],
-  CONSTRAINT c UNIQUE (b)
-)
-
-statement error column b is of type int\[\] and thus is not indexable
-CREATE TABLE a (
-  b INT[],
-  INDEX c (b)
-)
 
 statement ok
 CREATE TABLE a (b INT ARRAY)
@@ -471,18 +448,6 @@ a  CREATE TABLE a (
      b INT8[] NULL,
      FAMILY "primary" (b, rowid)
    )
-
-statement ok
-DROP TABLE a
-
-statement ok
-CREATE TABLE a (b INT[], c INT[])
-
-statement error column b is of type int\[\] and thus is not indexable
-CREATE INDEX idx ON a (b)
-
-statement error the following columns are not indexable due to their type: b \(type int\[\]\), c \(type int\[\]\)
-CREATE INDEX idx ON a (b, c)
 
 statement ok
 DROP TABLE a
@@ -1343,3 +1308,129 @@ SELECT x, y FROM t WHERE x < y
 query TT
 SELECT x, y FROM t WHERE x > y
 ----
+
+query TT
+SELECT x, y FROM t ORDER BY (x, y)
+----
+{1}        {1,2}
+{1,1,1,1}  {2}
+
+subtest array_indexes
+
+# Create indexes on arrays.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT[] PRIMARY KEY)
+
+statement ok
+INSERT INTO t VALUES
+  (ARRAY[1]),
+  (ARRAY[5]),
+  (ARRAY[4]),
+  (ARRAY[1,4,5]),
+  (ARRAY[1,4,6]),
+  (ARRAY[1,NULL,10]),
+  (ARRAY[NULL]),
+  (ARRAY[NULL, NULL, NULL])
+
+# Test that the unique index rejects bad inserts.
+statement error pq: duplicate key value \(x\)=\(ARRAY\[1,NULL,10\]\) violates unique constraint "primary"
+INSERT INTO t VALUES (ARRAY[1, NULL, 10])
+
+# Use the index for point lookups.
+query T
+SELECT x FROM t WHERE x = ARRAY[1,4,6]
+----
+{1,4,6}
+
+# Use the index for bounded scans.
+# Note that nulls sort first in CockroachDB, so this ordering is different
+# than what postgres will output. In postgres, NULLs in arrays are treated
+# as larger than other elements, while we treat them as less.
+# TODO (rohany): We have always done this for array comparisons, so I think
+#  it would be a breaking change + opposite with our other null behavior to
+#  change it suddenly...
+query T
+SELECT x FROM t WHERE x < ARRAY[1, 4, 3] ORDER BY x
+----
+{NULL}
+{NULL,NULL,NULL}
+{1}
+{1,NULL,10}
+
+query T
+SELECT x FROM t WHERE x > ARRAY [1, NULL] ORDER BY x DESC
+----
+{5}
+{4}
+{1,4,6}
+{1,4,5}
+{1,NULL,10}
+
+query T
+SELECT x FROM t WHERE x > ARRAY[1, 3] AND x < ARRAY[1, 4, 10] ORDER BY x
+----
+{1,4,5}
+{1,4,6}
+
+# Test some operations on a descending index.
+statement ok
+CREATE INDEX i ON t(x DESC)
+
+query T
+SELECT x FROM t@i WHERE x <= ARRAY[1] ORDER BY x DESC
+----
+{1}
+{NULL,NULL,NULL}
+{NULL}
+
+query T
+SELECT x FROM t@i WHERE x > ARRAY[1] ORDER BY x
+----
+{1,NULL,10}
+{1,4,5}
+{1,4,6}
+{4}
+{5}
+
+# Ensure that we can order by the arrays without any indexes.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x INT[]);
+INSERT INTO t VALUES
+  (ARRAY[1]),
+  (ARRAY[5]),
+  (ARRAY[4]),
+  (ARRAY[1,4,5]),
+  (ARRAY[1,4,6]),
+  (ARRAY[1,NULL,10]),
+  (ARRAY[NULL]),
+  (ARRAY[NULL, NULL, NULL])
+
+query T
+SELECT x FROM t ORDER BY x
+----
+{NULL}
+{NULL,NULL,NULL}
+{1}
+{1,NULL,10}
+{1,4,5}
+{1,4,6}
+{4}
+{5}
+
+query T
+SELECT x FROM t ORDER BY x DESC
+----
+{5}
+{4}
+{1,4,6}
+{1,4,5}
+{1,NULL,10}
+{1}
+{NULL,NULL,NULL}
+{NULL}
+
+# Create an indexes on a bad type.
+statement error pq: unimplemented: column x is of type geography\[\] and thus is not indexable
+CREATE TABLE tbad (x GEOGRAPHY[] PRIMARY KEY)
