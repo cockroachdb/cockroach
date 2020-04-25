@@ -49,10 +49,7 @@
     $input:(Scan
         $scanPrivate:* & (IsCanonicalScan $scanPrivate)
     ) & (HasStrictKey $input)
-    $filters:* &
-        (ExprPairSucceeded $pair:(ExprPairForSplitDisjunction $filters)) &
-        (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols (ExprPairLeft $pair))) &
-        (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols (ExprPairRight $pair)))
+    $filters:* & (ExprPairSucceeded $pair:(ExprPairForSplitDisjunction $scanPrivate $filters))
 )
 =>
 (DistinctOn
@@ -112,10 +109,7 @@
     $input:(Scan
         $scanPrivate:* & (IsCanonicalScan $scanPrivate)
     ) & ^(HasStrictKey $input)
-    $filters:* &
-        (ExprPairSucceeded $pair:(ExprPairForSplitDisjunction $filters)) &
-        (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols (ExprPairLeft $pair))) &
-        (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols (ExprPairRight $pair)))
+    $filters:* & (ExprPairSucceeded $pair:(ExprPairForSplitDisjunction $scanPrivate $filters))
 )
 =>
 (Project
