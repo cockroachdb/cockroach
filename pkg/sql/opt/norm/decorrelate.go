@@ -12,6 +12,7 @@ package norm
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -349,13 +350,28 @@ func (c *CustomFuncs) ConstructApplyJoin(
 }
 
 // EnsureKey finds the shortest strong key for the input expression. If no
-// strong key exists, then EnsureKey wraps the input in a Ordinality operator,
-// which provides a key column by uniquely numbering the rows. EnsureKey returns
-// the input expression (perhaps wrapped by Ordinality).
+// strong key exists and the input expression is a scan, EnsureKey returns a new
+// Scan with the preexisting primary key for the table. If the input is not a
+// Scan, EnsureKey wraps the input in an Ordinality operator, which provides a
+// key column by uniquely numbering the rows. EnsureKey returns the input
+// expression (perhaps augmented with a key column(s) or wrapped by Ordinality).
 func (c *CustomFuncs) EnsureKey(in memo.RelExpr) memo.RelExpr {
 	_, ok := c.CandidateKey(in)
 	if ok {
 		return in
+	}
+
+	switch t := in.(type) {
+	case *memo.ScanExpr:
+		// Add primary key columns if this is a non-virtual table.
+		private := t.ScanPrivate
+		tableID := private.Table
+		table := c.f.Metadata().Table(tableID)
+		if !table.IsVirtualTable() {
+			keyCols := c.f.Metadata().TableMeta(tableID).IndexKeyColumns(cat.PrimaryIndex)
+			private.Cols = private.Cols.Union(keyCols)
+			return c.f.ConstructScan(&private)
+		}
 	}
 
 	colID := c.f.Metadata().AddColumn("rownum", types.Int)

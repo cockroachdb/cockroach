@@ -1419,26 +1419,24 @@ SELECT ARRAY(SELECT k FROM a WHERE a.i = b.i ORDER BY a.k) FROM a AS b
 project
  ├── columns: array:14
  ├── group-by
- │    ├── columns: a.k:7 rownum:15!null array_agg:16
- │    ├── grouping columns: rownum:15!null
+ │    ├── columns: b.k:1!null a.k:7 array_agg:15
+ │    ├── grouping columns: b.k:1!null
  │    ├── internal-ordering: +7 opt(8)
- │    ├── key: (15)
- │    ├── fd: (15)-->(7,16)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(7,15)
  │    ├── sort
- │    │    ├── columns: b.i:2 a.k:7 a.i:8 rownum:15!null
- │    │    ├── key: (7,15)
- │    │    ├── fd: (15)-->(2), (7)-->(8)
+ │    │    ├── columns: b.k:1!null b.i:2 a.k:7 a.i:8
+ │    │    ├── key: (1,7)
+ │    │    ├── fd: (1)-->(2), (7)-->(8)
  │    │    ├── ordering: +7 opt(8) [actual: +7]
  │    │    └── left-join (hash)
- │    │         ├── columns: b.i:2 a.k:7 a.i:8 rownum:15!null
- │    │         ├── key: (7,15)
- │    │         ├── fd: (15)-->(2), (7)-->(8)
- │    │         ├── ordinality
- │    │         │    ├── columns: b.i:2 rownum:15!null
- │    │         │    ├── key: (15)
- │    │         │    ├── fd: (15)-->(2)
- │    │         │    └── scan b
- │    │         │         └── columns: b.i:2
+ │    │         ├── columns: b.k:1!null b.i:2 a.k:7 a.i:8
+ │    │         ├── key: (1,7)
+ │    │         ├── fd: (1)-->(2), (7)-->(8)
+ │    │         ├── scan b
+ │    │         │    ├── columns: b.k:1!null b.i:2
+ │    │         │    ├── key: (1)
+ │    │         │    └── fd: (1)-->(2)
  │    │         ├── scan a
  │    │         │    ├── columns: a.k:7!null a.i:8
  │    │         │    ├── key: (7)
@@ -1446,12 +1444,12 @@ project
  │    │         └── filters
  │    │              └── a.i:8 = b.i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
  │    └── aggregations
- │         ├── array-agg [as=array_agg:16, outer=(7)]
+ │         ├── array-agg [as=array_agg:15, outer=(7)]
  │         │    └── a.k:7
  │         └── any-not-null-agg [as=a.k:7, outer=(7)]
  │              └── a.k:7
  └── projections
-      └── COALESCE(CASE WHEN a.k:7 IS NOT NULL THEN array_agg:16 END, ARRAY[]) [as=array:14, outer=(7,16)]
+      └── COALESCE(CASE WHEN a.k:7 IS NOT NULL THEN array_agg:15 END, ARRAY[]) [as=array:14, outer=(7,15)]
 
 norm expect=NormalizeArrayFlattenToAgg
 SELECT ARRAY(SELECT generate_series(1, a.k) ORDER BY 1 DESC) FROM a
