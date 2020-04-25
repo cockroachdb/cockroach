@@ -423,21 +423,20 @@ func TestRetriableErrorWhenGenerationReport(t *testing.T) {
 	cfg := s.GossipI().(*gossip.Gossip).GetSystemConfig()
 	dummyNodeChecker := func(id roachpb.NodeID) bool { return true }
 
-	saver := makeReplicationStatsReportSaver()
-	v := makeReplicationStatsVisitor(ctx, cfg, dummyNodeChecker, &saver)
+	v := makeReplicationStatsVisitor(ctx, cfg, dummyNodeChecker)
 	realIter := makeMeta2RangeIter(db, 10000 /* batchSize */)
 	require.NoError(t, visitRanges(ctx, &realIter, cfg, &v))
-	expReport := v.report
-	require.Greater(t, len(expReport.stats), 0, "unexpected empty report")
+	expReport := v.Report()
+	require.Greater(t, len(expReport), 0, "unexpected empty report")
 
 	realIter = makeMeta2RangeIter(db, 10000 /* batchSize */)
 	errorIter := erroryRangeIterator{
 		iter:           realIter,
 		injectErrAfter: 3,
 	}
-	v = makeReplicationStatsVisitor(ctx, cfg, func(id roachpb.NodeID) bool { return true }, &saver)
+	v = makeReplicationStatsVisitor(ctx, cfg, func(id roachpb.NodeID) bool { return true })
 	require.NoError(t, visitRanges(ctx, &errorIter, cfg, &v))
-	require.Greater(t, len(v.report.stats), 0, "unexpected empty report")
+	require.Greater(t, len(v.report), 0, "unexpected empty report")
 	require.Equal(t, expReport, v.report)
 }
 
@@ -470,31 +469,6 @@ func (it *erroryRangeIterator) Next(ctx context.Context) (roachpb.RangeDescripto
 
 func (it *erroryRangeIterator) Close(ctx context.Context) {
 	it.iter.Close(ctx)
-}
-
-// computeConstraintConformanceReport iterates through all the ranges and
-// generates the constraint conformance report.
-func computeConstraintConformanceReport(
-	ctx context.Context,
-	rangeStore RangeIterator,
-	cfg *config.SystemConfig,
-	storeResolver StoreResolver,
-) (*replicationConstraintStatsReportSaver, error) {
-	saver := makeReplicationConstraintStatusReportSaver()
-	v := makeConstraintConformanceVisitor(ctx, cfg, storeResolver, &saver)
-	err := visitRanges(ctx, rangeStore, cfg, &v)
-	return v.report, err
-}
-
-// computeReplicationStatsReport iterates through all the ranges and generates
-// the replication stats report.
-func computeReplicationStatsReport(
-	ctx context.Context, rangeStore RangeIterator, checker nodeChecker, cfg *config.SystemConfig,
-) (*replicationStatsReportSaver, error) {
-	saver := makeReplicationStatsReportSaver()
-	v := makeReplicationStatsVisitor(ctx, cfg, checker, &saver)
-	err := visitRanges(ctx, rangeStore, cfg, &v)
-	return v.report, err
 }
 
 func TestZoneChecker(t *testing.T) {
@@ -687,11 +661,8 @@ func (r *recordingRangeVisitor) visitNewZone(
 	return nil
 }
 
-func (r *recordingRangeVisitor) visitSameZone(
-	_ context.Context, rng *roachpb.RangeDescriptor,
-) error {
+func (r *recordingRangeVisitor) visitSameZone(_ context.Context, rng *roachpb.RangeDescriptor) {
 	r.rngs = append(r.rngs, visitorEntry{newZone: false, rng: *rng})
-	return nil
 }
 
 func (r *recordingRangeVisitor) failed() bool {

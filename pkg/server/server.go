@@ -203,11 +203,24 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	// Attempt to load TLS configs right away, failures are permanent.
-	if certMgr, err := cfg.InitializeNodeTLSConfigs(stopper); err != nil {
-		return nil, err
-	} else if certMgr != nil {
-		// The certificate manager is non-nil in secure mode.
-		registry.AddMetricStruct(certMgr.Metrics())
+	if !cfg.Insecure {
+		// TODO(peter): Call methods on CertificateManager directly. Need to call
+		// base.wrapError or similar on the resulting error.
+		if _, err := cfg.GetServerTLSConfig(); err != nil {
+			return nil, err
+		}
+		if _, err := cfg.GetUIServerTLSConfig(); err != nil {
+			return nil, err
+		}
+		if _, err := cfg.GetClientTLSConfig(); err != nil {
+			return nil, err
+		}
+		cm, err := cfg.GetCertificateManager()
+		if err != nil {
+			return nil, err
+		}
+		cm.RegisterSignalHandler(stopper)
+		registry.AddMetricStruct(cm.Metrics())
 	}
 
 	// Add a dynamic log tag value for the node ID.

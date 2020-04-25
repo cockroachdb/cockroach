@@ -127,6 +127,7 @@ func initCLIDefaults() {
 	startCtx.listeningURLFile = ""
 	startCtx.pidFile = ""
 	startCtx.inBackground = false
+	startCtx.geoLibsDir = "/usr/local/lib"
 
 	quitCtx.serverDecommission = false
 	quitCtx.drainWait = 10 * time.Minute
@@ -167,8 +168,11 @@ func initCLIDefaults() {
 	demoCtx.disableLicenseAcquisition = false
 	demoCtx.transientCluster = nil
 	demoCtx.insecure = false
+	demoCtx.geoLibsDir = "/usr/local/lib"
 
 	authCtx.validityPeriod = 1 * time.Hour
+
+	certCtx.certPrincipalMap = nil
 
 	initPreFlagsDefaults()
 
@@ -325,6 +329,9 @@ var startCtx struct {
 
 	// logging settings specific to file logging.
 	logDir log.DirName
+
+	// geoLibsDir is used to specify locations of the GEOS library.
+	geoLibsDir string
 }
 
 // quitCtx captures the command-line parameters of the `quit` and
@@ -392,4 +399,11 @@ var demoCtx struct {
 	simulateLatency           bool
 	transientCluster          *transientCluster
 	insecure                  bool
+	geoLibsDir                string
+}
+
+// certCtx captures the command-line parameters of the `cert` command.
+// Defaults set by InitCLIDefaults() above.
+var certCtx struct {
+	certPrincipalMap []string
 }

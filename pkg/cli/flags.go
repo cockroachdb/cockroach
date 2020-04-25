@@ -363,6 +363,7 @@ func init() {
 		StringFlag(f, &startCtx.listeningURLFile, cliflags.ListeningURLFile, startCtx.listeningURLFile)
 
 		StringFlag(f, &startCtx.pidFile, cliflags.PIDFile, startCtx.pidFile)
+		StringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir, startCtx.geoLibsDir)
 
 		// Use a separate variable to store the value of ServerInsecure.
 		// We share the default with the ClientInsecure flag.
@@ -389,7 +390,8 @@ func init() {
 		// 'start' will check that the flag is properly defined.
 		VarFlag(f, &serverCfg.JoinList, cliflags.Join)
 		VarFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
-		BoolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification, false)
+		BoolFlag(f, &baseCfg.DisableClusterNameVerification,
+			cliflags.DisableClusterNameVerification, baseCfg.DisableClusterNameVerification)
 		if cmd == startSingleNodeCmd {
 			// Even though all server flags are supported for
 			// 'start-single-node', we intend that command to be used by
@@ -441,6 +443,10 @@ func init() {
 		StringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, baseCfg.SSLCertsDir)
 	}
 
+	// The list certs command needs the certificate principal map.
+	StringSlice(listCertsCmd.Flags(), &certCtx.certPrincipalMap,
+		cliflags.CertPrincipalMap, certCtx.certPrincipalMap)
+
 	for _, cmd := range []*cobra.Command{createCACertCmd, createClientCACertCmd} {
 		f := cmd.Flags()
 		// CA certificates have a longer expiration time.
@@ -470,6 +476,7 @@ func init() {
 		debugZipCmd,
 		dumpCmd,
 		genHAProxyCmd,
+		initCmd,
 		quitCmd,
 		sqlShellCmd,
 		/* StartCmds are covered above */
@@ -477,7 +484,6 @@ func init() {
 	clientCmds = append(clientCmds, authCmds...)
 	clientCmds = append(clientCmds, nodeCmds...)
 	clientCmds = append(clientCmds, systemBenchCmds...)
-	clientCmds = append(clientCmds, initCmd)
 	clientCmds = append(clientCmds, nodeLocalCmds...)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
@@ -612,14 +618,18 @@ func init() {
 		}
 	}
 
-	// Make the other non-SQL client commands also recognize --url in
-	// strict SSL mode.
+	// Make the non-SQL client commands also recognize --url in strict SSL mode
+	// and ensure they can connect to clusters that use a cluster-name.
 	for _, cmd := range clientCmds {
 		if f := flagSetForCmd(cmd).Lookup(cliflags.URL.Name); f != nil {
 			// --url already registered above, nothing to do.
 			continue
 		}
-		VarFlag(cmd.PersistentFlags(), urlParser{cmd, &cliCtx, true /* strictSSL */}, cliflags.URL)
+		f := cmd.PersistentFlags()
+		VarFlag(f, urlParser{cmd, &cliCtx, true /* strictSSL */}, cliflags.URL)
+		VarFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
+		BoolFlag(f, &baseCfg.DisableClusterNameVerification,
+			cliflags.DisableClusterNameVerification, baseCfg.DisableClusterNameVerification)
 	}
 
 	// Commands that print tables.
@@ -657,6 +667,7 @@ func init() {
 	// The --empty flag is only valid for the top level demo command,
 	// so we use the regular flag set.
 	BoolFlag(demoCmd.Flags(), &demoCtx.useEmptyDatabase, cliflags.UseEmptyDatabase, demoCtx.useEmptyDatabase)
+	StringFlag(demoFlags, &demoCtx.geoLibsDir, cliflags.GeoLibsDir, demoCtx.geoLibsDir)
 
 	// sqlfmt command.
 	fmtFlags := sqlfmtCmd.Flags()

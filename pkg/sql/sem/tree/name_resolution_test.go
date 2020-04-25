@@ -792,12 +792,20 @@ func TestResolveTablePatternOrName(t *testing.T) {
 					scPrefix = tpv.Schema()
 					ctPrefix = tpv.Catalog()
 				case *tree.TableName:
+					var prefix tree.ObjectNamePrefix
 					if tc.expected {
 						flags := tree.ObjectLookupFlags{}
-						found, obMeta, err = tpv.ResolveExisting(ctx, fakeResolver, flags, tc.curDb, tc.searchPath)
+						// TODO: As part of work for #34240, we should be operating on
+						//  UnresolvedObjectNames here, rather than TableNames.
+						un := tpv.ToUnresolvedObjectName()
+						found, prefix, obMeta, err = tree.ResolveExisting(ctx, un, fakeResolver, flags, tc.curDb, tc.searchPath)
 					} else {
-						found, scMeta, err = tpv.ResolveTarget(ctx, fakeResolver, tc.curDb, tc.searchPath)
+						// TODO: As part of work for #34240, we should be operating on
+						//  UnresolvedObjectNames here, rather than TableNames.
+						un := tpv.ToUnresolvedObjectName()
+						found, prefix, scMeta, err = tree.ResolveTarget(ctx, un, fakeResolver, tc.curDb, tc.searchPath)
 					}
+					tpv.ObjectNamePrefix = prefix
 					scPrefix = tpv.Schema()
 					ctPrefix = tpv.Catalog()
 				default:
