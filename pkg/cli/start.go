@@ -661,7 +661,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		} else {
 			// Don't shout to stderr since the server will have detached by
 			// the time this function gets called.
-			log.Warningf(ctx, msg)
+			log.Warning(ctx, msg)
 		}
 	}
 
@@ -1265,7 +1265,7 @@ func setupAndInitializeLoggingAndProfiling(
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
 	info := build.GetInfo()
-	log.Infof(ctx, info.Short())
+	log.Info(ctx, info.Short())
 
 	initMemProfile(ctx, outputDirectory)
 	initCPUProfile(ctx, outputDirectory)

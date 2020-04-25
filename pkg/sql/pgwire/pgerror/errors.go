@@ -12,7 +12,6 @@ package pgerror
 
 import (
 	"bytes"
-	goErr "errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -106,7 +105,7 @@ func DangerousStatementf(format string, args ...interface{}) error {
 	buf.WriteString("rejected: ")
 	fmt.Fprintf(&buf, format, args...)
 	buf.WriteString(" (sql_safe_updates = true)")
-	err := goErr.New(buf.String())
+	err := errors.Newf("%s", buf.String())
 	err = errors.WithSafeDetails(err, format, args...)
 	err = WithCandidateCode(err, pgcode.Warning)
 	return err

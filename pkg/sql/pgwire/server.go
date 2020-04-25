@@ -828,5 +828,5 @@ func (s *Server) sendErr(ctx context.Context, conn net.Conn, err error) error {
 }
 
 func newAdminShutdownErr(msg string) error {
-	return pgerror.Newf(pgcode.AdminShutdown, msg)
+	return pgerror.New(pgcode.AdminShutdown, msg)
 }

@@ -1834,10 +1834,10 @@ func (ds *DistSender) sendToReplicas(
 
 		// Has the caller given up?
 		if ctx.Err() != nil {
-			errMsg := fmt.Sprintf("context done during DistSender.Send: %s", ctx.Err())
-			log.Eventf(ctx, errMsg)
+			reportedErr := errors.Wrap(ctx.Err(), "context done during DistSender.Send")
+			log.Eventf(ctx, "%v", reportedErr)
 			if ambiguousError != nil {
-				return nil, roachpb.NewAmbiguousResultError(errMsg)
+				return nil, roachpb.NewAmbiguousResultError(reportedErr.Error())
 			}
 			// Don't consider this a SendError, because SendErrors indicate that we
 			// were unable to reach a replica that could serve the request, and they

@@ -67,11 +67,12 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 			continue
 		}
 		if isAdmin, ok := allRoles[string(r)]; !ok || !isAdmin {
-			errMsg := "%s is not a superuser or role admin for role %s"
 			if string(r) == sqlbase.AdminRole {
-				errMsg = "%s is not a role admin for role %s"
+				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+					"%s is not a role admin for role %s", p.User(), r)
 			}
-			return nil, pgerror.Newf(pgcode.InsufficientPrivilege, errMsg, p.User(), r)
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"%s is not a superuser or role admin for role %s", p.User(), r)
 		}
 	}
 

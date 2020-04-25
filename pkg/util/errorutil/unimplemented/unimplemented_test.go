@@ -31,7 +31,6 @@ func TestUnimplemented(t *testing.T) {
 		{NewWithDepthf(1, "woo", "hello %s", "world"), "unimplemented: hello world", "woo", "", 0},
 		{NewWithIssue(123, "waa"), "unimplemented: waa", "", "", 123},
 		{NewWithIssuef(123, "hello %s", "world"), "unimplemented: hello world", "", "", 123},
-		{NewWithIssueHint(123, "waa", "woo"), "unimplemented: waa", "", "woo", 123},
 		{NewWithIssueDetail(123, "waa", "woo"), "unimplemented: woo", "waa", "", 123},
 		{NewWithIssueDetailf(123, "waa", "hello %s", "world"), "unimplemented: hello world", "waa", "", 123},
 	}
