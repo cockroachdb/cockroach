@@ -1247,11 +1247,17 @@ type optVirtualTable struct {
 	// virtual table.
 	name cat.DataSourceName
 
-	// index is a synthesized primary index.
-	index optVirtualIndex
+	// indexes contains "virtual indexes", which are used to produce virtual table
+	// data given constraints using generator functions. The 0th index is a
+	// synthesized primary index.
+	indexes []optVirtualIndex
 
 	// family is a synthesized primary family.
 	family optVirtualFamily
+
+	// colMap is a mapping from unique ColumnID to column ordinal within the
+	// table. This is a common lookup that needs to be fast.
+	colMap map[sqlbase.ColumnID]int
 }
 
 var _ cat.Table = &optVirtualTable{}
@@ -1293,11 +1299,47 @@ func newOptVirtualTable(
 		name: *name,
 	}
 
+	// Create the table's column mapping from sqlbase.ColumnID to column ordinal.
+	ot.colMap = make(map[sqlbase.ColumnID]int, ot.DeletableColumnCount())
+	for i, n := 0, ot.DeletableColumnCount(); i < n; i++ {
+		ot.colMap[sqlbase.ColumnID(ot.Column(i).ColID())] = i
+	}
+
 	ot.name.ExplicitSchema = true
 	ot.name.ExplicitCatalog = true
 
-	ot.index.init(ot)
 	ot.family.init(ot)
+
+	// Build the indexes (add 1 to account for lack of primary index in
+	// indexes slice).
+	ot.indexes = make([]optVirtualIndex, 1+len(ot.desc.Indexes))
+	// Set up the primary index.
+	ot.indexes[0] = optVirtualIndex{
+		tab:          ot,
+		indexOrdinal: 0,
+		numCols:      ot.ColumnCount(),
+		isPrimary:    true,
+		desc: &sqlbase.IndexDescriptor{
+			ID:   0,
+			Name: "primary",
+		},
+	}
+
+	for i := range ot.desc.Indexes {
+		idxDesc := &ot.desc.Indexes[i]
+		if len(idxDesc.ColumnIDs) > 1 {
+			panic("virtual indexes with more than 1 col not supported")
+		}
+
+		// Add 1, since the 0th index will the the primary that we added above.
+		ot.indexes[i+1] = optVirtualIndex{
+			tab:          ot,
+			desc:         idxDesc,
+			indexOrdinal: i + 1,
+			// The virtual indexes don't return the bogus PK key?
+			numCols: ot.ColumnCount(),
+		}
+	}
 
 	return ot, nil
 }
@@ -1371,25 +1413,25 @@ func (ot *optVirtualTable) Column(i int) cat.Column {
 
 // IndexCount is part of the cat.Table interface.
 func (ot *optVirtualTable) IndexCount() int {
-	return 1
+	// Primary index is always present, so count is always >= 1.
+	return 1 + len(ot.desc.Indexes)
 }
 
 // WritableIndexCount is part of the cat.Table interface.
 func (ot *optVirtualTable) WritableIndexCount() int {
-	return 1
+	// Primary index is always present, so count is always >= 1.
+	return 1 + len(ot.desc.WritableIndexes())
 }
 
 // DeletableIndexCount is part of the cat.Table interface.
 func (ot *optVirtualTable) DeletableIndexCount() int {
-	return 1
+	// Primary index is always present, so count is always >= 1.
+	return 1 + len(ot.desc.DeletableIndexes())
 }
 
 // Index is part of the cat.Table interface.
-func (ot *optVirtualTable) Index(i int) cat.Index {
-	if i > 0 {
-		panic("invalid index")
-	}
-	return &ot.index
+func (ot *optVirtualTable) Index(i cat.IndexOrdinal) cat.Index {
+	return &ot.indexes[i]
 }
 
 // StatisticCount is part of the cat.Table interface.
@@ -1510,42 +1552,35 @@ func (optDummyVirtualPKColumn) ComputedExprStr() string {
 	return ""
 }
 
-// optVirtualIndex is a dummy implementation of cat.Index for the only index
+// optVirtualIndex is a dummy implementation of cat.Index for the indexes
 // reported by a virtual table. The index assumes that table column 0 is a dummy
 // PK column.
 type optVirtualIndex struct {
 	tab *optVirtualTable
-}
 
-var _ cat.Index = &optIndex{}
+	// isPrimary is set to true if this is the dummy PK index for virtual tables.
+	isPrimary bool
 
-func (oi *optVirtualIndex) init(tab *optVirtualTable) {
-	oi.tab = tab
+	desc *sqlbase.IndexDescriptor
+
+	numCols int
+
+	indexOrdinal int
 }
 
 // ID is part of the cat.Index interface.
 func (oi *optVirtualIndex) ID() cat.StableID {
-	return 1
+	return cat.StableID(oi.desc.ID)
 }
 
 // Name is part of the cat.Index interface.
 func (oi *optVirtualIndex) Name() tree.Name {
-	return "primary"
-}
-
-// Table is part of the cat.Index interface.
-func (oi *optVirtualIndex) Table() cat.Table {
-	return oi.tab
-}
-
-// Ordinal is part of the cat.Index interface.
-func (oi *optVirtualIndex) Ordinal() int {
-	return 0
+	return tree.Name(oi.desc.Name)
 }
 
 // IsUnique is part of the cat.Index interface.
 func (oi *optVirtualIndex) IsUnique() bool {
-	return true
+	return oi.desc.Unique
 }
 
 // IsInverted is part of the cat.Index interface.
@@ -1555,7 +1590,7 @@ func (oi *optVirtualIndex) IsInverted() bool {
 
 // ColumnCount is part of the cat.Index interface.
 func (oi *optVirtualIndex) ColumnCount() int {
-	return oi.tab.ColumnCount()
+	return oi.numCols
 }
 
 // KeyColumnCount is part of the cat.Index interface.
@@ -1568,14 +1603,43 @@ func (oi *optVirtualIndex) LaxKeyColumnCount() int {
 	return 1
 }
 
+// lookupColumnOrdinal returns the ordinal of the column with the given ID. A
+// cache makes the lookup O(1).
+func (ot *optVirtualTable) lookupColumnOrdinal(colID sqlbase.ColumnID) (int, error) {
+	col, ok := ot.colMap[colID]
+	if ok {
+		return col, nil
+	}
+	return col, pgerror.Newf(pgcode.UndefinedColumn,
+		"column [%d] does not exist", colID)
+}
+
 // Column is part of the cat.Index interface.
-func (oi *optVirtualIndex) Column(ord int) cat.IndexColumn {
+func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
+	if oi.isPrimary {
+		return cat.IndexColumn{Column: oi.tab.Column(i), Ordinal: i}
+	}
+	if i == oi.ColumnCount()-1 {
+		// The special bogus PK column goes at the end. It has ID 0.
+		return cat.IndexColumn{Column: oi.tab.Column(0), Ordinal: 0}
+	}
+	length := len(oi.desc.ColumnIDs)
+	if i < length {
+		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
+		return cat.IndexColumn{
+			Column:  oi.tab.Column(ord),
+			Ordinal: ord,
+		}
+	}
+
+	i -= length
+	ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.StoreColumnIDs[i])
 	return cat.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
 }
 
 // Zone is part of the cat.Index interface.
 func (oi *optVirtualIndex) Zone() cat.Zone {
-	return &zonepb.ZoneConfig{}
+	panic("no zone")
 }
 
 // Span is part of the cat.Index interface.
@@ -1583,9 +1647,19 @@ func (oi *optVirtualIndex) Span() roachpb.Span {
 	panic("no span")
 }
 
+// Table is part of the cat.Index interface.
+func (oi *optVirtualIndex) Table() cat.Table {
+	return oi.tab
+}
+
+// Ordinal is part of the cat.Index interface.
+func (oi *optVirtualIndex) Ordinal() int {
+	return oi.indexOrdinal
+}
+
 // PartitionByListPrefixes is part of the cat.Index interface.
 func (oi *optVirtualIndex) PartitionByListPrefixes() []tree.Datums {
-	return nil
+	panic("no partition")
 }
 
 // optVirtualFamily is a dummy implementation of cat.Family for the only family
