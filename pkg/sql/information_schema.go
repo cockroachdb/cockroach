@@ -208,30 +208,35 @@ var informationSchemaAdministrableRoleAuthorizations = virtualSchemaTable{
 ` + base.DocsURL("information-schema.html#administrable_role_authorizations") + `
 https://www.postgresql.org/docs/9.5/infoschema-administrable-role-authorizations.html`,
 	schema: vtable.InformationSchemaAdministrableRoleAuthorizations,
-	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		currentUser := p.SessionData().User
-		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
-		if err != nil {
-			return err
-		}
-
-		grantee := tree.NewDString(currentUser)
-		for roleName, isAdmin := range memberMap {
-			if !isAdmin {
-				// We only show memberships with the admin option.
-				continue
-			}
-
-			if err := addRow(
-				grantee,                   // grantee: always the current user
-				tree.NewDString(roleName), // role_name
-				yesString,                 // is_grantable: always YES
-			); err != nil {
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, 0, len(vtableDescriptor.Columns))
+		worker := func(pusher rowPusher) error {
+			currentUser := p.SessionData().User
+			memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
+			if err != nil {
 				return err
 			}
-		}
 
-		return nil
+			grantee := tree.NewDString(currentUser)
+			for roleName, isAdmin := range memberMap {
+				if !isAdmin {
+					// We only show memberships with the admin option.
+					continue
+				}
+
+				row = append(row[:0],
+					grantee,                   // grantee: always the current user
+					tree.NewDString(roleName), // role_name
+					yesString,                 // is_grantable: always YES
+				)
+				if err := pusher.pushRow(row...); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -240,26 +245,32 @@ var informationSchemaApplicableRoles = virtualSchemaTable{
 ` + base.DocsURL("information-schema.html#applicable_roles") + `
 https://www.postgresql.org/docs/9.5/infoschema-applicable-roles.html`,
 	schema: vtable.InformationSchemaApplicableRoles,
-	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		currentUser := p.SessionData().User
-		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
-		if err != nil {
-			return err
-		}
-
-		grantee := tree.NewDString(currentUser)
-
-		for roleName, isAdmin := range memberMap {
-			if err := addRow(
-				grantee,                   // grantee: always the current user
-				tree.NewDString(roleName), // role_name
-				yesOrNoDatum(isAdmin),     // is_grantable
-			); err != nil {
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, len(vtableDescriptor.Columns))
+		worker := func(pusher rowPusher) error {
+			currentUser := p.SessionData().User
+			memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
+			if err != nil {
 				return err
 			}
-		}
 
-		return nil
+			grantee := tree.NewDString(currentUser)
+
+			for roleName, isAdmin := range memberMap {
+				row = append(row[:0],
+					grantee,                   // grantee: always the current user
+					tree.NewDString(roleName), // role_name
+					yesOrNoDatum(isAdmin),     // is_grantable
+				)
+				if err := pusher.pushRow(row...); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -268,67 +279,74 @@ var informationSchemaCheckConstraints = virtualSchemaTable{
 ` + base.DocsURL("information-schema.html#check_constraints") + `
 https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 	schema: vtable.InformationSchemaCheckConstraints,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		h := makeOidHasher()
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
-			db *sqlbase.DatabaseDescriptor,
-			scName string,
-			table *sqlbase.TableDescriptor,
-			tableLookup tableLookupFn,
-		) error {
-			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
-			if err != nil {
-				return err
-			}
-			dbNameStr := tree.NewDString(db.Name)
-			scNameStr := tree.NewDString(scName)
-			for conName, con := range conInfo {
-				// Only Check constraints are included.
-				if con.Kind != sqlbase.ConstraintTypeCheck {
-					continue
-				}
-				conNameStr := tree.NewDString(conName)
-				// Like with pg_catalog.pg_constraint, Postgres wraps the check
-				// constraint expression in two pairs of parentheses.
-				chkExprStr := tree.NewDString(fmt.Sprintf("((%s))", con.Details))
-				if err := addRow(
-					dbNameStr,  // constraint_catalog
-					scNameStr,  // constraint_schema
-					conNameStr, // constraint_name
-					chkExprStr, // check_clause
-				); err != nil {
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, len(vtableDescriptor.Columns))
+		worker := func(pusher rowPusher) error {
+			h := makeOidHasher()
+			return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
+				db *sqlbase.DatabaseDescriptor,
+				scName string,
+				table *sqlbase.TableDescriptor,
+				tableLookup tableLookupFn,
+			) error {
+				conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
+				if err != nil {
 					return err
 				}
-			}
-
-			// Unlike with pg_catalog.pg_constraint, Postgres also includes NOT
-			// NULL column constraints in information_schema.check_constraints.
-			// Cockroach doesn't track these constraints as check constraints,
-			// but we can pull them off of the table's column descriptors.
-			colNum := 0
-			return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
-				colNum++
-				// Only visible, non-nullable columns are included.
-				if column.Hidden || column.Nullable {
-					return nil
+				dbNameStr := tree.NewDString(db.Name)
+				scNameStr := tree.NewDString(scName)
+				for conName, con := range conInfo {
+					// Only Check constraints are included.
+					if con.Kind != sqlbase.ConstraintTypeCheck {
+						continue
+					}
+					conNameStr := tree.NewDString(conName)
+					// Like with pg_catalog.pg_constraint, Postgres wraps the check
+					// constraint expression in two pairs of parentheses.
+					chkExprStr := tree.NewDString(fmt.Sprintf("((%s))", con.Details))
+					row = append(row[:0],
+						dbNameStr,  // constraint_catalog
+						scNameStr,  // constraint_schema
+						conNameStr, // constraint_name
+						chkExprStr, // check_clause
+					)
+					if err := pusher.pushRow(row...); err != nil {
+						return err
+					}
 				}
-				// Generate a unique name for each NOT NULL constraint. Postgres
-				// uses the format <namespace_oid>_<table_oid>_<col_idx>_not_null.
-				// We might as well do the same.
-				conNameStr := tree.NewDString(fmt.Sprintf(
-					"%s_%s_%d_not_null", h.NamespaceOid(db, scName), tableOid(table.ID), colNum,
-				))
-				chkExprStr := tree.NewDString(fmt.Sprintf(
-					"%s IS NOT NULL", column.Name,
-				))
-				return addRow(
-					dbNameStr,  // constraint_catalog
-					scNameStr,  // constraint_schema
-					conNameStr, // constraint_name
-					chkExprStr, // check_clause
-				)
+
+				// Unlike with pg_catalog.pg_constraint, Postgres also includes NOT
+				// NULL column constraints in information_schema.check_constraints.
+				// Cockroach doesn't track these constraints as check constraints,
+				// but we can pull them off of the table's column descriptors.
+				colNum := 0
+				return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
+					colNum++
+					// Only visible, non-nullable columns are included.
+					if column.Hidden || column.Nullable {
+						return nil
+					}
+					// Generate a unique name for each NOT NULL constraint. Postgres
+					// uses the format <namespace_oid>_<table_oid>_<col_idx>_not_null.
+					// We might as well do the same.
+					conNameStr := tree.NewDString(fmt.Sprintf(
+						"%s_%s_%d_not_null", h.NamespaceOid(db, scName), tableOid(table.ID), colNum,
+					))
+					chkExprStr := tree.NewDString(fmt.Sprintf(
+						"%s IS NOT NULL", column.Name,
+					))
+					row = append(row[:0],
+						dbNameStr,  // constraint_catalog
+						scNameStr,  // constraint_schema
+						conNameStr, // constraint_name
+						chkExprStr, // check_clause
+					)
+					return pusher.pushRow(row...)
+				})
 			})
-		})
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -337,34 +355,40 @@ var informationSchemaColumnPrivileges = virtualSchemaTable{
 ` + base.DocsURL("information-schema.html#column_privileges") + `
 https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 	schema: vtable.InformationSchemaColumnPrivileges,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
-			dbNameStr := tree.NewDString(db.Name)
-			scNameStr := tree.NewDString(scName)
-			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
-			for _, u := range table.Privileges.Users {
-				for _, priv := range columndata {
-					if priv.Mask()&u.Privileges != 0 {
-						for i := range table.Columns {
-							cd := &table.Columns[i]
-							if err := addRow(
-								tree.DNull,                     // grantor
-								tree.NewDString(u.User),        // grantee
-								dbNameStr,                      // table_catalog
-								scNameStr,                      // table_schema
-								tree.NewDString(table.Name),    // table_name
-								tree.NewDString(cd.Name),       // column_name
-								tree.NewDString(priv.String()), // privilege_type
-								tree.DNull,                     // is_grantable
-							); err != nil {
-								return err
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, len(vtableDescriptor.Columns))
+		worker := func(pusher rowPusher) error {
+			return forEachTableDesc(ctx, p, dbContext, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+				dbNameStr := tree.NewDString(db.Name)
+				scNameStr := tree.NewDString(scName)
+				columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
+				for _, u := range table.Privileges.Users {
+					for _, priv := range columndata {
+						if priv.Mask()&u.Privileges != 0 {
+							for i := range table.Columns {
+								cd := &table.Columns[i]
+								row = append(row[:0],
+									tree.DNull,                     // grantor
+									tree.NewDString(u.User),        // grantee
+									dbNameStr,                      // table_catalog
+									scNameStr,                      // table_schema
+									tree.NewDString(table.Name),    // table_name
+									tree.NewDString(cd.Name),       // column_name
+									tree.NewDString(priv.String()), // privilege_type
+									tree.DNull,                     // is_grantable
+								)
+								if err := pusher.pushRow(row...); err != nil {
+									return err
+								}
 							}
 						}
 					}
 				}
-			}
-			return nil
-		})
+				return nil
+			})
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -373,72 +397,79 @@ var informationSchemaColumnsTable = virtualSchemaTable{
 ` + base.DocsURL("information-schema.html#columns") + `
 https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 	schema: vtable.InformationSchemaColumns,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
-			dbNameStr := tree.NewDString(db.Name)
-			scNameStr := tree.NewDString(scName)
-			return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
-				collationCatalog := tree.DNull
-				collationSchema := tree.DNull
-				collationName := tree.DNull
-				if locale := column.Type.Locale(); locale != "" {
-					collationCatalog = dbNameStr
-					collationSchema = pgCatalogNameDString
-					collationName = tree.NewDString(locale)
-				}
-				return addRow(
-					dbNameStr,                                            // table_catalog
-					scNameStr,                                            // table_schema
-					tree.NewDString(table.Name),                          // table_name
-					tree.NewDString(column.Name),                         // column_name
-					tree.NewDInt(tree.DInt(column.ID)),                   // ordinal_position
-					dStringPtrOrNull(column.DefaultExpr),                 // column_default
-					yesOrNoDatum(column.Nullable),                        // is_nullable
-					tree.NewDString(column.Type.InformationSchemaName()), // data_type
-					characterMaximumLength(&column.Type),                 // character_maximum_length
-					characterOctetLength(&column.Type),                   // character_octet_length
-					numericPrecision(&column.Type),                       // numeric_precision
-					numericPrecisionRadix(&column.Type),                  // numeric_precision_radix
-					numericScale(&column.Type),                           // numeric_scale
-					datetimePrecision(&column.Type),                      // datetime_precision
-					tree.DNull,                                           // interval_type
-					tree.DNull,                                           // interval_precision
-					tree.DNull,                                           // character_set_catalog
-					tree.DNull,                                           // character_set_schema
-					tree.DNull,                                           // character_set_name
-					collationCatalog,                                     // collation_catalog
-					collationSchema,                                      // collation_schema
-					collationName,                                        // collation_name
-					tree.DNull,                                           // domain_catalog
-					tree.DNull,                                           // domain_schema
-					tree.DNull,                                           // domain_name
-					dbNameStr,                                            // udt_catalog
-					pgCatalogNameDString,                                 // udt_schema
-					tree.NewDString(column.Type.PGName()),                // udt_name
-					tree.DNull,                                           // scope_catalog
-					tree.DNull,                                           // scope_schema
-					tree.DNull,                                           // scope_name
-					tree.DNull,                                           // maximum_cardinality
-					tree.DNull,                                           // dtd_identifier
-					tree.DNull,                                           // is_self_referencing
-					tree.DNull,                                           // is_identity
-					tree.DNull,                                           // identity_generation
-					tree.DNull,                                           // identity_start
-					tree.DNull,                                           // identity_increment
-					tree.DNull,                                           // identity_maximum
-					tree.DNull,                                           // identity_minimum
-					tree.DNull,                                           // identity_cycle
-					yesOrNoDatum(column.IsComputed()),                    // is_generated
-					dStringPtrOrEmpty(column.ComputeExpr),                // generation_expression
-					yesOrNoDatum(table.IsTable() &&
-						!table.IsVirtualTable() &&
-						!column.IsComputed(),
-					), // is_updatable
-					yesOrNoDatum(column.Hidden),              // is_hidden
-					tree.NewDString(column.Type.SQLString()), // crdb_sql_type
-				)
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, len(vtableDescriptor.Columns))
+		worker := func(pusher rowPusher) error {
+			return forEachTableDesc(ctx, p, dbContext, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+				dbNameStr := tree.NewDString(db.Name)
+				scNameStr := tree.NewDString(scName)
+				return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
+					collationCatalog := tree.DNull
+					collationSchema := tree.DNull
+					collationName := tree.DNull
+					if locale := column.Type.Locale(); locale != "" {
+						collationCatalog = dbNameStr
+						collationSchema = pgCatalogNameDString
+						collationName = tree.NewDString(locale)
+					}
+					row = append(row[:0],
+						dbNameStr,                                            // table_catalog
+						scNameStr,                                            // table_schema
+						tree.NewDString(table.Name),                          // table_name
+						tree.NewDString(column.Name),                         // column_name
+						tree.NewDInt(tree.DInt(column.ID)),                   // ordinal_position
+						dStringPtrOrNull(column.DefaultExpr),                 // column_default
+						yesOrNoDatum(column.Nullable),                        // is_nullable
+						tree.NewDString(column.Type.InformationSchemaName()), // data_type
+						characterMaximumLength(&column.Type),                 // character_maximum_length
+						characterOctetLength(&column.Type),                   // character_octet_length
+						numericPrecision(&column.Type),                       // numeric_precision
+						numericPrecisionRadix(&column.Type),                  // numeric_precision_radix
+						numericScale(&column.Type),                           // numeric_scale
+						datetimePrecision(&column.Type),                      // datetime_precision
+						tree.DNull,                                           // interval_type
+						tree.DNull,                                           // interval_precision
+						tree.DNull,                                           // character_set_catalog
+						tree.DNull,                                           // character_set_schema
+						tree.DNull,                                           // character_set_name
+						collationCatalog,                                     // collation_catalog
+						collationSchema,                                      // collation_schema
+						collationName,                                        // collation_name
+						tree.DNull,                                           // domain_catalog
+						tree.DNull,                                           // domain_schema
+						tree.DNull,                                           // domain_name
+						dbNameStr,                                            // udt_catalog
+						pgCatalogNameDString,                                 // udt_schema
+						tree.NewDString(column.Type.PGName()),                // udt_name
+						tree.DNull,                                           // scope_catalog
+						tree.DNull,                                           // scope_schema
+						tree.DNull,                                           // scope_name
+						tree.DNull,                                           // maximum_cardinality
+						tree.DNull,                                           // dtd_identifier
+						tree.DNull,                                           // is_self_referencing
+						tree.DNull,                                           // is_identity
+						tree.DNull,                                           // identity_generation
+						tree.DNull,                                           // identity_start
+						tree.DNull,                                           // identity_increment
+						tree.DNull,                                           // identity_maximum
+						tree.DNull,                                           // identity_minimum
+						tree.DNull,                                           // identity_cycle
+						yesOrNoDatum(column.IsComputed()),                    // is_generated
+						dStringPtrOrEmpty(column.ComputeExpr),                // generation_expression
+						yesOrNoDatum(table.IsTable() &&
+							!table.IsVirtualTable() &&
+							!column.IsComputed(),
+						), // is_updatable
+						yesOrNoDatum(column.Hidden),              // is_hidden
+						tree.NewDString(column.Type.SQLString()), // crdb_sql_type
+					)
+
+					return pusher.pushRow(row...)
+				})
 			})
-		})
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -450,29 +481,36 @@ https://www.postgresql.org/docs/9.5/infoschema-enabled-roles.html`,
 CREATE TABLE information_schema.enabled_roles (
 	ROLE_NAME STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		currentUser := p.SessionData().User
-		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
-		if err != nil {
-			return err
-		}
-
-		// The current user is always listed.
-		if err := addRow(
-			tree.NewDString(currentUser), // role_name: the current user
-		); err != nil {
-			return err
-		}
-
-		for roleName := range memberMap {
-			if err := addRow(
-				tree.NewDString(roleName), // role_name
-			); err != nil {
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, len(vtableDescriptor.Columns))
+		worker := func(pusher rowPusher) error {
+			currentUser := p.SessionData().User
+			memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
+			if err != nil {
 				return err
 			}
-		}
 
-		return nil
+			// The current user is always listed.
+			row = append(row[:0],
+				tree.NewDString(currentUser), // role_name: the current user
+			)
+			if err := pusher.pushRow(row...); err != nil {
+				return err
+			}
+
+			for roleName := range memberMap {
+				row = append(row[:0],
+					tree.NewDString(roleName), // role_name: the current user
+				)
+				if err := pusher.pushRow(row...); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -581,51 +619,57 @@ CREATE TABLE information_schema.constraint_column_usage (
 	CONSTRAINT_SCHEMA  STRING NOT NULL,
 	CONSTRAINT_NAME    STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
-			db *sqlbase.DatabaseDescriptor,
-			scName string,
-			table *sqlbase.TableDescriptor,
-			tableLookup tableLookupFn,
-		) error {
-			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
-			if err != nil {
-				return err
-			}
-			scNameStr := tree.NewDString(scName)
-			dbNameStr := tree.NewDString(db.Name)
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, 0, len(vtableDescriptor.Columns))
+		worker := func(pusher rowPusher) error {
+			return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
+				db *sqlbase.DatabaseDescriptor,
+				scName string,
+				table *sqlbase.TableDescriptor,
+				tableLookup tableLookupFn,
+			) error {
+				conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
+				if err != nil {
+					return err
+				}
+				scNameStr := tree.NewDString(scName)
+				dbNameStr := tree.NewDString(db.Name)
 
-			for conName, con := range conInfo {
-				conTable := table
-				conCols := con.Columns
-				conNameStr := tree.NewDString(conName)
-				if con.Kind == sqlbase.ConstraintTypeFK {
-					// For foreign key constraint, constraint_column_usage
-					// identifies the table/columns that the foreign key
-					// references.
-					conTable = con.ReferencedTable
-					conCols, err = conTable.NamesForColumnIDs(con.FK.ReferencedColumnIDs)
-					if err != nil {
-						return err
+				for conName, con := range conInfo {
+					conTable := table
+					conCols := con.Columns
+					conNameStr := tree.NewDString(conName)
+					if con.Kind == sqlbase.ConstraintTypeFK {
+						// For foreign key constraint, constraint_column_usage
+						// identifies the table/columns that the foreign key
+						// references.
+						conTable = con.ReferencedTable
+						conCols, err = conTable.NamesForColumnIDs(con.FK.ReferencedColumnIDs)
+						if err != nil {
+							return err
+						}
+					}
+					tableNameStr := tree.NewDString(conTable.Name)
+					for _, col := range conCols {
+						row = append(row[:0],
+							dbNameStr,            // table_catalog
+							scNameStr,            // table_schema
+							tableNameStr,         // table_name
+							tree.NewDString(col), // column_name
+							dbNameStr,            // constraint_catalog
+							scNameStr,            // constraint_schema
+							conNameStr,           // constraint_name
+						)
+						if err := pusher.pushRow(row...); err != nil {
+							return err
+						}
 					}
 				}
-				tableNameStr := tree.NewDString(conTable.Name)
-				for _, col := range conCols {
-					if err := addRow(
-						dbNameStr,            // table_catalog
-						scNameStr,            // table_schema
-						tableNameStr,         // table_name
-						tree.NewDString(col), // column_name
-						dbNameStr,            // constraint_catalog
-						scNameStr,            // constraint_schema
-						conNameStr,           // constraint_name
-					); err != nil {
-						return err
-					}
-				}
-			}
-			return nil
-		})
+				return nil
+			})
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -646,55 +690,61 @@ CREATE TABLE information_schema.key_column_usage (
 	ORDINAL_POSITION   INT NOT NULL,
 	POSITION_IN_UNIQUE_CONSTRAINT INT
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
-			db *sqlbase.DatabaseDescriptor,
-			scName string,
-			table *sqlbase.TableDescriptor,
-			tableLookup tableLookupFn,
-		) error {
-			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
-			if err != nil {
-				return err
-			}
-			dbNameStr := tree.NewDString(db.Name)
-			scNameStr := tree.NewDString(scName)
-			tbNameStr := tree.NewDString(table.Name)
-			for conName, con := range conInfo {
-				// Only Primary Key, Foreign Key, and Unique constraints are included.
-				switch con.Kind {
-				case sqlbase.ConstraintTypePK:
-				case sqlbase.ConstraintTypeFK:
-				case sqlbase.ConstraintTypeUnique:
-				default:
-					continue
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, 0, len(vtableDescriptor.Columns))
+		worker := func(pusher rowPusher) error {
+			return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
+				db *sqlbase.DatabaseDescriptor,
+				scName string,
+				table *sqlbase.TableDescriptor,
+				tableLookup tableLookupFn,
+			) error {
+				conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
+				if err != nil {
+					return err
 				}
-
-				cstNameStr := tree.NewDString(conName)
-
-				for pos, col := range con.Columns {
-					ordinalPos := tree.NewDInt(tree.DInt(pos + 1))
-					uniquePos := tree.DNull
-					if con.Kind == sqlbase.ConstraintTypeFK {
-						uniquePos = ordinalPos
+				dbNameStr := tree.NewDString(db.Name)
+				scNameStr := tree.NewDString(scName)
+				tbNameStr := tree.NewDString(table.Name)
+				for conName, con := range conInfo {
+					// Only Primary Key, Foreign Key, and Unique constraints are included.
+					switch con.Kind {
+					case sqlbase.ConstraintTypePK:
+					case sqlbase.ConstraintTypeFK:
+					case sqlbase.ConstraintTypeUnique:
+					default:
+						continue
 					}
-					if err := addRow(
-						dbNameStr,            // constraint_catalog
-						scNameStr,            // constraint_schema
-						cstNameStr,           // constraint_name
-						dbNameStr,            // table_catalog
-						scNameStr,            // table_schema
-						tbNameStr,            // table_name
-						tree.NewDString(col), // column_name
-						ordinalPos,           // ordinal_position, 1-indexed
-						uniquePos,            // position_in_unique_constraint
-					); err != nil {
-						return err
+
+					cstNameStr := tree.NewDString(conName)
+
+					for pos, col := range con.Columns {
+						ordinalPos := tree.NewDInt(tree.DInt(pos + 1))
+						uniquePos := tree.DNull
+						if con.Kind == sqlbase.ConstraintTypeFK {
+							uniquePos = ordinalPos
+						}
+						row = append(row[:0],
+							dbNameStr,            // constraint_catalog
+							scNameStr,            // constraint_schema
+							cstNameStr,           // constraint_name
+							dbNameStr,            // table_catalog
+							scNameStr,            // table_schema
+							tbNameStr,            // table_name
+							tree.NewDString(col), // column_name
+							ordinalPos,           // ordinal_position, 1-indexed
+							uniquePos,            // position_in_unique_constraint
+						)
+						if err := pusher.pushRow(row...); err != nil {
+							return err
+						}
 					}
 				}
-			}
-			return nil
-		})
+				return nil
+			})
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -738,8 +788,8 @@ CREATE TABLE information_schema.parameters (
 	DTD_IDENTIFIER STRING,
 	PARAMETER_DEFAULT STRING
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		return emptyVirtualTableGenerator, nil, nil
 	},
 }
 
@@ -796,48 +846,54 @@ CREATE TABLE information_schema.referential_constraints (
 	TABLE_NAME                STRING NOT NULL,
 	REFERENCED_TABLE_NAME     STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
-			db *sqlbase.DatabaseDescriptor,
-			scName string,
-			table *sqlbase.TableDescriptor,
-			tableLookup tableLookupFn,
-		) error {
-			dbNameStr := tree.NewDString(db.Name)
-			scNameStr := tree.NewDString(scName)
-			tbNameStr := tree.NewDString(table.Name)
-			for i := range table.OutboundFKs {
-				fk := &table.OutboundFKs[i]
-				refTable, err := tableLookup.getTableByID(fk.ReferencedTableID)
-				if err != nil {
-					return err
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, len(vtableDescriptor.Columns))
+		worker := func(pusher rowPusher) error {
+			return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
+				db *sqlbase.DatabaseDescriptor,
+				scName string,
+				table *sqlbase.TableDescriptor,
+				tableLookup tableLookupFn,
+			) error {
+				dbNameStr := tree.NewDString(db.Name)
+				scNameStr := tree.NewDString(scName)
+				tbNameStr := tree.NewDString(table.Name)
+				for i := range table.OutboundFKs {
+					fk := &table.OutboundFKs[i]
+					refTable, err := tableLookup.getTableByID(fk.ReferencedTableID)
+					if err != nil {
+						return err
+					}
+					var matchType = tree.DNull
+					if r, ok := matchOptionMap[fk.Match]; ok {
+						matchType = r
+					}
+					referencedIdx, err := sqlbase.FindFKReferencedIndex(refTable, fk.ReferencedColumnIDs)
+					if err != nil {
+						return err
+					}
+					row = append(row[:0],
+						dbNameStr,                           // constraint_catalog
+						scNameStr,                           // constraint_schema
+						tree.NewDString(fk.Name),            // constraint_name
+						dbNameStr,                           // unique_constraint_catalog
+						scNameStr,                           // unique_constraint_schema
+						tree.NewDString(referencedIdx.Name), // unique_constraint_name
+						matchType,                           // match_option
+						dStringForFKAction(fk.OnUpdate),     // update_rule
+						dStringForFKAction(fk.OnDelete),     // delete_rule
+						tbNameStr,                           // table_name
+						tree.NewDString(refTable.Name),      // referenced_table_name
+					)
+					if err := pusher.pushRow(row...); err != nil {
+						return err
+					}
 				}
-				var matchType = tree.DNull
-				if r, ok := matchOptionMap[fk.Match]; ok {
-					matchType = r
-				}
-				referencedIdx, err := sqlbase.FindFKReferencedIndex(refTable, fk.ReferencedColumnIDs)
-				if err != nil {
-					return err
-				}
-				if err := addRow(
-					dbNameStr,                           // constraint_catalog
-					scNameStr,                           // constraint_schema
-					tree.NewDString(fk.Name),            // constraint_name
-					dbNameStr,                           // unique_constraint_catalog
-					scNameStr,                           // unique_constraint_schema
-					tree.NewDString(referencedIdx.Name), // unique_constraint_name
-					matchType,                           // match_option
-					dStringForFKAction(fk.OnUpdate),     // update_rule
-					dStringForFKAction(fk.OnDelete),     // delete_rule
-					tbNameStr,                           // table_name
-					tree.NewDString(refTable.Name),      // referenced_table_name
-				); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
+				return nil
+			})
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -861,7 +917,7 @@ CREATE TABLE information_schema.role_table_grants (
 	// This is the same as information_schema.table_privileges. In postgres, this virtual table does
 	// not show tables with grants provided through PUBLIC, but table_privileges does.
 	// Since we don't have the PUBLIC concept, the two virtual tables are identical.
-	populate: populateTablePrivileges,
+	generator: generateTablePrivileges,
 }
 
 // MySQL:    https://dev.mysql.com/doc/mysql-infoschema-excerpt/5.7/en/routines-table.html
@@ -952,8 +1008,8 @@ CREATE TABLE information_schema.routines (
 	RESULT_CAST_MAXIMUM_CARDINALITY INT,
 	RESULT_CAST_DTD_IDENTIFIER STRING
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		return emptyVirtualTableGenerator, nil, nil
 	},
 }
 
@@ -963,17 +1019,24 @@ var informationSchemaSchemataTable = virtualSchemaTable{
 ` + base.DocsURL("information-schema.html#schemata") + `
 https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 	schema: vtable.InformationSchemaSchemata,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachDatabaseDesc(ctx, p, dbContext, func(db *sqlbase.DatabaseDescriptor) error {
-			return forEachSchemaName(ctx, p, db, func(sc string) error {
-				return addRow(
-					tree.NewDString(db.Name), // catalog_name
-					tree.NewDString(sc),      // schema_name
-					tree.DNull,               // default_character_set_name
-					tree.DNull,               // sql_path
-				)
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, len(vtableDescriptor.Columns))
+		worker := func(pusher rowPusher) error {
+			return forEachDatabaseDesc(ctx, p, dbContext, func(db *sqlbase.DatabaseDescriptor) error {
+				return forEachSchemaName(ctx, p, db, func(sc string) error {
+					row = append(row[:0],
+						tree.NewDString(db.Name), // catalog_name
+						tree.NewDString(sc),      // schema_name
+						tree.DNull,               // default_character_set_name
+						tree.DNull,               // sql_path
+					)
+
+					return pusher.pushRow(row...)
+				})
 			})
-		})
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -989,31 +1052,37 @@ CREATE TABLE information_schema.schema_privileges (
 	PRIVILEGE_TYPE  STRING NOT NULL,
 	IS_GRANTABLE    STRING
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachDatabaseDesc(ctx, p, dbContext, func(db *sqlbase.DatabaseDescriptor) error {
-			return forEachSchemaName(ctx, p, db, func(scName string) error {
-				privs := db.Privileges.Show()
-				dbNameStr := tree.NewDString(db.Name)
-				scNameStr := tree.NewDString(scName)
-				// TODO(knz): This should filter for the current user, see
-				// https://github.com/cockroachdb/cockroach/issues/35572
-				for _, u := range privs {
-					userNameStr := tree.NewDString(u.User)
-					for _, priv := range u.Privileges {
-						if err := addRow(
-							userNameStr,           // grantee
-							dbNameStr,             // table_catalog
-							scNameStr,             // table_schema
-							tree.NewDString(priv), // privilege_type
-							tree.DNull,            // is_grantable
-						); err != nil {
-							return err
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, len(vtableDescriptor.Columns))
+		worker := func(pusher rowPusher) error {
+			return forEachDatabaseDesc(ctx, p, dbContext, func(db *sqlbase.DatabaseDescriptor) error {
+				return forEachSchemaName(ctx, p, db, func(scName string) error {
+					privs := db.Privileges.Show()
+					dbNameStr := tree.NewDString(db.Name)
+					scNameStr := tree.NewDString(scName)
+					// TODO(knz): This should filter for the current user, see
+					// https://github.com/cockroachdb/cockroach/issues/35572
+					for _, u := range privs {
+						userNameStr := tree.NewDString(u.User)
+						for _, priv := range u.Privileges {
+							row = append(row[:0],
+								userNameStr,           // grantee
+								dbNameStr,             // table_catalog
+								scNameStr,             // table_schema
+								tree.NewDString(priv), // privilege_type
+								tree.DNull,            // is_grantable
+							)
+							if err := pusher.pushRow(row...); err != nil {
+								return err
+							}
 						}
 					}
-				}
-				return nil
+					return nil
+				})
 			})
-		})
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -1052,27 +1121,33 @@ CREATE TABLE information_schema.sequences (
     INCREMENT                STRING NOT NULL,
     CYCLE_OPTION             STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* no sequences in virtual schemas */
-			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
-				if !table.IsSequence() {
-					return nil
-				}
-				return addRow(
-					tree.NewDString(db.GetName()),    // catalog
-					tree.NewDString(scName),          // schema
-					tree.NewDString(table.GetName()), // name
-					tree.NewDString("bigint"),        // type
-					tree.NewDInt(64),                 // numeric precision
-					tree.NewDInt(2),                  // numeric precision radix
-					tree.NewDInt(0),                  // numeric scale
-					tree.NewDString(strconv.FormatInt(table.SequenceOpts.Start, 10)),     // start value
-					tree.NewDString(strconv.FormatInt(table.SequenceOpts.MinValue, 10)),  // min value
-					tree.NewDString(strconv.FormatInt(table.SequenceOpts.MaxValue, 10)),  // max value
-					tree.NewDString(strconv.FormatInt(table.SequenceOpts.Increment, 10)), // increment
-					noString, // cycle
-				)
-			})
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, len(vtableDescriptor.Columns))
+		worker := func(pusher rowPusher) error {
+			return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* no sequences in virtual schemas */
+				func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+					if !table.IsSequence() {
+						return nil
+					}
+					row = append(row[:0],
+						tree.NewDString(db.GetName()),    // catalog
+						tree.NewDString(scName),          // schema
+						tree.NewDString(table.GetName()), // name
+						tree.NewDString("bigint"),        // type
+						tree.NewDInt(64),                 // numeric precision
+						tree.NewDInt(2),                  // numeric precision radix
+						tree.NewDInt(0),                  // numeric scale
+						tree.NewDString(strconv.FormatInt(table.SequenceOpts.Start, 10)),     // start value
+						tree.NewDString(strconv.FormatInt(table.SequenceOpts.MinValue, 10)),  // min value
+						tree.NewDString(strconv.FormatInt(table.SequenceOpts.MaxValue, 10)),  // max value
+						tree.NewDString(strconv.FormatInt(table.SequenceOpts.Increment, 10)), // increment
+						noString, // cycle
+					)
+					return pusher.pushRow(row...)
+				})
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -1097,83 +1172,89 @@ CREATE TABLE information_schema.statistics (
 	STORING       STRING NOT NULL,
 	IMPLICIT      STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables have no indexes */
-			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
-				dbNameStr := tree.NewDString(db.GetName())
-				scNameStr := tree.NewDString(scName)
-				tbNameStr := tree.NewDString(table.GetName())
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, len(vtableDescriptor.Columns))
+		worker := func(pusher rowPusher) error {
+			return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables have no indexes */
+				func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+					dbNameStr := tree.NewDString(db.GetName())
+					scNameStr := tree.NewDString(scName)
+					tbNameStr := tree.NewDString(table.GetName())
 
-				appendRow := func(index *sqlbase.IndexDescriptor, colName string, sequence int,
-					direction tree.Datum, isStored, isImplicit bool,
-				) error {
-					return addRow(
-						dbNameStr,                         // table_catalog
-						scNameStr,                         // table_schema
-						tbNameStr,                         // table_name
-						yesOrNoDatum(!index.Unique),       // non_unique
-						scNameStr,                         // index_schema
-						tree.NewDString(index.Name),       // index_name
-						tree.NewDInt(tree.DInt(sequence)), // seq_in_index
-						tree.NewDString(colName),          // column_name
-						tree.DNull,                        // collation
-						tree.DNull,                        // cardinality
-						direction,                         // direction
-						yesOrNoDatum(isStored),            // storing
-						yesOrNoDatum(isImplicit),          // implicit
-					)
-				}
-
-				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
-					// Columns in the primary key that aren't in index.ColumnNames or
-					// index.StoreColumnNames are implicit columns in the index.
-					var implicitCols map[string]struct{}
-					var hasImplicitCols bool
-					if index.HasOldStoredColumns() {
-						// Old STORING format: implicit columns are extra columns minus stored
-						// columns.
-						hasImplicitCols = len(index.ExtraColumnIDs) > len(index.StoreColumnNames)
-					} else {
-						// New STORING format: implicit columns are extra columns.
-						hasImplicitCols = len(index.ExtraColumnIDs) > 0
-					}
-					if hasImplicitCols {
-						implicitCols = make(map[string]struct{})
-						for _, col := range table.PrimaryIndex.ColumnNames {
-							implicitCols[col] = struct{}{}
-						}
+					appendRow := func(index *sqlbase.IndexDescriptor, colName string, sequence int,
+						direction tree.Datum, isStored, isImplicit bool,
+					) error {
+						row = append(row[:0],
+							dbNameStr,                         // table_catalog
+							scNameStr,                         // table_schema
+							tbNameStr,                         // table_name
+							yesOrNoDatum(!index.Unique),       // non_unique
+							scNameStr,                         // index_schema
+							tree.NewDString(index.Name),       // index_name
+							tree.NewDInt(tree.DInt(sequence)), // seq_in_index
+							tree.NewDString(colName),          // column_name
+							tree.DNull,                        // collation
+							tree.DNull,                        // cardinality
+							direction,                         // direction
+							yesOrNoDatum(isStored),            // storing
+							yesOrNoDatum(isImplicit),          // implicit
+						)
+						return pusher.pushRow(row...)
 					}
 
-					sequence := 1
-					for i, col := range index.ColumnNames {
-						// We add a row for each column of index.
-						dir := dStringForIndexDirection(index.ColumnDirections[i])
-						if err := appendRow(index, col, sequence, dir, false, false); err != nil {
-							return err
+					return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
+						// Columns in the primary key that aren't in index.ColumnNames or
+						// index.StoreColumnNames are implicit columns in the index.
+						var implicitCols map[string]struct{}
+						var hasImplicitCols bool
+						if index.HasOldStoredColumns() {
+							// Old STORING format: implicit columns are extra columns minus stored
+							// columns.
+							hasImplicitCols = len(index.ExtraColumnIDs) > len(index.StoreColumnNames)
+						} else {
+							// New STORING format: implicit columns are extra columns.
+							hasImplicitCols = len(index.ExtraColumnIDs) > 0
 						}
-						sequence++
-						delete(implicitCols, col)
-					}
-					for _, col := range index.StoreColumnNames {
-						// We add a row for each stored column of index.
-						if err := appendRow(index, col, sequence,
-							indexDirectionNA, true, false); err != nil {
-							return err
+						if hasImplicitCols {
+							implicitCols = make(map[string]struct{})
+							for _, col := range table.PrimaryIndex.ColumnNames {
+								implicitCols[col] = struct{}{}
+							}
 						}
-						sequence++
-						delete(implicitCols, col)
-					}
-					for col := range implicitCols {
-						// We add a row for each implicit column of index.
-						if err := appendRow(index, col, sequence,
-							indexDirectionAsc, false, true); err != nil {
-							return err
+
+						sequence := 1
+						for i, col := range index.ColumnNames {
+							// We add a row for each column of index.
+							dir := dStringForIndexDirection(index.ColumnDirections[i])
+							if err := appendRow(index, col, sequence, dir, false, false); err != nil {
+								return err
+							}
+							sequence++
+							delete(implicitCols, col)
 						}
-						sequence++
-					}
-					return nil
+						for _, col := range index.StoreColumnNames {
+							// We add a row for each stored column of index.
+							if err := appendRow(index, col, sequence,
+								indexDirectionNA, true, false); err != nil {
+								return err
+							}
+							sequence++
+							delete(implicitCols, col)
+						}
+						for col := range implicitCols {
+							// We add a row for each implicit column of index.
+							if err := appendRow(index, col, sequence,
+								indexDirectionAsc, false, true); err != nil {
+								return err
+							}
+							sequence++
+						}
+						return nil
+					})
 				})
-			})
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -1194,69 +1275,77 @@ CREATE TABLE information_schema.table_constraints (
 	IS_DEFERRABLE      STRING NOT NULL,
 	INITIALLY_DEFERRED STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		h := makeOidHasher()
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual, /* virtual tables have no constraints */
-			func(
-				db *sqlbase.DatabaseDescriptor,
-				scName string,
-				table *sqlbase.TableDescriptor,
-				tableLookup tableLookupFn,
-			) error {
-				conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
-				if err != nil {
-					return err
-				}
-
-				dbNameStr := tree.NewDString(db.Name)
-				scNameStr := tree.NewDString(scName)
-				tbNameStr := tree.NewDString(table.Name)
-
-				for conName, c := range conInfo {
-					if err := addRow(
-						dbNameStr,                       // constraint_catalog
-						scNameStr,                       // constraint_schema
-						tree.NewDString(conName),        // constraint_name
-						dbNameStr,                       // table_catalog
-						scNameStr,                       // table_schema
-						tbNameStr,                       // table_name
-						tree.NewDString(string(c.Kind)), // constraint_type
-						yesOrNoDatum(false),             // is_deferrable
-						yesOrNoDatum(false),             // initially_deferred
-					); err != nil {
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, len(vtableDescriptor.Columns))
+		worker := func(pusher rowPusher) error {
+			h := makeOidHasher()
+			return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual, /* virtual tables have no constraints */
+				func(
+					db *sqlbase.DatabaseDescriptor,
+					scName string,
+					table *sqlbase.TableDescriptor,
+					tableLookup tableLookupFn,
+				) error {
+					conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
+					if err != nil {
 						return err
 					}
-				}
 
-				// Unlike with pg_catalog.pg_constraint, Postgres also includes NOT
-				// NULL column constraints in information_schema.check_constraints.
-				// Cockroach doesn't track these constraints as check constraints,
-				// but we can pull them off of the table's column descriptors.
-				colNum := 0
-				return forEachColumnInTable(table, func(col *sqlbase.ColumnDescriptor) error {
-					colNum++
-					// NOT NULL column constraints are implemented as a CHECK in postgres.
-					conNameStr := tree.NewDString(fmt.Sprintf(
-						"%s_%s_%d_not_null", h.NamespaceOid(db, scName), tableOid(table.ID), colNum,
-					))
-					if !col.Nullable {
-						if err := addRow(
-							dbNameStr,                // constraint_catalog
-							scNameStr,                // constraint_schema
-							conNameStr,               // constraint_name
-							dbNameStr,                // table_catalog
-							scNameStr,                // table_schema
-							tbNameStr,                // table_name
-							tree.NewDString("CHECK"), // constraint_type
-							yesOrNoDatum(false),      // is_deferrable
-							yesOrNoDatum(false),      // initially_deferred
-						); err != nil {
+					dbNameStr := tree.NewDString(db.Name)
+					scNameStr := tree.NewDString(scName)
+					tbNameStr := tree.NewDString(table.Name)
+
+					for conName, c := range conInfo {
+						row = append(row[:0],
+							dbNameStr,                       // constraint_catalog
+							scNameStr,                       // constraint_schema
+							tree.NewDString(conName),        // constraint_name
+							dbNameStr,                       // table_catalog
+							scNameStr,                       // table_schema
+							tbNameStr,                       // table_name
+							tree.NewDString(string(c.Kind)), // constraint_type
+							yesOrNoDatum(false),             // is_deferrable
+							yesOrNoDatum(false),             // initially_deferred
+						)
+						if err := pusher.pushRow(row...); err != nil {
 							return err
 						}
 					}
-					return nil
+
+					// Unlike with pg_catalog.pg_constraint, Postgres also includes NOT
+					// NULL column constraints in information_schema.check_constraints.
+					// Cockroach doesn't track these constraints as check constraints,
+					// but we can pull them off of the table's column descriptors.
+					colNum := 0
+					return forEachColumnInTable(table, func(col *sqlbase.ColumnDescriptor) error {
+						colNum++
+						// NOT NULL column constraints are implemented as a CHECK in postgres.
+						conNameStr := tree.NewDString(fmt.Sprintf(
+							"%s_%s_%d_not_null", h.NamespaceOid(db, scName), tableOid(table.ID), colNum,
+						))
+						if !col.Nullable {
+							row = append(row[:0],
+								dbNameStr,                // constraint_catalog
+								scNameStr,                // constraint_schema
+								conNameStr,               // constraint_name
+								dbNameStr,                // table_catalog
+								scNameStr,                // table_schema
+								tbNameStr,                // table_name
+								tree.NewDString("CHECK"), // constraint_type
+								yesOrNoDatum(false),      // is_deferrable
+								yesOrNoDatum(false),      // initially_deferred
+							)
+							if err := pusher.pushRow(row...); err != nil {
+								return err
+							}
+						}
+						return nil
+					})
 				})
-			})
+
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -1272,24 +1361,30 @@ CREATE TABLE information_schema.user_privileges (
 	PRIVILEGE_TYPE STRING NOT NULL,
 	IS_GRANTABLE   STRING
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachDatabaseDesc(ctx, p, dbContext, func(dbDesc *DatabaseDescriptor) error {
-			dbNameStr := tree.NewDString(dbDesc.Name)
-			for _, u := range []string{security.RootUser, sqlbase.AdminRole} {
-				grantee := tree.NewDString(u)
-				for _, p := range privilege.List(privilege.ByValue[:]).SortedNames() {
-					if err := addRow(
-						grantee,            // grantee
-						dbNameStr,          // table_catalog
-						tree.NewDString(p), // privilege_type
-						tree.DNull,         // is_grantable
-					); err != nil {
-						return err
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, len(vtableDescriptor.Columns))
+		worker := func(pusher rowPusher) error {
+			return forEachDatabaseDesc(ctx, p, dbContext, func(dbDesc *DatabaseDescriptor) error {
+				dbNameStr := tree.NewDString(dbDesc.Name)
+				for _, u := range []string{security.RootUser, sqlbase.AdminRole} {
+					grantee := tree.NewDString(u)
+					for _, p := range privilege.List(privilege.ByValue[:]).SortedNames() {
+						row = append(row[:0],
+							grantee,            // grantee
+							dbNameStr,          // table_catalog
+							tree.NewDString(p), // privilege_type
+							tree.DNull,         // is_grantable
+						)
+						if err := pusher.pushRow(row...); err != nil {
+							return err
+						}
 					}
 				}
-			}
-			return nil
-		})
+				return nil
+			})
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 
@@ -1309,38 +1404,44 @@ CREATE TABLE information_schema.table_privileges (
 	IS_GRANTABLE   STRING,
 	WITH_HIERARCHY STRING NOT NULL
 )`,
-	populate: populateTablePrivileges,
+	generator: generateTablePrivileges,
 }
 
-// populateTablePrivileges is used to populate both table_privileges and role_table_grants.
-func populateTablePrivileges(
-	ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error,
-) error {
-	return forEachTableDesc(ctx, p, dbContext, virtualMany,
-		func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
-			dbNameStr := tree.NewDString(db.Name)
-			scNameStr := tree.NewDString(scName)
-			tbNameStr := tree.NewDString(table.Name)
-			// TODO(knz): This should filter for the current user, see
-			// https://github.com/cockroachdb/cockroach/issues/35572
-			for _, u := range table.Privileges.Show() {
-				for _, priv := range u.Privileges {
-					if err := addRow(
-						tree.DNull,                     // grantor
-						tree.NewDString(u.User),        // grantee
-						dbNameStr,                      // table_catalog
-						scNameStr,                      // table_schema
-						tbNameStr,                      // table_name
-						tree.NewDString(priv),          // privilege_type
-						tree.DNull,                     // is_grantable
-						yesOrNoDatum(priv == "SELECT"), // with_hierarchy
-					); err != nil {
-						return err
+// generateTablePrivileges is used to populate both table_privileges and role_table_grants.
+func generateTablePrivileges(
+	ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor,
+) (virtualTableGenerator, cleanupFunc, error) {
+	row := make(tree.Datums, len(vtableDescriptor.Columns))
+	worker := func(pusher rowPusher) error {
+		return forEachTableDesc(ctx, p, dbContext, virtualMany,
+			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+				dbNameStr := tree.NewDString(db.Name)
+				scNameStr := tree.NewDString(scName)
+				tbNameStr := tree.NewDString(table.Name)
+				// TODO(knz): This should filter for the current user, see
+				// https://github.com/cockroachdb/cockroach/issues/35572
+				for _, u := range table.Privileges.Show() {
+					for _, priv := range u.Privileges {
+						row = append(row[:0],
+							tree.DNull,                     // grantor
+							tree.NewDString(u.User),        // grantee
+							dbNameStr,                      // table_catalog
+							scNameStr,                      // table_schema
+							tbNameStr,                      // table_name
+							tree.NewDString(priv),          // privilege_type
+							tree.DNull,                     // is_grantable
+							yesOrNoDatum(priv == "SELECT"), // with_hierarchy
+						)
+						if err := pusher.pushRow(row...); err != nil {
+							return err
+						}
 					}
 				}
-			}
-			return nil
-		})
+				return nil
+			})
+	}
+	next, cleanup := setupGenerator(ctx, worker)
+	return next, cleanup, nil
 }
 
 var (
@@ -1431,33 +1532,40 @@ CREATE TABLE information_schema.views (
     IS_TRIGGER_DELETABLE       STRING NOT NULL,
     IS_TRIGGER_INSERTABLE_INTO STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas have no views */
-			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
-				if !table.IsView() {
-					return nil
-				}
-				// Note that the view query printed will not include any column aliases
-				// specified outside the initial view query into the definition returned,
-				// unlike Postgres. For example, for the view created via
-				//  `CREATE VIEW (a) AS SELECT b FROM foo`
-				// we'll only print `SELECT b FROM foo` as the view definition here,
-				// while Postgres would more accurately print `SELECT b AS a FROM foo`.
-				// TODO(a-robinson): Insert column aliases into view query once we
-				// have a semantic query representation to work with (#10083).
-				return addRow(
-					tree.NewDString(db.Name),         // table_catalog
-					tree.NewDString(scName),          // table_schema
-					tree.NewDString(table.Name),      // table_name
-					tree.NewDString(table.ViewQuery), // view_definition
-					tree.DNull,                       // check_option
-					noString,                         // is_updatable
-					noString,                         // is_insertable_into
-					noString,                         // is_trigger_updatable
-					noString,                         // is_trigger_deletable
-					noString,                         // is_trigger_insertable_into
-				)
-			})
+	generator: func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, dbContext *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, len(vtableDescriptor.Columns))
+		worker := func(pusher rowPusher) error {
+			return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas have no views */
+				func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+					if !table.IsView() {
+						return nil
+					}
+					// Note that the view query printed will not include any column aliases
+					// specified outside the initial view query into the definition returned,
+					// unlike Postgres. For example, for the view created via
+					//  `CREATE VIEW (a) AS SELECT b FROM foo`
+					// we'll only print `SELECT b FROM foo` as the view definition here,
+					// while Postgres would more accurately print `SELECT b AS a FROM foo`.
+					// TODO(a-robinson): Insert column aliases into view query once we
+					// have a semantic query representation to work with (#10083).
+					row = append(row[:0],
+						tree.NewDString(db.Name),         // table_catalog
+						tree.NewDString(scName),          // table_schema
+						tree.NewDString(table.Name),      // table_name
+						tree.NewDString(table.ViewQuery), // view_definition
+						tree.DNull,                       // check_option
+						noString,                         // is_updatable
+						noString,                         // is_insertable_into
+						noString,                         // is_trigger_updatable
+						noString,                         // is_trigger_deletable
+						noString,                         // is_trigger_insertable_into
+					)
+
+					return pusher.pushRow(row...)
+				})
+		}
+		next, cleanup := setupGenerator(ctx, worker)
+		return next, cleanup, nil
 	},
 }
 

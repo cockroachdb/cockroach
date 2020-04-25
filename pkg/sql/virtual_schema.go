@@ -98,7 +98,8 @@ type virtualSchemaTable struct {
 	// generator, if non-nil, is a function that is used when creating a
 	// virtualTableNode. This function returns a virtualTableGenerator function
 	// which generates the next row of the virtual table when called.
-	generator func(ctx context.Context, p *planner, db *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error)
+	generator func(ctx context.Context, p *planner, vtableDescriptor *TableDescriptor, db *DatabaseDescriptor,
+	) (virtualTableGenerator, cleanupFunc, error)
 }
 
 // virtualSchemaView represents a view within a virtualSchema
@@ -334,7 +335,7 @@ func (e virtualDefEntry) getPlanInfo(
 			}
 
 			if def.generator != nil {
-				next, cleanup, err := def.generator(ctx, p, dbDesc)
+				next, cleanup, err := def.generator(ctx, p, table, dbDesc)
 				if err != nil {
 					return nil, err
 				}
@@ -385,54 +386,22 @@ func (e virtualDefEntry) getPlanInfo(
 			}
 
 			// Figure out the ordinal position of the column that we're filtering on.
-			// TODO(jordan): there is probably a better way to do this.
-			constraintColumnOrd := table.ColumnIdxMap()[index.ColumnIDs[0]]
+			columnIdxMap := table.ColumnIdxMap()
+			indexKeyDatums := make([]tree.Datum, len(index.ColumnIDs))
 			addRowIfPassesFilter := func(datums ...tree.Datum) error {
 				validateRow(datums...)
-				matchedFilter := false
-				// If we have a constraint, apply it as a filter. If the filter passes,
-				// or we had no filter at all, add the datums to the row container.
-				datumToFilter := datums[constraintColumnOrd]
-				for i := 0; i < idxConstraint.Spans.Count(); i++ {
-					span := idxConstraint.Spans.Get(i)
-					if span.HasSingleKey(p.EvalContext()) {
-						matchedFilter = datumToFilter.Compare(p.EvalContext(), span.StartKey().Value(0)) == 0
-						if matchedFilter {
-							break
-						}
-					} else {
-						// Check both boundaries - the datum must be greater than the
-						// startKey, and less than the endKey.
-						var matchedStart, matchedEnd bool
-						if span.StartKey().IsEmpty() {
-							matchedStart = true
-						} else {
-							startCmp := datumToFilter.Compare(p.EvalContext(), span.StartKey().Value(0))
-							if span.StartBoundary() == constraint.IncludeBoundary {
-								matchedStart = startCmp >= 0
-							} else {
-								matchedStart = startCmp > 0
-							}
-						}
-						if span.EndKey().IsEmpty() {
-							matchedEnd = true
-						} else {
-							endCmp := datumToFilter.Compare(p.EvalContext(), span.EndKey().Value(0))
-							if span.EndBoundary() == constraint.IncludeBoundary {
-								matchedEnd = endCmp <= 0
-							} else {
-								matchedEnd = endCmp < 0
-							}
-						}
-						matchedFilter = matchedStart && matchedEnd
-						if matchedFilter {
-							break
-						}
-					}
+				for i, id := range index.ColumnIDs {
+					indexKeyDatums[i] = datums[columnIdxMap[id]]
 				}
-
+				// Construct a single key span out of the current row, so that
+				// we can test it for containment within the constraint span of the
+				// filter that we're applying. The results of this containment check
+				// will tell us whether or not to let the current row pass the filter.
 				var err error
-				if matchedFilter {
+				var span constraint.Span
+				key := constraint.MakeCompositeKey(indexKeyDatums...)
+				span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+				if idxConstraint.ContainsSpan(p.EvalContext(), &span) {
 					_, err = v.rows.AddRow(ctx, datums)
 				}
 				return err

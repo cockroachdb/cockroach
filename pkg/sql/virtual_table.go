@@ -24,6 +24,9 @@ import (
 // nil). If there is an error, then return (nil, error).
 type virtualTableGenerator func() (tree.Datums, error)
 
+// emptyVirtualTableGenerator is a virtual table with no rows!
+var emptyVirtualTableGenerator = func() (tree.Datums, error) { return nil, nil }
+
 // cleanupFunc is a function to cleanup resources created by the generator.
 type cleanupFunc func()
 
