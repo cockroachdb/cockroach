@@ -1,0 +1,130 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+
+# --------------------------------------------------
+# ConvertZipArrayToValues
+# --------------------------------------------------
+
+# Basic case with only constants in array.
+norm expect=ConvertZipArrayToValues
+SELECT unnest(ARRAY[1,2,3])
+----
+values
+ ├── columns: unnest:1!null
+ ├── cardinality: [3 - 3]
+ ├── (1,)
+ ├── (2,)
+ └── (3,)
+
+# Case with subquery in ProjectSet input.
+norm expect=ConvertZipArrayToValues
+SELECT unnest(ARRAY[1,2,3]) FROM unnest(ARRAY[4,5,6])
+----
+inner-join (cross)
+ ├── columns: unnest:2!null
+ ├── cardinality: [9 - 9]
+ ├── values
+ │    ├── cardinality: [3 - 3]
+ │    ├── ()
+ │    ├── ()
+ │    └── ()
+ ├── values
+ │    ├── columns: unnest:2!null
+ │    ├── cardinality: [3 - 3]
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (3,)
+ └── filters (true)
+
+# Case with correlated array.
+norm expect=ConvertZipArrayToValues
+SELECT unnest(ARRAY[x,y]) FROM xy
+----
+project
+ ├── columns: unnest:3
+ └── inner-join-apply
+      ├── columns: x:1!null y:2 unnest:3
+      ├── fd: (1)-->(2)
+      ├── scan xy
+      │    ├── columns: x:1!null y:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── values
+      │    ├── columns: unnest:3
+      │    ├── outer: (1,2)
+      │    ├── cardinality: [2 - 2]
+      │    ├── (x:1,)
+      │    └── (y:2,)
+      └── filters (true)
+
+# Case with correlated array in a correlated subquery.
+norm expect=ConvertZipArrayToValues
+SELECT * FROM xy
+WHERE EXISTS
+(SELECT t
+  FROM unnest(ARRAY[NULL,2,NULL,4,5,x])
+  AS f(t)
+  WHERE t=y
+)
+----
+semi-join-apply
+ ├── columns: x:1!null y:2!null
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── values
+ │    ├── columns: unnest:3
+ │    ├── outer: (1)
+ │    ├── cardinality: [6 - 6]
+ │    ├── (NULL,)
+ │    ├── (2,)
+ │    ├── (NULL,)
+ │    ├── (4,)
+ │    ├── (5,)
+ │    └── (x:1,)
+ └── filters
+      └── unnest:3 = y:2 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
+
+# No-op case because multiple unnests are being zipped.
+norm expect-not=ConvertZipArrayToValues
+SELECT unnest(ARRAY[1]), unnest(ARRAY[2])
+----
+project-set
+ ├── columns: unnest:1 unnest:2
+ ├── side-effects
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── ()
+ └── zip
+      ├── unnest(ARRAY[1]) [side-effects]
+      └── unnest(ARRAY[2]) [side-effects]
+
+# No-op case because array_agg is not an ArrayExpr or ConstExpr with a DArray.
+norm expect-not=ConvertZipArrayToValues
+SELECT unnest((SELECT array_agg(y) FROM xy))
+----
+project-set
+ ├── columns: unnest:4
+ ├── side-effects
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── ()
+ └── zip
+      └── function: unnest [side-effects, subquery]
+           └── subquery
+                └── scalar-group-by
+                     ├── columns: array_agg:3
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(3)
+                     ├── scan xy
+                     │    └── columns: y:2
+                     └── aggregations
+                          └── array-agg [as=array_agg:3, outer=(2)]
+                               └── y:2

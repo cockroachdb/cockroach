@@ -191,28 +191,28 @@ render                ·                   ·                                   
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series((SELECT unnest(ARRAY[x, y]) FROM xy), z) FROM xz
 ----
-·                                distributed   false                                 ·                     ·
-·                                vectorized    false                                 ·                     ·
-root                             ·             ·                                     (generate_series)     ·
- ├── render                      ·             ·                                     (generate_series)     ·
- │    │                          render 0      generate_series                       ·                     ·
- │    └── project set            ·             ·                                     (z, generate_series)  ·
- │         │                     render 0      generate_series(@S1, @1)              ·                     ·
- │         └── scan              ·             ·                                     (z)                   ·
- │                               table         xz@primary                            ·                     ·
- │                               spans         FULL SCAN                             ·                     ·
- └── subquery                    ·             ·                                     ·                     ·
-      │                          id            @S1                                   ·                     ·
-      │                          original sql  (SELECT unnest(ARRAY[x, y]) FROM xy)  ·                     ·
-      │                          exec mode     one row                               ·                     ·
-      └── max1row                ·             ·                                     (unnest)              ·
-           └── render            ·             ·                                     (unnest)              ·
-                │                render 0      unnest                                ·                     ·
-                └── project set  ·             ·                                     (x, y, unnest)        ·
-                     │           render 0      unnest(ARRAY[@1, @2])                 ·                     ·
-                     └── scan    ·             ·                                     (x, y)                ·
-·                                table         xy@primary                            ·                     ·
-·                                spans         FULL SCAN                             ·                     ·
+·                               distributed   false                                 ·                     ·
+·                               vectorized    false                                 ·                     ·
+root                            ·             ·                                     (generate_series)     ·
+ ├── render                     ·             ·                                     (generate_series)     ·
+ │    │                         render 0      generate_series                       ·                     ·
+ │    └── project set           ·             ·                                     (z, generate_series)  ·
+ │         │                    render 0      generate_series(@S1, @1)              ·                     ·
+ │         └── scan             ·             ·                                     (z)                   ·
+ │                              table         xz@primary                            ·                     ·
+ │                              spans         FULL SCAN                             ·                     ·
+ └── subquery                   ·             ·                                     ·                     ·
+      │                         id            @S1                                   ·                     ·
+      │                         original sql  (SELECT unnest(ARRAY[x, y]) FROM xy)  ·                     ·
+      │                         exec mode     one row                               ·                     ·
+      └── max1row               ·             ·                                     (unnest)              ·
+           └── render           ·             ·                                     (unnest)              ·
+                │               render 0      unnest                                ·                     ·
+                └── apply-join  ·             ·                                     (x, y, unnest)        ·
+                     │          type          inner                                 ·                     ·
+                     └── scan   ·             ·                                     (x, y)                ·
+·                               table         xy@primary                            ·                     ·
+·                               spans         FULL SCAN                             ·                     ·
 
 # Regression test for #24676.
 statement ok

@@ -1356,6 +1356,46 @@ func (c *CustomFuncs) ZipOuterCols(zip memo.ZipExpr) opt.ColSet {
 	return colSet
 }
 
+// IsUnnestFunction returns true if the given ScalarExpr is an unnest function.
+func (c *CustomFuncs) IsUnnestFunction(scalar opt.ScalarExpr) bool {
+	fn, ok := scalar.(*memo.FunctionExpr)
+	if !ok {
+		return false
+	}
+	return fn.Name == "unnest"
+}
+
+// ConstructValuesFromArray constructs a Values operator with the elements from
+// the given ArrayExpr (or ConstExpr that wraps a DArray).
+func (c *CustomFuncs) ConstructValuesFromArray(
+	scalar opt.ScalarExpr, cols opt.ColList,
+) memo.RelExpr {
+	var rows memo.ScalarListExpr
+
+	tupleTyp := types.MakeTuple([]types.T{*scalar.DataType().ArrayContents()})
+	addRow := func(elem opt.ScalarExpr) {
+		tuple := c.f.ConstructTuple(memo.ScalarListExpr{elem}, tupleTyp)
+		rows = append(rows, tuple)
+	}
+
+	switch t := scalar.(type) {
+	case *memo.ConstExpr:
+		darr := t.Value.(*tree.DArray)
+		for _, elem := range darr.Array {
+			addRow(c.f.ConstructConstVal(elem, darr.ParamTyp))
+		}
+	case *memo.ArrayExpr:
+		for _, elem := range t.Elems {
+			addRow(elem)
+		}
+	default:
+		panic(errors.AssertionFailedf("unexpected input expression type: %T", t))
+	}
+
+	valuesPrivate := &memo.ValuesPrivate{Cols: cols, ID: c.f.Metadata().NextUniqueID()}
+	return c.f.ConstructValues(rows, valuesPrivate)
+}
+
 // ----------------------------------------------------------------------
 //
 // Set Rules
@@ -1860,6 +1900,15 @@ func (c *CustomFuncs) IsConstArray(scalar opt.ScalarExpr) bool {
 		}
 	}
 	return false
+}
+
+// IsArray returns true if the expression is either a constant array or a normal
+// array.
+func (c *CustomFuncs) IsArray(scalar opt.ScalarExpr) bool {
+	if _, ok := scalar.(*memo.ArrayExpr); ok {
+		return true
+	}
+	return c.IsConstArray(scalar)
 }
 
 // ConvertConstArrayToTuple converts a constant ARRAY datum to the equivalent
