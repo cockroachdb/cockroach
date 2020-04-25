@@ -34,10 +34,9 @@ func initMathBuiltins() {
 }
 
 var (
-	errAbsOfMinInt64   = pgerror.New(pgcode.NumericValueOutOfRange, "abs of min integer value (-9223372036854775808) not defined")
-	errSqrtOfNegNumber = pgerror.New(pgcode.InvalidArgumentForPowerFunction, "cannot take square root of a negative number")
-	errLogOfNegNumber  = pgerror.New(pgcode.InvalidArgumentForLogarithm, "cannot take logarithm of a negative number")
-	errLogOfZero       = pgerror.New(pgcode.InvalidArgumentForLogarithm, "cannot take logarithm of zero")
+	errAbsOfMinInt64  = pgerror.New(pgcode.NumericValueOutOfRange, "abs of min integer value (-9223372036854775808) not defined")
+	errLogOfNegNumber = pgerror.New(pgcode.InvalidArgumentForLogarithm, "cannot take logarithm of a negative number")
+	errLogOfZero      = pgerror.New(pgcode.InvalidArgumentForLogarithm, "cannot take logarithm of zero")
 )
 
 const (
@@ -143,12 +142,10 @@ var mathBuiltins = map[string]builtinDefinition{
 
 	"cbrt": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
-			return tree.NewDFloat(tree.DFloat(math.Cbrt(x))), nil
+			return tree.Cbrt(x)
 		}, "Calculates the cube root (∛) of `val`."),
 		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
-			dd := &tree.DDecimal{}
-			_, err := tree.DecimalCtx.Cbrt(&dd.Decimal, x)
-			return dd, err
+			return tree.DecimalCbrt(x)
 		}, "Calculates the cube root (∛) of `val`."),
 	),
 
@@ -481,19 +478,10 @@ var mathBuiltins = map[string]builtinDefinition{
 
 	"sqrt": makeBuiltin(defProps(),
 		floatOverload1(func(x float64) (tree.Datum, error) {
-			// TODO(mjibson): see #13642
-			if x < 0 {
-				return nil, errSqrtOfNegNumber
-			}
-			return tree.NewDFloat(tree.DFloat(math.Sqrt(x))), nil
+			return tree.Sqrt(x)
 		}, "Calculates the square root of `val`."),
 		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
-			if x.Sign() < 0 {
-				return nil, errSqrtOfNegNumber
-			}
-			dd := &tree.DDecimal{}
-			_, err := tree.DecimalCtx.Sqrt(&dd.Decimal, x)
-			return dd, err
+			return tree.DecimalSqrt(x)
 		}, "Calculates the square root of `val`."),
 	),
 
@@ -629,7 +617,6 @@ func decimalLogFn(
 	logFn func(*apd.Decimal, *apd.Decimal) (apd.Condition, error), info string,
 ) tree.Overload {
 	return decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
-		// TODO(mjibson): see #13642
 		switch x.Sign() {
 		case -1:
 			return nil, errLogOfNegNumber
