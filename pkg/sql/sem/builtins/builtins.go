@@ -66,7 +66,7 @@ var (
 	errChrValueTooLarge = pgerror.Newf(pgcode.InvalidParameterValue,
 		"input value must be <= %d (maximum Unicode code point)", utf8.MaxRune)
 	errStringTooLarge = pgerror.Newf(pgcode.ProgramLimitExceeded,
-		fmt.Sprintf("requested length too large, exceeds %s", humanizeutil.IBytes(maxAllocatedStringSize)))
+		"requested length too large, exceeds %s", humanizeutil.IBytes(maxAllocatedStringSize))
 )
 
 const maxAllocatedStringSize = 128 * 1024 * 1024
@@ -2898,10 +2898,12 @@ may increase either contention or retry errors, or both.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				errCode := string(*args[0].(*tree.DString))
 				msg := string(*args[1].(*tree.DString))
+				// We construct the errors below via %s as the
+				// message may contain PII.
 				if errCode == "" {
-					return nil, errors.New(msg)
+					return nil, errors.Newf("%s", msg)
 				}
-				return nil, pgerror.New(errCode, msg)
+				return nil, pgerror.Newf(errCode, "%s", msg)
 			},
 			Info: "This function is used only by CockroachDB's developers for testing purposes.",
 		},

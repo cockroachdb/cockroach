@@ -68,7 +68,7 @@ func classifyTablePattern(n *UnresolvedName) (TablePattern, error) {
 // Used e.g. in SELECT clauses.
 func classifyColumnItem(n *UnresolvedName) (VarName, error) {
 	if n.NumParts < 1 || n.NumParts > 4 {
-		return nil, newInvColRef("invalid column name: %s", n)
+		return nil, newInvColRef(n)
 	}
 
 	// Check that all the parts specified are not empty.
@@ -85,7 +85,7 @@ func classifyColumnItem(n *UnresolvedName) (VarName, error) {
 	}
 	for i := firstCheck; i < lastCheck; i++ {
 		if len(n.Parts[i]) == 0 {
-			return nil, newInvColRef("invalid column name: %s", n)
+			return nil, newInvColRef(n)
 		}
 	}
 
@@ -537,8 +537,9 @@ func (n *UnresolvedName) ResolveFunction(
 	return def, nil
 }
 
-func newInvColRef(fmt string, n *UnresolvedName) error {
-	return pgerror.NewWithDepthf(1, pgcode.InvalidColumnReference, fmt, n)
+func newInvColRef(n *UnresolvedName) error {
+	return pgerror.NewWithDepthf(1, pgcode.InvalidColumnReference,
+		"invalid column name: %s", n)
 }
 
 func newInvTableNameError(n fmt.Stringer) error {

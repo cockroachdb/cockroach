@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -252,14 +251,14 @@ func (p *planner) getViewDescForCascade(
 			viewName, err = p.getQualifiedTableName(ctx, viewDesc.TableDesc())
 			if err != nil {
 				log.Warningf(ctx, "unable to retrieve qualified name of view %d: %v", viewID, err)
-				msg := fmt.Sprintf("cannot drop %s %q because a view depends on it", typeName, objName)
-				return nil, sqlbase.NewDependentObjectError(msg)
+				return nil, sqlbase.NewDependentObjectErrorf(
+					"cannot drop %s %q because a view depends on it", typeName, objName)
 			}
 		}
-		msg := fmt.Sprintf("cannot drop %s %q because view %q depends on it",
-			typeName, objName, viewName)
-		hint := fmt.Sprintf("you can drop %s instead.", viewName)
-		return nil, sqlbase.NewDependentObjectErrorWithHint(msg, hint)
+		return nil, errors.WithHintf(
+			sqlbase.NewDependentObjectErrorf("cannot drop %s %q because view %q depends on it",
+				typeName, objName, viewName),
+			"you can drop %s instead.", viewName)
 	}
 	return viewDesc, nil
 }

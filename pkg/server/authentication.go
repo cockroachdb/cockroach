@@ -31,8 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -175,9 +175,9 @@ func (s *authenticationServer) UserLogout(
 	); err != nil {
 		return nil, apiInternalError(ctx, err)
 	} else if n == 0 {
-		msg := fmt.Sprintf("session with id %d nonexistent", sessionID)
-		log.Info(ctx, msg)
-		return nil, fmt.Errorf(msg)
+		err := errors.Newf("session with id %d nonexistent", sessionID)
+		log.Info(ctx, err)
+		return nil, err
 	}
 
 	// Send back a header which will cause the browser to destroy the cookie.
