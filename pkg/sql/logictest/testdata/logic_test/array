@@ -429,17 +429,6 @@ SELECT ARRAY[ARRAY[1,2,3]]
 query error VECTOR column types are unsupported
 CREATE TABLE badtable (b INT2VECTOR)
 
-# Using an array as a primary key should be disallowed. #17154
-
-statement error column b is of type int\[\] and thus is not indexable
-CREATE TABLE badtable (b INT[] PRIMARY KEY)
-
-# Indexing an array column should be disallowed. #17154
-
-statement error column b is of type int\[\] and thus is not indexable
-CREATE TABLE a (b INT[] UNIQUE)
-
-
 # Regression test for #18745
 
 statement ok
@@ -448,18 +437,6 @@ CREATE TABLE ident (x INT)
 query T
 SELECT ARRAY[ROW()] FROM ident
 ----
-
-statement error column b is of type int\[\] and thus is not indexable
-CREATE TABLE a (
-  b INT[],
-  CONSTRAINT c UNIQUE (b)
-)
-
-statement error column b is of type int\[\] and thus is not indexable
-CREATE TABLE a (
-  b INT[],
-  INDEX c (b)
-)
 
 statement ok
 CREATE TABLE a (b INT ARRAY)
@@ -471,18 +448,6 @@ a  CREATE TABLE a (
      b INT8[] NULL,
      FAMILY "primary" (b, rowid)
    )
-
-statement ok
-DROP TABLE a
-
-statement ok
-CREATE TABLE a (b INT[], c INT[])
-
-statement error column b is of type int\[\] and thus is not indexable
-CREATE INDEX idx ON a (b)
-
-statement error the following columns are not indexable due to their type: b \(type int\[\]\), c \(type int\[\]\)
-CREATE INDEX idx ON a (b, c)
 
 statement ok
 DROP TABLE a
@@ -1343,3 +1308,394 @@ SELECT x, y FROM t WHERE x < y
 query TT
 SELECT x, y FROM t WHERE x > y
 ----
+
+query TT
+SELECT x, y FROM t ORDER BY (x, y)
+----
+{1}        {1,2}
+{1,1,1,1}  {2}
+
+subtest array_indexes
+
+# Create indexes on arrays.
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t (x INT[] PRIMARY KEY)
+
+statement ok
+INSERT INTO t VALUES
+  (ARRAY[1]),
+  (ARRAY[5]),
+  (ARRAY[4]),
+  (ARRAY[1,4,5]),
+  (ARRAY[1,4,6]),
+  (ARRAY[1,NULL,10]),
+  (ARRAY[NULL]),
+  (ARRAY[NULL, NULL, NULL])
+
+# Test that the unique index rejects bad inserts.
+statement error pq: duplicate key value \(x\)=\(ARRAY\[1,NULL,10\]\) violates unique constraint "primary"
+INSERT INTO t VALUES (ARRAY[1, NULL, 10])
+
+query T
+SELECT x FROM t ORDER BY x
+----
+{NULL}
+{NULL,NULL,NULL}
+{1}
+{1,NULL,10}
+{1,4,5}
+{1,4,6}
+{4}
+{5}
+
+# Use the index for point lookups.
+query T
+SELECT x FROM t WHERE x = ARRAY[1,4,6]
+----
+{1,4,6}
+
+# Use the index for bounded scans.
+# Note that nulls sort first in CockroachDB, so this ordering is different
+# than what postgres will output. In postgres, NULLs in arrays are treated
+# as larger than other elements, while we treat them as less.
+# TODO (rohany): We have always done this for array comparisons, so I think
+#  it would be a breaking change + opposite with our other null behavior to
+#  change it suddenly...
+query T
+SELECT x FROM t WHERE x < ARRAY[1, 4, 3] ORDER BY x
+----
+{NULL}
+{NULL,NULL,NULL}
+{1}
+{1,NULL,10}
+
+query T
+SELECT x FROM t WHERE x > ARRAY [1, NULL] ORDER BY x DESC
+----
+{5}
+{4}
+{1,4,6}
+{1,4,5}
+{1,NULL,10}
+
+query T
+SELECT x FROM t WHERE x > ARRAY[1, 3] AND x < ARRAY[1, 4, 10] ORDER BY x
+----
+{1,4,5}
+{1,4,6}
+
+query T
+SELECT x FROM t WHERE x > ARRAY[NULL, NULL]:::INT[] ORDER BY x
+----
+{NULL,NULL,NULL}
+{1}
+{1,NULL,10}
+{1,4,5}
+{1,4,6}
+{4}
+{5}
+
+# Test some operations on a descending index.
+statement ok
+CREATE INDEX i ON t(x DESC)
+
+query T
+SELECT x FROM t@i WHERE x <= ARRAY[1] ORDER BY x DESC
+----
+{1}
+{NULL,NULL,NULL}
+{NULL}
+
+query T
+SELECT x FROM t@i WHERE x > ARRAY[1] ORDER BY x
+----
+{1,NULL,10}
+{1,4,5}
+{1,4,6}
+{4}
+{5}
+
+# Ensure that we can order by the arrays without any indexes.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x INT[]);
+INSERT INTO t VALUES
+  (ARRAY[1]),
+  (ARRAY[5]),
+  (ARRAY[4]),
+  (ARRAY[1,4,5]),
+  (ARRAY[1,4,6]),
+  (ARRAY[1,NULL,10]),
+  (ARRAY[NULL]),
+  (ARRAY[NULL, NULL, NULL])
+
+query T
+SELECT x FROM t ORDER BY x
+----
+{NULL}
+{NULL,NULL,NULL}
+{1}
+{1,NULL,10}
+{1,4,5}
+{1,4,6}
+{4}
+{5}
+
+query T
+SELECT x FROM t ORDER BY x DESC
+----
+{5}
+{4}
+{1,4,6}
+{1,4,5}
+{1,NULL,10}
+{1}
+{NULL,NULL,NULL}
+{NULL}
+
+statement ok
+CREATE INDEX i ON t (x);
+INSERT INTO t VALUES (NULL), (NULL)
+
+# Test that NULL's are differentiated from {NULL}.
+query T
+SELECT x FROM t@i WHERE x IS NOT NULL ORDER BY x
+----
+{NULL}
+{NULL,NULL,NULL}
+{1}
+{1,NULL,10}
+{1,4,5}
+{1,4,6}
+{4}
+{5}
+
+# Create an indexes on a bad type.
+statement error pq: unimplemented: column x is of type geography\[\] and thus is not indexable
+CREATE TABLE tbad (x GEOGRAPHY[] PRIMARY KEY)
+
+# Test arrays of composite types.
+statement ok
+CREATE TABLE tarray(x DECIMAL[] PRIMARY KEY);
+INSERT INTO tarray VALUES (ARRAY[1.00]), (ARRAY[1.501])
+
+# Ensure these are round tripped correctly.
+query T
+SELECT x FROM tarray ORDER BY x
+----
+{1.00}
+{1.501}
+
+# Test indexes on multiple columns with arrays.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x INT, y INT[], z INT, INDEX i (x, y, z));
+INSERT INTO t VALUES
+  (1, ARRAY[1, 2, 3], 3),
+  (NULL, ARRAY[1, NULL, 3], NULL),
+  (2, ARRAY[NULL, NULL, NULL], NULL),
+  (NULL, ARRAY[NULL, NULL], 3),
+  (2, ARRAY[4, 5], 7)
+
+query ITI
+SELECT x, y, z FROM t WHERE x IS NOT NULL AND y > ARRAY[1] ORDER BY z
+----
+ 1  {1,2,3}  3
+ 2  {4,5}    7
+
+query ITI
+SELECT x, y, z FROM t WHERE x = 2 AND y < ARRAY[10] ORDER BY y
+----
+2  {NULL,NULL,NULL}  NULL
+2  {4,5}             7
+
+# Test that interleaving an array index doesn't lead to problems.
+statement ok
+DROP TABLE IF EXISTS parent, child CASCADE;
+CREATE TABLE parent (x INT, y INT[], PRIMARY KEY (x, y DESC));
+CREATE TABLE child (x INT, y INT[], z INT[], PRIMARY KEY (x, y DESC, z)) INTERLEAVE IN PARENT parent (x, y);
+INSERT INTO parent VALUES
+  (1, ARRAY[1, 2, 3]),
+  (1, ARRAY[1, NULL]),
+  (2, ARRAY[NULL]),
+  (3, ARRAY[NULL, 1, NULL]);
+INSERT INTO child VALUES
+  (1, ARRAY[1, 2, 3], ARRAY[4]),
+  (1, ARRAY[1, 2, 3, 4], ARRAY[5]),
+  (1, ARRAY[1, NULL], ARRAY[5]),
+  (1, ARRAY[1, NULL, NULL], ARRAY[10]),
+  (2, ARRAY[NULL], ARRAY[1]),
+  (3, ARRAY[NULL, 1, NULL], ARRAY[3]);
+
+# Ensure scans on the parent and child aren't affected.
+query IT
+SELECT x, y FROM parent ORDER BY x, y DESC
+----
+1  {1,2,3}
+1  {1,NULL}
+2  {NULL}
+3  {NULL,1,NULL}
+
+query ITT
+SELECT x, y, z FROM child ORDER BY x, y DESC, z
+----
+1  {1,2,3,4}      {5}
+1  {1,2,3}        {4}
+1  {1,NULL,NULL}  {10}
+1  {1,NULL}       {5}
+2  {NULL}         {1}
+3  {NULL,1,NULL}  {3}
+
+# Test arrays of strings.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x STRING[] PRIMARY KEY);
+INSERT INTO t VALUES
+  (ARRAY['']),
+  (ARRAY['hello', 'hi\nthere']),
+  (ARRAY['another', 'string', 'in', 'my', 'array']),
+  (ARRAY['this', 'array', NULL, 'has', NULL])
+
+query T
+SELECT x FROM t ORDER BY x DESC
+----
+{this,array,NULL,has,NULL}
+{hello,"hi\\nthere"}
+{another,string,in,my,array}
+{""}
+
+query T
+SELECT x FROM t WHERE x > ARRAY['hell'] AND x < ARRAY['i']
+----
+{hello,"hi\\nthere"}
+
+# Test arrays of bytes, and insert some bytes that are used by the
+# array encoding itself.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x BYTES[] PRIMARY KEY);
+INSERT INTO t VALUES
+  (ARRAY[b'\xFF', b'\x00']),
+  (ARRAY[NULL, b'\x01', b'\x01', NULL]),
+  (ARRAY[NULL, b'\xFF'])
+
+query T
+SELECT x FROM t ORDER BY x
+----
+{NULL,"\\x01","\\x01",NULL}
+{NULL,"\\xff"}
+{"\\xff","\\x00"}
+
+# Repeat the above test with a descending encoding.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x BYTES[], PRIMARY KEY (x DESC));
+INSERT INTO t VALUES
+  (ARRAY[b'\xFF', b'\x00']),
+  (ARRAY[NULL, b'\x01', b'\x01', NULL]),
+  (ARRAY[NULL, b'\xFF'])
+
+query T
+SELECT x FROM t ORDER BY x
+----
+{NULL,"\\x01","\\x01",NULL}
+{NULL,"\\xff"}
+{"\\xff","\\x00"}
+
+# Test some indexes with multiple array columns.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x INT[], y INT[], PRIMARY KEY (x, y));
+INSERT INTO t VALUES
+  (ARRAY[1, 2], ARRAY[3, 4]),
+  (ARRAY[NULL, NULL], ARRAY[NULL, NULL]),
+  (ARRAY[], ARRAY[]),
+  (ARRAY[], ARRAY[NULL, 2]),
+  (ARRAY[NULL], ARRAY[])
+
+query TT
+SELECT x, y FROM t ORDER BY x, y
+----
+{}           {}
+{}           {NULL,2}
+{NULL}       {}
+{NULL,NULL}  {NULL,NULL}
+{1,2}        {3,4}
+
+query TT
+SELECT x, y FROM t WHERE x > ARRAY[NULL]:::INT[] ORDER BY y
+----
+{NULL,NULL}  {NULL,NULL}
+{1,2}        {3,4}
+
+# Test that we can create foreign key references on arrays.
+statement ok
+DROP TABLE IF EXISTS t1, t2 CASCADE;
+CREATE TABLE t1 (x INT[] PRIMARY KEY);
+CREATE TABLE t2 (x INT[] PRIMARY KEY);
+ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1 (x)
+
+statement ok
+INSERT INTO t1 VALUES (ARRAY[1, 2, NULL, 3])
+
+statement error pq: insert on table "t2" violates foreign key constraint "fk_x_ref_t1"
+INSERT INTO t2 VALUES (ARRAY[1, 2])
+
+statement ok
+INSERT INTO t2 VALUES (ARRAY[1, 2, NULL, 3])
+
+statement error pq: delete on table "t1" violates foreign key constraint "fk_x_ref_t1" on table "t2"
+DELETE FROM t1 WHERE x > ARRAY[1]
+
+# Test different joins on indexed arrays.
+statement ok
+DROP TABLE IF EXISTS t1, t2 CASCADE;
+CREATE TABLE t1 (x INT[] PRIMARY KEY);
+CREATE TABLE t2 (x INT[] PRIMARY KEY);
+INSERT INTO t1 VALUES
+  (ARRAY[1, 2]),
+  (ARRAY[NULL]),
+  (ARRAY[3, 4]);
+INSERT INTO t2 VALUES
+  (ARRAY[]),
+  (ARRAY[1, 2]),
+  (ARRAY[NULL])
+
+query T rowsort
+SELECT t1.x FROM t1 INNER HASH JOIN t2 ON t1.x = t2.x
+----
+{NULL}
+{1,2}
+
+query T rowsort
+SELECT t1.x FROM t1 INNER MERGE JOIN t2 ON t1.x = t2.x
+----
+{NULL}
+{1,2}
+
+query T rowsort
+SELECT t1.x FROM t1 INNER LOOKUP JOIN t2 ON t1.x = t2.x
+----
+{NULL}
+{1,2}
+
+# Test that we can group by arrays.
+statement ok
+DROP TABLE t;
+CREATE TABLE t (x INT[], INDEX (x));
+INSERT INTO t VALUES
+  (ARRAY[1, 2]),
+  (ARRAY[1, 2]),
+  (ARRAY[1, 2]),
+  (ARRAY[NULL, NULL]),
+  (ARRAY[NULL, NULL]),
+  (ARRAY[1,2,NULL,4,NULL]),
+  (ARRAY[1,2,NULL,4,NULL])
+
+query T rowsort
+SELECT x FROM t GROUP BY x
+----
+{1,2}
+{NULL,NULL}
+{1,2,NULL,4,NULL}

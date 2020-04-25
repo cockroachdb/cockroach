@@ -3565,6 +3565,16 @@ func (d *DArray) ResolvedType() *types.T {
 	return types.MakeArray(d.ParamTyp)
 }
 
+// IsComposite implements the CompositeDatum interface.
+func (d *DArray) IsComposite() bool {
+	for _, elem := range d.Array {
+		if cdatum, ok := elem.(CompositeDatum); ok && cdatum.IsComposite() {
+			return true
+		}
+	}
+	return false
+}
+
 // FirstIndex returns the first index of the array. 1 for normal SQL arrays,
 // which are 1-indexed, and 0 for the special Postgers vector types which are
 // 0-indexed.

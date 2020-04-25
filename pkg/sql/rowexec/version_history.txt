@@ -109,3 +109,6 @@
     - The CORR aggregate function has been added which will not be recognized
       by older nodes. However, new nodes can process plans from older nodes,
       so MinAcceptedVersion is unchanged.
+- Version: 29 (MinAcceptedVersion: 29)
+    - The hashing of DArray datums was changed and is incompatible with the
+      existing method of hashing DArrays.

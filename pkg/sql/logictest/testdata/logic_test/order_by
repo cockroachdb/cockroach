@@ -187,18 +187,6 @@ SELECT * FROM t ORDER BY foo
 query error no data source matches prefix: a
 SELECT a FROM t ORDER BY a.b
 
-query error can't order by column type int\[\]
-SELECT generate_series FROM generate_series(1, 100) ORDER BY ARRAY[generate_series]
-
-query error can't order by column type int\[\]
-SELECT ARRAY[generate_series] FROM generate_series(1, 100) ORDER BY ARRAY[generate_series]
-
-query error can't order by column type int\[\]
-SELECT ARRAY[generate_series] FROM generate_series(1, 100) ORDER BY 1
-
-query error can't order by column type int\[\]
-SELECT ARRAY[generate_series] AS a FROM generate_series(1, 100) ORDER BY a
-
 query IT
 SELECT generate_series, ARRAY[generate_series] FROM generate_series(1, 1) ORDER BY 1
 ----
