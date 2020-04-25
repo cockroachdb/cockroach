@@ -277,6 +277,10 @@ func (input truncateDecisionInput) LogTooLarge() bool {
 	return input.LogSize > input.MaxLogSize
 }
 
+// truncateDecision describes a truncation decision.
+// Beware: when extending this struct, be sure to adjust .String()
+// so that it is guaranteed to not contain any PII or confidential
+// cluster data.
 type truncateDecision struct {
 	Input       truncateDecisionInput
 	CommitIndex uint64
@@ -318,6 +322,9 @@ func (td *truncateDecision) NumNewRaftSnapshots() int {
 	return td.raftSnapshotsForIndex(td.NewFirstIndex) - td.raftSnapshotsForIndex(td.Input.FirstIndex)
 }
 
+// String returns a representation for the decision.
+// It is guaranteed to not return PII or confidential
+// information from the cluster.
 func (td *truncateDecision) String() string {
 	var buf strings.Builder
 	_, _ = fmt.Fprintf(&buf, "should truncate: %t [", td.ShouldTruncate())
@@ -612,7 +619,7 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ *config.Syst
 		}
 		r.store.metrics.RaftLogTruncated.Inc(int64(decision.NumTruncatableIndexes()))
 	} else {
-		log.VEventf(ctx, 3, decision.String())
+		log.VEventf(ctx, 3, "%s", log.Safe(decision.String()))
 	}
 	return nil
 }

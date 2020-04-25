@@ -144,10 +144,10 @@ func NewErrorWithTxn(err error, txn *Transaction) *Error {
 // passthrough to fmt.Errorf, with an additional prefix containing the
 // filename and line number.
 func NewErrorf(format string, a ...interface{}) *Error {
-	// Cannot use errors.Errorf here due to cyclic dependency.
+	err := errors.Newf(format, a...)
 	file, line, _ := caller.Lookup(1)
-	s := fmt.Sprintf("%s:%d: ", file, line)
-	return NewError(fmt.Errorf(s+format, a...))
+	err = errors.Wrapf(err, "%s:%d", file, line)
+	return NewError(err)
 }
 
 // String implements fmt.Stringer.

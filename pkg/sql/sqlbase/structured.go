@@ -2323,7 +2323,7 @@ func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
 			}
 		}
 	}
-	return unimplemented.NewWithIssueDetailf(35730, typInfo, msg)
+	return unimplemented.NewWithIssueDetailf(35730, typInfo, "%s", msg)
 }
 
 func checkColumnsValidForIndex(tableDesc *MutableTableDescriptor, indexColNames []string) error {
@@ -2758,6 +2758,7 @@ func (desc *MutableTableDescriptor) DropConstraint(
 	case ConstraintTypeFK:
 		if detail.FK.Validity == ConstraintValidity_Validating {
 			return unimplemented.NewWithIssueDetailf(42844,
+				"drop-constraint-fk-validating",
 				"constraint %q in the middle of being added, try again later", name)
 		}
 		if detail.FK.Validity == ConstraintValidity_Dropping {

@@ -396,7 +396,8 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 	if check && mm.mu.curAllocated != 0 {
 		log.ReportOrPanic(
 			ctx, &mm.settings.SV,
-			fmt.Sprintf("%s: unexpected %d leftover bytes", mm.name, mm.mu.curAllocated))
+			"%s: unexpected %d leftover bytes",
+			log.Safe(mm.name), log.Safe(mm.mu.curAllocated))
 		mm.releaseBytes(ctx, mm.mu.curAllocated)
 	}
 

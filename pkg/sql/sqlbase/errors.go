@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -122,26 +121,22 @@ func NewWrongObjectTypeError(name tree.NodeFormatter, desiredObjType string) err
 		tree.ErrString(name), desiredObjType)
 }
 
-// NewSyntaxError creates a syntax error.
-func NewSyntaxError(msg string) error {
-	return pgerror.New(pgcode.Syntax, msg)
+// NewSyntaxErrorf creates a syntax error.
+func NewSyntaxErrorf(format string, args ...interface{}) error {
+	return pgerror.Newf(pgcode.Syntax, format, args...)
 }
 
-// NewDependentObjectError creates a dependent object error.
-func NewDependentObjectError(msg string) error {
-	return pgerror.New(pgcode.DependentObjectsStillExist, msg)
-}
-
-// NewDependentObjectErrorWithHint creates a dependent object error with a hint
-func NewDependentObjectErrorWithHint(msg string, hint string) error {
-	err := pgerror.New(pgcode.DependentObjectsStillExist, msg)
-	return errors.WithHint(err, hint)
+// NewDependentObjectErrorf creates a dependent object error.
+func NewDependentObjectErrorf(format string, args ...interface{}) error {
+	return pgerror.Newf(pgcode.DependentObjectsStillExist, format, args...)
 }
 
 // NewRangeUnavailableError creates an unavailable range error.
 func NewRangeUnavailableError(
 	rangeID roachpb.RangeID, origErr error, nodeIDs ...roachpb.NodeID,
 ) error {
+	// TODO(knz): This could should really use errors.Wrap or
+	// errors.WithSecondaryError.
 	return pgerror.Newf(pgcode.RangeUnavailable,
 		"key range id:%d is unavailable; missing nodes: %s. Original error: %v",
 		rangeID, nodeIDs, origErr)
