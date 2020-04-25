@@ -14,6 +14,10 @@ exec-ddl
 CREATE TABLE cd (c INT PRIMARY KEY, d INT NOT NULL)
 ----
 
+exec-ddl
+CREATE TABLE ab (a INT, b INT)
+----
+
 # --------------------------------------------------
 # DecorrelateJoin
 # --------------------------------------------------
@@ -1839,24 +1843,22 @@ project
  ├── columns: y:2!null cst:3!null
  ├── fd: ()-->(2,3)
  ├── select
- │    ├── columns: y:2!null max:9!null rownum:10!null
- │    ├── key: (10)
+ │    ├── columns: x:1!null y:2!null max:9!null
+ │    ├── key: (1)
  │    ├── fd: ()-->(2,9)
  │    ├── group-by
- │    │    ├── columns: y:2!null max:9 rownum:10!null
- │    │    ├── grouping columns: rownum:10!null
- │    │    ├── key: (10)
- │    │    ├── fd: ()-->(2), (10)-->(2,9)
+ │    │    ├── columns: x:1!null y:2!null max:9
+ │    │    ├── grouping columns: x:1!null
+ │    │    ├── key: (1)
+ │    │    ├── fd: ()-->(2), (1)-->(2,9)
  │    │    ├── inner-join (hash)
- │    │    │    ├── columns: y:2!null k:4!null s:7 rownum:10!null
- │    │    │    ├── key: (10)
+ │    │    │    ├── columns: x:1!null y:2!null k:4!null s:7
+ │    │    │    ├── key: (1)
  │    │    │    ├── fd: ()-->(2,4,7), (2)==(4), (4)==(2)
- │    │    │    ├── ordinality
- │    │    │    │    ├── columns: y:2 rownum:10!null
- │    │    │    │    ├── key: (10)
- │    │    │    │    ├── fd: (10)-->(2)
- │    │    │    │    └── scan xy
- │    │    │    │         └── columns: y:2
+ │    │    │    ├── scan xy
+ │    │    │    │    ├── columns: x:1!null y:2
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(2)
  │    │    │    ├── limit
  │    │    │    │    ├── columns: k:4!null s:7
  │    │    │    │    ├── cardinality: [0 - 1]
@@ -2168,24 +2170,22 @@ project
  ├── columns: i:2!null cst:6!null
  ├── fd: ()-->(6)
  ├── select
- │    ├── columns: i:2!null max:9!null rownum:10!null
- │    ├── key: (10)
- │    ├── fd: ()-->(9), (10)-->(2)
+ │    ├── columns: k:1!null i:2!null max:9!null
+ │    ├── key: (1)
+ │    ├── fd: ()-->(9), (1)-->(2)
  │    ├── group-by
- │    │    ├── columns: i:2!null max:9!null rownum:10!null
- │    │    ├── grouping columns: rownum:10!null
- │    │    ├── key: (10)
- │    │    ├── fd: (10)-->(2,9)
+ │    │    ├── columns: k:1!null i:2!null max:9!null
+ │    │    ├── grouping columns: k:1!null
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,9)
  │    │    ├── inner-join (hash)
- │    │    │    ├── columns: i:2!null x:7!null y:8!null rownum:10!null
- │    │    │    ├── key: (10)
- │    │    │    ├── fd: (10)-->(2), (7)-->(8), (2)==(7), (7)==(2)
- │    │    │    ├── ordinality
- │    │    │    │    ├── columns: i:2 rownum:10!null
- │    │    │    │    ├── key: (10)
- │    │    │    │    ├── fd: (10)-->(2)
- │    │    │    │    └── scan a
- │    │    │    │         └── columns: i:2
+ │    │    │    ├── columns: k:1!null i:2!null x:7!null y:8!null
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2), (7)-->(8), (2)==(7), (7)==(2)
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: k:1!null i:2
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(2)
  │    │    │    ├── select
  │    │    │    │    ├── columns: x:7!null y:8!null
  │    │    │    │    ├── key: (7)
@@ -2807,20 +2807,18 @@ SELECT (SELECT x FROM xy WHERE y=i LIMIT 1) FROM a
 project
  ├── columns: x:8
  ├── distinct-on
- │    ├── columns: xy.x:6 rownum:9!null
- │    ├── grouping columns: rownum:9!null
- │    ├── key: (9)
- │    ├── fd: (9)-->(6)
+ │    ├── columns: k:1!null xy.x:6
+ │    ├── grouping columns: k:1!null
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(6)
  │    ├── left-join (hash)
- │    │    ├── columns: i:2 xy.x:6 y:7 rownum:9!null
- │    │    ├── key: (6,9)
- │    │    ├── fd: (9)-->(2), (6)-->(7)
- │    │    ├── ordinality
- │    │    │    ├── columns: i:2 rownum:9!null
- │    │    │    ├── key: (9)
- │    │    │    ├── fd: (9)-->(2)
- │    │    │    └── scan a
- │    │    │         └── columns: i:2
+ │    │    ├── columns: k:1!null i:2 xy.x:6 y:7
+ │    │    ├── key: (1,6)
+ │    │    ├── fd: (1)-->(2), (6)-->(7)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
  │    │    ├── scan xy
  │    │    │    ├── columns: xy.x:6!null y:7
  │    │    │    ├── key: (6)
@@ -3948,19 +3946,17 @@ SELECT EXISTS(SELECT * FROM xy WHERE y=i) FROM a
 project
  ├── columns: exists:8!null
  ├── group-by
- │    ├── columns: true_agg:10 rownum:12!null
- │    ├── grouping columns: rownum:12!null
- │    ├── key: (12)
- │    ├── fd: (12)-->(10)
+ │    ├── columns: k:1!null true_agg:10
+ │    ├── grouping columns: k:1!null
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(10)
  │    ├── left-join (hash)
- │    │    ├── columns: i:2 y:7 true:9 rownum:12!null
- │    │    ├── fd: (12)-->(2)
- │    │    ├── ordinality
- │    │    │    ├── columns: i:2 rownum:12!null
- │    │    │    ├── key: (12)
- │    │    │    ├── fd: (12)-->(2)
- │    │    │    └── scan a
- │    │    │         └── columns: i:2
+ │    │    ├── columns: k:1!null i:2 y:7 true:9
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
  │    │    ├── project
  │    │    │    ├── columns: true:9!null y:7
  │    │    │    ├── fd: ()-->(9)
@@ -3983,19 +3979,17 @@ SELECT 5 < ANY(SELECT y FROM xy WHERE y=i) AS r FROM a
 project
  ├── columns: r:8
  ├── group-by
- │    ├── columns: bool_or:10 rownum:12!null
- │    ├── grouping columns: rownum:12!null
- │    ├── key: (12)
- │    ├── fd: (12)-->(10)
+ │    ├── columns: k:1!null bool_or:10
+ │    ├── grouping columns: k:1!null
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(10)
  │    ├── left-join (hash)
- │    │    ├── columns: i:2 y:7 notnull:9 rownum:12!null
- │    │    ├── fd: (12)-->(2), (7)~~>(9)
- │    │    ├── ordinality
- │    │    │    ├── columns: i:2 rownum:12!null
- │    │    │    ├── key: (12)
- │    │    │    ├── fd: (12)-->(2)
- │    │    │    └── scan a
- │    │    │         └── columns: i:2
+ │    │    ├── columns: k:1!null i:2 y:7 notnull:9
+ │    │    ├── fd: (1)-->(2), (7)~~>(9)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
  │    │    ├── project
  │    │    │    ├── columns: notnull:9!null y:7
  │    │    │    ├── fd: (7)-->(9)
@@ -4020,35 +4014,32 @@ norm expect=HoistProjectSubquery
 SELECT EXISTS(SELECT EXISTS(SELECT * FROM xy WHERE y=i) FROM a)
 ----
 values
- ├── columns: exists:13
+ ├── columns: exists:12
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(13)
+ ├── fd: ()-->(12)
  └── tuple
       └── exists
            └── limit
-                ├── columns: i:2 y:7 true:9 rownum:12!null
+                ├── columns: k:1!null i:2 y:7 true:9
                 ├── cardinality: [0 - 1]
                 ├── key: ()
-                ├── fd: ()-->(2,7,9,12)
+                ├── fd: ()-->(1,2,7,9)
                 ├── left-join (hash)
-                │    ├── columns: i:2 y:7 true:9 rownum:12!null
-                │    ├── fd: ()-->(2,12)
+                │    ├── columns: k:1!null i:2 y:7 true:9
+                │    ├── fd: ()-->(1,2)
                 │    ├── limit hint: 1.00
-                │    ├── ordinality
-                │    │    ├── columns: i:2 rownum:12!null
+                │    ├── limit
+                │    │    ├── columns: k:1!null i:2
                 │    │    ├── cardinality: [0 - 1]
                 │    │    ├── key: ()
-                │    │    ├── fd: ()-->(2,12)
-                │    │    └── limit
-                │    │         ├── columns: i:2
-                │    │         ├── cardinality: [0 - 1]
-                │    │         ├── key: ()
-                │    │         ├── fd: ()-->(2)
-                │    │         ├── scan a
-                │    │         │    ├── columns: i:2
-                │    │         │    └── limit hint: 1.00
-                │    │         └── 1
+                │    │    ├── fd: ()-->(1,2)
+                │    │    ├── scan a
+                │    │    │    ├── columns: k:1!null i:2
+                │    │    │    ├── key: (1)
+                │    │    │    ├── fd: (1)-->(2)
+                │    │    │    └── limit hint: 1.00
+                │    │    └── 1
                 │    ├── project
                 │    │    ├── columns: true:9!null y:7
                 │    │    ├── fd: ()-->(9)
@@ -5158,3 +5149,108 @@ semi-join (hash)
  │    └── columns: xy.y:7
  └── filters
       └── i:2 = xy.y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+
+# --------------------------------------------------
+# EnsureKey
+# --------------------------------------------------
+
+# Check that when the EnsureKey function is called on a Scan that has pruned its
+# key away, it creates a new Scan with the primary key added back rather than
+# introducing an ordinality operator.
+#
+# In this test case, the key column of a is pruned away from the Scan, but when
+# TryDecorrelateLimitOne calls EnsureKey on the Scan, the key is added back.
+norm
+SELECT (SELECT x FROM xy WHERE y=i LIMIT 1) FROM a
+----
+project
+ ├── columns: x:8
+ ├── distinct-on
+ │    ├── columns: k:1!null xy.x:6
+ │    ├── grouping columns: k:1!null
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(6)
+ │    ├── left-join (hash)
+ │    │    ├── columns: k:1!null i:2 xy.x:6 y:7
+ │    │    ├── key: (1,6)
+ │    │    ├── fd: (1)-->(2), (6)-->(7)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: xy.x:6!null y:7
+ │    │    │    ├── key: (6)
+ │    │    │    └── fd: (6)-->(7)
+ │    │    └── filters
+ │    │         └── y:7 = i:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+ │    └── aggregations
+ │         └── first-agg [as=xy.x:6, outer=(6)]
+ │              └── xy.x:6
+ └── projections
+      └── xy.x:6 [as=x:8, outer=(6)]
+
+# Case where EnsureKey retrieves an implicit key to add to the Scan.
+norm
+SELECT (SELECT x FROM xy WHERE y=b LIMIT 1) FROM ab
+----
+project
+ ├── columns: x:6
+ ├── distinct-on
+ │    ├── columns: rowid:3!null xy.x:4
+ │    ├── grouping columns: rowid:3!null
+ │    ├── key: (3)
+ │    ├── fd: (3)-->(4)
+ │    ├── left-join (hash)
+ │    │    ├── columns: b:2 rowid:3!null xy.x:4 y:5
+ │    │    ├── key: (3,4)
+ │    │    ├── fd: (3)-->(2), (4)-->(5)
+ │    │    ├── scan ab
+ │    │    │    ├── columns: b:2 rowid:3!null
+ │    │    │    ├── key: (3)
+ │    │    │    └── fd: (3)-->(2)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: xy.x:4!null y:5
+ │    │    │    ├── key: (4)
+ │    │    │    └── fd: (4)-->(5)
+ │    │    └── filters
+ │    │         └── y:5 = b:2 [outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+ │    └── aggregations
+ │         └── first-agg [as=xy.x:4, outer=(4)]
+ │              └── xy.x:4
+ └── projections
+      └── xy.x:4 [as=x:6, outer=(4)]
+
+# EnsureKey should construct an Ordinality operator when it is called on a Scan
+# over a virtual table.
+norm
+SELECT (SELECT x FROM xy WHERE y=version LIMIT 1) FROM information_schema.tables
+----
+project
+ ├── columns: x:10
+ ├── distinct-on
+ │    ├── columns: xy.x:8 rownum:11!null
+ │    ├── grouping columns: rownum:11!null
+ │    ├── key: (11)
+ │    ├── fd: (11)-->(8)
+ │    ├── left-join (hash)
+ │    │    ├── columns: version:7 xy.x:8 y:9 rownum:11!null
+ │    │    ├── key: (8,11)
+ │    │    ├── fd: (11)-->(7), (8)-->(9)
+ │    │    ├── ordinality
+ │    │    │    ├── columns: version:7 rownum:11!null
+ │    │    │    ├── key: (11)
+ │    │    │    ├── fd: (11)-->(7)
+ │    │    │    └── scan information_schema.tables
+ │    │    │         └── columns: version:7
+ │    │    ├── scan xy
+ │    │    │    ├── columns: xy.x:8!null y:9
+ │    │    │    ├── key: (8)
+ │    │    │    └── fd: (8)-->(9)
+ │    │    └── filters
+ │    │         └── y:9 = version:7 [outer=(7,9), constraints=(/7: (/NULL - ]; /9: (/NULL - ]), fd=(7)==(9), (9)==(7)]
+ │    └── aggregations
+ │         └── first-agg [as=xy.x:8, outer=(8)]
+ │              └── xy.x:8
+ └── projections
+      └── xy.x:8 [as=x:10, outer=(8)]
