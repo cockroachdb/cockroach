@@ -49,26 +49,22 @@
     $input:(Scan
         $scanPrivate:* & (IsCanonicalScan $scanPrivate)
     ) & (HasStrictKey $input)
-    $filters:[
-        ...
-        $item:(FiltersItem $or:(Or)) &
-            (ExprPairSucceeded $pair:(ExprPairForSplitDisjunction $or)) &
-            (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols (ExprPairLeft $pair))) &
-            (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols (ExprPairRight $pair)))
-        ...
-    ]
+    $filters:* &
+        (ExprPairSucceeded $pair:(ExprPairForSplitDisjunction $filters)) &
+        (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols (ExprPairLeft $pair))) &
+        (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols (ExprPairRight $pair)))
 )
 =>
 (DistinctOn
     (UnionAll
         (Select
             $input
-            (ReplaceFiltersItem $filters $item (ExprPairLeft $pair))
+            (ReplaceFiltersItem $filters (ExprPairFiltersItemToReplace $pair) (ExprPairLeft $pair))
         )
         (Select
             (Scan $rightScanPrivate:(DuplicateScanPrivate $scanPrivate))
             (MapScanFilterCols
-                (ReplaceFiltersItem $filters $item (ExprPairRight $pair))
+                (ReplaceFiltersItem $filters (ExprPairFiltersItemToReplace $pair) (ExprPairRight $pair))
                 $scanPrivate
                 $rightScanPrivate
             )
@@ -116,14 +112,10 @@
     $input:(Scan
         $scanPrivate:* & (IsCanonicalScan $scanPrivate)
     ) & ^(HasStrictKey $input)
-    $filters:[
-        ...
-        $item:(FiltersItem $or:(Or)) &
-            (ExprPairSucceeded $pair:(ExprPairForSplitDisjunction $or)) &
-            (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols (ExprPairLeft $pair))) &
-            (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols (ExprPairRight $pair)))
-        ...
-    ]
+    $filters:* &
+        (ExprPairSucceeded $pair:(ExprPairForSplitDisjunction $filters)) &
+        (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols (ExprPairLeft $pair))) &
+        (CanMaybeConstrainIndexWithCols $scanPrivate (OuterCols (ExprPairRight $pair)))
 )
 =>
 (Project
@@ -131,12 +123,12 @@
         (UnionAll
             (Select
                 $leftScan:(Scan $leftScanPrivate:(AddPrimaryKeyColsToScanPrivate $scanPrivate))
-                (ReplaceFiltersItem $filters $item (ExprPairLeft $pair))
+                (ReplaceFiltersItem $filters (ExprPairFiltersItemToReplace $pair) (ExprPairLeft $pair))
             )
             (Select
                 (Scan $rightScanPrivate:(DuplicateScanPrivate $leftScanPrivate))
                 (MapScanFilterCols
-                    (ReplaceFiltersItem $filters $item (ExprPairRight $pair))
+                    (ReplaceFiltersItem $filters (ExprPairFiltersItemToReplace $pair) (ExprPairRight $pair))
                     $leftScanPrivate
                     $rightScanPrivate
                 )
