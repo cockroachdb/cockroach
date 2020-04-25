@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // ID, ColumnID, FamilyID, and IndexID are all uint32, but are each given a
@@ -1281,12 +1282,14 @@ func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 // key, so that different strings that collate equal cannot both be used as
 // keys. The value part is the usual UTF-8 encoding of the string, stored so
 // that it can be recovered later for inspection/display.
-func HasCompositeKeyEncoding(semanticType types.Family) bool {
-	switch semanticType {
+func HasCompositeKeyEncoding(semanticType *types.T) bool {
+	switch semanticType.Family() {
 	case types.CollatedStringFamily,
 		types.FloatFamily,
 		types.DecimalFamily:
 		return true
+	case types.ArrayFamily:
+		return HasCompositeKeyEncoding(semanticType.ArrayContents())
 	}
 	return false
 }
@@ -1294,17 +1297,24 @@ func HasCompositeKeyEncoding(semanticType types.Family) bool {
 // DatumTypeHasCompositeKeyEncoding is a version of HasCompositeKeyEncoding
 // which works on datum types.
 func DatumTypeHasCompositeKeyEncoding(typ *types.T) bool {
-	return HasCompositeKeyEncoding(typ.Family())
+	return HasCompositeKeyEncoding(typ)
 }
 
 // MustBeValueEncoded returns true if columns of the given kind can only be value
 // encoded.
-func MustBeValueEncoded(semanticType types.Family) bool {
-	return semanticType == types.ArrayFamily ||
-		semanticType == types.JsonFamily ||
-		semanticType == types.TupleFamily ||
-		semanticType == types.GeometryFamily ||
-		semanticType == types.GeographyFamily
+func MustBeValueEncoded(semanticType *types.T) bool {
+	switch semanticType.Family() {
+	case types.ArrayFamily:
+		switch semanticType.Oid() {
+		case oid.T_int2vector, oid.T_oidvector:
+			return true
+		default:
+			return MustBeValueEncoded(semanticType.ArrayContents())
+		}
+	case types.JsonFamily, types.TupleFamily, types.GeographyFamily, types.GeometryFamily:
+		return true
+	}
+	return false
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
@@ -1346,7 +1356,7 @@ func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]Colu
 	isCompositeColumn := make(map[ColumnID]struct{})
 	for i := range desc.Columns {
 		col := &desc.Columns[i]
-		if HasCompositeKeyEncoding(col.Type.Family()) {
+		if HasCompositeKeyEncoding(&col.Type) {
 			isCompositeColumn[col.ID] = struct{}{}
 		}
 	}
@@ -2273,7 +2283,7 @@ func fitColumnToFamily(desc *MutableTableDescriptor, col ColumnDescriptor) (int,
 
 // ColumnTypeIsIndexable returns whether the type t is valid as an indexed column.
 func ColumnTypeIsIndexable(t *types.T) bool {
-	return !MustBeValueEncoded(t.Family())
+	return !MustBeValueEncoded(t)
 }
 
 // ColumnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
