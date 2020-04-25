@@ -1788,6 +1788,61 @@ distinct-on
       └── const-agg [as=v:3, outer=(3)]
            └── v:3
 
+# Find the first disjunction in the filters that have different column sets on
+# the left and right.
+opt expect=SplitDisjunction
+SELECT k FROM d WHERE (w = 1 OR w = 2) AND (u = 3 OR v = 4)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── distinct-on
+      ├── columns: k:1!null u:2 v:3 w:4!null
+      ├── grouping columns: k:1!null
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── union-all
+      │    ├── columns: k:1!null u:2 v:3 w:4!null
+      │    ├── left columns: k:1!null u:2 v:3 w:4!null
+      │    ├── right columns: k:5 u:6 v:7 w:8
+      │    ├── select
+      │    │    ├── columns: k:1!null u:2!null v:3 w:4!null
+      │    │    ├── key: (1)
+      │    │    ├── fd: ()-->(2), (1)-->(3,4)
+      │    │    ├── index-join d
+      │    │    │    ├── columns: k:1!null u:2 v:3 w:4
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: ()-->(2), (1)-->(3,4)
+      │    │    │    └── scan d@u
+      │    │    │         ├── columns: k:1!null u:2!null
+      │    │    │         ├── constraint: /2/1: [/3 - /3]
+      │    │    │         ├── key: (1)
+      │    │    │         └── fd: ()-->(2)
+      │    │    └── filters
+      │    │         └── (w:4 = 1) OR (w:4 = 2) [outer=(4), constraints=(/4: [/1 - /1] [/2 - /2]; tight)]
+      │    └── select
+      │         ├── columns: k:5!null u:6 v:7!null w:8!null
+      │         ├── key: (5)
+      │         ├── fd: ()-->(7), (5)-->(6,8)
+      │         ├── index-join d
+      │         │    ├── columns: k:5!null u:6 v:7 w:8
+      │         │    ├── key: (5)
+      │         │    ├── fd: ()-->(7), (5)-->(6,8)
+      │         │    └── scan d@v
+      │         │         ├── columns: k:5!null v:7!null
+      │         │         ├── constraint: /7/5: [/4 - /4]
+      │         │         ├── key: (5)
+      │         │         └── fd: ()-->(7)
+      │         └── filters
+      │              └── (w:8 = 1) OR (w:8 = 2) [outer=(8), constraints=(/8: [/1 - /1] [/2 - /2]; tight)]
+      └── aggregations
+           ├── const-agg [as=u:2, outer=(2)]
+           │    └── u:2
+           ├── const-agg [as=v:3, outer=(3)]
+           │    └── v:3
+           └── const-agg [as=w:4, outer=(4)]
+                └── w:4
+
 # Don't apply when outer columns of both sides of OR do not intersect with index columns.
 opt expect-not=SplitDisjunction
 SELECT k, u, w FROM d WHERE u = 1 OR w = 1
@@ -2694,6 +2749,62 @@ project
            │    └── u:2
            └── const-agg [as=v:3, outer=(3)]
                 └── v:3
+
+# Find the first disjunction in the filters that have different column sets on
+# the left and right.
+opt expect=SplitDisjunctionAddKey
+SELECT u, v FROM d WHERE (w = 1 OR w = 2) AND (u = 3 OR v = 4)
+----
+project
+ ├── columns: u:2 v:3
+ └── project
+      ├── columns: u:2 v:3 w:4!null
+      └── distinct-on
+           ├── columns: k:1!null u:2 v:3 w:4!null
+           ├── grouping columns: k:1!null
+           ├── key: (1)
+           ├── fd: (1)-->(2-4)
+           ├── union-all
+           │    ├── columns: k:1!null u:2 v:3 w:4!null
+           │    ├── left columns: k:1!null u:2 v:3 w:4!null
+           │    ├── right columns: k:5 u:6 v:7 w:8
+           │    ├── select
+           │    │    ├── columns: k:1!null u:2!null v:3 w:4!null
+           │    │    ├── key: (1)
+           │    │    ├── fd: ()-->(2), (1)-->(3,4)
+           │    │    ├── index-join d
+           │    │    │    ├── columns: k:1!null u:2 v:3 w:4
+           │    │    │    ├── key: (1)
+           │    │    │    ├── fd: ()-->(2), (1)-->(3,4)
+           │    │    │    └── scan d@u
+           │    │    │         ├── columns: k:1!null u:2!null
+           │    │    │         ├── constraint: /2/1: [/3 - /3]
+           │    │    │         ├── key: (1)
+           │    │    │         └── fd: ()-->(2)
+           │    │    └── filters
+           │    │         └── (w:4 = 1) OR (w:4 = 2) [outer=(4), constraints=(/4: [/1 - /1] [/2 - /2]; tight)]
+           │    └── select
+           │         ├── columns: k:5!null u:6 v:7!null w:8!null
+           │         ├── key: (5)
+           │         ├── fd: ()-->(7), (5)-->(6,8)
+           │         ├── index-join d
+           │         │    ├── columns: k:5!null u:6 v:7 w:8
+           │         │    ├── key: (5)
+           │         │    ├── fd: ()-->(7), (5)-->(6,8)
+           │         │    └── scan d@v
+           │         │         ├── columns: k:5!null v:7!null
+           │         │         ├── constraint: /7/5: [/4 - /4]
+           │         │         ├── key: (5)
+           │         │         └── fd: ()-->(7)
+           │         └── filters
+           │              └── (w:8 = 1) OR (w:8 = 2) [outer=(8), constraints=(/8: [/1 - /1] [/2 - /2]; tight)]
+           └── aggregations
+                ├── const-agg [as=u:2, outer=(2)]
+                │    └── u:2
+                ├── const-agg [as=v:3, outer=(3)]
+                │    └── v:3
+                └── const-agg [as=w:4, outer=(4)]
+                     └── w:4
 
 # Don't apply when outer columns of both sides of OR do not intersect with index columns.
 opt expect-not=SplitDisjunctionAddKey
