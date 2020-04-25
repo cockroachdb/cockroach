@@ -691,7 +691,7 @@ func mkFKCheckErr(md *opt.Metadata, c *memo.FKChecksItem, keyVals tree.Datums) e
 	}
 
 	return errors.WithDetail(
-		pgerror.New(pgcode.ForeignKeyViolation, msg.String()),
+		pgerror.Newf(pgcode.ForeignKeyViolation, "%s", msg.String()),
 		details.String(),
 	)
 }

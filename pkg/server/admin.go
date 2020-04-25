@@ -1499,16 +1499,19 @@ func (s *adminServer) Locations(
 ) (*serverpb.LocationsResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
 
-	userName, err := userFromContext(ctx)
+	_, err := userFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	// The following query swaps the user identity to `root` because
+	// system.locations does not contain sensitive information and
+	// we want to display the node map for anyone.
 	q := makeSQLQuery()
 	q.Append(`SELECT "localityKey", "localityValue", latitude, longitude FROM system.locations`)
 	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-locations", nil, /* txn */
-		sqlbase.InternalExecutorSessionDataOverride{User: userName},
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		q.String(),
 	)
 	if err != nil {

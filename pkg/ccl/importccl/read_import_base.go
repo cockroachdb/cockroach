@@ -195,13 +195,11 @@ func readInputFiles(
 					for s := range rejected {
 						countRejected++
 						if countRejected > 1000 { // TODO(spaskob): turn the magic constant into an option
-							return pgerror.New(
+							return pgerror.Newf(
 								pgcode.DataCorrupted,
-								fmt.Sprintf(
-									"too many parsing errors (%d) encountered for file %s",
-									countRejected,
-									dataFile,
-								),
+								"too many parsing errors (%d) encountered for file %s",
+								countRejected,
+								dataFile,
 							)
 						}
 						buf = append(buf, s...)
@@ -339,8 +337,9 @@ func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {
 }
 
 func makeRowErr(_ string, row int64, code, format string, args ...interface{}) error {
-	return pgerror.NewWithDepthf(1, code,
-		"row %d: "+format, append([]interface{}{row}, args...)...)
+	err := pgerror.NewWithDepthf(1, code, format, args...)
+	err = errors.WrapWithDepthf(1, err, "row %d", row)
+	return err
 }
 
 func wrapRowErr(err error, _ string, row int64, code, format string, args ...interface{}) error {
