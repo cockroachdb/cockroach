@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -46,10 +47,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"gopkg.in/yaml.v2"
 )
 
-const crdbInternalName = "crdb_internal"
+const crdbInternalName = sessiondata.CRDBInternalSchemaName
 
 // Naming convention:
 // - if the response is served from memory, prefix with node_
@@ -1371,13 +1371,18 @@ CREATE TABLE crdb_internal.builtin_functions (
 	},
 }
 
+// Prepare the row populate function.
+var typeView = tree.NewDString("view")
+var typeTable = tree.NewDString("table")
+var typeSequence = tree.NewDString("sequence")
+
 // crdbInternalCreateStmtsTable exposes the CREATE TABLE/CREATE VIEW
 // statements.
 //
 // TODO(tbg): prefix with kv_.
-var crdbInternalCreateStmtsTable = virtualSchemaTable{
-	comment: `CREATE and ALTER statements for all tables accessible by current user in current database (KV scan)`,
-	schema: `
+var crdbInternalCreateStmtsTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
+	`CREATE and ALTER statements for all tables accessible by current user in current database (KV scan)`,
+	`
 CREATE TABLE crdb_internal.create_statements (
   database_id                   INT,
   database_name                 STRING,
@@ -1390,148 +1395,83 @@ CREATE TABLE crdb_internal.create_statements (
   create_nofks                  STRING NOT NULL,
   alter_statements              STRING[] NOT NULL,
   validate_statements           STRING[] NOT NULL,
-  zone_configuration_statements STRING[] NOT NULL
+  has_partitions                BOOL NOT NULL,
+  INDEX(descriptor_id)
 )
-`,
-	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+`, virtualOnce, false, /* includesIndexEntries */
+	func(ctx context.Context, p *planner, h oidHasher, db *sqlbase.DatabaseDescriptor, scName string,
+		table *sqlbase.TableDescriptor, lookup simpleSchemaResolver, addRow func(...tree.Datum) error) error {
 		contextName := ""
-		if dbContext != nil {
-			contextName = dbContext.Name
+		parentNameStr := tree.DNull
+		if db != nil {
+			contextName = db.Name
+			parentNameStr = tree.NewDString(db.Name)
+		}
+		scNameStr := tree.NewDString(scName)
+
+		var descType tree.Datum
+		var stmt, createNofk string
+		alterStmts := tree.NewDArray(types.String)
+		validateStmts := tree.NewDArray(types.String)
+		var err error
+		if table.IsView() {
+			descType = typeView
+			stmt, err = ShowCreateView(ctx, (*tree.Name)(&table.Name), table)
+		} else if table.IsSequence() {
+			descType = typeSequence
+			stmt, err = ShowCreateSequence(ctx, (*tree.Name)(&table.Name), table)
+		} else {
+			descType = typeTable
+			tn := (*tree.Name)(&table.Name)
+			createNofk, err = ShowCreateTable(ctx, p, tn, contextName, table, lookup, OmitFKClausesFromCreate)
+			if err != nil {
+				return err
+			}
+			allIdx := append(table.Indexes, table.PrimaryIndex)
+			if err := showAlterStatementWithInterleave(ctx, tn, contextName, lookup, allIdx, table, alterStmts,
+				validateStmts); err != nil {
+				return err
+			}
+			stmt, err = ShowCreateTable(ctx, p, tn, contextName, table, lookup, IncludeFkClausesInCreate)
+		}
+		if err != nil {
+			return err
 		}
 
-		// Prepare the row populate function.
-		typeView := tree.NewDString("view")
-		typeTable := tree.NewDString("table")
-		typeSequence := tree.NewDString("sequence")
-
-		// Hold the configuration statements for each table
-		zoneConfigStmts := make(map[string][]string)
-		// Prepare a query used to see zones configuations on this table.
-		configStmtsQuery := `
-			SELECT
-				table_name, raw_config_yaml, raw_config_sql
-			FROM
-				crdb_internal.zones
-			WHERE
-				database_name = '%[1]s'
-				AND table_name IS NOT NULL
-				AND raw_config_yaml IS NOT NULL
-				AND raw_config_sql IS NOT NULL
-			ORDER BY
-				database_name, table_name, index_name, partition_name
-		`
-		// The create_statements table is used at times where other internal
-		// tables have not been created, or are unaccessible (perhaps during
-		// certain tests (TestDumpAsOf in pkg/cli/dump_test.go)). So if something
-		// goes wrong querying this table, proceed without any constraint data.
-		zoneConstraintRows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
-			ctx, "zone-constraints-for-show-create-table", p.txn,
-			fmt.Sprintf(configStmtsQuery, contextName))
-		if err != nil {
-			log.VEventf(ctx, 1, "%q", err)
-		} else {
-			for _, row := range zoneConstraintRows {
-				tableName := string(tree.MustBeDString(row[0]))
-				var zoneConfig zonepb.ZoneConfig
-				yamlString := string(tree.MustBeDString(row[1]))
-				err := yaml.UnmarshalStrict([]byte(yamlString), &zoneConfig)
-				if err != nil {
-					return err
-				}
-				// If all constraints are default, then don't show anything.
-				if !zoneConfig.Equal(zonepb.ZoneConfig{}) {
-					sqlString := string(tree.MustBeDString(row[2]))
-					zoneConfigStmts[tableName] = append(zoneConfigStmts[tableName], sqlString)
-				}
+		descID := tree.NewDInt(tree.DInt(table.ID))
+		dbDescID := tree.NewDInt(tree.DInt(table.GetParentID()))
+		if createNofk == "" {
+			createNofk = stmt
+		}
+		hasPartitions := false
+		for i := range table.Indexes {
+			if table.Indexes[i].Partitioning.NumColumns != 0 {
+				hasPartitions = true
+				break
 			}
 		}
-
-		return forEachTableDescWithTableLookupInternal(ctx, p, dbContext, virtualOnce, true, /*allowAdding*/
-			func(db *DatabaseDescriptor, scName string, table *TableDescriptor, lCtx tableLookupFn) error {
-				parentNameStr := tree.DNull
-				if db != nil {
-					parentNameStr = tree.NewDString(db.Name)
-				}
-				scNameStr := tree.NewDString(scName)
-
-				var descType tree.Datum
-				var stmt, createNofk string
-				alterStmts := tree.NewDArray(types.String)
-				validateStmts := tree.NewDArray(types.String)
-				var err error
-				if table.IsView() {
-					descType = typeView
-					stmt, err = ShowCreateView(ctx, (*tree.Name)(&table.Name), table)
-				} else if table.IsSequence() {
-					descType = typeSequence
-					stmt, err = ShowCreateSequence(ctx, (*tree.Name)(&table.Name), table)
-				} else {
-					descType = typeTable
-					tn := (*tree.Name)(&table.Name)
-					createNofk, err = ShowCreateTable(ctx, p, tn, contextName, table, lCtx, OmitFKClausesFromCreate)
-					if err != nil {
-						return err
-					}
-					allIdx := append(table.Indexes, table.PrimaryIndex)
-					if err := showAlterStatementWithInterleave(ctx, tn, contextName, lCtx, allIdx, table, alterStmts, validateStmts); err != nil {
-						return err
-					}
-					stmt, err = ShowCreateTable(ctx, p, tn, contextName, table, lCtx, IncludeFkClausesInCreate)
-				}
-				if err != nil {
-					return err
-				}
-
-				zoneRows := tree.NewDArray(types.String)
-				if val, ok := zoneConfigStmts[table.Name]; ok {
-					for _, s := range val {
-						if err := zoneRows.Append(tree.NewDString(s)); err != nil {
-							return err
-						}
-					}
-				} else {
-					// If there are partitions applied to this table and no zone configurations, display a warning.
-					hasPartitions := false
-					for i := range table.Indexes {
-						if table.Indexes[i].Partitioning.NumColumns != 0 {
-							hasPartitions = true
-							break
-						}
-					}
-					hasPartitions = hasPartitions || table.PrimaryIndex.Partitioning.NumColumns != 0
-					if hasPartitions {
-						stmt += "\n-- Warning: Partitioned table with no zone configurations."
-					}
-				}
-
-				descID := tree.NewDInt(tree.DInt(table.ID))
-				dbDescID := tree.NewDInt(tree.DInt(table.GetParentID()))
-				if createNofk == "" {
-					createNofk = stmt
-				}
-				return addRow(
-					dbDescID,
-					parentNameStr,
-					scNameStr,
-					descID,
-					descType,
-					tree.NewDString(table.Name),
-					tree.NewDString(stmt),
-					tree.NewDString(table.State.String()),
-					tree.NewDString(createNofk),
-					alterStmts,
-					validateStmts,
-					zoneRows,
-				)
-			})
-	},
-}
+		hasPartitions = hasPartitions || table.PrimaryIndex.Partitioning.NumColumns != 0
+		return addRow(
+			dbDescID,
+			parentNameStr,
+			scNameStr,
+			descID,
+			descType,
+			tree.NewDString(table.Name),
+			tree.NewDString(stmt),
+			tree.NewDString(table.State.String()),
+			tree.NewDString(createNofk),
+			alterStmts,
+			validateStmts,
+			tree.MakeDBool(tree.DBool(hasPartitions)),
+		)
+	})
 
 func showAlterStatementWithInterleave(
 	ctx context.Context,
 	tn *tree.Name,
 	contextName string,
-	lCtx tableLookupFn,
+	lCtx simpleSchemaResolver,
 	allIdx []sqlbase.IndexDescriptor,
 	table *sqlbase.TableDescriptor,
 	alterStmts *tree.DArray,
@@ -1574,7 +1514,7 @@ func showAlterStatementWithInterleave(
 			var err error
 			var parentName tree.TableName
 			if lCtx != nil {
-				parentName, err = lCtx.getParentAsTableName(parentTableID, contextName)
+				parentName, err = getParentAsTableName(lCtx, parentTableID, contextName)
 				if err != nil {
 					return err
 				}
@@ -1586,7 +1526,7 @@ func showAlterStatementWithInterleave(
 
 			var tableName tree.TableName
 			if lCtx != nil {
-				tableName, err = lCtx.getTableAsTableName(table, contextName)
+				tableName, err = getTableAsTableName(lCtx, table, contextName)
 				if err != nil {
 					return err
 				}

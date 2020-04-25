@@ -131,7 +131,7 @@ render                                  ·            ·
                 │                       filter       ((job_type IS NULL) OR (job_type != 'AUTO CREATE STATS')) AND ((finished IS NULL) OR (finished > (now() - '12:00:00')))
                 └── render              ·            ·
                      └── virtual table  ·            ·
-·                                       source       ·
+·                                       source       jobs@primary
 
 statement ok
 CREATE INDEX a ON foo(x)
@@ -178,7 +178,7 @@ sort                          ·            ·
       │                       distinct on  database_name
       └── render              ·            ·
            └── virtual table  ·            ·
-·                             source       ·
+·                             source       schemata@primary
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW TABLES] WHERE field != 'size'
@@ -196,12 +196,12 @@ render                                       ·            ·
                 │    │                       filter       nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog')
                 │    └── render              ·            ·
                 │         └── virtual table  ·            ·
-                │                            source       ·
+                │                            source       pg_namespace@primary
                 └── filter                   ·            ·
                      │                       filter       relkind IN ('S', 'r', 'v')
                      └── render              ·            ·
                           └── virtual table  ·            ·
-·                                            source       ·
+·                                            source       pg_class@primary
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE field != 'size'
@@ -222,17 +222,17 @@ render                                            ·            ·
                 │    │    │                       filter       nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog')
                 │    │    └── render              ·            ·
                 │    │         └── virtual table  ·            ·
-                │    │                            source       ·
+                │    │                            source       pg_namespace@primary
                 │    └── filter                   ·            ·
                 │         │                       filter       relkind IN ('S', 'r', 'v')
                 │         └── render              ·            ·
                 │              └── virtual table  ·            ·
-                │                                 source       ·
+                │                                 source       pg_class@primary
                 └── filter                        ·            ·
                      │                            filter       objsubid = 0
                      └── render                   ·            ·
                           └── virtual table       ·            ·
-·                                                 source       ·
+·                                                 source       pg_description@primary
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW DATABASE] WHERE field != 'size'
@@ -244,7 +244,7 @@ render                        ·            ·
       │                       filter       variable = 'database'
       └── render              ·            ·
            └── virtual table  ·            ·
-·                             source       ·
+·                             source       session_variables@primary
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW TIME ZONE] WHERE field != 'size'
@@ -256,7 +256,7 @@ render                        ·            ·
       │                       filter       variable = 'timezone'
       └── render              ·            ·
            └── virtual table  ·            ·
-·                             source       ·
+·                             source       session_variables@primary
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION] WHERE field != 'size'
@@ -268,7 +268,7 @@ render                        ·            ·
       │                       filter       variable = 'default_transaction_isolation'
       └── render              ·            ·
            └── virtual table  ·            ·
-·                             source       ·
+·                             source       session_variables@primary
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_PRIORITY] WHERE field != 'size'
@@ -280,7 +280,7 @@ render                        ·            ·
       │                       filter       variable = 'default_transaction_priority'
       └── render              ·            ·
            └── virtual table  ·            ·
-·                             source       ·
+·                             source       session_variables@primary
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW TRANSACTION ISOLATION LEVEL] WHERE field != 'size'
@@ -292,7 +292,7 @@ render                        ·            ·
       │                       filter       variable = 'transaction_isolation'
       └── render              ·            ·
            └── virtual table  ·            ·
-·                             source       ·
+·                             source       session_variables@primary
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW TRANSACTION PRIORITY] WHERE field != 'size'
@@ -304,7 +304,7 @@ render                        ·            ·
       │                       filter       variable = 'transaction_priority'
       └── render              ·            ·
            └── virtual table  ·            ·
-·                             source       ·
+·                             source       session_variables@primary
 
 query TTT
 EXPLAIN SHOW COLUMNS FROM foo
@@ -333,12 +333,12 @@ render                                            ·            ·
                      │    │                       filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
                      │    └── render              ·            ·
                      │         └── virtual table  ·            ·
-                     │                            source       ·
+                     │                            source       columns@primary
                      └── filter                   ·            ·
                           │                       filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
                           └── render              ·            ·
                                └── virtual table  ·            ·
-·                                                 source       ·
+·                                                 source       statistics@primary
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW GRANTS ON foo] WHERE field != 'size'
@@ -352,7 +352,7 @@ render                             ·            ·
            │                       filter       (table_catalog, table_schema, table_name) IN (('test', 'public', 'foo'),)
            └── render              ·            ·
                 └── virtual table  ·            ·
-·                                  source       ·
+·                                  source       table_privileges@primary
 
 query TTT
 EXPLAIN SHOW INDEX FROM foo
@@ -364,36 +364,43 @@ render                        ·            ·
       │                       filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
       └── render              ·            ·
            └── virtual table  ·            ·
-·                             source       ·
+·                             source       statistics@primary
 
 query TTT
 EXPLAIN SHOW CONSTRAINTS FROM foo
 ----
-·                                                 distributed  false
-·                                                 vectorized   false
-render                                            ·            ·
- └── sort                                         ·            ·
-      │                                           order        +conname
-      └── render                                  ·            ·
-           └── hash-join                          ·            ·
-                │                                 type         inner
-                │                                 equality     (conrelid) = (oid)
-                ├── render                        ·            ·
-                │    └── virtual table            ·            ·
-                │                                 source       ·
-                └── hash-join                     ·            ·
-                     │                            type         inner
-                     │                            equality     (oid) = (relnamespace)
-                     ├── filter                   ·            ·
-                     │    │                       filter       nspname = 'public'
-                     │    └── render              ·            ·
-                     │         └── virtual table  ·            ·
-                     │                            source       ·
-                     └── filter                   ·            ·
-                          │                       filter       relname = 'foo'
-                          └── render              ·            ·
-                               └── virtual table  ·            ·
-·                                                 source       ·
+·                                                      distributed         false
+·                                                      vectorized          false
+render                                                 ·                   ·
+ └── sort                                              ·                   ·
+      │                                                order               +conname
+      └── render                                       ·                   ·
+           └── hash-join                               ·                   ·
+                │                                      type                inner
+                │                                      equality            (oid) = (relnamespace)
+                ├── filter                             ·                   ·
+                │    │                                 filter              nspname = 'public'
+                │    └── render                        ·                   ·
+                │         └── virtual table            ·                   ·
+                │                                      source              pg_namespace@primary
+                └── merge-join                         ·                   ·
+                     │                                 type                inner
+                     │                                 equality            (conrelid) = (oid)
+                     │                                 left cols are key   ·
+                     │                                 right cols are key  ·
+                     │                                 mergeJoinOrder      +"(conrelid=oid)"
+                     ├── sort                          ·                   ·
+                     │    │                            order               +conrelid
+                     │    └── render                   ·                   ·
+                     │         └── virtual table       ·                   ·
+                     │                                 source              pg_constraint@pg_constraint_conrelid_idx
+                     └── filter                        ·                   ·
+                          │                            filter              relname = 'foo'
+                          └── sort                     ·                   ·
+                               │                       order               +oid
+                               └── render              ·                   ·
+                                    └── virtual table  ·                   ·
+·                                                      source              pg_class@pg_class_oid_idx
 
 query TTT
 EXPLAIN SHOW USERS

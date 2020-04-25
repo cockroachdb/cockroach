@@ -1221,12 +1221,15 @@ func (desc *MutableTableDescriptor) AllocateIDs() error {
 		}
 	}
 
-	// Only physical tables can have / need indexes and column families.
-	if desc.IsPhysicalTable() {
+	// Only tables can have / need indexes and column families.
+	if desc.IsTable() {
 		if err := desc.allocateIndexIDs(columnNames); err != nil {
 			return err
 		}
-		desc.allocateColumnFamilyIDs(columnNames)
+		// Virtual tables don't have column families.
+		if desc.IsPhysicalTable() {
+			desc.allocateColumnFamilyIDs(columnNames)
+		}
 	}
 
 	// This is sort of ugly. If the descriptor does not have an ID, we hack one in

@@ -60,9 +60,14 @@ func TestRemovePartitioningOSS(t *testing.T) {
 			ToExclusive:   encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 2),
 		}},
 	}
+	// Note that this is really a gross hack - it breaks planner caches, which
+	// assume that nothing is going to change out from under them like this. We
+	// "fix" the issue by altering the table's name to refresh the cache, below.
 	if err := kvDB.Put(ctx, tableKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
 		t.Fatal(err)
 	}
+	sqlDB.Exec(t, "ALTER TABLE t.kv RENAME to t.kv2")
+	sqlDB.Exec(t, "ALTER TABLE t.kv2 RENAME to t.kv")
 	exp := `CREATE TABLE kv (
 	k INT8 NOT NULL,
 	v INT8 NULL,

@@ -1,0 +1,57 @@
+query TTT
+EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE oid = 50
+----
+·              distributed  false
+·              vectorized   false
+virtual table  ·            ·
+·              source       pg_class@pg_class_oid_idx
+·              constraint   /2: [/50 - /50]
+
+query TTT
+EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE relname = 'blah'
+----
+·                   distributed  false
+·                   vectorized   false
+filter              ·            ·
+ │                  filter       relname = 'blah'
+ └── virtual table  ·            ·
+·                   source       pg_class@primary
+
+
+# We can push the filter into information_schema.tables, which has an index
+# on the table_name field.
+query TTT
+EXPLAIN SELECT * FROM information_schema.tables WHERE table_name = 'blah'
+----
+·              distributed  false
+·              vectorized   false
+virtual table  ·            ·
+·              source       tables@tables_table_name_idx
+·              constraint   /4: [/'blah' - /'blah']
+
+# Make sure that if we need an ordering on one of the virtual indexes we
+# provide it using a sortNode even though the optimizer expects the virtual
+# index to provide it "naturally".
+query TTT
+EXPLAIN SELECT * FROM information_schema.tables WHERE table_name > 'blah' ORDER BY table_name
+----
+·                   distributed  false
+·                   vectorized   false
+sort                ·            ·
+ │                  order        +table_name
+ └── virtual table  ·            ·
+·                   source       tables@tables_table_name_idx
+·                   constraint   /4: [/e'blah\x00' - ]
+
+# Make sure that we properly push down just part of a filter on two columns
+# where only one of them is satisfied by the virtual index.
+query TTT
+EXPLAIN SELECT * FROM information_schema.tables WHERE table_name = 'blah' AND table_type = 'foo'
+----
+·                   distributed  false
+·                   vectorized   false
+filter              ·            ·
+ │                  filter       table_type = 'foo'
+ └── virtual table  ·            ·
+·                   source       tables@tables_table_name_idx
+·                   constraint   /4: [/'blah' - /'blah']

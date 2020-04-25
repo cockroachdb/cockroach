@@ -12,9 +12,11 @@ package sql
 
 import (
 	"context"
+	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -52,9 +54,25 @@ type virtualSchema struct {
 type virtualSchemaDef interface {
 	getSchema() string
 	initVirtualTableDesc(
-		ctx context.Context, st *cluster.Settings, id sqlbase.ID,
+		ctx context.Context, st *cluster.Settings, parentSchemaID, id sqlbase.ID,
 	) (sqlbase.TableDescriptor, error)
 	getComment() string
+}
+
+type virtualIndex struct {
+	// populate populates the table given the constraint. matched is true if any
+	// rows were generated.
+	populate func(ctx context.Context, constraint tree.Datum, p *planner, db *DatabaseDescriptor,
+		addRow func(...tree.Datum) error,
+	) (matched bool, err error)
+
+	// partial is true if the virtual index isn't able to satisfy all constraints.
+	// For example, the pg_class table contains both indexes and tables. Tables
+	// can be looked up via a virtual index, since we can look up their descriptor
+	// by their ID directly. But indexes can't - they're hashed identifiers with
+	// no actual index. So we mark this index as partial, and if we get no match
+	// during populate, we'll fall back on populating the entire table.
+	partial bool
 }
 
 // virtualSchemaTable represents a table within a virtualSchema.
@@ -70,6 +88,12 @@ type virtualSchemaTable struct {
 	// valuesNode. This function eagerly loads every row of the virtual table
 	// during initialization of the valuesNode.
 	populate func(ctx context.Context, p *planner, db *DatabaseDescriptor, addRow func(...tree.Datum) error) error
+
+	// indexes, if non empty, is a slice of populate methods that also take a
+	// constraint, only generating rows that match the constraint. The order of
+	// indexes must match the order of the index definitions in the virtual table's
+	// schema.
+	indexes []virtualIndex
 
 	// generator, if non-nil, is a function that is used when creating a
 	// virtualTableNode. This function returns a virtualTableGenerator function
@@ -90,7 +114,7 @@ func (t virtualSchemaTable) getSchema() string {
 
 // initVirtualTableDesc is part of the virtualSchemaDef interface.
 func (t virtualSchemaTable) initVirtualTableDesc(
-	ctx context.Context, st *cluster.Settings, id sqlbase.ID,
+	ctx context.Context, st *cluster.Settings, parentSchemaID, id sqlbase.ID,
 ) (sqlbase.TableDescriptor, error) {
 	stmt, err := parser.ParseOne(t.schema)
 	if err != nil {
@@ -98,12 +122,26 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 	}
 
 	create := stmt.AST.(*tree.CreateTable)
+	var firstColDef *tree.ColumnTableDef
 	for _, def := range create.Defs {
-		if d, ok := def.(*tree.ColumnTableDef); ok && d.HasDefaultExpr() {
-			return sqlbase.TableDescriptor{},
-				errors.Errorf("virtual tables are not allowed to use default exprs "+
-					"because bootstrapping: %s:%s", &create.Table, d.Name)
+		if d, ok := def.(*tree.ColumnTableDef); ok {
+			if d.HasDefaultExpr() {
+				return sqlbase.TableDescriptor{},
+					errors.Errorf("virtual tables are not allowed to use default exprs "+
+						"because bootstrapping: %s:%s", &create.Table, d.Name)
+			}
+			if firstColDef == nil {
+				firstColDef = d
+			}
 		}
+		if _, ok := def.(*tree.UniqueConstraintTableDef); ok {
+			return sqlbase.TableDescriptor{},
+				errors.Errorf("virtual tables are not allowed to have unique constraints")
+		}
+	}
+	if firstColDef == nil {
+		return sqlbase.TableDescriptor{},
+			errors.Errorf("can't have empty virtual tables")
 	}
 
 	// Virtual tables never use SERIAL so we need not process SERIAL
@@ -115,7 +153,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		st,
 		create,
 		0, /* parentID */
-		0, /* parentSchemaID */
+		parentSchemaID,
 		id,
 		hlc.Timestamp{}, /* creationTime */
 		publicSelectPrivileges,
@@ -125,7 +163,34 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		&sessiondata.SessionData{}, /* sessionData */
 		false,                      /* temporary */
 	)
-	return mutDesc.TableDescriptor, err
+	if err != nil {
+		return mutDesc.TableDescriptor, err
+	}
+	for i := range mutDesc.Indexes {
+		idx := &mutDesc.Indexes[i]
+		if len(idx.ColumnIDs) > 1 {
+			panic("we don't know how to deal with virtual composite indexes yet")
+		}
+		// All indexes of virtual tables automatically STORE all other columns in
+		// the table.
+		idx.StoreColumnIDs = make([]sqlbase.ColumnID, len(mutDesc.Columns)-len(idx.ColumnIDs))
+		idx.StoreColumnNames = make([]string, len(mutDesc.Columns)-len(idx.ColumnIDs))
+		// Store all columns but the ones in the index.
+		outputIdx := 0
+	EACHCOLUMN:
+		for j := range mutDesc.Columns {
+			for _, id := range idx.ColumnIDs {
+				if mutDesc.Columns[j].ID == id {
+					// Skip columns in the index.
+					continue EACHCOLUMN
+				}
+			}
+			idx.StoreColumnIDs[outputIdx] = mutDesc.Columns[j].ID
+			idx.StoreColumnNames[outputIdx] = mutDesc.Columns[j].Name
+			outputIdx++
+		}
+	}
+	return mutDesc.TableDescriptor, nil
 }
 
 // getComment is part of the virtualSchemaDef interface.
@@ -140,7 +205,7 @@ func (v virtualSchemaView) getSchema() string {
 
 // initVirtualTableDesc is part of the virtualSchemaDef interface.
 func (v virtualSchemaView) initVirtualTableDesc(
-	ctx context.Context, st *cluster.Settings, id sqlbase.ID,
+	ctx context.Context, st *cluster.Settings, parentSchemaID sqlbase.ID, id sqlbase.ID,
 ) (sqlbase.TableDescriptor, error) {
 	stmt, err := parser.ParseOne(v.schema)
 	if err != nil {
@@ -157,7 +222,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		create.Name.Table(),
 		tree.AsStringWithFlags(create.AsSource, tree.FmtParsable),
 		0, /* parentID */
-		0, /* parentSchemaID */
+		parentSchemaID,
 		id,
 		columns,
 		hlc.Timestamp{}, /* creationTime */
@@ -196,6 +261,7 @@ var virtualSchemas = map[sqlbase.ID]virtualSchema{
 // on an Executor.
 type VirtualSchemaHolder struct {
 	entries      map[string]virtualSchemaEntry
+	defsByID     map[sqlbase.ID]*virtualDefEntry
 	orderedNames []string
 }
 
@@ -232,7 +298,11 @@ func newInvalidVirtualDefEntryError() error {
 // valuesNode for the virtual table. We use deferred construction here
 // so as to avoid populating a RowContainer during query preparation,
 // where we can't guarantee it will be Close()d in case of error.
-func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConstructor) {
+func (e virtualDefEntry) getPlanInfo(
+	table *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
+	idxConstraint *constraint.Constraint,
+) (sqlbase.ResultColumns, virtualTableConstructor) {
 	var columns sqlbase.ResultColumns
 	for i := range e.desc.Columns {
 		col := &e.desc.Columns[i]
@@ -268,11 +338,14 @@ func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConst
 				if err != nil {
 					return nil, err
 				}
-				return p.newContainerVirtualTableNode(columns, 0, next, cleanup), nil
+				return p.newVirtualTableNode(columns, 0, next, cleanup), nil
 			}
+
 			v := p.newContainerValuesNode(columns, 0)
 
-			if err := def.populate(ctx, p, dbDesc, func(datums ...tree.Datum) error {
+			constrainedScan := idxConstraint != nil && !idxConstraint.IsUnconstrained()
+
+			validateRow := func(datums ...tree.Datum) {
 				if r, c := len(datums), len(v.columns); r != c {
 					log.Fatalf(ctx, "datum row count and column count differ: %d vs %d", r, c)
 				}
@@ -288,9 +361,127 @@ func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConst
 							col.Name, col.Typ, datum.ResolvedType())
 					}
 				}
-				_, err := v.rows.AddRow(ctx, datums)
+			}
+			if !constrainedScan {
+				// If we don't have a constrained scan, just populate all the rows and
+				// we're done.
+				addRow := func(datums ...tree.Datum) error {
+					validateRow(datums...)
+					_, err := v.rows.AddRow(ctx, datums)
+					return err
+				}
+				if err := def.populate(ctx, p, dbDesc, addRow); err != nil {
+					v.Close(ctx)
+					return nil, err
+				}
+				return v, nil
+			}
+
+			// We are now dealing with a constrained virtual index scan.
+
+			if index.ID == 1 {
+				return nil, errors.AssertionFailedf(
+					"programming error: can't constrain scan on primary virtual index of table %s", e.desc.Name)
+			}
+
+			// Figure out the ordinal position of the column that we're filtering on.
+			// TODO(jordan): there is probably a better way to do this.
+			constraintColumnOrd := table.ColumnIdxMap()[index.ColumnIDs[0]]
+			addRowIfPassesFilter := func(datums ...tree.Datum) error {
+				validateRow(datums...)
+				matchedFilter := false
+				// If we have a constraint, apply it as a filter. If the filter passes,
+				// or we had no filter at all, add the datums to the row container.
+				datumToFilter := datums[constraintColumnOrd]
+				for i := 0; i < idxConstraint.Spans.Count(); i++ {
+					span := idxConstraint.Spans.Get(i)
+					if span.HasSingleKey(p.EvalContext()) {
+						matchedFilter = datumToFilter.Compare(p.EvalContext(), span.StartKey().Value(0)) == 0
+						if matchedFilter {
+							break
+						}
+					} else {
+						// Check both boundaries - the datum must be greater than the
+						// startKey, and less than the endKey.
+						var matchedStart, matchedEnd bool
+						if span.StartKey().IsEmpty() {
+							matchedStart = true
+						} else {
+							startCmp := datumToFilter.Compare(p.EvalContext(), span.StartKey().Value(0))
+							if span.StartBoundary() == constraint.IncludeBoundary {
+								matchedStart = startCmp >= 0
+							} else {
+								matchedStart = startCmp > 0
+							}
+						}
+						if span.EndKey().IsEmpty() {
+							matchedEnd = true
+						} else {
+							endCmp := datumToFilter.Compare(p.EvalContext(), span.EndKey().Value(0))
+							if span.EndBoundary() == constraint.IncludeBoundary {
+								matchedEnd = endCmp <= 0
+							} else {
+								matchedEnd = endCmp < 0
+							}
+						}
+						matchedFilter = matchedStart && matchedEnd
+						if matchedFilter {
+							break
+						}
+					}
+				}
+
+				var err error
+				if matchedFilter {
+					_, err = v.rows.AddRow(ctx, datums)
+				}
 				return err
-			}); err != nil {
+			}
+
+			giveUp := false
+
+			// We have a virtual index with a constraint. Run the constrained
+			// populate routine for every span. If for some reason we can't use the
+			// index for a span, we set the giveUp flag to true, which will populate
+			// the whole table, filtering the output.
+			for i := 0; i < idxConstraint.Spans.Count(); i++ {
+				span := idxConstraint.Spans.Get(i)
+				if span.StartKey().Length() > 1 {
+					return nil, errors.AssertionFailedf(
+						"programming error: can't push down composite constraints into vtables")
+				}
+				if !span.HasSingleKey(p.EvalContext()) {
+					// No hope - we can't deal with range scans on virtual indexes.
+					giveUp = true
+					break
+				}
+				constraintDatum := span.StartKey().Value(0)
+				// Subtract 2 from the index id to get the ordinal in def.indexes, since
+				// the index with ID 1 is the "primary" index defined by def.populate.
+				virtualIndex := def.indexes[index.ID-2]
+
+				// For each span, run populate.
+				found, err := virtualIndex.populate(ctx, constraintDatum, p, dbDesc,
+					addRowIfPassesFilter)
+				if err != nil {
+					v.Close(ctx)
+					return nil, err
+				}
+				if !found && virtualIndex.partial {
+					// If we found nothing, and the index was partial, we have no choice
+					// but to populate the entire table and search through it.
+					giveUp = true
+					break
+				}
+			}
+			if !giveUp {
+				return v, nil
+			}
+
+			// Fall back to populating the whole table - clear what we have so far
+			// and start over with a full populate and filter.
+			v.rows.Clear(ctx)
+			if err := def.populate(ctx, p, dbDesc, addRowIfPassesFilter); err != nil {
 				v.Close(ctx)
 				return nil, err
 			}
@@ -311,6 +502,7 @@ func NewVirtualSchemaHolder(
 	vs := &VirtualSchemaHolder{
 		entries:      make(map[string]virtualSchemaEntry, len(virtualSchemas)),
 		orderedNames: make([]string, len(virtualSchemas)),
+		defsByID:     make(map[sqlbase.ID]*virtualDefEntry, math.MaxUint32-sqlbase.MinVirtualID),
 	}
 
 	order := 0
@@ -321,7 +513,7 @@ func NewVirtualSchemaHolder(
 		orderedDefNames := make([]string, 0, len(schema.tableDefs))
 
 		for id, def := range schema.tableDefs {
-			tableDesc, err := def.initVirtualTableDesc(ctx, st, id)
+			tableDesc, err := def.initVirtualTableDesc(ctx, st, schemaID, id)
 
 			if err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
@@ -334,12 +526,14 @@ func NewVirtualSchemaHolder(
 				}
 			}
 
-			defs[tableDesc.Name] = virtualDefEntry{
+			entry := virtualDefEntry{
 				virtualDef:                 def,
 				desc:                       &tableDesc,
 				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
 				comment:                    def.getComment(),
 			}
+			defs[tableDesc.Name] = entry
+			vs.defsByID[tableDesc.ID] = &entry
 			orderedDefNames = append(orderedDefNames, tableDesc.Name)
 		}
 
@@ -410,11 +604,20 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtual
 	return virtualDefEntry{}, nil
 }
 
+func (vs *VirtualSchemaHolder) getVirtualTableEntryByID(id sqlbase.ID) (virtualDefEntry, error) {
+	entry, ok := vs.defsByID[id]
+	if !ok {
+		return virtualDefEntry{}, sqlbase.ErrDescriptorNotFound
+	}
+	return *entry, nil
+}
+
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
 	getVirtualTableDesc(tn *tree.TableName) (*sqlbase.TableDescriptor, error)
 	getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool)
 	getVirtualTableEntry(tn *tree.TableName) (virtualDefEntry, error)
+	getVirtualTableEntryByID(id sqlbase.ID) (virtualDefEntry, error)
 	getEntries() map[string]virtualSchemaEntry
 	getSchemaNames() []string
 }
