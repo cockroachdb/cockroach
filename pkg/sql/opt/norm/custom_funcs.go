@@ -1313,11 +1313,151 @@ func (c *CustomFuncs) FoldTupleColumnAccess(
 	}
 
 	// Construct and return a new ProjectionsExpr using the new ColumnIDs.
-	for i, projection := range projections {
+	for i := range projections {
+		projection := &projections[i]
 		newProjections[i] = c.f.ConstructProjectionsItem(
 			replace(projection.Element).(opt.ScalarExpr), projection.Col)
 	}
 	return newProjections
+}
+
+// CanPushColumnRemappingIntoValues returns true if there is at least one
+// ProjectionsItem for which the following conditions hold:
+//
+// 1. The ProjectionsItem remaps an output column from the given ValuesExpr.
+//
+// 2. The Values output column being remapped is not in the passthrough set.
+//
+func (c *CustomFuncs) CanPushColumnRemappingIntoValues(
+	projections memo.ProjectionsExpr, passthrough opt.ColSet, values memo.RelExpr,
+) bool {
+	outputCols := values.(*memo.ValuesExpr).Relational().OutputCols
+	for i := range projections {
+		if variable, ok := projections[i].Element.(*memo.VariableExpr); ok {
+			if !passthrough.Contains(variable.Col) && outputCols.Contains(variable.Col) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// PushColumnRemappingIntoValues folds ProjectionsItems into the passthrough set
+// if all they do is remap output columns from the ValuesExpr input. The Values
+// output columns are replaced by the corresponding columns from the folded
+// ProjectionsItems.
+//
+// Example:
+// project
+//  ├── columns: x:2!null
+//  ├── values
+//  │    ├── columns: column1:1!null
+//  │    ├── cardinality: [2 - 2]
+//  │    ├── (1,)
+//  │    └── (2,)
+//  └── projections
+//       └── column1:1 [as=x:2, outer=(1)]
+// =>
+// project
+//  ├── columns: x:2!null
+//  └── values
+//       ├── columns: x:2!null
+//       ├── cardinality: [2 - 2]
+//       ├── (1,)
+//       └── (2,)
+//
+// This allows other rules to fire. In the above example, EliminateProject can
+// now remove the Project altogether.
+func (c *CustomFuncs) PushColumnRemappingIntoValues(
+	oldInput memo.RelExpr, oldProjections memo.ProjectionsExpr, oldPassthrough opt.ColSet,
+) memo.RelExpr {
+	oldValues := oldInput.(*memo.ValuesExpr)
+	oldValuesCols := oldValues.Relational().OutputCols
+	newPassthrough := oldPassthrough.Copy()
+	replacementCols := make(map[opt.ColumnID]opt.ColumnID)
+	var newProjections memo.ProjectionsExpr
+
+	// Construct the new ProjectionsExpr and passthrough columns. Keep track of
+	// which Values columns are to be replaced.
+	for i := range oldProjections {
+		oldItem := &oldProjections[i]
+
+		// A column can be replaced if the following conditions hold:
+		// 1. The current ProjectionsItem contains a VariableExpr.
+		// 2. The VariableExpr references a column from the ValuesExpr.
+		// 3. The column has not already been assigned a replacement.
+		// 4. The column is not a passthrough column.
+		if v, ok := oldItem.Element.(*memo.VariableExpr); ok {
+			if targetCol := v.Col; oldValuesCols.Contains(targetCol) {
+				if replacementCols[targetCol] == 0 {
+					if !newPassthrough.Contains(targetCol) {
+						// The conditions for column replacement have been met. Map the old
+						// Values output column to its replacement and add the replacement
+						// to newPassthrough so it will become a passthrough column.
+						// Continue so that no corresponding ProjectionsItem is added to
+						// newProjections.
+						replacementCols[targetCol] = oldItem.Col
+						newPassthrough.Add(oldItem.Col)
+						continue
+					}
+				}
+			}
+		}
+		// The current ProjectionsItem cannot be folded into newPassthrough because
+		// the above conditions do not hold. Simply add it to newProjections. Later,
+		// every ProjectionsItem will be recursively traversed and any references to
+		// columns that are in replacementCols will be replaced.
+		newProjections = append(newProjections, *oldItem)
+	}
+
+	// Recursively traverses a ProjectionsItem element and replaces references to
+	// old ValuesExpr columns with the replacement columns. This ensures that any
+	// remaining references to old columns are replaced. For example:
+	//
+	//   WITH t AS (SELECT x, x FROM (VALUES (1)) f(x)) SELECT * FROM t;
+	//
+	// The "x" column of the Values operator will be mapped to the first column of
+	// t. This first column will become a passthrough column. Now, the remaining
+	// reference to "x" in the second column of t needs to be replaced by the new
+	// passthrough column.
+	var replace ReplaceFunc
+	replace = func(nd opt.Expr) opt.Expr {
+		switch t := nd.(type) {
+		case *memo.VariableExpr:
+			if replaceCol := replacementCols[t.Col]; replaceCol != 0 {
+				return c.f.ConstructVariable(replaceCol)
+			}
+		}
+		return c.f.Replace(nd, replace)
+	}
+
+	// Traverse each element in newProjections and replace col references as
+	// dictated by replacementCols.
+	for i := range newProjections {
+		item := &newProjections[i]
+		newProjections[i] = c.f.ConstructProjectionsItem(
+			replace(item.Element).(opt.ScalarExpr), item.Col)
+	}
+
+	// Replace all columns in newValuesColList that have been remapped by the old
+	// ProjectionsExpr.
+	oldValuesColList := oldValues.Cols
+	newValuesColList := make(opt.ColList, len(oldValuesColList))
+	for i := range newValuesColList {
+		if replaceCol := replacementCols[oldValuesColList[i]]; replaceCol != 0 {
+			newValuesColList[i] = replaceCol
+		} else {
+			newValuesColList[i] = oldValuesColList[i]
+		}
+	}
+
+	// Construct a new ValuesExpr with the replaced cols.
+	newValues := c.f.ConstructValues(
+		oldValues.Rows,
+		&memo.ValuesPrivate{Cols: newValuesColList, ID: c.f.Metadata().NextUniqueID()})
+
+	// Construct and return a new ProjectExpr with the new ValuesExpr as input.
+	return c.f.ConstructProject(newValues, newProjections, newPassthrough)
 }
 
 // ----------------------------------------------------------------------
