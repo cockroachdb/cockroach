@@ -995,7 +995,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 	// error will lead to replica removal.
 	sm.r.prepareLocalResult(ctx, cmd)
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.VEvent(ctx, 2, cmd.localResult.String())
+		log.VEventf(ctx, 2, "%v", cmd.localResult.String())
 	}
 
 	// Handle the ReplicatedEvalResult, executing any side effects of the last

@@ -264,7 +264,7 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (index int64, pE
 		for _, rDesc := range crt.Removed() {
 			if rDesc.ReplicaID == replID {
 				msg := fmt.Sprintf("received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt)
-				log.Error(p.ctx, msg)
+				log.Errorf(p.ctx, "%v", msg)
 				return 0, roachpb.NewErrorf("%s: %s", r, msg)
 			}
 		}

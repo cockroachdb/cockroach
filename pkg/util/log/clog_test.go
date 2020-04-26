@@ -536,7 +536,7 @@ func TestRollover(t *testing.T) {
 		t.Fatalf("info has initial error: %v", err)
 	}
 	fname0 := info.file.Name()
-	Info(context.Background(), strings.Repeat("x", int(LogFileMaxSize))) // force a rollover
+	Infof(context.Background(), "%s", strings.Repeat("x", int(LogFileMaxSize))) // force a rollover
 	if err != nil {
 		t.Fatalf("info has error after big write: %v", err)
 	}

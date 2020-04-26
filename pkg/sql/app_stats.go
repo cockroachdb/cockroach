@@ -394,7 +394,6 @@ func dumpStmtStats(ctx context.Context, appName string, stats map[stmtKey]*stmtS
 		return
 	}
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Statistics for %q:\n", appName)
 	for key, s := range stats {
 		s.Lock()
 		json, err := json.Marshal(s.data)
@@ -405,7 +404,7 @@ func dumpStmtStats(ctx context.Context, appName string, stats map[stmtKey]*stmtS
 		}
 		fmt.Fprintf(&buf, "%q: %s\n", key.String(), json)
 	}
-	log.Info(ctx, buf.String())
+	log.Infof(ctx, "Statistics for %q:\n%s", appName, buf.String())
 }
 
 func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
