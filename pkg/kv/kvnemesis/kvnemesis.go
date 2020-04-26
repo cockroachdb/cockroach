@@ -75,7 +75,7 @@ func RunNemesis(
 			fmt.Fprintf(&buf, "\n  before: %s", step.Before)
 			step.format(&buf, formatCtx{indent: `  ` + workerName + ` OP  `})
 			fmt.Fprintf(&buf, "\n  after: %s", step.After)
-			log.Info(ctx, buf.String())
+			log.Infof(ctx, "%v", buf.String())
 			stepsByWorker[workerIdx] = append(stepsByWorker[workerIdx], step)
 		}
 		return nil

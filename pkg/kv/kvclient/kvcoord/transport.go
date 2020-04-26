@@ -337,7 +337,7 @@ func (s *senderTransport) SendNext(
 	defer cleanup()
 
 	ba.Replica = s.replica
-	log.Event(ctx, ba.String())
+	log.Eventf(ctx, "%v", ba.String())
 	br, pErr := s.sender.Send(ctx, ba)
 	if br == nil {
 		br = &roachpb.BatchResponse{}
@@ -347,7 +347,7 @@ func (s *senderTransport) SendNext(
 	}
 	br.Error = pErr
 	if pErr != nil {
-		log.Event(ctx, "error: "+pErr.String())
+		log.Eventf(ctx, "error: %v", pErr.String())
 	}
 
 	// Import the remotely collected spans, if any.

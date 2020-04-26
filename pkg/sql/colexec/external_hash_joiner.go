@@ -534,9 +534,9 @@ StateChanged:
 		case externalHJRecursivePartitioning:
 			hj.numRepartitions++
 			if log.V(2) && hj.numRepartitions%10 == 0 {
-				log.Info(ctx, fmt.Sprintf(
+				log.Infof(ctx,
 					"external hash joiner is performing %d'th repartition", hj.numRepartitions,
-				))
+				)
 			}
 			// In order to use a different hash function when repartitioning, we need
 			// to increase the seed value of the tuple distributor.
@@ -636,10 +636,10 @@ StateChanged:
 					// join strategy.
 					hj.diskBackedSortMerge.Init()
 					if log.V(2) {
-						log.Info(ctx, fmt.Sprintf(
+						log.Infof(ctx,
 							"external hash joiner will join %d partitions using sort + merge join",
 							len(hj.partitionsToJoinUsingSortMerge),
-						))
+						)
 					}
 					hj.state = externalHJSortMergeNewPartition
 					continue

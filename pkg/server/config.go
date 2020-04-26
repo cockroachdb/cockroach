@@ -576,7 +576,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	log.Infof(ctx, "%d storage engine%s initialized",
 		len(engines), util.Pluralize(int64(len(engines))))
 	for _, s := range details {
-		log.Info(ctx, s)
+		log.Infof(ctx, "%v", s)
 	}
 	enginesCopy := engines
 	engines = nil

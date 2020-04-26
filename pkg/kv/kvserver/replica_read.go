@@ -104,7 +104,7 @@ func (r *Replica) executeReadOnlyBatch(
 	}
 
 	if pErr != nil {
-		log.VErrEvent(ctx, 3, pErr.String())
+		log.VErrEventf(ctx, 3, "%v", pErr.String())
 	} else {
 		log.Event(ctx, "read completed")
 	}

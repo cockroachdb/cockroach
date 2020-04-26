@@ -380,7 +380,7 @@ func (mr *MetricsRecorder) getNetworkActivity(
 			address, err := mr.gossip.GetNodeIDAddress(nodeID)
 			if err != nil {
 				if entry.IsLive {
-					log.Warning(ctx, err.Error())
+					log.Warningf(ctx, "%v", err)
 				}
 				continue
 			}

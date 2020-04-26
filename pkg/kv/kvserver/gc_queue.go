@@ -380,7 +380,7 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 	ba.Add(&req)
 
 	if _, pErr := r.repl.Send(ctx, ba); pErr != nil {
-		log.VErrEvent(ctx, 2, pErr.String())
+		log.VErrEventf(ctx, 2, "%v", pErr.String())
 		return pErr.GoError()
 	}
 	return nil

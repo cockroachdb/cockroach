@@ -1649,14 +1649,14 @@ func execChangeReplicasTxn(
 			},
 		})
 		if err := txn.Run(ctx, b); err != nil {
-			log.Event(ctx, err.Error())
+			log.Eventf(ctx, "%v", err)
 			return err
 		}
 
 		returnDesc = crt.Desc
 		return nil
 	}); err != nil {
-		log.Event(ctx, err.Error())
+		log.Eventf(ctx, "%v", err)
 		// NB: desc may not be the descriptor we actually compared against, but
 		// either way this gives a good idea of what happened which is all it's
 		// supposed to do.

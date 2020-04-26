@@ -299,14 +299,14 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	copy(f.requestSpans, f.spans)
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		buf := bytes.NewBufferString("Scan ")
+		var buf bytes.Buffer
 		for i, span := range f.spans {
 			if i != 0 {
 				buf.WriteString(", ")
 			}
 			buf.WriteString(span.String())
 		}
-		log.VEvent(ctx, 2, buf.String())
+		log.VEventf(ctx, 2, "Scan %s", buf.String())
 	}
 
 	// Reset spans in preparation for adding resume-spans below.
