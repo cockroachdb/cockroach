@@ -213,17 +213,23 @@ class Entry : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::google::protobuf::int64 line() const;
   void set_line(::google::protobuf::int64 value);
 
-  // int64 goroutine = 6;
-  void clear_goroutine();
-  static const int kGoroutineFieldNumber = 6;
-  ::google::protobuf::int64 goroutine() const;
-  void set_goroutine(::google::protobuf::int64 value);
-
   // .cockroach.util.log.Severity severity = 1;
   void clear_severity();
   static const int kSeverityFieldNumber = 1;
   ::cockroach::util::log::Severity severity() const;
   void set_severity(::cockroach::util::log::Severity value);
+
+  // bool redactable = 7;
+  void clear_redactable();
+  static const int kRedactableFieldNumber = 7;
+  bool redactable() const;
+  void set_redactable(bool value);
+
+  // int64 goroutine = 6;
+  void clear_goroutine();
+  static const int kGoroutineFieldNumber = 6;
+  ::google::protobuf::int64 goroutine() const;
+  void set_goroutine(::google::protobuf::int64 value);
 
   // @@protoc_insertion_point(class_scope:cockroach.util.log.Entry)
  private:
@@ -233,8 +239,9 @@ class Entry : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::google::protobuf::internal::ArenaStringPtr message_;
   ::google::protobuf::int64 time_;
   ::google::protobuf::int64 line_;
-  ::google::protobuf::int64 goroutine_;
   int severity_;
+  bool redactable_;
+  ::google::protobuf::int64 goroutine_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_util_2flog_2flog_2eproto::TableStruct;
 };
@@ -696,6 +703,20 @@ inline void Entry::set_allocated_message(::std::string* message) {
   }
   message_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), message);
   // @@protoc_insertion_point(field_set_allocated:cockroach.util.log.Entry.message)
+}
+
+// bool redactable = 7;
+inline void Entry::clear_redactable() {
+  redactable_ = false;
+}
+inline bool Entry::redactable() const {
+  // @@protoc_insertion_point(field_get:cockroach.util.log.Entry.redactable)
+  return redactable_;
+}
+inline void Entry::set_redactable(bool value) {
+  
+  redactable_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.util.log.Entry.redactable)
 }
 
 // -------------------------------------------------------------------

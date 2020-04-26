@@ -22,7 +22,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -39,6 +38,12 @@ var logging loggingT
 type loggingT struct {
 	// Level flag for output to stderr. Handled atomically.
 	stderrThreshold Severity
+
+	// the --no-color flag.
+	noColor bool
+
+	// whether or not to include redaction markers.
+	redactableLogs bool
 
 	// pool for entry formatting buffers.
 	bufPool sync.Pool
@@ -147,9 +152,7 @@ func SetClusterID(clusterID string) {
 	// Ensure that the clusterID is logged with the same format as for
 	// new log files, even on the first log file. This ensures that grep
 	// will always find it.
-	file, line, _ := caller.Lookup(1)
-	mainLog.outputLogEntry(Severity_INFO, file, line,
-		fmt.Sprintf("[config] clusterID: %s", clusterID))
+	addStructured(context.Background(), Severity_INFO, 1, "[config] clusterID: %s", []interface{}{clusterID})
 
 	// Perform the change proper.
 	logging.mu.Lock()
@@ -187,10 +190,11 @@ func (l *loggerT) writeToFile(data []byte) error {
 // outputLogEntry marshals a log entry proto into bytes, and writes
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
-func (l *loggerT) outputLogEntry(s Severity, file string, line int, msg string) {
+func (l *loggerT) outputLogEntry(s Severity, file string, line int, msg string, redactable bool) {
 	// Set additional details in log entry.
 	now := timeutil.Now()
 	entry := MakeEntry(s, now.UnixNano(), file, line, msg)
+	entry.Redactable = redactable
 
 	if f, ok := logging.interceptor.Load().(InterceptorFn); ok && f != nil {
 		f(entry)
@@ -330,7 +334,17 @@ func (l *loggerT) printPanicToFile(r interface{}) {
 		return
 	}
 
-	panicBytes := []byte(fmt.Sprintf("%v\n\n%s\n", r, debug.Stack()))
+	// Let's be careful with the panic object, which may contain unsafe
+	// data.
+	annotateFn := func(s interface{}) interface{} { return s }
+	if logging.redactableLogs {
+		annotateFn = annotateUnsafeValue
+	}
+
+	// The stack trace, OTOH, is considered safe. The delimiters
+	// are only enclosing the panic object.
+	panicBytes := []byte(fmt.Sprintf("%v\n\n%s\n",
+		annotateFn(r), debug.Stack()))
 	if err := l.writeToFile(panicBytes); err != nil {
 		fmt.Fprintf(OrigStderr, "log: %v", err)
 		return

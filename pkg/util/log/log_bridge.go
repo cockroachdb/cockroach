@@ -71,6 +71,10 @@ func (lb logBridge) Write(b []byte) (n int, err error) {
 			line = 1
 		}
 	}
-	mainLog.outputLogEntry(Severity(lb), file, line, text)
+	// Note: because the caller is using the stdLog interface, they are
+	// bypassing all the log marker logic. This means that the entire
+	// log message should be assumed to contain confidential
+	// information—it is thus not redactable.
+	mainLog.outputLogEntry(Severity(lb), file, line, text, false /* redactable */)
 	return len(b), nil
 }

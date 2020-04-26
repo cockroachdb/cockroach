@@ -12,8 +12,6 @@ package log
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
@@ -110,21 +108,14 @@ func (l *SecondaryLogger) output(
 	ctx context.Context, depth int, sev Severity, format string, args ...interface{},
 ) {
 	file, line, _ := caller.Lookup(depth + 1)
-	var buf strings.Builder
-	formatTags(ctx, &buf)
-
+	var counter uint64
 	if l.enableMsgCount {
 		// Add a counter. This is important for the SQL audit logs.
-		counter := atomic.AddUint64(&l.msgCount, 1)
-		fmt.Fprintf(&buf, "%d ", counter)
+		counter = atomic.AddUint64(&l.msgCount, 1)
 	}
-
-	if format == "" {
-		fmt.Fprint(&buf, args...)
-	} else {
-		fmt.Fprintf(&buf, format, args...)
-	}
-	l.logger.outputLogEntry(Severity_INFO, file, line, buf.String())
+	redactable := logging.redactableLogs
+	msg := makeMessageInternal(ctx, l.enableMsgCount, counter, format, args, redactable)
+	l.logger.outputLogEntry(Severity_INFO, file, line, msg, redactable)
 }
 
 // Logf logs an event on a secondary logger.

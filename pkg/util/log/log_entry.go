@@ -23,14 +23,13 @@ import (
 	"github.com/petermattis/goid"
 )
 
-// the --no-color flag.
-var noColor bool
-
 // formatLogEntry formats an Entry into a newly allocated *buffer.
 // The caller is responsible for calling putBuffer() afterwards.
 func (l *loggingT) formatLogEntry(entry Entry, stacks []byte, cp ttycolor.Profile) *buffer {
 	buf := l.formatHeader(entry.Severity, timeutil.Unix(0, entry.Time),
-		int(entry.Goroutine), entry.File, int(entry.Line), cp)
+		int(entry.Goroutine), entry.File, int(entry.Line), cp,
+		entry.Redactable,
+	)
 	_, _ = buf.WriteString(entry.Message)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
 		_ = buf.WriteByte('\n')
@@ -59,9 +58,9 @@ func (l *loggingT) formatLogEntry(entry Entry, stacks []byte, cp ttycolor.Profil
 // 	line             The line number
 // 	msg              The user-supplied message
 func (l *loggingT) formatHeader(
-	s Severity, now time.Time, gid int, file string, line int, cp ttycolor.Profile,
+	s Severity, now time.Time, gid int, file string, line int, cp ttycolor.Profile, redactable bool,
 ) *buffer {
-	if noColor {
+	if l.noColor {
 		cp = nil
 	}
 
@@ -123,10 +122,22 @@ func (l *loggingT) formatHeader(
 	tmp[0] = ':'
 	n = buf.someDigits(1, line)
 	n++
-	// Extra space between the header and the actual message for scannability.
+	// Reset the color to default.
+	n += copy(tmp[n:], cp[ttycolor.Reset])
 	tmp[n] = ' '
 	n++
-	n += copy(tmp[n:], cp[ttycolor.Reset])
+	// If redaction is enabled, indicate that the current entry has
+	// markers. This indicator is used in the log parser to determine
+	// which redaction strategy to adopt.
+	if redactable {
+		copy(tmp[n:], redactableIndicatorBytes)
+		n += len(redactableIndicatorBytes)
+	}
+	// Extra space between the header and the actual message for scannability.
+	// Note: when the redactable indicator is not introduced
+	// there are two spaces next to each other. This is intended
+	// and should be preserved for backward-compatibility with
+	// 3rd party log parsers.
 	tmp[n] = ' '
 	n++
 	buf.Write(tmp[:n])
@@ -167,7 +178,7 @@ func (e Entry) Format(w io.Writer) error {
 // preamble, because a capture group that handles multiline messages is very
 // slow when running on the large buffers passed to EntryDecoder.split.
 var entryRE = regexp.MustCompile(
-	`(?m)^([IWEF])(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) (?:(\d+) )?([^:]+):(\d+)`)
+	`(?m)^([IWEF])(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) (?:(\d+) )?([^:]+):(\d+) ((?:` + redactableIndicator + `)?) `)
 
 // EntryDecoder reads successive encoded log entries from the input
 // buffer. Each entry is preceded by a single big-ending uint32
@@ -175,12 +186,17 @@ var entryRE = regexp.MustCompile(
 type EntryDecoder struct {
 	re                 *regexp.Regexp
 	scanner            *bufio.Scanner
+	sensitiveEditor    redactEditor
 	truncatedLastEntry bool
 }
 
 // NewEntryDecoder creates a new instance of EntryDecoder.
-func NewEntryDecoder(in io.Reader) *EntryDecoder {
-	d := &EntryDecoder{scanner: bufio.NewScanner(in), re: entryRE}
+func NewEntryDecoder(in io.Reader, editMode EditSensitiveData) *EntryDecoder {
+	d := &EntryDecoder{
+		re:              entryRE,
+		scanner:         bufio.NewScanner(in),
+		sensitiveEditor: getEditor(editMode),
+	}
 	d.scanner.Split(d.split)
 	return d
 }
@@ -222,9 +238,26 @@ func (d *EntryDecoder) Decode(entry *Entry) error {
 			return err
 		}
 		entry.Line = int64(line)
-		entry.Message = strings.TrimSpace(string(b[len(m[0]):]))
+		r := redactablePackage{
+			msg:        trimFinalNewLines(b[len(m[0]):]),
+			redactable: len(m[6]) > 0,
+		}
+		r = d.sensitiveEditor(r)
+		entry.Message = string(r.msg)
+		entry.Redactable = r.redactable
 		return nil
 	}
+}
+
+func trimFinalNewLines(s []byte) []byte {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] == '\n' {
+			s = s[:i]
+		} else {
+			break
+		}
+	}
+	return s
 }
 
 func (d *EntryDecoder) split(data []byte, atEOF bool) (advance int, token []byte, err error) {

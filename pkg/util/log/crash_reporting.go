@@ -102,9 +102,6 @@ func RecoverAndReportNonfatalPanic(ctx context.Context, sv *settings.Values) {
 	}
 }
 
-// Safe constructs a SafeMessager.
-var Safe = errors.Safe
-
 // ReportPanic reports a panic has occurred on the real stderr.
 func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth int) {
 	Shout(ctx, Severity_ERROR, "a panic has occurred!")
@@ -114,10 +111,14 @@ func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth 
 		// if stderr is not redirected (e.g. when logging to file is
 		// disabled) Shout() would copy its argument to stderr
 		// unconditionally, and we don't want that: Go's runtime system
-		// already unconditonally copies the panic details to stderr.
+		// already unconditionally copies the panic details to stderr.
 		// Instead, we copy manually the details to stderr, only when stderr
 		// is redirected to a file otherwise.
 		fmt.Fprintf(OrigStderr, "%v\n\n%s\n", r, debug.Stack())
+
+		// FIXME(knz): if stderr is redirected and redactableLogs is set,
+		// stderr redirection needs to add redaction markers. Until then,
+		// we're leaking unsafe data.
 	} else {
 		// If stderr is not redirected, then Go's runtime will only print
 		// out the panic details to the original stderr, and we'll miss a copy

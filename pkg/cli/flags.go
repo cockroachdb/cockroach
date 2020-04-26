@@ -273,9 +273,9 @@ func init() {
 			flag.Hidden = true
 		}
 		switch flag.Name {
-		case logflags.NoRedirectStderrName:
-			flag.Hidden = true
-		case logflags.ShowLogsName:
+		case logflags.NoRedirectStderrName, // test-only flag
+			logflags.ShowLogsName,       // test-only flag
+			logflags.RedactableLogsName: // support-only flag
 			flag.Hidden = true
 		case logflags.LogToStderrName:
 			// The actual default value for --logtostderr is overridden in
@@ -562,6 +562,7 @@ func init() {
 		f := debugZipCmd.Flags()
 		VarFlag(f, &zipCtx.nodes.inclusive, cliflags.ZipNodes)
 		VarFlag(f, &zipCtx.nodes.exclusive, cliflags.ZipExcludeNodes)
+		BoolFlag(f, &zipCtx.redactLogs, cliflags.ZipRedactLogs, zipCtx.redactLogs)
 	}
 
 	// Decommission command.

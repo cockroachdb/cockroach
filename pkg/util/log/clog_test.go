@@ -138,7 +138,7 @@ func TestStandardLog(t *testing.T) {
 // Verify that a log can be fetched in JSON format.
 func TestEntryDecoder(t *testing.T) {
 	formatEntry := func(s Severity, now time.Time, gid int, file string, line int, msg string) string {
-		buf := logging.formatHeader(s, now, gid, file, line, nil)
+		buf := logging.formatHeader(s, now, gid, file, line, nil, false /* redactable */)
 		defer putBuffer(buf)
 		buf.WriteString(msg)
 		buf.WriteString("\n")
@@ -171,7 +171,7 @@ func TestEntryDecoder(t *testing.T) {
 	contents += formatEntry(Severity_INFO, t8, 7, "clog_test.go", 143, tooLongEntry)
 
 	readAllEntries := func(contents string) []Entry {
-		decoder := NewEntryDecoder(strings.NewReader(contents))
+		decoder := NewEntryDecoder(strings.NewReader(contents), WithFlattenedSensitiveData)
 		var entries []Entry
 		var entry Entry
 		for {
@@ -678,7 +678,7 @@ func TestExitOnFullDisk(t *testing.T) {
 
 func BenchmarkHeader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		buf := logging.formatHeader(Severity_INFO, timeutil.Now(), 200, "file.go", 100, nil)
+		buf := logging.formatHeader(Severity_INFO, timeutil.Now(), 200, "file.go", 100, nil, false /* redactable */)
 		putBuffer(buf)
 	}
 }

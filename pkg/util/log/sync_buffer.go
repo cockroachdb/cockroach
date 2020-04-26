@@ -12,6 +12,7 @@ package log
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"sync/atomic"
@@ -114,31 +115,33 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 
 	messages := make([]string, 0, 6)
 	messages = append(messages,
-		fmt.Sprintf("[config] file created at: %s\n", now.Format("2006/01/02 15:04:05")),
-		fmt.Sprintf("[config] running on machine: %s\n", host),
-		fmt.Sprintf("[config] binary: %s\n", build.GetInfo().Short()),
-		fmt.Sprintf("[config] arguments: %s\n", os.Args),
+		makeStartLine("[config] file created at: %s", Safe(now.Format("2006/01/02 15:04:05"))),
+		makeStartLine("[config] running on machine: %s", host),
+		makeStartLine("[config] binary: %s", Safe(build.GetInfo().Short())),
+		makeStartLine("[config] arguments: %s", os.Args),
 	)
 
 	logging.mu.Lock()
 	if logging.mu.clusterID != "" {
-		messages = append(messages, fmt.Sprintf("[config] clusterID: %s\n", logging.mu.clusterID))
+		messages = append(messages, makeStartLine("[config] clusterID: %s", logging.mu.clusterID))
 	}
 	logging.mu.Unlock()
 
 	// Including a non-ascii character in the first 1024 bytes of the log helps
 	// viewers that attempt to guess the character encoding.
-	messages = append(messages, fmt.Sprintf("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713\n"))
+	messages = append(messages,
+		fmt.Sprintf("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713"))
 
 	f, l, _ := caller.Lookup(1)
 	for _, msg := range messages {
 		buf := logging.formatLogEntry(Entry{
-			Severity:  Severity_INFO,
-			Time:      now.UnixNano(),
-			Goroutine: goid.Get(),
-			File:      f,
-			Line:      int64(l),
-			Message:   msg,
+			Severity:   Severity_INFO,
+			Time:       now.UnixNano(),
+			Goroutine:  goid.Get(),
+			File:       f,
+			Line:       int64(l),
+			Message:    msg,
+			Redactable: logging.redactableLogs,
 		}, nil, nil)
 		var n int
 		n, err = sb.file.Write(buf.Bytes())
@@ -154,4 +157,8 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	default:
 	}
 	return nil
+}
+
+func makeStartLine(format string, args ...interface{}) string {
+	return makeMessageInternal(context.Background(), false, 0, format, args, logging.redactableLogs)
 }

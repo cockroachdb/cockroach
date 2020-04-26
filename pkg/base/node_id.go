@@ -12,6 +12,7 @@ package base
 
 import (
 	"context"
+	"io"
 	"strconv"
 	"sync/atomic"
 
@@ -39,6 +40,11 @@ func (n *NodeIDContainer) String() string {
 		return "?"
 	}
 	return strconv.Itoa(int(val))
+}
+
+// SafeFormat implements the log.SafeFormatter interface.
+func (n *NodeIDContainer) SafeFormat(w io.Writer) {
+	_, _ = w.Write([]byte(n.String()))
 }
 
 // Get returns the current node ID; 0 if it is unset.

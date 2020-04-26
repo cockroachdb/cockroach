@@ -1166,4 +1166,14 @@ List of nodes to exclude. Can be specified as a comma-delimited
 list of node IDs or ranges of node IDs, for example: 5,10-20,23.
 The default is to not exclude any node.`,
 	}
+
+	ZipRedactLogs = FlagInfo{
+		Name: "redact-logs",
+		Description: `
+Redact text that may contain confidential data or PII from retrieved
+log entries. Note that this flag only operates on log entries;
+other items retrieved by the zip command may still consider
+confidential data or PII.
+`,
+	}
 )

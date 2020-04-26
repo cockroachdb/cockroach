@@ -13,31 +13,40 @@ package log
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 )
 
-// formatTags appends the tags to a strings.Builder. If there are no tags,
-// returns false.
-func formatTags(ctx context.Context, buf *strings.Builder) bool {
-	tags := logtags.FromContext(ctx)
-	if tags == nil {
-		return false
-	}
-	buf.WriteByte('[')
-	tags.FormatToString(buf)
-	buf.WriteString("] ")
-	return true
+// MakeMessage creates a structured log entry.
+// TODO(knz): this should be deprecated, and MakeEntry
+// used instead.
+func MakeMessage(ctx context.Context, format string, args []interface{}) string {
+	return makeMessageInternal(ctx, false, 0, format, args, false /*redactable*/)
 }
 
-// MakeMessage creates a structured log entry.
-func MakeMessage(ctx context.Context, format string, args []interface{}) string {
+func makeMessageInternal(
+	ctx context.Context,
+	addCounter bool,
+	n uint64,
+	format string,
+	args []interface{},
+	redactable bool,
+) string {
 	var buf strings.Builder
-	formatTags(ctx, &buf)
+	if redactable {
+		redactTags(ctx, &buf)
+		annotateUnsafe(args)
+	} else {
+		formatTags(ctx, &buf)
+	}
+	if addCounter {
+		buf.WriteString(strconv.FormatUint(n, 10))
+		buf.WriteByte(' ')
+	}
 	if len(args) == 0 {
 		buf.WriteString(format)
 	} else if len(format) == 0 {
@@ -51,9 +60,6 @@ func MakeMessage(ctx context.Context, format string, args []interface{}) string 
 // addStructured creates a structured log entry to be written to the
 // specified facility of the logger.
 func addStructured(ctx context.Context, s Severity, depth int, format string, args []interface{}) {
-	file, line, _ := caller.Lookup(depth + 1)
-	msg := MakeMessage(ctx, format, args)
-
 	if s == Severity_FATAL {
 		// We load the ReportingSettings from the a global singleton in this
 		// call path. See the singleton's comment for a rationale.
@@ -62,8 +68,12 @@ func addStructured(ctx context.Context, s Severity, depth int, format string, ar
 			sendCrashReport(ctx, sv, err, ReportTypePanic)
 		}
 	}
-	// MakeMessage already added the tags when forming msg, we don't want
+
+	file, line, _ := caller.Lookup(depth + 1)
+	redactable := logging.redactableLogs
+	msg := makeMessageInternal(ctx, false /*addCounter*/, 0, format, args, redactable)
+	// makeMessageInternal already added the tags when forming msg, we don't want
 	// eventInternal to prepend them again.
 	eventInternal(ctx, (s >= Severity_ERROR), false /*withTags*/, "%s:%d %s", file, line, msg)
-	mainLog.outputLogEntry(s, file, line, msg)
+	mainLog.outputLogEntry(s, file, line, msg, redactable)
 }

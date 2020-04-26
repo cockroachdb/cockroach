@@ -60,6 +60,7 @@ var _ flag.Value = &atomicBool{}
 const (
 	LogToStderrName               = "logtostderr"
 	NoColorName                   = "no-color"
+	RedactableLogsName            = "redactable-logs"
 	VModuleName                   = "vmodule"
 	LogDirName                    = "log-dir"
 	NoRedirectStderrName          = "no-redirect-stderr"
@@ -76,10 +77,12 @@ func InitFlags(
 	logDir flag.Value,
 	showLogs *bool,
 	nocolor *bool,
+	redactableLogs *bool,
 	vmodule flag.Value,
 	logFileMaxSize, logFilesCombinedMaxSize *int64,
 ) {
 	flag.BoolVar(nocolor, NoColorName, *nocolor, "disable standard error log colorization")
+	flag.BoolVar(redactableLogs, RedactableLogsName, *redactableLogs, "make log outputs redactable for confidentiality")
 	flag.BoolVar(noRedirectStderr, NoRedirectStderrName, *noRedirectStderr, "disable redirect of stderr to the log file")
 	flag.Var(vmodule, VModuleName, "comma-separated list of pattern=N settings for file-filtered logging (significantly hurts performance)")
 	flag.Var(logDir, LogDirName, "if non-empty, write log files in this directory")

@@ -19,7 +19,10 @@ import (
 func init() {
 	logflags.InitFlags(
 		&mainLog.noStderrRedirect,
-		&mainLog.logDir, &showLogs, &noColor,
+		&mainLog.logDir,
+		&showLogs,
+		&logging.noColor,
+		&logging.redactableLogs,
 		&logging.vmoduleConfig.mu.vmodule,
 		&LogFileMaxSize, &LogFilesCombinedMaxSize,
 	)

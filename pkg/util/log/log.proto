@@ -39,6 +39,15 @@ message Entry {
   string file = 3;
   int64 line = 4;
   string message = 5;
+  // redactable is true if the message includes markers
+  // to delineate sensitive information. In that case,
+  // confidentiality can be obtained by only stripping away
+  // the data within this marker.
+  // If redactable is false or unknown, the message
+  // should be considered to only contain sensitive information,
+  // and should be stripped away completely for
+  // confidentiality.
+  bool redactable = 7;
 }
 
 // A FileDetails holds all of the particulars that can be parsed by the name of

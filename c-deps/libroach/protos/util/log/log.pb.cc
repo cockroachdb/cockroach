@@ -121,6 +121,7 @@ const int Entry::kGoroutineFieldNumber;
 const int Entry::kFileFieldNumber;
 const int Entry::kLineFieldNumber;
 const int Entry::kMessageFieldNumber;
+const int Entry::kRedactableFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Entry::Entry()
@@ -143,8 +144,8 @@ Entry::Entry(const Entry& from)
     message_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.message_);
   }
   ::memcpy(&time_, &from.time_,
-    static_cast<size_t>(reinterpret_cast<char*>(&severity_) -
-    reinterpret_cast<char*>(&time_)) + sizeof(severity_));
+    static_cast<size_t>(reinterpret_cast<char*>(&goroutine_) -
+    reinterpret_cast<char*>(&time_)) + sizeof(goroutine_));
   // @@protoc_insertion_point(copy_constructor:cockroach.util.log.Entry)
 }
 
@@ -152,8 +153,8 @@ void Entry::SharedCtor() {
   file_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   message_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&time_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&severity_) -
-      reinterpret_cast<char*>(&time_)) + sizeof(severity_));
+      reinterpret_cast<char*>(&goroutine_) -
+      reinterpret_cast<char*>(&time_)) + sizeof(goroutine_));
 }
 
 Entry::~Entry() {
@@ -184,8 +185,8 @@ void Entry::Clear() {
   file_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   message_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&time_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&severity_) -
-      reinterpret_cast<char*>(&time_)) + sizeof(severity_));
+      reinterpret_cast<char*>(&goroutine_) -
+      reinterpret_cast<char*>(&time_)) + sizeof(goroutine_));
   _internal_metadata_.Clear();
 }
 
@@ -294,6 +295,20 @@ bool Entry::MergePartialFromCodedStream(
         break;
       }
 
+      // bool redactable = 7;
+      case 7: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(56u /* 56 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &redactable_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -361,6 +376,11 @@ void Entry::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(6, this->goroutine(), output);
   }
 
+  // bool redactable = 7;
+  if (this->redactable() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(7, this->redactable(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.util.log.Entry)
@@ -400,17 +420,22 @@ size_t Entry::ByteSizeLong() const {
         this->line());
   }
 
+  // .cockroach.util.log.Severity severity = 1;
+  if (this->severity() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::EnumSize(this->severity());
+  }
+
+  // bool redactable = 7;
+  if (this->redactable() != 0) {
+    total_size += 1 + 1;
+  }
+
   // int64 goroutine = 6;
   if (this->goroutine() != 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::Int64Size(
         this->goroutine());
-  }
-
-  // .cockroach.util.log.Severity severity = 1;
-  if (this->severity() != 0) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::EnumSize(this->severity());
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -444,11 +469,14 @@ void Entry::MergeFrom(const Entry& from) {
   if (from.line() != 0) {
     set_line(from.line());
   }
-  if (from.goroutine() != 0) {
-    set_goroutine(from.goroutine());
-  }
   if (from.severity() != 0) {
     set_severity(from.severity());
+  }
+  if (from.redactable() != 0) {
+    set_redactable(from.redactable());
+  }
+  if (from.goroutine() != 0) {
+    set_goroutine(from.goroutine());
   }
 }
 
@@ -475,8 +503,9 @@ void Entry::InternalSwap(Entry* other) {
     GetArenaNoVirtual());
   swap(time_, other->time_);
   swap(line_, other->line_);
-  swap(goroutine_, other->goroutine_);
   swap(severity_, other->severity_);
+  swap(redactable_, other->redactable_);
+  swap(goroutine_, other->goroutine_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

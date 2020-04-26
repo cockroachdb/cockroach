@@ -629,7 +629,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 			}
 			formattedTrace := trace.String()
 			expectedMessages := []string{
-				`could not promote .*n3,s3.* to voter, rolling back: change replicas of r\d+ failed: descriptor changed`,
+				`could not promote .*n3,s3.* to voter, rolling back:.*change replicas of r\d+ failed: descriptor changed`,
 				`learner to roll back not found`,
 			}
 			return testutils.MatchInOrder(formattedTrace, expectedMessages...)

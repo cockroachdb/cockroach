@@ -574,7 +574,9 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 					if err := runZipRequestWithTimeout(baseCtx, fmt.Sprintf("requesting log file %s", file.Name), timeout,
 						func(ctx context.Context) error {
 							entries, err = status.LogFile(
-								ctx, &serverpb.LogFileRequest{NodeId: id, File: file.Name})
+								ctx, &serverpb.LogFileRequest{
+									NodeId: id, File: file.Name, Redact: zipCtx.redactLogs, KeepRedactable: true,
+								})
 							return err
 						}); err != nil {
 						if err := z.createError(name, err); err != nil {
@@ -586,10 +588,33 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 					if err != nil {
 						return err
 					}
+					warnRedactLeak := false
 					for _, e := range entries.Entries {
+						// If the user requests redaction, and some non-redactable
+						// data was found in the log, *despite KeepRedactable
+						// being set*, this means that this zip client is talking
+						// to a node that doesn't yet know how to redact. This
+						// also means that node may be leaking sensitive data.
+						//
+						// In that case, we do the redaction work ourselves in the
+						// most conservative way possible. (It's not great that
+						// possibly confidential data flew over the network, but
+						// at least it stops here.)
+						if zipCtx.redactLogs && !e.Redactable {
+							e.Message = "REDACTEDBYZIP"
+							// We're also going to print a warning at the end.
+							warnRedactLeak = true
+						}
 						if err := e.Format(logOut); err != nil {
 							return err
 						}
+					}
+					if warnRedactLeak {
+						// Defer the warning, so that it does not get "drowned" as
+						// part of the main zip output.
+						defer func(fileName string) {
+							fmt.Fprintf(stderr, "WARNING: server-side redaction failed for %s, completed client-side (--redact-logs=true)\n", fileName)
+						}(file.Name)
 					}
 				}
 			}

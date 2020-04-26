@@ -97,6 +97,34 @@ func enableLogFileOutput(dir string, stderrSeverity Severity) (func(), error) {
 	return undo, mainLog.logDir.Set(dir)
 }
 
+// Rotate closes the current log files so that the next log call will
+// reopen them with current settings. This is useful when e.g. a test
+// changes the logging configuration after opening a test log scope.
+func (l *TestLogScope) Rotate(t tShim) {
+	// Ensure remaining logs are written.
+	Flush()
+
+	func() {
+		mainLog.mu.Lock()
+		defer mainLog.mu.Unlock()
+		if err := mainLog.closeFileLocked(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	secondaryLogRegistry.mu.Lock()
+	defer secondaryLogRegistry.mu.Unlock()
+	for _, l := range secondaryLogRegistry.mu.loggers {
+		func() {
+			l.logger.mu.Lock()
+			defer l.logger.mu.Unlock()
+			if err := l.logger.closeFileLocked(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+	}
+}
+
 // Close cleans up a TestLogScope. The directory and its contents are
 // deleted, unless the test has failed and the directory is non-empty.
 func (l *TestLogScope) Close(t tShim) {

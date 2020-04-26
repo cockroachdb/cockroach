@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"golang.org/x/net/trace"
@@ -102,6 +103,14 @@ func getSpanOrEventLog(ctx context.Context) (opentracing.Span, *ctxEventLog, boo
 
 // eventInternal is the common code for logging an event. If no args are given,
 // the format is treated as a pre-formatted string.
+//
+// Note that when called from logging function, this is taking the log
+// message as input after introduction of redaction markers.  This
+// means the message may or may not contain markers already depending
+// of the configuration of --redactable-logs.
+//
+// TODO(knz): change the interface to take a log.Entry
+// as input instead.
 func eventInternal(ctx context.Context, isErr, withTags bool, format string, args ...interface{}) {
 	if sp, el, ok := getSpanOrEventLog(ctx); ok {
 		var buf strings.Builder
@@ -145,6 +154,19 @@ func eventInternal(ctx context.Context, isErr, withTags bool, format string, arg
 			el.Unlock()
 		}
 	}
+}
+
+// formatTags appends the tags to a strings.Builder. If there are no tags,
+// returns false.
+func formatTags(ctx context.Context, buf *strings.Builder) bool {
+	tags := logtags.FromContext(ctx)
+	if tags == nil {
+		return false
+	}
+	buf.WriteByte('[')
+	tags.FormatToString(buf)
+	buf.WriteString("] ")
+	return true
 }
 
 // Event looks for an opentracing.Trace in the context and logs the given
