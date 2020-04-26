@@ -67,7 +67,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 				t.Fatal(err)
 			}
 			if d.Cmd == "plan-string" {
-				return planToString(ctx, p.curPlan.plan, p.curPlan.subqueryPlans, p.curPlan.postqueryPlans)
+				return planToString(ctx, &p.curPlan)
 			}
 			tree := planToTree(ctx, &p.curPlan)
 			treeYaml, err := yaml.Marshal(tree)

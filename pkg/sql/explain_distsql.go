@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -26,10 +27,11 @@ import (
 type explainDistSQLNode struct {
 	optColumnsSlot
 
-	options        *tree.ExplainOptions
-	plan           planNode
-	subqueryPlans  []subquery
-	postqueryPlans []postquery
+	options       *tree.ExplainOptions
+	plan          planNode
+	subqueryPlans []subquery
+	cascades      []exec.Cascade
+	checkPlans    []checkPlan
 
 	stmtType tree.StatementType
 
@@ -72,6 +74,11 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	planCtx.ignoreClose = true
 	planCtx.planner = params.p
 	planCtx.stmtType = n.stmtType
+
+	if n.analyze && len(n.cascades) > 0 {
+		return errors.New("running EXPLAIN ANALYZE (DISTSQL) on this query is " +
+			"unsupported because of the presence of cascades")
+	}
 
 	// In EXPLAIN ANALYZE mode, we need subqueries to be evaluated as normal.
 	// In EXPLAIN mode, we don't evaluate subqueries, and instead display their
@@ -205,12 +212,12 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		}
 	}
 
-	if n.analyze && len(n.postqueryPlans) > 0 {
-		outerPostqueries := planCtx.planner.curPlan.postqueryPlans
+	if n.analyze && len(n.checkPlans) > 0 {
+		outerChecks := planCtx.planner.curPlan.checkPlans
 		defer func() {
-			planCtx.planner.curPlan.postqueryPlans = outerPostqueries
+			planCtx.planner.curPlan.checkPlans = outerChecks
 		}()
-		planCtx.planner.curPlan.postqueryPlans = n.postqueryPlans
+		planCtx.planner.curPlan.checkPlans = n.checkPlans
 
 		// Discard rows that are returned.
 		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
@@ -233,7 +240,8 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			planCtx.ctx,
 			params.p,
 			params.extendedEvalCtx.copy,
-			n.postqueryPlans,
+			nil, /* cascades */
+			n.checkPlans,
 			recv,
 			true,
 		) {
@@ -275,11 +283,11 @@ func (n *explainDistSQLNode) Close(ctx context.Context) {
 			n.subqueryPlans[i].plan = nil
 		}
 	}
-	for i := range n.postqueryPlans {
-		// Once a postquery plan has been evaluated, it already closes its plan.
-		if n.postqueryPlans[i].plan != nil {
-			n.postqueryPlans[i].plan.Close(ctx)
-			n.postqueryPlans[i].plan = nil
+	for i := range n.checkPlans {
+		// Once a check plan plan has been evaluated, it already closes its plan.
+		if n.checkPlans[i].plan != nil {
+			n.checkPlans[i].plan.Close(ctx)
+			n.checkPlans[i].plan = nil
 		}
 	}
 }

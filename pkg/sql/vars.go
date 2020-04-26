@@ -526,7 +526,7 @@ var varGen = map[string]sessionVar{
 	`experimental_optimizer_foreign_key_cascades`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`experimental_optimizer_foreign_key_cascades`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			b, err := parseBoolVar("optimizer_foreign_key_cascades", s)
+			b, err := parseBoolVar("experimental_optimizer_foreign_key_cascades", s)
 			if err != nil {
 				return err
 			}
