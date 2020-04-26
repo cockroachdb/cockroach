@@ -12,7 +12,6 @@ package log
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"time"
 
@@ -155,9 +154,9 @@ func (l *loggerT) flushAndSync(doSync bool) {
 	// If we can't sync within this duration, exit the process.
 	t := time.AfterFunc(maxSyncDuration, func() {
 		// NB: the disk-stall-detected roachtest matches on this message.
-		Shout(context.Background(), Severity_FATAL, fmt.Sprintf(
+		Shoutf(context.Background(), Severity_FATAL,
 			"disk stall detected: unable to sync log files within %s", maxSyncDuration,
-		))
+		)
 	})
 	defer t.Stop()
 

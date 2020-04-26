@@ -46,7 +46,12 @@ func logDepth(ctx context.Context, depth int, sev Severity, format string, args 
 
 // Shout logs to the specified severity's log, and also to the real
 // stderr if logging is currently redirected to a file.
-func Shout(ctx context.Context, sev Severity, args ...interface{}) {
+func Shout(ctx context.Context, sev Severity, msg string) {
+	Shoutf(ctx, sev, msg)
+}
+
+// Shoutf is like Shout but uses formatting.
+func Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	if sev == Severity_FATAL {
 		// Fatal error handling later already tries to exit even if I/O should
 		// block, but crash reporting might also be in the way.
@@ -57,9 +62,9 @@ func Shout(ctx context.Context, sev Severity, args ...interface{}) {
 	}
 	if mainLog.stderrRedirected() {
 		fmt.Fprintf(OrigStderr, "*\n* %s: %s\n*\n", sev.String(),
-			strings.Replace(MakeMessage(ctx, "", args), "\n", "\n* ", -1))
+			strings.Replace(MakeMessage(ctx, format, args), "\n", "\n* ", -1))
 	}
-	logDepth(ctx, 1, sev, "", args)
+	logDepth(ctx, 1, sev, format, args)
 }
 
 // Infof logs to the INFO log.
