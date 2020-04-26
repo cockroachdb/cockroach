@@ -1211,3 +1211,14 @@ CREATE INDEX ON t47029_1(c0) INTERLEAVE IN PARENT t47029_0(c0)
 query I
 SELECT * FROM t47029_0 WHERE (t47029_0.rowid > 0) IS NULL
 ----
+
+# Regression for #47115 (cfetcher sometimes not reading value component
+# of composite encoded data).
+statement ok
+CREATE TABLE t47715 (c0 DECIMAL PRIMARY KEY, c1 INT UNIQUE);
+INSERT INTO t47715(c0) VALUES (1819487610)
+
+query T
+SELECT c0 FROM t47715 ORDER by c1
+----
+1819487610
