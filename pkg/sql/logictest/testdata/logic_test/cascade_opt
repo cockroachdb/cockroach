@@ -3,6 +3,160 @@
 statement ok
 SET optimizer_foreign_keys = true
 
+# Tests for the experimental opt-driven cascades.
+subtest OptDriven
+
+statement ok
+SET experimental_optimizer_foreign_key_cascades = true
+
+# Single delete cascade.
+statement ok
+CREATE TABLE parent (p INT PRIMARY KEY);
+CREATE TABLE child (
+  c INT PRIMARY KEY,
+  p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE
+);
+INSERT INTO parent VALUES (1), (2);
+INSERT INTO child VALUES (1, 1), (2, 2), (10, 1), (20, 2);
+
+query II rowsort
+SELECT * FROM child
+----
+1   1
+2   2
+10  1
+20  2
+
+statement ok
+DELETE FROM parent WHERE p >= 2
+
+query II rowsort
+SELECT * FROM child
+----
+1   1
+10  1
+
+statement ok
+DELETE FROM parent WHERE p <= 2
+
+query II
+SELECT * FROM child
+----
+
+statement ok
+DROP TABLE child;
+DROP TABLE parent
+
+
+# Delete cascade with multiple columns and multiple child tables.
+statement ok
+CREATE TABLE parent_multi (pa INT, pb INT, pc INT, UNIQUE INDEX (pa,pb,pc));
+CREATE TABLE child_multi_1 (
+  c INT,
+  a INT,
+  b INT,
+  FOREIGN KEY (a,b,c) REFERENCES parent_multi(pa,pb,pc) ON DELETE CASCADE
+);
+CREATE TABLE child_multi_2 (
+  b INT,
+  c INT,
+  a INT,
+  FOREIGN KEY (a,b,c) REFERENCES parent_multi(pa,pb,pc) ON DELETE CASCADE
+)
+
+statement ok
+INSERT INTO parent_multi VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300), (NULL, NULL, NULL);
+INSERT INTO child_multi_1(a,b,c) VALUES (1, 10, 100), (2, 20, 200), (1, 10, 100), (2, 20, 200), (NULL, NULL, NULL);
+INSERT INTO child_multi_2(a,b,c) VALUES (2, 20, 200), (3, 30, 300)
+
+query III rowsort
+SELECT * FROM parent_multi
+----
+1     10    100
+2     20    200
+3     30    300
+NULL  NULL  NULL
+
+query III rowsort
+SELECT a,b,c FROM child_multi_1
+----
+1     10    100
+2     20    200
+1     10    100
+2     20    200
+NULL  NULL  NULL
+
+query III rowsort
+SELECT a,b,c FROM child_multi_2
+----
+2  20  200
+3  30  300
+
+statement ok
+DELETE FROM parent_multi WHERE pa = 1
+
+query III rowsort
+SELECT * FROM parent_multi
+----
+2     20    200
+3     30    300
+NULL  NULL  NULL
+
+query III rowsort
+SELECT a,b,c FROM child_multi_1
+----
+2     20    200
+2     20    200
+NULL  NULL  NULL
+
+query III rowsort
+SELECT a,b,c FROM child_multi_2
+----
+2  20  200
+3  30  300
+
+statement ok
+DELETE FROM parent_multi WHERE pb = 20
+
+query III rowsort
+SELECT * FROM parent_multi
+----
+3     30    300
+NULL  NULL  NULL
+
+query III rowsort
+SELECT a,b,c FROM child_multi_1
+----
+NULL  NULL  NULL
+
+query III rowsort
+SELECT a,b,c FROM child_multi_2
+----
+3  30  300
+
+# Deleting NULLs should not cause any changes in a child.
+statement ok
+DELETE FROM parent_multi WHERE pa IS NULL
+
+query III rowsort
+SELECT * FROM parent_multi
+----
+3  30  300
+
+query III rowsort
+SELECT a,b,c FROM child_multi_1
+----
+NULL  NULL  NULL
+
+query III rowsort
+SELECT a,b,c FROM child_multi_2
+----
+3  30  300
+
+# TODO(radu): enable when we support Cascades.
+statement ok
+SET experimental_optimizer_foreign_key_cascades = false
+
 subtest AllCascadingActions
 ### A test of all cascading actions in their most basic form.
 # A

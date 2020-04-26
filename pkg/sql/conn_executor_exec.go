@@ -853,7 +853,9 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	}
 
 	var evalCtxFactory func() *extendedEvalContext
-	if len(planner.curPlan.subqueryPlans) != 0 || len(planner.curPlan.postqueryPlans) != 0 {
+	if len(planner.curPlan.subqueryPlans) != 0 ||
+		len(planner.curPlan.cascades) != 0 ||
+		len(planner.curPlan.checkPlans) != 0 {
 		// The factory reuses the same object because the contexts are not used
 		// concurrently.
 		var factoryEvalCtx extendedEvalContext
@@ -890,9 +892,9 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		return recv.bytesRead, recv.rowsRead, recv.commErr
 	}
 
-	if len(planner.curPlan.postqueryPlans) != 0 {
+	if len(planner.curPlan.checkPlans) > 0 || len(planner.curPlan.cascades) > 0 {
 		ex.server.cfg.DistSQLPlanner.PlanAndRunPostqueries(
-			ctx, planner, evalCtxFactory, planner.curPlan.postqueryPlans, recv, distribute,
+			ctx, planner, evalCtxFactory, planner.curPlan.cascades, planner.curPlan.checkPlans, recv, distribute,
 		)
 	}
 
