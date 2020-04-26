@@ -472,7 +472,8 @@ func (s *fileLogStream) open() bool {
 	if s.err = seekToFirstAfterFrom(s.f, s.from); s.err != nil {
 		return false
 	}
-	s.d = log.NewEntryDecoder(bufio.NewReaderSize(s.f, readBufSize))
+	s.d = log.NewEntryDecoder(bufio.NewReaderSize(s.f, readBufSize),
+		log.WithMarkedSensitiveData)
 	return true
 }
 
@@ -546,7 +547,7 @@ func seekToFirstAfterFrom(f *os.File, from time.Time) (err error) {
 			panic(err)
 		}
 		var e log.Entry
-		switch err := log.NewEntryDecoder(f).Decode(&e); err {
+		switch err := log.NewEntryDecoder(f, log.WithMarkedSensitiveData).Decode(&e); err {
 		case nil:
 			return e.Time >= from.UnixNano()
 		default:
@@ -557,7 +558,7 @@ func seekToFirstAfterFrom(f *os.File, from time.Time) (err error) {
 		return err
 	}
 	var e log.Entry
-	if err := log.NewEntryDecoder(f).Decode(&e); err != nil {
+	if err := log.NewEntryDecoder(f, log.WithMarkedSensitiveData).Decode(&e); err != nil {
 		return err
 	}
 	_, err = f.Seek(int64(offset), io.SeekStart)

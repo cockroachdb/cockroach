@@ -119,6 +119,7 @@ func (l *SecondaryLogger) output(
 		fmt.Fprintf(&buf, "%d ", counter)
 	}
 
+	annotateUnsafe(&buf, args)
 	if format == "" {
 		fmt.Fprint(&buf, args...)
 	} else {

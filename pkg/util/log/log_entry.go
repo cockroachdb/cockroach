@@ -175,12 +175,17 @@ var entryRE = regexp.MustCompile(
 type EntryDecoder struct {
 	re                 *regexp.Regexp
 	scanner            *bufio.Scanner
+	sensitiveEditor    func([]byte) []byte
 	truncatedLastEntry bool
 }
 
 // NewEntryDecoder creates a new instance of EntryDecoder.
-func NewEntryDecoder(in io.Reader) *EntryDecoder {
-	d := &EntryDecoder{scanner: bufio.NewScanner(in), re: entryRE}
+func NewEntryDecoder(in io.Reader, editMode EditSensitiveData) *EntryDecoder {
+	d := &EntryDecoder{
+		re:              entryRE,
+		scanner:         bufio.NewScanner(in),
+		sensitiveEditor: getEditor(editMode),
+	}
 	d.scanner.Split(d.split)
 	return d
 }
@@ -222,7 +227,7 @@ func (d *EntryDecoder) Decode(entry *Entry) error {
 			return err
 		}
 		entry.Line = int64(line)
-		entry.Message = strings.TrimSpace(string(b[len(m[0]):]))
+		entry.Message = strings.TrimSpace(string(d.sensitiveEditor(b[len(m[0]):])))
 		return nil
 	}
 }
@@ -270,3 +275,31 @@ func (d *EntryDecoder) split(data []byte, atEOF bool) (advance int, token []byte
 	i[0]++
 	return i[0], data[:i[0]], nil
 }
+
+// EditSensitiveData describes how the messages in log entries should
+// be edited through the API.
+type EditSensitiveData int
+
+const (
+	// WithMarkedSensitiveData is the "raw" log with sensitive data markers included.
+	WithMarkedSensitiveData EditSensitiveData = iota
+	// WithFlattenedSensitiveData is the log with markers stripped.
+	WithFlattenedSensitiveData
+	// WithoutSensitiveData is the log with the sensitive data redacted.
+	WithoutSensitiveData
+)
+
+func getEditor(editMode EditSensitiveData) func([]byte) []byte {
+	switch editMode {
+	case WithMarkedSensitiveData:
+		return func(s []byte) []byte { return s }
+	case WithFlattenedSensitiveData:
+		return func(s []byte) []byte { return reStripMarkers.ReplaceAll(s, nil) }
+	default: // be conservative: edit out by default
+		return func(s []byte) []byte { return reStripSensitive.ReplaceAll(s, redacted) }
+	}
+}
+
+var redacted = []byte("<REDACTED>")
+var reStripSensitive = regexp.MustCompile("\x0E[^\x0F\x0E]*\x0F")
+var reStripMarkers = regexp.MustCompile("[\x0F\x0E]")

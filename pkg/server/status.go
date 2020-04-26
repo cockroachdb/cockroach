@@ -822,7 +822,7 @@ func (s *statusServer) LogFile(
 
 	var entry log.Entry
 	var resp serverpb.LogEntriesResponse
-	decoder := log.NewEntryDecoder(reader)
+	decoder := log.NewEntryDecoder(reader, log.WithoutSensitiveData)
 	for {
 		if err := decoder.Decode(&entry); err != nil {
 			if err == io.EOF {
@@ -924,7 +924,8 @@ func (s *statusServer) Logs(
 		}
 	}
 
-	entries, err := log.FetchEntriesFromFiles(startTimestamp, endTimestamp, int(maxEntries), regex)
+	entries, err := log.FetchEntriesFromFiles(
+		startTimestamp, endTimestamp, int(maxEntries), regex, log.WithoutSensitiveData)
 	if err != nil {
 		return nil, err
 	}

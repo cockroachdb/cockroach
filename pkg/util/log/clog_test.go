@@ -171,7 +171,7 @@ func TestEntryDecoder(t *testing.T) {
 	contents += formatEntry(Severity_INFO, t8, 7, "clog_test.go", 143, tooLongEntry)
 
 	readAllEntries := func(contents string) []Entry {
-		decoder := NewEntryDecoder(strings.NewReader(contents))
+		decoder := NewEntryDecoder(strings.NewReader(contents), WithFlattenedSensitiveData)
 		var entries []Entry
 		var entry Entry
 		for {

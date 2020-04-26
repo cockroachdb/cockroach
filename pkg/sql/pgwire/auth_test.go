@@ -258,7 +258,8 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						// this is currently broken for secondary loggers.
 						// See: https://github.com/cockroachdb/cockroach/issues/45745
 						// So instead we need to do the filtering ourselves.
-						entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 10000, authLogFileRe)
+						entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 10000, authLogFileRe,
+							log.WithFlattenedSensitiveData)
 						if err != nil {
 							t.Fatal(err)
 						}

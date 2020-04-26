@@ -37,6 +37,7 @@ func formatTags(ctx context.Context, buf *strings.Builder) bool {
 func MakeMessage(ctx context.Context, format string, args []interface{}) string {
 	var buf strings.Builder
 	formatTags(ctx, &buf)
+	annotateUnsafe(&buf, args)
 	if len(args) == 0 {
 		buf.WriteString(format)
 	} else if len(format) == 0 {
@@ -46,6 +47,27 @@ func MakeMessage(ctx context.Context, format string, args []interface{}) string 
 	}
 	return buf.String()
 }
+
+func annotateUnsafe(buf *strings.Builder, args []interface{}) {
+	for i := range args {
+		if _, ok := args[i].(SafeType); !ok {
+			args[i] = &redactable{args[i]}
+		}
+	}
+}
+
+type redactable struct {
+	arg interface{}
+}
+
+func (r *redactable) Format(s fmt.State, verb rune) {
+	_, _ = s.Write(startRedact)
+	fmt.Fprintf(s, fmt.Sprintf("%%%c", verb), r.arg)
+	_, _ = s.Write(endRedact)
+}
+
+var startRedact = []byte{0x0E}
+var endRedact = []byte{0x0F}
 
 // addStructured creates a structured log entry to be written to the
 // specified facility of the logger.

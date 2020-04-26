@@ -448,7 +448,10 @@ func selectFiles(logFiles []FileInfo, endTimestamp int64) []FileInfo {
 // 'pattern' if provided. The logs entries are returned in reverse
 // chronological order.
 func FetchEntriesFromFiles(
-	startTimestamp, endTimestamp int64, maxEntries int, pattern *regexp.Regexp,
+	startTimestamp, endTimestamp int64,
+	maxEntries int,
+	pattern *regexp.Regexp,
+	editMode EditSensitiveData,
 ) ([]Entry, error) {
 	logFiles, err := ListLogFiles()
 	if err != nil {
@@ -464,7 +467,8 @@ func FetchEntriesFromFiles(
 			startTimestamp,
 			endTimestamp,
 			maxEntries-len(entries),
-			pattern)
+			pattern,
+			editMode)
 		if err != nil {
 			return nil, err
 		}
@@ -489,7 +493,11 @@ func FetchEntriesFromFiles(
 // processed. If the number of entries returned exceeds 'maxEntries' then
 // processing of new entries is stopped immediately.
 func readAllEntriesFromFile(
-	file FileInfo, startTimestamp, endTimestamp int64, maxEntries int, pattern *regexp.Regexp,
+	file FileInfo,
+	startTimestamp, endTimestamp int64,
+	maxEntries int,
+	pattern *regexp.Regexp,
+	editMode EditSensitiveData,
 ) ([]Entry, bool, error) {
 	reader, err := GetLogReader(file.Name, true /* restricted */)
 	if reader == nil || err != nil {
@@ -497,7 +505,7 @@ func readAllEntriesFromFile(
 	}
 	defer reader.Close()
 	entries := []Entry{}
-	decoder := NewEntryDecoder(reader)
+	decoder := NewEntryDecoder(reader, editMode)
 	entryBeforeStart := false
 	for {
 		entry := Entry{}
