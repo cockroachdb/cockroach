@@ -975,3 +975,59 @@ select
  │         └── fd: ()-->(1), (2)-->(4)
  └── filters
       └── z:3 < 990 [type=bool, outer=(3), constraints=(/3: (/NULL - /989]; tight)]
+
+# Regression test for #47742 and #47879. Make sure the first bucket always has
+# NumRange=0, even after filtering.
+exec-ddl
+CREATE TABLE t47742 (a INT, b BOOL, INDEX b_idx (b DESC));
+----
+
+exec-ddl
+ALTER TABLE t47742 INJECT STATISTICS '[
+  {
+    "name":"__auto__",
+    "created_at":"2000-01-01 00:00:00+00:00",
+    "columns":["b"],
+    "row_count":200000,
+    "distinct_count":56128,
+    "null_count":27606,
+    "histo_col_type":"BOOL",
+    "histo_buckets":[{
+      "num_eq":7975541041996628837,
+      "num_range":0,
+      "distinct_range":0,
+      "upper_bound":"false"
+    },
+    {
+      "num_eq":124065620125775458,
+      "num_range":100000000000,
+      "distinct_range":100000000000,
+      "upper_bound":"true"
+    }]
+  }
+]'
+----
+
+opt
+SELECT a, b::string FROM t47742 WHERE b = true
+----
+project
+ ├── columns: a:1(int) b:4(string!null)
+ ├── stats: [rows=2640.64496]
+ ├── fd: ()-->(4)
+ ├── index-join t47742
+ │    ├── columns: a:1(int) t47742.b:2(bool!null)
+ │    ├── stats: [rows=2640.64496, distinct(2)=2.00246926, null(2)=0]
+ │    │   histogram(2)=  0    0    0.0021284 2640.6
+ │    │                <--- false ----------- true
+ │    ├── fd: ()-->(2)
+ │    └── scan t47742@b_idx
+ │         ├── columns: t47742.b:2(bool!null) rowid:3(int!null)
+ │         ├── constraint: /-2/3: [/true - /true]
+ │         ├── stats: [rows=2640.64496, distinct(2)=2.00246926, null(2)=0]
+ │         │   histogram(2)=  0    0    0.0021284 2640.6
+ │         │                <--- false ----------- true
+ │         ├── key: (3)
+ │         └── fd: ()-->(2)
+ └── projections
+      └── t47742.b:2::STRING [as=b:4, type=string, outer=(2)]
