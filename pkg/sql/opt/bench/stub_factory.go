@@ -217,7 +217,7 @@ func (f *stubFactory) RenameColumns(input exec.Node, colNames []string) (exec.No
 }
 
 func (f *stubFactory) ConstructPlan(
-	root exec.Node, subqueries []exec.Subquery, postqueries []exec.Node,
+	root exec.Node, subqueries []exec.Subquery, cascades []exec.Cascade, checks []exec.Node,
 ) (exec.Plan, error) {
 	return struct{}{}, nil
 }

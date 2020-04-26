@@ -11,6 +11,8 @@
 package exec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -295,14 +297,19 @@ type Factory interface {
 	RenameColumns(input Node, colNames []string) (Node, error)
 
 	// ConstructPlan creates a plan enclosing the given plan and (optionally)
-	// subqueries and postqueries.
+	// subqueries, cascades, and checks.
 	//
 	// Subqueries are executed before the root tree, which can refer to subquery
 	// results using tree.Subquery nodes.
 	//
-	// Postqueries are executed after the root tree. They don't return results but
-	// can generate errors (e.g. foreign key check failures).
-	ConstructPlan(root Node, subqueries []Subquery, postqueries []Node) (Plan, error)
+	// Cascades are executed after the root tree. They can return more cascades
+	// and checks which should also be executed.
+	//
+	// Checks are executed after all cascades have been executed. They don't
+	// return results but can generate errors (e.g. foreign key check failures).
+	ConstructPlan(
+		root Node, subqueries []Subquery, cascades []Cascade, checks []Node,
+	) (Plan, error)
 
 	// ConstructExplain returns a node that implements EXPLAIN (OPT), showing
 	// information about the given plan.
@@ -332,7 +339,7 @@ type Factory interface {
 	//
 	// If skipFKChecks is set, foreign keys are not checked as part of the
 	// execution of the insertion. This is used when the FK checks are planned by
-	// the optimizer and are run separately as plan postqueries.
+	// the optimizer and are run separately as plan checks.
 	ConstructInsert(
 		input Node,
 		table cat.Table,
@@ -389,7 +396,7 @@ type Factory interface {
 	//
 	// If skipFKChecks is set, foreign keys are not checked as part of the
 	// execution of the insertion. This is used when the FK checks are planned by
-	// the optimizer and are run separately as plan postqueries.
+	// the optimizer and are run separately as plan checks.
 	ConstructUpdate(
 		input Node,
 		table cat.Table,
@@ -434,7 +441,7 @@ type Factory interface {
 	// If skipFKChecks is set, foreign keys are not checked as part of the
 	// execution of the upsert for the insert half. This is used when the FK
 	// checks are planned by the optimizer and are run separately as plan
-	// postqueries.
+	// checks.
 	ConstructUpsert(
 		input Node,
 		table cat.Table,
@@ -463,7 +470,7 @@ type Factory interface {
 	//
 	// If skipFKChecks is set, foreign keys are not checked as part of the
 	// execution of the delete. This is used when the FK checks are planned
-	// by the optimizer and are run separately as plan postqueries.
+	// by the optimizer and are run separately as plan checks.
 	ConstructDelete(
 		input Node,
 		table cat.Table,
@@ -714,6 +721,39 @@ type RecursiveCTEIterationFn func(bufferRef BufferNode) (Plan, error)
 // a row produced from the left side. The plan is guaranteed to produce the
 // rightColumns passed to ConstructApplyJoin (in order).
 type ApplyJoinPlanRightSideFn func(leftRow tree.Datums) (Plan, error)
+
+// Cascade describes a cascading query. The query uses a BufferNode as an input;
+// it should only be triggered if this buffer is not empty.
+type Cascade struct {
+	// FKName is the name of the foreign key constraint.
+	FKName string
+
+	// Buffer is the Node returned by ConstructBuffer which stores the input to
+	// the mutation.
+	Buffer BufferNode
+
+	// PlanFn builds the cascade query and creates the plan for it.
+	// Note that the generated Plan can in turn contain more cascades (as well as
+	// checks, which should run after all cascades are executed).
+	//
+	// The bufferRef is a reference that can be used with ConstructWithBuffer to
+	// read the mutation input. It is conceptually the same as the Buffer field;
+	// however, we allow the execution engine to provide a different copy or
+	// implementation of the node (e.g. to facilitate early cleanup of the
+	// original plan).
+	//
+	// This method does not mutate any captured state; it is ok to call PlanFn
+	// methods concurrently (provided that they don't use a single non-thread-safe
+	// execFactory).
+	PlanFn func(
+		ctx context.Context,
+		semaCtx *tree.SemaContext,
+		evalCtx *tree.EvalContext,
+		execFactory Factory,
+		bufferRef BufferNode,
+		numBufferedRows int,
+	) (Plan, error)
+}
 
 // InsertFastPathMaxRows is the maximum number of rows for which we can use the
 // insert fast path.

@@ -54,7 +54,7 @@ import (
 type deleteCascadeBuilder struct {
 	mutatedTable cat.Table
 	// fkInboundOrdinal is the ordinal of the inbound foreign key constraint on
-	// the mutated table (can be passed tomutatedTable.InboundForeignKey).
+	// the mutated table (can be passed to mutatedTable.InboundForeignKey).
 	fkInboundOrdinal int
 	childTable       cat.Table
 }
