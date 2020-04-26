@@ -258,7 +258,8 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						// this is currently broken for secondary loggers.
 						// See: https://github.com/cockroachdb/cockroach/issues/45745
 						// So instead we need to do the filtering ourselves.
-						entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 10000, authLogFileRe)
+						entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 10000, authLogFileRe,
+							log.WithFlattenedSensitiveData)
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -274,13 +275,17 @@ func hbaRunTest(t *testing.T, insecure bool) {
 								entry := &entries[i]
 								t.Logf("found log entry: %+v", *entry)
 
-								// The message is going to contain a client address, with a random port number.
+								// The tag part is going to contain a client address, with a random port number.
 								// To make the test deterministic, erase the random part.
-								msg := addrRe.ReplaceAllString(entry.Message, ",client=XXX")
+								tags := addrRe.ReplaceAllString(entry.Tags, ",client=XXX")
+								var maybeTags string
+								if len(tags) > 0 {
+									maybeTags = "[" + tags + "] "
+								}
 								// Ditto with the duration.
-								msg = durationRe.ReplaceAllString(msg, "duration: XXX")
+								msg := durationRe.ReplaceAllString(entry.Message, "duration: XXX")
 
-								fmt.Fprintf(&buf, "%c: %s\n", entry.Severity.String()[0], msg)
+								fmt.Fprintf(&buf, "%c: %s%s\n", entry.Severity.String()[0], maybeTags, msg)
 							}
 							lastLogMsg := entries[0].Message
 							if !re.MatchString(lastLogMsg) {

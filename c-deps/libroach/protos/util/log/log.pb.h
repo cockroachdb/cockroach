@@ -201,6 +201,20 @@ class Entry : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::std::string* release_message();
   void set_allocated_message(::std::string* message);
 
+  // string tags = 7;
+  void clear_tags();
+  static const int kTagsFieldNumber = 7;
+  const ::std::string& tags() const;
+  void set_tags(const ::std::string& value);
+  #if LANG_CXX11
+  void set_tags(::std::string&& value);
+  #endif
+  void set_tags(const char* value);
+  void set_tags(const char* value, size_t size);
+  ::std::string* mutable_tags();
+  ::std::string* release_tags();
+  void set_allocated_tags(::std::string* tags);
+
   // int64 time = 2;
   void clear_time();
   static const int kTimeFieldNumber = 2;
@@ -213,17 +227,29 @@ class Entry : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::google::protobuf::int64 line() const;
   void set_line(::google::protobuf::int64 value);
 
+  // .cockroach.util.log.Severity severity = 1;
+  void clear_severity();
+  static const int kSeverityFieldNumber = 1;
+  ::cockroach::util::log::Severity severity() const;
+  void set_severity(::cockroach::util::log::Severity value);
+
+  // bool redactable = 9;
+  void clear_redactable();
+  static const int kRedactableFieldNumber = 9;
+  bool redactable() const;
+  void set_redactable(bool value);
+
   // int64 goroutine = 6;
   void clear_goroutine();
   static const int kGoroutineFieldNumber = 6;
   ::google::protobuf::int64 goroutine() const;
   void set_goroutine(::google::protobuf::int64 value);
 
-  // .cockroach.util.log.Severity severity = 1;
-  void clear_severity();
-  static const int kSeverityFieldNumber = 1;
-  ::cockroach::util::log::Severity severity() const;
-  void set_severity(::cockroach::util::log::Severity value);
+  // uint64 counter = 8;
+  void clear_counter();
+  static const int kCounterFieldNumber = 8;
+  ::google::protobuf::uint64 counter() const;
+  void set_counter(::google::protobuf::uint64 value);
 
   // @@protoc_insertion_point(class_scope:cockroach.util.log.Entry)
  private:
@@ -231,10 +257,13 @@ class Entry : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::ArenaStringPtr file_;
   ::google::protobuf::internal::ArenaStringPtr message_;
+  ::google::protobuf::internal::ArenaStringPtr tags_;
   ::google::protobuf::int64 time_;
   ::google::protobuf::int64 line_;
-  ::google::protobuf::int64 goroutine_;
   int severity_;
+  bool redactable_;
+  ::google::protobuf::int64 goroutine_;
+  ::google::protobuf::uint64 counter_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_util_2flog_2flog_2eproto::TableStruct;
 };
@@ -696,6 +725,87 @@ inline void Entry::set_allocated_message(::std::string* message) {
   }
   message_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), message);
   // @@protoc_insertion_point(field_set_allocated:cockroach.util.log.Entry.message)
+}
+
+// string tags = 7;
+inline void Entry::clear_tags() {
+  tags_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& Entry::tags() const {
+  // @@protoc_insertion_point(field_get:cockroach.util.log.Entry.tags)
+  return tags_.GetNoArena();
+}
+inline void Entry::set_tags(const ::std::string& value) {
+  
+  tags_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.util.log.Entry.tags)
+}
+#if LANG_CXX11
+inline void Entry::set_tags(::std::string&& value) {
+  
+  tags_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.util.log.Entry.tags)
+}
+#endif
+inline void Entry::set_tags(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  tags_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.util.log.Entry.tags)
+}
+inline void Entry::set_tags(const char* value, size_t size) {
+  
+  tags_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.util.log.Entry.tags)
+}
+inline ::std::string* Entry::mutable_tags() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.util.log.Entry.tags)
+  return tags_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* Entry::release_tags() {
+  // @@protoc_insertion_point(field_release:cockroach.util.log.Entry.tags)
+  
+  return tags_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void Entry::set_allocated_tags(::std::string* tags) {
+  if (tags != NULL) {
+    
+  } else {
+    
+  }
+  tags_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), tags);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.util.log.Entry.tags)
+}
+
+// uint64 counter = 8;
+inline void Entry::clear_counter() {
+  counter_ = GOOGLE_ULONGLONG(0);
+}
+inline ::google::protobuf::uint64 Entry::counter() const {
+  // @@protoc_insertion_point(field_get:cockroach.util.log.Entry.counter)
+  return counter_;
+}
+inline void Entry::set_counter(::google::protobuf::uint64 value) {
+  
+  counter_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.util.log.Entry.counter)
+}
+
+// bool redactable = 9;
+inline void Entry::clear_redactable() {
+  redactable_ = false;
+}
+inline bool Entry::redactable() const {
+  // @@protoc_insertion_point(field_get:cockroach.util.log.Entry.redactable)
+  return redactable_;
+}
+inline void Entry::set_redactable(bool value) {
+  
+  redactable_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.util.log.Entry.redactable)
 }
 
 // -------------------------------------------------------------------

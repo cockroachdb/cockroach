@@ -30,3 +30,37 @@ func StoreFloat64(addr *AtomicFloat64, val float64) {
 func LoadFloat64(addr *AtomicFloat64) (val float64) {
 	return math.Float64frombits(atomic.LoadUint64((*uint64)(addr)))
 }
+
+// AtomicBool mimics an atomic boolean.
+type AtomicBool uint32
+
+// Set atomically sets the boolean.
+func (b *AtomicBool) Set(v bool) {
+	s := uint32(0)
+	if v {
+		s = 1
+	}
+	atomic.StoreUint32((*uint32)(b), s)
+}
+
+// Get atomically gets the boolean.
+func (b *AtomicBool) Get() bool {
+	s := atomic.LoadUint32((*uint32)(b))
+	if s == 0 {
+		return false
+	}
+	return true
+}
+
+// Swap atomically swaps the value.
+func (b *AtomicBool) Swap(v bool) bool {
+	wanted := uint32(0)
+	if v {
+		wanted = 1
+	}
+	current := atomic.SwapUint32((*uint32)(b), wanted)
+	if current == 0 {
+		return false
+	}
+	return true
+}

@@ -250,7 +250,7 @@ func (l *logger) Printf(f string, args ...interface{}) {
 // which stack frame is reported as the file:line in the message. depth=1 is
 // equivalent to PrintfCtx. E.g. pass 2 to ignore the caller's frame.
 func (l *logger) PrintfCtxDepth(ctx context.Context, depth int, f string, args ...interface{}) {
-	msg := crdblog.MakeMessage(ctx, f, args)
+	msg := crdblog.FormatWithContextTags(ctx, f, args)
 	if err := l.stdoutL.Output(depth+1, msg); err != nil {
 		// Changing our interface to return an Error from a logging method seems too
 		// onerous. Let's yell to the default logger and if that fails, oh well.
@@ -264,7 +264,7 @@ func (l *logger) ErrorfCtx(ctx context.Context, f string, args ...interface{}) {
 }
 
 func (l *logger) ErrorfCtxDepth(ctx context.Context, depth int, f string, args ...interface{}) {
-	msg := crdblog.MakeMessage(ctx, f, args)
+	msg := crdblog.FormatWithContextTags(ctx, f, args)
 	if err := l.stderrL.Output(depth+1, msg); err != nil {
 		// Changing our interface to return an Error from a logging method seems too
 		// onerous. Let's yell to the default logger and if that fails, oh well.

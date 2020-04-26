@@ -12,26 +12,25 @@ package log
 
 import (
 	"bufio"
+	"context"
+	"fmt"
 	"io"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/ttycolor"
 	"github.com/petermattis/goid"
 )
 
-// the --no-color flag.
-var noColor bool
-
 // formatLogEntry formats an Entry into a newly allocated *buffer.
 // The caller is responsible for calling putBuffer() afterwards.
 func (l *loggingT) formatLogEntry(entry Entry, stacks []byte, cp ttycolor.Profile) *buffer {
-	buf := l.formatHeader(entry.Severity, timeutil.Unix(0, entry.Time),
-		int(entry.Goroutine), entry.File, int(entry.Line), cp)
-	_, _ = buf.WriteString(entry.Message)
+	buf := l.formatLogEntryInternal(entry, cp)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
 		_ = buf.WriteByte('\n')
 	}
@@ -41,13 +40,13 @@ func (l *loggingT) formatLogEntry(entry Entry, stacks []byte, cp ttycolor.Profil
 	return buf
 }
 
-// formatHeader formats a log header using the provided file name and
-// line number. Log lines are colorized depending on severity.
+// formatEntryInternal renders a log entry.
+// Log lines are colorized depending on severity.
 // It uses a newly allocated *buffer. The caller is responsible
 // for calling putBuffer() afterwards.
 //
 // Log lines have this form:
-// 	Lyymmdd hh:mm:ss.uuuuuu goid file:line msg...
+// 	Lyymmdd hh:mm:ss.uuuuuu goid file:line <redactable> [tags] counter msg...
 // where the fields are defined as follows:
 // 	L                A single character, representing the log level (eg 'I' for INFO)
 // 	yy               The year (zero padded; ie 2016 is '16')
@@ -57,26 +56,26 @@ func (l *loggingT) formatLogEntry(entry Entry, stacks []byte, cp ttycolor.Profil
 // 	goid             The goroutine id (omitted if zero for use by tests)
 // 	file             The file name
 // 	line             The line number
+// 	tags             The context tags
+// 	counter          The log entry counter, if non-zero
 // 	msg              The user-supplied message
-func (l *loggingT) formatHeader(
-	s Severity, now time.Time, gid int, file string, line int, cp ttycolor.Profile,
-) *buffer {
-	if noColor {
+func (l *loggingT) formatLogEntryInternal(entry Entry, cp ttycolor.Profile) *buffer {
+	if l.noColor {
 		cp = nil
 	}
 
 	buf := getBuffer()
-	if line < 0 {
-		line = 0 // not a real line number, but acceptable to someDigits
+	if entry.Line < 0 {
+		entry.Line = 0 // not a real line number, but acceptable to someDigits
 	}
-	if s > Severity_FATAL || s <= Severity_UNKNOWN {
-		s = Severity_INFO // for safety.
+	if entry.Severity > Severity_FATAL || entry.Severity <= Severity_UNKNOWN {
+		entry.Severity = Severity_INFO // for safety.
 	}
 
 	tmp := buf.tmp[:len(buf.tmp)]
 	var n int
 	var prefix []byte
-	switch s {
+	switch entry.Severity {
 	case Severity_INFO:
 		prefix = cp[ttycolor.Cyan]
 	case Severity_WARNING:
@@ -87,10 +86,11 @@ func (l *loggingT) formatHeader(
 	n += copy(tmp, prefix)
 	// Avoid Fprintf, for speed. The format is so simple that we can do it quickly by hand.
 	// It's worth about 3X. Fprintf is hard.
+	now := timeutil.Unix(0, entry.Time)
 	year, month, day := now.Date()
 	hour, minute, second := now.Clock()
 	// Lyymmdd hh:mm:ss.uuuuuu file:line
-	tmp[n] = severityChar[s-1]
+	tmp[n] = severityChar[entry.Severity-1]
 	n++
 	if year < 2000 {
 		year = 2000
@@ -113,23 +113,58 @@ func (l *loggingT) formatHeader(
 	n += buf.nDigits(6, n, now.Nanosecond()/1000, '0')
 	tmp[n] = ' '
 	n++
-	if gid > 0 {
-		n += buf.someDigits(n, gid)
+	if entry.Goroutine > 0 {
+		n += buf.someDigits(n, int(entry.Goroutine))
 		tmp[n] = ' '
 		n++
 	}
 	buf.Write(tmp[:n])
-	buf.WriteString(file)
+	buf.WriteString(entry.File)
 	tmp[0] = ':'
-	n = buf.someDigits(1, line)
+	n = buf.someDigits(1, int(entry.Line))
 	n++
-	// Extra space between the header and the actual message for scannability.
-	tmp[n] = ' '
-	n++
+	// Reset the color to default.
 	n += copy(tmp[n:], cp[ttycolor.Reset])
 	tmp[n] = ' '
 	n++
+	// If redaction is enabled, indicate that the current entry has
+	// markers. This indicator is used in the log parser to determine
+	// which redaction strategy to adopt.
+	if entry.Redactable {
+		copy(tmp[n:], redactableIndicatorBytes)
+		n += len(redactableIndicatorBytes)
+	}
+	// Note: when the redactable indicator is not introduced
+	// there are two spaces next to each other. This is intended
+	// and should be preserved for backward-compatibility with
+	// 3rd party log parsers.
+	tmp[n] = ' '
+	n++
 	buf.Write(tmp[:n])
+
+	// The remainder is variable-length and could exceed
+	// the static size of tmp. But we do have an upper bound.
+	buf.Grow(len(entry.Tags) + 14 + len(entry.Message))
+
+	// Display the tags if set.
+	if len(entry.Tags) != 0 {
+		buf.Write(cp[ttycolor.Blue])
+		buf.WriteByte('[')
+		buf.WriteString(entry.Tags)
+		buf.WriteString("] ")
+		buf.Write(cp[ttycolor.Reset])
+	}
+
+	// Display the counter if set.
+	if entry.Counter > 0 {
+		n = buf.someDigits(0, int(entry.Counter))
+		tmp[n] = ' '
+		n++
+		buf.Write(tmp[:n])
+	}
+
+	// Display the message.
+	buf.WriteString(entry.Message)
 	return buf
 }
 
@@ -144,14 +179,60 @@ func (l *loggingT) processForFile(entry Entry, stacks []byte) *buffer {
 }
 
 // MakeEntry creates an Entry.
-func MakeEntry(s Severity, t int64, file string, line int, msg string) Entry {
-	return Entry{
-		Severity:  s,
-		Time:      t,
-		Goroutine: goid.Get(),
-		File:      file,
-		Line:      int64(line),
-		Message:   msg,
+func MakeEntry(
+	ctx context.Context,
+	s Severity,
+	lc *EntryCounter,
+	depth int,
+	redactable bool,
+	format string,
+	args ...interface{},
+) (res Entry) {
+	res = Entry{
+		Severity:   s,
+		Time:       timeutil.Now().UnixNano(),
+		Goroutine:  goid.Get(),
+		Redactable: redactable,
+	}
+
+	// Populate file/lineno.
+	file, line, _ := caller.Lookup(depth + 1)
+	res.File = file
+	res.Line = int64(line)
+
+	// Optionally populate the counter.
+	if lc != nil && lc.EnableMsgCount {
+		// Add a counter. This is important for e.g. the SQL audit logs.
+		res.Counter = atomic.AddUint64(&lc.msgCount, 1)
+	}
+
+	// Populate the tags.
+	var buf strings.Builder
+	if redactable {
+		redactTags(ctx, &buf)
+		// Also annotate the arguments for the message below, to avoid
+		// comparing redactable twice.
+		annotateUnsafe(args)
+	} else {
+		formatTags(ctx, false /* brackets */, &buf)
+	}
+	res.Tags = buf.String()
+
+	// Populate the message.
+	buf.Reset()
+	renderArgs(&buf, format, args)
+	res.Message = buf.String()
+
+	return
+}
+
+func renderArgs(buf *strings.Builder, format string, args []interface{}) {
+	if len(args) == 0 {
+		buf.WriteString(format)
+	} else if len(format) == 0 {
+		fmt.Fprint(buf, args...)
+	} else {
+		fmt.Fprintf(buf, format, args...)
 	}
 }
 
@@ -167,7 +248,14 @@ func (e Entry) Format(w io.Writer) error {
 // preamble, because a capture group that handles multiline messages is very
 // slow when running on the large buffers passed to EntryDecoder.split.
 var entryRE = regexp.MustCompile(
-	`(?m)^([IWEF])(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) (?:(\d+) )?([^:]+):(\d+)`)
+	`(?m)^` +
+		/* Severity         */ `([IWEF])` +
+		/* Date and time    */ `(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) ` +
+		/* Goroutine ID     */ `(?:(\d+) )?` +
+		/* File/Line        */ `([^:]+):(\d+) ` +
+		/* Redactable flag  */ `((?:` + redactableIndicator + `)?) ` +
+		/* Context tags     */ `(?:\[([^]]+)\] )?`,
+)
 
 // EntryDecoder reads successive encoded log entries from the input
 // buffer. Each entry is preceded by a single big-ending uint32
@@ -175,12 +263,17 @@ var entryRE = regexp.MustCompile(
 type EntryDecoder struct {
 	re                 *regexp.Regexp
 	scanner            *bufio.Scanner
+	sensitiveEditor    redactEditor
 	truncatedLastEntry bool
 }
 
 // NewEntryDecoder creates a new instance of EntryDecoder.
-func NewEntryDecoder(in io.Reader) *EntryDecoder {
-	d := &EntryDecoder{scanner: bufio.NewScanner(in), re: entryRE}
+func NewEntryDecoder(in io.Reader, editMode EditSensitiveData) *EntryDecoder {
+	d := &EntryDecoder{
+		re:              entryRE,
+		scanner:         bufio.NewScanner(in),
+		sensitiveEditor: getEditor(editMode),
+	}
 	d.scanner.Split(d.split)
 	return d
 }
@@ -203,12 +296,18 @@ func (d *EntryDecoder) Decode(entry *Entry) error {
 		if m == nil {
 			continue
 		}
+
+		// Process the severity.
 		entry.Severity = Severity(strings.IndexByte(severityChar, m[1][0]) + 1)
+
+		// Process the timestamp.
 		t, err := time.Parse(MessageTimeFormat, string(m[2]))
 		if err != nil {
 			return err
 		}
 		entry.Time = t.UnixNano()
+
+		// Process the goroutine ID.
 		if len(m[3]) > 0 {
 			goroutine, err := strconv.Atoi(string(m[3]))
 			if err != nil {
@@ -216,15 +315,47 @@ func (d *EntryDecoder) Decode(entry *Entry) error {
 			}
 			entry.Goroutine = int64(goroutine)
 		}
+
+		// Process the file/line details.
 		entry.File = string(m[4])
 		line, err := strconv.Atoi(string(m[5]))
 		if err != nil {
 			return err
 		}
 		entry.Line = int64(line)
-		entry.Message = strings.TrimSpace(string(b[len(m[0]):]))
+
+		// Process the context tags.
+		redactable := len(m[6]) != 0
+		if len(m[7]) != 0 {
+			r := redactablePackage{
+				msg:        m[7],
+				redactable: redactable,
+			}
+			r = d.sensitiveEditor(r)
+			entry.Tags = string(r.msg)
+		}
+
+		// Process the log message itself
+		r := redactablePackage{
+			msg:        trimFinalNewLines(b[len(m[0]):]),
+			redactable: redactable,
+		}
+		r = d.sensitiveEditor(r)
+		entry.Message = string(r.msg)
+		entry.Redactable = r.redactable
 		return nil
 	}
+}
+
+func trimFinalNewLines(s []byte) []byte {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] == '\n' {
+			s = s[:i]
+		} else {
+			break
+		}
+	}
+	return s
 }
 
 func (d *EntryDecoder) split(data []byte, atEOF bool) (advance int, token []byte, err error) {

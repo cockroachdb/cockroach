@@ -13,6 +13,7 @@ package roachpb
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,6 +33,11 @@ func (n NodeID) String() string {
 	return strconv.FormatInt(int64(n), 10)
 }
 
+// SafeFormat implements the log.SafeFormatter interface.
+func (n NodeID) SafeFormat(w io.Writer) {
+	_, _ = w.Write([]byte(n.String()))
+}
+
 // StoreID is a custom type for a cockroach store ID.
 type StoreID int32
 
@@ -48,12 +54,22 @@ func (n StoreID) String() string {
 	return strconv.FormatInt(int64(n), 10)
 }
 
+// SafeFormat implements the log.SafeFormatter interface.
+func (n StoreID) SafeFormat(w io.Writer) {
+	_, _ = w.Write([]byte(n.String()))
+}
+
 // A RangeID is a unique ID associated to a Raft consensus group.
 type RangeID int64
 
 // String implements the fmt.Stringer interface.
 func (r RangeID) String() string {
 	return strconv.FormatInt(int64(r), 10)
+}
+
+// SafeFormat implements the log.SafeFormatter interface.
+func (r RangeID) SafeFormat(w io.Writer) {
+	_, _ = w.Write([]byte(r.String()))
 }
 
 // RangeIDSlice implements sort.Interface.
@@ -69,6 +85,11 @@ type ReplicaID int32
 // String implements the fmt.Stringer interface.
 func (r ReplicaID) String() string {
 	return strconv.FormatInt(int64(r), 10)
+}
+
+// SafeFormat implements the log.SafeFormatter interface.
+func (r ReplicaID) SafeFormat(w io.Writer) {
+	_, _ = w.Write([]byte(r.String()))
 }
 
 // Equals returns whether the Attributes lists are equivalent. Attributes lists

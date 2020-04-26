@@ -11,12 +11,9 @@
 package log
 
 import (
-	"fmt"
+	"context"
 	"io"
 	"os"
-
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // SetExitFunc allows setting a function that will be called to exit
@@ -59,7 +56,7 @@ func ResetExitFunc() {
 func (l *loggerT) exitLocked(err error) {
 	l.mu.AssertHeld()
 
-	l.reportErrorEverywhereLocked(err)
+	l.reportErrorEverywhereLocked(context.Background(), err)
 
 	logging.mu.Lock()
 	f := logging.mu.exitOverride.f
@@ -77,11 +74,11 @@ func (l *loggerT) exitLocked(err error) {
 
 // reportErrorEverywhereLocked writes the error details to both the
 // process' original stderr and the log file if configured.
-func (l *loggerT) reportErrorEverywhereLocked(err error) {
+func (l *loggerT) reportErrorEverywhereLocked(ctx context.Context, err error) {
 	// Make a valid log entry for this error.
-	file, line, _ := caller.Lookup(1)
-	entry := MakeEntry(Severity_ERROR, timeutil.Now().UnixNano(), file, line,
-		fmt.Sprintf("logging error: %v", err))
+	entry := MakeEntry(
+		ctx, Severity_ERROR, &l.logCounter, 1 /* depth */, l.redactableLogs.Get(),
+		"logging error: %v", err)
 
 	// Format the entry for output below. Note how this formatting is
 	// done just once here for both the stderr and file outputs below,
