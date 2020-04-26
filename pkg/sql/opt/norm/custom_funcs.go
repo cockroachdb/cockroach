@@ -11,6 +11,7 @@
 package norm
 
 import (
+	"fmt"
 	"math"
 	"sort"
 
@@ -280,6 +281,11 @@ func (c *CustomFuncs) HasNoCols(input memo.RelExpr) bool {
 	return input.Relational().OutputCols.Empty()
 }
 
+// HasOneCol returns true if the input expression has exactly one output column.
+func (c *CustomFuncs) HasOneCol(input memo.RelExpr) bool {
+	return input.Relational().OutputCols.Len() == 1
+}
+
 // HasZeroRows returns true if the input expression never returns any rows.
 func (c *CustomFuncs) HasZeroRows(input memo.RelExpr) bool {
 	return input.Relational().Cardinality.IsZero()
@@ -385,6 +391,12 @@ func (c *CustomFuncs) AddColToSet(set opt.ColSet, col opt.ColumnID) opt.ColSet {
 	newSet := set.Copy()
 	newSet.Add(col)
 	return newSet
+}
+
+// SingleColFromSet returns the single column in s. Panics if s does not contain
+// exactly one column.
+func (c *CustomFuncs) SingleColFromSet(s opt.ColSet) opt.ColumnID {
+	return s.SingleColumn()
 }
 
 // sharedProps returns the shared logical properties for the given expression.
@@ -1142,6 +1154,172 @@ func (c *CustomFuncs) ProjectExtraCol(
 	return c.f.ConstructProject(in, projections, in.Relational().OutputCols)
 }
 
+// CanUnnestTuplesFromValues returns true if the Values operator has a single
+// column containing tuples that can be unfolded into multiple columns.
+//
+// This is the case if:
+//
+// 	1. The Values operator has exactly one output column.
+//
+// 	2. The single output column is of type tuple.
+//
+// 	3. There is at least one row.
+//
+// 	4. All tuples in the single column are either TupleExpr's or ConstExpr's
+//     that wrap DTuples, as opposed to dynamically generated tuples.
+//
+func (c *CustomFuncs) CanUnnestTuplesFromValues(expr memo.RelExpr) bool {
+	values := expr.(*memo.ValuesExpr)
+	if !c.HasOneCol(expr) {
+		return false
+	}
+	colTypeFam := c.mem.Metadata().ColumnMeta(values.Cols[0]).Type.Family()
+	if colTypeFam != types.TupleFamily {
+		return false
+	}
+	if len(values.Rows) < 1 {
+		return false
+	}
+	for _, row := range values.Rows {
+		if !c.IsStaticTuple(row.(*memo.TupleExpr).Elems[0]) {
+			return false
+		}
+	}
+	return true
+}
+
+// OnlyTupleColumnsAccessed ensures that the input ProjectionsExpr contains no
+// direct references to the tuple represented by the given ColumnID.
+func (c *CustomFuncs) OnlyTupleColumnsAccessed(
+	projections memo.ProjectionsExpr, tupleCol opt.ColumnID,
+) bool {
+	var check func(expr opt.Expr) bool
+	check = func(expr opt.Expr) bool {
+		switch t := expr.(type) {
+		case *memo.ColumnAccessExpr:
+			switch t.Input.(type) {
+			case *memo.VariableExpr:
+				return true
+			}
+
+		case *memo.VariableExpr:
+			return t.Col != tupleCol
+		}
+		for i, n := 0, expr.ChildCount(); i < n; i++ {
+			if !check(expr.Child(i)) {
+				return false
+			}
+		}
+		return true
+	}
+
+	for i := range projections {
+		if !check(projections[i].Element) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// MakeColsForUnnestTuples takes in the ColumnID of a tuple column and adds new
+// columns to metadata corresponding to each field in the tuple. A ColList
+// containing these new columns is returned.
+func (c *CustomFuncs) MakeColsForUnnestTuples(tupleColID opt.ColumnID) opt.ColList {
+	mem := c.mem.Metadata()
+	tupleType := c.mem.Metadata().ColumnMeta(tupleColID).Type
+
+	// Create a new column for each position in the tuple. Add it to outColIDs.
+	tupleLen := len(tupleType.TupleContents())
+	tupleAlias := mem.ColumnMeta(tupleColID).Alias
+	outColIDs := make(opt.ColList, tupleLen)
+	for i := 0; i < tupleLen; i++ {
+		newAlias := fmt.Sprintf("%s_%d", tupleAlias, i+1)
+		newColID := mem.AddColumn(newAlias, &tupleType.TupleContents()[i])
+		outColIDs[i] = newColID
+	}
+	return outColIDs
+}
+
+// UnnestTuplesFromValues takes in a Values operator that has a single column
+// of tuples and a ColList corresponding to each tuple field. It returns a new
+// Values operator with the tuple expanded out into the Values rows.
+// For example, these rows:
+//
+//   ((1, 2),)
+//   ((3, 4),)
+//
+// would be unnested as:
+//
+//   (1, 2)
+//   (3, 4)
+//
+func (c *CustomFuncs) UnnestTuplesFromValues(
+	expr memo.RelExpr, valuesCols opt.ColList,
+) memo.RelExpr {
+	values := expr.(*memo.ValuesExpr)
+	tupleColID := values.Cols[0]
+	tupleType := c.mem.Metadata().ColumnMeta(tupleColID).Type
+	outTuples := make(memo.ScalarListExpr, len(values.Rows))
+
+	// Pull the inner tuples out of the single column of the Values operator and
+	// put them into a ScalarListExpr to be used in the new Values operator.
+	for i, row := range values.Rows {
+		outerTuple := row.(*memo.TupleExpr)
+		switch t := outerTuple.Elems[0].(type) {
+		case *memo.TupleExpr:
+			outTuples[i] = t
+
+		case *memo.ConstExpr:
+			dTuple := t.Value.(*tree.DTuple)
+			tupleVals := make(memo.ScalarListExpr, len(dTuple.D))
+			for i, v := range dTuple.D {
+				val := c.f.ConstructConstVal(v, &tupleType.TupleContents()[i])
+				tupleVals[i] = val
+			}
+			outTuples[i] = c.f.ConstructTuple(tupleVals, tupleType)
+
+		default:
+			panic(errors.AssertionFailedf("unhandled input op: %T", t))
+		}
+	}
+
+	// Return new ValuesExpr with new tuples.
+	valuesPrivate := &memo.ValuesPrivate{Cols: valuesCols, ID: c.mem.Metadata().NextUniqueID()}
+	return c.f.ConstructValues(outTuples, valuesPrivate)
+}
+
+// FoldTupleColumnAccess constructs a new ProjectionsExpr from the old one with
+// any ColumnAccess operators that refer to the original tuple column (oldColID)
+// replaced by new columns from the output of the given ValuesExpr.
+func (c *CustomFuncs) FoldTupleColumnAccess(
+	projections memo.ProjectionsExpr, valuesCols opt.ColList, oldColID opt.ColumnID,
+) memo.ProjectionsExpr {
+	newProjections := make(memo.ProjectionsExpr, len(projections))
+
+	// Recursively traverses a ProjectionsItem element and replaces references to
+	// positions in the tuple rows with one of the newly constructed columns.
+	var replace ReplaceFunc
+	replace = func(nd opt.Expr) opt.Expr {
+		if colAccess, ok := nd.(*memo.ColumnAccessExpr); ok {
+			if variable, ok := colAccess.Input.(*memo.VariableExpr); ok {
+				// Skip past references to columns other than the input tuple column.
+				if variable.Col == oldColID {
+					return c.f.ConstructVariable(valuesCols[int(colAccess.Idx)])
+				}
+			}
+		}
+		return c.f.Replace(nd, replace)
+	}
+
+	// Construct and return a new ProjectionsExpr using the new ColumnIDs.
+	for i, projection := range projections {
+		newProjections[i] = c.f.ConstructProjectionsItem(
+			replace(projection.Element).(opt.ScalarExpr), projection.Col)
+	}
+	return newProjections
+}
+
 // ----------------------------------------------------------------------
 //
 // Select Rules
@@ -1398,7 +1576,7 @@ func (c *CustomFuncs) CanConstructValuesFromZips(zip memo.ZipExpr) bool {
 			// Unnest has more than one argument.
 			return false
 		}
-		if !c.IsArray(fn.Args[0]) {
+		if !c.IsStaticArray(fn.Args[0]) {
 			// Unnest argument is not an ArrayExpr or ConstExpr wrapping a DArray.
 			return false
 		}
@@ -1447,6 +1625,7 @@ func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 			for j, val := range t.Elems {
 				addValToOutRows(val, j, i)
 			}
+
 		case *memo.ConstExpr:
 			dArray := t.Value.(*tree.DArray)
 			for j, elem := range dArray.Array {
@@ -1974,9 +2153,20 @@ func (c *CustomFuncs) IsConstArray(scalar opt.ScalarExpr) bool {
 	return false
 }
 
-// IsArray returns true if the expression is either a constant array or a normal
-// array.
-func (c *CustomFuncs) IsArray(scalar opt.ScalarExpr) bool {
+// IsStaticArray returns true if the expression is either a ConstExpr that
+// wraps a DArray or an ArrayExpr. The complete set of expressions within a
+// static array can be determined during planning:
+//
+//   ARRAY[1,2]
+//   ARRAY[x,y]
+//
+// By contrast, expressions within a dynamic array can only be determined at
+// run-time:
+//
+//   SELECT (SELECT array_agg(x) FROM xy)
+//
+// Here, the length of the array is only known at run-time.
+func (c *CustomFuncs) IsStaticArray(scalar opt.ScalarExpr) bool {
 	if _, ok := scalar.(*memo.ArrayExpr); ok {
 		return true
 	}
@@ -2170,6 +2360,33 @@ func (c *CustomFuncs) VarsAreSame(left, right opt.ScalarExpr) bool {
 	lv := left.(*memo.VariableExpr)
 	rv := right.(*memo.VariableExpr)
 	return lv.Col == rv.Col
+}
+
+// IsStaticTuple returns true if the given ScalarExpr is either a TupleExpr or a
+// ConstExpr wrapping a DTuple. Expressions within a static tuple can be
+// determined during planning:
+//
+//   (1, 2)
+//   (x, y)
+//
+// By contrast, expressions within a dynamic tuple can only be determined at
+// run-time:
+//
+//   SELECT (SELECT (x, y) FROM xy)
+//
+// Here, if there are 0 rows in xy, the tuple value will be NULL. Or, if there
+// is more than one row in xy, a dynamic error will be raised.
+func (c *CustomFuncs) IsStaticTuple(expr opt.ScalarExpr) bool {
+	switch t := expr.(type) {
+	case *memo.TupleExpr:
+		return true
+
+	case *memo.ConstExpr:
+		if _, ok := t.Value.(*tree.DTuple); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // ----------------------------------------------------------------------

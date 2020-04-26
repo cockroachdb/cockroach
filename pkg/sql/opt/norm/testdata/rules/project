@@ -216,3 +216,334 @@ project
  └── projections
       ├── column1:1 + 1 [as="?column?":3, outer=(1)]
       └── 3 [as="?column?":4]
+
+# --------------------------------------------------
+# FoldTupleAccessIntoValues
+# --------------------------------------------------
+
+# Simple case with VALUES.
+norm expect=FoldTupleAccessIntoValues
+SELECT (tup).@1, (tup).@2 FROM (VALUES ((1,2)), ((3,4))) AS v(tup)
+----
+project
+ ├── columns: "?column?":2!null "?column?":3!null
+ ├── cardinality: [2 - 2]
+ ├── values
+ │    ├── columns: column1_1:4!null column1_2:5!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── (1, 2)
+ │    └── (3, 4)
+ └── projections
+      ├── column1_1:4 [as="?column?":2, outer=(4)]
+      └── column1_2:5 [as="?column?":3, outer=(5)]
+
+# Simple case with unnest.
+norm expect=FoldTupleAccessIntoValues
+SELECT (Tuples).@1, (Tuples).@2 FROM unnest(ARRAY[(1,2),(3,4)]) AS Tuples
+----
+project
+ ├── columns: "?column?":2!null "?column?":3!null
+ ├── cardinality: [2 - 2]
+ ├── values
+ │    ├── columns: unnest_1:4!null unnest_2:5!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── (1, 2)
+ │    └── (3, 4)
+ └── projections
+      ├── unnest_1:4 [as="?column?":2, outer=(4)]
+      └── unnest_2:5 [as="?column?":3, outer=(5)]
+
+# Case with tuples containing multiple types.
+norm expect=FoldTupleAccessIntoValues
+SELECT (tup).@1, (tup).@2, (tup).@3 FROM (VALUES ((1,'2',3.0)), ((4,'5',NULL::DECIMAL))) AS v(tup)
+----
+project
+ ├── columns: "?column?":2!null "?column?":3!null "?column?":4
+ ├── cardinality: [2 - 2]
+ ├── values
+ │    ├── columns: column1_1:5!null column1_2:6!null column1_3:7
+ │    ├── cardinality: [2 - 2]
+ │    ├── (1, '2', 3.0)
+ │    └── (4, '5', NULL)
+ └── projections
+      ├── column1_1:5 [as="?column?":2, outer=(5)]
+      ├── column1_2:6 [as="?column?":3, outer=(6)]
+      └── column1_3:7 [as="?column?":4, outer=(7)]
+
+# Case with one tuple field referenced zero times, one field referenced once,
+# and one field referenced twice.
+norm expect=FoldTupleAccessIntoValues
+SELECT (tup).@2, (tup).@3, ARRAY[(tup).@3] FROM (VALUES ((1,2,3))) AS v(tup)
+----
+values
+ ├── columns: "?column?":2!null "?column?":3!null array:4!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2-4)
+ └── (2, 3, ARRAY[3])
+
+# Case with tuples of empty tuples.
+norm expect=FoldTupleAccessIntoValues
+SELECT (Tuples).@1, (Tuples).@2 FROM unnest(ARRAY[((),()),((),())]) AS Tuples
+----
+project
+ ├── columns: "?column?":2!null "?column?":3!null
+ ├── cardinality: [2 - 2]
+ ├── values
+ │    ├── columns: unnest_1:4!null unnest_2:5!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── ((), ())
+ │    └── ((), ())
+ └── projections
+      ├── unnest_1:4 [as="?column?":2, outer=(4)]
+      └── unnest_2:5 [as="?column?":3, outer=(5)]
+
+# Case with subquery projection.
+norm expect=FoldTupleAccessIntoValues
+SELECT (SELECT (tup).@1 * x FROM b) FROM (VALUES ((1,2)), ((3,4))) AS v(tup)
+----
+project
+ ├── columns: "?column?":5
+ ├── cardinality: [1 - ]
+ ├── ensure-distinct-on
+ │    ├── columns: "?column?":4 rownum:8!null
+ │    ├── grouping columns: rownum:8!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── cardinality: [1 - ]
+ │    ├── key: (8)
+ │    ├── fd: (8)-->(4)
+ │    ├── left-join-apply
+ │    │    ├── columns: "?column?":4 column1_1:6!null rownum:8!null
+ │    │    ├── cardinality: [2 - ]
+ │    │    ├── fd: (8)-->(6)
+ │    │    ├── ordinality
+ │    │    │    ├── columns: column1_1:6!null rownum:8!null
+ │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    ├── key: (8)
+ │    │    │    ├── fd: (8)-->(6)
+ │    │    │    └── values
+ │    │    │         ├── columns: column1_1:6!null
+ │    │    │         ├── cardinality: [2 - 2]
+ │    │    │         ├── (1,)
+ │    │    │         └── (3,)
+ │    │    ├── project
+ │    │    │    ├── columns: "?column?":4
+ │    │    │    ├── outer: (6)
+ │    │    │    ├── scan b
+ │    │    │    │    ├── columns: x:2!null
+ │    │    │    │    └── key: (2)
+ │    │    │    └── projections
+ │    │    │         └── x:2 * column1_1:6 [as="?column?":4, outer=(2,6)]
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         └── const-agg [as="?column?":4, outer=(4)]
+ │              └── "?column?":4
+ └── projections
+      └── "?column?":4 [as="?column?":5, outer=(4)]
+
+# Case where columns are unnested and then pruned away because the surrounding
+# project only references an outer column.
+norm expect=FoldTupleAccessIntoValues
+SELECT (SELECT ((x).@1) FROM (VALUES ((5,6)),((7,8)))) FROM (VALUES ((1,2)), ((3,4))) v(x);
+----
+project
+ ├── columns: "?column?":6!null
+ ├── cardinality: [1 - 4]
+ ├── ensure-distinct-on
+ │    ├── columns: "?column?":3!null rownum:9!null
+ │    ├── grouping columns: rownum:9!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── cardinality: [1 - 4]
+ │    ├── key: (9)
+ │    ├── fd: (9)-->(3)
+ │    ├── project
+ │    │    ├── columns: "?column?":3!null rownum:9!null
+ │    │    ├── cardinality: [4 - 4]
+ │    │    ├── fd: (9)-->(3)
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: column1_1:7!null rownum:9!null
+ │    │    │    ├── cardinality: [4 - 4]
+ │    │    │    ├── fd: (9)-->(7)
+ │    │    │    ├── ordinality
+ │    │    │    │    ├── columns: column1_1:7!null rownum:9!null
+ │    │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    │    ├── key: (9)
+ │    │    │    │    ├── fd: (9)-->(7)
+ │    │    │    │    └── values
+ │    │    │    │         ├── columns: column1_1:7!null
+ │    │    │    │         ├── cardinality: [2 - 2]
+ │    │    │    │         ├── (1,)
+ │    │    │    │         └── (3,)
+ │    │    │    ├── values
+ │    │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    │    ├── ()
+ │    │    │    │    └── ()
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── column1_1:7 [as="?column?":3, outer=(7)]
+ │    └── aggregations
+ │         └── const-agg [as="?column?":3, outer=(3)]
+ │              └── "?column?":3
+ └── projections
+      └── "?column?":3 [as="?column?":6, outer=(3)]
+
+# Case with named tuple access.
+norm expect=FoldTupleAccessIntoValues
+SELECT (tup).a, (tup).b
+FROM (VALUES
+        (((1,2) AS a,b)),
+        (((3,4) AS a,b))
+     ) v(tup)
+----
+project
+ ├── columns: a:2!null b:3!null
+ ├── cardinality: [2 - 2]
+ ├── values
+ │    ├── columns: column1_1:4!null column1_2:5!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── ((1, 2) AS a, b)
+ │    └── ((3, 4) AS a, b)
+ └── projections
+      ├── column1_1:4 [as=a:2, outer=(4)]
+      └── column1_2:5 [as=b:3, outer=(5)]
+
+# Case with wildcard tuple access on a named tuple.
+norm expect=FoldTupleAccessIntoValues
+SELECT (tup).*
+FROM (VALUES
+        (((1,2) AS a,b)),
+        (((3,4) AS a,b))
+     ) v(tup)
+----
+project
+ ├── columns: a:2!null b:3!null
+ ├── cardinality: [2 - 2]
+ ├── values
+ │    ├── columns: column1_1:4!null column1_2:5!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── ((1, 2) AS a, b)
+ │    └── ((3, 4) AS a, b)
+ └── projections
+      ├── column1_1:4 [as=a:2, outer=(4)]
+      └── column1_2:5 [as=b:3, outer=(5)]
+
+# Case with wildcard tuple access on an unnamed tuple.
+norm expect=FoldTupleAccessIntoValues
+SELECT (tup).*
+FROM (VALUES
+        ((1,2)),
+        ((3,4))
+     ) v(tup)
+----
+project
+ ├── columns: "?column?":2!null "?column?":3!null
+ ├── cardinality: [2 - 2]
+ ├── values
+ │    ├── columns: column1_1:4!null column1_2:5!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── (1, 2)
+ │    └── (3, 4)
+ └── projections
+      ├── column1_1:4 [as="?column?":2, outer=(4)]
+      └── column1_2:5 [as="?column?":3, outer=(5)]
+
+# No-op case because the Values operator has more than one column.
+norm expect-not=FoldTupleAccessIntoValues
+SELECT (col1).@1, (col2).@1 FROM (VALUES ((1,2),(3,4)), ((5,6),(7,8))) AS v(col1, col2)
+----
+project
+ ├── columns: "?column?":3 "?column?":4
+ ├── cardinality: [2 - 2]
+ ├── values
+ │    ├── columns: column1:1 column2:2
+ │    ├── cardinality: [2 - 2]
+ │    ├── ((1, 2), (3, 4))
+ │    └── ((5, 6), (7, 8))
+ └── projections
+      ├── (column1:1).@1 [as="?column?":3, outer=(1)]
+      └── (column2:2).@1 [as="?column?":4, outer=(2)]
+
+# No-op case because the single column in Values is not of type tuple.
+norm expect-not=FoldTupleAccessIntoValues
+SELECT col[1], col[2] FROM unnest(ARRAY[[1,2],[3,4]]) AS col
+----
+project
+ ├── columns: col:2 col:3
+ ├── cardinality: [2 - 2]
+ ├── values
+ │    ├── columns: unnest:1!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── (ARRAY[1,2],)
+ │    └── (ARRAY[3,4],)
+ └── projections
+      ├── unnest:1[1] [as=col:2, outer=(1)]
+      └── unnest:1[2] [as=col:3, outer=(1)]
+
+# No-op case because one of the tuple rows in Values can only be determined at
+# run-time. Put dynamic tuple expression at end of list to ensure that all rows
+# are checked.
+norm expect-not=FoldTupleAccessIntoValues
+SELECT (tup).@1, (tup).@2 FROM (VALUES ((3,4)), ((SELECT (x, z) FROM b))) AS v(tup)
+----
+project
+ ├── columns: "?column?":5 "?column?":6
+ ├── cardinality: [2 - 2]
+ ├── values
+ │    ├── columns: column1:4
+ │    ├── cardinality: [2 - 2]
+ │    ├── ((3, 4),)
+ │    └── tuple
+ │         └── subquery
+ │              └── max1-row
+ │                   ├── columns: "?column?":3
+ │                   ├── error: "more than one row returned by a subquery used as an expression"
+ │                   ├── cardinality: [0 - 1]
+ │                   ├── key: ()
+ │                   ├── fd: ()-->(3)
+ │                   └── project
+ │                        ├── columns: "?column?":3
+ │                        ├── scan b
+ │                        │    ├── columns: x:1!null z:2
+ │                        │    ├── key: (1)
+ │                        │    └── fd: (1)-->(2)
+ │                        └── projections
+ │                             └── (x:1, z:2) [as="?column?":3, outer=(1,2)]
+ └── projections
+      ├── (column1:4).@1 [as="?column?":5, outer=(4)]
+      └── (column1:4).@2 [as="?column?":6, outer=(4)]
+
+# No-op case because the tuple itself is referenced rather than just its fields.
+norm expect-not=FoldTupleAccessIntoValues
+SELECT (tup).@1, (tup).@2, ARRAY[tup] FROM (VALUES ((1,2)), ((3,4))) AS v(tup)
+----
+project
+ ├── columns: "?column?":2 "?column?":3 array:4
+ ├── cardinality: [2 - 2]
+ ├── values
+ │    ├── columns: column1:1
+ │    ├── cardinality: [2 - 2]
+ │    ├── ((1, 2),)
+ │    └── ((3, 4),)
+ └── projections
+      ├── (column1:1).@1 [as="?column?":2, outer=(1)]
+      ├── (column1:1).@2 [as="?column?":3, outer=(1)]
+      └── ARRAY[column1:1] [as=array:4, outer=(1)]
+
+# No-op case because the tuple itself is referenced. Make sure that a reference
+# inside the input of a ColumnAccess is detected.
+norm expect-not=FoldTupleAccessIntoValues
+SELECT (least(tup, (1,2))).a FROM (VALUES (((1,2) AS a,b), ((3,4) AS a,b))) v(tup)
+----
+project
+ ├── columns: a:3
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3)
+ ├── values
+ │    ├── columns: column1:1
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (((1, 2) AS a, b),)
+ └── projections
+      └── (least(column1:1, (1, 2))).a [as=a:3, outer=(1)]
