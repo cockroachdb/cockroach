@@ -1114,7 +1114,7 @@ func (rf *cFetcher) processValueBytes(
 		lastColIDIndex     int
 		lastNeededColIndex int
 	)
-	for len(valueBytes) > 0 && rf.machine.remainingValueColsByIdx.Len() > 0 {
+	for len(valueBytes) > 0 {
 		_, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
