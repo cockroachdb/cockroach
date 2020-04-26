@@ -637,7 +637,7 @@ func noteFeedMessage(a fsm.Args) error {
 		if err != nil {
 			return err
 		}
-		log.Info(a.Ctx, string(m.Resolved))
+		log.Infof(a.Ctx, "%v", string(m.Resolved))
 		return ns.v.NoteResolved(m.Partition, ts)
 	}
 	ts, _, err := ParseJSONValueTimestamps(m.Value)

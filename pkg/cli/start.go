@@ -658,7 +658,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		} else {
 			// Don't shout to stderr since the server will have detached by
 			// the time this function gets called.
-			log.Warning(ctx, msg)
+			log.Warningf(ctx, "%s", msg)
 		}
 	}
 
@@ -1120,7 +1120,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		} else {
 			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
 		}
-		log.Warning(ctx, buf.String())
+		log.Warningf(ctx, "%s", buf.String())
 	}
 
 	// Check that the total suggested "max" memory is well below the available memory.
@@ -1262,7 +1262,7 @@ func setupAndInitializeLoggingAndProfiling(
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
 	info := build.GetInfo()
-	log.Info(ctx, info.Short())
+	log.Infof(ctx, "%s", info.Short())
 
 	initMemProfile(ctx, outputDirectory)
 	initCPUProfile(ctx, outputDirectory)

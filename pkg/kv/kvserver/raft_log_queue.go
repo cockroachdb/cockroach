@@ -597,9 +597,10 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ *config.Syst
 	// Can and should the raft logs be truncated?
 	if decision.ShouldTruncate() {
 		if n := decision.NumNewRaftSnapshots(); log.V(1) || n > 0 && rlq.logSnapshots.ShouldProcess(timeutil.Now()) {
-			log.Info(ctx, decision.String())
+			// TODO(knz,tbg): check how much of this can be included in log.Safe().
+			log.Infof(ctx, "%v", decision.String())
 		} else {
-			log.VEvent(ctx, 1, decision.String())
+			log.VEventf(ctx, 1, "%v", decision.String())
 		}
 		b := &kv.Batch{}
 		b.AddRawRequest(&roachpb.TruncateLogRequest{
