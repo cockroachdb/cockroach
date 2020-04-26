@@ -1320,6 +1320,163 @@ func (c *CustomFuncs) FoldTupleColumnAccess(
 	return newProjections
 }
 
+// CanPushColumnRemappingIntoValues takes in a ProjectionsExpr, a ValuesExpr,
+// and a passthrough ColSet. It returns true if:
+//
+// 1. There is at least one ProjectionsItem that remaps a column
+//  	reference from the given ValuesExpr.
+//
+// 2. None of the remapping projections attempt to remap a column that is
+// 		already a passthrough column, since folding in this case would leave
+//		the passthrough column pointing to nothing.
+//
+func (c *CustomFuncs) CanPushColumnRemappingIntoValues(
+	projections memo.ProjectionsExpr, passthrough opt.ColSet, values memo.RelExpr,
+) bool {
+	outputCols := values.(*memo.ValuesExpr).Relational().OutputCols
+	for _, item := range projections {
+		if variable, ok := item.Element.(*memo.VariableExpr); ok {
+			if passthrough.Contains(variable.Col) {
+				return false
+			}
+			if outputCols.Contains(variable.Col) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// PushColumnRemappingIntoValues folds ProjectionsItems into the passthrough set
+// if all they do is remap output columns from the ValuesExpr input. The Values
+// output columns are replaced by the corresponding columns from the folded
+// ProjectionsItems.
+//
+// Example:
+// 		project
+//     ├── columns: x:2!null
+//     ├── values
+//     │    ├── columns: column1:1!null
+//     │    ├── cardinality: [2 - 2]
+//     │    ├── (1,)
+//     │    └── (2,)
+//     └── projections
+//          └── column1:1 [as=x:2, outer=(1)]
+//		=>
+// 		project
+//     ├── columns: x:2!null
+//     └── values
+//          ├── columns: x:2!null
+//          ├── cardinality: [2 - 2]
+//          ├── (1,)
+//          └── (2,)
+//
+// This allows other rules to fire. In the above example, EliminateProject
+// can now remove the Project altogether.
+func (c *CustomFuncs) PushColumnRemappingIntoValues(
+	oldInput memo.RelExpr, oldProjections memo.ProjectionsExpr, oldPassthrough opt.ColSet,
+) memo.RelExpr {
+	oldValues := oldInput.(*memo.ValuesExpr)
+	oldValuesCols := oldValues.Relational().OutputCols
+	newPassthrough := oldPassthrough.Copy()
+	replacementCols := make(map[opt.ColumnID]opt.ColumnID)
+	var newProjections memo.ProjectionsExpr
+
+	// Construct the new ProjectionsExpr and passthrough columns. Keep track of
+	// which Values columns are to be replaced.
+	for _, oldItem := range oldProjections {
+		v, ok := oldItem.Element.(*memo.VariableExpr)
+		if !ok {
+			// The ProjectionsItem does not hold a VariableExpr, so just put oldItem
+			// into newProjections to be replaced later and continue to the next item.
+			newProjections = append(newProjections, oldItem)
+			continue
+		} else {
+			var variable *memo.VariableExpr
+			targetCol := v.Col
+			if !oldValuesCols.Contains(targetCol) {
+				// Use existing variable if variable doesn't target a ValuesExpr column
+				// (i.e. it refers to an outer column).
+				variable = v
+			} else {
+				newCol := replacementCols[targetCol]
+				if newCol == 0 {
+					// Assert that PushColumnRemappingIntoValues is not attempting to fold
+					// a remapping of a passthrough column. This case should have been
+					// filtered out by CanPushColumnRemappingIntoValues.
+					if newPassthrough.Contains(oldItem.Col) {
+						panic(errors.AssertionFailedf("cannot fold a remapping of a passthrough column"))
+					}
+
+					// If we have not encountered this reference to a Values col, map it
+					// to the replacement col. Add replacement col to newPassthrough and
+					// continue so that no ProjectionsItem is added to newProjections.
+					replacementCols[targetCol] = oldItem.Col
+					newPassthrough.Add(oldItem.Col)
+					continue
+				}
+				// We have encountered targetCol before, so replace it.
+				// This case can occur with a query like the following:
+				//
+				// 	WITH a AS (SELECT x, x FROM (VALUES (1), (2)) f(x)) SELECT * FROM a
+				//
+				// In this case, x is being remapped twice to the columns of a. After
+				// the first projection is folded into newPassthrough, the second must
+				// be changed to refer to this new passthrough column.
+				variable = c.f.ConstructVariable(newCol).(*memo.VariableExpr)
+			}
+			newProjections = append(newProjections, c.f.ConstructProjectionsItem(variable, oldItem.Col))
+		}
+	}
+
+	// Recursively traverses a ProjectionsItem element and replaces references to
+	// old ValuesExpr columns with the replacement columns. This ensures that
+	// any remaining references to old columns are replaced. For example:
+	//
+	//   SELECT a AS b, a+1 AS c FROM (VALUES (1)) f(a);
+	//
+	// The "a" column of the Values operator will be remapped to "b", but the
+	// remaining reference to "a" in the "c" column needs to be remapped to the
+	// new passthrough "b" column.
+	var replace ReplaceFunc
+	replace = func(nd opt.Expr) opt.Expr {
+		switch t := nd.(type) {
+		case *memo.VariableExpr:
+			if replaceCol := replacementCols[t.Col]; replaceCol != 0 {
+				return c.f.ConstructVariable(replaceCol)
+			}
+		}
+		return c.f.Replace(nd, replace)
+	}
+
+	// Traverse each element in newProjections and replace col references as
+	// dictated by replacementCols.
+	for i, item := range newProjections {
+		newProjections[i] = c.f.ConstructProjectionsItem(
+			replace(item.Element).(opt.ScalarExpr), item.Col)
+	}
+
+	// Replace all columns in newValuesColList that have been remapped by the old
+	// ProjectionsExpr.
+	oldValuesColList := oldValues.Cols
+	newValuesColList := make(opt.ColList, len(oldValuesColList))
+	for i := range newValuesColList {
+		if replaceCol := replacementCols[oldValuesColList[i]]; replaceCol != 0 {
+			newValuesColList[i] = replaceCol
+		} else {
+			newValuesColList[i] = oldValuesColList[i]
+		}
+	}
+
+	// Construct a new ValuesExpr with the replaced cols.
+	newValues := c.f.ConstructValues(
+		oldValues.Rows,
+		&memo.ValuesPrivate{Cols: newValuesColList, ID: c.f.Metadata().NextUniqueID()})
+
+	// Construct and return a new ProjectExpr with the new ValuesExpr as input.
+	return c.f.ConstructProject(newValues, newProjections, newPassthrough)
+}
+
 // ----------------------------------------------------------------------
 //
 // Select Rules
