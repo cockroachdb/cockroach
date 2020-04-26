@@ -791,16 +791,17 @@ func (s *statusServer) LogFilesList(
 func (s *statusServer) LogFile(
 	ctx context.Context, req *serverpb.LogFileRequest,
 ) (*serverpb.LogEntriesResponse, error) {
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
-		return nil, err
-	}
-
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
 	if !debug.GatewayRemoteAllowed(ctx, s.st) {
 		return nil, remoteDebuggingErr
 	}
 
-	ctx = propagateGatewayMetadata(ctx)
-	ctx = s.AnnotateCtx(ctx)
+	_, isAdmin, err := s.admin.getUserAndRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
@@ -813,7 +814,18 @@ func (s *statusServer) LogFile(
 		return status.LogFile(ctx, req)
 	}
 
+	// Determine whether the request is valid for the current user.
+	if !isAdmin && !req.Redact {
+		return nil, errInsufficientPrivilege
+	}
+
+	// Determine how to redact.
+	inputEditMode := log.SelectEditMode(req.Redact, req.KeepRedactable)
+
+	// Ensure that the latest log entries are available in files.
 	log.Flush()
+
+	// Read the logs.
 	reader, err := log.GetLogReader(req.File, true /* restricted */)
 	if reader == nil || err != nil {
 		return nil, fmt.Errorf("log file %s could not be opened: %s", req.File, err)
@@ -822,7 +834,7 @@ func (s *statusServer) LogFile(
 
 	var entry log.Entry
 	var resp serverpb.LogEntriesResponse
-	decoder := log.NewEntryDecoder(reader)
+	decoder := log.NewEntryDecoder(reader, inputEditMode)
 	for {
 		if err := decoder.Decode(&entry); err != nil {
 			if err == io.EOF {
@@ -831,6 +843,13 @@ func (s *statusServer) LogFile(
 			return nil, err
 		}
 		resp.Entries = append(resp.Entries, entry)
+	}
+
+	// Erase the redactable bit if requested by client.
+	if !req.KeepRedactable {
+		for i := range resp.Entries {
+			resp.Entries[i].Redactable = false
+		}
 	}
 
 	return &resp, nil
@@ -870,15 +889,17 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 func (s *statusServer) Logs(
 	ctx context.Context, req *serverpb.LogsRequest,
 ) (*serverpb.LogEntriesResponse, error) {
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
-		return nil, err
-	}
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
 	if !debug.GatewayRemoteAllowed(ctx, s.st) {
 		return nil, remoteDebuggingErr
 	}
 
-	ctx = propagateGatewayMetadata(ctx)
-	ctx = s.AnnotateCtx(ctx)
+	_, isAdmin, err := s.admin.getUserAndRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
@@ -891,8 +912,15 @@ func (s *statusServer) Logs(
 		return status.Logs(ctx, req)
 	}
 
-	log.Flush()
+	// Determine whether the request is valid for the current user.
+	if !isAdmin && !req.Redact {
+		return nil, errInsufficientPrivilege
+	}
 
+	// Determine how to redact.
+	inputEditMode := log.SelectEditMode(req.Redact, req.KeepRedactable)
+
+	// Select the time interval.
 	startTimestamp, err := parseInt64WithDefault(
 		req.StartTime,
 		timeutil.Now().AddDate(0, 0, -1).UnixNano())
@@ -924,9 +952,21 @@ func (s *statusServer) Logs(
 		}
 	}
 
-	entries, err := log.FetchEntriesFromFiles(startTimestamp, endTimestamp, int(maxEntries), regex)
+	// Ensure that the latest log entries are available in files.
+	log.Flush()
+
+	// Read the logs.
+	entries, err := log.FetchEntriesFromFiles(
+		startTimestamp, endTimestamp, int(maxEntries), regex, inputEditMode)
 	if err != nil {
 		return nil, err
+	}
+
+	// Erase the redactable bit if requested by client.
+	if !req.KeepRedactable {
+		for i := range entries {
+			entries[i].Redactable = false
+		}
 	}
 
 	return &serverpb.LogEntriesResponse{Entries: entries}, nil

@@ -825,7 +825,7 @@ SQLPARSER_TARGETS = \
 
 PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources bin/.cpp_protobuf_sources bin/.cpp_ccl_protobuf_sources
 
-DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions
+DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions docs/generated/redact_safe.md
 
 EXECGEN_TARGETS = \
   pkg/col/coldata/vec.eg.go \
@@ -1527,6 +1527,19 @@ bin/.docgen_bnfs: bin/docgen
 bin/.docgen_functions: bin/docgen
 	docgen functions docs/generated/sql --quiet
 	touch $@
+
+.PHONY: docs/generated/redact_safe.md
+
+docs/generated/redact_safe.md:
+	@(echo "The following types are considered always safe for reporting:"; echo; \
+	  echo "File | Type"; echo "--|--") >$@.tmp
+	@git grep '^func \(.*\) SafeValue\(\)' | \
+	  grep -v '^pkg/util/redact' | \
+	  sed -E -e 's/^([^:]*):func \(([^ ]* )?(.*)\) SafeValue.*$$/\1 | \`\3\`/g' >>$@.tmp || rm -f $@.tmp
+	@git grep 'redact\.RegisterSafeType' | \
+	  grep -v '^pkg/util/redact' | \
+	  sed -E -e 's/^([^:]*):.*redact\.RegisterSafeType\((.*)\).*/\1 | \`\2\`/g' >>$@.tmp || rm -f $@.tmp
+	@mv -f $@.tmp $@
 
 settings-doc-gen := $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),$(COCKROACH))
 

@@ -465,7 +465,8 @@ func TestCorruptData(t *testing.T) {
 			return err
 		}))
 		log.Flush()
-		entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 100, msg)
+		entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 100, msg,
+			log.WithFlattenedSensitiveData)
 		require.NoError(t, err)
 		require.Len(t, entries, 1)
 		for _, e := range entries {
@@ -516,7 +517,8 @@ func TestCorruptData(t *testing.T) {
 		}))
 		log.Flush()
 
-		entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 100, msg)
+		entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 100, msg,
+			log.WithFlattenedSensitiveData)
 		require.NoError(t, err)
 		require.Len(t, entries, 1)
 		for _, e := range entries {

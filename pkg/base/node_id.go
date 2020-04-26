@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/redact"
 )
 
 // NodeIDContainer is used to share a single roachpb.NodeID instance between
@@ -34,11 +35,17 @@ type NodeIDContainer struct {
 
 // String returns the node ID, or "?" if it is unset.
 func (n *NodeIDContainer) String() string {
+	return redact.StringWithoutMarkers(n)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (n *NodeIDContainer) SafeFormat(w redact.SafePrinter, _ rune) {
 	val := n.Get()
 	if val == 0 {
-		return "?"
+		w.SafeRune('?')
+	} else {
+		w.Print(val)
 	}
-	return strconv.Itoa(int(val))
 }
 
 // Get returns the current node ID; 0 if it is unset.

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/redact"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
@@ -496,7 +497,11 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, ms GoMemSt
 		staleMsg = "(stale)"
 	}
 	goTotal := ms.Sys - ms.HeapReleased
-	log.Infof(ctx, "%s", log.Safe(fmt.Sprintf("runtime stats: %s RSS, %d goroutines, %s/%s/%s GO alloc/idle/total%s, "+
+
+	// TODO(knz): make utility wrapper around humanize.IBytes that
+	// returns a safe value and collapse the entire log.Infof -> Safe ->
+	// Sprintf sequence as a flat Infof call.
+	log.Infof(ctx, "%s", redact.Safe(fmt.Sprintf("runtime stats: %s RSS, %d goroutines, %s/%s/%s GO alloc/idle/total%s, "+
 		"%s/%s CGO alloc/total, %.1f CGO/sec, %.1f/%.1f %%(u/s)time, %.1f %%gc (%dx), "+
 		"%s/%s (r/w)net",
 		humanize.IBytes(mem.Resident), numGoroutine,
