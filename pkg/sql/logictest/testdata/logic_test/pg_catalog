@@ -2209,3 +2209,29 @@ CREATE DATABASE other_db; SET DATABASE = other_db
 query O
 SELECT oid FROM pg_class WHERE oid=$testid
 ----
+
+subtest geospatial
+
+statement ok
+SET DATABASE = test
+
+statement ok
+CREATE TABLE geospatial_table (
+  id UUID PRIMARY KEY,
+  a geography(geometry, 4326),
+  b geometry(point, 4326),
+  INVERTED INDEX idxa (a)
+)
+
+statement ok
+CREATE INVERTED INDEX idxb ON geospatial_table (b)
+
+query TT colnames
+SELECT indexname, indexdef
+FROM pg_catalog.pg_indexes
+WHERE tablename = 'geospatial_table'
+----
+indexname  indexdef
+primary    CREATE UNIQUE INDEX "primary" ON test.public.geospatial_table USING btree (id ASC)
+idxa       CREATE INDEX idxa ON test.public.geospatial_table USING gin (a ASC)
+idxb       CREATE INDEX idxb ON test.public.geospatial_table USING gin (b ASC)

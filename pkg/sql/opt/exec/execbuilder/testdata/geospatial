@@ -1,0 +1,59 @@
+statement ok
+CREATE TABLE b(
+  a int primary key,
+  geog geography(geometry, 4326),
+  geom geometry(point, 4326),
+  FAMILY (a, geog, geom)
+)
+
+statement ok
+CREATE TABLE c(
+  a int primary key,
+  geog geography(geometry, 4326),
+  geom geometry(point, 4326),
+  FAMILY (a, geog, geom),
+  INVERTED INDEX (geog),
+  INVERTED INDEX (geom)
+)
+
+query T kvtrace
+INSERT INTO b VALUES
+  (1, 'POINT(1.0 1.0)', 'POINT(2.0 2.0)'),
+  (2, 'LINESTRING(1.0 1.0, 2.0 2.0)', 'POINT(1.0 1.0)')
+----
+CPut /Table/53/1/1/0 -> /TUPLE/
+CPut /Table/53/1/2/0 -> /TUPLE/
+
+query T kvtrace
+INSERT INTO c VALUES
+  (1, 'POINT(1.0 1.0)', 'POINT(2.0 2.0)'),
+  (2, 'LINESTRING(1.0 1.0, 2.0 2.0)', 'POINT(1.0 1.0)')
+----
+CPut /Table/54/1/1/0 -> /TUPLE/
+InitPut /Table/54/2/1153277837650709461/1/0 -> /BYTES/
+InitPut /Table/54/3/1152921526351450449/1/0 -> /BYTES/
+CPut /Table/54/1/2/0 -> /TUPLE/
+InitPut /Table/54/2/1153290940513779712/2/0 -> /BYTES/
+InitPut /Table/54/2/1154047404446580736/2/0 -> /BYTES/
+InitPut /Table/54/2/1154328879490400256/2/0 -> /BYTES/
+InitPut /Table/54/3/1152921510042997845/2/0 -> /BYTES/
+
+statement ok
+CREATE INVERTED INDEX geog_idx ON b(geog)
+
+statement ok
+CREATE INVERTED INDEX geom_idx ON b(geom)
+
+query T kvtrace
+INSERT INTO b VALUES
+  (3, 'POINT(1.0 1.0)', 'POINT(2.0 2.0)'),
+  (4, 'LINESTRING(1.0 1.0, 2.0 2.0)', 'POINT(1.0 1.0)')
+----
+CPut /Table/53/1/3/0 -> /TUPLE/
+InitPut /Table/53/2/1153277837650709461/3/0 -> /BYTES/
+InitPut /Table/53/3/1152921526351450449/3/0 -> /BYTES/
+CPut /Table/53/1/4/0 -> /TUPLE/
+InitPut /Table/53/2/1153290940513779712/4/0 -> /BYTES/
+InitPut /Table/53/2/1154047404446580736/4/0 -> /BYTES/
+InitPut /Table/53/2/1154328879490400256/4/0 -> /BYTES/
+InitPut /Table/53/3/1152921510042997845/4/0 -> /BYTES/

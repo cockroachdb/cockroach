@@ -2687,6 +2687,30 @@ func NewDGeography(g *geo.Geography) *DGeography {
 	return &DGeography{Geography: g}
 }
 
+// AsDGeography attempts to retrieve a *DGeography from an Expr, returning a
+// *DGeography and a flag signifying whether the assertion was successful. The
+// function should be used instead of direct type assertions wherever a
+// *DGeography wrapped by a *DOidWrapper is possible.
+func AsDGeography(e Expr) (*DGeography, bool) {
+	switch t := e.(type) {
+	case *DGeography:
+		return t, true
+	case *DOidWrapper:
+		return AsDGeography(t.Wrapped)
+	}
+	return nil, false
+}
+
+// MustBeDGeography attempts to retrieve a *DGeography from an Expr, panicking
+// if the assertion fails.
+func MustBeDGeography(e Expr) *DGeography {
+	i, ok := AsDGeography(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DGeography, found %T", e))
+	}
+	return i
+}
+
 // ParseDGeography attempts to pass `str` as a Geography type.
 func ParseDGeography(str string) (*DGeography, error) {
 	g, err := geo.ParseGeography(str)
@@ -2769,6 +2793,30 @@ type DGeometry struct {
 // NewDGeometry returns a new Geometry Datum.
 func NewDGeometry(g *geo.Geometry) *DGeometry {
 	return &DGeometry{Geometry: g}
+}
+
+// AsDGeometry attempts to retrieve a *DGeometry from an Expr, returning a
+// *DGeometry and a flag signifying whether the assertion was successful. The
+// function should be used instead of direct type assertions wherever a
+// *DGeometry wrapped by a *DOidWrapper is possible.
+func AsDGeometry(e Expr) (*DGeometry, bool) {
+	switch t := e.(type) {
+	case *DGeometry:
+		return t, true
+	case *DOidWrapper:
+		return AsDGeometry(t.Wrapped)
+	}
+	return nil, false
+}
+
+// MustBeDGeometry attempts to retrieve a *DGeometry from an Expr, panicking
+// if the assertion fails.
+func MustBeDGeometry(e Expr) *DGeometry {
+	i, ok := AsDGeometry(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DGeometry, found %T", e))
+	}
+	return i
 }
 
 // ParseDGeometry attempts to pass `str` as a Geometry type.
