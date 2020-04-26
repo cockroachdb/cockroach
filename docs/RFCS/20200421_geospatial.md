@@ -625,7 +625,7 @@ proj4text to another. The library has a lot of extra additions that
 may be unnecessary for our use case (e.g. requiring the installation of
 sqlite3 for storing metadata from certain tools we don't use) and as
 such we may decide to also ship this as a library which requires
-dlopen/dlsym as well.
+dlopen/dlsym.
 
 It is worth noting there is a go port of the PROJ library named
 [go-spatial/proj](https://github.com/go-spatial/proj), but is missing
@@ -904,7 +904,7 @@ convenience of illustration, the numbering is not the Hilbert curve
 numbering used by S2. In the numbering here, the children of cell c[i]
 are numbered c[4*i+1]...c[4*i+4]. The following depicts this covering
 as a tree with the leaf cells being the covering cells. Note that the
-paths to the leaves to the root are not the same length.
+paths from the leaves to the root are not the same length.
 
 
 ```
@@ -1100,6 +1100,14 @@ geospatial queries:
     the selectivity calculation for lookup joins in cases where the
     index is inverted.
 
+    Since the set operations required for each row make selectivity
+    calculation on geospatial lookup joins especially difficult, we
+    may consider adding a new type of histogram for geospatial data.
+    The histogram buckets would be ranges of S2 cell IDs, and the
+    counts would represent the number of objects in the geospatial
+    column that overlap that cell. By joining histograms on two
+    geospatial columns, we could estimate the selectivity of a real
+    join on those columns
 
 ### Weakness of Covering invariant
 
@@ -1394,7 +1402,7 @@ The number of neighborhoods is 129 and the number of census blocks is
 `nyc_neighborhoods` table, the cardinality of the name field is the
 same, 129. So the optimizer can predict that the name filter will
 match 2 rows. This filter will be pushed below the join, so the input
-to the join from `nyc_neighborhoods` is 2.
+to the join from `nyc_neighborhoods` is 2 rows.
 
 The optimizer will consider several different types of joins when
 joining `nyc_neighborhoods` and `nyc_census_blocks`. The two most
@@ -1435,7 +1443,8 @@ Here is the expected query plan:
 
 ```
 QUERY PLAN                                                      
--------------------------------------------------------------------------------------- project
+--------------------------------------------------------------------------------------
+project
  ├── group-by
  │    ├── inner-join (lookup nyc_census_blocks AS c)
  │    │    ├── lookup columns are key
