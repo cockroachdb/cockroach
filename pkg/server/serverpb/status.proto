@@ -299,6 +299,18 @@ message LogsRequest {
   string end_time = 4;
   string max = 5;
   string pattern = 6;
+  // redact, if true, requests redaction of sensitive data away
+  // from the retrieved log entries.
+  // Only admin users can send a request with redact = false.
+  bool redact = 7;
+  // keep_redactable, if true, requests that retrieved entries preserve
+  // the redaction markers if any were present in the log files.
+  // If false, redaction markers are stripped away.
+  // Note that redact = false && redactable = false implies
+  // "flat" entries with all sensitive information enclosed and
+  // no markers; this is suitable for backward-compatibility with
+  // RPC clients from prior the introduction of redactable logs.
+  bool keep_redactable = 8;
 }
 
 message LogEntriesResponse {
@@ -322,6 +334,18 @@ message LogFileRequest {
   // forwarding is necessary.
   string node_id = 1;
   string file = 2;
+  // redact, if true, requests redaction of sensitive data away
+  // from the retrieved log entries.
+  // Only admin users can send a request with redact = false.
+  bool redact = 3;
+  // keep_redactable, if true, requests that retrieved entries preserve
+  // the redaction markers if any were present in the log files.
+  // If false, redaction markers are stripped away.
+  // Note that redact = false && redactable = false implies
+  // "flat" entries with all sensitive information enclosed and
+  // no markers; this is suitable for backward-compatibility with
+  // RPC clients from prior the introduction of redactable logs.
+  bool keep_redactable = 4;
 }
 
 enum StacksType {

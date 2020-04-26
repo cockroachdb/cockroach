@@ -62,7 +62,11 @@ func TestTxnSnowballTrace(t *testing.T) {
 	found, err := regexp.MatchString(
 		// The (?s) makes "." match \n. This makes the test resilient to other log
 		// lines being interspersed.
-		"(?s).*event:inside txn\n.*event:client.Txn did AutoCommit. err: <nil>\n.*\n.*event:txn complete.*",
+		`(?s)`+
+			`.*event:[^:]*:\d+ inside txn\n`+
+			`.*event:[^:]*:\d+ client\.Txn did AutoCommit\. err: <nil>\n`+
+			`.*\n`+
+			`.*event:[^:]*:\d+ txn complete.*`,
 		dump)
 	if err != nil {
 		t.Fatal(err)

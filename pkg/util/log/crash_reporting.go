@@ -100,9 +100,6 @@ func RecoverAndReportNonfatalPanic(ctx context.Context, sv *settings.Values) {
 	}
 }
 
-// Safe constructs a SafeMessager.
-var Safe = errors.Safe
-
 // ReportPanic reports a panic has occurred on the real stderr.
 func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth int) {
 	// Announce the panic has occurred to all places. The purpose
@@ -116,7 +113,7 @@ func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth 
 	//   (The go runtime doesn't time stamp its output.)
 	Shout(ctx, Severity_ERROR, "a panic has occurred!")
 
-	if stderrLog.redirectInternalStderrWrites() {
+	if stderrLog.redirectInternalStderrWrites {
 		// If we decided that the internal stderr writes performed by the
 		// Go runtime are going to our file, that's also where the panic
 		// details will go automatically when the runtime processes the
@@ -129,7 +126,7 @@ func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth 
 		// as an indication they also want to see panic details
 		// there. Do it here.
 		if LoggingToStderr(Severity_FATAL) {
-			stderrLog.printPanicToExternalStderr(depth+1, r)
+			stderrLog.printPanicToExternalStderr(ctx, depth+1, r)
 		}
 	} else {
 		// If we are not redirecting internal stderr writes, then the
@@ -138,7 +135,7 @@ func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth 
 		//
 		// However, we actually want to persist these details. So print
 		// them in the log file ourselves.
-		stderrLog.printPanicToFile(depth+1, r)
+		stderrLog.printPanicToFile(ctx, depth+1, r)
 	}
 
 	sendCrashReport(ctx, sv, PanicAsError(depth+1, r), ReportTypePanic)

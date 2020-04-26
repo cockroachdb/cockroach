@@ -12,49 +12,30 @@ package log
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 )
 
-// formatTags appends the tags to a strings.Builder. If there are no tags,
-// returns false.
-func formatTags(ctx context.Context, buf *strings.Builder) bool {
-	tags := logtags.FromContext(ctx)
-	if tags == nil {
-		return false
-	}
-	buf.WriteByte('[')
-	tags.FormatToString(buf)
-	buf.WriteString("] ")
-	return true
-}
-
-// MakeMessage creates a structured log entry.
-func MakeMessage(ctx context.Context, format string, args []interface{}) string {
+// FormatWithContextTags formats the string and prepends the context
+// tags.
+//
+// Redaction markers are *not* inserted. The resulting
+// string is generally unsafe for reporting.
+func FormatWithContextTags(ctx context.Context, format string, args ...interface{}) string {
 	var buf strings.Builder
-	formatTags(ctx, &buf)
-	if len(args) == 0 {
-		buf.WriteString(format)
-	} else if len(format) == 0 {
-		fmt.Fprint(&buf, args...)
-	} else {
-		fmt.Fprintf(&buf, format, args...)
-	}
+	formatTags(ctx, true /* brackets */, &buf)
+	renderArgs(false, &buf, format, args...)
 	return buf.String()
 }
 
 // addStructured creates a structured log entry to be written to the
 // specified facility of the logger.
-func addStructured(ctx context.Context, s Severity, depth int, format string, args []interface{}) {
-	file, line, _ := caller.Lookup(depth + 1)
-	msg := MakeMessage(ctx, format, args)
-
-	if s == Severity_FATAL {
+func addStructured(
+	ctx context.Context, sev Severity, depth int, format string, args []interface{},
+) {
+	if sev == Severity_FATAL {
 		// We load the ReportingSettings from the a global singleton in this
 		// call path. See the singleton's comment for a rationale.
 		if sv := settings.TODO(); sv != nil {
@@ -62,8 +43,11 @@ func addStructured(ctx context.Context, s Severity, depth int, format string, ar
 			sendCrashReport(ctx, sv, err, ReportTypePanic)
 		}
 	}
-	// MakeMessage already added the tags when forming msg, we don't want
-	// eventInternal to prepend them again.
-	eventInternal(ctx, (s >= Severity_ERROR), false /*withTags*/, "%s:%d %s", file, line, msg)
-	mainLog.outputLogEntry(s, file, line, msg)
+
+	entry := MakeEntry(
+		ctx, sev, &mainLog.logCounter, depth+1, mainLog.redactableLogs.Get(), format, args...)
+	if sp, el, ok := getSpanOrEventLog(ctx); ok {
+		eventInternal(sp, el, (sev >= Severity_ERROR), entry)
+	}
+	mainLog.outputLogEntry(entry)
 }

@@ -90,8 +90,6 @@ func setFlags() {
 	ResetExitFunc()
 	mainLog.mu.Lock()
 	defer mainLog.mu.Unlock()
-	// Make the internal stderr writes go to the stderr log file.
-	stderrLog.noRedirectInternalStderrWrites = false
 	// Make all logged errors go to the external stderr, in addition to
 	// the log file.
 	mainLog.stderrThreshold = Severity_ERROR
@@ -141,10 +139,16 @@ func TestStandardLog(t *testing.T) {
 // Verify that a log can be fetched in JSON format.
 func TestEntryDecoder(t *testing.T) {
 	formatEntry := func(s Severity, now time.Time, gid int, file string, line int, msg string) string {
-		buf := logging.formatHeader(s, now, gid, file, line, nil)
+		entry := Entry{
+			Severity:  s,
+			Time:      now.UnixNano(),
+			Goroutine: int64(gid),
+			File:      file,
+			Line:      int64(line),
+			Message:   msg,
+		}
+		buf := logging.formatLogEntry(entry, nil /* stacks */, nil /* color profile */)
 		defer putBuffer(buf)
-		buf.WriteString(msg)
-		buf.WriteString("\n")
 		return buf.String()
 	}
 
@@ -174,7 +178,7 @@ func TestEntryDecoder(t *testing.T) {
 	contents += formatEntry(Severity_INFO, t8, 7, "clog_test.go", 143, tooLongEntry)
 
 	readAllEntries := func(contents string) []Entry {
-		decoder := NewEntryDecoder(strings.NewReader(contents))
+		decoder := NewEntryDecoder(strings.NewReader(contents), WithFlattenedSensitiveData)
 		var entries []Entry
 		var entry Entry
 		for {
@@ -417,14 +421,20 @@ func TestListLogFiles(t *testing.T) {
 		t.Fatalf("buffer wasn't created")
 	}
 
-	expectedName := filepath.Base(sb.file.Name())
-
 	results, err := ListLogFiles()
 	if err != nil {
 		t.Fatalf("error in ListLogFiles: %v", err)
 	}
 
-	if len(results) != 1 || results[0].Name != expectedName {
+	expectedName := filepath.Base(sb.file.Name())
+	foundExpected := false
+	for i := range results {
+		if results[i].Name == expectedName {
+			foundExpected = true
+			break
+		}
+	}
+	if !foundExpected {
 		t.Fatalf("unexpected results: %q", results)
 	}
 }
@@ -616,7 +626,7 @@ func TestRedirectStderr(t *testing.T) {
 	const stderrText = "hello stderr"
 	fmt.Fprint(os.Stderr, stderrText)
 
-	contents, err := ioutil.ReadFile(mainLog.mu.file.(*syncBuffer).file.Name())
+	contents, err := ioutil.ReadFile(stderrLog.mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -680,8 +690,15 @@ func TestExitOnFullDisk(t *testing.T) {
 }
 
 func BenchmarkHeader(b *testing.B) {
+	entry := Entry{
+		Severity:  Severity_INFO,
+		Time:      timeutil.Now().UnixNano(),
+		Goroutine: 200,
+		File:      "file.go",
+		Line:      100,
+	}
 	for i := 0; i < b.N; i++ {
-		buf := logging.formatHeader(Severity_INFO, timeutil.Now(), 200, "file.go", 100, nil)
+		buf := logging.formatLogEntryInternal(entry, nil /* profile */)
 		putBuffer(buf)
 	}
 }

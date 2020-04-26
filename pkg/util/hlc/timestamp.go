@@ -92,6 +92,9 @@ func (t Timestamp) String() string {
 	return *(*string)(unsafe.Pointer(&buf))
 }
 
+// SafeValue implements the redact.SafeValue interface.
+func (Timestamp) SafeValue() {}
+
 var (
 	timestampRegexp = regexp.MustCompile(
 		`^(?P<sign>-)?(?P<secs>\d{1,19})(\.(?P<nanos>\d{1,20}))?,(?P<logical>-?\d{1,10})$`)

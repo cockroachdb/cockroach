@@ -72,6 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/redact"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -275,7 +276,7 @@ type Gossip struct {
 
 	localityTierMap map[string]struct{}
 
-	lastConnectivity string
+	lastConnectivity redact.RedactableString
 
 	defaultZoneConfig *zonepb.ZoneConfig
 }
@@ -561,21 +562,23 @@ func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescript
 func (g *Gossip) LogStatus() {
 	g.mu.RLock()
 	n := len(g.nodeDescs)
-	status := "ok"
+	status := redact.SafeString("ok")
 	if g.mu.is.getInfo(KeySentinel) == nil {
-		status = "stalled"
+		status = redact.SafeString("stalled")
 	}
 	g.mu.RUnlock()
 
-	var connectivity string
-	if s := g.Connectivity().String(); s != g.lastConnectivity {
+	var connectivity redact.RedactableString
+	if s := redact.Sprint(g.Connectivity()); s != g.lastConnectivity {
 		g.lastConnectivity = s
 		connectivity = s
 	}
 
 	ctx := g.AnnotateCtx(context.TODO())
 	log.Infof(ctx, "gossip status (%s, %d node%s)\n%s%s%s",
-		status, n, util.Pluralize(int64(n)), g.clientStatus(), g.server.status(), connectivity)
+		status, n, util.Pluralize(int64(n)),
+		g.clientStatus(), g.server.status(),
+		connectivity)
 }
 
 func (g *Gossip) clientStatus() ClientStatus {

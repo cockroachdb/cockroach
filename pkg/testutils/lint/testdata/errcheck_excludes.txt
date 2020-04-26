@@ -1,6 +1,8 @@
 fmt.Fprint
 fmt.Fprintf
 fmt.Fprintln
+github.com/cockroachdb/cockroach/pkg/util/redact.Fprint
+github.com/cockroachdb/cockroach/pkg/util/redact.Fprintf
 (*bufio.Writer).Flush
 (*database/sql.DB).Close
 (*database/sql.Rows).Close

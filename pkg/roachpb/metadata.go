@@ -11,7 +11,6 @@
 package roachpb
 
 import (
-	"bytes"
 	"fmt"
 	"sort"
 	"strconv"
@@ -19,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/redact"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,6 +31,9 @@ type NodeID int32
 func (n NodeID) String() string {
 	return strconv.FormatInt(int64(n), 10)
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (n NodeID) SafeValue() {}
 
 // StoreID is a custom type for a cockroach store ID.
 type StoreID int32
@@ -48,6 +51,9 @@ func (n StoreID) String() string {
 	return strconv.FormatInt(int64(n), 10)
 }
 
+// SafeValue implements the redact.SafeValue interface.
+func (n StoreID) SafeValue() {}
+
 // A RangeID is a unique ID associated to a Raft consensus group.
 type RangeID int64
 
@@ -55,6 +61,9 @@ type RangeID int64
 func (r RangeID) String() string {
 	return strconv.FormatInt(int64(r), 10)
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (r RangeID) SafeValue() {}
 
 // RangeIDSlice implements sort.Interface.
 type RangeIDSlice []RangeID
@@ -70,6 +79,9 @@ type ReplicaID int32
 func (r ReplicaID) String() string {
 	return strconv.FormatInt(int64(r), 10)
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (r ReplicaID) SafeValue() {}
 
 // Equals returns whether the Attributes lists are equivalent. Attributes lists
 // are treated as sets, meaning that ordering and duplicates are ignored.
@@ -281,100 +293,60 @@ func (r *RangeDescriptor) Validate() error {
 }
 
 func (r RangeDescriptor) String() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "r%d:", r.RangeID)
-
-	if !r.IsInitialized() {
-		buf.WriteString("{-}")
-	} else {
-		buf.WriteString(r.RSpan().String())
-	}
-	buf.WriteString(" [")
-
-	if allReplicas := r.Replicas().All(); len(allReplicas) > 0 {
-		for i, rep := range allReplicas {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			buf.WriteString(rep.String())
-		}
-	} else {
-		buf.WriteString("<no replicas>")
-	}
-	fmt.Fprintf(&buf, ", next=%d, gen=%d", r.NextReplicaID, r.Generation)
-	if s := r.GetStickyBit(); !s.IsEmpty() {
-		fmt.Fprintf(&buf, ", sticky=%s", s)
-	}
-	buf.WriteString("]")
-
-	return buf.String()
+	return redact.StringWithoutMarkers(r)
 }
 
-// SafeMessage implements the SafeMessager interface.
-//
-// This method should be kept in sync with the String() method, except for the Start/End keys, which are customer data.
-func (r RangeDescriptor) SafeMessage() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "r%d:", r.RangeID)
+// SafeFormat implements the redact.SafeFormatter interface.
+func (r RangeDescriptor) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("r%d:", r.RangeID)
 	if !r.IsInitialized() {
-		buf.WriteString("{-}")
+		w.SafeString("{-}")
+	} else {
+		w.Print(r.RSpan())
 	}
-	buf.WriteString(" [")
+	w.SafeString(" [")
 
 	if allReplicas := r.Replicas().All(); len(allReplicas) > 0 {
 		for i, rep := range allReplicas {
 			if i > 0 {
-				buf.WriteString(", ")
+				w.SafeString(", ")
 			}
-			buf.WriteString(rep.SafeMessage())
+			w.Print(rep)
 		}
 	} else {
-		buf.WriteString("<no replicas>")
+		w.SafeString("<no replicas>")
 	}
-	fmt.Fprintf(&buf, ", next=%d, gen=%d", r.NextReplicaID, r.Generation)
+	w.Printf(", next=%d, gen=%d", r.NextReplicaID, r.Generation)
 	if s := r.GetStickyBit(); !s.IsEmpty() {
-		fmt.Fprintf(&buf, ", sticky=%s", s)
+		w.Printf(", sticky=%s", s)
 	}
-	buf.WriteString("]")
-
-	return buf.String()
+	w.SafeString("]")
 }
 
 func (r ReplicationTarget) String() string {
-	return fmt.Sprintf("n%d,s%d", r.NodeID, r.StoreID)
+	return redact.StringWithoutMarkers(r)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (r ReplicationTarget) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("n%d,s%d", r.NodeID, r.StoreID)
 }
 
 func (r ReplicaDescriptor) String() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "(n%d,s%d):", r.NodeID, r.StoreID)
-	if r.ReplicaID == 0 {
-		buf.WriteString("?")
-	} else {
-		fmt.Fprintf(&buf, "%d", r.ReplicaID)
-	}
-	if typ := r.GetType(); typ != VOTER_FULL {
-		buf.WriteString(typ.String())
-	}
-	return buf.String()
+	return redact.StringWithoutMarkers(r)
 }
 
-// SafeMessage implements the SafeMessager interface.
-//
-// This method should be kept in sync with the String() method, while there is no customer data in the ReplicaDescriptor
-// today, we maintain this method for future compatibility, since its used from other places
-// such as RangeDescriptor#SafeMessage()
-func (r ReplicaDescriptor) SafeMessage() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "(n%d,s%d):", r.NodeID, r.StoreID)
+// SafeFormat implements the redact.SafeFormatter interface.
+func (r ReplicaDescriptor) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("(n%d,s%d):", r.NodeID, r.StoreID)
 	if r.ReplicaID == 0 {
-		buf.WriteString("?")
+		w.SafeRune('?')
 	} else {
-		fmt.Fprintf(&buf, "%d", r.ReplicaID)
+		w.Print(r.ReplicaID)
 	}
 	if typ := r.GetType(); typ != VOTER_FULL {
-		buf.WriteString(typ.String())
+		w.Print(typ)
 	}
-	return buf.String()
 }
 
 // Validate performs some basic validation of the contents of a replica descriptor.
@@ -398,6 +370,9 @@ func (r ReplicaDescriptor) GetType() ReplicaType {
 	}
 	return *r.Type
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (r ReplicaType) SafeValue() {}
 
 // PercentilesFromData derives percentiles from a slice of data points.
 // Sorts the input data if it isn't already sorted.
@@ -431,13 +406,23 @@ func percentileFromSortedData(data []float64, percent float64) float64 {
 
 // String returns a string representation of the Percentiles.
 func (p Percentiles) String() string {
-	return fmt.Sprintf("p10=%.2f p25=%.2f p50=%.2f p75=%.2f p90=%.2f pMax=%.2f",
+	return redact.StringWithoutMarkers(p)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (p Percentiles) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("p10=%.2f p25=%.2f p50=%.2f p75=%.2f p90=%.2f pMax=%.2f",
 		p.P10, p.P25, p.P50, p.P75, p.P90, p.PMax)
 }
 
 // String returns a string representation of the StoreCapacity.
 func (sc StoreCapacity) String() string {
-	return fmt.Sprintf("disk (capacity=%s, available=%s, used=%s, logicalBytes=%s), "+
+	return redact.StringWithoutMarkers(sc)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (sc StoreCapacity) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("disk (capacity=%s, available=%s, used=%s, logicalBytes=%s), "+
 		"ranges=%d, leases=%d, queries=%.2f, writes=%.2f, "+
 		"bytesPerReplica={%s}, writesPerReplica={%s}",
 		humanizeutil.IBytes(sc.Capacity), humanizeutil.IBytes(sc.Available),
