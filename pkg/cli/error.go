@@ -354,11 +354,11 @@ func maybeShoutError(
 }
 
 func checkAndMaybeShout(err error) error {
-	return checkAndMaybeShoutTo(err, log.Shout)
+	return checkAndMaybeShoutTo(err, log.Shoutf)
 }
 
 func checkAndMaybeShoutTo(
-	err error, logger func(context.Context, log.Severity, ...interface{}),
+	err error, logger func(context.Context, log.Severity, string, ...interface{}),
 ) error {
 	if err == nil {
 		return nil
@@ -370,6 +370,6 @@ func checkAndMaybeShoutTo(
 		severity = ec.severity
 		cause = ec.cause
 	}
-	logger(context.Background(), severity, cause)
+	logger(context.Background(), severity, "%v", cause)
 	return err
 }

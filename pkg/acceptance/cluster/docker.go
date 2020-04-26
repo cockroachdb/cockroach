@@ -305,7 +305,7 @@ func (c *Container) Wait(ctx context.Context, condition container.WaitCondition)
 		if exitCode := waitOKBody.StatusCode; exitCode != 0 {
 			err = errors.Errorf("non-zero exit code: %d", exitCode)
 			fmt.Fprintln(out, err.Error())
-			log.Shout(ctx, log.Severity_INFO, "command left-over files in ", c.cluster.volumesDir)
+			log.Shoutf(ctx, log.Severity_INFO, "command left-over files in %s", c.cluster.volumesDir)
 		}
 
 		return err

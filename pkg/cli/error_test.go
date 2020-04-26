@@ -109,7 +109,7 @@ type logger struct {
 	Err      error
 }
 
-func (l *logger) Log(_ context.Context, sev log.Severity, args ...interface{}) {
+func (l *logger) Log(_ context.Context, sev log.Severity, msg string, args ...interface{}) {
 	require.Equal(l.TB, 1, len(args), "expected to log one item")
 	err, ok := args[0].(error)
 	require.True(l.TB, ok, "expected to log an error")

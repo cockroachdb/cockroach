@@ -794,8 +794,8 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 			cutStmt = cutStmt[:panicLogOutputCutoffChars] + " [...]"
 		}
 
-		log.Shout(ctx, log.Severity_ERROR,
-			fmt.Sprintf("a SQL panic has occurred while executing %q: %s", cutStmt, recovered))
+		log.Shoutf(ctx, log.Severity_ERROR,
+			"a SQL panic has occurred while executing %q: %s", cutStmt, recovered)
 
 		ex.close(ctx, panicClose)
 
