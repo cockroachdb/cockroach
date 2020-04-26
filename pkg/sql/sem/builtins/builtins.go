@@ -3193,7 +3193,79 @@ may increase either contention or retry errors, or both.`,
 				"Raising the verbosity can severely affect performance.",
 		},
 	),
-
+	// Returns the number of distinct inverted index entries that would be
+	// generated for a value.
+	"crdb_internal.num_geo_inverted_index_entries": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     categorySystemInfo,
+			NullableArgs: true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"table_id", types.Int},
+				{"index_id", types.Int},
+				{"val", types.Geography},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull || args[1] == tree.DNull || args[2] == tree.DNull {
+					return tree.DZero, nil
+				}
+				tableID := int(tree.MustBeDInt(args[0]))
+				indexID := int(tree.MustBeDInt(args[1]))
+				g := tree.MustBeDGeography(args[2])
+				tableDesc, err := sqlbase.GetTableDescFromID(ctx.Context, ctx.Txn, sqlbase.ID(tableID))
+				if err != nil {
+					return nil, err
+				}
+				indexDesc, err := tableDesc.FindIndexByID(sqlbase.IndexID(indexID))
+				if err != nil {
+					return nil, err
+				}
+				if indexDesc.GeoConfig.S2Geography == nil {
+					return nil, errors.Errorf("index_id %d is not a geography inverted index", indexID)
+				}
+				keys, err := sqlbase.EncodeGeoInvertedIndexTableKeys(g, nil, indexDesc)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(len(keys))), nil
+			},
+			Info: "This function is used only by CockroachDB's developers for testing purposes.",
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"table_id", types.Int},
+				{"index_id", types.Int},
+				{"val", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull || args[1] == tree.DNull || args[2] == tree.DNull {
+					return tree.DZero, nil
+				}
+				tableID := int(tree.MustBeDInt(args[0]))
+				indexID := int(tree.MustBeDInt(args[1]))
+				g := tree.MustBeDGeometry(args[2])
+				tableDesc, err := sqlbase.GetTableDescFromID(ctx.Context, ctx.Txn, sqlbase.ID(tableID))
+				if err != nil {
+					return nil, err
+				}
+				indexDesc, err := tableDesc.FindIndexByID(sqlbase.IndexID(indexID))
+				if err != nil {
+					return nil, err
+				}
+				if indexDesc.GeoConfig.S2Geometry == nil {
+					return nil, errors.Errorf("index_id %d is not a geometry inverted index", indexID)
+				}
+				keys, err := sqlbase.EncodeGeoInvertedIndexTableKeys(g, nil, indexDesc)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(len(keys))), nil
+			},
+			Info: "This function is used only by CockroachDB's developers for testing purposes.",
+		}),
 	// Returns the number of distinct inverted index entries that would be
 	// generated for a value.
 	"crdb_internal.num_inverted_index_entries": makeBuiltin(
@@ -3238,8 +3310,7 @@ may increase either contention or retry errors, or both.`,
 				return tree.NewDInt(tree.DInt(len(keys))), nil
 			},
 			Info: "This function is used only by CockroachDB's developers for testing purposes.",
-		},
-	),
+		}),
 
 	// Returns true iff the current user has admin role.
 	// Note: it would be a privacy leak to extend this to check arbitrary usernames.

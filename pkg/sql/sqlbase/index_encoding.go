@@ -11,9 +11,11 @@
 package sqlbase
 
 import (
+	"context"
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -852,7 +854,9 @@ func EncodeInvertedIndexKeys(
 	} else {
 		val = tree.DNull
 	}
-
+	if !geoindex.IsEmptyConfig(&index.GeoConfig) {
+		return EncodeGeoInvertedIndexTableKeys(val, keyPrefix, index)
+	}
 	return EncodeInvertedIndexTableKeys(val, keyPrefix)
 }
 
@@ -901,6 +905,49 @@ func encodeArrayInvertedIndexTableKeys(val *tree.DArray, inKey []byte) (key [][]
 	}
 	outKeys = unique.UniquifyByteSlices(outKeys)
 	return outKeys, nil
+}
+
+// EncodeGeoInvertedIndexTableKeys is the equivalent of EncodeInvertedIndexTableKeys
+// for Geography and Geometry.
+func EncodeGeoInvertedIndexTableKeys(
+	val tree.Datum, inKey []byte, index *IndexDescriptor,
+) (key [][]byte, err error) {
+	if val == tree.DNull {
+		return nil, nil
+	}
+	switch val.ResolvedType().Family() {
+	case types.GeographyFamily:
+		index := geoindex.NewS2GeographyIndex(*index.GeoConfig.S2Geography)
+		intKeys, err := index.InvertedIndexKeys(context.TODO(), val.(*tree.DGeography).Geography)
+		if err != nil {
+			return nil, err
+		}
+		return encodeGeoKeys(inKey, intKeys)
+	case types.GeometryFamily:
+		index := geoindex.NewS2GeometryIndex(*index.GeoConfig.S2Geometry)
+		intKeys, err := index.InvertedIndexKeys(context.TODO(), val.(*tree.DGeometry).Geometry)
+		if err != nil {
+			return nil, err
+		}
+		return encodeGeoKeys(inKey, intKeys)
+	default:
+		return nil, errors.Errorf("internal error: unexpected type: %s", val.ResolvedType().Family())
+	}
+}
+
+func encodeGeoKeys(inKey []byte, geoKeys []geoindex.Key) (keys [][]byte, err error) {
+	keys = make([][]byte, 0, len(geoKeys))
+	for _, k := range geoKeys {
+		outKey := make([]byte, len(inKey))
+		copy(outKey, inKey)
+		d := (tree.DInt)(k)
+		newKey, err := EncodeTableKey(outKey, &d, encoding.Ascending)
+		if err != nil {
+			return nil, err
+		}
+		keys = append(keys, newKey)
+	}
+	return keys, nil
 }
 
 // EncodePrimaryIndex constructs a list of k/v pairs for a
