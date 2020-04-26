@@ -3084,6 +3084,303 @@ project
            └── x:1 = k:3 [outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
 
 # --------------------------------------------------
+# TryDecorrelateMax1Row
+# --------------------------------------------------
+
+# Rule is activated on LeftJoinApply.
+norm format=show-miscprops expect=TryDecorrelateMax1Row
+SELECT (SELECT d FROM cd WHERE d=x) FROM xy
+----
+project
+ ├── columns: d:5
+ ├── ensure-distinct-on
+ │    ├── columns: x:1!null cd.d:4
+ │    ├── grouping columns: x:1!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(4)
+ │    ├── left-join (hash)
+ │    │    ├── columns: x:1!null cd.d:4
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:1!null
+ │    │    │    └── key: (1)
+ │    │    ├── scan cd
+ │    │    │    └── columns: cd.d:4!null
+ │    │    └── filters
+ │    │         └── cd.d:4 = x:1 [outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │    └── aggregations
+ │         └── const-agg [as=cd.d:4, outer=(4)]
+ │              └── cd.d:4
+ └── projections
+      └── cd.d:4 [as=d:5, outer=(4)]
+
+# Rule is activated on LeftJoinApply.
+# Case without a primary key on left side of join.
+norm format=show-miscprops expect=TryDecorrelateMax1Row
+SELECT * FROM (SELECT y FROM xy) WHERE 5 = (SELECT d FROM cd WHERE d=y)
+----
+project
+ ├── columns: y:2
+ └── select
+      ├── columns: x:1!null y:2 d:4!null
+      ├── key: (1)
+      ├── fd: ()-->(4), (1)-->(2)
+      ├── ensure-distinct-on
+      │    ├── columns: x:1!null y:2 d:4
+      │    ├── grouping columns: x:1!null
+      │    ├── error: "more than one row returned by a subquery used as an expression"
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,4)
+      │    ├── left-join (hash)
+      │    │    ├── columns: x:1!null y:2 d:4
+      │    │    ├── fd: (1)-->(2)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:1!null y:2
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2)
+      │    │    ├── scan cd
+      │    │    │    └── columns: d:4!null
+      │    │    └── filters
+      │    │         └── d:4 = y:2 [outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
+      │    └── aggregations
+      │         ├── const-agg [as=y:2, outer=(2)]
+      │         │    └── y:2
+      │         └── const-agg [as=d:4, outer=(4)]
+      │              └── d:4
+      └── filters
+           └── d:4 = 5 [outer=(4), constraints=(/4: [/5 - /5]; tight), fd=()-->(4)]
+
+# Rule is activated on LeftJoinApply.
+# Case with multiple projected columns that will be translated to multiple
+# const-agg functions.
+norm format=show-miscprops expect=TryDecorrelateMax1Row
+SELECT (SELECT d FROM cd WHERE d=k), i, f, s, j FROM a
+----
+project
+ ├── columns: d:8 i:2 f:3 s:4 j:5
+ ├── ensure-distinct-on
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5 cd.d:7
+ │    ├── grouping columns: k:1!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5,7)
+ │    ├── left-join (hash)
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 cd.d:7
+ │    │    ├── fd: (1)-->(2-5)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2-5)
+ │    │    ├── scan cd
+ │    │    │    └── columns: cd.d:7!null
+ │    │    └── filters
+ │    │         └── cd.d:7 = k:1 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ │    └── aggregations
+ │         ├── const-agg [as=i:2, outer=(2)]
+ │         │    └── i:2
+ │         ├── const-agg [as=f:3, outer=(3)]
+ │         │    └── f:3
+ │         ├── const-agg [as=s:4, outer=(4)]
+ │         │    └── s:4
+ │         ├── const-agg [as=j:5, outer=(5)]
+ │         │    └── j:5
+ │         └── const-agg [as=cd.d:7, outer=(7)]
+ │              └── cd.d:7
+ └── projections
+      └── cd.d:7 [as=d:8, outer=(7)]
+
+# Rule is activated on LeftJoin.
+# This test is a bit fragile because it depends on DecorrelateJoin activating
+# before TryDecorrelateMax1Row.
+# A LeftJoin is used because subquery cardinality might be zero.
+norm format=show-miscprops expect=TryDecorrelateMax1Row
+SELECT * FROM a LEFT JOIN LATERAL (SELECT * FROM uv WHERE (SELECT true FROM xy WHERE y=i)) ON true
+----
+project
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 u:6 v:7
+ ├── key: (1,6)
+ ├── fd: (1)-->(2-5), (1,6)-->(7)
+ └── left-join-apply
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 u:6 v:7 bool:10
+      ├── key: (1,6)
+      ├── fd: (1)-->(2-5), (1,6)-->(7,10)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-5)
+      ├── ensure-distinct-on
+      │    ├── columns: u:6!null v:7 bool:10
+      │    ├── grouping columns: u:6!null
+      │    ├── error: "more than one row returned by a subquery used as an expression"
+      │    ├── outer: (2)
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7,10)
+      │    ├── left-join (cross)
+      │    │    ├── columns: u:6!null v:7 bool:10
+      │    │    ├── outer: (2)
+      │    │    ├── fd: (6)-->(7)
+      │    │    ├── scan uv
+      │    │    │    ├── columns: u:6!null v:7
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7)
+      │    │    ├── project
+      │    │    │    ├── columns: bool:10!null
+      │    │    │    ├── outer: (2)
+      │    │    │    ├── fd: ()-->(10)
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: y:9!null
+      │    │    │    │    ├── outer: (2)
+      │    │    │    │    ├── fd: ()-->(9)
+      │    │    │    │    ├── scan xy
+      │    │    │    │    │    └── columns: y:9
+      │    │    │    │    └── filters
+      │    │    │    │         └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+      │    │    │    └── projections
+      │    │    │         └── true [as=bool:10]
+      │    │    └── filters (true)
+      │    └── aggregations
+      │         ├── const-agg [as=v:7, outer=(7)]
+      │         │    └── v:7
+      │         └── const-agg [as=bool:10, outer=(10)]
+      │              └── bool:10
+      └── filters
+           └── bool:10 [outer=(10), constraints=(/10: [/true - /true]; tight), fd=()-->(10)]
+
+# Rule is activated on InnerJoinApply.
+# An InnerJoinApply is used because subquery cardinality is guaranteed to be
+# greater than zero.
+norm format=show-miscprops expect=TryDecorrelateMax1Row
+SELECT (SELECT t=x FROM (VALUES (1), (2)) f(t)) FROM xy
+----
+project
+ ├── columns: "?column?":5!null
+ ├── ensure-distinct-on
+ │    ├── columns: x:1!null "?column?":4!null
+ │    ├── grouping columns: x:1!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(4)
+ │    ├── project
+ │    │    ├── columns: "?column?":4!null x:1!null
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: x:1!null column1:3!null
+ │    │    │    ├── scan xy
+ │    │    │    │    ├── columns: x:1!null
+ │    │    │    │    └── key: (1)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:3!null
+ │    │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    │    ├── (1,)
+ │    │    │    │    └── (2,)
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── column1:3 = x:1 [as="?column?":4, outer=(1,3)]
+ │    └── aggregations
+ │         └── const-agg [as="?column?":4, outer=(4)]
+ │              └── "?column?":4
+ └── projections
+      └── "?column?":4 [as="?column?":5, outer=(4)]
+
+# Rule is activated on InnerJoin.
+# This test is a bit fragile because it depends on DecorrelateJoin activating
+# before TryDecorrelateMax1Row.
+norm format=show-miscprops expect=TryDecorrelateMax1Row
+SELECT * FROM a LEFT JOIN LATERAL (SELECT * FROM uv WHERE (SELECT y=i FROM (VALUES (1), (2)) v(y))) ON true
+----
+project
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 u:6 v:7
+ ├── key: (1,6)
+ ├── fd: (1)-->(2-5), (1,6)-->(7)
+ └── left-join-apply
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 u:6 v:7 "?column?":9
+      ├── key: (1,6)
+      ├── fd: (1)-->(2-5), (1,6)-->(7,9)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-5)
+      ├── ensure-distinct-on
+      │    ├── columns: u:6!null v:7 "?column?":9
+      │    ├── grouping columns: u:6!null
+      │    ├── error: "more than one row returned by a subquery used as an expression"
+      │    ├── outer: (2)
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7,9)
+      │    ├── project
+      │    │    ├── columns: "?column?":9 u:6!null v:7
+      │    │    ├── outer: (2)
+      │    │    ├── fd: (6)-->(7)
+      │    │    ├── inner-join (cross)
+      │    │    │    ├── columns: u:6!null v:7 column1:8!null
+      │    │    │    ├── fd: (6)-->(7)
+      │    │    │    ├── scan uv
+      │    │    │    │    ├── columns: u:6!null v:7
+      │    │    │    │    ├── key: (6)
+      │    │    │    │    └── fd: (6)-->(7)
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:8!null
+      │    │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    │    ├── (1,)
+      │    │    │    │    └── (2,)
+      │    │    │    └── filters (true)
+      │    │    └── projections
+      │    │         └── column1:8 = i:2 [as="?column?":9, outer=(2,8)]
+      │    └── aggregations
+      │         ├── const-agg [as=v:7, outer=(7)]
+      │         │    └── v:7
+      │         └── const-agg [as="?column?":9, outer=(9)]
+      │              └── "?column?":9
+      └── filters
+           └── "?column?":9 [outer=(9), constraints=(/9: [/true - /true]; tight), fd=()-->(9)]
+
+# Filter (y=3) must not be pushed through EnsureDistinctOn in order to ensure
+# expected error behavior.
+norm format=show-miscprops expect=TryDecorrelateMax1Row
+SELECT a FROM (VALUES (0), (0)) v(a) WHERE (SELECT y FROM xy WHERE x<>a)=3
+----
+project
+ ├── columns: a:1!null
+ └── select
+      ├── columns: column1:1!null y:3!null rownum:4!null
+      ├── key: (4)
+      ├── fd: ()-->(3), (4)-->(1)
+      ├── ensure-distinct-on
+      │    ├── columns: column1:1!null y:3 rownum:4!null
+      │    ├── grouping columns: rownum:4!null
+      │    ├── error: "more than one row returned by a subquery used as an expression"
+      │    ├── cardinality: [1 - ]
+      │    ├── key: (4)
+      │    ├── fd: (4)-->(1,3)
+      │    ├── left-join (cross)
+      │    │    ├── columns: column1:1!null x:2 y:3 rownum:4!null
+      │    │    ├── cardinality: [2 - ]
+      │    │    ├── key: (2,4)
+      │    │    ├── fd: (4)-->(1), (2)-->(3)
+      │    │    ├── ordinality
+      │    │    │    ├── columns: column1:1!null rownum:4!null
+      │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    ├── key: (4)
+      │    │    │    ├── fd: (4)-->(1)
+      │    │    │    └── values
+      │    │    │         ├── columns: column1:1!null
+      │    │    │         ├── cardinality: [2 - 2]
+      │    │    │         ├── (0,)
+      │    │    │         └── (0,)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:2!null y:3
+      │    │    │    ├── key: (2)
+      │    │    │    └── fd: (2)-->(3)
+      │    │    └── filters
+      │    │         └── x:2 != column1:1 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      │    └── aggregations
+      │         ├── const-agg [as=column1:1, outer=(1)]
+      │         │    └── column1:1
+      │         └── const-agg [as=y:3, outer=(3)]
+      │              └── y:3
+      └── filters
+           └── y:3 = 3 [outer=(3), constraints=(/3: [/3 - /3]; tight), fd=()-->(3)]
+
+# --------------------------------------------------
 # HoistSelectExists
 # --------------------------------------------------
 norm expect=HoistSelectExists
@@ -3913,26 +4210,26 @@ scalar-group-by
  ├── fd: ()-->(9)
  ├── project
  │    ├── columns: column8:8
- │    ├── left-join-apply
- │    │    ├── columns: i:2 y:7
- │    │    ├── scan a
- │    │    │    └── columns: i:2
- │    │    ├── max1-row
- │    │    │    ├── columns: y:7!null
- │    │    │    ├── error: "more than one row returned by a subquery used as an expression"
- │    │    │    ├── outer: (2)
- │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(7)
- │    │    │    └── select
- │    │    │         ├── columns: y:7!null
- │    │    │         ├── outer: (2)
- │    │    │         ├── fd: ()-->(7)
- │    │    │         ├── scan xy
- │    │    │         │    └── columns: y:7
- │    │    │         └── filters
- │    │    │              └── y:7 = i:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
- │    │    └── filters (true)
+ │    ├── ensure-distinct-on
+ │    │    ├── columns: k:1!null y:7
+ │    │    ├── grouping columns: k:1!null
+ │    │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(7)
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: k:1!null i:2 y:7
+ │    │    │    ├── fd: (1)-->(2)
+ │    │    │    ├── scan a
+ │    │    │    │    ├── columns: k:1!null i:2
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(2)
+ │    │    │    ├── scan xy
+ │    │    │    │    └── columns: y:7
+ │    │    │    └── filters
+ │    │    │         └── y:7 = i:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+ │    │    └── aggregations
+ │    │         └── const-agg [as=y:7, outer=(7)]
+ │    │              └── y:7
  │    └── projections
  │         └── y:7 [as=column8:8, outer=(7)]
  └── aggregations
@@ -4220,60 +4517,57 @@ SELECT (VALUES ((SELECT i+1 AS r)), (10), ((SELECT k+1 AS s))) FROM a
 ----
 project
  ├── columns: column1:9
- ├── inner-join-apply
- │    ├── columns: k:1!null i:2 column1:8
+ ├── ensure-distinct-on
+ │    ├── columns: k:1!null column1:8
+ │    ├── grouping columns: k:1!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,8)
- │    ├── scan a
- │    │    ├── columns: k:1!null i:2
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2)
- │    ├── max1-row
- │    │    ├── columns: column1:8
- │    │    ├── error: "more than one row returned by a subquery used as an expression"
- │    │    ├── outer: (1,2)
- │    │    ├── cardinality: [1 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(8)
- │    │    └── project
- │    │         ├── columns: column1:8
- │    │         ├── outer: (1,2)
- │    │         ├── cardinality: [3 - 3]
- │    │         └── inner-join-apply
- │    │              ├── columns: r:6 s:7 column1:8
- │    │              ├── outer: (1,2)
- │    │              ├── cardinality: [3 - 3]
- │    │              ├── fd: ()-->(6,7)
- │    │              ├── inner-join (cross)
- │    │              │    ├── columns: r:6 s:7
- │    │              │    ├── outer: (1,2)
- │    │              │    ├── cardinality: [1 - 1]
- │    │              │    ├── key: ()
- │    │              │    ├── fd: ()-->(6,7)
- │    │              │    ├── values
- │    │              │    │    ├── columns: r:6
- │    │              │    │    ├── outer: (2)
- │    │              │    │    ├── cardinality: [1 - 1]
- │    │              │    │    ├── key: ()
- │    │              │    │    ├── fd: ()-->(6)
- │    │              │    │    └── (i:2 + 1,)
- │    │              │    ├── values
- │    │              │    │    ├── columns: s:7
- │    │              │    │    ├── outer: (1)
- │    │              │    │    ├── cardinality: [1 - 1]
- │    │              │    │    ├── key: ()
- │    │              │    │    ├── fd: ()-->(7)
- │    │              │    │    └── (k:1 + 1,)
- │    │              │    └── filters (true)
- │    │              ├── values
- │    │              │    ├── columns: column1:8
- │    │              │    ├── outer: (6,7)
- │    │              │    ├── cardinality: [3 - 3]
- │    │              │    ├── (r:6,)
- │    │              │    ├── (10,)
- │    │              │    └── (s:7,)
- │    │              └── filters (true)
- │    └── filters (true)
+ │    ├── fd: (1)-->(8)
+ │    ├── inner-join-apply
+ │    │    ├── columns: k:1!null i:2 r:6 s:7 column1:8
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    ├── inner-join-apply
+ │    │    │    ├── columns: r:6 s:7 column1:8
+ │    │    │    ├── outer: (1,2)
+ │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    ├── fd: ()-->(6,7)
+ │    │    │    ├── inner-join (cross)
+ │    │    │    │    ├── columns: r:6 s:7
+ │    │    │    │    ├── outer: (1,2)
+ │    │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    ├── fd: ()-->(6,7)
+ │    │    │    │    ├── values
+ │    │    │    │    │    ├── columns: r:6
+ │    │    │    │    │    ├── outer: (2)
+ │    │    │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    ├── fd: ()-->(6)
+ │    │    │    │    │    └── (i:2 + 1,)
+ │    │    │    │    ├── values
+ │    │    │    │    │    ├── columns: s:7
+ │    │    │    │    │    ├── outer: (1)
+ │    │    │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    ├── fd: ()-->(7)
+ │    │    │    │    │    └── (k:1 + 1,)
+ │    │    │    │    └── filters (true)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:8
+ │    │    │    │    ├── outer: (6,7)
+ │    │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    │    ├── (r:6,)
+ │    │    │    │    ├── (10,)
+ │    │    │    │    └── (s:7,)
+ │    │    │    └── filters (true)
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         └── const-agg [as=column1:8, outer=(8)]
+ │              └── column1:8
  └── projections
       └── column1:8 [as=column1:9, outer=(8)]
 

@@ -27,6 +27,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// duplicateUpsertErrText is error text used when a row is modified twice by
+// an upsert statement.
+const duplicateUpsertErrText = "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+
 // excludedTableName is the name of a special Upsert data source. When a row
 // cannot be inserted due to a conflict, the "excluded" data source contains
 // that row, so that its columns can be referenced in the conflict clause:
@@ -744,7 +748,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds u
 		// Treat NULL values as distinct from one another. And if duplicates are
 		// detected, remove them rather than raising an error.
 		mb.outScope = mb.b.buildDistinctOn(
-			conflictCols, mb.outScope, true /* nullsAreDistinct */, false /* errorOnDup */)
+			conflictCols, mb.outScope, true /* nullsAreDistinct */, "" /* errorOnDup */)
 	}
 
 	mb.targetColList = make(opt.ColList, 0, mb.tab.DeletableColumnCount())
@@ -780,7 +784,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	}
 	mb.outScope.ordering = nil
 	mb.outScope = mb.b.buildDistinctOn(
-		conflictCols, mb.outScope, true /* nullsAreDistinct */, true /* errorOnDup */)
+		conflictCols, mb.outScope, true /* nullsAreDistinct */, duplicateUpsertErrText)
 
 	// Re-alias all INSERT columns so that they are accessible as if they were
 	// part of a special data source named "crdb_internal.excluded".

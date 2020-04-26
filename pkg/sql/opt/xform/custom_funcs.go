@@ -2203,6 +2203,14 @@ func (c *CustomFuncs) GenerateStreamingGroupBy(
 			}
 			c.e.mem.AddDistinctOnToGroup(&newExpr, grp)
 
+		case opt.EnsureDistinctOnOp:
+			newExpr := memo.EnsureDistinctOnExpr{
+				Input:           input,
+				Aggregations:    aggs,
+				GroupingPrivate: newPrivate,
+			}
+			c.e.mem.AddEnsureDistinctOnToGroup(&newExpr, grp)
+
 		case opt.UpsertDistinctOnOp:
 			newExpr := memo.UpsertDistinctOnExpr{
 				Input:           input,

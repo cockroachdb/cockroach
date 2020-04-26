@@ -199,7 +199,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.GroupByExpr, *memo.ScalarGroupByExpr:
 		ep, err = b.buildGroupBy(e)
 
-	case *memo.DistinctOnExpr, *memo.UpsertDistinctOnExpr:
+	case *memo.DistinctOnExpr, *memo.EnsureDistinctOnExpr, *memo.UpsertDistinctOnExpr:
 		ep, err = b.buildDistinct(t)
 
 	case *memo.LimitExpr, *memo.OffsetExpr:
@@ -1032,16 +1032,9 @@ func (b *Builder) buildDistinct(distinct memo.RelExpr) (execPlan, error) {
 		nullsAreDistinct = true
 	}
 
-	// If duplicate input rows are not allowed, raise an error at runtime if
-	// duplicates are detected.
-	var errorOnDup string
-	if private.ErrorOnDup {
-		errorOnDup = sqlbase.DuplicateUpsertErrText
-	}
-
 	reqOrdering := ep.reqOrdering(distinct)
 	ep.root, err = b.factory.ConstructDistinct(
-		input.root, distinctCols, orderedCols, reqOrdering, nullsAreDistinct, errorOnDup)
+		input.root, distinctCols, orderedCols, reqOrdering, nullsAreDistinct, private.ErrorOnDup)
 	if err != nil {
 		return execPlan{}, err
 	}

@@ -101,6 +101,9 @@
 # it always returns a non-empty set if its input is non-empty. Similarly, if its
 # input is empty, then it returns the empty set. Therefore, it's a no-op for
 # Exists.
+#
+# NOTE: EnsureDistinctOn has the side effect of error'ing if the input has
+# duplicates, so do not eliminate it.
 [EliminateExistsGroupBy, Normalize]
 (Exists (GroupBy | DistinctOn $input:*) $subqueryPrivate:*) => (Exists $input $subqueryPrivate)
 
@@ -348,7 +351,7 @@
                         (MakeArrayAggCol (ArrayType $requestedCol))
                     )
                 ]
-                (MakeOrderedGrouping
+                (MakeGrouping
                     (MakeEmptyColSet)
                     (SubqueryOrdering $subquery)
                 )

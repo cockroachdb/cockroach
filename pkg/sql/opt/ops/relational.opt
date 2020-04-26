@@ -477,8 +477,8 @@ define GroupBy {
 }
 
 # GroupingPrivate is shared between the grouping-related operators: GroupBy
-# ScalarGroupBy, DistinctOn, and UpsertDistinctOn. This allows the operators to
-# be treated polymorphically.
+# ScalarGroupBy, DistinctOn, EnsureDistinctOn, and UpsertDistinctOn. This allows
+# the operators to be treated polymorphically.
 [Private]
 define GroupingPrivate {
     # GroupingCols partitions the GroupBy input rows into aggregation groups.
@@ -499,9 +499,10 @@ define GroupingPrivate {
     # orderings that contain grouping columns.
     Ordering OrderingChoice
 
-    # ErrorOnDup, if true, triggers an error if any aggregation group contains
-    # more than one row. This can only be true for the UpsertDistinctOn operator.
-    ErrorOnDup bool
+    # ErrorOnDup, if non-empty, triggers an error with the given text if any
+    # aggregation group contains more than one row. This can only be true for
+    # the EnsureDistinctOn and UpsertDistinctOn operators.
+    ErrorOnDup string
 }
 
 # ScalarGroupBy computes aggregate functions over the complete set of input
@@ -560,6 +561,23 @@ define ScalarGroupBy {
 # ConstAgg.
 [Relational, Grouping, Telemetry]
 define DistinctOn {
+    Input        RelExpr
+    Aggregations AggregationsExpr
+
+    _ GroupingPrivate
+}
+
+# EnsureDistinctOn is a variation on DistinctOn that is only used to replace a
+# Max1Row operator in a decorrelation attempt. It raises an error if any
+# distinct grouping contains more than one row. Or in other words, it "ensures"
+# that the input is distinct on the grouping columns.
+#
+# Rules should only "push through" or eliminate an EnsureDistinctOn if they
+# preserve the expected error behavior. For example, it would be invalid to
+# push a Select filter into an EnsureDistinctOn, as it might eliminate rows
+# that would otherwise trigger the EnsureDistinctOn error.
+[Relational, Grouping, Telemetry]
+define EnsureDistinctOn {
     Input        RelExpr
     Aggregations AggregationsExpr
 
