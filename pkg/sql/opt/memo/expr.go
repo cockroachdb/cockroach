@@ -11,6 +11,7 @@
 package memo
 
 import (
+	"context"
 	"fmt"
 	"math/bits"
 	"sort"
@@ -678,4 +679,63 @@ func ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
 	default:
 		return false
 	}
+}
+
+// FKCascades stores metadata necessary for building cascading queries.
+type FKCascades []FKCascade
+
+// FKCascade stores metadata necessary for building a cascading query.
+// Cascading queries are built as needed, after the original query is executed.
+type FKCascade struct {
+	// FKName is the name of the FK constraint.
+	FKName string
+
+	// Builder is an object that can be used as the "optbuilder" for the cascading
+	// query.
+	Builder CascadeBuilder
+
+	// WithID identifies the buffer for the mutation input in the original
+	// expression tree.
+	WithID opt.WithID
+
+	// OldValues are column IDs from the mutation input that correspond to the
+	// old values of the modified rows. The list maps 1-to-1 to foreign key
+	// columns.
+	OldValues opt.ColList
+
+	// NewValues are column IDs from the mutation input that correspond to the
+	// new values of the modified rows. The list maps 1-to-1 to foreign key columns.
+	// It is empty if the mutation is a deletion.
+	NewValues opt.ColList
+}
+
+// CascadeBuilder is an interface used to construct a cascading query for a
+// specific FK relation. For example: if we are deleting rows from a parent
+// table, after deleting the rows from the parent table this interface will be
+// used to build the corresponding deletion in the child table.
+type CascadeBuilder interface {
+	// Build constructs a cascading query that mutates the child table. The input
+	// is scanned using WithScan with the given WithID; oldValues and newValues
+	// columns correspond 1-to-1 to foreign key columns. For deletes, newValues is
+	// empty.
+	//
+	// The query does not need to be built in the same memo as the original query;
+	// the only requirement is that the mutation input columns
+	// (oldValues/newValues) are valid in the metadata.
+	//
+	// The method does not mutate any captured state; it is ok to call Build
+	// concurrently (e.g. if the plan it originates from is cached and reused).
+	//
+	// Note: factory is always *norm.Factory; it is an interface{} only to avoid
+	// circular package dependencies.
+	Build(
+		ctx context.Context,
+		semaCtx *tree.SemaContext,
+		evalCtx *tree.EvalContext,
+		catalog cat.Catalog,
+		factory interface{},
+		binding opt.WithID,
+		bindingProps *props.Relational,
+		oldValues, newValues opt.ColList,
+	) (RelExpr, error)
 }

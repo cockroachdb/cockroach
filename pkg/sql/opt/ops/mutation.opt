@@ -134,6 +134,9 @@ define MutationPrivate {
     # is zero.
     WithID WithID
 
+    # FKCascades stores metadata necessary for building cascading queries.
+    FKCascades FKCascades
+
     # FKFallback is true if we need to fall back to the legacy path for FK
     # checks / cascades.
     FKFallback bool
