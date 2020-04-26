@@ -483,28 +483,20 @@ project
  │    │    ├── stats: [rows=1.29289322, distinct(4)=1.29289322, null(4)=1, distinct(5)=1.29289322, null(5)=0]
  │    │    ├── key: (4)
  │    │    ├── fd: (4)-->(5)
- │    │    ├── project
+ │    │    ├── select
  │    │    │    ├── columns: a:3(bool!null) b:4(int)
  │    │    │    ├── cardinality: [0 - 3]
- │    │    │    ├── stats: [rows=1.5, distinct(4)=1.29289322, null(4)=1]
+ │    │    │    ├── stats: [rows=1.5, distinct(3)=1, null(3)=0, distinct(4)=1.29289322, null(4)=1]
  │    │    │    ├── fd: ()-->(3)
- │    │    │    ├── select
- │    │    │    │    ├── columns: column1:1(bool!null) column2:2(int)
- │    │    │    │    ├── cardinality: [0 - 3]
- │    │    │    │    ├── stats: [rows=1.5, distinct(1)=1, null(1)=0, distinct(2)=1.29289322, null(2)=1]
- │    │    │    │    ├── fd: ()-->(1)
- │    │    │    │    ├── values
- │    │    │    │    │    ├── columns: column1:1(bool!null) column2:2(int)
- │    │    │    │    │    ├── cardinality: [3 - 3]
- │    │    │    │    │    ├── stats: [rows=3, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=2]
- │    │    │    │    │    ├── (true, NULL) [type=tuple{bool, int}]
- │    │    │    │    │    ├── (false, NULL) [type=tuple{bool, int}]
- │    │    │    │    │    └── (true, 5) [type=tuple{bool, int}]
- │    │    │    │    └── filters
- │    │    │    │         └── column1:1 [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
- │    │    │    └── projections
- │    │    │         ├── column1:1 [as=a:3, type=bool, outer=(1)]
- │    │    │         └── column2:2 [as=b:4, type=int, outer=(2)]
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: a:3(bool!null) b:4(int)
+ │    │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    │    ├── stats: [rows=3, distinct(3)=2, null(3)=0, distinct(4)=2, null(4)=2]
+ │    │    │    │    ├── (true, NULL) [type=tuple{bool, int}]
+ │    │    │    │    ├── (false, NULL) [type=tuple{bool, int}]
+ │    │    │    │    └── (true, 5) [type=tuple{bool, int}]
+ │    │    │    └── filters
+ │    │    │         └── a:3 [type=bool, outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
  │    │    └── aggregations
  │    │         └── bool-or [as=bool_or:5, type=bool, outer=(3)]
  │    │              └── a:3 [type=bool]
