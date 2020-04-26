@@ -1,0 +1,178 @@
+exec-ddl
+CREATE TABLE parent (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE)
+----
+
+build
+DELETE FROM parent WHERE p > 1
+----
+delete parent
+ ├── columns: <none>
+ ├── fetch columns: p:2
+ ├── input binding: &1
+ ├── cascades
+ │    └── fk_p_ref_parent
+ └── select
+      ├── columns: p:2!null
+      ├── scan parent
+      │    └── columns: p:2!null
+      └── filters
+           └── p:2 > 1
+
+build-cascades
+DELETE FROM parent WHERE p > 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:2
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent
+ │    └── select
+ │         ├── columns: p:2!null
+ │         ├── scan parent
+ │         │    └── columns: p:2!null
+ │         └── filters
+ │              └── p:2 > 1
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: c:5 child.p:6
+           └── semi-join (hash)
+                ├── columns: c:5!null child.p:6!null
+                ├── scan child
+                │    └── columns: c:5!null child.p:6!null
+                ├── with-scan &1
+                │    ├── columns: p:7!null
+                │    └── mapping:
+                │         └──  parent.p:2 => p:7
+                └── filters
+                     └── child.p:6 = p:7
+
+exec-ddl
+CREATE TABLE grandchild (g INT PRIMARY KEY, c INT REFERENCES child(c) ON DELETE CASCADE)
+----
+
+build-cascades
+DELETE FROM parent WHERE p > 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:2
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent
+ │    └── select
+ │         ├── columns: p:2!null
+ │         ├── scan parent
+ │         │    └── columns: p:2!null
+ │         └── filters
+ │              └── p:2 > 1
+ └── cascade
+      ├── delete child
+      │    ├── columns: <none>
+      │    ├── fetch columns: c:5 child.p:6
+      │    ├── input binding: &2
+      │    ├── cascades
+      │    │    └── fk_c_ref_child
+      │    └── semi-join (hash)
+      │         ├── columns: c:5!null child.p:6!null
+      │         ├── scan child
+      │         │    └── columns: c:5!null child.p:6!null
+      │         ├── with-scan &1
+      │         │    ├── columns: p:7!null
+      │         │    └── mapping:
+      │         │         └──  parent.p:2 => p:7
+      │         └── filters
+      │              └── child.p:6 = p:7
+      └── cascade
+           └── delete grandchild
+                ├── columns: <none>
+                ├── fetch columns: g:10 grandchild.c:11
+                └── semi-join (hash)
+                     ├── columns: g:10!null grandchild.c:11
+                     ├── scan grandchild
+                     │    └── columns: g:10!null grandchild.c:11
+                     ├── with-scan &2
+                     │    ├── columns: c:12!null
+                     │    └── mapping:
+                     │         └──  child.c:5 => c:12
+                     └── filters
+                          └── grandchild.c:11 = c:12
+
+exec-ddl
+CREATE TABLE self (a INT PRIMARY KEY, b INT REFERENCES self(a) ON DELETE CASCADE)
+----
+
+build-cascades cascade-levels=3
+DELETE FROM self WHERE a=1
+----
+root
+ ├── delete self
+ │    ├── columns: <none>
+ │    ├── fetch columns: a:3 b:4
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_b_ref_self
+ │    └── select
+ │         ├── columns: a:3!null b:4
+ │         ├── scan self
+ │         │    └── columns: a:3!null b:4
+ │         └── filters
+ │              └── a:3 = 1
+ └── cascade
+      ├── delete self
+      │    ├── columns: <none>
+      │    ├── fetch columns: self.a:7 b:8
+      │    ├── input binding: &2
+      │    ├── cascades
+      │    │    └── fk_b_ref_self
+      │    └── semi-join (hash)
+      │         ├── columns: self.a:7!null b:8
+      │         ├── scan self
+      │         │    └── columns: self.a:7!null b:8
+      │         ├── with-scan &1
+      │         │    ├── columns: a:9!null
+      │         │    └── mapping:
+      │         │         └──  self.a:3 => a:9
+      │         └── filters
+      │              └── b:8 = a:9
+      └── cascade
+           ├── delete self
+           │    ├── columns: <none>
+           │    ├── fetch columns: self.a:12 b:13
+           │    ├── input binding: &3
+           │    ├── cascades
+           │    │    └── fk_b_ref_self
+           │    └── semi-join (hash)
+           │         ├── columns: self.a:12!null b:13
+           │         ├── scan self
+           │         │    └── columns: self.a:12!null b:13
+           │         ├── with-scan &2
+           │         │    ├── columns: a:14!null
+           │         │    └── mapping:
+           │         │         └──  self.a:7 => a:14
+           │         └── filters
+           │              └── b:13 = a:14
+           └── cascade
+                └── delete self
+                     ├── columns: <none>
+                     ├── fetch columns: self.a:17 b:18
+                     ├── input binding: &4
+                     ├── cascades
+                     │    └── fk_b_ref_self
+                     └── semi-join (hash)
+                          ├── columns: self.a:17!null b:18
+                          ├── scan self
+                          │    └── columns: self.a:17!null b:18
+                          ├── with-scan &3
+                          │    ├── columns: a:19!null
+                          │    └── mapping:
+                          │         └──  self.a:12 => a:19
+                          └── filters
+                               └── b:18 = a:19
