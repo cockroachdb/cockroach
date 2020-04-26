@@ -214,6 +214,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.LookupJoinExpr:
 		ep, err = b.buildLookupJoin(t)
 
+	case *memo.GeoLookupJoinExpr:
+		ep, err = b.buildGeoLookupJoin(t)
+
 	case *memo.ZigzagJoinExpr:
 		ep, err = b.buildZigzagJoin(t)
 
@@ -1338,6 +1341,60 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		idx,
 		keyCols,
 		join.LookupColsAreTableKey,
+		lookupOrdinals,
+		onExpr,
+		res.reqOrdering(join),
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// Apply a post-projection if Cols doesn't contain all input columns.
+	if !inputCols.SubsetOf(join.Cols) {
+		return b.applySimpleProject(res, join.Cols, join.ProvidedPhysical().Ordering)
+	}
+	return res, nil
+}
+
+func (b *Builder) buildGeoLookupJoin(join *memo.GeoLookupJoinExpr) (execPlan, error) {
+	input, err := b.buildRelational(join.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	md := b.mem.Metadata()
+
+	inputCols := join.Input.Relational().OutputCols
+	lookupCols := join.Cols.Difference(inputCols)
+
+	lookupOrdinals, lookupColMap := b.getColumns(lookupCols, join.Table)
+	allCols := joinOutputMap(input.outputCols, lookupColMap)
+
+	res := execPlan{outputCols: allCols}
+	if join.JoinType == opt.SemiJoinOp || join.JoinType == opt.AntiJoinOp {
+		// For semi and anti join, only the left columns are output.
+		res.outputCols = input.outputCols
+	}
+
+	ctx := buildScalarCtx{
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
+		ivarMap: allCols,
+	}
+	onExpr, err := b.buildScalar(&ctx, &join.On)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	tab := md.Table(join.Table)
+	idx := tab.Index(join.Index)
+
+	res.root, err = b.factory.ConstructGeoLookupJoin(
+		joinOpToJoinType(join.JoinType),
+		join.GeoRelationshipType,
+		input.root,
+		tab,
+		idx,
+		input.getNodeColumnOrdinal(join.GeoCol),
 		lookupOrdinals,
 		onExpr,
 		res.reqOrdering(join),

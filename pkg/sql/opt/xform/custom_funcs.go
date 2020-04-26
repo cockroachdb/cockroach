@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -1500,6 +1501,171 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// Create the LookupJoin for the index join in the same group.
 		c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
 	}
+}
+
+// GenerateGeoLookupJoins is similar to GenerateLookupJoins, but instead
+// of generating lookup joins with regular indexes, it generates geospatial
+// lookup joins with inverted geospatial indexes. Since these indexes are not
+// covering, all geospatial lookup joins must be wrapped in an index join with
+// the primary index of the table. See the description of Case 2 in the comment
+// above GenerateLookupJoins for details about how this works.
+func (c *CustomFuncs) GenerateGeoLookupJoins(
+	grp memo.RelExpr,
+	joinType opt.Operator,
+	input memo.RelExpr,
+	scanPrivate *memo.ScanPrivate,
+	on memo.FiltersExpr,
+	joinPrivate *memo.JoinPrivate,
+	fn opt.ScalarExpr,
+) {
+	if !joinPrivate.Flags.Has(memo.AllowLookupJoinIntoRight) {
+		return
+	}
+
+	// Geospatial lookup joins are not covering, so we must wrap them in an
+	// index join.
+	if scanPrivate.Flags.NoIndexJoin {
+		return
+	}
+
+	function := fn.(*memo.FunctionExpr)
+	inputProps := input.Relational()
+
+	// Extract the geospatial relationship as well as the variable inputs to
+	// the geospatial function.
+	relationship, ok := geoRelationshipMap[function.Name]
+	if !ok {
+		panic(errors.AssertionFailedf(
+			"GenerateGeoLookupJoins called on a function that cannot be index-accelerated",
+		))
+	}
+
+	if function.Args.ChildCount() != 2 {
+		panic(errors.AssertionFailedf(
+			"all index-accelerated geospatial functions should have two arguments",
+		))
+	}
+
+	variable, ok := function.Args.Child(0).(*memo.VariableExpr)
+	if !ok {
+		panic(errors.AssertionFailedf(
+			"GenerateGeoLookupJoins called on function containing non-variable inputs",
+		))
+	}
+	indexGeoCol := variable.Col
+
+	variable, ok = function.Args.Child(1).(*memo.VariableExpr)
+	if !ok {
+		panic(errors.AssertionFailedf(
+			"GenerateGeoLookupJoins called on function containing non-variable inputs",
+		))
+	}
+	if !inputProps.OutputCols.Contains(variable.Col) {
+		// The second argument should be from the input.
+		// TODO(rytaft): Commute the geospatial function in this case.
+		//   Contains    <->  ContainedBy
+		//   Intersects  <->  Intersects
+		return
+	}
+	inputGeoCol := variable.Col
+
+	var pkCols opt.ColList
+
+	var iter scanIndexIter
+	iter.init(c.e.mem, scanPrivate, onlyInvertedIndexes)
+	for iter.next() {
+		if scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal) != indexGeoCol {
+			continue
+		}
+
+		if pkCols == nil {
+			pkIndex := iter.tab.Index(cat.PrimaryIndex)
+			pkCols = make(opt.ColList, pkIndex.KeyColumnCount())
+			for i := range pkCols {
+				pkCols[i] = scanPrivate.Table.ColumnID(pkIndex.Column(i).Ordinal)
+			}
+		}
+
+		// Though the index is marked as containing the geospatial column being
+		// indexed, it doesn't actually, and it is only valid to extract the
+		// primary key columns from it.
+		indexCols := pkCols.ToSet()
+
+		lookupJoin := memo.GeoLookupJoinExpr{Input: input}
+		lookupJoin.JoinPrivate = *joinPrivate
+		lookupJoin.JoinType = joinType
+		lookupJoin.Table = scanPrivate.Table
+		lookupJoin.Index = iter.indexOrdinal
+		lookupJoin.GeoRelationshipType = relationship
+		lookupJoin.GeoCol = inputGeoCol
+		lookupJoin.Cols = indexCols.Union(inputProps.OutputCols)
+
+		var indexJoin memo.LookupJoinExpr
+
+		// ON may have some conditions that are bound by the columns in the index
+		// and some conditions that refer to other columns. We can put the former
+		// in the GeospatialLookupJoin and the latter in the index join.
+		lookupJoin.On = c.ExtractBoundConditions(on, lookupJoin.Cols)
+		indexJoin.On = c.ExtractUnboundConditions(on, lookupJoin.Cols)
+
+		indexJoin.Input = c.e.f.ConstructGeoLookupJoin(
+			lookupJoin.Input,
+			lookupJoin.On,
+			&lookupJoin.GeoLookupJoinPrivate,
+		)
+		indexJoin.JoinType = joinType
+		indexJoin.Table = scanPrivate.Table
+		indexJoin.Index = cat.PrimaryIndex
+		indexJoin.KeyCols = pkCols
+		indexJoin.Cols = scanPrivate.Cols.Union(inputProps.OutputCols)
+		indexJoin.LookupColsAreTableKey = true
+
+		// Create the LookupJoin for the index join in the same group.
+		c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
+	}
+}
+
+// geoRelationshipMap contains all the geospatial functions that can be index-
+// accelerated. Each function implies a certain type of geospatial relationship,
+// which affects how the index is queried as part of a constrained scan or
+// geospatial lookup join. geoRelationshipMap maps the function name to its
+// corresponding relationship (Covers, CoveredBy, or Intersects).
+//
+// Note that for all of these functions, a geospatial lookup join or constrained
+// index scan may produce false positives. Therefore, the original function must
+// be called on the output of the index operation to filter the results.
+// TODO(rytaft): add ST_DFullyWithin (geoindex.Covers) and ST_DWithin
+//  (geoindex.Intersects) once we add support for extending a geometry.
+var geoRelationshipMap = map[string]geoindex.RelationshipType{
+	"st_covers":     geoindex.Covers,
+	"st_coveredby":  geoindex.CoveredBy,
+	"st_contains":   geoindex.Covers,
+	"st_crosses":    geoindex.Intersects,
+	"st_equals":     geoindex.Intersects,
+	"st_intersects": geoindex.Intersects,
+	"st_overlaps":   geoindex.Intersects,
+	"st_touches":    geoindex.Intersects,
+	"st_within":     geoindex.CoveredBy,
+}
+
+// IsGeoIndexFunction returns true if the given function is a geospatial
+// function that can be index-accelerated.
+func (c *CustomFuncs) IsGeoIndexFunction(fn opt.ScalarExpr) bool {
+	function := fn.(*memo.FunctionExpr)
+	_, ok := geoRelationshipMap[function.Name]
+	return ok
+}
+
+// HasAllVariableArgs returns true if all the arguments to the given function
+// are variables.
+func (c *CustomFuncs) HasAllVariableArgs(fn opt.ScalarExpr) bool {
+	function := fn.(*memo.FunctionExpr)
+	for i, n := 0, function.Args.ChildCount(); i < n; i++ {
+		if _, ok := function.Args.Child(i).(*memo.VariableExpr); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // findConstantFilter tries to find a filter that is exactly equivalent to

@@ -11,6 +11,7 @@
 package exec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -208,7 +209,7 @@ type Factory interface {
 		reqOrdering OutputOrdering,
 	) (Node, error)
 
-	// ConstructLookupJoin returns a node that preforms a lookup join.
+	// ConstructLookupJoin returns a node that performs a lookup join.
 	// The eqCols are columns from the input used as keys for the columns of the
 	// index (or a prefix of them); lookupCols are ordinals for the table columns
 	// we are retrieving.
@@ -223,6 +224,27 @@ type Factory interface {
 		index cat.Index,
 		eqCols []NodeColumnOrdinal,
 		eqColsAreKey bool,
+		lookupCols TableColumnOrdinalSet,
+		onCond tree.TypedExpr,
+		reqOrdering OutputOrdering,
+	) (Node, error)
+
+	// ConstructGeoLookupJoin returns a node that performs a geospatial lookup
+	// join. geoRelationshipType describes the type of geospatial relationship
+	// represented by the join. geoCol is the geospatial column from the input
+	// that will be used to look up into the index; lookupCols are ordinals for
+	// the table columns we are retrieving.
+	//
+	// The node produces the columns in the input and (unless join type is
+	// LeftSemiJoin or LeftAntiJoin) the lookupCols, ordered by ordinal. The ON
+	// condition can refer to these using IndexedVars.
+	ConstructGeoLookupJoin(
+		joinType sqlbase.JoinType,
+		geoRelationshipType geoindex.RelationshipType,
+		input Node,
+		table cat.Table,
+		index cat.Index,
+		geoCol NodeColumnOrdinal,
 		lookupCols TableColumnOrdinalSet,
 		onCond tree.TypedExpr,
 		reqOrdering OutputOrdering,
