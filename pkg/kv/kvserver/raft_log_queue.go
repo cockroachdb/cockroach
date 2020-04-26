@@ -528,7 +528,7 @@ func (rlq *raftLogQueue) shouldQueue(
 ) (shouldQ bool, priority float64) {
 	decision, err := newTruncateDecision(ctx, r)
 	if err != nil {
-		log.Warning(ctx, err)
+		log.Warningf(ctx, "%v", err)
 		return false, 0
 	}
 

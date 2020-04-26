@@ -162,7 +162,7 @@ func (r *rocksDBMap) Clear() error {
 // Close implements the SortedDiskMap interface.
 func (r *rocksDBMap) Close(ctx context.Context) {
 	if err := r.Clear(); err != nil {
-		log.Error(ctx, err)
+		log.Errorf(ctx, "%v", err)
 	}
 }
 
@@ -362,7 +362,7 @@ func (r *pebbleMap) Clear() error {
 // Close implements the SortedDiskMap interface.
 func (r *pebbleMap) Close(ctx context.Context) {
 	if err := r.Clear(); err != nil {
-		log.Error(ctx, err)
+		log.Errorf(ctx, "%v", err)
 	}
 }
 

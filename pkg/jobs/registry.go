@@ -973,7 +973,7 @@ func (r *Registry) adoptionDisabled(ctx context.Context) bool {
 	if r.preventAdoptionFile != "" {
 		if _, err := os.Stat(r.preventAdoptionFile); err != nil {
 			if !os.IsNotExist(err) {
-				log.Warning(ctx, "error checking if job adoption is currently disabled", err)
+				log.Warningf(ctx, "error checking if job adoption is currently disabled: %v", err)
 			}
 			return false
 		}

@@ -251,8 +251,8 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 		i.OrigStamp = monotonicUnixNano()
 		if highWaterStamp, ok := is.highWaterStamps[i.NodeID]; ok && highWaterStamp >= i.OrigStamp {
 			// Report both timestamps in the crash.
-			log.Fatal(context.Background(),
-				log.Safe(fmt.Sprintf("high water stamp %d >= %d", highWaterStamp, i.OrigStamp)))
+			log.Fatalf(context.Background(),
+				"high water stamp %d >= %d", log.Safe(highWaterStamp), log.Safe(i.OrigStamp))
 		}
 	}
 	// Update info map.

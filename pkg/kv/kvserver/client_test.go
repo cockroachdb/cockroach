@@ -973,7 +973,7 @@ func (m *multiTestContext) addStore(idx int) {
 	m.nodeLivenesses[idx].StartHeartbeat(ctx, stopper, m.engines[idx:idx+1], func(ctx context.Context) {
 		now := clock.Now()
 		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
-			log.Warning(ctx, err)
+			log.Warningf(ctx, "%v", err)
 		}
 		ran.Do(func() {
 			close(ran.ch)
@@ -1070,7 +1070,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	cfg.NodeLiveness.StartHeartbeat(ctx, stopper, m.engines[i:i+1], func(ctx context.Context) {
 		now := m.clocks[i].Now()
 		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
-			log.Warning(ctx, err)
+			log.Warningf(ctx, "%v", err)
 		}
 	})
 }
@@ -1196,7 +1196,7 @@ func (m *multiTestContext) changeReplicas(
 		// is lost. We could make a this into a roachpb.Error but it seems overkill
 		// for this one usage.
 		if testutils.IsError(err, "snapshot failed: .*|descriptor changed") {
-			log.Info(ctx, err)
+			log.Infof(ctx, "%v", err)
 			continue
 		}
 		return 0, err

@@ -171,7 +171,7 @@ func (ds *ServerImpl) setupFlow(
 			"version mismatch in flow request: %d; this node accepts %d through %d",
 			req.Version, execinfra.MinAcceptedVersion, execinfra.Version,
 		)
-		log.Warning(ctx, err)
+		log.Warningf(ctx, "%v", err)
 		return ctx, nil, err
 	}
 	nodeID := ds.ServerConfig.NodeID.Get()
@@ -566,7 +566,7 @@ func (ds *ServerImpl) FlowStream(stream execinfrapb.DistSQL_FlowStreamServer) er
 		// flowStreamInt may return an error during normal operation (e.g. a flow
 		// was canceled as part of a graceful teardown). Log this error at the INFO
 		// level behind a verbose flag for visibility.
-		log.Info(ctx, err)
+		log.Infof(ctx, "%v", err)
 	}
 	return err
 }

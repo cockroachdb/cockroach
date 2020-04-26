@@ -342,7 +342,7 @@ func (mq *mergeQueue) process(
 	}
 	if testingAggressiveConsistencyChecks {
 		if err := mq.store.consistencyQueue.process(ctx, lhsRepl, sysCfg); err != nil {
-			log.Warning(ctx, err)
+			log.Warningf(ctx, "%v", err)
 		}
 	}
 	return nil

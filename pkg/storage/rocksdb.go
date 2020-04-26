@@ -740,7 +740,7 @@ func (r *RocksDB) Close() {
 		}
 		// Remove the temporary directory when the engine is in-memory.
 		if err := os.RemoveAll(r.auxDir); err != nil {
-			log.Warning(context.TODO(), err)
+			log.Warningf(context.TODO(), "%v", err)
 		}
 	} else {
 		log.Infof(context.TODO(), "closing rocksdb instance at %q", r.cfg.Dir)

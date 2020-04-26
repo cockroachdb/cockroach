@@ -397,7 +397,7 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 			}
 		},
 	); err != nil {
-		log.Warning(ctx, err)
+		log.Warningf(ctx, "%v", err)
 	}
 }
 

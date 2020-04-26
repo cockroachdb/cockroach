@@ -448,7 +448,7 @@ func (c *sqlConn) Close() {
 	if c.conn != nil {
 		err := c.conn.Close()
 		if err != nil && err != driver.ErrBadConn {
-			log.Info(context.TODO(), err)
+			log.Infof(context.TODO(), "%v", err)
 		}
 		c.conn = nil
 	}

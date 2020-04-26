@@ -76,7 +76,7 @@ func (n *Node) assertEngineHealth(
 			})
 			defer t.Stop()
 			if err := storage.WriteSyncNoop(ctx, eng); err != nil {
-				log.Fatal(ctx, err)
+				log.Fatalf(ctx, "%v", err)
 			}
 		}()
 	}

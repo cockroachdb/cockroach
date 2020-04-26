@@ -299,7 +299,7 @@ func (c *Container) Wait(ctx context.Context, condition container.WaitCondition)
 
 		out := io.MultiWriter(cmdLog, os.Stderr)
 		if err := c.Logs(ctx, out); err != nil {
-			log.Warning(ctx, err)
+			log.Warningf(ctx, "%v", err)
 		}
 
 		if exitCode := waitOKBody.StatusCode; exitCode != 0 {
@@ -351,7 +351,7 @@ func (c *Container) Inspect(ctx context.Context) (types.ContainerJSON, error) {
 func (c *Container) Addr(ctx context.Context, port nat.Port) *net.TCPAddr {
 	containerInfo, err := c.Inspect(ctx)
 	if err != nil {
-		log.Error(ctx, err)
+		log.Errorf(ctx, "%v", err)
 		return nil
 	}
 	bindings, ok := containerInfo.NetworkSettings.Ports[port]
@@ -360,7 +360,7 @@ func (c *Container) Addr(ctx context.Context, port nat.Port) *net.TCPAddr {
 	}
 	portNum, err := strconv.Atoi(bindings[0].HostPort)
 	if err != nil {
-		log.Error(ctx, err)
+		log.Errorf(ctx, "%v", err)
 		return nil
 	}
 	return &net.TCPAddr{

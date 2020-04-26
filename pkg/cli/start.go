@@ -119,7 +119,7 @@ var maxSizePerProfile = envutil.EnvOrDefaultInt64(
 func gcProfiles(dir, prefix string, maxSize int64) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
-		log.Warning(context.Background(), err)
+		log.Warningf(context.Background(), "%v", err)
 		return
 	}
 	var sum int64
@@ -142,7 +142,7 @@ func gcProfiles(dir, prefix string, maxSize int64) {
 			continue
 		}
 		if err := os.Remove(filepath.Join(dir, f.Name())); err != nil {
-			log.Info(context.Background(), err)
+			log.Infof(context.Background(), "%v", err)
 		}
 	}
 }

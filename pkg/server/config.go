@@ -401,7 +401,7 @@ func (cfg *Config) Report(ctx context.Context) {
 	} else {
 		log.Infof(ctx, "system total memory: %s", humanizeutil.IBytes(memSize))
 	}
-	log.Info(ctx, "server configuration:\n", cfg)
+	log.Infof(ctx, "server configuration:\n%s", cfg)
 }
 
 // Engines is a container of engines, allowing convenient closing.

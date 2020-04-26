@@ -282,7 +282,8 @@ func (t *Tracker) Track(ctx context.Context) (hlc.Timestamp, closedts.ReleaseFun
 		calls++
 		if calls != 1 {
 			if lai != 0 || rangeID != 0 || calls > 2 {
-				log.Fatal(ctx, log.Safe(fmt.Sprintf("command released %d times, this time with arguments (%d, %d)", calls, rangeID, lai)))
+				log.Fatalf(ctx, "command released %d times, this time with arguments (%d, %d)",
+					log.Safe(calls), log.Safe(rangeID), log.Safe(lai))
 			}
 			return
 		}

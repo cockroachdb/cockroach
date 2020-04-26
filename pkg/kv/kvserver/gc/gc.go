@@ -506,7 +506,7 @@ func processAbortSpan(
 		return nil
 	})
 	if err != nil {
-		log.Warning(ctx, err)
+		log.Warningf(ctx, "%v", err)
 	}
 }
 

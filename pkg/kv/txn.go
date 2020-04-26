@@ -233,7 +233,7 @@ func (txn *Txn) TestingSetPriority(priority enginepb.TxnPriority) {
 	// non-randomized, priority for the transaction.
 	txn.mu.userPriority = roachpb.UserPriority(-priority)
 	if err := txn.mu.sender.SetUserPriority(txn.mu.userPriority); err != nil {
-		log.Fatal(context.TODO(), err)
+		log.Fatalf(context.TODO(), "%+v", err)
 	}
 	txn.mu.Unlock()
 }

@@ -283,7 +283,7 @@ var _ RowIterator = &diskRowIterator{}
 
 func (d *DiskRowContainer) newIterator(ctx context.Context) diskRowIterator {
 	if err := d.bufferedRows.Flush(); err != nil {
-		log.Fatal(ctx, err)
+		log.Fatalf(ctx, "%v", err)
 	}
 	return diskRowIterator{rowContainer: d, SortedDiskMapIterator: d.diskMap.NewIterator()}
 }

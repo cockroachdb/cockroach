@@ -170,7 +170,7 @@ func (a *allocSim) runWithConfig(config Configuration) {
 func (a *allocSim) setup() {
 	db := a.Nodes[0].DB()
 	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS allocsim"); err != nil {
-		log.Fatal(context.Background(), err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 
 	blocks := `
@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS blocks (
 )
 `
 	if _, err := db.Exec(blocks); err != nil {
-		log.Fatal(context.Background(), err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 }
 
@@ -190,7 +190,7 @@ func (a *allocSim) maybeLogError(err error) {
 	if localcluster.IsUnavailableError(err) {
 		return
 	}
-	log.Error(context.Background(), err)
+	log.Errorf(context.Background(), "%v", err)
 	atomic.AddUint64(&a.stats.errors, 1)
 }
 
@@ -251,11 +251,11 @@ func (a *allocSim) rangeInfo() allocStats {
 				NodeId: fmt.Sprintf("local"),
 			})
 			if err != nil {
-				log.Fatal(context.Background(), err)
+				log.Fatalf(context.Background(), "%v", err)
 			}
 			var metrics map[string]interface{}
 			if err := json.Unmarshal(resp.Data, &metrics); err != nil {
-				log.Fatal(context.Background(), err)
+				log.Fatalf(context.Background(), "%v", err)
 			}
 			stores := metrics["stores"].(map[string]interface{})
 			for _, v := range stores {
@@ -420,7 +420,7 @@ func main() {
 		var err error
 		config, err = loadConfig(*configFile)
 		if err != nil {
-			log.Fatal(context.Background(), err)
+			log.Fatalf(context.Background(), "%v", err)
 		}
 	}
 
@@ -479,11 +479,11 @@ func main() {
 			// set up tc rules on the loopback device.
 			tcController = tc.NewController("lo")
 			if err := tcController.Init(); err != nil {
-				log.Fatal(context.Background(), err)
+				log.Fatalf(context.Background(), "%v", err)
 			}
 			defer func() {
 				if err := tcController.CleanUp(); err != nil {
-					log.Error(context.Background(), err)
+					log.Errorf(context.Background(), "%v", err)
 				}
 			}()
 		}
@@ -495,7 +495,7 @@ func main() {
 							if err := tcController.AddLatency(
 								perNodeCfg[srcNodeIdx].Addr, perNodeCfg[dstNodeIdx].Addr, time.Duration(outgoing.Latency/2),
 							); err != nil {
-								log.Fatal(context.Background(), err)
+								log.Fatalf(context.Background(), "%v", err)
 							}
 						}
 					}
@@ -542,7 +542,7 @@ func main() {
 	c.UpdateZoneConfig(1, 1<<20)
 	_, err := c.Nodes[0].DB().Exec("SET CLUSTER SETTING kv.raft_log.disable_synchronization_unsafe = true")
 	if err != nil {
-		log.Fatal(context.Background(), err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 	if len(config.Localities) != 0 {
 		a.runWithConfig(config)
