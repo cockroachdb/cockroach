@@ -176,7 +176,7 @@ func (s *authenticationServer) UserLogout(
 		return nil, apiInternalError(ctx, err)
 	} else if n == 0 {
 		err := errors.Newf("session with id %d nonexistent", sessionID)
-		log.Info(ctx, err)
+		log.Infof(ctx, "%v", err)
 		return nil, err
 	}
 

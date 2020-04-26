@@ -226,7 +226,7 @@ func (s *Server) checkForUpdates(ctx context.Context) bool {
 
 	err = decoder.Decode(&r)
 	if err != nil && err != io.EOF {
-		log.Warning(ctx, "Error decoding updates info: ", err)
+		log.Warningf(ctx, "Error decoding updates info: %v", err)
 		return false
 	}
 
@@ -341,7 +341,7 @@ func (s *Server) getReportingInfo(
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		"SELECT id, config FROM system.zones",
 	); err != nil {
-		log.Warning(ctx, err)
+		log.Warningf(ctx, "%v", err)
 	} else {
 		info.ZoneConfigs = make(map[int64]zonepb.ZoneConfig)
 		for _, row := range datums {
@@ -436,7 +436,7 @@ func (s *Server) ReportDiagnostics(ctx context.Context) {
 
 	b, err := protoutil.Marshal(report)
 	if err != nil {
-		log.Warning(ctx, err)
+		log.Warningf(ctx, "%v", err)
 		return
 	}
 
@@ -447,7 +447,7 @@ func (s *Server) ReportDiagnostics(ctx context.Context) {
 		if log.V(2) {
 			// This is probably going to be relatively common in production
 			// environments where network access is usually curtailed.
-			log.Warning(ctx, "failed to report node usage metrics: ", err)
+			log.Warningf(ctx, "failed to report node usage metrics: %v", err)
 		}
 		return
 	}

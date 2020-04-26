@@ -271,13 +271,13 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		// minimizes impact on other adders (e.g. causing extra SST splitting).
 		if b.flushCounts.total == 1 {
 			if splitAt, err := keys.EnsureSafeSplitKey(start); err != nil {
-				log.Warning(ctx, err)
+				log.Warningf(ctx, "%v", err)
 			} else {
 				// NB: Passing 'hour' here is technically illegal until 19.2 is
 				// active, but the value will be ignored before that, and we don't
 				// have access to the cluster version here.
 				if err := b.db.SplitAndScatter(ctx, splitAt, hour); err != nil {
-					log.Warning(ctx, err)
+					log.Warningf(ctx, "%v", err)
 				}
 			}
 		}
@@ -319,7 +319,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		if b.splitAfter != nil {
 			if splitAfter := b.splitAfter(); b.flushedToCurrentRange > splitAfter && nextKey != nil {
 				if splitAt, err := keys.EnsureSafeSplitKey(nextKey); err != nil {
-					log.Warning(ctx, err)
+					log.Warningf(ctx, "%v", err)
 				} else {
 					beforeSplit := timeutil.Now()
 

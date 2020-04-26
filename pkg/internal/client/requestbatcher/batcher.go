@@ -312,7 +312,7 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 					if prevResps != nil {
 						prevResp := prevResps[i]
 						if cErr := roachpb.CombineResponses(prevResp, resp); cErr != nil {
-							log.Fatal(ctx, cErr)
+							log.Fatalf(ctx, "%v", cErr)
 						}
 						resp = prevResp
 					}

@@ -509,7 +509,7 @@ func (n *Node) SetHLCUpperBound(ctx context.Context, hlcUpperBound int64) error 
 func (n *Node) addStore(store *kvserver.Store) {
 	cv, err := store.GetClusterVersion(context.TODO())
 	if err != nil {
-		log.Fatal(context.TODO(), err)
+		log.Fatalf(context.TODO(), "%v", err)
 	}
 	if cv == (clusterversion.ClusterVersion{}) {
 		// The store should have had a version written to it during the store
@@ -636,7 +636,7 @@ func (n *Node) gossipStores(ctx context.Context) {
 	if err := n.stores.VisitStores(func(s *kvserver.Store) error {
 		return s.GossipStore(ctx, false /* useCached */)
 	}); err != nil {
-		log.Warning(ctx, err)
+		log.Warningf(ctx, "%v", err)
 	}
 }
 
@@ -744,7 +744,7 @@ func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration) erro
 				numNodes++
 				return nil
 			}); err != nil {
-				log.Warning(ctx, err)
+				log.Warningf(ctx, "%v", err)
 			}
 			if numNodes > 1 {
 				// Avoid this warning on single-node clusters, which require special UX.

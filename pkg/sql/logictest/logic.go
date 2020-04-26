@@ -2732,7 +2732,7 @@ func (t *logicTest) Error(args ...interface{}) {
 	if *showSQL {
 		t.outf("\t-- FAIL")
 	}
-	log.Error(context.Background(), "\n", fmt.Sprint(args...))
+	log.Errorf(context.Background(), "\n%s", fmt.Sprint(args...))
 	t.t().Error("\n", fmt.Sprint(args...))
 	t.failures++
 }
@@ -2757,7 +2757,7 @@ func (t *logicTest) Fatal(args ...interface{}) {
 	if *showSQL {
 		fmt.Println()
 	}
-	log.Error(context.Background(), args...)
+	log.Errorf(context.Background(), "", args...)
 	t.t().Logf("\n%s:%d: error while processing", t.curPath, t.curLineNo)
 	t.t().Fatal(args...)
 }
@@ -2768,7 +2768,7 @@ func (t *logicTest) Fatalf(format string, args ...interface{}) {
 	if *showSQL {
 		fmt.Println()
 	}
-	log.Error(context.Background(), args...)
+	log.Errorf(context.Background(), format, args...)
 	t.t().Logf("\n%s:%d: error while processing", t.curPath, t.curLineNo)
 	t.t().Fatalf(format, args...)
 }

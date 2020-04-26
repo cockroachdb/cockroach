@@ -2111,7 +2111,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 					advInfo.txnEvent.String()+ //the event is included like this so that it doesn't get sanitized
 					" generated even though res.Err() has been set to: %s",
 				res.Err())
-			log.Error(ex.Ctx(), err)
+			log.Errorf(ex.Ctx(), "%v", err)
 			errorutil.SendReport(ex.Ctx(), &ex.server.cfg.Settings.SV, err)
 			return advanceInfo{}, err
 		}

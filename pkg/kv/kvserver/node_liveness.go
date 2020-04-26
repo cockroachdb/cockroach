@@ -967,7 +967,7 @@ func shouldReplaceLiveness(old, new storagepb.Liveness) bool {
 func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) {
 	var liveness storagepb.Liveness
 	if err := content.GetProto(&liveness); err != nil {
-		log.Error(context.TODO(), err)
+		log.Errorf(context.TODO(), "%v", err)
 		return
 	}
 

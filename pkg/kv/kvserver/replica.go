@@ -1029,18 +1029,17 @@ func (r *Replica) State() storagepb.RangeInfo {
 func (r *Replica) assertStateLocked(ctx context.Context, reader storage.Reader) {
 	diskState, err := r.mu.stateLoader.Load(ctx, reader, r.mu.state.Desc)
 	if err != nil {
-		log.Fatal(ctx, err)
+		log.Fatalf(ctx, "%v", err)
 	}
 	if !diskState.Equal(r.mu.state) {
 		// The roundabout way of printing here is to expose this information in sentry.io.
 		//
 		// TODO(dt): expose properly once #15892 is addressed.
-		log.Errorf(ctx, "on-disk and in-memory state diverged:\n%s", pretty.Diff(diskState, r.mu.state))
+		log.Errorf(ctx, "on-disk and in-memory state diverged:\n%s",
+			pretty.Diff(diskState, r.mu.state))
 		r.mu.state.Desc, diskState.Desc = nil, nil
-		log.Fatal(ctx, log.Safe(
-			fmt.Sprintf("on-disk and in-memory state diverged: %s",
-				pretty.Diff(diskState, r.mu.state)),
-		))
+		log.Fatalf(ctx, "on-disk and in-memory state diverged: %s",
+			log.Safe(pretty.Diff(diskState, r.mu.state)))
 	}
 }
 

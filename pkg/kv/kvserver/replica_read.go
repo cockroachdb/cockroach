@@ -99,7 +99,7 @@ func (r *Replica) executeReadOnlyBatch(
 		// prohibits any concurrent requests for the same range. See #17760.
 		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT
 		if err := r.store.intentResolver.CleanupIntentsAsync(ctx, intents, allowSyncProcessing); err != nil {
-			log.Warning(ctx, err)
+			log.Warningf(ctx, "%v", err)
 		}
 	}
 

@@ -1167,7 +1167,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 			raftGroup.ReportUnreachable(msg.To)
 			return true, nil
 		}); err != nil && err != errRemoved {
-			log.Fatal(ctx, err)
+			log.Fatalf(ctx, "%v", err)
 		}
 	}
 }
@@ -1210,7 +1210,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 		raftGroup.ReportSnapshot(uint64(to), snapStatus)
 		return true, nil
 	}); err != nil && err != errRemoved {
-		log.Fatal(ctx, err)
+		log.Fatalf(ctx, "%v", err)
 	}
 }
 
