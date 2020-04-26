@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -680,6 +681,21 @@ func (ef *execFactory) ConstructLookupJoin(
 	n.columns = append(n.columns, inputCols...)
 	n.columns = append(n.columns, scanCols...)
 	return n, nil
+}
+
+func (ef *execFactory) ConstructGeoLookupJoin(
+	joinType sqlbase.JoinType,
+	geoRelationshipType geoindex.RelationshipType,
+	input exec.Node,
+	table cat.Table,
+	index cat.Index,
+	geoCol exec.NodeColumnOrdinal,
+	lookupCols exec.TableColumnOrdinalSet,
+	onCond tree.TypedExpr,
+	reqOrdering exec.OutputOrdering,
+) (exec.Node, error) {
+	// TODO(rytaft, sumeerbhola): Fill this in.
+	return nil, errors.Errorf("Geospatial joins are not yet supported")
 }
 
 // Helper function to create a scanNode from just a table / index descriptor

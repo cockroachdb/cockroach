@@ -399,6 +399,12 @@ func (b *logicalPropsBuilder) buildLookupJoinProps(join *LookupJoinExpr, rel *pr
 	b.buildJoinProps(join, rel)
 }
 
+func (b *logicalPropsBuilder) buildGeoLookupJoinProps(
+	join *GeoLookupJoinExpr, rel *props.Relational,
+) {
+	b.buildJoinProps(join, rel)
+}
+
 func (b *logicalPropsBuilder) buildZigzagJoinProps(join *ZigzagJoinExpr, rel *props.Relational) {
 	b.buildJoinProps(join, rel)
 }
@@ -1645,6 +1651,30 @@ func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *pr
 	return relational
 }
 
+// ensureGeoLookupJoinInputProps lazily populates the relational properties
+// that apply to the lookup side of the join, as if it were a Scan operator.
+func ensureGeoLookupJoinInputProps(
+	join *GeoLookupJoinExpr, sb *statisticsBuilder,
+) *props.Relational {
+	relational := &join.lookupProps
+	if relational.OutputCols.Empty() {
+		md := join.Memo().Metadata()
+		relational.OutputCols = join.Cols.Difference(join.Input.Relational().OutputCols)
+		relational.NotNullCols = tableNotNullCols(md, join.Table)
+		relational.NotNullCols.IntersectionWith(relational.OutputCols)
+		relational.Cardinality = props.AnyCardinality
+
+		// TODO(rytaft): See if we need to use different functional dependencies
+		// for the inverted index.
+		relational.FuncDeps.CopyFrom(MakeTableFuncDep(md, join.Table))
+		relational.FuncDeps.ProjectCols(relational.OutputCols)
+
+		// TODO(rytaft): Change this to use inverted index stats once available.
+		relational.Stats = *sb.makeTableStatistics(join.Table)
+	}
+	return relational
+}
+
 // ensureZigzagJoinInputProps lazily populates the relational properties that
 // apply to the two sides of the join, as if it were a Scan operator.
 func ensureZigzagJoinInputProps(join *ZigzagJoinExpr, sb *statisticsBuilder) {
@@ -1760,6 +1790,19 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		}
 
 		// Lookup join has implicit equality conditions on KeyCols.
+		h.filterIsTrue = false
+		h.filterIsFalse = h.filters.IsFalse()
+
+	case *GeoLookupJoinExpr:
+		h.leftProps = joinExpr.Child(0).(RelExpr).Relational()
+		ensureGeoLookupJoinInputProps(join, &b.sb)
+		h.joinType = join.JoinType
+		h.rightProps = &join.lookupProps
+		h.filters = join.On
+		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
+		h.filterNotNullCols = b.rejectNullCols(h.filters)
+
+		// Geospatial lookup join always has a filter condition on the index keys.
 		h.filterIsTrue = false
 		h.filterIsFalse = h.filters.IsFalse()
 

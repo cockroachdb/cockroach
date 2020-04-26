@@ -1564,6 +1564,121 @@ project
       └── filters (true)
 
 # --------------------------------------------------
+# GenerateGeospatialLookupJoins
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE nyc_census_blocks (
+  gid serial PRIMARY KEY,
+  blkid varchar(15),
+  popn_total float8,
+  popn_white float8,
+  popn_black float8,
+  popn_nativ float8,
+  popn_asian float8,
+  popn_other float8,
+  boroname varchar(32),
+  geom GEOMETRY(MULTIPOLYGON,4326),
+  INVERTED INDEX nyc_census_blocks_geo_idx (geom)
+)
+----
+
+exec-ddl
+CREATE TABLE nyc_neighborhoods (
+  gid serial PRIMARY KEY,
+  boroname varchar(43),
+  name varchar(64),
+  geom GEOMETRY(MULTIPOLYGON,4326),
+  INVERTED INDEX nyc_neighborhoods_geo_idx (geom)
+)
+----
+
+exec-ddl
+ALTER TABLE nyc_census_blocks INJECT STATISTICS '[
+  {
+    "columns": ["gid"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 38794,
+    "distinct_count": 38794
+  },
+  {
+    "columns": ["boroname"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 38794,
+    "distinct_count": 5
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE nyc_neighborhoods INJECT STATISTICS '[
+  {
+    "columns": ["gid"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 129,
+    "distinct_count": 129
+  },
+  {
+    "columns": ["boroname"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 129,
+    "distinct_count": 5
+  },
+  {
+    "columns": ["name"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 129,
+    "distinct_count": 129
+  }
+]'
+----
+
+# This query calculates the population density of two different neighborhoods
+# in New York City.
+opt expect=GenerateGeoLookupJoins
+SELECT
+  n.name,
+  Sum(c.popn_total) / (ST_Area(n.geom) / 1000000.0) AS popn_per_sqkm
+FROM nyc_census_blocks AS c
+JOIN nyc_neighborhoods AS n
+ON ST_Intersects(c.geom, n.geom) AND c.boroname = n.boroname
+WHERE n.name = 'Upper West Side'
+OR n.name = 'Upper East Side'
+GROUP BY n.name, n.geom
+----
+project
+ ├── columns: name:13!null popn_per_sqkm:16
+ ├── side-effects
+ ├── group-by
+ │    ├── columns: name:13!null n.geom:14 sum:15
+ │    ├── grouping columns: name:13!null n.geom:14
+ │    ├── key: (13,14)
+ │    ├── fd: (13,14)-->(15)
+ │    ├── inner-join (lookup nyc_census_blocks)
+ │    │    ├── columns: popn_total:3 c.boroname:9!null c.geom:10 n.boroname:12!null name:13!null n.geom:14
+ │    │    ├── key columns: [1] = [1]
+ │    │    ├── lookup columns are key
+ │    │    ├── fd: (9)==(12), (12)==(9)
+ │    │    ├── inner-join (geo-lookup nyc_census_blocks@nyc_census_blocks_geo_idx)
+ │    │    │    ├── columns: c.gid:1!null n.boroname:12 name:13!null n.geom:14
+ │    │    │    ├── geo-relationship: intersects
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: n.boroname:12 name:13!null n.geom:14
+ │    │    │    │    ├── scan n
+ │    │    │    │    │    └── columns: n.boroname:12 name:13 n.geom:14
+ │    │    │    │    └── filters
+ │    │    │    │         └── (name:13 = 'Upper West Side') OR (name:13 = 'Upper East Side') [outer=(13), constraints=(/13: [/'Upper East Side' - /'Upper East Side'] [/'Upper West Side' - /'Upper West Side']; tight)]
+ │    │    │    └── filters (true)
+ │    │    └── filters
+ │    │         ├── st_intersects(c.geom:10, n.geom:14) [outer=(10,14)]
+ │    │         └── c.boroname:9 = n.boroname:12 [outer=(9,12), constraints=(/9: (/NULL - ]; /12: (/NULL - ]), fd=(9)==(12), (12)==(9)]
+ │    └── aggregations
+ │         └── sum [as=sum:15, outer=(3)]
+ │              └── popn_total:3
+ └── projections
+      └── sum:15 / (st_area(n.geom:14) / 1e+06) [as=popn_per_sqkm:16, outer=(14,15), side-effects]
+
+# --------------------------------------------------
 # GenerateZigZagJoins
 # --------------------------------------------------
 

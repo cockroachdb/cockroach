@@ -424,6 +424,10 @@ func (lj *LookupJoinExpr) initUnexportedFields(mem *Memo) {
 	// lookupProps are initialized as necessary by the logical props builder.
 }
 
+func (gj *GeoLookupJoinExpr) initUnexportedFields(mem *Memo) {
+	// lookupProps are initialized as necessary by the logical props builder.
+}
+
 func (zj *ZigzagJoinExpr) initUnexportedFields(mem *Memo) {
 	// leftProps and rightProps are initialized as necessary by the logical props
 	// builder.
