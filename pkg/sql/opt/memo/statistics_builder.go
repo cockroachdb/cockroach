@@ -353,7 +353,8 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		return sb.colStatSetNode(colSet, e)
 
-	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp, opt.UpsertDistinctOnOp:
+	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp, opt.EnsureDistinctOnOp,
+		opt.UpsertDistinctOnOp:
 		return sb.colStatGroupBy(colSet, e)
 
 	case opt.LimitOp:
@@ -1461,7 +1462,7 @@ func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Rel
 	} else {
 		inputStats := sb.statsFromChild(groupNode, 0 /* childIdx */)
 
-		if groupingPrivate.ErrorOnDup {
+		if groupingPrivate.ErrorOnDup != "" {
 			// If any input group has more than one row, then the distinct operator
 			// will raise an error, so in non-error cases it has the same number of
 			// rows as its input.
@@ -1510,7 +1511,7 @@ func (sb *statisticsBuilder) colStatGroupBy(
 		colStat = sb.copyColStatFromChild(colSet, groupNode, s)
 		inputColStat = sb.colStatFromChild(colSet, groupNode, 0 /* childIdx */)
 
-		if groupingPrivate.ErrorOnDup && colSet.Equals(groupingColSet) {
+		if groupingPrivate.ErrorOnDup != "" && colSet.Equals(groupingColSet) {
 			// If any input group has more than one row, then the distinct operator
 			// will raise an error, so in non-error cases its distinct count is the
 			// same as its row count.

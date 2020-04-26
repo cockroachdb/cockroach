@@ -285,7 +285,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	switch t := e.(type) {
 	// Special-case handling for GroupBy private; print grouping columns
 	// and internal ordering in addition to full set of columns.
-	case *GroupByExpr, *ScalarGroupByExpr, *DistinctOnExpr, *UpsertDistinctOnExpr:
+	case *GroupByExpr, *ScalarGroupByExpr, *DistinctOnExpr, *EnsureDistinctOnExpr,
+		*UpsertDistinctOnExpr:
 		private := e.Private().(*GroupingPrivate)
 		if !f.HasFlags(ExprFmtHideColumns) && !private.GroupingCols.Empty() {
 			f.formatColList(e, tp, "grouping columns:", opt.ColSetToList(private.GroupingCols))
@@ -293,8 +294,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if !f.HasFlags(ExprFmtHidePhysProps) && !private.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", private.Ordering)
 		}
-		if !f.HasFlags(ExprFmtHideMiscProps) && private.ErrorOnDup {
-			tp.Childf("error-on-dup")
+		if !f.HasFlags(ExprFmtHideMiscProps) && private.ErrorOnDup != "" {
+			tp.Childf("error: \"%s\"", private.ErrorOnDup)
 		}
 
 	case *LimitExpr:

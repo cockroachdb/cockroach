@@ -338,11 +338,17 @@ INSERT INTO "cpk" ("key", "value", "extra")
   VALUES ('k1', 1, 1), ('k2', 2, 2), ('k3', 3, 3)
   RETURNING "cpk"."key", "cpk"."value";
 
+# Inner join with correlated values prevents decorrelation. This ensures the
+# final plan contains a correlated InnerJoin operator with a reference to the
+# With clause.
 query error couldn't find WITH expression \"new_values\" with ID 1
 WITH "new_values" ("k", "v", "x") AS (
   VALUES ('k1', 1, 10), ('k3', 3, 30))
 UPDATE "cpk" SET "extra" = (
-    SELECT "new_values"."x" FROM "new_values" 
-    WHERE (("cpk"."key" = "new_values"."k") AND ("cpk"."value" = "new_values"."v"))
-) 
+    SELECT y
+    FROM "new_values"
+    INNER JOIN (VALUES ("cpk"."value")) v(y)
+    ON TRUE
+    WHERE k='k1'
+)
 WHERE (("cpk"."key", "cpk"."value") IN (SELECT "new_values"."k", "new_values"."v" FROM "new_values"));

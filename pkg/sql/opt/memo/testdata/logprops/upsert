@@ -84,7 +84,7 @@ project
            │    │    │    ├── upsert-distinct-on
            │    │    │    │    ├── columns: x:5(int!null) y:6(int!null) column8:8(int) column9:9(int!null)
            │    │    │    │    ├── grouping columns: y:6(int!null) column9:9(int!null)
-           │    │    │    │    ├── error-on-dup
+           │    │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
            │    │    │    │    ├── cardinality: [0 - 1]
            │    │    │    │    ├── side-effects
            │    │    │    │    ├── key: ()
@@ -472,7 +472,7 @@ project
  │         │    │    ├── upsert-distinct-on
  │         │    │    │    ├── columns: column1:5(int!null) column6:6(int!null) column7:7(int) column8:8(int!null)
  │         │    │    │    ├── grouping columns: column7:7(int)
- │         │    │    │    ├── error-on-dup
+ │         │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
  │         │    │    │    ├── cardinality: [1 - 2]
  │         │    │    │    ├── side-effects
  │         │    │    │    ├── lax-key: (7)
@@ -617,7 +617,7 @@ upsert abc
       │    │    │    ├── upsert-distinct-on
       │    │    │    │    ├── columns: y:6(int!null) column8:8(int!null) column9:9(int) column10:10(int!null)
       │    │    │    │    ├── grouping columns: y:6(int!null)
-      │    │    │    │    ├── error-on-dup
+      │    │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    │    │    │    ├── side-effects
       │    │    │    │    ├── key: (6)
       │    │    │    │    ├── fd: ()-->(8,10), (6)-->(8-10)

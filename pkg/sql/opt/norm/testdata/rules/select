@@ -1590,41 +1590,46 @@ FROM a
 ----
 project
  ├── columns: k:17
- ├── left-join-apply
- │    ├── columns: a.i:2 k:16
- │    ├── scan a
- │    │    └── columns: a.i:2
- │    ├── max1-row
- │    │    ├── columns: k:16!null
- │    │    ├── error: "more than one row returned by a subquery used as an expression"
- │    │    ├── outer: (2)
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(16)
- │    │    └── union-all
- │    │         ├── columns: k:16!null
- │    │         ├── left columns: b.k:6
- │    │         ├── right columns: b.k:11
- │    │         ├── outer: (2)
- │    │         ├── select
- │    │         │    ├── columns: b.k:6!null
- │    │         │    ├── outer: (2)
- │    │         │    ├── key: (6)
- │    │         │    ├── scan b
- │    │         │    │    ├── columns: b.k:6!null
- │    │         │    │    └── key: (6)
- │    │         │    └── filters
- │    │         │         └── b.k:6 < a.i:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
- │    │         └── select
- │    │              ├── columns: b.k:11!null
- │    │              ├── outer: (2)
- │    │              ├── key: (11)
- │    │              ├── scan b
- │    │              │    ├── columns: b.k:11!null
- │    │              │    └── key: (11)
- │    │              └── filters
- │    │                   └── b.k:11 < a.i:2 [outer=(2,11), constraints=(/2: (/NULL - ]; /11: (/NULL - ])]
- │    └── filters (true)
+ ├── ensure-distinct-on
+ │    ├── columns: a.k:1!null k:16
+ │    ├── grouping columns: a.k:1!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(16)
+ │    ├── left-join-apply
+ │    │    ├── columns: a.k:1!null a.i:2 k:16
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.k:1!null a.i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    ├── union-all
+ │    │    │    ├── columns: k:16!null
+ │    │    │    ├── left columns: b.k:6
+ │    │    │    ├── right columns: b.k:11
+ │    │    │    ├── outer: (2)
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: b.k:6!null
+ │    │    │    │    ├── outer: (2)
+ │    │    │    │    ├── key: (6)
+ │    │    │    │    ├── scan b
+ │    │    │    │    │    ├── columns: b.k:6!null
+ │    │    │    │    │    └── key: (6)
+ │    │    │    │    └── filters
+ │    │    │    │         └── b.k:6 < a.i:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+ │    │    │    └── select
+ │    │    │         ├── columns: b.k:11!null
+ │    │    │         ├── outer: (2)
+ │    │    │         ├── key: (11)
+ │    │    │         ├── scan b
+ │    │    │         │    ├── columns: b.k:11!null
+ │    │    │         │    └── key: (11)
+ │    │    │         └── filters
+ │    │    │              └── b.k:11 < a.i:2 [outer=(2,11), constraints=(/2: (/NULL - ]; /11: (/NULL - ])]
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         └── const-agg [as=k:16, outer=(16)]
+ │              └── k:16
  └── projections
       └── k:16 [as=k:17, outer=(16)]
 

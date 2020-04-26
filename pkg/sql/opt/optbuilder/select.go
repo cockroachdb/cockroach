@@ -1004,7 +1004,7 @@ func (b *Builder) buildSelectClause(
 				projectionsScope.distinctOnCols,
 				outScope,
 				false, /* nullsAreDistinct */
-				false, /* errorOnDup */
+				"",    /* errorOnDup */
 			)
 		}
 	}

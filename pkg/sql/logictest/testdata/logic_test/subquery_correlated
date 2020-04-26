@@ -383,6 +383,49 @@ FROM c
 WHERE (SELECT o_id FROM o WHERE o.c_id=c.c_id AND ship='WY')=4;
 ----
 
+# Try to find customers other than customer #2 that have at most one order that
+# is shipping to 'CA'. However, since there is more than one order shipping to
+# 'CA' corresponding to customers other than #2, this attempt fails with an
+# error.
+query error more than one row returned by a subquery used as an expression
+SELECT * FROM c WHERE c_id=(SELECT c_id FROM o WHERE ship='CA' AND c.c_id<>2)
+
+# Find customers other than customer #1 that have at most one order that is
+# shipping to 'CA' and a billing state equal to 'TX'. Since there is only one
+# other customer who is shipping to 'CA', and this customer has only a single
+# order, this attempt is successful.
+query IT
+SELECT * FROM c WHERE c_id=(SELECT c_id FROM o WHERE ship='CA' AND c_id<>1 AND bill='TX')
+----
+2  TX
+
+# Find customers with billing state equal to 'FL' that have at most one order
+# that is shipping to 'WA'. Since there is only one order shipping to 'WA', this
+# attempt is successful.
+query IT
+SELECT * FROM c WHERE c_id=(SELECT c_id FROM o WHERE ship='WA' AND bill='FL')
+----
+6  FL
+
+# Try to find customers that have at most one order that is also shipping to
+# 'WA'. However, since there are customers that have more than one order, this
+# attempt fails with an error.
+query error more than one row returned by a subquery used as an expression
+SELECT * FROM c WHERE (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NOT NULL)='WA'
+
+# Add clause to filter out customers that have more than one order. Find
+# remaining customers with at least one order shipping to 'WA'.
+query IT
+SELECT *
+FROM c
+WHERE (
+  SELECT ship
+  FROM o
+  WHERE o.c_id=c.c_id AND ship IS NOT NULL AND (SELECT count(*) FROM o WHERE o.c_id=c.c_id)<=1
+)='WA'
+----
+6  FL
+
 # ------------------------------------------------------------------------------
 # Subqueries in projection lists.
 #   Although the queries are similar to those above, they are often compiled
@@ -1016,10 +1059,11 @@ SELECT
   jsonb_array_elements( (SELECT gg.data->'members' FROM groups gg WHERE gg.data->>'name' = g.data->>'name') )
 FROM
   groups g
+ORDER BY g.data->>'name'
 ----
-Group 1	{"name": "admin", "type": "USER"}
-Group 1	{"name": "user", "type": "USER"}
-Group 2	{"name": "admin2", "type": "USER"}
+Group 1  {"name": "admin", "type": "USER"}
+Group 1  {"name": "user", "type": "USER"}
+Group 2  {"name": "admin2", "type": "USER"}
 
 query TT
 SELECT
@@ -1037,6 +1081,7 @@ FROM
                 gg.data->>'name' = g.data->>'name'
         )
     ) AS members
+ORDER BY g.data->>'name'
 ----
 Group 1  {"name": "admin", "type": "USER"}
 Group 1  {"name": "user", "type": "USER"}

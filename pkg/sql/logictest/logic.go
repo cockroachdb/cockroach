@@ -2185,6 +2185,19 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	rows, err := t.db.Query(query.sql)
 	if err == nil {
 		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), query.sql)
+
+		// If expecting an error, then read all result rows, since some errors are
+		// only triggered after initial rows are returned.
+		if query.expectErr != "" {
+			// Break early if error is detected, and be sure to test for error in case
+			// where Next returns false.
+			for rows.Next() {
+				if rows.Err() != nil {
+					break
+				}
+			}
+			err = rows.Err()
+		}
 	}
 	if _, err := t.verifyError(query.sql, query.pos, query.expectErr, query.expectErrCode, err); err != nil {
 		return err

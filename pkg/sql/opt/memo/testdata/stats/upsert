@@ -127,7 +127,7 @@ with &1
  │         │    │    ├── upsert-distinct-on
  │         │    │    │    ├── columns: a:4(int!null) b:5(string) column8:8(float)
  │         │    │    │    ├── grouping columns: b:5(string)
- │         │    │    │    ├── error-on-dup
+ │         │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
  │         │    │    │    ├── stats: [rows=9.94974874, distinct(4)=6.31184239, null(4)=0, distinct(5)=9.94974874, null(5)=0]
  │         │    │    │    ├── lax-key: (5)
  │         │    │    │    ├── fd: ()-->(8), (5)~~>(4,8)
@@ -269,7 +269,7 @@ upsert uv
       │    │    ├── upsert-distinct-on
       │    │    │    ├── columns: z:6(int) column7:7(int)
       │    │    │    ├── grouping columns: z:6(int)
-      │    │    │    ├── error-on-dup
+      │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    │    │    ├── side-effects
       │    │    │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=10]
       │    │    │    ├── lax-key: (6)
@@ -348,7 +348,7 @@ upsert mno
       │    │    ├── upsert-distinct-on
       │    │    │    ├── columns: m:4(int!null) n:5(int) o:6(int)
       │    │    │    ├── grouping columns: n:5(int) o:6(int)
-      │    │    │    ├── error-on-dup
+      │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    │    │    ├── stats: [rows=2000, distinct(4)=1981, null(4)=0, distinct(5)=100, null(5)=10, distinct(6)=1900, null(6)=100]
       │    │    │    ├── key: (4)
       │    │    │    ├── fd: (4)-->(5,6), (5,6)~~>(4)

@@ -188,7 +188,8 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		cost = c.computeSetCost(candidate)
 
-	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp, opt.UpsertDistinctOnOp:
+	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp, opt.EnsureDistinctOnOp,
+		opt.UpsertDistinctOnOp:
 		cost = c.computeGroupingCost(candidate, required)
 
 	case opt.LimitOp:

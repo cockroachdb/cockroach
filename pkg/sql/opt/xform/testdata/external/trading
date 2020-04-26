@@ -1344,7 +1344,7 @@ with &1 (updates)
       │    │    ├── upsert-distinct-on
       │    │    │    ├── columns: "?column?":11!null bool:12!null current_timestamp:13 int8:14 int8:15 column18:18 sellprice:19 buyprice:20
       │    │    │    ├── grouping columns: current_timestamp:13 int8:14 int8:15
-      │    │    │    ├── error-on-dup
+      │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │    │    │    ├── side-effects
       │    │    │    ├── lax-key: (13-15)
       │    │    │    ├── fd: ()-->(11,12), (13-15)~~>(11,12,18-20)

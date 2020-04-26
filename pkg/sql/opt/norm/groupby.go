@@ -28,12 +28,6 @@ func (c *CustomFuncs) NullsAreDistinct(distinctOp opt.Operator) bool {
 	return distinctOp == opt.UpsertDistinctOnOp
 }
 
-// RaisesErrorOnDup returns true if an UpsertDistinct operator raises an error
-// when duplicate values are detected.
-func (c *CustomFuncs) RaisesErrorOnDup(private *memo.GroupingPrivate) bool {
-	return private.ErrorOnDup
-}
-
 // RemoveGroupingCols returns a new grouping private struct with the given
 // columns removed from the grouping column set.
 func (c *CustomFuncs) RemoveGroupingCols(
@@ -186,12 +180,6 @@ func (c *CustomFuncs) ConstructProjectionFromDistinctOn(
 		}
 	}
 	return c.f.ConstructProject(input, projections, passthrough)
-}
-
-// DuplicateUpsertErrText returns the error text used when duplicate input rows
-// to the Upsert operator are detected.
-func (c *CustomFuncs) DuplicateUpsertErrText() string {
-	return sqlbase.DuplicateUpsertErrText
 }
 
 // AreValuesDistinct returns true if a constant Values operator input contains

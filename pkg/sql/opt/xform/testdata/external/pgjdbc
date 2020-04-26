@@ -83,43 +83,51 @@ WHERE
 project
  ├── columns: type_cat:71 type_schem:34!null type_name:2!null class_name:71 data_type:72 remarks:73 base_type:74
  ├── fd: ()-->(71)
- ├── left-join-apply
- │    ├── columns: t.oid:1 t.typname:2!null t.typnamespace:3!null t.typtype:7 t.typbasetype:25 n.oid:33!null nspname:34!null case:70
- │    ├── fd: (3)==(33), (33)==(3)
- │    ├── inner-join (hash)
- │    │    ├── columns: t.oid:1 t.typname:2!null t.typnamespace:3!null t.typtype:7 t.typbasetype:25 n.oid:33!null nspname:34!null
- │    │    ├── fd: (3)==(33), (33)==(3)
- │    │    ├── scan t
- │    │    │    └── columns: t.oid:1 t.typname:2!null t.typnamespace:3 t.typtype:7 t.typbasetype:25
- │    │    ├── select
- │    │    │    ├── columns: n.oid:33 nspname:34!null
- │    │    │    ├── scan n
- │    │    │    │    └── columns: n.oid:33 nspname:34!null
- │    │    │    └── filters
- │    │    │         └── nspname:34 != 'pg_catalog' [outer=(34), constraints=(/34: (/NULL - /'pg_catalog') [/e'pg_catalog\x00' - ]; tight)]
+ ├── ensure-distinct-on
+ │    ├── columns: t.oid:1 t.typname:2!null t.typtype:7 nspname:34!null case:70 rownum:75!null
+ │    ├── grouping columns: rownum:75!null
+ │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    ├── key: (75)
+ │    ├── fd: (75)-->(1,2,7,34,70)
+ │    ├── left-join (hash)
+ │    │    ├── columns: t.oid:1 t.typname:2!null t.typnamespace:3!null t.typtype:7 t.typbasetype:25 n.oid:33!null nspname:34!null pg_type.oid:38 case:70 rownum:75!null
+ │    │    ├── fd: (3)==(33), (33)==(3), (75)-->(1-3,7,25,33,34)
+ │    │    ├── ordinality
+ │    │    │    ├── columns: t.oid:1 t.typname:2!null t.typnamespace:3!null t.typtype:7 t.typbasetype:25 n.oid:33!null nspname:34!null rownum:75!null
+ │    │    │    ├── key: (75)
+ │    │    │    ├── fd: (3)==(33), (33)==(3), (75)-->(1-3,7,25,33,34)
+ │    │    │    └── inner-join (hash)
+ │    │    │         ├── columns: t.oid:1 t.typname:2!null t.typnamespace:3!null t.typtype:7 t.typbasetype:25 n.oid:33!null nspname:34!null
+ │    │    │         ├── fd: (3)==(33), (33)==(3)
+ │    │    │         ├── scan t
+ │    │    │         │    └── columns: t.oid:1 t.typname:2!null t.typnamespace:3 t.typtype:7 t.typbasetype:25
+ │    │    │         ├── select
+ │    │    │         │    ├── columns: n.oid:33 nspname:34!null
+ │    │    │         │    ├── scan n
+ │    │    │         │    │    └── columns: n.oid:33 nspname:34!null
+ │    │    │         │    └── filters
+ │    │    │         │         └── nspname:34 != 'pg_catalog' [outer=(34), constraints=(/34: (/NULL - /'pg_catalog') [/e'pg_catalog\x00' - ]; tight)]
+ │    │    │         └── filters
+ │    │    │              └── t.typnamespace:3 = n.oid:33 [outer=(3,33), constraints=(/3: (/NULL - ]; /33: (/NULL - ]), fd=(3)==(33), (33)==(3)]
+ │    │    ├── project
+ │    │    │    ├── columns: case:70!null pg_type.oid:38
+ │    │    │    ├── scan pg_type
+ │    │    │    │    └── columns: pg_type.oid:38 pg_type.typname:39!null
+ │    │    │    └── projections
+ │    │    │         └── CASE WHEN pg_type.typname:39 = 'pgType' THEN 'sqlType' ELSE 'OTHER' END [as=case:70, outer=(39)]
  │    │    └── filters
- │    │         └── t.typnamespace:3 = n.oid:33 [outer=(3,33), constraints=(/3: (/NULL - ]; /33: (/NULL - ]), fd=(3)==(33), (33)==(3)]
- │    ├── max1-row
- │    │    ├── columns: case:70!null
- │    │    ├── error: "more than one row returned by a subquery used as an expression"
- │    │    ├── outer: (25)
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(70)
- │    │    └── project
- │    │         ├── columns: case:70!null
- │    │         ├── outer: (25)
- │    │         ├── select
- │    │         │    ├── columns: pg_type.oid:38!null pg_type.typname:39!null
- │    │         │    ├── outer: (25)
- │    │         │    ├── fd: ()-->(38)
- │    │         │    ├── scan pg_type
- │    │         │    │    └── columns: pg_type.oid:38 pg_type.typname:39!null
- │    │         │    └── filters
- │    │         │         └── pg_type.oid:38 = t.typbasetype:25 [outer=(25,38), constraints=(/25: (/NULL - ]; /38: (/NULL - ]), fd=(25)==(38), (38)==(25)]
- │    │         └── projections
- │    │              └── CASE WHEN pg_type.typname:39 = 'pgType' THEN 'sqlType' ELSE 'OTHER' END [as=case:70, outer=(39)]
- │    └── filters (true)
+ │    │         └── pg_type.oid:38 = t.typbasetype:25 [outer=(25,38), constraints=(/25: (/NULL - ]; /38: (/NULL - ]), fd=(25)==(38), (38)==(25)]
+ │    └── aggregations
+ │         ├── const-agg [as=t.oid:1, outer=(1)]
+ │         │    └── t.oid:1
+ │         ├── const-agg [as=t.typname:2, outer=(2)]
+ │         │    └── t.typname:2
+ │         ├── const-agg [as=t.typtype:7, outer=(7)]
+ │         │    └── t.typtype:7
+ │         ├── const-agg [as=nspname:34, outer=(34)]
+ │         │    └── nspname:34
+ │         └── const-agg [as=case:70, outer=(70)]
+ │              └── case:70
  └── projections
       ├── NULL [as=type_cat:71]
       ├── CASE WHEN t.typtype:7 = 'c' THEN 'STRUCT' ELSE 'DISTINCT' END [as=data_type:72, outer=(7)]

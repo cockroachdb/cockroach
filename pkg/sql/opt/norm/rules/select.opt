@@ -249,6 +249,10 @@
 #   SELECT MAX(y) FROM a GROUP BY x
 #
 # Citations: [2]
+#
+# Note: Do not add EnsureDistinctOn to the match pattern. Pushing the select
+# filters through the EnsureDistinctOn can prevent it from detecting duplicate
+# rows and therefore change error behavior.
 [PushSelectIntoGroupBy, Normalize]
 (Select
     $input:(GroupBy | DistinctOn

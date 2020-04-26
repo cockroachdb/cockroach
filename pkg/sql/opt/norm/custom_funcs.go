@@ -1929,18 +1929,53 @@ func (c *CustomFuncs) MakeArrayAggCol(typ *types.T) opt.ColumnID {
 	return c.mem.Metadata().AddColumn("array_agg", typ)
 }
 
-// MakeOrderedGrouping constructs a new GroupingPrivate using the given
-// grouping columns and OrderingChoice private. The ErrorOnDup will be false.
-func (c *CustomFuncs) MakeOrderedGrouping(
+// MakeGrouping constructs a new GroupingPrivate using the given grouping
+// columns and OrderingChoice. ErrorOnDup will be empty.
+func (c *CustomFuncs) MakeGrouping(
 	groupingCols opt.ColSet, ordering physical.OrderingChoice,
 ) *memo.GroupingPrivate {
 	return &memo.GroupingPrivate{GroupingCols: groupingCols, Ordering: ordering}
 }
 
-// MakeUnorderedGrouping constructs a new GroupingPrivate using the given
-// grouping columns, but with no ordering on the groups.
-func (c CustomFuncs) MakeUnorderedGrouping(groupingCols opt.ColSet) *memo.GroupingPrivate {
-	return &memo.GroupingPrivate{GroupingCols: groupingCols}
+// MakeErrorOnDupGrouping constructs a new GroupingPrivate using the given
+// grouping columns, OrderingChoice, and ErrorOnDup text.
+func (c *CustomFuncs) MakeErrorOnDupGrouping(
+	groupingCols opt.ColSet, ordering physical.OrderingChoice, errorText string,
+) *memo.GroupingPrivate {
+	return &memo.GroupingPrivate{
+		GroupingCols: groupingCols, Ordering: ordering, ErrorOnDup: errorText,
+	}
+}
+
+// ErrorOnDup returns the error text contained by the given GroupingPrivate.
+func (c *CustomFuncs) ErrorOnDup(private *memo.GroupingPrivate) string {
+	return private.ErrorOnDup
+}
+
+// RaisesErrorOnDup returns true if an EnsureDistinctOn or UpsertDistinctOn
+// operator with the given GroupingPrivate raises an error upon detection
+// of duplicate values.
+func (c *CustomFuncs) RaisesErrorOnDup(private *memo.GroupingPrivate) bool {
+	return private.ErrorOnDup != ""
+}
+
+// ExtractGroupingOrdering returns the ordering associated with the input
+// GroupingPrivate.
+func (c *CustomFuncs) ExtractGroupingOrdering(
+	private *memo.GroupingPrivate,
+) physical.OrderingChoice {
+	return private.Ordering
+}
+
+// AddColsToGrouping returns a new GroupByDef that is a copy of the given
+// GroupingPrivate, except with the given set of grouping columns union'ed with
+// the existing grouping columns.
+func (c *CustomFuncs) AddColsToGrouping(
+	private *memo.GroupingPrivate, groupingCols opt.ColSet,
+) *memo.GroupingPrivate {
+	p := *private
+	p.GroupingCols = private.GroupingCols.Union(groupingCols)
+	return &p
 }
 
 // IsLimited indicates whether a limit was pushed under the subquery

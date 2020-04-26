@@ -490,7 +490,7 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		onCols := e.Child(2).(*memo.FiltersExpr).OuterCols(e.Memo())
 		relProps.Rule.PruneCols.DifferenceWith(onCols)
 
-	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
+	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp, opt.EnsureDistinctOnOp:
 		// Grouping columns can't be pruned, because they were used to group rows.
 		// However, aggregation columns can potentially be pruned.
 		groupingColSet := e.Private().(*memo.GroupingPrivate).GroupingCols
