@@ -1089,7 +1089,7 @@ func (bq *baseQueue) finishProcessingReplica(
 
 		// If not a benign or purgatory error, log.
 		if !benign {
-			log.Error(ctx, err)
+			log.Errorf(ctx, "%v", err)
 		}
 	}
 
@@ -1114,7 +1114,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 	}
 
 	if log.V(1) {
-		log.Info(ctx, errors.Wrap(purgErr, "purgatory"))
+		log.Infof(ctx, "purgatory: %v", purgErr)
 	}
 
 	if _, found := bq.mu.replicas[repl.GetRangeID()]; found {

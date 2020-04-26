@@ -271,13 +271,13 @@ type kafkaLogAdapter struct {
 var _ sarama.StdLogger = (*kafkaLogAdapter)(nil)
 
 func (l *kafkaLogAdapter) Print(v ...interface{}) {
-	log.InfoDepth(l.ctx, 1, v...)
+	log.InfofDepth(l.ctx, 1, "", v...)
 }
 func (l *kafkaLogAdapter) Printf(format string, v ...interface{}) {
 	log.InfofDepth(l.ctx, 1, format, v...)
 }
 func (l *kafkaLogAdapter) Println(v ...interface{}) {
-	log.InfoDepth(l.ctx, 1, v...)
+	log.InfofDepth(l.ctx, 1, "", v...)
 }
 
 func init() {

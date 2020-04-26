@@ -506,7 +506,7 @@ func (tc *TableCollection) releaseTableLeases(ctx context.Context, tables []IDVe
 		if !shouldRelease(l.ID) {
 			filteredLeases = append(filteredLeases, l)
 		} else if err := tc.leaseMgr.Release(l); err != nil {
-			log.Warning(ctx, err)
+			log.Warningf(ctx, "%v", err)
 		}
 	}
 	tc.leasedTables = filteredLeases
@@ -517,7 +517,7 @@ func (tc *TableCollection) releaseLeases(ctx context.Context) {
 		log.VEventf(ctx, 2, "releasing %d tables", len(tc.leasedTables))
 		for _, table := range tc.leasedTables {
 			if err := tc.leaseMgr.Release(table); err != nil {
-				log.Warning(ctx, err)
+				log.Warningf(ctx, "%v", err)
 			}
 		}
 		tc.leasedTables = tc.leasedTables[:0]

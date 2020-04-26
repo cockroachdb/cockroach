@@ -473,7 +473,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	// Persist merged addresses.
 	if numAddrs := len(g.bootstrapInfo.Addresses); numAddrs > len(storedBI.Addresses) {
 		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
-			log.Error(ctx, err)
+			log.Errorf(ctx, "%v", err)
 		}
 	}
 
@@ -756,12 +756,12 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 		}
 		return nil
 	}, true /* deleteExpired */); err != nil {
-		log.Error(ctx, err)
+		log.Errorf(ctx, "%v", err)
 		return
 	}
 
 	if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
-		log.Error(ctx, err)
+		log.Errorf(ctx, "%v", err)
 	}
 }
 
@@ -804,7 +804,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	ctx := g.AnnotateCtx(context.TODO())
 	var desc roachpb.NodeDescriptor
 	if err := content.GetProto(&desc); err != nil {
-		log.Error(ctx, err)
+		log.Errorf(ctx, "%v", err)
 		return
 	}
 	if log.V(1) {
@@ -856,7 +856,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	added := g.maybeAddBootstrapAddressLocked(desc.Address, desc.NodeID)
 	if added && g.storage != nil {
 		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
-			log.Error(ctx, err)
+			log.Errorf(ctx, "%v", err)
 		}
 	}
 }
@@ -871,7 +871,7 @@ func (g *Gossip) updateStoreMap(key string, content roachpb.Value) {
 	ctx := g.AnnotateCtx(context.TODO())
 	var desc roachpb.StoreDescriptor
 	if err := content.GetProto(&desc); err != nil {
-		log.Error(ctx, err)
+		log.Errorf(ctx, "%v", err)
 		return
 	}
 
@@ -912,7 +912,7 @@ func (g *Gossip) updateClients() {
 	g.mu.RUnlock()
 
 	if err := g.AddInfo(MakeGossipClientsKey(nodeID), buf.Bytes(), 2*defaultClientsInterval); err != nil {
-		log.Error(g.AnnotateCtx(context.Background()), err)
+		log.Errorf(g.AnnotateCtx(context.Background()), "%v", err)
 	}
 }
 

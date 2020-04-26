@@ -100,7 +100,7 @@ func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handl
 	// net/http.(*Server).Serve/http2.ConfigureServer are not thread safe with
 	// respect to net/http.(*Server).TLSConfig, so we call it synchronously here.
 	if err := http2.ConfigureServer(server.Server, nil); err != nil {
-		log.Fatal(ctx, err)
+		log.Fatalf(ctx, "%v", err)
 	}
 
 	stopper.RunWorker(ctx, func(context.Context) {
@@ -163,7 +163,7 @@ func IsClosedConnection(err error) bool {
 // cmux.ErrListenerClosed, or the net package's errClosed.
 func FatalIfUnexpected(err error) {
 	if err != nil && !IsClosedConnection(err) {
-		log.Fatal(context.TODO(), err)
+		log.Fatalf(context.TODO(), "%v", err)
 	}
 }
 

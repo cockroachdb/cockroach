@@ -153,7 +153,7 @@ func (spy *logSpy) handleDebugLogSpy(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if err := spy.run(ctx, w, opts); err != nil {
 		// This is likely a broken HTTP connection, so nothing too unexpected.
-		log.Info(ctx, err)
+		log.Infof(ctx, "%v", err)
 	}
 }
 

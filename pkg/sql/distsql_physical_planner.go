@@ -2421,7 +2421,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 
 	if dsp.shouldPlanTestMetadata() {
 		if err := plan.CheckLastStagePost(); err != nil {
-			log.Fatal(planCtx.ctx, err)
+			log.Fatalf(planCtx.ctx, "%v", err)
 		}
 		plan.AddNoGroupingStageWithCoreFunc(
 			func(_ int, _ *physicalplan.Processor) execinfrapb.ProcessorCoreUnion {

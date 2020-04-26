@@ -57,7 +57,7 @@ func (s *initResolvedTSScan) Run(ctx context.Context) {
 	defer s.Cancel()
 	if err := s.iterateAndConsume(ctx); err != nil {
 		err = errors.Wrap(err, "initial resolved timestamp scan failed")
-		log.Error(ctx, err)
+		log.Errorf(ctx, "%v", err)
 		s.p.StopWithErr(roachpb.NewError(err))
 	} else {
 		// Inform the processor that its resolved timestamp can be initialized.
@@ -160,7 +160,7 @@ func newTxnPushAttempt(
 func (a *txnPushAttempt) Run(ctx context.Context) {
 	defer a.Cancel()
 	if err := a.pushOldTxns(ctx); err != nil {
-		log.Error(ctx, errors.Wrap(err, "pushing old intents failed"))
+		log.Errorf(ctx, "pushing old intents failed: %v", err)
 	}
 }
 

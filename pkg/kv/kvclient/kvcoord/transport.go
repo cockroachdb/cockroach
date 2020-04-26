@@ -202,7 +202,7 @@ func (gt *grpcTransport) sendBatch(
 	if reply != nil && !rpc.IsLocal(iface) {
 		for i := range reply.Responses {
 			if err := reply.Responses[i].GetInner().Verify(ba.Requests[i].GetInner()); err != nil {
-				log.Error(ctx, err)
+				log.Errorf(ctx, "%v", err)
 			}
 		}
 		// Import the remotely collected spans, if any.

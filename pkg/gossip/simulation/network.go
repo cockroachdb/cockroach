@@ -81,7 +81,7 @@ func NewNetwork(
 	var err error
 	n.tlsConfig, err = n.RPCContext.GetServerTLSConfig()
 	if err != nil {
-		log.Fatal(context.TODO(), err)
+		log.Fatalf(context.TODO(), "%v", err)
 	}
 
 	// Ensure that tests using this test context and restart/shut down
@@ -92,7 +92,7 @@ func NewNetwork(
 	for i := 0; i < nodeCount; i++ {
 		node, err := n.CreateNode(defaultZoneConfig)
 		if err != nil {
-			log.Fatal(context.TODO(), err)
+			log.Fatalf(context.TODO(), "%v", err)
 		}
 		// Build a resolver for each instance or we'll get data races.
 		if createResolvers {
@@ -180,14 +180,14 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 			encoding.EncodeUint64Ascending(nil, uint64(cycle)),
 			time.Hour,
 		); err != nil {
-			log.Fatal(context.TODO(), err)
+			log.Fatalf(context.TODO(), "%v", err)
 		}
 		if err := nodes[0].Gossip.AddInfo(
 			gossip.KeyClusterID,
 			encoding.EncodeUint64Ascending(nil, uint64(cycle)),
 			0*time.Second,
 		); err != nil {
-			log.Fatal(context.TODO(), err)
+			log.Fatalf(context.TODO(), "%v", err)
 		}
 		// Every node gossips every cycle.
 		for _, node := range nodes {
@@ -196,7 +196,7 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 				encoding.EncodeUint64Ascending(nil, uint64(cycle)),
 				time.Hour,
 			); err != nil {
-				log.Fatal(context.TODO(), err)
+				log.Fatalf(context.TODO(), "%v", err)
 			}
 			node.Gossip.SimulationCycle()
 		}
@@ -223,7 +223,7 @@ func (n *Network) Start() {
 	n.started = true
 	for _, node := range n.Nodes {
 		if err := n.StartNode(node); err != nil {
-			log.Fatal(context.TODO(), err)
+			log.Fatalf(context.TODO(), "%v", err)
 		}
 	}
 }

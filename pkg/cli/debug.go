@@ -863,7 +863,7 @@ func runTimeSeriesDump(cmd *cobra.Command, args []string) error {
 	tsClient := tspb.NewTimeSeriesClient(conn)
 	stream, err := tsClient.Dump(context.Background(), &tspb.DumpRequest{})
 	if err != nil {
-		log.Fatal(context.Background(), err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 
 	var name, source string

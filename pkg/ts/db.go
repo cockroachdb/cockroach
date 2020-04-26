@@ -194,7 +194,7 @@ func (p *poller) poll() {
 			log.Warningf(ctx, "error writing time series data: %s", err)
 		}
 	}); err != nil {
-		log.Warning(bgCtx, err)
+		log.Warningf(bgCtx, "%v", err)
 	}
 }
 
