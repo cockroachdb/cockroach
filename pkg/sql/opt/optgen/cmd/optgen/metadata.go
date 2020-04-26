@@ -204,6 +204,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"ScanFlags":           {fullName: "memo.ScanFlags", passByVal: true},
 		"JoinFlags":           {fullName: "memo.JoinFlags", passByVal: true},
 		"WindowFrame":         {fullName: "memo.WindowFrame", passByVal: true},
+		"FKCascades":          {fullName: "memo.FKCascades", passByVal: true},
 		"ExplainOptions":      {fullName: "tree.ExplainOptions", passByVal: true},
 		"StatementType":       {fullName: "tree.StatementType", passByVal: true},
 		"ShowTraceType":       {fullName: "tree.ShowTraceType", passByVal: true},
