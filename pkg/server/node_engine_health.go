@@ -12,7 +12,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -54,7 +53,7 @@ func (n *Node) startAssertEngineHealth(ctx context.Context, engines []storage.En
 
 func guaranteedExitFatal(ctx context.Context, msg string, args ...interface{}) {
 	// NB: log.Shout sets up a timer that guarantees process termination.
-	log.Shout(ctx, log.Severity_FATAL, fmt.Sprintf(msg, args...))
+	log.Shoutf(ctx, log.Severity_FATAL, msg, args...)
 }
 
 func (n *Node) assertEngineHealth(

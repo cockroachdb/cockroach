@@ -286,7 +286,7 @@ func (cfg *Config) CheckCertificateAddrs(ctx context.Context) {
 	// with the provided certificate.
 	certInfo := cm.NodeCert()
 	if certInfo.Error != nil {
-		log.Shout(ctx, log.Severity_ERROR,
+		log.Shoutf(ctx, log.Severity_ERROR,
 			"invalid node certificate: %v", certInfo.Error)
 	} else {
 		cert := certInfo.ParsedCertificates[0]
@@ -313,11 +313,11 @@ func (cfg *Config) CheckCertificateAddrs(ctx context.Context) {
 			fmt.Fprintf(&msg, "advertise SQL address %q not in node certificate (%s)\n", host, addrInfo)
 		}
 		if msg.Len() > 0 {
-			log.Shout(ctx, log.Severity_WARNING,
-				fmt.Sprintf("%s"+
+			log.Shoutf(ctx, log.Severity_WARNING,
+				"%s"+
 					"Secure client connections are likely to fail.\n"+
 					"Consider extending the node certificate or tweak --listen-addr/--advertise-addr/--sql-addr/--advertise-sql-addr.",
-					msg.String()))
+				msg.String())
 		}
 	}
 
@@ -331,7 +331,7 @@ func (cfg *Config) CheckCertificateAddrs(ctx context.Context) {
 		certInfo = cm.NodeCert()
 	}
 	if certInfo.Error != nil {
-		log.Shout(ctx, log.Severity_ERROR,
+		log.Shoutf(ctx, log.Severity_ERROR,
 			"invalid UI certificate: %v", certInfo.Error)
 	} else {
 		cert := certInfo.ParsedCertificates[0]
