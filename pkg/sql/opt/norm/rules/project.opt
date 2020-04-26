@@ -79,3 +79,39 @@ $input
     (FoldTupleColumnAccess $projections $tuplecols $col)
     $passthrough
 )
+
+# FoldPassthroughProjections folds ProjectionsItems into the passthrough set
+# if they simply remap columns from the output of the ValuesExpr. The Values
+# output columns are replaced by the corresponding columns projected by the
+# folded ProjectionsItems.
+#
+# Example:
+#
+#   project
+#    ├── columns: x:2!null
+#    ├── values
+#    │    ├── columns: column1:1!null
+#    │    ├── cardinality: [2 - 2]
+#    │    ├── (1,)
+#    │    └── (2,)
+#    └── projections
+#         └── column1:1 [as=x:2, outer=(1)]
+#    =>
+#   project
+#    ├── columns: x:2!null
+#    └── values
+#         ├── columns: x:2!null
+#         ├── cardinality: [2 - 2]
+#         ├── (1,)
+#         └── (2,)
+#
+# This allows other rules to fire. In the example above, the project would now
+# be removed by EliminateProject.
+[FoldPassthroughProjections, Normalize]
+(Project
+    $input:(Values)
+    $projections:*
+    $passthrough:* & (CanFoldPassthroughProjections $projections $passthrough $input)
+)
+=>
+(FoldPassthroughProjections $input $projections $passthrough)
