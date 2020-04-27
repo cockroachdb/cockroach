@@ -89,10 +89,6 @@ var aggTypes = []aggType{
 		},
 		name: "hash",
 	},
-	{
-		new:  NewOrderedAggregator,
-		name: "ordered",
-	},
 }
 
 func (tc *aggregatorTestCase) init() error {
@@ -707,21 +703,13 @@ func BenchmarkAggregator(b *testing.B) {
 
 	const bytesFixedLength = 8
 	for _, aggFn := range []execinfrapb.AggregatorSpec_Func{
-		execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-		execinfrapb.AggregatorSpec_AVG,
-		execinfrapb.AggregatorSpec_COUNT_ROWS,
-		execinfrapb.AggregatorSpec_COUNT,
 		execinfrapb.AggregatorSpec_SUM,
-		execinfrapb.AggregatorSpec_MIN,
-		execinfrapb.AggregatorSpec_MAX,
-		execinfrapb.AggregatorSpec_BOOL_AND,
-		execinfrapb.AggregatorSpec_BOOL_OR,
 	} {
 		fName := execinfrapb.AggregatorSpec_Func_name[int32(aggFn)]
 		b.Run(fName, func(b *testing.B) {
 			for _, agg := range aggTypes {
-				for typIdx, typ := range []types.T{*types.Int, *types.Decimal, *types.Bytes} {
-					for _, groupSize := range []int{1, 2, coldata.BatchSize() / 2, coldata.BatchSize()} {
+				for typIdx, typ := range []types.T{*types.Int, *types.Decimal} {
+					for _, groupSize := range []int{1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096} {
 						for _, hasNulls := range []bool{false, true} {
 							for _, numInputBatches := range []int{64} {
 								if aggFn == execinfrapb.AggregatorSpec_BOOL_AND || aggFn == execinfrapb.AggregatorSpec_BOOL_OR {
