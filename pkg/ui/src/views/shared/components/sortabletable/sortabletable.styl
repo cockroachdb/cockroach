@@ -66,6 +66,10 @@
   &__row
     border-top 1px solid transparent
     border-bottom 1px solid $table-border 
+    .cell--show-on-hover
+      visibility hidden
+    &:hover .cell--show-on-hover
+      visibility visible  
     &.drawer-active
       background-color $background-color
       .cl-table-link__tooltip

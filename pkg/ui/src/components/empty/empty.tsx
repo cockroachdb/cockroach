@@ -20,8 +20,7 @@ export interface IEmptyProps {
   link?: string;
   anchor?: string;
   backgroundImage?: string;
-  onClick?: () => void;
-  btnType?: "button" | "anchor";
+  onClick?: (() => void) | string;
 }
 
 export const Empty = ({
@@ -52,7 +51,7 @@ export const Empty = ({
       <footer className="cl-empty-view__footer">
         <Button
           type="primary"
-          onClick={onClick}
+          onClick={() => typeof onClick === "string" ? window.open(onClick) : onClick()}
         >
           {label}
         </Button>

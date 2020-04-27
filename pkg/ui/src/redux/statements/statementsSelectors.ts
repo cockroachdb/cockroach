@@ -38,6 +38,11 @@ export const selectStatementDiagnosticsReports = createSelector(
   diagnosticsReports => diagnosticsReports,
 );
 
+export const statementDiagnosticsReportsInFlight = createSelector(
+  (state: AdminUIState) => state.cachedData.statementDiagnosticsReports.inFlight,
+  inFlight => inFlight,
+);
+
 type StatementDiagnosticsDictionary = {
   [statementFingerprint: string]: IStatementDiagnosticsReport;
 };
