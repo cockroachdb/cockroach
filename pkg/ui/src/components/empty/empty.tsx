@@ -11,7 +11,7 @@
 import heroBannerLp from "assets/heroBannerLp.png";
 import React from "react";
 import { Anchor, Button, Text, TextTypes } from "src/components";
-import "./empty.styl";
+import styles from "./empty.module.styl";
 
 export interface IEmptyProps {
   title?: string;
@@ -33,23 +33,36 @@ export const Empty = ({
   link,
   backgroundImage,
 }: IEmptyProps) => (
-  <div className="cl-empty-view" style={{ backgroundImage: `url(${backgroundImage})` }}>
+  <div
+    className={styles[`cl-empty-view`]}
+    style={{ backgroundImage: `url(${backgroundImage})` }}
+  >
     <Text
-      className="cl-empty-view__title"
+      className={styles[`cl-empty-view__title`]}
       textType={TextTypes.Heading3}
     >
       {title}
     </Text>
-    <div className="cl-empty-view__content">
-      <main className="cl-empty-view__main">
+    <div
+      className={styles[`cl-empty-view__content`]}
+    >
+      <main className={styles[`cl-empty-view__main`]}>
         <Text
+          className={styles[`cl-empty-view__main--text`]}
           textType={TextTypes.Body}
         >
           {description}
-          {link && <Anchor href={link}>{anchor}</Anchor>}
+          {link && (
+            <Anchor
+              href={link}
+              className={styles[`cl-empty-view__main--anchor`]}
+            >
+              {anchor}
+            </Anchor>
+          )}
         </Text>
       </main>
-      <footer className="cl-empty-view__footer">
+      <footer className={styles[`cl-empty-view__footer`]}>
         <Button
           type="primary"
           onClick={onClick}
