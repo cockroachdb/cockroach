@@ -269,7 +269,7 @@ var (
 	// TableDataMin is the start of the range of table data keys.
 	TableDataMin = SystemTenantKeyGen.TablePrefix(0)
 	// TableDataMin is the end of the range of table data keys.
-	TableDataMax = SystemTenantKeyGen.TablePrefix(math.MaxUint32)
+	TableDataMax = SystemTenantKeyGen.TablePrefix(math.MaxUint32).PrefixEnd()
 	//
 	// SystemConfigSplitKey is the key to split at immediately prior to the
 	// system config span. NB: Split keys need to be valid column keys.
