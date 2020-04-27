@@ -240,7 +240,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
             onClick={this.prevPage}
             type="flat"
             size="small"
-            className={cx("crl-button--link-to")}
+            className={cx("crl-button--link-to", "crl-button__content")}
             icon={BackIcon}
             iconPosition="left"
           >
