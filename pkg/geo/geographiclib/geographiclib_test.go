@@ -28,8 +28,8 @@ func TestInverse(t *testing.T) {
 		{
 			desc:     "{0,0}, {1,1} on WGS84Spheroid",
 			spheroid: WGS84Spheroid,
-			a:        s2.LatLng{Lat: 0, Lng: 0},
-			b:        s2.LatLng{Lat: 1, Lng: 1},
+			a:        s2.LatLngFromDegrees(0, 0),
+			b:        s2.LatLngFromDegrees(1, 1),
 			s12:      156899.56829134029,
 			az1:      45.188040229358869,
 			az2:      45.196767321644863,
