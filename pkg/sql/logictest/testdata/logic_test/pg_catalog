@@ -732,6 +732,18 @@ WHERE collname='en-US'
 oid         collname  collnamespace  collowner  collencoding  collcollate  collctype
 3903121477  en-US     1307062959     NULL       6             NULL         NULL
 
+user testuser
+
+# Should be globally visible
+query OT colnames
+SELECT oid, collname FROM pg_collation
+WHERE collname='en-US'
+----
+oid         collname
+3903121477  en-US
+
+user root
+
 ## pg_catalog.pg_constraint
 ##
 ## These order of this virtual table is non-deterministic, so all queries must
@@ -1288,6 +1300,19 @@ oid    typname        typndims  typcollation  typdefaultbin  typdefault  typacl
 90002  geography      0         0             NULL           NULL        NULL
 90003  _geography     0         0             NULL           NULL        NULL
 
+user testuser
+
+# Should be globally visible
+query OTOIBT colnames
+SELECT oid, typname, typowner, typlen, typbyval, typtype
+FROM pg_catalog.pg_type WHERE typname = 'uuid'
+ORDER BY oid
+----
+oid    typname  typowner  typlen  typbyval  typtype
+2950   uuid     NULL      16      true      b
+
+user root
+
 ## pg_catalog.pg_proc
 
 query TOOOTTO colnames
@@ -1380,6 +1405,19 @@ WHERE proname='json_extract_path'
 ----
 proname            provariadic  pronargs  prorettype  proargtypes  proargmodes
 json_extract_path  25           2         3802        3802 25      {i,v}
+
+user testuser
+
+# Should be globally visible
+query TOIOTT colnames
+SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes
+FROM pg_catalog.pg_proc
+WHERE proname='json_extract_path'
+----
+proname            provariadic  pronargs  prorettype  proargtypes  proargmodes
+json_extract_path  25           2         3802        3802 25      {i,v}
+
+user root
 
 ## pg_catalog.pg_range
 query IIIIII colnames

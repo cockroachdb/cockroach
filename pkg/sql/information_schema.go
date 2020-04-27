@@ -964,16 +964,17 @@ var informationSchemaSchemataTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 	schema: vtable.InformationSchemaSchemata,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachDatabaseDesc(ctx, p, dbContext, func(db *sqlbase.DatabaseDescriptor) error {
-			return forEachSchemaName(ctx, p, db, func(sc string) error {
-				return addRow(
-					tree.NewDString(db.Name), // catalog_name
-					tree.NewDString(sc),      // schema_name
-					tree.DNull,               // default_character_set_name
-					tree.DNull,               // sql_path
-				)
+		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
+			func(db *sqlbase.DatabaseDescriptor) error {
+				return forEachSchemaName(ctx, p, db, func(sc string) error {
+					return addRow(
+						tree.NewDString(db.Name), // catalog_name
+						tree.NewDString(sc),      // schema_name
+						tree.DNull,               // default_character_set_name
+						tree.DNull,               // sql_path
+					)
+				})
 			})
-		})
 	},
 }
 
@@ -990,30 +991,31 @@ CREATE TABLE information_schema.schema_privileges (
 	IS_GRANTABLE    STRING
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachDatabaseDesc(ctx, p, dbContext, func(db *sqlbase.DatabaseDescriptor) error {
-			return forEachSchemaName(ctx, p, db, func(scName string) error {
-				privs := db.Privileges.Show()
-				dbNameStr := tree.NewDString(db.Name)
-				scNameStr := tree.NewDString(scName)
-				// TODO(knz): This should filter for the current user, see
-				// https://github.com/cockroachdb/cockroach/issues/35572
-				for _, u := range privs {
-					userNameStr := tree.NewDString(u.User)
-					for _, priv := range u.Privileges {
-						if err := addRow(
-							userNameStr,           // grantee
-							dbNameStr,             // table_catalog
-							scNameStr,             // table_schema
-							tree.NewDString(priv), // privilege_type
-							tree.DNull,            // is_grantable
-						); err != nil {
-							return err
+		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
+			func(db *sqlbase.DatabaseDescriptor) error {
+				return forEachSchemaName(ctx, p, db, func(scName string) error {
+					privs := db.Privileges.Show()
+					dbNameStr := tree.NewDString(db.Name)
+					scNameStr := tree.NewDString(scName)
+					// TODO(knz): This should filter for the current user, see
+					// https://github.com/cockroachdb/cockroach/issues/35572
+					for _, u := range privs {
+						userNameStr := tree.NewDString(u.User)
+						for _, priv := range u.Privileges {
+							if err := addRow(
+								userNameStr,           // grantee
+								dbNameStr,             // table_catalog
+								scNameStr,             // table_schema
+								tree.NewDString(priv), // privilege_type
+								tree.DNull,            // is_grantable
+							); err != nil {
+								return err
+							}
 						}
 					}
-				}
-				return nil
+					return nil
+				})
 			})
-		})
 	},
 }
 
@@ -1273,23 +1275,24 @@ CREATE TABLE information_schema.user_privileges (
 	IS_GRANTABLE   STRING
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachDatabaseDesc(ctx, p, dbContext, func(dbDesc *DatabaseDescriptor) error {
-			dbNameStr := tree.NewDString(dbDesc.Name)
-			for _, u := range []string{security.RootUser, sqlbase.AdminRole} {
-				grantee := tree.NewDString(u)
-				for _, p := range privilege.List(privilege.ByValue[:]).SortedNames() {
-					if err := addRow(
-						grantee,            // grantee
-						dbNameStr,          // table_catalog
-						tree.NewDString(p), // privilege_type
-						tree.DNull,         // is_grantable
-					); err != nil {
-						return err
+		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
+			func(dbDesc *DatabaseDescriptor) error {
+				dbNameStr := tree.NewDString(dbDesc.Name)
+				for _, u := range []string{security.RootUser, sqlbase.AdminRole} {
+					grantee := tree.NewDString(u)
+					for _, p := range privilege.List(privilege.ByValue[:]).SortedNames() {
+						if err := addRow(
+							grantee,            // grantee
+							dbNameStr,          // table_catalog
+							tree.NewDString(p), // privilege_type
+							tree.DNull,         // is_grantable
+						); err != nil {
+							return err
+						}
 					}
 				}
-			}
-			return nil
-		})
+				return nil
+			})
 	},
 }
 
@@ -1488,23 +1491,35 @@ func forEachSchemaName(
 
 // forEachDatabaseDesc calls a function for the given DatabaseDescriptor, or if
 // it is nil, retrieves all database descriptors and iterates through them in
-// lexicographical order with respect to their name. The function is only called
-// if the user has privileges on the database.
+// lexicographical order with respect to their name. If privileges are required,
+// the function is only called if the user has privileges on the database.
 func forEachDatabaseDesc(
 	ctx context.Context,
 	p *planner,
 	dbContext *DatabaseDescriptor,
+	requiresPrivileges bool,
 	fn func(*sqlbase.DatabaseDescriptor) error,
 ) error {
 	var dbDescs []*sqlbase.DatabaseDescriptor
-	dbDescs, err := p.Tables().getAllDatabaseDescriptors(ctx, p.txn)
-	if err != nil {
-		return err
+	if dbContext == nil {
+		allDbDescs, err := p.Tables().getAllDatabaseDescriptors(ctx, p.txn)
+		if err != nil {
+			return err
+		}
+		dbDescs = allDbDescs
+	} else {
+		// We can't just use dbContext here because we need to fetch the descriptor
+		// with privileges from kv.
+		fetchedDbDesc, err := getDatabaseDescriptorsFromIDs(ctx, p.txn, []sqlbase.ID{dbContext.ID})
+		if err != nil {
+			return err
+		}
+		dbDescs = fetchedDbDesc
 	}
 
 	// Ignore databases that the user cannot see.
 	for _, dbDesc := range dbDescs {
-		if (dbContext == nil || dbContext.ID == dbDesc.ID) && userCanSeeDatabase(ctx, p, dbDesc) {
+		if !requiresPrivileges || userCanSeeDatabase(ctx, p, dbDesc) {
 			if err := fn(dbDesc); err != nil {
 				return err
 			}
