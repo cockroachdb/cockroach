@@ -224,45 +224,39 @@ func (p *planner) ResolveUncachedTableDescriptor(
 
 // ResolveTargetObject determines a valid target path for an object
 // that may not exist yet. It returns the descriptor for the database
-// where the target object lives.
-//
-// The object name is modified in-place with the result of the name
-// resolution.
+// where the target object lives. It also returns the resolved name
+// prefix for the input object.
 func ResolveTargetObject(
-	ctx context.Context, sc SchemaResolver, tn *ObjectName,
-) (res *DatabaseDescriptor, err error) {
-	// TODO: As part of work for #34240, we should be operating on
-	//  UnresolvedObjectNames here, rather than TableNames.
-	un := tn.ToUnresolvedObjectName()
+	ctx context.Context, sc SchemaResolver, un *tree.UnresolvedObjectName,
+) (*DatabaseDescriptor, tree.ObjectNamePrefix, error) {
 	found, prefix, descI, err := tree.ResolveTarget(ctx, un, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
-		return nil, err
+		return nil, prefix, err
 	}
-	tn.ObjectNamePrefix = prefix
 	if !found {
-		if !tn.ExplicitSchema && !tn.ExplicitCatalog {
-			return nil, pgerror.New(pgcode.InvalidName, "no database specified")
+		if !un.HasExplicitSchema() && !un.HasExplicitCatalog() {
+			return nil, prefix, pgerror.New(pgcode.InvalidName, "no database specified")
 		}
 		err = pgerror.Newf(pgcode.InvalidSchemaName,
 			"cannot create %q because the target database or schema does not exist",
-			tree.ErrString(tn))
+			tree.ErrString(un))
 		err = errors.WithHint(err, "verify that the current database and search_path are valid and/or the target database exists")
-		return nil, err
+		return nil, prefix, err
 	}
-	if tn.Schema() != tree.PublicSchema {
-		return nil, pgerror.Newf(pgcode.InvalidName,
-			"schema cannot be modified: %q", tree.ErrString(&tn.ObjectNamePrefix))
+	if prefix.Schema() != tree.PublicSchema {
+		return nil, prefix, pgerror.Newf(pgcode.InvalidName,
+			"schema cannot be modified: %q", tree.ErrString(&prefix))
 	}
-	return descI.(*DatabaseDescriptor), nil
+	return descI.(*DatabaseDescriptor), prefix, nil
 }
 
 func (p *planner) ResolveUncachedDatabase(
-	ctx context.Context, tn *ObjectName,
-) (res *UncachedDatabaseDescriptor, err error) {
+	ctx context.Context, un *tree.UnresolvedObjectName,
+) (res *UncachedDatabaseDescriptor, namePrefix tree.ObjectNamePrefix, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		res, err = ResolveTargetObject(ctx, p, tn)
+		res, namePrefix, err = ResolveTargetObject(ctx, p, un)
 	})
-	return res, err
+	return res, namePrefix, err
 }
 
 // ResolveRequiredType can be passed to the ResolveExistingObject function to

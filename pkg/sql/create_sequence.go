@@ -30,10 +30,12 @@ type createSequenceNode struct {
 }
 
 func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (planNode, error) {
-	dbDesc, err := p.ResolveUncachedDatabase(ctx, &n.Name)
+	un := n.Name.ToUnresolvedObjectName()
+	dbDesc, prefix, err := p.ResolveUncachedDatabase(ctx, un)
 	if err != nil {
 		return nil, err
 	}
+	n.Name.ObjectNamePrefix = prefix
 
 	if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
 		return nil, err
