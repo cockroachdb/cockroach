@@ -111,10 +111,13 @@ func (p *planner) processSerialInColumnDef(
 	// Here and below we skip the cache because name resolution using
 	// the cache does not work (well) if the txn retries and the
 	// descriptor was written already in an early txn attempt.
-	dbDesc, err := p.ResolveUncachedDatabase(ctx, seqName)
+	un := seqName.ToUnresolvedObjectName()
+	dbDesc, prefix, err := p.ResolveUncachedDatabase(ctx, un)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
+	seqName.ObjectNamePrefix = prefix
+
 	// Now skip over all names that are already taken.
 	nameBase := seqName.ObjectName
 	for i := 0; ; i++ {
