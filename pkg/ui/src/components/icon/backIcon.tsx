@@ -1,4 +1,4 @@
-// Copyright 2019 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,5 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./cockroachLabsLockupIcon";
-export * from "./backIcon";
+import React from "react";
+import Back from "assets/back-arrow.svg";
+import styles from "./backIcon.module.styl";
+
+// tslint:disable-next-line: variable-name
+export const BackIcon = () => (
+  <img
+    src={Back}
+    alt="back"
+    className={styles[`root`]}
+  />
+);
