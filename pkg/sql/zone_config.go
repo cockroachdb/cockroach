@@ -244,7 +244,7 @@ func (p *planner) resolveTableForZone(
 		p.runWithOptions(resolveFlags{skipCache: true}, func() {
 			flags := tree.ObjectLookupFlagsWithRequired()
 			flags.IncludeOffline = true
-			immutRes, err = ResolveExistingObject(ctx, p, &zs.TableOrIndex.Table, flags, ResolveAnyDescType)
+			immutRes, err = ResolveExistingTableObject(ctx, p, &zs.TableOrIndex.Table, flags, ResolveAnyDescType)
 		})
 		if err != nil {
 			return nil, err

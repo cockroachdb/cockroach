@@ -193,10 +193,15 @@ func getTableCreateParams(
 		tKey = sqlbase.NewTableKey(dbID, schemaID, tableName)
 	}
 
-	exists, _, err := sqlbase.LookupObjectID(params.ctx, params.p.txn, dbID, schemaID, tableName)
+	exists, id, err := sqlbase.LookupObjectID(params.ctx, params.p.txn, dbID, schemaID, tableName)
 	if err == nil && exists {
+		// Try and see what kind of object we collided with.
+		desc, err := getDescriptorByID(params.ctx, params.p.txn, id)
+		if err != nil {
+			return nil, 0, err
+		}
 		// Still return data in this case.
-		return tKey, schemaID, sqlbase.NewRelationAlreadyExistsError(tableName)
+		return tKey, schemaID, makeObjectAlreadyExistsError(desc, tableName)
 	} else if err != nil {
 		return nil, 0, err
 	}
@@ -621,7 +626,7 @@ func ResolveFK(
 		originColumnIDs[i] = col.ID
 	}
 
-	target, err := ResolveMutableExistingObject(ctx, sc, &d.Table, true /*required*/, ResolveRequireTableDesc)
+	target, err := ResolveMutableExistingTableObject(ctx, sc, &d.Table, true /*required*/, ResolveRequireTableDesc)
 	if err != nil {
 		return err
 	}
@@ -896,7 +901,7 @@ func addInterleave(
 			7854, "unsupported shorthand %s", interleave.DropBehavior)
 	}
 
-	parentTable, err := ResolveExistingObject(
+	parentTable, err := ResolveExistingTableObject(
 		ctx, vt, &interleave.Parent, tree.ObjectLookupFlagsWithRequired(), ResolveRequireTableDesc,
 	)
 	if err != nil {
@@ -1960,6 +1965,20 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 		newDefs = append(newDefs, defs...)
 	}
 	return newDefs, nil
+}
+
+func makeObjectAlreadyExistsError(collidingObject sqlbase.DescriptorProto, name string) error {
+	switch collidingObject.(type) {
+	case *TableDescriptor:
+		return sqlbase.NewRelationAlreadyExistsError(name)
+	case *TypeDescriptor:
+		return sqlbase.NewTypeAlreadyExistsError(name)
+	case *DatabaseDescriptor:
+		// TODO (rohany): I'm not sure when users of this function would
+		//  collide with a database...
+		return sqlbase.NewDatabaseAlreadyExistsError(name)
+	}
+	return nil
 }
 
 // dummyColumnItem is used in MakeCheckConstraint to construct an expression

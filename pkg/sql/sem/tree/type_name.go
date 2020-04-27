@@ -55,9 +55,30 @@ func (t *TypeName) FQString() string {
 	return ctx.CloseAndGetString()
 }
 
+func (t *TypeName) objectName() {}
+
 // NewUnqualifiedTypeName returns a new base type name.
 func NewUnqualifiedTypeName(typ Name) *TypeName {
 	return &TypeName{objName{
 		ObjectName: typ,
 	}}
+}
+
+// ToUnresolvedObjectName converts the type name to an unresolved object name.
+// Schema and catalog are included if indicated by the ExplicitSchema and
+// ExplicitCatalog flags.
+func (t *TypeName) ToUnresolvedObjectName() *UnresolvedObjectName {
+	u := &UnresolvedObjectName{}
+
+	u.NumParts = 1
+	u.Parts[0] = string(t.ObjectName)
+	if t.ExplicitSchema {
+		u.Parts[u.NumParts] = string(t.SchemaName)
+		u.NumParts++
+	}
+	if t.ExplicitCatalog {
+		u.Parts[u.NumParts] = string(t.CatalogName)
+		u.NumParts++
+	}
+	return u
 }

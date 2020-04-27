@@ -10,6 +10,18 @@
 
 package tree
 
+type ObjectName interface {
+	NodeFormatter
+	Object() string
+	Schema() string
+	Catalog() string
+	FQString() string
+	objectName()
+}
+
+var _ ObjectName = &TableName{}
+var _ ObjectName = &TypeName{}
+
 // objName is the internal type for a qualified object.
 type objName struct {
 	// ObjectName is the unqualified name for the object
@@ -19,6 +31,10 @@ type objName struct {
 	// ObjectNamePrefix is the path to the object.  This can be modified
 	// further by name resolution, see name_resolution.go.
 	ObjectNamePrefix
+}
+
+func (o *objName) Object() string {
+	return string(o.ObjectName)
 }
 
 // ObjectNamePrefix corresponds to the path prefix of an object name.
@@ -112,12 +128,12 @@ func NewUnresolvedObjectName(
 
 // Resolved returns the resolved name in the annotation for this node (or nil if
 // there isn't one).
-func (u *UnresolvedObjectName) Resolved(ann *Annotations) *TableName {
+func (u *UnresolvedObjectName) Resolved(ann *Annotations) ObjectName {
 	r := u.GetAnnotation(ann)
 	if r == nil {
 		return nil
 	}
-	return r.(*TableName)
+	return r.(ObjectName)
 }
 
 // Format implements the NodeFormatter interface.

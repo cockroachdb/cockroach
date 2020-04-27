@@ -40,6 +40,8 @@ func (t *TableName) Format(ctx *FmtCtx) {
 }
 func (t *TableName) String() string { return AsString(t) }
 
+func (t *TableName) objectName() {}
+
 // FQString renders the table name in full, not omitting the prefix
 // schema and catalog names. Suitable for logging, etc.
 func (t *TableName) FQString() string {

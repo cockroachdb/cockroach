@@ -33,9 +33,9 @@ import (
 // reference implementations of these interfaces.
 
 type (
-	// ObjectName is provided for convenience and to make the interface
+	// TableName is provided for convenience and to make the interface
 	// definitions below more intuitive.
-	ObjectName = tree.TableName
+	TableName = tree.TableName
 	// DatabaseDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	DatabaseDescriptor = sqlbase.DatabaseDescriptor
@@ -51,6 +51,9 @@ type (
 	// TableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	TableDescriptor = sqlbase.TableDescriptor
+	// TypeDescriptor is provided for convenience and to make the
+	// interface definitions below more intuitive.
+	TypeDescriptor = sqlbase.TypeDescriptor
 	// ViewDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	ViewDescriptor = sqlbase.TableDescriptor
@@ -66,8 +69,13 @@ type (
 type ObjectDescriptor interface {
 	tree.NameResolutionResult
 
-	// TableDesc returns the underlying table descriptor.
+	// TableDesc returns the underlying table descriptor, or nil if the
+	// descriptor is not a table backed object.
 	TableDesc() *TableDescriptor
+
+	// TypeDesc returns the underlying type descriptor, or nil if the
+	// descriptor is not a type backed object.
+	TypeDesc() *TypeDescriptor
 }
 
 // SchemaAccessor provides access to database descriptors.
@@ -90,5 +98,5 @@ type SchemaAccessor interface {
 	// descriptor and that of its parent database. If the object is not
 	// found and flags.required is true, an error is returned, otherwise
 	// a nil reference is returned.
-	GetObjectDesc(ctx context.Context, txn *kv.Txn, settings *cluster.Settings, name *ObjectName, flags tree.ObjectLookupFlags) (ObjectDescriptor, error)
+	GetObjectDesc(ctx context.Context, txn *kv.Txn, settings *cluster.Settings, db, schema, object string, flags tree.ObjectLookupFlags) (ObjectDescriptor, error)
 }

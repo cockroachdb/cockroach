@@ -92,9 +92,11 @@ func (n *scrubNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if err := n.startScrubTable(
-			params.ctx, params.p, tableDesc, params.p.ResolvedName(n.n.Table),
-		); err != nil {
+		tn, ok := params.p.ResolvedName(n.n.Table).(*tree.TableName)
+		if !ok {
+			return errors.AssertionFailedf("%q was not resolved as a table", n.n.Table)
+		}
+		if err := n.startScrubTable(params.ctx, params.p, tableDesc, tn); err != nil {
 			return err
 		}
 	case tree.ScrubDatabase:
@@ -173,8 +175,15 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 
 	for i := range tbNames {
 		tableName := &tbNames[i]
-		objDesc, err := p.LogicalSchemaAccessor().GetObjectDesc(ctx, p.txn, p.ExecCfg().Settings,
-			tableName, p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/))
+		objDesc, err := p.LogicalSchemaAccessor().GetObjectDesc(
+			ctx,
+			p.txn,
+			p.ExecCfg().Settings,
+			tableName.Catalog(),
+			tableName.Schema(),
+			tableName.Table(),
+			p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/),
+		)
 		if err != nil {
 			return err
 		}
