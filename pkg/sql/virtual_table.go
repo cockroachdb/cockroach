@@ -148,7 +148,7 @@ type virtualTableNode struct {
 }
 
 func (p *planner) newVirtualTableNode(
-	columns sqlbase.ResultColumns, capacity int, next virtualTableGenerator, cleanup func(),
+	columns sqlbase.ResultColumns, next virtualTableGenerator, cleanup func(),
 ) *virtualTableNode {
 	return &virtualTableNode{
 		columns: columns,
