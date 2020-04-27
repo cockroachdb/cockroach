@@ -178,7 +178,7 @@ func shouldReplicaQuiesce(
 	}
 	if q.hasPendingProposalsRLocked() {
 		if log.V(4) {
-			log.Infof(ctx, "not quiescing: proposals pending")
+			log.Infof(ctx, "not quiescing: proposals pending or outstanding quota")
 		}
 		return nil, false
 	}

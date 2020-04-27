@@ -339,8 +339,17 @@ func (r *Replica) numPendingProposalsRLocked() int {
 	return len(r.mu.proposals) + r.mu.proposalBuf.Len()
 }
 
+// hasPendingProposalsRLocked returns true if this range cannot be quiesced
+// because there are outstanding commands. A command counts as outstanding if it
+// has been proposed by the current replica and it hasn't been applied locally
+// yet. A command also counts as outstanding if it's holding up quota - i.e. if
+// it hasn't been persisted in all the other live replicas' logs. This second
+// condition is important for quiescing: we can't quiesce while there
+// outstanding quota because the respective quota would not be released while
+// quiesced, and it might prevent the range from unquiescing (leading to
+// deadlock).
 func (r *Replica) hasPendingProposalsRLocked() bool {
-	return r.numPendingProposalsRLocked() > 0
+	return r.numPendingProposalsRLocked() > 0 || len(r.mu.quotaReleaseQueue) > 0
 }
 
 var errRemoved = errors.New("replica removed")
