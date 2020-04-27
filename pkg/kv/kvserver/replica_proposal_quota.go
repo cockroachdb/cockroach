@@ -145,7 +145,8 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			return
 		}
 
-		// Only consider followers that are active.
+		// Only consider followers that are active. In-active ones don't decrease minIndex - i.e.
+		// they don't hold up releasing quota.
 		if !r.mu.lastUpdateTimes.isFollowerActive(ctx, rep.ReplicaID, now) {
 			return
 		}
