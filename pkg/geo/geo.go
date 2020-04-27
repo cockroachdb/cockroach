@@ -22,7 +22,8 @@ import (
 	"github.com/twpayne/go-geom/encoding/ewkb"
 )
 
-var ewkbEncodingFormat = binary.LittleEndian
+// EWKBEncodingFormat is the encoding format for EWKB.
+var EWKBEncodingFormat = binary.LittleEndian
 
 // spatialObjectBase is the base for spatial objects.
 type spatialObjectBase struct {
@@ -61,7 +62,7 @@ func makeSpatialObjectBase(in geopb.UnvalidatedEWKB) (spatialObjectBase, error) 
 	if err != nil {
 		return spatialObjectBase{}, err
 	}
-	ret, err := ewkb.Marshal(t, ewkbEncodingFormat)
+	ret, err := ewkb.Marshal(t, EWKBEncodingFormat)
 	if err != nil {
 		return spatialObjectBase{}, err
 	}
@@ -118,7 +119,7 @@ func (g *Geometry) AsGeography() (*Geography, error) {
 		return nil, err
 	}
 	adjustGeomSRID(geom, geopb.DefaultGeographySRID)
-	ret, err := ewkb.Marshal(geom, ewkbEncodingFormat)
+	ret, err := ewkb.Marshal(geom, EWKBEncodingFormat)
 	if err != nil {
 		return nil, err
 	}
