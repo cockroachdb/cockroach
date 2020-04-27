@@ -20,6 +20,7 @@ import { Table } from "oss/src/components";
 import { connectedMount } from "src/test-utils";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+import buttonStyles from "src/components/button/button.module.styl";
 
 const sandbox = sinon.createSandbox();
 
@@ -50,7 +51,7 @@ describe("DiagnosticsView", () => {
     });
 
     it("calls activate callback with statementId when click on Activate button", () => {
-      const activateButtonComponent = wrapper.find(".crl-button").first();
+      const activateButtonComponent = wrapper.find(`.${buttonStyles["crl-button"]}`).first();
       activateButtonComponent.simulate("click");
       activateFn.calledOnceWith(statementFingerprint);
     });
@@ -79,7 +80,7 @@ describe("DiagnosticsView", () => {
     });
 
     it("calls activate callback with statementId when click on Activate button", () => {
-      const activateButtonComponent = wrapper.find(".crl-button").first();
+      const activateButtonComponent = wrapper.find(`.${buttonStyles["crl-button"]}`).first();
       activateButtonComponent.simulate("click");
       activateFn.calledOnceWith(statementFingerprint);
     });
