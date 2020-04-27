@@ -26,6 +26,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -327,13 +328,12 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 
 	{
 		var nodes *serverpb.NodesResponse
-		if err := runZipRequestWithTimeout(baseCtx, "requesting nodes", timeout, func(ctx context.Context) error {
+		err := runZipRequestWithTimeout(baseCtx, "requesting nodes", timeout, func(ctx context.Context) error {
 			nodes, err = status.Nodes(ctx, &serverpb.NodesRequest{})
 			return err
-		}); err != nil {
-			if err := z.createError(nodesPrefix, err); err != nil {
-				return err
-			}
+		})
+		if cErr := z.createJSONOrError(base+"/nodes.json", nodes, err); cErr != nil {
+			return cErr
 		}
 
 		// In case nodes came up back empty (the Nodes() RPC failed), we
@@ -350,8 +350,38 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 			nodeList = nodes.Nodes
 		}
 
+		// We'll want livenesses to decide whether a node is decommissioned.
+		var lresponse *serverpb.LivenessResponse
+		err = runZipRequestWithTimeout(baseCtx, "requesting liveness", timeout, func(ctx context.Context) error {
+			lresponse, err = admin.Liveness(ctx, &serverpb.LivenessRequest{})
+			return err
+		})
+		if cErr := z.createJSONOrError(base+"/liveness.json", nodes, err); cErr != nil {
+			return cErr
+		}
+		livenessByNodeID := map[roachpb.NodeID]storagepb.NodeLivenessStatus{}
+		if lresponse != nil {
+			livenessByNodeID = lresponse.Statuses
+		}
+
 		for _, node := range nodeList {
-			id := fmt.Sprintf("%d", node.Desc.NodeID)
+			nodeID := node.Desc.NodeID
+			liveness := livenessByNodeID[nodeID]
+			if liveness == storagepb.NodeLivenessStatus_DECOMMISSIONED {
+				// Decommissioned + process terminated. Let's not waste time
+				// on this node.
+				//
+				// NB: we still inspect DECOMMISSIONING nodes (marked as
+				// decommissioned but the process is still alive) to get a
+				// chance to collect their log files.
+				//
+				// NB: we still inspect DEAD nodes because even though they
+				// don't heartbeat their liveness record their process might
+				// still be up and willing to deliver some log files.
+				continue
+			}
+
+			id := fmt.Sprintf("%d", nodeID)
 			prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
 			// Don't use sqlConn because that's only for is the node `debug
 			// zip` was pointed at, but here we want to connect to nodes
