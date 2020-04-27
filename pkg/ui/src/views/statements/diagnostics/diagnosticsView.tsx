@@ -36,7 +36,7 @@ import { trustIcon } from "src/util/trust";
 
 import { DiagnosticStatusBadge } from "./diagnosticStatusBadge";
 import DownloadIcon from "!!raw-loader!assets/download.svg";
-import "./diagnosticsView.styl";
+import styles from "./diagnosticsView.module.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequest;
@@ -93,7 +93,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
       render: (_text, record) => {
         if (record.completed) {
           return (
-            <div className="crl-statements-diagnostics-view__actions-column">
+            <div className={styles[`crl-statements-diagnostics-view__actions-column`]}>
               <a href={`_admin/v1/stmtbundle/${record.statement_diagnostics_id}`}
                  onClick={() => trackDownloadDiagnosticsBundle(record.statement_fingerprint)}>
                 <Button
@@ -102,7 +102,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
                   iconPosition="left"
                   icon={() => (
                     <span
-                      className="crl-statements-diagnostics-view__icon"
+                      className={styles[`crl-statements-diagnostics-view__icon`]}
                       dangerouslySetInnerHTML={ trustIcon(DownloadIcon) }
                     />
                   )}
@@ -149,7 +149,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
 
     if (!hasData) {
       return (
-        <SummaryCard className="summary--card__empty-state">
+        <SummaryCard className={styles[`summary--card__empty-state`]}>
           <EmptyDiagnosticsView {...this.props} />
         </SummaryCard>
       );
@@ -157,7 +157,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
     return (
       <SummaryCard>
         <div
-          className="crl-statements-diagnostics-view__title"
+          className={styles[`crl-statements-diagnostics-view__title`]}
         >
           <Text
             textType={TextTypes.Heading3}
@@ -170,7 +170,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
                 onClick={this.onActivateButtonClick}
                 disabled={!canRequestDiagnostics}
                 type="secondary"
-                className="crl-statements-diagnostics-view__activate-button"
+                className={styles[`crl-statements-diagnostics-view__activate-button`]}
               >
                 Activate diagnostics
               </Button>
@@ -181,7 +181,7 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
           dataSource={dataSource}
           columns={this.columns}
         />
-        <div className="crl-statements-diagnostics-view__footer">
+        <div className={styles[`crl-statements-diagnostics-view__footer`]}>
           <Link to="/reports/statements/diagnosticshistory">All statement diagnostics</Link>
         </div>
         <DownloadFile ref={this.downloadRef}/>
