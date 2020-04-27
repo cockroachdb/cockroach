@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import "./styles.styl";
+import styles from  "./summaryCard.module.styl";
 
 interface ISummaryCardProps {
   children: React.ReactNode;
@@ -18,7 +18,7 @@ interface ISummaryCardProps {
 
 // tslint:disable-next-line: variable-name
 export const SummaryCard: React.FC<ISummaryCardProps> = ({ children, className }) => (
-  <div className={`summary--card ${className}`}>
+  <div className={`${styles[`summary--card`]} ${className}`}>
     {children}
   </div>
 );
