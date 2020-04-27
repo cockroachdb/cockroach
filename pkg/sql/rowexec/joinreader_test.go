@@ -445,7 +445,7 @@ func TestJoinReader(t *testing.T) {
 				}
 
 				// Set a lower batch size to force multiple batches.
-				jr.(*joinReader).SetBatchSize(3 /* batchSize */)
+				jr.(*joinReader).SetBatchSizeBytes(int64(encRows[0].Size() * 3))
 
 				jr.Run(ctx)
 

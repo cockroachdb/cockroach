@@ -33,10 +33,15 @@ import (
 	"github.com/opentracing/opentracing-go"
 )
 
-// TODO(radu): we currently create one batch at a time and run the KV operations
-// on this node. In the future we may want to build separate batches for the
-// nodes that "own" the respective ranges, and send out flows on those nodes.
-const joinReaderBatchSize = 100
+// joinReaderDefaultLookupBatchSizeBytes is a bytes limit for the batch of
+// lookup rows constructed in readInput. The higher this number, the more the
+// lookup cost is amortized. However, if the result size becomes too large, the
+// joinReader is likely to spill to disk.
+// This number was chosen by running a variation of TPCH Q10 and choosing the
+// largest batch size that didn't cause a disk spill.
+// TODO(asubiotto): Eventually we might want to adjust this batch size
+//  dynamically based on whether the result row container spilled or not.
+const joinReaderDefaultLookupBatchSizeBytes = 6 << 20 /* 6 MiB */
 
 // partialJoinSentinel is used as the inputRowIdxToLookedUpRowIdx value for
 // semi- and anti-joins, where we only need to know about the existence of a
@@ -88,7 +93,8 @@ type joinReader struct {
 	lookupCols []uint32
 
 	// Batch size for fetches. Not a constant so we can lower for testing.
-	batchSize int
+	batchSizeBytes int64
+	curBatchSize   int64
 
 	// State variables for each batch of input rows.
 	inputRows            sqlbase.EncDatumRows
@@ -144,7 +150,7 @@ func newJoinReader(
 		input:                input,
 		inputTypes:           input.OutputTypes(),
 		lookupCols:           spec.LookupColumns,
-		batchSize:            joinReaderBatchSize,
+		batchSizeBytes:       joinReaderDefaultLookupBatchSizeBytes,
 		keyToInputRowIndices: make(map[string][]int),
 	}
 
@@ -269,9 +275,9 @@ func getIndexColSet(
 	return cols
 }
 
-// SetBatchSize sets the desired batch size. It should only be used in tests.
-func (jr *joinReader) SetBatchSize(batchSize int) {
-	jr.batchSize = batchSize
+// SetBatchSizeBytes sets the desired batch size. It should only be used in tests.
+func (jr *joinReader) SetBatchSizeBytes(batchSize int64) {
+	jr.batchSizeBytes = batchSize
 }
 
 // Spilled returns whether the joinReader spilled to disk.
@@ -363,7 +369,7 @@ func (jr *joinReader) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata
 // readInput reads the next batch of input rows and starts an index scan.
 func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadata) {
 	// Read the next batch of input rows.
-	for len(jr.inputRows) < jr.batchSize {
+	for jr.curBatchSize < jr.batchSizeBytes {
 		row, meta := jr.input.Next()
 		if meta != nil {
 			if meta.Err != nil {
@@ -375,6 +381,7 @@ func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 		if row == nil {
 			break
 		}
+		jr.curBatchSize += int64(row.Size())
 		jr.inputRows = append(jr.inputRows, jr.rowAlloc.CopyRow(row))
 	}
 
@@ -443,6 +450,9 @@ func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 // performLookup reads the next batch of index rows, joins them to the
 // corresponding input rows, and adds the results to
 // jr.inputRowIdxToLookedUpRowIdx.
+// TODO(radu): we currently create one batch at a time and run the KV operations
+// on this node. In the future we may want to build separate batches for the
+// nodes that "own" the respective ranges, and send out flows on those nodes.
 func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMetadata) {
 	nCols := len(jr.lookupCols)
 
@@ -525,6 +535,7 @@ func (jr *joinReader) emitRow() (
 		log.VEventf(jr.Ctx, 1, "done emitting rows")
 		// Ready for another input batch. Reset state.
 		jr.inputRows = jr.inputRows[:0]
+		jr.curBatchSize = 0
 		jr.keyToInputRowIndices = make(map[string][]int)
 		jr.emitCursor.outputRowIdx = 0
 		jr.emitCursor.inputRowIdx = 0
