@@ -49,6 +49,9 @@ import {
 } from "src/redux/statements/statementsSelectors";
 import { Button, BackIcon } from "src/components/button";
 import { trackSubnavSelection } from "src/util/analytics";
+import styles from "./statementDetails.module.styl";
+import sortableTableStyles from "src/views/shared/components/sortabletable/sortabletable.module.styl";
+import summaryCardStyles from "src/views/shared/components/summaryCard/summaryCard.module.styl";
 
 const { TabPane } = Tabs;
 
@@ -71,11 +74,23 @@ interface SingleStatementStatistics {
 
 function AppLink(props: { app: string }) {
   if (!props.app) {
-    return <span className="app-name app-name__unset">(unset)</span>;
+    return (
+      <span
+        className={classNames(
+          styles[`app-name`],
+          styles[`app-name__unset`],
+        )}
+      >
+        (unset)
+      </span>
+    );
   }
 
   return (
-    <Link className="app-name" to={ `/statements/${encodeURIComponent(props.app)}` }>
+    <Link
+      className={styles[`app-name`]}
+      to={ `/statements/${encodeURIComponent(props.app)}` }
+    >
       { props.app }
     </Link>
   );
@@ -121,23 +136,69 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
   render() {
     const { rows } = this.props;
     return (
-      <table className="sort-table statements-table">
+      <table
+        className={classNames(
+          sortableTableStyles[`sort-table`],
+          styles[`statements-table`],
+        )}
+      >
         <thead>
-          <tr className="sort-table__row sort-table__row--header">
-            <th className="sort-table__cell sort-table__cell--header">Phase</th>
-            <th className="sort-table__cell">Mean {this.props.measure}</th>
-            <th className="sort-table__cell">Standard Deviation</th>
+          <tr
+            className={classNames(
+              sortableTableStyles[`sort-table__row`],
+              sortableTableStyles[`sort-table__row--header`],
+            )}
+          >
+            <th
+              className={classNames(
+                sortableTableStyles[`sort-table__cell`],
+                sortableTableStyles[`sort-table__cell--header`],
+              )}
+            >
+              Phase
+            </th>
+            <th className={sortableTableStyles[`sort-table__cell`]}>
+              Mean {this.props.measure}
+            </th>
+            <th className={sortableTableStyles[`sort-table__cell`]}>
+              Standard Deviation
+            </th>
           </tr>
         </thead>
         <tbody>
           {
             rows.map((row: NumericStatRow) => {
-              const className = classNames("sort-table__row sort-table__row--body", {"sort-table__row--summary": row.summary});
+              const className = classNames(
+                sortableTableStyles[`sort-table__row`],
+                sortableTableStyles[`sort-table__row--body`],
+                {
+                  [sortableTableStyles[`sort-table__row--summary`]]: row.summary,
+                },
+              );
               return (
                 <tr className={className}>
-                  <th className="sort-table__cell sort-table__cell--header" style={{ textAlign: "left" }}>{ row.name }</th>
-                  <td className="sort-table__cell">{ row.bar ? row.bar() : null }</td>
-                  <td className="sort-table__cell sort-table__cell--active">{ this.props.format(stdDev(row.value, this.props.count)) }</td>
+                  <th
+                    className={classNames(
+                      sortableTableStyles[`sort-table__cell`],
+                      sortableTableStyles[`sort-table__cell--header`],
+                    )}
+                    style={{ textAlign: "left" }}
+                  >
+                    { row.name }
+                  </th>
+                  <td
+                    className={sortableTableStyles[`sort-table__cell`]}
+                  >
+                    { row.bar ? row.bar() : null }
+                  </td>
+                  <td
+                    className={classNames(
+                      sortableTableStyles[`sort-table__cell`],
+                      sortableTableStyles[`sort-table__cell--active`],
+                    )}
+                  >
+                    { this.props.format(stdDev(row.value, this.props.count)) }
+                  </td>
                 </tr>
               );
             })
@@ -183,7 +244,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
     return (
       <div>
         <Helmet title={`Details | ${(app ? `${app} App |` : "")} Statements`} />
-        <div className="section page--header">
+        <div className={classNames(styles[`section`], styles[`page--header`])}>
           <Button
             onClick={this.prevPage}
             type="flat"
@@ -194,9 +255,20 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
           >
             Statements
           </Button>
-          <h1 className="base-heading page--header__title">Statement Details</h1>
+          <h1 className={classNames(
+            styles[`base-heading`],
+            styles[`page--header__title`],
+          )}
+          >
+            Statement Details
+          </h1>
         </div>
-        <section className="section section--container">
+        <section
+          className={classNames(
+            styles[`section`],
+            styles[`section--container`],
+          )}
+        >
           <Loading
             loading={_.isNil(this.props.statement)}
             error={this.props.statementsError}
@@ -221,13 +293,13 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
 
       return (
         <React.Fragment>
-          <section className="section">
+          <section className={styles[`section`]}>
             <SqlBox value={ statement } />
           </section>
-          <section className="section">
+          <section className={styles[`section`]}>
             <h3>Unable to find statement</h3>
             There are no execution statistics for this statement.{" "}
-            <Link className="back-link" to={ listUrl }>
+            <Link className={styles[`back-link`]} to={ listUrl }>
               Back to Statements
             </Link>
           </section>
@@ -249,7 +321,11 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
     const logicalPlan = stats.sensitive_info && stats.sensitive_info.most_recent_plan_description;
     const duration = (v: number) => Duration(v * 1e9);
     return (
-      <Tabs defaultActiveKey="1" className="cockroach--tabs" onChange={trackSubnavSelection}>
+      <Tabs
+        defaultActiveKey="1"
+        className={styles[`cockroach--tabs`]}
+        onChange={trackSubnavSelection}
+      >
         <TabPane tab="Overview" key="overview">
           <Row gutter={16}>
             <Col className="gutter-row" span={16}>
@@ -259,67 +335,108 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
               <SummaryCard>
                 <Row>
                   <Col span={12}>
-                    <div className="summary--card__counting">
-                      <h3 className="summary--card__counting--value">{formatNumberForDisplay(count * stats.service_lat.mean, duration)}</h3>
-                      <p className="summary--card__counting--label">Total Time</p>
+                    <div className={summaryCardStyles[`summary--card__counting`]}>
+                      <h3 className={summaryCardStyles[`summary--card__counting--value`]}>
+                        {formatNumberForDisplay(count * stats.service_lat.mean, duration)}
+                      </h3>
+                      <p className={summaryCardStyles[`summary--card__counting--label`]}>Total Time</p>
                     </div>
                   </Col>
                   <Col span={12}>
-                    <div className="summary--card__counting">
-                      <h3 className="summary--card__counting--value">{formatNumberForDisplay(stats.service_lat.mean, duration)}</h3>
-                      <p className="summary--card__counting--label">Mean Service Latency</p>
+                    <div className={summaryCardStyles[`summary--card__counting`]}>
+                      <h3 className={summaryCardStyles[`summary--card__counting--value`]}>
+                        {formatNumberForDisplay(stats.service_lat.mean, duration)}
+                      </h3>
+                      <p className={summaryCardStyles[`summary--card__counting--label`]}>Mean Service Latency</p>
                     </div>
                   </Col>
                 </Row>
-                <p className="summary--card__divider"></p>
-                <div className="summary--card__item" style={{ justifyContent: "flex-start" }}>
-                  <h4 className="summary--card__item--label">App:</h4>
-                  <p className="summary--card__item--value">{ intersperse<ReactNode>(app.map(a => <AppLink app={ a } key={ a } />), ", ") }</p>
+                <p className={summaryCardStyles[`summary--card__divider`]} />
+                <div
+                  className={summaryCardStyles[`summary--card__item`]}
+                  style={{ justifyContent: "flex-start" }}
+                >
+                  <h4 className={summaryCardStyles[`summary--card__item--label`]}>App:</h4>
+                  <p className={summaryCardStyles[`summary--card__item--value`]}>
+                    { intersperse<ReactNode>(app.map(a => <AppLink app={ a } key={ a } />), ", ") }
+                  </p>
                 </div>
-                <div className="summary--card__item">
-                  <h4 className="summary--card__item--label">Transaction Type</h4>
-                  <p className="summary--card__item--value">{ renderTransactionType(implicit_txn) }</p>
+                <div className={summaryCardStyles[`summary--card__item`]}>
+                  <h4 className={summaryCardStyles[`summary--card__item--label`]}>Transaction Type</h4>
+                  <p className={summaryCardStyles[`summary--card__item--value`]}>{ renderTransactionType(implicit_txn) }</p>
                 </div>
-                <div className="summary--card__item">
-                  <h4 className="summary--card__item--label">Distributed execution?</h4>
-                  <p className="summary--card__item--value">{ renderBools(opt) }</p>
+                <div className={summaryCardStyles[`summary--card__item`]}>
+                  <h4 className={summaryCardStyles[`summary--card__item--label`]}>Distributed execution?</h4>
+                  <p className={summaryCardStyles[`summary--card__item--value`]}>{ renderBools(opt) }</p>
                 </div>
-                <div className="summary--card__item">
-                  <h4 className="summary--card__item--label">Used cost-based optimizer?</h4>
-                  <p className="summary--card__item--value">{ renderBools(opt) }</p>
+                <div className={summaryCardStyles[`summary--card__item`]}>
+                  <h4 className={summaryCardStyles[`summary--card__item--label`]}>Used cost-based optimizer?</h4>
+                  <p className={summaryCardStyles[`summary--card__item--value`]}>{ renderBools(opt) }</p>
                 </div>
-                <div className="summary--card__item">
-                  <h4 className="summary--card__item--label">Failed?</h4>
-                  <p className="summary--card__item--value">{ renderBools(failed) }</p>
+                <div className={summaryCardStyles[`summary--card__item`]}>
+                  <h4 className={summaryCardStyles[`summary--card__item--label`]}>Failed?</h4>
+                  <p className={summaryCardStyles[`summary--card__item--value`]}>{ renderBools(failed) }</p>
                 </div>
               </SummaryCard>
               <SummaryCard>
-                <h2 className="base-heading summary--card__title">Execution Count</h2>
-                <div className="summary--card__item">
-                  <h4 className="summary--card__item--label">First Attempts</h4>
-                  <p className="summary--card__item--value">{ firstAttemptsBarChart }</p>
+                <h2
+                  className={classNames(
+                    styles[`base-heading`],
+                    summaryCardStyles[`summary--card__title`],
+                  )}
+                >
+                  Execution Count
+                </h2>
+                <div className={summaryCardStyles[`summary--card__item`]}>
+                  <h4 className={summaryCardStyles[`summary--card__item--label`]}>First Attempts</h4>
+                  <p className={summaryCardStyles[`summary--card__item--value`]}>{ firstAttemptsBarChart }</p>
                 </div>
-                <div className="summary--card__item">
-                  <h4 className="summary--card__item--label">Retries</h4>
-                  <p className={classNames("summary--card__item--value", { "summary--card__item--value-red": retriesBarChart > 0})}>{ retriesBarChart }</p>
+                <div className={summaryCardStyles[`summary--card__item`]}>
+                  <h4 className={summaryCardStyles[`summary--card__item--label`]}>Retries</h4>
+                  <p
+                    className={classNames(
+                      summaryCardStyles[`summary--card__item--value`],
+                      {
+                        [summaryCardStyles[`summary--card__item--value-red`]]: retriesBarChart > 0,
+                      },
+                    )}
+                  >
+                    { retriesBarChart }
+                  </p>
                 </div>
-                <div className="summary--card__item">
-                  <h4 className="summary--card__item--label">Max Retries</h4>
-                  <p className={classNames("summary--card__item--value", { "summary--card__item--value-red": maxRetriesBarChart > 0})}>{ maxRetriesBarChart }</p>
+                <div className={summaryCardStyles[`summary--card__item`]}>
+                  <h4 className={summaryCardStyles[`summary--card__item--label`]}>Max Retries</h4>
+                  <p
+                    className={classNames(
+                      summaryCardStyles[`summary--card__item--value`],
+                      {
+                        [summaryCardStyles[`summary--card__item--value-red`]]: maxRetriesBarChart > 0,
+                      },
+                    )}
+                  >
+                    { maxRetriesBarChart }
+                  </p>
                 </div>
-                <div className="summary--card__item">
-                  <h4 className="summary--card__item--label">Total</h4>
-                  <p className="summary--card__item--value">{ totalCountBarChart }</p>
+                <div className={summaryCardStyles[`summary--card__item`]}>
+                  <h4 className={summaryCardStyles[`summary--card__item--label`]}>Total</h4>
+                  <p className={summaryCardStyles[`summary--card__item--value`]}>{ totalCountBarChart }</p>
                 </div>
-                <p className="summary--card__divider"></p>
-                <h2 className="base-heading summary--card__title">Rows Affected</h2>
-                <div className="summary--card__item">
-                  <h4 className="summary--card__item--label">Mean Rows</h4>
-                  <p className="summary--card__item--value">{ rowsBarChart(true) }</p>
+                <p className={summaryCardStyles[`summary--card__divider`]} />
+                <h2
+                  className={classNames(
+                    styles[`base-heading`],
+                    summaryCardStyles[`summary--card__title`],
+                  )}
+                >
+                  Rows Affected
+                </h2>
+                <div className={summaryCardStyles[`summary--card__item`]}>
+                  <h4 className={summaryCardStyles[`summary--card__item--label`]}>Mean Rows</h4>
+                  <p className={summaryCardStyles[`summary--card__item--value`]}>{ rowsBarChart(true) }</p>
                 </div>
-                <div className="summary--card__item">
-                  <h4 className="summary--card__item--label">Standard Deviation</h4>
-                  <p className="summary--card__item--value">{ rowsBarChart() }</p>
+                <div className={summaryCardStyles[`summary--card__item`]}>
+                  <h4 className={summaryCardStyles[`summary--card__item--label`]}>Standard Deviation</h4>
+                  <p className={summaryCardStyles[`summary--card__item--value`]}>{ rowsBarChart() }</p>
                 </div>
               </SummaryCard>
             </Col>
@@ -338,12 +455,17 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
         </TabPane>
         <TabPane tab="Execution Stats" key="execution-stats">
           <SummaryCard>
-            <h2 className="base-heading summary--card__title">
+            <h2
+              className={classNames(
+                styles[`base-heading`],
+                summaryCardStyles[`summary--card__title`],
+              )}
+            >
               Execution Latency By Phase
-              <div className="numeric-stats-table__tooltip">
+              <div className={styles[`numeric-stats-table__tooltip`]}>
                 <ToolTipWrapper text="The execution latency of this statement, broken down by phase.">
-                  <div className="numeric-stats-table__tooltip-hover-area">
-                    <div className="numeric-stats-table__info-icon">i</div>
+                  <div className={styles[`numeric-stats-table__tooltip-hover-area`]}>
+                    <div className={styles[`numeric-stats-table__info-icon`]}>i</div>
                   </div>
                 </ToolTipWrapper>
               </div>
@@ -363,18 +485,23 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
             />
           </SummaryCard>
           <SummaryCard>
-            <h2 className="base-heading summary--card__title">
+            <h2
+              className={classNames(
+                styles[`base-heading`],
+                summaryCardStyles[`summary--card__title`],
+              )}
+            >
               Stats By Node
-              <div className="numeric-stats-table__tooltip">
+              <div className={styles[`numeric-stats-table__tooltip`]}>
                 <ToolTipWrapper text="text">
-                  <div className="numeric-stats-table__tooltip-hover-area">
-                    <div className="numeric-stats-table__info-icon">i</div>
+                  <div className={styles[`numeric-stats-table__tooltip-hover-area`]}>
+                    <div className={styles[`numeric-stats-table__info-icon`]}>i</div>
                   </div>
                 </ToolTipWrapper>
               </div>
             </h2>
             <StatementsSortedTable
-              className="statements-table"
+              className={styles[`statements-table`]}
               data={statsByNode}
               columns={makeNodesColumns(statsByNode, this.props.nodeNames)}
               sortSetting={this.state.sortSetting}
