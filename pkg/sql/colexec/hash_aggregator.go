@@ -458,7 +458,7 @@ func (v *hashAggFuncs) compute(b coldata.Batch, aggCols [][]uint32) {
 	}
 }
 
-const hashAggFuncsAllocSize = 128
+const hashAggFuncsAllocSize = 1024
 
 // hashAggFuncsAlloc is a utility struct that batches allocations of
 // hashAggFuncs.
