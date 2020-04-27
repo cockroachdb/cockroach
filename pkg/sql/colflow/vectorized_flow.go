@@ -1017,9 +1017,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 		if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.EnableVectorizedInvariantsChecker {
 			result.Op = colexec.NewInvariantsChecker(result.Op)
 		}
-		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto &&
+		if flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto &&
 			!result.IsStreaming {
-			return nil, errors.Errorf("non-streaming operator encountered when vectorize=auto")
+			return nil, errors.Errorf("non-streaming operator encountered when vectorize=201auto")
 		}
 		// We created a streaming memory account when calling NewColOperator above,
 		// so there is definitely at least one memory account, and it doesn't
@@ -1041,12 +1041,12 @@ func (s *vectorizedFlowCreator) setupFlow(
 			op = vsc
 		}
 
-		if (flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.VectorizeAuto) &&
+		if (flowCtx.EvalCtx.SessionData.VectorizeMode == sessiondata.Vectorize201Auto) &&
 			pspec.Output[0].Type == execinfrapb.OutputRouterSpec_BY_HASH {
 			// colexec.HashRouter is not supported when vectorize=auto since it can
 			// buffer an unlimited number of tuples, even though it falls back to
 			// disk. vectorize=on does support this.
-			return nil, errors.Errorf("hash router encountered when vectorize=auto")
+			return nil, errors.Errorf("hash router encountered when vectorize=201auto")
 		}
 		if _, err := typeconv.FromColumnTypes(result.ColumnTypes); err != nil {
 			return nil, err
