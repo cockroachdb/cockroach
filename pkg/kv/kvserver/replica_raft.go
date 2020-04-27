@@ -343,6 +343,20 @@ func (r *Replica) hasPendingProposalsRLocked() bool {
 	return r.numPendingProposalsRLocked() > 0
 }
 
+// hasPendingProposalQuotaRLocked is part of the quiescer interface. It returns
+// true if there are any commands that haven't completed replicating that are
+// tracked by this node's quota pool (i.e. commands that haven't been acked by
+// all live replicas).
+// We can't quiesce while there's outstanding quota because the respective quota
+// would not be released while quiesced, and it might prevent the range from
+// unquiescing (leading to deadlock). See #46699.
+func (r *Replica) hasPendingProposalQuotaRLocked() bool {
+	if r.mu.proposalQuota == nil {
+		return true
+	}
+	return !r.mu.proposalQuota.Full()
+}
+
 var errRemoved = errors.New("replica removed")
 
 // stepRaftGroup calls Step on the replica's RawNode with the provided request's
