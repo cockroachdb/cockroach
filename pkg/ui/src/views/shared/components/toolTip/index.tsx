@@ -13,7 +13,7 @@ import React from "react";
 import { AbstractTooltipProps } from "antd/es/tooltip";
 import classNames from "classnames";
 
-import "./tooltip.styl";
+import styles from "./tooltip.module.styl";
 
 interface ToolTipWrapperProps extends AbstractTooltipProps {
   text: React.ReactNode;
@@ -33,9 +33,17 @@ interface ToolTipWrapperProps extends AbstractTooltipProps {
 // tslint:disable-next-line: variable-name
 export const ToolTipWrapper = (props: ToolTipWrapperProps) => {
   const { text, children, placement } = props;
-  const overlayClassName = classNames("tooltip__preset--white", `tooltip__preset--placement-${placement}`);
+  const overlayClassName = classNames(
+    styles[`tooltip__preset--white`],
+    styles[`tooltip__preset--placement-${placement}`],
+  );
   return (
-    <Tooltip title={ text } placement="bottom" overlayClassName={overlayClassName} {...props}>
+    <Tooltip
+      title={ text }
+      placement="bottom"
+      overlayClassName={overlayClassName}
+      {...props}
+    >
       {children}
     </Tooltip>
   );
