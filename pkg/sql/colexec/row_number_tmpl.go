@@ -65,7 +65,25 @@ func (r *rowNumberBase) Init() {
 	r.Input().Init()
 }
 
-// {{ range . }}
+// {{/*
+// _COMPUTE_ROW_NUMBER is a code snippet that computes the row number value
+// for a single tuple at index i as an increment from the previous tuple's row
+// number. If a new partition begins, then the running 'rowNumber' variable is
+// reset.
+func _COMPUTE_ROW_NUMBER() { // */}}
+	// {{define "computeRowNumber" -}}
+	// {{if $.HasPartition}}
+	if partitionCol[i] {
+		r.rowNumber = 0
+	}
+	// {{end}}
+	r.rowNumber++
+	rowNumberCol[i] = r.rowNumber
+	// {{end}}
+	// {{/*
+} // */}}
+
+// {{range .}}
 
 type _ROW_NUMBER_STRINGOp struct {
 	rowNumberBase
@@ -75,11 +93,12 @@ var _ colexecbase.Operator = &_ROW_NUMBER_STRINGOp{}
 
 func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	batch := r.Input().Next(ctx)
-	if batch.Length() == 0 {
+	n := batch.Length()
+	if n == 0 {
 		return coldata.ZeroBatch
 	}
 
-	// {{ if .HasPartition }}
+	// {{if .HasPartition}}
 	partitionCol := batch.ColVec(r.partitionColIdx).Bool()
 	// {{ end }}
 	rowNumberVec := batch.ColVec(r.outputColIdx)
@@ -91,27 +110,15 @@ func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	rowNumberCol := rowNumberVec.Int64()
 	sel := batch.Selection()
 	if sel != nil {
-		for i := 0; i < batch.Length(); i++ {
-			// {{ if .HasPartition }}
-			if partitionCol[sel[i]] {
-				r.rowNumber = 1
-			}
-			// {{ end }}
-			r.rowNumber++
-			rowNumberCol[sel[i]] = r.rowNumber
+		for _, i := range sel[:n] {
+			_COMPUTE_ROW_NUMBER()
 		}
 	} else {
-		for i := 0; i < batch.Length(); i++ {
-			// {{ if .HasPartition }}
-			if partitionCol[i] {
-				r.rowNumber = 0
-			}
-			// {{ end }}
-			r.rowNumber++
-			rowNumberCol[i] = r.rowNumber
+		for i := range rowNumberCol[:n] {
+			_COMPUTE_ROW_NUMBER()
 		}
 	}
 	return batch
 }
 
-// {{ end }}
+// {{end}}

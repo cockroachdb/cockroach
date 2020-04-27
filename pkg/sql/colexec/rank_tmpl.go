@@ -101,6 +101,32 @@ type rankInitFields struct {
 	peersColIdx     int
 }
 
+// {{/*
+// _COMPUTE_RANK is a code snippet that computes the rank for a single tuple at
+// index i.
+func _COMPUTE_RANK() { // */}}
+	// {{define "computeRank" -}}
+	// {{if $.HasPartition}}
+	if partitionCol[i] {
+		// We need to reset the internal state because of the new partition.
+		// Note that the beginning of new partition necessarily starts a new
+		// peer group, so peersCol[i] *must* be true, and we will correctly
+		// update the rank before setting it to rankCol.
+		r.rank = 0
+		r.rankIncrement = 1
+	}
+	// {{end}}
+	if peersCol[i] {
+		_UPDATE_RANK()
+		rankCol[i] = r.rank
+	} else {
+		rankCol[i] = r.rank
+		_UPDATE_RANK_INCREMENT()
+	}
+	// {{end}}
+	// {{/*
+} // */}}
+
 // {{range .}}
 
 type _RANK_STRINGOp struct {
@@ -142,42 +168,13 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	}
 	rankCol := rankVec.Int64()
 	sel := batch.Selection()
-	// TODO(yuzefovich): template out sel vs non-sel cases.
 	if sel != nil {
 		for _, i := range sel[:n] {
-			// {{ if .HasPartition }}
-			if partitionCol[i] {
-				r.rank = 1
-				r.rankIncrement = 1
-				rankCol[i] = 1
-				continue
-			}
-			// {{end}}
-			if peersCol[i] {
-				_UPDATE_RANK()
-				rankCol[i] = r.rank
-			} else {
-				rankCol[i] = r.rank
-				_UPDATE_RANK_INCREMENT()
-			}
+			_COMPUTE_RANK()
 		}
 	} else {
 		for i := range rankCol[:n] {
-			// {{ if .HasPartition }}
-			if partitionCol[i] {
-				r.rank = 1
-				r.rankIncrement = 1
-				rankCol[i] = 1
-				continue
-			}
-			// {{end}}
-			if peersCol[i] {
-				_UPDATE_RANK()
-				rankCol[i] = r.rank
-			} else {
-				rankCol[i] = r.rank
-				_UPDATE_RANK_INCREMENT()
-			}
+			_COMPUTE_RANK()
 		}
 	}
 	return batch

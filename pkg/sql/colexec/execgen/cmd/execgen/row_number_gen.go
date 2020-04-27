@@ -34,6 +34,9 @@ func genRowNumberOp(wr io.Writer) error {
 
 	s = strings.Replace(s, "_ROW_NUMBER_STRING", "{{.String}}", -1)
 
+	computeRowNumberRe := makeFunctionRegex("_COMPUTE_ROW_NUMBER", 0)
+	s = computeRowNumberRe.ReplaceAllString(s, `{{template "computeRowNumber" buildDict "HasPartition" .HasPartition}}`)
+
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("row_number_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
