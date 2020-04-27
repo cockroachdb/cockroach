@@ -9,13 +9,11 @@
 // licenses/APL.txt.
 
 import React from "react";
-import cn from "classnames";
-import Back from "assets/back-arrow.svg";
-
-import "./button.styl";
+import classNames from "classnames/bind";
+import styles from "./button.module.styl";
 
 export interface ButtonProps {
-  type?: "primary" | "secondary" | "flat";
+  type?: "primary" | "secondary" | "flat" | "unstyled-link";
   disabled?: boolean;
   size?: "default" | "small";
   children?: React.ReactNode;
@@ -25,10 +23,12 @@ export interface ButtonProps {
   className?: string;
 }
 
+const cx = classNames.bind(styles);
+
 export function Button(props: ButtonProps) {
   const { children, type, disabled, size, icon, iconPosition, onClick, className } = props;
 
-  const rootStyles = cn(
+  const rootStyles = cx(
     "crl-button",
     `crl-button--type-${type}`,
     `crl-button--size-${size}`,
@@ -43,7 +43,7 @@ export function Button(props: ButtonProps) {
       return null;
     }
     return (
-      <div className={`crl-button__icon--push-${iconPosition}`}>
+      <div className={cx(`crl-button__icon--push-${iconPosition}`)}>
         { icon() }
       </div>
     );
@@ -55,9 +55,9 @@ export function Button(props: ButtonProps) {
       className={rootStyles}
       disabled={disabled}
     >
-      <div className="crl-button__container">
+      <div className={cx("crl-button__container")}>
         { iconPosition === "left" && renderIcon() }
-        <div className="crl-button__content">
+        <div className={cx("crl-button__content")}>
           {children}
         </div>
         { iconPosition === "right" && renderIcon() }
@@ -74,6 +74,3 @@ Button.defaultProps = {
   className: "",
   iconPosition: "left",
 };
-
-// tslint:disable-next-line: variable-name
-export const BackIcon = () => <img src={Back} alt="back" />;
