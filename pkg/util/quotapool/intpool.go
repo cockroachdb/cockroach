@@ -294,7 +294,10 @@ func (p *IntPool) Len() int {
 }
 
 // ApproximateQuota will report approximately the amount of quota available in
-// the pool.
+// the pool. It's "approximate" because, if there's an acquisition in progress,
+// this might return an "intermediate" value - one that does not fully reflect
+// the capacity either before that acquisitions started or after it will have
+// finished.
 func (p *IntPool) ApproximateQuota() (q uint64) {
 	p.qp.ApproximateQuota(func(r Resource) {
 		if ia, ok := r.(*intAlloc); ok {
@@ -302,6 +305,11 @@ func (p *IntPool) ApproximateQuota() (q uint64) {
 		}
 	})
 	return q
+}
+
+// Full returns true if no quota is outstanding.
+func (p *IntPool) Full() bool {
+	return p.ApproximateQuota() == p.Capacity()
 }
 
 // Close signals to all ongoing and subsequent acquisitions that the pool is
