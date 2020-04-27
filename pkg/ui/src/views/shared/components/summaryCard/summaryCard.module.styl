@@ -1,0 +1,67 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require "~styl/base/palette.styl"
+
+.summary--card
+  border-radius 3px
+  box-shadow 0 0 1px 0 rgba(67, 90, 111, 0.41)
+  background-color $adminui-white
+  padding 25px
+  margin-bottom 15px
+  &__divider
+    width 100%
+    height 1px
+    margin 22px 0
+    background $table-border
+  &__title
+    font-family SourceSansPro-Regular
+    font-size 20px
+    line-height 1.6
+    letter-spacing -0.2px
+    color $popover-color
+    margin-bottom 25px
+  &__counting
+    &--value
+      font-family SourceSansPro-Regular
+      font-size 20pt
+      line-height 1.6
+      letter-spacing -0.2px
+      color $text-color
+      margin-bottom 15px
+    &--label
+      font-family SourceSansPro-Regular
+      font-size 14pt
+      line-height 1.67
+      letter-spacing 0.3px
+      color $secondary-text-color
+      margin-bottom 0
+  &__item
+    display flex;
+    justify-content space-between
+    margin-bottom 10px
+    &--label
+      font-family SourceSansPro-Regular
+      font-size 14px
+      line-height 1.57
+      letter-spacing 0.1px
+      color $secondary-text-color
+      margin-right 5px
+      margin-bottom 0
+    &--value
+      font-family SourceSansPro-Regular
+      font-size 14px
+      font-weight 600
+      line-height 1.71
+      letter-spacing 0.1px
+      color $popover-color
+      margin-bottom 0
+      &-red
+        color $alert-color
