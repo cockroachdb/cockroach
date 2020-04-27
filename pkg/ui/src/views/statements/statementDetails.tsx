@@ -47,7 +47,8 @@ import classNames from "classnames/bind";
 import {
   selectDiagnosticsReportsCountByStatementFingerprint,
 } from "src/redux/statements/statementsSelectors";
-import { Button, BackIcon } from "src/components/button";
+import { Button } from "src/components/button";
+import { BackIcon } from "src/components/icon";
 import { trackSubnavSelection } from "src/util/analytics";
 import styles from "./statementDetails.module.styl";
 import sortableTableStyles from "src/views/shared/components/sortabletable/sortabletable.module.styl";
@@ -238,9 +239,8 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
         <div className={cx("section", "page--header")}>
           <Button
             onClick={this.prevPage}
-            type="flat"
+            type="unstyled-link"
             size="small"
-            className={cx("crl-button--link-to", "crl-button__content")}
             icon={BackIcon}
             iconPosition="left"
           >

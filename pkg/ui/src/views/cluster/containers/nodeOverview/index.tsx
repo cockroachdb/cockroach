@@ -23,7 +23,8 @@ import { Bytes, DATE_FORMAT, Percentage } from "src/util/format";
 import { INodeStatus, MetricConstants, StatusMetrics } from "src/util/proto";
 import { getMatchParamByName } from "src/util/query";
 import { SummaryBar, SummaryLabel, SummaryValue } from "src/views/shared/components/summaryBar";
-import { Button, BackIcon } from "src/components/button";
+import { Button } from "src/components/button";
+import { BackIcon } from "src/components/icon";
 import "./nodeOverview.styl";
 
 /**
@@ -93,9 +94,8 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
         <div className="section section--heading">
           <Button
             onClick={this.prevPage}
-            type="flat"
+            type="unstyled-link"
             size="small"
-            className="crl-button--link-to"
             icon={BackIcon}
             iconPosition="left"
           >

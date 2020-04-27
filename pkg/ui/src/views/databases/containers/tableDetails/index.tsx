@@ -28,7 +28,8 @@ import "./styles.styl";
 const { TabPane } = Tabs;
 import { getMatchParamByName } from "src/util/query";
 import { databaseDetails } from "../databaseSummary";
-import { Button, BackIcon } from "src/components/button";
+import { Button } from "src/components/button";
+import { BackIcon } from "src/components/icon";
 
 class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.IGrant> {}
 
@@ -98,9 +99,8 @@ export class TableMain extends React.Component<TableMainProps, {}> {
           <div className="page--header">
             <Button
               onClick={this.prevPage}
-              type="flat"
+              type="unstyled-link"
               size="small"
-              className="crl-button--link-to"
               icon={BackIcon}
               iconPosition="left"
             >
