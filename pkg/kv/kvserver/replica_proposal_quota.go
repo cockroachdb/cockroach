@@ -147,12 +147,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 
 		// Only consider followers that are active. In-active ones don't decrease minIndex - i.e.
 		// they don't hold up releasing quota.
-		if !r.mu.lastUpdateTimes.isFollowerActive(ctx, rep.ReplicaID, now) {
-			return
-		}
-
-		// Only consider followers that that have "healthy" RPC connections.
-		if err := r.store.cfg.NodeDialer.ConnHealth(rep.NodeID, r.connectionClass.get()); err != nil {
+		if !r.isFollowerLiveRLocked(r.store, rep, now) {
 			return
 		}
 

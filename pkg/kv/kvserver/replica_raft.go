@@ -342,14 +342,24 @@ func (r *Replica) numPendingProposalsRLocked() int {
 // hasPendingProposalsRLocked returns true if this range cannot be quiesced
 // because there are outstanding commands. A command counts as outstanding if it
 // has been proposed by the current replica and it hasn't been applied locally
-// yet. A command also counts as outstanding if it's holding up quota - i.e. if
-// it hasn't been persisted in all the other live replicas' logs. This second
-// condition is important for quiescing: we can't quiesce while there
-// outstanding quota because the respective quota would not be released while
-// quiesced, and it might prevent the range from unquiescing (leading to
-// deadlock).
+// yet.
 func (r *Replica) hasPendingProposalsRLocked() bool {
-	return r.numPendingProposalsRLocked() > 0 || len(r.mu.quotaReleaseQueue) > 0
+	return r.numPendingProposalsRLocked() > 0
+}
+
+// hasPendingProposalsRLocked returns true if this range cannot be quiesced
+// because there is outstanding quota (i.e. if some commands haven't been
+// persisted in all the other live replicas' logs). Quiescing would be bad
+// because quota is not released while we're quiesced and so, if too much quota
+// is outstanding, we might be unable to unquiesce because we might not have
+// quota to propose any more commands (resulting in a deadlock).
+//
+// Besides the deadlock argument, we generally don't want to quiesce until all
+// the followers are caught up; failovers can take longer while followers are
+// behind. However note that generally not quiescing when followers are behind
+// is also ensured more strictly by checking the Raft status elsewhere.
+func (r *Replica) hasPendingQuotaRLocked() bool {
+	return len(r.mu.quotaReleaseQueue) > 0
 }
 
 var errRemoved = errors.New("replica removed")
@@ -860,7 +870,7 @@ func maybeFatalOnRaftReadyErr(ctx context.Context, expl string, err error) (remo
 
 // tick the Raft group, returning true if the raft group exists and is
 // unquiesced; false otherwise.
-func (r *Replica) tick(livenessMap IsLiveMap) (bool, error) {
+func (r *Replica) tick(livenessChecker livenessChecker) (bool, error) {
 	ctx := r.AnnotateCtx(context.TODO())
 
 	r.unreachablesMu.Lock()
@@ -885,7 +895,8 @@ func (r *Replica) tick(livenessMap IsLiveMap) (bool, error) {
 	if r.mu.quiescent {
 		return false, nil
 	}
-	if r.maybeQuiesceLocked(ctx, livenessMap) {
+
+	if r.maybeQuiesceLocked(ctx, livenessChecker) {
 		return false, nil
 	}
 

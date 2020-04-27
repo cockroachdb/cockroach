@@ -525,16 +525,40 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 	}
 }
 
+type livenessInfo struct {
+	livenessRecordValid bool
+	connHealthy         bool
+}
+
+type livenessChecker interface {
+	livenessInfo(roachpb.NodeID) livenessInfo
+}
+
+func (s *Store) livenessInfo(nid roachpb.NodeID) livenessInfo {
+	var res livenessInfo
+	livenessMap, _ := s.livenessMap.Load().(IsLiveMap)
+	entry, ok := livenessMap[nid]
+	if !ok {
+		res.livenessRecordValid = false
+	} else {
+		res.livenessRecordValid = entry.IsLive
+	}
+	res.connHealthy = (s.cfg.NodeDialer.ConnHealth(nid, rpc.DefaultClass) == nil)
+	if !res.connHealthy {
+		res.connHealthy = (s.cfg.NodeDialer.ConnHealth(nid, rpc.SystemClass) == nil)
+	}
+	return res
+}
+
 func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 	value, ok := s.mu.replicas.Load(int64(rangeID))
 	if !ok {
 		return false
 	}
-	livenessMap, _ := s.livenessMap.Load().(IsLiveMap)
 
 	start := timeutil.Now()
 	r := (*Replica)(value)
-	exists, err := r.tick(livenessMap)
+	exists, err := r.tick(livenessChecker(s))
 	if err != nil {
 		log.Error(ctx, err)
 	}
@@ -623,18 +647,6 @@ func (s *Store) updateLivenessMap() {
 			s.cfg.ClosedTimestamp.Clients.EnsureClient(nodeID)
 			continue
 		}
-		// Liveness claims that this node is down, but ConnHealth gets the last say
-		// because we'd rather quiesce a range too little than one too often.
-		//
-		// NB: This has false negatives. If a node doesn't have a conn open to it
-		// when ConnHealth is called, then ConnHealth will return
-		// rpc.ErrNotHeartbeated regardless of whether the node is up or not. That
-		// said, for the nodes that matter, we're likely talking to them via the
-		// Raft transport, so ConnHealth should usually indicate a real problem if
-		// it gives us an error back. The check can also have false positives if the
-		// node goes down after populating the map, but that matters even less.
-		entry.IsLive = (s.cfg.NodeDialer.ConnHealth(nodeID, rpc.SystemClass) == nil)
-		nextMap[nodeID] = entry
 	}
 	s.livenessMap.Store(nextMap)
 }

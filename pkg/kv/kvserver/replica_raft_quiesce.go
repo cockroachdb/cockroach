@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -147,12 +148,44 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 // would quiesce. The fallout from this situation are undesirable raft
 // elections which will cause throughput hiccups to the range, but not
 // correctness issues.
-func (r *Replica) maybeQuiesceLocked(ctx context.Context, livenessMap IsLiveMap) bool {
-	status, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().Now(), livenessMap)
+func (r *Replica) maybeQuiesceLocked(ctx context.Context, livenessChecker livenessChecker) bool {
+	status, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().Now(), livenessChecker)
 	if !ok {
 		return false
 	}
 	return r.quiesceAndNotifyLocked(ctx, status)
+}
+
+// We combine a couple of signals when deciding whether to consider a node as
+// alive or dead for the purposes of quiescing. Direct communication with the
+// node (connHealthy, lastUpdateTime) are proof of life. A recently-heartbeated
+// liveness record is not, by itself, sufficient proof of life: the follower
+// might be able to heartbeat its liveness record but we might still be
+// partitioned from it. Such a follower should not prevent us from quiescing
+// indefinitely, but we do take the liveness record into consideration and
+// afford a longer timeout for lastUpdateTime.
+func (r *Replica) isFollowerLiveRLocked(
+	checker livenessChecker, rep roachpb.ReplicaDescriptor, now time.Time,
+) bool {
+	if checker == nil {
+		return true
+	}
+	info := checker.livenessInfo(rep.NodeID)
+	if info.connHealthy {
+		return true
+	}
+	lastUpdated, ok := r.mu.lastUpdateTimes[rep.ReplicaID]
+	if !ok {
+		// If the follower has no entry in lastUpdateTimes, it has not been
+		// updated since r became the leader (at which point all then-existing
+		// replicas were updated).
+		return false
+	}
+	threshold := MaxQuotaReplicaLivenessDuration
+	if info.livenessRecordValid {
+		threshold = 60 * time.Second
+	}
+	return now.Sub(lastUpdated) < threshold
 }
 
 type quiescer interface {
@@ -161,24 +194,57 @@ type quiescer interface {
 	raftLastIndexLocked() (uint64, error)
 	hasRaftReadyRLocked() bool
 	hasPendingProposalsRLocked() bool
+	hasPendingQuotaRLocked() bool
 	ownsValidLeaseRLocked(ts hlc.Timestamp) bool
 	mergeInProgressRLocked() bool
 	isDestroyedRLocked() (DestroyReason, error)
+	isFollowerLiveRLocked(
+		checker livenessChecker, rep roachpb.ReplicaDescriptor, now time.Time,
+	) bool
 }
 
 // shouldReplicaQuiesce determines if a replica should be quiesced. All of the
 // access to Replica internals are gated by the quiescer interface to
 // facilitate testing. Returns the raft.Status and true on success, and (nil,
 // false) on failure.
+//
+// A replica should quiesce if all the following hold:
+// a) The leaseholder and the leader are collocated. We don't want to quiesce
+// otherwise as we don't want to quiesce while a leader election is in progress,
+// and also we don't want to quiesce if another replica might have commands
+// pending that require this leader for proposing them.
+// b) There's no commands in-flight proposed by this leaseholder. Clients can be
+// waiting for results while there's pending proposals.
+// c) There's no outstanding quota. Quiescing while there's quota outstanding
+// can lead to deadlock.
+// d) All the live followers are caught up. We don't want to quiesce when
+// followers are behind because then they might not catch up until we
+// un-quiesce. We like it when everybody is caught up because otherwise
+// failovers can take longer.
+//
+// NOTE: The last 3 conditions are fairly, but not completely, overlapping.
 func shouldReplicaQuiesce(
-	ctx context.Context, q quiescer, now hlc.Timestamp, livenessMap IsLiveMap,
+	ctx context.Context, q quiescer, now hlc.Timestamp, livenessChecker livenessChecker,
 ) (*raft.Status, bool) {
 	if testingDisableQuiescence {
 		return nil, false
 	}
 	if q.hasPendingProposalsRLocked() {
 		if log.V(4) {
-			log.Infof(ctx, "not quiescing: proposals pending or outstanding quota")
+			log.Infof(ctx, "not quiescing: proposals pending")
+		}
+		return nil, false
+	}
+	// !!! Should I call r.updateProposalQuotaRaftMuLocked() here in order to
+	// potentially release some quota based on an updated view of node liveness?
+	// updateProposalQuotaRaftMuLockedReleasing() uses the same liveness
+	// determination as we do below, so it's weird that we allow the
+	// hasPendingQuotaRLocked() info to be "stale".
+	// An alternative is to not look at the pending quota at all, and instead just
+	// clear it if we decide to quiesce.
+	if q.hasPendingQuotaRLocked() {
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: outstanding quota")
 		}
 		return nil, false
 	}
@@ -247,6 +313,10 @@ func shouldReplicaQuiesce(
 	}
 
 	var foundSelf bool
+	// For liveness determinations we use the physical clock, not the HLC. Note
+	// that the liveness record validity (which is one of the liveness signals),
+	// is computed based on the HLC, however.
+	physicalNow := timeutil.Now()
 	for _, rep := range q.descRLocked().Replicas().All() {
 		if uint64(rep.ReplicaID) == status.ID {
 			foundSelf = true
@@ -259,7 +329,7 @@ func shouldReplicaQuiesce(
 			return nil, false
 		} else if progress.Match != status.Applied {
 			// Skip any node in the descriptor which is not live.
-			if livenessMap != nil && !livenessMap[rep.NodeID].IsLive {
+			if !q.isFollowerLiveRLocked(livenessChecker, rep, physicalNow) {
 				if log.V(4) {
 					log.Infof(ctx, "skipping node %d because not live. Progress=%+v",
 						rep.NodeID, progress)
