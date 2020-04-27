@@ -102,14 +102,14 @@ func TestDumpData(t *testing.T) {
 }
 
 func dumpSingleTable(w io.Writer, conn *sqlConn, dbName string, tName string) error {
-	mds, ts, err := getDumpMetadata(conn, dbName, []string{tName}, "")
+	mds, err := getDumpMetadata(conn, dbName, []string{tName}, "")
 	if err != nil {
 		return err
 	}
 	if err := dumpCreateTable(w, mds[0]); err != nil {
 		return err
 	}
-	return dumpTableData(w, conn, ts, mds[0])
+	return dumpTableData(w, conn, mds[0])
 }
 
 func TestDumpBytes(t *testing.T) {
@@ -602,6 +602,250 @@ USE TEST;
 
 			if result1 != result2 {
 				t.Fatalf("expected: %s\ngot: %s", test.expected, dump)
+			}
+		})
+	}
+}
+
+func TestDumpAllTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := []struct {
+		name     string
+		args     []string
+		recreate bool
+		create   string
+		expected string
+		clean    string
+	}{
+		{
+			name: " dump_all",
+			create: `
+CREATE DATABASE db1;
+USE db1;
+CREATE TABLE t1(id INT NOT NULL, pkey STRING PRIMARY KEY);
+
+INSERT INTO t1(id, pkey) VALUES(1, 'db1-aaaa');
+INSERT INTO t1(id, pkey) VALUES(2, 'db1-bbbb');
+
+CREATE DATABASE db2;
+USE db2;
+CREATE TABLE t2(id INT NOT NULL, pkey STRING PRIMARY KEY);
+
+INSERT INTO t2(id, pkey) VALUES(1, 'db2-aaaa');
+INSERT INTO t2(id, pkey) VALUES(2, 'db2-bbbb');
+`,
+			expected: `
+CREATE DATABASE IF NOT EXISTS db1;
+USE db1;
+
+CREATE TABLE t1 (
+	id INT8 NOT NULL,
+	pkey STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (pkey ASC),
+	FAMILY "primary" (id, pkey)
+);
+
+INSERT INTO t1 (id, pkey) VALUES
+	(1, 'db1-aaaa'),
+	(2, 'db1-bbbb');
+
+CREATE DATABASE IF NOT EXISTS db2;
+USE db2;
+
+CREATE TABLE t2 (
+	id INT8 NOT NULL,
+	pkey STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (pkey ASC),
+	FAMILY "primary" (id, pkey)
+);
+
+INSERT INTO t2 (id, pkey) VALUES
+	(1, 'db2-aaaa'),
+	(2, 'db2-bbbb');
+`,
+		},
+		{
+			name: " dump_all_only_data",
+			args: []string{"--dump-mode=data"},
+			create: `
+CREATE DATABASE db1;
+USE db1;
+CREATE TABLE t1(id INT NOT NULL, pkey STRING PRIMARY KEY);
+
+INSERT INTO t1(id, pkey) VALUES(1, 'db1-aaaa');
+INSERT INTO t1(id, pkey) VALUES(2, 'db1-bbbb');
+
+CREATE DATABASE db2;
+USE db2;
+CREATE TABLE t2(id INT NOT NULL, pkey STRING PRIMARY KEY);
+
+INSERT INTO t2(id, pkey) VALUES(1, 'db2-aaaa');
+INSERT INTO t2(id, pkey) VALUES(2, 'db2-bbbb');
+`,
+			expected: `
+INSERT INTO t1 (id, pkey) VALUES
+	(1, 'db1-aaaa'),
+	(2, 'db1-bbbb');
+
+INSERT INTO t2 (id, pkey) VALUES
+	(1, 'db2-aaaa'),
+	(2, 'db2-bbbb');
+`,
+		},
+		{
+			name:     "dump_cross_references",
+			recreate: true,
+			create: `
+CREATE DATABASE dbB;
+USE dbB;
+
+CREATE TABLE person(
+	id int PRIMARY KEY,
+	name string NOT NULL);
+
+INSERT INTO person(id, name) VALUES(1, 'John Smith');
+INSERT INTO person(id, name) VALUES(2, 'Joe Dow');
+
+CREATE DATABASE dbA;
+USE dbA;
+
+CREATE TABLE account(
+	id int PRIMARY KEY,
+	person_id int REFERENCES dbB.person(id),
+	accountNo int NOT NULL);
+
+INSERT INTO account(id, person_id, accountNo) VALUES(1, 1, 1111); 
+INSERT INTO account(id, person_id, accountNo) VALUES(2, 2, 2222); 
+`,
+			expected: `
+CREATE DATABASE IF NOT EXISTS dba;
+USE dba;
+
+CREATE TABLE account (
+	id INT8 NOT NULL,
+	person_id INT8 NULL,
+	accountno INT8 NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	INDEX account_auto_index_fk_person_id_ref_person (person_id ASC),
+	FAMILY "primary" (id, person_id, accountno)
+);
+
+INSERT INTO account (id, person_id, accountno) VALUES
+	(1, 1, 1111),
+	(2, 2, 2222);
+
+CREATE DATABASE IF NOT EXISTS dbb;
+USE dbb;
+
+CREATE TABLE person (
+	id INT8 NOT NULL,
+	name STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, name)
+);
+
+INSERT INTO person (id, name) VALUES
+	(1, 'John Smith'),
+	(2, 'Joe Dow');
+
+ALTER TABLE account ADD CONSTRAINT fk_person_id_ref_person FOREIGN KEY (person_id) REFERENCES dbb.public.person(id);
+
+-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
+ALTER TABLE account VALIDATE CONSTRAINT fk_person_id_ref_person;
+`,
+			clean: `
+DROP DATABASE dba;
+DROP DATABASE dbb;
+`,
+		},
+		{
+			name: "verify_defaultdb_dump",
+			create: `
+CREATE TABLE foo(id INT NOT NULL);
+
+INSERT INTO foo(id) VALUES(1);
+INSERT INTO foo(id) VALUES(2);
+INSERT INTO foo(id) VALUES(3);
+
+CREATE DATABASE dba;
+USE dba;
+
+CREATE TABLE bar(id INT NOT NULL);
+
+INSERT INTO bar(id) VALUES(1);
+INSERT INTO bar(id) VALUES(2);
+`,
+			clean: `
+	USE defaultdb;
+	DROP TABLE foo;
+	DROP DATABASE dba;
+`,
+			recreate: true,
+			expected: `
+CREATE DATABASE IF NOT EXISTS dba;
+USE dba;
+
+CREATE TABLE bar (
+	id INT8 NOT NULL,
+	FAMILY "primary" (id, rowid)
+);
+
+INSERT INTO bar (id) VALUES
+	(1),
+	(2);
+
+CREATE DATABASE IF NOT EXISTS defaultdb;
+USE defaultdb;
+
+CREATE TABLE foo (
+	id INT8 NOT NULL,
+	FAMILY "primary" (id, rowid)
+);
+
+INSERT INTO foo (id) VALUES
+	(1),
+	(2),
+	(3);
+`,
+		},
+	}
+	for _, test := range tests {
+		tt := test
+		t.Run(tt.name, func(t *testing.T) {
+
+			c := newCLITest(cliTestParams{t: t})
+			c.omitArgs = true
+			defer c.cleanup()
+
+			_, err := c.RunWithCaptureArgs([]string{"sql", "-e", tt.create})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			args := []string{"dump", "--dump-all"}
+			args = append(args, tt.args...)
+			dump, err := c.RunWithCaptureArgs(args)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if dump != tt.expected {
+				t.Fatalf("expected: %s\ngot: %s", tt.expected, dump)
+			}
+
+			// attempt to recreate from dump if test case defines
+			//clean up procedure
+			if tt.recreate {
+				_, err := c.RunWithCaptureArgs([]string{"sql", "-e", tt.clean})
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				_, err = c.RunWithCaptureArgs([]string{"sql", "-e", dump})
+				if err != nil {
+					t.Fatal(err)
+				}
 			}
 		})
 	}

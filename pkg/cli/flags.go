@@ -584,6 +584,7 @@ func init() {
 
 	VarFlag(dumpCmd.Flags(), &dumpCtx.dumpMode, cliflags.DumpMode)
 	StringFlag(dumpCmd.Flags(), &dumpCtx.asOf, cliflags.DumpTime, dumpCtx.asOf)
+	BoolFlag(dumpCmd.Flags(), &dumpCtx.dumpAll, cliflags.DumpAll, dumpCtx.dumpAll)
 
 	// Commands that establish a SQL connection.
 	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd, demoCmd}
