@@ -83,17 +83,21 @@ func (n *renameTableNode) startExec(params runParams) error {
 	newTn := n.newTn
 	tableDesc := n.tableDesc
 
-	prevDbDesc, err := p.ResolveUncachedDatabase(ctx, oldTn)
+	oldUn := oldTn.ToUnresolvedObjectName()
+	prevDbDesc, prefix, err := p.ResolveUncachedDatabase(ctx, oldUn)
 	if err != nil {
 		return err
 	}
+	oldTn.ObjectNamePrefix = prefix
 
 	// Check if target database exists.
 	// We also look at uncached descriptors here.
-	targetDbDesc, err := p.ResolveUncachedDatabase(ctx, newTn)
+	newUn := newTn.ToUnresolvedObjectName()
+	targetDbDesc, prefix, err := p.ResolveUncachedDatabase(ctx, newUn)
 	if err != nil {
 		return err
 	}
+	newTn.ObjectNamePrefix = prefix
 
 	if err := p.CheckPrivilege(ctx, targetDbDesc, privilege.CREATE); err != nil {
 		return err
