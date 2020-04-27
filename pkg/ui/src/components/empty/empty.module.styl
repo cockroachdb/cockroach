@@ -10,12 +10,6 @@
 
 @require '~src/components/core/index.styl'
 
-.summary--card.summary--card__empty-state
-  padding 0
-  .cl-empty-view
-    &__content
-      max-width 650px
-
 .cl-empty-view
   display flex
   flex-direction column
@@ -42,11 +36,11 @@
     max-width 600px
 
   &__main
-    .text
+    &--text
       color $colors--neutral-6
       font-size $font-size--medium
       line-height $line-height--medium-small
-    .crl-anchor
+    &--anchor
       margin-left 6px
 
   &__actions-column
