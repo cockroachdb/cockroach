@@ -179,6 +179,18 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData.OptimizerFKCascades = false
 	notStale()
 
+	// Stale optimizer histogram usage enable.
+	evalCtx.SessionData.OptimizerUseHistograms = true
+	stale()
+	evalCtx.SessionData.OptimizerUseHistograms = false
+	notStale()
+
+	// Stale optimizer multi-col stats usage enable.
+	evalCtx.SessionData.OptimizerUseMultiColStats = true
+	stale()
+	evalCtx.SessionData.OptimizerUseMultiColStats = false
+	notStale()
+
 	// Stale safe updates.
 	evalCtx.SessionData.SafeUpdates = true
 	stale()

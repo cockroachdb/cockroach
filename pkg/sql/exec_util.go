@@ -188,6 +188,18 @@ var optDrivenFKCascadesClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
+var optUseHistogramsClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.optimizer_use_histograms.enabled",
+	"default value for optimizer_use_histograms session setting; enables usage of histograms in the optimizer by default",
+	true,
+)
+
+var optUseMultiColStatsClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.optimizer_use_multicol_stats.enabled",
+	"default value for optimizer_use_multicol_stats session setting; enables usage of multi-column stats in the optimizer by default",
+	true,
+)
+
 var implicitSelectForUpdateClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.implicit_select_for_update.enabled",
 	"default value for enable_implicit_select_for_update session setting; enables FOR UPDATE locking during the row-fetch phase of mutation statements",
@@ -1933,6 +1945,14 @@ func (m *sessionDataMutator) SetOptimizerFKChecks(val bool) {
 
 func (m *sessionDataMutator) SetOptimizerFKCascades(val bool) {
 	m.data.OptimizerFKCascades = val
+}
+
+func (m *sessionDataMutator) SetOptimizerUseHistograms(val bool) {
+	m.data.OptimizerUseHistograms = val
+}
+
+func (m *sessionDataMutator) SetOptimizerUseMultiColStats(val bool) {
+	m.data.OptimizerUseMultiColStats = val
 }
 
 func (m *sessionDataMutator) SetImplicitSelectForUpdate(val bool) {
