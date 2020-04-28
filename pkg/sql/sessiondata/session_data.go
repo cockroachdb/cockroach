@@ -47,6 +47,12 @@ type SessionData struct {
 	// OptimizerFKCascades indicates whether we should use the new paths to plan foreign
 	// key cascades in the optimizer.
 	OptimizerFKCascades bool
+	// OptimizerUseHistograms indicates whether we should use histograms for
+	// cardinality estimation in the optimizer.
+	OptimizerUseHistograms bool
+	// OptimizerUseMultiColStats indicates whether we should use multi-column
+	// statistics for cardinality estimation in the optimizer.
+	OptimizerUseMultiColStats bool
 	// SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
 	SerialNormalizationMode SerialNormalizationMode
 	// SearchPath is a list of namespaces to search builtins in.
