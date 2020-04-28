@@ -409,7 +409,7 @@ func getAllDescChanges(
 	startTime, endTime hlc.Timestamp,
 	priorIDs map[sqlbase.ID]sqlbase.ID,
 ) ([]BackupManifest_DescriptorRevision, error) {
-	startKey := keys.TODOTenantKeyGen.TablePrefix(keys.DescriptorTableID)
+	startKey := keys.TODOSQLCodec.TablePrefix(keys.DescriptorTableID)
 	endKey := startKey.PrefixEnd()
 
 	allRevs, err := storageccl.GetAllRevisions(ctx, db, startKey, endKey, startTime, endTime)
@@ -420,7 +420,7 @@ func getAllDescChanges(
 	var res []BackupManifest_DescriptorRevision
 
 	for _, revs := range allRevs {
-		id, err := keys.TODOTenantKeyGen.DecodeDescMetadataID(revs.Key)
+		id, err := keys.TODOSQLCodec.DecodeDescMetadataID(revs.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -444,7 +444,7 @@ func getAllDescChanges(
 }
 
 func allSQLDescriptors(ctx context.Context, txn *kv.Txn) ([]sqlbase.Descriptor, error) {
-	startKey := keys.TODOTenantKeyGen.TablePrefix(keys.DescriptorTableID)
+	startKey := keys.TODOSQLCodec.TablePrefix(keys.DescriptorTableID)
 	endKey := startKey.PrefixEnd()
 	rows, err := txn.Scan(ctx, startKey, endKey, 0)
 	if err != nil {

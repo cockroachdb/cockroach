@@ -24,7 +24,7 @@ import (
 // Pass name == "" in order to generate the prefix key to use to scan over all
 // of the names for the specified parentID.
 func MakeNameMetadataKey(parentID ID, parentSchemaID ID, name string) roachpb.Key {
-	k := keys.TODOTenantKeyGen.IndexPrefix(uint32(NamespaceTable.ID), uint32(NamespaceTable.PrimaryIndex.ID))
+	k := keys.TODOSQLCodec.IndexPrefix(uint32(NamespaceTable.ID), uint32(NamespaceTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentSchemaID))
 	if name != "" {
@@ -37,7 +37,7 @@ func MakeNameMetadataKey(parentID ID, parentSchemaID ID, name string) roachpb.Ke
 // DecodeNameMetadataKey returns the components that make up the
 // NameMetadataKey for version >= 20.1.
 func DecodeNameMetadataKey(k roachpb.Key) (parentID ID, parentSchemaID ID, name string, err error) {
-	k, _, err = keys.TODOTenantKeyGen.DecodeTablePrefix(k)
+	k, _, err = keys.TODOSQLCodec.DecodeTablePrefix(k)
 	if err != nil {
 		return 0, 0, "", err
 	}
@@ -77,7 +77,7 @@ func DecodeNameMetadataKey(k roachpb.Key) (parentID ID, parentSchemaID ID, name 
 // versions < 20.1. Pass name == "" in order to generate the prefix key to use
 // to scan over all of the names for the specified parentID.
 func MakeDeprecatedNameMetadataKey(parentID ID, name string) roachpb.Key {
-	k := keys.TODOTenantKeyGen.IndexPrefix(
+	k := keys.TODOSQLCodec.IndexPrefix(
 		uint32(DeprecatedNamespaceTable.ID), uint32(DeprecatedNamespaceTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
 	if name != "" {
@@ -89,12 +89,12 @@ func MakeDeprecatedNameMetadataKey(parentID ID, name string) roachpb.Key {
 
 // MakeAllDescsMetadataKey returns the key for all descriptors.
 func MakeAllDescsMetadataKey() roachpb.Key {
-	return keys.TODOTenantKeyGen.DescMetadataPrefix()
+	return keys.TODOSQLCodec.DescMetadataPrefix()
 }
 
 // MakeDescMetadataKey returns the key for the descriptor.
 func MakeDescMetadataKey(descID ID) roachpb.Key {
-	return keys.TODOTenantKeyGen.DescMetadataKey(uint32(descID))
+	return keys.TODOSQLCodec.DescMetadataKey(uint32(descID))
 }
 
 // IndexKeyValDirs returns the corresponding encoding.Directions for all the

@@ -238,7 +238,7 @@ func TestUserKey(t *testing.T) {
 }
 
 func TestSequenceKey(t *testing.T) {
-	actual := SystemTenantKeyGen.SequenceKey(55)
+	actual := SystemSQLCodec.SequenceKey(55)
 	expected := []byte("\xbf\x89\x88\x88")
 	if !bytes.Equal(actual, expected) {
 		t.Errorf("expected %q (len %d), got %q (len %d)", expected, len(expected), actual, len(actual))
@@ -582,7 +582,7 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 		{e(1, 2, 200)[:3], "insufficient bytes to decode uvarint value"},
 		// Exercises a former overflow bug. We decode a uint(18446744073709551610) which, if casted
 		// to int carelessly, results in -6.
-		{encoding.EncodeVarintAscending(SystemTenantKeyGen.TablePrefix(999), 322434), "malformed table key"},
+		{encoding.EncodeVarintAscending(SystemSQLCodec.TablePrefix(999), 322434), "malformed table key"},
 		// TODO(nvanbenschoten): add test cases for tenant keys.
 	}
 	for i, d := range errorData {

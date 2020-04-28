@@ -193,8 +193,8 @@ func NewDefaultConfig() GeneratorConfig {
 // by this Generator.
 func GeneratorDataSpan() roachpb.Span {
 	return roachpb.Span{
-		Key:    keys.SystemTenantKeyGen.TablePrefix(50),
-		EndKey: keys.SystemTenantKeyGen.TablePrefix(51),
+		Key:    keys.SystemSQLCodec.TablePrefix(50),
+		EndKey: keys.SystemSQLCodec.TablePrefix(51),
 	}
 }
 

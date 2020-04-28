@@ -29,19 +29,19 @@ func TestPrettyScanner(t *testing.T) {
 		{
 			prettyKey: "/Table/t1",
 			expKey: func() roachpb.Key {
-				return keys.SystemTenantKeyGen.TablePrefix(50)
+				return keys.SystemSQLCodec.TablePrefix(50)
 			},
 		},
 		{
 			prettyKey: "/Table/t1/pk",
 			expKey: func() roachpb.Key {
-				return keys.SystemTenantKeyGen.IndexPrefix(50, 1)
+				return keys.SystemSQLCodec.IndexPrefix(50, 1)
 			},
 		},
 		{
 			prettyKey: "/Table/t1/pk/1/2/3",
 			expKey: func() roachpb.Key {
-				k := keys.SystemTenantKeyGen.IndexPrefix(50, 1)
+				k := keys.SystemSQLCodec.IndexPrefix(50, 1)
 				k = encoding.EncodeVarintAscending(k, 1)
 				k = encoding.EncodeVarintAscending(k, 2)
 				k = encoding.EncodeVarintAscending(k, 3)
@@ -56,7 +56,7 @@ func TestPrettyScanner(t *testing.T) {
 		{
 			prettyKey: "/Table/t1/idx1/1/2/3",
 			expKey: func() roachpb.Key {
-				k := keys.SystemTenantKeyGen.IndexPrefix(50, 5)
+				k := keys.SystemSQLCodec.IndexPrefix(50, 5)
 				k = encoding.EncodeVarintAscending(k, 1)
 				k = encoding.EncodeVarintAscending(k, 2)
 				k = encoding.EncodeVarintAscending(k, 3)

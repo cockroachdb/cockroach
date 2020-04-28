@@ -67,7 +67,7 @@ func parseTableKeysAsAscendingInts(
 	if !ok {
 		panic(fmt.Sprintf("unknown table: %s", tableName))
 	}
-	output := keys.TODOTenantKeyGen.TablePrefix(uint32(tableID))
+	output := keys.TODOSQLCodec.TablePrefix(uint32(tableID))
 	if remainder == "" {
 		return "", output
 	}

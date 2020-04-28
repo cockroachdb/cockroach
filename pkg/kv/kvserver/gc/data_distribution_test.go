@@ -180,7 +180,7 @@ func (ds uniformDistSpec) dist(maxRows int, rng *rand.Rand) dataDistribution {
 }
 
 func (ds uniformDistSpec) desc() *roachpb.RangeDescriptor {
-	tablePrefix := keys.SystemTenantKeyGen.TablePrefix(42)
+	tablePrefix := keys.SystemSQLCodec.TablePrefix(42)
 	return &roachpb.RangeDescriptor{
 		StartKey: roachpb.RKey(tablePrefix),
 		EndKey:   roachpb.RKey(tablePrefix.PrefixEnd()),

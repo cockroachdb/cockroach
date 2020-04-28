@@ -627,7 +627,7 @@ func (s *adminServer) TableDetails(
 // NOTE: this doesn't make sense for interleaved (children) table. As of
 // 03/2018, callers around here use it anyway.
 func generateTableSpan(tableID sqlbase.ID) roachpb.Span {
-	tableStartKey := keys.TODOTenantKeyGen.TablePrefix(uint32(tableID))
+	tableStartKey := keys.TODOSQLCodec.TablePrefix(uint32(tableID))
 	tableEndKey := tableStartKey.PrefixEnd()
 	return roachpb.Span{Key: tableStartKey, EndKey: tableEndKey}
 }
@@ -1846,7 +1846,7 @@ func (s *adminServer) DataDistribution(
 				return err
 			}
 
-			_, tableID, err := keys.TODOTenantKeyGen.DecodeTablePrefix(rangeDesc.StartKey.AsRawKey())
+			_, tableID, err := keys.TODOSQLCodec.DecodeTablePrefix(rangeDesc.StartKey.AsRawKey())
 			if err != nil {
 				return err
 			}

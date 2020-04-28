@@ -384,8 +384,8 @@ func pickOneRecord(tCtx *testContext) uuid.UUID {
 
 func tableSpan(tableID uint32) roachpb.Span {
 	return roachpb.Span{
-		Key:    keys.SystemTenantKeyGen.TablePrefix(tableID),
-		EndKey: keys.SystemTenantKeyGen.TablePrefix(tableID).PrefixEnd(),
+		Key:    keys.SystemSQLCodec.TablePrefix(tableID),
+		EndKey: keys.SystemSQLCodec.TablePrefix(tableID).PrefixEnd(),
 	}
 }
 

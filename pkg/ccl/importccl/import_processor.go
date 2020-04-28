@@ -320,7 +320,7 @@ func ingestKvs(
 		// number of L0 (and total) files, but with a lower memory usage.
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {
-				_, _, indexID, indexErr := keys.TODOTenantKeyGen.DecodeIndexPrefix(kv.Key)
+				_, _, indexID, indexErr := keys.TODOSQLCodec.DecodeIndexPrefix(kv.Key)
 				if indexErr != nil {
 					return indexErr
 				}

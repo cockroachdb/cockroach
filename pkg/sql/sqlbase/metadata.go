@@ -188,7 +188,7 @@ func (ms MetadataSchema) GetInitialValues(
 			Value: value,
 		})
 		if desc.GetID() > keys.MaxSystemConfigDescID {
-			splits = append(splits, roachpb.RKey(keys.TODOTenantKeyGen.TablePrefix(uint32(desc.GetID()))))
+			splits = append(splits, roachpb.RKey(keys.TODOSQLCodec.TablePrefix(uint32(desc.GetID()))))
 		}
 	}
 
@@ -199,7 +199,7 @@ func (ms MetadataSchema) GetInitialValues(
 	}
 
 	for _, id := range ms.otherSplitIDs {
-		splits = append(splits, roachpb.RKey(keys.TODOTenantKeyGen.TablePrefix(id)))
+		splits = append(splits, roachpb.RKey(keys.TODOSQLCodec.TablePrefix(id)))
 	}
 
 	// Other key/value generation that doesn't fit into databases and

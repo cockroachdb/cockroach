@@ -117,7 +117,7 @@ func MakeKeyRewriter(descs map[sqlbase.ID]*sqlbase.TableDescriptor) (*KeyRewrite
 // function, but it takes into account interleaved ancestors, which we don't
 // want here.
 func makeKeyRewriterPrefixIgnoringInterleaved(tableID sqlbase.ID, indexID sqlbase.IndexID) []byte {
-	return keys.TODOTenantKeyGen.IndexPrefix(uint32(tableID), uint32(indexID))
+	return keys.TODOSQLCodec.IndexPrefix(uint32(tableID), uint32(indexID))
 }
 
 // RewriteKey modifies key (possibly in place), changing all table IDs to their
@@ -140,7 +140,7 @@ func (kr *KeyRewriter) RewriteKey(key []byte, isFromSpan bool) ([]byte, bool, er
 	// Fetch the original table ID for descriptor lookup. Ignore errors because
 	// they will be caught later on if tableID isn't in descs or kr doesn't
 	// perform a rewrite.
-	_, tableID, _ := keys.TODOTenantKeyGen.DecodeTablePrefix(key)
+	_, tableID, _ := keys.TODOSQLCodec.DecodeTablePrefix(key)
 	// Rewrite the first table ID.
 	key, ok := kr.prefixes.rewriteKey(key)
 	if !ok {
@@ -151,7 +151,7 @@ func (kr *KeyRewriter) RewriteKey(key []byte, isFromSpan bool) ([]byte, bool, er
 		return nil, false, errors.Errorf("missing descriptor for table %d", tableID)
 	}
 	// Check if this key may have interleaved children.
-	k, _, indexID, err := keys.TODOTenantKeyGen.DecodeIndexPrefix(key)
+	k, _, indexID, err := keys.TODOSQLCodec.DecodeIndexPrefix(key)
 	if err != nil {
 		return nil, false, err
 	}

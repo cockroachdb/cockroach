@@ -51,7 +51,7 @@ func (r *RowCounter) Count(key roachpb.Key) error {
 
 	r.prev = append(r.prev[:0], row...)
 
-	_, tableID, indexID, err := keys.TODOTenantKeyGen.DecodeIndexPrefix(row)
+	_, tableID, indexID, err := keys.TODOSQLCodec.DecodeIndexPrefix(row)
 	if err != nil {
 		return err
 	}

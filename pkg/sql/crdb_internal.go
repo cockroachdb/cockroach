@@ -2214,12 +2214,12 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			}
 
 			var dbName, tableName, indexName string
-			if _, tableID, err := keys.TODOTenantKeyGen.DecodeTablePrefix(desc.StartKey.AsRawKey()); err == nil {
+			if _, tableID, err := keys.TODOSQLCodec.DecodeTablePrefix(desc.StartKey.AsRawKey()); err == nil {
 				parent := parents[tableID]
 				if parent != 0 {
 					tableName = tableNames[tableID]
 					dbName = dbNames[parent]
-					if _, _, idxID, err := keys.TODOTenantKeyGen.DecodeIndexPrefix(desc.StartKey.AsRawKey()); err == nil {
+					if _, _, idxID, err := keys.TODOSQLCodec.DecodeIndexPrefix(desc.StartKey.AsRawKey()); err == nil {
 						indexName = indexNames[tableID][idxID]
 					}
 				} else {

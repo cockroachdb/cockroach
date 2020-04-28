@@ -44,7 +44,7 @@ var tableNames = map[string]bool{
 //    - NULLASC, NULLDESC, NOTNULLASC, NOTNULLDESC
 //    - PrefixEnd
 func EncodeTestKey(tb testing.TB, kvDB *kv.DB, keyStr string) roachpb.Key {
-	key := keys.SystemTenantKeyGen.TenantPrefix()
+	key := keys.SystemSQLCodec.TenantPrefix()
 	tokens := strings.Split(keyStr, "/")
 	if tokens[0] != "" {
 		panic("missing '/' token at the beginning of long format")

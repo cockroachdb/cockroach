@@ -122,7 +122,7 @@ func (td *tableDeleter) deleteAllRowsFast(
 	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
-		tablePrefix := keys.TODOTenantKeyGen.TablePrefix(uint32(td.rd.Helper.TableDesc.ID))
+		tablePrefix := keys.TODOSQLCodec.TablePrefix(uint32(td.rd.Helper.TableDesc.ID))
 		// Delete rows and indexes starting with the table's prefix.
 		resume = roachpb.Span{
 			Key:    tablePrefix,
