@@ -31,7 +31,10 @@ import (
 type LogicalSchemaAccessor struct {
 	SchemaAccessor
 	vt VirtualTabler
+<<<<<<< HEAD
 	// Used to avoid allocations.
+=======
+>>>>>>> sql: allow for uncached resolution of type descriptors
 	tn TableName
 }
 
