@@ -629,7 +629,7 @@ func (node *IsOfTypeExpr) Format(ctx *FmtCtx) {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.Buffer.WriteString(t.SQLString())
+		ctx.FormatTypeReference(t)
 	}
 	ctx.WriteByte(')')
 }
@@ -1448,7 +1448,7 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 		// with string constants; if the underlying expression was changed, we fall
 		// back to the short syntax.
 		if _, ok := node.Expr.(*StrVal); ok {
-			ctx.WriteString(node.Type.SQLString())
+			ctx.FormatTypeReference(node.Type)
 			ctx.WriteByte(' ')
 			ctx.FormatNode(node.Expr)
 			break
@@ -1457,7 +1457,7 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 	case CastShort:
 		exprFmtWithParen(ctx, node.Expr)
 		ctx.WriteString("::")
-		ctx.WriteString(node.Type.SQLString())
+		ctx.FormatTypeReference(node.Type)
 	default:
 		ctx.WriteString("CAST(")
 		ctx.FormatNode(node.Expr)
@@ -1476,7 +1476,7 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 			ctx.WriteString(") COLLATE ")
 			lex.EncodeLocaleName(&ctx.Buffer, typ.Locale())
 		} else {
-			ctx.WriteString(node.Type.SQLString())
+			ctx.FormatTypeReference(node.Type)
 			ctx.WriteByte(')')
 		}
 	}
@@ -1622,7 +1622,7 @@ func (node *AnnotateTypeExpr) Format(ctx *FmtCtx) {
 			case types.StringFamily, types.CollatedStringFamily:
 				// Postgres formats strings using a cast afterward. Let's do the same.
 				ctx.WriteString("::")
-				ctx.WriteString(node.Type.SQLString())
+				ctx.WriteString(typ.SQLString())
 			}
 		}
 		return
@@ -1631,13 +1631,13 @@ func (node *AnnotateTypeExpr) Format(ctx *FmtCtx) {
 	case AnnotateShort:
 		exprFmtWithParen(ctx, node.Expr)
 		ctx.WriteString(":::")
-		ctx.WriteString(node.Type.SQLString())
+		ctx.FormatTypeReference(node.Type)
 
 	default:
 		ctx.WriteString("ANNOTATE_TYPE(")
 		ctx.FormatNode(node.Expr)
 		ctx.WriteString(", ")
-		ctx.WriteString(node.Type.SQLString())
+		ctx.FormatTypeReference(node.Type)
 		ctx.WriteByte(')')
 	}
 }

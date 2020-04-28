@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -237,7 +238,7 @@ const (
 )
 
 // parseStats converts the given datums to a TableStatistic object.
-func parseStats(datums tree.Datums) (*TableStatistic, error) {
+func parseStats(ctx context.Context, db *kv.DB, datums tree.Datums) (*TableStatistic, error) {
 	if datums == nil || datums.Len() == 0 {
 		return nil, nil
 	}
@@ -303,6 +304,26 @@ func parseStats(datums tree.Datums) (*TableStatistic, error) {
 		// Decode the histogram data so that it's usable by the opt catalog.
 		res.Histogram = make([]cat.HistogramBucket, len(res.HistogramData.Buckets))
 		typ := res.HistogramData.ColumnType
+		// Hydrate the type in case any user defined types are present.
+		// There are cases where typ is nil, so don't do anything if so.
+		if typ != nil && typ.UserDefined() {
+			// TODO (rohany): This should instead query a leased copy of the type.
+			// TODO (rohany): I worry about using a new txn here -- could this
+			//  cause a conflict with the txn running the main query that is
+			//  requesting data from the cache?
+			// TODO (rohany): If we are caching data about types here, then this
+			//  cache needs to be invalidated as well when type metadata changes.
+			err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				typDesc, err := sqlbase.GetTypeDescFromID(ctx, txn, keys.TODOSQLCodec, sqlbase.ID(typ.StableTypeID()))
+				if err != nil {
+					return err
+				}
+				return typDesc.HydrateTypeInfo(typ)
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
 		var a sqlbase.DatumAlloc
 		for i := range res.Histogram {
 			bucket := &res.HistogramData.Buckets[i]
@@ -351,7 +372,7 @@ ORDER BY "createdAt" DESC
 
 	var statsList []*TableStatistic
 	for _, row := range rows {
-		stats, err := parseStats(row)
+		stats, err := parseStats(ctx, sc.ClientDB, row)
 		if err != nil {
 			return nil, err
 		}
