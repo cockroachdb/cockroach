@@ -112,7 +112,9 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 				p.txn,
 				p.ExecCfg().Settings,
 				p.ExecCfg().Codec,
-				&tbNames[i],
+				tbNames[i].Catalog(),
+				tbNames[i].Schema(),
+				tbNames[i].Table(),
 				tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags},
 			)
 			if err != nil {
