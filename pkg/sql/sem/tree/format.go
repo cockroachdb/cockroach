@@ -126,6 +126,11 @@ const (
 	// FmtPGIndexDef is used to produce CREATE INDEX statements that are
 	// compatible with pg_get_indexdef.
 	FmtPGIndexDef
+
+	// If set, user defined types will be printed as '@id', where id is the
+	// stable type ID for the user defined type. This is used in DistSQL flows
+	// where we don't want to perform name resolution of types again.
+	fmtFormatUserDefinedTypesAsIDs
 )
 
 // Composite/derived flag definitions follow.
@@ -149,6 +154,12 @@ const (
 	//    can otherwise be formatted to the same string: (for example the
 	//    DDecimal 1 and the DInt 1).
 	FmtCheckEquivalence FmtFlags = fmtSymbolicVars | fmtDisambiguateDatumTypes | FmtParsableNumerics
+
+	// FmtDistSQLSerialization is just like FmtCheckEquivalence, but it can be
+	// used to serialize expressions for query distribution. In particular, it
+	// includes the flag fmtFormatUserDefinedTypesAsIDs which serializes user
+	// defined types in a way that avoids name resolution for DistSQL evaluation.
+	FmtDistSQLSerialization FmtFlags = FmtCheckEquivalence | fmtFormatUserDefinedTypesAsIDs
 
 	// FmtArrayToString is a special composite flag suitable
 	// for the output of array_to_string(). This de-quotes
@@ -370,7 +381,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 		}
 		if typ != nil {
 			ctx.WriteString(":::")
-			ctx.WriteString(typ.SQLString())
+			ctx.FormatTypeReference(typ)
 		}
 	}
 }

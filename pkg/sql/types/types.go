@@ -1572,6 +1572,9 @@ func (t *T) SQLString() string {
 		}
 		return t.ArrayContents().SQLString() + "[]"
 	case EnumFamily:
+		if t.Oid() == oid.T_anyenum {
+			return "anyenum"
+		}
 		return t.TypeMeta.Name.FQName()
 	}
 	return strings.ToUpper(t.Name())

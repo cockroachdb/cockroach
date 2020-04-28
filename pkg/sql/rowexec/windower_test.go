@@ -74,7 +74,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 			Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &aggSpec},
 			ArgsIdxs:     []uint32{0},
 			Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0}}},
-			OutputColIdx: 0,
+			OutputColIdx: 1,
 			FilterColIdx: noFilterIdx,
 			Frame: &execinfrapb.WindowerSpec_Frame{
 				Mode: execinfrapb.WindowerSpec_Frame_ROWS,
@@ -239,6 +239,7 @@ func BenchmarkWindower(b *testing.B) {
 				runName = runName + "ORDER BY"
 			}
 			runName = runName + ")"
+			spec.WindowFns[0].OutputColIdx = 3
 
 			b.Run(runName, func(b *testing.B) {
 				post := &execinfrapb.PostProcessSpec{}
