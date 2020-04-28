@@ -1,0 +1,203 @@
+pretty n=80
+#
+# Generate code for interesting rule.
+#
+[Relational]
+define Select {
+    # Input comment.
+    Input   RelExpr
+    Filters FiltersExpr
+}
+
+[Relational, Join, JoinNonApply]
+define InnerJoin {
+    Left  RelExpr
+    Right RelExpr
+    On    FiltersExpr
+}
+
+[Scalar, Bool, List]
+define Filters {
+}
+
+[Scalar, Bool, ListItem, ScalarProps]
+define FiltersItem {
+    Condition ScalarExpr
+}
+
+# ---
+# Unattached comment.
+# ---
+
+[PushSelectIntoJoinLeft, Normalize]
+(Select
+    $input:(InnerJoin | InnerJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filters:[
+        ...
+        $item:* & (IsBoundBy $item $leftCols:(OutputCols $left))
+        ...
+    ]
+)
+=>
+(Select
+    ((OpName $input)
+        (Select
+            $left
+            (ExtractBoundConditions $filters $leftCols)
+        )
+        $right
+        $on
+    )
+    (ExtractUnboundConditions $filters $leftCols)
+)
+----
+----
+#
+# Generate code for interesting rule.
+#
+[Relational]
+define Select {
+	# Input comment.
+	Input RelExpr
+	Filters FiltersExpr
+}
+
+[Relational, Join, JoinNonApply]
+define InnerJoin {
+	Left RelExpr
+	Right RelExpr
+	On FiltersExpr
+}
+
+[Scalar, Bool, List]
+define Filters {
+}
+
+[Scalar, Bool, ListItem, ScalarProps]
+define FiltersItem {
+	Condition ScalarExpr
+}
+
+# ---
+# Unattached comment.
+# ---
+
+[PushSelectIntoJoinLeft, Normalize]
+(Select
+	$input:(InnerJoin | InnerJoinApply $left:* $right:* $on:*)
+	$filters:[ ... $item:* & (IsBoundBy $item $leftCols:(OutputCols $left)) ...]
+)
+=>
+(Select
+	((OpName $input)
+		(Select $left (ExtractBoundConditions $filters $leftCols))
+		$right
+		$on
+	)
+	(ExtractUnboundConditions $filters $leftCols)
+)
+----
+----
+
+pretty n=1
+[Relational, Join, JoinNonApply]
+define InnerJoin {
+    Left  RelExpr
+    Right RelExpr
+    On    FiltersExpr
+}
+
+# ---
+# Unattached comment.
+# ---
+
+[PushSelectIntoJoinLeft, Normalize]
+(Select
+    $input:(InnerJoin | InnerJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filters:[
+        ...
+        $item:* & (IsBoundBy $item $leftCols:(OutputCols $left))
+        ...
+    ]
+)
+=>
+(Select
+    ((OpName $input)
+        (Select
+            $left
+            (ExtractBoundConditions $filters $leftCols)
+        )
+        $right
+        $on
+    )
+    (ExtractUnboundConditions $filters $leftCols)
+)
+----
+----
+[
+	Relational,
+	Join,
+	JoinNonApply
+]
+define InnerJoin {
+	Left RelExpr
+	Right RelExpr
+	On FiltersExpr
+}
+
+# ---
+# Unattached comment.
+# ---
+
+[
+	PushSelectIntoJoinLeft,
+	Normalize
+]
+(Select
+	$input:(InnerJoin | InnerJoinApply
+		$left:*
+		$right:*
+		$on:*
+	)
+	$filters:[
+		...
+		$item:* &
+			(IsBoundBy
+				$item
+				$leftCols:(OutputCols
+					$left
+				)
+			)
+		...
+	]
+)
+=>
+(Select
+	((OpName
+		$input
+	)
+		(Select
+			$left
+			(ExtractBoundConditions
+				$filters
+				$leftCols
+			)
+		)
+		$right
+		$on
+	)
+	(ExtractUnboundConditions
+		$filters
+		$leftCols
+	)
+)
+----
+----

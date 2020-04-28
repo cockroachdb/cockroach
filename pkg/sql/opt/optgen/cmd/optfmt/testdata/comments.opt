@@ -1,0 +1,57 @@
+pretty n=80
+# Com1
+# More com1
+# Blah 1
+
+
+# 1
+# 2
+
+
+
+
+# Even more com1
+
+# Com2
+[
+Blah
+]
+(Select
+$a:*
+b
+)
+=>
+(
+False $a
+)
+
+# End com
+# More end com
+
+# End com 3
+
+
+
+----
+----
+# Com1
+# More com1
+# Blah 1
+
+# 1
+# 2
+
+# Even more com1
+
+# Com2
+[Blah]
+(Select $a:* b)
+=>
+(False $a)
+
+# End com
+# More end com
+
+# End com 3
+----
+----

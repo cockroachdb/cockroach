@@ -1,0 +1,63 @@
+#
+# Generate code for interesting rule.
+#
+[Relational]
+define Select {
+    Input   RelExpr
+    Filters FiltersExpr
+}
+
+[Relational, Join, JoinNonApply]
+define InnerJoin {
+    Left  RelExpr
+    Right RelExpr
+    On    FiltersExpr
+}
+
+[Relational, Join, JoinApply]
+define InnerJoinApply {
+    Left  RelExpr
+    Right RelExpr
+    On    FiltersExpr
+}
+
+[Scalar, Bool, List]
+define Filters {
+}
+
+[Scalar, Bool, ListItem, ScalarProps]
+define FiltersItem {
+    Condition ScalarExpr
+}
+
+[Scalar, ListItem]
+define KVOptionsItem {
+    Value ScalarExpr
+    Key   string
+}
+
+[PushSelectIntoJoinLeft, Normalize]
+(Select
+    $input:(InnerJoin | InnerJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filters:[
+        ...
+        $item:* & (IsBoundBy $item $leftCols:(OutputCols $left))
+        ...
+    ]
+)
+=>
+(Select
+    ((OpName $input)
+        (Select
+            $left
+            (ExtractBoundConditions $filters $leftCols)
+        )
+        $right
+        $on
+    )
+    (ExtractUnboundConditions $filters $leftCols)
+)

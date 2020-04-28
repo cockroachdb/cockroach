@@ -48,6 +48,9 @@ type Parser struct {
 	// unscanned is true if the last token was unscanned (i.e. put back to be
 	// reparsed).
 	unscanned bool
+
+	// exprs is tracks top-level expressions (including comments) in order.
+	exprs []Expr
 }
 
 // NewParser constructs a new instance of the Optgen parser, with the specified
@@ -90,6 +93,12 @@ func (p *Parser) Parse() *RootExpr {
 // errors occurred, then Errors returns nil.
 func (p *Parser) Errors() []error {
 	return p.errors
+}
+
+// Exprs returns the top-level expressions (defines, rules, comments) in the
+// order in which they were encountered.
+func (p *Parser) Exprs() []Expr {
+	return p.exprs
 }
 
 // root = tags (define | rule)
@@ -145,6 +154,7 @@ func (p *Parser) parseRoot() *RootExpr {
 				}
 
 				rootOp.Rules = append(rootOp.Rules, rule)
+				p.exprs = append(p.exprs, rule)
 				break
 			}
 
@@ -173,6 +183,7 @@ func (p *Parser) parseRoot() *RootExpr {
 			}
 
 			rootOp.Defines = append(rootOp.Defines, define)
+			p.exprs = append(p.exprs, define)
 
 		default:
 			p.addExpectedTokenErr("define statement or rule")
@@ -618,6 +629,12 @@ func (p *Parser) scan() Token {
 		tok := p.s.Scan()
 		switch tok {
 		case EOF:
+			if len(p.comments) > 0 {
+				coms := p.comments
+				p.exprs = append(p.exprs, &coms)
+				p.comments = make(CommentsExpr, 0)
+			}
+
 			// Reached end of current file, so try to open next file.
 			if p.file+1 >= len(p.files) {
 				// No more files to parse.
@@ -636,17 +653,16 @@ func (p *Parser) scan() Token {
 			return ERROR
 
 		case COMMENT:
-			// Remember contiguous comments if p.comments is initialized, else
-			// skip.
-			if p.comments != nil {
-				p.comments = append(p.comments, CommentExpr(p.s.Literal()))
+			if p.comments == nil {
+				p.comments = make(CommentsExpr, 0)
 			}
+			p.comments = append(p.comments, CommentExpr(p.s.Literal()))
 
 		case WHITESPACE:
-			// A blank line resets any accumulating comments, since they have
-			// to be contiguous.
-			if p.comments != nil && strings.Count(p.s.Literal(), "\n") > 1 {
-				p.comments = p.comments[:0]
+			if p.comments != nil && len(p.comments) > 0 && strings.Count(p.s.Literal(), "\n") > 1 {
+				coms := p.comments
+				p.exprs = append(p.exprs, &coms)
+				p.comments = make(CommentsExpr, 0)
 			}
 
 		default:
