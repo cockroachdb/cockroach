@@ -91,7 +91,7 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 		testutils.MakeKey(keys.Meta1Prefix, roachpb.RKeyMax),
 		keys.Meta2KeyMax,
 		testutils.MakeKey(keys.Meta2KeyMax, []byte("a")),
-		keys.MakeTablePrefix(10 /* system descriptor ID */),
+		keys.SystemSQLCodec.TablePrefix(10 /* system descriptor ID */),
 	} {
 		args := adminSplitArgs(key)
 		_, pErr := kv.SendWrapped(context.Background(), store.TestSender(), args)
@@ -304,7 +304,7 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 	// Manually create some the column keys corresponding to the table:
 	//
 	//   CREATE TABLE t (id STRING PRIMARY KEY, col1 INT, col2 INT)
-	tableKey := keys.MakeTablePrefix(keys.MinUserDescID)
+	tableKey := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.MinUserDescID))
 	rowKey := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), 1))
 	rowKey = encoding.EncodeStringAscending(encoding.EncodeVarintAscending(rowKey, 1), "a")
 	col1Key, err := keys.EnsureSafeSplitKey(keys.MakeFamilyKey(append([]byte(nil), rowKey...), 1))
@@ -703,13 +703,13 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	ctx := context.Background()
 
 	// Split the range after the last table data key.
-	keyPrefix := keys.MakeTablePrefix(keys.MinUserDescID)
+	keyPrefix := keys.SystemSQLCodec.TablePrefix(keys.MinUserDescID)
 	args := adminSplitArgs(keyPrefix)
 	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
 		t.Fatal(pErr)
 	}
 	// Verify empty range has empty stats.
-	repl := store.LookupReplica(keyPrefix)
+	repl := store.LookupReplica(roachpb.RKey(keyPrefix))
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
 	empty := enginepb.MVCCStats{LastUpdateNanos: manual.UnixNano()}
@@ -836,7 +836,7 @@ func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 
 	// Split the range after the last table data key to get a range that contains
 	// no user data.
-	splitKey := keys.MakeTablePrefix(keys.MinUserDescID)
+	splitKey := keys.SystemSQLCodec.TablePrefix(keys.MinUserDescID)
 	splitArgs := adminSplitArgs(splitKey)
 	if _, err := kv.SendWrapped(ctx, mtc.distSenders[0], splitArgs); err != nil {
 		t.Fatal(err)
@@ -862,7 +862,7 @@ func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 
 	// Replicate the newly-split range to trigger a snapshot request from store 0
 	// to store 1.
-	rangeID := mtc.stores[0].LookupReplica(splitKey).RangeID
+	rangeID := mtc.stores[0].LookupReplica(roachpb.RKey(splitKey)).RangeID
 	mtc.replicateRange(rangeID, 1)
 
 	// Verify that we saw at least one snapshot request,
@@ -903,13 +903,13 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	ctx := context.Background()
 
 	// Split the range after the last table data key.
-	keyPrefix := keys.MakeTablePrefix(keys.MinUserDescID)
+	keyPrefix := keys.SystemSQLCodec.TablePrefix(keys.MinUserDescID)
 	args := adminSplitArgs(keyPrefix)
 	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
 		t.Fatal(pErr)
 	}
 	// Verify empty range has empty stats.
-	repl := store.LookupReplica(keyPrefix)
+	repl := store.LookupReplica(roachpb.RKey(keyPrefix))
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
 	empty := enginepb.MVCCStats{LastUpdateNanos: manual.UnixNano()}
@@ -1025,7 +1025,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tableBoundary := keys.MakeTablePrefix(descID)
+	tableBoundary := keys.SystemSQLCodec.TablePrefix(descID)
 
 	{
 		var repl *kvserver.Replica
@@ -1033,7 +1033,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		// Wait for the range to be split along table boundaries.
 		expectedRSpan := roachpb.RSpan{Key: roachpb.RKey(tableBoundary), EndKey: roachpb.RKeyMax}
 		testutils.SucceedsSoon(t, func() error {
-			repl = store.LookupReplica(tableBoundary)
+			repl = store.LookupReplica(roachpb.RKey(tableBoundary))
 			if actualRSpan := repl.Desc().RSpan(); !actualRSpan.Equal(expectedRSpan) {
 				return errors.Errorf("expected range %s to span %s", repl, expectedRSpan)
 			}
@@ -1051,7 +1051,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 
 	// Verify that the range is in fact split.
 	testutils.SucceedsSoon(t, func() error {
-		repl := store.LookupReplica(keys.MakeTablePrefix(descID + 1))
+		repl := store.LookupReplica(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(descID + 1)))
 		rngDesc := repl.Desc()
 		rngStart, rngEnd := rngDesc.StartKey, rngDesc.EndKey
 		if rngStart.Equal(tableBoundary) || !rngEnd.Equal(roachpb.RKeyMax) {
@@ -1089,7 +1089,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 
 	// Verify that the range is split and the new range has the correct max bytes.
 	testutils.SucceedsSoon(t, func() error {
-		newRng := store.LookupReplica(keys.MakeTablePrefix(descID))
+		newRng := store.LookupReplica(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(descID)))
 		if newRng.RangeID == origRng.RangeID {
 			return errors.Errorf("expected new range created by split")
 		}
@@ -1289,7 +1289,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
-		descTablePrefix := keys.MakeTablePrefix(keys.DescriptorTableID)
+		descTablePrefix := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)
 		kvs, _ /* splits */ := schema.GetInitialValues(clusterversion.TestingClusterVersion)
 		for _, kv := range kvs {
 			if !bytes.HasPrefix(kv.Key, descTablePrefix) {
@@ -1326,13 +1326,13 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		maxID := uint32(ids[len(ids)-1])
 		for i := uint32(keys.MaxSystemConfigDescID + 1); i <= maxID; i++ {
 			expKeys = append(expKeys,
-				testutils.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(i)),
+				testutils.MakeKey(keys.Meta2Prefix, keys.SystemSQLCodec.TablePrefix(i)),
 			)
 		}
 		for i := keys.MinUserDescID; i <= userTableMax; i++ {
 			if _, ok := exceptions[i]; !ok {
 				expKeys = append(expKeys,
-					testutils.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(uint32(i))),
+					testutils.MakeKey(keys.Meta2Prefix, keys.SystemSQLCodec.TablePrefix(uint32(i))),
 				)
 			}
 		}
@@ -2416,7 +2416,7 @@ func TestUnsplittableRange(t *testing.T) {
 	store := createTestStoreWithConfig(t, stopper, cfg)
 
 	// Add a single large row to /Table/14.
-	tableKey := keys.MakeTablePrefix(keys.UITableID)
+	tableKey := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.UITableID))
 	row1Key := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), 1))
 	col1Key := keys.MakeFamilyKey(append([]byte(nil), row1Key...), 0)
 	valueLen := 0.9 * maxBytes
@@ -2722,12 +2722,12 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 	// the user range [/Table/48-/Max) is stored on the right meta2 range, so the lookup
 	// will require a scan that continues into the next meta2 range.
 	const tableID = keys.MinUserDescID + 1 // 51
-	splitReq := adminSplitArgs(keys.MakeTablePrefix(tableID - 3 /* 48 */))
+	splitReq := adminSplitArgs(keys.SystemSQLCodec.TablePrefix(tableID - 3 /* 48 */))
 	if _, pErr := kv.SendWrapped(ctx, s.DB().NonTransactionalSender(), splitReq); pErr != nil {
 		t.Fatal(pErr)
 	}
 
-	metaKey := keys.RangeMetaKey(keys.MakeTablePrefix(tableID)).AsRawKey()
+	metaKey := keys.RangeMetaKey(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(tableID))).AsRawKey()
 	splitReq = adminSplitArgs(metaKey)
 	if _, pErr := kv.SendWrapped(ctx, s.DB().NonTransactionalSender(), splitReq); pErr != nil {
 		t.Fatal(pErr)
@@ -2741,8 +2741,8 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 		// Scan from [/Table/49-/Table/50) both forwards and backwards.
 		// Either way, the resulting RangeLookup scan will be forced to
 		// perform a continuation lookup.
-		scanStart := roachpb.Key(keys.MakeTablePrefix(tableID - 2)) // 49
-		scanEnd := scanStart.PrefixEnd()                            // 50
+		scanStart := keys.SystemSQLCodec.TablePrefix(tableID - 2) // 49
+		scanEnd := scanStart.PrefixEnd()                          // 50
 		header := roachpb.RequestHeader{
 			Key:    scanStart,
 			EndKey: scanEnd,

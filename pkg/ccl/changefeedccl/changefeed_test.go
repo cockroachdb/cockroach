@@ -790,7 +790,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 func fetchDescVersionModificationTime(
 	t testing.TB, db *gosql.DB, f cdctest.TestFeedFactory, tableName string, version int,
 ) hlc.Timestamp {
-	tblKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
+	tblKey := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)
 	header := roachpb.RequestHeader{
 		Key:    tblKey,
 		EndKey: tblKey.PrefixEnd(),
@@ -822,7 +822,7 @@ func fetchDescVersionModificationTime(
 				continue
 			}
 			k := it.UnsafeKey()
-			remaining, _, _, err := sqlbase.DecodeTableIDIndexID(k.Key)
+			remaining, _, _, err := keys.SystemSQLCodec.DecodeIndexPrefix(k.Key)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -2204,8 +2204,8 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 		}
 		mkCheckRecord = func(t *testing.T, tableID int) func(r *ptpb.Record) error {
 			expectedKeys := map[string]struct{}{
-				string(keys.MakeTablePrefix(uint32(tableID))):        {},
-				string(keys.MakeTablePrefix(keys.DescriptorTableID)): {},
+				string(keys.SystemSQLCodec.TablePrefix(uint32(tableID))):        {},
+				string(keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)): {},
 			}
 			return func(ptr *ptpb.Record) error {
 				if ptr == nil {

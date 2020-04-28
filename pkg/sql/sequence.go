@@ -49,7 +49,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		rowid := builtins.GenerateUniqueInt(p.EvalContext().NodeID)
 		val = int64(rowid)
 	} else {
-		seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
+		seqValueKey := keys.TODOSQLCodec.SequenceKey(uint32(descriptor.ID))
 		val, err = kv.IncrementValRetryable(
 			ctx, p.txn.DB(), seqValueKey, seqOpts.Increment)
 		if err != nil {
@@ -162,7 +162,7 @@ func MakeSequenceKeyVal(
 		newVal = newVal - sequence.SequenceOpts.Increment
 	}
 
-	seqValueKey := keys.MakeSequenceKey(uint32(sequence.ID))
+	seqValueKey := keys.TODOSQLCodec.SequenceKey(uint32(sequence.ID))
 	return seqValueKey, newVal, nil
 }
 
@@ -173,7 +173,7 @@ func (p *planner) GetSequenceValue(
 	if desc.SequenceOpts == nil {
 		return 0, errors.New("descriptor is not a sequence")
 	}
-	keyValue, err := p.txn.Get(ctx, keys.MakeSequenceKey(uint32(desc.ID)))
+	keyValue, err := p.txn.Get(ctx, keys.TODOSQLCodec.SequenceKey(uint32(desc.ID)))
 	if err != nil {
 		return 0, err
 	}

@@ -12,6 +12,7 @@ package keys
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"reflect"
 	"testing"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStoreKeyEncodeDecode(t *testing.T) {
@@ -236,7 +238,7 @@ func TestUserKey(t *testing.T) {
 }
 
 func TestSequenceKey(t *testing.T) {
-	actual := MakeSequenceKey(55)
+	actual := SystemSQLCodec.SequenceKey(55)
 	expected := []byte("\xbf\x89\x88\x88")
 	if !bytes.Equal(actual, expected) {
 		t.Errorf("expected %q (len %d), got %q (len %d)", expected, len(expected), actual, len(actual))
@@ -543,6 +545,7 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 		{e(1, 2, 3, 1), e(1, 2)},       // /Table/1/2/3/1 -> /Table/1/2
 		{e(1, 2, 200, 2), e(1, 2)},     // /Table/1/2/200/2 -> /Table/1/2
 		{e(1, 2, 3, 4, 1), e(1, 2, 3)}, // /Table/1/2/3/4/1 -> /Table/1/2/3
+		// TODO(nvanbenschoten): add test cases for tenant keys.
 	}
 	for i, d := range goodData {
 		out, err := EnsureSafeSplitKey(d.in)
@@ -579,12 +582,48 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 		{e(1, 2, 200)[:3], "insufficient bytes to decode uvarint value"},
 		// Exercises a former overflow bug. We decode a uint(18446744073709551610) which, if casted
 		// to int carelessly, results in -6.
-		{encoding.EncodeVarintAscending(MakeTablePrefix(999), 322434), "malformed table key"},
+		{encoding.EncodeVarintAscending(SystemSQLCodec.TablePrefix(999), 322434), "malformed table key"},
+		// TODO(nvanbenschoten): add test cases for tenant keys.
 	}
 	for i, d := range errorData {
 		_, err := EnsureSafeSplitKey(d.in)
 		if !testutils.IsError(err, d.err) {
 			t.Fatalf("%d: %s: expected %q, but got %v", i, d.in, d.err, err)
 		}
+	}
+}
+
+func TestTenantPrefix(t *testing.T) {
+	tIDs := []roachpb.TenantID{
+		roachpb.SystemTenantID,
+		roachpb.MakeTenantID(2),
+		roachpb.MakeTenantID(999),
+		roachpb.MakeTenantID(math.MaxUint64),
+	}
+	for _, tID := range tIDs {
+		t.Run(fmt.Sprintf("%v", tID), func(t *testing.T) {
+			// Encode tenant ID.
+			k := MakeTenantPrefix(tID)
+
+			// The system tenant has no tenant prefix.
+			if tID == roachpb.SystemTenantID {
+				require.Len(t, k, 0)
+			}
+
+			// Encode table prefix.
+			const tableID = 5
+			k = encoding.EncodeUvarintAscending(k, tableID)
+
+			// Decode tenant ID.
+			rem, retTID, err := DecodeTenantPrefix(k)
+			require.Equal(t, tID, retTID)
+			require.NoError(t, err)
+
+			// Decode table prefix.
+			rem, retTableID, err := encoding.DecodeUvarintAscending(rem)
+			require.Len(t, rem, 0)
+			require.Equal(t, uint64(tableID), retTableID)
+			require.NoError(t, err)
+		})
 	}
 }

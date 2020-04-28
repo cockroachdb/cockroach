@@ -60,7 +60,7 @@ func TestManualReplication(t *testing.T) {
 	kvDB := tc.Servers[0].DB()
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
-	tableStartKey := keys.MakeTablePrefix(uint32(tableDesc.ID))
+	tableStartKey := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.ID))
 	leftRangeDesc, tableRangeDesc, err := tc.SplitRange(tableStartKey)
 	if err != nil {
 		t.Fatal(err)

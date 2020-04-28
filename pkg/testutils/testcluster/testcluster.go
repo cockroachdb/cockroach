@@ -14,7 +14,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"math"
 	"net"
 	"sync"
 	"testing"
@@ -684,7 +683,7 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 // kv scratch space (it doesn't overlap system spans or SQL tables). The range
 // is lazily split off on the first call to ScratchRange.
 func (tc *TestCluster) ScratchRange(t testing.TB) roachpb.Key {
-	scratchKey := keys.MakeTablePrefix(math.MaxUint32)
+	scratchKey := keys.TableDataMax
 	if tc.scratchRangeID > 0 {
 		return scratchKey
 	}

@@ -3332,7 +3332,7 @@ func MVCCFindSplitKey(
 		return nil, nil
 	}
 	var minSplitKey roachpb.Key
-	if _, _, err := keys.DecodeTablePrefix(it.UnsafeKey().Key); err == nil {
+	if _, _, err := keys.TODOSQLCodec.DecodeTablePrefix(it.UnsafeKey().Key); err == nil {
 		// The first key in this range represents a row in a SQL table. Advance the
 		// minSplitKey past this row to avoid the problems described above.
 		firstRowKey, err := keys.EnsureSafeSplitKey(it.Key().Key)

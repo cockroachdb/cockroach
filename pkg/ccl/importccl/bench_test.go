@@ -61,7 +61,7 @@ func BenchmarkImportWorkload(b *testing.B) {
 
 		t := tableSSTable{
 			meta:    table,
-			span:    roachpb.Span{Key: keys.MakeTablePrefix(uint32(tableID))},
+			span:    roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(tableID))},
 			sstData: sst,
 		}
 		t.span.EndKey = t.span.Key.PrefixEnd()

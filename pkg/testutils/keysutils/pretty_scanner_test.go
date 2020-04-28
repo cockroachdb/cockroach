@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -30,19 +29,19 @@ func TestPrettyScanner(t *testing.T) {
 		{
 			prettyKey: "/Table/t1",
 			expKey: func() roachpb.Key {
-				return keys.MakeTablePrefix(50)
+				return keys.SystemSQLCodec.TablePrefix(50)
 			},
 		},
 		{
 			prettyKey: "/Table/t1/pk",
 			expKey: func() roachpb.Key {
-				return sqlbase.EncodeTableIDIndexID(nil /* key */, 50, 1)
+				return keys.SystemSQLCodec.IndexPrefix(50, 1)
 			},
 		},
 		{
 			prettyKey: "/Table/t1/pk/1/2/3",
 			expKey: func() roachpb.Key {
-				k := sqlbase.EncodeTableIDIndexID(nil /* key */, 50, 1)
+				k := keys.SystemSQLCodec.IndexPrefix(50, 1)
 				k = encoding.EncodeVarintAscending(k, 1)
 				k = encoding.EncodeVarintAscending(k, 2)
 				k = encoding.EncodeVarintAscending(k, 3)
@@ -57,7 +56,7 @@ func TestPrettyScanner(t *testing.T) {
 		{
 			prettyKey: "/Table/t1/idx1/1/2/3",
 			expKey: func() roachpb.Key {
-				k := sqlbase.EncodeTableIDIndexID(nil /* key */, 50, 5)
+				k := keys.SystemSQLCodec.IndexPrefix(50, 5)
 				k = encoding.EncodeVarintAscending(k, 1)
 				k = encoding.EncodeVarintAscending(k, 2)
 				k = encoding.EncodeVarintAscending(k, 3)

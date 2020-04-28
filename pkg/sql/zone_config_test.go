@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -119,7 +120,7 @@ func TestGetZoneConfig(t *testing.T) {
 		for tcNum, tc := range testCases {
 			// Verify SystemConfig.GetZoneConfigForKey.
 			{
-				key := append(keys.MakeTablePrefix(tc.objectID), tc.keySuffix...)
+				key := append(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(tc.objectID)), tc.keySuffix...)
 				zoneCfg, err := cfg.GetZoneConfigForKey(key) // Complete ZoneConfig
 				if err != nil {
 					t.Fatalf("#%d: err=%s", tcNum, err)
@@ -355,7 +356,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 		for tcNum, tc := range testCases {
 			// Verify SystemConfig.GetZoneConfigForKey.
 			{
-				key := append(keys.MakeTablePrefix(tc.objectID), tc.keySuffix...)
+				key := append(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(tc.objectID)), tc.keySuffix...)
 				zoneCfg, err := cfg.GetZoneConfigForKey(key) // Complete ZoneConfig
 				if err != nil {
 					t.Fatalf("#%d: err=%s", tcNum, err)
@@ -643,7 +644,8 @@ func BenchmarkGetZoneConfig(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := cfg.GetZoneConfigForKey(keys.MakeTablePrefix(keys.MinUserDescID))
+		key := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.MinUserDescID))
+		_, err := cfg.GetZoneConfigForKey(key)
 		if err != nil {
 			b.Fatal(err)
 		}

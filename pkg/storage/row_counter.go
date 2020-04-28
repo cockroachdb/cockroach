@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // RowCounter is a helper that counts how many distinct rows appear in the KVs
@@ -52,12 +51,7 @@ func (r *RowCounter) Count(key roachpb.Key) error {
 
 	r.prev = append(r.prev[:0], row...)
 
-	rest, tableID, err := keys.DecodeTablePrefix(row)
-	if err != nil {
-		return err
-	}
-
-	_, indexID, err := encoding.DecodeUvarintAscending(rest)
+	_, tableID, indexID, err := keys.TODOSQLCodec.DecodeIndexPrefix(row)
 	if err != nil {
 		return err
 	}
@@ -65,7 +59,7 @@ func (r *RowCounter) Count(key roachpb.Key) error {
 	if r.EntryCounts == nil {
 		r.EntryCounts = make(map[uint64]int64)
 	}
-	r.EntryCounts[roachpb.BulkOpSummaryID(tableID, indexID)]++
+	r.EntryCounts[roachpb.BulkOpSummaryID(uint64(tableID), uint64(indexID))]++
 
 	if indexID == 1 {
 		r.DeprecatedRows++

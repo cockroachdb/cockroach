@@ -40,7 +40,7 @@ func TestKVFeed(t *testing.T) {
 	}
 	kv := func(tableID uint32, k, v string, ts hlc.Timestamp) roachpb.KeyValue {
 		vDatum := tree.DString(k)
-		key, err := sqlbase.EncodeTableKey(keys.MakeTablePrefix(tableID), &vDatum, encoding.Ascending)
+		key, err := sqlbase.EncodeTableKey(keys.SystemSQLCodec.TablePrefix(tableID), &vDatum, encoding.Ascending)
 		if err != nil {
 			panic(err)
 		}
@@ -356,7 +356,7 @@ var _ schemaFeed = (*rawTableFeed)(nil)
 
 func tableSpan(tableID uint32) roachpb.Span {
 	return roachpb.Span{
-		Key:    keys.MakeTablePrefix(tableID),
-		EndKey: roachpb.Key(keys.MakeTablePrefix(tableID)).PrefixEnd(),
+		Key:    keys.SystemSQLCodec.TablePrefix(tableID),
+		EndKey: keys.SystemSQLCodec.TablePrefix(tableID).PrefixEnd(),
 	}
 }

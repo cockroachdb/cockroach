@@ -4492,7 +4492,7 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	}
 	mtc.replicateRange(1, 1, 2)
 	// Make a key that's in the user data space.
-	keyA := append(keys.MakeTablePrefix(100), 'a')
+	keyA := append(keys.SystemSQLCodec.TablePrefix(100), 'a')
 	replica1 := mtc.stores[0].LookupReplica(roachpb.RKey(keyA))
 	mtc.replicateRange(replica1.RangeID, 1, 2)
 	// Create a test function so that we can run the test both immediately after
@@ -4847,7 +4847,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 		// Split off a non-system range so we don't have to account for node liveness
 		// traffic.
-		scratchTableKey := keys.MakeTablePrefix(math.MaxUint32)
+		scratchTableKey := keys.SystemSQLCodec.TablePrefix(math.MaxUint32)
 		// Put some data in the range so we'll have something to test for.
 		keyA = append(append(roachpb.Key{}, scratchTableKey...), 'a')
 		keyB = append(append(roachpb.Key{}, scratchTableKey...), 'b')

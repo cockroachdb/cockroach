@@ -68,7 +68,7 @@ func TestVerifier(t *testing.T) {
 	db := kv.NewDB(s.DB().AmbientContext, tsf, s.Clock())
 	ptv := ptverifier.New(db, pts)
 	makeTableSpan := func(tableID uint32) roachpb.Span {
-		k := roachpb.Key(keys.MakeTablePrefix(tableID))
+		k := keys.SystemSQLCodec.TablePrefix(tableID)
 		return roachpb.Span{Key: k, EndKey: k.PrefixEnd()}
 	}
 

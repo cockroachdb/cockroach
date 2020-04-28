@@ -1208,7 +1208,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	}
 
 	// Write some arbitrary data in the system config span.
-	key := keys.MakeTablePrefix(keys.MaxSystemConfigDescID)
+	key := keys.SystemSQLCodec.TablePrefix(keys.MaxSystemConfigDescID)
 	var val roachpb.Value
 	val.SetInt(42)
 	if err := storage.MVCCPut(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, val, nil); err != nil {
@@ -1480,7 +1480,7 @@ func TestReplicaNoGossipConfig(t *testing.T) {
 	tc.Start(t, stopper)
 
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
-	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
+	key := keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID)
 
 	txn := newTransaction("test", key, 1 /* userPriority */, tc.Clock())
 	h := roachpb.Header{Txn: txn}
@@ -1525,7 +1525,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	tc.Start(t, stopper)
 
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
-	key := keys.MakeTablePrefix(keys.MaxReservedDescID)
+	key := keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID)
 
 	txn := newTransaction("test", key, 1 /* userPriority */, tc.Clock())
 	req1 := putArgs(key, nil)
@@ -12245,7 +12245,7 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	keyA := append(keys.MakeTablePrefix(math.MaxUint32), 'a')
+	keyA := append(keys.SystemSQLCodec.TablePrefix(math.MaxUint32), 'a')
 	keyAA := append(keyA[:len(keyA):len(keyA)], 'a')
 	rKeyA, err := keys.Addr(keyA)
 	putReq := func(key roachpb.Key) *roachpb.PutRequest {

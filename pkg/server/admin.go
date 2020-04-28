@@ -627,8 +627,7 @@ func (s *adminServer) TableDetails(
 // NOTE: this doesn't make sense for interleaved (children) table. As of
 // 03/2018, callers around here use it anyway.
 func generateTableSpan(tableID sqlbase.ID) roachpb.Span {
-	tablePrefix := keys.MakeTablePrefix(uint32(tableID))
-	tableStartKey := roachpb.Key(tablePrefix)
+	tableStartKey := keys.TODOSQLCodec.TablePrefix(uint32(tableID))
 	tableEndKey := tableStartKey.PrefixEnd()
 	return roachpb.Span{Key: tableStartKey, EndKey: tableEndKey}
 }
@@ -1764,11 +1763,11 @@ func (s *adminServer) DataDistribution(
 	}
 
 	// Used later when we're scanning Meta2 and only have IDs, not names.
-	tableInfosByTableID := map[uint64]serverpb.DataDistributionResponse_TableInfo{}
+	tableInfosByTableID := map[uint32]serverpb.DataDistributionResponse_TableInfo{}
 
 	for _, row := range rows1 {
 		tableName := (*string)(row[0].(*tree.DString))
-		tableID := uint64(tree.MustBeDInt(row[1]))
+		tableID := uint32(tree.MustBeDInt(row[1]))
 		dbName := (*string)(row[2].(*tree.DString))
 
 		// Look at whether it was dropped.
@@ -1847,7 +1846,7 @@ func (s *adminServer) DataDistribution(
 				return err
 			}
 
-			_, tableID, err := keys.DecodeTablePrefix(rangeDesc.StartKey.AsRawKey())
+			_, tableID, err := keys.TODOSQLCodec.DecodeTablePrefix(rangeDesc.StartKey.AsRawKey())
 			if err != nil {
 				return err
 			}

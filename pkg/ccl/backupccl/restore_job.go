@@ -544,11 +544,11 @@ func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.
 	// start of the table. That is, change a span start key from /Table/51/1 to
 	// /Table/51. Otherwise a permanently empty span at /Table/51-/Table/51/1
 	// will be created.
-	if b, id, idx, err := sqlbase.DecodeTableIDIndexID(newKey); err != nil {
+	if b, id, idx, err := keys.TODOSQLCodec.DecodeIndexPrefix(newKey); err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"could not rewrite span start key: %s", key)
 	} else if idx == 1 && len(b) == 0 {
-		newKey = keys.MakeTablePrefix(uint32(id))
+		newKey = keys.TODOSQLCodec.TablePrefix(id)
 	}
 	return newKey, nil
 }

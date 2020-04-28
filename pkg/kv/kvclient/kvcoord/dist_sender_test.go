@@ -3394,7 +3394,7 @@ func TestConnectionClass(t *testing.T) {
 	for _, key := range []roachpb.Key{
 		keys.Meta1Prefix,
 		keys.NodeLivenessKey(1),
-		roachpb.Key(keys.MakeTablePrefix(1234)), // A non-system table
+		keys.SystemSQLCodec.TablePrefix(1234), // A non-system table
 	} {
 		t.Run(key.String(), func(t *testing.T) {
 			var ba roachpb.BatchRequest

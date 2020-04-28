@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -319,7 +320,7 @@ func ingestKvs(
 		// number of L0 (and total) files, but with a lower memory usage.
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {
-				_, _, indexID, indexErr := sqlbase.DecodeTableIDIndexID(kv.Key)
+				_, _, indexID, indexErr := keys.TODOSQLCodec.DecodeIndexPrefix(kv.Key)
 				if indexErr != nil {
 					return indexErr
 				}

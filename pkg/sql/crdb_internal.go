@@ -2131,19 +2131,19 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			return nil, nil, err
 		}
 		// TODO(knz): maybe this could use internalLookupCtx.
-		dbNames := make(map[uint64]string)
-		tableNames := make(map[uint64]string)
-		indexNames := make(map[uint64]map[sqlbase.IndexID]string)
-		parents := make(map[uint64]uint64)
+		dbNames := make(map[uint32]string)
+		tableNames := make(map[uint32]string)
+		indexNames := make(map[uint32]map[uint32]string)
+		parents := make(map[uint32]uint32)
 		for _, desc := range descs {
-			id := uint64(desc.GetID())
+			id := uint32(desc.GetID())
 			switch desc := desc.(type) {
 			case *sqlbase.TableDescriptor:
-				parents[id] = uint64(desc.ParentID)
+				parents[id] = uint32(desc.ParentID)
 				tableNames[id] = desc.GetName()
-				indexNames[id] = make(map[sqlbase.IndexID]string)
+				indexNames[id] = make(map[uint32]string)
 				for _, idx := range desc.Indexes {
-					indexNames[id][idx.ID] = idx.Name
+					indexNames[id][uint32(idx.ID)] = idx.Name
 				}
 			case *sqlbase.DatabaseDescriptor:
 				dbNames[id] = desc.GetName()
@@ -2214,16 +2214,16 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			}
 
 			var dbName, tableName, indexName string
-			if _, id, err := keys.DecodeTablePrefix(desc.StartKey.AsRawKey()); err == nil {
-				parent := parents[id]
+			if _, tableID, err := keys.TODOSQLCodec.DecodeTablePrefix(desc.StartKey.AsRawKey()); err == nil {
+				parent := parents[tableID]
 				if parent != 0 {
-					tableName = tableNames[id]
+					tableName = tableNames[tableID]
 					dbName = dbNames[parent]
-					if _, _, idxID, err := sqlbase.DecodeTableIDIndexID(desc.StartKey.AsRawKey()); err == nil {
-						indexName = indexNames[id][idxID]
+					if _, _, idxID, err := keys.TODOSQLCodec.DecodeIndexPrefix(desc.StartKey.AsRawKey()); err == nil {
+						indexName = indexNames[tableID][idxID]
 					}
 				} else {
-					dbName = dbNames[id]
+					dbName = dbNames[tableID]
 				}
 			}
 

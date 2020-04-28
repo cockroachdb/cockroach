@@ -13,32 +13,23 @@ package config
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // MakeZoneKeyPrefix returns the key prefix for id's row in the system.zones
 // table.
 func MakeZoneKeyPrefix(id uint32) roachpb.Key {
-	return keys.ZoneKeyPrefix(id)
+	return keys.TODOSQLCodec.ZoneKeyPrefix(id)
 }
 
 // MakeZoneKey returns the key for id's entry in the system.zones table.
 func MakeZoneKey(id uint32) roachpb.Key {
-	return keys.ZoneKey(id)
+	return keys.TODOSQLCodec.ZoneKey(id)
 }
 
 // DecodeObjectID decodes the object ID from the front of key. It returns the
 // decoded object ID, the remainder of the key, and whether the result is valid
 // (i.e., whether the key was within the structured key space).
 func DecodeObjectID(key roachpb.RKey) (uint32, []byte, bool) {
-	if key.Equal(roachpb.RKeyMax) {
-		return 0, nil, false
-	}
-	if encoding.PeekType(key) != encoding.Int {
-		// TODO(marc): this should eventually return SystemDatabaseID.
-		return 0, nil, false
-	}
-	// Consume first encoded int.
-	rem, id64, err := encoding.DecodeUvarintAscending(key)
-	return uint32(id64), rem, err == nil
+	rem, id, err := keys.TODOSQLCodec.DecodeTablePrefix(key.AsRawKey())
+	return id, rem, err == nil
 }

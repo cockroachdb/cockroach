@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -103,7 +104,7 @@ var tableNames = map[string]bool{
 // Format for any key:
 //   <table-name>/<index-id>/<index-col1>/.../#/<table-name>/<index-id>/....
 func encodeTestKey(kvDB *kv.DB, keyStr string) (roachpb.Key, error) {
-	var key []byte
+	key := keys.SystemSQLCodec.TenantPrefix()
 	tokens := strings.Split(keyStr, "/")
 
 	for _, tok := range tokens {

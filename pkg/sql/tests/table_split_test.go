@@ -44,7 +44,7 @@ SELECT tables.id FROM system.namespace tables
 `
 	var tableID uint32
 	runner.QueryRow(t, tableIDQuery, "test", "t").Scan(&tableID)
-	tableStartKey := keys.MakeTablePrefix(tableID)
+	tableStartKey := keys.SystemSQLCodec.TablePrefix(tableID)
 
 	// Wait for new table to split.
 	testutils.SucceedsSoon(t, func() error {

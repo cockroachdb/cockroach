@@ -211,10 +211,10 @@ func TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents(t *te
 	txB := db.NewTxn(ctx, "b")
 
 	require.NoError(t, txA.SetSystemConfigTrigger())
-	require.NoError(t, txA.Put(ctx, keys.DescMetadataKey(1000), "foo"))
+	require.NoError(t, txA.Put(ctx, keys.SystemSQLCodec.DescMetadataKey(1000), "foo"))
 
 	require.NoError(t, txB.SetSystemConfigTrigger())
-	require.NoError(t, txB.Put(ctx, keys.DescMetadataKey(2000), "bar"))
+	require.NoError(t, txB.Put(ctx, keys.SystemSQLCodec.DescMetadataKey(2000), "bar"))
 
 	const someTime = 10 * time.Millisecond
 	clearNotifictions := func(ch <-chan struct{}) {

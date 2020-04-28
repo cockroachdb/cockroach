@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -289,8 +290,8 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 		t.Fatalf("failed to lookup ids: %+v", err)
 	}
 	// Split the table at key 2.
-	k, err := sqlbase.EncodeTableKey(sqlbase.EncodeTableIDIndexID(nil, tableID, 1),
-		tree.NewDInt(2), encoding.Ascending)
+	idxPrefix := keys.SystemSQLCodec.IndexPrefix(uint32(tableID), 1)
+	k, err := sqlbase.EncodeTableKey(idxPrefix, tree.NewDInt(2), encoding.Ascending)
 	if err != nil {
 		t.Fatalf("failed to encode key: %+v", err)
 	}

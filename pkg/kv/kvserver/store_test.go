@@ -1464,11 +1464,14 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	}{
 		{store.LookupReplica(roachpb.RKeyMin),
 			*store.cfg.DefaultZoneConfig.RangeMaxBytes},
-		{splitTestRange(store, roachpb.RKeyMin, keys.MakeTablePrefix(baseID), t),
+		{splitTestRange(
+			store, roachpb.RKeyMin, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID)), t),
 			1 << 20},
-		{splitTestRange(store, keys.MakeTablePrefix(baseID), keys.MakeTablePrefix(baseID+1), t),
+		{splitTestRange(
+			store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID)), roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+1)), t),
 			*store.cfg.DefaultZoneConfig.RangeMaxBytes},
-		{splitTestRange(store, keys.MakeTablePrefix(baseID+1), keys.MakeTablePrefix(baseID+2), t),
+		{splitTestRange(
+			store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+1)), roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+2)), t),
 			2 << 20},
 	}
 
@@ -3204,7 +3207,7 @@ func TestPreemptiveSnapshotsAreRemoved(t *testing.T) {
 	defer stopper.Stop(ctx)
 	config := TestStoreConfig(hlc.NewClock(hlc.UnixNano, base.DefaultMaxClockOffset))
 	s := createTestStoreWithoutStart(t, stopper, testStoreOpts{}, &config)
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(42))
+	tablePrefix := keys.SystemSQLCodec.TablePrefix(42)
 	tablePrefixEnd := tablePrefix.PrefixEnd()
 	const rangeID = 42
 

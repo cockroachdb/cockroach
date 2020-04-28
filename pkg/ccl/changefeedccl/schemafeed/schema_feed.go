@@ -452,7 +452,7 @@ func fetchTableDescriptorVersions(
 		log.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
 	}
 	start := timeutil.Now()
-	span := roachpb.Span{Key: keys.MakeTablePrefix(keys.DescriptorTableID)}
+	span := roachpb.Span{Key: keys.TODOSQLCodec.TablePrefix(keys.DescriptorTableID)}
 	span.EndKey = span.Key.PrefixEnd()
 	header := roachpb.Header{Timestamp: endTS}
 	req := &roachpb.ExportRequest{
@@ -486,7 +486,7 @@ func fetchTableDescriptorVersions(
 					return nil
 				}
 				k := it.UnsafeKey()
-				remaining, _, _, err := sqlbase.DecodeTableIDIndexID(k.Key)
+				remaining, _, _, err := keys.TODOSQLCodec.DecodeIndexPrefix(k.Key)
 				if err != nil {
 					return err
 				}

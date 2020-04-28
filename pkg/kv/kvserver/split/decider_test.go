@@ -182,7 +182,7 @@ func TestDeciderCallsEnsureSafeSplitKey(t *testing.T) {
 	var d Decider
 	Init(&d, intn, func() float64 { return 1.0 })
 
-	baseKey := keys.MakeTablePrefix(51)
+	baseKey := keys.SystemSQLCodec.TablePrefix(51)
 	for i := 0; i < 4; i++ {
 		baseKey = encoding.EncodeUvarintAscending(baseKey, uint64(52+i))
 	}
@@ -215,7 +215,7 @@ func TestDeciderIgnoresEnsureSafeSplitKeyOnError(t *testing.T) {
 	var d Decider
 	Init(&d, intn, func() float64 { return 1.0 })
 
-	baseKey := keys.MakeTablePrefix(51)
+	baseKey := keys.SystemSQLCodec.TablePrefix(51)
 	for i := 0; i < 4; i++ {
 		baseKey = encoding.EncodeUvarintAscending(baseKey, uint64(52+i))
 	}

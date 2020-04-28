@@ -123,7 +123,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	})
 
 	// Verify the actual splits.
-	splits = []roachpb.RKey{keys.MakeTablePrefix(objectID + 3), roachpb.RKeyMax}
+	splits = []roachpb.RKey{roachpb.RKey(keys.SystemSQLCodec.TablePrefix(objectID + 3)), roachpb.RKeyMax}
 	ranges, err = getRangeKeys(kvDB)
 	if err != nil {
 		t.Fatal(err)

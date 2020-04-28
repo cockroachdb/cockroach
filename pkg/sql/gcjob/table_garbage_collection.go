@@ -88,7 +88,7 @@ func clearTableData(
 	}
 	log.Infof(ctx, "clearing data for table %d", table.ID)
 
-	tableKey := roachpb.RKey(keys.MakeTablePrefix(uint32(table.ID)))
+	tableKey := roachpb.RKey(keys.TODOSQLCodec.TablePrefix(uint32(table.ID)))
 	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 
 	// ClearRange requests lays down RocksDB range deletion tombstones that have

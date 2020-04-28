@@ -189,7 +189,7 @@ func BenchmarkImport(b *testing.B) {
 						OldID: uint32(tableDesc.ID), NewDesc: newDescBytes,
 					})
 				}
-				newStartKey := roachpb.Key(keys.MakeTablePrefix(uint32(id)))
+				newStartKey := keys.SystemSQLCodec.TablePrefix(uint32(id))
 
 				b.StartTimer()
 				var files []roachpb.ImportRequest_File

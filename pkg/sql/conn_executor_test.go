@@ -481,7 +481,7 @@ func TestQueryProgress(t *testing.T) {
 	var queryRunningAtomic, scannedBatchesAtomic int64
 	stalled, unblock := make(chan struct{}), make(chan struct{})
 
-	tableKey := roachpb.Key(keys.MakeTablePrefix(keys.MinNonPredefinedUserDescID + 1))
+	tableKey := keys.SystemSQLCodec.TablePrefix(keys.MinNonPredefinedUserDescID + 1)
 	tableSpan := roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 
 	// Install a store filter which, if queryRunningAtomic is 1, will count scan
@@ -715,7 +715,7 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 		}
 		if req, ok := ba.GetArg(roachpb.Get); ok {
 			get := req.(*roachpb.GetRequest)
-			_, tableID, err := keys.DecodeTablePrefix(get.Key)
+			_, tableID, err := keys.SystemSQLCodec.DecodeTablePrefix(get.Key)
 			if err != nil || tableID != keys.NamespaceTableID {
 				err = nil
 				return nil

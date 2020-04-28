@@ -402,7 +402,7 @@ func makeSpansToProtect(targets jobspb.ChangefeedTargets) []roachpb.Span {
 	// of table descriptors to version data.
 	spansToProtect := make([]roachpb.Span, 0, len(targets)+1)
 	addTablePrefix := func(id uint32) {
-		tablePrefix := roachpb.Key(keys.MakeTablePrefix(id))
+		tablePrefix := keys.TODOSQLCodec.TablePrefix(id)
 		spansToProtect = append(spansToProtect, roachpb.Span{
 			Key:    tablePrefix,
 			EndKey: tablePrefix.PrefixEnd(),

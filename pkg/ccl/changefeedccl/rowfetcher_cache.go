@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -43,8 +44,12 @@ func (c *rowFetcherCache) TableDescForKey(
 	ctx context.Context, key roachpb.Key, ts hlc.Timestamp,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	var tableDesc *sqlbase.ImmutableTableDescriptor
+	key, err := keys.TODOSQLCodec.StripTenantPrefix(key)
+	if err != nil {
+		return nil, err
+	}
 	for skippedCols := 0; ; {
-		remaining, tableID, _, err := sqlbase.DecodeTableIDIndexID(key)
+		remaining, tableID, _, err := sqlbase.DecodePartialTableIDIndexID(key)
 		if err != nil {
 			return nil, err
 		}

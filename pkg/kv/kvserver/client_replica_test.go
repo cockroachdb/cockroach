@@ -2978,7 +2978,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 		}
 		tableID       = getTableID()
 		tenSecondsAgo hlc.Timestamp // written in setup
-		tableKey      = roachpb.Key(keys.MakeTablePrefix(tableID))
+		tableKey      = keys.SystemSQLCodec.TablePrefix(tableID)
 		tableSpan     = roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 		mkRecord      = func() ptpb.Record {
 			return ptpb.Record{
@@ -3110,7 +3110,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 	t.Run("system ranges are unaffected", func(t *testing.T) {
 		setSystemGCTTL(t, 1)
 		txn := mkStaleTxn()
-		descriptorTable := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
+		descriptorTable := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)
 		_, err := txn.Scan(ctx, descriptorTable, descriptorTable.PrefixEnd(), 1)
 		require.NoError(t, err)
 	})

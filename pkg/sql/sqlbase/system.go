@@ -1463,7 +1463,7 @@ func createZoneConfigKV(keyID int, zoneConfig *zonepb.ZoneConfig) roachpb.KeyVal
 		panic(fmt.Sprintf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
 	}
 	return roachpb.KeyValue{
-		Key:   keys.ZoneKey(uint32(keyID)),
+		Key:   keys.TODOSQLCodec.ZoneKey(uint32(keyID)),
 		Value: value,
 	}
 }

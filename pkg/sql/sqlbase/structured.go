@@ -3606,7 +3606,7 @@ func (desc *TableDescriptor) IndexSpan(indexID IndexID) roachpb.Span {
 
 // TableSpan returns the Span that corresponds to the entire table.
 func (desc *TableDescriptor) TableSpan() roachpb.Span {
-	prefix := roachpb.Key(keys.MakeTablePrefix(uint32(desc.ID)))
+	prefix := keys.TODOSQLCodec.TablePrefix(uint32(desc.ID))
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
 
