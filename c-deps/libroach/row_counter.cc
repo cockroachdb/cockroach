@@ -17,7 +17,14 @@ using namespace cockroach;
 int RowCounter::GetRowPrefixLength(rocksdb::Slice* key) {
   size_t n = key->size();
 
-  if (!IsInt(key)) {
+  // Strip tenant ID prefix from key.
+  rocksdb::Slice buf = rocksdb::Slice(*key);
+  if (!StripTenantPrefix(&buf)) {
+    return 0;
+  }
+  size_t ten_n = key->size();
+
+  if (!IsInt(&buf)) {
     // Not a table key, so the row prefix is the entire key.
     return n;
   }
@@ -25,8 +32,7 @@ int RowCounter::GetRowPrefixLength(rocksdb::Slice* key) {
   // The column ID length is encoded as a varint and we take advantage of the
   // fact that the column ID itself will be encoded in 0-9 bytes and thus the
   // length of the column ID data will fit in a single byte.
-  rocksdb::Slice buf = rocksdb::Slice(*key);
-  buf.remove_prefix(n - 1);
+  buf.remove_prefix(ten_n - 1);
 
   if (!IsInt(&buf)) {
     // The last byte is not a valid column ID suffix.
@@ -38,7 +44,7 @@ int RowCounter::GetRowPrefixLength(rocksdb::Slice* key) {
     return 0;
   }
 
-  if (col_id_len > uint64_t(n - 1)) {
+  if (col_id_len > uint64_t(ten_n - 1)) {
     // The column ID length was impossible. colIDLen is the length of
     // the encoded column ID suffix. We add 1 to account for the byte
     // holding the length of the encoded column ID and if that total
@@ -95,7 +101,7 @@ bool RowCounter::Count(const rocksdb::Slice& key) {
   prev_key.assign(decoded_key.data(), decoded_key.size());
 
   uint64_t tbl;
-  if (!DecodeTablePrefix(&decoded_key, &tbl)) {
+  if (!DecodeTenantAndTablePrefix(&decoded_key, &tbl)) {
     return false;
   }
 
