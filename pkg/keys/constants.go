@@ -267,25 +267,25 @@ var (
 	// minimum, prefix them all with "System".
 	//
 	// TableDataMin is the start of the range of table data keys.
-	TableDataMin = SystemTenantKeyGen.TablePrefix(0)
+	TableDataMin = SystemSQLCodec.TablePrefix(0)
 	// TableDataMin is the end of the range of table data keys.
-	TableDataMax = SystemTenantKeyGen.TablePrefix(math.MaxUint32).PrefixEnd()
+	TableDataMax = SystemSQLCodec.TablePrefix(math.MaxUint32).PrefixEnd()
 	//
 	// SystemConfigSplitKey is the key to split at immediately prior to the
 	// system config span. NB: Split keys need to be valid column keys.
 	// TODO(bdarnell): this should be either roachpb.Key or RKey, not []byte.
 	SystemConfigSplitKey = []byte(TableDataMin)
 	// SystemConfigTableDataMax is the end key of system config span.
-	SystemConfigTableDataMax = SystemTenantKeyGen.TablePrefix(MaxSystemConfigDescID + 1)
+	SystemConfigTableDataMax = SystemSQLCodec.TablePrefix(MaxSystemConfigDescID + 1)
 	//
 	// NamespaceTableMin is the start key of system.namespace, which is a system
 	// table that does not reside in the same range as other system tables.
-	NamespaceTableMin = SystemTenantKeyGen.TablePrefix(NamespaceTableID)
+	NamespaceTableMin = SystemSQLCodec.TablePrefix(NamespaceTableID)
 	// NamespaceTableMax is the end key of system.namespace.
-	NamespaceTableMax = SystemTenantKeyGen.TablePrefix(NamespaceTableID + 1)
+	NamespaceTableMax = SystemSQLCodec.TablePrefix(NamespaceTableID + 1)
 	//
 	// UserTableDataMin is the start key of user structured data.
-	UserTableDataMin = SystemTenantKeyGen.TablePrefix(MinUserDescID)
+	UserTableDataMin = SystemSQLCodec.TablePrefix(MinUserDescID)
 
 	// tenantPrefix is the prefix for all non-system tenant keys.
 	tenantPrefix       = roachpb.Key{tenantPrefixByte}

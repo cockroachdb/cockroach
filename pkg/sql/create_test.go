@@ -87,7 +87,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
 	}
 
-	start := keys.SystemTenantKeyGen.TablePrefix(uint32(keys.NamespaceTableID))
+	start := keys.SystemSQLCodec.TablePrefix(uint32(keys.NamespaceTableID))
 	if kvs, err := kvDB.Scan(ctx, start, start.PrefixEnd(), 0 /* maxRows */); err != nil {
 		t.Fatal(err)
 	} else {

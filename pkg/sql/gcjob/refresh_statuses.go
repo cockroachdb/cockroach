@@ -271,7 +271,7 @@ func isProtected(
 func setupConfigWatcher(
 	execCfg *sql.ExecutorConfig,
 ) (gossip.SystemConfigDeltaFilter, <-chan struct{}) {
-	k := keys.TODOTenantKeyGen.IndexPrefix(uint32(keys.ZonesTableID), uint32(keys.ZonesTablePrimaryIndexID))
+	k := keys.TODOSQLCodec.IndexPrefix(uint32(keys.ZonesTableID), uint32(keys.ZonesTablePrimaryIndexID))
 	zoneCfgFilter := gossip.MakeSystemConfigDeltaFilter(k)
 	gossipUpdateC := execCfg.Gossip.Deprecated(47150).RegisterSystemConfigChannel()
 	return zoneCfgFilter, gossipUpdateC

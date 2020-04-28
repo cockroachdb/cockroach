@@ -104,7 +104,7 @@ var tableNames = map[string]bool{
 // Format for any key:
 //   <table-name>/<index-id>/<index-col1>/.../#/<table-name>/<index-id>/....
 func encodeTestKey(kvDB *kv.DB, keyStr string) (roachpb.Key, error) {
-	key := keys.SystemTenantKeyGen.TenantPrefix()
+	key := keys.SystemSQLCodec.TenantPrefix()
 	tokens := strings.Split(keyStr, "/")
 
 	for _, tok := range tokens {

@@ -35,7 +35,7 @@ import (
 // need the corresponding Span, prefer desc.IndexSpan(indexID) or
 // desc.PrimaryIndexSpan().
 func MakeIndexKeyPrefix(desc *TableDescriptor, indexID IndexID) []byte {
-	keyGen := &keys.TODOTenantKeyGen
+	keyGen := &keys.TODOSQLCodec
 	if i, err := desc.FindIndexByID(indexID); err == nil && len(i.Interleave.Ancestors) > 0 {
 		ancestor := &i.Interleave.Ancestors[0]
 		return keyGen.IndexPrefix(uint32(ancestor.TableID), uint32(ancestor.IndexID))
@@ -515,7 +515,7 @@ func DecodePartialTableIDIndexID(key []byte) ([]byte, ID, IndexID, error) {
 func DecodeIndexKeyPrefix(
 	desc *TableDescriptor, key []byte,
 ) (indexID IndexID, remaining []byte, err error) {
-	key, err = keys.TODOTenantKeyGen.StripTenantPrefix(key)
+	key, err = keys.TODOSQLCodec.StripTenantPrefix(key)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -590,7 +590,7 @@ func DecodeIndexKey(
 	colDirs []IndexDescriptor_Direction,
 	key []byte,
 ) (remainingKey []byte, matches bool, foundNull bool, _ error) {
-	key, err := keys.TODOTenantKeyGen.StripTenantPrefix(key)
+	key, err := keys.TODOSQLCodec.StripTenantPrefix(key)
 	if err != nil {
 		return nil, false, false, err
 	}
@@ -1525,7 +1525,7 @@ func maxKeyTokens(index *IndexDescriptor, containsNull bool) int {
 // to read.
 func AdjustStartKeyForInterleave(index *IndexDescriptor, start roachpb.Key) (roachpb.Key, error) {
 	// Remove the tenant prefix before decomposing.
-	strippedStart, err := keys.TODOTenantKeyGen.StripTenantPrefix(start)
+	strippedStart, err := keys.TODOSQLCodec.StripTenantPrefix(start)
 	if err != nil {
 		return roachpb.Key{}, err
 	}
@@ -1573,7 +1573,7 @@ func AdjustEndKeyForInterleave(
 	}
 
 	// Remove the tenant prefix before decomposing.
-	strippedEnd, err := keys.TODOTenantKeyGen.StripTenantPrefix(end)
+	strippedEnd, err := keys.TODOSQLCodec.StripTenantPrefix(end)
 	if err != nil {
 		return roachpb.Key{}, err
 	}

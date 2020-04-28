@@ -53,7 +53,7 @@ func makeMutationTest(
 // in the table equals e.
 func (mt mutationTest) checkTableSize(e int) {
 	// Check that there are no hidden values
-	tableStartKey := keys.SystemTenantKeyGen.TablePrefix(uint32(mt.tableDesc.ID))
+	tableStartKey := keys.SystemSQLCodec.TablePrefix(uint32(mt.tableDesc.ID))
 	tableEndKey := tableStartKey.PrefixEnd()
 	if kvs, err := mt.kvDB.Scan(context.TODO(), tableStartKey, tableEndKey, 0); err != nil {
 		mt.Error(err)

@@ -169,7 +169,7 @@ func TestChangePollInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// We'll inject a request filter to detect scans due to the polling.
-	tableStart := keys.SystemTenantKeyGen.TablePrefix(keys.StatementDiagnosticsRequestsTableID)
+	tableStart := keys.SystemSQLCodec.TablePrefix(keys.StatementDiagnosticsRequestsTableID)
 	tableSpan := roachpb.Span{
 		Key:    tableStart,
 		EndKey: tableStart.PrefixEnd(),
