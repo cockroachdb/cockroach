@@ -2299,6 +2299,13 @@ func (s *Store) Descriptor(useCached bool) (*roachpb.StoreDescriptor, error) {
 func (s *Store) RangeFeed(
 	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) *roachpb.Error {
+
+	if filter := s.TestingKnobs().TestingRangefeedFilter; filter != nil {
+		if pErr := filter(args, stream); pErr != nil {
+			return pErr
+		}
+	}
+
 	if err := verifyKeys(args.Span.Key, args.Span.EndKey, true); err != nil {
 		return roachpb.NewError(err)
 	}
