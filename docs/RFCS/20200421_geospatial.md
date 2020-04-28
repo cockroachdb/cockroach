@@ -5,9 +5,6 @@
 - RFC PR: (PR # after acceptance of initial draft)
 - Cockroach Issue: (one or more # from the issue tracker)
 
-**Remember, you can submit a PR with your RFC before the text is
-complete. Refer to the [README](README.md#rfc-process) for details.**
-
 Table of contents:
 
 - [Summary](#Summary)
@@ -26,14 +23,17 @@ Table of contents:
 
 # Summary
 
-This RFC proposes addition of Geospatial features to CockroachDB, similar to
-what is supported by PostGIS. These features are often requested by users.
+This RFC proposes the addition of geospatial features to CockroachDB, similar to
+what is supported by PostGIS. These features are often requested by users. At time
+of writing, support for geospatial features is the most requested feature in
+CockroachDB.
 
 The approach leverages open-source geometry libraries used by PostGIS whenever
 possible. For indexing, the approach diverges from PostGIS by dividing the space
 into cells of decreasing size, which fits into the totally ordered key-value
 model of CockroachDB. Early experiments suggest that this is competitive in
-performance with R-trees.
+performance with R-trees whilst allowing for additional scaling as it has
+lock free data structures.
 
 # Guide-level explanation
 
@@ -65,8 +65,8 @@ for.
 
 The specs we refer to in this document are:
 
-* OGC: [v1.2.1](http://portal.opengeospatial.org/files/?artifact_id=25354)
-
+* OGC: [v1.1](http://portal.opengeospatial.org/files/?artifact_id=13228)
+** NOTE: we will aim to support v1.1 as PostGIS does for 20.2
 * SQL/MM: [ISO 13249-3](http://jtc1sc32.org/doc/N1101-1150/32N1107-WD13249-3--spatial.pdf)
 
 Our approach will leverage the open-source geometry libraries used by
@@ -99,7 +99,8 @@ that is supported by GEOGRAPHY) is:
 * MULTILINESTRING
 * MULTIPOLYGON
 * GEOMETRYCOLLECTION
-* GEOMETRY ("shape", which is different than the "type")
+* GEOMETRY ("shape", which is different than the "type", which allows
+any of the above types to be referenced - more later)
 
 In addition, geospatial types and datums can have Spatial Reference
 System Identifiers (SRIDs) which specify which projection was applied
@@ -110,7 +111,7 @@ the 20.2 release which we will detail in this RFC.
 
 A number of new SQL builtin functions are added which operate on
 GEOMETRY and GEOGRAPHY. Some of these functions can be accelerated by
-maintaining a spatial index over a table, which is exposed as SQL
+maintaining a spatial index over a table, which is exposed as a SQL
 index. The optimizer will be aware of these indexes and use them in
 planning.
 
@@ -182,7 +183,7 @@ We are planning to support the following:
     * MULTICURVE
     * TRIANGLE
   * 3D: 
-    * triangulated irregular network (TIN)
+    * TIN (triangulated irregular network)
     * SURFACE
     * MULTISURFACE
     * POLYHEDRALSURFACE
@@ -210,7 +211,7 @@ We will be able to support the explicit casts easily. However, as
 implicit casts are not supported in Cockroach (yet), we may have to
 "double define" a few definitions of functions that cast Geography to
 Geometry to emulate PostGIS. We will aim to support this as
-"psuedo-implicit casts" for commonly used functions that are only
+"pseudo-implicit casts" for commonly used functions that are only
 defined for Geometry (e.g. ST_SRID). The user also has the option to
 explicitly cast Geography to Geometry before the builtins if we miss
 any.
@@ -247,6 +248,9 @@ We will mirror the same definitions for GEOGRAPHY as we do for
 GEOMETRY with one key difference - the default SRID will be 4326
 (representing vanilla lat/lng on a WGS84 sphere), instead of leaving
 it with an SRID of 0.
+
+For 20.2, operations such as `ALTER TABLE ... SET DATA TYPE ...` may not be
+permitted, but will be extended in later versions.
 
 
 #### Index Creation
@@ -287,23 +291,44 @@ consultation with users.
 #### Disk Serialization
 
 For Geometry and Geography types, we will serialize the data as
-EWKB. This allows us flexibility in changing libraries later, as well
-as encoding the necessary type and shape metadata.
+a protobuf that contains the EWKB. This allows us flexibility in
+changing libraries later, as well as encoding the necessary type
+and shape metadata. The protobuf will appear as follows:
+
+```
+message SpatialObject {
+  // EWKB is always stored in littleEndian order.
+  bytes ewkb = 1;
+  // SRID is denormalized from the EWKB.
+  int32 srid = 2;
+  // Shape is the Shape that is stored in the database.
+  Shape shape = 3;
+  // BBox bounding box for optimizing certain operations
+  // depending on performance benchmarks.
+  BoundingBox bbox = 4;
+}
+
+enum Shape {
+  GEOMETRY = 1;
+  POINT = 2;
+  // ... etc.
+};
+
+message BoundingBox {
+  float64 min_x = 1;
+  float64 min_y = 2;
+  float64 max_x = 3;
+  float64 max_y = 4;
+}
+```
 
 It is worth noting we could serialize Geography types with the S2
 library. The S2 library would be fastest to transform serialization
 and deserialization into S2 types (compared to EWKB). However, it is
 missing important metadata such as 2.5D/3D (Z-) and M- coordinates, as
 well as original shape and SRID metadata. There is a "Compressed"
-serialization option for s2 objects which further improves disk usage,
+serialization option for S2 objects which further improves disk usage,
 however it is not yet ported to Go.
-
-If we decide to change disk serialization in the future, we can use
-the first byte of EWKB as a makeshift "version number". EWKB uses 0x0
-or 0x1 for the first byte to determine between big endian and little
-endian, but we can use any other values to represent a different
-serialization scheme if we chose to do so. We would then be able to
-support multiple serialization methods.
 
 We will not support indexing geospatial types in default primary keys
 and indexes (as we do not for JSONB and ARRAYs today). However, we
@@ -342,7 +367,7 @@ We will aim to use CGO to interface with the GEOS library in
 GEOS library specifically targets implementing the OGC spec.  This
 provides us with coverage for many of the mathematical predicates
 required for 2D geometry and lets us build a lot of functionality
-quickly.
+quickly. We will eat the CGO overhead to be able to ship quickly.
 
 We will use 
 [dlopen](http://man7.org/linux/man-pages/man3/dlopen.3.html) and
@@ -368,6 +393,14 @@ their environment. As a corollary of this limitation:
     operations are required. This is similar to PostGIS where users
     would require extra steps by installing the PostGIS extension
     dependencies to perform Geospatial operations.
+
+Example changed installation instructions:
+```
+$ wget -qO- https://binaries.cockroachdb.com/cockroach-v20.2.0.linux-amd64.tgz | tar  xvz
+$ cp -i cockroach-v20.2.0.linux-amd64/cockroach /usr/local/bin/
+# Optional step.
+$ cp -i cockroach-v20.2.0.linux-amd64/libgeos_c.so /usr/local/lib/
+```
 
 
 #### Geometry (Curves)
@@ -440,7 +473,7 @@ operators](https://postgis.net/docs/reference.html#idm9874) that are
 not part of the OGC or SQL/MM specs. As mentioned above, our different
 indexing approach prevents these from being index
 accelerated. Therefore we have no plans to support these in the
-initial run.
+initial implementation.
 
 
 #### Distance Operators
@@ -577,9 +610,6 @@ than PostGIS (which will be in the user's current catalog).
 
 As such, we will make the following adjustments:
 
-* We will allow modifications from ONLY admin CRDB users (a departure
-  from PostGIS privileges, which has this as a limitation due to it
-  being an extension).
 * We can also optionally look to "lock" in default SRIDs, preventing
   deletion entirely of "default" SRIDs (especially 4326 and 0).
 * It will not be available for lookup in the user's current catalog
@@ -594,10 +624,11 @@ which injects tables into the public schema, we need this table to be
 resolvable from anywhere by simply requesting "geometry_columns",
 "geography_columns" or spatial_ref_sys.
 
-To resolve this, we will add the system and pg_extension schemas
-as one of the items to look for in the search path when performing
+To resolve this, we will add `system.public.spatial_ref_sys` and the
+`pg_extension` schema as items to look for when performing
 object resolution, e.g. `SELECT * FROM spatial_ref_sys`) will look at
-the `system` catalog after looking at the public one.
+the `system.public` schema and `pg_extension` schema after looking at the
+`public` schema in the current database catalog.
 
 
 #### spatial_ref_sys lookup caching
@@ -627,9 +658,10 @@ sqlite3 for storing metadata from certain tools we don't use) and as
 such we may decide to also ship this as a library which requires
 dlopen/dlsym.
 
-It is worth noting there is a go port of the PROJ library named
+It is worth noting there is a Go port of the PROJ library named
 [go-spatial/proj](https://github.com/go-spatial/proj), but is missing
-some essential proj4 transformations.
+some essential functionality such as the ability to define custom
+proj4 transformations.
 
 
 ### Other Supported Operations
@@ -645,8 +677,7 @@ As this is part of the OGC spec, we should also look to support these
 views. We will create a new schema "pg_extension" , which will house
 these as virtual views alongside our other virtual schemas. We can
 optionally allow lookup into these views from the public schema for
-cross compatibility as described in "Availability on the Public
-Schema".
+cross compatibility as described in "Availability from any Schema".
 
 
 #### AddGeomColumn
@@ -1015,7 +1046,7 @@ inverted-index “lookup join”:
   to generate the matching shapes.
 
 We plan to generalize this geospatial “lookup join” to also be usable
-for other inverted index cases, like arrays and JSON.
+for other inverted index cases, like ARRAY and JSON.
 
 
 #### Query Planner/Optimizer
@@ -1061,7 +1092,8 @@ geospatial queries:
     of how much data must be scanned for each of the inverted index
     scans, as well as how many rows are returned by the full set
     expression. The statistics code for inverted indexes is currently
-    very rudimentary, so this should be improved.
+    very rudimentary, so this should be improved whilst benefitting
+    JSONB and ARRAY.
 
   * To improve the statistics code for inverted indexes, there are a
     couple of options: (1) Store the number of distinct keys in the
