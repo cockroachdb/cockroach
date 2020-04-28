@@ -101,6 +101,27 @@ func (h *ProcOutputHelper) Init(
 	if post.Projection && len(post.RenderExprs) > 0 {
 		return errors.Errorf("post-processing has both projection and rendering: %s", post)
 	}
+
+	// Hydrate all types used in the processor.
+	for _, t := range typs {
+		if t.UserDefined() {
+			// TODO (rohany): This should eventually look into the set of cached type
+			//  descriptors before attempting to access it here.
+			typDesc, err := sqlbase.GetTypeDescFromID(
+				evalCtx.Context,
+				evalCtx.Txn,
+				evalCtx.Codec,
+				sqlbase.ID(t.StableTypeID()),
+			)
+			if err != nil {
+				return err
+			}
+			if err := typDesc.HydrateTypeInfo(t); err != nil {
+				return err
+			}
+		}
+	}
+
 	h.output = output
 	h.numInternalCols = len(typs)
 	if post.Filter != (execinfrapb.Expression{}) {

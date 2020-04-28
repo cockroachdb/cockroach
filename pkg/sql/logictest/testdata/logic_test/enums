@@ -133,5 +133,37 @@ CREATE TYPE greeting2 AS ENUM ('hello')
 statement error pq: invalid cast: greeting -> greeting2
 SELECT 'hello'::greeting::greeting2
 
-statement error pq: value type greeting cannot be used for table columns
-CREATE TABLE bad (x greeting)
+# Test inserting and reading enum data from tables.
+statement ok
+CREATE TABLE greeting_table (x1 greeting, x2 greeting)
+
+statement error pq: invalid input value for enum greeting: "bye"
+INSERT INTO greeting_table VALUES ('bye', 'hi')
+
+statement ok
+INSERT INTO greeting_table VALUES ('hi', 'hello')
+
+query TT
+SELECT * FROM greeting_table
+----
+hi hello
+
+query TTTT
+SELECT * FROM greeting_table a JOIN greeting_table b ON a.x1 = b.x1
+----
+hi  hello  hi  hello
+
+query TT
+SELECT 'hello'::greeting, x1 FROM greeting_table
+----
+hello hi
+
+query TB
+SELECT x1, x1 < 'hello'::greeting FROM greeting_table
+----
+hi false
+
+# Regression to ensure that statistics jobs can be run on tables
+# with user defined types.
+statement ok
+CREATE STATISTICS s FROM greeting_table

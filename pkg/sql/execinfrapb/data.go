@@ -15,9 +15,12 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -71,11 +74,35 @@ func ConvertToMappedSpecOrdering(
 	return specOrdering
 }
 
+// TypeAccessor is a structure that implements tree.TypeAccessor. It is used
+// during evaluation to provide access to user defined type metadata.
+type TypeAccessor struct {
+	// TODO (rohany): This struct should locally cache id -> types.T here
+	//  so that repeated lookups do not incur additional KV operations.
+}
+
+// GetEnumByID implements tree.TypeAccessor.
+// TODO (rohany): This should eventually look into the set of cached type
+//  descriptors before attempting to access it here.
+func (t *TypeAccessor) GetEnumByID(
+	ctx context.Context, codec keys.SQLCodec, txn *kv.Txn, id uint32,
+) (*types.T, error) {
+	typDesc, err := sqlbase.GetTypeDescFromID(ctx, txn, codec, sqlbase.ID(id))
+	if err != nil {
+		return nil, err
+	}
+	typ := types.MakeEnum(id)
+	if err := typDesc.HydrateTypeInfo(typ); err != nil {
+		return nil, err
+	}
+	return typ, nil
+}
+
 // ExprFmtCtxBase produces a FmtCtx used for serializing expressions; a proper
 // IndexedVar formatting function needs to be added on. It replaces placeholders
 // with their values.
 func ExprFmtCtxBase(evalCtx *tree.EvalContext) *tree.FmtCtx {
-	fmtCtx := tree.NewFmtCtx(tree.FmtCheckEquivalence)
+	fmtCtx := tree.NewFmtCtx(tree.FmtDistSQLSerialization)
 	fmtCtx.SetPlaceholderFormat(
 		func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
 			d, err := p.Eval(evalCtx)
@@ -115,7 +142,7 @@ func (e *Expression) Empty() bool {
 // String implements the Stringer interface.
 func (e Expression) String() string {
 	if e.LocalExpr != nil {
-		ctx := tree.NewFmtCtx(tree.FmtCheckEquivalence)
+		ctx := tree.NewFmtCtx(tree.FmtDistSQLSerialization)
 		ctx.FormatNode(e.LocalExpr)
 		return ctx.CloseAndGetString()
 	}

@@ -162,11 +162,66 @@ func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error)
 		if err := tdesc.HydrateTypeInfo(typ); err != nil {
 			return nil, err
 		}
+		// Override the hydrated name with the fully resolved type name.
 		typ.TypeMeta.Name = &tn
 		return typ, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
 	}
+}
+
+// TODO (rohany): Once we start to cache type descriptors, this needs needs to
+//  look into the set of leased copies.
+func (p *planner) getTypeDescByID(ctx context.Context, id sqlbase.ID) (*TypeDescriptor, error) {
+	rawDesc, err := getDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id)
+	if err != nil {
+		return nil, err
+	}
+	typDesc, ok := rawDesc.(*TypeDescriptor)
+	if !ok {
+		return nil, errors.AssertionFailedf("%s was not a type descriptor", rawDesc)
+	}
+	return typDesc, nil
+}
+
+// maybeHydrateTypesInDescriptor hydrates any types.T's in the input descriptor.
+func (p *planner) maybeHydrateTypesInDescriptor(
+	ctx context.Context, objDesc tree.NameResolutionResult,
+) error {
+	// Helper method to hydrate the types within a TableDescriptor.
+	hydrateDesc := func(desc *TableDescriptor) error {
+		for i := range desc.Columns {
+			col := &desc.Columns[i]
+			if col.Type.UserDefined() {
+				// Look up its type descriptor.
+				typDesc, err := p.getTypeDescByID(ctx, sqlbase.ID(col.Type.StableTypeID()))
+				if err != nil {
+					return err
+				}
+				if err := typDesc.HydrateTypeInfo(col.Type); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	// As of now, only {Mutable,Immutable}TableDescriptor have types.T that
+	// need to be hydrated.
+	switch desc := objDesc.(type) {
+	case *sqlbase.MutableTableDescriptor:
+		if err := hydrateDesc(desc.TableDesc()); err != nil {
+			return err
+		}
+		if err := hydrateDesc(&desc.ClusterVersion); err != nil {
+			return err
+		}
+	case *sqlbase.ImmutableTableDescriptor:
+		if err := hydrateDesc(desc.TableDesc()); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func resolveExistingObjectImpl(
@@ -354,6 +409,14 @@ func (p *planner) LookupObject(
 	sc := p.LogicalSchemaAccessor()
 	lookupFlags.CommonLookupFlags = p.CommonLookupFlags(false /* required */)
 	objDesc, err := sc.GetObjectDesc(ctx, p.txn, p.ExecCfg().Settings, p.ExecCfg().Codec, dbName, scName, tbName, lookupFlags)
+
+	// The returned object may contain types.T that need hydrating.
+	if objDesc != nil {
+		if err := p.maybeHydrateTypesInDescriptor(ctx, objDesc); err != nil {
+			return false, nil, err
+		}
+	}
+
 	return objDesc != nil, objDesc, err
 }
 

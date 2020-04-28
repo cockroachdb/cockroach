@@ -405,6 +405,9 @@ func (r *createStatsResumer) Resume(
 
 		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn)
 		planCtx.planner = p
+		// Set the transaction on the EvalContext to this txn. This allows for
+		// use of the txn during processor setup during the execution of the flow.
+		evalCtx.Txn = txn
 		if err := dsp.planAndRunCreateStats(
 			ctx, evalCtx, planCtx, txn, r.job, NewRowResultWriter(rows),
 		); err != nil {

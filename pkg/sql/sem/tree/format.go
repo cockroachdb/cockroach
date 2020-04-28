@@ -126,6 +126,10 @@ const (
 	// FmtPGIndexDef is used to produce CREATE INDEX statements that are
 	// compatible with pg_get_indexdef.
 	FmtPGIndexDef
+
+	// If set, all datums of user defined types will wrap themselves in
+	// a way to avoid name resolution during DistSQL query evaluation.
+	fmtDisambiguateUserDefinedTypes
 )
 
 // Composite/derived flag definitions follow.
@@ -149,6 +153,12 @@ const (
 	//    can otherwise be formatted to the same string: (for example the
 	//    DDecimal 1 and the DInt 1).
 	FmtCheckEquivalence FmtFlags = fmtSymbolicVars | fmtDisambiguateDatumTypes | FmtParsableNumerics
+
+	// FmtDistSQLSerialization is just like FmtCheckEquivalence, but it can be
+	// used to serialize expressions for query distribution. In particular, it
+	// includes the flag fmtDisambiguateUserDefinedTypes which serializes user
+	// defined types in a way that avoids name resolution for DistSQL evaluation.
+	FmtDistSQLSerialization FmtFlags = FmtCheckEquivalence | fmtDisambiguateUserDefinedTypes
 
 	// FmtArrayToString is a special composite flag suitable
 	// for the output of array_to_string(). This de-quotes

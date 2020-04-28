@@ -350,6 +350,25 @@ func GetDatabaseDescFromID(
 	return db, nil
 }
 
+// GetTypeDescFromID retrieves the type descriptor for the type ID passed
+// in using an existing proto getter. It returns an error if the descriptor
+// doesn't exist or if it exists and is not a type descriptor.
+func GetTypeDescFromID(
+	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, id ID,
+) (*TypeDescriptor, error) {
+	descKey := MakeDescMetadataKey(codec, id)
+	desc := &Descriptor{}
+	_, err := protoGetter.GetProtoTs(ctx, descKey, desc)
+	if err != nil {
+		return nil, err
+	}
+	typ := desc.GetType()
+	if typ == nil {
+		return nil, ErrDescriptorNotFound
+	}
+	return typ, nil
+}
+
 // GetTableDescFromID retrieves the table descriptor for the table
 // ID passed in using an existing proto getter. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a table.
@@ -4093,6 +4112,7 @@ func (desc *TypeDescriptor) SetName(name string) {
 //  ImmutableTypeDescriptor so that pointers to the cached info
 //  can be shared among callers.
 func (desc *TypeDescriptor) HydrateTypeInfo(typ *types.T) error {
+	typ.TypeMeta.Name = tree.NewUnqualifiedTypeName(tree.Name(desc.Name))
 	switch desc.Kind {
 	case TypeDescriptor_ENUM:
 		if typ.Family() != types.EnumFamily {
