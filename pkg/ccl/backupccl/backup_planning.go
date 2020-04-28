@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -355,6 +356,13 @@ func backupPlanHook(
 					return err
 				}
 				tables = append(tables, tableDesc)
+
+				// If the table has any user defined types, error out.
+				for _, col := range tableDesc.Columns {
+					if col.Type.UserDefined() {
+						return unimplemented.NewWithIssue(48689, "user defined types in backup")
+					}
+				}
 
 				// Collect all the table stats for this table.
 				tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc.GetID())
