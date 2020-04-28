@@ -689,33 +689,39 @@ func DecodeTableIDIndexID(key []byte) ([]byte, uint32, uint32, error) {
 // prefix of every key for the same row. (Any key with this maximal prefix is
 // also guaranteed to be part of the input key's row.)
 // For secondary index keys, the row prefix is defined as the entire key.
-//
-// TODO(nvanbenschoten): support tenant ID prefix.
 func GetRowPrefixLength(key roachpb.Key) (int, error) {
 	n := len(key)
-	if encoding.PeekType(key) != encoding.Int {
+
+	// Strip tenant ID prefix from key.
+	tenKey, _, err := DecodeTenantPrefix(key)
+	if err != nil {
+		return 0, errors.Errorf("%s: not a valid table key", key)
+	}
+	tenN := len(tenKey)
+
+	if encoding.PeekType(tenKey) != encoding.Int {
 		// Not a table key, so the row prefix is the entire key.
 		return n, nil
 	}
 	// The column ID length is encoded as a varint and we take advantage of the
 	// fact that the column ID itself will be encoded in 0-9 bytes and thus the
 	// length of the column ID data will fit in a single byte.
-	buf := key[n-1:]
-	if encoding.PeekType(buf) != encoding.Int {
+	colIDLenByte := tenKey[tenN-1:]
+	if encoding.PeekType(colIDLenByte) != encoding.Int {
 		// The last byte is not a valid column ID suffix.
 		return 0, errors.Errorf("%s: not a valid table key", key)
 	}
 
-	// Strip off the family ID / column ID suffix from the buf. The last byte of the buf
-	// contains the length of the column ID suffix (which might be 0 if the buf
-	// does not contain a column ID suffix).
-	_, colIDLen, err := encoding.DecodeUvarintAscending(buf)
+	// Strip off the family ID / column ID suffix from the buf. The last byte of
+	// the buf contains the length of the column ID suffix (which might be 0 if
+	// the buf does not contain a column ID suffix).
+	_, colIDLen, err := encoding.DecodeUvarintAscending(colIDLenByte)
 	if err != nil {
 		return 0, err
 	}
 	// Note how this next comparison (and by extension the code after it) is overflow-safe. There
 	// are more intuitive ways of writing this that aren't as safe. See #18628.
-	if colIDLen > uint64(n-1) {
+	if colIDLen > uint64(tenN-1) {
 		// The column ID length was impossible. colIDLen is the length of
 		// the encoded column ID suffix. We add 1 to account for the byte
 		// holding the length of the encoded column ID and if that total
@@ -726,7 +732,7 @@ func GetRowPrefixLength(key roachpb.Key) (int, error) {
 		// by SystemConfig.ComputeSplitKey).
 		return 0, errors.Errorf("%s: malformed table key", key)
 	}
-	return len(key) - int(colIDLen) - 1, nil
+	return n - int(colIDLen) - 1, nil
 }
 
 // EnsureSafeSplitKey transforms an SQL table key such that it is a valid split key
