@@ -39,8 +39,8 @@ case "${1-}" in
       XGOARCH=amd64
       XCMAKE_SYSTEM_NAME=Linux
       TARGET_TRIPLE=x86_64-unknown-linux-gnu
-# -lrt is needed as clock_gettime isn't part of glibc prior to 2.17
-# once we update - the -lrt can be removed
+      # -lrt is needed as clock_gettime isn't part of glibc prior to 2.17.
+      # If we update to a newer glibc, the -lrt can be removed.
       LDFLAGS="-static-libgcc -static-libstdc++ -lrt"
       SUFFIX=-linux-2.6.32-gnu-amd64
     ) ;;
@@ -56,6 +56,11 @@ case "${1-}" in
     ) ;;
 
   ?(arm64-)linux?(-gnueabi))
+    # Manually set the correct values for configure checks that libkrb5 won't be
+    # able to perform because we're cross-compiling.
+    export krb5_cv_attr_constructor_destructor=yes
+    export ac_cv_func_regcomp=yes
+    export ac_cv_printf_positional=yes
     args=(
       XGOOS=linux
       XGOARCH=arm64
