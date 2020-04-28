@@ -755,7 +755,7 @@ statement ok
 DROP TABLE IF EXISTS t;
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y))
 
-statement error pq: primary key of table t dropped without subsequent addition of new primary key
+statement error pq: unimplemented: primary key of table t dropped without subsequent addition of new primary key
 ALTER TABLE t DROP CONSTRAINT "primary"
 
 statement error pq: multiple primary keys for table "t" are not allowed
@@ -916,7 +916,7 @@ ALTER TABLE t1 DROP CONSTRAINT "primary"
 statement ok
 INSERT INTO t2 VALUES (1)
 
-statement error pq: primary key of table t1 dropped without subsequent addition of new primary key
+statement error pq: unimplemented: primary key of table t1 dropped without subsequent addition of new primary key
 COMMIT
 
 query I
