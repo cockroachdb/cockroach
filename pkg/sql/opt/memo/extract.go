@@ -294,3 +294,20 @@ func ExtractConstColumns(
 	}
 	return fixedCols
 }
+
+// ExtractValueForConstColumn returns the constant value of a column returned by
+// ExtractConstColumns.
+func ExtractValueForConstColumn(
+	on FiltersExpr, mem *Memo, evalCtx *tree.EvalContext, col opt.ColumnID,
+) tree.Datum {
+	for i := range on {
+		scalar := on[i]
+		scalarProps := scalar.ScalarProps()
+		if scalarProps.Constraints != nil {
+			if val := scalarProps.Constraints.ExtractValueForConstCol(evalCtx, col); val != nil {
+				return val
+			}
+		}
+	}
+	return nil
+}

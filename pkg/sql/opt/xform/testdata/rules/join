@@ -1756,6 +1756,20 @@ memo (optimized, ~13KB, required=[presentation: q:2,r:3])
  ├── G16: (variable r)
  └── G17: (const 2)
 
+# Case where the fixed columns are extracted from a complicated expression.
+opt
+SELECT q,r FROM pqr WHERE q = 1 AND ((r < 1 AND r > 1) OR (r >= 2 AND r <= 2))
+----
+inner-join (zigzag pqr@q pqr@r)
+ ├── columns: q:2!null r:3!null
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [3] = [2]
+ ├── fd: ()-->(2,3)
+ └── filters
+      ├── q:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      └── ((r:3 < 1) AND (r:3 > 1)) OR ((r:3 >= 2) AND (r:3 <= 2)) [outer=(3), constraints=(/3: [/2 - /2]), fd=()-->(3)]
+
 # Nested zigzag case - zigzag join needs to be wrapped in a lookup join to
 # satisfy required columns.
 opt
