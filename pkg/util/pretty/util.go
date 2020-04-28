@@ -56,35 +56,41 @@ func JoinNestedRight(sep Doc, nested ...Doc) Doc {
 	}
 }
 
-// ConcatLine concatenates two Docs with a Line.
-func ConcatLine(a, b Doc) Doc {
+// ConcatDoc concatenates two Docs with between.
+func ConcatDoc(a, b, between Doc) Doc {
 	return simplifyNil(a, b, func(a, b Doc) Doc {
 		return Concat(
 			a,
 			Concat(
-				Line,
+				between,
 				b,
 			),
 		)
 	})
 }
 
+// ConcatLine concatenates two Docs with a Line.
+func ConcatLine(a, b Doc) Doc {
+	return ConcatDoc(a, b, Line)
+}
+
 // ConcatSpace concatenates two Docs with a space.
 func ConcatSpace(a, b Doc) Doc {
-	return simplifyNil(a, b, func(a, b Doc) Doc {
-		return Concat(
-			a,
-			Concat(
-				textSpace,
-				b,
-			),
-		)
-	})
+	return ConcatDoc(a, b, textSpace)
 }
 
 // Stack concats Docs with a Line between each.
 func Stack(d ...Doc) Doc {
 	return Fold(ConcatLine, d...)
+}
+
+// Fillwords fills lines with as many docs as will fit joined with a space or line.
+func Fillwords(d ...Doc) Doc {
+	u := &union{textSpace, line{}}
+	fill := func(a, b Doc) Doc {
+		return ConcatDoc(a, b, u)
+	}
+	return Fold(fill, d...)
 }
 
 // JoinGroupAligned nests joined d with divider under head.

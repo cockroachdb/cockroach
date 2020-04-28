@@ -36,10 +36,7 @@ type Parser struct {
 	saveSrc SourceLoc
 	errors  []error
 
-	// comments accumulates contiguous comments as they are scanned, as long as
-	// it has been initialized to a non-nil array. Parser functions initialize
-	// it when they want to remember comments. For example, the parser tags
-	// each define and rule with any comments that preceded it.
+	// comments accumulates contiguous comments as they are scanned.
 	comments CommentsExpr
 
 	// resolver is invoked to open the input files provided to the parser.
@@ -48,13 +45,22 @@ type Parser struct {
 	// unscanned is true if the last token was unscanned (i.e. put back to be
 	// reparsed).
 	unscanned bool
+
+	// exprs is tracks top-level expressions (including comments) in order.
+	exprs []Expr
+
+	// exprComments maps expressions to comments.
+	exprComments map[Expr]CommentsExpr
 }
 
 // NewParser constructs a new instance of the Optgen parser, with the specified
 // list of file paths as its input files. The Parse method must be called in
 // order to parse the input files.
 func NewParser(files ...string) *Parser {
-	p := &Parser{files: files}
+	p := &Parser{
+		files:        files,
+		exprComments: make(map[Expr]CommentsExpr),
+	}
 
 	// By default, resolve file names by a call to os.Open.
 	p.resolver = func(name string) (io.Reader, error) {
@@ -92,6 +98,40 @@ func (p *Parser) Errors() []error {
 	return p.errors
 }
 
+// Exprs returns the top-level expressions (defines, rules, comments) in the
+// order in which they were encountered.
+func (p *Parser) Exprs() []Expr {
+	return p.exprs
+}
+
+// GetComments returns the comments associated with e.
+func (p *Parser) GetComments(e Expr) CommentsExpr {
+	return p.exprComments[e]
+}
+
+func (p *Parser) getComments() CommentsExpr {
+	comments := p.comments
+	p.comments = nil
+	return comments
+}
+
+func (p *Parser) setComments(e Expr, comments CommentsExpr) {
+	if len(comments) > 0 {
+		p.exprComments[e] = comments
+	}
+}
+
+func (p *Parser) hasComments() bool {
+	return len(p.comments) > 0
+}
+
+func (p *Parser) appendComments() {
+	comments := p.getComments()
+	if len(comments) > 0 {
+		p.exprs = append(p.exprs, &comments)
+	}
+}
+
 // root = tags (define | rule)
 func (p *Parser) parseRoot() *RootExpr {
 	rootOp := &RootExpr{}
@@ -109,11 +149,8 @@ func (p *Parser) parseRoot() *RootExpr {
 	}
 
 	for {
-		var comments CommentsExpr
 		var tags TagsExpr
-
-		// Remember any comments at the top-level by initializing p.comments.
-		p.comments = make(CommentsExpr, 0)
+		var comments CommentsExpr
 
 		tok := p.scan()
 		src := p.src
@@ -125,10 +162,7 @@ func (p *Parser) parseRoot() *RootExpr {
 		case LBRACKET:
 			p.unscan()
 
-			// Get any comments that have accumulated.
-			comments = p.comments
-			p.comments = nil
-
+			comments = p.getComments()
 			tags = p.parseTags()
 			if tags == nil {
 				p.tryRecover()
@@ -143,25 +177,25 @@ func (p *Parser) parseRoot() *RootExpr {
 					p.tryRecover()
 					break
 				}
+				p.setComments(rule, comments)
 
 				rootOp.Rules = append(rootOp.Rules, rule)
+				p.exprs = append(p.exprs, rule)
 				break
 			}
 
 			fallthrough
 
 		case IDENT:
-			// Get any comments that have accumulated.
-			if comments == nil {
-				comments = p.comments
-				p.comments = nil
-			}
-
 			// Only define identifier is allowed at the top level.
 			if !p.isDefineIdent() {
 				p.addExpectedTokenErr("define statement")
 				p.tryRecover()
 				break
+			}
+			// If there was no tag, we need to check for comments.
+			if len(comments) == 0 {
+				comments = p.getComments()
 			}
 
 			p.unscan()
@@ -171,8 +205,10 @@ func (p *Parser) parseRoot() *RootExpr {
 				p.tryRecover()
 				break
 			}
+			p.setComments(define, comments)
 
 			rootOp.Defines = append(rootOp.Defines, define)
+			p.exprs = append(p.exprs, define)
 
 		default:
 			p.addExpectedTokenErr("define statement or rule")
@@ -199,19 +235,16 @@ func (p *Parser) parseDefine(comments CommentsExpr, tags TagsExpr, src SourceLoc
 	}
 
 	for {
-		// Remember any comments scanned by p.scan by initializing p.comments.
-		p.comments = make(CommentsExpr, 0)
-
 		if p.scan() == RBRACE {
+			if len(p.comments) > 0 {
+				p.addErr(fmt.Sprintf("comments not allowed before closing }: %v", p.comments))
+				return nil
+			}
 			return define
 		}
 		p.unscan()
 
-		// Get any comments that have accumulated.
-		comments := p.comments
-		p.comments = nil
-
-		defineField := p.parseDefineField(comments)
+		defineField := p.parseDefineField()
 		if defineField == nil {
 			return nil
 		}
@@ -221,7 +254,7 @@ func (p *Parser) parseDefine(comments CommentsExpr, tags TagsExpr, src SourceLoc
 }
 
 // define-field = field-name field-type
-func (p *Parser) parseDefineField(comments CommentsExpr) *DefineFieldExpr {
+func (p *Parser) parseDefineField() *DefineFieldExpr {
 	if !p.scanToken(IDENT, "define field name") {
 		return nil
 	}
@@ -235,12 +268,14 @@ func (p *Parser) parseDefineField(comments CommentsExpr) *DefineFieldExpr {
 
 	typ := p.s.Literal()
 
-	return &DefineFieldExpr{
+	field := &DefineFieldExpr{
 		Src:      &src,
 		Name:     StringExpr(name),
-		Comments: comments,
+		Comments: p.getComments(),
 		Type:     StringExpr(typ),
 	}
+	p.setComments(field, field.Comments)
+	return field
 }
 
 // rule = match '=>' replace
@@ -251,6 +286,10 @@ func (p *Parser) parseRule(comments CommentsExpr, tags TagsExpr, src SourceLoc) 
 	}
 
 	if !p.scanToken(ARROW, "'=>'") {
+		return nil
+	}
+	if p.hasComments() {
+		p.addErr("comments not allowed before =>")
 		return nil
 	}
 
@@ -274,25 +313,33 @@ func (p *Parser) parseMatch() Expr {
 	if !p.scanToken(LPAREN, "match pattern") {
 		return nil
 	}
+	comments := p.getComments()
 	p.unscan()
-	return p.parseFunc()
+	f := p.parseFunc()
+	p.setComments(f, comments)
+	return f
 }
 
 // replace = func | ref
 func (p *Parser) parseReplace() Expr {
-	switch p.scan() {
+	tok := p.scan()
+	comments := p.getComments()
+	var e Expr
+	switch tok {
 	case LPAREN:
 		p.unscan()
-		return p.parseFunc()
+		e = p.parseFunc()
 
 	case DOLLAR:
 		p.unscan()
-		return p.parseRef()
+		e = p.parseRef()
 
 	default:
 		p.addExpectedTokenErr("replace pattern")
 		return nil
 	}
+	p.setComments(e, comments)
+	return e
 }
 
 // func = '(' func-name arg* ')'
@@ -310,14 +357,20 @@ func (p *Parser) parseFunc() Expr {
 	fn := &FuncExpr{Src: &src, Name: name}
 	for {
 		if p.scan() == RPAREN {
+			if p.hasComments() {
+				p.addErr("comments not allowed before )")
+				return nil
+			}
 			return fn
 		}
 
 		p.unscan()
+		comments := p.getComments()
 		arg := p.parseArg()
 		if arg == nil {
 			return nil
 		}
+		p.setComments(arg, comments)
 
 		fn.Args = append(fn.Args, arg)
 	}
@@ -325,19 +378,25 @@ func (p *Parser) parseFunc() Expr {
 
 // func-name = names | func
 func (p *Parser) parseFuncName() Expr {
-	switch p.scan() {
+	tok := p.scan()
+	comments := p.getComments()
+	var e Expr
+	switch tok {
 	case IDENT:
 		p.unscan()
-		return p.parseNames()
+		e = p.parseNames()
 
 	case LPAREN:
 		// Constructed name.
 		p.unscan()
-		return p.parseFunc()
-	}
+		e = p.parseFunc()
 
-	p.addExpectedTokenErr("name")
-	return nil
+	default:
+		p.addExpectedTokenErr("name")
+		return nil
+	}
+	p.setComments(e, comments)
+	return e
 }
 
 // names = name ('|' name)*
@@ -419,39 +478,44 @@ func (p *Parser) parseAnd() Expr {
 
 // expr = func | not | list | any | name | STRING | NUMBER
 func (p *Parser) parseExpr() Expr {
-	switch p.scan() {
+	tok := p.scan()
+	comments := p.getComments()
+	var e Expr
+	switch tok {
 	case LPAREN:
 		p.unscan()
-		return p.parseFunc()
+		e = p.parseFunc()
 
 	case CARET:
 		p.unscan()
-		return p.parseNot()
+		e = p.parseNot()
 
 	case LBRACKET:
 		p.unscan()
-		return p.parseList()
+		e = p.parseList()
 
 	case ASTERISK:
 		src := p.src
-		return &AnyExpr{Src: &src}
+		e = &AnyExpr{Src: &src}
 
 	case IDENT:
 		name := NameExpr(p.s.Literal())
-		return &name
+		e = &name
 
 	case STRING:
 		p.unscan()
-		return p.parseString()
+		e = p.parseString()
 
 	case NUMBER:
 		p.unscan()
-		return p.parseNumber()
+		e = p.parseNumber()
 
 	default:
 		p.addExpectedTokenErr("expression")
 		return nil
 	}
+	p.setComments(e, comments)
+	return e
 }
 
 // not = '^' expr
@@ -480,6 +544,10 @@ func (p *Parser) parseList() Expr {
 	list := &ListExpr{Src: &src}
 	for {
 		if p.scan() == RBRACKET {
+			if p.hasComments() {
+				p.addErr("comments not allowed before ]")
+				return nil
+			}
 			return list
 		}
 
@@ -495,12 +563,18 @@ func (p *Parser) parseList() Expr {
 
 // list-child = list-any | arg
 func (p *Parser) parseListChild() Expr {
-	if p.scan() == ELLIPSES {
+	tok := p.scan()
+	comments := p.getComments()
+	var e Expr
+	if tok == ELLIPSES {
 		src := p.src
-		return &ListAnyExpr{Src: &src}
+		e = &ListAnyExpr{Src: &src}
+	} else {
+		p.unscan()
+		e = p.parseArg()
 	}
-	p.unscan()
-	return p.parseArg()
+	p.setComments(e, comments)
+	return e
 }
 
 // ref = '$' label
@@ -534,6 +608,10 @@ func (p *Parser) parseTags() TagsExpr {
 		tags = append(tags, TagExpr(p.s.Literal()))
 
 		if p.scan() == RBRACKET {
+			if p.hasComments() {
+				p.addErr("comments not allowed before ]")
+				return nil
+			}
 			return tags
 		}
 
@@ -618,6 +696,8 @@ func (p *Parser) scan() Token {
 		tok := p.s.Scan()
 		switch tok {
 		case EOF:
+			p.appendComments()
+
 			// Reached end of current file, so try to open next file.
 			if p.file+1 >= len(p.files) {
 				// No more files to parse.
@@ -636,17 +716,11 @@ func (p *Parser) scan() Token {
 			return ERROR
 
 		case COMMENT:
-			// Remember contiguous comments if p.comments is initialized, else
-			// skip.
-			if p.comments != nil {
-				p.comments = append(p.comments, CommentExpr(p.s.Literal()))
-			}
+			p.comments = append(p.comments, CommentExpr(p.s.Literal()))
 
 		case WHITESPACE:
-			// A blank line resets any accumulating comments, since they have
-			// to be contiguous.
-			if p.comments != nil && strings.Count(p.s.Literal(), "\n") > 1 {
-				p.comments = p.comments[:0]
+			if strings.Count(p.s.Literal(), "\n") > 1 {
+				p.appendComments()
 			}
 
 		default:
