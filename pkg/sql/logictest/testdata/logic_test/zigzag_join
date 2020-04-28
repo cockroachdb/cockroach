@@ -59,6 +59,11 @@ CREATE INDEX a_idx_2 ON a(a);
 CREATE INDEX b_idx_2 ON a(b);
 SELECT n,a,b FROM a WHERE a = 4 AND b = 1;
 
+# Regression test for 48003 ("non-values node passed as fixed value to zigzag
+# join" error).
+statement ok
+SELECT n FROM a WHERE b = 1 AND (((a < 1) AND (a > 1)) OR (a >= 2 AND a <= 2))
+
 # ------------------------------------------------------------------------------
 # Zigzag join tests on inverted indexes.
 # ------------------------------------------------------------------------------
