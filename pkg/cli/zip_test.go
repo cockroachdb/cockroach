@@ -383,7 +383,11 @@ func TestZipRetries(t *testing.T) {
 			t.Fatal(err)
 		}
 		z := newZipper(out)
-		defer z.close()
+		defer func() {
+			if err := z.close(); err != nil {
+				t.Fatal(err)
+			}
+		}()
 
 		sqlURL := url.URL{
 			Scheme:   "postgres",
