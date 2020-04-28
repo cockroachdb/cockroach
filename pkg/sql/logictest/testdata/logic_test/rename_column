@@ -17,10 +17,10 @@ uid name  title
 1  tom   cat
 2  jerry rat
 
-statement error column name "name" already exists
+statement error pq: column "name" of relation "users" already exists
 ALTER TABLE users RENAME COLUMN title TO name
 
-statement error empty column name
+statement error pgcode 42601 empty column name
 ALTER TABLE users RENAME COLUMN title TO ""
 
 statement error pgcode 42703 column "ttle" does not exist
