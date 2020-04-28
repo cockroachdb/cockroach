@@ -216,15 +216,29 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return sqlbase.NewNonNullViolationError(col.Name)
 				}
 			}
-			_, dropped, err := n.tableDesc.FindColumnByName(d.Name)
-			if err == nil {
-				if dropped {
+			_, err = n.tableDesc.FindActiveColumnByName(string(d.Name))
+			if m := n.tableDesc.FindColumnMutationByName(d.Name); m != nil {
+				switch m.Direction {
+				case sqlbase.DescriptorMutation_ADD:
+					return pgerror.Newf(pgcode.DuplicateColumn,
+						"duplicate: column %q in the middle of being added, not yet public",
+						col.Name)
+				case sqlbase.DescriptorMutation_DROP:
 					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"column %q being dropped, try again later", col.Name)
+				default:
+					if err != nil {
+						return errors.AssertionFailedf(
+							"mutation in state %s, direction %s, and no column descriptor",
+							errors.Safe(m.State), errors.Safe(m.Direction))
+					}
 				}
+			}
+			if err == nil {
 				if t.IfNotExists {
 					continue
 				}
+				return sqlbase.NewColumnAlreadyExistsError(string(d.Name), n.tableDesc.Name)
 			}
 
 			n.tableDesc.AddColumnMutation(col, sqlbase.DescriptorMutation_ADD)

@@ -119,6 +119,11 @@ func NewUndefinedColumnError(name string) error {
 	return pgerror.Newf(pgcode.UndefinedColumn, "column %q does not exist", name)
 }
 
+// NewColumnAlreadyExistsError creates an error for a preexisting column.
+func NewColumnAlreadyExistsError(name, relation string) error {
+	return pgerror.Newf(pgcode.DuplicateColumn, "column %q of relation %q already exists", name, relation)
+}
+
 // NewDatabaseAlreadyExistsError creates an error for a preexisting database.
 func NewDatabaseAlreadyExistsError(name string) error {
 	return pgerror.Newf(pgcode.DuplicateDatabase, "database %q already exists", name)
