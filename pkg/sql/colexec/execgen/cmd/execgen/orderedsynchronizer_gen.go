@@ -41,6 +41,9 @@ func genOrderedSynchronizer(wr io.Writer) error {
 		return err
 	}
 
+	// It doesn't matter that we're passing in all overloads of Equality
+	// comparison operator - we simply need to iterate over all supported
+	// types.
 	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.EQ])
 }
 

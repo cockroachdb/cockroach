@@ -730,8 +730,8 @@ func getFloatCmpOpCompareFunc(checkLeftNan, checkRightNan bool) compareFunc {
 					{{.Target}} = 1
 				}	else if a == b {
 					{{.Target}} = 0
-				}	else if {{ if .CheckLeftNan }} math.IsNaN(a) {{ else }} false {{ end }} {
-					if {{ if .CheckRightNan }} math.IsNaN(b) {{ else }} false {{ end }} {
+				}	else if {{if .CheckLeftNan}} math.IsNaN(a) {{else}} false {{end}} {
+					if {{if .CheckRightNan}} math.IsNaN(b) {{else}} false {{end}} {
 						{{.Target}} = 0
 					} else {
 						{{.Target}} = -1
@@ -958,11 +958,11 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				{{ if .IsDivision }}
+				{{if .IsDivision}}
 				if {{.Right}} == 0 {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
-				{{ end }}
+				{{end}}
 				tmpDec := &decimalScratch.tmpDec1
 				tmpDec.SetFinite(int64({{.Right}}), 0)
 				if _, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, tmpDec); err != nil {
@@ -1030,14 +1030,14 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 			{
 				tmpDec := &decimalScratch.tmpDec1
 				tmpDec.SetFinite(int64({{.Left}}), 0)
-				{{ if .IsDivision }}
+				{{if .IsDivision}}
 				cond, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})
 				if cond.DivisionByZero() {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
-				{{ else }}
+				{{else}}
 				_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})
-				{{ end }}
+				{{end}}
 				if err != nil {
 					colexecerror.ExpectedError(err)
 				}
@@ -1410,6 +1410,9 @@ func buildDict(values ...interface{}) (map[string]interface{}, error) {
 	}
 	return dict, nil
 }
+
+// Although unused right now, this function might be helpful later.
+var _ = intersectOverloads
 
 // intersectOverloads takes in a slice of overloads and returns a new slice of
 // overloads the corresponding intersected overloads at each position. The

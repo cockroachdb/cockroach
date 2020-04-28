@@ -47,6 +47,7 @@ func TestExternalSort(t *testing.T) {
 		},
 	}
 
+	const numForcedRepartitions = 3
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 
@@ -85,7 +86,7 @@ func TestExternalSort(t *testing.T) {
 							// flow this will happen in a downstream materializer/outbox,
 							// since there is no way to tell an operator that Next won't be
 							// called again.
-							if tc.k == 0 || int(tc.k) >= len(tc.tuples) {
+							if tc.k == 0 || tc.k >= len(tc.tuples) {
 								semsToCheck = append(semsToCheck, sem)
 							}
 							// TODO(asubiotto): Pass in the testing.T of the caller to this
@@ -95,7 +96,7 @@ func TestExternalSort(t *testing.T) {
 							//  be drained.
 							sorter, newAccounts, newMonitors, closers, err := createDiskBackedSorter(
 								ctx, flowCtx, input, tc.typs, tc.ordCols, tc.matchLen, tc.k, func() {},
-								externalSorterMinPartitions, false /* delegateFDAcquisition */, queueCfg, sem,
+								numForcedRepartitions, false /* delegateFDAcquisition */, queueCfg, sem,
 							)
 							// Check that the sort was added as a Closer.
 							// TODO(asubiotto): Explicitly Close when testing.T is passed into
@@ -142,6 +143,7 @@ func TestExternalSortRandomized(t *testing.T) {
 		typs[i] = *types.Int
 	}
 
+	const numForcedRepartitions = 3
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 
@@ -198,7 +200,7 @@ func TestExternalSortRandomized(t *testing.T) {
 							sorter, newAccounts, newMonitors, closers, err := createDiskBackedSorter(
 								ctx, flowCtx, input, typs[:nCols], ordCols,
 								0 /* matchLen */, 0 /* k */, func() {},
-								externalSorterMinPartitions, delegateFDAcquisition, queueCfg, sem)
+								numForcedRepartitions, delegateFDAcquisition, queueCfg, sem)
 							// TODO(asubiotto): Explicitly Close when testing.T is passed into
 							//  this constructor and we do a substring match.
 							require.Equal(t, 1, len(closers))
@@ -271,13 +273,10 @@ func BenchmarkExternalSort(b *testing.B) {
 					for n := 0; n < b.N; n++ {
 						source := newFiniteBatchSource(batch, typs, nBatches)
 						var spilled bool
-						// TODO(yuzefovich): do not specify maxNumberPartitions (let the
-						// external sorter figure out that number itself) once we pass in
-						// filled-in disk queue config.
 						sorter, accounts, monitors, _, err := createDiskBackedSorter(
 							ctx, flowCtx, []colexecbase.Operator{source}, typs, ordCols,
 							0 /* matchLen */, 0 /* k */, func() { spilled = true },
-							64 /* maxNumberPartitions */, false /* delegateFDAcquisitions */, queueCfg, &colexecbase.TestingSemaphore{},
+							0 /* numForcedRepartitions */, false /* delegateFDAcquisitions */, queueCfg, &colexecbase.TestingSemaphore{},
 						)
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
@@ -315,9 +314,9 @@ func createDiskBackedSorter(
 	typs []types.T,
 	ordCols []execinfrapb.Ordering_Column,
 	matchLen int,
-	k uint16,
+	k int,
 	spillingCallbackFn func(),
-	maxNumberPartitions int,
+	numForcedRepartitions int,
 	delegateFDAcquisitions bool,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
@@ -346,7 +345,7 @@ func createDiskBackedSorter(
 	// understand when to start a new partition, so we will not use
 	// the streaming memory account.
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
-	args.TestingKnobs.NumForcedRepartitions = maxNumberPartitions
+	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions
 	result, err := NewColOperator(ctx, flowCtx, args)
 	return result.Op, result.OpAccounts, result.OpMonitors, result.ToClose, err

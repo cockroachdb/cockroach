@@ -86,7 +86,7 @@ func _ASSIGN_LT(_, _, _ string) bool {
 
 func isSorterSupported(t *types.T, dir execinfrapb.Ordering_Column_Direction) bool {
 	switch typeconv.FromColumnType(t) {
-	// {{range $typ, $ := . }} {{/* for each type */}}
+	// {{range $typ, $ := .}} {{/* for each type */}}
 	case _TYPES_T:
 		switch dir {
 		// {{range (index . true).Overloads}} {{/* for each direction */}}
@@ -106,10 +106,10 @@ func newSingleSorter(
 	t *types.T, dir execinfrapb.Ordering_Column_Direction, hasNulls bool,
 ) colSorter {
 	switch typeconv.FromColumnType(t) {
-	// {{range $typ, $ := . }} {{/* for each type */}}
+	// {{range $typ, $ := .}} {{/* for each type */}}
 	case _TYPES_T:
 		switch hasNulls {
-		// {{range $isNull, $ := . }} {{/* for null vs not null */}}
+		// {{range $isNull, $ := .}} {{/* for null vs not null */}}
 		case _ISNULL:
 			switch dir {
 			// {{range .Overloads}} {{/* for each direction */}}
@@ -131,8 +131,8 @@ func newSingleSorter(
 	return nil
 }
 
-// {{range $typ, $ := . }} {{/* for each type */}}
-// {{range . }} {{/* for null vs not null */}}
+// {{range $typ, $ := .}} {{/* for each type */}}
+// {{range .}} {{/* for null vs not null */}}
 // {{range .Overloads}} {{/* for each direction */}}
 
 type sort_TYPE_DIR_HANDLES_NULLSOp struct {
@@ -172,10 +172,10 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sortPartitions(ctx context.Context, part
 }
 
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) Less(i, j int) bool {
-	// {{ if eq .Nulls true }}
+	// {{if eq .Nulls true}}
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
-	// {{ if eq .DirString "Asc" }}
+	// {{if eq .DirString "Asc"}}
 	// If ascending, nulls always sort first, so we encode that logic here.
 	if n1 && n2 {
 		return false
@@ -184,7 +184,7 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) Less(i, j int) bool {
 	} else if n2 {
 		return false
 	}
-	// {{ else if eq .DirString "Desc" }}
+	// {{else if eq .DirString "Desc"}}
 	// If descending, nulls always sort last, so we encode that logic here.
 	if n1 && n2 {
 		return false
