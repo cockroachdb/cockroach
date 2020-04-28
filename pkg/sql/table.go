@@ -234,7 +234,16 @@ func (tc *TableCollection) getMutableTableDescriptor(
 	}
 
 	phyAccessor := UncachedPhysicalAccessor{}
-	obj, err := phyAccessor.GetObjectDesc(ctx, txn, tc.settings, tc.codec(), tn, flags)
+	obj, err := phyAccessor.GetObjectDesc(
+		ctx,
+		txn,
+		tc.settings,
+		tc.codec(),
+		tn.Catalog(),
+		tn.Schema(),
+		tn.Table(),
+		flags,
+	)
 	if obj == nil {
 		return nil, err
 	}
@@ -295,11 +304,24 @@ func (tc *TableCollection) getTableVersion(
 
 	readTableFromStore := func() (*sqlbase.ImmutableTableDescriptor, error) {
 		phyAccessor := UncachedPhysicalAccessor{}
-		obj, err := phyAccessor.GetObjectDesc(ctx, txn, tc.settings, tc.codec(), tn, flags)
+		obj, err := phyAccessor.GetObjectDesc(
+			ctx,
+			txn,
+			tc.settings,
+			tc.codec(),
+			tn.Catalog(),
+			tn.Schema(),
+			tn.Table(),
+			flags,
+		)
 		if obj == nil {
 			return nil, err
 		}
-		return obj.(*sqlbase.ImmutableTableDescriptor), err
+		tbl, ok := obj.(*sqlbase.ImmutableTableDescriptor)
+		if !ok {
+			return nil, err
+		}
+		return tbl, err
 	}
 
 	refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseID(tn.Catalog(), flags.Required)

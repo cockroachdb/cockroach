@@ -36,7 +36,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		return 0, readOnlyError("nextval()")
 	}
 
-	descriptor, err := ResolveExistingObject(ctx, p, seqName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireSequenceDesc)
+	descriptor, err := ResolveExistingTableObject(ctx, p, seqName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireSequenceDesc)
 	if err != nil {
 		return 0, err
 	}
@@ -94,7 +94,7 @@ func boundsExceededError(descriptor *sqlbase.ImmutableTableDescriptor) error {
 func (p *planner) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
-	descriptor, err := ResolveExistingObject(ctx, p, seqName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireSequenceDesc)
+	descriptor, err := ResolveExistingTableObject(ctx, p, seqName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireSequenceDesc)
 	if err != nil {
 		return 0, err
 	}
@@ -117,7 +117,7 @@ func (p *planner) SetSequenceValue(
 		return readOnlyError("setval()")
 	}
 
-	descriptor, err := ResolveExistingObject(ctx, p, seqName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireSequenceDesc)
+	descriptor, err := ResolveExistingTableObject(ctx, p, seqName, tree.ObjectLookupFlagsWithRequired(), ResolveRequireSequenceDesc)
 	if err != nil {
 		return err
 	}
@@ -432,7 +432,7 @@ func maybeAddSequenceDependencies(
 			}
 		} else {
 			// This is only executed via IMPORT which uses its own resolver.
-			seqDesc, err = ResolveMutableExistingObject(ctx, sc, &tn, true /*required*/, ResolveRequireSequenceDesc)
+			seqDesc, err = ResolveMutableExistingTableObject(ctx, sc, &tn, true /*required*/, ResolveRequireSequenceDesc)
 			if err != nil {
 				return nil, err
 			}

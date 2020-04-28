@@ -6,3 +6,31 @@ DROP TYPE mytype
 
 statement error pq: unimplemented: DROP TYPE
 DROP TYPE IF EXISTS mytype
+
+statement ok
+CREATE TYPE t AS ENUM ()
+
+statement error pq: relation "t" does not exist
+SELECT * FROM t
+
+statement error pq: type "t" already exists
+CREATE TABLE t (x INT)
+
+statement error pq: type "t" already exists
+CREATE TYPE t AS ENUM ()
+
+statement ok
+CREATE TABLE torename (x INT)
+
+statement error pq: type "t" already exists
+ALTER TABLE torename RENAME TO t
+
+statement ok
+CREATE DATABASE db2;
+CREATE TYPE db2.t AS ENUM ()
+
+statement error pq: relation "db2.t" does not exist
+SELECT * FROM db2.t
+
+statement error pq: type "db2.public.t" already exists
+CREATE TYPE db2.t AS ENUM ()

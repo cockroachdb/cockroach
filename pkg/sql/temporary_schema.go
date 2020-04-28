@@ -232,7 +232,9 @@ func cleanupSchemaObjects(
 			txn,
 			settings,
 			codec,
-			&tbName,
+			tbName.Catalog(),
+			tbName.Schema(),
+			tbName.Object(),
 			tree.ObjectLookupFlagsWithRequired(),
 		)
 		if err != nil {

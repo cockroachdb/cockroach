@@ -101,11 +101,16 @@ func getDatabaseID(
 func getDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
-	desc := &sqlbase.DatabaseDescriptor{}
-	if err := getDescriptorByID(ctx, txn, codec, id, desc); err != nil {
+	desc, err := getDescriptorByID(ctx, txn, codec, id)
+	if err != nil {
 		return nil, err
 	}
-	return desc, nil
+	db, ok := desc.(*sqlbase.DatabaseDescriptor)
+	if !ok {
+		return nil, pgerror.Newf(pgcode.WrongObjectType,
+			"%q is not a database", desc.String())
+	}
+	return db, nil
 }
 
 // MustGetDatabaseDescByID looks up the database descriptor given its ID,

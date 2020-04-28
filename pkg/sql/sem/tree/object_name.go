@@ -10,6 +10,19 @@
 
 package tree
 
+// ObjectName is a common interface for qualified object names.
+type ObjectName interface {
+	NodeFormatter
+	Object() string
+	Schema() string
+	Catalog() string
+	FQString() string
+	objectName()
+}
+
+var _ ObjectName = &TableName{}
+var _ ObjectName = &TypeName{}
+
 // objName is the internal type for a qualified object.
 type objName struct {
 	// ObjectName is the unqualified name for the object
@@ -19,6 +32,29 @@ type objName struct {
 	// ObjectNamePrefix is the path to the object.  This can be modified
 	// further by name resolution, see name_resolution.go.
 	ObjectNamePrefix
+}
+
+func (o *objName) Object() string {
+	return string(o.ObjectName)
+}
+
+// ToUnresolvedObjectName converts the type name to an unresolved object name.
+// Schema and catalog are included if indicated by the ExplicitSchema and
+// ExplicitCatalog flags.
+func (o *objName) ToUnresolvedObjectName() *UnresolvedObjectName {
+	u := &UnresolvedObjectName{}
+
+	u.NumParts = 1
+	u.Parts[0] = string(o.ObjectName)
+	if o.ExplicitSchema {
+		u.Parts[u.NumParts] = string(o.SchemaName)
+		u.NumParts++
+	}
+	if o.ExplicitCatalog {
+		u.Parts[u.NumParts] = string(o.CatalogName)
+		u.NumParts++
+	}
+	return u
 }
 
 // ObjectNamePrefix corresponds to the path prefix of an object name.
@@ -112,12 +148,12 @@ func NewUnresolvedObjectName(
 
 // Resolved returns the resolved name in the annotation for this node (or nil if
 // there isn't one).
-func (u *UnresolvedObjectName) Resolved(ann *Annotations) *TableName {
+func (u *UnresolvedObjectName) Resolved(ann *Annotations) ObjectName {
 	r := u.GetAnnotation(ann)
 	if r == nil {
 		return nil
 	}
-	return r.(*TableName)
+	return r.(ObjectName)
 }
 
 // Format implements the NodeFormatter interface.
