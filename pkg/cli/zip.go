@@ -12,7 +12,6 @@ package cli
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -243,6 +242,14 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	// We're going to use the SQL code, but in non-interactive mode.
+	// Override whatever terminal-driven defaults there may be out there.
+	cliCtx.isInteractive = false
+	cliCtx.terminalOutput = false
+	sqlCtx.showTimes = false
+	// Use a streaming format to avoid accumulating all rows in RAM.
+	cliCtx.tableDisplayFormat = tableDisplayTSV
 
 	sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
 	if err != nil {
@@ -681,15 +688,14 @@ func dumpTableDataForZip(
 	name := base + "/" + table + ".txt"
 
 	fmt.Printf("retrieving SQL data for %s... ", table)
-	var buf bytes.Buffer
-	err := runQueryAndFormatResults(conn, &buf, makeQuery(query))
-	if err != nil {
-		return z.createError(name, err)
-	}
 	w, err := z.create(name, time.Time{})
 	if err != nil {
 		return err
 	}
-	_, err = io.Copy(w, bytes.NewReader(buf.Bytes()))
-	return err
+	// Pump the SQL rows directly into the zip writer, to avoid
+	// in-RAM buffering.
+	if err := runQueryAndFormatResults(conn, w, makeQuery(query)); err != nil {
+		return z.createError(name, err)
+	}
+	return nil
 }

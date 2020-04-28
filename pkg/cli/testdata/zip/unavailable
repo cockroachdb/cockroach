@@ -17,25 +17,35 @@ retrieving SQL data for crdb_internal.cluster_queries... writing: debug/crdb_int
 retrieving SQL data for crdb_internal.cluster_sessions... writing: debug/crdb_internal.cluster_sessions.txt
 retrieving SQL data for crdb_internal.cluster_settings... writing: debug/crdb_internal.cluster_settings.txt
 retrieving SQL data for crdb_internal.cluster_transactions... writing: debug/crdb_internal.cluster_transactions.txt
-retrieving SQL data for crdb_internal.jobs... writing: debug/crdb_internal.jobs.txt.err.txt
+retrieving SQL data for crdb_internal.jobs... writing: debug/crdb_internal.jobs.txt
+writing: debug/crdb_internal.jobs.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for system.jobs... writing: debug/system.jobs.txt.err.txt
+retrieving SQL data for system.jobs... writing: debug/system.jobs.txt
+writing: debug/system.jobs.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for system.descriptor... writing: debug/system.descriptor.txt.err.txt
+retrieving SQL data for system.descriptor... writing: debug/system.descriptor.txt
+writing: debug/system.descriptor.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for system.namespace... writing: debug/system.namespace.txt.err.txt
+retrieving SQL data for system.namespace... writing: debug/system.namespace.txt
+writing: debug/system.namespace.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for system.namespace2... writing: debug/system.namespace2.txt.err.txt
+retrieving SQL data for system.namespace2... writing: debug/system.namespace2.txt
+writing: debug/system.namespace2.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.kv_node_status... writing: debug/crdb_internal.kv_node_status.txt.err.txt
+retrieving SQL data for crdb_internal.kv_node_status... writing: debug/crdb_internal.kv_node_status.txt
+writing: debug/crdb_internal.kv_node_status.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.kv_store_status... writing: debug/crdb_internal.kv_store_status.txt.err.txt
+retrieving SQL data for crdb_internal.kv_store_status... writing: debug/crdb_internal.kv_store_status.txt
+writing: debug/crdb_internal.kv_store_status.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.schema_changes... writing: debug/crdb_internal.schema_changes.txt.err.txt
+retrieving SQL data for crdb_internal.schema_changes... writing: debug/crdb_internal.schema_changes.txt
+writing: debug/crdb_internal.schema_changes.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.partitions... writing: debug/crdb_internal.partitions.txt.err.txt
+retrieving SQL data for crdb_internal.partitions... writing: debug/crdb_internal.partitions.txt
+writing: debug/crdb_internal.partitions.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.zones... writing: debug/crdb_internal.zones.txt.err.txt
+retrieving SQL data for crdb_internal.zones... writing: debug/crdb_internal.zones.txt
+writing: debug/crdb_internal.zones.txt.err.txt
   ^- resulted in ...
 requesting nodes... writing: debug/nodes.json.err.txt
   ^- resulted in ...
