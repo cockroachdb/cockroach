@@ -624,7 +624,9 @@ func (s *Store) updateLivenessMap() {
 			continue
 		}
 		// Liveness claims that this node is down, but ConnHealth gets the last say
-		// because we'd rather quiesce a range too little than one too often.
+		// because we'd rather quiesce a range too little than one too often. Note
+		// that this policy is different from the one governing the releasing of
+		// proposal quota; see comments over there.
 		//
 		// NB: This has false negatives. If a node doesn't have a conn open to it
 		// when ConnHealth is called, then ConnHealth will return
