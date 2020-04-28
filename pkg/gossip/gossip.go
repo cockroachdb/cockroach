@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1613,4 +1614,53 @@ func (g *Gossip) findClient(match func(*client) bool) *client {
 		}
 	}
 	return nil
+}
+
+// MakeDeprecatedGossip initializes a DeprecatedGossip instance.
+//
+// Use of Gossip from within the SQL layer is **deprecated**. Please do not
+// introduce new uses of it.
+//
+// See TenantSQLDeprecatedWrapper for details.
+func MakeDeprecatedGossip(g *Gossip, exposed bool) DeprecatedGossip {
+	return DeprecatedGossip{
+		w: errorutil.MakeTenantSQLDeprecatedWrapper(g, exposed),
+	}
+}
+
+// DeprecatedGossip is a Gossip instance in a SQL tenant server.
+//
+// Use of Gossip from within the SQL layer is **deprecated**. Please do not
+// introduce new uses of it.
+//
+// See TenantSQLDeprecatedWrapper for details.
+type DeprecatedGossip struct {
+	w errorutil.TenantSQLDeprecatedWrapper
+}
+
+// Deprecated trades a Github issue tracking the removal of the call for the
+// wrapped Gossip instance.
+//
+// Use of Gossip from within the SQL layer is **deprecated**. Please do not
+// introduce new uses of it.
+func (dg DeprecatedGossip) Deprecated(issueNo int) *Gossip {
+	// NB: some tests use a nil Gossip.
+	g, _ := dg.w.Deprecated(issueNo).(*Gossip)
+	return g
+}
+
+// OptionalErr returns the Gossip instance if the wrapper was set up to allow
+// it. Otherwise, it returns an error referring to the optionally passed in
+// issues.
+//
+// Use of Gossip from within the SQL layer is **deprecated**. Please do not
+// introduce new uses of it.
+func (dg DeprecatedGossip) OptionalErr(issueNos ...int) (*Gossip, error) {
+	v, err := dg.w.OptionalErr(issueNos...)
+	if err != nil {
+		return nil, err
+	}
+	// NB: some tests use a nil Gossip.
+	g, _ := v.(*Gossip)
+	return g, nil
 }

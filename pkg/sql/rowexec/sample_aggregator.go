@@ -389,7 +389,10 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	}
 
 	// Gossip invalidation of the stat caches for this table.
-	return stats.GossipTableStatAdded(s.FlowCtx.Cfg.Gossip, s.tableID)
+	return stats.GossipTableStatAdded(
+		s.FlowCtx.Cfg.Gossip.Deprecated(47925),
+		s.tableID,
+	)
 }
 
 // generateHistogram returns a histogram (on a given column) from a set of

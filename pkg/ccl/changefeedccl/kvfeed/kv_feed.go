@@ -38,7 +38,7 @@ type Config struct {
 	Settings           *cluster.Settings
 	DB                 *kv.DB
 	Clock              *hlc.Clock
-	Gossip             *gossip.Gossip
+	Gossip             gossip.DeprecatedGossip
 	Spans              []roachpb.Span
 	Targets            jobspb.ChangefeedTargets
 	Sink               EventBufferWriter
