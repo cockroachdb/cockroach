@@ -35,8 +35,8 @@ type DescriptorKey interface {
 	Name() string
 }
 
-// DescriptorProto is the interface implemented by both DatabaseDescriptor
-// and TableDescriptor.
+// DescriptorProto is the interface implemented by DatabaseDescriptor,
+// TableDescriptor, and TypeDescriptor.
 // TODO(marc): this is getting rather large.
 type DescriptorProto interface {
 	protoutil.Message
@@ -59,6 +59,8 @@ func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
 		desc.Union = &Descriptor_Table{Table: t}
 	case *DatabaseDescriptor:
 		desc.Union = &Descriptor_Database{Database: t}
+	case *TypeDescriptor:
+		desc.Union = &Descriptor_Type{Type: t}
 	default:
 		panic(fmt.Sprintf("unknown descriptor type: %s", descriptor.TypeName()))
 	}
