@@ -176,6 +176,14 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 
 		// Make sure it can be resolved as each of those types or throws a parsing error.
 		for _, availType := range avail {
+
+			// The enum value in c.AvailableTypes() is AnyEnum, so we will not be able to
+			// resolve that exact type. In actual execution, the constant would be resolved
+			// as a hydrated enum type instead.
+			if availType.Family() == types.EnumFamily {
+				continue
+			}
+
 			if _, err := test.c.ResolveAsType(&tree.SemaContext{}, availType); err != nil {
 				if !strings.Contains(err.Error(), "could not parse") {
 					// Parsing errors are permitted for this test, as proper tree.StrVal parsing
@@ -377,6 +385,14 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 
 		// Make sure it can be resolved as each of those types or throws a parsing error.
 		for _, availType := range test.c.AvailableTypes() {
+
+			// The enum value in c.AvailableTypes() is AnyEnum, so we will not be able to
+			// resolve that exact type. In actual execution, the constant would be resolved
+			// as a hydrated enum type instead.
+			if availType.Family() == types.EnumFamily {
+				continue
+			}
+
 			res, err := test.c.ResolveAsType(&tree.SemaContext{}, availType)
 			if err != nil {
 				if !strings.Contains(err.Error(), "could not parse") && !strings.Contains(err.Error(), "parsing") {

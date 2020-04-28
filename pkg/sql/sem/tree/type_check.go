@@ -419,12 +419,17 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 }
 
 func isCastDeepValid(castFrom, castTo *types.T) (bool, telemetry.Counter) {
-	if castTo.Family() == types.ArrayFamily && castFrom.Family() == types.ArrayFamily {
+	switch {
+	case castTo.Family() == types.ArrayFamily && castFrom.Family() == types.ArrayFamily:
 		ok, c := isCastDeepValid(castFrom.ArrayContents(), castTo.ArrayContents())
 		if ok {
 			telemetry.Inc(sqltelemetry.ArrayCastCounter)
 		}
 		return ok, c
+	case castTo.Family() == types.EnumFamily && castFrom.Family() == types.EnumFamily:
+		// Casts from ENUM to ENUM type can only succeed if the two enums
+		// types are equivalent.
+		return castFrom.Equivalent(castTo), sqltelemetry.EnumCastCounter
 	}
 	for _, t := range validCastTypes(castTo) {
 		if castFrom.Family() == t.fromT.Family() {
@@ -1407,6 +1412,10 @@ func (d *DFloat) TypeCheck(_ *SemaContext, _ *types.T) (TypedExpr, error) { retu
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
+func (d *DEnum) TypeCheck(_ *SemaContext, _ *types.T) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
 func (d *DDecimal) TypeCheck(_ *SemaContext, _ *types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
@@ -1814,8 +1823,8 @@ func typeCheckComparisonOp(
 		}
 	}
 
-	leftIsGeneric := leftFamily == types.CollatedStringFamily || leftFamily == types.ArrayFamily
-	rightIsGeneric := rightFamily == types.CollatedStringFamily || rightFamily == types.ArrayFamily
+	leftIsGeneric := leftFamily == types.CollatedStringFamily || leftFamily == types.ArrayFamily || leftFamily == types.EnumFamily
+	rightIsGeneric := rightFamily == types.CollatedStringFamily || rightFamily == types.ArrayFamily || rightFamily == types.EnumFamily
 	genericComparison := leftIsGeneric && rightIsGeneric
 
 	typeMismatch := false

@@ -349,6 +349,12 @@ enum Family {
     //   GEOGRAPHY(LINESTRING, SRID)
     GeographyFamily = 23;
 
+    // EnumFamily is a family that represents all ENUM types. ENUM types
+    // have data about the ENUM defined in a TypeDescriptor. The ID of
+    // the TypeDescriptor that backs this ENUM is stored in the StableTypeID
+    // field. It does not have a canonical form.
+    EnumFamily = 24;
+
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and
     // tuple types. Execution-time values should never have this type. As an
@@ -500,4 +506,9 @@ message InternalType {
 
     // GeoMetadata is populated for geospatial types.
     optional GeoMetadata geo_metadata = 14;
+
+    // StableTypeID is the ID of the backing TypeDescriptor for this type.
+    // StableTypeID is set only for User Defined Types.
+    optional uint32 stable_type_id = 15
+      [(gogoproto.nullable) = false, (gogoproto.customname) = "StableTypeID"];
 }

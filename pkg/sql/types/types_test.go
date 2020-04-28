@@ -492,6 +492,15 @@ func TestTypes(t *testing.T) {
 		{Uuid, &T{InternalType: InternalType{
 			Family: UuidFamily, Oid: oid.T_uuid, Locale: &emptyLocale}}},
 		{Uuid, MakeScalar(UuidFamily, oid.T_uuid, 0, 0, emptyLocale)},
+
+		// ENUMs
+		{MakeEnum(15210), &T{InternalType: InternalType{
+			Family: EnumFamily,
+			Locale: &emptyLocale,
+			// TODO (rohany): Oid will be populated in the future.
+			Oid:          0,
+			StableTypeID: 15210,
+		}}},
 	}
 
 	for i, tc := range testCases {
@@ -593,6 +602,10 @@ func TestEquivalent(t *testing.T) {
 		{MakeLabeledTuple([]*T{Int, String}, []string{"label1", "label2"}),
 			MakeLabeledTuple([]*T{Int4, VarChar}, []string{"label2", "label1"}), true},
 		{MakeTuple([]*T{String, Int}), MakeTuple([]*T{Int, String}), false},
+
+		// ENUM
+		{MakeEnum(15210), MakeEnum(15210), true},
+		{MakeEnum(15210), MakeEnum(15150), false},
 
 		// UNKNOWN
 		{Unknown, &T{InternalType: InternalType{
@@ -937,7 +950,7 @@ func TestOidSetDuringUpgrade(t *testing.T) {
 			if family == ArrayFamily {
 				// This is not material to this test, but needs to be set to avoid
 				// panic.
-				input.InternalType.ArrayContents = &T{InternalType{
+				input.InternalType.ArrayContents = &T{InternalType: InternalType{
 					Family: BoolFamily,
 				}}
 			}

@@ -626,6 +626,9 @@ func (expr *DTimeTZ) Walk(_ Visitor) Expr { return expr }
 func (expr *DFloat) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
+func (expr *DEnum) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
 func (expr *DDecimal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.

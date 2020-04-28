@@ -1,6 +1,3 @@
-statement error pq: unimplemented: CREATE TYPE
-CREATE TYPE mytype AS ENUM ('val1', 'val2')
-
 statement error pq: unimplemented: DROP TYPE
 DROP TYPE mytype
 
@@ -38,3 +35,103 @@ CREATE TYPE db2.t AS ENUM ()
 # Regression for #48537. Dropping a table with a type name caused a panic.
 statement error pq: relation "t" does not exist
 DROP TABLE t
+
+statement error pq: enum definition contains duplicate value "dup"
+CREATE TYPE bad AS ENUM ('dup', 'dup')
+
+# Duplicates with different casing count as different.
+statement ok
+CREATE TYPE notbad AS ENUM ('dup', 'DUP')
+
+# Test that we can create types that shadow builtin type names,
+# but in different schemas.
+statement ok
+CREATE TYPE int AS ENUM ('Z', 'S of int')
+
+statement error pq: could not parse "Z" as type int
+SELECT 'Z'::int
+
+query T
+SELECT 'Z'::public.int
+----
+Z
+
+query T
+SELECT 'Z'::"int"
+----
+Z
+
+statement ok
+CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi')
+
+# Test that we can only reference greeting with the right qualification.
+statement error pq: type "pg_catalog.greeting" does not exist
+SELECT 'hello'::pg_catalog.greeting
+
+query T
+SELECT 'hello'::public.greeting
+----
+hello
+
+# Test some expression evaluation on enums.
+# These test should live in TestEval, but it is difficult to adjust the
+# test to handle creation of user defined types.
+query TTT
+SELECT 'hello'::greeting, 'howdy'::greeting, 'hi'::greeting
+----
+hello howdy hi
+
+# Test type annotations.
+query TTT
+SELECT 'hello':::greeting, 'howdy':::greeting, 'hi':::greeting
+----
+hello howdy hi
+
+statement error pq: invalid input value for enum greeting: "goodbye"
+SELECT 'goodbye'::greeting
+
+query T
+SELECT 'hello'::greeting::string
+----
+hello
+
+query BBBBBBBBBBB
+SELECT 'hello'::greeting < 'howdy'::greeting,
+       'howdy'::greeting < 'hi':: greeting,
+       'hi'::greeting > 'hello'::greeting,
+       'howdy'::greeting < 'hello'::greeting,
+       'hi'::greeting <= 'hi'::greeting,
+       NULL < 'hello'::greeting,
+       'hi'::greeting < NULL,
+       'hello'::greeting = 'hello'::greeting,
+       'hello'::greeting != 'hi'::greeting,
+       'howdy'::greeting IS NOT DISTINCT FROM NULL,
+       'hello'::greeting IN ('hi'::greeting, 'howdy'::greeting, 'hello'::greeting)
+----
+true true true false true NULL NULL true true false true
+
+statement ok
+CREATE TYPE farewell AS ENUM ('bye', 'seeya')
+
+statement error pq: unsupported comparison operator: <greeting> = <farewell>
+SELECT 'hello'::greeting = 'bye'::farewell
+
+statement error pq: unsupported comparison operator: <greeting> < <farewell>
+SELECT 'hello'::greeting < 'bye'::farewell
+
+statement error pq: unsupported comparison operator: <greeting> <= <farewell>
+SELECT 'hello'::greeting <= 'bye'::farewell
+
+query T
+SELECT 'hello'::greeting::greeting
+----
+hello
+
+statement ok
+CREATE TYPE greeting2 AS ENUM ('hello')
+
+statement error pq: invalid cast: greeting -> greeting2
+SELECT 'hello'::greeting::greeting2
+
+statement error pq: value type greeting cannot be used for table columns
+CREATE TABLE bad (x greeting)
