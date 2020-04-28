@@ -29,10 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/spf13/cobra"
 )
 
@@ -685,17 +687,38 @@ func dumpTableDataForZip(
 	z *zipper, conn *sqlConn, timeout time.Duration, base, table, selectClause string,
 ) error {
 	query := fmt.Sprintf(`SET statement_timeout = '%s'; SELECT %s FROM %s`, timeout, selectClause, table)
-	name := base + "/" + table + ".txt"
+	baseName := base + "/" + table
 
 	fmt.Printf("retrieving SQL data for %s... ", table)
-	w, err := z.create(name, time.Time{})
-	if err != nil {
-		return err
-	}
-	// Pump the SQL rows directly into the zip writer, to avoid
-	// in-RAM buffering.
-	if err := runQueryAndFormatResults(conn, w, makeQuery(query)); err != nil {
-		return z.createError(name, err)
+	const maxRetries = 5
+	suffix := ""
+	for numRetries := 1; numRetries <= maxRetries; numRetries++ {
+		name := baseName + suffix + ".txt"
+		w, err := z.create(name, time.Time{})
+		if err != nil {
+			return err
+		}
+		// Pump the SQL rows directly into the zip writer, to avoid
+		// in-RAM buffering.
+		if err := runQueryAndFormatResults(conn, w, makeQuery(query)); err != nil {
+			if cErr := z.createError(name, err); cErr != nil {
+				return cErr
+			}
+			pqErr, ok := errors.UnwrapAll(err).(*pq.Error)
+			if !ok {
+				// Not a SQL error. Nothing to retry.
+				break
+			}
+			if pqErr.Code != pgcode.SerializationFailure {
+				// A non-retry error. We've printed the error, and
+				// there's nothing to retry. Stop here.
+				break
+			}
+			// We've encountered a retry error. Add a suffix then loop.
+			suffix = fmt.Sprintf(".%d", numRetries)
+			continue
+		}
+		break
 	}
 	return nil
 }
