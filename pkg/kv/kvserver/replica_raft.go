@@ -1511,10 +1511,17 @@ func (m lastUpdateTimesMap) updateOnBecomeLeader(descs []roachpb.ReplicaDescript
 	}
 }
 
-// isFollowerActive returns whether the specified follower has made
-// communication with the leader in the last MaxQuotaReplicaLivenessDuration.
+// isFollowerActive is like isFollowerActiveSince, with a default threshold.
 func (m lastUpdateTimesMap) isFollowerActive(
 	ctx context.Context, replicaID roachpb.ReplicaID, now time.Time,
+) bool {
+	return m.isFollowerActiveSince(ctx, replicaID, now, MaxQuotaReplicaLivenessDuration)
+}
+
+// isFollowerActiveSince returns whether the specified follower has made
+// communication with the leader recently (since threshold).
+func (m lastUpdateTimesMap) isFollowerActiveSince(
+	ctx context.Context, replicaID roachpb.ReplicaID, now time.Time, threshold time.Duration,
 ) bool {
 	lastUpdateTime, ok := m[replicaID]
 	if !ok {
@@ -1523,7 +1530,7 @@ func (m lastUpdateTimesMap) isFollowerActive(
 		// replicas were updated).
 		return false
 	}
-	return now.Sub(lastUpdateTime) <= MaxQuotaReplicaLivenessDuration
+	return now.Sub(lastUpdateTime) <= threshold
 }
 
 // maybeAcquireSnapshotMergeLock checks whether the incoming snapshot subsumes
