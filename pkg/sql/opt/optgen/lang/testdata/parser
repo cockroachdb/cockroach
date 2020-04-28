@@ -213,7 +213,7 @@ parse
 	Defines=(DefineSet)
 	Rules=(RuleSet
 		(Rule
-			Comments=(Comments)
+			Comments=(Comments # Nested match # String # Number # Negation # Any # List)
 			Name="Tag"
 			Tags=(Tags)
 			Match=(Func
