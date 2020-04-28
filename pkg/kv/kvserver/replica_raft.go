@@ -339,6 +339,19 @@ func (r *Replica) numPendingProposalsRLocked() int {
 	return len(r.mu.proposals) + r.mu.proposalBuf.Len()
 }
 
+// hasPendingProposalsRLocked is part of the quiescer interface.
+// It returns true if this node has any outstanding proposals. A client might be
+// waiting for the outcome of these proposals, so we definitely don't want to
+// quiesce while such proposals are in-flight.
+//
+// Note that this method says nothing about other node's outstanding proposals:
+// if this node is the current leaseholders, previous leaseholders might have
+// proposals on which they're waiting. If this node is not the current
+// leaseholder, then obviously whoever is the current leaseholder might have
+// pending proposals. This method is called in two places: on the current
+// leaseholder when deciding whether the leaseholder should attempt to quiesce
+// the range, and then on every follower to confirm that the range can indeed be
+// quiesced.
 func (r *Replica) hasPendingProposalsRLocked() bool {
 	return r.numPendingProposalsRLocked() > 0
 }
