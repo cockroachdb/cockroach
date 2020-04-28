@@ -2894,6 +2894,12 @@ type EvalContext struct {
 
 	Sequence SequenceOperators
 
+	// DistSQLTypeResolver is a type resolver used during execution of DistSQL
+	// flows. It is limited to only provide access to types via ID, meaning that
+	// it cannot perform resolution of qualified names into types. It will be nil
+	// when not in the context of a DistSQL flow.
+	DistSQLTypeResolver TypeReferenceResolver
+
 	// The transaction in which the statement is executing.
 	Txn *kv.Txn
 	// A handle to the database.

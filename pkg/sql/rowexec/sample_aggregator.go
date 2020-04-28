@@ -143,6 +143,13 @@ func newSampleAggregator(
 	); err != nil {
 		return nil, err
 	}
+
+	// Because we don't pass any types to the processor init, we need to
+	// explicitly hydrate types used in the stats collector.
+	if err := execinfrapb.HydrateTypeSlice(s.EvalCtx, input.OutputTypes()); err != nil {
+		return nil, err
+	}
+
 	return s, nil
 }
 

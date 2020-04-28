@@ -397,6 +397,10 @@ func (r *createStatsResumer) Resume(
 
 	dsp := p.DistSQLPlanner()
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Set the transaction on the EvalContext to this txn. This allows for
+		// use of the txn during processor setup during the execution of the flow.
+		evalCtx.Txn = txn
+
 		if details.AsOf != nil {
 			p.semaCtx.AsOfTimestamp = details.AsOf
 			p.extendedEvalCtx.SetTxnTimestamp(details.AsOf.GoTime())

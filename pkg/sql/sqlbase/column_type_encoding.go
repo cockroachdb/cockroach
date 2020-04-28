@@ -160,6 +160,11 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 			return encoding.EncodeVarintAscending(b, int64(t.DInt)), nil
 		}
 		return encoding.EncodeVarintDescending(b, int64(t.DInt)), nil
+	case *tree.DEnum:
+		if dir == encoding.Ascending {
+			return encoding.EncodeBytesAscending(b, t.PhysicalRep), nil
+		}
+		return encoding.EncodeBytesDescending(b, t.PhysicalRep), nil
 	}
 	return nil, errors.Errorf("unable to encode table key: %T", val)
 }
@@ -348,6 +353,17 @@ func DecodeTableKey(
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
 		return a.NewDOid(tree.MakeDOid(tree.DInt(i))), rkey, err
+	case types.EnumFamily:
+		var r []byte
+		if dir == encoding.Ascending {
+			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
+		} else {
+			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		return tree.MakeDEnumFromPhysicalRepresentation(valType, r), rkey, nil
 	default:
 		return nil, nil, errors.Errorf("unable to decode table key: %s", valType)
 	}
@@ -725,6 +741,11 @@ func MarshalColumnValue(col *ColumnDescriptor, val tree.Datum) (roachpb.Value, e
 			r.SetInt(int64(v.DInt))
 			return r, nil
 		}
+	case types.EnumFamily:
+		if v, ok := val.(*tree.DEnum); ok {
+			r.SetBytes(v.PhysicalRep)
+			return r, nil
+		}
 	default:
 		return r, errors.AssertionFailedf("unsupported column type: %s", col.Type.Family())
 	}
@@ -887,6 +908,12 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 			return nil, err
 		}
 		return tree.NewDJSON(jsonDatum), nil
+	case types.EnumFamily:
+		v, err := value.GetBytes()
+		if err != nil {
+			return nil, err
+		}
+		return tree.MakeDEnumFromPhysicalRepresentation(typ, v), nil
 	default:
 		return nil, errors.Errorf("unsupported column type: %s", typ.Family())
 	}

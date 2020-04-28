@@ -162,11 +162,88 @@ func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error)
 		if err := tdesc.HydrateTypeInfo(typ); err != nil {
 			return nil, err
 		}
+		// Override the hydrated name with the fully resolved type name.
 		typ.TypeMeta.Name = &tn
 		return typ, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
 	}
+}
+
+// TODO (rohany): Once we start to cache type descriptors, this needs to
+//  look into the set of leased copies.
+// TODO (rohany): Once we lease types, this should be pushed down into the
+//  leased object collection.
+func (p *planner) getTypeDescByID(ctx context.Context, id sqlbase.ID) (*TypeDescriptor, error) {
+	rawDesc, err := getDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id)
+	if err != nil {
+		return nil, err
+	}
+	typDesc, ok := rawDesc.(*TypeDescriptor)
+	if !ok {
+		return nil, errors.AssertionFailedf("%s was not a type descriptor", rawDesc)
+	}
+	return typDesc, nil
+}
+
+// ResolveTypeByID implements the tree.TypeResolver interface. We disallow
+// accessing types directly by their ID in standard SQL contexts, so error
+// out nicely here.
+// TODO (rohany): Is there a need to disable this in the general case?
+func (p *planner) ResolveTypeByID(id uint32) (*types.T, error) {
+	return nil, errors.Newf("type id reference @%d not allowed in this context", id)
+}
+
+// maybeHydrateTypesInDescriptor hydrates any types.T's in the input descriptor.
+// TODO (rohany): Once we lease types, this should be pushed down into the
+//  leased object collection.
+func (p *planner) maybeHydrateTypesInDescriptor(
+	ctx context.Context, objDesc tree.NameResolutionResult,
+) error {
+	// Helper method to hydrate the types within a TableDescriptor.
+	hydrateDesc := func(desc *TableDescriptor) error {
+		for i := range desc.Columns {
+			col := &desc.Columns[i]
+			if col.Type.UserDefined() {
+				// Look up its type descriptor.
+				typDesc, err := p.getTypeDescByID(ctx, sqlbase.ID(col.Type.StableTypeID()))
+				if err != nil {
+					return err
+				}
+				// TODO (rohany): This should be a noop if the hydrated type
+				//  information present in the descriptor has the same version as
+				//  the resolved type descriptor we found here.
+				// TODO (rohany): Is this going to be problematic if someone is
+				//  currently reading this table descriptor and we switch out the
+				//  cached type information out from under them? We are basically
+				//  mutating an ImmutableTableDescriptor here. The other solution is
+				//  to drop leases on all tables when a type used in those tables
+				//  changes, but that seems pretty heavyweight. Another solution is
+				//  that whenever a lease on a type expires, the lease manager will
+				//  create a new ImmutableTableDescriptor for that table so that there
+				//  isn't a chance for racing. If that is the case, then this logic
+				//  should be pushed down into the lease manager.
+				if err := typDesc.HydrateTypeInfo(col.Type); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	// As of now, only {Mutable,Immutable}TableDescriptor have types.T that
+	// need to be hydrated.
+	switch desc := objDesc.(type) {
+	case *sqlbase.MutableTableDescriptor:
+		if err := hydrateDesc(desc.TableDesc()); err != nil {
+			return err
+		}
+	case *sqlbase.ImmutableTableDescriptor:
+		if err := hydrateDesc(desc.TableDesc()); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func resolveExistingObjectImpl(
@@ -354,6 +431,14 @@ func (p *planner) LookupObject(
 	sc := p.LogicalSchemaAccessor()
 	lookupFlags.CommonLookupFlags = p.CommonLookupFlags(false /* required */)
 	objDesc, err := sc.GetObjectDesc(ctx, p.txn, p.ExecCfg().Settings, p.ExecCfg().Codec, dbName, scName, tbName, lookupFlags)
+
+	// The returned object may contain types.T that need hydrating.
+	if objDesc != nil {
+		if err := p.maybeHydrateTypesInDescriptor(ctx, objDesc); err != nil {
+			return false, nil, err
+		}
+	}
+
 	return objDesc != nil, objDesc, err
 }
 

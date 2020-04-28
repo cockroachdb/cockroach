@@ -11,6 +11,8 @@
 package tree
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -92,15 +94,16 @@ func MakeTypeNameFromPrefix(prefix ObjectNamePrefix, object Name) TypeName {
 
 // TypeReferenceResolver is the interface that will provide the ability
 // to actually look up type metadata and transform references into
-// *types.T's. In practice, this will probably be implemented by
-// the planner, but for now it is a dummy interface.
+// *types.T's.
 type TypeReferenceResolver interface {
-	// In the future this will take a context.
 	ResolveType(name *UnresolvedObjectName) (*types.T, error)
+	ResolveTypeByID(id uint32) (*types.T, error)
 }
 
 // ResolvableTypeReference represents a type that is possibly unknown
 // until type-checking/type name resolution is performed.
+// N.B. ResolvableTypeReferences in expressions must be formatted with
+// FormatTypeReference instead of SQLString.
 type ResolvableTypeReference interface {
 	SQLString() string
 }
@@ -108,6 +111,7 @@ type ResolvableTypeReference interface {
 var _ ResolvableTypeReference = &UnresolvedObjectName{}
 var _ ResolvableTypeReference = &ArrayTypeReference{}
 var _ ResolvableTypeReference = &types.T{}
+var _ ResolvableTypeReference = &IDTypeReference{}
 
 // ResolveType converts a ResolvableTypeReference into a *types.T.
 func ResolveType(ref ResolvableTypeReference, resolver TypeReferenceResolver) (*types.T, error) {
@@ -127,9 +131,29 @@ func ResolveType(ref ResolvableTypeReference, resolver TypeReferenceResolver) (*
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "type %q does not exist", t)
 		}
 		return resolver.ResolveType(t)
+	case *IDTypeReference:
+		if resolver == nil {
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "type id %d does not exist", t.ID)
+		}
+		return resolver.ResolveTypeByID(t.ID)
 	default:
 		return nil, errors.AssertionFailedf("unknown resolvable type reference type %s", t)
 	}
+}
+
+// FormatTypeReference formats a ResolvableTypeReference.
+func (ctx *FmtCtx) FormatTypeReference(ref ResolvableTypeReference) {
+	if ctx.HasFlags(fmtFormatUserDefinedTypesAsIDs) {
+		switch t := ref.(type) {
+		case *types.T:
+			if t.UserDefined() {
+				idRef := IDTypeReference{ID: t.StableTypeID()}
+				ctx.WriteString(idRef.SQLString())
+				return
+			}
+		}
+	}
+	ctx.WriteString(ref.SQLString())
 }
 
 // GetStaticallyKnownType possibly promotes a ResolvableTypeReference into a
@@ -149,6 +173,16 @@ func MustBeStaticallyKnownType(ref ResolvableTypeReference) *types.T {
 		return typ
 	}
 	panic(errors.AssertionFailedf("type reference was not a statically known type"))
+}
+
+// IDTypeReference is a reference to a type directly by its stable ID.
+type IDTypeReference struct {
+	ID uint32
+}
+
+// SQLString implements the ResolvableTypeReference interface.
+func (node *IDTypeReference) SQLString() string {
+	return fmt.Sprintf("@%d", node.ID)
 }
 
 // ArrayTypeReference represents an array of possibly unknown type references.
@@ -194,6 +228,10 @@ func (dtr *TestingMapTypeResolver) ResolveType(name *UnresolvedObjectName) (*typ
 		return nil, errors.Newf("type %q does not exist", name)
 	}
 	return typ, nil
+}
+
+func (dtr *TestingMapTypeResolver) ResolveTypeByID(uint32) (*types.T, error) {
+	return nil, errors.AssertionFailedf("unimplemented")
 }
 
 // MakeTestingMapTypeResolver creates a TestingMapTypeResolver from a map.
