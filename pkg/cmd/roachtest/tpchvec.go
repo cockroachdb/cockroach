@@ -86,9 +86,6 @@ var tpchTables = []string{
 }
 
 type tpchVecTestCase interface {
-	// TODO(asubiotto): Getting the queries we want to run given a version should
-	//  also be part of this. This can also be where we return tpch queries with
-	//  random placeholders.
 	// vectorizeOptions are the vectorize options that each query will be run
 	// with.
 	vectorizeOptions() []bool
@@ -99,7 +96,7 @@ type tpchVecTestCase interface {
 	preTestRunHook(ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion)
 	// testRun is the main function of the test case that executes the desired
 	// test workload.
-	testRun(ctx context.Context, t *test, c *cluster, version crdbVersion)
+	testRun(ctx context.Context, t *test, c *cluster, version crdbVersion, vectorizeOptions []bool, numRunsPerQuery int)
 	// postQueryRunHook is called after each tpch query is run with the output and
 	// the vectorize mode it was run in.
 	postQueryRunHook(t *test, output []byte, vectorized bool)
@@ -136,12 +133,17 @@ func (b tpchVecTestCaseBase) preTestRunHook(
 }
 
 func (b tpchVecTestCaseBase) testRun(
-	ctx context.Context, t *test, c *cluster, version crdbVersion,
+	ctx context.Context,
+	t *test,
+	c *cluster,
+	version crdbVersion,
+	vectorizeOptions []bool,
+	numRunsPerQuery int,
 ) {
 	firstNode := c.Node(1)
 	queriesToSkip := queriesToSkipByVersion[version]
 	for queryNum := 1; queryNum <= tpchVecNumQueries; queryNum++ {
-		for _, vectorize := range b.vectorizeOptions() {
+		for _, vectorize := range vectorizeOptions {
 			if reason, skip := queriesToSkip[queryNum]; skip {
 				t.Status(fmt.Sprintf("skipping q%d because of %q", queryNum, reason))
 				continue
@@ -152,7 +154,7 @@ func (b tpchVecTestCaseBase) testRun(
 			}
 			cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
 				"--max-ops=%d --queries=%d --vectorize=%s {pgurl:1-%d}",
-				b.numRunsPerQuery(), queryNum, vectorizeSetting, tpchVecNodeCount)
+				numRunsPerQuery, queryNum, vectorizeSetting, tpchVecNodeCount)
 			workloadOutput, err := c.RunWithBuffer(ctx, t.l, firstNode, cmd)
 			t.l.Printf("\n" + string(workloadOutput))
 			if err != nil {
@@ -350,8 +352,15 @@ func (s tpchVecSmithcmpTest) preTestRunHook(
 }
 
 func (s tpchVecSmithcmpTest) testRun(
-	ctx context.Context, t *test, c *cluster, version crdbVersion,
+	ctx context.Context,
+	t *test,
+	c *cluster,
+	_ crdbVersion,
+	vectorizeOptions []bool,
+	numRunsPerQuery int,
 ) {
+	// We ignore vectorizeOptions and numRunsPerQuery arguments because the
+	// config file determines that.
 	const (
 		configFile = `tpchvec_smithcmp.toml`
 		configURL  = `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/cmd/roachtest/` + configFile
@@ -396,7 +405,7 @@ func runTPCHVec(ctx context.Context, t *test, c *cluster, testCase tpchVecTestCa
 	}
 
 	testCase.preTestRunHook(ctx, t, c, conn, version)
-	testCase.testRun(ctx, t, c, version)
+	testCase.testRun(ctx, t, c, version, testCase.vectorizeOptions(), testCase.numRunsPerQuery())
 	testCase.postTestRunHook(t, conn, version)
 }
 
