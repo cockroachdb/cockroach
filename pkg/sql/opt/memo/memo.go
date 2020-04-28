@@ -137,6 +137,8 @@ type Memo struct {
 	zigzagJoinEnabled   bool
 	optimizerFKChecks   bool
 	optimizerFKCascades bool
+	useHistograms       bool
+	useMultiColStats    bool
 	safeUpdates         bool
 	saveTablesPrefix    string
 	insertFastPath      bool
@@ -171,6 +173,8 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.zigzagJoinEnabled = evalCtx.SessionData.ZigzagJoinEnabled
 	m.optimizerFKChecks = evalCtx.SessionData.OptimizerFKChecks
 	m.optimizerFKCascades = evalCtx.SessionData.OptimizerFKCascades
+	m.useHistograms = evalCtx.SessionData.OptimizerUseHistograms
+	m.useMultiColStats = evalCtx.SessionData.OptimizerUseMultiColStats
 	m.safeUpdates = evalCtx.SessionData.SafeUpdates
 	m.saveTablesPrefix = evalCtx.SessionData.SaveTablesPrefix
 	m.insertFastPath = evalCtx.SessionData.InsertFastPath
@@ -279,6 +283,8 @@ func (m *Memo) IsStale(
 		m.zigzagJoinEnabled != evalCtx.SessionData.ZigzagJoinEnabled ||
 		m.optimizerFKChecks != evalCtx.SessionData.OptimizerFKChecks ||
 		m.optimizerFKCascades != evalCtx.SessionData.OptimizerFKCascades ||
+		m.useHistograms != evalCtx.SessionData.OptimizerUseHistograms ||
+		m.useMultiColStats != evalCtx.SessionData.OptimizerUseMultiColStats ||
 		m.safeUpdates != evalCtx.SessionData.SafeUpdates ||
 		m.saveTablesPrefix != evalCtx.SessionData.SaveTablesPrefix ||
 		m.insertFastPath != evalCtx.SessionData.InsertFastPath {
