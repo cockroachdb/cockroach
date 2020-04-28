@@ -58,7 +58,7 @@ statement ok
 ALTER TABLE t ADD COLUMN IF NOT EXISTS b INT
 
 # Errors during validation should still occur.
-statement error duplicate column name
+statement error pq: column "b" of relation "t" already exists
 ALTER TABLE t ADD COLUMN b INT
 
 query TT

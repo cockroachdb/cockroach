@@ -215,7 +215,7 @@ var ErrMissingPrimaryKey = errors.New("table must contain a primary key")
 
 func validateName(name, typ string) error {
 	if len(name) == 0 {
-		return fmt.Errorf("empty %s name", typ)
+		return pgerror.Newf(pgcode.Syntax, "empty %s name", typ)
 	}
 	// TODO(pmattis): Do we want to be more restrictive than this?
 	return nil
@@ -1790,13 +1790,15 @@ func (desc *TableDescriptor) ValidateTable() error {
 			return errors.AssertionFailedf("invalid column ID %d", errors.Safe(column.ID))
 		}
 
-		if _, ok := columnNames[column.Name]; ok {
+		if _, columnNameExists := columnNames[column.Name]; columnNameExists {
 			for i := range desc.Columns {
 				if desc.Columns[i].Name == column.Name {
-					return fmt.Errorf("duplicate column name: %q", column.Name)
+					return pgerror.Newf(pgcode.DuplicateColumn,
+						"duplicate column name: %q", column.Name)
 				}
 			}
-			return fmt.Errorf("duplicate: column %q in the middle of being added, not yet public", column.Name)
+			return pgerror.Newf(pgcode.DuplicateColumn,
+				"duplicate: column %q in the middle of being added, not yet public", column.Name)
 		}
 		columnNames[column.Name] = column.ID
 

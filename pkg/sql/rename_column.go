@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -119,7 +118,7 @@ func (p *planner) renameColumn(
 	}
 
 	if _, _, err := tableDesc.FindColumnByName(*newName); err == nil {
-		return false, fmt.Errorf("column name %q already exists", tree.ErrString(newName))
+		return false, sqlbase.NewColumnAlreadyExistsError(tree.ErrString(newName), tableDesc.Name)
 	}
 
 	preFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
