@@ -21,6 +21,7 @@ import (
 	"github.com/twpayne/go-geom/encoding/ewkb"
 	"github.com/twpayne/go-geom/encoding/ewkbhex"
 	"github.com/twpayne/go-geom/encoding/geojson"
+	"github.com/twpayne/go-geom/encoding/wkb"
 )
 
 // parseAmbiguousTextToEWKB parses a text as a number of different options
@@ -36,12 +37,12 @@ func parseAmbiguousTextToEWKB(str string, defaultSRID geopb.SRID) (geopb.EWKB, e
 	case '0':
 		return ParseEWKBHex(str, defaultSRID)
 	case 0x00, 0x01:
-		return ParseEWKB([]byte(str), defaultSRID)
+		return ParseEWKB([]byte(str), defaultSRID, DefaultSRIDIsHint)
 	case '{':
 		return ParseGeoJSON([]byte(str), defaultSRID)
 	}
 
-	return ParseEWKT(geopb.EWKT(str), defaultSRID)
+	return ParseEWKT(geopb.EWKT(str), defaultSRID, DefaultSRIDIsHint)
 }
 
 // ParseEWKBHex takes a given str assumed to be in EWKB hex and transforms it
@@ -60,15 +61,29 @@ func ParseEWKBHex(str string, defaultSRID geopb.SRID) (geopb.EWKB, error) {
 
 // ParseEWKB takes given bytes assumed to be EWKB and transforms it into
 // an EWKB in the proper format.
-func ParseEWKB(b []byte, defaultSRID geopb.SRID) (geopb.EWKB, error) {
+// The defaultSRID will overwrite any SRID set in the EWKB if overwrite is true.
+func ParseEWKB(
+	b []byte, defaultSRID geopb.SRID, overwrite defaultSRIDOverwriteSetting,
+) (geopb.EWKB, error) {
 	t, err := ewkb.Unmarshal(b)
 	if err != nil {
 		return nil, err
 	}
 	// TODO(otan): check SRID is valid against spatial_ref_sys.
-	if defaultSRID != 0 && t.SRID() == 0 {
+	if overwrite == DefaultSRIDShouldOverwrite || (defaultSRID != 0 && t.SRID() == 0) {
 		adjustGeomSRID(t, defaultSRID)
 	}
+	return ewkb.Marshal(t, ewkbEncodingFormat)
+}
+
+// ParseWKB takes given bytes assumed to be WKB and transforms it into
+// an EWKB in the proper format.
+func ParseWKB(b []byte, defaultSRID geopb.SRID) (geopb.EWKB, error) {
+	t, err := wkb.Unmarshal(b)
+	if err != nil {
+		return nil, err
+	}
+	adjustGeomSRID(t, defaultSRID)
 	return ewkb.Marshal(t, ewkbEncodingFormat)
 }
 
@@ -113,21 +128,37 @@ func adjustGeomSRID(t geom.T, srid geopb.SRID) {
 const sridPrefix = "SRID="
 const sridPrefixLen = len(sridPrefix)
 
+type defaultSRIDOverwriteSetting bool
+
+const (
+	// DefaultSRIDShouldOverwrite implies the parsing function should overwrite
+	// the SRID with the defaultSRID.
+	DefaultSRIDShouldOverwrite defaultSRIDOverwriteSetting = true
+	// DefaultSRIDIsHint implies that the default SRID is only a hint
+	// and if the SRID is provided by the given EWKT/EWKB, it should be
+	// used instead.
+	DefaultSRIDIsHint defaultSRIDOverwriteSetting = false
+)
+
 // ParseEWKT decodes a WKT string.
-func ParseEWKT(str geopb.EWKT, defaultSRID geopb.SRID) (geopb.EWKB, error) {
+// The defaultSRID will overwrite any SRID set in the EWKT if overwrite is true.
+func ParseEWKT(
+	str geopb.EWKT, defaultSRID geopb.SRID, overwrite defaultSRIDOverwriteSetting,
+) (geopb.EWKB, error) {
 	srid := defaultSRID
 	if strings.HasPrefix(string(str), sridPrefix) {
 		end := strings.Index(string(str[sridPrefixLen:]), ";")
 		if end != -1 {
-			sridInt64, err := strconv.ParseInt(string(str[sridPrefixLen:sridPrefixLen+end]), 10, 32)
-			if err != nil {
-				return nil, err
-			}
-			// Only override the SRID if the SRID is not zero.
-			// This is in line with observed PostGIS behavior, where Geography still uses
-			// SRID 4326 if a 0 SRID was explicitly made at the beginning.
-			if sridInt64 != 0 {
-				srid = geopb.SRID(sridInt64)
+			if overwrite != DefaultSRIDShouldOverwrite {
+				sridInt64, err := strconv.ParseInt(string(str[sridPrefixLen:sridPrefixLen+end]), 10, 32)
+				if err != nil {
+					return nil, err
+				}
+				// Only use the parsed SRID if the parsed SRID is not zero and it was not
+				// to be overwritten by the DefaultSRID parameter.
+				if sridInt64 != 0 {
+					srid = geopb.SRID(sridInt64)
+				}
 			}
 			str = str[sridPrefixLen+end+1:]
 		} else {

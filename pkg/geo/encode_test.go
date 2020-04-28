@@ -28,7 +28,7 @@ func TestEWKBToWKT(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
-			ewkb, err := ParseEWKT(tc.ewkt, geopb.DefaultGeometrySRID)
+			ewkb, err := ParseEWKT(tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
 			encoded, err := EWKBToWKT(ewkb)
 			require.NoError(t, err)
@@ -48,7 +48,7 @@ func TestEWKBToEWKT(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
-			ewkb, err := ParseEWKT(tc.ewkt, geopb.DefaultGeometrySRID)
+			ewkb, err := ParseEWKT(tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
 			encoded, err := EWKBToEWKT(ewkb)
 			require.NoError(t, err)
@@ -68,7 +68,7 @@ func TestEWKBToWKB(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
-			ewkb, err := ParseEWKT(tc.ewkt, geopb.DefaultGeometrySRID)
+			ewkb, err := ParseEWKT(tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
 			encoded, err := EWKBToWKB(ewkb)
 			require.NoError(t, err)
@@ -88,7 +88,7 @@ func TestEWKBToGeoJSON(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
-			ewkb, err := ParseEWKT(tc.ewkt, geopb.DefaultGeometrySRID)
+			ewkb, err := ParseEWKT(tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
 			encoded, err := EWKBToGeoJSON(ewkb)
 			require.NoError(t, err)
@@ -108,7 +108,7 @@ func TestEWKBToWKBHex(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
-			ewkb, err := ParseEWKT(tc.ewkt, geopb.DefaultGeometrySRID)
+			ewkb, err := ParseEWKT(tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
 			encoded, err := EWKBToWKBHex(ewkb)
 			require.NoError(t, err)
@@ -130,7 +130,7 @@ func TestEWKBToKML(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(string(tc.ewkt), func(t *testing.T) {
-			ewkb, err := ParseEWKT(tc.ewkt, geopb.DefaultGeometrySRID)
+			ewkb, err := ParseEWKT(tc.ewkt, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 			require.NoError(t, err)
 			encoded, err := EWKBToKML(ewkb)
 			require.NoError(t, err)

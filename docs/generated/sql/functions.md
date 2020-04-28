@@ -666,6 +666,38 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tbody>
 <tr><td><a name="st_area"></a><code>st_area(geometry_a: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of geometry_a</p>
 </span></td></tr>
+<tr><td><a name="st_asbinary"></a><code>st_asbinary(geography: geography) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the WKB representation of a given Geography.</p>
+</span></td></tr>
+<tr><td><a name="st_asbinary"></a><code>st_asbinary(geometry: geometry) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the WKB representation of a given Geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_asewkb"></a><code>st_asewkb(geography: geography) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the EWKB representation of a given Geography.</p>
+</span></td></tr>
+<tr><td><a name="st_asewkb"></a><code>st_asewkb(geometry: geometry) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the EWKB representation of a given Geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_asewkt"></a><code>st_asewkt(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKT representation of a given Geography.</p>
+</span></td></tr>
+<tr><td><a name="st_asewkt"></a><code>st_asewkt(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKT representation of a given Geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geography.</p>
+</span></td></tr>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_ashexewkb"></a><code>st_ashexewkb(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKB representation in hex of a given Geography.</p>
+</span></td></tr>
+<tr><td><a name="st_ashexewkb"></a><code>st_ashexewkb(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKB representation in hex of a given Geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_ashexwkb"></a><code>st_ashexwkb(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKB representation in hex of a given Geography.</p>
+</span></td></tr>
+<tr><td><a name="st_ashexwkb"></a><code>st_ashexwkb(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKB representation in hex of a given Geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_askml"></a><code>st_askml(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the KML representation of a given Geography.</p>
+</span></td></tr>
+<tr><td><a name="st_askml"></a><code>st_askml(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the KML representation of a given Geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_astext"></a><code>st_astext(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geography.</p>
+</span></td></tr>
+<tr><td><a name="st_astext"></a><code>st_astext(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry.</p>
+</span></td></tr>
 <tr><td><a name="st_contains"></a><code>st_contains(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if no points of geometry_b lie in the exterior of geometry_a, and there is at least one point in the interior of geometry_b that lies in the interior of geometry_a.</p>
 <p>This function uses the GEOS module.</p>
 <p>This function will automatically use any available index.</p>
@@ -685,6 +717,46 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="st_equals"></a><code>st_equals(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is spatially equal to geometry_b, i.e. ST_Within(geometry_a, geometry_b) = ST_Within(geometry_b, geometry_a) = true.</p>
 <p>This function uses the GEOS module.</p>
 <p>This function will automatically use any available index.</p>
+</span></td></tr>
+<tr><td><a name="st_geogfromewkb"></a><code>st_geogfromewkb(val: <a href="bytes.html">bytes</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from an EWKB representation.</p>
+</span></td></tr>
+<tr><td><a name="st_geogfromewkt"></a><code>st_geogfromewkt(val: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from an EWKT representation.</p>
+</span></td></tr>
+<tr><td><a name="st_geogfromgeojson"></a><code>st_geogfromgeojson(val: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from an GeoJSON representation.</p>
+</span></td></tr>
+<tr><td><a name="st_geogfromgeojson"></a><code>st_geogfromgeojson(val: jsonb) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from an GeoJSON representation.</p>
+</span></td></tr>
+<tr><td><a name="st_geogfromtext"></a><code>st_geogfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
+</span></td></tr>
+<tr><td><a name="st_geogfromtext"></a><code>st_geogfromtext(val: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from a WKT or EWKT representation.</p>
+</span></td></tr>
+<tr><td><a name="st_geogfromwkb"></a><code>st_geogfromwkb(bytes: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from a WKB representation with the given SRID set.</p>
+</span></td></tr>
+<tr><td><a name="st_geogfromwkb"></a><code>st_geogfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from a WKB representation.</p>
+</span></td></tr>
+<tr><td><a name="st_geographyfromtext"></a><code>st_geographyfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
+</span></td></tr>
+<tr><td><a name="st_geographyfromtext"></a><code>st_geographyfromtext(val: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from a WKT or EWKT representation.</p>
+</span></td></tr>
+<tr><td><a name="st_geometryfromtext"></a><code>st_geometryfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
+</span></td></tr>
+<tr><td><a name="st_geometryfromtext"></a><code>st_geometryfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation.</p>
+</span></td></tr>
+<tr><td><a name="st_geomfromewkb"></a><code>st_geomfromewkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from an EWKB representation.</p>
+</span></td></tr>
+<tr><td><a name="st_geomfromewkt"></a><code>st_geomfromewkt(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from an EWKT representation.</p>
+</span></td></tr>
+<tr><td><a name="st_geomfromgeojson"></a><code>st_geomfromgeojson(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from an GeoJSON representation.</p>
+</span></td></tr>
+<tr><td><a name="st_geomfromgeojson"></a><code>st_geomfromgeojson(val: jsonb) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from an GeoJSON representation.</p>
+</span></td></tr>
+<tr><td><a name="st_geomfromtext"></a><code>st_geomfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
+</span></td></tr>
+<tr><td><a name="st_geomfromtext"></a><code>st_geomfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation.</p>
+</span></td></tr>
+<tr><td><a name="st_geomfromwkb"></a><code>st_geomfromwkb(bytes: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation with the given SRID set.</p>
+</span></td></tr>
+<tr><td><a name="st_geomfromwkb"></a><code>st_geomfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB representation.</p>
 </span></td></tr>
 <tr><td><a name="st_intersects"></a><code>st_intersects(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a shares any portion of space with geometry_b.</p>
 <p>This function uses the GEOS module.</p>
