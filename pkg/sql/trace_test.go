@@ -238,7 +238,7 @@ func TestTrace(t *testing.T) {
 				"exec stmt",
 				"flow",
 				"materializer",
-				"operator for processor 0",
+				"*colexec.CancelChecker",
 				"consuming rows",
 				"txn coordinator send",
 				"dist sender send",
