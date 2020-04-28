@@ -102,6 +102,8 @@ func TestBuilder(t *testing.T) {
 				evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 				evalCtx.SessionData.OptimizerFKChecks = true
 				evalCtx.SessionData.OptimizerFKCascades = true
+				evalCtx.SessionData.OptimizerUseHistograms = true
+				evalCtx.SessionData.OptimizerUseMultiColStats = true
 
 				var o xform.Optimizer
 				o.Init(&evalCtx, catalog)
