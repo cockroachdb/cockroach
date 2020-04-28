@@ -2347,7 +2347,8 @@ func checkColumnsValidForInvertedIndex(
 	tableDesc *MutableTableDescriptor, indexColNames []string,
 ) error {
 	if len((indexColNames)) > 1 {
-		return errors.New("indexing more than one column with an inverted index is not supported")
+		return unimplemented.NewWithIssue(48100,
+			"indexing more than one column with an inverted index is not supported")
 	}
 	invalidColumns := make([]ColumnDescriptor, 0, len(indexColNames))
 	for _, indexCol := range indexColNames {
