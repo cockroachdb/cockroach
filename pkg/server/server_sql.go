@@ -412,6 +412,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.gossip,
 			cfg.db,
 			cfg.circularInternalExecutor,
+			codec,
 		),
 
 		// Note: don't forget to add the secondary loggers as closers

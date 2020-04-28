@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -57,6 +58,7 @@ type TableStatisticsCache struct {
 	}
 	ClientDB    *kv.DB
 	SQLExecutor sqlutil.InternalExecutor
+	Codec       keys.SQLCodec
 }
 
 // The cache stores *cacheEntry objects. The fields are protected by the
@@ -76,11 +78,16 @@ type cacheEntry struct {
 // NewTableStatisticsCache creates a new TableStatisticsCache that can hold
 // statistics for <cacheSize> tables.
 func NewTableStatisticsCache(
-	cacheSize int, gw gossip.DeprecatedGossip, db *kv.DB, sqlExecutor sqlutil.InternalExecutor,
+	cacheSize int,
+	gw gossip.DeprecatedGossip,
+	db *kv.DB,
+	sqlExecutor sqlutil.InternalExecutor,
+	codec keys.SQLCodec,
 ) *TableStatisticsCache {
 	tableStatsCache := &TableStatisticsCache{
 		ClientDB:    db,
 		SQLExecutor: sqlExecutor,
+		Codec:       codec,
 	}
 	tableStatsCache.mu.cache = cache.NewUnorderedCache(cache.Config{
 		Policy:      cache.CacheLRU,
@@ -237,7 +244,9 @@ const (
 )
 
 // parseStats converts the given datums to a TableStatistic object.
-func parseStats(datums tree.Datums) (*TableStatistic, error) {
+func parseStats(
+	ctx context.Context, db *kv.DB, codec keys.SQLCodec, datums tree.Datums,
+) (*TableStatistic, error) {
 	if datums == nil || datums.Len() == 0 {
 		return nil, nil
 	}
@@ -303,6 +312,23 @@ func parseStats(datums tree.Datums) (*TableStatistic, error) {
 		// Decode the histogram data so that it's usable by the opt catalog.
 		res.Histogram = make([]cat.HistogramBucket, len(res.HistogramData.Buckets))
 		typ := res.HistogramData.ColumnType
+		// Hydrate the type in case any user defined types are present.
+		// There are cases where typ is nil, so don't do anything if so.
+		if typ != nil && typ.UserDefined() {
+			// TODO (rohany): This should instead query a leased copy of the type.
+			// TODO (rohany): If we are caching data about types here, then this
+			//  cache needs to be invalidated as well when type metadata changes.
+			err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				typDesc, err := sqlbase.GetTypeDescFromID(ctx, txn, codec, sqlbase.ID(typ.StableTypeID()))
+				if err != nil {
+					return err
+				}
+				return typDesc.HydrateTypeInfo(typ)
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
 		var a sqlbase.DatumAlloc
 		for i := range res.Histogram {
 			bucket := &res.HistogramData.Buckets[i]
@@ -351,7 +377,7 @@ ORDER BY "createdAt" DESC
 
 	var statsList []*TableStatistic
 	for _, row := range rows {
-		stats, err := parseStats(row)
+		stats, err := parseStats(ctx, sc.ClientDB, sc.Codec, row)
 		if err != nil {
 			return nil, err
 		}
