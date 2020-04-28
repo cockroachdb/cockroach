@@ -89,33 +89,47 @@ writing: debug/nodes/1/ranges/31.json
 writing: debug/nodes/1/ranges/32.json
 writing: debug/nodes/2/status.json
 using SQL connection URL for node 2: postgresql://...
-retrieving SQL data for crdb_internal.feature_usage... writing: debug/nodes/2/crdb_internal.feature_usage.txt.err.txt
+retrieving SQL data for crdb_internal.feature_usage... writing: debug/nodes/2/crdb_internal.feature_usage.txt
+writing: debug/nodes/2/crdb_internal.feature_usage.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.gossip_alerts... writing: debug/nodes/2/crdb_internal.gossip_alerts.txt.err.txt
+retrieving SQL data for crdb_internal.gossip_alerts... writing: debug/nodes/2/crdb_internal.gossip_alerts.txt
+writing: debug/nodes/2/crdb_internal.gossip_alerts.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.gossip_liveness... writing: debug/nodes/2/crdb_internal.gossip_liveness.txt.err.txt
+retrieving SQL data for crdb_internal.gossip_liveness... writing: debug/nodes/2/crdb_internal.gossip_liveness.txt
+writing: debug/nodes/2/crdb_internal.gossip_liveness.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.gossip_network... writing: debug/nodes/2/crdb_internal.gossip_network.txt.err.txt
+retrieving SQL data for crdb_internal.gossip_network... writing: debug/nodes/2/crdb_internal.gossip_network.txt
+writing: debug/nodes/2/crdb_internal.gossip_network.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.gossip_nodes... writing: debug/nodes/2/crdb_internal.gossip_nodes.txt.err.txt
+retrieving SQL data for crdb_internal.gossip_nodes... writing: debug/nodes/2/crdb_internal.gossip_nodes.txt
+writing: debug/nodes/2/crdb_internal.gossip_nodes.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.leases... writing: debug/nodes/2/crdb_internal.leases.txt.err.txt
+retrieving SQL data for crdb_internal.leases... writing: debug/nodes/2/crdb_internal.leases.txt
+writing: debug/nodes/2/crdb_internal.leases.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.node_build_info... writing: debug/nodes/2/crdb_internal.node_build_info.txt.err.txt
+retrieving SQL data for crdb_internal.node_build_info... writing: debug/nodes/2/crdb_internal.node_build_info.txt
+writing: debug/nodes/2/crdb_internal.node_build_info.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.node_metrics... writing: debug/nodes/2/crdb_internal.node_metrics.txt.err.txt
+retrieving SQL data for crdb_internal.node_metrics... writing: debug/nodes/2/crdb_internal.node_metrics.txt
+writing: debug/nodes/2/crdb_internal.node_metrics.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.node_queries... writing: debug/nodes/2/crdb_internal.node_queries.txt.err.txt
+retrieving SQL data for crdb_internal.node_queries... writing: debug/nodes/2/crdb_internal.node_queries.txt
+writing: debug/nodes/2/crdb_internal.node_queries.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.node_runtime_info... writing: debug/nodes/2/crdb_internal.node_runtime_info.txt.err.txt
+retrieving SQL data for crdb_internal.node_runtime_info... writing: debug/nodes/2/crdb_internal.node_runtime_info.txt
+writing: debug/nodes/2/crdb_internal.node_runtime_info.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.node_sessions... writing: debug/nodes/2/crdb_internal.node_sessions.txt.err.txt
+retrieving SQL data for crdb_internal.node_sessions... writing: debug/nodes/2/crdb_internal.node_sessions.txt
+writing: debug/nodes/2/crdb_internal.node_sessions.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.node_statement_statistics... writing: debug/nodes/2/crdb_internal.node_statement_statistics.txt.err.txt
+retrieving SQL data for crdb_internal.node_statement_statistics... writing: debug/nodes/2/crdb_internal.node_statement_statistics.txt
+writing: debug/nodes/2/crdb_internal.node_statement_statistics.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.node_transactions... writing: debug/nodes/2/crdb_internal.node_transactions.txt.err.txt
+retrieving SQL data for crdb_internal.node_transactions... writing: debug/nodes/2/crdb_internal.node_transactions.txt
+writing: debug/nodes/2/crdb_internal.node_transactions.txt.err.txt
   ^- resulted in ...
-retrieving SQL data for crdb_internal.node_txn_stats... writing: debug/nodes/2/crdb_internal.node_txn_stats.txt.err.txt
+retrieving SQL data for crdb_internal.node_txn_stats... writing: debug/nodes/2/crdb_internal.node_txn_stats.txt
+writing: debug/nodes/2/crdb_internal.node_txn_stats.txt.err.txt
   ^- resulted in ...
 requesting data for debug/nodes/2/details... writing: debug/nodes/2/details.json.err.txt
   ^- resulted in ...
