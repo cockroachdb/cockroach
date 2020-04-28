@@ -228,6 +228,7 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogPreparedStatementsTableID:  pgCatalogPreparedStatementsTable,
 		sqlbase.PgCatalogPreparedXactsTableID:       pgCatalogPreparedXactsTable,
 		sqlbase.PgCatalogProcTableID:                pgCatalogProcTable,
+		sqlbase.PgCatalogAggregateTableID:           pgCatalogAggregateTable,
 		sqlbase.PgCatalogRangeTableID:               pgCatalogRangeTable,
 		sqlbase.PgCatalogRewriteTableID:             pgCatalogRewriteTable,
 		sqlbase.PgCatalogRolesTableID:               pgCatalogRolesTable,
@@ -2937,6 +2938,88 @@ CREATE TABLE pg_catalog.pg_views (
 					tree.NewDString(desc.ViewQuery), // definition
 				)
 			})
+	},
+}
+
+var pgCatalogAggregateTable = virtualSchemaTable{
+	comment: `aggregated built-in functions (incomplete)
+https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_aggregate (
+	aggfnoid REGPROC,
+	aggkind  CHAR,
+	aggnumdirectargs INT2,
+	aggtransfn REGPROC,
+	aggfinalfn REGPROC,
+	aggcombinefn REGPROC,
+	aggserialfn REGPROC,
+	aggdeserialfn REGPROC,
+	aggmtransfn REGPROC,
+	aggminvtransfn REGPROC,
+	aggmfinalfn REGPROC,
+	aggfinalextra BOOL,
+	aggmfinalextra BOOL,
+	aggsortop OID,
+	aggtranstype OID,
+	aggtransspace INT4,
+	aggmtranstype OID,
+	aggmtransspace INT4,
+	agginitval TEXT,
+	aggminitval TEXT
+)
+`,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
+			func(db *DatabaseDescriptor) error {
+				for _, name := range builtins.AllAggregateBuiltinNames {
+				if name == builtins.AnyNotNull {
+					// any_not_null is treated as a special case.
+					continue
+				}
+				_, overloads := builtins.GetBuiltinProperties(name)
+				for _, overload := range overloads {
+					params, _ := tree.GetParamsAndReturnType(overload)
+					sortOperatorOid := oidZero
+					if params.Length() != 0 {
+						argType := tree.NewDOid(tree.DInt(params.Types()[0].Oid()))
+						returnType := tree.NewDOid(tree.DInt(oid.T_bool))
+						switch name {
+						case "max", "bit_or":
+							sortOperatorOid = h.OperatorOid(">", argType, argType, returnType)
+						case "min", "bit_and", "every":
+							sortOperatorOid = h.OperatorOid("<", argType, argType, returnType)
+						}
+					}
+					err := addRow(
+						h.BuiltinOid(name, &overload).AsRegProc(name), // aggfnoid
+						tree.NewDString("n"),                          // aggkind
+						tree.NewDInt(0),                               // aggnumdirectargs
+						tree.DNull,                                    // aggtransfn
+						tree.DNull,                                    // aggfinalfn
+						tree.DNull,                                    // aggcombinefn
+						tree.DNull,                                    // aggserialfn
+						tree.DNull,                                    // aggdeserialfn
+						tree.DNull,                                    // aggmtransfn
+						tree.DNull,                                    // aggminvtransfn
+						tree.DNull,                                    // aggmfinalfn
+						tree.DNull,                                    // aggfinalextra
+						tree.DNull,                                    // aggmfinalextra
+						sortOperatorOid,                               // aggsortop
+						tree.DNull,                                    // aggtranstype
+						tree.DNull,                                    // aggtransspace
+						tree.DNull,                                    // aggmtranstype
+						tree.DNull,                                    // aggmtransspace
+						tree.DNull,                                    // agginitval
+						tree.DNull,                                    // aggminitval
+					)
+					if err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		})
 	},
 }
 

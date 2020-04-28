@@ -142,6 +142,7 @@ const (
 	PgCatalogPreparedStatementsTableID
 	PgCatalogPreparedXactsTableID
 	PgCatalogProcTableID
+	PgCatalogAggregateTableID
 	PgCatalogRangeTableID
 	PgCatalogRewriteTableID
 	PgCatalogRolesTableID
