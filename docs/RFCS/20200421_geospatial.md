@@ -328,11 +328,16 @@ serialization option for S2 objects which further improves disk usage,
 however it is not yet ported to Go.
 
 We will not support indexing geospatial types in default primary keys
-and indexes (as we do not for JSONB and ARRAYs today). However, we
-will support using inverted indexes for geospatial indexing -- see the
-indexing section for details. This may change subject to further
-user consultation before the upcoming v20.2 release.
+and unique secondary indexes (as we do not for JSONB and ARRAYs today). This is
+because we will not be able to match the PostGIS definition as it's based
+on a hash of its internal data structure, which means we will
+not be able to be a "drop-in" replacement here. If we could decide
+on our own ordering, it will be based on the raw EWKB byte ordering.
+This may change subject to further user consultation before the upcoming
+v20.2 release.
 
+We will however support using inverted indexes for geospatial indexing
+-- see the indexing section for details.
 
 #### Display
 
@@ -420,13 +425,13 @@ Curves are implemented natively in PostGIS, with an [approximation of
 ~32 points per
 curve](https://github.com/postgis/postgis/blob/master/liblwgeom/lwgeom_geos.c#L412) 
 done when input into the GEOS library. We can look to use some of the
-same math after 20.2.
+same math after v20.2.
 
 
 #### Geometry (2.5D)
 
 These are implemented natively in PostGIS with some GEOS support. We
-can look at doing this after 20.2.
+can look at doing this after v20.2.
 
 
 #### Geometry (3D)
@@ -460,7 +465,7 @@ value. This will add an extra "row" for this builtin in our docs
 compared to PostGIS.
 
 Users and tools specifying explicitly default args (e.g. `SELECT
-ST_Area(geom, use_spheroid := false)`) will be unable to do so at 20.2
+ST_Area(geom, use_spheroid := false)`) will be unable to do so at v20.2
 unless we implement the default args feature before then.
 
 
@@ -646,7 +651,6 @@ they are available on the public schema upon extension registration.
 
 This will also be available on the `pg_extension` schema
 mentioned below.
-```
 
 ##### `pg_extension` schema
 
@@ -730,8 +734,16 @@ types. This may be out of line with the OGC spec, but follows the
 principle that we will prioritize PostGIS behaviour.
 
 
-### Other Future Work/Out of Scope for 20.2
+### Out of Scope for v20.2
 
+The following has been mentioned as out of scope:
+* 2.5D, 3D shapes
+* PRIMARY KEY definitions for Geometry/Geography types
+* Default Arguments for Builtins
+* Caching certain builtin operations
+* User defined SRIDs
+
+Furthermore, these will be out of scope:
 * Supporting the default geometric data types in
   [PostgreSQL](https://www.postgresql.org/docs/current/datatype-geometric.html).
 
