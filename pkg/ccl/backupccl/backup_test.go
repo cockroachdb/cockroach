@@ -967,11 +967,11 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		low := keys.MakeTablePrefix(ip.backupTableID)
-		high := keys.MakeTablePrefix(ip.backupTableID + 1)
+		low := keys.SystemSQLCodec.TablePrefix(ip.backupTableID)
+		high := keys.SystemSQLCodec.TablePrefix(ip.backupTableID + 1)
 		if bytes.Compare(highWaterMark, low) <= 0 || bytes.Compare(highWaterMark, high) >= 0 {
 			return errors.Errorf("expected high-water mark %v to be between %v and %v",
-				highWaterMark, roachpb.Key(low), roachpb.Key(high))
+				highWaterMark, low, high)
 		}
 		return nil
 	}
@@ -2467,7 +2467,7 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 	gcr := roachpb.GCRequest{
 		// Bogus span to make it a valid request.
 		RequestHeader: roachpb.RequestHeader{
-			Key:    keys.MakeTablePrefix(keys.MinUserDescID),
+			Key:    keys.SystemSQLCodec.TablePrefix(keys.MinUserDescID),
 			EndKey: keys.MaxKey,
 		},
 		Threshold: tc.Server(0).Clock().Now(),

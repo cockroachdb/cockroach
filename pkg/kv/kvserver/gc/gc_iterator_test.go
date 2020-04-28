@@ -81,8 +81,8 @@ func TestGCIterator(t *testing.T) {
 		}
 	}
 	vals := uniformValueDistribution(3, 5, 0, rand.New(rand.NewSource(1)))
-	tablePrefix := keys.MakeTablePrefix(42)
-	desc := roachpb.RangeDescriptor{StartKey: tablePrefix, EndKey: roachpb.RKey(roachpb.Key(tablePrefix).PrefixEnd())}
+	tablePrefix := keys.SystemSQLCodec.TablePrefix(42)
+	desc := roachpb.RangeDescriptor{StartKey: roachpb.RKey(tablePrefix), EndKey: roachpb.RKey(tablePrefix.PrefixEnd())}
 	keyA := append(tablePrefix[0:len(tablePrefix):len(tablePrefix)], 'a')
 	keyB := append(tablePrefix[0:len(tablePrefix):len(tablePrefix)], 'b')
 	keyC := append(tablePrefix[0:len(tablePrefix):len(tablePrefix)], 'c')

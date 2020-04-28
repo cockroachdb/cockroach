@@ -27,11 +27,11 @@ import (
 
 // DecodeIndexKeyToCols decodes an index key into the idx'th position of the
 // provided slices of colexec.Vecs. The input index key must already have its
-// first table id / index id prefix removed. If matches is false, the key is
-// from a different table, and the returned remainingKey indicates a
+// tenant id and first table id / index id prefix removed. If matches is false,
+// the key is from a different table, and the returned remainingKey indicates a
 // "seek prefix": the next key that might be part of the table being searched
-// for. The input key will also be mutated if matches is false.
-// See the analog in sqlbase/index_encoding.go.
+// for. The input key will also be mutated if matches is false. See the analog
+// in sqlbase/index_encoding.go.
 func DecodeIndexKeyToCols(
 	vecs []coldata.Vec,
 	idx int,
@@ -53,7 +53,7 @@ func DecodeIndexKeyToCols(
 			// Our input key had its first table id / index id chopped off, so
 			// don't try to decode those for the first ancestor.
 			if i != 0 {
-				key, decodedTableID, decodedIndexID, err = sqlbase.DecodeTableIDIndexID(key)
+				key, decodedTableID, decodedIndexID, err = sqlbase.DecodePartialTableIDIndexID(key)
 				if err != nil {
 					return nil, false, false, err
 				}
@@ -61,7 +61,7 @@ func DecodeIndexKeyToCols(
 					// We don't match. Return a key with the table ID / index ID we're
 					// searching for, so the caller knows what to seek to.
 					curPos := len(origKey) - len(key)
-					key = sqlbase.EncodeTableIDIndexID(origKey[:curPos], ancestor.TableID, ancestor.IndexID)
+					key = sqlbase.EncodePartialTableIDIndexID(origKey[:curPos], ancestor.TableID, ancestor.IndexID)
 					return key, false, false, nil
 				}
 			}
@@ -90,7 +90,7 @@ func DecodeIndexKeyToCols(
 			}
 		}
 
-		key, decodedTableID, decodedIndexID, err = sqlbase.DecodeTableIDIndexID(key)
+		key, decodedTableID, decodedIndexID, err = sqlbase.DecodePartialTableIDIndexID(key)
 		if err != nil {
 			return nil, false, false, err
 		}
@@ -98,7 +98,7 @@ func DecodeIndexKeyToCols(
 			// We don't match. Return a key with the table ID / index ID we're
 			// searching for, so the caller knows what to seek to.
 			curPos := len(origKey) - len(key)
-			key = sqlbase.EncodeTableIDIndexID(origKey[:curPos], desc.ID, index.ID)
+			key = sqlbase.EncodePartialTableIDIndexID(origKey[:curPos], desc.ID, index.ID)
 			return key, false, false, nil
 		}
 	}

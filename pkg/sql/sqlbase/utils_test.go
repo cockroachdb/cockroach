@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -43,7 +44,7 @@ var tableNames = map[string]bool{
 //    - NULLASC, NULLDESC, NOTNULLASC, NOTNULLDESC
 //    - PrefixEnd
 func EncodeTestKey(tb testing.TB, kvDB *kv.DB, keyStr string) roachpb.Key {
-	var key []byte
+	key := keys.SystemSQLCodec.TenantPrefix()
 	tokens := strings.Split(keyStr, "/")
 	if tokens[0] != "" {
 		panic("missing '/' token at the beginning of long format")
@@ -54,7 +55,7 @@ func EncodeTestKey(tb testing.TB, kvDB *kv.DB, keyStr string) roachpb.Key {
 
 	for _, tok := range tokens {
 		if tok == "PrefixEnd" {
-			key = roachpb.Key(key).PrefixEnd()
+			key = key.PrefixEnd()
 			continue
 		}
 

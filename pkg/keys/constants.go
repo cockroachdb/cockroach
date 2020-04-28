@@ -29,6 +29,7 @@ const (
 	metaMaxByte      = '\x04'
 	systemPrefixByte = metaMaxByte
 	systemMaxByte    = '\x05'
+	tenantPrefixByte = '\xfe'
 )
 
 // Constants for system-reserved keys in the KV map.
@@ -262,26 +263,34 @@ var (
 
 	// 3. SQL keys
 	//
+	// TODO(nvanbenschoten): Figure out what to do with all of these. At a
+	// minimum, prefix them all with "System".
+	//
 	// TableDataMin is the start of the range of table data keys.
-	TableDataMin = roachpb.Key(MakeTablePrefix(0))
+	TableDataMin = SystemSQLCodec.TablePrefix(0)
 	// TableDataMin is the end of the range of table data keys.
-	TableDataMax = roachpb.Key(MakeTablePrefix(math.MaxUint32))
+	TableDataMax = SystemSQLCodec.TablePrefix(math.MaxUint32).PrefixEnd()
 	//
 	// SystemConfigSplitKey is the key to split at immediately prior to the
 	// system config span. NB: Split keys need to be valid column keys.
 	// TODO(bdarnell): this should be either roachpb.Key or RKey, not []byte.
 	SystemConfigSplitKey = []byte(TableDataMin)
 	// SystemConfigTableDataMax is the end key of system config span.
-	SystemConfigTableDataMax = roachpb.Key(MakeTablePrefix(MaxSystemConfigDescID + 1))
+	SystemConfigTableDataMax = SystemSQLCodec.TablePrefix(MaxSystemConfigDescID + 1)
 	//
 	// NamespaceTableMin is the start key of system.namespace, which is a system
 	// table that does not reside in the same range as other system tables.
-	NamespaceTableMin = roachpb.Key(MakeTablePrefix(NamespaceTableID))
+	NamespaceTableMin = SystemSQLCodec.TablePrefix(NamespaceTableID)
 	// NamespaceTableMax is the end key of system.namespace.
-	NamespaceTableMax = roachpb.Key(MakeTablePrefix(NamespaceTableID + 1))
+	NamespaceTableMax = SystemSQLCodec.TablePrefix(NamespaceTableID + 1)
 	//
 	// UserTableDataMin is the start key of user structured data.
-	UserTableDataMin = roachpb.Key(MakeTablePrefix(MinUserDescID))
+	UserTableDataMin = SystemSQLCodec.TablePrefix(MinUserDescID)
+
+	// tenantPrefix is the prefix for all non-system tenant keys.
+	tenantPrefix       = roachpb.Key{tenantPrefixByte}
+	TenantTableDataMin = MakeTenantPrefix(roachpb.MinTenantID)
+	TenantTableDataMax = MakeTenantPrefix(roachpb.MaxTenantID).PrefixEnd()
 )
 
 // Various IDs used by the structured data layer.
@@ -372,6 +381,15 @@ const (
 	TableCommentType    = 1
 	ColumnCommentType   = 2
 	IndexCommentType    = 3
+)
+
+const (
+	// SequenceIndexID is the ID of the single index on each special single-column,
+	// single-row sequence table.
+	SequenceIndexID = 1
+	// SequenceColumnFamilyID is the ID of the column family on each special single-column,
+	// single-row sequence table.
+	SequenceColumnFamilyID = 0
 )
 
 // PseudoTableIDs is the list of ids from above that are not real tables (i.e.

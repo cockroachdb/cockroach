@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -21,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -122,9 +122,7 @@ func (td *tableDeleter) deleteAllRowsFast(
 	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
-		tablePrefix := roachpb.Key(
-			encoding.EncodeUvarintAscending(nil, uint64(td.rd.Helper.TableDesc.ID)),
-		)
+		tablePrefix := keys.TODOSQLCodec.TablePrefix(uint32(td.rd.Helper.TableDesc.ID))
 		// Delete rows and indexes starting with the table's prefix.
 		resume = roachpb.Span{
 			Key:    tablePrefix,

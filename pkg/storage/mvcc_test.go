@@ -4215,8 +4215,8 @@ func TestValidSplitKeys(t *testing.T) {
 		{roachpb.Key("a"), true},
 		{roachpb.Key("\xff"), true},
 		{roachpb.Key("\xff\x01"), true},
-		{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID)), false},
-		{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID + 1)), true},
+		{keys.SystemSQLCodec.TablePrefix(keys.MaxSystemConfigDescID), false},
+		{keys.SystemSQLCodec.TablePrefix(keys.MaxSystemConfigDescID + 1), true},
 	}
 	for i, test := range testCases {
 		valid := IsValidSplitKey(test.key)
@@ -4294,7 +4294,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 	// Manually creates rows corresponding to the schema:
 	// CREATE TABLE t (id1 STRING, id2 STRING, ... PRIMARY KEY (id1, id2, ...))
 	addTablePrefix := func(prefix roachpb.Key, id uint32, rowVals ...string) roachpb.Key {
-		tableKey := append(prefix, keys.MakeTablePrefix(id)...)
+		tableKey := append(prefix, keys.SystemSQLCodec.TablePrefix(id)...)
 		rowKey := roachpb.Key(encoding.EncodeVarintAscending(tableKey, 1))
 		for _, rowVal := range rowVals {
 			rowKey = encoding.EncodeStringAscending(rowKey, rowVal)
@@ -4333,7 +4333,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 				addColFam(tablePrefix(1, "some", "data"), 1),
 				addColFam(tablePrefix(keys.MaxSystemConfigDescID, "blah"), 1),
 			},
-			rangeStart: keys.MakeTablePrefix(1),
+			rangeStart: keys.SystemSQLCodec.TablePrefix(1),
 			expSplit:   nil,
 			expError:   false,
 		},
@@ -4454,7 +4454,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 				addColFam(tablePrefix(userID, "c"), 1),
 				addColFam(tablePrefix(userID, "d"), 1),
 			},
-			rangeStart: keys.MakeTablePrefix(userID),
+			rangeStart: keys.SystemSQLCodec.TablePrefix(userID),
 			expSplit:   tablePrefix(userID, "c"),
 			expError:   false,
 		},
@@ -4470,7 +4470,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 				addColFam(tablePrefix(userID, "b"), 1),
 				addColFam(tablePrefix(userID, "c"), 1),
 			},
-			rangeStart: keys.MakeTablePrefix(keys.MinUserDescID),
+			rangeStart: keys.SystemSQLCodec.TablePrefix(keys.MinUserDescID),
 			expSplit:   tablePrefix(userID, "b"),
 			expError:   false,
 		},

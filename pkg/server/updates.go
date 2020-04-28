@@ -462,7 +462,7 @@ func (s *Server) ReportDiagnostics(ctx context.Context) {
 }
 
 func (s *Server) collectSchemaInfo(ctx context.Context) ([]sqlbase.TableDescriptor, error) {
-	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
+	startKey := keys.TODOSQLCodec.TablePrefix(keys.DescriptorTableID)
 	endKey := startKey.PrefixEnd()
 	kvs, err := s.db.Scan(ctx, startKey, endKey, 0)
 	if err != nil {

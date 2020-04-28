@@ -67,7 +67,7 @@ func TestAmbiguousCommit(t *testing.T) {
 		translateToRPCError := roachpb.NewError(errors.Errorf("%s: RPC error: success=%t", t.Name(), ambiguousSuccess))
 
 		maybeRPCError := func(req *roachpb.ConditionalPutRequest) *roachpb.Error {
-			tsk, ok := tableStartKey.Load().([]byte)
+			tsk, ok := tableStartKey.Load().(roachpb.Key)
 			if !ok {
 				return nil
 			}
@@ -156,10 +156,10 @@ func TestAmbiguousCommit(t *testing.T) {
 		}
 
 		tableID := sqlutils.QueryTableID(t, sqlDB, "test", "public", "t")
-		tableStartKey.Store(keys.MakeTablePrefix(tableID))
+		tableStartKey.Store(keys.SystemSQLCodec.TablePrefix(tableID))
 
 		// Wait for new table to split & replication.
-		if err := tc.WaitForSplitAndInitialization(tableStartKey.Load().([]byte)); err != nil {
+		if err := tc.WaitForSplitAndInitialization(tableStartKey.Load().(roachpb.Key)); err != nil {
 			t.Fatal(err)
 		}
 

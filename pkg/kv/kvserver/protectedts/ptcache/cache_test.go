@@ -420,8 +420,8 @@ func waitForAsOfAfter(t *testing.T, c protectedts.Cache, ts hlc.Timestamp) (asOf
 
 func tableSpan(tableID uint32) roachpb.Span {
 	return roachpb.Span{
-		Key:    roachpb.Key(keys.MakeTablePrefix(tableID)),
-		EndKey: roachpb.Key(keys.MakeTablePrefix(tableID)).PrefixEnd(),
+		Key:    keys.SystemSQLCodec.TablePrefix(tableID),
+		EndKey: keys.SystemSQLCodec.TablePrefix(tableID).PrefixEnd(),
 	}
 }
 

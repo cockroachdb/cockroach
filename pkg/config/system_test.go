@@ -33,7 +33,7 @@ func plainKV(k, v string) roachpb.KeyValue {
 }
 
 func tkey(tableID uint32, chunks ...string) []byte {
-	key := keys.MakeTablePrefix(tableID)
+	key := keys.SystemSQLCodec.TablePrefix(tableID)
 	for _, c := range chunks {
 		key = append(key, []byte(c)...)
 	}

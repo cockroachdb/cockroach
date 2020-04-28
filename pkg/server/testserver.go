@@ -1062,7 +1062,7 @@ func (ts *TestServer) ForceTableGC(
 		return errors.AssertionFailedf("expected 1 column from internal query")
 	}
 	tableID := uint32(*row[0].(*tree.DInt))
-	tblKey := roachpb.Key(keys.MakeTablePrefix(tableID))
+	tblKey := keys.SystemSQLCodec.TablePrefix(tableID)
 	gcr := roachpb.GCRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:    tblKey,

@@ -48,9 +48,9 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		// No intersection, no bytes, no load.
 		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 0, 64 << 20, false, 0},
 		// Intersection in zone, no bytes, no load.
-		{keys.MakeTablePrefix(2001), roachpb.RKeyMax, 0, 64 << 20, true, 1},
+		{roachpb.RKey(keys.SystemSQLCodec.TablePrefix(2001)), roachpb.RKeyMax, 0, 64 << 20, true, 1},
 		// Already split at largest ID, no load.
-		{keys.MakeTablePrefix(2002), roachpb.RKeyMax, 0, 32 << 20, false, 0},
+		{roachpb.RKey(keys.SystemSQLCodec.TablePrefix(2002)), roachpb.RKeyMax, 0, 32 << 20, false, 0},
 		// Multiple intersections, no bytes, no load.
 		{roachpb.RKeyMin, roachpb.RKeyMax, 0, 64 << 20, true, 1},
 		// No intersection, max bytes, no load.
@@ -62,9 +62,9 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		// No intersection, max bytes * 4, no load, should not backpressure.
 		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64 << 22, 64 << 20, true, 4},
 		// Intersection, max bytes +1, no load.
-		{keys.MakeTablePrefix(2000), roachpb.RKeyMax, 32<<20 + 1, 32 << 20, true, 2},
+		{roachpb.RKey(keys.SystemSQLCodec.TablePrefix(2000)), roachpb.RKeyMax, 32<<20 + 1, 32 << 20, true, 2},
 		// Split needed at table boundary, but no zone config, no load.
-		{keys.MakeTablePrefix(2001), roachpb.RKeyMax, 32<<20 + 1, 64 << 20, true, 1},
+		{roachpb.RKey(keys.SystemSQLCodec.TablePrefix(2001)), roachpb.RKeyMax, 32<<20 + 1, 64 << 20, true, 1},
 	}
 
 	cfg := tc.gossip.GetSystemConfig()

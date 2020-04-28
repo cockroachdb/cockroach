@@ -31,7 +31,7 @@ func (s *Server) refreshSettings() {
 	tbl := &sqlbase.SettingsTable
 
 	a := &sqlbase.DatumAlloc{}
-	settingsTablePrefix := keys.MakeTablePrefix(uint32(tbl.ID))
+	settingsTablePrefix := keys.TODOSQLCodec.TablePrefix(uint32(tbl.ID))
 	colIdxMap := row.ColIDtoRowIndexFromCols(tbl.Columns)
 
 	processKV := func(ctx context.Context, kv roachpb.KeyValue, u settings.Updater) error {

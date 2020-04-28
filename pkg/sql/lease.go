@@ -1773,7 +1773,7 @@ func (m *LeaseManager) findTableState(tableID sqlbase.ID, create bool) *tableSta
 func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *kv.DB, g *gossip.Gossip) {
 	ctx := context.TODO()
 	s.RunWorker(ctx, func(ctx context.Context) {
-		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
+		descKeyPrefix := keys.TODOSQLCodec.TablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		cfgFilter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
 		gossipUpdateC := g.RegisterSystemConfigChannel()
 		for {

@@ -39,7 +39,7 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 	storagebase.MergeQueueEnabled.Override(&testCtx.store.ClusterSettings().SV, true)
 
 	tableKey := func(i uint32) []byte {
-		return keys.MakeTablePrefix(keys.MaxReservedDescID + i)
+		return keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + i)
 	}
 
 	config.TestingSetZoneConfig(keys.MaxReservedDescID+1, *zonepb.NewZoneConfig())

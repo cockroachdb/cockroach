@@ -21,26 +21,37 @@
 //
 // This is the ten-thousand foot view of the keyspace:
 //
-//    +----------+
-//    | (empty)  | /Min
-//    | \x01...  | /Local    ----+
-//    |          |               |
-//    | ...      |               |	local keys
-//    |          |               |
-//    |          |           ----+
-//    | \x02...  | /Meta1    ----+
-//    | \x03...  | /Meta2        |
-//    | \x04...  | /System       |
-//    |          |               |
-//    | ...      |               |
-//    |          |               | global keys
-//    | \x89...  | /Table/1      |
-//    | \x8a...  | /Table/2      |
-//    |          |               |
-//    | ...      |               |
-//    |          |               |
-//    | \xff\xff | /Max      ----+
-//    +----------+
+//    +------------------+
+//    | (empty)          | /Min
+//    | \x01...          | /Local            ---------------------+
+//    |                  |                                        |
+//    | ...              |                                        | local keys
+//    |                  |                                        |
+//    |                  |                   ---------------------+
+//    |                  |                   ---------------------+
+//    | \x02...          | /Meta1            ----+                |
+//    | \x03...          | /Meta2                |                |
+//    | \x04...          | /System               |                |
+//    |                  |                       | system keys    |
+//    | ...              |                       |                |
+//    |                  |                   ----+                |
+//    | \x89...          | /Table/1          ----+                |
+//    | \x8a...          | /Table/2              |                |
+//    |                  |                       | system tenant  |
+//    | ...              |                       |                | global keys
+//    |                  |                   ----+                |
+//    | \xfe\x8a\x89...  | /Tenant/2/Table/1 ----+                |
+//    | \xfe\x8a\x8a...  | /Tenant/2/Table/2     |                |
+//    |                  |                       | tenant 2       |
+//    | ...              |                       |                |
+//    |                  |                   ----+                |
+//    | \xfe...          | /Tenant/...       ----+                |
+//    | \xfe...          |                       |                |
+//    |                  |                       | tenant ...     |
+//    | ...              |                       |                |
+//    |                  |                   ----+                |
+//    | \xff\xff         | /Max              ---------------------+
+//    +------------------+
 //
 // When keys are pretty printed, the logical name to the right of the table is
 // shown instead of the raw byte sequence.
@@ -205,7 +216,8 @@ var _ = [...]interface{}{
 	StoreIdentKey,               // "iden"
 	StoreLastUpKey,              // "uptm"
 
-	// The global keyspace includes the meta{1,2}, system, and SQL keys.
+	// The global keyspace includes the meta{1,2}, system, system tenant SQL
+	// keys, and non-system tenant SQL keys.
 	//
 	// 	1. Meta keys: This is where we store all key addressing data.
 	MetaMin,
@@ -229,11 +241,17 @@ var _ = [...]interface{}{
 	TimeseriesPrefix,    // "tsd"
 	SystemMax,
 
-	// 	3. SQL keys: This is where we store all table data.
+	// 	3. System tenant SQL keys: This is where we store all system-tenant
+	// 	table data.
 	TableDataMin,
 	NamespaceTableMin,
 	UserTableDataMin,
 	TableDataMax,
+
+	//  4. Non-system tenant SQL keys: This is where we store all non-system
+	//  tenant table data.
+	TenantTableDataMin,
+	TenantTableDataMax,
 
 	MaxKey,
 }

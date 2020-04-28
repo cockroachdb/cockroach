@@ -113,7 +113,7 @@ func (s *SystemConfig) GetDesc(key roachpb.Key) *roachpb.Value {
 		return getVal
 	}
 
-	id, err := keys.DecodeDescMetadataID(key)
+	id, err := keys.TODOSQLCodec.DecodeDescMetadataID(key)
 	if err != nil {
 		// No ID found for key. No roachpb.Value corresponds to this key.
 		panic(err)
@@ -181,11 +181,11 @@ func (s *SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 	}
 
 	// Search for the descriptor table entries within the SystemConfig.
-	highBound := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID + 1))
+	highBound := keys.TODOSQLCodec.TablePrefix(keys.DescriptorTableID + 1)
 	highIndex := sort.Search(len(s.Values), func(i int) bool {
 		return bytes.Compare(s.Values[i].Key, highBound) >= 0
 	})
-	lowBound := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
+	lowBound := keys.TODOSQLCodec.TablePrefix(keys.DescriptorTableID)
 	lowIndex := sort.Search(len(s.Values), func(i int) bool {
 		return bytes.Compare(s.Values[i].Key, lowBound) >= 0
 	})
@@ -197,7 +197,7 @@ func (s *SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 	// No maximum specified; maximum ID is the last entry in the descriptor
 	// table.
 	if maxID == 0 {
-		id, err := keys.DecodeDescMetadataID(s.Values[highIndex-1].Key)
+		id, err := keys.TODOSQLCodec.DecodeDescMetadataID(s.Values[highIndex-1].Key)
 		if err != nil {
 			return 0, err
 		}
@@ -211,7 +211,7 @@ func (s *SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 	var err error
 	maxIdx := sort.Search(len(searchSlice), func(i int) bool {
 		var id uint64
-		id, err = keys.DecodeDescMetadataID(searchSlice[i].Key)
+		id, err = keys.TODOSQLCodec.DecodeDescMetadataID(searchSlice[i].Key)
 		if err != nil {
 			return false
 		}
@@ -224,7 +224,7 @@ func (s *SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 	// If we found an index within the list, maxIdx might point to a descriptor
 	// with exactly maxID.
 	if maxIdx < len(searchSlice) {
-		id, err := keys.DecodeDescMetadataID(searchSlice[maxIdx].Key)
+		id, err := keys.TODOSQLCodec.DecodeDescMetadataID(searchSlice[maxIdx].Key)
 		if err != nil {
 			return 0, err
 		}
@@ -238,7 +238,7 @@ func (s *SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 	}
 
 	// Return ID of the immediately preceding descriptor.
-	id, err := keys.DecodeDescMetadataID(searchSlice[maxIdx-1].Key)
+	id, err := keys.TODOSQLCodec.DecodeDescMetadataID(searchSlice[maxIdx-1].Key)
 	if err != nil {
 		return 0, err
 	}
@@ -449,7 +449,7 @@ func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) (rr roachp
 	findSplitKey := func(startID, endID uint32) roachpb.RKey {
 		// endID could be smaller than startID if we don't have user tables.
 		for id := startID; id <= endID; id++ {
-			tableKey := roachpb.RKey(keys.MakeTablePrefix(id))
+			tableKey := roachpb.RKey(keys.TODOSQLCodec.TablePrefix(id))
 			// This logic is analogous to the well-commented static split logic above.
 			if startKey.Less(tableKey) && s.shouldSplit(id) {
 				if tableKey.Less(endKey) {
@@ -532,7 +532,7 @@ func (s *SystemConfig) shouldSplit(ID uint32) bool {
 		// actual descriptors.
 		shouldSplit = true
 	} else {
-		desc := s.GetDesc(keys.DescMetadataKey(ID))
+		desc := s.GetDesc(keys.TODOSQLCodec.DescMetadataKey(ID))
 		shouldSplit = desc != nil && sqlbase.ShouldSplitAtID(ID, desc)
 	}
 	// Populate the cache.

@@ -70,6 +70,7 @@ func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
 // installed on the underlying persistent storage before a cockroach store can
 // start running correctly, thus requiring this special initialization.
 type MetadataSchema struct {
+	// TODO(nvanbenschoten): add roachpb.TenantID here. Use in GetInitialValues.
 	descs         []metadataDescriptor
 	otherSplitIDs []uint32
 	otherKV       []roachpb.KeyValue
@@ -187,7 +188,7 @@ func (ms MetadataSchema) GetInitialValues(
 			Value: value,
 		})
 		if desc.GetID() > keys.MaxSystemConfigDescID {
-			splits = append(splits, roachpb.RKey(keys.MakeTablePrefix(uint32(desc.GetID()))))
+			splits = append(splits, roachpb.RKey(keys.TODOSQLCodec.TablePrefix(uint32(desc.GetID()))))
 		}
 	}
 
@@ -198,7 +199,7 @@ func (ms MetadataSchema) GetInitialValues(
 	}
 
 	for _, id := range ms.otherSplitIDs {
-		splits = append(splits, roachpb.RKey(keys.MakeTablePrefix(id)))
+		splits = append(splits, roachpb.RKey(keys.TODOSQLCodec.TablePrefix(id)))
 	}
 
 	// Other key/value generation that doesn't fit into databases and

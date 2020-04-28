@@ -25,6 +25,8 @@ import (
 // MakePrettyScannerForNamedTables create a PrettyScanner that, beside what the
 // PrettyScanner is generally able to decode, can also decode keys of the form
 // "/<table name>/<index name>/1/2/3/..." using supplied maps from names to ids.
+//
+// TODO(nvanbenschoten): support tenant SQL keys.
 func MakePrettyScannerForNamedTables(
 	tableNameToID map[string]int, idxNameToID map[string]int,
 ) keysutil.PrettyScanner {
@@ -65,7 +67,7 @@ func parseTableKeysAsAscendingInts(
 	if !ok {
 		panic(fmt.Sprintf("unknown table: %s", tableName))
 	}
-	output := roachpb.Key(keys.MakeTablePrefix(uint32(tableID)))
+	output := keys.TODOSQLCodec.TablePrefix(uint32(tableID))
 	if remainder == "" {
 		return "", output
 	}

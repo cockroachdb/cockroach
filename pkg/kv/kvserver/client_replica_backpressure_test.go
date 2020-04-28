@@ -96,7 +96,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		var tableID int
 		tdb.QueryRow(t, "SELECT table_id FROM crdb_internal.tables WHERE name = 'foo'").Scan(&tableID)
 		require.NotEqual(t, 0, tableID)
-		tablePrefix = keys.MakeTablePrefix(uint32(tableID))
+		tablePrefix = keys.SystemSQLCodec.TablePrefix(uint32(tableID))
 		tc.SplitRangeOrFatal(t, tablePrefix)
 		require.NoError(t, tc.WaitForSplitAndInitialization(tablePrefix))
 

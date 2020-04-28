@@ -122,7 +122,7 @@ var (
 				PSFunc: parseUnsupported,
 			},
 			{Name: "/tsd", prefix: TimeseriesPrefix,
-				ppFunc: decodeTimeseriesKey,
+				ppFunc: timeseriesKeyPrint,
 				PSFunc: parseUnsupported,
 			},
 		}},
@@ -131,6 +131,9 @@ var (
 		}},
 		{Name: "/Table", start: TableDataMin, end: TableDataMax, Entries: []DictEntry{
 			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: tableKeyParse},
+		}},
+		{Name: "/Tenant", start: TenantTableDataMin, end: TenantTableDataMax, Entries: []DictEntry{
+			{Name: "", prefix: nil, ppFunc: tenantKeyPrint, PSFunc: tenantKeyParse},
 		}},
 	}
 
@@ -231,8 +234,31 @@ func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
 	return
 }
 
+const strTable = "/Table/"
 const strSystemConfigSpan = "SystemConfigSpan"
 const strSystemConfigSpanStart = "Start"
+
+func tenantKeyParse(input string) (remainder string, output roachpb.Key) {
+	input = mustShiftSlash(input)
+	slashPos := strings.Index(input, "/")
+	if slashPos < 0 {
+		slashPos = len(input)
+	}
+	remainder = input[slashPos:] // `/something/else` -> `/else`
+	tenantIDStr := input[:slashPos]
+	tenantID, err := strconv.ParseUint(tenantIDStr, 10, 64)
+	if err != nil {
+		panic(&ErrUglifyUnsupported{err})
+	}
+	output = MakeTenantPrefix(roachpb.MakeTenantID(tenantID))
+	if strings.HasPrefix(remainder, strTable) {
+		var indexKey roachpb.Key
+		remainder = remainder[len(strTable)-1:]
+		remainder, indexKey = tableKeyParse(remainder)
+		output = append(output, indexKey...)
+	}
+	return remainder, output
+}
 
 func tableKeyParse(input string) (remainder string, output roachpb.Key) {
 	input = mustShiftSlash(input)
@@ -253,13 +279,13 @@ func tableKeyParse(input string) (remainder string, output roachpb.Key) {
 	if err != nil {
 		panic(&ErrUglifyUnsupported{err})
 	}
-	output = roachpb.Key(MakeTablePrefix(uint32(tableID)))
+	output = encoding.EncodeUvarintAscending(nil /* key */, tableID)
 	if remainder != "" {
 		var indexKey roachpb.Key
 		remainder, indexKey = tableIndexParse(remainder)
 		output = append(output, indexKey...)
 	}
-	return
+	return remainder, output
 }
 
 // tableIndexParse parses an index id out of the input and returns the remainder.
@@ -278,7 +304,6 @@ func tableIndexParse(input string) (string, roachpb.Key) {
 	if err != nil {
 		panic(&ErrUglifyUnsupported{err})
 	}
-
 	output := encoding.EncodeUvarintAscending(nil /* key */, indexID)
 	return remainder, output
 }
@@ -527,8 +552,19 @@ func decodeKeyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 	return encoding.PrettyPrintValue(valDirs, key, "/")
 }
 
-func decodeTimeseriesKey(_ []encoding.Direction, key roachpb.Key) string {
+func timeseriesKeyPrint(_ []encoding.Direction, key roachpb.Key) string {
 	return PrettyPrintTimeseriesKey(key)
+}
+
+func tenantKeyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
+	key, tID, err := DecodeTenantPrefix(key)
+	if err != nil {
+		return fmt.Sprintf("/err:%v", err)
+	}
+	if len(key) == 0 {
+		return fmt.Sprintf("/%s", tID)
+	}
+	return fmt.Sprintf("/%s%s", tID, key.StringWithDirs(valDirs, 0))
 }
 
 // prettyPrintInternal parse key with prefix in KeyDict.

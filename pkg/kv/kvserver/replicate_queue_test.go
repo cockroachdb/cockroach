@@ -83,7 +83,7 @@ func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
 	trackedRanges := map[roachpb.RangeID]struct{}{}
 	for i := 0; i < newRanges; i++ {
 		tableID := keys.MinUserDescID + i
-		splitKey := keys.MakeTablePrefix(uint32(tableID))
+		splitKey := keys.SystemSQLCodec.TablePrefix(uint32(tableID))
 		// Retry the splits on descriptor errors which are likely as the replicate
 		// queue is already hard at work.
 		testutils.SucceedsSoon(t, func() error {

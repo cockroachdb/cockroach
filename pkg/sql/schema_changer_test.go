@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -297,7 +296,7 @@ CREATE INDEX foo ON t.test (v)
 
 func getTableKeyCount(ctx context.Context, kvDB *kv.DB) (int, error) {
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tablePrefix := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.ID))
 	tableEnd := tablePrefix.PrefixEnd()
 	kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0)
 	return len(kvs), err
@@ -721,7 +720,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	wg.Wait()
 
 	// Ensure that the table data hasn't been deleted.
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tablePrefix := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.ID))
 	tableEnd := tablePrefix.PrefixEnd()
 	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
@@ -1924,7 +1923,7 @@ CREATE TABLE t.test (
 	// values. This is done to make the table appear like it were
 	// written in the past when cockroachdb used to write sentinel
 	// values for each table row.
-	startKey := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	startKey := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.ID))
 	kvs, err := kvDB.Scan(
 		ctx,
 		startKey,
@@ -3887,7 +3886,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	}
 
 	// Ensure that the table data hasn't been deleted.
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tablePrefix := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.ID))
 	tableEnd := tablePrefix.PrefixEnd()
 	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
@@ -4034,7 +4033,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	}
 
 	// Ensure that the table data has been deleted.
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tablePrefix := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.ID))
 	tableEnd := tablePrefix.PrefixEnd()
 	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
@@ -4043,7 +4042,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	}
 
 	fkTableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "pi")
-	tablePrefix = roachpb.Key(keys.MakeTablePrefix(uint32(fkTableDesc.ID)))
+	tablePrefix = keys.SystemSQLCodec.TablePrefix(uint32(fkTableDesc.ID))
 	tableEnd = tablePrefix.PrefixEnd()
 	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
@@ -4150,7 +4149,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// The new table is truncated.
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tablePrefix := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.ID))
 	tableEnd := tablePrefix.PrefixEnd()
 	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
@@ -4915,8 +4914,7 @@ func TestIndexBackfillValidation(t *testing.T) {
 				count := atomic.AddInt64(&backfillCount, 1)
 				if count == 2 {
 					// drop an index value before validation.
-					keyEnc := keys.MakeTablePrefix(uint32(tableDesc.ID))
-					key := roachpb.Key(encoding.EncodeUvarintAscending(keyEnc, uint64(tableDesc.NextIndexID)))
+					key := keys.SystemSQLCodec.IndexPrefix(uint32(tableDesc.ID), uint32(tableDesc.NextIndexID))
 					kv, err := db.Scan(context.TODO(), key, key.PrefixEnd(), 1)
 					if err != nil {
 						t.Error(err)
@@ -4985,8 +4983,7 @@ func TestInvertedIndexBackfillValidation(t *testing.T) {
 				count := atomic.AddInt64(&backfillCount, 1)
 				if count == 2 {
 					// drop an index value before validation.
-					keyEnc := keys.MakeTablePrefix(uint32(tableDesc.ID))
-					key := roachpb.Key(encoding.EncodeUvarintAscending(keyEnc, uint64(tableDesc.NextIndexID)))
+					key := keys.SystemSQLCodec.IndexPrefix(uint32(tableDesc.ID), uint32(tableDesc.NextIndexID))
 					kv, err := db.Scan(context.TODO(), key, key.PrefixEnd(), 1)
 					if err != nil {
 						t.Error(err)
