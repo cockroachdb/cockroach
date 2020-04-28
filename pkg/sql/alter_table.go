@@ -219,6 +219,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if t.IfNotExists {
 					continue
 				}
+				return sqlbase.NewColumnAlreadyExistsError(string(d.Name), n.tableDesc.Name)
 			}
 
 			n.tableDesc.AddColumnMutation(col, sqlbase.DescriptorMutation_ADD)
