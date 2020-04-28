@@ -122,6 +122,11 @@ func MakeIndexDescriptor(
 	if err := validateIndexColumnsExist(tableDesc, n.Columns); err != nil {
 		return nil, err
 	}
+
+	// Ensure that the index name does not exist before trying to create the index.
+	if err := tableDesc.ValidateIndexNameIsUnique(string(n.Name)); err != nil {
+		return nil, err
+	}
 	indexDesc := sqlbase.IndexDescriptor{
 		Name:              string(n.Name),
 		Unique:            n.Unique,

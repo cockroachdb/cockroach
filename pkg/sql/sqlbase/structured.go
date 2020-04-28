@@ -1716,6 +1716,16 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *k
 	return nil
 }
 
+// ValidateIndexNameIsUnique validates that the index name does not exist.
+func (desc *TableDescriptor) ValidateIndexNameIsUnique(indexName string) error {
+	for _, index := range desc.AllNonDropIndexes() {
+		if indexName == index.Name {
+			return NewRelationAlreadyExistsError(indexName)
+		}
+	}
+	return nil
+}
+
 // ValidateTable validates that the table descriptor is well formed. Checks
 // include validating the table, column and index names, verifying that column
 // names and index names are unique and verifying that column IDs and index IDs
@@ -1982,13 +1992,16 @@ func (desc *TableDescriptor) validateTableIndexes(columnNames map[string]ColumnI
 			return fmt.Errorf("invalid index ID %d", index.ID)
 		}
 
-		if _, ok := indexNames[index.Name]; ok {
+		if _, indexNameExists := indexNames[index.Name]; indexNameExists {
 			for i := range desc.Indexes {
 				if desc.Indexes[i].Name == index.Name {
-					return fmt.Errorf("duplicate index name: %q", index.Name)
+					// This error should be caught in MakeIndexDescriptor.
+					return errors.HandleAsAssertionFailure(fmt.Errorf("duplicate index name: %q", index.Name))
 				}
 			}
-			return fmt.Errorf("duplicate: index %q in the middle of being added, not yet public", index.Name)
+			// This error should be caught in MakeIndexDescriptor.
+			return errors.HandleAsAssertionFailure(fmt.Errorf(
+				"duplicate: index %q in the middle of being added, not yet public", index.Name))
 		}
 		indexNames[index.Name] = struct{}{}
 

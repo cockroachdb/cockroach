@@ -870,7 +870,7 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	// "foo" is being added.
 	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
 	if _, err := sqlDB.Exec(`CREATE INDEX foo ON t.test (c)`); !testutils.IsError(err,
-		`duplicate: index "foo" in the middle of being added, not yet public`) {
+		`relation "foo" already exists`) {
 		t.Fatal(err)
 	}
 	// Make "foo" live.
