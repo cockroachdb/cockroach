@@ -60,6 +60,19 @@ CR_GEOS_Status CR_GEOS_ClipEWKBByRect(CR_GEOS* lib, CR_GEOS_Slice wkb, double xm
                                       double xmax, double ymax, CR_GEOS_String* clippedEWKB);
 
 //
+// Unary operators.
+//
+
+CR_GEOS_Status CR_GEOS_Area(CR_GEOS* lib, CR_GEOS_Slice a, double *ret);
+CR_GEOS_Status CR_GEOS_Length(CR_GEOS* lib, CR_GEOS_Slice a, double *ret);
+
+//
+// Binary operators.
+//
+
+CR_GEOS_Status CR_GEOS_Distance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, double *ret);
+
+//
 // Binary predicates.
 //
 

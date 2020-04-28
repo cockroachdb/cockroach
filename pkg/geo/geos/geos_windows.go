@@ -31,6 +31,18 @@ func ClipEWKBByRect(
 	return nil, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
 }
 
+func Area(ewkb geopb.EWKB) (float64, error) {
+	return 0, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
+}
+
+func Length(ewkb geopb.EWKB) (float64, error) {
+	return 0, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
+}
+
+func MinDistance(a geopb.EWKB, b geopb.EWKB) (float64, error) {
+	return 0, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
+}
+
 func Covers(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 	return false, unimplemented.NewWithIssue(46876, "operation not supported on Windows")
 }

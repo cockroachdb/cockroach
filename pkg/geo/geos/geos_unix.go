@@ -211,16 +211,55 @@ func WKTToEWKB(wkt geopb.WKT, srid geopb.SRID) (geopb.EWKB, error) {
 	return cStringToSafeGoBytes(cEWKB), nil
 }
 
-// ClipEWKBByRect clips a WKB to the specified rectangle.
+// Area returns the area of an EWKB.
+func Area(ewkb geopb.EWKB) (float64, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return 0, err
+	}
+	var area C.double
+	if err := statusToError(C.CR_GEOS_Area(g, goToCSlice(ewkb), &area)); err != nil {
+		return 0, err
+	}
+	return float64(area), nil
+}
+
+// Length returns the length of an EWKB.
+func Length(ewkb geopb.EWKB) (float64, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return 0, err
+	}
+	var length C.double
+	if err := statusToError(C.CR_GEOS_Length(g, goToCSlice(ewkb), &length)); err != nil {
+		return 0, err
+	}
+	return float64(length), nil
+}
+
+// MinDistance returns the minimum distance between two EWKBs.
+func MinDistance(a geopb.EWKB, b geopb.EWKB) (float64, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return 0, err
+	}
+	var distance C.double
+	if err := statusToError(C.CR_GEOS_Distance(g, goToCSlice(a), goToCSlice(b), &distance)); err != nil {
+		return 0, err
+	}
+	return float64(distance), nil
+}
+
+// ClipEWKBByRect clips a EWKB to the specified rectangle.
 func ClipEWKBByRect(
-	wkb geopb.EWKB, xMin float64, yMin float64, xMax float64, yMax float64,
+	ewkb geopb.EWKB, xMin float64, yMin float64, xMax float64, yMax float64,
 ) (geopb.EWKB, error) {
 	g, err := ensureInitInternal()
 	if err != nil {
 		return nil, err
 	}
 	var cEWKB C.CR_GEOS_String
-	if err := statusToError(C.CR_GEOS_ClipEWKBByRect(g, goToCSlice(wkb), C.double(xMin),
+	if err := statusToError(C.CR_GEOS_ClipEWKBByRect(g, goToCSlice(ewkb), C.double(xMin),
 		C.double(yMin), C.double(xMax), C.double(yMax), &cEWKB)); err != nil {
 		return nil, err
 	}
