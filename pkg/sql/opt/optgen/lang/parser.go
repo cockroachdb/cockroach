@@ -36,10 +36,7 @@ type Parser struct {
 	saveSrc SourceLoc
 	errors  []error
 
-	// comments accumulates contiguous comments as they are scanned, as long as
-	// it has been initialized to a non-nil array. Parser functions initialize
-	// it when they want to remember comments. For example, the parser tags
-	// each define and rule with any comments that preceded it.
+	// comments accumulates contiguous comments as they are scanned.
 	comments CommentsExpr
 
 	// resolver is invoked to open the input files provided to the parser.
@@ -48,6 +45,9 @@ type Parser struct {
 	// unscanned is true if the last token was unscanned (i.e. put back to be
 	// reparsed).
 	unscanned bool
+
+	// exprs is tracks top-level expressions (including comments) in order.
+	exprs []Expr
 }
 
 // NewParser constructs a new instance of the Optgen parser, with the specified
@@ -92,6 +92,25 @@ func (p *Parser) Errors() []error {
 	return p.errors
 }
 
+// Exprs returns the top-level expressions (defines, rules, comments) in the
+// order in which they were encountered.
+func (p *Parser) Exprs() []Expr {
+	return p.exprs
+}
+
+func (p *Parser) getComments() CommentsExpr {
+	comments := p.comments
+	p.comments = nil
+	return comments
+}
+
+func (p *Parser) appendComments() {
+	comments := p.getComments()
+	if len(comments) > 0 {
+		p.exprs = append(p.exprs, &comments)
+	}
+}
+
 // root = tags (define | rule)
 func (p *Parser) parseRoot() *RootExpr {
 	rootOp := &RootExpr{}
@@ -109,11 +128,7 @@ func (p *Parser) parseRoot() *RootExpr {
 	}
 
 	for {
-		var comments CommentsExpr
 		var tags TagsExpr
-
-		// Remember any comments at the top-level by initializing p.comments.
-		p.comments = make(CommentsExpr, 0)
 
 		tok := p.scan()
 		src := p.src
@@ -125,10 +140,6 @@ func (p *Parser) parseRoot() *RootExpr {
 		case LBRACKET:
 			p.unscan()
 
-			// Get any comments that have accumulated.
-			comments = p.comments
-			p.comments = nil
-
 			tags = p.parseTags()
 			if tags == nil {
 				p.tryRecover()
@@ -138,25 +149,20 @@ func (p *Parser) parseRoot() *RootExpr {
 			if p.scan() != IDENT {
 				p.unscan()
 
-				rule := p.parseRule(comments, tags, src)
+				rule := p.parseRule(tags, src)
 				if rule == nil {
 					p.tryRecover()
 					break
 				}
 
 				rootOp.Rules = append(rootOp.Rules, rule)
+				p.exprs = append(p.exprs, rule)
 				break
 			}
 
 			fallthrough
 
 		case IDENT:
-			// Get any comments that have accumulated.
-			if comments == nil {
-				comments = p.comments
-				p.comments = nil
-			}
-
 			// Only define identifier is allowed at the top level.
 			if !p.isDefineIdent() {
 				p.addExpectedTokenErr("define statement")
@@ -166,13 +172,14 @@ func (p *Parser) parseRoot() *RootExpr {
 
 			p.unscan()
 
-			define := p.parseDefine(comments, tags, src)
+			define := p.parseDefine(tags, src)
 			if define == nil {
 				p.tryRecover()
 				break
 			}
 
 			rootOp.Defines = append(rootOp.Defines, define)
+			p.exprs = append(p.exprs, define)
 
 		default:
 			p.addExpectedTokenErr("define statement or rule")
@@ -182,7 +189,7 @@ func (p *Parser) parseRoot() *RootExpr {
 }
 
 // define = 'define' define-name '{' define-field* '}'
-func (p *Parser) parseDefine(comments CommentsExpr, tags TagsExpr, src SourceLoc) *DefineExpr {
+func (p *Parser) parseDefine(tags TagsExpr, src SourceLoc) *DefineExpr {
 	if !p.scanToken(IDENT, "define statement") || p.s.Literal() != "define" {
 		return nil
 	}
@@ -192,26 +199,23 @@ func (p *Parser) parseDefine(comments CommentsExpr, tags TagsExpr, src SourceLoc
 	}
 
 	name := p.s.Literal()
-	define := &DefineExpr{Src: &src, Comments: comments, Name: StringExpr(name), Tags: tags}
+	define := &DefineExpr{Src: &src, Comments: p.getComments(), Name: StringExpr(name), Tags: tags}
 
 	if !p.scanToken(LBRACE, "'{'") {
 		return nil
 	}
 
 	for {
-		// Remember any comments scanned by p.scan by initializing p.comments.
-		p.comments = make(CommentsExpr, 0)
-
 		if p.scan() == RBRACE {
+			if len(p.comments) > 0 {
+				p.addErr("comments not allowed before closing }")
+				return nil
+			}
 			return define
 		}
 		p.unscan()
 
-		// Get any comments that have accumulated.
-		comments := p.comments
-		p.comments = nil
-
-		defineField := p.parseDefineField(comments)
+		defineField := p.parseDefineField()
 		if defineField == nil {
 			return nil
 		}
@@ -221,7 +225,7 @@ func (p *Parser) parseDefine(comments CommentsExpr, tags TagsExpr, src SourceLoc
 }
 
 // define-field = field-name field-type
-func (p *Parser) parseDefineField(comments CommentsExpr) *DefineFieldExpr {
+func (p *Parser) parseDefineField() *DefineFieldExpr {
 	if !p.scanToken(IDENT, "define field name") {
 		return nil
 	}
@@ -238,13 +242,13 @@ func (p *Parser) parseDefineField(comments CommentsExpr) *DefineFieldExpr {
 	return &DefineFieldExpr{
 		Src:      &src,
 		Name:     StringExpr(name),
-		Comments: comments,
+		Comments: p.getComments(),
 		Type:     StringExpr(typ),
 	}
 }
 
 // rule = match '=>' replace
-func (p *Parser) parseRule(comments CommentsExpr, tags TagsExpr, src SourceLoc) *RuleExpr {
+func (p *Parser) parseRule(tags TagsExpr, src SourceLoc) *RuleExpr {
 	match := p.parseMatch()
 	if match == nil {
 		return nil
@@ -262,7 +266,7 @@ func (p *Parser) parseRule(comments CommentsExpr, tags TagsExpr, src SourceLoc) 
 	return &RuleExpr{
 		Src:      &src,
 		Name:     StringExpr(tags[0]),
-		Comments: comments,
+		Comments: p.getComments(),
 		Tags:     tags[1:],
 		Match:    match.(*FuncExpr),
 		Replace:  replace,
@@ -618,6 +622,8 @@ func (p *Parser) scan() Token {
 		tok := p.s.Scan()
 		switch tok {
 		case EOF:
+			p.appendComments()
+
 			// Reached end of current file, so try to open next file.
 			if p.file+1 >= len(p.files) {
 				// No more files to parse.
@@ -636,17 +642,11 @@ func (p *Parser) scan() Token {
 			return ERROR
 
 		case COMMENT:
-			// Remember contiguous comments if p.comments is initialized, else
-			// skip.
-			if p.comments != nil {
-				p.comments = append(p.comments, CommentExpr(p.s.Literal()))
-			}
+			p.comments = append(p.comments, CommentExpr(p.s.Literal()))
 
 		case WHITESPACE:
-			// A blank line resets any accumulating comments, since they have
-			// to be contiguous.
-			if p.comments != nil && strings.Count(p.s.Literal(), "\n") > 1 {
-				p.comments = p.comments[:0]
+			if strings.Count(p.s.Literal(), "\n") > 1 {
+				p.appendComments()
 			}
 
 		default:
