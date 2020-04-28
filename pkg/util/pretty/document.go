@@ -42,6 +42,7 @@ type Doc interface {
 func (text) isDoc()      {}
 func (line) isDoc()      {}
 func (softbreak) isDoc() {}
+func (hardline) isDoc()  {}
 func (nilDoc) isDoc()    {}
 func (*concat) isDoc()   {}
 func (nestt) isDoc()     {}
@@ -73,7 +74,7 @@ func Text(s string) Doc {
 // line represents LINE :: DOC -- a "soft line" that can be flattened to a space.
 type line struct{}
 
-// Line is the LINE constructor.
+// Line is a newline and is flattened to a space.
 var Line Doc = line{}
 
 // softbreak represents SOFTBREAK :: DOC -- an invisible space between
@@ -90,8 +91,13 @@ var Line Doc = line{}
 // https://github.com/minad/wl-pprint-annotated/blob/master/src/Text/PrettyPrint/Annotated/WL.hs
 type softbreak struct{}
 
-// SoftBreak is the softbreak constructor.
+// SoftBreak is a newline and is flattened to an empty string.
 var SoftBreak Doc = softbreak{}
+
+type hardline struct{}
+
+// HardLine is a newline and cannot be flattened.
+var HardLine Doc = hardline{}
 
 // concat represents (DOC <> DOC) :: DOC -- the concatenation of two docs.
 type concat struct {
@@ -161,7 +167,7 @@ func flatten(d Doc) Doc {
 		return NestT(flatten(t.d))
 	case nests:
 		return NestS(t.n, flatten(t.d))
-	case text, keyword:
+	case text, keyword, hardline:
 		return d
 	case line:
 		return textSpace

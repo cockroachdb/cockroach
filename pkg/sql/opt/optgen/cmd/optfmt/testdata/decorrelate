@@ -1,0 +1,86 @@
+pretty
+[R]
+(
+# C
+Name
+# N
+arg
+# another
+[
+#some
+...
+# list com1
+$item:*
+...
+]
+[
+#com2
+$item:*
+]
+[ ... some
+#more
+more
+]
+[ what ever ]
+#t
+(t)
+)
+=>
+(Project
+    # Needed to project away any columns added by EnsureKey.
+    (Select ((OpName $right) (InnerJoinApply $newLeft:(EnsureKey $left) $input [] $private) (AppendAggCols $aggregations ConstAgg (NonKeyCols $newLeft)) (AddColsToGrouping $groupingPrivate (KeyCols $newLeft))) $on) [] (OutputCols2 $left $right))
+----
+[R]
+(
+    # C
+    Name
+    # N
+    arg
+    # another
+    [
+        #some
+        ...
+        # list com1
+        $item:*
+        ...
+    ]
+    [
+        #com2
+        $item:*
+    ]
+    [
+        ...
+        some
+        #more
+        more
+    ]
+    [ what ever ]
+    #t
+    (t)
+)
+=>
+(Project
+    # Needed to project away any columns added by EnsureKey.
+    (Select
+        ((OpName $right)
+            (InnerJoinApply
+                $newLeft:(EnsureKey $left)
+                $input
+                []
+                $private
+            )
+            (AppendAggCols
+                $aggregations
+                ConstAgg
+                (NonKeyCols $newLeft)
+            )
+            (AddColsToGrouping
+                $groupingPrivate
+                (KeyCols $newLeft)
+            )
+        )
+        $on
+    )
+    []
+    (OutputCols2 $left $right)
+)
