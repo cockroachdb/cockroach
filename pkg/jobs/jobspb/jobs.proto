@@ -409,6 +409,9 @@ message Payload {
     CreateStatsDetails createStats = 15;
     SchemaChangeGCDetails schemaChangeGC = 21;
   }
+
+  // ScheduleID if this job was started by periodic job.
+  int64 schedule_id = 22  [ (gogoproto.customname) = "ScheduleID"];
 }
 
 message Progress {
