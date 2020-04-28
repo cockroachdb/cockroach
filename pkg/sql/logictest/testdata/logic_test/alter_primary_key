@@ -819,7 +819,7 @@ BEGIN
 statement ok
 ALTER TABLE t DROP CONSTRAINT "primary"
 
-statement error pq: requested table does not have a primary key
+statement error pgcode 55C02 requested table does not have a primary key
 INSERT INTO t VALUES (1, 1)
 
 statement ok
@@ -831,7 +831,7 @@ BEGIN
 statement ok
 ALTER TABLE t DROP CONSTRAINT "primary"
 
-statement error pq: requested table does not have a primary key
+statement error pgcode 55C02 pq: requested table does not have a primary key
 DELETE FROM t WHERE x = 1
 
 statement ok
@@ -843,7 +843,7 @@ BEGIN
 statement ok
 ALTER TABLE t DROP CONSTRAINT "primary"
 
-statement error pq: requested table does not have a primary key
+statement error pgcode 55C02 pq: requested table does not have a primary key
 UPDATE t SET x = 1 WHERE y = 1
 
 statement ok
@@ -855,7 +855,7 @@ BEGIN
 statement ok
 ALTER TABLE t DROP CONSTRAINT "primary"
 
-statement error pq: requested table does not have a primary key
+statement error pgcode 55C02 pq: requested table does not have a primary key
 SELECT * FROM t
 
 statement ok
@@ -870,7 +870,7 @@ BEGIN
 statement ok
 ALTER TABLE t DROP CONSTRAINT "primary"
 
-statement error pq: requested table does not have a primary key
+statement error pgcode 55C02 pq: requested table does not have a primary key
 CREATE INDEX ON t(x)
 
 statement ok
@@ -882,7 +882,7 @@ BEGIN
 statement ok
 ALTER TABLE t DROP CONSTRAINT "primary"
 
-statement error pq: requested table does not have a primary key
+statement error pgcode 55C02 pq: requested table does not have a primary key
 ALTER TABLE t ADD COLUMN z INT
 
 statement ok
@@ -894,7 +894,7 @@ BEGIN
 statement ok
 ALTER TABLE t DROP CONSTRAINT "primary"
 
-statement error pq: requested table does not have a primary key
+statement error pgcode 55C02 pq: requested table does not have a primary key
 ALTER TABLE t ADD COLUMN z INT, ADD PRIMARY KEY (x)
 
 statement ok

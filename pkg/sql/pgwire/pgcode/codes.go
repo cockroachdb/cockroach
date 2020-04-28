@@ -345,6 +345,10 @@ const (
 	// precedes the hlc timestamp of the relevant DDL transaction.
 	SchemaChangeOccurred = "55C01"
 
+	// NoPrimaryKey signals that a table descriptor is invalid because the table
+	// does not have a primary key.
+	NoPrimaryKey = "55C02"
+
 	// Class 58C - System errors related to CockroachDB node problems.
 
 	// RangeUnavailable signals that some data from the cluster cannot be
