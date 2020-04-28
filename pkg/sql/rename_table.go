@@ -148,11 +148,16 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	exists, _, err := sqlbase.LookupPublicTableID(
+	exists, id, err := sqlbase.LookupPublicTableID(
 		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.ID, newTn.Table(),
 	)
 	if err == nil && exists {
-		return sqlbase.NewRelationAlreadyExistsError(newTn.Table())
+		// Try and see what kind of object we collided with.
+		desc, err := getDescriptorByID(params.ctx, params.p.txn, p.ExecCfg().Codec, id)
+		if err != nil {
+			return err
+		}
+		return makeObjectAlreadyExistsError(desc, newTn.Table())
 	} else if err != nil {
 		return err
 	}
