@@ -1,0 +1,165 @@
+pretty
+#
+# Generate code for interesting rule.
+#
+[Relational]
+define Select {
+    # Input comment.
+    Input   RelExpr
+    Filters FiltersExpr
+}
+
+[Relational, Join, JoinNonApply]
+define InnerJoin {
+    Left  RelExpr
+    Right RelExpr
+    On    FiltersExpr
+}
+
+[Scalar, Bool, List]
+define Filters {
+}
+
+[Scalar, Bool, ListItem, ScalarProps]
+define FiltersItem {
+    Condition ScalarExpr
+}
+
+# ---
+# Unattached comment.
+# ---
+
+[PushSelectIntoJoinLeft, Normalize]
+(Select | Other
+    $input:(InnerJoin | InnerJoinApply | SomethingElse | Many | Things | LooooooooongLine | Much | More | Than | EightyChars
+        $left:3
+        $right:*
+        $on:*
+    )
+    $filters:[
+        ...
+        $item:* & (IsBoundBy $item $leftCols:(OutputCols $left))
+        ...
+    ]
+)
+=>
+(Select
+    ((OpName $input)
+        (Select
+            $left
+            (ExtractBoundConditions $filters $leftCols)
+        )
+        $right
+        $on
+    )
+    (ExtractUnboundConditions $filters $leftCols)
+)
+
+[TestSingleLine]
+(Select $input:(InnerJoin | InnerJoinApply $left:* $right:* $on:*))
+=>
+(False)
+
+[TestNestedAnd]
+(Select
+	$right:* &
+	(HasOuterCols $right) &
+	^(GroupBy | DistinctOn $input:* $aggregations:* $groupingPrivate:*) &
+	(IsUnorderedGrouping $groupingPrivate)
+
+	$left: * & (Blah)
+)
+=>
+(False)
+----
+----
+#
+# Generate code for interesting rule.
+#
+[Relational]
+define Select {
+    # Input comment.
+    Input RelExpr
+    Filters FiltersExpr
+}
+
+[Relational, Join, JoinNonApply]
+define InnerJoin {
+    Left RelExpr
+    Right RelExpr
+    On FiltersExpr
+}
+
+[Scalar, Bool, List]
+define Filters {
+}
+
+[Scalar, Bool, ListItem, ScalarProps]
+define FiltersItem {
+    Condition ScalarExpr
+}
+
+# ---
+# Unattached comment.
+# ---
+
+[PushSelectIntoJoinLeft, Normalize]
+(Select | Other
+    $input:(InnerJoin | InnerJoinApply | SomethingElse | Many
+            | Things | LooooooooongLine | Much | More | Than
+            | EightyChars
+        $left:3
+        $right:*
+        $on:*
+    )
+    $filters:[
+        ...
+        $item:* & (IsBoundBy $item $leftCols:(OutputCols $left))
+        ...
+    ]
+)
+=>
+(Select
+    ((OpName $input)
+        (Select
+            $left
+            (ExtractBoundConditions $filters $leftCols)
+        )
+        $right
+        $on
+    )
+    (ExtractUnboundConditions $filters $leftCols)
+)
+
+[TestSingleLine]
+(Select
+    $input:(InnerJoin | InnerJoinApply $left:* $right:* $on:*)
+)
+=>
+(False)
+
+[TestNestedAnd]
+(Select
+    $right:* &
+        (HasOuterCols $right) &
+        ^(GroupBy | DistinctOn
+            $input:*
+            $aggregations:*
+            $groupingPrivate:*
+        ) &
+        (IsUnorderedGrouping $groupingPrivate)
+    $left:* & (Blah)
+)
+=>
+(False)
+----
+----
+
+pretty
+[Short]
+(R) => (O)
+----
+[Short]
+(R)
+=>
+(O)
