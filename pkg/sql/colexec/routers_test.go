@@ -126,8 +126,8 @@ func TestRouterOutputAddBatch(t *testing.T) {
 			inputBatchSize:   coldata.BatchSize(),
 			outputBatchSize:  coldata.BatchSize(),
 			blockedThreshold: getDefaultRouterOutputBlockedThreshold(),
-			selection:        fullSelection[:len(fullSelection)/4],
-			name:             "QuarterSelection",
+			selection:        fullSelection[:len(fullSelection)/3],
+			name:             "OneThirdSelection",
 		},
 	}
 
