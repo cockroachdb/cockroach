@@ -2060,6 +2060,7 @@ func (ex *connExecutor) resetPlanner(
 	p.semaCtx.SearchPath = ex.sessionData.SearchPath
 	p.semaCtx.AsOfTimestamp = nil
 	p.semaCtx.Annotations = nil
+	p.semaCtx.TypeResolver = p
 
 	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
 

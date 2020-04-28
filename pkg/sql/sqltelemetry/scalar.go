@@ -52,6 +52,10 @@ func CastOpCounter(ftyp, ttyp string) telemetry.Counter {
 // counter for the element type.
 var ArrayCastCounter = telemetry.GetCounterOnce("sql.plan.ops.cast.arrays")
 
+// EnumCastCounter is to be incremented when typechecking casts that
+// are between enums.
+var EnumCastCounter = telemetry.GetCounterOnce("sql.plan.ops.cast.enums")
+
 // ArrayConstructorCounter is to be incremented upon type checking
 // of ARRAY[...] expressions/
 var ArrayConstructorCounter = telemetry.GetCounterOnce("sql.plan.ops.array.cons")
