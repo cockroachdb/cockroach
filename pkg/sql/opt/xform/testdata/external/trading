@@ -1022,10 +1022,7 @@ values
 # Get account locations of a list of cards.
 #
 # Problems:
-#   1. WITH is not inlined into the query, because it is marked as having side
-#      effects, even though it does not.
-#   2. unnest should be folded into VALUES operator when it operates over
-#      constant ARRAY.
+#   1. Tuple access is not folded with Values operator.
 opt
 WITH CardsToFind AS
 (
@@ -1050,77 +1047,56 @@ GROUP BY AccountName
 ORDER BY sum(Quantity) DESC
 LIMIT 1000
 ----
-sort
+limit
  ├── columns: accountname:8!null quantity:12
+ ├── internal-ordering: -12
  ├── cardinality: [0 - 1000]
- ├── side-effects
  ├── key: (8)
  ├── fd: (8)-->(12)
  ├── ordering: -12
- └── with &1 (cardstofind)
-      ├── columns: accountname:8!null sum:12
-      ├── cardinality: [0 - 1000]
-      ├── side-effects
-      ├── key: (8)
-      ├── fd: (8)-->(12)
-      ├── project
-      │    ├── columns: id:2 quantity:3
-      │    ├── side-effects
-      │    ├── project-set
-      │    │    ├── columns: unnest:1
-      │    │    ├── side-effects
-      │    │    ├── values
-      │    │    │    ├── cardinality: [1 - 1]
-      │    │    │    ├── key: ()
-      │    │    │    └── ()
-      │    │    └── zip
-      │    │         └── unnest(ARRAY[(42948, 3),(24924, 4)]) [side-effects]
-      │    └── projections
-      │         ├── (unnest:1).@1 [as=id:2, outer=(1)]
-      │         └── (unnest:1).@2 [as=quantity:3, outer=(1)]
-      └── limit
-           ├── columns: accountname:8!null sum:12
-           ├── internal-ordering: -12
-           ├── cardinality: [0 - 1000]
-           ├── key: (8)
-           ├── fd: (8)-->(12)
-           ├── sort
-           │    ├── columns: accountname:8!null sum:12
-           │    ├── key: (8)
-           │    ├── fd: (8)-->(12)
-           │    ├── ordering: -12
-           │    ├── limit hint: 1000.00
-           │    └── group-by
-           │         ├── columns: accountname:8!null sum:12
-           │         ├── grouping columns: accountname:8!null
-           │         ├── key: (8)
-           │         ├── fd: (8)-->(12)
-           │         ├── project
-           │         │    ├── columns: quantity:11 accountname:8!null
-           │         │    ├── inner-join (lookup inventorydetails)
-           │         │    │    ├── columns: id:4!null quantity:5 dealerid:6!null cardid:7!null accountname:8!null inventorydetails.quantity:9!null
-           │         │    │    ├── key columns: [6 7 8] = [6 7 8]
-           │         │    │    ├── lookup columns are key
-           │         │    │    ├── fd: (6-8)-->(9), (4)==(7), (7)==(4)
-           │         │    │    ├── inner-join (lookup inventorydetails@inventorydetails_auto_index_inventorydetailscardidkey)
-           │         │    │    │    ├── columns: id:4!null quantity:5 dealerid:6!null cardid:7!null accountname:8!null
-           │         │    │    │    ├── key columns: [4] = [7]
-           │         │    │    │    ├── fd: (4)==(7), (7)==(4)
-           │         │    │    │    ├── with-scan &1 (cardstofind)
-           │         │    │    │    │    ├── columns: id:4 quantity:5
-           │         │    │    │    │    └── mapping:
-           │         │    │    │    │         ├──  id:2 => id:4
-           │         │    │    │    │         └──  quantity:3 => quantity:5
-           │         │    │    │    └── filters
-           │         │    │    │         ├── ((((dealerid:6 = 1) OR (dealerid:6 = 2)) OR (dealerid:6 = 3)) OR (dealerid:6 = 4)) OR (dealerid:6 = 5) [outer=(6), constraints=(/6: [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5]; tight)]
-           │         │    │    │         └── accountname:8 IN ('account-1', 'account-2', 'account-3') [outer=(8), constraints=(/8: [/'account-1' - /'account-1'] [/'account-2' - /'account-2'] [/'account-3' - /'account-3']; tight)]
-           │         │    │    └── filters (true)
-           │         │    └── projections
-           │         │         └── CASE WHEN quantity:5 < inventorydetails.quantity:9 THEN quantity:5 ELSE inventorydetails.quantity:9 END [as=quantity:11, outer=(5,9)]
-           │         └── aggregations
-           │              └── sum [as=sum:12, outer=(11)]
-           │                   └── quantity:11
-           └── 1000
+ ├── sort
+ │    ├── columns: accountname:8!null sum:12
+ │    ├── key: (8)
+ │    ├── fd: (8)-->(12)
+ │    ├── ordering: -12
+ │    ├── limit hint: 1000.00
+ │    └── group-by
+ │         ├── columns: accountname:8!null sum:12
+ │         ├── grouping columns: accountname:8!null
+ │         ├── key: (8)
+ │         ├── fd: (8)-->(12)
+ │         ├── project
+ │         │    ├── columns: quantity:11 accountname:8!null
+ │         │    ├── inner-join (lookup inventorydetails)
+ │         │    │    ├── columns: id:4!null quantity:5 dealerid:6!null cardid:7!null accountname:8!null inventorydetails.quantity:9!null
+ │         │    │    ├── key columns: [6 7 8] = [6 7 8]
+ │         │    │    ├── lookup columns are key
+ │         │    │    ├── fd: (6-8)-->(9), (4)==(7), (7)==(4)
+ │         │    │    ├── inner-join (lookup inventorydetails@inventorydetails_auto_index_inventorydetailscardidkey)
+ │         │    │    │    ├── columns: id:4!null quantity:5 dealerid:6!null cardid:7!null accountname:8!null
+ │         │    │    │    ├── key columns: [4] = [7]
+ │         │    │    │    ├── fd: (4)==(7), (7)==(4)
+ │         │    │    │    ├── project
+ │         │    │    │    │    ├── columns: id:4 quantity:5
+ │         │    │    │    │    ├── cardinality: [2 - 2]
+ │         │    │    │    │    ├── values
+ │         │    │    │    │    │    ├── columns: unnest:1!null
+ │         │    │    │    │    │    ├── cardinality: [2 - 2]
+ │         │    │    │    │    │    ├── ((42948, 3),)
+ │         │    │    │    │    │    └── ((24924, 4),)
+ │         │    │    │    │    └── projections
+ │         │    │    │    │         ├── (unnest:1).@1 [as=id:4, outer=(1)]
+ │         │    │    │    │         └── (unnest:1).@2 [as=quantity:5, outer=(1)]
+ │         │    │    │    └── filters
+ │         │    │    │         ├── ((((dealerid:6 = 1) OR (dealerid:6 = 2)) OR (dealerid:6 = 3)) OR (dealerid:6 = 4)) OR (dealerid:6 = 5) [outer=(6), constraints=(/6: [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5]; tight)]
+ │         │    │    │         └── accountname:8 IN ('account-1', 'account-2', 'account-3') [outer=(8), constraints=(/8: [/'account-1' - /'account-1'] [/'account-2' - /'account-2'] [/'account-3' - /'account-3']; tight)]
+ │         │    │    └── filters (true)
+ │         │    └── projections
+ │         │         └── CASE WHEN quantity:5 < inventorydetails.quantity:9 THEN quantity:5 ELSE inventorydetails.quantity:9 END [as=quantity:11, outer=(5,9)]
+ │         └── aggregations
+ │              └── sum [as=sum:12, outer=(11)]
+ │                   └── quantity:11
+ └── 1000
 
 # Get buy/sell volume of a particular card in the last 2 days.
 #
@@ -1432,10 +1408,7 @@ delete inventorydetails
 # transfers.
 #
 # Problems:
-#   1. WITH is not inlined into the query, because it is marked as having side
-#      effects, even though it does not.
-#   2. unnest should be folded into VALUES operator when it operates over
-#      constant ARRAY.
+#   1. Tuple access is not folded with Values operator.
 opt
 WITH Updates AS
 (
@@ -1449,115 +1422,100 @@ SET actualinventory = (SELECT coalesce(sum_INT(quantity), 0)
 FROM Updates
 WHERE ci.cardid = Updates.c AND ci.dealerid = 1
 ----
-with &1 (updates)
+update ci
+ ├── columns: <none>
+ ├── fetch columns: ci.dealerid:13 ci.cardid:14 buyprice:15 sellprice:16 discount:17 desiredinventory:18 actualinventory:19 maxinventory:20 ci.version:21
+ ├── update-mapping:
+ │    └── column31:31 => actualinventory:10
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
- ├── project
- │    ├── columns: c:2 q:3
- │    ├── side-effects
- │    ├── project-set
- │    │    ├── columns: unnest:1
- │    │    ├── side-effects
- │    │    ├── values
- │    │    │    ├── cardinality: [1 - 1]
- │    │    │    ├── key: ()
- │    │    │    └── ()
- │    │    └── zip
- │    │         └── unnest(ARRAY[(42948, 3),(24924, 4)]) [side-effects]
- │    └── projections
- │         ├── (unnest:1).@1 [as=c:2, outer=(1)]
- │         └── (unnest:1).@2 [as=q:3, outer=(1)]
- └── update ci
-      ├── columns: <none>
-      ├── fetch columns: ci.dealerid:13 ci.cardid:14 buyprice:15 sellprice:16 discount:17 desiredinventory:18 actualinventory:19 maxinventory:20 ci.version:21
-      ├── update-mapping:
-      │    └── column31:31 => actualinventory:10
-      ├── cardinality: [0 - 0]
-      ├── side-effects, mutations
-      └── project
-           ├── columns: column31:31 ci.dealerid:13!null ci.cardid:14!null buyprice:15!null sellprice:16!null discount:17!null desiredinventory:18!null actualinventory:19!null maxinventory:20!null ci.version:21!null c:22!null q:23
-           ├── key: (14)
-           ├── fd: ()-->(13), (14)-->(15-23,31), (21)-->(14-20), (14)==(22), (22)==(14)
-           ├── group-by
-           │    ├── columns: ci.dealerid:13!null ci.cardid:14!null buyprice:15!null sellprice:16!null discount:17!null desiredinventory:18!null actualinventory:19!null maxinventory:20!null ci.version:21!null c:22!null q:23 sum_int:29
-           │    ├── grouping columns: ci.cardid:14!null
-           │    ├── key: (14)
-           │    ├── fd: ()-->(13), (14)-->(13,15-23,29), (21)-->(14-20), (14)==(22), (22)==(14)
-           │    ├── left-join (lookup inventorydetails)
-           │    │    ├── columns: ci.dealerid:13!null ci.cardid:14!null buyprice:15!null sellprice:16!null discount:17!null desiredinventory:18!null actualinventory:19!null maxinventory:20!null ci.version:21!null c:22!null q:23 id.dealerid:24 id.cardid:25 quantity:27
-           │    │    ├── key columns: [35 14] = [24 25]
-           │    │    ├── fd: ()-->(13), (14)-->(15-23), (21)-->(14-20), (14)==(22), (22)==(14)
-           │    │    ├── project
-           │    │    │    ├── columns: "project_const_col_@24":35!null ci.dealerid:13!null ci.cardid:14!null buyprice:15!null sellprice:16!null discount:17!null desiredinventory:18!null actualinventory:19!null maxinventory:20!null ci.version:21!null c:22!null q:23
-           │    │    │    ├── key: (14)
-           │    │    │    ├── fd: ()-->(13,35), (14)-->(15-23), (21)-->(14-20), (14)==(22), (22)==(14)
-           │    │    │    ├── distinct-on
-           │    │    │    │    ├── columns: ci.dealerid:13!null ci.cardid:14!null buyprice:15!null sellprice:16!null discount:17!null desiredinventory:18!null actualinventory:19!null maxinventory:20!null ci.version:21!null c:22!null q:23
-           │    │    │    │    ├── grouping columns: ci.cardid:14!null
-           │    │    │    │    ├── key: (14)
-           │    │    │    │    ├── fd: ()-->(13), (14)-->(13,15-23), (21)-->(14-20), (14)==(22), (22)==(14)
-           │    │    │    │    ├── inner-join (lookup cardsinfo)
-           │    │    │    │    │    ├── columns: ci.dealerid:13!null ci.cardid:14!null buyprice:15!null sellprice:16!null discount:17!null desiredinventory:18!null actualinventory:19!null maxinventory:20!null ci.version:21!null c:22!null q:23
-           │    │    │    │    │    ├── key columns: [32 22] = [13 14]
-           │    │    │    │    │    ├── lookup columns are key
-           │    │    │    │    │    ├── fd: ()-->(13), (14)-->(15-21), (21)-->(14-20), (14)==(22), (22)==(14)
-           │    │    │    │    │    ├── project
-           │    │    │    │    │    │    ├── columns: "project_const_col_@13":32!null c:22 q:23
-           │    │    │    │    │    │    ├── fd: ()-->(32)
-           │    │    │    │    │    │    ├── with-scan &1 (updates)
-           │    │    │    │    │    │    │    ├── columns: c:22 q:23
-           │    │    │    │    │    │    │    └── mapping:
-           │    │    │    │    │    │    │         ├──  c:2 => c:22
-           │    │    │    │    │    │    │         └──  q:3 => q:23
-           │    │    │    │    │    │    └── projections
-           │    │    │    │    │    │         └── 1 [as="project_const_col_@13":32]
-           │    │    │    │    │    └── filters (true)
-           │    │    │    │    └── aggregations
-           │    │    │    │         ├── first-agg [as=buyprice:15, outer=(15)]
-           │    │    │    │         │    └── buyprice:15
-           │    │    │    │         ├── first-agg [as=sellprice:16, outer=(16)]
-           │    │    │    │         │    └── sellprice:16
-           │    │    │    │         ├── first-agg [as=discount:17, outer=(17)]
-           │    │    │    │         │    └── discount:17
-           │    │    │    │         ├── first-agg [as=desiredinventory:18, outer=(18)]
-           │    │    │    │         │    └── desiredinventory:18
-           │    │    │    │         ├── first-agg [as=actualinventory:19, outer=(19)]
-           │    │    │    │         │    └── actualinventory:19
-           │    │    │    │         ├── first-agg [as=maxinventory:20, outer=(20)]
-           │    │    │    │         │    └── maxinventory:20
-           │    │    │    │         ├── first-agg [as=ci.version:21, outer=(21)]
-           │    │    │    │         │    └── ci.version:21
-           │    │    │    │         ├── first-agg [as=c:22, outer=(22)]
-           │    │    │    │         │    └── c:22
-           │    │    │    │         ├── first-agg [as=q:23, outer=(23)]
-           │    │    │    │         │    └── q:23
-           │    │    │    │         └── const-agg [as=ci.dealerid:13, outer=(13)]
-           │    │    │    │              └── ci.dealerid:13
-           │    │    │    └── projections
-           │    │    │         └── 1 [as="project_const_col_@24":35]
-           │    │    └── filters (true)
-           │    └── aggregations
-           │         ├── sum-int [as=sum_int:29, outer=(27)]
-           │         │    └── quantity:27
-           │         ├── const-agg [as=ci.dealerid:13, outer=(13)]
-           │         │    └── ci.dealerid:13
-           │         ├── const-agg [as=buyprice:15, outer=(15)]
-           │         │    └── buyprice:15
-           │         ├── const-agg [as=sellprice:16, outer=(16)]
-           │         │    └── sellprice:16
-           │         ├── const-agg [as=discount:17, outer=(17)]
-           │         │    └── discount:17
-           │         ├── const-agg [as=desiredinventory:18, outer=(18)]
-           │         │    └── desiredinventory:18
-           │         ├── const-agg [as=actualinventory:19, outer=(19)]
-           │         │    └── actualinventory:19
-           │         ├── const-agg [as=maxinventory:20, outer=(20)]
-           │         │    └── maxinventory:20
-           │         ├── const-agg [as=ci.version:21, outer=(21)]
-           │         │    └── ci.version:21
-           │         ├── const-agg [as=c:22, outer=(22)]
-           │         │    └── c:22
-           │         └── const-agg [as=q:23, outer=(23)]
-           │              └── q:23
-           └── projections
-                └── COALESCE(sum_int:29, 0) [as=column31:31, outer=(29)]
+ └── project
+      ├── columns: column31:31 ci.dealerid:13!null ci.cardid:14!null buyprice:15!null sellprice:16!null discount:17!null desiredinventory:18!null actualinventory:19!null maxinventory:20!null ci.version:21!null c:22!null q:23
+      ├── key: (14)
+      ├── fd: ()-->(13), (14)-->(15-23,31), (21)-->(14-20), (14)==(22), (22)==(14)
+      ├── group-by
+      │    ├── columns: ci.dealerid:13!null ci.cardid:14!null buyprice:15!null sellprice:16!null discount:17!null desiredinventory:18!null actualinventory:19!null maxinventory:20!null ci.version:21!null c:22!null q:23 sum_int:29
+      │    ├── grouping columns: ci.cardid:14!null
+      │    ├── key: (14)
+      │    ├── fd: ()-->(13), (14)-->(13,15-23,29), (21)-->(14-20), (14)==(22), (22)==(14)
+      │    ├── left-join (lookup inventorydetails)
+      │    │    ├── columns: ci.dealerid:13!null ci.cardid:14!null buyprice:15!null sellprice:16!null discount:17!null desiredinventory:18!null actualinventory:19!null maxinventory:20!null ci.version:21!null c:22!null q:23 id.dealerid:24 id.cardid:25 quantity:27
+      │    │    ├── key columns: [35 14] = [24 25]
+      │    │    ├── fd: ()-->(13), (14)-->(15-23), (21)-->(14-20), (14)==(22), (22)==(14)
+      │    │    ├── project
+      │    │    │    ├── columns: "project_const_col_@24":35!null ci.dealerid:13!null ci.cardid:14!null buyprice:15!null sellprice:16!null discount:17!null desiredinventory:18!null actualinventory:19!null maxinventory:20!null ci.version:21!null c:22!null q:23
+      │    │    │    ├── key: (14)
+      │    │    │    ├── fd: ()-->(13,35), (14)-->(15-23), (21)-->(14-20), (14)==(22), (22)==(14)
+      │    │    │    ├── distinct-on
+      │    │    │    │    ├── columns: ci.dealerid:13!null ci.cardid:14!null buyprice:15!null sellprice:16!null discount:17!null desiredinventory:18!null actualinventory:19!null maxinventory:20!null ci.version:21!null c:22!null q:23
+      │    │    │    │    ├── grouping columns: ci.cardid:14!null
+      │    │    │    │    ├── key: (14)
+      │    │    │    │    ├── fd: ()-->(13), (14)-->(13,15-23), (21)-->(14-20), (14)==(22), (22)==(14)
+      │    │    │    │    ├── inner-join (lookup cardsinfo)
+      │    │    │    │    │    ├── columns: ci.dealerid:13!null ci.cardid:14!null buyprice:15!null sellprice:16!null discount:17!null desiredinventory:18!null actualinventory:19!null maxinventory:20!null ci.version:21!null c:22!null q:23
+      │    │    │    │    │    ├── key columns: [32 22] = [13 14]
+      │    │    │    │    │    ├── lookup columns are key
+      │    │    │    │    │    ├── fd: ()-->(13), (14)-->(15-21), (21)-->(14-20), (14)==(22), (22)==(14)
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: "project_const_col_@13":32!null c:22 q:23
+      │    │    │    │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    │    │    │    ├── fd: ()-->(32)
+      │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    ├── columns: unnest:1!null
+      │    │    │    │    │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    │    │    │    │    ├── ((42948, 3),)
+      │    │    │    │    │    │    │    └── ((24924, 4),)
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         ├── 1 [as="project_const_col_@13":32]
+      │    │    │    │    │    │         ├── (unnest:1).@1 [as=c:22, outer=(1)]
+      │    │    │    │    │    │         └── (unnest:1).@2 [as=q:23, outer=(1)]
+      │    │    │    │    │    └── filters (true)
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=buyprice:15, outer=(15)]
+      │    │    │    │         │    └── buyprice:15
+      │    │    │    │         ├── first-agg [as=sellprice:16, outer=(16)]
+      │    │    │    │         │    └── sellprice:16
+      │    │    │    │         ├── first-agg [as=discount:17, outer=(17)]
+      │    │    │    │         │    └── discount:17
+      │    │    │    │         ├── first-agg [as=desiredinventory:18, outer=(18)]
+      │    │    │    │         │    └── desiredinventory:18
+      │    │    │    │         ├── first-agg [as=actualinventory:19, outer=(19)]
+      │    │    │    │         │    └── actualinventory:19
+      │    │    │    │         ├── first-agg [as=maxinventory:20, outer=(20)]
+      │    │    │    │         │    └── maxinventory:20
+      │    │    │    │         ├── first-agg [as=ci.version:21, outer=(21)]
+      │    │    │    │         │    └── ci.version:21
+      │    │    │    │         ├── first-agg [as=c:22, outer=(22)]
+      │    │    │    │         │    └── c:22
+      │    │    │    │         ├── first-agg [as=q:23, outer=(23)]
+      │    │    │    │         │    └── q:23
+      │    │    │    │         └── const-agg [as=ci.dealerid:13, outer=(13)]
+      │    │    │    │              └── ci.dealerid:13
+      │    │    │    └── projections
+      │    │    │         └── 1 [as="project_const_col_@24":35]
+      │    │    └── filters (true)
+      │    └── aggregations
+      │         ├── sum-int [as=sum_int:29, outer=(27)]
+      │         │    └── quantity:27
+      │         ├── const-agg [as=ci.dealerid:13, outer=(13)]
+      │         │    └── ci.dealerid:13
+      │         ├── const-agg [as=buyprice:15, outer=(15)]
+      │         │    └── buyprice:15
+      │         ├── const-agg [as=sellprice:16, outer=(16)]
+      │         │    └── sellprice:16
+      │         ├── const-agg [as=discount:17, outer=(17)]
+      │         │    └── discount:17
+      │         ├── const-agg [as=desiredinventory:18, outer=(18)]
+      │         │    └── desiredinventory:18
+      │         ├── const-agg [as=actualinventory:19, outer=(19)]
+      │         │    └── actualinventory:19
+      │         ├── const-agg [as=maxinventory:20, outer=(20)]
+      │         │    └── maxinventory:20
+      │         ├── const-agg [as=ci.version:21, outer=(21)]
+      │         │    └── ci.version:21
+      │         ├── const-agg [as=c:22, outer=(22)]
+      │         │    └── c:22
+      │         └── const-agg [as=q:23, outer=(23)]
+      │              └── q:23
+      └── projections
+           └── COALESCE(sum_int:29, 0) [as=column31:31, outer=(29)]
