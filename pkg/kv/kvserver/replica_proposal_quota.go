@@ -146,7 +146,9 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		}
 
 		// Only consider followers that are active.
-		if !r.mu.lastUpdateTimes.isFollowerActive(ctx, rep.ReplicaID, now) {
+		if !r.mu.lastUpdateTimes.isFollowerActiveSince(
+			ctx, rep.ReplicaID, now, r.store.cfg.RangeLeaseActiveDuration(),
+		) {
 			return
 		}
 
