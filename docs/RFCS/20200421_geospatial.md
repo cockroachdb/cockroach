@@ -330,7 +330,8 @@ however it is not yet ported to Go.
 We will not support indexing geospatial types in default primary keys
 and indexes (as we do not for JSONB and ARRAYs today). However, we
 will support using inverted indexes for geospatial indexing -- see the
-indexing section for details.
+indexing section for details. This may change subject to further
+user consultation before the upcoming v20.2 release.
 
 
 #### Display
@@ -392,12 +393,25 @@ their environment. As a corollary of this limitation:
     dependencies to perform Geospatial operations.
 
 Example changed installation instructions:
-```
+
+```sh
 $ wget -qO- https://binaries.cockroachdb.com/cockroach-v20.2.0.linux-amd64.tgz | tar  xvz
 $ cp -i cockroach-v20.2.0.linux-amd64/cockroach /usr/local/bin/
 # Optional step.
 $ cp -i cockroach-v20.2.0.linux-amd64/libgeos_c.so /usr/local/lib/
 ```
+
+If a user attempts to use a geospatial function without having the library installed,
+they should see an error similar to the following:
+
+```sql
+$ SELECT ST_Area('POINT(1.0 1.0)'::geometry)
+ERROR: geospatial functions are only supported if the GEOS module is installed
+HINT: See http://cockroachdb.com/link/to/installation/instructions
+```
+
+If a user loads geospatial data then later does not have the module installed,
+the above error will still appear.
 
 
 #### Geometry (Curves)
@@ -521,12 +535,12 @@ reference, the 3D functions that need such indexing support are:
 
 #### Builtin Result Caching
 
-Certain builtin operations are cached, using the hashed data from the
-shape as keys. This is especially useful for ST_Distance/ST_DWithin
+In PostGIS, certain builtin operations are cached, using the hashed data
+from the shape as keys. This is especially useful for ST_Distance/ST_DWithin
 for repeated use of these operations. We may similarly look into
 caching the results of certain operations, but this is out of scope for
-v20.2.
-
+v20.2. If we decide to go along this route, a future RFC will be
+published.
 
 #### Documentation
 
@@ -601,31 +615,54 @@ cli tools already available to perform this operation.
 
 We need to be able to support some notion of a spatial_ref_sys table,
 which allows management of user-defined insertable spatial_ref_sys
-data. We can make this a `system` table, which will come preloaded
-with the same set of SRIDs. However, this will be in a different catalog
-than PostGIS (which will be in the user's current catalog).
+data.
 
-As such, we will make the following adjustments:
+For v20.2, we will not be looking to support custom SRIDs, and as such
+SRIDs will be a hardcoded map and viewable from a `pg_extension`
+virtual schema, discussed below in the "`pg_extension` schema" section.
 
-* We can also optionally look to "lock" in default SRIDs, preventing
-  deletion entirely of "default" SRIDs (especially 4326 and 0).
-* It will not be available for lookup in the user's current catalog
-  public schema by default, unless we decide to persue what is described
-  in "Availability from any Schema".
+In future versions, we can look at supporting user-defined
+`spatial_ref_sys` schemas by allowing the user to "copy" the
+`spatial_ref_sys` table into the public schema and using that
+as the source of truth, analogous to PostGIS. This will appear
+as the following:
+
+```
+$ CREATE EXTENSION 'postgis';
+-- copy over spatial_ref_sys table, maybe even geometry_column/geography_column views
+$ SELECT * FROM spatial_ref_sys
+-- .... results copied from default spatial_ref_sys
+$ INSERT INTO geom_table VALUES ('SRID=9999;POINT(1.0 1.0)')
+-- lookup is based on what is available on the public schema as opposed
+-- to a hardcoded map.
 
 
-##### Availability from any Schema
+#### geometry_columns / geography_columns
+
+The `geometry_columns` and `geography_columns` views in PostGIS are a
+wrapper around pg_catalog which allow the user to view which tables
+currently involve geospatial data. Due to PostGIS's extension nature,
+they are available on the public schema upon extension registration.
+
+This will also be available on the `pg_extension` schema
+mentioned below.
+```
+
+##### `pg_extension` schema
 
 For cross compatibility with PostGIS and its nature as an extension
 which injects tables into the public schema, we need this table to be
 resolvable from anywhere by simply requesting "geometry_columns",
-"geography_columns" or spatial_ref_sys.
+"geography_columns" or "spatial_ref_sys".
 
-To resolve this, we will add `system.public.spatial_ref_sys` and the
-`pg_extension` schema as items to look for when performing
-object resolution, e.g. `SELECT * FROM spatial_ref_sys`) will look at
-the `system.public` schema and `pg_extension` schema after looking at the
-`public` schema in the current database catalog.
+For v20.2, this will be available on a virtual schema called `pg_extension`.
+This will be on the search_path similar to how pg_catalog is today. This
+will differentiate these views from the default virtual schema views 
+available on other tables.
+
+This schema should also be resolvable from any search path, and
+thus available from any catalog. Any custom defined schemas should not
+be named `pg_extension`.
 
 
 #### spatial_ref_sys lookup caching
@@ -662,19 +699,6 @@ proj4 transformations.
 
 
 ### Other Supported Operations
-
-#### geometry_columns / geography_columns
-
-The `geometry_columns` and `geography_columns` views in PostGIS are a
-wrapper around pg_catalog which allow the user to view which tables
-currently involve geospatial data. Due to PostGIS's extension nature,
-they are available on the public schema upon extension registration.
-
-As this is part of the OGC spec, we should also look to support these
-views. We will create a new schema "pg_extension" , which will house
-these as virtual views alongside our other virtual schemas. We can
-optionally allow lookup into these views from the public schema for
-cross compatibility as described in "Availability from any Schema".
 
 
 #### AddGeomColumn
