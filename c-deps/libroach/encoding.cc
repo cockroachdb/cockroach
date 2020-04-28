@@ -276,7 +276,23 @@ WARN_UNUSED_RESULT bool IsInt(rocksdb::Slice* buf) {
   return false;
 }
 
-WARN_UNUSED_RESULT bool DecodeTablePrefix(rocksdb::Slice* buf, uint64_t* tbl) {
+WARN_UNUSED_RESULT bool StripTenantPrefix(rocksdb::Slice* buf) {
+  if (buf->size() == 0) {
+    return true;
+  }
+  // kTenantPrefix is guaranteed to be a single byte.
+  if ((*buf)[0] != kTenantPrefix[0]) {
+    return true;
+  }
+  buf->remove_prefix(1);
+  uint64_t tid;
+  return DecodeUvarint64(buf, &tid);
+}
+
+WARN_UNUSED_RESULT bool DecodeTenantAndTablePrefix(rocksdb::Slice* buf, uint64_t* tbl) {
+  if (!StripTenantPrefix(buf)) {
+    return false;
+  }
   if (!IsInt(buf) || !DecodeUvarint64(buf, tbl)) {
     return false;
   }
