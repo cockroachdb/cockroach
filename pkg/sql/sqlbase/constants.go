@@ -109,6 +109,7 @@ const (
 	InformationSchemaViewsTableID
 	InformationSchemaUserPrivilegesID
 	PgCatalogID
+	PgCatalogAggregateTableID
 	PgCatalogAmTableID
 	PgCatalogAttrDefTableID
 	PgCatalogAttributeTableID

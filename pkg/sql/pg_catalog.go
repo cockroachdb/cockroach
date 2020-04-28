@@ -228,6 +228,7 @@ var pgCatalog = virtualSchema{
 		sqlbase.PgCatalogPreparedStatementsTableID:  pgCatalogPreparedStatementsTable,
 		sqlbase.PgCatalogPreparedXactsTableID:       pgCatalogPreparedXactsTable,
 		sqlbase.PgCatalogProcTableID:                pgCatalogProcTable,
+		sqlbase.PgCatalogAggregateTableID:           pgCatalogAggregateTable,
 		sqlbase.PgCatalogRangeTableID:               pgCatalogRangeTable,
 		sqlbase.PgCatalogRewriteTableID:             pgCatalogRewriteTable,
 		sqlbase.PgCatalogRolesTableID:               pgCatalogRolesTable,
@@ -2936,6 +2937,104 @@ CREATE TABLE pg_catalog.pg_views (
 					tree.DNull,                      // viewowner
 					tree.NewDString(desc.ViewQuery), // definition
 				)
+			})
+	},
+}
+
+var pgCatalogAggregateTable = virtualSchemaTable{
+	comment: `aggregated built-in functions (incomplete)
+https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
+	schema: `
+CREATE TABLE pg_catalog.pg_aggregate (
+	aggfnoid REGPROC,
+	aggkind  CHAR,
+	aggnumdirectargs INT2,
+	aggtransfn REGPROC,
+	aggfinalfn REGPROC,
+	aggcombinefn REGPROC,
+	aggserialfn REGPROC,
+	aggdeserialfn REGPROC,
+	aggmtransfn REGPROC,
+	aggminvtransfn REGPROC,
+	aggmfinalfn REGPROC,
+	aggfinalextra BOOL,
+	aggmfinalextra BOOL,
+	aggsortop OID,
+	aggtranstype OID,
+	aggtransspace INT4,
+	aggmtranstype OID,
+	aggmtransspace INT4,
+	agginitval TEXT,
+	aggminitval TEXT
+)
+`,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
+			func(db *DatabaseDescriptor) error {
+				for _, name := range builtins.AllAggregateBuiltinNames {
+					if name == builtins.AnyNotNull {
+						// any_not_null is treated as a special case.
+						continue
+					}
+					_, overloads := builtins.GetBuiltinProperties(name)
+					for _, overload := range overloads {
+						params, _ := tree.GetParamsAndReturnType(overload)
+						sortOperatorOid := oidZero
+						aggregateKind := tree.NewDString("n")
+						aggNumDirectArgs := zeroVal
+						if params.Length() != 0 {
+							argType := tree.NewDOid(tree.DInt(params.Types()[0].Oid()))
+							returnType := tree.NewDOid(tree.DInt(oid.T_bool))
+							switch name {
+							// Cases to determine sort operator.
+							case "max", "bool_or":
+								sortOperatorOid = h.OperatorOid(">", argType, argType, returnType)
+							case "min", "bool_and", "every":
+								sortOperatorOid = h.OperatorOid("<", argType, argType, returnType)
+
+							// Cases to determine aggregate kind.
+							case "rank", "percent_rank", "cume_dict", "dense_rank":
+								aggregateKind = tree.NewDString("h")
+								aggNumDirectArgs = tree.NewDInt(1)
+							case "mode":
+								aggregateKind = tree.NewDString("o")
+							default:
+								if strings.HasPrefix(name, "percentile_") {
+									aggregateKind = tree.NewDString("o")
+									aggNumDirectArgs = tree.NewDInt(1)
+								}
+							}
+						}
+						regprocForZeroOid := oidZero.AsRegProc("-")
+						err := addRow(
+							h.BuiltinOid(name, &overload).AsRegProc(name), // aggfnoid
+							aggregateKind,     // aggkind
+							aggNumDirectArgs,  // aggnumdirectargs
+							regprocForZeroOid, // aggtransfn
+							regprocForZeroOid, // aggfinalfn
+							regprocForZeroOid, // aggcombinefn
+							regprocForZeroOid, // aggserialfn
+							regprocForZeroOid, // aggdeserialfn
+							regprocForZeroOid, // aggmtransfn
+							regprocForZeroOid, // aggminvtransfn
+							regprocForZeroOid, // aggmfinalfn
+							tree.DBoolFalse,   // aggfinalextra
+							tree.DBoolFalse,   // aggmfinalextra
+							sortOperatorOid,   // aggsortop
+							tree.DNull,        // aggtranstype
+							tree.DNull,        // aggtransspace
+							tree.DNull,        // aggmtranstype
+							tree.DNull,        // aggmtransspace
+							tree.DNull,        // agginitval
+							tree.DNull,        // aggminitval
+						)
+						if err != nil {
+							return err
+						}
+					}
+				}
+				return nil
 			})
 	},
 }
