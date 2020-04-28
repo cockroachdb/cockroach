@@ -123,8 +123,8 @@ func _PROBE_SWITCH(
 	switch colType {
 	// {{range $mjOverload := $.Global.MJOverloads }}
 	case _TYPES_T:
-		lKeys := lVec._TemplateType()
-		rKeys := rVec._TemplateType()
+		lKeys := lVec.TemplateType()
+		rKeys := rVec.TemplateType()
 		var lGroup, rGroup group
 		for o.groups.nextGroupInCol(&lGroup, &rGroup) {
 			curLIdx := lGroup.rowStartIdx
@@ -634,9 +634,9 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool)
 	case _TYPES_T:
 		var srcCol _GOTYPESLICE
 		if src != nil {
-			srcCol = src._TemplateType()
+			srcCol = src.TemplateType()
 		}
-		outCol := out._TemplateType()
+		outCol := out.TemplateType()
 		var val _GOTYPE
 		var srcStartIdx int
 
@@ -826,8 +826,8 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftBufferedGroup(
 					switch colType {
 					// {{ range $.MJOverloads }}
 					case _TYPES_T:
-						srcCol := src._TemplateType()
-						outCol := out._TemplateType()
+						srcCol := src.TemplateType()
+						outCol := out.TemplateType()
 						var val _GOTYPE
 						// Loop over every row in the group.
 						for ; o.builderState.left.curSrcStartIdx < batchLength; o.builderState.left.curSrcStartIdx++ {
@@ -921,9 +921,9 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool, _HAS_NULLS bool
 	case _TYPES_T:
 		var srcCol _GOTYPESLICE
 		if src != nil {
-			srcCol = src._TemplateType()
+			srcCol = src.TemplateType()
 		}
-		outCol := out._TemplateType()
+		outCol := out.TemplateType()
 
 		// Loop over every group.
 		for ; o.builderState.right.groupsIdx < len(rightGroups); o.builderState.right.groupsIdx++ {
@@ -1123,8 +1123,8 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightBufferedGroup(
 						switch colType {
 						// {{range $.MJOverloads }}
 						case _TYPES_T:
-							srcCol := src._TemplateType()
-							outCol := out._TemplateType()
+							srcCol := src.TemplateType()
+							outCol := out.TemplateType()
 
 							// Optimization in the case that group length is 1, use assign
 							// instead of copy.

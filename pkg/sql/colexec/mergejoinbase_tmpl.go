@@ -97,9 +97,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 	// Check all equality columns in the first row of batch to make sure we're in
 	// the same group.
 	for _, colIdx := range input.eqCols[:len(input.eqCols)] {
-		typ := input.sourceTypes[colIdx]
-
-		switch typeconv.FromColumnType(&typ) {
+		switch typeconv.FromColumnType(&input.sourceTypes[colIdx]) {
 		// {{ range . }}
 		case _TYPES_T:
 			// We perform this null check on every equality column of the first
@@ -110,13 +108,13 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 			if bufferedGroup.firstTuple[colIdx].Nulls().NullAt(0) {
 				return true
 			}
-			bufferedCol := bufferedGroup.firstTuple[colIdx]._TemplateType()
+			bufferedCol := bufferedGroup.firstTuple[colIdx].TemplateType()
 			prevVal := execgen.UNSAFEGET(bufferedCol, 0)
 			var curVal _GOTYPE
 			if batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt(tupleToLookAtIdx) {
 				return true
 			}
-			col := batch.ColVec(int(colIdx))._TemplateType()
+			col := batch.ColVec(int(colIdx)).TemplateType()
 			curVal = execgen.UNSAFEGET(col, tupleToLookAtIdx)
 			var match bool
 			_ASSIGN_EQ(match, prevVal, curVal)
@@ -125,7 +123,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 			}
 		// {{end}}
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", &typ))
+			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", input.sourceTypes[colIdx].String()))
 		}
 	}
 	return false

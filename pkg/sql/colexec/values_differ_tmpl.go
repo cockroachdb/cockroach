@@ -75,8 +75,8 @@ func valuesDiffer(
 	switch typeconv.FromColumnType(t) {
 	// {{range .}}
 	case _TYPES_T:
-		aCol := aColVec._TemplateType()
-		bCol := bColVec._TemplateType()
+		aCol := aColVec.TemplateType()
+		bCol := bColVec.TemplateType()
 		aNulls := aColVec.Nulls()
 		bNulls := bColVec.Nulls()
 		aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)

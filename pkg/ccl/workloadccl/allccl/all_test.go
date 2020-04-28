@@ -127,7 +127,8 @@ func TestAllRegisteredSetup(t *testing.T) {
 		case `roachmart`:
 			// TODO(dan): It'd be nice to test this with the default flags. For now,
 			// this is better than nothing.
-			if err := gen.(workload.Flagser).Flags().Parse([]string{
+			flags := gen.(workload.Flagser).Flags()
+			if err := flags.Parse([]string{
 				`--users=10`, `--orders=100`, `--partition=false`,
 			}); err != nil {
 				t.Fatal(err)

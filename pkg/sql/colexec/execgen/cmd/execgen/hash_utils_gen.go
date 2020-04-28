@@ -29,7 +29,7 @@ func genHashUtils(wr io.Writer) error {
 
 	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
 	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
+	s = strings.Replace(s, "TemplateType", "{{.LTyp}}", -1)
 
 	assignHash := makeFunctionRegex("_ASSIGN_HASH", 2)
 	s = assignHash.ReplaceAllString(s, makeTemplateFunctionCall("Global.UnaryAssign", 2))

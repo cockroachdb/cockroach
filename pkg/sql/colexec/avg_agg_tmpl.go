@@ -97,7 +97,7 @@ var _ aggregateFunc = &avg_TYPEAgg{}
 
 func (a *avg_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
-	a.scratch.vec = v._TemplateType()
+	a.scratch.vec = v.TemplateType()
 	a.scratch.nulls = v.Nulls()
 	a.Reset()
 }
@@ -141,7 +141,7 @@ func (a *avg_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 		return
 	}
 	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
-	col, nulls := vec._TemplateType(), vec.Nulls()
+	col, nulls := vec.TemplateType(), vec.Nulls()
 	if nulls.MaybeHasNulls() {
 		if sel != nil {
 			sel = sel[:inputLen]

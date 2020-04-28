@@ -62,6 +62,50 @@ func _ASSIGN_NE(_, _, _ interface{}) int {
 // */}}
 
 // {{/*
+func _POPULATE_SELS(b coldata.Batch, hashBuffer []uint64, _BATCH_HAS_SELECTION bool) { // */}}
+	// {{define "populateSels" -}}
+	for selIdx, hashCode := range hashBuffer {
+		selsSlot := -1
+		for slot, hash := range op.scratch.hashCodeForSelsSlot {
+			if hash == hashCode {
+				// We have already seen a tuple with the same hashCode
+				// previously, so we will append into the same sels slot.
+				selsSlot = slot
+				break
+			}
+		}
+		if selsSlot < 0 {
+			// This is the first tuple in hashBuffer with this hashCode, so we
+			// will add this tuple to the next available sels slot.
+			selsSlot = len(op.scratch.hashCodeForSelsSlot)
+			op.scratch.hashCodeForSelsSlot = append(op.scratch.hashCodeForSelsSlot, hashCode)
+		}
+		// {{if .BatchHasSelection}}
+		op.scratch.sels[selsSlot] = append(op.scratch.sels[selsSlot], batchSelection[selIdx])
+		// {{else}}
+		op.scratch.sels[selsSlot] = append(op.scratch.sels[selsSlot], selIdx)
+		// {{end}}
+	}
+	// {{end}}
+	// {{/*
+} // */}}
+
+// populateSels populates intermediate selection vectors (stored in
+// op.scratch.sels) for each hash code present in b. hashBuffer must contain
+// the hash codes for all of the tuples in b.
+func (op *hashAggregator) populateSels(b coldata.Batch, hashBuffer []uint64) {
+	// Note: we don't need to reset any of the slices in op.scratch.sels since
+	// they all are of zero length here (see the comment for op.scratch.sels
+	// for context).
+	op.scratch.hashCodeForSelsSlot = op.scratch.hashCodeForSelsSlot[:0]
+	if batchSelection := b.Selection(); batchSelection != nil {
+		_POPULATE_SELS(b, hashBuffer, true)
+	} else {
+		_POPULATE_SELS(b, hashBuffer, false)
+	}
+}
+
+// {{/*
 func _MATCH_LOOP(
 	sel []int,
 	lhs coldata.Vec,
@@ -150,13 +194,11 @@ func (v hashAggFuncs) match(
 			rhs := b.ColVec(int(colIdx))
 			rhsHasNull := rhs.MaybeHasNulls()
 
-			keyTyp := keyTypes[keyIdx]
-
-			switch typeconv.FromColumnType(&keyTyp) {
+			switch typeconv.FromColumnType(&keyTypes[keyIdx]) {
 			// {{range .}}
 			case _TYPES_T:
-				lhsCol := lhs._TemplateType()
-				rhsCol := rhs._TemplateType()
+				lhsCol := lhs.TemplateType()
+				rhsCol := rhs.TemplateType()
 				if lhsHasNull {
 					lhsNull := lhs.Nulls().NullAt(v.keyIdx)
 					if rhsHasNull {
@@ -173,7 +215,7 @@ func (v hashAggFuncs) match(
 				}
 			// {{end}}
 			default:
-				colexecerror.InternalError(fmt.Sprintf("unhandled type %s", &keyTyp))
+				colexecerror.InternalError(fmt.Sprintf("unhandled type %s", keyTypes[keyIdx].String()))
 			}
 		}
 	}

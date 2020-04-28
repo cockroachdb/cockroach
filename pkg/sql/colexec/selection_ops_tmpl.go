@@ -85,9 +85,9 @@ func _SEL_CONST_LOOP(_HAS_NULLS bool) { // */}}
 			arg := execgen.UNSAFEGET(col, i)
 			_ASSIGN_CMP(cmp, arg, p.constArg)
 			// {{if _HAS_NULLS}}
-			isNull := nulls.NullAt(i)
+			isNull = nulls.NullAt(i)
 			// {{else}}
-			isNull := false
+			isNull = false
 			// {{end}}
 			if cmp && !isNull {
 				sel[idx] = i
@@ -103,9 +103,9 @@ func _SEL_CONST_LOOP(_HAS_NULLS bool) { // */}}
 			arg := execgen.UNSAFEGET(col, i)
 			_ASSIGN_CMP(cmp, arg, p.constArg)
 			// {{if _HAS_NULLS}}
-			isNull := nulls.NullAt(i)
+			isNull = nulls.NullAt(i)
 			// {{else}}
-			isNull := false
+			isNull = false
 			// {{end}}
 			if cmp && !isNull {
 				sel[idx] = i
@@ -131,9 +131,9 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 			arg2 := _R_UNSAFEGET(col2, i)
 			_ASSIGN_CMP(cmp, arg1, arg2)
 			// {{if _HAS_NULLS}}
-			isNull := nulls.NullAt(i)
+			isNull = nulls.NullAt(i)
 			// {{else}}
-			isNull := false
+			isNull = false
 			// {{end}}
 			if cmp && !isNull {
 				sel[idx] = i
@@ -157,9 +157,9 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 			arg2 := _R_UNSAFEGET(col2, i)
 			_ASSIGN_CMP(cmp, arg1, arg2)
 			// {{if _HAS_NULLS}}
-			isNull := nulls.NullAt(i)
+			isNull = nulls.NullAt(i)
 			// {{else}}
-			isNull := false
+			isNull = false
 			// {{end}}
 			if cmp && !isNull {
 				sel[idx] = i
@@ -201,6 +201,7 @@ func (p *_OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = decimalScratch
+	var isNull bool
 	for {
 		batch := p.input.Next(ctx)
 		if batch.Length() == 0 {
@@ -242,6 +243,7 @@ func (p *_OP_NAME) Next(ctx context.Context) coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = decimalScratch
+	var isNull bool
 	for {
 		batch := p.input.Next(ctx)
 		if batch.Length() == 0 {

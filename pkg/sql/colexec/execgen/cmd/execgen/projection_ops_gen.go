@@ -79,11 +79,13 @@ func replaceProjConstTmplVariables(tmpl string, isConstLeft bool) string {
 		tmpl = strings.Replace(tmpl, "_CONST_SIDE", "L", -1)
 		tmpl = strings.Replace(tmpl, "_IS_CONST_LEFT", "true", -1)
 		tmpl = strings.Replace(tmpl, "_OP_CONST_NAME", "proj{{.Name}}{{.LTyp}}Const{{.RTyp}}Op", -1)
+		tmpl = strings.Replace(tmpl, "_NON_CONST_GOTYPESLICE", "{{.RTyp.GoTypeSliceName}}", -1)
 		tmpl = replaceManipulationFuncs(".RTyp", tmpl)
 	} else {
 		tmpl = strings.Replace(tmpl, "_CONST_SIDE", "R", -1)
 		tmpl = strings.Replace(tmpl, "_IS_CONST_LEFT", "false", -1)
 		tmpl = strings.Replace(tmpl, "_OP_CONST_NAME", "proj{{.Name}}{{.LTyp}}{{.RTyp}}ConstOp", -1)
+		tmpl = strings.Replace(tmpl, "_NON_CONST_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
 		tmpl = replaceManipulationFuncs(".LTyp", tmpl)
 	}
 	return replaceProjTmplVariables(tmpl)

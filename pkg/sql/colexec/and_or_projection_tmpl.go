@@ -131,10 +131,12 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	//
 	// knownResult indicates the boolean value which if present on the left side
 	// fully determines the result of the logical operation.
+	var (
+		knownResult             bool
+		isLeftNull, isRightNull bool
+	)
 	// {{ if _IS_OR_OP }}
-	knownResult := true
-	// {{ else }}
-	knownResult := false
+	knownResult = true
 	// {{ end }}
 	leftCol := batch.ColVec(o.leftIdx)
 	leftColVals := leftCol.Bool()
@@ -234,9 +236,9 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 func _ADD_TUPLE_FOR_RIGHT(_L_HAS_NULLS bool) { // */}}
 	// {{define "addTupleForRight" -}}
 	// {{if _L_HAS_NULLS}}
-	isLeftNull := leftNulls.NullAt(i)
+	isLeftNull = leftNulls.NullAt(i)
 	// {{else}}
-	isLeftNull := false
+	isLeftNull = false
 	// {{end}}
 	if isLeftNull || leftColVals[i] != knownResult {
 		// We add the tuple into the selection vector if the left value is NULL or
@@ -280,18 +282,18 @@ func _SET_VALUES(_IS_OR_OP bool, _L_HAS_NULLS bool, _R_HAS_NULLS bool) { // */}}
 func _SET_SINGLE_VALUE(_IS_OR_OP bool, _L_HAS_NULLS bool, _R_HAS_NULLS bool) { // */}}
 	// {{ define "setSingleValue" -}}
 	// {{ if _L_HAS_NULLS }}
-	isLeftNull := leftNulls.NullAt(idx)
+	isLeftNull = leftNulls.NullAt(idx)
 	// {{ else }}
-	isLeftNull := false
+	isLeftNull = false
 	// {{ end }}
 	leftVal := leftColVals[idx]
 	if !isLeftNull && leftVal == knownResult {
 		outputColVals[idx] = leftVal
 	} else {
 		// {{ if _R_HAS_NULLS }}
-		isRightNull := rightNulls.NullAt(idx)
+		isRightNull = rightNulls.NullAt(idx)
 		// {{ else }}
-		isRightNull := false
+		isRightNull = false
 		// {{ end }}
 		rightVal := rightColVals[idx]
 		// {{ if _IS_OR_OP }}
