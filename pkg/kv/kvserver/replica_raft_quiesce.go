@@ -176,6 +176,28 @@ type quiescer interface {
 // access to Replica internals are gated by the quiescer interface to
 // facilitate testing. Returns the raft.Status and true on success, and (nil,
 // false) on failure.
+//
+// Deciding to quiesce can race with requests being evaluated and their
+// proposals. Any proposal happening after the range has quiesced will
+// un-quiesce the range.
+//
+// A replica should quiesce if all the following hold:
+// a) The leaseholder and the leader are collocated. We don't want to quiesce
+// otherwise as we don't want to quiesce while a leader election is in progress,
+// and also we don't want to quiesce if another replica might have commands
+// pending that require this leader for proposing them. Note that, after the
+// leaseholder decides to quiesce, followers can still refuse quiescing if they
+// have pending commands.
+// b) There are no commands in-flight proposed by this leaseholder. Clients can
+// be waiting for results while there's pending proposals.
+// c) There is no outstanding proposal quota. Quiescing while there's quota
+// outstanding can lead to deadlock. See #46699.
+// d) All the live followers are caught up. We don't want to quiesce when
+// followers are behind because then they might not catch up until we
+// un-quiesce. We like it when everybody is caught up because otherwise
+// failovers can take longer.
+//
+// NOTE: The last 3 conditions are fairly, but not completely, overlapping.
 func shouldReplicaQuiesce(
 	ctx context.Context, q quiescer, now hlc.Timestamp, livenessMap IsLiveMap,
 ) (*raft.Status, bool) {

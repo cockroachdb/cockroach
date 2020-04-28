@@ -78,9 +78,10 @@ type ProposalData struct {
 	// containing the command ID.
 	encodedCommand []byte
 
-	// quotaAlloc is the allocation retrieved from the proposalQuota.
-	// Once a proposal has been passed to raft modifying this field requires
-	// holding the raftMu.
+	// quotaAlloc is the allocation retrieved from the proposalQuota. Once a
+	// proposal has been passed to raft modifying this field requires holding the
+	// raftMu. Once the proposal comes out of Raft, ownerwhip of this quota is
+	// passed to r.mu.quotaReleaseQueue.
 	quotaAlloc *quotapool.IntAlloc
 
 	// tmpFooter is used to avoid an allocation.

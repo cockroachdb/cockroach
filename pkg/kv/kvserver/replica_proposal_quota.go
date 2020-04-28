@@ -140,7 +140,14 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			return
 		}
 
-		// Only consider followers that are active.
+		// Only consider followers that are active. Inactive ones don't decrease
+		// minIndex - i.e. they don't hold up releasing quota.
+		//
+		// The policy for determining who's active is more strict than the one used
+		// for purposes of quiescing. Failure to consider a dead/stuck node as such
+		// for the purposes of releasing quota can have bad consequences (writes
+		// will stall), whereas for quiescing the downside is lower.
+
 		if !r.mu.lastUpdateTimes.isFollowerActiveSince(
 			ctx, rep.ReplicaID, now, r.store.cfg.RangeLeaseActiveDuration(),
 		) {
