@@ -143,7 +143,7 @@ type sort_TYPE_DIR_HANDLES_NULLSOp struct {
 }
 
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) init(col coldata.Vec, order []int) {
-	s.sortCol = col._TemplateType()
+	s.sortCol = col.TemplateType()
 	s.nulls = col.Nulls()
 	s.order = order
 }

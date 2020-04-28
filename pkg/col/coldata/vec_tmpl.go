@@ -55,8 +55,8 @@ func (m *memColumn) Append(args SliceArgs) {
 	switch args.ColType {
 	// {{range .}}
 	case _TYPES_T:
-		fromCol := args.Src._TemplateType()
-		toCol := m._TemplateType()
+		fromCol := args.Src.TemplateType()
+		toCol := m.TemplateType()
 		// NOTE: it is unfortunate that we always append whole slice without paying
 		// attention to whether the values are NULL. However, if we do start paying
 		// attention, the performance suffers dramatically, so we choose to copy
@@ -153,8 +153,8 @@ func (m *memColumn) Copy(args CopySliceArgs) {
 	switch args.ColType {
 	// {{range .}}
 	case _TYPES_T:
-		fromCol := args.Src._TemplateType()
-		toCol := m._TemplateType()
+		fromCol := args.Src.TemplateType()
+		toCol := m.TemplateType()
 		if args.Sel != nil {
 			sel := args.Sel
 			if args.SelOnDest {
@@ -177,7 +177,7 @@ func (m *memColumn) Window(colType coltypes.T, start int, end int) Vec {
 	switch colType {
 	// {{range .}}
 	case _TYPES_T:
-		col := m._TemplateType()
+		col := m.TemplateType()
 		return &memColumn{
 			t:     colType,
 			col:   execgen.WINDOW(col, start, end),
@@ -195,7 +195,7 @@ func SetValueAt(v Vec, elem interface{}, rowIdx int, colType coltypes.T) {
 	switch colType {
 	// {{range .}}
 	case _TYPES_T:
-		target := v._TemplateType()
+		target := v.TemplateType()
 		newVal := elem.(_GOTYPE)
 		execgen.SET(target, rowIdx, newVal)
 	// {{end}}
@@ -210,7 +210,7 @@ func GetValueAt(v Vec, rowIdx int, colType coltypes.T) interface{} {
 	switch colType {
 	// {{range .}}
 	case _TYPES_T:
-		target := v._TemplateType()
+		target := v.TemplateType()
 		return execgen.UNSAFEGET(target, rowIdx)
 	// {{end}}
 	default:

@@ -74,8 +74,10 @@ func _CHECK_COL_BODY(
 	_USE_BUILD_SEL bool,
 ) { // */}}
 	// {{define "checkColBody" -}}
-	probeIsNull := false
-	buildIsNull := false
+	var (
+		probeIdx, buildIdx       int
+		probeIsNull, buildIsNull bool
+	)
 	// Early bounds check.
 	_ = ht.probeScratch.toCheck[nToCheck-1]
 	for i := uint64(0); i < nToCheck; i++ {
@@ -89,18 +91,18 @@ func _CHECK_COL_BODY(
 			// found.
 
 			// {{if .UseProbeSel}}
-			probeIdx := probeSel[toCheck]
+			probeIdx = probeSel[toCheck]
 			// {{else}}
-			probeIdx := int(toCheck)
+			probeIdx = int(toCheck)
 			// {{end}}
 			/* {{if .ProbeHasNulls }} */
 			probeIsNull = probeVec.Nulls().NullAt(probeIdx)
 			/* {{end}} */
 
 			// {{if .UseBuildSel}}
-			buildIdx := buildSel[keyID-1]
+			buildIdx = buildSel[keyID-1]
 			// {{else}}
-			buildIdx := int(keyID - 1)
+			buildIdx = int(keyID - 1)
 			// {{end}}
 
 			/* {{if .BuildHasNulls }} */
@@ -286,7 +288,7 @@ func (ht *hashTable) checkColForDistinctTuples(
 		// {{end}}
 		// {{end}}
 	default:
-		colexecerror.InternalError(fmt.Sprintf("unhandled type %s", probeType))
+		colexecerror.InternalError(fmt.Sprintf("unhandled type %s", probeType.Name()))
 	}
 }
 

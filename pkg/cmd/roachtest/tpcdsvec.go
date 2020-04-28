@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcds"
+	"github.com/cockroachdb/errors"
 )
 
 func registerTPCDSVec(r *testRegistry) {
@@ -149,7 +150,7 @@ func registerTPCDSVec(r *testRegistry) {
 		}
 
 		noStatsRunTimes := make(map[int]float64)
-		encounteredErrors := false
+		var errToReport error
 		// We will run all queries in two scenarios: without stats and with
 		// auto stats. The idea is that the plans are likely to be different,
 		// so we will be testing different execution scenarios. We additionally
@@ -175,7 +176,7 @@ func registerTPCDSVec(r *testRegistry) {
 					ctx, 3*timeout, conns, "", query, false, /* ignoreSQLErrors */
 				); err != nil {
 					t.Status(fmt.Sprintf("encountered an error: %s\n", err))
-					encounteredErrors = true
+					errToReport = errors.CombineErrors(errToReport, err)
 				} else {
 					runTimeInSeconds := timeutil.Since(start).Seconds()
 					t.Status(
@@ -198,8 +199,8 @@ func registerTPCDSVec(r *testRegistry) {
 				createStatsFromTables(t, clusterConn, tpcdsTables)
 			}
 		}
-		if encounteredErrors {
-			t.FailNow()
+		if errToReport != nil {
+			t.Fatal(errToReport)
 		}
 	}
 

@@ -151,7 +151,7 @@ func GetVecComparator(t *types.T, numVecs int) vecComparator {
 		}
 		// {{end}}
 	}
-	colexecerror.InternalError(fmt.Sprintf("unhandled type %v", t))
+	colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t.Name()))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }
