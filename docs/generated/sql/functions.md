@@ -1,3 +1,12 @@
+### ANYENUM functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="crdb_internal.create_enum"></a><code>crdb_internal.create_enum(id: <a href="int.html">int</a>, val: <a href="string.html">string</a>) &rarr; anyenum</code></td><td><span class="funcdesc"><p>This function is used internally for distributing SQL queries.</p>
+</span></td></tr></tbody>
+</table>
+
 ### Array functions
 
 <table>

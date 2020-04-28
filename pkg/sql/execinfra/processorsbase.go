@@ -101,6 +101,24 @@ func (h *ProcOutputHelper) Init(
 	if post.Projection && len(post.RenderExprs) > 0 {
 		return errors.Errorf("post-processing has both projection and rendering: %s", post)
 	}
+
+	// Hydrate all types used in the processor.
+	for _, t := range typs {
+		if t.UserDefined() {
+			// This should be pulled out somewhere else.
+			descKey := sqlbase.MakeDescMetadataKey(evalCtx.Codec, sqlbase.ID(t.StableTypeID()))
+			desc := &sqlbase.Descriptor{}
+			_, err := evalCtx.Txn.GetProtoTs(evalCtx.Context, descKey, desc)
+			if err != nil {
+				return err
+			}
+			typDesc := desc.GetType()
+			if err := typDesc.HydrateTypeInfo(t); err != nil {
+				return err
+			}
+		}
+	}
+
 	h.output = output
 	h.numInternalCols = len(typs)
 	if post.Filter != (execinfrapb.Expression{}) {

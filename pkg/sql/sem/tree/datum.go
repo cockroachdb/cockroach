@@ -3793,8 +3793,22 @@ func MakeDEnumFromLogicalRepresentation(typ *types.T, rep string) (*DEnum, error
 
 // Format implements the NodeFormatter interface.
 func (d *DEnum) Format(ctx *FmtCtx) {
-	s := DString(d.LogicalRep)
-	s.Format(ctx)
+	// TODO (rohany): Do we want to include a different flag here? I don't
+	//  know if the fmtDisambiguateDatumTypes flag is used in other places
+	//  that aren't equipped to handle a the create_enum function.
+	// If we are supposed to disambiguate datum types for DistSQL serialization,
+	// then wrap the enum the internal function to create it. This avoids
+	// name resolution on remote nodes executing DistSQL flows.
+	if ctx.HasFlags(fmtDisambiguateDatumTypes) {
+		ctx.WriteString("crdb_internal.create_enum(")
+		ctx.WriteString(fmt.Sprintf("%d", d.EnumTyp.StableTypeID()))
+		ctx.WriteByte(',')
+		lex.EncodeSQLStringWithFlags(&ctx.Buffer, d.LogicalRep, lex.EncNoFlags)
+		ctx.WriteByte(')')
+	} else {
+		s := DString(d.LogicalRep)
+		s.Format(ctx)
+	}
 }
 
 func (d *DEnum) String() string {
@@ -3872,7 +3886,7 @@ func (d *DEnum) IsMin(_ *EvalContext) bool {
 
 // AmbiguousFormat implements the Datum interface.
 func (d *DEnum) AmbiguousFormat() bool {
-	return true
+	return false
 }
 
 // DOid is the Postgres OID datum. It can represent either an OID type or any

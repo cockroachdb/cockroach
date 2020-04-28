@@ -15,9 +15,12 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -69,6 +72,28 @@ func ConvertToMappedSpecOrdering(
 		}
 	}
 	return specOrdering
+}
+
+type TypeAccessor struct {
+	// TODO (rohany): Include a map of id to type here for caching.
+}
+
+func (t *TypeAccessor) GetEnumByID(
+	ctx context.Context, codec keys.SQLCodec, txn *kv.Txn, id uint32,
+) (*types.T, error) {
+	// This should be pulled out somewhere else.
+	descKey := sqlbase.MakeDescMetadataKey(codec, sqlbase.ID(id))
+	desc := &sqlbase.Descriptor{}
+	_, err := txn.GetProtoTs(ctx, descKey, desc)
+	if err != nil {
+		return nil, err
+	}
+	typ := types.MakeEnum(id)
+	typDesc := desc.GetType()
+	if err := typDesc.HydrateTypeInfo(typ); err != nil {
+		return nil, err
+	}
+	return typ, nil
 }
 
 // ExprFmtCtxBase produces a FmtCtx used for serializing expressions; a proper

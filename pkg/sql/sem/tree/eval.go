@@ -2778,6 +2778,10 @@ type SequenceOperators interface {
 	SetSequenceValue(ctx context.Context, seqName *TableName, newVal int64, isCalled bool) error
 }
 
+type TypeAccessor interface {
+	GetEnumByID(ctx context.Context, codec keys.SQLCodec, txn *kv.Txn, id uint32) (*types.T, error)
+}
+
 // EvalContextTestingKnobs contains test knobs.
 type EvalContextTestingKnobs struct {
 	// AssertFuncExprReturnTypes indicates whether FuncExpr evaluations
@@ -2893,6 +2897,9 @@ type EvalContext struct {
 	ClientNoticeSender ClientNoticeSender
 
 	Sequence SequenceOperators
+
+	// Used in DistSQL only.
+	TypeAccessor TypeAccessor
 
 	// The transaction in which the statement is executing.
 	Txn *kv.Txn

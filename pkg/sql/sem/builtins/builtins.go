@@ -3346,6 +3346,33 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	// create_enum is used when serializing enum values in DistSQL flows.
+	// Using a builtin to carry the type avoids the need for expensive
+	// name resolution steps on remote nodes.
+	"crdb_internal.create_enum": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+				{"val", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.AnyEnum),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if ctx.TypeAccessor == nil {
+					return nil, errors.New("eval context is not configured with a type accessor")
+				}
+				typID := uint32(tree.MustBeDInt(args[0]))
+				val := string(tree.MustBeDString(args[1]))
+				typ, err := ctx.TypeAccessor.GetEnumByID(ctx.Context, ctx.Codec, ctx.Txn, typID)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDEnumFromLogicalRepresentation(typ, val)
+			},
+			Info: "This function is used internally for distributing SQL queries.",
+		},
+	),
+
 	"crdb_internal.round_decimal_values": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
