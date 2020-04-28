@@ -83,10 +83,10 @@ SELECT * FROM kv
 5 6
 7 8
 
-statement error empty database name
+statement error pgcode 42601 empty database name
 ALTER DATABASE "" RENAME TO u
 
-statement error empty database name
+statement error pgcode 42601 empty database name
 ALTER DATABASE u RENAME TO ""
 
 statement ok

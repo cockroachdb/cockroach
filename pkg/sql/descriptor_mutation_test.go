@@ -917,7 +917,7 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	// "b" is being added.
 	mt.writeColumnMutation("b", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
 	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD b CHAR`); !testutils.IsError(err,
-		`duplicate: column "b" in the middle of being added, not yet public`) {
+		`pq: duplicate: column "b" in the middle of being added, not yet public`) {
 		t.Fatal(err)
 	}
 	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP b`); !testutils.IsError(err, `column "b" in the middle of being added, try again later`) {
