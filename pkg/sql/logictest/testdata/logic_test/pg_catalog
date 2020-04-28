@@ -1687,6 +1687,8 @@ max_identifier_length                        128                 NULL      NULL 
 max_index_keys                               32                  NULL      NULL        NULL        string
 node_id                                      1                   NULL      NULL        NULL        string
 optimizer_foreign_keys                       on                  NULL      NULL        NULL        string
+optimizer_use_histograms                     on                  NULL      NULL        NULL        string
+optimizer_use_multicol_stats                 on                  NULL      NULL        NULL        string
 reorder_joins_limit                          4                   NULL      NULL        NULL        string
 require_explicit_primary_keys                off                 NULL      NULL        NULL        string
 results_buffer_size                          16384               NULL      NULL        NULL        string
@@ -1748,6 +1750,8 @@ max_identifier_length                        128                 NULL  user     
 max_index_keys                               32                  NULL  user     NULL      32                  32
 node_id                                      1                   NULL  user     NULL      1                   1
 optimizer_foreign_keys                       on                  NULL  user     NULL      on                  on
+optimizer_use_histograms                     on                  NULL  user     NULL      on                  on
+optimizer_use_multicol_stats                 on                  NULL  user     NULL      on                  on
 reorder_joins_limit                          4                   NULL  user     NULL      4                   4
 require_explicit_primary_keys                off                 NULL  user     NULL      off                 off
 results_buffer_size                          16384               NULL  user     NULL      16384               16384
@@ -1806,6 +1810,8 @@ max_index_keys                               NULL    NULL     NULL     NULL     
 node_id                                      NULL    NULL     NULL     NULL        NULL
 optimizer                                    NULL    NULL     NULL     NULL        NULL
 optimizer_foreign_keys                       NULL    NULL     NULL     NULL        NULL
+optimizer_use_histograms                     NULL    NULL     NULL     NULL        NULL
+optimizer_use_multicol_stats                 NULL    NULL     NULL     NULL        NULL
 reorder_joins_limit                          NULL    NULL     NULL     NULL        NULL
 require_explicit_primary_keys                NULL    NULL     NULL     NULL        NULL
 results_buffer_size                          NULL    NULL     NULL     NULL        NULL

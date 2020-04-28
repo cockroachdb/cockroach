@@ -524,14 +524,20 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 		// column set. Stats are ordered with most recent first.
 		for i := 0; i < tab.StatisticCount(); i++ {
 			stat := tab.Statistic(i)
+			if stat.ColumnCount() > 1 && !sb.evalCtx.SessionData.OptimizerUseMultiColStats {
+				continue
+			}
+
 			var cols opt.ColSet
 			for i := 0; i < stat.ColumnCount(); i++ {
 				cols.Add(tabID.ColumnID(stat.ColumnOrdinal(i)))
 			}
+
 			if colStat, ok := stats.ColStats.Add(cols); ok {
 				colStat.DistinctCount = float64(stat.DistinctCount())
 				colStat.NullCount = float64(stat.NullCount())
-				if cols.Len() == 1 && stat.Histogram() != nil {
+				if cols.Len() == 1 && stat.Histogram() != nil &&
+					sb.evalCtx.SessionData.OptimizerUseHistograms {
 					col, _ := cols.Next(0)
 					colStat.Histogram = &props.Histogram{}
 					colStat.Histogram.Init(sb.evalCtx, col, stat.Histogram())
