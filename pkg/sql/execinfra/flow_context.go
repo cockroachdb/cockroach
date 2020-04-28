@@ -70,7 +70,9 @@ type FlowCtx struct {
 // them at runtime to ensure expressions are evaluated with the correct indexed
 // var context.
 func (ctx *FlowCtx) NewEvalCtx() *tree.EvalContext {
-	return ctx.EvalCtx.Copy()
+	evalCopy := ctx.EvalCtx.Copy()
+	evalCopy.DistSQLTypeResolver = &execinfrapb.DistSQLTypeResolver{EvalContext: evalCopy}
+	return evalCopy
 }
 
 // TestingKnobs returns the distsql testing knobs for this flow context.

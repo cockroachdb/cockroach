@@ -1,0 +1,48 @@
+# LogicTest: local
+
+# Note that we use EXPLAIN (opt) in these tests because the standard explain
+# prints spans after they have been converted into keys. Once converted into
+# keys, enum datums are not human readable. EXPLAIN (OPT) prints these enums
+# as datums, so we can more clearly see what spans are being generated.
+
+statement ok
+CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi');
+CREATE TABLE t (x greeting PRIMARY KEY, y greeting, INDEX i (y), FAMILY (x, y));
+INSERT INTO t VALUES ('hello', 'howdy'), ('howdy', 'hi')
+
+# TODO (rohany): (include the issue for this). We cannot yet omit
+#  the cast in the comparison.
+query T
+EXPLAIN (OPT) SELECT * FROM t WHERE x = 'hello'::greeting
+----
+scan t
+ └── constraint: /1: [/'hello' - /'hello']
+
+query T
+EXPLAIN (OPT) SELECT * FROM t WHERE x = 'hello'::greeting OR x = 'hi'::greeting
+----
+scan t
+ └── constraint: /1
+      ├── [/'hello' - /'hello']
+      └── [/'hi' - /'hi']
+
+query T
+EXPLAIN (OPT) SELECT * FROM t WHERE x > 'hello'::greeting
+----
+scan t
+ └── constraint: /1: [/'howdy' - ]
+
+# Test that we can perform constrained scans using secondary indexes too.
+query T
+EXPLAIN (OPT) SELECT * FROM t WHERE y = 'hello'::greeting
+----
+scan t@i
+ └── constraint: /2/1: [/'hello' - /'hello']
+
+query T
+EXPLAIN (OPT) SELECT * FROM t WHERE y > 'hello'::greeting AND y < 'hi'::greeting
+----
+scan t@i
+ └── constraint: /2/1: [/'howdy' - /'howdy']
+
+

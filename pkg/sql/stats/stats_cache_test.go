@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -258,6 +259,39 @@ func TestCacheBasic(t *testing.T) {
 	sc.InvalidateTableStats(ctx, tableID)
 	if statsList, ok := lookupTableStats(ctx, sc, tableID); ok {
 		t.Fatalf("lookup of invalidated key %d returned: %s", tableID, statsList)
+	}
+}
+
+func TestCacheUserDefinedTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+USE t;
+CREATE TYPE t AS ENUM ('hello');
+CREATE TABLE tt (x t PRIMARY KEY);
+INSERT INTO tt VALUES ('hello');
+CREATE STATISTICS s FROM tt;
+`); err != nil {
+		t.Fatal(err)
+	}
+	_ = kvDB
+	// Make a stats cache.
+	sc := NewTableStatisticsCache(
+		1,
+		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		kvDB,
+		s.InternalExecutor().(sqlutil.InternalExecutor),
+	)
+	tbl := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
+	// Get stats for our table. We are ensuring here that the access to the stats
+	// for tt properly hydrates the user defined type t before access.
+	_, err := sc.GetTableStats(ctx, tbl.ID)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

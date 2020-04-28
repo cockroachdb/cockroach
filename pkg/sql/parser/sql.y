@@ -7617,6 +7617,11 @@ simple_typename:
       }
     }
   }
+| '@' iconst32
+  {
+    id := $2.int32()
+    $$.val = &tree.IDTypeReference{ID: uint32(id)}
+  }
 | complex_type_name
   {
     $$.val = $1.typeReference()
