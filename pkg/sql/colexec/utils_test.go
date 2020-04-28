@@ -1465,7 +1465,7 @@ type sortTestCase struct {
 	typs        []types.T
 	ordCols     []execinfrapb.Ordering_Column
 	matchLen    int
-	k           uint16
+	k           int
 }
 
 // Mock typing context for the typechecker.

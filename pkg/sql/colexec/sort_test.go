@@ -156,7 +156,7 @@ func TestSortRandomized(t *testing.T) {
 	}
 	for nCols := 1; nCols < maxCols; nCols++ {
 		for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
-			for _, k := range []uint16{0, uint16(rng.Intn(nTups)) + 1} {
+			for _, k := range []int{0, rng.Intn(nTups) + 1} {
 				topK := k != 0
 				name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/topK=%t", nCols, nOrderingCols, topK)
 				t.Run(name, func(t *testing.T) {
@@ -276,7 +276,7 @@ func TestAllSpooler(t *testing.T) {
 func BenchmarkSort(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
-	k := uint16(128)
+	k := 128
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {

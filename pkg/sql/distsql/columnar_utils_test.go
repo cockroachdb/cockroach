@@ -42,6 +42,10 @@ type verifyColOperatorArgs struct {
 	pspec       *execinfrapb.ProcessorSpec
 	// forceDiskSpill, if set, will force the operator to spill to disk.
 	forceDiskSpill bool
+	// forcedDiskSpillMightNotOccur determines whether we error out if
+	// forceDiskSpill is true but the spilling doesn't occur. Please leave an
+	// explanation for why that could be the case.
+	forcedDiskSpillMightNotOccur bool
 	// numForcedRepartitions specifies a number of "repartitions" that a
 	// disk-backed operator should be forced to perform. "Repartition" can mean
 	// different things depending on the operator (for example, for hash joiner
@@ -319,7 +323,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 
 	if args.forceDiskSpill {
 		// Check that the spilling did occur.
-		if !spilled {
+		if !spilled && !args.forcedDiskSpillMightNotOccur {
 			return errors.Errorf("expected spilling to disk but it did *not* occur")
 		}
 	}

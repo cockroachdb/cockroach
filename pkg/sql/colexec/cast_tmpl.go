@@ -75,11 +75,11 @@ func _FROM_TYPE_SLICE(col, i, j interface{}) interface{} {
 
 func cast(fromType, toType *types.T, inputVec, outputVec coldata.Vec, n int, sel []int) {
 	switch typeconv.FromColumnType(fromType) {
-	// {{ range $typ, $overloads := . }}
+	// {{range $typ, $overloads := .}}
 	case coltypes._ALLTYPES:
 		switch typeconv.FromColumnType(toType) {
-		// {{ range $overloads }}
-		// {{ if isCastFuncSet . }}
+		// {{range $overloads}}
+		// {{if isCastFuncSet .}}
 		case coltypes._TOTYPE:
 			inputCol := inputVec._FROMTYPE()
 			outputCol := outputVec._TOTYPE()
@@ -159,11 +159,11 @@ func GetCastOperator(
 		}, nil
 	}
 	switch typeconv.FromColumnType(fromType) {
-	// {{ range $typ, $overloads := . }}
+	// {{range $typ, $overloads := .}}
 	case coltypes._ALLTYPES:
 		switch typeconv.FromColumnType(toType) {
-		// {{ range $overloads }}
-		// {{ if isCastFuncSet . }}
+		// {{range $overloads}}
+		// {{if isCastFuncSet .}}
 		case coltypes._TOTYPE:
 			return &castOp{
 				OneInputNode: NewOneInputNode(input),

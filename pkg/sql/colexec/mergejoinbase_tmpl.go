@@ -98,7 +98,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 	// the same group.
 	for _, colIdx := range input.eqCols[:len(input.eqCols)] {
 		switch typeconv.FromColumnType(&input.sourceTypes[colIdx]) {
-		// {{ range . }}
+		// {{range .}}
 		case _TYPES_T:
 			// We perform this null check on every equality column of the first
 			// buffered tuple regardless of the join type since it is done only once
