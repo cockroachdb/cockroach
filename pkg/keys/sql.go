@@ -23,7 +23,7 @@ func MakeTenantPrefix(tenID roachpb.TenantID) roachpb.Key {
 	if tenID == roachpb.SystemTenantID {
 		return nil
 	}
-	return encoding.EncodeUvarintAscending(tenantPrefix, tenID.ToUint64())
+	return encoding.EncodeUvarintAscending(TenantPrefix, tenID.ToUint64())
 }
 
 // DecodeTenantPrefix determines the tenant ID from the key prefix, returning

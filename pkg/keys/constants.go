@@ -191,7 +191,8 @@ var (
 	// possible suggested compaction keys for a store.
 	LocalStoreSuggestedCompactionsMax = LocalStoreSuggestedCompactionsMin.PrefixEnd()
 
-	// The global keyspace includes the meta{1,2}, system, and SQL keys.
+	// The global keyspace includes the meta{1,2}, system, system tenant SQL
+	// keys, and non-system tenant SQL keys.
 
 	// 1. Meta keys
 	//
@@ -261,7 +262,7 @@ var (
 	// TimeseriesKeyMax is the maximum value for any timeseries data.
 	TimeseriesKeyMax = TimeseriesPrefix.PrefixEnd()
 
-	// 3. SQL keys
+	// 3. System tenant SQL keys
 	//
 	// TODO(nvanbenschoten): Figure out what to do with all of these. At a
 	// minimum, prefix them all with "System".
@@ -287,8 +288,10 @@ var (
 	// UserTableDataMin is the start key of user structured data.
 	UserTableDataMin = SystemSQLCodec.TablePrefix(MinUserDescID)
 
-	// tenantPrefix is the prefix for all non-system tenant keys.
-	tenantPrefix       = roachpb.Key{tenantPrefixByte}
+	// 4. Non-system tenant SQL keys
+	//
+	// TenantPrefix is the prefix for all non-system tenant keys.
+	TenantPrefix       = roachpb.Key{tenantPrefixByte}
 	TenantTableDataMin = MakeTenantPrefix(roachpb.MinTenantID)
 	TenantTableDataMax = MakeTenantPrefix(roachpb.MaxTenantID).PrefixEnd()
 )
