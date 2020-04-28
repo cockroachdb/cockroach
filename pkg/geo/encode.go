@@ -56,7 +56,7 @@ func EWKBToWKB(b geopb.EWKB) (geopb.WKB, error) {
 	if err != nil {
 		return nil, err
 	}
-	ret, err := wkb.Marshal(t, ewkbEncodingFormat)
+	ret, err := wkb.Marshal(t, EWKBEncodingFormat)
 	return geopb.WKB(ret), err
 }
 
@@ -79,7 +79,7 @@ func EWKBToWKBHex(b geopb.EWKB) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ret, err := wkbhex.Encode(t, ewkbEncodingFormat)
+	ret, err := wkbhex.Encode(t, EWKBEncodingFormat)
 	return strings.ToUpper(ret), err
 }
 

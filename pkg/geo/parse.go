@@ -56,7 +56,7 @@ func ParseEWKBHex(str string, defaultSRID geopb.SRID) (geopb.EWKB, error) {
 	if defaultSRID != 0 && t.SRID() == 0 {
 		adjustGeomSRID(t, defaultSRID)
 	}
-	return ewkb.Marshal(t, ewkbEncodingFormat)
+	return ewkb.Marshal(t, EWKBEncodingFormat)
 }
 
 // ParseEWKB takes given bytes assumed to be EWKB and transforms it into
@@ -73,7 +73,7 @@ func ParseEWKB(
 	if overwrite == DefaultSRIDShouldOverwrite || (defaultSRID != 0 && t.SRID() == 0) {
 		adjustGeomSRID(t, defaultSRID)
 	}
-	return ewkb.Marshal(t, ewkbEncodingFormat)
+	return ewkb.Marshal(t, EWKBEncodingFormat)
 }
 
 // ParseWKB takes given bytes assumed to be WKB and transforms it into
@@ -84,7 +84,7 @@ func ParseWKB(b []byte, defaultSRID geopb.SRID) (geopb.EWKB, error) {
 		return nil, err
 	}
 	adjustGeomSRID(t, defaultSRID)
-	return ewkb.Marshal(t, ewkbEncodingFormat)
+	return ewkb.Marshal(t, EWKBEncodingFormat)
 }
 
 // ParseGeoJSON takes given bytes assumed to be GeoJSON and transforms it to
@@ -99,7 +99,7 @@ func ParseGeoJSON(b []byte, defaultSRID geopb.SRID) (geopb.EWKB, error) {
 	if defaultSRID != 0 && t.SRID() == 0 {
 		adjustGeomSRID(t, defaultSRID)
 	}
-	return ewkb.Marshal(t, ewkbEncodingFormat)
+	return ewkb.Marshal(t, EWKBEncodingFormat)
 }
 
 // adjustGeomSRID adjusts the SRID of a given geom.T.

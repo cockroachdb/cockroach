@@ -179,16 +179,16 @@ POINT (1 1)                                    SRID=3857;POINT (1 1)            
 POINT (1 1)                                    SRID=4326;POINT (1 1)                                                                 [1 1 0 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  [1 1 0 0 32 230 16 0 0 0 0 0 0 0 0 240 63 0 0 0 0 0 0 240 63]  0101000000000000000000F03F000000000000F03F  0101000020E6100000000000000000F03F000000000000F03F  <?xml version="1.0" encoding="UTF-8"?>
 <Point><coordinates>1,1</coordinates></Point>  {"type":"Feature","geometry":{"type":"Point","coordinates":[1,1]},"properties":null}
 
-subtest geom_binary_predicates
+subtest operators
 
 statement ok
-CREATE TABLE geom_binary_predicates_test (
+CREATE TABLE geom_operators_test (
   dsc TEXT PRIMARY KEY,
   geom GEOMETRY
 )
 
 statement ok
-INSERT INTO geom_binary_predicates_test VALUES
+INSERT INTO geom_operators_test VALUES
   ('NULL', NULL),
   ('Square (left)', 'POLYGON((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0))'),
   ('Point middle of Left Square', 'POINT(-0.5 0.5)'),
@@ -197,6 +197,85 @@ INSERT INTO geom_binary_predicates_test VALUES
   ('Square overlapping left and right square', 'POLYGON((-0.1 0.0, 1.0 0.0, 1.0 1.0, -0.1 1.0, -0.1 0.0))'),
   ('Line going through left and right square', 'LINESTRING(-0.5 0.5, 0.5 0.5)')
 
+# Unary operators
+query TRRR
+SELECT
+  a.dsc,
+  ST_Area(a.geom),
+  ST_Length(a.geom),
+  ST_Perimeter(a.geom)
+FROM geom_operators_test a
+ORDER BY a.dsc
+----
+Line going through left and right square  0     1     0
+NULL                                      NULL  NULL  NULL
+Point middle of Left Square               0     0     0
+Point middle of Right Square              0     0     0
+Square (left)                             1     0     4
+Square (right)                            1     0     4
+Square overlapping left and right square  1.1   0     4.2
+
+# Binary operators
+query TTR
+SELECT
+  a.dsc,
+  b.dsc,
+  ST_Distance(a.geom, b.geom)
+FROM geom_operators_test a
+JOIN geom_operators_test b ON (1=1)
+ORDER BY a.dsc, b.dsc
+----
+Line going through left and right square  Line going through left and right square  0
+Line going through left and right square  NULL                                      NULL
+Line going through left and right square  Point middle of Left Square               0
+Line going through left and right square  Point middle of Right Square              0
+Line going through left and right square  Square (left)                             0
+Line going through left and right square  Square (right)                            0
+Line going through left and right square  Square overlapping left and right square  0
+NULL                                      Line going through left and right square  NULL
+NULL                                      NULL                                      NULL
+NULL                                      Point middle of Left Square               NULL
+NULL                                      Point middle of Right Square              NULL
+NULL                                      Square (left)                             NULL
+NULL                                      Square (right)                            NULL
+NULL                                      Square overlapping left and right square  NULL
+Point middle of Left Square               Line going through left and right square  0
+Point middle of Left Square               NULL                                      NULL
+Point middle of Left Square               Point middle of Left Square               0
+Point middle of Left Square               Point middle of Right Square              1
+Point middle of Left Square               Square (left)                             0
+Point middle of Left Square               Square (right)                            0.5
+Point middle of Left Square               Square overlapping left and right square  0.4
+Point middle of Right Square              Line going through left and right square  0
+Point middle of Right Square              NULL                                      NULL
+Point middle of Right Square              Point middle of Left Square               1
+Point middle of Right Square              Point middle of Right Square              0
+Point middle of Right Square              Square (left)                             0.5
+Point middle of Right Square              Square (right)                            0
+Point middle of Right Square              Square overlapping left and right square  0
+Square (left)                             Line going through left and right square  0
+Square (left)                             NULL                                      NULL
+Square (left)                             Point middle of Left Square               0
+Square (left)                             Point middle of Right Square              0.5
+Square (left)                             Square (left)                             0
+Square (left)                             Square (right)                            0
+Square (left)                             Square overlapping left and right square  0
+Square (right)                            Line going through left and right square  0
+Square (right)                            NULL                                      NULL
+Square (right)                            Point middle of Left Square               0.5
+Square (right)                            Point middle of Right Square              0
+Square (right)                            Square (left)                             0
+Square (right)                            Square (right)                            0
+Square (right)                            Square overlapping left and right square  0
+Square overlapping left and right square  Line going through left and right square  0
+Square overlapping left and right square  NULL                                      NULL
+Square overlapping left and right square  Point middle of Left Square               0.4
+Square overlapping left and right square  Point middle of Right Square              0
+Square overlapping left and right square  Square (left)                             0
+Square overlapping left and right square  Square (right)                            0
+Square overlapping left and right square  Square overlapping left and right square  0
+
+# Binary predicates
 query TTBBBBBBBBB
 SELECT
   a.dsc,
@@ -210,8 +289,8 @@ SELECT
   ST_Overlaps(a.geom, b.geom),
   ST_Touches(a.geom, b.geom),
   ST_Within(a.geom, b.geom)
-FROM geom_binary_predicates_test a
-JOIN geom_binary_predicates_test b ON (1=1)
+FROM geom_operators_test a
+JOIN geom_operators_test b ON (1=1)
 ORDER BY a.dsc, b.dsc
 ----
 Line going through left and right square  Line going through left and right square  true   true   true   false  true   true   false  false  true

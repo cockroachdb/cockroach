@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	"github.com/cockroachdb/errors"
 )
 
 // infoBuilder is used to build a detailed info string that is consistent between
@@ -454,19 +453,81 @@ var geoBuiltins = map[string]builtinDefinition{
 	//
 	// Unary functions.
 	//
-	// TODO(rytaft, otan): replace this with a real function.
 	"st_area": makeBuiltin(
 		defProps(),
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"geometry_a", types.Geometry},
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.Area(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
 			},
-			ReturnType: tree.FixedReturnType(types.Float),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDFloat(0), errors.Newf("ST_Area is not yet supported.")
+			types.Float,
+			infoBuilder{
+				info:     "Returns the area of the given geometry.",
+				usesGEOS: true,
 			},
-			Info: "Returns the area of geometry_a",
-		},
+		),
+	),
+	"st_length": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.Length(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: `Returns the length of the given geometry.
+
+Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.`,
+				usesGEOS: true,
+			},
+		),
+	),
+	"st_perimeter": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.Perimeter(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: `Returns the perimeter of the given geometry.
+
+Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.`,
+				usesGEOS: true,
+			},
+		),
+	),
+
+	//
+	// Binary functions
+	//
+	"st_distance": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.MinDistance(a.Geometry, b.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info:     `Returns the distance between the given geometries.`,
+				usesGEOS: true,
+			},
+		),
 	),
 
 	//

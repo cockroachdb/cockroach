@@ -19,6 +19,8 @@
 
 #include "geos_unix.h"
 
+#define CR_GEOS_NO_ERROR_DEFINED_MESSAGE "geos: returned invalid result but error not populated"
+
 namespace {
 
 // Data Types adapted from `capi/geos_c.h.in` in GEOS.
@@ -48,6 +50,11 @@ typedef CR_GEOS_WKBReader (*CR_GEOS_WKBReader_create_r)(CR_GEOS_Handle);
 typedef CR_GEOS_Geometry (*CR_GEOS_WKBReader_read_r)(CR_GEOS_Handle, CR_GEOS_WKBReader, const char*,
                                                      size_t);
 typedef void (*CR_GEOS_WKBReader_destroy_r)(CR_GEOS_Handle, CR_GEOS_WKBReader);
+
+typedef int (*CR_GEOS_Area_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
+typedef int (*CR_GEOS_Length_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double*);
+
+typedef int (*CR_GEOS_Distance_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry, double*);
 
 typedef char (*CR_GEOS_Covers_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
 typedef char (*CR_GEOS_CoveredBy_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
@@ -93,6 +100,11 @@ struct CR_GEOS {
   CR_GEOS_WKBReader_destroy_r GEOSWKBReader_destroy_r;
   CR_GEOS_WKBReader_read_r GEOSWKBReader_read_r;
 
+  CR_GEOS_Area_r GEOSArea_r;
+  CR_GEOS_Length_r GEOSLength_r;
+
+  CR_GEOS_Distance_r GEOSDistance_r;
+
   CR_GEOS_Covers_r GEOSCovers_r;
   CR_GEOS_CoveredBy_r GEOSCoveredBy_r;
   CR_GEOS_Contains_r GEOSContains_r;
@@ -134,6 +146,9 @@ struct CR_GEOS {
     INIT(GEOSGeom_destroy_r);
     INIT(GEOSSetSRID_r);
     INIT(GEOSGetSRID_r);
+    INIT(GEOSArea_r);
+    INIT(GEOSLength_r);
+    INIT(GEOSDistance_r);
     INIT(GEOSCovers_r);
     INIT(GEOSCoveredBy_r);
     INIT(GEOSContains_r);
@@ -214,6 +229,13 @@ CR_GEOS_Handle initHandleWithErrorBuffer(CR_GEOS* lib, std::string* buffer) {
   return handle;
 }
 
+CR_GEOS_Geometry CR_GEOS_GeometryFromSlice(CR_GEOS* lib, CR_GEOS_Handle handle, CR_GEOS_Slice slice) {
+  auto wkbReader = lib->GEOSWKBReader_create_r(handle);
+  auto geom = lib->GEOSWKBReader_read_r(handle, wkbReader, slice.data, slice.len);
+  lib->GEOSWKBReader_destroy_r(handle, wkbReader);
+  return geom;
+}
+
 void CR_GEOS_writeGeomToEWKB(CR_GEOS* lib, CR_GEOS_Handle handle, CR_GEOS_Geometry geom,
                              CR_GEOS_String* ewkb, int srid) {
   auto wkbWriter = lib->GEOSWKBWriter_create_r(handle);
@@ -250,9 +272,7 @@ CR_GEOS_Status CR_GEOS_ClipEWKBByRect(CR_GEOS* lib, CR_GEOS_Slice ewkb, double x
   auto handle = initHandleWithErrorBuffer(lib, &error);
   *clippedEWKB = {.data = NULL, .len = 0};
 
-  auto wkbReader = lib->GEOSWKBReader_create_r(handle);
-  auto geom = lib->GEOSWKBReader_read_r(handle, wkbReader, ewkb.data, ewkb.len);
-  lib->GEOSWKBReader_destroy_r(handle, wkbReader);
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, ewkb);
   if (geom != nullptr) {
     auto clippedGeom = lib->GEOSClipByRect_r(handle, geom, xmin, ymin, xmax, ymax);
     if (clippedGeom != nullptr) {
@@ -265,6 +285,61 @@ CR_GEOS_Status CR_GEOS_ClipEWKBByRect(CR_GEOS* lib, CR_GEOS_Slice ewkb, double x
 
   lib->GEOS_finish_r(handle);
   return toGEOSString(error.data(), error.length());
+}
+
+//
+// Unary operators
+//
+
+template <typename T, typename R>
+CR_GEOS_Status CR_GEOS_UnaryOperator(CR_GEOS* lib, T fn, CR_GEOS_Slice a, R *ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, a);
+  if (geom != nullptr) {
+    auto r = fn(handle, geom, ret);
+    // ret == 0 indicates an exception.
+    if (r == 0) {
+      if (error.length() == 0) {
+        error.assign(CR_GEOS_NO_ERROR_DEFINED_MESSAGE);
+      }
+    }
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+template <typename T, typename R>
+CR_GEOS_Status CR_GEOS_BinaryOperator(CR_GEOS* lib, T fn, CR_GEOS_Slice a, CR_GEOS_Slice b, R *ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto wkbReader = lib->GEOSWKBReader_create_r(handle);
+  auto geomA = lib->GEOSWKBReader_read_r(handle, wkbReader, a.data, a.len);
+  auto geomB = lib->GEOSWKBReader_read_r(handle, wkbReader, b.data, b.len);
+  lib->GEOSWKBReader_destroy_r(handle, wkbReader);
+  if (geomA != nullptr && geomB != nullptr) {
+    auto r = fn(handle, geomA, geomB, ret);
+    // ret == 0 indicates an exception.
+    if (r == 0) {
+      if (error.length() == 0) {
+        error.assign(CR_GEOS_NO_ERROR_DEFINED_MESSAGE);
+      }
+    }
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_Area(CR_GEOS* lib, CR_GEOS_Slice a, double *ret) {
+  return CR_GEOS_UnaryOperator(lib, lib->GEOSArea_r, a, ret);
+}
+
+CR_GEOS_Status CR_GEOS_Length(CR_GEOS* lib, CR_GEOS_Slice a, double *ret) {
+  return CR_GEOS_UnaryOperator(lib, lib->GEOSLength_r, a, ret);
+}
+
+CR_GEOS_Status CR_GEOS_Distance(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, double *ret) {
+  return CR_GEOS_BinaryOperator(lib, lib->GEOSDistance_r, a, b, ret);
 }
 
 //
@@ -286,7 +361,7 @@ CR_GEOS_Status CR_GEOS_BinaryPredicate(CR_GEOS* lib, T fn, CR_GEOS_Slice a, CR_G
     // ret == 2 indicates an exception.
     if (r == 2) {
       if (error.length() == 0) {
-        error.assign("geos: returned invalid result but error not populated");
+        error.assign(CR_GEOS_NO_ERROR_DEFINED_MESSAGE);
       }
     } else {
       *ret = r;

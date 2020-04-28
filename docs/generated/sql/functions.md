@@ -664,7 +664,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
-<tr><td><a name="st_area"></a><code>st_area(geometry_a: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of geometry_a</p>
+<tr><td><a name="st_area"></a><code>st_area(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the area of the given geometry.</p>
+<p>This function uses the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_asbinary"></a><code>st_asbinary(geography: geography) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the WKB representation of a given Geography.</p>
 </span></td></tr>
@@ -714,6 +715,9 @@ has no relationship with the commit order of concurrent transactions.</p>
 <p>This function uses the GEOS module.</p>
 <p>This function will automatically use any available index.</p>
 </span></td></tr>
+<tr><td><a name="st_distance"></a><code>st_distance(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance between the given geometries.</p>
+<p>This function uses the GEOS module.</p>
+</span></td></tr>
 <tr><td><a name="st_equals"></a><code>st_equals(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is spatially equal to geometry_b, i.e. ST_Within(geometry_a, geometry_b) = ST_Within(geometry_b, geometry_a) = true.</p>
 <p>This function uses the GEOS module.</p>
 <p>This function will automatically use any available index.</p>
@@ -762,9 +766,17 @@ has no relationship with the commit order of concurrent transactions.</p>
 <p>This function uses the GEOS module.</p>
 <p>This function will automatically use any available index.</p>
 </span></td></tr>
+<tr><td><a name="st_length"></a><code>st_length(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the length of the given geometry.</p>
+<p>Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.</p>
+<p>This function uses the GEOS module.</p>
+</span></td></tr>
 <tr><td><a name="st_overlaps"></a><code>st_overlaps(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a intersects but does not completely contain geometry_b, or vice versa. “Does not completely” implies ST_Within(geometry_a, geometry_b) = ST_Within(geometry_b, geometry_a) = false.</p>
 <p>This function uses the GEOS module.</p>
 <p>This function will automatically use any available index.</p>
+</span></td></tr>
+<tr><td><a name="st_perimeter"></a><code>st_perimeter(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the perimeter of the given geometry.</p>
+<p>Note ST_Perimeter is only valid for Polygon - use ST_Length for LineString.</p>
+<p>This function uses the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_touches"></a><code>st_touches(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if the only points in common between geometry_a and geometry_b are on the boundary. Note points do not touch other points.</p>
 <p>This function uses the GEOS module.</p>
