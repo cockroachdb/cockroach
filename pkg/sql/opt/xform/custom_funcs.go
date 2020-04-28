@@ -2467,15 +2467,18 @@ func (c *CustomFuncs) ExprPairSucceeded(ep ExprPair) bool {
 	return ep != ExprPair{}
 }
 
-// ExprPairForSplitDisjunction finds the first non-empty ExprPair that can be
-// generated from a FiltersItem with a top-level OrExpr. If such an ExprPair is
-// found, it is returned. If one is not found, an empty ExprPair is returned.
+// ExprPairForSplitDisjunction finds the first "interesting" ExprPair in the
+// filters and returns it. If an "interesting" ExprPair is not found, an empty
+// ExprPair is returned.
 //
-// See buildExprPairForSplitDisjunction for details on how the ExprPair is created.
-func (c *CustomFuncs) ExprPairForSplitDisjunction(filters memo.FiltersExpr) ExprPair {
+// For details on what makes an ExprPair "interesting", see
+// buildExprPairForSplitDisjunction.
+func (c *CustomFuncs) ExprPairForSplitDisjunction(
+	sp *memo.ScanPrivate, filters memo.FiltersExpr,
+) ExprPair {
 	for i := range filters {
 		if filters[i].Condition.Op() == opt.OrOp {
-			ep := c.buildExprPairForSplitDisjunction(&filters[i])
+			ep := c.buildExprPairForSplitDisjunction(sp, &filters[i])
 			if (ep != ExprPair{}) {
 				return ep
 			}
@@ -2484,21 +2487,52 @@ func (c *CustomFuncs) ExprPairForSplitDisjunction(filters memo.FiltersExpr) Expr
 	return ExprPair{}
 }
 
-// buildExprPairForSplitDisjunction returns an ExprPair that groups all
-// sub-expressions adjacent to the input's top-level OrExpr into left and right
-// expression groups. These two groups form the new filter expressions on the
-// left and right side of the generated UnionAll.
+// buildExprPairForSplitDisjunction groups disjuction sub-expressions into an
+// "interesting" ExprPair.
+//
+// An "interesting" ExprPair is one where:
+//
+//   1. The column sets of both expressions in the pair are not
+//      equal.
+//   2. Two index scans can potentially be constrained by both expressions in
+//      the pair.
+//
+// Consider the expression:
+//
+//   u = 1 OR v = 2
+//
+// If an index exists on u and another on v, an "interesting" ExprPair exists,
+// ("u = 1", "v = 1"). If both indexes do not exist, there is no "interesting"
+// ExprPair possible.
+//
+// Now consider the expression:
+//
+//   u = 1 OR u = 2
+//
+// There is no possible "interesting" ExprPair here because the left and right
+// sides of the disjunction share the same columns.
+//
+// buildExprPairForSplitDisjunction groups all sub-expressions adjacent to the
+// input's top-level OrExpr into left and right expression groups. These two
+// groups form the new filter expressions on the left and right side of the
+// generated UnionAll in SplitDisjunction(AddKey).
 //
 // All sub-expressions with the same columns as the left-most sub-expression
 // are grouped in the left group. All other sub-expressions are grouped in the
 // right group.
 //
 // buildExprPairForSplitDisjunction returns an empty ExprPair if all
-// sub-expressions have the same columns.
-func (c *CustomFuncs) buildExprPairForSplitDisjunction(filter *memo.FiltersItem) ExprPair {
+// sub-expressions have the same columns. It also returns an empty ExprPair if
+// either expression in the pair found is not likely to constrain an index
+// scan. See canMaybeConstrainIndexWithCols for details on how this is
+// determined.
+func (c *CustomFuncs) buildExprPairForSplitDisjunction(
+	sp *memo.ScanPrivate, filter *memo.FiltersItem,
+) ExprPair {
 	var leftExprs memo.ScalarListExpr
 	var rightExprs memo.ScalarListExpr
 	var leftColSet opt.ColSet
+	var rightColSet opt.ColSet
 
 	// Traverse all adjacent OrExpr.
 	var collect func(opt.ScalarExpr)
@@ -2523,13 +2557,18 @@ func (c *CustomFuncs) buildExprPairForSplitDisjunction(filter *memo.FiltersItem)
 		if leftColSet.Equals(cols) {
 			leftExprs = append(leftExprs, expr)
 		} else {
+			rightColSet.UnionWith(cols)
 			rightExprs = append(rightExprs, expr)
 		}
 	}
 	collect(filter.Condition)
 
-	// Return an empty pair if one of the groups has no expressions.
-	if len(leftExprs) == 0 || len(rightExprs) == 0 {
+	// Return an empty pair if either of the groups is empty or if either the
+	// left or right groups are unlikely to constrain an index scan.
+	if len(leftExprs) == 0 ||
+		len(rightExprs) == 0 ||
+		!c.canMaybeConstrainIndexWithCols(sp, leftColSet) ||
+		!c.canMaybeConstrainIndexWithCols(sp, rightColSet) {
 		return ExprPair{}
 	}
 
@@ -2540,12 +2579,12 @@ func (c *CustomFuncs) buildExprPairForSplitDisjunction(filter *memo.FiltersItem)
 	}
 }
 
-// CanMaybeConstrainIndexWithCols returns true if any indexes on the
+// canMaybeConstrainIndexWithCols returns true if any indexes on the
 // ScanPrivate's table could be constrained by cols. It is a fast check for
 // SplitDisjunction to avoid matching a large number of queries that won't
 // obviously be improved by the rule.
 //
-// CanMaybeConstrainIndexWithCols checks for an intersection between the input
+// canMaybeConstrainIndexWithCols checks for an intersection between the input
 // columns and an index's columns. An intersection between column sets implies
 // that cols could constrain a scan on that index. For example, the columns "a"
 // would constrain a scan on an index over columns "a, b", because the "a" is a
@@ -2568,10 +2607,10 @@ func (c *CustomFuncs) buildExprPairForSplitDisjunction(filter *memo.FiltersItem)
 //
 // The expression "a = 5" can constrain a scan over the hash index: The columns
 // "hash" must be a constant value of 1 because it is dependent on column "a"
-// with a constant value of 5. However, CanMaybeConstrainIndexWithCols will
+// with a constant value of 5. However, canMaybeConstrainIndexWithCols will
 // return false in this case because "a" does not intersect with the index
 // column, "hash".
-func (c *CustomFuncs) CanMaybeConstrainIndexWithCols(sp *memo.ScanPrivate, cols opt.ColSet) bool {
+func (c *CustomFuncs) canMaybeConstrainIndexWithCols(sp *memo.ScanPrivate, cols opt.ColSet) bool {
 	md := c.e.mem.Metadata()
 	tabMeta := md.TableMeta(sp.Table)
 

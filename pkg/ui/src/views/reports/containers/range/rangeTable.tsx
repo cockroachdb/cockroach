@@ -66,7 +66,6 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "commit", display: "Commit", compareToLeader: true },
   { variable: "lastIndex", display: "Last Index", compareToLeader: true },
   { variable: "logSize", display: "Log Size", compareToLeader: false },
-  { variable: "logSizeTrusted", display: "Log Size Trusted?", compareToLeader: false },
   { variable: "leaseHolderQPS", display: "Lease Holder QPS", compareToLeader: false },
   { variable: "keysWrittenPS", display: "Average Keys Written Per Second", compareToLeader: false },
   { variable: "approxProposalQuota", display: "Approx Proposal Quota", compareToLeader: false },
@@ -153,11 +152,18 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     };
   }
 
-  contentBytes(bytes: Long): RangeTableCellContent {
+  contentBytes(bytes: Long, className: string = null, toolTip: string = null): RangeTableCellContent {
     const humanized = Bytes(bytes.toNumber());
+    if (_.isNull(className)) {
+      return {
+        value: [humanized],
+        title: [humanized, bytes.toString()],
+      };
+    }
     return {
       value: [humanized],
-      title: [humanized, bytes.toString()],
+      title: [humanized, bytes.toString(), toolTip],
+      className: [className],
     };
   }
 
@@ -499,8 +505,14 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         applied: this.contentIf(!dormant, () => this.createContent(FixLong(info.raft_state.applied))),
         commit: this.contentIf(!dormant, () => this.createContent(FixLong(info.raft_state.hard_state.commit))),
         lastIndex: this.createContent(FixLong(info.state.last_index)),
-        logSize: this.contentBytes(FixLong(info.state.raft_log_size)),
-        logSizeTrusted: this.createContent(info.state.raft_log_size_trusted.toString()),
+        logSize: this.contentBytes(
+          FixLong(info.state.raft_log_size),
+          info.state.raft_log_size_trusted ? "" : "range-table__cell--dormant",
+          "Log size is known to not be correct. This isn't an error condition. " +
+            "The log size will became exact the next time it is recomputed. " +
+            "This replica does not perform log truncation (because the log might already " +
+            "be truncated sufficiently).",
+        ),
         leaseHolderQPS: leaseHolder ? this.createContent(info.stats.queries_per_second.toFixed(4)) : rangeTableEmptyContent,
         keysWrittenPS: this.createContent(info.stats.writes_per_second.toFixed(4)),
         approxProposalQuota: raftLeader ? this.createContent(FixLong(info.state.approximate_proposal_quota)) : rangeTableEmptyContent,
