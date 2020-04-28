@@ -62,6 +62,8 @@ func (t *TypeName) FQString() string {
 	return ctx.CloseAndGetString()
 }
 
+func (t *TypeName) objectName() {}
+
 // NewUnqualifiedTypeName returns a new base type name.
 func NewUnqualifiedTypeName(typ Name) *TypeName {
 	return &TypeName{objName{

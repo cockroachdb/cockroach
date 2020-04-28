@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/errors"
 )
 
 // This file provides reference implementations of the schema accessor
@@ -30,6 +31,8 @@ import (
 type LogicalSchemaAccessor struct {
 	SchemaAccessor
 	vt VirtualTabler
+	// Used to avoid allocations.
+	tn TableName
 }
 
 var _ SchemaAccessor = &LogicalSchemaAccessor{}
@@ -77,28 +80,36 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 	txn *kv.Txn,
 	settings *cluster.Settings,
 	codec keys.SQLCodec,
-	name *ObjectName,
+	db, schema, object string,
 	flags tree.ObjectLookupFlags,
 ) (ObjectDescriptor, error) {
-	if scEntry, ok := l.vt.getVirtualSchemaEntry(name.Schema()); ok {
-		tableName := name.Table()
-		if t, ok := scEntry.defs[tableName]; ok {
-			if flags.RequireMutable {
-				return sqlbase.NewMutableExistingTableDescriptor(*t.desc), nil
+	switch flags.DesiredObjectKind {
+	case tree.TypeObject:
+		return (UncachedPhysicalAccessor{}).GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
+	case tree.TableObject:
+		l.tn = tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(schema), tree.Name(object))
+		if scEntry, ok := l.vt.getVirtualSchemaEntry(l.tn.Schema()); ok {
+			tableName := l.tn.Table()
+			if t, ok := scEntry.defs[tableName]; ok {
+				if flags.RequireMutable {
+					return sqlbase.NewMutableExistingTableDescriptor(*t.desc), nil
+				}
+				return sqlbase.NewImmutableTableDescriptor(*t.desc), nil
 			}
-			return sqlbase.NewImmutableTableDescriptor(*t.desc), nil
-		}
-		if _, ok := scEntry.allTableNames[tableName]; ok {
-			return nil, unimplemented.Newf(name.Schema()+"."+tableName,
-				"virtual schema table not implemented: %s.%s", name.Schema(), tableName)
+			if _, ok := scEntry.allTableNames[tableName]; ok {
+				return nil, unimplemented.Newf(l.tn.Schema()+"."+tableName,
+					"virtual schema table not implemented: %s.%s", l.tn.Schema(), tableName)
+			}
+
+			if flags.Required {
+				return nil, sqlbase.NewUndefinedRelationError(&l.tn)
+			}
+			return nil, nil
 		}
 
-		if flags.Required {
-			return nil, sqlbase.NewUndefinedRelationError(name)
-		}
-		return nil, nil
+		// Fallthrough.
+		return l.SchemaAccessor.GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
+	default:
+		return nil, errors.AssertionFailedf("unknown desired object kind %d", flags.DesiredObjectKind)
 	}
-
-	// Fallthrough.
-	return l.SchemaAccessor.GetObjectDesc(ctx, txn, settings, codec, name, flags)
 }

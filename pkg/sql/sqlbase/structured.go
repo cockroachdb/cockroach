@@ -4038,9 +4038,29 @@ func (desc *MutableTableDescriptor) IsShardColumn(col *ColumnDescriptor) bool {
 	return false
 }
 
+// TypeDesc implements the ObjectDescriptor interface.
+func (desc *MutableTableDescriptor) TypeDesc() *TypeDescriptor {
+	return nil
+}
+
 // TableDesc implements the ObjectDescriptor interface.
 func (desc *ImmutableTableDescriptor) TableDesc() *TableDescriptor {
 	return &desc.TableDescriptor
+}
+
+// TypeDesc implements the ObjectDescriptor interface.
+func (desc *ImmutableTableDescriptor) TypeDesc() *TypeDescriptor {
+	return nil
+}
+
+// TableDesc implements the ObjectDescriptor interface.
+func (desc *TypeDescriptor) TableDesc() *TableDescriptor {
+	return nil
+}
+
+// TypeDesc implements the ObjectDescriptor interface.
+func (desc *TypeDescriptor) TypeDesc() *TypeDescriptor {
+	return desc
 }
 
 // GetAuditMode implements the DescriptorProto interface.
