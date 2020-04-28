@@ -15,18 +15,23 @@ import (
 	"bytes"
 	"context"
 	enc_hex "encoding/hex"
+	"fmt"
+	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -360,6 +365,66 @@ func TestPartialZip(t *testing.T) {
 			})
 			return out
 		})
+}
+
+// This checks that SQL retry errors are properly handled.
+func TestZipRetries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	defer s.Stopper().Stop(context.Background())
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	zipName := filepath.Join(dir, "test.zip")
+
+	func() {
+		out, err := os.Create(zipName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		z := newZipper(out)
+		defer z.close()
+
+		sqlURL := url.URL{
+			Scheme:   "postgres",
+			User:     url.User(security.RootUser),
+			Host:     s.ServingSQLAddr(),
+			RawQuery: "sslmode=disable",
+		}
+		sqlConn := makeSQLConn(sqlURL.String())
+		defer sqlConn.Close()
+
+		if err := dumpTableDataForZip(
+			z, sqlConn, 3*time.Second,
+			"test", `generate_series(1,15000) as t(x)`,
+			`if(x<11000,x,crdb_internal.force_retry('1h'))`); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	r, err := zip.OpenReader(zipName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close() }()
+	var fileList bytes.Buffer
+	for _, f := range r.File {
+		fmt.Fprintln(&fileList, f.Name)
+	}
+	const expected = `test/generate_series(1,15000) as t(x).txt
+test/generate_series(1,15000) as t(x).txt.err.txt
+test/generate_series(1,15000) as t(x).1.txt
+test/generate_series(1,15000) as t(x).1.txt.err.txt
+test/generate_series(1,15000) as t(x).2.txt
+test/generate_series(1,15000) as t(x).2.txt.err.txt
+test/generate_series(1,15000) as t(x).3.txt
+test/generate_series(1,15000) as t(x).3.txt.err.txt
+test/generate_series(1,15000) as t(x).4.txt
+test/generate_series(1,15000) as t(x).4.txt.err.txt
+`
+	assert.Equal(t, expected, fileList.String())
 }
 
 // This test the operation of zip over secure clusters.
