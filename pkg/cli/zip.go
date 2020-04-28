@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -113,9 +113,10 @@ func newZipper(f *os.File) *zipper {
 	}
 }
 
-func (z *zipper) close() {
-	_ = z.z.Close()
-	_ = z.f.Close()
+func (z *zipper) close() error {
+	err1 := z.z.Close()
+	err2 := z.f.Close()
+	return errors.CombineErrors(err1, err2)
 }
 
 func (z *zipper) create(name string, mtime time.Time) (io.Writer, error) {
@@ -201,7 +202,7 @@ func runZipRequestWithTimeout(
 	return contextutil.RunWithTimeout(ctx, requestName, timeout, fn)
 }
 
-func runDebugZip(cmd *cobra.Command, args []string) error {
+func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	const (
 		base          = "debug"
 		eventsName    = base + "/events"
@@ -270,7 +271,10 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	fmt.Printf("writing %s\n", name)
 
 	z := newZipper(out)
-	defer z.close()
+	defer func() {
+		cErr := z.close()
+		retErr = errors.CombineErrors(retErr, cErr)
+	}()
 
 	timeout := 10 * time.Second
 	if cliCtx.cmdTimeout != 0 {
