@@ -214,10 +214,13 @@ func createBenchmarkChangefeed(
 	}
 	_, withDiff := details.Opts[changefeedbase.OptDiff]
 	kvfeedCfg := kvfeed.Config{
-		Settings:         settings,
-		DB:               s.DB(),
-		Clock:            feedClock,
-		Gossip:           s.GossipI().(*gossip.Gossip),
+		Settings: settings,
+		DB:       s.DB(),
+		Clock:    feedClock,
+		Gossip: gossip.MakeDeprecatedGossip(
+			s.GossipI().(*gossip.Gossip),
+			true, /* exposed */
+		),
 		Spans:            spans,
 		Targets:          details.Targets,
 		Sink:             buf,

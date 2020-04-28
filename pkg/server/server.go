@@ -527,7 +527,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 				return sStatus, true
 			},
 			nodeLiveness:           nodeLiveness,
-			gossip:                 g,
+			gossip:                 gossip.MakeDeprecatedGossip(g, true /* exposed */),
 			nodeDialer:             nodeDialer,
 			grpcServer:             grpcServer.Server,
 			recorder:               recorder,

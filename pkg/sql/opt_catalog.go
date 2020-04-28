@@ -73,9 +73,10 @@ func (oc *optCatalog) reset() {
 		oc.dataSources = make(map[*sqlbase.ImmutableTableDescriptor]cat.DataSource)
 	}
 
+	g := oc.planner.execCfg.Gossip.Deprecated(47150)
 	// Gossip can be nil in testing scenarios.
-	if oc.planner.execCfg.Gossip != nil {
-		oc.cfg = oc.planner.execCfg.Gossip.GetSystemConfig()
+	if g != nil {
+		oc.cfg = g.GetSystemConfig()
 	}
 }
 

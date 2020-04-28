@@ -36,7 +36,7 @@ type kvScanner interface {
 
 type scanRequestScanner struct {
 	settings *cluster.Settings
-	gossip   *gossip.Gossip
+	gossip   gossip.DeprecatedGossip
 	db       *kv.DB
 }
 
@@ -58,7 +58,11 @@ func (p *scanRequestScanner) Scan(
 	// Export requests for the various watched spans are executed in parallel,
 	// with a semaphore-enforced limit based on a cluster setting.
 	// The spans here generally correspond with range boundaries.
-	maxConcurrentExports := clusterNodeCount(p.gossip) *
+	approxNodeCount, err := clusterNodeCount(p.gossip)
+	if err != nil {
+		return err
+	}
+	maxConcurrentExports := approxNodeCount *
 		int(kvserver.ExportRequestsLimit.Get(&p.settings.SV))
 	exportsSem := make(chan struct{}, maxConcurrentExports)
 	g := ctxgroup.WithContext(ctx)
@@ -240,11 +244,15 @@ func allRangeDescriptors(ctx context.Context, txn *kv.Txn) ([]roachpb.RangeDescr
 }
 
 // clusterNodeCount returns the approximate number of nodes in the cluster.
-func clusterNodeCount(g *gossip.Gossip) int {
+func clusterNodeCount(gw gossip.DeprecatedGossip) (int, error) {
+	g, err := gw.OptionalErr(47971)
+	if err != nil {
+		return 0, err
+	}
 	var nodes int
 	_ = g.IterateInfos(gossip.KeyNodeIDPrefix, func(_ string, _ gossip.Info) error {
 		nodes++
 		return nil
 	})
-	return nodes
+	return nodes, nil
 }

@@ -1213,7 +1213,8 @@ func injectTableStats(
 	// update is handled asynchronously).
 	params.extendedEvalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(params.ctx, desc.ID)
 
-	return stats.GossipTableStatAdded(params.extendedEvalCtx.ExecCfg.Gossip, desc.ID)
+	return stats.GossipTableStatAdded(
+		params.extendedEvalCtx.ExecCfg.Gossip.Deprecated(47925), desc.ID)
 }
 
 func (p *planner) removeColumnComment(
