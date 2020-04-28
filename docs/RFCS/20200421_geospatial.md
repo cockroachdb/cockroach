@@ -2,29 +2,27 @@
 - Status: in-progress
 - Start Date: 2020-04-01
 - Authors: danhhz otan rytaft sumeerbhola
-- RFC PR: (PR # after acceptance of initial draft)
-- Cockroach Issue: (one or more # from the issue tracker)
+- RFC PR: [#47762](https://github.com/cockroachdb/cockroach/pull/47762)
+- Cockroach Issue: [#19313](https://github.com/cockroachdb/cockroach/issues/19313)
 
 Table of contents:
 
 - [Summary](#Summary)
 - [Guide-level explanation](#Guide-level-explanation)
 - [Reference-level explanation](#Reference-level-explanation)
-  * [SQL Types & Functions](#SQL-Types-&-Functions)
+  * [SQL Types & Functions](#SQL-Types--Functions)
   * [Indexing](#Indexing)
   * [End-to-End Example](#End-to-End-Example)
   * [Package Structure](#Package-Structure)
   * [Telemetry](#Telemetry)
   * [Testing](#Testing)
   * [Performance Benchmarking](#Performance-Benchmarking)
-- [Drawbacks](#Drawbacks)
-- [Rationale and Alternatives](#Rationale-and-Alternatives)
 - [Unresolved questions](#Unresolved-questions)
 
 # Summary
 
 This RFC proposes the addition of geospatial features to CockroachDB, similar to
-what is supported by PostGIS. These features are often requested by users. At time
+what is supported by PostGIS. These features are often requested by users. At the time
 of writing, support for geospatial features is the most requested feature in
 CockroachDB.
 
@@ -32,8 +30,7 @@ The approach leverages open-source geometry libraries used by PostGIS whenever
 possible. For indexing, the approach diverges from PostGIS by dividing the space
 into cells of decreasing size, which fits into the totally ordered key-value
 model of CockroachDB. Early experiments suggest that this is competitive in
-performance with R-trees whilst allowing for additional scaling as it has
-lock free data structures.
+performance with R-trees whilst allowing for horizontal scaling.
 
 # Guide-level explanation
 
@@ -66,7 +63,7 @@ for.
 The specs we refer to in this document are:
 
 * OGC: [v1.1](http://portal.opengeospatial.org/files/?artifact_id=13228)
-** NOTE: we will aim to support v1.1 as PostGIS does for 20.2
+** NOTE: For 20.2, we will aim to support v1.1 as PostGIS does
 * SQL/MM: [ISO 13249-3](http://jtc1sc32.org/doc/N1101-1150/32N1107-WD13249-3--spatial.pdf)
 
 Our approach will leverage the open-source geometry libraries used by
@@ -1630,15 +1627,6 @@ benchmark on the following:
 We may decide to compare our implementation against other SQL-based
 implementations such as SQL Server and Postgres/PostGIS. MongoDB is a
 good stretch option as well.
-
-
-## Drawbacks
-
-TBD
-
-## Rationale and Alternatives
-
-TBD 
 
 ## Unresolved questions
 
