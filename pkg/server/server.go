@@ -523,7 +523,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		sqlServerOptionalArgs: sqlServerOptionalArgs{
 			rpcContext: rpcContext,
 			distSender: distSender,
-			statusServer: func() (*statusServer, bool) {
+			statusServer: func() (serverpb.StatusServer, bool) {
 				return sStatus, true
 			},
 			nodeLiveness:           nodeLiveness,
