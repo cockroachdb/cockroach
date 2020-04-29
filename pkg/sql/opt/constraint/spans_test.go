@@ -93,10 +93,10 @@ func TestSpansSortAndMerge(t *testing.T) {
 
 		// Calculate via constraints.
 		var c Constraint
-		c.InitSingleSpan(keyCtx, spans.Get(0))
+		c.InitSingleSpan(keyCtx, spans.Get(0), Equality)
 		for i := 1; i < spans.Count(); i++ {
 			var d Constraint
-			d.InitSingleSpan(keyCtx, spans.Get(i))
+			d.InitSingleSpan(keyCtx, spans.Get(i), Equality)
 			c.UnionWith(evalCtx, &d)
 		}
 		expected := c.Spans.String()

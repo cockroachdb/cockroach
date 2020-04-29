@@ -51,6 +51,11 @@ func TestConstraintUnion(t *testing.T) {
 	test(t, &evalCtx, &data.c20to30, &data.c30to40, "/1: [/20 - /40]")
 	test(t, &evalCtx, &data.c30to40, &data.c20to30, "/1: [/20 - /40]")
 
+	// Containment constraints.
+	test(t, &evalCtx, &data.conA1, &data.conA1, `/1: ⊇ [/'{"a": 1}' - /'{"a": 1}']`)
+	test(t, &evalCtx, &data.conA1, &data.conB2, `/1: ⊇ [/'{"a": 1}' - /'{"a": 1}'] [/'{"b": 2}' - /'{"b": 2}']`)
+	test(t, &evalCtx, &data.conB2, &data.conA1, `/1: ⊇ [/'{"a": 1}' - /'{"a": 1}'] [/'{"b": 2}' - /'{"b": 2}']`)
+
 	// Merge multiple spans down to single span.
 	var left, right Constraint
 	left = data.c1to10
@@ -311,7 +316,8 @@ func TestConsolidateSpans(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			spans := parseSpans(&evalCtx, tc.s)
 			var c Constraint
-			c.Init(kc, &spans)
+			// TODO test for containment
+			c.Init(kc, &spans, Equality)
 			c.ConsolidateSpans(kc.EvalCtx)
 			if res := c.Spans.String(); res != tc.e {
 				t.Errorf("expected  %s  got  %s", tc.e, res)
@@ -328,53 +334,78 @@ func TestExactPrefix(t *testing.T) {
 	testData := []struct {
 		s string
 		// expected value
-		e int
+		e  int
+		t  Type
+		kc *KeyContext
 	}{
 		{
-			s: "",
-			e: 0,
+			s:  "",
+			e:  0,
+			t:  Equality,
+			kc: testKeyContext(1, 2, 3),
 		},
 		{
-			s: "[/1 - /1]",
-			e: 1,
+			s:  "[/1 - /1]",
+			e:  1,
+			t:  Equality,
+			kc: testKeyContext(1, 2, 3),
 		},
 		{
-			s: "[/1 - /2]",
-			e: 0,
+			s:  "[/1 - /2]",
+			e:  0,
+			t:  Equality,
+			kc: testKeyContext(1, 2, 3),
 		},
 		{
-			s: "[/1/2/3 - /1/2/3]",
-			e: 3,
+			s:  "[/1/2/3 - /1/2/3]",
+			e:  3,
+			t:  Equality,
+			kc: testKeyContext(1, 2, 3),
 		},
 		{
-			s: "[/1/2/3 - /1/2/3] [/1/2/5 - /1/2/8]",
-			e: 2,
+			s:  "[/1/2/3 - /1/2/3] [/1/2/5 - /1/2/8]",
+			e:  2,
+			t:  Equality,
+			kc: testKeyContext(1, 2, 3),
 		},
 		{
-			s: "[/1/2/3 - /1/2/3] [/1/2/5 - /1/3/8]",
-			e: 1,
+			s:  "[/1/2/3 - /1/2/3] [/1/2/5 - /1/3/8]",
+			e:  1,
+			t:  Equality,
+			kc: testKeyContext(1, 2, 3),
 		},
 		{
-			s: "[/1/2/3 - /1/2/3] [/1/3/3 - /1/3/3]",
-			e: 1,
+			s:  "[/1/2/3 - /1/2/3] [/1/3/3 - /1/3/3]",
+			e:  1,
+			t:  Equality,
+			kc: testKeyContext(1, 2, 3),
 		},
 		{
-			s: "[/1/2/3 - /1/2/3] [/3 - /4]",
-			e: 0,
+			s:  "[/1/2/3 - /1/2/3] [/3 - /4]",
+			e:  0,
+			t:  Equality,
+			kc: testKeyContext(1, 2, 3),
 		},
 		{
-			s: "[/1/2/1 - /1/2/1] [/1/3/1 - /1/4/1]",
-			e: 1,
+			s:  "[/1/2/1 - /1/2/1] [/1/3/1 - /1/4/1]",
+			e:  1,
+			t:  Equality,
+			kc: testKeyContext(1, 2, 3),
+		},
+		{
+			s:  "[/1 - /1]",
+			e:  0,
+			t:  Containment,
+			kc: testKeyContext(1),
 		},
 	}
 
-	kc := testKeyContext(1, 2, 3)
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			spans := parseSpans(&evalCtx, tc.s)
 			var c Constraint
-			c.Init(kc, &spans)
-			if res := c.ExactPrefix(kc.EvalCtx); res != tc.e {
+			c.Init(tc.kc, &spans, tc.t)
+			if res := c.ExactPrefix(tc.kc.EvalCtx); res != tc.e {
 				t.Errorf("expected  %d  got  %d", tc.e, res)
 			}
 		})
@@ -390,6 +421,8 @@ type constraintTestData struct {
 	c30to40         Constraint // [/30 - /40]
 	c40to50         Constraint // [/40 - /50]
 	c60to70         Constraint // (/60 - /70)
+	conA1           Constraint // ⊇ [/'{"a": 1}' - /'{"a": 1}']
+	conB2           Constraint // ⊇ [/'{"b": 2}' - /'{"b": 2}']
 	cherryRaspberry Constraint // [/'cherry'/true - /'raspberry'/false)
 	mangoStrawberry Constraint // [/'mango'/false - /'strawberry']
 }
@@ -408,6 +441,11 @@ func newConstraintTestData(evalCtx *tree.EvalContext) *constraintTestData {
 	key60 := MakeKey(tree.NewDInt(60))
 	key70 := MakeKey(tree.NewDInt(70))
 
+	A1, _ := tree.MakeDJSON(map[string]interface{}{"a": 1})
+	B2, _ := tree.MakeDJSON(map[string]interface{}{"b": 2})
+	keyA1 := MakeKey(A1)
+	keyB2 := MakeKey(B2)
+
 	kc12 := testKeyContext(1, 2)
 	kc1 := testKeyContext(1)
 
@@ -420,43 +458,51 @@ func newConstraintTestData(evalCtx *tree.EvalContext) *constraintTestData {
 
 	// [ - /10)
 	span.Init(EmptyKey, IncludeBoundary, key10, ExcludeBoundary)
-	data.cLt10.InitSingleSpan(kc1, &span)
+	data.cLt10.InitSingleSpan(kc1, &span, Equality)
 
 	// (/20 - ]
 	span.Init(key20, ExcludeBoundary, EmptyKey, IncludeBoundary)
-	data.cGt20.InitSingleSpan(kc1, &span)
+	data.cGt20.InitSingleSpan(kc1, &span, Equality)
 
 	// [/1 - /10]
 	span.Init(key1, IncludeBoundary, key10, IncludeBoundary)
-	data.c1to10.InitSingleSpan(kc1, &span)
+	data.c1to10.InitSingleSpan(kc1, &span, Equality)
 
 	// (/5 - /25)
 	span.Init(key5, ExcludeBoundary, key25, ExcludeBoundary)
-	data.c5to25.InitSingleSpan(kc1, &span)
+	data.c5to25.InitSingleSpan(kc1, &span, Equality)
 
 	// [/20 - /30)
 	span.Init(key20, IncludeBoundary, key30, ExcludeBoundary)
-	data.c20to30.InitSingleSpan(kc1, &span)
+	data.c20to30.InitSingleSpan(kc1, &span, Equality)
 
 	// [/30 - /40]
 	span.Init(key30, IncludeBoundary, key40, IncludeBoundary)
-	data.c30to40.InitSingleSpan(kc1, &span)
+	data.c30to40.InitSingleSpan(kc1, &span, Equality)
 
 	// [/40 - /50]
 	span.Init(key40, IncludeBoundary, key50, IncludeBoundary)
-	data.c40to50.InitSingleSpan(kc1, &span)
+	data.c40to50.InitSingleSpan(kc1, &span, Equality)
 
 	// (/60 - /70)
 	span.Init(key60, ExcludeBoundary, key70, ExcludeBoundary)
-	data.c60to70.InitSingleSpan(kc1, &span)
+	data.c60to70.InitSingleSpan(kc1, &span, Equality)
+
+	// ⊇ [/'{"a": 1}' - /'{"a": 1}']
+	span.Init(keyA1, IncludeBoundary, keyA1, IncludeBoundary)
+	data.conA1.InitSingleSpan(kc1, &span, Containment)
+
+	// ⊇ [/'{"b": 2}' - /'{"b": 2}']
+	span.Init(keyB2, IncludeBoundary, keyB2, IncludeBoundary)
+	data.conB2.InitSingleSpan(kc1, &span, Containment)
 
 	// [/'cherry'/true - /'raspberry'/false)
 	span.Init(cherry, IncludeBoundary, raspberry, ExcludeBoundary)
-	data.cherryRaspberry.InitSingleSpan(kc12, &span)
+	data.cherryRaspberry.InitSingleSpan(kc12, &span, Equality)
 
 	// [/'mango'/false - /'strawberry']
 	span.Init(mango, IncludeBoundary, strawberry, IncludeBoundary)
-	data.mangoStrawberry.InitSingleSpan(kc12, &span)
+	data.mangoStrawberry.InitSingleSpan(kc12, &span, Equality)
 
 	return data
 }
@@ -525,9 +571,17 @@ func TestExtractNotNullCols(t *testing.T) {
 			c: "/1/2/3: [/1/1/NULL - /1/1/2] [/3/3/3 - /3/3/4]",
 			e: []opt.ColumnID{1, 2},
 		},
-		{ // 13
+		{ // 14
 			c: "/1/2/3: [/1/1/1 - /1/1/1] [/2/NULL/2 - /2/NULL/3]",
 			e: []opt.ColumnID{1, 3},
+		},
+		{ // 15
+			c: "/1: ⊇ [/1 - /1]",
+			e: []opt.ColumnID{1},
+		},
+		{ // 16
+			c: "/1: ⊇ [/1 - /1] [/2 - /2]",
+			e: []opt.ColumnID{1},
 		},
 	}
 

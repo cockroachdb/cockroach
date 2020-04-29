@@ -35,12 +35,12 @@ func TestConstraintSetIntersect(t *testing.T) {
 	// Simple AND case.
 	// @1 > 20
 	var c Constraint
-	c.InitSingleSpan(kc1, &data.spGt20)
+	c.InitSingleSpan(kc1, &data.spGt20, Equality)
 	gt20 := SingleConstraint(&c)
 	test(gt20, "/1: (/20 - ]")
 
 	// @1 <= 40
-	le40 := SingleSpanConstraint(kc1, &data.spLe40)
+	le40 := SingleSpanConstraint(kc1, &data.spLe40, Equality)
 	test(le40, "/1: [ - /40]")
 
 	// @1 > 20 AND @1 <= 40
@@ -51,7 +51,7 @@ func TestConstraintSetIntersect(t *testing.T) {
 
 	// Include constraint on multiple columns.
 	// (@1, @2) >= (10, 15)
-	gt1015 := SingleSpanConstraint(kc12, &data.spGe1015)
+	gt1015 := SingleSpanConstraint(kc12, &data.spGe1015, Equality)
 	test(gt1015, "/1/2: [/10/15 - ]")
 
 	// (@1, @2) >= (10, 15) AND @1 <= 40
@@ -66,7 +66,7 @@ func TestConstraintSetIntersect(t *testing.T) {
 		"/1/2: [/10/15 - ]")
 
 	// (@1, @2) >= (10, 15) AND @1 <= 40 AND @2 < 80
-	lt80 := SingleSpanConstraint(kc2, &data.spLt80)
+	lt80 := SingleSpanConstraint(kc2, &data.spLt80, Equality)
 	multi3 := lt80.Intersect(evalCtx, multi2)
 	test(multi3, ""+
 		"/1: [ - /40]; "+
@@ -80,7 +80,7 @@ func TestConstraintSetIntersect(t *testing.T) {
 		"/2: [ - /80)")
 
 	// Mismatched number of constraints in each set.
-	eq10 := SingleSpanConstraint(kc1, &data.spEq10)
+	eq10 := SingleSpanConstraint(kc1, &data.spEq10, Equality)
 	mismatched := eq10.Intersect(evalCtx, multi3)
 	test(mismatched, ""+
 		"/1: [/10 - /10]; "+
@@ -94,7 +94,7 @@ func TestConstraintSetIntersect(t *testing.T) {
 		"/2: [ - /80)")
 
 	// Multiple intersecting constraints on different columns.
-	diffCols := eq10.Intersect(evalCtx, SingleSpanConstraint(kc2, &data.spGt20))
+	diffCols := eq10.Intersect(evalCtx, SingleSpanConstraint(kc2, &data.spGt20, Equality))
 	res := diffCols.Intersect(evalCtx, multi3)
 	test(res, ""+
 		"/1: [/10 - /10]; "+
@@ -124,6 +124,41 @@ func TestConstraintSetIntersect(t *testing.T) {
 	test(res, "contradiction")
 	res = Contradiction.Intersect(evalCtx, eq10)
 	test(res, "contradiction")
+
+	// Containment constraints on the same column.
+	conA1 := SingleSpanConstraint(kc1, &data.spA1, Containment)
+	conB2 := SingleSpanConstraint(kc1, &data.spB2, Containment)
+	res = conA1.Intersect(evalCtx, conA1)
+	test(res, `/1: ⊇ [/'{"a": 1}' - /'{"a": 1}']`)
+	res = conA1.Intersect(evalCtx, conB2)
+	test(res, ""+
+		`/1: ⊇ [/'{"a": 1}' - /'{"a": 1}']; `+
+		`/1: ⊇ [/'{"b": 2}' - /'{"b": 2}']`)
+
+	// Multiple containment constraint intersections.
+	conC3 := SingleSpanConstraint(kc1, &data.spC3, Containment)
+	res = conA1.Intersect(evalCtx, conB2).Intersect(evalCtx, conC3)
+	test(res, ""+
+		`/1: ⊇ [/'{"a": 1}' - /'{"a": 1}']; `+
+		`/1: ⊇ [/'{"b": 2}' - /'{"b": 2}']; `+
+		`/1: ⊇ [/'{"c": 3}' - /'{"c": 3}']`)
+	res = conA1.Intersect(evalCtx, conC3).Intersect(evalCtx, conB2)
+	test(res, ""+
+		`/1: ⊇ [/'{"a": 1}' - /'{"a": 1}']; `+
+		`/1: ⊇ [/'{"b": 2}' - /'{"b": 2}']; `+
+		`/1: ⊇ [/'{"c": 3}' - /'{"c": 3}']`)
+
+	// Intersection with a containment constraint with multiple spans (from a
+	// previos union operation.
+	// TODO(mgartner): These tests are failing.
+	res = conA1.Union(evalCtx, conB2).Intersect(evalCtx, conC3)
+	test(res, "unconstrained")
+	res = conA1.Union(evalCtx, conC3).Intersect(evalCtx, conB2)
+	test(res, "unconstrained")
+	res = conA1.Intersect(evalCtx, conC3.Union(evalCtx, conB2))
+	test(res, "unconstrained")
+	res = conA1.Intersect(evalCtx, conB2.Union(evalCtx, conC3))
+	test(res, "unconstrained")
 }
 
 func TestConstraintSetUnion(t *testing.T) {
@@ -142,11 +177,11 @@ func TestConstraintSetUnion(t *testing.T) {
 
 	// Simple OR case.
 	// @1 > 20
-	gt20 := SingleSpanConstraint(kc1, &data.spGt20)
+	gt20 := SingleSpanConstraint(kc1, &data.spGt20, Equality)
 	test(gt20, "/1: (/20 - ]")
 
 	// @1 = 10
-	eq10 := SingleSpanConstraint(kc1, &data.spEq10)
+	eq10 := SingleSpanConstraint(kc1, &data.spEq10, Equality)
 	test(eq10, "/1: [/10 - /10]")
 
 	// @1 > 20 OR @1 = 10
@@ -157,7 +192,7 @@ func TestConstraintSetUnion(t *testing.T) {
 
 	// Combine constraints that result in full span and unconstrained result.
 	// @1 > 20 OR @1 = 10 OR @1 <= 40
-	le40 := SingleSpanConstraint(kc1, &data.spLe40)
+	le40 := SingleSpanConstraint(kc1, &data.spLe40, Equality)
 	res := gt20eq10.Union(evalCtx, le40)
 	test(res, "unconstrained")
 	res = le40.Union(evalCtx, gt20eq10)
@@ -165,13 +200,13 @@ func TestConstraintSetUnion(t *testing.T) {
 
 	// Include constraint on multiple columns and union with itself.
 	// (@1, @2) >= (10, 15)
-	gt1015 := SingleSpanConstraint(kc12, &data.spGe1015)
+	gt1015 := SingleSpanConstraint(kc12, &data.spGe1015, Equality)
 	res = gt1015.Union(evalCtx, gt1015)
 	test(res, "/1/2: [/10/15 - ]")
 
 	// Union incompatible constraints (both are discarded).
 	// (@1, @2) >= (10, 15) OR @2 < 80
-	lt80 := SingleSpanConstraint(kc2, &data.spLt80)
+	lt80 := SingleSpanConstraint(kc2, &data.spLt80, Equality)
 	res = gt1015.Union(evalCtx, lt80)
 	test(res, "unconstrained")
 	res = lt80.Union(evalCtx, gt1015)
@@ -182,7 +217,7 @@ func TestConstraintSetUnion(t *testing.T) {
 	multi3 := gt1015.Intersect(evalCtx, lt80)
 	multi3 = multi3.Intersect(evalCtx, gt20)
 
-	eq80 := SingleSpanConstraint(kc2, &data.spEq80)
+	eq80 := SingleSpanConstraint(kc2, &data.spEq80, Equality)
 	multi2 := eq10.Intersect(evalCtx, eq80)
 
 	res = multi3.Union(evalCtx, multi2)
@@ -220,6 +255,26 @@ func TestConstraintSetUnion(t *testing.T) {
 	test(res, "/1: [/10 - /10]")
 	res = Contradiction.Union(evalCtx, eq10)
 	test(res, "/1: [/10 - /10]")
+
+	// Containment constraints on the same column.
+	conA1 := SingleSpanConstraint(kc1, &data.spA1, Containment)
+	conB2 := SingleSpanConstraint(kc1, &data.spB2, Containment)
+	res = conA1.Union(evalCtx, conA1)
+	test(res, `/1: ⊇ [/'{"a": 1}' - /'{"a": 1}']`)
+	res = conA1.Union(evalCtx, conB2)
+	test(res, `/1: ⊇ [/'{"a": 1}' - /'{"a": 1}'] [/'{"b": 2}' - /'{"b": 2}']`)
+
+	// Containment constraints on the same column with two containment
+	// constraints in the set.
+	conA1B2 := conA1.Intersect(evalCtx, conB2)
+	conC3 := SingleSpanConstraint(kc1, &data.spC3, Containment)
+	// TODO(mgartner): We can techincally make conA1B2 UNION conA1 result in
+	// conA1B2, because unioning a containment with a span equal to one of the
+	// spans in the intersection is logically the same as the intersection.
+	res = conA1B2.Union(evalCtx, conA1)
+	test(res, "unconstrained")
+	res = conA1B2.Union(evalCtx, conC3)
+	test(res, "unconstrained")
 }
 
 func TestExtractCols(t *testing.T) {
@@ -252,6 +307,19 @@ func TestExtractCols(t *testing.T) {
 				`/4: [/4 - /4]`,
 			},
 			cols(1, 2, 3, 4),
+		},
+		{
+			[]string{
+				`/1: ⊇ [/1 - /1] [/2 - /2]`,
+			},
+			cols(1),
+		},
+		{
+			[]string{
+				`/1: ⊇ [/1 - /1]`,
+				`/1: ⊇ [/2 - /2]`,
+			},
+			cols(1),
 		},
 	}
 
@@ -317,6 +385,25 @@ func TestExtractConstCols(t *testing.T) {
 			},
 			vals{},
 		},
+		{
+			[]string{
+				`/1: ⊇ [/1 - /1]`,
+			},
+			vals{},
+		},
+		{
+			[]string{
+				`/1: ⊇ [/1 - /1] [/2 - /2]`,
+			},
+			vals{},
+		},
+		{
+			[]string{
+				`/1: ⊇ [/1 - /1]`,
+				`/1: ⊇ [/2 - /2]`,
+			},
+			vals{},
+		},
 	}
 
 	evalCtx := tree.NewTestingEvalContext(nil)
@@ -374,6 +461,22 @@ func TestIsSingleColumnConstValue(t *testing.T) {
 			},
 			0, 0,
 		},
+		{
+			[]string{
+				`/1: ⊇ [/1 - /1]`,
+			}, 0, 0,
+		},
+		{
+			[]string{
+				`/1: ⊇ [/1 - /1] [/2 - /2]`,
+			}, 0, 0,
+		},
+		{
+			[]string{
+				`/1: ⊇ [/1 - /1]`,
+				`/1: ⊇ [/2 - /2]`,
+			}, 0, 0,
+		},
 	}
 	evalCtx := tree.NewTestingEvalContext(nil)
 	for _, tc := range cases {
@@ -400,6 +503,9 @@ type spanTestData struct {
 	spLt80   Span // [ - /80)
 	spEq80   Span // [/80 - /80]
 	spGe1015 Span // [/10/15 - ]
+	spA1     Span // [/'{"a": 1}' - /'{"a": 1}']
+	spB2     Span // [/'{"b": 2}' - /'{"b": 2}']
+	spC3     Span // [/'{"c": 3}' - /'{"c": 3}']
 }
 
 func newSpanTestData() *spanTestData {
@@ -410,6 +516,13 @@ func newSpanTestData() *spanTestData {
 	key20 := MakeKey(tree.NewDInt(20))
 	key40 := MakeKey(tree.NewDInt(40))
 	key80 := MakeKey(tree.NewDInt(80))
+
+	A1, _ := tree.MakeDJSON(map[string]interface{}{"a": 1})
+	B2, _ := tree.MakeDJSON(map[string]interface{}{"b": 2})
+	C3, _ := tree.MakeDJSON(map[string]interface{}{"c": 3})
+	keyA1 := MakeKey(A1)
+	keyB2 := MakeKey(B2)
+	keyC3 := MakeKey(C3)
 
 	// [/10 - /10]
 	data.spEq10.Init(key10, IncludeBoundary, key10, IncludeBoundary)
@@ -429,6 +542,15 @@ func newSpanTestData() *spanTestData {
 	// [/10/15 - ]
 	key1015 := key10.Concat(key15)
 	data.spGe1015.Init(key1015, IncludeBoundary, EmptyKey, IncludeBoundary)
+
+	// [/'{"a": 1}' - /'{"a": 1}']
+	data.spA1.Init(keyA1, IncludeBoundary, keyA1, IncludeBoundary)
+
+	// [/'{"b": 2}' - /'{"b": 2}']
+	data.spB2.Init(keyB2, IncludeBoundary, keyB2, IncludeBoundary)
+
+	// [/'{"c": 3}' - /'{"c": 3}']
+	data.spC3.Init(keyC3, IncludeBoundary, keyC3, IncludeBoundary)
 
 	return data
 }

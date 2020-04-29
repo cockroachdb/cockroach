@@ -42,11 +42,31 @@ type Constraint struct {
 	// Spans contains the spans in this constraint. The spans are always ordered
 	// and non-overlapping.
 	Spans Spans
+
+	Type Type
 }
+
+// Type is an enum that represents different fundamental types of constraints.
+// Constraints of different types cannot be intersected
+type Type int
+
+const (
+	// Equality represents a constraint that relates to values by some form of
+	// equality. Operators such as =, <, >, <=, and >= are examples of operators
+	// that map to this constraint types.
+	Equality = iota
+
+	// Containment represents a constraint that relates to values by a
+	// containment operator, such as @>.
+	Containment
+)
 
 // Init initializes the constraint to the columns in the key context and with
 // the given spans.
-func (c *Constraint) Init(keyCtx *KeyContext, spans *Spans) {
+func (c *Constraint) Init(keyCtx *KeyContext, spans *Spans, t Type) {
+	if t == Containment && keyCtx.Columns.Count() > 1 {
+		panic(errors.AssertionFailedf("containment constraints must have a single column"))
+	}
 	for i := 1; i < spans.Count(); i++ {
 		if !spans.Get(i).StartsStrictlyAfter(keyCtx, spans.Get(i-1)) {
 			panic(errors.AssertionFailedf("spans must be ordered and non-overlapping"))
@@ -55,13 +75,15 @@ func (c *Constraint) Init(keyCtx *KeyContext, spans *Spans) {
 	c.Columns = keyCtx.Columns
 	c.Spans = *spans
 	c.Spans.makeImmutable()
+	c.Type = t
 }
 
 // InitSingleSpan initializes the constraint to the columns in the key context
 // and with one span.
-func (c *Constraint) InitSingleSpan(keyCtx *KeyContext, span *Span) {
+func (c *Constraint) InitSingleSpan(keyCtx *KeyContext, span *Span, t Type) {
 	c.Columns = keyCtx.Columns
 	c.Spans.InitSingleSpan(span)
+	c.Type = t
 }
 
 // IsContradiction returns true if there are no spans in the constraint.
@@ -75,6 +97,51 @@ func (c *Constraint) IsUnconstrained() bool {
 	return c.Spans.Count() == 1 && c.Spans.Get(0).IsUnconstrained()
 }
 
+// CanUnionWith returns true if this constraint can be unioned with the
+// given constraint, other. Both constraints must have the same Type to allow
+// union.
+func (c *Constraint) CanUnionWith(other *Constraint) bool {
+	return c.Type == other.Type
+}
+
+// CanIntersectWith returns true if this constraint can be intersected with the
+// given constraint, other.
+//
+// The rules for allowing constraints to be intersected are as follows:
+//
+//   1. Different types of constraints cannot be intersected.
+//   2. Equality constraints can always be intersected.
+//   3. Containment constraints can only be intersected if their spans are
+//      equal.
+//
+// Intersect of Containment constraints with unequal spans is not allowed
+// because they lead to contradictions.
+//
+// Consider the two JSON containment operators and the associated constraints:
+//
+//   @1 @> '{"a": 1}'
+//   /1: ⊇ [/'{"a": 1}' - /'{"a": 1}']
+//
+//   @1 @> '{"b": 2}'
+//   /1: ⊇ [/'{"b": 2}' - /'{"b": 2}']
+//
+// If intersected, these two spans result in a contradiction. However, because
+// of containment semantics, they are not logically a contradiction. Therefore,
+// they must be represented as two separate constraints.
+func (c *Constraint) CanIntersectWith(evalCtx *tree.EvalContext, other *Constraint) bool {
+	switch {
+	case c.Type == Equality && other.Type == Equality:
+		// Can always intersect Equality constraints.
+		return true
+	case c.Type == Containment && other.Type == Containment:
+		// Can only intersect Containment constraints if their spans are equal.
+		return c.equalSpans(evalCtx, other)
+	default:
+		// Cannot intersect different types of constraints.
+		return false
+	}
+}
+
 // UnionWith merges the spans of the given constraint into this constraint.  The
 // columns of both constraints must be the same. Constrained columns in the
 // merged constraint can have values that are part of either of the input
@@ -82,6 +149,9 @@ func (c *Constraint) IsUnconstrained() bool {
 func (c *Constraint) UnionWith(evalCtx *tree.EvalContext, other *Constraint) {
 	if !c.Columns.Equals(&other.Columns) {
 		panic(errors.AssertionFailedf("column mismatch"))
+	}
+	if !c.CanUnionWith(other) {
+		panic(errors.AssertionFailedf("union not allowed"))
 	}
 	if c.IsUnconstrained() || other.IsContradiction() {
 		return
@@ -171,6 +241,9 @@ func (c *Constraint) IntersectWith(evalCtx *tree.EvalContext, other *Constraint)
 	if !c.Columns.Equals(&other.Columns) {
 		panic(errors.AssertionFailedf("column mismatch"))
 	}
+	if !c.CanIntersectWith(evalCtx, other) {
+		panic(errors.AssertionFailedf("intersection not allowed"))
+	}
 	if c.IsContradiction() || other.IsUnconstrained() {
 		return
 	}
@@ -218,6 +291,9 @@ func (c Constraint) String() string {
 	var b strings.Builder
 	b.WriteString(c.Columns.String())
 	b.WriteString(": ")
+	if c.Type == Containment {
+		b.WriteString("⊇ ")
+	}
 	if c.IsUnconstrained() {
 		b.WriteString("unconstrained")
 	} else if c.IsContradiction() {
@@ -422,7 +498,7 @@ func (c *Constraint) ConsolidateSpans(evalCtx *tree.EvalContext) {
 //   /a/b/c: [/1/2/3 - /1/2/3] [/1/3/3 - /1/3/3]  ->  ExactPrefix = 1
 //   /a/b/c: [/1/2/3 - /1/2/3] [/3 - /4]          ->  ExactPrefix = 0
 func (c *Constraint) ExactPrefix(evalCtx *tree.EvalContext) int {
-	if c.IsContradiction() {
+	if c.IsContradiction() || c.Type == Containment {
 		return 0
 	}
 
@@ -499,6 +575,12 @@ func (c *Constraint) Prefix(evalCtx *tree.EvalContext) int {
 // constant by the constraint.
 func (c *Constraint) ExtractConstCols(evalCtx *tree.EvalContext) opt.ColSet {
 	var res opt.ColSet
+
+	// Containment constraints cannot restrict columns to a constant.
+	if c.Type == Containment {
+		return res
+	}
+
 	pre := c.ExactPrefix(evalCtx)
 	for i := 0; i < pre; i++ {
 		res.Add(c.Columns.Get(i).ID())
@@ -649,4 +731,37 @@ func (c *Constraint) CalculateMaxResults(
 		distinctVals = uint64(c.Spans.Count())
 	}
 	return distinctVals
+}
+
+func (c *Constraint) CompareContainmentSpan(evalCtx *tree.EvalContext, other *Constraint) int {
+	if c.Type != Containment || other.Type != Containment {
+		panic(errors.AssertionFailedf("can only compare containment spans of containment constraints"))
+	}
+	if c.Spans.Count() > 1 || other.Spans.Count() > 1 {
+		panic(errors.AssertionFailedf("cannot compare containment constraints with multiple spans"))
+	}
+
+	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+	return c.Spans.Get(0).Compare(&keyCtx, other.Spans.Get(0))
+}
+
+// equalSpans returns true if the constraint spans are equivalent to the spans
+// in the given constraint.
+func (c *Constraint) equalSpans(evalCtx *tree.EvalContext, other *Constraint) bool {
+	// A different number of spans cannot be equal.
+	if c.Spans.Count() != other.Spans.Count() {
+		return false
+	}
+
+	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+
+	// Use a variation on merge sort, because both sets of spans are ordered and
+	// non-overlapping.
+	for i := 0; i < c.Spans.Count(); i++ {
+		if c.Spans.Get(i).Compare(&keyCtx, other.Spans.Get(i)) != 0 {
+			return false
+		}
+	}
+
+	return true
 }

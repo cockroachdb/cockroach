@@ -32,9 +32,13 @@ func ParseConstraint(evalCtx *tree.EvalContext, str string) Constraint {
 	for _, v := range parseIntPath(s[0]) {
 		cols = append(cols, opt.OrderingColumn(v))
 	}
+	spans := strings.TrimPrefix(s[1], "⊇ ")
 	var c Constraint
 	c.Columns.Init(cols)
-	c.Spans = parseSpans(evalCtx, s[1])
+	c.Spans = parseSpans(evalCtx, spans)
+	if len(spans) != len(s[1]) {
+		c.Type = Containment
+	}
 	return c
 }
 

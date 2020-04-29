@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -25,6 +26,8 @@ import (
 // Convenience aliases to avoid the constraint prefix everywhere.
 const includeBoundary = constraint.IncludeBoundary
 const excludeBoundary = constraint.ExcludeBoundary
+const equality = constraint.Equality
+const containment = constraint.Containment
 
 var emptyKey = constraint.EmptyKey
 var unconstrained = constraint.Unconstrained
@@ -71,7 +74,7 @@ func (cb *constraintsBuilder) buildSingleColumnConstraint(
 		}
 		var c constraint.Constraint
 		spans.SortAndMerge(&keyCtx)
-		c.Init(&keyCtx, &spans)
+		c.Init(&keyCtx, &spans, equality)
 		return constraint.SingleConstraint(&c), true
 	}
 
@@ -297,7 +300,7 @@ func (cb *constraintsBuilder) buildConstraintForTupleIn(
 	spans.SortAndMerge(&keyCtx)
 
 	var c constraint.Constraint
-	c.Init(&keyCtx, &spans)
+	c.Init(&keyCtx, &spans, equality)
 	con := constraint.SingleConstraint(&c)
 
 	// Now add a constraint for each individual column. This makes extracting
@@ -321,7 +324,7 @@ func (cb *constraintsBuilder) buildConstraintForTupleIn(
 
 		spans.SortAndMerge(&keyCtx)
 		var c constraint.Constraint
-		c.Init(&keyCtx, &spans)
+		c.Init(&keyCtx, &spans, equality)
 		con = con.Intersect(cb.evalCtx, constraint.SingleConstraint(&c))
 	}
 
@@ -402,7 +405,7 @@ func (cb *constraintsBuilder) buildConstraintForTupleInequality(
 	}
 	keyCtx.Columns.Init(cols)
 	span.PreferInclusive(&keyCtx)
-	return constraint.SingleSpanConstraint(&keyCtx, &span), true
+	return constraint.SingleSpanConstraint(&keyCtx, &span, equality), true
 }
 
 func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.Set, tight bool) {
@@ -477,6 +480,53 @@ func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.
 	if v, ok := child0.(*VariableExpr); ok {
 		return cb.buildSingleColumnConstraint(v.Col, e.Op(), child1)
 	}
+
+	return unconstrained, false
+}
+
+func (cb *constraintsBuilder) buildConstraintForJSONDatum(
+	col opt.ColumnID, datum *tree.DJSON,
+) (_ *constraint.Set, tight bool) {
+	j := datum.JSON
+
+	keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
+	keyCtx.Columns.InitSingle(opt.MakeOrderingColumn(col, false /* descending */))
+
+	// Check the first path through the datum for Object and Array JSON types.
+	if j.Type() == json.ArrayJSONType || j.Type() == json.ObjectJSONType {
+		paths, err := json.AllPaths(j)
+		if err != nil {
+			return unconstrained, false
+		}
+
+		var spans constraint.Spans
+		spans.Alloc(len(paths))
+		var sp constraint.Span
+		for i := range paths {
+			pathDatum, err := tree.MakeDJSON(paths[i])
+			if err != nil {
+				return unconstrained, false
+			}
+
+			hasContainerLeaf, err := paths[i].HasContainerLeaf()
+			if err != nil {
+				return unconstrained, false
+			}
+			if hasContainerLeaf {
+				// No constraints possible if the datum contains either [] or {}.
+				continue
+			}
+
+			key := constraint.MakeKey(pathDatum)
+			sp.Init(key, includeBoundary, key, includeBoundary)
+			spans.Append(&sp)
+		}
+
+		var c constraint.Constraint
+		spans.SortAndMerge(&keyCtx)
+		c.Init(&keyCtx, &spans, constraint.Containment)
+		return constraint.SingleConstraint(&c), spans.Count() == len(paths)
+	}
 	return unconstrained, false
 }
 
@@ -492,7 +542,7 @@ func (cb *constraintsBuilder) singleSpan(
 	keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
 	keyCtx.Columns.InitSingle(opt.MakeOrderingColumn(col, false /* descending */))
 	span.PreferInclusive(&keyCtx)
-	return constraint.SingleSpanConstraint(&keyCtx, &span)
+	return constraint.SingleSpanConstraint(&keyCtx, &span, equality)
 }
 
 func (cb *constraintsBuilder) notNullSpan(col opt.ColumnID) *constraint.Set {

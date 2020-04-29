@@ -82,12 +82,12 @@ func SingleConstraint(c *Constraint) *Set {
 
 // SingleSpanConstraint creates a Set with a single constraint which
 // has one span.
-func SingleSpanConstraint(keyCtx *KeyContext, span *Span) *Set {
+func SingleSpanConstraint(keyCtx *KeyContext, span *Span, t Type) *Set {
 	if span.IsUnconstrained() {
 		return Unconstrained
 	}
 	s := &Set{length: 1}
-	s.firstConstraint.InitSingleSpan(keyCtx, span)
+	s.firstConstraint.InitSingleSpan(keyCtx, span, t)
 	return s
 }
 
@@ -138,8 +138,11 @@ func (s *Set) Intersect(evalCtx *tree.EvalContext, other *Set) *Set {
 	otherIndex := 0
 	otherLength := other.Length()
 
-	// Constraints are ordered in the set by column indexes, with no duplicates,
-	// so intersection can be done as a variation on merge sort.
+	// Constraints are ordered in the set by column indexes, so intersection can
+	// be done as a variation on merge sort. Note that multiple containment
+	// constraints with the same columns are possible. Containment constraints
+	// with the same column ID are ordered by their spans, so the variation on
+	// merge sort is possible.
 	for index < length || otherIndex < otherLength {
 		// Allocate the next constraint slot in the new set.
 		merge := mergeSet.allocConstraint(length - index + otherLength - otherIndex)
@@ -154,20 +157,36 @@ func (s *Set) Intersect(evalCtx *tree.EvalContext, other *Set) *Set {
 		}
 
 		if cmp == 0 {
-			// Constraints have same columns, so they're compatible and need to
-			// be merged.
-			*merge = *s.Constraint(index)
-			merge.IntersectWith(evalCtx, other.Constraint(otherIndex))
-			if merge.IsContradiction() {
-				return Contradiction
+			// Constraints have same columns and they can be intersected, so
+			// they're compatible and need to be merged.
+			if s.Constraint(index).CanIntersectWith(evalCtx, other.Constraint(otherIndex)) {
+				*merge = *s.Constraint(index)
+				merge.IntersectWith(evalCtx, other.Constraint(otherIndex))
+				if merge.IsContradiction() {
+					return Contradiction
+				}
+
+				// Skip past both inputs.
+				index++
+				otherIndex++
+				continue
 			}
 
-			// Skip past both inputs.
-			index++
-			otherIndex++
-		} else if cmp < 0 {
-			// This constraint has no corresponding constraint in other set, so
-			// add it to the set (absence of other constraint = unconstrained).
+			// TODO(mgartner): If the one of the containment constraints for
+			// this column in either s or other already has multiple spans, we
+			// cannot include any constraints for that column in the intersection.
+
+			// If the constraints cannot be intersected (because they are
+			// containment constraints with non-equal spans), include the
+			// lower-valued contraint in the set.
+			cmp = s.Constraint(index).CompareContainmentSpan(evalCtx, other.Constraint(otherIndex))
+		}
+
+		if cmp < 0 {
+			// This constraint has no corresponding constraint in other set, or
+			// it is a containment contraint that should be added before the
+			// other containment constraint, so add it to the set (absence of
+			// other constraint = unconstrained).
 			*merge = *s.Constraint(index)
 			index++
 		} else {
@@ -234,6 +253,10 @@ func (s *Set) Union(evalCtx *tree.EvalContext, other *Set) *Set {
 		// Constraints have same columns, so they're compatible and need to
 		// be merged. Allocate the next constraint slot in the new set.
 		merge := mergeSet.allocConstraint(length - index + otherLength - otherIndex)
+
+		// TODO(mgartner): If s or other has multiple containment constraints
+		// for the same column, we cannot include any constraints for that
+		// column in the union.
 
 		*merge = *s.Constraint(index)
 		merge.UnionWith(evalCtx, other.Constraint(otherIndex))
