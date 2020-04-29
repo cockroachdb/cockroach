@@ -280,8 +280,11 @@ func initBlockProfile() {
 	// will sample one event per X nanoseconds spent blocking.
 	//
 	// The block profile can be viewed with `pprof http://HOST:PORT/debug/pprof/block`
-	d := envutil.EnvOrDefaultInt64("COCKROACH_BLOCK_PROFILE_RATE",
-		10000000 /* 1 sample per 10 milliseconds spent blocking */)
+	//
+	// The utility of the block profile (aka blocking profile) has diminished
+	// with the advent of the mutex profile. We currently leave the block profile
+	// disabled by default as it has a non-zero performance impact.
+	d := envutil.EnvOrDefaultInt64("COCKROACH_BLOCK_PROFILE_RATE", 0)
 	runtime.SetBlockProfileRate(int(d))
 }
 
