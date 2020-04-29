@@ -11,9 +11,10 @@
 package errorutil
 
 import (
-	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/errors"
 )
 
 // UnsupportedWithMultiTenancy returns an error suitable for returning when an
@@ -30,5 +31,7 @@ func UnsupportedWithMultiTenancy(issues ...int) error {
 			fmt.Fprint(&buf, prefix, n)
 		}
 	}
-	return errors.New(buf.String())
+	// TODO(knz): This should be done in a different way,
+	// see: https://github.com/cockroachdb/cockroach/issues/48164
+	return errors.Newf("%s", buf.String())
 }
