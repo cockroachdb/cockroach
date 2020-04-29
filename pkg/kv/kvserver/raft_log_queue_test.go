@@ -353,6 +353,8 @@ func TestUpdateRaftStatusActivity(t *testing.T) {
 
 	now := timeutil.Now()
 
+	inactivityThreashold := time.Second
+
 	tcs := []testCase{
 		// No data, no crash.
 		{},
@@ -372,8 +374,8 @@ func TestUpdateRaftStatusActivity(t *testing.T) {
 			replicas: []roachpb.ReplicaDescriptor{{ReplicaID: 1}, {ReplicaID: 2}, {ReplicaID: 3}},
 			prs:      []tracker.Progress{{RecentActive: false}, {RecentActive: true}},
 			lastUpdate: map[roachpb.ReplicaID]time.Time{
-				1: now.Add(-1 * MaxQuotaReplicaLivenessDuration / 2),
-				2: now.Add(-1 - MaxQuotaReplicaLivenessDuration),
+				1: now.Add(-1 * inactivityThreashold / 2),
+				2: now.Add(-1 - inactivityThreashold),
 				3: now,
 			},
 			now: now,
@@ -394,7 +396,12 @@ func TestUpdateRaftStatusActivity(t *testing.T) {
 			for i, pr := range tc.exp {
 				expPRs[uint64(i+1)] = pr
 			}
-			updateRaftProgressFromActivity(ctx, prs, tc.replicas, tc.lastUpdate, tc.now)
+			updateRaftProgressFromActivity(ctx, prs, tc.replicas,
+				func(replicaID roachpb.ReplicaID) bool {
+					return tc.lastUpdate.isFollowerActiveSince(ctx, replicaID, tc.now, inactivityThreashold)
+				},
+			)
+
 			assert.Equal(t, expPRs, prs)
 		})
 	}
