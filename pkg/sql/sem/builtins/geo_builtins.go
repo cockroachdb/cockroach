@@ -191,6 +191,9 @@ var geoBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
+				if asString == nil {
+					return tree.DNull, nil
+				}
 				g, err := geo.ParseGeoJSON([]byte(*asString), geopb.DefaultGeometrySRID)
 				if err != nil {
 					return nil, err
@@ -285,6 +288,9 @@ var geoBuiltins = map[string]builtinDefinition{
 				asString, err := s.AsText()
 				if err != nil {
 					return nil, err
+				}
+				if asString == nil {
+					return tree.DNull, nil
 				}
 				g, err := geo.ParseGeoJSON([]byte(*asString), geopb.DefaultGeographySRID)
 				if err != nil {

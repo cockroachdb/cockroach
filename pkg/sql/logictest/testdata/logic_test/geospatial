@@ -342,3 +342,10 @@ Square overlapping left and right square  Point middle of Right Square          
 Square overlapping left and right square  Square (left)                             false  false  false  false  false  true   true   false  false
 Square overlapping left and right square  Square (right)                            true   false  true   false  false  true   false  false  false
 Square overlapping left and right square  Square overlapping left and right square  true   true   true   false  true   true   false  false  true
+
+subtest regression_48093
+
+query TT
+SELECT st_geogfromgeojson('null':::jsonb), st_geomfromgeojson('null':::jsonb)
+----
+NULL  NULL
