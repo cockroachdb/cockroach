@@ -590,8 +590,9 @@ func (s *sqlServer) start(
 		mmKnobs = *migrationManagerTestingKnobs.(*sqlmigrations.MigrationManagerTestingKnobs)
 	}
 
-	s.leaseMgr.RefreshLeases(stopper, s.execCfg.DB, s.execCfg.Gossip)
-	s.leaseMgr.PeriodicallyRefreshSomeLeases()
+	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB, s.execCfg.Gossip)
+	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
+
 	migrationsExecutor := sql.MakeInternalExecutor(
 		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.execCfg.Settings)
 	migrationsExecutor.SetSessionData(
