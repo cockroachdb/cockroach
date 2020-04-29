@@ -37,6 +37,19 @@ const (
 	OmitMissingFKClausesFromCreate
 )
 
+// ShowCreateDisplayOptions is a container struct holding the options that
+// ShowCreate uses to determine how much information should be included in the
+// CREATE statement.
+type ShowCreateDisplayOptions struct {
+	FKDisplayMode shouldOmitFKClausesFromCreate
+	// Comment resolution requires looking up table data from system.comments
+	// table. This is sometimes not possible. For example, in the context of a
+	// SHOW BACKUP which may resolve the create statement, there is no mechanism
+	// to read any table data from the backup (nor is there a guarantee that the
+	// system.comments table is included in the backup at all).
+	IgnoreComments bool
+}
+
 // ShowCreateTable returns a valid SQL representation of the CREATE
 // TABLE statement used to create the given table.
 //
@@ -52,7 +65,7 @@ func ShowCreateTable(
 	dbPrefix string,
 	desc *sqlbase.TableDescriptor,
 	lCtx simpleSchemaResolver,
-	fkDisplayMode shouldOmitFKClausesFromCreate,
+	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {
 	a := &sqlbase.DatumAlloc{}
 
@@ -88,7 +101,7 @@ func ShowCreateTable(
 	}
 	// TODO (lucy): Possibly include FKs in the mutations list here, or else
 	// exclude check mutations below, for consistency.
-	if fkDisplayMode != OmitFKClausesFromCreate {
+	if displayOptions.FKDisplayMode != OmitFKClausesFromCreate {
 		for i := range desc.OutboundFKs {
 			fkCtx := tree.NewFmtCtx(tree.FmtSimple)
 			fk := &desc.OutboundFKs[i]
@@ -96,9 +109,9 @@ func ShowCreateTable(
 			fkCtx.FormatNameP(&fk.Name)
 			fkCtx.WriteString(" ")
 			if err := showForeignKeyConstraint(&fkCtx.Buffer, dbPrefix, desc, fk, lCtx); err != nil {
-				if fkDisplayMode == OmitMissingFKClausesFromCreate {
+				if displayOptions.FKDisplayMode == OmitMissingFKClausesFromCreate {
 					continue
-				} else { // When fkDisplayMode == IncludeFkClausesInCreate.
+				} else { // When FKDisplayMode == IncludeFkClausesInCreate.
 					return "", err
 				}
 			}
@@ -114,7 +127,7 @@ func ShowCreateTable(
 		// Initialize to false if Interleave has no ancestors, indicating that the
 		// index is not interleaved at all.
 		includeInterleaveClause := len(idx.Interleave.Ancestors) == 0
-		if fkDisplayMode != OmitFKClausesFromCreate {
+		if displayOptions.FKDisplayMode != OmitFKClausesFromCreate {
 			// The caller is instructing us to not omit FK clauses from inside the CREATE.
 			// (i.e. the caller does not want them as separate DDL.)
 			// Since we're including FK clauses, we need to also include the PARTITION and INTERLEAVE
@@ -156,8 +169,10 @@ func ShowCreateTable(
 		return "", err
 	}
 
-	if err := showComments(desc, selectComment(ctx, p, desc.ID), &f.Buffer); err != nil {
-		return "", err
+	if !displayOptions.IgnoreComments {
+		if err := showComments(desc, selectComment(ctx, p, desc.ID), &f.Buffer); err != nil {
+			return "", err
+		}
 	}
 
 	return f.CloseAndGetString(), nil
@@ -188,7 +203,7 @@ func (p *planner) ShowCreate(
 	dbPrefix string,
 	allDescs []sqlbase.Descriptor,
 	desc *sqlbase.TableDescriptor,
-	ignoreFKs shouldOmitFKClausesFromCreate,
+	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {
 	var stmt string
 	var err error
@@ -199,7 +214,7 @@ func (p *planner) ShowCreate(
 		stmt, err = ShowCreateSequence(ctx, tn, desc)
 	} else {
 		lCtx := newInternalLookupCtxFromDescriptors(allDescs, nil /* want all tables */)
-		stmt, err = ShowCreateTable(ctx, p, tn, dbPrefix, desc, lCtx, ignoreFKs)
+		stmt, err = ShowCreateTable(ctx, p, tn, dbPrefix, desc, lCtx, displayOptions)
 	}
 
 	return stmt, err
