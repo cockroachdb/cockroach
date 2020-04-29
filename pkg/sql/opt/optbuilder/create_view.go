@@ -11,8 +11,6 @@
 package optbuilder
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -46,11 +44,11 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 	p := defScope.makePhysicalProps().Presentation
 	if len(cv.ColumnNames) != 0 {
 		if len(p) != len(cv.ColumnNames) {
-			panic(sqlbase.NewSyntaxError(fmt.Sprintf(
+			panic(sqlbase.NewSyntaxErrorf(
 				"CREATE VIEW specifies %d column name%s, but data source has %d column%s",
 				len(cv.ColumnNames), util.Pluralize(int64(len(cv.ColumnNames))),
 				len(p), util.Pluralize(int64(len(p)))),
-			))
+			)
 		}
 		// Override the columns.
 		for i := range p {

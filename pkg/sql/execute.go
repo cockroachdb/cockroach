@@ -45,7 +45,7 @@ func fillInPlaceholders(
 			e, typ, "EXECUTE parameter", /* context */
 			&semaCtx, true /* allowImpure */)
 		if err != nil {
-			return nil, pgerror.New(pgcode.WrongObjectType, err.Error())
+			return nil, pgerror.WithCandidateCode(err, pgcode.WrongObjectType)
 		}
 
 		qArgs[idx] = typedExpr

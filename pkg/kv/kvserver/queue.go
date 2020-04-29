@@ -564,18 +564,21 @@ type queueHelper interface {
 // is not available, the 'wait' parameter decides whether to wait or to return
 // as a noop. Note that if the system is quiescing, fn may never be called in-
 // dependent of the value of 'wait'.
+//
+// The caller is responsible for ensuring that opName does not contain PII.
+// (Best is to pass a constant string.)
 func (bq *baseQueue) Async(
 	ctx context.Context, opName string, wait bool, fn func(ctx context.Context, h queueHelper),
 ) {
 	if log.V(3) {
-		log.InfofDepth(ctx, 2, opName)
+		log.InfofDepth(ctx, 2, "%s", log.Safe(opName))
 	}
 	opName += " (" + bq.name + ")"
 	if err := bq.store.stopper.RunLimitedAsyncTask(context.Background(), opName, bq.addOrMaybeAddSem, wait,
 		func(ctx context.Context) {
 			fn(ctx, baseQueueHelper{bq})
 		}); err != nil && bq.addLogN.ShouldLog() {
-		log.Infof(ctx, "rate limited in %s: %s", opName, err)
+		log.Infof(ctx, "rate limited in %s: %s", log.Safe(opName), err)
 	}
 }
 

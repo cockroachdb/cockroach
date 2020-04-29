@@ -244,9 +244,12 @@ func PushTxn(
 		if !pusherWins {
 			s = "failed to push"
 		}
-		log.Infof(ctx, "%s "+s+" (push type=%s) %s: %s (pushee last active: %s)",
-			args.PusherTxn.Short(), pushType, args.PusheeTxn.Short(),
-			reason, reply.PusheeTxn.LastActive())
+		log.Infof(ctx, "%s %s (push type=%s) %s: %s (pushee last active: %s)",
+			args.PusherTxn.Short(), log.Safe(s),
+			log.Safe(pushType),
+			args.PusheeTxn.Short(),
+			log.Safe(reason),
+			reply.PusheeTxn.LastActive())
 	}
 
 	// If the pushed transaction is in the staging state, we can't change its

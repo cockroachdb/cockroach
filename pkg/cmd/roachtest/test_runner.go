@@ -35,9 +35,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/petermattis/goid"
-	"github.com/pkg/errors"
 )
 
 // testRunner runs tests.
@@ -812,7 +812,7 @@ func (r *testRunner) runTest(
 			r.collectClusterLogs(ctx, c, t.l)
 			// We return an error here because the test goroutine is still running, so
 			// we want to alert the caller of this unusual situation.
-			return false, fmt.Errorf(msg)
+			return false, errors.New(msg)
 		}
 	}
 

@@ -14,7 +14,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -33,6 +32,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -62,7 +62,7 @@ func run() error {
 		var b bytes.Buffer
 		flags.SetOutput(&b)
 		flags.Usage()
-		return errors.New(b.String())
+		return errors.Newf("%s", b.String())
 	}
 
 	cluster := os.Args[1]
@@ -109,7 +109,7 @@ func run() error {
 		var b bytes.Buffer
 		flags.SetOutput(&b)
 		flags.Usage()
-		return errors.New(b.String())
+		return errors.Newf("%s", b.String())
 	}
 	if *flagFailure != "" {
 		if _, err := regexp.Compile(*flagFailure); err != nil {

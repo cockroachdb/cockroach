@@ -114,8 +114,9 @@ func parseHbaLine(inputLine hbaLine) (entry Entry, err error) {
 		case token.IsKeyword("all"):
 			entry.Address = token
 		case token.IsKeyword("samehost"), token.IsKeyword("samenet"):
-			return entry, unimplemented.New(fmt.Sprintf("hba-net-%s", token.Value),
-				"address specification "+token.Value+" is not yet supported")
+			return entry, unimplemented.Newf(
+				fmt.Sprintf("hba-net-%s", token.Value),
+				"address specification %s is not yet supported", errors.Safe(token.Value))
 		default:
 			// Split name/mask.
 			addr := token.Value

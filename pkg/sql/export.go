@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -117,7 +116,7 @@ func (ef *execFactory) ConstructExport(
 	if override, ok := optVals[exportOptionChunkSize]; ok {
 		chunkSize, err = strconv.Atoi(override)
 		if err != nil {
-			return nil, pgerror.New(pgcode.InvalidParameterValue, err.Error())
+			return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 		}
 		if chunkSize < 1 {
 			return nil, pgerror.New(pgcode.InvalidParameterValue, "invalid csv chunk size")
@@ -131,7 +130,8 @@ func (ef *execFactory) ConstructExport(
 		if strings.EqualFold(name, exportCompressionCodec) {
 			codec = execinfrapb.FileCompression_Gzip
 		} else {
-			return nil, pgerror.New(pgcode.InvalidParameterValue, fmt.Sprintf("unsupported compression codec %s", name))
+			return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+				"unsupported compression codec %s", name)
 		}
 	}
 

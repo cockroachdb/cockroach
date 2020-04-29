@@ -115,7 +115,7 @@ func TestSpanImport(t *testing.T) {
 	server := mockInternalClient{}
 	// Let's spice things up and simulate an error from the server.
 	expectedErr := "my expected error"
-	server.pErr = roachpb.NewErrorf(expectedErr)
+	server.pErr = roachpb.NewErrorf(expectedErr /* nolint:fmtsafe */)
 
 	recCtx, getRec, cancel := tracing.ContextWithRecordingSpan(ctx, "test")
 	defer cancel()

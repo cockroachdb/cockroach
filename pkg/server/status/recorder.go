@@ -594,7 +594,7 @@ func GetTotalMemory(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	if warning != "" {
-		log.Infof(ctx, warning)
+		log.Infof(ctx, "%s", warning)
 	}
 	return memory, nil
 }

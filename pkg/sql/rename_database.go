@@ -151,11 +151,9 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 							dependentDesc.ID,
 							err,
 						)
-						msg := fmt.Sprintf(
+						return sqlbase.NewDependentObjectErrorf(
 							"cannot rename database because a relation depends on relation %q",
-							tbTableName.String(),
-						)
-						return sqlbase.NewDependentObjectError(msg)
+							tbTableName.String())
 					}
 				} else {
 					dependentDescTableName := tree.MakeTableNameWithSchema(
@@ -165,7 +163,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 					)
 					dependentDescQualifiedString = dependentDescTableName.String()
 				}
-				msg := fmt.Sprintf(
+				depErr := sqlbase.NewDependentObjectErrorf(
 					"cannot rename database because relation %q depends on relation %q",
 					dependentDescQualifiedString,
 					tbTableName.String(),
@@ -185,12 +183,12 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 							dbDesc.Name,
 						)
 					}
-					return sqlbase.NewDependentObjectErrorWithHint(msg, hint)
+					return errors.WithHint(depErr, hint)
 				}
 
 				// Otherwise, we default to the view error message.
-				hint := fmt.Sprintf("you can drop %q instead", dependentDescQualifiedString)
-				return sqlbase.NewDependentObjectErrorWithHint(msg, hint)
+				return errors.WithHintf(depErr,
+					"you can drop %q instead", dependentDescQualifiedString)
 			}
 		}
 	}

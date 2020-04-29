@@ -11,7 +11,6 @@
 package parser
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 )
 
 func TestScanner(t *testing.T) {
@@ -359,7 +359,7 @@ func TestScanError(t *testing.T) {
 		if lval.id != ERROR {
 			t.Errorf("%s: expected ERROR, but found %d", d.sql, lval.id)
 		}
-		if !testutils.IsError(errors.New(lval.str), d.err) {
+		if !testutils.IsError(errors.Newf("%s", lval.str), d.err) {
 			t.Errorf("%s: expected %s, but found %v", d.sql, d.err, lval.str)
 		}
 	}

@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
@@ -297,8 +296,8 @@ func maybeCreateAndAddShardCol(
 		if !existingShardCol.Hidden {
 			// The user managed to reverse-engineer our crazy shard column name, so
 			// we'll return an error here rather than try to be tricky.
-			return nil, false, pgerror.New(pgcode.DuplicateColumn,
-				fmt.Sprintf("column %s already specified; can't be used for sharding", shardCol.Name))
+			return nil, false, pgerror.Newf(pgcode.DuplicateColumn,
+				"column %s already specified; can't be used for sharding", shardCol.Name)
 		}
 		return existingShardCol, false, nil
 	}

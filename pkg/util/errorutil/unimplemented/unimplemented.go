@@ -49,15 +49,6 @@ func NewWithIssuef(issue int, format string, args ...interface{}) error {
 	return unimplementedInternal(1 /*depth*/, issue, "" /*detail*/, true /*format*/, format, args...)
 }
 
-// NewWithIssueHint constructs an error with the given
-// message, hint, and a link to the passed issue. Recorded as "#<issue>"
-// in tracking.
-func NewWithIssueHint(issue int, msg, hint string) error {
-	err := unimplementedInternal(1 /*depth*/, issue, "" /*detail*/, false /*format*/, msg)
-	err = errors.WithHint(err, hint)
-	return err
-}
-
 // NewWithIssueDetail constructs an error with the given message
 // and a link to the passed issue. Recorded as "#<issue>.detail" in tracking.
 // This is useful when we need an extra axis of information to drill down into.

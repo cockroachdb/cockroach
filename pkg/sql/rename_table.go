@@ -12,13 +12,13 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 type renameTableNode struct {
@@ -180,13 +180,13 @@ func (p *planner) dependentViewRenameError(
 		viewName, err = p.getQualifiedTableName(ctx, viewDesc)
 		if err != nil {
 			log.Warningf(ctx, "unable to retrieve name of view %d: %v", viewID, err)
-			msg := fmt.Sprintf("cannot rename %s %q because a view depends on it",
+			return sqlbase.NewDependentObjectErrorf(
+				"cannot rename %s %q because a view depends on it",
 				typeName, objName)
-			return sqlbase.NewDependentObjectError(msg)
 		}
 	}
-	msg := fmt.Sprintf("cannot rename %s %q because view %q depends on it",
-		typeName, objName, viewName)
-	hint := fmt.Sprintf("you can drop %s instead.", viewName)
-	return sqlbase.NewDependentObjectErrorWithHint(msg, hint)
+	return errors.WithHintf(
+		sqlbase.NewDependentObjectErrorf("cannot rename %s %q because view %q depends on it",
+			typeName, objName, viewName),
+		"you can drop %s instead.", viewName)
 }
