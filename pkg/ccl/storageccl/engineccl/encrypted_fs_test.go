@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
-	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -223,8 +222,11 @@ func TestPebbleEncryption(t *testing.T) {
 	// TODO(sbhola): Ensure that we are not returning the secret data keys by mistake.
 	r, err := db.GetEncryptionRegistries()
 	require.NoError(t, err)
-	t.Logf("FileRegistry:\n%s\n\n", r.FileRegistry)
-	t.Logf("KeyRegistry:\n%s\n\n", r.KeyRegistry)
+
+	var fileRegistry enginepb.FileRegistry
+	require.NoError(t, protoutil.Unmarshal(r.FileRegistry, &fileRegistry))
+	var keyRegistry enginepbccl.DataKeysRegistry
+	require.NoError(t, protoutil.Unmarshal(r.KeyRegistry, &keyRegistry))
 
 	stats, err := db.GetEnvStats()
 	require.NoError(t, err)
@@ -233,7 +235,7 @@ func TestPebbleEncryption(t *testing.T) {
 	require.Equal(t, uint64(4), stats.TotalFiles)
 	require.Equal(t, uint64(4), stats.ActiveKeyFiles)
 	var s enginepbccl.EncryptionStatus
-	require.NoError(t, proto.UnmarshalText(string(stats.EncryptionStatus), &s))
+	require.NoError(t, protoutil.Unmarshal(stats.EncryptionStatus, &s))
 	require.Equal(t, "16.key", s.ActiveStoreKey.Source)
 	require.Equal(t, int32(enginepbccl.EncryptionType_AES128_CTR), stats.EncryptionType)
 	t.Logf("EnvStats:\n%+v\n\n", *stats)
