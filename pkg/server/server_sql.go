@@ -99,10 +99,7 @@ type sqlServerOptionalArgs struct {
 	// for debugging and DistSQL planning purposes.
 	distSender *kvcoord.DistSender
 	// statusServer gives access to the Status service.
-	//
-	// In a SQL tenant server, this is not available (returning false) and
-	// pgerror.UnsupportedWithMultiTenancy should be returned.
-	statusServer func() (serverpb.StatusServer, bool)
+	statusServer serverpb.OptionalStatusServer
 	// Narrowed down version of *NodeLiveness.
 	nodeLiveness interface {
 		jobs.NodeLiveness                    // jobs uses this
@@ -376,7 +373,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		LeaseManager:            leaseMgr,
 		Clock:                   cfg.clock,
 		DistSQLSrv:              distSQLServer,
-		StatusServer:            func() (serverpb.StatusServer, bool) { return cfg.statusServer() },
+		StatusServer:            cfg.statusServer,
 		SessionRegistry:         cfg.sessionRegistry,
 		JobRegistry:             jobRegistry,
 		VirtualSchemas:          virtualSchemas,
@@ -537,9 +534,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		cfg.db,
 		cfg.registry,
 		distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
-		func() (serverpb.StatusServer, bool) {
-			return cfg.statusServer()
-		},
+		cfg.statusServer,
 		cfg.isMeta1Leaseholder,
 		sqlExecutorTestingKnobs,
 	)

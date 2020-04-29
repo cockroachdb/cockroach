@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -108,9 +107,9 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanning(
 ) (*PlanningCtx, []roachpb.NodeID, error) {
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* txn */)
 
-	ss, ok := execCfg.StatusServer()
-	if !ok {
-		return nil, nil, errorutil.UnsupportedWithMultiTenancy()
+	ss, err := execCfg.StatusServer.OptionalErr(47900)
+	if err != nil {
+		return nil, nil, err
 	}
 	resp, err := ss.Nodes(ctx, &serverpb.NodesRequest{})
 	if err != nil {

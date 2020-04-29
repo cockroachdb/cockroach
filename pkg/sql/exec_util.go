@@ -597,10 +597,7 @@ type ExecutorConfig struct {
 	Clock             *hlc.Clock
 	DistSQLSrv        *distsql.ServerImpl
 	// StatusServer gives access to the Status service.
-	//
-	// In a SQL tenant server, this is not available (returning false) and
-	// pgerror.UnsupportedWithMultiTenancy should be returned.
-	StatusServer     func() (serverpb.StatusServer, bool)
+	StatusServer     serverpb.OptionalStatusServer
 	MetricsRecorder  nodeStatusGenerator
 	SessionRegistry  *SessionRegistry
 	JobRegistry      *jobs.Registry
