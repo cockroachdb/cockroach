@@ -165,6 +165,11 @@ func (g *Geography) AsGeometry() *Geometry {
 	return NewGeometry(g.ewkb)
 }
 
+// AsGeomT returns the geometry as a geom.T object.
+func (g *Geography) AsGeomT() (geom.T, error) {
+	return ewkb.Unmarshal(g.ewkb)
+}
+
 // AsS2 converts a given Geography into it's S2 form.
 func (g *Geography) AsS2() ([]s2.Region, error) {
 	// TODO(otan): parse EWKB ourselves.
@@ -172,8 +177,8 @@ func (g *Geography) AsS2() ([]s2.Region, error) {
 	if err != nil {
 		return nil, err
 	}
-	// TODO(otan): convert by reading from S2 directly.
-	return s2RegionsFromGeom(geomRepr), nil
+	// TODO(otan): convert by reading from EWKB to S2 directly.
+	return S2RegionsFromGeom(geomRepr), nil
 }
 
 // isLinearRingCCW returns whether a given linear ring is counter clock wise.
@@ -218,9 +223,9 @@ func isLinearRingCCW(linearRing *geom.LinearRing) bool {
 	return areaSign > 0
 }
 
-// s2RegionsFromGeom converts an geom representation of an object
+// S2RegionsFromGeom converts an geom representation of an object
 // to s2 regions.
-func s2RegionsFromGeom(geomRepr geom.T) []s2.Region {
+func S2RegionsFromGeom(geomRepr geom.T) []s2.Region {
 	var regions []s2.Region
 	switch repr := geomRepr.(type) {
 	case *geom.Point:
@@ -259,19 +264,19 @@ func s2RegionsFromGeom(geomRepr geom.T) []s2.Region {
 		}
 	case *geom.GeometryCollection:
 		for _, geom := range repr.Geoms() {
-			regions = append(regions, s2RegionsFromGeom(geom)...)
+			regions = append(regions, S2RegionsFromGeom(geom)...)
 		}
 	case *geom.MultiPoint:
 		for i := 0; i < repr.NumPoints(); i++ {
-			regions = append(regions, s2RegionsFromGeom(repr.Point(i))...)
+			regions = append(regions, S2RegionsFromGeom(repr.Point(i))...)
 		}
 	case *geom.MultiLineString:
 		for i := 0; i < repr.NumLineStrings(); i++ {
-			regions = append(regions, s2RegionsFromGeom(repr.LineString(i))...)
+			regions = append(regions, S2RegionsFromGeom(repr.LineString(i))...)
 		}
 	case *geom.MultiPolygon:
 		for i := 0; i < repr.NumPolygons(); i++ {
-			regions = append(regions, s2RegionsFromGeom(repr.Polygon(i))...)
+			regions = append(regions, S2RegionsFromGeom(repr.Polygon(i))...)
 		}
 	}
 	return regions
