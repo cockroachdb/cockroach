@@ -1273,7 +1273,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	// Intentionally leave the merge queue enabled. This indrectly tests that the
+	// Intentionally leave the merge queue enabled. This indirectly tests that the
 	// merge queue respects these split points.
 	store, _ := createTestStore(t, stopper)
 
@@ -1302,7 +1302,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		for i := keys.MinUserDescID; i <= userTableMax; i++ {
 			// We don't care about the value, just the key.
 			key := sqlbase.MakeDescMetadataKey(sqlbase.ID(i))
-			if err := txn.Put(ctx, key, &sqlbase.TableDescriptor{}); err != nil {
+			if err := txn.Put(ctx, key, &sqlbase.Descriptor{}); err != nil {
 				return err
 			}
 		}
@@ -1366,7 +1366,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		// This time, only write the last table descriptor. Splits only occur for
 		// the descriptor we add. We don't care about the value, just the key.
 		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(userTableMax))
-		return txn.Put(ctx, k, &sqlbase.TableDescriptor{})
+		return txn.Put(ctx, k, &sqlbase.Descriptor{})
 	}); err != nil {
 		t.Fatal(err)
 	}

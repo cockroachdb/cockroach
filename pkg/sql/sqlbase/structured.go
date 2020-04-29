@@ -4006,6 +4006,34 @@ func (desc *ImmutableTableDescriptor) TableDesc() *TableDescriptor {
 	return &desc.TableDescriptor
 }
 
+// GetAuditMode implements the DescriptorProto interface.
+func (desc *TypeDescriptor) GetAuditMode() TableDescriptor_AuditMode {
+	return TableDescriptor_DISABLED
+}
+
+// GetPrivileges implements the DescriptorProto interface.
+func (desc *TypeDescriptor) GetPrivileges() *PrivilegeDescriptor {
+	return nil
+}
+
+// SetID implements the DescriptorProto interface.
+func (desc *TypeDescriptor) SetID(id ID) {
+	desc.ID = id
+}
+
+// TypeName implements the DescriptorProto interface.
+func (desc *TypeDescriptor) TypeName() string {
+	return "type"
+}
+
+// SetName implements the DescriptorProto interface.
+func (desc *TypeDescriptor) SetName(name string) {
+	desc.Name = name
+}
+
+// NameResolutionResult implements the NameResolutionResult interface.
+func (desc *TypeDescriptor) NameResolutionResult() {}
+
 // DatabaseKey implements DescriptorKey.
 type DatabaseKey struct {
 	name string
