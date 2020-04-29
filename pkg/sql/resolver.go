@@ -94,10 +94,14 @@ func ResolveExistingObject(
 	lookupFlags tree.ObjectLookupFlags,
 	requiredType ResolveRequiredType,
 ) (res *ImmutableTableDescriptor, err error) {
-	desc, err := resolveExistingObjectImpl(ctx, sc, tn, lookupFlags, requiredType)
+	// TODO: As part of work for #34240, an UnresolvedObjectName should be
+	//  passed as an argument to this function.
+	un := tn.ToUnresolvedObjectName()
+	desc, prefix, err := resolveExistingObjectImpl(ctx, sc, un, lookupFlags, requiredType)
 	if err != nil || desc == nil {
 		return nil, err
 	}
+	tn.ObjectNamePrefix = prefix
 	return desc.(*ImmutableTableDescriptor), nil
 }
 
@@ -119,36 +123,36 @@ func ResolveMutableExistingObject(
 		CommonLookupFlags: tree.CommonLookupFlags{Required: required},
 		RequireMutable:    true,
 	}
-	desc, err := resolveExistingObjectImpl(ctx, sc, tn, lookupFlags, requiredType)
+	// TODO: As part of work for #34240, an UnresolvedObjectName should be
+	//  passed as an argument to this function.
+	un := tn.ToUnresolvedObjectName()
+	desc, prefix, err := resolveExistingObjectImpl(ctx, sc, un, lookupFlags, requiredType)
 	if err != nil || desc == nil {
 		return nil, err
 	}
+	tn.ObjectNamePrefix = prefix
 	return desc.(*MutableTableDescriptor), nil
 }
 
 func resolveExistingObjectImpl(
 	ctx context.Context,
 	sc SchemaResolver,
-	tn *ObjectName,
+	un *tree.UnresolvedObjectName,
 	lookupFlags tree.ObjectLookupFlags,
 	requiredType ResolveRequiredType,
-) (res tree.NameResolutionResult, err error) {
-	// TODO: As part of work for #34240, an UnresolvedObjectName should be
-	//  passed as an argument to this function.
-	un := tn.ToUnresolvedObjectName()
+) (res tree.NameResolutionResult, prefix tree.ObjectNamePrefix, err error) {
 	found, prefix, descI, err := tree.ResolveExisting(ctx, un, sc, lookupFlags, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
-		return nil, err
+		return nil, prefix, err
 	}
+	// Construct the resolved table name for use in error messages.
+	resolvedTn := tree.MakeTableNameFromPrefix(prefix, tree.Name(un.Object()))
 	if !found {
 		if lookupFlags.Required {
-			return nil, sqlbase.NewUndefinedRelationError(tn)
+			return nil, prefix, sqlbase.NewUndefinedRelationError(&resolvedTn)
 		}
-		return nil, nil
+		return nil, prefix, nil
 	}
-	// ResolveExisting no longer mutates the input table name, we need to
-	// mutate it so that callers that depend on the mutation are still happy.
-	tn.ObjectNamePrefix = prefix
 
 	obj := descI.(ObjectDescriptor)
 
@@ -164,7 +168,7 @@ func resolveExistingObjectImpl(
 		goodType = obj.TableDesc().IsSequence()
 	}
 	if !goodType {
-		return nil, sqlbase.NewWrongObjectTypeError(tn, requiredTypeNames[requiredType])
+		return nil, prefix, sqlbase.NewWrongObjectTypeError(&resolvedTn, requiredTypeNames[requiredType])
 	}
 
 	// If the table does not have a primary key, return an error
@@ -172,14 +176,14 @@ func resolveExistingObjectImpl(
 	if !lookupFlags.AllowWithoutPrimaryKey &&
 		obj.TableDesc().IsTable() &&
 		!obj.TableDesc().HasPrimaryKey() {
-		return nil, errNoPrimaryKey
+		return nil, prefix, errNoPrimaryKey
 	}
 
 	if lookupFlags.RequireMutable {
-		return descI.(*MutableTableDescriptor), nil
+		return descI.(*MutableTableDescriptor), prefix, nil
 	}
 
-	return descI.(*ImmutableTableDescriptor), nil
+	return descI.(*ImmutableTableDescriptor), prefix, nil
 }
 
 // runWithOptions sets the provided resolution flags for the
@@ -741,16 +745,16 @@ func (p *planner) ResolveMutableTableDescriptorExAllowNoPrimaryKey(
 	required bool,
 	requiredType ResolveRequiredType,
 ) (*MutableTableDescriptor, error) {
-	tn := name.ToTableName()
 	lookupFlags := tree.ObjectLookupFlags{
 		CommonLookupFlags:      tree.CommonLookupFlags{Required: required},
 		RequireMutable:         true,
 		AllowWithoutPrimaryKey: true,
 	}
-	desc, err := resolveExistingObjectImpl(ctx, p, &tn, lookupFlags, requiredType)
+	desc, prefix, err := resolveExistingObjectImpl(ctx, p, name, lookupFlags, requiredType)
 	if err != nil || desc == nil {
 		return nil, err
 	}
+	tn := tree.MakeTableNameFromPrefix(prefix, tree.Name(name.Object()))
 	name.SetAnnotation(&p.semaCtx.Annotations, &tn)
 	return desc.(*MutableTableDescriptor), nil
 }
@@ -775,12 +779,12 @@ func (p *planner) ResolveExistingObjectEx(
 	required bool,
 	requiredType ResolveRequiredType,
 ) (res *ImmutableTableDescriptor, err error) {
-	tn := name.ToTableName()
 	lookupFlags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: required}}
-	desc, err := resolveExistingObjectImpl(ctx, p, &tn, lookupFlags, requiredType)
+	desc, prefix, err := resolveExistingObjectImpl(ctx, p, name, lookupFlags, requiredType)
 	if err != nil || desc == nil {
 		return nil, err
 	}
+	tn := tree.MakeTableNameFromPrefix(prefix, tree.Name(name.Object()))
 	name.SetAnnotation(&p.semaCtx.Annotations, &tn)
 	return desc.(*ImmutableTableDescriptor), nil
 }
