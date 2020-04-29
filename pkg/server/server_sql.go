@@ -150,6 +150,9 @@ type sqlServerArgs struct {
 	// Various components want to register themselves with metrics.
 	registry *metric.Registry
 
+	// Used for SHOW/CANCEL QUERIE(S)/SESSION(S).
+	sessionRegistry *sql.SessionRegistry
+
 	// KV depends on the internal executor, so we pass a pointer to an empty
 	// struct in this configuration, which newSQLServer fills.
 	//
@@ -163,13 +166,6 @@ type sqlServerArgs struct {
 }
 
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
-	var sessionRegistry *sql.SessionRegistry
-	if statusServer, ok := cfg.statusServer(); ok {
-		sessionRegistry = statusServer.sessionRegistry
-	} else {
-		sessionRegistry = sql.NewSessionRegistry()
-	}
-
 	execCfg := &sql.ExecutorConfig{}
 	var jobAdoptionStopFile string
 	for _, spec := range cfg.Stores.Specs {
@@ -381,7 +377,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		Clock:                   cfg.clock,
 		DistSQLSrv:              distSQLServer,
 		StatusServer:            func() (serverpb.StatusServer, bool) { return cfg.statusServer() },
-		SessionRegistry:         sessionRegistry,
+		SessionRegistry:         cfg.sessionRegistry,
 		JobRegistry:             jobRegistry,
 		VirtualSchemas:          virtualSchemas,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
@@ -558,7 +554,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		internalExecutor:        cfg.circularInternalExecutor,
 		leaseMgr:                leaseMgr,
 		blobService:             blobService,
-		sessionRegistry:         sessionRegistry,
+		sessionRegistry:         cfg.sessionRegistry,
 		jobRegistry:             jobRegistry,
 		statsRefresher:          statsRefresher,
 		temporaryObjectCleaner:  temporaryObjectCleaner,
