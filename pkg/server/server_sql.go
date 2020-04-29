@@ -102,7 +102,7 @@ type sqlServerOptionalArgs struct {
 	//
 	// In a SQL tenant server, this is not available (returning false) and
 	// pgerror.UnsupportedWithMultiTenancy should be returned.
-	statusServer func() (*statusServer, bool)
+	statusServer func() (serverpb.StatusServer, bool)
 	// Narrowed down version of *NodeLiveness.
 	nodeLiveness interface {
 		jobs.NodeLiveness                    // jobs uses this
