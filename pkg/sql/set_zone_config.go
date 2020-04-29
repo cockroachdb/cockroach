@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -566,9 +565,9 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				return err
 			}
 
-			ss, ok := params.extendedEvalCtx.StatusServer()
-			if !ok {
-				return errorutil.UnsupportedWithMultiTenancy()
+			ss, err := params.extendedEvalCtx.StatusServer.OptionalErr()
+			if err != nil {
+				return err
 			}
 
 			// Validate that the result makes sense.
