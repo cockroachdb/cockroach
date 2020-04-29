@@ -25,7 +25,7 @@ import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconf
 import { SortSetting} from "src/views/shared/components/sortabletable";
 import "./index.styl";
 import { statusOptions } from "./jobStatusOptions";
-import { JobTable} from "oss/src/views/jobs/jobTable";
+import { JobTable } from "src/views/jobs/jobTable";
 import { trackFilter } from "src/util/analytics";
 import JobType = cockroach.sql.jobs.jobspb.Type;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;

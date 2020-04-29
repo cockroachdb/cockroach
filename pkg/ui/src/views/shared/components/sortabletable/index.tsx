@@ -10,17 +10,17 @@
 
 import React from "react";
 import classNames from "classnames";
+import getHighlightedText from "src/util/highlightedText";
 import map from "lodash/map";
 import isUndefined from "lodash/isUndefined";
 import times from "lodash/times";
 
-import getHighlightedText from "oss/src/util/highlightedText";
 import { DrawerComponent } from "../drawer";
 import { trackTableSort } from "src/util/analytics";
 
 import "./sortabletable.styl";
 import { Spin, Icon } from "antd";
-import SpinIcon from "oss/src/components/icon/spin";
+import SpinIcon from "src/components/icon/spin";
 import { Empty, IEmptyProps } from "src/components/empty";
 
 /**

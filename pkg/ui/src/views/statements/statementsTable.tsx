@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import getHighlightedText from "oss/src/util/highlightedText";
+import getHighlightedText from "src/util/highlightedText";
 import React from "react";
 import { Link } from "react-router-dom";
 
