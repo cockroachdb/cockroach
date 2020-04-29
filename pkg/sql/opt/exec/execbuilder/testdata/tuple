@@ -30,7 +30,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) <= (2, 3, 1) ORDER BY u, v, w
 ----
 ·     distributed  false                   ·          ·
-·     vectorized   false                   ·          ·
+·     vectorized   true                    ·          ·
 scan  ·            ·                       (u, v, w)  +u,+v,+w
 ·     table        uvw@uvw_u_v_w_idx       ·          ·
 ·     spans        /!NULL-/2/3/2           ·          ·
@@ -40,7 +40,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) < (2, 2, 2) ORDER BY u, v, w
 ----
 ·     distributed  false                  ·          ·
-·     vectorized   false                  ·          ·
+·     vectorized   true                   ·          ·
 scan  ·            ·                      (u, v, w)  +u,+v,+w
 ·     table        uvw@uvw_u_v_w_idx      ·          ·
 ·     spans        /!NULL-/2/2/2          ·          ·
@@ -50,7 +50,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) != (1, 2, 3) ORDER BY u, v, w
 ----
 ·     distributed  false                   ·          ·
-·     vectorized   false                   ·          ·
+·     vectorized   true                    ·          ·
 scan  ·            ·                       (u, v, w)  +u,+v,+w
 ·     table        uvw@uvw_u_v_w_idx       ·          ·
 ·     spans        -/1/2/3 /1/2/4-         ·          ·
@@ -105,7 +105,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3)
 ----
 ·     distributed  false                  ·          ·
-·     vectorized   false                  ·          ·
+·     vectorized   true                   ·          ·
 scan  ·            ·                      (a, b, c)  ·
 ·     table        abc@abc_a_b_c_idx      ·          ·
 ·     spans        /1-                    ·          ·

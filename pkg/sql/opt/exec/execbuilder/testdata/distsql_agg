@@ -354,7 +354,7 @@ query TTTTT
 EXPLAIN (verbose) SELECT b, count(*), corr(a, b) FROM data2 WHERE a=1 GROUP BY b
 ----
 ·          distributed  true           ·                 ·
-·          vectorized   false          ·                 ·
+·          vectorized   true           ·                 ·
 group      ·            ·              (b, count, corr)  ·
  │         aggregate 0  b              ·                 ·
  │         aggregate 1  count_rows()   ·                 ·
