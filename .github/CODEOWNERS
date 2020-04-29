@@ -13,6 +13,13 @@
 
 /pkg/cli/                    @cockroachdb/cli-prs
 
+/pkg/ccl/backupccl/          @cockroachdb/teams/bulk-prs
+/pkg/ccl/importccl/          @cockroachdb/teams/bulk-prs
+/pkg/ccl/storageccl/         @cockroachdb/teams/bulk-prs
+/pkg/ccl/changefeedccl/      @cockroachdb/teams/bulk-prs
+/pkg/sql/distsql_plan_csv.go @cockroachdb/teams/bulk-prs
+/pkg/cli/dump.go             @cockroachdb/teams/bulk-prs
+
 /pkg/ui/                     @cockroachdb/admin-ui-prs
 /pkg/ui/embedded.go
 /pkg/ui/src/js/protos.d.ts
