@@ -99,10 +99,7 @@ type sqlServerOptionalArgs struct {
 	// for debugging and DistSQL planning purposes.
 	distSender *kvcoord.DistSender
 	// statusServer gives access to the Status service.
-	//
-	// In a SQL tenant server, this is not available (returning false) and
-	// pgerror.UnsupportedWithMultiTenancy should be returned.
-	statusServer func() (*statusServer, bool)
+	statusServer serverpb.OptionalStatusServer
 	// Narrowed down version of *NodeLiveness.
 	nodeLiveness interface {
 		jobs.NodeLiveness                    // jobs uses this
@@ -150,6 +147,9 @@ type sqlServerArgs struct {
 	// Various components want to register themselves with metrics.
 	registry *metric.Registry
 
+	// Used for SHOW/CANCEL QUERIE(S)/SESSION(S).
+	sessionRegistry *sql.SessionRegistry
+
 	// KV depends on the internal executor, so we pass a pointer to an empty
 	// struct in this configuration, which newSQLServer fills.
 	//
@@ -163,13 +163,6 @@ type sqlServerArgs struct {
 }
 
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
-	var sessionRegistry *sql.SessionRegistry
-	if statusServer, ok := cfg.statusServer(); ok {
-		sessionRegistry = statusServer.sessionRegistry
-	} else {
-		sessionRegistry = sql.NewSessionRegistry()
-	}
-
 	execCfg := &sql.ExecutorConfig{}
 	var jobAdoptionStopFile string
 	for _, spec := range cfg.Stores.Specs {
@@ -380,8 +373,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		LeaseManager:            leaseMgr,
 		Clock:                   cfg.clock,
 		DistSQLSrv:              distSQLServer,
-		StatusServer:            func() (serverpb.StatusServer, bool) { return cfg.statusServer() },
-		SessionRegistry:         sessionRegistry,
+		StatusServer:            cfg.statusServer,
+		SessionRegistry:         cfg.sessionRegistry,
 		JobRegistry:             jobRegistry,
 		VirtualSchemas:          virtualSchemas,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
@@ -531,9 +524,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		cfg.gossip.Deprecated(47893),
 		cfg.Settings,
 	)
-	if statusServer, ok := cfg.statusServer(); ok {
-		statusServer.setStmtDiagnosticsRequester(stmtDiagnosticsRegistry)
-	}
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
 	leaseMgr.RefreshLeases(cfg.stopper, cfg.db, cfg.gossip.Deprecated(47150))
@@ -544,9 +534,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		cfg.db,
 		cfg.registry,
 		distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
-		func() (serverpb.StatusServer, bool) {
-			return cfg.statusServer()
-		},
+		cfg.statusServer,
 		cfg.isMeta1Leaseholder,
 		sqlExecutorTestingKnobs,
 	)
@@ -558,7 +546,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		internalExecutor:        cfg.circularInternalExecutor,
 		leaseMgr:                leaseMgr,
 		blobService:             blobService,
-		sessionRegistry:         sessionRegistry,
+		sessionRegistry:         cfg.sessionRegistry,
 		jobRegistry:             jobRegistry,
 		statsRefresher:          statsRefresher,
 		temporaryObjectCleaner:  temporaryObjectCleaner,

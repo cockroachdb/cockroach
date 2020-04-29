@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,7 +40,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	// Ask to trace a particular query.
-	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder.(*stmtdiagnostics.Registry)
+	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
 	reqID, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
 	require.NoError(t, err)
 	reqRow := db.QueryRow(
@@ -108,7 +107,7 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Ask to trace a particular query using node 0.
-	registry := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder.(*stmtdiagnostics.Registry)
+	registry := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
 	reqID, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
 	require.NoError(t, err)
 	reqRow := db0.QueryRow(

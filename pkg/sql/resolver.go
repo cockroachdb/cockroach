@@ -50,7 +50,8 @@ type SchemaResolver interface {
 
 var _ SchemaResolver = &planner{}
 
-var errNoPrimaryKey = errors.New("requested table does not have a primary key")
+var errNoPrimaryKey = pgerror.Newf(pgcode.NoPrimaryKey,
+	"requested table does not have a primary key")
 
 // ResolveUncachedDatabaseByName looks up a database name from the store.
 func (p *planner) ResolveUncachedDatabaseByName(
