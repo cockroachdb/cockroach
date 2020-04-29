@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -596,10 +597,7 @@ type ExecutorConfig struct {
 	Clock             *hlc.Clock
 	DistSQLSrv        *distsql.ServerImpl
 	// StatusServer gives access to the Status service.
-	//
-	// In a SQL tenant server, this is not available (returning false) and
-	// pgerror.UnsupportedWithMultiTenancy should be returned.
-	StatusServer     func() (serverpb.StatusServer, bool)
+	StatusServer     serverpb.OptionalStatusServer
 	MetricsRecorder  nodeStatusGenerator
 	SessionRegistry  *SessionRegistry
 	JobRegistry      *jobs.Registry
@@ -634,7 +632,7 @@ type ExecutorConfig struct {
 	ProtectedTimestampProvider protectedts.Provider
 
 	// StmtDiagnosticsRecorder deals with recording statement diagnostics.
-	StmtDiagnosticsRecorder StmtDiagnosticsRecorder
+	StmtDiagnosticsRecorder *stmtdiagnostics.Registry
 }
 
 // Organization returns the value of cluster.organization.

@@ -521,11 +521,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalArgs: sqlServerOptionalArgs{
-			rpcContext: rpcContext,
-			distSender: distSender,
-			statusServer: func() (*statusServer, bool) {
-				return sStatus, true
-			},
+			rpcContext:             rpcContext,
+			distSender:             distSender,
+			statusServer:           serverpb.MakeOptionalStatusServer(sStatus),
 			nodeLiveness:           nodeLiveness,
 			gossip:                 gossip.MakeDeprecatedGossip(g, true /* exposed */),
 			nodeDialer:             nodeDialer,
@@ -543,12 +541,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		runtime:                  runtimeSampler,
 		db:                       db,
 		registry:                 registry,
+		sessionRegistry:          sessionRegistry,
 		circularInternalExecutor: internalExecutor,
 		jobRegistry:              jobRegistry,
 	})
 	if err != nil {
 		return nil, err
 	}
+	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	debugServer := debug.NewServer(st, sqlServer.pgServer.HBADebugFn())
 	node.InitLogger(sqlServer.execCfg)
 

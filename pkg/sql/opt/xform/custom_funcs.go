@@ -1777,8 +1777,8 @@ func (c *CustomFuncs) fixedColsForZigzag(
 ) (fixedCols opt.ColList, vals memo.ScalarListExpr, typs []types.T) {
 	for i, cnt := 0, index.ColumnCount(); i < cnt; i++ {
 		colID := tabID.ColumnID(index.Column(i).Ordinal)
-		val, _, ok := c.findConstantFilter(filters, colID)
-		if !ok {
+		val := memo.ExtractValueForConstColumn(filters, c.e.mem, c.e.evalCtx, colID)
+		if val == nil {
 			break
 		}
 		if vals == nil {
@@ -1944,6 +1944,10 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			rightFixedCols, rightVals, rightTypes := c.fixedColsForZigzag(
 				iter2.index, scanPrivate.Table, filters,
 			)
+
+			if len(leftFixedCols) != leftFixed.Len() || len(rightFixedCols) != rightFixed.Len() {
+				panic(errors.AssertionFailedf("could not populate all fixed columns for zig zag join"))
+			}
 
 			zigzagJoin.LeftFixedCols = leftFixedCols
 			zigzagJoin.RightFixedCols = rightFixedCols

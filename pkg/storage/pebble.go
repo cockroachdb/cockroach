@@ -801,7 +801,10 @@ func (p *Pebble) GetEncryptionRegistries() (*EncryptionRegistries, error) {
 		}
 	}
 	if p.fileRegistry != nil {
-		rv.FileRegistry = []byte(p.fileRegistry.getRegistryCopy().String())
+		rv.FileRegistry, err = protoutil.Marshal(p.fileRegistry.getRegistryCopy())
+		if err != nil {
+			return nil, err
+		}
 	}
 	return rv, nil
 }

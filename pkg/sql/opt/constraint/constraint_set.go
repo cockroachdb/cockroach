@@ -289,6 +289,29 @@ func (s *Set) ExtractConstCols(evalCtx *tree.EvalContext) opt.ColSet {
 	return res
 }
 
+// ExtractValueForConstCol extracts the value for a constant column returned
+// by ExtractConstCols.
+func (s *Set) ExtractValueForConstCol(evalCtx *tree.EvalContext, col opt.ColumnID) tree.Datum {
+	if s == Unconstrained || s == Contradiction {
+		return nil
+	}
+	for i := 0; i < s.Length(); i++ {
+		c := s.Constraint(i)
+		colOrd := -1
+		for j := 0; j < c.Columns.Count(); j++ {
+			if c.Columns.Get(j).ID() == col {
+				colOrd = j
+				break
+			}
+		}
+		// The column must be part of the constraint's "exact prefix".
+		if colOrd != -1 && c.ExactPrefix(evalCtx) > colOrd {
+			return c.Spans.Get(0).StartKey().Value(colOrd)
+		}
+	}
+	return nil
+}
+
 // IsSingleColumnConstValue returns true if the Set contains a single constraint
 // on a single column which allows for a single constant value. On success,
 // returns the column and the constant value.

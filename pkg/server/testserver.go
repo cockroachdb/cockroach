@@ -479,7 +479,7 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 	// server to register against (but they'll never get RPCs at the time of
 	// writing): the blob service and DistSQL.
 	dummyRPCServer := rpc.NewServer(rpcContext)
-	noStatusServer := func() (*statusServer, bool) { return nil, false }
+	noStatusServer := serverpb.MakeOptionalStatusServer(nil)
 	return sqlServerArgs{
 		sqlServerOptionalArgs: sqlServerOptionalArgs{
 			rpcContext:   rpcContext,
@@ -508,6 +508,7 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),
 		db:                       ts.DB(),
 		registry:                 registry,
+		sessionRegistry:          sql.NewSessionRegistry(),
 		circularInternalExecutor: circularInternalExecutor,
 		jobRegistry:              &jobs.Registry{},
 	}
