@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -43,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -216,7 +218,8 @@ func (t *leaseTest) node(nodeID uint32) *sql.LeaseManager {
 			t.server.Stopper(),
 			t.cfg,
 		)
-		mgr.PeriodicallyRefreshSomeLeases()
+		ctx := logtags.AddTag(context.Background(), "leasemgr", nodeID)
+		mgr.PeriodicallyRefreshSomeLeases(ctx)
 		t.nodes[nodeID] = mgr
 	}
 	return mgr
@@ -701,7 +704,7 @@ func TestSubqueryLeases(t *testing.T) {
 						// Note: we don't use close(fooRelease) here because the
 						// lease on "foo" may be re-acquired (and re-released)
 						// multiple times, at least once for the first
-						// CREATE/SELECT pair and one for the final DROP.
+						// CREATE/SELECT pair and one for the finalf DROP.
 						atomic.AddInt32(&fooReleaseCount, 1)
 						fooRelease <- struct{}{}
 					}
@@ -2146,93 +2149,198 @@ func TestIntentOnSystemConfigDoesNotPreventSchemaChange(t *testing.T) {
 	}
 }
 
-// TestIntentOnSystemConfigDoesNotPreventSchemaChange tests that failures to
-// gossip the system config due to intents are rectified when later intents
-// are aborted.
-func TestIntentOnSystemConfigDoesNotPreventSchemaChange2(t *testing.T) {
+// TestFinalizeVersionEnablesRangefeedUpdates ensures that gossip is used when
+// the version is initialized to something prior to VersionRangefeedLeases and
+// then that rangefeeds are adopted once that version is finalized.
+//
+// TODO(ajwerner): Remove this test in 21.1 as it is no longer relevant.
+func TestFinalizeVersionEnablesRangefeedUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// The test first starts a cluster at a version below VersionRangefeedLeases
+	// and ensure that schema changes don't block for too long. Meanwhile ensure
+	// that no rangefeed has been created on the system config span. Then finalize
+	// the version upgrade and ensure that a rangefeed is created and that
+	// schema changes still work.
+
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+	var rangefeedsCreated int64
+	descriptorTablePrefix := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)
+	descriptorTableSpan := roachpb.Span{
+		Key:    descriptorTablePrefix,
+		EndKey: descriptorTablePrefix.PrefixEnd(),
+	}
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
-					AlwaysUseRangefeeds: true,
+					VersionPollIntervalForRangefeeds: time.Millisecond,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					// Add a filter to detect the creation of a rangefeed over the
+					// descriptor table.
+					TestingRangefeedFilter: func(
+						args *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFeedServer,
+					) *roachpb.Error {
+						if args.Span.Overlaps(descriptorTableSpan) {
+							atomic.AddInt64(&rangefeedsCreated, 1)
+						}
+						return nil
+					},
 				},
 				Server: &server.TestingKnobs{
-					// TODO(ajwerner): A
-
-					BootstrapVersionOverride: clusterversion.TestingBinaryVersion,
+					// We're going to manually control when the upgrade takes place below
+					// so disable the automatic upgrade.
+					DisableAutomaticVersionUpgrade: 1,
+					// Bootstrap the cluster at something below VersionRangefeedLeases so
+					// that we can test the upgrade.
+					BootstrapVersionOverride: clusterversion.VersionByKey(clusterversion.Version20_1),
 				},
 			},
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	db := tc.ServerConn(0)
-	tdb := sqlutils.MakeSQLRunner(db)
-	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms';")
-	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true;")
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
-	time.Sleep(time.Second)
+	// Lease table foo on node 2.
+	db2 := tc.ServerConn(1)
+	var junk int
+	require.EqualValues(t, gosql.ErrNoRows, db2.QueryRow("SELECT * FROM foo").Scan(&junk))
 
-	log.Infof(ctx, "created table at %v", tc.Server(0).Clock().Now())
-	connA, err := db.Conn(ctx)
-	require.NoError(t, err)
-	connB, err := db.Conn(ctx)
-	require.NoError(t, err)
+	// Run a schema change which will require a notification to finish.
+	tdb.Exec(t, "ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 2")
+	require.Equal(t, int64(0), atomic.LoadInt64(&rangefeedsCreated))
 
-	txA, err := connA.BeginTx(ctx, &gosql.TxOptions{})
-	require.NoError(t, err)
-	txB, err := connB.BeginTx(ctx, &gosql.TxOptions{})
-	require.NoError(t, err)
-
-	// Lay down an intent on the system config span.
-	_, err = txA.Exec("CREATE TABLE bar (i INT PRIMARY KEY)")
-	require.NoError(t, err)
-
-	_, err = txB.Exec("ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 2")
-	require.NoError(t, err)
-
-	getFooVersion := func() (version int) {
-		tx, err := db.Begin()
-		require.NoError(t, err)
-		// Prevent this transaction from blocking on intents.
-		_, err = tx.Exec("SET TRANSACTION PRIORITY HIGH")
-		require.NoError(t, err)
-		require.NoError(t, tx.QueryRow(
-			"SELECT version FROM crdb_internal.tables WHERE name = 'foo'").
-			Scan(&version))
-		require.NoError(t, tx.Commit())
-		return version
-	}
-
-	// Fire off the commit. In order to return, the table descriptor will need
-	// to make it through several versions. We wait until the version has been
-	// incremented once before we rollback txA.
-	origVersion := getFooVersion()
-	errCh := make(chan error)
-	go func() {
-		errCh <- txB.Commit()
-		log.Infof(ctx, "committed txn at %v", tc.Server(0).Clock().Now())
-	}()
+	// Upgrade to after VersionRangefeedLeases and ensure that a rangefeed is created.
+	tdb.Exec(t, "SET CLUSTER SETTING version = crdb_internal.node_executable_version();")
 	testutils.SucceedsSoon(t, func() error {
-		if got := getFooVersion(); got < origVersion {
-			return fmt.Errorf("got origVersion %d, expected greater", got)
+		if atomic.LoadInt64(&rangefeedsCreated) == 0 {
+			return errors.New("no rangefeeds created")
 		}
 		return nil
 	})
+	tdb.Exec(t, "ALTER TABLE foo ADD COLUMN k INT NOT NULL DEFAULT 2")
+}
 
-	// Roll back txA which had left an intent on the system config span which
-	// prevented the leaseholders of origVersion of foo from being notified.
-	// Ensure that those leaseholders are notified in a timely manner.
-	require.NoError(t, txA.Rollback())
-
-	const extremelyLongTime = 100 * time.Second
-	select {
-	case <-time.After(extremelyLongTime):
-		t.Fatalf("schema change did not complete in %v", extremelyLongTime)
-	case err := <-errCh:
-		require.NoError(t, err)
+func ensureTestTakesLessThan(t *testing.T, allowed time.Duration) func() {
+	start := timeutil.Now()
+	return func() {
+		if t.Failed() {
+			return
+		}
+		if took := timeutil.Since(start); took > allowed {
+			t.Fatalf("test took %v which is greater than %v", took, allowed)
+		}
 	}
+}
+
+// TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces deals with the case where
+// we have a request to lease a table descriptor, we read version 1 and prior to
+// adding that to the state, we get an update indicating that that version is
+// too old.
+func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer ensureTestTakesLessThan(t, 30*time.Second)()
+
+	ctx := context.Background()
+	var interestingTable atomic.Value
+	interestingTable.Store(sqlbase.ID(0))
+	blockLeaseAcquisitionOfInterestingTable := make(chan chan struct{})
+	unblockAll := make(chan struct{})
+	args := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				BootstrapVersionOverride: clusterversion.VersionByKey(clusterversion.VersionRangefeedLeases),
+			},
+		},
+	}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: args,
+	})
+	tableUpdateChan := make(chan *sqlbase.TableDescriptor)
+	args.Knobs.SQLLeaseManager = &sql.LeaseManagerTestingKnobs{
+		TestingTableUpdateEvent: func(table *sqlbase.TableDescriptor) error {
+			// Use this testing knob to ensure that we see an update for the table
+			// in question. We don't care about events to refresh the first version
+			// which can happen under rare stress scenarios.
+			if table.ID == interestingTable.Load().(sqlbase.ID) && table.Version >= 2 {
+				select {
+				case tableUpdateChan <- table:
+				case <-unblockAll:
+				}
+			}
+			return nil
+		},
+		LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
+			LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, err error) {
+				// Block the lease acquisition for the table after the leasing
+				// transaction has been issued. We'll wait to unblock it until after
+				// the new version has been published and that even has been received.
+				if table.ID != interestingTable.Load().(sqlbase.ID) {
+					return
+				}
+				blocked := make(chan struct{})
+				select {
+				case blockLeaseAcquisitionOfInterestingTable <- blocked:
+					<-blocked
+				case <-unblockAll:
+				}
+			},
+		},
+	}
+	// Start a second server with our knobs.
+	tc.AddServer(t, args)
+	defer tc.Stopper().Stop(ctx)
+
+	db1 := tc.ServerConn(0)
+	tdb1 := sqlutils.MakeSQLRunner(db1)
+	db2 := tc.ServerConn(1)
+
+	// Create a couple of tables.
+	tdb1.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+
+	// Find the table ID for the table we'll be mucking with.
+	var tableID sqlbase.ID
+	tdb1.QueryRow(t, "SELECT table_id FROM crdb_internal.tables WHERE name = $1 AND database_name = current_database()",
+		"foo").Scan(&tableID)
+	interestingTable.Store(tableID)
+
+	// Launch a goroutine to query foo. It will be blocked in lease acquisition.
+	selectDone := make(chan error)
+	go func() {
+		var count int
+		selectDone <- db2.QueryRow("SELECT count(*) FROM foo").Scan(&count)
+	}()
+
+	// Make sure it got blocked.
+	toUnblockForLeaseAcquisition := <-blockLeaseAcquisitionOfInterestingTable
+
+	// Launch a goroutine to perform a schema change which will lead to new
+	// versions.
+	alterErrCh := make(chan error)
+	go func() {
+		_, err := db1.Exec("ALTER TABLE foo ADD COLUMN j INT DEFAULT 1")
+		alterErrCh <- err
+	}()
+
+	// Make sure we get an update. Note that this is after we have already
+	// acquired a lease on the old version but have not yet recorded that fact.
+	table := <-tableUpdateChan
+	require.Equal(t, sqlbase.DescriptorVersion(2), table.Version)
+
+	// Allow the original lease acquisition to proceed.
+	close(toUnblockForLeaseAcquisition)
+
+	// Ensure the query completes.
+	<-selectDone
+
+	// Allow everything to proceed as usual.
+	close(unblockAll)
+	// Ensure the schema change completes.
+	<-alterErrCh
+
+	// Ensure that the new schema is in use on n2.
+	var i, j int
+	require.Equal(t, gosql.ErrNoRows, db2.QueryRow("SELECT i, j FROM foo").Scan(&i, &j))
 }

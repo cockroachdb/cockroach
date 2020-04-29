@@ -723,6 +723,13 @@ type tableState struct {
 		// If set, leases are released from the store as soon as their
 		// refcount drops to 0, as opposed to waiting until they expire.
 		dropped bool
+
+		// acquisitionsInProgress indicates that at least one caller is currently
+		// in the process of performing an acquisition. This tracking is critical
+		// to ensure that notifications of new versions which arrive before a lease
+		// acquisition finishes but indicate that that new lease is expired are not
+		// ignored.
+		acquisitionsInProgress int
 	}
 }
 
@@ -891,9 +898,6 @@ func (m *LeaseManager) insertTableVersions(tableID sqlbase.ID, versions []*table
 // inserts it into the active set. It guarantees that the lease returned is
 // the one acquired after the call is made. Use this if the lease we want to
 // get needs to see some descriptor updates that we know happened recently.
-//
-// TODO(ajwerner): This really just needs to acquire a lease on the ID newer
-// than something. Not necessarily newer than
 func (m *LeaseManager) AcquireFreshestFromStore(ctx context.Context, tableID sqlbase.ID) error {
 	// Create tableState if needed.
 	_ = m.findTableState(tableID, true /* create */)
@@ -941,7 +945,7 @@ func (m *LeaseManager) AcquireFreshestFromStore(ctx context.Context, tableID sql
 // it and returns it.
 func (t *tableState) upsertLocked(
 	ctx context.Context, table *tableVersionState,
-) (*storedTableLease, error) {
+) (_ *storedTableLease, _ error) {
 	s := t.mu.active.find(table.Version)
 	if s == nil {
 		if t.mu.active.findNewest() != nil {
@@ -1140,7 +1144,7 @@ func purgeOldVersions(
 		return nil
 	}
 	t.mu.Lock()
-	empty := len(t.mu.active.data) == 0
+	empty := len(t.mu.active.data) == 0 && t.mu.acquisitionsInProgress == 0
 	t.mu.Unlock()
 	if empty {
 		// We don't currently have a version on this table, so no need to refresh
@@ -1228,6 +1232,20 @@ func (t *tableState) startLeaseRenewal(
 	atomic.StoreInt32(&t.renewalInProgress, 0)
 }
 
+// markAcquisitionStart increments the acquisitionsInProgress counter.
+func (t *tableState) markAcquisitionStart(ctx context.Context) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.acquisitionsInProgress++
+}
+
+// markAcquisitionDone decrements the acquisitionsInProgress counter.
+func (t *tableState) markAcquisitionDone(ctx context.Context) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.acquisitionsInProgress--
+}
+
 // LeaseAcquireBlockType is the type of blocking result event when
 // calling LeaseAcquireResultBlockEvent.
 type LeaseAcquireBlockType int
@@ -1278,6 +1296,13 @@ type LeaseManagerTestingKnobs struct {
 	// AlwaysUseRangefeeds ensures that rangefeeds and not gossip are used to
 	// detect changes to table descriptors.
 	AlwaysUseRangefeeds bool
+
+	// VersionPollIntervalForRangefeeds controls the polling interval for the
+	// check whether the requisite version for rangefeed-based notifications has
+	// been finalized.
+	//
+	// TODO(ajwerner): Remove this and replace it with a callback.
+	VersionPollIntervalForRangefeeds time.Duration
 
 	LeaseStoreTestingKnobs LeaseStoreTestingKnobs
 }
@@ -1412,6 +1437,10 @@ type LeaseManager struct {
 	mu struct {
 		syncutil.Mutex
 		tables map[sqlbase.ID]*tableState
+
+		// updatesResolvedTimestamp keeps track of a timestamp before which all
+		// table updates have already been seen.
+		updatesResolvedTimestamp hlc.Timestamp
 	}
 
 	draining atomic.Value
@@ -1425,8 +1454,6 @@ type LeaseManager struct {
 	ambientCtx   log.AmbientContext
 	stopper      *stop.Stopper
 	sem          *quotapool.IntPool
-
-	initialTimestamp hlc.Timestamp
 }
 
 const leaseConcurrencyLimit = 5
@@ -1467,13 +1494,13 @@ func NewLeaseManager(
 		tableNames: tableNameCache{
 			tables: make(map[tableNameCacheKey]*tableVersionState),
 		},
-		ambientCtx:       ambientCtx,
-		stopper:          stopper,
-		sem:              quotapool.NewIntPool("lease manager", leaseConcurrencyLimit),
-		initialTimestamp: clock.Now(),
+		ambientCtx: ambientCtx,
+		stopper:    stopper,
+		sem:        quotapool.NewIntPool("lease manager", leaseConcurrencyLimit),
 	}
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.mu.tables = make(map[sqlbase.ID]*tableState)
+	lm.mu.updatesResolvedTimestamp = db.Clock().Now()
 
 	lm.draining.Store(false)
 	return lm
@@ -1686,10 +1713,16 @@ func (m *LeaseManager) Acquire(
 		}
 		switch {
 		case errors.Is(err, errRenewLease):
-			// Renew lease and retry. This will block until the lease is acquired.
-			if _, errLease := acquireNodeLease(ctx, m, tableID); errLease != nil {
-				return nil, hlc.Timestamp{}, errLease
+			if err := func() error {
+				t.markAcquisitionStart(ctx)
+				defer t.markAcquisitionDone(ctx)
+				// Renew lease and retry. This will block until the lease is acquired.
+				_, errLease := acquireNodeLease(ctx, m, tableID)
+				return errLease
+			}(); err != nil {
+				return nil, hlc.Timestamp{}, err
 			}
+
 			if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
 				m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(LeaseAcquireBlock)
 			}
@@ -1786,47 +1819,21 @@ func (m *LeaseManager) findTableState(tableID sqlbase.ID, create bool) *tableSta
 
 // RefreshLeases starts a goroutine that refreshes the lease manager
 // leases for tables received in the latest system configuration via gossip or
-// rangefeeds. This function must be passed a non-nil gossip if Version
-func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *kv.DB, g gossip.DeprecatedGossip) {
-
-	// Okay so we want to create a rangefeed and use that.
-	m.initialTimestamp = db.Clock().Now()
-	// Do we need to use the gossip at all? Seems like nah. Oh we need to because
-	// we don't know if rangefeeds are enabled. Grr. I guess the deal is that when
-	// it gets enabled then we flip the switch? We don't want to force the nodes
-	// to restart to get the goodness. We also want to be able to stop gossipping.
-
-	// We're going to kick off a function to do the updating based on the gossip
-	// and then we'll also do one based on the rangefeeds and they'll synchronize.
-	//
-	// TODO(ajwerner): Fix this up, start out by assuming we're going to rely on
-	// gossip, depending on the minimum accepted version, then switch based on
-	// the finalization from the cluster setting or if the gossip is nil.
-	//
-	// We want an upgrade path such that after you finalize the 20.2 upgrade, the
-	// descriptor table is no longer gossipped.
-
-	s.RunWorker(context.TODO(), func(ctx context.Context) {
-		for r := retry.Start(retry.Options{}); r.Next(); {
-			if m.settings.Version.ActiveVersionOrEmpty(ctx) != (clusterversion.ClusterVersion{}) {
-				break
-			}
-		}
-		m.refreshLeases(s, g, db)
+// rangefeeds. This function must be passed a non-nil gossip if
+// VersionRangefeedLeases is not active.
+func (m *LeaseManager) RefreshLeases(
+	ctx context.Context, s *stop.Stopper, db *kv.DB, g gossip.DeprecatedGossip,
+) {
+	s.RunWorker(ctx, func(ctx context.Context) {
+		m.refreshLeases(ctx, g, db, s)
 	})
 }
 
-func (m *LeaseManager) refreshLeases(s *stop.Stopper, g gossip.DeprecatedGossip, db *kv.DB) {
-	ctx := context.TODO()
+func (m *LeaseManager) refreshLeases(
+	ctx context.Context, g gossip.DeprecatedGossip, db *kv.DB, s *stop.Stopper,
+) {
 	tableUpdateCh := make(chan *sqlbase.TableDescriptor)
-	ver := m.settings.Version.ActiveVersion(ctx)
-	fmt.Println(ver)
-	if m.testingKnobs.AlwaysUseRangefeeds || m.settings.Version.IsActive(ctx, clusterversion.VersionRangefeedLeases) {
-		m.watchForRangefeedUpdates(ctx, s, db, tableUpdateCh)
-	} else {
-		m.watchForGossipUpdates(ctx, s, g, tableUpdateCh)
-	}
-
+	m.watchForUpdates(ctx, s, db, g, tableUpdateCh)
 	s.RunWorker(ctx, func(ctx context.Context) {
 		for {
 			select {
@@ -1845,11 +1852,14 @@ func (m *LeaseManager) refreshLeases(s *stop.Stopper, g gossip.DeprecatedGossip,
 				}
 
 				// Try to refresh the table lease to one >= this version.
+				log.VEventf(ctx, 2, "purging old version of table %d@%d (offline %v)",
+					table.ID, table.Version, table.GoingOffline())
 				if err := purgeOldVersions(
 					ctx, db, table.ID, table.GoingOffline(), table.Version, m); err != nil {
 					log.Warningf(ctx, "error purging leases for table %d(%s): %s",
 						table.ID, table.Name, err)
 				}
+
 				if evFunc := m.testingKnobs.TestingTableRefreshedEvent; evFunc != nil {
 					evFunc(table)
 				}
@@ -1859,6 +1869,53 @@ func (m *LeaseManager) refreshLeases(s *stop.Stopper, g gossip.DeprecatedGossip,
 			}
 		}
 	})
+}
+
+// watchForUpdates will watch either gossip or rangefeeds for updates. If the
+// version does not currently support rangefeeds, gossip will be used until
+// rangefeeds are supported, at which time, the system will shut down the
+// gossip listener and start using rangefeeds.
+func (m *LeaseManager) watchForUpdates(
+	ctx context.Context,
+	s *stop.Stopper,
+	db *kv.DB,
+	g gossip.DeprecatedGossip,
+	tableUpdateCh chan *sqlbase.TableDescriptor,
+) {
+	useRangefeeds := m.testingKnobs.AlwaysUseRangefeeds ||
+		m.settings.Version.IsActive(ctx, clusterversion.VersionRangefeedLeases)
+	if useRangefeeds {
+		m.watchForRangefeedUpdates(ctx, s, db, tableUpdateCh)
+		return
+	}
+	gossipCtx, cancelWatchingGossip := context.WithCancel(ctx)
+	m.watchForGossipUpdates(gossipCtx, s, g, tableUpdateCh)
+	canUseRangefeedsCh := m.waitForRangefeedsToBeUsable(ctx, s)
+	if err := s.RunAsyncTask(ctx, "wait for upgrade", func(ctx context.Context) {
+		select {
+		case <-s.ShouldQuiesce():
+			return
+		case <-canUseRangefeedsCh:
+			// Note: It's okay that the cancelation of gossip watching is
+			// asynchronous. At worst we'd get duplicate updates or stale updates.
+			// Both of those are handled.
+			cancelWatchingGossip()
+			// Note: It's safe to start watching for rangefeeds now. We know that all
+			// nodes support rangefeeds in the system config span. Even though there
+			// may not have been logical ops for all operations in the log, the
+			// catch-up scan should take us up to the present.
+			//
+			// When the rangefeed starts up we'll pass it an initial timestamp which
+			// is no newer than all updates to the system config span we've already
+			// seen (see setResolvedTimestamp and its callers). The rangefeed API
+			// ensures that we will see all updates from on or before that timestamp
+			// at least once.
+			m.watchForRangefeedUpdates(ctx, s, db, tableUpdateCh)
+		}
+	}); err != nil {
+		// Note: this can only happen if the stopper has been stopped.
+		return
+	}
 }
 
 func (m *LeaseManager) watchForGossipUpdates(
@@ -1873,6 +1930,7 @@ func (m *LeaseManager) watchForGossipUpdates(
 
 	s.RunWorker(ctx, func(ctx context.Context) {
 		descKeyPrefix := m.codec.TablePrefix(uint32(sqlbase.DescriptorTable.ID))
+		// TODO(ajwerner): Add a mechanism to unregister this channel upon return.
 		gossipUpdateC := g.DeprecatedRegisterSystemConfigChannel(47150)
 		filter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
 
@@ -1892,16 +1950,6 @@ func (m *LeaseManager) watchForGossipUpdates(
 func (m *LeaseManager) watchForRangefeedUpdates(
 	ctx context.Context, s *stop.Stopper, db *kv.DB, tableUpdateCh chan<- *sqlbase.TableDescriptor,
 ) {
-	// We're going to want to create a rangefeed.
-
-	// We need to make sure that before we attempt to acquire a lease for a table
-	// that we register the need to track tables and their versions. Then we
-	// need to keep track of the states of the tables so that when a lease returns
-	// that we know whether it's still valid.
-	//
-	// This sort of race isn't necessarily handled by gossip but the lack of
-	// specificity in the gossip stream mitigated the importance of missing an
-	// event.
 	if log.V(1) {
 		log.Infof(ctx, "using rangefeeds for lease manager updates")
 	}
@@ -1910,22 +1958,22 @@ func (m *LeaseManager) watchForRangefeedUpdates(
 	ctx, _ = s.WithCancelOnQuiesce(ctx)
 	if err := s.RunAsyncTask(ctx, "lease rangefeed", func(ctx context.Context) {
 		for {
-			descKeyPrefix := keys.TODOSQLCodec.TablePrefix(uint32(sqlbase.DescriptorTable.ID))
+			ts := m.getResolvedTimestamp()
+			descKeyPrefix := m.codec.TablePrefix(uint32(sqlbase.DescriptorTable.ID))
 			span := roachpb.Span{
 				Key:    descKeyPrefix,
 				EndKey: descKeyPrefix.PrefixEnd(),
 			}
-			// TODO(ajwerner): consider using withDiff to detect whether a version
-			// change occurred.
+			// Note: We don't need to use withDiff to detect version changes because
+			// the LeaseManager already stores the relevant version information.
 			const withDiff = false
-			log.VEventf(ctx, 1, "starting rangefeed from %v on %v", m.initialTimestamp, span)
-			// TODO(ajwerner): track the resolved timestamp
-			err := distSender.RangeFeed(ctx, span, m.initialTimestamp, withDiff, eventCh)
+			log.VEventf(ctx, 1, "starting rangefeed from %v on %v", ts, span)
+			err := distSender.RangeFeed(ctx, span, ts, withDiff, eventCh)
 			if err != nil && ctx.Err() == nil {
 				log.Warningf(ctx, "lease rangefeed failed, restarting: %v", err)
 			}
 			if ctx.Err() != nil {
-				log.VEventf(ctx, 0, "exiting rangefeed")
+				log.VEventf(ctx, 1, "exiting rangefeed")
 				return
 			}
 		}
@@ -1952,13 +2000,14 @@ func (m *LeaseManager) watchForRangefeedUpdates(
 		// actually reads the table, but it's necessary for the call to
 		// ValidateTable().
 		if err := table.MaybeFillInDescriptor(ctx, nil, m.codec); err != nil {
-			log.Warningf(ctx, "%s: unable to fill in table descriptor %v", ev.Key, table)
+			log.ReportOrPanic(ctx, &m.settings.SV,
+				"%s: unable to fill in table descriptor %v", ev.Key, table)
 			return
 		}
 		if err := table.ValidateTable(); err != nil {
-			log.Errorf(ctx, "%s: received invalid table descriptor: %s. Desc: %v",
-				ev.Key, err, table,
-			)
+			// Note: we don't ReportOrPanic here because invalid descriptors are
+			// sometimes created during testing.
+			log.Errorf(ctx, "%s: received invalid table descriptor: %s. Desc: %v", ev.Key, err, table)
 			return
 		}
 		if log.V(2) {
@@ -1969,7 +2018,6 @@ func (m *LeaseManager) watchForRangefeedUpdates(
 		case <-ctx.Done():
 		case tableUpdateCh <- table:
 		}
-		return
 	}
 	s.RunWorker(ctx, func(ctx context.Context) {
 		for {
@@ -1978,7 +2026,8 @@ func (m *LeaseManager) watchForRangefeedUpdates(
 				return
 			case e := <-eventCh:
 				if e.Checkpoint != nil {
-					log.Infof(ctx, "got checkpoint %v", e.Checkpoint)
+					log.VEventf(ctx, 2, "got rangefeed checkpoint %v", e.Checkpoint)
+					m.setResolvedTimestamp(e.Checkpoint.ResolvedTS)
 					continue
 				}
 				if e.Error != nil {
@@ -2004,10 +2053,13 @@ func (m *LeaseManager) handleUpdatedSystemCfg(
 	if log.V(2) {
 		log.Info(ctx, "received a new config; will refresh leases")
 	}
-
+	var latestTimestamp hlc.Timestamp
 	cfgFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
 		// Attempt to unmarshal config into a table/database descriptor.
 		var descriptor sqlbase.Descriptor
+		if latestTimestamp.Less(kv.Value.Timestamp) {
+			latestTimestamp = kv.Value.Timestamp
+		}
 		if err := kv.Value.GetProto(&descriptor); err != nil {
 			log.Warningf(ctx, "%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
 			return
@@ -2041,7 +2093,9 @@ func (m *LeaseManager) handleUpdatedSystemCfg(
 			// Ignore.
 		}
 	})
-
+	if !latestTimestamp.IsEmpty() {
+		m.setResolvedTimestamp(latestTimestamp)
+	}
 	// Attempt to shove a nil table descriptor into the channel to ensure that
 	// we've processed all of the events previously sent.
 	select {
@@ -2050,6 +2104,59 @@ func (m *LeaseManager) handleUpdatedSystemCfg(
 		// been canceled.
 	case tableUpdateChan <- nil:
 	}
+}
+
+// waitForRangefeedsToBeUsable returns a channel which is closed when rangefeeds
+// are usable according to the cluster version.
+func (m *LeaseManager) waitForRangefeedsToBeUsable(
+	ctx context.Context, s *stop.Stopper,
+) chan struct{} {
+	// TODO(ajwerner): Add a callback to notify about version changes.
+	// Checking is pretty cheap but really this should be a callback.
+	const defaultCheckInterval = 10 * time.Second
+	checkInterval := defaultCheckInterval
+	if m.testingKnobs.VersionPollIntervalForRangefeeds != 0 {
+		checkInterval = m.testingKnobs.VersionPollIntervalForRangefeeds
+	}
+	upgradeChan := make(chan struct{})
+	timer := timeutil.NewTimer()
+	timer.Reset(0)
+	s.RunWorker(ctx, func(ctx context.Context) {
+		for {
+			select {
+			case <-timer.C:
+				timer.Read = true
+				if m.settings.Version.IsActive(ctx, clusterversion.VersionRangefeedLeases) {
+					close(upgradeChan)
+					return
+				}
+				timer.Reset(checkInterval)
+			case <-ctx.Done():
+				return
+			case <-s.ShouldQuiesce():
+				return
+			}
+		}
+	})
+	return upgradeChan
+}
+
+// setResolvedTimestamp marks the LeaseManager as having processed all updates
+// up to this timestamp. It is set under the gossip path based on the highest
+// timestamp seen in a system config and under the rangefeed path when a
+// resolved timestamp is received.
+func (m *LeaseManager) setResolvedTimestamp(ts hlc.Timestamp) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.mu.updatesResolvedTimestamp.Less(ts) {
+		m.mu.updatesResolvedTimestamp = ts
+	}
+}
+
+func (m *LeaseManager) getResolvedTimestamp() hlc.Timestamp {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.mu.updatesResolvedTimestamp
 }
 
 // tableLeaseRefreshLimit is the upper-limit on the number of table leases
@@ -2063,8 +2170,8 @@ var tableLeaseRefreshLimit = settings.RegisterIntSetting(
 // PeriodicallyRefreshSomeLeases so that leases are fresh and can serve
 // traffic immediately.
 // TODO(vivek): Remove once epoch based table leases are implemented.
-func (m *LeaseManager) PeriodicallyRefreshSomeLeases() {
-	m.stopper.RunWorker(context.Background(), func(ctx context.Context) {
+func (m *LeaseManager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
+	m.stopper.RunWorker(ctx, func(ctx context.Context) {
 		if m.leaseDuration <= 0 {
 			return
 		}
