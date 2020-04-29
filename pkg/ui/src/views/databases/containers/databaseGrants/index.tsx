@@ -17,10 +17,11 @@ import { AdminUIState } from "src/redux/state";
 import { databaseDetails, DatabaseSummaryExplicitData, grants as selectGrants, tableInfos, DatabaseSummaryBase } from "src/views/databases/containers/databaseSummary";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
-import { SummaryCard } from "oss/src/views/shared/components/summaryCard";
-import { Row, Col } from "antd";
-import { DatabaseIcon } from "oss/src/components/icon/databaseIcon";
+import { SummaryCard } from "src/views/shared/components/summaryCard";
+import { DatabaseIcon } from "src/components/icon/databaseIcon";
 import Stack from "assets/stack.svg";
+import { SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
+import TitleWithIcon from "../../components/titleWithIcon/titleWithIcon";
 
 class DatabaseGrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.DatabaseDetailsResponse.Grant> {}
 
@@ -52,7 +53,7 @@ class DatabaseSummaryGrants extends DatabaseSummaryBase {
     return (
       <div className="database-summary">
         <div className="database-summary-title">
-          <h2 className="base-heading"><img src={Stack} alt="Stack" />{dbID}</h2>
+          <TitleWithIcon src={Stack} title={dbID}/>
         </div>
         <div className="l-columns">
           <div className="l-columns__left">
@@ -76,14 +77,11 @@ class DatabaseSummaryGrants extends DatabaseSummaryBase {
           </div>
           <div className="l-columns__right">
             <SummaryCard>
-              <Row>
-                <Col span={24}>
-                  <div className="summary--card__counting">
-                    <h3 className="summary--card__counting--value">{this.totalUsers()}</h3>
-                    <p className="summary--card__counting--label">Total Users</p>
-                  </div>
-                </Col>
-              </Row>
+                <SummaryHeadlineStat
+                  title="Total Users"
+                  tooltip="Total users that have been granted permissions on this table."
+                  value={this.totalUsers()}
+                />
             </SummaryCard>
           </div>
         </div>

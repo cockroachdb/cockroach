@@ -21,10 +21,11 @@ import { TableInfo } from "src/views/databases/data/tableInfo";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import "./databaseTables.styl";
-import { DatabaseIcon } from "oss/src/components/icon/databaseIcon";
+import { DatabaseIcon } from "src/components/icon/databaseIcon";
 import Stack from "assets/stack.svg";
-import { SummaryCard } from "oss/src/views/shared/components/summaryCard";
-import { Row, Col } from "antd";
+import { SummaryCard } from "src/views/shared/components/summaryCard";
+import { SummaryHeadlineStat } from "src/views/shared/components/summaryBar";
+import TitleWithIcon from "../../components/titleWithIcon/titleWithIcon";
 
 const databaseTablesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "databases/sort_setting/tables", (s) => s.localSettings,
@@ -59,7 +60,7 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
     return (
       <div className="database-summary">
         <div className="database-summary-title">
-          <h2 className="base-heading"><img src={Stack} alt="Stack" />{dbID}</h2>
+          <TitleWithIcon src={Stack} title={dbID}/>
         </div>
         <div className="l-columns">
           <div className="l-columns__left">
@@ -73,7 +74,7 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
                   title: "Table Name",
                   cell: (tableInfo) => {
                     return (
-                      <div className="sort-table__unbounded-column">
+                      <div className="sort-table__unbounded-column table-name">
                         <Link to={`/database/${dbID}/table/${tableInfo.name}`}><DatabaseIcon /> {tableInfo.name}</Link>
                       </div>
                     );
@@ -108,26 +109,19 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
           </div>
           <div className="l-columns__right">
             <SummaryCard>
-              <Row>
-                <Col span={24}>
-                  <div className="summary--card__counting">
-                    <h3 className="summary--card__counting--value">{Bytes(this.totalSize())}</h3>
-                    <p className="summary--card__counting--label">Database Size</p>
-                  </div>
-                </Col>
-                <Col span={24}>
-                  <div className="summary--card__counting">
-                    <h3 className="summary--card__counting--value">{numTables}</h3>
-                    <p className="summary--card__counting--label">{(numTables === 1) ? "Table" : "Tables"}</p>
-                  </div>
-                </Col>
-                <Col span={24}>
-                  <div className="summary--card__counting">
-                    <h3 className="summary--card__counting--value">{this.totalRangeCount()}</h3>
-                    <p className="summary--card__counting--label">Total Range Count</p>
-                  </div>
-                </Col>
-              </Row>
+                <SummaryHeadlineStat
+                  title="Database Size"
+                  tooltip="Approximate total disk size of this database across all table replicas."
+                  value={this.totalSize()}
+                  format={Bytes} />
+                <SummaryHeadlineStat
+                  title={(numTables === 1) ? "Table" : "Tables"}
+                  tooltip="The total number of tables in this database."
+                  value={numTables} />
+                <SummaryHeadlineStat
+                  title="Total Range Count"
+                  tooltip="The total ranges across all tables in this database."
+                  value={this.totalRangeCount()} />
             </SummaryCard>
           </div>
         </div>
