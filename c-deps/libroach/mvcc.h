@@ -407,6 +407,12 @@ template <bool reverse> class mvccScanner {
         // sequence, read that value.
         const bool found = getFromIntentHistory();
         if (found) {
+          if (target_bytes_ > 0 && kvs_->NumBytes() >= target_bytes_) {
+            max_keys_ = kvs_->Count();
+          }
+          if (max_keys_ > 0 && kvs_->Count() == max_keys_) {
+            return false;
+          }
           return advanceKey();
         }
         // 11. If no value in the intent history has a sequence number equal to
