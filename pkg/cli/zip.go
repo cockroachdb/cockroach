@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -375,6 +376,12 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 
 		for _, node := range nodeList {
 			nodeID := node.Desc.NodeID
+
+			if !zipCtx.nodes.isIncluded(nodeID) {
+				fmt.Fprintf(stderr, "skipping excluded node %d\n", nodeID)
+				continue
+			}
+
 			liveness := livenessByNodeID[nodeID]
 			if liveness == storagepb.NodeLivenessStatus_DECOMMISSIONED {
 				// Decommissioned + process terminated. Let's not waste time
@@ -721,4 +728,88 @@ func dumpTableDataForZip(
 		break
 	}
 	return nil
+}
+
+type nodeSelection struct {
+	inclusive     rangeSelection
+	exclusive     rangeSelection
+	includedCache map[int]struct{}
+	excludedCache map[int]struct{}
+}
+
+func (n *nodeSelection) isIncluded(nodeID roachpb.NodeID) bool {
+	// Avoid recomputing the maps on every call.
+	if n.includedCache == nil {
+		n.includedCache = n.inclusive.items()
+	}
+	if n.excludedCache == nil {
+		n.excludedCache = n.exclusive.items()
+	}
+
+	// If the included cache is empty, then we're assuming the node is included.
+	isIncluded := true
+	if len(n.includedCache) > 0 {
+		_, isIncluded = n.includedCache[int(nodeID)]
+	}
+	// Then filter out excluded IDs.
+	if _, excluded := n.excludedCache[int(nodeID)]; excluded {
+		isIncluded = false
+	}
+	return isIncluded
+}
+
+type rangeSelection struct {
+	input  string
+	ranges []vrange
+}
+
+type vrange struct {
+	a, b int
+}
+
+func (r *rangeSelection) String() string { return r.input }
+
+func (r *rangeSelection) Type() string {
+	return "a-b,c,d-e,..."
+}
+
+func (r *rangeSelection) Set(v string) error {
+	r.input = v
+	for _, rs := range strings.Split(v, ",") {
+		var thisRange vrange
+		if strings.Contains(rs, "-") {
+			ab := strings.SplitN(rs, "-", 2)
+			a, err := strconv.Atoi(ab[0])
+			if err != nil {
+				return err
+			}
+			b, err := strconv.Atoi(ab[1])
+			if err != nil {
+				return err
+			}
+			if b < a {
+				return errors.New("invalid range")
+			}
+			thisRange = vrange{a, b}
+		} else {
+			a, err := strconv.Atoi(rs)
+			if err != nil {
+				return err
+			}
+			thisRange = vrange{a, a}
+		}
+		r.ranges = append(r.ranges, thisRange)
+	}
+	return nil
+}
+
+// items returns the values selected by the range selection
+func (r *rangeSelection) items() map[int]struct{} {
+	s := map[int]struct{}{}
+	for _, vr := range r.ranges {
+		for i := vr.a; i <= vr.b; i++ {
+			s[i] = struct{}{}
+		}
+	}
+	return s
 }
