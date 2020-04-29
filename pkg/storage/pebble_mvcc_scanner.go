@@ -409,6 +409,14 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		// history that has a sequence number equal to or less than the read
 		// sequence, read that value.
 		if p.getFromIntentHistory() {
+			if p.targetBytes > 0 && p.results.bytes >= p.targetBytes {
+				// When the target bytes are met or exceeded, stop producing more
+				// keys. We implement this by reducing maxKeys to the current
+				// number of keys.
+				//
+				// TODO(bilal): see if this can be implemented more transparently.
+				p.maxKeys = p.results.count
+			}
 			if p.maxKeys > 0 && p.results.count == p.maxKeys {
 				return false
 			}

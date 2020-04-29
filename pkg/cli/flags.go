@@ -240,7 +240,9 @@ func init() {
 
 	// Every command but start will inherit the following setting.
 	AddPersistentPreRunE(cockroachCmd, func(cmd *cobra.Command, _ []string) error {
-		extraClientFlagInit()
+		if err := extraClientFlagInit(); err != nil {
+			return err
+		}
 		return setDefaultStderrVerbosity(cmd, log.Severity_WARNING)
 	})
 
@@ -441,11 +443,10 @@ func init() {
 		f := cmd.Flags()
 		// All certs commands need the certificate directory.
 		StringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, baseCfg.SSLCertsDir)
+		// All certs commands get the certificate principal map.
+		StringSlice(f, &cliCtx.certPrincipalMap,
+			cliflags.CertPrincipalMap, cliCtx.certPrincipalMap)
 	}
-
-	// The list certs command needs the certificate principal map.
-	StringSlice(listCertsCmd.Flags(), &certCtx.certPrincipalMap,
-		cliflags.CertPrincipalMap, certCtx.certPrincipalMap)
 
 	for _, cmd := range []*cobra.Command{createCACertCmd, createClientCACertCmd} {
 		f := cmd.Flags()
@@ -495,6 +496,9 @@ func init() {
 
 		// Certificate flags.
 		StringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, baseCfg.SSLCertsDir)
+		// Certificate principal map.
+		StringSlice(f, &cliCtx.certPrincipalMap,
+			cliflags.CertPrincipalMap, cliCtx.certPrincipalMap)
 	}
 
 	// Auth commands.
@@ -885,7 +889,10 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	return nil
 }
 
-func extraClientFlagInit() {
+func extraClientFlagInit() error {
+	if err := security.SetCertPrincipalMap(cliCtx.certPrincipalMap); err != nil {
+		return err
+	}
 	serverCfg.Addr = net.JoinHostPort(cliCtx.clientConnHost, cliCtx.clientConnPort)
 	serverCfg.AdvertiseAddr = serverCfg.Addr
 	serverCfg.SQLAddr = net.JoinHostPort(cliCtx.clientConnHost, cliCtx.clientConnPort)
@@ -901,6 +908,7 @@ func extraClientFlagInit() {
 	if sqlCtx.debugMode {
 		sqlCtx.echo = true
 	}
+	return nil
 }
 
 func setDefaultStderrVerbosity(cmd *cobra.Command, defaultSeverity log.Severity) error {

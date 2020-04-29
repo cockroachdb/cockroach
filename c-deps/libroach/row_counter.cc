@@ -17,40 +17,46 @@ using namespace cockroach;
 int RowCounter::GetRowPrefixLength(rocksdb::Slice* key) {
   size_t n = key->size();
 
-  if (!IsInt(key)) {
+  // Strip tenant ID prefix to get a "SQL key" starting with a table ID.
+  rocksdb::Slice buf = rocksdb::Slice(*key);
+  if (!StripTenantPrefix(&buf)) {
+    return 0;
+  }
+  size_t sql_n = key->size();
+
+  if (!IsInt(&buf)) {
     // Not a table key, so the row prefix is the entire key.
     return n;
   }
 
-  // The column ID length is encoded as a varint and we take advantage of the
-  // fact that the column ID itself will be encoded in 0-9 bytes and thus the
-  // length of the column ID data will fit in a single byte.
-  rocksdb::Slice buf = rocksdb::Slice(*key);
-  buf.remove_prefix(n - 1);
+  // The column family ID length is encoded as a varint and we take advantage of
+  // the fact that the column family ID itself will be encoded in 0-9 bytes and
+  // thus the length of the column family ID data will fit in a single byte.
+  buf.remove_prefix(sql_n - 1);
 
   if (!IsInt(&buf)) {
-    // The last byte is not a valid column ID suffix.
+    // The last byte is not a valid column family ID suffix.
     return 0;
   }
 
-  uint64_t col_id_len;
-  if (!DecodeUvarint64(&buf, &col_id_len)) {
+  uint64_t col_fam_id_len;
+  if (!DecodeUvarint64(&buf, &col_fam_id_len)) {
     return 0;
   }
 
-  if (col_id_len > uint64_t(n - 1)) {
-    // The column ID length was impossible. colIDLen is the length of
-    // the encoded column ID suffix. We add 1 to account for the byte
-    // holding the length of the encoded column ID and if that total
-    // (colIDLen+1) is greater than the key suffix (n == len(buf))
-    // then we bail. Note that we don't consider this an error because
-    // EnsureSafeSplitKey can be called on keys that look like table
-    // keys but which do not have a column ID length suffix (e.g
-    // by SystemConfig.ComputeSplitKey).
+  if (col_fam_id_len > uint64_t(sql_n - 1)) {
+    // The column family ID length was impossible. colFamIDLen is the length of
+    // the encoded column family ID suffix. We add 1 to account for the byte
+    // holding the length of the encoded column family ID and if that total
+    // (colFamIDLen+1) is greater than the key suffix (sqlN == len(sqlKey)) then
+    // we bail. Note that we don't consider this an error because
+    // EnsureSafeSplitKey can be called on keys that look like table keys but
+    // which do not have a column family ID length suffix (e.g by
+    // SystemConfig.ComputeSplitKey).
     return 0;
   }
 
-  return n - int(col_id_len) - 1;
+  return n - int(col_fam_id_len) - 1;
 }
 
 // EnsureSafeSplitKey transforms the SQL table key argumnet such that it is a
@@ -95,7 +101,7 @@ bool RowCounter::Count(const rocksdb::Slice& key) {
   prev_key.assign(decoded_key.data(), decoded_key.size());
 
   uint64_t tbl;
-  if (!DecodeTablePrefix(&decoded_key, &tbl)) {
+  if (!DecodeTenantAndTablePrefix(&decoded_key, &tbl)) {
     return false;
   }
 

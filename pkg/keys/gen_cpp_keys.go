@@ -69,6 +69,7 @@ namespace cockroach {
 	genKey(keys.LocalRangeIDReplicatedInfix, "LocalRangeIDReplicatedInfix")
 	genKey(keys.LocalRangeAppliedStateSuffix, "LocalRangeAppliedStateSuffix")
 	genKey(keys.Meta2KeyMax, "Meta2KeyMax")
+	genKey(keys.TenantPrefix, "TenantPrefix")
 	genKey(keys.MinKey, "MinKey")
 	genKey(keys.MaxKey, "MaxKey")
 	fmt.Fprintf(f, "\n")

@@ -76,3 +76,35 @@ TEST(Libroach, Encoding) {
     EXPECT_EQ(*it, out);
   }
 }
+
+TEST(Libroach, DecodeTenantAndTablePrefix) {
+  // clang-format off
+  std::vector<std::pair<std::string, uint64_t>> cases{
+    {{'\x89'}, 1LLU},
+    {{'\xf6', '\xff'}, 255LLU},
+    {{'\xf7', '\xff', '\xff'}, 65535LLU},
+    {{'\xf8', '\xff', '\xff', '\xff'}, 16777215LLU},
+    {{'\xf9', '\xff', '\xff', '\xff', '\xff'}, 4294967295LLU},
+    {{'\xfa', '\xff', '\xff', '\xff', '\xff', '\xff'}, 1099511627775LLU},
+    {{'\xfb', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff'}, 281474976710655LLU},
+    {{'\xfc', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff'}, 72057594037927935LLU},
+    {{'\xfd', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff'}, 18446744073709551615LLU},
+    {{'\xfe', '\x8d', '\x89'}, 1LLU},
+    {{'\xfe', '\x8d', '\xf6', '\xff'}, 255LLU},
+    {{'\xfe', '\x8d', '\xf7', '\xff', '\xff'}, 65535LLU},
+    {{'\xfe', '\x8d', '\xf8', '\xff', '\xff', '\xff'}, 16777215LLU},
+    {{'\xfe', '\x8d', '\xf9', '\xff', '\xff', '\xff', '\xff'}, 4294967295LLU},
+    {{'\xfe', '\x8d', '\xfa', '\xff', '\xff', '\xff', '\xff', '\xff'}, 1099511627775LLU},
+    {{'\xfe', '\x8d', '\xfb', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff'}, 281474976710655LLU},
+    {{'\xfe', '\x8d', '\xfc', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff'}, 72057594037927935LLU},
+    {{'\xfe', '\x8d', '\xfd', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff'}, 18446744073709551615LLU},
+  };
+  // clang-format on
+
+  for (auto it = cases.begin(); it != cases.end(); it++) {
+    rocksdb::Slice slice(it->first);
+    uint64_t tbl = 0;
+    EXPECT_TRUE(DecodeTenantAndTablePrefix(&slice, &tbl));
+    EXPECT_EQ(it->second, tbl);
+  }
+}

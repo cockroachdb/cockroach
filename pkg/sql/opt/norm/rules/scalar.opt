@@ -90,6 +90,11 @@
     $result
 )
 
+# EliminateExistsZeroRows converts an Exists subquery to False when it's known
+# that the input produces zero rows.
+[EliminateExistsZeroRows, Normalize]
+(Exists $input:* & (HasZeroRows $input)) => (False)
+
 # EliminateExistsProject discards a Project input to the Exists operator. The
 # Project operator never changes the row cardinality of its input, and row
 # cardinality is the only thing that Exists cares about, so Project is a no-op.
