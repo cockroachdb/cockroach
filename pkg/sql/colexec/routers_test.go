@@ -140,6 +140,10 @@ func TestRouterOutputAddBatch(t *testing.T) {
 	defer cleanup()
 
 	for _, tc := range testCases {
+		if len(tc.selection) == 0 {
+			// No data to work with, probably due to a low coldata.BatchSize.
+			continue
+		}
 		for _, mtc := range memoryTestCases {
 			t.Run(fmt.Sprintf("%s/memoryLimit=%s", tc.name, humanizeutil.IBytes(mtc.bytes)), func(t *testing.T) {
 				// Clear the testAllocator for use.
