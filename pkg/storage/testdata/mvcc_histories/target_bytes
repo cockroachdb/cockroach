@@ -246,3 +246,54 @@ scan: "c" -> /BYTES/ghijkllkjihg @0.000000123,45
 scan: "aa" -> /<empty> @0.000000250,1
 scan: "a" -> /BYTES/abcdef @0.000000123,45
 scan: 98 bytes (target 65)
+
+# Regression test for a bug simiar to #46652: Test appropriate termination when
+# the TargetBytes-th kv pair is in the intent history.
+
+run ok
+with t=A ts=11,0 targetbytes=32
+  txn_begin
+  txn_step  seq=10
+  put       k=k  v=a
+  put       k=l  v=a
+  put       k=m  v=a
+  put       k=n  v=a
+  txn_step  seq=20
+  put       k=k  v=b
+  put       k=l  v=b
+  put       k=m  v=b
+  put       k=n  v=b
+  txn_step  seq=30
+  put       k=k  v=c
+  put       k=l  v=c
+  put       k=m  v=c
+  put       k=n  v=c
+  txn_step  seq=20
+  scan      k=k end=o
+  scan      k=k end=o reverse=true
+----
+scan: "k" -> /BYTES/b @0,0
+scan: "l" -> /BYTES/b @0,0
+scan: resume span ["m","o")
+scan: 32 bytes (target 32)
+scan: "n" -> /BYTES/b @0,0
+scan: "m" -> /BYTES/b @0,0
+scan: resume span ["k","l\x00")
+scan: 32 bytes (target 32)
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=20} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+data: "a"/0.000000123,45 -> /BYTES/abcdef
+data: "a"/0.000000001,0 -> /BYTES/nevergoingtobeseen
+data: "aa"/0.000000250,1 -> /<empty>
+data: "aa"/0.000000001,0 -> /BYTES/willbetombstoned
+data: "c"/0.000000123,45 -> /BYTES/ghijkllkjihg
+data: "e"/0.000000123,45 -> /BYTES/mnopqr
+data: "e"/0.000000001,0 -> /BYTES/sameasabove
+meta: "k"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "k"/0.000000011,0 -> /BYTES/c
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "l"/0.000000011,0 -> /BYTES/c
+meta: "m"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "m"/0.000000011,0 -> /BYTES/c
+meta: "n"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=30} ts=0.000000011,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}}
+data: "n"/0.000000011,0 -> /BYTES/c
