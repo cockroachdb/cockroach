@@ -970,31 +970,14 @@ func (p *Pebble) DeleteFile(filename string) error {
 
 // DeleteDirAndFiles implements the Engine interface.
 func (p *Pebble) DeleteDirAndFiles(dir string) error {
-	// TODO(itsbilal): Implement FS.RemoveAll then call that here instead.
-	files, err := p.fs.List(dir)
+	// NB RemoveAll does not return an error if dir does not exist, but we want
+	// DeleteDirAndFiles to return an error in that case to match the RocksDB
+	// behavior.
+	_, err := p.fs.Stat(dir)
 	if err != nil {
 		return err
 	}
-
-	// Recurse through all files, calling DeleteFile or DeleteDirAndFiles as
-	// appropriate.
-	for _, filename := range files {
-		path := p.fs.PathJoin(dir, filename)
-		stat, err := p.fs.Stat(path)
-		if err != nil {
-			return err
-		}
-
-		if stat.IsDir() {
-			err = p.DeleteDirAndFiles(path)
-		} else {
-			err = p.DeleteFile(path)
-		}
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return p.fs.RemoveAll(dir)
 }
 
 // LinkFile implements the FS interface.
