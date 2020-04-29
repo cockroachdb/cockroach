@@ -22,13 +22,13 @@ import (
 )
 
 func registerEngineSwitch(r *testRegistry) {
-	runEngineSwitch := func(ctx context.Context, t *test, c *cluster) {
+	runEngineSwitch := func(ctx context.Context, t *test, c *cluster, additionalArgs ...string) {
 		roachNodes := c.Range(1, c.spec.NodeCount-1)
 		loadNode := c.Node(c.spec.NodeCount)
 		c.Put(ctx, workload, "./workload", loadNode)
 		c.Put(ctx, cockroach, "./cockroach", roachNodes)
-		pebbleArgs := startArgs("--args=--storage-engine=pebble")
-		rocksdbArgs := startArgs("--args=--storage-engine=rocksdb")
+		pebbleArgs := startArgs(append(additionalArgs, "--args=--storage-engine=pebble")...)
+		rocksdbArgs := startArgs(append(additionalArgs, "--args=--storage-engine=rocksdb")...)
 		c.Start(ctx, t, roachNodes, rocksdbArgs)
 		stageDuration := 1 * time.Minute
 		if local {
@@ -138,6 +138,15 @@ func registerEngineSwitch(r *testRegistry) {
 		Cluster:    makeClusterSpec(n + 1),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runEngineSwitch(ctx, t, c)
+		},
+	})
+	r.Add(testSpec{
+		Name:       fmt.Sprintf("engine/switch/encrypted/nodes=%d", n),
+		Owner:      OwnerStorage,
+		MinVersion: "v20.1.0",
+		Cluster:    makeClusterSpec(n + 1),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runEngineSwitch(ctx, t, c, "--encrypt=true")
 		},
 	})
 }
