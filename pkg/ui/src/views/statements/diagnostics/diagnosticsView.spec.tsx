@@ -16,7 +16,7 @@ import Long from "long";
 
 import "src/enzymeInit";
 import { DiagnosticsView, EmptyDiagnosticsView } from "./diagnosticsView";
-import { Table } from "oss/src/components";
+import { Table } from "src/components";
 import { connectedMount } from "src/test-utils";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
