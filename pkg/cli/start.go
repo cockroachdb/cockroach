@@ -417,12 +417,12 @@ func initTempStorageConfig(
 // a store wasn't found).
 func resolveStorageEngineType(engineType enginepb.EngineType, dir string) enginepb.EngineType {
 	if engineType == enginepb.EngineTypeDefault {
-		engineType = enginepb.EngineTypeRocksDB
+		engineType = enginepb.EngineTypePebble
 		// Check if this storage directory was last written to by pebble. In that
 		// case, default to opening a Pebble engine.
 		if version, err := pebble.GetVersion(dir, vfs.Default); err == nil {
-			if version != "" && !strings.HasPrefix(version, "rocksdb") {
-				engineType = enginepb.EngineTypePebble
+			if strings.HasPrefix(version, "rocksdb") {
+				engineType = enginepb.EngineTypeRocksDB
 			}
 		}
 	}
