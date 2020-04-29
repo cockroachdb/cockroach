@@ -250,6 +250,20 @@ values
  └── (true IN (NULL, NULL, ('201.249.149.90/18' & '97a7:3650:3dd8:d4e9:35fe:6cfb:a714:1c17/61') << 'e22f:2067:2ed2:7b07:b167:206f:f17b:5b7d/82'),)
 
 # --------------------------------------------------
+# EliminateExistsZeroRows
+# --------------------------------------------------
+
+norm expect=EliminateExistsZeroRows
+SELECT EXISTS(SELECT * FROM (VALUES (1)) WHERE false)
+----
+values
+ ├── columns: exists:2!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── (false,)
+
+# --------------------------------------------------
 # EliminateExistsProject
 # --------------------------------------------------
 norm expect=EliminateExistsProject
@@ -524,21 +538,11 @@ anti-join (hash)
 norm expect-not=EliminateExistsLimit
 SELECT * FROM a a1 WHERE EXISTS(SELECT i FROM a a2 where a1.i = a2.i LIMIT 0)
 ----
-select
- ├── columns: k:1!null i:2 f:3 s:4 j:5 arr:6
- ├── key: (1)
- ├── fd: (1)-->(2-6)
- ├── scan a1
- │    ├── columns: a1.k:1!null a1.i:2 a1.f:3 a1.s:4 a1.j:5 a1.arr:6
- │    ├── key: (1)
- │    └── fd: (1)-->(2-6)
- └── filters
-      └── exists [subquery]
-           └── values
-                ├── columns: a2.i:8!null
-                ├── cardinality: [0 - 0]
-                ├── key: ()
-                └── fd: ()-->(8)
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null arr:6!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-6)
 
 # Don't eliminate a limit from a non-correlated subquery.
 norm expect-not=EliminateExistsLimit
