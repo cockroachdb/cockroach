@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -473,9 +474,10 @@ func (p *planner) dropSequencesOwnedByCol(
 		if err != nil {
 			return err
 		}
-		// TODO (lucy): Have more consistent/informative names for dependent jobs.
+		jobDesc := fmt.Sprintf("removing sequence %q dependent on column %q which is being dropped",
+			seqDesc.Name, col.ColName())
 		if err := p.dropSequenceImpl(
-			ctx, seqDesc, true /* queueJob */, "dropping dependent sequence", tree.DropRestrict,
+			ctx, seqDesc, true /* queueJob */, jobDesc, tree.DropRestrict,
 		); err != nil {
 			return err
 		}
@@ -535,9 +537,10 @@ func (p *planner) removeSequenceDependencies(
 				seqDesc.DependedOnBy[refTableIdx+1:]...)
 		}
 
-		// TODO (lucy): Have more consistent/informative names for dependent jobs.
+		jobDesc := fmt.Sprintf("removing sequence %q dependent on column %q which is being dropped",
+			seqDesc.Name, col.ColName())
 		if err := p.writeSchemaChange(
-			ctx, seqDesc, sqlbase.InvalidMutationID, "removing sequence dependency",
+			ctx, seqDesc, sqlbase.InvalidMutationID, jobDesc,
 		); err != nil {
 			return err
 		}
