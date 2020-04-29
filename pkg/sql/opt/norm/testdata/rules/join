@@ -2165,7 +2165,7 @@ scan a
 # SimplifyZeroCardinalitySemiJoin
 # --------------------------------------------------
 # TODO(justin): figure out if there's a good way to make this still apply.
-norm disable=SimplifyZeroCardinalityGroup expect=SimplifyZeroCardinalitySemiJoin
+norm disable=(SimplifyZeroCardinalityGroup,EliminateExistsZeroRows) expect=SimplifyZeroCardinalitySemiJoin
 SELECT * FROM a WHERE EXISTS(SELECT * FROM (VALUES (k)) OFFSET 1)
 ----
 values
@@ -2178,7 +2178,7 @@ values
 # EliminateAntiJoin
 # --------------------------------------------------
 # TODO(justin): figure out if there's a good way to make this still apply.
-norm disable=SimplifyZeroCardinalityGroup expect=EliminateAntiJoin
+norm disable=(SimplifyZeroCardinalityGroup,EliminateExistsZeroRows) expect=EliminateAntiJoin
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM (VALUES (k)) OFFSET 1)
 ----
 scan a
