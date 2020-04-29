@@ -1144,4 +1144,20 @@ Addresses for network benchmark.`,
 		Description: `
 Latency or throughput mode.`,
 	}
+
+	ZipNodes = FlagInfo{
+		Name: "nodes",
+		Description: `
+List of nodes to include. Can be specified as a comma-delimited
+list of node IDs or ranges of node IDs, for example: 5,10-20,23.
+The default is to include all nodes.`,
+	}
+
+	ZipExcludeNodes = FlagInfo{
+		Name: "exclude-nodes",
+		Description: `
+List of nodes to exclude. Can be specified as a comma-delimited
+list of node IDs or ranges of node IDs, for example: 5,10-20,23.
+The default is to not exclude any node.`,
+	}
 )
