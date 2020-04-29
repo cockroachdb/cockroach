@@ -24,11 +24,6 @@ import (
 	"go.etcd.io/etcd/raft/tracker"
 )
 
-// MaxQuotaReplicaLivenessDuration is the maximum duration that a replica
-// can remain inactive while still being counting against the range's
-// available proposal quota.
-const MaxQuotaReplicaLivenessDuration = 10 * time.Second
-
 func (r *Replica) maybeAcquireProposalQuota(
 	ctx context.Context, quota uint64,
 ) (*quotapool.IntAlloc, error) {

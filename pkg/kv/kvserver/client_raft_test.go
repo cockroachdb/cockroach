@@ -2252,9 +2252,10 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	wg.Wait()
 	defer followerRepl.RaftUnlock()
 
-	// Increment leader's clock close to MaxQuotaReplicaLivenessDuration, but
-	// not past it.
-	mtc.manualClock.Increment(kvserver.MaxQuotaReplicaLivenessDuration.Nanoseconds() - 1)
+	inactivityThreshold := time.Second
+
+	// Increment leader's clock close to inactivityThreshold, but not past it.
+	mtc.manualClock.Increment(inactivityThreshold.Nanoseconds() - 1)
 
 	// Send a request to the leader replica. followerRepl is locked so it will
 	// not respond.
@@ -2272,7 +2273,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 
 	// The follower should still be active.
 	followerID := followerRepl.ReplicaID()
-	if !leaderRepl.IsFollowerActive(ctx, followerID) {
+	if !leaderRepl.IsFollowerActiveSince(ctx, followerID, inactivityThreshold) {
 		t.Fatalf("expected follower to still be considered active")
 	}
 
@@ -2281,8 +2282,8 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	// would bump the last active timestamp on the leader. Because of this,
 	// we check whether the follower is eventually considered inactive.
 	testutils.SucceedsSoon(t, func() error {
-		// Increment leader's clock past MaxQuotaReplicaLivenessDuration
-		mtc.manualClock.Increment(kvserver.MaxQuotaReplicaLivenessDuration.Nanoseconds() + 1)
+		// Increment leader's clock past inactivityThreshold
+		mtc.manualClock.Increment(inactivityThreshold.Nanoseconds() + 1)
 
 		// Send another request to the leader replica. followerRepl is locked
 		// so it will not respond.
@@ -2291,7 +2292,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 		}
 
 		// The follower should no longer be considered active.
-		if leaderRepl.IsFollowerActive(ctx, followerID) {
+		if leaderRepl.IsFollowerActiveSince(ctx, followerID, inactivityThreshold) {
 			return errors.New("expected follower to be considered inactive")
 		}
 		return nil
