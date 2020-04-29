@@ -508,6 +508,7 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),
 		db:                       ts.DB(),
 		registry:                 registry,
+		sessionRegistry:          sql.NewSessionRegistry(),
 		circularInternalExecutor: circularInternalExecutor,
 		jobRegistry:              &jobs.Registry{},
 	}

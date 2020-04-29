@@ -543,6 +543,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		runtime:                  runtimeSampler,
 		db:                       db,
 		registry:                 registry,
+		sessionRegistry:          sessionRegistry,
 		circularInternalExecutor: internalExecutor,
 		jobRegistry:              jobRegistry,
 	})
