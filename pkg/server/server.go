@@ -550,6 +550,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	debugServer := debug.NewServer(st, sqlServer.pgServer.HBADebugFn())
 	node.InitLogger(sqlServer.execCfg)
 

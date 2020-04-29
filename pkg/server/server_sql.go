@@ -527,9 +527,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		cfg.gossip.Deprecated(47893),
 		cfg.Settings,
 	)
-	if statusServer, ok := cfg.statusServer(); ok {
-		statusServer.setStmtDiagnosticsRequester(stmtDiagnosticsRegistry)
-	}
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
 	leaseMgr.RefreshLeases(cfg.stopper, cfg.db, cfg.gossip.Deprecated(47150))
