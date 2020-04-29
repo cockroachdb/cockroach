@@ -414,7 +414,9 @@ func (p *planner) dropIndexByName(
 			if err != nil {
 				return err
 			}
-			cascadedViews, err := p.removeDependentView(ctx, tableDesc, viewDesc)
+			viewJobDesc := fmt.Sprintf("removing view %q dependent on index %q which is being dropped",
+				viewDesc.Name, idx.Name)
+			cascadedViews, err := p.removeDependentView(ctx, tableDesc, viewDesc, viewJobDesc)
 			if err != nil {
 				return err
 			}
