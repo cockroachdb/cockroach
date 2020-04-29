@@ -46,3 +46,13 @@ func minChordAngle(a s1.ChordAngle, b s1.ChordAngle) s1.ChordAngle {
 	}
 	return b
 }
+
+// maybeClosestPointToEdge returns a point on the normal of the edge,
+// and a bool of whether it lies in the segment of the edge.
+// This operation is done on a sphere.
+func maybeClosestPointToEdge(edge s2.Edge, point s2.Point) (s2.Point, bool) {
+	edgeNormal := edge.V0.Vector.Cross(edge.V1.Vector).Normalize()
+	edgeNormalScaledToPoint := edgeNormal.Mul(edgeNormal.Dot(point.Vector))
+	closestPoint := s2.Point{Vector: point.Vector.Sub(edgeNormalScaledToPoint).Normalize()}
+	return closestPoint, (&s2.Polyline{edge.V0, edge.V1}).IntersectsCell(s2.CellFromPoint(closestPoint))
+}
