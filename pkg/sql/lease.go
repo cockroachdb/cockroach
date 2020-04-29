@@ -138,7 +138,7 @@ func storedLeaseExpiration(expiration hlc.Timestamp) tree.DTimestamp {
 // LeaseStore implements the operations for acquiring and releasing leases and
 // publishing a new version of a descriptor. Exported only for testing.
 type LeaseStore struct {
-	nodeIDContainer  *base.NodeIDContainer
+	nodeIDContainer  *base.IDContainer
 	db               *kv.DB
 	clock            *hlc.Clock
 	internalExecutor sqlutil.InternalExecutor
@@ -1426,7 +1426,7 @@ const leaseConcurrencyLimit = 5
 // stopper is used to run async tasks. Can be nil in tests.
 func NewLeaseManager(
 	ambientCtx log.AmbientContext,
-	nodeIDContainer *base.NodeIDContainer,
+	nodeIDContainer *base.IDContainer,
 	db *kv.DB,
 	clock *hlc.Clock,
 	internalExecutor sqlutil.InternalExecutor,

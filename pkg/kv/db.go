@@ -182,7 +182,7 @@ type DBContext struct {
 	UserPriority roachpb.UserPriority
 	// NodeID provides the node ID for setting the gateway node and avoiding
 	// clock uncertainty for root transactions started at the gateway.
-	NodeID *base.NodeIDContainer
+	NodeID *base.IDContainer
 	// Stopper is used for async tasks.
 	Stopper *stop.Stopper
 }
@@ -190,10 +190,12 @@ type DBContext struct {
 // DefaultDBContext returns (a copy of) the default options for
 // NewDBWithContext.
 func DefaultDBContext() DBContext {
+	var c base.NodeIDContainer
 	return DBContext{
 		UserPriority: roachpb.NormalUserPriority,
-		NodeID:       &base.NodeIDContainer{},
-		Stopper:      stop.NewStopper(),
+		// TODO(tbg): this is ugly. Force callers to pass in an IDContainer.
+		NodeID:  base.NewIDContainer(0, &c, true /* exposed */),
+		Stopper: stop.NewStopper(),
 	}
 }
 

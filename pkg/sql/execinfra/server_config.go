@@ -125,7 +125,7 @@ type ServerConfig struct {
 	Metrics *DistSQLMetrics
 
 	// NodeID is the id of the node on which this Server is running.
-	NodeID      *base.NodeIDContainer
+	NodeID      *base.IDContainer
 	ClusterID   *base.ClusterIDContainer
 	ClusterName string
 

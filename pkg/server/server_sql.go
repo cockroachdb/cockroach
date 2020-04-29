@@ -121,7 +121,7 @@ type sqlServerOptionalArgs struct {
 	// For the temporaryObjectCleaner.
 	isMeta1Leaseholder func(hlc.Timestamp) (bool, error)
 	// DistSQL, lease management, and others want to know the node they're on.
-	nodeIDContainer *base.NodeIDContainer
+	nodeIDContainer *base.IDContainer
 
 	// Used by backup/restore.
 	externalStorage        cloud.ExternalStorageFactory
