@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -634,7 +635,7 @@ type ExecutorConfig struct {
 	ProtectedTimestampProvider protectedts.Provider
 
 	// StmtDiagnosticsRecorder deals with recording statement diagnostics.
-	StmtDiagnosticsRecorder StmtDiagnosticsRecorder
+	StmtDiagnosticsRecorder *stmtdiagnostics.Registry
 }
 
 // Organization returns the value of cluster.organization.
