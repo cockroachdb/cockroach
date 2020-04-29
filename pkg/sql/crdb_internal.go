@@ -1424,7 +1424,10 @@ CREATE TABLE crdb_internal.create_statements (
 		} else {
 			descType = typeTable
 			tn := (*tree.Name)(&table.Name)
-			createNofk, err = ShowCreateTable(ctx, p, tn, contextName, table, lookup, OmitFKClausesFromCreate)
+			displayOptions := ShowCreateDisplayOptions{
+				FKDisplayMode: OmitFKClausesFromCreate,
+			}
+			createNofk, err = ShowCreateTable(ctx, p, tn, contextName, table, lookup, displayOptions)
 			if err != nil {
 				return err
 			}
@@ -1433,7 +1436,8 @@ CREATE TABLE crdb_internal.create_statements (
 				validateStmts); err != nil {
 				return err
 			}
-			stmt, err = ShowCreateTable(ctx, p, tn, contextName, table, lookup, IncludeFkClausesInCreate)
+			displayOptions.FKDisplayMode = IncludeFkClausesInCreate
+			stmt, err = ShowCreateTable(ctx, p, tn, contextName, table, lookup, displayOptions)
 		}
 		if err != nil {
 			return err
