@@ -13,6 +13,7 @@ package spanset
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -289,7 +290,7 @@ func (s *SpanSet) checkAllowed(
 		}
 	}
 
-	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s", access, span, s)
+	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s\nstack:\n%s", access, span, s, debug.Stack())
 }
 
 // contains returns whether s1 contains s2. Unlike Span.Contains, this function
