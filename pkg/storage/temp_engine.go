@@ -35,9 +35,9 @@ func NewTempEngine(
 	switch engine {
 	case enginepb.EngineTypeTeePebbleRocksDB:
 		fallthrough
-	case enginepb.EngineTypePebble:
+	case enginepb.EngineTypeDefault, enginepb.EngineTypePebble:
 		return NewPebbleTempEngine(ctx, tempStorage, storeSpec)
-	case enginepb.EngineTypeDefault, enginepb.EngineTypeRocksDB:
+	case enginepb.EngineTypeRocksDB:
 		return NewRocksDBTempEngine(tempStorage, storeSpec)
 	}
 	panic(fmt.Sprintf("unknown engine type: %d", engine))
