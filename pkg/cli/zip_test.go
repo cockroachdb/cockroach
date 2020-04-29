@@ -315,8 +315,20 @@ func TestPartialZip(t *testing.T) {
 			return out
 		})
 
+	// Now do it again and exclude the down node explicitly.
+	out, err = c.RunWithCapture("debug zip " + os.DevNull + " --exclude-nodes=2")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out = eraseNonDeterministicZipOutput(out)
+	datadriven.RunTest(t, "testdata/zip/partial1_excluded",
+		func(t *testing.T, td *datadriven.TestData) string {
+			return out
+		})
+
 	// Now mark the stopped node as decommissioned, and check that zip
-	// skips over it.
+	// skips over it automatically.
 	s := tc.Server(0)
 	conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(),
 		rpc.DefaultClass).Connect(context.Background())
@@ -517,5 +529,44 @@ func TestToHex(t *testing.T) {
 	}
 	if err = r.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestNodeRangeSelection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Avoid leaking configuration changes after the tests end.
+	defer initCLIDefaults()
+
+	testData := []struct {
+		args         []string
+		wantIncluded []int
+		wantExcluded []int
+	}{
+		{[]string{""}, []int{1, 200, 3}, nil},
+		{[]string{"--nodes=1"}, []int{1}, []int{2, 3, 100}},
+		{[]string{"--nodes=1,3"}, []int{1, 3}, []int{2, 4, 100}},
+		{[]string{"--nodes=1-3"}, []int{1, 2, 3}, []int{4, 100}},
+		{[]string{"--nodes=1-3,5"}, []int{1, 2, 3, 5}, []int{4, 100}},
+		{[]string{"--nodes=1-3,5,10-20"}, []int{2, 5, 15}, []int{7}},
+		{[]string{"--nodes=1,1-2"}, []int{1, 2}, []int{3, 100}},
+		{[]string{"--nodes=1-3", "--exclude-nodes=2"}, []int{1, 3}, []int{2, 4, 100}},
+		{[]string{"--nodes=1,3", "--exclude-nodes=3"}, []int{1}, []int{2, 3, 4, 100}},
+		{[]string{"--exclude-nodes=2-7"}, []int{1, 8, 9, 10}, []int{2, 3, 4, 5, 6, 7}},
+	}
+
+	f := debugZipCmd.Flags()
+	for _, tc := range testData {
+		initCLIDefaults()
+		if err := f.Parse(tc.args); err != nil {
+			t.Fatalf("Parse(%#v) got unexpected error: %v", tc.args, err)
+		}
+
+		for _, wantIncluded := range tc.wantIncluded {
+			assert.True(t, zipCtx.nodes.isIncluded(roachpb.NodeID(wantIncluded)))
+		}
+		for _, wantExcluded := range tc.wantExcluded {
+			assert.False(t, zipCtx.nodes.isIncluded(roachpb.NodeID(wantExcluded)))
+		}
 	}
 }
