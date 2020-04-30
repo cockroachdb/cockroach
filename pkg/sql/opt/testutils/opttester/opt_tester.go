@@ -630,16 +630,18 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		f.ExploreTraceSkipNoop = true
 
 	case "expect":
-		var err error
-		if f.ExpectedRules, err = ruleNamesToRuleSet(arg.Vals); err != nil {
+		ruleset, err := ruleNamesToRuleSet(arg.Vals)
+		if err != nil {
 			return err
 		}
+		f.ExpectedRules.UnionWith(ruleset)
 
 	case "expect-not":
-		var err error
-		if f.UnexpectedRules, err = ruleNamesToRuleSet(arg.Vals); err != nil {
+		ruleset, err := ruleNamesToRuleSet(arg.Vals)
+		if err != nil {
 			return err
 		}
+		f.UnexpectedRules.UnionWith(ruleset)
 
 	case "colstat":
 		if len(arg.Vals) == 0 {
