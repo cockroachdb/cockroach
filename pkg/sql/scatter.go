@@ -40,7 +40,7 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 	var span roachpb.Span
 	if n.From == nil {
 		// No FROM/TO specified; the span is the entire table/index.
-		span = tableDesc.IndexSpan(index.ID)
+		span = tableDesc.IndexSpan(p.ExecCfg().Codec, index.ID)
 	} else {
 		switch {
 		case len(n.From) == 0:
@@ -91,11 +91,11 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 			}
 		}
 
-		span.Key, err = getRowKey(tableDesc.TableDesc(), index, fromVals)
+		span.Key, err = getRowKey(p.ExecCfg().Codec, tableDesc.TableDesc(), index, fromVals)
 		if err != nil {
 			return nil, err
 		}
-		span.EndKey, err = getRowKey(tableDesc.TableDesc(), index, toVals)
+		span.EndKey, err = getRowKey(p.ExecCfg().Codec, tableDesc.TableDesc(), index, toVals)
 		if err != nil {
 			return nil, err
 		}

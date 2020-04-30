@@ -184,6 +184,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		}
 	}
 	if err := d.fetcher.Init(
+		params.ExecCfg().Codec,
 		false, /* reverse */
 		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
 		// strength here. Consider hooking this in to the same knob that will

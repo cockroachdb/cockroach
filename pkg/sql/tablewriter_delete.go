@@ -146,7 +146,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
-		resume = td.rd.Helper.TableDesc.PrimaryIndexSpan()
+		resume = td.rd.Helper.TableDesc.PrimaryIndexSpan(td.rd.Helper.Codec)
 	}
 
 	var valNeededForCol util.FastIntSet
@@ -163,6 +163,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 		ValNeededForCol: valNeededForCol,
 	}
 	if err := rf.Init(
+		td.rd.Helper.Codec,
 		false, /* reverse */
 		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
 		// strength here. Consider hooking this in to the same knob that will
@@ -226,7 +227,7 @@ func (td *tableDeleter) deleteIndexFast(
 	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
-		resume = td.rd.Helper.TableDesc.IndexSpan(idx.ID)
+		resume = td.rd.Helper.TableDesc.IndexSpan(td.rd.Helper.Codec, idx.ID)
 	}
 
 	if traceKV {
@@ -248,7 +249,7 @@ func (td *tableDeleter) clearIndex(ctx context.Context, idx *sqlbase.IndexDescri
 		return errors.Errorf("unexpected interleaved index %d", idx.ID)
 	}
 
-	sp := td.rd.Helper.TableDesc.IndexSpan(idx.ID)
+	sp := td.rd.Helper.TableDesc.IndexSpan(td.rd.Helper.Codec, idx.ID)
 
 	// ClearRange cannot be run in a transaction, so create a
 	// non-transactional batch to send the request.
@@ -266,7 +267,7 @@ func (td *tableDeleter) deleteIndexScan(
 	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
-		resume = td.rd.Helper.TableDesc.PrimaryIndexSpan()
+		resume = td.rd.Helper.TableDesc.PrimaryIndexSpan(td.rd.Helper.Codec)
 	}
 
 	var valNeededForCol util.FastIntSet
@@ -283,6 +284,7 @@ func (td *tableDeleter) deleteIndexScan(
 		ValNeededForCol: valNeededForCol,
 	}
 	if err := rf.Init(
+		td.rd.Helper.Codec,
 		false, /* reverse */
 		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
 		// strength here. Consider hooking this in to the same knob that will

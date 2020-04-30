@@ -282,6 +282,7 @@ func showCreateInterleave(
 // index, if applicable.
 func ShowCreatePartitioning(
 	a *sqlbase.DatumAlloc,
+	codec keys.SQLCodec,
 	tableDesc *sqlbase.TableDescriptor,
 	idxDesc *sqlbase.IndexDescriptor,
 	partDesc *sqlbase.PartitioningDescriptor,
@@ -334,7 +335,7 @@ func ShowCreatePartitioning(
 				buf.WriteString(`, `)
 			}
 			tuple, _, err := sqlbase.DecodePartitionTuple(
-				a, tableDesc, idxDesc, partDesc, values, fakePrefixDatums)
+				a, codec, tableDesc, idxDesc, partDesc, values, fakePrefixDatums)
 			if err != nil {
 				return err
 			}
@@ -342,7 +343,7 @@ func ShowCreatePartitioning(
 		}
 		buf.WriteString(`)`)
 		if err := ShowCreatePartitioning(
-			a, tableDesc, idxDesc, &part.Subpartitioning, buf, indent+1,
+			a, codec, tableDesc, idxDesc, &part.Subpartitioning, buf, indent+1,
 			colOffset+int(partDesc.NumColumns),
 		); err != nil {
 			return err
@@ -358,14 +359,14 @@ func ShowCreatePartitioning(
 		buf.WriteString(part.Name)
 		buf.WriteString(" VALUES FROM ")
 		fromTuple, _, err := sqlbase.DecodePartitionTuple(
-			a, tableDesc, idxDesc, partDesc, part.FromInclusive, fakePrefixDatums)
+			a, codec, tableDesc, idxDesc, partDesc, part.FromInclusive, fakePrefixDatums)
 		if err != nil {
 			return err
 		}
 		buf.WriteString(fromTuple.String())
 		buf.WriteString(" TO ")
 		toTuple, _, err := sqlbase.DecodePartitionTuple(
-			a, tableDesc, idxDesc, partDesc, part.ToExclusive, fakePrefixDatums)
+			a, codec, tableDesc, idxDesc, partDesc, part.ToExclusive, fakePrefixDatums)
 		if err != nil {
 			return err
 		}

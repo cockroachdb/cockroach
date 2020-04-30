@@ -840,7 +840,7 @@ func writeZoneConfig(
 	if len(zone.Subzones) > 0 {
 		st := execCfg.Settings
 		zone.SubzoneSpans, err = GenerateSubzoneSpans(
-			st, execCfg.ClusterID(), table, zone.Subzones, hasNewSubzones)
+			st, execCfg.ClusterID(), execCfg.Codec, table, zone.Subzones, hasNewSubzones)
 		if err != nil {
 			return 0, err
 		}

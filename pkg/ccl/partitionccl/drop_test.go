@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -71,7 +72,7 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	indexSpan := tableDesc.IndexSpan(indexDesc.ID)
+	indexSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, indexDesc.ID)
 	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 
 	// Set zone configs on the primary index, secondary index, and one partition

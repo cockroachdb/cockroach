@@ -320,7 +320,7 @@ func newZigzagJoiner(
 				return nil, err
 			}
 		}
-		if err := z.setupInfo(spec, i, colOffset); err != nil {
+		if err := z.setupInfo(flowCtx, spec, i, colOffset); err != nil {
 			return nil, err
 		}
 		colOffset += len(z.infos[i].table.Columns)
@@ -393,7 +393,7 @@ type zigzagJoinerInfo struct {
 // to process. It is the number of columns in the tables of all previous sides
 // of the join.
 func (z *zigzagJoiner) setupInfo(
-	spec *execinfrapb.ZigzagJoinerSpec, side int, colOffset int,
+	flowCtx *execinfra.FlowCtx, spec *execinfrapb.ZigzagJoinerSpec, side int, colOffset int,
 ) error {
 	z.side = side
 	info := z.infos[side]
@@ -438,11 +438,12 @@ func (z *zigzagJoiner) setupInfo(
 	// Setup the RowContainers.
 	info.container.Reset()
 
-	info.spanBuilder = span.MakeBuilder(info.table, info.index)
+	info.spanBuilder = span.MakeBuilder(flowCtx.Codec(), info.table, info.index)
 
 	// Setup the Fetcher.
 	_, _, err := initRowFetcher(
-		&(info.fetcher),
+		flowCtx,
+		&info.fetcher,
 		info.table,
 		int(indexOrdinal),
 		info.table.ColumnIdxMap(),
@@ -459,7 +460,7 @@ func (z *zigzagJoiner) setupInfo(
 		return err
 	}
 
-	info.prefix = sqlbase.MakeIndexKeyPrefix(info.table, info.index.ID)
+	info.prefix = sqlbase.MakeIndexKeyPrefix(flowCtx.Codec(), info.table, info.index.ID)
 	span, err := z.produceSpanFromBaseRow()
 
 	if err != nil {

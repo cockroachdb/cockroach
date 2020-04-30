@@ -161,6 +161,9 @@ type FetcherTableArgs struct {
 //      // Process res.row
 //   }
 type Fetcher struct {
+	// codec is used to encode and decode SQL keys.
+	codec keys.SQLCodec
+
 	// tables is a slice of all the tables and their descriptors for which
 	// rows are returned.
 	tables []tableInfo
@@ -245,6 +248,7 @@ func (rf *Fetcher) Reset() {
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
 func (rf *Fetcher) Init(
+	codec keys.SQLCodec,
 	reverse bool,
 	lockStr sqlbase.ScanLockingStrength,
 	returnRangeInfo bool,
@@ -256,6 +260,7 @@ func (rf *Fetcher) Init(
 		return errors.AssertionFailedf("no tables to fetch from")
 	}
 
+	rf.codec = codec
 	rf.reverse = reverse
 	rf.lockStr = lockStr
 	rf.returnRangeInfo = returnRangeInfo
@@ -336,7 +341,9 @@ func (rf *Fetcher) Init(
 			}
 		}
 
-		table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(table.desc.TableDesc(), table.index.ID))
+		table.knownPrefixLength = len(
+			sqlbase.MakeIndexKeyPrefix(codec, table.desc.TableDesc(), table.index.ID),
+		)
 
 		var indexColumnIDs []sqlbase.ColumnID
 		indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
@@ -1354,7 +1361,7 @@ func (rf *Fetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) error 
 
 	// The below code makes incorrect checks (#45256).
 	indexEntries, err := sqlbase.EncodeSecondaryIndex(
-		table.desc.TableDesc(), table.index, table.colIdxMap, values, false /* includeEmpty */)
+		rf.codec, table.desc.TableDesc(), table.index, table.colIdxMap, values, false /* includeEmpty */)
 	if err != nil {
 		return err
 	}

@@ -116,7 +116,7 @@ func newTableReader(
 	var fetcher row.Fetcher
 	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
 	if _, _, err := initRowFetcher(
-		&fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
+		flowCtx, &fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
 		neededColumns, spec.IsCheck, &tr.alloc, spec.Visibility, spec.LockingStrength,
 	); err != nil {
 		return nil, err

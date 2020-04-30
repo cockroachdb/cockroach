@@ -160,7 +160,9 @@ func (tu *optTableUpserter) init(
 		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
 	)
 
-	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tableDesc.TableDesc(), tableDesc.PrimaryIndex.ID)
+	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(
+		evalCtx.Codec, tableDesc.TableDesc(), tableDesc.PrimaryIndex.ID,
+	)
 
 	if tu.collectRows {
 		tu.resultRow = make(tree.Datums, len(tu.returnCols))

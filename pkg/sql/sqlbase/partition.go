@@ -13,6 +13,7 @@ package sqlbase
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -102,6 +103,7 @@ func (t *PartitionTuple) String() string {
 // partitioning and MINVALUE/MAXVALUE.
 func DecodePartitionTuple(
 	a *DatumAlloc,
+	codec keys.SQLCodec,
 	tableDesc *TableDescriptor,
 	idxDesc *IndexDescriptor,
 	partDesc *PartitioningDescriptor,
@@ -161,7 +163,7 @@ func DecodePartitionTuple(
 		colMap[idxDesc.ColumnIDs[i]] = i
 	}
 
-	indexKeyPrefix := MakeIndexKeyPrefix(tableDesc, idxDesc.ID)
+	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, idxDesc.ID)
 	key, _, err := EncodePartialIndexKey(
 		tableDesc, idxDesc, len(allDatums), colMap, allDatums, indexKeyPrefix)
 	if err != nil {

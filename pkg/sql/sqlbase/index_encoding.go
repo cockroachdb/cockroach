@@ -34,13 +34,12 @@ import (
 // MakeIndexKeyPrefix returns the key prefix used for the index's data. If you
 // need the corresponding Span, prefer desc.IndexSpan(indexID) or
 // desc.PrimaryIndexSpan().
-func MakeIndexKeyPrefix(desc *TableDescriptor, indexID IndexID) []byte {
-	keyGen := &keys.TODOSQLCodec
+func MakeIndexKeyPrefix(codec keys.SQLCodec, desc *TableDescriptor, indexID IndexID) []byte {
 	if i, err := desc.FindIndexByID(indexID); err == nil && len(i.Interleave.Ancestors) > 0 {
 		ancestor := &i.Interleave.Ancestors[0]
-		return keyGen.IndexPrefix(uint32(ancestor.TableID), uint32(ancestor.IndexID))
+		return codec.IndexPrefix(uint32(ancestor.TableID), uint32(ancestor.IndexID))
 	}
-	return keyGen.IndexPrefix(uint32(desc.ID), uint32(indexID))
+	return codec.IndexPrefix(uint32(desc.ID), uint32(indexID))
 }
 
 // EncodeIndexKey creates a key by concatenating keyPrefix with the
@@ -513,9 +512,9 @@ func DecodePartialTableIDIndexID(key []byte) ([]byte, ID, IndexID, error) {
 //
 // Don't use this function in the scan "hot path".
 func DecodeIndexKeyPrefix(
-	desc *TableDescriptor, key []byte,
+	codec keys.SQLCodec, desc *TableDescriptor, key []byte,
 ) (indexID IndexID, remaining []byte, err error) {
-	key, err = keys.TODOSQLCodec.StripTenantPrefix(key)
+	key, err = codec.StripTenantPrefix(key)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -583,6 +582,7 @@ func DecodeIndexKeyPrefix(
 // empty. If the given descriptor does not match the key, false is returned with
 // no error.
 func DecodeIndexKey(
+	codec keys.SQLCodec,
 	desc *TableDescriptor,
 	index *IndexDescriptor,
 	types []types.T,
@@ -590,7 +590,7 @@ func DecodeIndexKey(
 	colDirs []IndexDescriptor_Direction,
 	key []byte,
 ) (remainingKey []byte, matches bool, foundNull bool, _ error) {
-	key, err := keys.TODOSQLCodec.StripTenantPrefix(key)
+	key, err := codec.StripTenantPrefix(key)
 	if err != nil {
 		return nil, false, false, err
 	}
@@ -707,9 +707,9 @@ func DecodeKeyVals(
 //
 // Don't use this function in the scan "hot path".
 func ExtractIndexKey(
-	a *DatumAlloc, tableDesc *TableDescriptor, entry kv.KeyValue,
+	a *DatumAlloc, codec keys.SQLCodec, tableDesc *TableDescriptor, entry kv.KeyValue,
 ) (roachpb.Key, error) {
-	indexID, key, err := DecodeIndexKeyPrefix(tableDesc, entry.Key)
+	indexID, key, err := DecodeIndexKeyPrefix(codec, tableDesc, entry.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -734,7 +734,7 @@ func ExtractIndexKey(
 		// find the index id so we can look up the descriptor, and once to extract
 		// the values. Only parse once.
 		var ok bool
-		_, ok, _, err = DecodeIndexKey(tableDesc, index, indexTypes, values, dirs, entry.Key)
+		_, ok, _, err = DecodeIndexKey(codec, tableDesc, index, indexTypes, values, dirs, entry.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -779,7 +779,7 @@ func ExtractIndexKey(
 	for i, columnID := range index.ExtraColumnIDs {
 		colMap[columnID] = i + len(index.ColumnIDs)
 	}
-	indexKeyPrefix := MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, tableDesc.PrimaryIndex.ID)
 
 	decodedValues := make([]tree.Datum, len(values)+len(extraValues))
 	for i, value := range values {
@@ -949,13 +949,14 @@ func encodeGeoKeys(inKey []byte, geoKeys []geoindex.Key) (keys [][]byte, err err
 // whether or not k/v's with empty values should be returned.
 // It returns indexEntries in family sorted order.
 func EncodePrimaryIndex(
+	codec keys.SQLCodec,
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
 	colMap map[ColumnID]int,
 	values []tree.Datum,
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
-	keyPrefix := MakeIndexKeyPrefix(tableDesc, index.ID)
+	keyPrefix := MakeIndexKeyPrefix(codec, tableDesc, index.ID)
 	indexKey, _, err := EncodeIndexKey(tableDesc, index, colMap, values, keyPrefix)
 	if err != nil {
 		return nil, err
@@ -1032,17 +1033,18 @@ func EncodePrimaryIndex(
 // empty values. For forward indexes the returned list of
 // index entries is in family sorted order.
 func EncodeSecondaryIndex(
+	codec keys.SQLCodec,
 	tableDesc *TableDescriptor,
 	secondaryIndex *IndexDescriptor,
 	colMap map[ColumnID]int,
 	values []tree.Datum,
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
-	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc, secondaryIndex.ID)
+	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, secondaryIndex.ID)
 
 	// Use the primary key encoding for covering indexes.
 	if secondaryIndex.GetEncodingType(tableDesc.PrimaryIndex.ID) == PrimaryIndexEncoding {
-		return EncodePrimaryIndex(tableDesc, secondaryIndex, colMap, values, includeEmpty)
+		return EncodePrimaryIndex(codec, tableDesc, secondaryIndex, colMap, values, includeEmpty)
 	}
 
 	var containsNull = false
@@ -1286,6 +1288,7 @@ func writeColumnValues(
 // value (passed as a parameter so the caller can reuse between rows) and is
 // expected to be the same length as indexes.
 func EncodeSecondaryIndexes(
+	codec keys.SQLCodec,
 	tableDesc *TableDescriptor,
 	indexes []IndexDescriptor,
 	colMap map[ColumnID]int,
@@ -1297,7 +1300,7 @@ func EncodeSecondaryIndexes(
 		panic("Length of secondaryIndexEntries was non-zero")
 	}
 	for i := range indexes {
-		entries, err := EncodeSecondaryIndex(tableDesc, &indexes[i], colMap, values, includeEmpty)
+		entries, err := EncodeSecondaryIndex(codec, tableDesc, &indexes[i], colMap, values, includeEmpty)
 		if err != nil {
 			return secondaryIndexEntries, err
 		}
@@ -1523,9 +1526,11 @@ func maxKeyTokens(index *IndexDescriptor, containsNull bool) int {
 // We can thus push forward the start key from /1/#/2 to /2. If the start key
 // was /1, we cannot push this forwards since that is the first key we want
 // to read.
-func AdjustStartKeyForInterleave(index *IndexDescriptor, start roachpb.Key) (roachpb.Key, error) {
+func AdjustStartKeyForInterleave(
+	codec keys.SQLCodec, index *IndexDescriptor, start roachpb.Key,
+) (roachpb.Key, error) {
 	// Remove the tenant prefix before decomposing.
-	strippedStart, err := keys.TODOSQLCodec.StripTenantPrefix(start)
+	strippedStart, err := codec.StripTenantPrefix(start)
 	if err != nil {
 		return roachpb.Key{}, err
 	}
@@ -1566,14 +1571,18 @@ func AdjustStartKeyForInterleave(index *IndexDescriptor, start roachpb.Key) (roa
 // cause issues when trying to decode the key tokens.
 // AdjustEndKeyForInterleave is idempotent upon successive invocation(s).
 func AdjustEndKeyForInterleave(
-	table *TableDescriptor, index *IndexDescriptor, end roachpb.Key, inclusive bool,
+	codec keys.SQLCodec,
+	table *TableDescriptor,
+	index *IndexDescriptor,
+	end roachpb.Key,
+	inclusive bool,
 ) (roachpb.Key, error) {
 	if index.Type == IndexDescriptor_INVERTED {
 		return end.PrefixEnd(), nil
 	}
 
 	// Remove the tenant prefix before decomposing.
-	strippedEnd, err := keys.TODOSQLCodec.StripTenantPrefix(end)
+	strippedEnd, err := codec.StripTenantPrefix(end)
 	if err != nil {
 		return roachpb.Key{}, err
 	}

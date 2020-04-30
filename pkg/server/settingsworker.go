@@ -31,7 +31,8 @@ func (s *Server) refreshSettings() {
 	tbl := &sqlbase.SettingsTable
 
 	a := &sqlbase.DatumAlloc{}
-	settingsTablePrefix := keys.TODOSQLCodec.TablePrefix(uint32(tbl.ID))
+	codec := keys.TODOSQLCodec
+	settingsTablePrefix := codec.TablePrefix(uint32(tbl.ID))
 	colIdxMap := row.ColIDtoRowIndexFromCols(tbl.Columns)
 
 	processKV := func(ctx context.Context, kv roachpb.KeyValue, u settings.Updater) error {
@@ -44,7 +45,7 @@ func (s *Server) refreshSettings() {
 		{
 			types := []types.T{tbl.Columns[0].Type}
 			nameRow := make([]sqlbase.EncDatum, 1)
-			_, matches, _, err := sqlbase.DecodeIndexKey(tbl, &tbl.PrimaryIndex, types, nameRow, nil, kv.Key)
+			_, matches, _, err := sqlbase.DecodeIndexKey(codec, tbl, &tbl.PrimaryIndex, types, nameRow, nil, kv.Key)
 			if err != nil {
 				return errors.Wrap(err, "failed to decode key")
 			}

@@ -13,6 +13,7 @@ package row
 import (
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -20,6 +21,8 @@ import (
 
 // rowHelper has the common methods for table row manipulations.
 type rowHelper struct {
+	Codec keys.SQLCodec
+
 	TableDesc *sqlbase.ImmutableTableDescriptor
 	// Secondary indexes.
 	Indexes      []sqlbase.IndexDescriptor
@@ -36,9 +39,9 @@ type rowHelper struct {
 }
 
 func newRowHelper(
-	desc *sqlbase.ImmutableTableDescriptor, indexes []sqlbase.IndexDescriptor,
+	codec keys.SQLCodec, desc *sqlbase.ImmutableTableDescriptor, indexes []sqlbase.IndexDescriptor,
 ) rowHelper {
-	rh := rowHelper{TableDesc: desc, Indexes: indexes}
+	rh := rowHelper{Codec: codec, TableDesc: desc, Indexes: indexes}
 
 	// Pre-compute the encoding directions of the index key values for
 	// pretty-printing in traces.
@@ -75,7 +78,7 @@ func (rh *rowHelper) encodePrimaryIndex(
 	colIDtoRowIndex map[sqlbase.ColumnID]int, values []tree.Datum,
 ) (primaryIndexKey []byte, err error) {
 	if rh.primaryIndexKeyPrefix == nil {
-		rh.primaryIndexKeyPrefix = sqlbase.MakeIndexKeyPrefix(rh.TableDesc.TableDesc(),
+		rh.primaryIndexKeyPrefix = sqlbase.MakeIndexKeyPrefix(rh.Codec, rh.TableDesc.TableDesc(),
 			rh.TableDesc.PrimaryIndex.ID)
 	}
 	primaryIndexKey, _, err = sqlbase.EncodeIndexKey(
@@ -94,7 +97,14 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 		rh.indexEntries = make([]sqlbase.IndexEntry, 0, len(rh.Indexes))
 	}
 	rh.indexEntries, err = sqlbase.EncodeSecondaryIndexes(
-		rh.TableDesc.TableDesc(), rh.Indexes, colIDtoRowIndex, values, rh.indexEntries[:0], includeEmpty)
+		rh.Codec,
+		rh.TableDesc.TableDesc(),
+		rh.Indexes,
+		colIDtoRowIndex,
+		values,
+		rh.indexEntries[:0],
+		includeEmpty,
+	)
 	if err != nil {
 		return nil, err
 	}

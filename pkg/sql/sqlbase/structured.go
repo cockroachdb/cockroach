@@ -2147,6 +2147,11 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 		return nil
 	}
 
+	// Use the system-tenant SQL codec when validating the keys in the partition
+	// descriptor. We just want to know how the partitions relate to one another,
+	// so it's fine to ignore the tenant ID prefix.
+	codec := keys.SystemSQLCodec
+
 	if len(partDesc.List) > 0 {
 		listValues := make(map[string]struct{}, len(partDesc.List))
 		for _, p := range partDesc.List {
@@ -2161,7 +2166,7 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 			// to match the behavior of the value when indexed.
 			for _, valueEncBuf := range p.Values {
 				tuple, keyPrefix, err := DecodePartitionTuple(
-					a, desc, idxDesc, partDesc, valueEncBuf, fakePrefixDatums)
+					a, codec, desc, idxDesc, partDesc, valueEncBuf, fakePrefixDatums)
 				if err != nil {
 					return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 				}
@@ -2190,12 +2195,12 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 			// NB: key encoding is used to check uniqueness because it has to match
 			// the behavior of the value when indexed.
 			fromDatums, fromKey, err := DecodePartitionTuple(
-				a, desc, idxDesc, partDesc, p.FromInclusive, fakePrefixDatums)
+				a, codec, desc, idxDesc, partDesc, p.FromInclusive, fakePrefixDatums)
 			if err != nil {
 				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 			}
 			toDatums, toKey, err := DecodePartitionTuple(
-				a, desc, idxDesc, partDesc, p.ToExclusive, fakePrefixDatums)
+				a, codec, desc, idxDesc, partDesc, p.ToExclusive, fakePrefixDatums)
 			if err != nil {
 				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 			}
@@ -3580,10 +3585,10 @@ func (desc *TableDescriptor) InvalidateFKConstraints() {
 
 // AllIndexSpans returns the Spans for each index in the table, including those
 // being added in the mutations.
-func (desc *TableDescriptor) AllIndexSpans() roachpb.Spans {
+func (desc *TableDescriptor) AllIndexSpans(codec keys.SQLCodec) roachpb.Spans {
 	var spans roachpb.Spans
 	err := desc.ForeachNonDropIndex(func(index *IndexDescriptor) error {
-		spans = append(spans, desc.IndexSpan(index.ID))
+		spans = append(spans, desc.IndexSpan(codec, index.ID))
 		return nil
 	})
 	if err != nil {
@@ -3594,20 +3599,22 @@ func (desc *TableDescriptor) AllIndexSpans() roachpb.Spans {
 
 // PrimaryIndexSpan returns the Span that corresponds to the entire primary
 // index; can be used for a full table scan.
-func (desc *TableDescriptor) PrimaryIndexSpan() roachpb.Span {
-	return desc.IndexSpan(desc.PrimaryIndex.ID)
+func (desc *TableDescriptor) PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span {
+	return desc.IndexSpan(codec, desc.PrimaryIndex.ID)
 }
 
 // IndexSpan returns the Span that corresponds to an entire index; can be used
 // for a full index scan.
-func (desc *TableDescriptor) IndexSpan(indexID IndexID) roachpb.Span {
-	prefix := roachpb.Key(MakeIndexKeyPrefix(desc, indexID))
+func (desc *TableDescriptor) IndexSpan(codec keys.SQLCodec, indexID IndexID) roachpb.Span {
+	prefix := roachpb.Key(MakeIndexKeyPrefix(codec, desc, indexID))
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
 
 // TableSpan returns the Span that corresponds to the entire table.
-func (desc *TableDescriptor) TableSpan() roachpb.Span {
-	prefix := keys.TODOSQLCodec.TablePrefix(uint32(desc.ID))
+func (desc *TableDescriptor) TableSpan(codec keys.SQLCodec) roachpb.Span {
+	// TODO(jordan): Why does IndexSpan consider interleaves but TableSpan does
+	// not? Should it?
+	prefix := codec.TablePrefix(uint32(desc.ID))
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
 

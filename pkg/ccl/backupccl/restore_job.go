@@ -904,7 +904,7 @@ func createImportingTables(
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
 	// that is, in the 'old' keyspace, before we reassign the table IDs.
-	spans := spansForAllTableIndexes(tables, nil)
+	spans := spansForAllTableIndexes(p.ExecCfg().Codec, tables, nil)
 
 	log.Eventf(ctx, "starting restore for %d tables", len(tables))
 

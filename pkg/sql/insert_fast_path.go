@@ -97,12 +97,14 @@ type insertFastPathFKCheck struct {
 	spanBuilder *span.Builder
 }
 
-func (c *insertFastPathFKCheck) init() error {
+func (c *insertFastPathFKCheck) init(params runParams) error {
 	idx := c.ReferencedIndex.(*optIndex)
 	c.tabDesc = c.ReferencedTable.(*optTable).desc
 	c.idxDesc = idx.desc
-	c.keyPrefix = sqlbase.MakeIndexKeyPrefix(&c.tabDesc.TableDescriptor, c.idxDesc.ID)
-	c.spanBuilder = span.MakeBuilder(c.tabDesc.TableDesc(), c.idxDesc)
+
+	codec := params.ExecCfg().Codec
+	c.keyPrefix = sqlbase.MakeIndexKeyPrefix(codec, &c.tabDesc.TableDescriptor, c.idxDesc.ID)
+	c.spanBuilder = span.MakeBuilder(codec, c.tabDesc.TableDesc(), c.idxDesc)
 
 	if len(c.InsertCols) > idx.numLaxKeyCols {
 		return errors.AssertionFailedf(
@@ -238,7 +240,7 @@ func (n *insertFastPathNode) startExec(params runParams) error {
 
 	if len(n.run.fkChecks) > 0 {
 		for i := range n.run.fkChecks {
-			if err := n.run.fkChecks[i].init(); err != nil {
+			if err := n.run.fkChecks[i].init(params); err != nil {
 				return err
 			}
 		}

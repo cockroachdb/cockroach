@@ -85,6 +85,7 @@ var testEvalCtx = &tree.EvalContext{
 	},
 	StmtTimestamp: timeutil.Unix(100000000, 0),
 	Settings:      cluster.MakeTestingClusterSettings(),
+	Codec:         keys.SystemSQLCodec,
 }
 
 // Value generator represents a value of some data at specified row/col.

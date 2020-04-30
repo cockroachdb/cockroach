@@ -13,6 +13,7 @@ package sql
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -45,7 +46,7 @@ func newTestScanNode(kvDB *kv.DB, tableName string) (*scanNode, error) {
 		}
 	}
 	scan.reqOrdering = ordering
-	sb := span.MakeBuilder(desc.TableDesc(), &desc.PrimaryIndex)
+	sb := span.MakeBuilder(keys.SystemSQLCodec, desc.TableDesc(), &desc.PrimaryIndex)
 	scan.spans, err = sb.SpansFromConstraint(nil /* constraint */, exec.TableColumnOrdinalSet{}, false /* forDelete */)
 	if err != nil {
 		return nil, err

@@ -297,6 +297,7 @@ func (ds *ServerImpl) setupFlow(
 			ClusterID:   ds.ServerConfig.ClusterID.Get(),
 			ClusterName: ds.ServerConfig.ClusterName,
 			NodeID:      nodeID,
+			Codec:       ds.ServerConfig.Codec,
 			ReCache:     ds.regexpCache,
 			Mon:         &monitor,
 			// Most processors will override this Context with their own context in

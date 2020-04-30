@@ -887,7 +887,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				// If we performed MakeMutationComplete on a PrimaryKeySwap mutation, then we need to start
 				// a job for the index deletion mutations that the primary key swap mutation added, if any.
 				mutationID := scDesc.ClusterVersion.NextMutationID
-				span := scDesc.PrimaryIndexSpan()
+				span := scDesc.PrimaryIndexSpan(sc.execCfg.Codec)
 				var spanList []jobspb.ResumeSpanList
 				for j := len(scDesc.ClusterVersion.Mutations); j < len(scDesc.Mutations); j++ {
 					spanList = append(spanList,
@@ -1221,7 +1221,7 @@ func (sc *SchemaChanger) updateJobForRollback(
 	ctx context.Context, txn *kv.Txn, tableDesc *sqlbase.TableDescriptor,
 ) error {
 	// Initialize refresh spans to scan the entire table.
-	span := tableDesc.PrimaryIndexSpan()
+	span := tableDesc.PrimaryIndexSpan(sc.execCfg.Codec)
 	var spanList []jobspb.ResumeSpanList
 	for _, m := range tableDesc.Mutations {
 		if m.MutationID == sc.mutationID {
@@ -1495,7 +1495,10 @@ func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 // used in the surrounding SQL session, so session tracing is unable
 // to capture schema change activity.
 func createSchemaChangeEvalCtx(
-	ctx context.Context, ts hlc.Timestamp, ieFactory sqlutil.SessionBoundInternalExecutorFactory,
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	ts hlc.Timestamp,
+	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
 ) extendedEvalContext {
 	dummyLocation := time.UTC
 
@@ -1522,6 +1525,7 @@ func createSchemaChangeEvalCtx(
 		// because it sets "enabled: false" and thus none of the
 		// other fields are used.
 		Tracing: &SessionTracing{},
+		ExecCfg: execCfg,
 		EvalContext: tree.EvalContext{
 			SessionData:      sd,
 			InternalExecutor: ieFactory(ctx, sd),
@@ -1532,6 +1536,13 @@ func createSchemaChangeEvalCtx(
 			Planner:            &sqlbase.DummyEvalPlanner{},
 			SessionAccessor:    &sqlbase.DummySessionAccessor{},
 			PrivilegedAccessor: &sqlbase.DummyPrivilegedAccessor{},
+			Settings:           execCfg.Settings,
+			TestingKnobs:       execCfg.EvalContextTestingKnobs,
+			ClusterID:          execCfg.ClusterID(),
+			ClusterName:        execCfg.RPCContext.ClusterName(),
+			NodeID:             execCfg.NodeID.Get(),
+			Codec:              execCfg.Codec,
+			Locality:           execCfg.Locality,
 		},
 	}
 	// The backfill is going to use the current timestamp for the various

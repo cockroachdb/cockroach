@@ -13,6 +13,7 @@ package row
 import (
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -118,6 +119,7 @@ type fkExistenceCheckBaseHelper struct {
 //   sql, sqlbase, row. The proliferation is annoying.
 func makeFkExistenceCheckBaseHelper(
 	txn *kv.Txn,
+	codec keys.SQLCodec,
 	otherTables FkTableMetadata,
 	ref *sqlbase.ForeignKeyConstraint,
 	searchIdx *sqlbase.IndexDescriptor,
@@ -147,6 +149,7 @@ func makeFkExistenceCheckBaseHelper(
 	}
 	rf := &Fetcher{}
 	if err := rf.Init(
+		codec,
 		false, /* reverse */
 		sqlbase.ScanLockingStrength_FOR_NONE,
 		false, /* returnRangeInfo */
@@ -168,7 +171,7 @@ func makeFkExistenceCheckBaseHelper(
 		ids:           ids,
 		prefixLen:     len(ref.OriginColumnIDs),
 		valuesScratch: make(tree.Datums, len(ref.OriginColumnIDs)),
-		spanBuilder:   span.MakeBuilder(searchTable.TableDesc(), searchIdx),
+		spanBuilder:   span.MakeBuilder(codec, searchTable.TableDesc(), searchIdx),
 	}, nil
 }
 
