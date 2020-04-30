@@ -654,6 +654,8 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 1628632029  19        1         false        false         false           false         false           true        false         false       true       false           4        0                          0         2          NULL      NULL
 1628632031  19        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 1841972634  6         1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
+2008917577  37        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
+2008917578  37        1         false        false         false           false         false           true        false         false       true       false           5        0                          0         2          NULL      NULL
 2101708905  5         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
 2148104569  21        2         true         true          false           true          false           true        false         false       true       false           1 2      3903121477 3903121477      0 0       2 2        NULL      NULL
 2361445172  8         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL
@@ -673,7 +675,7 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 3966258450  14        1         true         true          false           true          false           true        false         false       true       false           1        3903121477                 0         2          NULL      NULL
 4012654114  30        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 3903121477             0 0 0     2 2 2      NULL      NULL
 4225994721  13        2         true         true          false           true          false           true        false         false       true       false           1 7      0 0                        0 0       2 2        NULL      NULL
-
+                    
 # From #26504
 query OOI colnames
 SELECT indexrelid,
@@ -706,6 +708,8 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 1628632029  0                           1
 1628632031  0                           1
 1841972634  0                           1
+2008917577  0                           1
+2008917578  0                           1
 2101708905  0                           1
 2148104569  0                           1
 2148104569  0                           2
