@@ -27,8 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -63,8 +62,17 @@ var _ time.Time
 // Dummy import to pull in "duration" package.
 var _ duration.Duration
 
-// Dummy import to pull in "coltypes" package.
-var _ coltypes.T
+// _LEFT_CANONICAL_TYPE_FAMILY is the template variable.
+const _LEFT_CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _LEFT_TYPE_WIDTH is the template variable.
+const _LEFT_TYPE_WIDTH = 0
+
+// _RIGHT_CANONICAL_TYPE_FAMILY is the template variable.
+const _RIGHT_CANONICAL_TYPE_FAMILY = types.UnknownFamily
+
+// _RIGHT_TYPE_WIDTH is the template variable.
+const _RIGHT_TYPE_WIDTH = 0
 
 // _NON_CONST_GOTYPESLICE is a template Go type slice variable.
 type _NON_CONST_GOTYPESLICE interface{}
@@ -75,9 +83,9 @@ func _ASSIGN(_, _, _ interface{}) {
 	colexecerror.InternalError("")
 }
 
-// _RET_UNSAFEGET is the template function that will be replaced by
+// _RETURN_UNSAFEGET is the template function that will be replaced by
 // "execgen.UNSAFEGET" which uses _RET_TYP.
-func _RET_UNSAFEGET(_, _ interface{}) interface{} {
+func _RETURN_UNSAFEGET(_, _ interface{}) interface{} {
 	colexecerror.InternalError("")
 }
 
@@ -153,7 +161,7 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 		}
 	} else {
 		col = execgen.SLICE(col, 0, n)
-		_ = _RET_UNSAFEGET(projCol, n-1)
+		_ = _RETURN_UNSAFEGET(projCol, n-1)
 		for execgen.RANGE(i, col, 0, n) {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
 		}
@@ -194,17 +202,30 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 
 // */}}
 
-// {{/*
-// The outer range is a coltypes.T (the left type). The middle range is also a
-// coltypes.T (the right type). The inner is the overloads associated with
-// those two types.
-// */}}
-// {{range .}}
-// {{range .}}
-// {{range .}}
+// {{range .BinOps}}
+// {{range .LeftFamilies}}
+// {{range .LeftWidths}}
+// {{range .RightFamilies}}
+// {{range .RightWidths}}
 
 // {{template "projConstOp" .}}
 
+// {{end}}
+// {{end}}
+// {{end}}
+// {{end}}
+// {{end}}
+
+// {{range .CmpOps}}
+// {{range .LeftFamilies}}
+// {{range .LeftWidths}}
+// {{range .RightFamilies}}
+// {{range .RightWidths}}
+
+// {{template "projConstOp" .}}
+
+// {{end}}
+// {{end}}
 // {{end}}
 // {{end}}
 // {{end}}
@@ -241,58 +262,75 @@ func GetProjection_CONST_SIDEConstOperator(
 	if err != nil {
 		return nil, err
 	}
-	switch typeconv.FromColumnType(leftType) {
-	// {{range $lTyp, $rTypToOverloads := .}}
-	case coltypes._L_TYP_VAR:
-		switch typeconv.FromColumnType(rightType) {
-		// {{range $rTyp, $overloads := $rTypToOverloads}}
-		case coltypes._R_TYP_VAR:
-			switch op.(type) {
-			case tree.BinaryOperator:
-				switch op {
-				// {{range $overloads}}
-				// {{if .IsBinOp}}
-				case tree._NAME:
-					return &_OP_CONST_NAME{
-						projConstOpBase: projConstOpBase,
-						// {{if _IS_CONST_LEFT}}
-						constArg: c.(_L_GO_TYPE),
-						// {{else}}
-						constArg: c.(_R_GO_TYPE),
+	switch op.(type) {
+	case tree.BinaryOperator:
+		switch op {
+		// {{range .BinOps}}
+		case tree._NAME:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily[leftType.Family()] {
+			// {{range .LeftFamilies}}
+			case _LEFT_CANONICAL_TYPE_FAMILY:
+				switch leftType.Width() {
+				// {{range .LeftWidths}}
+				case _LEFT_TYPE_WIDTH:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily[rightType.Family()] {
+					// {{range .RightFamilies}}
+					case _RIGHT_CANONICAL_TYPE_FAMILY:
+						switch rightType.Width() {
+						// {{range .RightWidths}}
+						case _RIGHT_TYPE_WIDTH:
+							return &_OP_CONST_NAME{
+								projConstOpBase: projConstOpBase,
+								// {{if _IS_CONST_LEFT}}
+								constArg: c.(_L_GO_TYPE),
+								// {{else}}
+								constArg: c.(_R_GO_TYPE),
+								// {{end}}
+							}, nil
+							// {{end}}
+						}
 						// {{end}}
-					}, nil
-				// {{end}}
-				// {{end}}
-				default:
-					return nil, errors.Errorf("unhandled binary operator: %s", op)
+					}
+					// {{end}}
 				}
-			case tree.ComparisonOperator:
-				switch op {
-				// {{range $overloads}}
-				// {{if .IsCmpOp}}
-				case tree._NAME:
-					return &_OP_CONST_NAME{
-						projConstOpBase: projConstOpBase,
-						// {{if _IS_CONST_LEFT}}
-						constArg: c.(_L_GO_TYPE),
-						// {{else}}
-						constArg: c.(_R_GO_TYPE),
-						// {{end}}
-					}, nil
 				// {{end}}
-				// {{end}}
-				default:
-					return nil, errors.Errorf("unhandled comparison operator: %s", op)
-				}
-			default:
-				return nil, errors.Errorf("unhandled operator type: %s", op)
 			}
-		// {{end}}
-		default:
-			return nil, errors.Errorf("unhandled right type: %s", rightType)
+			// {{end}}
 		}
-	// {{end}}
-	default:
-		return nil, errors.Errorf("unhandled left type: %s", leftType)
+	case tree.ComparisonOperator:
+		switch op {
+		// {{range .CmpOps}}
+		case tree._NAME:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily[leftType.Family()] {
+			// {{range .LeftFamilies}}
+			case _LEFT_CANONICAL_TYPE_FAMILY:
+				switch leftType.Width() {
+				// {{range .LeftWidths}}
+				case _LEFT_TYPE_WIDTH:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily[rightType.Family()] {
+					// {{range .RightFamilies}}
+					case _RIGHT_CANONICAL_TYPE_FAMILY:
+						switch rightType.Width() {
+						// {{range .RightWidths}}
+						case _RIGHT_TYPE_WIDTH:
+							return &_OP_CONST_NAME{
+								projConstOpBase: projConstOpBase,
+								// {{if _IS_CONST_LEFT}}
+								constArg: c.(_L_GO_TYPE),
+								// {{else}}
+								constArg: c.(_R_GO_TYPE),
+								// {{end}}
+							}, nil
+							// {{end}}
+						}
+						// {{end}}
+					}
+					// {{end}}
+				}
+				// {{end}}
+			}
+			// {{end}}
+		}
 	}
+	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), op, rightType.Name())
 }

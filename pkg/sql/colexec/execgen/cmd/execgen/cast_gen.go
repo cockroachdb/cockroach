@@ -27,33 +27,30 @@ func genCastOperators(wr io.Writer) error {
 
 	s := string(t)
 
-	assignCast := makeFunctionRegex("_ASSIGN_CAST", 2)
-	s = assignCast.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 2))
-	s = strings.Replace(s, "_ALLTYPES", "{{$typ}}", -1)
-	s = strings.Replace(s, "_FROMTYPE", "{{.FromTyp}}", -1)
-	s = strings.Replace(s, "_TOTYPE", "{{.ToTyp}}", -1)
-	s = strings.Replace(s, "_GOTYPE", "{{.ToGoTyp}}", -1)
+	s = strings.ReplaceAll(s, "_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}")
+	s = strings.ReplaceAll(s, "_LEFT_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "_RIGHT_CANONICAL_TYPE_FAMILY", "{{.RightCanonicalFamilyStr}}")
+	s = strings.ReplaceAll(s, "_RIGHT_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "_R_GO_TYPE", "{{.Right.GoType}}")
+	s = strings.ReplaceAll(s, "_L_TYP", "{{.Left.VecMethod}}")
+	s = strings.ReplaceAll(s, "_R_TYP", "{{.Right.VecMethod}}")
 
-	// replace _FROM_TYPE_SLICE's with execgen.SLICE's of the correct type.
-	s = strings.Replace(s, "_FROM_TYPE_SLICE", "execgen.SLICE", -1)
-	// replace the _FROM_TYPE_UNSAFEGET's with execgen.UNSAFEGET's of the correct type.
-	s = strings.Replace(s, "_FROM_TYPE_UNSAFEGET", "execgen.UNSAFEGET", -1)
-	s = replaceManipulationFuncs(".FromTyp", s)
+	castRe := makeFunctionRegex("_CAST", 2)
+	s = castRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Cast", 2))
 
-	// replace the _TO_TYPE_SET's with execgen.SET's of the correct type
-	s = strings.Replace(s, "_TO_TYPE_SET", "execgen.SET", -1)
-	s = replaceManipulationFuncs(".ToTyp", s)
+	s = strings.ReplaceAll(s, "_L_SLICE", "execgen.SLICE")
+	s = strings.ReplaceAll(s, "_L_UNSAFEGET", "execgen.UNSAFEGET")
+	s = replaceManipulationFuncsAmbiguous(".Left", s)
 
-	isCastFuncSet := func(ov castOverload) bool {
-		return ov.AssignFunc != nil
-	}
+	s = strings.ReplaceAll(s, "_R_SET", "execgen.SET")
+	s = replaceManipulationFuncsAmbiguous(".Right", s)
 
-	tmpl, err := template.New("cast").Funcs(template.FuncMap{"isCastFuncSet": isCastFuncSet}).Parse(s)
+	tmpl, err := template.New("cast").Parse(s)
 	if err != nil {
 		return err
 	}
 
-	return tmpl.Execute(wr, castOverloads)
+	return tmpl.Execute(wr, twoArgsResolvedOverloadsInfo.CastOverloads)
 }
 
 func init() {

@@ -18,8 +18,10 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 var binaryOpName = map[tree.BinaryOperator]string{
@@ -68,79 +70,331 @@ var comparisonOpInfix = map[tree.ComparisonOperator]string{
 	tree.GE: ">=",
 }
 
-type overload struct {
-	Name string
-	// Only one of CmpOp and BinOp will be set, depending on whether the overload
-	// is a binary operator or a comparison operator.
+// overloadBase and other overload-related structs form a leveled hierarchy
+// that is useful during the code generation. Structs have "up" and "down"
+// references to each other so that the necessary fields for the templating are
+// accessible via '.'. Only when we reach the bottom level (where
+// lastArgWidthOverload is) do we have the access to "resolved" overload
+// functions.
+//
+// Here is the diagram of relationships for argTypeOverload struct:
+//
+//   argTypeOverloadBase            overloadBase
+//            \          \              |
+//            \           ------        |
+//            ↓                 ↓       ↓
+//   argWidthOverloadBase       argTypeOverload
+//               \                /
+//                \              | (single)
+//                ↓              ↓
+//                argWidthOverload
+//
+// And for lastArgTypeOverload:
+//
+//   argTypeOverloadBase            overloadBase
+//            \          \              |
+//            \           ------        |
+//            ↓                 ↓       ↓
+//   argWidthOverloadBase     lastArgTypeOverload
+//               \                /
+//                \              | (multiple)
+//                ↓              ↓
+//                lastArgWidthOverload
+//
+// Two argument overload consists of multiple corresponding to each other
+// argTypeOverloads and lastArgTypeOverloads.
+//
+// The important point is that an overload is "resolved" only at
+// lastArgWidthOverload level - only that struct has the information about the
+// return type and has access to the functions that can be called.
+//
+// These structs (or their "resolved" equivalents) are intended to be used by
+// the code generation with the following patterns:
+//
+//   switch canonicalTypeFamily {
+//     switch width {
+//       <resolved one arg overload>
+//     }
+//   }
+//
+//   switch leftCanonicalTypeFamily {
+//     switch leftWidth {
+//       switch rightCanonicalTypeFamily {
+//         switch rightWidth {
+//           <resolved two arg overload>
+//         }
+//       }
+//     }
+//   }
+type overloadBase struct {
+	Name  string
+	OpStr string
+	// Only one of CmpOp and BinOp will be set, depending on whether the
+	// overload is a binary operator or a comparison operator. Neither of the
+	// fields will be set when it is a hash or cast overload.
 	CmpOp tree.ComparisonOperator
 	BinOp tree.BinaryOperator
-	// OpStr is the string form of whichever of CmpOp and BinOp are set.
-	OpStr     string
-	LTyp      coltypes.T
-	RTyp      coltypes.T
-	LGoType   string
-	RGoType   string
-	RetTyp    coltypes.T
-	RetGoType string
 
-	AssignFunc  assignFunc
-	CompareFunc compareFunc
-
-	// TODO(solon): These would not be necessary if we changed the zero values of
-	// ComparisonOperator and BinaryOperator to be invalid.
 	IsCmpOp  bool
 	IsBinOp  bool
 	IsHashOp bool
+	IsCastOp bool
 }
 
-type assignFunc func(op overload, target, l, r string) string
+func (b *overloadBase) String() string {
+	return fmt.Sprintf("%s: %s", b.Name, b.OpStr)
+}
+
+func toString(family types.Family) string {
+	return "types." + family.String()
+}
+
+type argTypeOverloadBase struct {
+	CanonicalTypeFamily    types.Family
+	CanonicalTypeFamilyStr string
+}
+
+func newArgTypeOverloadBase(canonicalTypeFamily types.Family) *argTypeOverloadBase {
+	return &argTypeOverloadBase{
+		CanonicalTypeFamily:    canonicalTypeFamily,
+		CanonicalTypeFamilyStr: toString(canonicalTypeFamily),
+	}
+}
+
+func (b *argTypeOverloadBase) String() string {
+	return b.CanonicalTypeFamily.String()
+}
+
+type argTypeOverload struct {
+	*overloadBase
+	*argTypeOverloadBase
+
+	WidthOverload *argWidthOverload
+}
+
+// newArgTypeOverload creates a new argTypeOverload.
+func newArgTypeOverload(
+	ob *overloadBase, canonicalTypeFamily types.Family, width int32,
+) *argTypeOverload {
+	typeOverload := &argTypeOverload{
+		overloadBase:        ob,
+		argTypeOverloadBase: newArgTypeOverloadBase(canonicalTypeFamily),
+	}
+	typeOverload.WidthOverload = newArgWidthOverload(typeOverload, width)
+	return typeOverload
+}
+
+func (o *argTypeOverload) String() string {
+	return fmt.Sprintf("%s\t%s", o.overloadBase, o.WidthOverload)
+}
+
+type lastArgTypeOverload struct {
+	*overloadBase
+	*argTypeOverloadBase
+
+	WidthOverloads []*lastArgWidthOverload
+}
+
+// newLastArgTypeOverload creates a new lastArgTypeOverload. Note that
+// WidthOverloads field is not populated and will be updated according when
+// creating lastArgWidthOverloads.
+func newLastArgTypeOverload(
+	ob *overloadBase, canonicalTypeFamily types.Family,
+) *lastArgTypeOverload {
+	return &lastArgTypeOverload{
+		overloadBase:        ob,
+		argTypeOverloadBase: newArgTypeOverloadBase(canonicalTypeFamily),
+	}
+}
+
+func (o *lastArgTypeOverload) String() string {
+	s := fmt.Sprintf("%s\t%s", o.overloadBase, o.WidthOverloads[0])
+	for _, wo := range o.WidthOverloads[1:] {
+		s = fmt.Sprintf("%s\n%s", s, wo)
+	}
+	return s
+}
+
+type argWidthOverloadBase struct {
+	*argTypeOverloadBase
+
+	Width int32
+	// VecMethod is the name of the method that should be called on coldata.Vec
+	// to get access to the well-typed underlying memory.
+	VecMethod string
+	// GoType is the physical representation of a single element of the vector.
+	GoType string
+}
+
+func newArgWidthOverloadBase(
+	typeOverloadBase *argTypeOverloadBase, width int32,
+) *argWidthOverloadBase {
+	return &argWidthOverloadBase{
+		argTypeOverloadBase: typeOverloadBase,
+		Width:               width,
+		VecMethod:           toVecMethod(typeOverloadBase.CanonicalTypeFamily, width),
+		GoType:              toPhysicalRepresentation(typeOverloadBase.CanonicalTypeFamily, width),
+	}
+}
+
+func (b *argWidthOverloadBase) String() string {
+	return fmt.Sprintf("%s\tWidth: %d\tVecMethod: %s", b.argTypeOverloadBase, b.Width, b.VecMethod)
+}
+
+type argWidthOverload struct {
+	*argTypeOverload
+	*argWidthOverloadBase
+}
+
+func newArgWidthOverload(typeOverload *argTypeOverload, width int32) *argWidthOverload {
+	return &argWidthOverload{
+		argTypeOverload:      typeOverload,
+		argWidthOverloadBase: newArgWidthOverloadBase(typeOverload.argTypeOverloadBase, width),
+	}
+}
+
+func (o *argWidthOverload) String() string {
+	return o.argWidthOverloadBase.String()
+}
+
+type lastArgWidthOverload struct {
+	*lastArgTypeOverload
+	*argWidthOverloadBase
+
+	RetType      *types.T
+	RetVecMethod string
+	RetGoType    string
+
+	AssignFunc  assignFunc
+	CompareFunc compareFunc
+	CastFunc    castFunc
+}
+
+// newLastArgWidthOverload creates a new lastArgWidthOverload. Note that it
+// updates the typeOverload to include the newly-created struct into
+// WidthOverloads field.
+func newLastArgWidthOverload(
+	typeOverload *lastArgTypeOverload, width int32, retType *types.T,
+) *lastArgWidthOverload {
+	lawo := &lastArgWidthOverload{
+		lastArgTypeOverload:  typeOverload,
+		argWidthOverloadBase: newArgWidthOverloadBase(typeOverload.argTypeOverloadBase, width),
+		RetType:              retType,
+		RetVecMethod:         toVecMethod(retType.Family(), retType.Width()),
+		RetGoType:            toPhysicalRepresentation(retType.Family(), retType.Width()),
+	}
+	typeOverload.WidthOverloads = append(typeOverload.WidthOverloads, lawo)
+	return lawo
+}
+
+func (o *lastArgWidthOverload) String() string {
+	return fmt.Sprintf("%s\tReturn: %s", o.argWidthOverloadBase, o.RetType.Name())
+}
+
+type oneArgOverload struct {
+	*lastArgTypeOverload
+}
+
+func (o *oneArgOverload) String() string {
+	return fmt.Sprintf("%s\n", o.lastArgTypeOverload.String())
+}
+
+// twoArgsResolvedOverload is a utility struct that represents an overload that
+// takes it two arguments and that has been "resolved" (meaning it supports
+// only a single type family and a single type width on both sides).
+type twoArgsResolvedOverload struct {
+	*overloadBase
+	Left  *argWidthOverload
+	Right *lastArgWidthOverload
+}
+
+// twoArgsResolvedOverloadsInfo contains all overloads that take in two
+// arguments and stores them in a similar hierarchical structure to how
+// twoArgsOverloads are stored, with the difference that on the "bottom" level
+// we store the "resolved" overload.
+var twoArgsResolvedOverloadsInfo struct {
+	BinOps        []*twoArgsResolvedOverloadInfo
+	CmpOps        []*twoArgsResolvedOverloadInfo
+	CastOverloads *twoArgsResolvedOverloadInfo
+}
+
+var resolvedBinCmpOpsOverloads []*twoArgsResolvedOverload
+
+type twoArgsResolvedOverloadInfo struct {
+	*overloadBase
+	LeftFamilies []*twoArgsResolvedOverloadLeftFamilyInfo
+}
+
+type twoArgsResolvedOverloadLeftFamilyInfo struct {
+	LeftCanonicalFamilyStr string
+	LeftWidths             []*twoArgsResolvedOverloadLeftWidthInfo
+}
+
+type twoArgsResolvedOverloadLeftWidthInfo struct {
+	Width         int32
+	RightFamilies []*twoArgsResolvedOverloadRightFamilyInfo
+}
+
+type twoArgsResolvedOverloadRightFamilyInfo struct {
+	RightCanonicalFamilyStr string
+	RightWidths             []*twoArgsResolvedOverloadRightWidthInfo
+}
+
+type twoArgsResolvedOverloadRightWidthInfo struct {
+	Width int32
+	*twoArgsResolvedOverload
+}
+
+type assignFunc func(op *lastArgWidthOverload, target, l, r string) string
 type compareFunc func(target, l, r string) string
 
-var binaryOpOverloads []*overload
-var comparisonOpOverloads []*overload
-
 // sameTypeBinaryOpToOverloads maps a binary operator to all of the overloads
-// that implement the operator between two values of the same type.
-var sameTypeBinaryOpToOverloads map[tree.BinaryOperator][]*overload
+// that implement that comparison between two values of the same type (meaning
+// they have the same family and width).
+var sameTypeBinaryOpToOverloads = make(map[tree.BinaryOperator][]*oneArgOverload, len(binaryOpName))
 
-// anyTypeBinaryOpToOverloads maps a binary operator to all of the overloads
-// that implement it, including all mixed input types. It also includes all
-// entries from sameTypeBinaryOpToOverloads.
-var anyTypeBinaryOpToOverloads map[tree.BinaryOperator][]*overload
+var binOpOutputTypes = make(map[tree.BinaryOperator]map[typePair]*types.T)
 
 // sameTypeComparisonOpToOverloads maps a comparison operator to all of the
-// overloads that implement that comparison between two values of the same type.
-var sameTypeComparisonOpToOverloads map[tree.ComparisonOperator][]*overload
+// overloads that implement that comparison between two values of the same type
+// (meaning they have the same family and width).
+var sameTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*oneArgOverload, len(comparisonOpName))
 
-// anyTypeComparisonOpToOverloads maps a comparison operator to all of the
-// overloads that implement it, including all mixed type comparisons. It also
-// includes all entries from sameTypeComparisonOpToOverloads.
-var anyTypeComparisonOpToOverloads map[tree.ComparisonOperator][]*overload
+var cmpOpOutputTypes = make(map[typePair]*types.T)
 
 // hashOverloads is a list of all of the overloads that implement the hash
 // operation.
-var hashOverloads []*overload
+var hashOverloads []*oneArgOverload
+
+// castOutputTypes contains "fake" output types of a cast operator. It is used
+// just to make overloads initialization happy and is a bit of a hack - we
+// represent cast overloads as twoArgsOverload (meaning it takes in two
+// arguments and returns a third value), whereas it'll actually take in one
+// argument (left) and will return the result of a cast to another argument's
+// type (right), so the "true" return type is stored in right overload which is
+// populated correctly.
+var castOutputTypes = make(map[typePair]*types.T)
 
 // Assign produces a Go source string that assigns the "target" variable to the
 // result of applying the overload to the two inputs, l and r.
 //
 // For example, an overload that implemented the float64 plus operation, when fed
 // the inputs "x", "a", "b", would produce the string "x = a + b".
-func (o overload) Assign(target, l, r string) string {
+func (o *lastArgWidthOverload) Assign(target, l, r string) string {
 	if o.AssignFunc != nil {
 		if ret := o.AssignFunc(o, target, l, r); ret != "" {
 			return ret
 		}
 	}
 	// Default assign form assumes an infix operator.
-	return fmt.Sprintf("%s = %s %s %s", target, l, o.OpStr, r)
+	return fmt.Sprintf("%s = %s %s %s", target, l, o.overloadBase.OpStr, r)
 }
 
 // Compare produces a Go source string that assigns the "target" variable to the
 // result of comparing the two inputs, l and r. The target will be negative,
 // zero, or positive depending on whether l is less-than, equal-to, or
 // greater-than r.
-func (o overload) Compare(target, l, r string) string {
+func (o *lastArgWidthOverload) Compare(target, l, r string) string {
 	if o.CompareFunc != nil {
 		if ret := o.CompareFunc(target, l, r); ret != "" {
 			return ret
@@ -152,30 +406,25 @@ func (o overload) Compare(target, l, r string) string {
 		l, r, target, l, r, target, target)
 }
 
-func (o overload) UnaryAssign(target, v string) string {
+func (o *lastArgWidthOverload) UnaryAssign(target, v string) string {
 	if o.AssignFunc != nil {
 		if ret := o.AssignFunc(o, target, v, ""); ret != "" {
 			return ret
 		}
 	}
 	// Default assign form assumes a function operator.
-	return fmt.Sprintf("%s = %s(%s)", target, o.OpStr, v)
+	return fmt.Sprintf("%s = %s(%s)", target, o.overloadBase.OpStr, v)
 }
 
-type castOverload struct {
-	FromTyp    coltypes.T
-	ToTyp      coltypes.T
-	ToGoTyp    string
-	AssignFunc castAssignFunc
-}
+type castFunc func(to, from string) string
 
-func (o castOverload) Assign(to, from string) string {
-	return o.AssignFunc(to, from)
-}
-
-type castAssignFunc func(to, from string) string
-
-func castIdentity(to, from string) string {
+func (o *lastArgWidthOverload) Cast(to, from string) string {
+	if o.CastFunc != nil {
+		if ret := o.CastFunc(to, from); ret != "" {
+			return ret
+		}
+	}
+	// Default cast function is "identity" cast.
 	return fmt.Sprintf("%s = %s", to, from)
 }
 
@@ -242,238 +491,299 @@ func floatToDecimal(to, from string) string {
 	return fmt.Sprintf(convStr, to, from)
 }
 
-var castOverloads map[coltypes.T][]castOverload
+// populateTwoArgsOverloads creates all overload structs related to a single
+// binary, comparison, or cast operator. It takes in:
+// - base - the overload base that will be shared among all new overloads.
+// - opOutputTypes - mapping from a pair of types to the output type, it should
+//   contain an entry for all supported type pairs.
+// - overrideOverloadFuncs - a function that could update AssignFunc,
+//   CompareFunc and/or CastFunc fields of a newly created lastArgWidthOverload
+//   based on a typeCustomizer.
+// It returns all new overloads that have the same type (which will be empty
+// for cast operator).
+func populateTwoArgsOverloads(
+	base *overloadBase,
+	opOutputTypes map[typePair]*types.T,
+	overrideOverloadFuncs func(*lastArgWidthOverload, typeCustomizer),
+	customizers map[typePair]typeCustomizer,
+) (newSameTypeOverloads []*oneArgOverload) {
+	var combinableCanonicalTypeFamilies map[types.Family][]types.Family
+	if base.IsBinOp {
+		combinableCanonicalTypeFamilies = compatibleCanonicalTypeFamilies
+	} else if base.IsCmpOp {
+		combinableCanonicalTypeFamilies = comparableCanonicalTypeFamilies
+	} else if base.IsCastOp {
+		combinableCanonicalTypeFamilies = castableCanonicalTypeFamilies
+	} else {
+		colexecerror.InternalError("unexpectedly overload is neither binary, comparison, nor cast")
+	}
+	for _, leftFamily := range supportedCanonicalTypeFamilies {
+		leftWidths, found := supportedWidthsByCanonicalTypeFamily[leftFamily]
+		if !found {
+			colexecerror.InternalError(fmt.Sprintf("didn't find supported widths for %s", leftFamily))
+		}
+		leftFamilyStr := toString(leftFamily)
+		for _, rightFamily := range combinableCanonicalTypeFamilies[leftFamily] {
+			rightWidths, found := supportedWidthsByCanonicalTypeFamily[rightFamily]
+			if !found {
+				colexecerror.InternalError(fmt.Sprintf("didn't find supported widths for %s", rightFamily))
+			}
+			rightFamilyStr := toString(rightFamily)
+			for _, leftWidth := range leftWidths {
+				for _, rightWidth := range rightWidths {
+					customizer, ok := customizers[typePair{leftFamily, leftWidth, rightFamily, rightWidth}]
+					if !ok {
+						colexecerror.InternalError("unexpectedly didn't find a type customizer")
+					}
+					// Skip overloads that don't have associated output types.
+					retType, ok := opOutputTypes[typePair{leftFamily, leftWidth, rightFamily, rightWidth}]
+					if !ok {
+						continue
+					}
+					var info *twoArgsResolvedOverloadInfo
+					if base.IsBinOp {
+						for _, existingInfo := range twoArgsResolvedOverloadsInfo.BinOps {
+							if existingInfo.Name == base.Name {
+								info = existingInfo
+								break
+							}
+						}
+						if info == nil {
+							info = &twoArgsResolvedOverloadInfo{
+								overloadBase: base,
+							}
+							twoArgsResolvedOverloadsInfo.BinOps = append(twoArgsResolvedOverloadsInfo.BinOps, info)
+						}
+					} else if base.IsCmpOp {
+						for _, existingInfo := range twoArgsResolvedOverloadsInfo.CmpOps {
+							if existingInfo.Name == base.Name {
+								info = existingInfo
+								break
+							}
+						}
+						if info == nil {
+							info = &twoArgsResolvedOverloadInfo{
+								overloadBase: base,
+							}
+							twoArgsResolvedOverloadsInfo.CmpOps = append(twoArgsResolvedOverloadsInfo.CmpOps, info)
+						}
+					} else if base.IsCastOp {
+						info = twoArgsResolvedOverloadsInfo.CastOverloads
+						if info == nil {
+							info = &twoArgsResolvedOverloadInfo{
+								overloadBase: base,
+							}
+							twoArgsResolvedOverloadsInfo.CastOverloads = info
+						}
+					}
+					var leftFamilies *twoArgsResolvedOverloadLeftFamilyInfo
+					for _, lf := range info.LeftFamilies {
+						if lf.LeftCanonicalFamilyStr == leftFamilyStr {
+							leftFamilies = lf
+							break
+						}
+					}
+					if leftFamilies == nil {
+						leftFamilies = &twoArgsResolvedOverloadLeftFamilyInfo{
+							LeftCanonicalFamilyStr: leftFamilyStr,
+						}
+						info.LeftFamilies = append(info.LeftFamilies, leftFamilies)
+					}
+					var leftWidths *twoArgsResolvedOverloadLeftWidthInfo
+					for _, lw := range leftFamilies.LeftWidths {
+						if lw.Width == leftWidth {
+							leftWidths = lw
+							break
+						}
+					}
+					if leftWidths == nil {
+						leftWidths = &twoArgsResolvedOverloadLeftWidthInfo{
+							Width: leftWidth,
+						}
+						leftFamilies.LeftWidths = append(leftFamilies.LeftWidths, leftWidths)
+					}
+					var rightFamilies *twoArgsResolvedOverloadRightFamilyInfo
+					for _, rf := range leftWidths.RightFamilies {
+						if rf.RightCanonicalFamilyStr == rightFamilyStr {
+							rightFamilies = rf
+							break
+						}
+					}
+					if rightFamilies == nil {
+						rightFamilies = &twoArgsResolvedOverloadRightFamilyInfo{
+							RightCanonicalFamilyStr: rightFamilyStr,
+						}
+						leftWidths.RightFamilies = append(leftWidths.RightFamilies, rightFamilies)
+					}
+					lawo := newLastArgWidthOverload(
+						newLastArgTypeOverload(base, rightFamily),
+						rightWidth, retType,
+					)
+					overrideOverloadFuncs(lawo, customizer)
+					taro := &twoArgsResolvedOverload{
+						overloadBase: base,
+						Left: newArgWidthOverload(
+							newArgTypeOverload(base, leftFamily, leftWidth),
+							leftWidth,
+						),
+						Right: lawo,
+					}
+					rightFamilies.RightWidths = append(rightFamilies.RightWidths,
+						&twoArgsResolvedOverloadRightWidthInfo{
+							Width:                   rightWidth,
+							twoArgsResolvedOverload: taro,
+						})
+					if base.IsBinOp || base.IsCmpOp {
+						resolvedBinCmpOpsOverloads = append(resolvedBinCmpOpsOverloads, taro)
+						if leftFamily == rightFamily && leftWidth == rightWidth {
+							var oao *oneArgOverload
+							for _, o := range newSameTypeOverloads {
+								if o.CanonicalTypeFamily == leftFamily {
+									oao = o
+									break
+								}
+							}
+							if oao == nil {
+								oao = &oneArgOverload{
+									// We're creating a separate lastArgTypeOverload
+									// because we want to have a separate WidthOverloads
+									// field for same type family and same width
+									// overloads.
+									lastArgTypeOverload: &lastArgTypeOverload{
+										overloadBase:        base,
+										argTypeOverloadBase: lawo.lastArgTypeOverload.argTypeOverloadBase,
+									},
+								}
+								newSameTypeOverloads = append(newSameTypeOverloads, oao)
+							}
+							oao.WidthOverloads = append(oao.WidthOverloads, lawo)
+						}
+					}
+				}
+			}
+		}
+	}
+	return newSameTypeOverloads
+}
+
+func populateBinOpOverloads() {
+	registerBinOpOutputTypes()
+	for _, op := range []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div} {
+		ob := &overloadBase{
+			Name:    binaryOpName[op],
+			BinOp:   op,
+			IsBinOp: true,
+			OpStr:   binaryOpInfix[op],
+		}
+		sameTypeBinaryOpToOverloads[op] = populateTwoArgsOverloads(
+			ob, binOpOutputTypes[op],
+			func(lawo *lastArgWidthOverload, customizer typeCustomizer) {
+				if b, ok := customizer.(binOpTypeCustomizer); ok {
+					lawo.AssignFunc = b.getBinOpAssignFunc()
+				}
+			},
+			typeCustomizers,
+		)
+	}
+}
+
+func populateCmpOpOverloads() {
+	registerCmpOpOutputTypes()
+	for _, op := range []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
+		base := &overloadBase{
+			Name:    comparisonOpName[op],
+			CmpOp:   op,
+			IsCmpOp: true,
+			OpStr:   comparisonOpInfix[op],
+		}
+		sameTypeComparisonOpToOverloads[op] = populateTwoArgsOverloads(
+			base,
+			cmpOpOutputTypes,
+			func(lawo *lastArgWidthOverload, customizer typeCustomizer) {
+				if b, ok := customizer.(cmpOpTypeCustomizer); ok {
+					lawo.AssignFunc = func(op *lastArgWidthOverload, target, l, r string) string {
+						cmp := b.getCmpOpCompareFunc()("cmpResult", l, r)
+						if cmp == "" {
+							return ""
+						}
+						args := map[string]string{"Target": target, "Cmp": cmp, "Op": op.overloadBase.OpStr}
+						buf := strings.Builder{}
+						t := template.Must(template.New("").Parse(`
+										{
+											var cmpResult int
+											{{.Cmp}}
+											{{.Target}} = cmpResult {{.Op}} 0
+										}
+									`))
+						if err := t.Execute(&buf, args); err != nil {
+							colexecerror.InternalError(err)
+						}
+						return buf.String()
+					}
+					lawo.CompareFunc = b.getCmpOpCompareFunc()
+				}
+			},
+			typeCustomizers,
+		)
+	}
+}
+
+func populateHashOverloads() {
+	hashOverloadBase := &overloadBase{
+		Name:     "hash",
+		IsHashOp: true,
+		OpStr:    "uint64",
+	}
+	for _, family := range supportedCanonicalTypeFamilies {
+		widths, found := supportedWidthsByCanonicalTypeFamily[family]
+		if !found {
+			colexecerror.InternalError(fmt.Sprintf("didn't find supported widths for %s", family))
+		}
+		ov := newLastArgTypeOverload(hashOverloadBase, family)
+		for _, width := range widths {
+			// Note that we pass in types.Bool as the return type just to make
+			//
+			// Note that we pass in types.Bool as the return type just to make
+			// overloads initialization happy. We don't actually care about the
+			// return type since we know that it will be represented physically
+			// as uint64.
+			lawo := newLastArgWidthOverload(ov, width, types.Bool)
+			sameTypeCustomizer := typeCustomizers[typePair{family, width, family, width}]
+			if sameTypeCustomizer != nil {
+				if b, ok := sameTypeCustomizer.(hashTypeCustomizer); ok {
+					lawo.AssignFunc = b.getHashAssignFunc()
+				}
+			}
+		}
+		hashOverloads = append(hashOverloads, &oneArgOverload{
+			lastArgTypeOverload: ov,
+		})
+	}
+}
+
+func populateCastOverloads() {
+	registerCastTypeCustomizers()
+	registerCastOutputTypes()
+	populateTwoArgsOverloads(
+		&overloadBase{
+			Name:     "cast",
+			IsCastOp: true,
+		},
+		castOutputTypes,
+		func(lawo *lastArgWidthOverload, customizer typeCustomizer) {
+			if b, ok := customizer.(castTypeCustomizer); ok {
+				lawo.CastFunc = b.getCastFunc()
+			}
+		}, castTypeCustomizers)
+}
 
 func init() {
 	registerTypeCustomizers()
-	registerBinOpOutputTypes()
 
-	// Build overload definitions for basic coltypes.
-	inputTypes := coltypes.AllTypes
-	binOps := []tree.BinaryOperator{tree.Plus, tree.Minus, tree.Mult, tree.Div}
-	cmpOps := []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE}
-	sameTypeBinaryOpToOverloads = make(map[tree.BinaryOperator][]*overload, len(binaryOpName))
-	anyTypeBinaryOpToOverloads = make(map[tree.BinaryOperator][]*overload, len(binaryOpName))
-	sameTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*overload, len(comparisonOpName))
-	anyTypeComparisonOpToOverloads = make(map[tree.ComparisonOperator][]*overload, len(comparisonOpName))
-	for _, leftType := range inputTypes {
-		for _, rightType := range coltypes.CompatibleTypes[leftType] {
-			customizer := typeCustomizers[coltypePair{leftType, rightType}]
-			for _, op := range binOps {
-				// Skip types that don't have associated binary ops.
-				retType, ok := binOpOutputTypes[op][coltypePair{leftType, rightType}]
-				if !ok {
-					continue
-				}
-				ov := &overload{
-					Name:      binaryOpName[op],
-					BinOp:     op,
-					IsBinOp:   true,
-					OpStr:     binaryOpInfix[op],
-					LTyp:      leftType,
-					RTyp:      rightType,
-					LGoType:   leftType.GoTypeName(),
-					RGoType:   rightType.GoTypeName(),
-					RetTyp:    retType,
-					RetGoType: retType.GoTypeName(),
-				}
-				if customizer != nil {
-					if b, ok := customizer.(binOpTypeCustomizer); ok {
-						ov.AssignFunc = b.getBinOpAssignFunc()
-					}
-				}
-				binaryOpOverloads = append(binaryOpOverloads, ov)
-				anyTypeBinaryOpToOverloads[op] = append(anyTypeBinaryOpToOverloads[op], ov)
-				if leftType == rightType {
-					sameTypeBinaryOpToOverloads[op] = append(sameTypeBinaryOpToOverloads[op], ov)
-				}
-			}
-		}
-		for _, rightType := range coltypes.ComparableTypes[leftType] {
-			customizer := typeCustomizers[coltypePair{leftType, rightType}]
-			for _, op := range cmpOps {
-				opStr := comparisonOpInfix[op]
-				ov := &overload{
-					Name:      comparisonOpName[op],
-					CmpOp:     op,
-					IsCmpOp:   true,
-					OpStr:     opStr,
-					LTyp:      leftType,
-					RTyp:      rightType,
-					LGoType:   leftType.GoTypeName(),
-					RGoType:   rightType.GoTypeName(),
-					RetTyp:    coltypes.Bool,
-					RetGoType: coltypes.Bool.GoTypeName(),
-				}
-				if customizer != nil {
-					if b, ok := customizer.(cmpOpTypeCustomizer); ok {
-						ov.AssignFunc = func(op overload, target, l, r string) string {
-							cmp := b.getCmpOpCompareFunc()("cmpResult", l, r)
-							if cmp == "" {
-								return ""
-							}
-							args := map[string]string{"Target": target, "Cmp": cmp, "Op": op.OpStr}
-							buf := strings.Builder{}
-							t := template.Must(template.New("").Parse(`
-								{
-									var cmpResult int
-									{{.Cmp}}
-									{{.Target}} = cmpResult {{.Op}} 0
-								}
-							`))
-							if err := t.Execute(&buf, args); err != nil {
-								colexecerror.InternalError(err)
-							}
-							return buf.String()
-						}
-						ov.CompareFunc = b.getCmpOpCompareFunc()
-					}
-				}
-				comparisonOpOverloads = append(comparisonOpOverloads, ov)
-				anyTypeComparisonOpToOverloads[op] = append(anyTypeComparisonOpToOverloads[op], ov)
-				if leftType == rightType {
-					sameTypeComparisonOpToOverloads[op] = append(sameTypeComparisonOpToOverloads[op], ov)
-				}
-			}
-		}
-		sameTypeCustomizer := typeCustomizers[coltypePair{leftType, leftType}]
-		ov := &overload{
-			IsHashOp: true,
-			LTyp:     leftType,
-			OpStr:    "uint64",
-		}
-		if sameTypeCustomizer != nil {
-			if b, ok := sameTypeCustomizer.(hashTypeCustomizer); ok {
-				ov.AssignFunc = b.getHashAssignFunc()
-			}
-		}
-		hashOverloads = append(hashOverloads, ov)
-	}
-
-	// Build cast overloads. We omit cases of type casts that we do not support.
-	castOverloads = make(map[coltypes.T][]castOverload)
-	for _, from := range inputTypes {
-		switch from {
-		case coltypes.Bool:
-			for _, to := range inputTypes {
-				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
-				switch to {
-				case coltypes.Bool:
-					ov.AssignFunc = castIdentity
-				case coltypes.Int16, coltypes.Int32,
-					coltypes.Int64, coltypes.Float64:
-					ov.AssignFunc = func(to, from string) string {
-						convStr := `
-							%[1]s = 0
-							if %[2]s {
-								%[1]s = 1
-							}
-						`
-						return fmt.Sprintf(convStr, to, from)
-					}
-				}
-				castOverloads[from] = append(castOverloads[from], ov)
-			}
-		case coltypes.Bytes:
-			// TODO (rohany): It's unclear what to do here in the bytes case.
-			// There are different conversion rules for the multiple things
-			// that a bytes type can implemented, but we don't know each of the
-			// things is contained here. Additionally, we don't really know
-			// what to do even if it is a bytes to bytes operation here.
-			for _, to := range inputTypes {
-				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
-				switch to {
-				}
-				castOverloads[from] = append(castOverloads[from], ov)
-			}
-		case coltypes.Decimal:
-			for _, to := range inputTypes {
-				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
-				switch to {
-				case coltypes.Bool:
-					ov.AssignFunc = func(to, from string) string {
-						convStr := `
-							%[1]s = %[2]s.Sign() != 0
-						`
-						return fmt.Sprintf(convStr, to, from)
-					}
-				case coltypes.Decimal:
-					ov.AssignFunc = castIdentity
-				}
-				castOverloads[from] = append(castOverloads[from], ov)
-			}
-		case coltypes.Int16:
-			for _, to := range inputTypes {
-				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
-				switch to {
-				case coltypes.Bool:
-					ov.AssignFunc = numToBool
-				case coltypes.Decimal:
-					ov.AssignFunc = intToDecimal
-				case coltypes.Int16:
-					ov.AssignFunc = castIdentity
-				case coltypes.Int32:
-					ov.AssignFunc = intToInt32
-				case coltypes.Int64:
-					ov.AssignFunc = intToInt64
-				case coltypes.Float64:
-					ov.AssignFunc = intToFloat(64)
-				}
-				castOverloads[from] = append(castOverloads[from], ov)
-			}
-		case coltypes.Int32:
-			for _, to := range inputTypes {
-				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
-				switch to {
-				case coltypes.Bool:
-					ov.AssignFunc = numToBool
-				case coltypes.Decimal:
-					ov.AssignFunc = intToDecimal
-				case coltypes.Int32:
-					ov.AssignFunc = castIdentity
-				case coltypes.Int64:
-					ov.AssignFunc = intToInt64
-				case coltypes.Float64:
-					ov.AssignFunc = intToFloat(64)
-				}
-				castOverloads[from] = append(castOverloads[from], ov)
-			}
-		case coltypes.Int64:
-			for _, to := range inputTypes {
-				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
-				switch to {
-				case coltypes.Bool:
-					ov.AssignFunc = numToBool
-				case coltypes.Decimal:
-					ov.AssignFunc = intToDecimal
-				case coltypes.Int64:
-					ov.AssignFunc = castIdentity
-				case coltypes.Float64:
-					ov.AssignFunc = intToFloat(64)
-				}
-				castOverloads[from] = append(castOverloads[from], ov)
-			}
-		case coltypes.Float64:
-			for _, to := range inputTypes {
-				ov := castOverload{FromTyp: from, ToTyp: to, ToGoTyp: to.GoTypeName()}
-				switch to {
-				case coltypes.Bool:
-					ov.AssignFunc = numToBool
-				case coltypes.Decimal:
-					ov.AssignFunc = floatToDecimal
-				case coltypes.Int16:
-					ov.AssignFunc = floatToInt(16, 64)
-				case coltypes.Int32:
-					ov.AssignFunc = floatToInt(32, 64)
-				case coltypes.Int64:
-					ov.AssignFunc = floatToInt(64, 64)
-				case coltypes.Float64:
-					ov.AssignFunc = castIdentity
-				}
-				castOverloads[from] = append(castOverloads[from], ov)
-			}
-		}
-	}
+	populateBinOpOverloads()
+	populateCmpOpOverloads()
+	populateHashOverloads()
+	populateCastOverloads()
 }
 
 // typeCustomizer is a marker interface for something that implements one or
@@ -484,20 +794,41 @@ func init() {
 // (==, <, etc) or binary operator (+, -, etc) semantics.
 type typeCustomizer interface{}
 
-// coltypePair is used to key a map that holds all typeCustomizers.
-type coltypePair struct {
-	leftType  coltypes.T
-	rightType coltypes.T
+// typePair is used to key a map that holds all typeCustomizers.
+type typePair struct {
+	leftTypeFamily  types.Family
+	leftWidth       int32
+	rightTypeFamily types.Family
+	rightWidth      int32
 }
 
 var typeCustomizers map[coltypePair]typeCustomizer
-
-var binOpOutputTypes map[tree.BinaryOperator]map[coltypePair]coltypes.T
 
 // registerTypeCustomizer registers a particular type customizer to a
 // pair of types, for usage by templates.
 func registerTypeCustomizer(pair coltypePair, customizer typeCustomizer) {
 	typeCustomizers[pair] = customizer
+}
+
+var castTypeCustomizers = make(map[typePair]typeCustomizer)
+
+func registerCastTypeCustomizer(pair typePair, customizer typeCustomizer) {
+	if _, found := castTypeCustomizers[pair]; found {
+		colexecerror.InternalError(fmt.Sprintf("unexpectedly cast type customizer already present for %v", pair))
+	}
+	castTypeCustomizers[pair] = customizer
+	alreadyPresent := false
+	for _, rightFamily := range castableCanonicalTypeFamilies[pair.leftTypeFamily] {
+		if rightFamily == pair.rightTypeFamily {
+			alreadyPresent = true
+			break
+		}
+	}
+	if !alreadyPresent {
+		castableCanonicalTypeFamilies[pair.leftTypeFamily] = append(
+			castableCanonicalTypeFamilies[pair.leftTypeFamily], pair.rightTypeFamily,
+		)
+	}
 }
 
 // binOpTypeCustomizer is a type customizer that changes how the templater
@@ -1277,119 +1608,229 @@ func (c decimalIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 }
 
 func registerTypeCustomizers() {
-	typeCustomizers = make(map[coltypePair]typeCustomizer)
-	registerTypeCustomizer(coltypePair{coltypes.Bool, coltypes.Bool}, boolCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Bytes, coltypes.Bytes}, bytesCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Decimal, coltypes.Decimal}, decimalCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Timestamp, coltypes.Timestamp}, timestampCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Interval, coltypes.Interval}, intervalCustomizer{})
-	for _, leftFloatType := range coltypes.FloatTypes {
-		for _, rightFloatType := range coltypes.FloatTypes {
-			registerTypeCustomizer(coltypePair{leftFloatType, rightFloatType}, floatCustomizer{width: 64})
-		}
-	}
-	for _, leftIntType := range coltypes.IntTypes {
-		for _, rightIntType := range coltypes.IntTypes {
-			registerTypeCustomizer(coltypePair{leftIntType, rightIntType}, intCustomizer{width: 64})
+	typeCustomizers = make(map[typePair]typeCustomizer)
+	registerTypeCustomizer(typePair{types.BoolFamily, anyWidth, types.BoolFamily, anyWidth}, boolCustomizer{})
+	registerTypeCustomizer(typePair{types.BytesFamily, anyWidth, types.BytesFamily, anyWidth}, bytesCustomizer{})
+	registerTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.DecimalFamily, anyWidth}, decimalCustomizer{})
+	registerTypeCustomizer(typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}, floatCustomizer{})
+	registerTypeCustomizer(typePair{types.TimestampTZFamily, anyWidth, types.TimestampTZFamily, anyWidth}, timestampCustomizer{})
+	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}, intervalCustomizer{})
+	for _, leftIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+		for _, rightIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+			registerTypeCustomizer(typePair{types.IntFamily, leftIntWidth, types.IntFamily, rightIntWidth}, intCustomizer{width: anyWidth})
 		}
 	}
 	// Use a customizer of appropriate width when widths are the same.
-	registerTypeCustomizer(coltypePair{coltypes.Float64, coltypes.Float64}, floatCustomizer{width: 64})
-	registerTypeCustomizer(coltypePair{coltypes.Int16, coltypes.Int16}, intCustomizer{width: 16})
-	registerTypeCustomizer(coltypePair{coltypes.Int32, coltypes.Int32}, intCustomizer{width: 32})
-	registerTypeCustomizer(coltypePair{coltypes.Int64, coltypes.Int64}, intCustomizer{width: 64})
+	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+		registerTypeCustomizer(typePair{types.IntFamily, intWidth, types.IntFamily, intWidth}, intCustomizer{width: intWidth})
+	}
 
-	for _, rightFloatType := range coltypes.FloatTypes {
-		registerTypeCustomizer(coltypePair{coltypes.Decimal, rightFloatType}, decimalFloatCustomizer{})
-		registerTypeCustomizer(coltypePair{coltypes.Interval, rightFloatType}, intervalFloatCustomizer{})
+	registerTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.FloatFamily, anyWidth}, decimalFloatCustomizer{})
+	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.FloatFamily, anyWidth}, intervalFloatCustomizer{})
+	for _, rightIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+		registerTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.IntFamily, rightIntWidth}, decimalIntCustomizer{})
+		registerTypeCustomizer(typePair{types.FloatFamily, anyWidth, types.IntFamily, rightIntWidth}, floatIntCustomizer{})
+		registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.IntFamily, rightIntWidth}, intervalIntCustomizer{})
 	}
-	for _, rightIntType := range coltypes.IntTypes {
-		registerTypeCustomizer(coltypePair{coltypes.Decimal, rightIntType}, decimalIntCustomizer{})
-		registerTypeCustomizer(coltypePair{coltypes.Interval, rightIntType}, intervalIntCustomizer{})
+	registerTypeCustomizer(typePair{types.FloatFamily, anyWidth, types.DecimalFamily, anyWidth}, floatDecimalCustomizer{})
+	registerTypeCustomizer(typePair{types.FloatFamily, anyWidth, types.IntervalFamily, anyWidth}, floatIntervalCustomizer{})
+	for _, leftIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+		registerTypeCustomizer(typePair{types.IntFamily, leftIntWidth, types.DecimalFamily, anyWidth}, intDecimalCustomizer{})
+		registerTypeCustomizer(typePair{types.IntFamily, leftIntWidth, types.FloatFamily, anyWidth}, intFloatCustomizer{})
+		registerTypeCustomizer(typePair{types.IntFamily, leftIntWidth, types.IntervalFamily, anyWidth}, intIntervalCustomizer{})
 	}
-	for _, leftFloatType := range coltypes.FloatTypes {
-		registerTypeCustomizer(coltypePair{leftFloatType, coltypes.Decimal}, floatDecimalCustomizer{})
-		registerTypeCustomizer(coltypePair{leftFloatType, coltypes.Interval}, floatIntervalCustomizer{})
-	}
-	for _, leftIntType := range coltypes.IntTypes {
-		registerTypeCustomizer(coltypePair{leftIntType, coltypes.Decimal}, intDecimalCustomizer{})
-		registerTypeCustomizer(coltypePair{leftIntType, coltypes.Interval}, intIntervalCustomizer{})
-	}
-	for _, leftFloatType := range coltypes.FloatTypes {
-		for _, rightIntType := range coltypes.IntTypes {
-			registerTypeCustomizer(coltypePair{leftFloatType, rightIntType}, floatIntCustomizer{})
-		}
-	}
-	for _, leftIntType := range coltypes.IntTypes {
-		for _, rightFloatType := range coltypes.FloatTypes {
-			registerTypeCustomizer(coltypePair{leftIntType, rightFloatType}, intFloatCustomizer{})
-		}
-	}
-	registerTypeCustomizer(coltypePair{coltypes.Timestamp, coltypes.Interval}, timestampIntervalCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Interval, coltypes.Timestamp}, intervalTimestampCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Interval, coltypes.Decimal}, intervalDecimalCustomizer{})
-	registerTypeCustomizer(coltypePair{coltypes.Decimal, coltypes.Interval}, decimalIntervalCustomizer{})
+	registerTypeCustomizer(typePair{types.TimestampTZFamily, anyWidth, types.IntervalFamily, anyWidth}, timestampIntervalCustomizer{})
+	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.TimestampTZFamily, anyWidth}, intervalTimestampCustomizer{})
+	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.DecimalFamily, anyWidth}, intervalDecimalCustomizer{})
+	registerTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.IntervalFamily, anyWidth}, decimalIntervalCustomizer{})
 }
 
 func registerBinOpOutputTypes() {
-	binOpOutputTypes = make(map[tree.BinaryOperator]map[coltypePair]coltypes.T)
 	for binOp := range binaryOpName {
-		binOpOutputTypes[binOp] = make(map[coltypePair]coltypes.T)
-		for _, leftFloatType := range coltypes.FloatTypes {
-			for _, rightFloatType := range coltypes.FloatTypes {
-				binOpOutputTypes[binOp][coltypePair{leftFloatType, rightFloatType}] = coltypes.Float64
+		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
+		binOpOutputTypes[binOp][typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Float
+		for _, leftIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+			for _, rightIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+				binOpOutputTypes[binOp][typePair{types.IntFamily, leftIntWidth, types.IntFamily, rightIntWidth}] = types.Int
 			}
 		}
-		for _, leftIntType := range coltypes.IntTypes {
-			for _, rightIntType := range coltypes.IntTypes {
-				binOpOutputTypes[binOp][coltypePair{leftIntType, rightIntType}] = coltypes.Int64
-			}
-		}
+		binOpOutputTypes[binOp][typePair{types.DecimalFamily, anyWidth, types.DecimalFamily, anyWidth}] = types.Decimal
+		binOpOutputTypes[binOp][typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Float
 		// Use an output type of the same width when input widths are the same.
-		binOpOutputTypes[binOp][coltypePair{coltypes.Decimal, coltypes.Decimal}] = coltypes.Decimal
-		binOpOutputTypes[binOp][coltypePair{coltypes.Float64, coltypes.Float64}] = coltypes.Float64
 		// Note: keep output type of binary operations on integers of different
 		// widths in line with planning in colexec/execplan.go.
-		binOpOutputTypes[binOp][coltypePair{coltypes.Int16, coltypes.Int16}] = coltypes.Int16
-		binOpOutputTypes[binOp][coltypePair{coltypes.Int32, coltypes.Int32}] = coltypes.Int32
-		binOpOutputTypes[binOp][coltypePair{coltypes.Int64, coltypes.Int64}] = coltypes.Int64
-		for _, intType := range coltypes.IntTypes {
-			binOpOutputTypes[binOp][coltypePair{coltypes.Decimal, intType}] = coltypes.Decimal
-			binOpOutputTypes[binOp][coltypePair{intType, coltypes.Decimal}] = coltypes.Decimal
+		for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+			var intType *types.T
+			switch intWidth {
+			case 16:
+				intType = types.Int2
+			case 32:
+				intType = types.Int4
+			case anyWidth:
+				intType = types.Int
+			default:
+				colexecerror.InternalError(fmt.Sprintf("unexpected int width: %d", intWidth))
+			}
+			binOpOutputTypes[binOp][typePair{types.IntFamily, intWidth, types.IntFamily, intWidth}] = intType
+		}
+		for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+			binOpOutputTypes[binOp][typePair{types.DecimalFamily, anyWidth, types.IntFamily, intWidth}] = types.Decimal
+			binOpOutputTypes[binOp][typePair{types.IntFamily, intWidth, types.DecimalFamily, anyWidth}] = types.Decimal
 		}
 	}
 
 	// There is a special case for division with integers; it should have a
 	// decimal result.
-	for _, leftIntType := range coltypes.IntTypes {
-		for _, rightIntType := range coltypes.IntTypes {
-			binOpOutputTypes[tree.Div][coltypePair{leftIntType, rightIntType}] = coltypes.Decimal
+	for _, leftIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+		for _, rightIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+			binOpOutputTypes[tree.Div][typePair{types.IntFamily, leftIntWidth, types.IntFamily, rightIntWidth}] = types.Decimal
 		}
 	}
 
-	binOpOutputTypes[tree.Minus][coltypePair{coltypes.Timestamp, coltypes.Timestamp}] = coltypes.Interval
-	binOpOutputTypes[tree.Plus][coltypePair{coltypes.Interval, coltypes.Interval}] = coltypes.Interval
-	binOpOutputTypes[tree.Minus][coltypePair{coltypes.Interval, coltypes.Interval}] = coltypes.Interval
-	for _, numberType := range coltypes.NumberTypes {
-		binOpOutputTypes[tree.Mult][coltypePair{numberType, coltypes.Interval}] = coltypes.Interval
-		binOpOutputTypes[tree.Mult][coltypePair{coltypes.Interval, numberType}] = coltypes.Interval
+	binOpOutputTypes[tree.Minus][typePair{types.TimestampTZFamily, anyWidth, types.TimestampTZFamily, anyWidth}] = types.Interval
+	binOpOutputTypes[tree.Plus][typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.Interval
+	binOpOutputTypes[tree.Minus][typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.Interval
+	for _, numberTypeFamily := range numericCanonicalTypeFamilies {
+		binOpOutputTypes[tree.Mult][typePair{numberTypeFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.Interval
+		binOpOutputTypes[tree.Mult][typePair{types.IntervalFamily, anyWidth, numberTypeFamily, anyWidth}] = types.Interval
 	}
-	for _, rightIntType := range coltypes.IntTypes {
-		binOpOutputTypes[tree.Div][coltypePair{coltypes.Interval, rightIntType}] = coltypes.Interval
-	}
-	for _, rightFloatType := range coltypes.FloatTypes {
-		binOpOutputTypes[tree.Div][coltypePair{coltypes.Interval, rightFloatType}] = coltypes.Interval
-	}
-	binOpOutputTypes[tree.Plus][coltypePair{coltypes.Timestamp, coltypes.Interval}] = coltypes.Timestamp
-	binOpOutputTypes[tree.Minus][coltypePair{coltypes.Timestamp, coltypes.Interval}] = coltypes.Timestamp
-	binOpOutputTypes[tree.Plus][coltypePair{coltypes.Interval, coltypes.Timestamp}] = coltypes.Timestamp
+	binOpOutputTypes[tree.Div][typePair{types.IntervalFamily, anyWidth, types.IntFamily, anyWidth}] = types.Interval
+	binOpOutputTypes[tree.Div][typePair{types.IntervalFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Interval
+	binOpOutputTypes[tree.Plus][typePair{types.TimestampTZFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.TimestampTZ
+	binOpOutputTypes[tree.Minus][typePair{types.TimestampTZFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.TimestampTZ
+	binOpOutputTypes[tree.Plus][typePair{types.IntervalFamily, anyWidth, types.TimestampTZFamily, anyWidth}] = types.TimestampTZ
 }
 
-// Avoid unused warning for functions which are only used in templates.
-var _ = overload{}.Assign
-var _ = overload{}.Compare
-var _ = overload{}.UnaryAssign
-var _ = castOverload{}.Assign
+// boolCastCustomizer specifies casts from booleans.
+type boolCastCustomizer struct{}
+
+// decimalCastCustomizer specifies casts from decimals.
+type decimalCastCustomizer struct{}
+
+// floatCastCustomizer specifies casts from floats.
+type floatCastCustomizer struct {
+	toFamily types.Family
+	toWidth  int32
+}
+
+// intCastCustomizer specifies casts from ints to other types.
+type intCastCustomizer struct {
+	toFamily types.Family
+	toWidth  int32
+}
+
+func (boolCastCustomizer) getCastFunc() castFunc {
+	return func(to, from string) string {
+		convStr := `
+			%[1]s = 0
+			if %[2]s {
+				%[1]s = 1
+			}
+		`
+		return fmt.Sprintf(convStr, to, from)
+	}
+}
+
+func (decimalCastCustomizer) getCastFunc() castFunc {
+	return func(to, from string) string {
+		return fmt.Sprintf("%[1]s = %[2]s.Sign() != 0", to, from)
+	}
+}
+
+func (c floatCastCustomizer) getCastFunc() castFunc {
+	switch c.toFamily {
+	case types.BoolFamily:
+		return numToBool
+	case types.DecimalFamily:
+		return floatToDecimal
+	case types.IntFamily:
+		return floatToInt(c.toWidth, 64)
+	}
+	colexecerror.InternalError(fmt.Sprintf("unexpectedly didn't find a cast from float to %s with %d width", c.toFamily, c.toWidth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
+}
+
+func (c intCastCustomizer) getCastFunc() castFunc {
+	switch c.toFamily {
+	case types.BoolFamily:
+		return numToBool
+	case types.DecimalFamily:
+		return intToDecimal
+	case types.IntFamily:
+		switch c.toWidth {
+		case 16:
+			return intToInt16
+		case 32:
+			return intToInt32
+		case anyWidth:
+			return intToInt64
+		}
+	case types.FloatFamily:
+		return intToFloat()
+	}
+	colexecerror.InternalError(fmt.Sprintf("unexpectedly didn't find a cast from int to %s with %d width", c.toFamily, c.toWidth))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
+}
+
+func registerCastTypeCustomizers() {
+	// Identity casts.
+	//
+	// Note that we're using the same "vanilla" type customizers since identity
+	// casts are the default behavior of the CastFunc.
+	registerCastTypeCustomizer(typePair{types.BoolFamily, anyWidth, types.BoolFamily, anyWidth}, boolCustomizer{})
+	// TODO(yuzefovich): add casts between types that have types.BytesFamily as
+	// their canonical type family.
+	registerCastTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.DecimalFamily, anyWidth}, decimalCustomizer{})
+	registerCastTypeCustomizer(typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}, floatCustomizer{})
+	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+		registerCastTypeCustomizer(typePair{types.IntFamily, intWidth, types.IntFamily, intWidth}, intCustomizer{width: intWidth})
+	}
+	// TODO(yuzefovich): add casts for Timestamps and Intervals.
+
+	// Casts from boolean.
+	registerCastTypeCustomizer(typePair{types.BoolFamily, anyWidth, types.FloatFamily, anyWidth}, boolCastCustomizer{})
+	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+		registerCastTypeCustomizer(typePair{types.BoolFamily, anyWidth, types.IntFamily, intWidth}, boolCastCustomizer{})
+	}
+
+	// Casts from decimal.
+	registerCastTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.BoolFamily, anyWidth}, decimalCastCustomizer{})
+
+	// Casts from ints.
+	for _, fromIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+		// Casts between ints.
+		for _, toIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
+			if fromIntWidth != toIntWidth {
+				registerCastTypeCustomizer(typePair{types.IntFamily, fromIntWidth, types.IntFamily, toIntWidth}, intCastCustomizer{toFamily: types.IntFamily, toWidth: toIntWidth})
+			}
+		}
+		// Casts to other types.
+		for _, toFamily := range []types.Family{types.BoolFamily, types.DecimalFamily, types.FloatFamily} {
+			registerCastTypeCustomizer(typePair{types.IntFamily, fromIntWidth, toFamily, anyWidth}, intCastCustomizer{toFamily: toFamily, toWidth: anyWidth})
+		}
+	}
+
+	// Casts from float.
+	for _, toFamily := range []types.Family{types.BoolFamily, types.DecimalFamily, types.IntFamily} {
+		for _, toWidth := range supportedWidthsByCanonicalTypeFamily[toFamily] {
+			registerCastTypeCustomizer(typePair{types.FloatFamily, anyWidth, toFamily, toWidth}, floatCastCustomizer{toFamily: toFamily, toWidth: toWidth})
+		}
+	}
+}
+
+func registerCastOutputTypes() {
+	for _, leftFamily := range supportedCanonicalTypeFamilies {
+		for _, leftWidth := range supportedWidthsByCanonicalTypeFamily[leftFamily] {
+			for _, rightFamily := range castableCanonicalTypeFamilies[leftFamily] {
+				for _, rightWidth := range supportedWidthsByCanonicalTypeFamily[rightFamily] {
+					castOutputTypes[typePair{leftFamily, leftWidth, rightFamily, rightWidth}] = types.Bool
+				}
+			}
+		}
+	}
+}
 
 // buildDict is a template function that builds a dictionary out of its
 // arguments. The argument to this function should be an alternating sequence of
@@ -1479,4 +1920,342 @@ func makeTemplateFunctionCall(funcName string, numArgs int) string {
 	}
 	res += "}}"
 	return res
+}
+
+func (b *argWidthOverloadBase) GoTypeSliceName() string {
+	switch b.CanonicalTypeFamily {
+	case types.BytesFamily:
+		return "*coldata.Bytes"
+	case types.IntFamily:
+		switch b.Width {
+		case 16:
+			return "[]int16"
+		case 32:
+			return "[]int32"
+		case 64, anyWidth:
+			return "[]int64"
+		default:
+			colexecerror.InternalError(fmt.Sprintf("unexpected int width %d", b.Width))
+			// This code is unreachable, but the compiler cannot infer that.
+			return ""
+		}
+	default:
+		return "[]" + toPhysicalRepresentation(b.CanonicalTypeFamily, b.Width)
+	}
+}
+
+func get(family types.Family, target, i string) string {
+	switch family {
+	case types.BytesFamily:
+		return fmt.Sprintf("%s.Get(%s)", target, i)
+	}
+	return fmt.Sprintf("%s[%s]", target, i)
+}
+
+// Get is a function that should only be used in templates.
+func (b *argWidthOverloadBase) Get(target, i string) string {
+	return get(b.CanonicalTypeFamily, target, i)
+}
+
+// ReturnGet is a function that should only be used in templates.
+func (o *lastArgWidthOverload) ReturnGet(target, i string) string {
+	return get(typeconv.TypeFamilyToCanonicalTypeFamily[o.RetType.Family()], target, i)
+}
+
+// CopyVal is a function that should only be used in templates.
+func (b *argWidthOverloadBase) CopyVal(dest, src string) string {
+	switch b.CanonicalTypeFamily {
+	case types.BytesFamily:
+		return fmt.Sprintf("%[1]s = append(%[1]s[:0], %[2]s...)", dest, src)
+	case types.DecimalFamily:
+		return fmt.Sprintf("%s.Set(&%s)", dest, src)
+	}
+	return fmt.Sprintf("%s = %s", dest, src)
+}
+
+// Set is a function that should only be used in templates.
+func (b *argWidthOverloadBase) Set(target, i, new string) string {
+	switch b.CanonicalTypeFamily {
+	case types.BytesFamily:
+		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
+	case types.DecimalFamily:
+		return fmt.Sprintf("%s[%s].Set(&%s)", target, i, new)
+	}
+	return fmt.Sprintf("%s[%s] = %s", target, i, new)
+}
+
+// Slice is a function that should only be used in templates.
+func (b *argWidthOverloadBase) Slice(target, start, end string) string {
+	switch b.CanonicalTypeFamily {
+	case types.BytesFamily:
+		// Slice is a noop for Bytes. We also add a few lines to address "unused
+		// variable" compiler errors.
+		return fmt.Sprintf(`%s
+_ = %s
+_ = %s`, target, start, end)
+	}
+	return fmt.Sprintf("%s[%s:%s]", target, start, end)
+}
+
+// CopySlice is a function that should only be used in templates.
+func (b *argWidthOverloadBase) CopySlice(
+	target, src, destIdx, srcStartIdx, srcEndIdx string,
+) string {
+	var tmpl string
+	switch b.CanonicalTypeFamily {
+	case types.BytesFamily:
+		tmpl = `{{.Tgt}}.CopySlice({{.Src}}, {{.TgtIdx}}, {{.SrcStart}}, {{.SrcEnd}})`
+	case types.DecimalFamily:
+		tmpl = `{
+  __tgt_slice := {{.Tgt}}[{{.TgtIdx}}:]
+  __src_slice := {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}]
+  for __i := range __src_slice {
+    __tgt_slice[__i].Set(&__src_slice[__i])
+  }
+}`
+	default:
+		tmpl = `copy({{.Tgt}}[{{.TgtIdx}}:], {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}])`
+	}
+	args := map[string]string{
+		"Tgt":      target,
+		"Src":      src,
+		"TgtIdx":   destIdx,
+		"SrcStart": srcStartIdx,
+		"SrcEnd":   srcEndIdx,
+	}
+	var buf strings.Builder
+	if err := template.Must(template.New("").Parse(tmpl)).Execute(&buf, args); err != nil {
+		colexecerror.InternalError(err)
+	}
+	return buf.String()
+}
+
+// AppendSlice is a function that should only be used in templates.
+func (b *argWidthOverloadBase) AppendSlice(
+	target, src, destIdx, srcStartIdx, srcEndIdx string,
+) string {
+	var tmpl string
+	switch b.CanonicalTypeFamily {
+	case types.BytesFamily:
+		tmpl = `{{.Tgt}}.AppendSlice({{.Src}}, {{.TgtIdx}}, {{.SrcStart}}, {{.SrcEnd}})`
+	case types.DecimalFamily:
+		tmpl = `{
+  __desiredCap := {{.TgtIdx}} + {{.SrcEnd}} - {{.SrcStart}}
+  if cap({{.Tgt}}) >= __desiredCap {
+  	{{.Tgt}} = {{.Tgt}}[:__desiredCap]
+  } else {
+    __prevCap := cap({{.Tgt}})
+    __capToAllocate := __desiredCap
+    if __capToAllocate < 2 * __prevCap {
+      __capToAllocate = 2 * __prevCap
+    }
+    __new_slice := make([]apd.Decimal, __desiredCap, __capToAllocate)
+    copy(__new_slice, {{.Tgt}}[:{{.TgtIdx}}])
+    {{.Tgt}} = __new_slice
+  }
+  __src_slice := {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}]
+  __dst_slice := {{.Tgt}}[{{.TgtIdx}}:]
+  for __i := range __src_slice {
+    __dst_slice[__i].Set(&__src_slice[__i])
+  }
+}`
+	default:
+		tmpl = `{{.Tgt}} = append({{.Tgt}}[:{{.TgtIdx}}], {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}]...)`
+	}
+	args := map[string]string{
+		"Tgt":      target,
+		"Src":      src,
+		"TgtIdx":   destIdx,
+		"SrcStart": srcStartIdx,
+		"SrcEnd":   srcEndIdx,
+	}
+	var buf strings.Builder
+	if err := template.Must(template.New("").Parse(tmpl)).Execute(&buf, args); err != nil {
+		colexecerror.InternalError(err)
+	}
+	return buf.String()
+}
+
+// AppendVal is a function that should only be used in templates.
+func (b *argWidthOverloadBase) AppendVal(target, v string) string {
+	switch b.CanonicalTypeFamily {
+	case types.BytesFamily:
+		return fmt.Sprintf("%s.AppendVal(%s)", target, v)
+	case types.DecimalFamily:
+		return fmt.Sprintf(`%[1]s = append(%[1]s, apd.Decimal{})
+%[1]s[len(%[1]s)-1].Set(&%[2]s)`, target, v)
+	}
+	return fmt.Sprintf("%[1]s = append(%[1]s, %[2]s)", target, v)
+}
+
+// Len is a function that should only be used in templates.
+// WARNING: combination of Slice and Len might not work correctly for Bytes
+// type.
+func (b *argWidthOverloadBase) Len(target string) string {
+	switch b.CanonicalTypeFamily {
+	case types.BytesFamily:
+		return fmt.Sprintf("%s.Len()", target)
+	}
+	return fmt.Sprintf("len(%s)", target)
+}
+
+// Range is a function that should only be used in templates.
+func (b *argWidthOverloadBase) Range(loopVariableIdent, target, start, end string) string {
+	switch b.CanonicalTypeFamily {
+	case types.BytesFamily:
+		return fmt.Sprintf("%[1]s := %[2]s; %[1]s < %[3]s; %[1]s++", loopVariableIdent, start, end)
+	}
+	return fmt.Sprintf("%[1]s := range %[2]s", loopVariableIdent, target)
+}
+
+// Window is a function that should only be used in templates.
+func (b *argWidthOverloadBase) Window(target, start, end string) string {
+	switch b.CanonicalTypeFamily {
+	case types.BytesFamily:
+		return fmt.Sprintf(`%s.Window(%s, %s)`, target, start, end)
+	}
+	return fmt.Sprintf("%s[%s:%s]", target, start, end)
+}
+
+// Remove unused warnings.
+var (
+	lawo = &lastArgWidthOverload{}
+	_    = lawo.Assign
+	_    = lawo.Compare
+	_    = lawo.Cast
+	_    = lawo.UnaryAssign
+	_    = lawo.ReturnGet
+
+	awob = &argWidthOverloadBase{}
+	_    = awob.GoTypeSliceName
+	_    = awob.Get
+	_    = awob.CopyVal
+	_    = awob.Set
+	_    = awob.Slice
+	_    = awob.CopySlice
+	_    = awob.AppendSlice
+	_    = awob.AppendVal
+	_    = awob.Len
+	_    = awob.Range
+	_    = awob.Window
+)
+
+var supportedCanonicalTypeFamilies = []types.Family{
+	types.BoolFamily,
+	types.BytesFamily,
+	types.DecimalFamily,
+	types.IntFamily,
+	types.FloatFamily,
+	types.TimestampTZFamily,
+	types.IntervalFamily,
+}
+
+var compatibleCanonicalTypeFamilies = map[types.Family][]types.Family{
+	types.BoolFamily:        {types.BoolFamily},
+	types.BytesFamily:       {types.BytesFamily},
+	types.DecimalFamily:     append(numericCanonicalTypeFamilies, types.IntervalFamily),
+	types.IntFamily:         append(numericCanonicalTypeFamilies, types.IntervalFamily),
+	types.FloatFamily:       append(numericCanonicalTypeFamilies, types.IntervalFamily),
+	types.TimestampTZFamily: timeCanonicalTypeFamilies,
+	types.IntervalFamily:    append(numericCanonicalTypeFamilies, timeCanonicalTypeFamilies...),
+}
+
+var comparableCanonicalTypeFamilies = map[types.Family][]types.Family{
+	types.BoolFamily:        {types.BoolFamily},
+	types.BytesFamily:       {types.BytesFamily},
+	types.DecimalFamily:     numericCanonicalTypeFamilies,
+	types.IntFamily:         numericCanonicalTypeFamilies,
+	types.FloatFamily:       numericCanonicalTypeFamilies,
+	types.TimestampTZFamily: {types.TimestampTZFamily},
+	types.IntervalFamily:    {types.IntervalFamily},
+}
+
+var castableCanonicalTypeFamilies = make(map[types.Family][]types.Family)
+
+// anyWidth is special "value" of width of a type that will be used to generate
+// "case -1: default:" block that would match all widths that are not
+// explicitly specified.
+const anyWidth = -1
+
+var typeWidthReplacement = fmt.Sprintf("{{.Width}}{{if eq .Width %d}}: default{{end}}", anyWidth)
+
+// supportedWidthsByCanonicalTypeFamily is a mapping from a canonical type
+// family to all widths that are supported by that family. Make sure that
+// anyWidth value is the last one in every slice.
+var supportedWidthsByCanonicalTypeFamily = map[types.Family][]int32{
+	types.BoolFamily:        {anyWidth},
+	types.BytesFamily:       {anyWidth},
+	types.DecimalFamily:     {anyWidth},
+	types.IntFamily:         {16, 32, anyWidth},
+	types.FloatFamily:       {anyWidth},
+	types.TimestampTZFamily: {anyWidth},
+	types.IntervalFamily:    {anyWidth},
+}
+
+var numericCanonicalTypeFamilies = []types.Family{types.IntFamily, types.FloatFamily, types.DecimalFamily}
+
+var timeCanonicalTypeFamilies = []types.Family{types.TimestampTZFamily, types.IntervalFamily}
+
+func toVecMethod(canonicalTypeFamily types.Family, width int32) string {
+	switch canonicalTypeFamily {
+	case types.BoolFamily:
+		return "Bool"
+	case types.BytesFamily:
+		return "Bytes"
+	case types.DecimalFamily:
+		return "Decimal"
+	case types.IntFamily:
+		switch width {
+		case 16:
+			return "Int16"
+		case 32:
+			return "Int32"
+		case 64, anyWidth:
+			return "Int64"
+		default:
+			colexecerror.InternalError(fmt.Sprintf("unexpected width of int type family: %d", width))
+		}
+	case types.FloatFamily:
+		return "Float64"
+	case types.TimestampTZFamily:
+		return "Timestamp"
+	case types.IntervalFamily:
+		return "Interval"
+	default:
+		colexecerror.InternalError(fmt.Sprintf("unsupported canonical type family %s", canonicalTypeFamily))
+	}
+	// This code is unreachable, but the compiler cannot infer that.
+	return ""
+}
+
+func toPhysicalRepresentation(canonicalTypeFamily types.Family, width int32) string {
+	switch canonicalTypeFamily {
+	case types.BoolFamily:
+		return "bool"
+	case types.BytesFamily:
+		return "[]byte"
+	case types.DecimalFamily:
+		return "apd.Decimal"
+	case types.IntFamily:
+		switch width {
+		case 16:
+			return "int16"
+		case 32:
+			return "int32"
+		case 64, anyWidth:
+			return "int64"
+		default:
+			colexecerror.InternalError(fmt.Sprintf("unexpected width of int type family: %d", width))
+		}
+	case types.FloatFamily:
+		return "float64"
+	case types.TimestampTZFamily:
+		return "time.Time"
+	case types.IntervalFamily:
+		return "duration.Duration"
+	default:
+		colexecerror.InternalError(fmt.Sprintf("unsupported canonical type family %s", canonicalTypeFamily))
+	}
+	// This code is unreachable, but the compiler cannot infer that.
+	return ""
 }

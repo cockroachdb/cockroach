@@ -16,8 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -193,8 +192,12 @@ type mergeJoinInput struct {
 
 	// sourceTypes specify the types of the input columns of the source table for
 	// the merge joiner.
-	sourceTypes     []types.T
-	sourcePhysTypes []coltypes.T
+	sourceTypes []types.T
+	// canonicalTypeFamilies stores the canonical type families from
+	// sourceTypes. It is stored explicitly rather than being converted at
+	// runtime because that conversion would occur in tight loops and
+	// noticeably hurt the performance.
+	canonicalTypeFamilies []types.Family
 
 	// The distincter is used in the finishGroup phase, and is used only to
 	// determine where the current group ends, in the case that the group ended
@@ -319,14 +322,6 @@ func newMergeJoinBase(
 
 	diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
 	diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
-	leftPhysTypes, err := typeconv.FromColumnTypes(leftTypes)
-	if err != nil {
-		return nil, err
-	}
-	rightPhysTypes, err := typeconv.FromColumnTypes(rightTypes)
-	if err != nil {
-		return nil, err
-	}
 	base := &mergeJoinBase{
 		twoInputNode:       newTwoInputNode(left, right),
 		unlimitedAllocator: unlimitedAllocator,
@@ -335,21 +330,22 @@ func newMergeJoinBase(
 		fdSemaphore:        fdSemaphore,
 		joinType:           joinType,
 		left: mergeJoinInput{
-			source:          left,
-			sourceTypes:     leftTypes,
-			sourcePhysTypes: leftPhysTypes,
-			eqCols:          lEqCols,
-			directions:      lDirections,
+			source:                left,
+			sourceTypes:           leftTypes,
+			canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(leftTypes),
+			eqCols:                lEqCols,
+			directions:            lDirections,
 		},
 		right: mergeJoinInput{
-			source:          right,
-			sourceTypes:     rightTypes,
-			sourcePhysTypes: rightPhysTypes,
-			eqCols:          rEqCols,
-			directions:      rDirections,
+			source:                right,
+			sourceTypes:           rightTypes,
+			canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(rightTypes),
+			eqCols:                rEqCols,
+			directions:            rDirections,
 		},
 		diskAcc: diskAcc,
 	}
+	var err error
 	base.left.distincterInput = &feedOperator{}
 	base.left.distincter, base.left.distinctOutput, err = OrderedDistinctColsToOperators(
 		base.left.distincterInput, lEqCols, leftTypes)
@@ -362,7 +358,6 @@ func newMergeJoinBase(
 	if err != nil {
 		return base, err
 	}
-	base.scratch.tempVecByType = make(map[coltypes.T]coldata.Vec)
 	return base, err
 }
 
@@ -399,10 +394,10 @@ type mergeJoinBase struct {
 	proberState  mjProberState
 	builderState mjBuilderState
 	scratch      struct {
-		// tempVecByType is a map from the type to a temporary vector that can be
-		// used during a cast operation in the probing phase. These vectors should
-		// *not* be exposed outside of the merge joiner.
-		tempVecByType map[coltypes.T]coldata.Vec
+		// tempVecs are temporary vectors that can be used during a cast
+		// operation in the probing phase. These vectors should *not* be
+		// exposed outside of the merge joiner.
+		tempVecs []coldata.Vec
 		// lBufferedGroupBatch and rBufferedGroupBatch are scratch batches that are
 		// used to select out the tuples that belong to the buffered batch before
 		// enqueueing them into corresponding mjBufferedGroups. These are lazily
@@ -466,16 +461,16 @@ func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
 		o.diskQueueCfg, o.fdSemaphore, coldata.BatchSize(), o.diskAcc,
 	)
 	o.proberState.lBufferedGroup.firstTuple = make([]coldata.Vec, len(o.left.sourceTypes))
-	for colIdx, typ := range o.left.sourceTypes {
-		o.proberState.lBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(&typ, 1)
+	for colIdx := range o.left.sourceTypes {
+		o.proberState.lBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(&o.left.sourceTypes[colIdx], 1)
 	}
 	o.proberState.rBufferedGroup.spillingQueue = newRewindableSpillingQueue(
 		o.unlimitedAllocator, o.right.sourceTypes, o.memoryLimit,
 		o.diskQueueCfg, o.fdSemaphore, coldata.BatchSize(), o.diskAcc,
 	)
 	o.proberState.rBufferedGroup.firstTuple = make([]coldata.Vec, len(o.right.sourceTypes))
-	for colIdx, typ := range o.right.sourceTypes {
-		o.proberState.rBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(&typ, 1)
+	for colIdx := range o.right.sourceTypes {
+		o.proberState.rBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(&o.right.sourceTypes[colIdx], 1)
 	}
 
 	o.builderState.lGroups = make([]group, 1)
@@ -532,11 +527,10 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	scratchBatch = o.unlimitedAllocator.NewMemBatchWithSize(sourceTypes, groupLength)
 	if bufferedGroup.numTuples == 0 {
 		o.unlimitedAllocator.PerformOperation(bufferedGroup.firstTuple, func() {
-			for colIdx, typ := range sourceTypes {
+			for colIdx := range sourceTypes {
 				bufferedGroup.firstTuple[colIdx].Copy(
 					coldata.CopySliceArgs{
 						SliceArgs: coldata.SliceArgs{
-							ColType:     typeconv.FromColumnType(&typ),
 							Src:         batch.ColVec(colIdx),
 							Sel:         sel,
 							DestIdx:     0,
@@ -551,11 +545,10 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	bufferedGroup.numTuples += groupLength
 
 	o.unlimitedAllocator.PerformOperation(scratchBatch.ColVecs(), func() {
-		for colIdx, typ := range input.sourceTypes {
+		for colIdx := range input.sourceTypes {
 			scratchBatch.ColVec(colIdx).Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
-						ColType:     typeconv.FromColumnType(&typ),
 						Src:         batch.ColVec(colIdx),
 						Sel:         sel,
 						DestIdx:     0,
