@@ -21,7 +21,6 @@
 #             step in some important transformations (like eliminating
 #             subqueries).
 
-
 # Scan returns a result set containing every row in a table by scanning one of
 # the table's indexes according to its ordering. The ScanPrivate field
 # identifies the table and index to scan, as well as the subset of columns to
@@ -42,23 +41,32 @@ define ScanPrivate {
     Table TableID
 
     # Index identifies the index to scan (whether primary or secondary). It
+
     # can be passed to the cat.Table.Index() method in order to fetch the
+
     # cat.Index metadata.
     Index IndexOrdinal
 
     # Cols specifies the set of columns that the scan operator projects. This
+
     # may be a subset of the columns that the table/index contains.
     Cols ColSet
 
     # If set, the scan is a constrained scan; the constraint contains the spans
+
     # that need to be scanned.
     Constraint Constraint
 
     # HardLimit specifies the maximum number of rows that the scan can return
+
     # (after applying any constraint), as well as the required scan direction.
+
     # This is a "hard" limit, meaning that the scan operator must never return
+
     # more than this number of rows, even if more are available. If its value is
+
     # zero, then the limit is unknown, and the scan should return all available
+
     # rows.
     HardLimit ScanLimit
 
@@ -66,15 +74,22 @@ define ScanPrivate {
     Flags ScanFlags
 
     # Locking represents the row-level locking mode of the Scan. Most scans
+
     # leave this unset (Strength = ForNone), which indicates that no row-level
+
     # locking will be performed while scanning the table. Stronger locking modes
+
     # are used by SELECT .. FOR [KEY] UPDATE/SHARE statements and by the initial
+
     # row retrieval of DELETE and UPDATE statements. The locking item's Targets
+
     # list will always be empty when part of a ScanPrivate.
     Locking LockingItem
 
     # PartitionConstrainedScan records whether or not we were able to use partitions
+
     # to constrain the lookup spans further. This flag is used to record telemetry
+
     # about how often this optimization is getting applied.
     PartitionConstrainedScan bool
 }
@@ -90,11 +105,11 @@ define SequenceSelect {
 
 [Private]
 define SequenceSelectPrivate {
-  # Sequence identifies the sequence to read from.
-  Sequence SequenceID
+    # Sequence identifies the sequence to read from.
+    Sequence SequenceID
 
-  # Cols is the 3 element list of column IDs returned by the operator.
-  Cols ColList
+    # Cols is the 3 element list of column IDs returned by the operator.
+    Cols ColList
 }
 
 # Values returns a manufactured result set containing a constant number of rows.
@@ -109,8 +124,7 @@ define SequenceSelectPrivate {
 [Relational]
 define Values {
     Rows ScalarListExpr
-
-    _    ValuesPrivate
+    _ ValuesPrivate
 }
 
 [Private]
@@ -118,8 +132,11 @@ define ValuesPrivate {
     Cols ColList
 
     # ID is a memo-unique identifier which distinguishes between identical
+
     # Values expressions which appear in different places in the query. In most
+
     # cases the column set is sufficient to do this, but various rules make it
+
     # possible to construct Values expressions with no columns.
     ID UniqueID
 }
@@ -131,7 +148,7 @@ define ValuesPrivate {
 # matching easier.
 [Relational]
 define Select {
-    Input   RelExpr
+    Input RelExpr
     Filters FiltersExpr
 }
 
@@ -144,16 +161,17 @@ define Select {
 # output columns.
 [Relational]
 define Project {
-    Input       RelExpr
+    Input RelExpr
     Projections ProjectionsExpr
-
     Passthrough ColSet
 
     # notNullCols is the set of columns (input or synthesized) that are known to
+
     # be not-null.
     notNullCols ColSet
 
     # internalFuncDeps are the functional dependencies between all columns
+
     # (input or synthesized).
     internalFuncDeps FuncDepSet
 }
@@ -165,55 +183,49 @@ define Project {
 # allowed to refer to the other's projected columns.
 [Relational, Join, JoinNonApply]
 define InnerJoin {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
 [Relational, Join, JoinNonApply]
 define LeftJoin {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
-   _ JoinPrivate
+    On FiltersExpr
+    _ JoinPrivate
 }
 
 [Relational, Join, JoinNonApply]
 define RightJoin {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
 [Relational, Join, JoinNonApply]
 define FullJoin {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
 [Relational, Join, JoinNonApply]
 define SemiJoin {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
 [Relational, Join, JoinNonApply]
 define AntiJoin {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
@@ -235,7 +247,6 @@ define JoinPrivate {
 [Relational]
 define IndexJoin {
     Input RelExpr
-
     _ IndexJoinPrivate
 }
 
@@ -246,6 +257,7 @@ define IndexJoinPrivate {
     Table TableID
 
     # Cols specifies the set of columns that the index join operator projects.
+
     # This may be a subset of the columns that the table contains.
     Cols ColSet
 }
@@ -255,12 +267,13 @@ define IndexJoinPrivate {
 [Relational]
 define LookupJoin {
     Input RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ LookupJoinPrivate
 
     # lookupProps caches relational properties for the "table" side of the lookup
+
     # join, treating it as if it were another relational input. This makes the
+
     # lookup join appear more like other join operators.
     lookupProps RelProps
 }
@@ -274,36 +287,51 @@ define LookupJoinPrivate {
     Table TableID
 
     # Index identifies the index to do lookups in (whether primary or secondary).
+
     # It can be passed to the cat.Table.Index() method in order to fetch the
+
     # cat.Index metadata.
     Index IndexOrdinal
 
     # KeyCols are the columns (produced by the input) used to create lookup keys.
+
     # The key columns must be non-empty, and are listed in the same order as the
+
     # index columns (or a prefix of them).
     KeyCols ColList
 
     # Cols is the set of columns produced by the lookup join. This set can
+
     # contain columns from the input and columns from the index. Any columns not
+
     # in the input are retrieved from the index. Cols may not contain some or
+
     # all of the KeyCols, if they are not output columns for the join.
+
     #
+
     # TODO(radu): this effectively allows an arbitrary projection; it should be
+
     # just a LookupCols set indicating which columns we should add from the
+
     # index. However, this requires extra Project operators in the lookup join
+
     # exploration transforms which currently leads to problems related to lookup
+
     # join statistics.
     Cols ColSet
 
     # LookupColsAreTableKey is true if the lookup columns form a key in the
+
     # table (and thus each left row matches with at most one table row).
     LookupColsAreTableKey bool
 
     # ConstFilters contains the constant filters that are represented as equality
+
     # conditions on the KeyCols. These filters are needed by the statistics code to
+
     # correctly estimate selectivity.
     ConstFilters FiltersExpr
-
     _ JoinPrivate
 }
 
@@ -333,16 +361,21 @@ define GeoLookupJoin {
     Input RelExpr
 
     # On only contains filters on the input columns and primary key columns of
+
     # the inverted index's base table. (Since the indexed geospatial column is
+
     # not actually included in the index, the GeoLookupJoin must be wrapped in
+
     # an index join, which will contain the original geospatial function as one
+
     # of its On conditions.)
     On FiltersExpr
-
     _ GeoLookupJoinPrivate
 
     # lookupProps caches relational properties for the "table" side of the lookup
+
     # join, treating it as if it were another relational input. This makes the
+
     # lookup join appear more like other join operators.
     lookupProps RelProps
 }
@@ -359,19 +392,23 @@ define GeoLookupJoinPrivate {
     Table TableID
 
     # Index identifies the geospatial inverted index to do lookups in. It can
+
     # be passed to the cat.Table.Index() method in order to fetch the cat.Index
+
     # metadata.
     Index IndexOrdinal
 
     # GeoCol is the geospatial column (produced by the input) used to
+
     # determine the keys (i.e., s2 CellIDs) to scan in the inverted index.
     GeoCol ColumnID
 
     # Cols is the set of columns produced by the geospatial lookup join. This
+
     # set can contain columns from the input and columns from the index. Any
+
     # columns not in the input are retrieved from the index.
     Cols ColSet
-
     _ JoinPrivate
 }
 
@@ -381,10 +418,9 @@ define GeoLookupJoinPrivate {
 # It can be any type of join (identified in the MergeJoinPrivate field).
 [Relational]
 define MergeJoin {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ MergeJoinPrivate
 }
 
@@ -395,23 +431,32 @@ define MergeJoinPrivate {
     JoinType Operator
 
     # LeftEq and RightEq are orderings on equality columns. They have the same
+
     # length and LeftEq[i] is a column on the left side which is constrained to
+
     # be equal to RightEq[i] on the right side. The directions also have to
+
     # match.
+
     #
+
     # Examples of valid settings for abc JOIN def ON a=d,b=e:
+
     #   LeftEq: a+,b+   RightEq: d+,e+
+
     #   LeftEq: b-,a+   RightEq: e-,d+
-    LeftEq  Ordering
+    LeftEq Ordering
     RightEq Ordering
 
     # LeftOrdering and RightOrdering are "simplified" versions of LeftEq/RightEq,
-    # taking into account the functional dependencies of each side. We need both
-    # versions because we need to configure execution with specific equality
-    # columns and orderings.
-    LeftOrdering  OrderingChoice
-    RightOrdering OrderingChoice
 
+    # taking into account the functional dependencies of each side. We need both
+
+    # versions because we need to configure execution with specific equality
+
+    # columns and orderings.
+    LeftOrdering OrderingChoice
+    RightOrdering OrderingChoice
     _ JoinPrivate
 }
 
@@ -423,13 +468,15 @@ define MergeJoinPrivate {
 # TODO(itsbilal): Add support for representing multi-way zigzag joins.
 [Relational, Telemetry]
 define ZigzagJoin {
-    On   FiltersExpr
-
+    On FiltersExpr
     _ ZigzagJoinPrivate
 
     # leftProps and rightProps cache relational properties corresponding to an
+
     # unconstrained scan on the respective indexes. By putting this in the
+
     # expr, zigzag joins can reuse a lot of the logical property building code
+
     # for joins.
     leftProps RelProps
     rightProps RelProps
@@ -443,31 +490,44 @@ define ZigzagJoinPrivate {
     RightTable TableID
 
     # LeftIndex and RightIndex identifies the index to do lookups in (whether
+
     # primary or secondary). It can be passed to the cat.Table.Index() method in
+
     # order to fetch the cat.Index metadata.
     LeftIndex IndexOrdinal
     RightIndex IndexOrdinal
 
     # LeftEqCols and RightEqCols contains lists of columns on the left and
+
     # right sides that are being equated. Both lists must be of equal length.
     LeftEqCols ColList
     RightEqCols ColList
 
     # FixedVals, LeftFixedCols and RightFixedCols reference fixed values.
+
     # Fixed values are constants that constrain each index' prefix columns
+
     # (the ones denoted in {Left,Right}FixedCols). These fixed columns must
+
     # lie at the start of the index and must immediately precede EqCols.
+
     #
+
     # FixedVals is a list of 2 tuples, each representing one side's fixed
+
     # values.
+
     #
+
     # Read the comment in pkg/sql/distsqlrun/zigzagjoiner.go for more on
+
     # fixed and equality columns.
     FixedVals ScalarListExpr
     LeftFixedCols ColList
     RightFixedCols ColList
 
     # Cols is the set of columns produced by the zigzag join. This set can
+
     # contain columns from either side's index.
     Cols ColSet
 }
@@ -477,37 +537,33 @@ define ZigzagJoinPrivate {
 # left input.
 [Relational, Join, JoinApply, Telemetry]
 define InnerJoinApply {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
 [Relational, Join, JoinApply, Telemetry]
 define LeftJoinApply {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
 [Relational, Join, JoinApply, Telemetry]
 define SemiJoinApply {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
 [Relational, Join, JoinApply, Telemetry]
 define AntiJoinApply {
-    Left  RelExpr
+    Left RelExpr
     Right RelExpr
-    On    FiltersExpr
-
+    On FiltersExpr
     _ JoinPrivate
 }
 
@@ -538,9 +594,8 @@ define AntiJoinApply {
 # interesting orderings.
 [Relational, Grouping, Telemetry]
 define GroupBy {
-    Input        RelExpr
+    Input RelExpr
     Aggregations AggregationsExpr
-
     _ GroupingPrivate
 }
 
@@ -555,20 +610,32 @@ define GroupingPrivate {
     GroupingCols ColSet
 
     # Ordering specifies the order required of the input. This order can intermix
+
     # grouping and non-grouping columns, serving a dual-purpose:
+
     #  - if we ignore grouping columns, it specifies an intra-group ordering (sort
+
     #    order of values within each group, useful for order-sensitive aggregation
+
     #    operators like ArrayAgg;
+
     #  - leading grouping columns specify an inter-group ordering, allowing for
+
     #    more efficient streaming execution.
+
     #
+
     # The canonical operation always contains an ordering that has no grouping
+
     # columns. Exploration rules can create versions of the operator with
+
     # orderings that contain grouping columns.
     Ordering OrderingChoice
 
     # ErrorOnDup, if non-empty, triggers an error with the given text if any
+
     # aggregation group contains more than one row. This can only be true for
+
     # the EnsureDistinctOn and UpsertDistinctOn operators.
     ErrorOnDup string
 }
@@ -587,9 +654,8 @@ define GroupingPrivate {
 # empty.
 [Relational, Grouping, Telemetry]
 define ScalarGroupBy {
-    Input        RelExpr
+    Input RelExpr
     Aggregations AggregationsExpr
-
     _ GroupingPrivate
 }
 
@@ -629,9 +695,8 @@ define ScalarGroupBy {
 # ConstAgg.
 [Relational, Grouping, Telemetry]
 define DistinctOn {
-    Input        RelExpr
+    Input RelExpr
     Aggregations AggregationsExpr
-
     _ GroupingPrivate
 }
 
@@ -646,9 +711,8 @@ define DistinctOn {
 # that would otherwise trigger the EnsureDistinctOn error.
 [Relational, Grouping, Telemetry]
 define EnsureDistinctOn {
-    Input        RelExpr
+    Input RelExpr
     Aggregations AggregationsExpr
-
     _ GroupingPrivate
 }
 
@@ -669,9 +733,8 @@ define EnsureDistinctOn {
 #
 [Relational, Grouping, Telemetry]
 define UpsertDistinctOn {
-    Input        RelExpr
+    Input RelExpr
     Aggregations AggregationsExpr
-
     _ GroupingPrivate
 }
 
@@ -682,9 +745,8 @@ define UpsertDistinctOn {
 # details.
 [Relational, Set]
 define Union {
-    Left    RelExpr
-    Right   RelExpr
-
+    Left RelExpr
+    Right RelExpr
     _ SetPrivate
 }
 
@@ -712,9 +774,9 @@ define Union {
 # must have matching types.
 [Private]
 define SetPrivate {
-    LeftCols  ColList
+    LeftCols ColList
     RightCols ColList
-    OutCols   ColList
+    OutCols ColList
 }
 
 # Intersect is an operator used to perform an intersection between the Left
@@ -726,9 +788,8 @@ define SetPrivate {
 # details.
 [Relational, Set]
 define Intersect {
-    Left    RelExpr
-    Right   RelExpr
-
+    Left RelExpr
+    Right RelExpr
     _ SetPrivate
 }
 
@@ -739,9 +800,8 @@ define Intersect {
 # with the output columns. See the comment above SetPrivate for more details.
 [Relational, Set]
 define Except {
-    Left    RelExpr
-    Right   RelExpr
-
+    Left RelExpr
+    Right RelExpr
     _ SetPrivate
 }
 
@@ -764,9 +824,8 @@ define Except {
 # details.
 [Relational, Set]
 define UnionAll {
-    Left    RelExpr
-    Right   RelExpr
-
+    Left RelExpr
+    Right RelExpr
     _ SetPrivate
 }
 
@@ -791,9 +850,8 @@ define UnionAll {
 # details.
 [Relational, Set]
 define IntersectAll {
-    Left    RelExpr
-    Right   RelExpr
-
+    Left RelExpr
+    Right RelExpr
     _ SetPrivate
 }
 
@@ -817,9 +875,8 @@ define IntersectAll {
 # details.
 [Relational, Set]
 define ExceptAll {
-    Left    RelExpr
-    Right   RelExpr
-
+    Left RelExpr
+    Right RelExpr
     _ SetPrivate
 }
 
@@ -832,7 +889,6 @@ define ExceptAll {
 define Limit {
     Input RelExpr
     Limit ScalarExpr
-
     Ordering OrderingChoice
 }
 
@@ -840,9 +896,8 @@ define Limit {
 # conjunction with Limit.
 [Relational]
 define Offset {
-    Input  RelExpr
+    Input RelExpr
     Offset ScalarExpr
-
     Ordering OrderingChoice
 }
 
@@ -854,7 +909,6 @@ define Offset {
 [Relational]
 define Max1Row {
     Input RelExpr
-
     ErrorText string
 }
 
@@ -863,7 +917,6 @@ define Max1Row {
 [Relational]
 define Ordinality {
     Input RelExpr
-
     _ OrdinalityPrivate
 }
 
@@ -894,7 +947,7 @@ define OrdinalityPrivate {
 [Relational, Telemetry]
 define ProjectSet {
     Input RelExpr
-    Zip   ZipExpr
+    Zip ZipExpr
 }
 
 # Window represents a window function. Window functions are operators which
@@ -910,11 +963,10 @@ define ProjectSet {
 # cumulative sum, or something else.
 [Relational]
 define Window {
-    Input    RelExpr
+    Input RelExpr
 
     # Windows is the set of window functions to be computed for this operator.
     Windows WindowsExpr
-
     _ WindowPrivate
 }
 
@@ -925,14 +977,20 @@ define WindowPrivate {
     Partition ColSet
 
     # Ordering is the ordering that the window function is computed relative to
+
     # within each partition.
     Ordering OrderingChoice
 
     # RangeOffsetColumn is the column ID of a single column from ORDER BY
+
     # clause (when there is only one column). We store it separately because
+
     # Ordering might be simplified (when that single column is in Partition),
+
     # but the execution still needs to know the original ordering with RANGE
+
     # mode of framing when at least one of the bounds has "offset". This column
+
     # ID is used to reconstruct the Ordering during exec build phase.
     RangeOffsetColumn ColumnID
 }
@@ -943,8 +1001,7 @@ define WindowPrivate {
 [Relational]
 define With {
     Binding RelExpr
-    Main    RelExpr
-
+    Main RelExpr
     _ WithPrivate
 }
 
@@ -953,10 +1010,12 @@ define WithPrivate {
     ID WithID
 
     # OriginalExpr contains the original CTE expression (so that we can display
+
     # it in the EXPLAIN plan).
     OriginalExpr Statement
 
     # Mtr is used to specify whether or not to override the optimizer's
+
     # default decision for materializing or not materializing tables.
     Mtr MaterializeClause
 
@@ -983,20 +1042,29 @@ define WithScanPrivate {
     Name string
 
     # InCols are the columns output by the expression referenced by this
+
     # expression. They correspond elementwise to the columns listed in OutCols.
     InCols ColList
 
     # OutCols contains a list of columns which correspond elementwise to the
+
     # columns in InCols, which are the IDs output by the referenced With
+
     # expression. WithScan cannot reuse the column IDs used in the original With
+
     # expression, since multiple WithScans referencing the same With can occur in
+
     # the same tree, so we maintain a mapping from the columns returned from
+
     # the referenced expression to the referencing expression.
     OutCols ColList
 
     # ID is a memo-unique identifier which distinguishes between identical
+
     # WithScan expressions which appear in different places in the query. In
+
     # most cases the column set is sufficient to do this, but various rules make
+
     # it possible to construct WithScan expressions with no columns.
     ID UniqueID
 }
@@ -1012,7 +1080,6 @@ define WithScanPrivate {
 define RecursiveCTE {
     Initial RelExpr
     Recursive RelExpr
-
     _ RecursiveCTEPrivate
 }
 
@@ -1022,6 +1089,7 @@ define RecursiveCTEPrivate {
     Name string
 
     # WithID is the ID through which the Recursive expression refers to the
+
     # current working table.
     WithID WithID
 
@@ -1029,15 +1097,22 @@ define RecursiveCTEPrivate {
     InitialCols ColList
 
     # RecursiveCols are the columns produced by the recursive expression, that
+
     # map 1-1 to InitialCols.
     RecursiveCols ColList
 
     # OutCols are the columns produced by the RecursiveCTE operator; they map
+
     # 1-1 to InitialCols and to RecursiveCols. Similar to Union, we don't want
+
     # to reuse column IDs from one side because the columns contain values from
+
     # both sides.
+
     #
+
     # These columns are also used by the Recursive query to refer to the working
+
     # table (see WithID).
     OutCols ColList
 }

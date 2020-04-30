@@ -39,15 +39,14 @@
     $passthrough:* &
         (CanPruneCols
             $project
-            $needed:(UnionCols (ProjectionOuterCols $projections) $passthrough)
+            $needed:(UnionCols
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
         )
 )
 =>
-(Project
-    (PruneCols $project $needed)
-    $projections
-    $passthrough
-)
+(Project (PruneCols $project $needed) $projections $passthrough)
 
 # PruneScanCols discards Scan operator columns that are never used. The needed
 # columns are pushed down into the Scan's opt.ScanOpDef private.
@@ -58,15 +57,14 @@
     $passthrough:* &
         (CanPruneCols
             $input
-            $needed:(UnionCols (ProjectionOuterCols $projections) $passthrough)
+            $needed:(UnionCols
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
         )
 )
 =>
-(Project
-    (PruneCols $input $needed)
-    $projections
-    $passthrough
-)
+(Project (PruneCols $input $needed) $projections $passthrough)
 
 # PruneSelectCols discards Select input columns that are never used.
 #
@@ -75,10 +73,7 @@
 # below Project).
 [PruneSelectCols, Normalize]
 (Project
-    (Select
-        $input:*
-        $filters:*
-    )
+    (Select $input:* $filters:*)
     $projections:*
     $passthrough:* &
         (CanPruneCols
@@ -92,10 +87,7 @@
 )
 =>
 (Project
-    (Select
-        (PruneCols $input $needed)
-        $filters
-    )
+    (Select (PruneCols $input $needed) $filters)
     $projections
     $passthrough
 )
@@ -107,11 +99,7 @@
 # below Project).
 [PruneLimitCols, Normalize]
 (Project
-    (Limit
-        $input:*
-        $limit:*
-        $ordering:*
-    )
+    (Limit $input:* $limit:* $ordering:*)
     $projections:*
     $passthrough:* &
         (CanPruneCols
@@ -141,11 +129,7 @@
 # below Project).
 [PruneOffsetCols, Normalize]
 (Project
-    (Offset
-        $input:*
-        $offset:*
-        $ordering:*
-    )
+    (Offset $input:* $offset:* $ordering:*)
     $projections:*
     $passthrough:* &
         (CanPruneCols
@@ -172,12 +156,7 @@
 # used.
 [PruneJoinLeftCols, Normalize]
 (Project
-    $input:(Join
-        $left:*
-        $right:*
-        $on:*
-        $private:*
-    )
+    $input:(Join $left:* $right:* $on:* $private:*)
     $projections:*
     $passthrough:* &
         (CanPruneCols
@@ -210,12 +189,7 @@
 # below Project).
 [PruneJoinRightCols, Normalize]
 (Project
-    $input:(Join
-        $left:*
-        $right:*
-        $on:*
-        $private:*
-    )
+    $input:(Join $left:* $right:* $on:* $private:*)
     $projections:*
     $passthrough:* &
         (CanPruneCols
@@ -251,25 +225,18 @@
     $right:*
     $on:*
     $private:* &
-        (CanPruneCols
-            $right
-            $needed:(FilterOuterCols $on)
-        )
+        (CanPruneCols $right $needed:(FilterOuterCols $on))
 )
 =>
-((OpName)
-    $left
-    (PruneCols $right $needed)
-    $on
-    $private
-)
+((OpName) $left (PruneCols $right $needed) $on $private)
 
 # PruneAggCols discards aggregation columns in a GroupBy that are never used.
 # Note that UpsertDistinctOn is not included here because its columns are always
 # used.
 [PruneAggCols, Normalize]
 (Project
-    $input:(GroupBy | ScalarGroupBy | DistinctOn | EnsureDistinctOn
+    $input:(GroupBy | ScalarGroupBy | DistinctOn
+            | EnsureDistinctOn
         $innerInput:*
         $aggregations:*
         $groupingPrivate:*
@@ -278,7 +245,10 @@
     $passthrough:* &
         (CanPruneAggCols
             $aggregations
-            $needed:(UnionCols (ProjectionOuterCols $projections) $passthrough)
+            $needed:(UnionCols
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
         )
 )
 =>
@@ -322,15 +292,14 @@
     $passthrough:* &
         (CanPruneCols
             $input
-            $needed:(UnionCols (ProjectionOuterCols $projections) $passthrough)
+            $needed:(UnionCols
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
         )
 )
 =>
-(Project
-    (PruneCols $input $needed)
-    $projections
-    $passthrough
-)
+(Project (PruneCols $input $needed) $projections $passthrough)
 
 # PruneOrdinalityCols discards Ordinality input columns that are never used.
 [PruneOrdinalityCols, Normalize]
@@ -362,13 +331,14 @@
 [PruneExplainCols, Normalize]
 (Explain
     $input:*
-    $explainPrivate:* & (CanPruneCols $input $needed:(NeededExplainCols $explainPrivate))
+    $explainPrivate:* &
+        (CanPruneCols
+            $input
+            $needed:(NeededExplainCols $explainPrivate)
+        )
 )
 =>
-(Explain
-    (PruneCols $input $needed)
-    $explainPrivate
-)
+(Explain (PruneCols $input $needed) $explainPrivate)
 
 # PruneProjectSetCols discards ProjectSet columns that are never used.
 [PruneProjectSetCols, Normalize]
@@ -387,10 +357,7 @@
 )
 =>
 (Project
-    (ProjectSet
-      (PruneCols $innerInput $needed)
-      $zip
-    )
+    (ProjectSet (PruneCols $innerInput $needed) $zip)
     $projections
     $passthrough
 )
@@ -399,24 +366,20 @@
 # expression.
 [PruneWindowOutputCols, Normalize]
 (Project
-    (Window
-        $input:*
-        $windows:*
-        $private:*
-    )
+    (Window $input:* $windows:* $private:*)
     $projections:*
-    $passthrough:* & (CanPruneWindows
-        $needed:(UnionCols (ProjectionOuterCols $projections) $passthrough)
-        $windows
-    )
+    $passthrough:* &
+        (CanPruneWindows
+            $needed:(UnionCols
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
+            $windows
+        )
 )
 =>
 (Project
-    (Window
-        $input
-        (PruneWindows $needed $windows)
-        $private
-    )
+    (Window $input (PruneWindows $needed $windows) $private)
     $projections
     $passthrough
 )
@@ -426,11 +389,7 @@
 # into a cycle.
 [PruneWindowInputCols, Normalize]
 (Project
-    $input:(Window
-        $innerInput:*
-        $fn:*
-        $private:*
-    )
+    $input:(Window $innerInput:* $fn:* $private:*)
     $projections:*
     $passthrough:* &
         (CanPruneCols
@@ -444,11 +403,7 @@
 )
 =>
 (Project
-    (Window
-      (PruneCols $innerInput $needed)
-      $fn
-      $private
-    )
+    (Window (PruneCols $innerInput $needed) $fn $private)
     $projections
     $passthrough
 )
@@ -464,7 +419,10 @@
     $mutationPrivate:* &
         (CanPruneMutationFetchCols
             $mutationPrivate
-            $needed:(NeededMutationFetchCols (OpName) $mutationPrivate)
+            $needed:(NeededMutationFetchCols
+                (OpName)
+                $mutationPrivate
+            )
         )
 )
 =>
@@ -481,14 +439,13 @@
     $input:*
     $checks:*
     $mutationPrivate:* &
-        (CanPruneCols $input $needed:(NeededMutationCols $mutationPrivate $checks))
+        (CanPruneCols
+            $input
+            $needed:(NeededMutationCols $mutationPrivate $checks)
+        )
 )
 =>
-((OpName)
-    (PruneCols $input $needed)
-    $checks
-    $mutationPrivate
-)
+((OpName) (PruneCols $input $needed) $checks $mutationPrivate)
 
 # PruneReturningCols removes columns from the mutation operator's ReturnCols
 # set if they are not used in the RETURNING clause of the mutation.
@@ -505,14 +462,14 @@
     )
     $projections:*
     $passthrough:* &
-      (CanPruneMutationReturnCols
-        $mutationPrivate
-        $needed:(UnionCols3
-            (PrimaryKeyCols (MutationTable $mutationPrivate))
-            (ProjectionOuterCols $projections)
-            $passthrough
+        (CanPruneMutationReturnCols
+            $mutationPrivate
+            $needed:(UnionCols3
+                (PrimaryKeyCols (MutationTable $mutationPrivate))
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
         )
-      )
 )
 =>
 (Project
@@ -534,15 +491,14 @@
     $passthrough:* &
         (CanPruneCols
             $input
-            $needed:(UnionCols (ProjectionOuterCols $projections) $passthrough)
+            $needed:(UnionCols
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
         )
 )
 =>
-(Project
-    (PruneCols $input $needed)
-    $projections
-    $passthrough
-)
+(Project (PruneCols $input $needed) $projections $passthrough)
 
 # PruneWithCols pushes a Project operator beneath a With. It's ok to
 # unconditionally push this Project down, since in the pruning case, we're
@@ -551,22 +507,14 @@
 # down.
 [PruneWithCols, Normalize]
 (Project
-    (With
-        $binding:*
-        $input:*
-        $private:*
-    )
+    (With $binding:* $input:* $private:*)
     $projections:*
     $passthrough:*
 )
 =>
 (With
     $binding
-    (Project
-        $input
-        $projections
-        $passthrough
-    )
+    (Project $input $projections $passthrough)
     $private
 )
 
@@ -585,19 +533,16 @@
 # EliminateProject.
 [PruneUnionAllCols, Normalize]
 (Project
-    $union:(UnionAll
-        $left:*
-        $right:*
-        $colmap:*
-    )
+    $union:(UnionAll $left:* $right:* $colmap:*)
     $projections:*
     $passthrough:* &
         (CanPruneCols
-             $union
-             $needed:(UnionCols
-                 (ProjectionOuterCols $projections) $passthrough
-             )
-         )
+            $union
+            $needed:(UnionCols
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
+        )
 )
 =>
 (Project
