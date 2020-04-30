@@ -87,28 +87,28 @@ func (w *worker) run(wg *sync.WaitGroup) {
 		if w.logOnly {
 			block := randBlock(300, 400)
 			if err := b.LogData(block); err != nil {
-				log.Fatal(ctx, err)
+				log.Fatalf(ctx, "%v", err)
 			}
 		} else {
 			for j := 0; j < 5; j++ {
 				block := randBlock(60, 80)
 				key := encoding.EncodeUint32Ascending(buf, rand.Uint32())
 				if err := b.Put(storage.MakeMVCCMetadataKey(key), block); err != nil {
-					log.Fatal(ctx, err)
+					log.Fatalf(ctx, "%v", err)
 				}
 				buf = key[:0]
 			}
 		}
 		bytes := uint64(b.Len())
 		if err := b.Commit(true); err != nil {
-			log.Fatal(ctx, err)
+			log.Fatalf(ctx, "%v", err)
 		}
 		atomic.AddUint64(&numOps, 1)
 		atomic.AddUint64(&numBytes, bytes)
 		elapsed := clampLatency(timeutil.Since(start), minLatency, maxLatency)
 		w.latency.Lock()
 		if err := w.latency.Current.RecordValue(elapsed.Nanoseconds()); err != nil {
-			log.Fatal(ctx, err)
+			log.Fatalf(ctx, "%v", err)
 		}
 		w.latency.Unlock()
 	}

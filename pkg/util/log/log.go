@@ -46,7 +46,12 @@ func logDepth(ctx context.Context, depth int, sev Severity, format string, args 
 
 // Shout logs to the specified severity's log, and also to the real
 // stderr if logging is currently redirected to a file.
-func Shout(ctx context.Context, sev Severity, args ...interface{}) {
+func Shout(ctx context.Context, sev Severity, msg string) {
+	Shoutf(ctx, sev, msg)
+}
+
+// Shoutf is like Shout but uses formatting.
+func Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	if sev == Severity_FATAL {
 		// Fatal error handling later already tries to exit even if I/O should
 		// block, but crash reporting might also be in the way.
@@ -57,9 +62,9 @@ func Shout(ctx context.Context, sev Severity, args ...interface{}) {
 	}
 	if mainLog.stderrRedirected() {
 		fmt.Fprintf(OrigStderr, "*\n* %s: %s\n*\n", sev.String(),
-			strings.Replace(MakeMessage(ctx, "", args), "\n", "\n* ", -1))
+			strings.Replace(MakeMessage(ctx, format, args), "\n", "\n* ", -1))
 	}
-	logDepth(ctx, 1, sev, "", args)
+	logDepth(ctx, 1, sev, format, args)
 }
 
 // Infof logs to the INFO log.
@@ -72,19 +77,9 @@ func Infof(ctx context.Context, format string, args ...interface{}) {
 
 // Info logs to the INFO log.
 // It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Print; a newline is
-// appended.
-func Info(ctx context.Context, args ...interface{}) {
-	logDepth(ctx, 1, Severity_INFO, "", args)
-}
-
-// InfoDepth logs to the INFO log, offsetting the caller's stack frame by
-// 'depth'.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Print; a newline is
-// appended.
-func InfoDepth(ctx context.Context, depth int, args ...interface{}) {
-	logDepth(ctx, depth+1, Severity_INFO, "", args)
+// message.
+func Info(ctx context.Context, msg string) {
+	logDepth(ctx, 1, Severity_INFO, msg, nil)
 }
 
 // InfofDepth logs to the INFO log, offsetting the caller's stack frame by
@@ -106,10 +101,9 @@ func Warningf(ctx context.Context, format string, args ...interface{}) {
 
 // Warning logs to the WARNING and INFO logs.
 // It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Print; a newline is
-// appended.
-func Warning(ctx context.Context, args ...interface{}) {
-	logDepth(ctx, 1, Severity_WARNING, "", args)
+// message.
+func Warning(ctx context.Context, msg string) {
+	logDepth(ctx, 1, Severity_WARNING, msg, nil)
 }
 
 // WarningfDepth logs to the WARNING and INFO logs, offsetting the caller's
@@ -131,10 +125,9 @@ func Errorf(ctx context.Context, format string, args ...interface{}) {
 
 // Error logs to the ERROR, WARNING, and INFO logs.
 // It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Print; a newline is
-// appended.
-func Error(ctx context.Context, args ...interface{}) {
-	logDepth(ctx, 1, Severity_ERROR, "", args)
+// message.
+func Error(ctx context.Context, msg string) {
+	logDepth(ctx, 1, Severity_ERROR, msg, nil)
 }
 
 // ErrorfDepth logs to the ERROR, WARNING, and INFO logs, offsetting the
@@ -158,10 +151,9 @@ func Fatalf(ctx context.Context, format string, args ...interface{}) {
 // Fatal logs to the INFO, WARNING, ERROR, and FATAL logs, including a stack
 // trace of all running goroutines, then calls os.Exit(255).
 // It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Print; a newline is
-// appended.
-func Fatal(ctx context.Context, args ...interface{}) {
-	logDepth(ctx, 1, Severity_FATAL, "", args)
+// message.
+func Fatal(ctx context.Context, msg string) {
+	logDepth(ctx, 1, Severity_FATAL, msg, nil)
 }
 
 // FatalfDepth logs to the INFO, WARNING, ERROR, and FATAL logs (offsetting the

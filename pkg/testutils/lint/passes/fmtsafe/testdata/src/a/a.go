@@ -64,7 +64,7 @@ func init() {
 type myLogger struct{}
 
 func (m myLogger) Info(args ...interface{}) {
-	log.Error(context.Background(), args...)
+	log.Errorf(context.Background(), "", args...)
 }
 
 func (m myLogger) Infof(_ string, args ...interface{}) {

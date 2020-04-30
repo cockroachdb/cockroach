@@ -56,7 +56,7 @@ func splitPreApply(
 		// We handle this below.
 		rightRepl = nil
 	} else if err != nil {
-		log.Fatal(ctx, errors.Wrap(err, "failed to get RHS replica"))
+		log.Fatalf(ctx, "failed to get RHS replica: %v", err)
 	}
 	// Check to see if we know that the RHS has already been removed from this
 	// store at the replica ID implied by the split.
@@ -113,7 +113,7 @@ func splitPreApply(
 	// Term and Vote). This is the common case.
 	rsl := stateloader.Make(split.RightDesc.RangeID)
 	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
-		log.Fatal(ctx, err)
+		log.Fatalf(ctx, "%v", err)
 	}
 
 	// The initialMaxClosed is assigned to the RHS replica to ensure that
@@ -233,7 +233,7 @@ func prepareRightReplicaForSplit(
 	err = rightRepl.loadRaftMuLockedReplicaMuLocked(&split.RightDesc)
 	rightRepl.mu.Unlock()
 	if err != nil {
-		log.Fatal(ctx, err)
+		log.Fatalf(ctx, "%v", err)
 	}
 
 	// Copy the minLeaseProposedTS from the LHS and grab the RHS's lease.

@@ -143,7 +143,7 @@ func Handler(cfg Config) http.Handler {
 		}); err != nil {
 			err = errors.Wrap(err, "templating index.html")
 			http.Error(w, err.Error(), 500)
-			log.Error(r.Context(), err)
+			log.Errorf(r.Context(), "%v", err)
 		}
 	})
 }

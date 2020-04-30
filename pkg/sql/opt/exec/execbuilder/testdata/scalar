@@ -763,4 +763,3 @@ EXPLAIN (VERBOSE) SELECT t0.c0 FROM t0 WHERE t0.c0 BETWEEN t0.c0 AND INTERVAL '-
 scan  ·            ·                     (c0)  ·
 ·     table        t0@t0_c0_key          ·     ·
 ·     spans        /!NULL-/-1/PrefixEnd  ·     ·
-·     filter       c0 >= c0              ·     ·

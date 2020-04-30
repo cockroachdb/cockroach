@@ -1185,7 +1185,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, string)) {
 					}
 					err = errors.Errorf("waiting for %d replicas to transfer their lease away", numRemaining)
 					if everySecond.ShouldLog() {
-						log.Info(ctx, err)
+						log.Infof(ctx, "%v", err)
 					}
 				}
 				if err == nil {

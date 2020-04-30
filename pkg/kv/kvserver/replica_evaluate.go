@@ -345,7 +345,7 @@ func evaluateBatch(
 					errors.Safe(ba.Header.MaxSpanRequestKeys),
 					errors.Safe(ba.Summary()), errors.Safe(index))
 				if sentryIssue46720Limiter.Allow() {
-					log.Error(ctx, err)
+					log.Errorf(ctx, "%v", err)
 					errorutil.SendReport(ctx, &rec.ClusterSettings().SV, err)
 				}
 				return nil, mergedResult, roachpb.NewError(err)

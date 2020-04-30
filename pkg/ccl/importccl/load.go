@@ -384,7 +384,7 @@ func writeSST(
 	}
 
 	filename := fmt.Sprintf("load-%d.sst", rand.Int63())
-	log.Info(ctx, "writesst ", filename)
+	log.Infof(ctx, "writesst %s", filename)
 
 	sstFile := &storage.MemFile{}
 	sst := storage.MakeBackupSSTWriter(sstFile)

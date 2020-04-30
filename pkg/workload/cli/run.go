@@ -300,7 +300,7 @@ func startPProfEndPoint(ctx context.Context) {
 	go func() {
 		err := http.ListenAndServe(":"+strconv.Itoa(*pprofport), nil)
 		if err != nil {
-			log.Error(ctx, err)
+			log.Errorf(ctx, "%v", err)
 		}
 	}()
 }
@@ -442,7 +442,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			formatter.outputError(err)
 			if *tolerateErrors {
 				if everySecond.ShouldLog() {
-					log.Error(ctx, err)
+					log.Errorf(ctx, "%v", err)
 				}
 				continue
 			}

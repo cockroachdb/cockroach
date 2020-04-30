@@ -202,7 +202,7 @@ func (gt *grpcTransport) sendBatch(
 	if reply != nil && !rpc.IsLocal(iface) {
 		for i := range reply.Responses {
 			if err := reply.Responses[i].GetInner().Verify(ba.Requests[i].GetInner()); err != nil {
-				log.Error(ctx, err)
+				log.Errorf(ctx, "%v", err)
 			}
 		}
 		// Import the remotely collected spans, if any.
@@ -337,7 +337,7 @@ func (s *senderTransport) SendNext(
 	defer cleanup()
 
 	ba.Replica = s.replica
-	log.Event(ctx, ba.String())
+	log.Eventf(ctx, "%v", ba.String())
 	br, pErr := s.sender.Send(ctx, ba)
 	if br == nil {
 		br = &roachpb.BatchResponse{}
@@ -347,7 +347,7 @@ func (s *senderTransport) SendNext(
 	}
 	br.Error = pErr
 	if pErr != nil {
-		log.Event(ctx, "error: "+pErr.String())
+		log.Eventf(ctx, "error: %v", pErr.String())
 	}
 
 	// Import the remotely collected spans, if any.

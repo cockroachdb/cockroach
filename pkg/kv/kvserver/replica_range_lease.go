@@ -336,7 +336,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 				if status.Lease.OwnedBy(nextLeaseHolder.StoreID) &&
 					p.repl.store.StoreID() == nextLeaseHolder.StoreID {
 					if err = p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.Liveness); err != nil {
-						log.Error(ctx, err)
+						log.Errorf(ctx, "%v", err)
 					}
 				} else if status.Liveness.Epoch == status.Lease.Epoch {
 					// If not owner, increment epoch if necessary to invalidate lease.
@@ -347,7 +347,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 						err = errors.Errorf("not incrementing epoch on n%d because next leaseholder (n%d) not live (err = %v)",
 							status.Liveness.NodeID, nextLeaseHolder.NodeID, liveErr)
 						if log.V(1) {
-							log.Info(ctx, err)
+							log.Infof(ctx, "%v", err)
 						}
 					} else if err = p.repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness); err != nil {
 						// If we get ErrEpochAlreadyIncremented, someone else beat
@@ -380,7 +380,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 						//
 						// https://github.com/cockroachdb/cockroach/issues/35986
 						if err != ErrEpochAlreadyIncremented {
-							log.Error(ctx, err)
+							log.Errorf(ctx, "%v", err)
 						}
 					}
 				}

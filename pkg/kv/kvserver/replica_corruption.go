@@ -71,7 +71,7 @@ A file preventing this node from restarting was placed at:
 `, r, path)
 
 	if err := ioutil.WriteFile(path, []byte(preventStartupMsg), 0644); err != nil {
-		log.Warning(ctx, err)
+		log.Warningf(ctx, "%v", err)
 	}
 
 	log.FatalfDepth(ctx, 1, "replica is corrupted: %s", cErr)

@@ -645,8 +645,7 @@ func (s *Store) checkSnapshotOverlapLocked(
 		exReplica, err := s.GetReplica(exRange.Desc().RangeID)
 		msg := IntersectingSnapshotMsg
 		if err != nil {
-			log.Warning(ctx, errors.Wrapf(
-				err, "unable to look up overlapping replica on %s", exReplica))
+			log.Warningf(ctx, "unable to look up overlapping replica on %s: %v", exReplica, err)
 		} else {
 			inactive := func(r *Replica) bool {
 				if r.RaftStatus() == nil {

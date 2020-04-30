@@ -437,7 +437,7 @@ func (ir *IntentResolver) CleanupIntentsAsync(
 				return err
 			})
 		if err != nil && ir.every.ShouldLog() {
-			log.Warning(ctx, err)
+			log.Warningf(ctx, "%v", err)
 		}
 	})
 }

@@ -137,7 +137,7 @@ func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
 			if c < minReplicas {
 				err := errors.Errorf(
 					"not balanced (want at least %d replicas on all stores): %d", minReplicas, counts)
-				log.Info(context.Background(), err)
+				log.Infof(context.Background(), "%v", err)
 				return err
 			}
 		}

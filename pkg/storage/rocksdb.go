@@ -115,13 +115,13 @@ func rocksDBLog(usePrimaryLog C.bool, sevLvl C.int, s *C.char, n C.int) {
 	ctx := logtags.AddTag(context.Background(), "rocksdb", nil)
 	switch sev {
 	case log.Severity_WARNING:
-		log.Warning(ctx, C.GoStringN(s, n))
+		log.Warningf(ctx, "%v", C.GoStringN(s, n))
 	case log.Severity_ERROR:
-		log.Error(ctx, C.GoStringN(s, n))
+		log.Errorf(ctx, "%v", C.GoStringN(s, n))
 	case log.Severity_FATAL:
-		log.Fatal(ctx, C.GoStringN(s, n))
+		log.Fatalf(ctx, "%v", C.GoStringN(s, n))
 	default:
-		log.Info(ctx, C.GoStringN(s, n))
+		log.Infof(ctx, "%v", C.GoStringN(s, n))
 	}
 }
 
@@ -740,7 +740,7 @@ func (r *RocksDB) Close() {
 		}
 		// Remove the temporary directory when the engine is in-memory.
 		if err := os.RemoveAll(r.auxDir); err != nil {
-			log.Warning(context.TODO(), err)
+			log.Warningf(context.TODO(), "%v", err)
 		}
 	} else {
 		log.Infof(context.TODO(), "closing rocksdb instance at %q", r.cfg.Dir)

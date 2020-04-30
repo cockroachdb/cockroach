@@ -1797,3 +1797,153 @@ project
  │    └── filters (true)
  └── projections
       └── array:64 [as=array:66, outer=(64)]
+
+# --------------------------------------------------
+# SimplifySameVarEqualities
+# --------------------------------------------------
+
+norm expect=(SimplifySameVarEqualities,SimplifySelectFilters)
+SELECT k FROM a WHERE k = k
+----
+scan a
+ ├── columns: k:1!null
+ └── key: (1)
+
+norm expect=(SimplifySameVarEqualities,SimplifySelectFilters)
+SELECT k FROM a WHERE k >= k
+----
+scan a
+ ├── columns: k:1!null
+ └── key: (1)
+
+norm expect=(SimplifySameVarEqualities,SimplifySelectFilters)
+SELECT k FROM a WHERE k <= k
+----
+scan a
+ ├── columns: k:1!null
+ └── key: (1)
+
+norm expect=(SimplifySameVarEqualities,SimplifyJoinFilters)
+SELECT a.k FROM a FULL OUTER JOIN xy ON a.k = a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan xy
+ └── filters
+      └── k:1 IS DISTINCT FROM CAST(NULL AS INT8) [outer=(1), constraints=(/1: (/NULL - ]; tight)]
+
+norm expect=(SimplifySameVarEqualities,SimplifyJoinFilters)
+SELECT a.k FROM a FULL OUTER JOIN xy ON a.k >= a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan xy
+ └── filters
+      └── k:1 IS DISTINCT FROM CAST(NULL AS INT8) [outer=(1), constraints=(/1: (/NULL - ]; tight)]
+
+norm expect=(SimplifySameVarEqualities,SimplifyJoinFilters)
+SELECT a.k FROM a FULL OUTER JOIN xy ON a.k <= a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan xy
+ └── filters
+      └── k:1 IS DISTINCT FROM CAST(NULL AS INT8) [outer=(1), constraints=(/1: (/NULL - ]; tight)]
+
+norm expect=SimplifySameVarEqualities
+SELECT k = k FROM a
+----
+project
+ ├── columns: "?column?":7
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── (k:1 IS DISTINCT FROM CAST(NULL AS INT8)) OR CAST(NULL AS INT8) [as="?column?":7, outer=(1)]
+
+# --------------------------------------------------
+# SimplifySameVarInequalities
+# --------------------------------------------------
+
+norm expect=(SimplifySameVarInequalities,SimplifySelectFilters)
+SELECT k FROM a WHERE k != k
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+norm expect=(SimplifySameVarInequalities,SimplifySelectFilters)
+SELECT k FROM a WHERE k > k
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+norm expect=(SimplifySameVarInequalities,SimplifySelectFilters)
+SELECT k FROM a WHERE k < k
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+norm expect=(SimplifySameVarInequalities,SimplifyJoinFilters)
+SELECT a.k FROM a FULL OUTER JOIN xy ON a.k != a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan xy
+ └── filters
+      └── false
+
+norm expect=(SimplifySameVarInequalities,SimplifyJoinFilters)
+SELECT a.k FROM a FULL OUTER JOIN xy ON a.k > a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan xy
+ └── filters
+      └── false
+
+norm expect=(SimplifySameVarInequalities,SimplifyJoinFilters)
+SELECT a.k FROM a FULL OUTER JOIN xy ON a.k < a.k
+----
+full-join (cross)
+ ├── columns: k:1
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── scan xy
+ └── filters
+      └── false
+
+norm expect=SimplifySameVarInequalities
+SELECT k != k FROM a
+----
+project
+ ├── columns: "?column?":7
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── (k:1 IS NOT DISTINCT FROM CAST(NULL AS INT8)) AND CAST(NULL AS INT8) [as="?column?":7, outer=(1)]

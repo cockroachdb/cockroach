@@ -575,7 +575,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	if err := stopper.RunAsyncTask(ctx, "busyloop-closer", func(ctx context.Context) {
 		for {
 			if _, err := closeConns(); err != nil {
-				log.Warning(ctx, err)
+				log.Warningf(ctx, "%v", err)
 			}
 			select {
 			case <-done:

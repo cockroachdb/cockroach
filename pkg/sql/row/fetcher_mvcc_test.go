@@ -123,7 +123,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	kvsToRows := func(kvs []roachpb.KeyValue) []rowWithMVCCMetadata {
 		t.Helper()
 		for _, kv := range kvs {
-			log.Info(ctx, kv.Key, kv.Value.Timestamp, kv.Value.PrettyPrint())
+			log.Infof(ctx, "%v %v %v", kv.Key, kv.Value.Timestamp, kv.Value.PrettyPrint())
 		}
 
 		if err := rf.StartScanFrom(ctx, &row.SpanKVFetcher{KVs: kvs}); err != nil {

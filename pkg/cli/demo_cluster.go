@@ -433,18 +433,17 @@ func maybeWarnMemSize(ctx context.Context) {
 		requestedMem := (demoCtx.cacheSize + demoCtx.sqlPoolMemorySize) * int64(demoCtx.nodes)
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {
-			log.Shout(
+			log.Shoutf(
 				ctx,
 				log.Severity_WARNING,
-				fmt.Sprintf(`HIGH MEMORY USAGE
+				`HIGH MEMORY USAGE
 The sum of --max-sql-memory (%s) and --cache (%s) multiplied by the
 number of nodes (%d) results in potentially high memory usage on your
 device.
 This server is running at increased risk of memory-related failures.`,
-					demoNodeSQLMemSizeValue,
-					demoNodeCacheSizeValue,
-					demoCtx.nodes,
-				),
+				demoNodeSQLMemSizeValue,
+				demoNodeCacheSizeValue,
+				demoCtx.nodes,
 			)
 		}
 	}

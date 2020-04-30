@@ -788,7 +788,7 @@ func (tc *TestCluster) WaitForFullReplication() error {
 				if err := s.ComputeMetrics(context.TODO(), 0); err != nil {
 					// This can sometimes fail since ComputeMetrics calls
 					// updateReplicationGauges which needs the system config gossiped.
-					log.Info(context.TODO(), err)
+					log.Infof(context.TODO(), "%v", err)
 					notReplicated = true
 					return nil
 				}

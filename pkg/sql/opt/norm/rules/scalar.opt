@@ -366,3 +366,31 @@
         (Array [] (ArrayType $requestedCol))
     ]
 )
+
+# SimplifySameVarEqualities converts `x = x` and other equality
+# comparisons into `x IS NOT NULL OR NULL`. The `OR NULL` is necessary
+# when x is NULL.
+[SimplifySameVarEqualities, Normalize]
+(Eq | Le | Ge
+    $left:(Variable)
+    $right:(Variable) & (VarsAreSame $left $right)
+)
+=>
+(Or
+    (IsNot $left (Null $typ:(TypeOf $left)))
+    (Null $typ)
+)
+
+# SimplifySameVarInequalities converts `x != x` and other inequality
+# comparisons into `x IS NULL AND NULL`. The `AND NULL` is necessary
+# when x is NULL.
+[SimplifySameVarInequalities, Normalize]
+(Ne | Lt | Gt
+    $left:(Variable)
+    $right:(Variable) & (VarsAreSame $left $right)
+)
+=>
+(And
+    (Is $left (Null $typ:(TypeOf $left)))
+    (Null $typ)
+)

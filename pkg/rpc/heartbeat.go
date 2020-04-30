@@ -72,7 +72,7 @@ func checkClusterName(clusterName string, peerName string) error {
 			err = errors.Errorf(
 				"local cluster name %q does not match peer cluster name %q", clusterName, peerName)
 		}
-		log.Shout(context.Background(), log.Severity_ERROR, err)
+		log.Shoutf(context.Background(), log.Severity_ERROR, "%v", err)
 		return err
 	}
 	return nil

@@ -559,13 +559,13 @@ func (ic *IntervalCache) doGet(i interval.Interface) bool {
 
 func (ic *IntervalCache) add(e *Entry) {
 	if err := ic.tree.Insert(e, false); err != nil {
-		log.Error(context.TODO(), err)
+		log.Errorf(context.TODO(), "%v", err)
 	}
 }
 
 func (ic *IntervalCache) del(e *Entry) {
 	if err := ic.tree.Delete(e, false); err != nil {
-		log.Error(context.TODO(), err)
+		log.Errorf(context.TODO(), "%v", err)
 	}
 }
 

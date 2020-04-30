@@ -260,7 +260,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	rpcContext.HeartbeatCB = func() {
 		if err := rpcContext.RemoteClocks.VerifyClockOffset(ctx); err != nil {
-			log.Fatal(ctx, err)
+			log.Fatalf(ctx, "%v", err)
 		}
 	}
 	registry.AddMetricStruct(rpcContext.Metrics())
@@ -1048,7 +1048,7 @@ func (s *Server) Start(ctx context.Context) error {
 				ctx, s.engines, v.BinaryVersion(), v.BinaryMinSupportedVersion(),
 			)
 			if err != nil {
-				log.Fatal(ctx, err)
+				log.Fatalf(ctx, "%v", err)
 			}
 			if !prevCV.Version.Less(newCV.Version) {
 				// If nothing needs to be updated, don't do anything. The
@@ -1058,7 +1058,7 @@ func (s *Server) Start(ctx context.Context) error {
 				return
 			}
 			if err := kvserver.WriteClusterVersionToEngines(ctx, s.engines, newCV); err != nil {
-				log.Fatal(ctx, err)
+				log.Fatalf(ctx, "%v", err)
 			}
 			log.Infof(ctx, "active cluster version is now %s (up from %s)", newCV, prevCV)
 		}
@@ -1154,7 +1154,7 @@ func (s *Server) Start(ctx context.Context) error {
 		<-s.stopper.ShouldQuiesce()
 		for _, c := range []net.Conn{c1, c2} {
 			if err := c.Close(); err != nil {
-				log.Fatal(workersCtx, err)
+				log.Fatalf(workersCtx, "%v", err)
 			}
 		}
 	})
@@ -1183,7 +1183,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
 		<-s.stopper.ShouldQuiesce()
 		if err := conn.Close(); err != nil {
-			log.Fatal(workersCtx, err)
+			log.Fatalf(workersCtx, "%v", err)
 		}
 	})
 
@@ -1468,7 +1468,7 @@ func (s *Server) Start(ctx context.Context) error {
 		if err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
 			return s.WriteLastUpTimestamp(ctx, now)
 		}); err != nil {
-			log.Warning(ctx, errors.Wrap(err, "writing last up timestamp"))
+			log.Warningf(ctx, "writing last up timestamp: %v", err)
 		}
 	})
 
@@ -1614,7 +1614,7 @@ func (s *Server) startListenRPCAndSQL(
 		s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
 			<-s.stopper.ShouldQuiesce()
 			if err := pgL.Close(); err != nil {
-				log.Fatal(workersCtx, err)
+				log.Fatalf(workersCtx, "%v", err)
 			}
 		})
 		log.Eventf(ctx, "listening on sql port %s", s.cfg.SQLAddr)
@@ -1695,7 +1695,7 @@ func (s *Server) startServeUI(
 	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
 		<-s.stopper.ShouldQuiesce()
 		if err := httpLn.Close(); err != nil {
-			log.Fatal(workersCtx, err)
+			log.Fatalf(workersCtx, "%v", err)
 		}
 	})
 
@@ -1779,7 +1779,7 @@ func (s *sqlServer) startServeSQL(
 		stopper.RunWorker(ctx, func(workersCtx context.Context) {
 			<-stopper.ShouldQuiesce()
 			if err := unixLn.Close(); err != nil {
-				log.Fatal(workersCtx, err)
+				log.Fatalf(workersCtx, "%v", err)
 			}
 		})
 
@@ -1787,7 +1787,7 @@ func (s *sqlServer) startServeSQL(
 			netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, stopper, unixLn, func(conn net.Conn) {
 				connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
 				if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
-					log.Error(connCtx, err)
+					log.Errorf(connCtx, "%v", err)
 				}
 			}))
 		})

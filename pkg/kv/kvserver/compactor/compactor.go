@@ -325,7 +325,7 @@ func (c *Compactor) fetchSuggestions(
 				log.Infof(ctx, "purging suggested compaction for range %s - %s that contains live data",
 					sc.StartKey, sc.EndKey)
 				if err := delBatch.Clear(kv.Key); err != nil {
-					log.Fatal(ctx, err) // should never happen on a batch
+					log.Fatalf(ctx, "%v", err) // should never happen on a batch
 				}
 				c.Metrics.BytesSkipped.Inc(sc.Bytes)
 			} else {
@@ -403,7 +403,7 @@ func (c *Compactor) processCompaction(
 		}
 		key := keys.StoreSuggestedCompactionKey(sc.StartKey, sc.EndKey)
 		if err := delBatch.Clear(storage.MVCCKey{Key: key}); err != nil {
-			log.Fatal(ctx, err) // should never happen on a batch
+			log.Fatalf(ctx, "%v", err) // should never happen on a batch
 		}
 	}
 

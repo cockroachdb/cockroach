@@ -81,7 +81,7 @@ func (s *Store) TestSender() kv.Sender {
 		// that.
 		key, err := keys.Addr(ba.Requests[0].GetInner().Header().Key)
 		if err != nil {
-			log.Fatal(context.TODO(), err)
+			log.Fatalf(context.TODO(), "%v", err)
 		}
 
 		ba.RangeID = roachpb.RangeID(1)
@@ -549,7 +549,7 @@ func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *
 	}
 	r, err := newReplica(context.Background(), desc, s, 1)
 	if err != nil {
-		log.Fatal(context.Background(), err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 	return r
 }

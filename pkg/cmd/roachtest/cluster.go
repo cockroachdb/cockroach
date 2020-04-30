@@ -1165,7 +1165,7 @@ func (f *clusterFactory) newCluster(
 	logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", name+".log")
 	l, err := rootLogger(logPath, teeOpt)
 	if err != nil {
-		log.Fatal(ctx, err)
+		log.Fatalf(ctx, "%v", err)
 	}
 
 	success := false

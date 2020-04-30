@@ -190,14 +190,14 @@ func (r *Replica) executeWriteBatch(
 				if err := r.store.intentResolver.CleanupIntentsAsync(
 					ctx, propResult.EncounteredIntents, true, /* allowSync */
 				); err != nil {
-					log.Warning(ctx, err)
+					log.Warningf(ctx, "%v", err)
 				}
 			}
 			if len(propResult.EndTxns) > 0 {
 				if err := r.store.intentResolver.CleanupTxnIntentsAsync(
 					ctx, r.RangeID, propResult.EndTxns, true, /* allowSync */
 				); err != nil {
-					log.Warning(ctx, err)
+					log.Warningf(ctx, "%v", err)
 				}
 			}
 			return propResult.Reply, nil, propResult.Err
@@ -205,8 +205,9 @@ func (r *Replica) executeWriteBatch(
 			slowTimer.Read = true
 			r.store.metrics.SlowRaftRequests.Inc(1)
 
-			log.Error(ctx, rangeUnavailableMessage(r.Desc(), r.store.cfg.NodeLiveness.GetIsLiveMap(),
-				r.RaftStatus(), ba, timeutil.Since(startPropTime)))
+			log.Errorf(ctx, "range unavailable: %v",
+				rangeUnavailableMessage(r.Desc(), r.store.cfg.NodeLiveness.GetIsLiveMap(),
+					r.RaftStatus(), ba, timeutil.Since(startPropTime)))
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError,
 			// which indicates to the caller that the command may have executed.

@@ -19,6 +19,6 @@ func Errorf(ctx context.Context, format string, args ...interface{}) {
 	fmt.Println(fmt.Sprintf(format, args...))
 }
 
-func Error(ctx context.Context, msg ...interface{}) {
-	fmt.Println(msg...)
+func Error(ctx context.Context, msg string) {
+	fmt.Println(msg)
 }
