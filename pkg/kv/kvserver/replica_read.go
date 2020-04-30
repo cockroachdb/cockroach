@@ -33,7 +33,6 @@ import (
 func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba *roachpb.BatchRequest, st storagepb.LeaseStatus, g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
-	log.Event(ctx, "waiting for read lock")
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
 
@@ -121,6 +120,8 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 	ba *roachpb.BatchRequest,
 	latchSpans *spanset.SpanSet,
 ) (br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
+	log.Event(ctx, "executing read-only batch")
+
 	for retries := 0; ; retries++ {
 		if retries > 0 {
 			log.VEventf(ctx, 2, "server-side retry of batch")
