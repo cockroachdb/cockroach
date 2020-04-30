@@ -1319,7 +1319,9 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	}
 	md := c.e.mem.Metadata()
 	if md.Table(scanPrivate.Table).IsVirtualTable() {
-		return
+		if joinType != opt.InnerJoinOp {
+			return
+		}
 	}
 	inputProps := input.Relational()
 

@@ -55,3 +55,24 @@ filter              ·            ·
  └── virtual table  ·            ·
 ·                   source       tables@tables_table_name_idx
 ·                   constraint   /4: [/'blah' - /'blah']
+
+# Lookup joins into virtual indexes.
+
+query TTT
+EXPLAIN SELECT * FROM pg_constraint INNER LOOKUP JOIN pg_class on conrelid=pg_class.oid
+----
+·                     distributed  false
+·                     vectorized   false
+virtual table lookup  ·            ·
+ │                    table        pg_class@pg_class_oid_idx
+ │                    equality     (conrelid) = (oid)
+ └── virtual table    ·            ·
+·                     source       pg_constraint@primary
+
+# Only inner lookup joins supported right now.
+
+query error could not produce
+EXPLAIN SELECT * FROM pg_constraint LEFT LOOKUP JOIN pg_class on conrelid=pg_class.oid
+
+query error could not produce
+EXPLAIN SELECT * FROM pg_constraint LEFT LOOKUP JOIN pg_class on conrelid=pg_class.oid

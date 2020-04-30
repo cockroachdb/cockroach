@@ -645,6 +645,9 @@ func (ef *execFactory) ConstructLookupJoin(
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
+	if table.IsVirtualTable() {
+		return ef.constructVirtualLookupJoin(joinType, input, table, index, eqCols, lookupCols, onCond)
+	}
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
 	colCfg := makeScanColumnsConfig(table, lookupCols)
@@ -680,6 +683,74 @@ func (ef *execFactory) ConstructLookupJoin(
 	n.columns = make(sqlbase.ResultColumns, 0, len(inputCols)+len(scanCols))
 	n.columns = append(n.columns, inputCols...)
 	n.columns = append(n.columns, scanCols...)
+	return n, nil
+}
+
+func (ef *execFactory) constructVirtualLookupJoin(
+	joinType sqlbase.JoinType,
+	input exec.Node,
+	table cat.Table,
+	index cat.Index,
+	eqCols []exec.NodeColumnOrdinal,
+	lookupCols exec.TableColumnOrdinalSet,
+	onCond tree.TypedExpr,
+) (exec.Node, error) {
+	tn := &table.(*optVirtualTable).name
+	virtual, err := ef.planner.getVirtualTabler().getVirtualTableEntry(tn)
+	if err != nil {
+		return nil, err
+	}
+	if len(eqCols) > 1 {
+		panic("vtable indexes with more than one column aren't supported yet")
+	}
+	// Check for explicit use of the dummy column.
+	if lookupCols.Contains(0) {
+		return nil, errors.Errorf("use of %s column not allowed.", table.Column(0).ColName())
+	}
+	indexDesc := index.(*optVirtualIndex).desc
+	tableDesc := table.(*optVirtualTable).desc
+	// Build the result columns.
+	inputCols := planColumns(input.(planNode))
+
+	if onCond == tree.DBoolTrue {
+		onCond = nil
+	}
+	var n exec.Node
+
+	var tableScan scanNode
+	// Set up a scanNode that we won't actually use, just to get the needed
+	// column analysis.
+	colCfg := makeScanColumnsConfig(table, lookupCols)
+	if err := tableScan.initTable(context.TODO(), ef.planner, tableDesc, nil, colCfg); err != nil {
+		return nil, err
+	}
+	tableScan.index = indexDesc
+	tableScan.isSecondaryIndex = true
+	vtableCols := sqlbase.ResultColumnsFromColDescs(tableDesc.Columns)
+	projectedVtableCols := planColumns(&tableScan)
+	outputCols := make(sqlbase.ResultColumns, 0, len(inputCols)+len(projectedVtableCols))
+	outputCols = append(outputCols, inputCols...)
+	outputCols = append(outputCols, projectedVtableCols...)
+	pred, err := makePredicate(joinType, inputCols, projectedVtableCols)
+	if err != nil {
+		return nil, err
+	}
+	pred.onCond = pred.iVarHelper.Rebind(
+		onCond, false /* alsoReset */, false, /* normalizeToNonNil */
+	)
+	n = &vTableLookupJoinNode{
+		input:             input.(planNode),
+		virtualTableEntry: virtual,
+		dbName:            tn.Catalog(),
+		table:             tableDesc.TableDesc(),
+		index:             indexDesc,
+		eqCol:             int(eqCols[0]),
+		inputCols:         inputCols,
+		vtableCols:        vtableCols,
+		lookupCols:        lookupCols,
+		columns:           outputCols,
+		pred:              pred,
+	}
 	return n, nil
 }
 
