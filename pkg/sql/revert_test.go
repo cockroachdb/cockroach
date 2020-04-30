@@ -31,6 +31,7 @@ func TestRevertTable(t *testing.T) {
 	s, sqlDB, kv := serverutils.StartServer(
 		t, base.TestServerArgs{UseDatabase: "test"})
 	defer s.Stopper().Stop(context.TODO())
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	db.Exec(t, `CREATE DATABASE IF NOT EXISTS test`)
@@ -68,7 +69,7 @@ func TestRevertTable(t *testing.T) {
 		// Revert the table to ts.
 		desc := sqlbase.GetTableDescriptor(kv, "test", "test")
 		desc.State = sqlbase.TableDescriptor_OFFLINE // bypass the offline check.
-		require.NoError(t, RevertTables(context.TODO(), kv, []*sqlbase.TableDescriptor{desc}, targetTime, 10))
+		require.NoError(t, RevertTables(context.TODO(), kv, &execCfg, []*sqlbase.TableDescriptor{desc}, targetTime, 10))
 
 		var reverted int
 		db.QueryRow(t, `SELECT xor_agg(k # rev) FROM test`).Scan(&reverted)
@@ -97,14 +98,14 @@ func TestRevertTable(t *testing.T) {
 		child := sqlbase.GetTableDescriptor(kv, "test", "child")
 		child.State = sqlbase.TableDescriptor_OFFLINE
 		t.Run("reject only parent", func(t *testing.T) {
-			require.Error(t, RevertTables(ctx, kv, []*sqlbase.TableDescriptor{desc}, targetTime, 10))
+			require.Error(t, RevertTables(ctx, kv, &execCfg, []*sqlbase.TableDescriptor{desc}, targetTime, 10))
 		})
 		t.Run("reject only child", func(t *testing.T) {
-			require.Error(t, RevertTables(ctx, kv, []*sqlbase.TableDescriptor{child}, targetTime, 10))
+			require.Error(t, RevertTables(ctx, kv, &execCfg, []*sqlbase.TableDescriptor{child}, targetTime, 10))
 		})
 
 		t.Run("rollback parent and child", func(t *testing.T) {
-			require.NoError(t, RevertTables(ctx, kv, []*sqlbase.TableDescriptor{desc, child}, targetTime, RevertTableDefaultBatchSize))
+			require.NoError(t, RevertTables(ctx, kv, &execCfg, []*sqlbase.TableDescriptor{desc, child}, targetTime, RevertTableDefaultBatchSize))
 
 			var reverted, revertedChild int
 			db.QueryRow(t, `SELECT xor_agg(k # rev) FROM test`).Scan(&reverted)

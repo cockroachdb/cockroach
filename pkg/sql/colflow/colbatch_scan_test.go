@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -56,7 +57,9 @@ func BenchmarkColBatchScan(b *testing.B) {
 				Core: execinfrapb.ProcessorCoreUnion{
 					TableReader: &execinfrapb.TableReaderSpec{
 						Table: *tableDesc,
-						Spans: []execinfrapb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+						Spans: []execinfrapb.TableReaderSpan{
+							{Span: tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)},
+						},
 					}},
 				Post: execinfrapb.PostProcessSpec{
 					Projection:    true,

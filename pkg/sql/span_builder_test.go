@@ -31,6 +31,7 @@ func TestSpanBuilderCanSplitSpan(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	tcs := []struct {
 		sql               string
 		index             string
@@ -101,7 +102,7 @@ func TestSpanBuilderCanSplitSpan(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			builder := span.MakeBuilder(desc, idx)
+			builder := span.MakeBuilder(execCfg.Codec, desc, idx)
 			if res := builder.CanSplitSpanIntoSeparateFamilies(
 				tc.numNeededFamilies, tc.prefixLen, tc.containsNull); res != tc.canSplit {
 				t.Errorf("expected result to be %v, but found %v", tc.canSplit, res)

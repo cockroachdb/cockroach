@@ -95,7 +95,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 			valNeededForCol.Add(colIdx)
 		}
 		args = append(args, row.FetcherTableArgs{
-			Spans:            desc.AllIndexSpans(),
+			Spans:            desc.AllIndexSpans(keys.SystemSQLCodec),
 			Desc:             desc,
 			Index:            &desc.PrimaryIndex,
 			ColIdxMap:        colIdxMap,
@@ -106,6 +106,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	}
 	var rf row.Fetcher
 	if err := rf.Init(
+		keys.SystemSQLCodec,
 		false, /* reverse */
 		sqlbase.ScanLockingStrength_FOR_NONE,
 		false, /* returnRangeInfo */

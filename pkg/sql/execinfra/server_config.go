@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -83,6 +84,15 @@ type ServerConfig struct {
 	Settings     *cluster.Settings
 	RuntimeStats RuntimeStats
 
+	ClusterID   *base.ClusterIDContainer
+	ClusterName string
+
+	// NodeID is the id of the node on which this Server is running.
+	NodeID *base.NodeIDContainer
+
+	// Codec is capable of encoding and decoding sql table keys.
+	Codec keys.SQLCodec
+
 	// DB is a handle to the cluster.
 	DB *kv.DB
 	// Executor can be used to run "internal queries". Note that Flows also have
@@ -123,11 +133,6 @@ type ServerConfig struct {
 	DiskMonitor *mon.BytesMonitor
 
 	Metrics *DistSQLMetrics
-
-	// NodeID is the id of the node on which this Server is running.
-	NodeID      *base.NodeIDContainer
-	ClusterID   *base.ClusterIDContainer
-	ClusterName string
 
 	// JobRegistry manages jobs being used by this Server.
 	JobRegistry *jobs.Registry

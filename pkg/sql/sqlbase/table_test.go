@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -101,7 +102,7 @@ func makeTableDescForTest(test indexKeyTest) (TableDescriptor, map[ColumnID]int)
 }
 
 func decodeIndex(
-	tableDesc *TableDescriptor, index *IndexDescriptor, key []byte,
+	codec keys.SQLCodec, tableDesc *TableDescriptor, index *IndexDescriptor, key []byte,
 ) ([]tree.Datum, error) {
 	types, err := GetColumnTypes(tableDesc, index.ColumnIDs)
 	if err != nil {
@@ -109,7 +110,7 @@ func decodeIndex(
 	}
 	values := make([]EncDatum, len(index.ColumnIDs))
 	colDirs := index.ColumnDirections
-	_, ok, _, err := DecodeIndexKey(tableDesc, index, types, values, colDirs, key)
+	_, ok, _, err := DecodeIndexKey(codec, tableDesc, index, types, values, colDirs, key)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +215,8 @@ func TestIndexKey(t *testing.T) {
 
 		testValues := append(test.primaryValues, test.secondaryValues...)
 
-		primaryKeyPrefix := MakeIndexKeyPrefix(&tableDesc, tableDesc.PrimaryIndex.ID)
+		codec := keys.SystemSQLCodec
+		primaryKeyPrefix := MakeIndexKeyPrefix(codec, &tableDesc, tableDesc.PrimaryIndex.ID)
 		primaryKey, _, err := EncodeIndexKey(
 			&tableDesc, &tableDesc.PrimaryIndex, colMap, testValues, primaryKeyPrefix)
 		if err != nil {
@@ -224,7 +226,7 @@ func TestIndexKey(t *testing.T) {
 		primaryIndexKV := kv.KeyValue{Key: primaryKey, Value: &primaryValue}
 
 		secondaryIndexEntry, err := EncodeSecondaryIndex(
-			&tableDesc, &tableDesc.Indexes[0], colMap, testValues, true /* includeEmpty */)
+			codec, &tableDesc, &tableDesc.Indexes[0], colMap, testValues, true /* includeEmpty */)
 		if len(secondaryIndexEntry) != 1 {
 			t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexEntry), secondaryIndexEntry)
 		}
@@ -237,7 +239,7 @@ func TestIndexKey(t *testing.T) {
 		}
 
 		checkEntry := func(index *IndexDescriptor, entry kv.KeyValue) {
-			values, err := decodeIndex(&tableDesc, index, entry.Key)
+			values, err := decodeIndex(codec, &tableDesc, index, entry.Key)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -249,7 +251,7 @@ func TestIndexKey(t *testing.T) {
 				}
 			}
 
-			indexID, _, err := DecodeIndexKeyPrefix(&tableDesc, entry.Key)
+			indexID, _, err := DecodeIndexKeyPrefix(codec, &tableDesc, entry.Key)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -257,7 +259,7 @@ func TestIndexKey(t *testing.T) {
 				t.Errorf("%d", i)
 			}
 
-			extracted, err := ExtractIndexKey(&a, &tableDesc, entry)
+			extracted, err := ExtractIndexKey(&a, codec, &tableDesc, entry)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -666,7 +668,7 @@ func TestIndexKeyEquivSignature(t *testing.T) {
 			tc.table.indexKeyArgs.primaryValues = tc.table.values
 			// Setup descriptors and form an index key.
 			desc, colMap := makeTableDescForTest(tc.table.indexKeyArgs)
-			primaryKeyPrefix := MakeIndexKeyPrefix(&desc, desc.PrimaryIndex.ID)
+			primaryKeyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, &desc, desc.PrimaryIndex.ID)
 			primaryKey, _, err := EncodeIndexKey(
 				&desc, &desc.PrimaryIndex, colMap, tc.table.values, primaryKeyPrefix)
 			if err != nil {
@@ -807,7 +809,7 @@ func TestEquivSignature(t *testing.T) {
 
 				// Setup descriptors and form an index key.
 				desc, colMap := makeTableDescForTest(table.indexKeyArgs)
-				primaryKeyPrefix := MakeIndexKeyPrefix(&desc, desc.PrimaryIndex.ID)
+				primaryKeyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, &desc, desc.PrimaryIndex.ID)
 				primaryKey, _, err := EncodeIndexKey(
 					&desc, &desc.PrimaryIndex, colMap, table.values, primaryKeyPrefix)
 				if err != nil {
@@ -1055,12 +1057,14 @@ func TestAdjustStartKeyForInterleave(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			actual, err := AdjustStartKeyForInterleave(tc.index, EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.input)))
+			codec := keys.SystemSQLCodec
+			actual := EncodeTestKey(t, kvDB, codec, ShortToLongKeyFmt(tc.input))
+			actual, err := AdjustStartKeyForInterleave(codec, tc.index, actual)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			expected := EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.expected))
+			expected := EncodeTestKey(t, kvDB, codec, ShortToLongKeyFmt(tc.expected))
 			if !expected.Equal(actual) {
 				t.Errorf("expected tightened start key %s, got %s", expected, actual)
 			}
@@ -1475,12 +1479,14 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			actual, err := AdjustEndKeyForInterleave(tc.table, tc.index, EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.input)), tc.inclusive)
+			codec := keys.SystemSQLCodec
+			actual := EncodeTestKey(t, kvDB, codec, ShortToLongKeyFmt(tc.input))
+			actual, err := AdjustEndKeyForInterleave(codec, tc.table, tc.index, actual, tc.inclusive)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			expected := EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.expected))
+			expected := EncodeTestKey(t, kvDB, codec, ShortToLongKeyFmt(tc.expected))
 			if !expected.Equal(actual) {
 				t.Errorf("expected tightened end key %s, got %s", expected, actual)
 			}

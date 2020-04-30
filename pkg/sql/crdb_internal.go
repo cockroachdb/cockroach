@@ -2896,7 +2896,7 @@ func addPartitioningRows(
 				buf.WriteString(`, `)
 			}
 			tuple, _, err := sqlbase.DecodePartitionTuple(
-				&datumAlloc, table, index, partitioning, values, fakePrefixDatums,
+				&datumAlloc, p.ExecCfg().Codec, table, index, partitioning, values, fakePrefixDatums,
 			)
 			if err != nil {
 				return err
@@ -2947,7 +2947,7 @@ func addPartitioningRows(
 	for _, r := range partitioning.Range {
 		var buf bytes.Buffer
 		fromTuple, _, err := sqlbase.DecodePartitionTuple(
-			&datumAlloc, table, index, partitioning, r.FromInclusive, fakePrefixDatums,
+			&datumAlloc, p.ExecCfg().Codec, table, index, partitioning, r.FromInclusive, fakePrefixDatums,
 		)
 		if err != nil {
 			return err
@@ -2955,7 +2955,7 @@ func addPartitioningRows(
 		buf.WriteString(fromTuple.String())
 		buf.WriteString(" TO ")
 		toTuple, _, err := sqlbase.DecodePartitionTuple(
-			&datumAlloc, table, index, partitioning, r.ToExclusive, fakePrefixDatums,
+			&datumAlloc, p.ExecCfg().Codec, table, index, partitioning, r.ToExclusive, fakePrefixDatums,
 		)
 		if err != nil {
 			return err

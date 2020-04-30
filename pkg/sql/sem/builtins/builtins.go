@@ -2864,7 +2864,7 @@ may increase either contention or retry errors, or both.`,
 				}
 
 				if indexDesc.ID == tableDesc.PrimaryIndex.ID {
-					keyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, indexDesc.ID)
+					keyPrefix := sqlbase.MakeIndexKeyPrefix(ctx.Codec, tableDesc, indexDesc.ID)
 					res, _, err := sqlbase.EncodeIndexKey(tableDesc, indexDesc, colMap, datums, keyPrefix)
 					if err != nil {
 						return nil, err
@@ -2872,7 +2872,7 @@ may increase either contention or retry errors, or both.`,
 					return tree.NewDBytes(tree.DBytes(res)), err
 				}
 				// We have a secondary index.
-				res, err := sqlbase.EncodeSecondaryIndex(tableDesc, indexDesc, colMap, datums, true /* includeEmpty */)
+				res, err := sqlbase.EncodeSecondaryIndex(ctx.Codec, tableDesc, indexDesc, colMap, datums, true /* includeEmpty */)
 				if err != nil {
 					return nil, err
 				}

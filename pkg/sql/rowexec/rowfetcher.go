@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -53,6 +54,7 @@ type rowFetcher interface {
 
 // initRowFetcher initializes the fetcher.
 func initRowFetcher(
+	flowCtx *execinfra.FlowCtx,
 	fetcher *row.Fetcher,
 	desc *sqlbase.TableDescriptor,
 	indexIdx int,
@@ -83,7 +85,13 @@ func initRowFetcher(
 		ValNeededForCol:  valNeededForCol,
 	}
 	if err := fetcher.Init(
-		reverseScan, lockStr, true /* returnRangeInfo */, isCheck, alloc, tableArgs,
+		flowCtx.Codec(),
+		reverseScan,
+		lockStr,
+		true, /* returnRangeInfo */
+		isCheck,
+		alloc,
+		tableArgs,
 	); err != nil {
 		return nil, false, err
 	}

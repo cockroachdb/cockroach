@@ -126,7 +126,7 @@ func doCreateSequence(
 	}
 
 	// Initialize the sequence value.
-	seqValueKey := keys.TODOSQLCodec.SequenceKey(uint32(id))
+	seqValueKey := params.ExecCfg().Codec.SequenceKey(uint32(id))
 	b := &kv.Batch{}
 	b.Inc(seqValueKey, desc.SequenceOpts.Start-desc.SequenceOpts.Increment)
 	if err := params.p.txn.Run(params.ctx, b); err != nil {

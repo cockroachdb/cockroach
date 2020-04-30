@@ -504,12 +504,13 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 		Config:                   &cfg,
 		stopper:                  stopper,
 		clock:                    clock,
-		protectedtsProvider:      protectedTSProvider,
 		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),
+		tenantID:                 roachpb.SystemTenantID,
 		db:                       ts.DB(),
 		registry:                 registry,
 		circularInternalExecutor: circularInternalExecutor,
 		jobRegistry:              &jobs.Registry{},
+		protectedtsProvider:      protectedTSProvider,
 	}
 }
 

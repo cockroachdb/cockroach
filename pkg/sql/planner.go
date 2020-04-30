@@ -344,6 +344,7 @@ func internalExtendedEvalCtx(
 			TxnReadOnly:      false,
 			TxnImplicit:      true,
 			Settings:         execCfg.Settings,
+			Codec:            execCfg.Codec,
 			Context:          ctx,
 			Mon:              plannerMon,
 			TestingKnobs:     evalContextTestingKnobs,

@@ -383,6 +383,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			ri, err := row.MakeInserter(
 				params.ctx,
 				params.p.txn,
+				params.ExecCfg().Codec,
 				sqlbase.NewImmutableTableDescriptor(*desc.TableDesc()),
 				desc.Columns,
 				row.SkipFKs,
@@ -497,7 +498,7 @@ func (p *planner) resolveFK(
 	ts FKTableState,
 	validationBehavior tree.ValidationBehavior,
 ) error {
-	return ResolveFK(ctx, p.txn, p, tbl, d, backrefs, ts, validationBehavior, p.ExecCfg().Settings)
+	return ResolveFK(ctx, p.txn, p, tbl, d, backrefs, ts, validationBehavior, p.EvalContext())
 }
 
 func qualifyFKColErrorWithDB(
@@ -607,7 +608,7 @@ func ResolveFK(
 	backrefs map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
 	ts FKTableState,
 	validationBehavior tree.ValidationBehavior,
-	settings *cluster.Settings,
+	evalCtx *tree.EvalContext,
 ) error {
 	originColumnIDs := make(sqlbase.ColumnIDs, len(d.FromCols))
 	for i, col := range d.FromCols {
@@ -1655,7 +1656,9 @@ func MakeTableDesc(
 			desc.Checks = append(desc.Checks, ck)
 
 		case *tree.ForeignKeyConstraintTableDef:
-			if err := ResolveFK(ctx, txn, fkResolver, &desc, d, affected, NewTable, tree.ValidationDefault, st); err != nil {
+			if err := ResolveFK(
+				ctx, txn, fkResolver, &desc, d, affected, NewTable, tree.ValidationDefault, evalCtx,
+			); err != nil {
 				return desc, err
 			}
 

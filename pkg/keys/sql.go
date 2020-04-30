@@ -79,6 +79,17 @@ func MakeSQLCodec(tenID roachpb.TenantID) SQLCodec {
 	}
 }
 
+// SQLCodecForKey constructs a SQLCodec capable of decoding the provided key.
+// This function should generally be avoided in favor of passing a server-wide
+// SQLCodec dependency to code in need.
+func SQLCodecForKey(key roachpb.Key) (SQLCodec, error) {
+	_, tenID, err := DecodeTenantPrefix(key)
+	if err != nil {
+		return SQLCodec{}, err
+	}
+	return MakeSQLCodec(tenID), nil
+}
+
 // SystemSQLCodec is a SQL key codec for the system tenant.
 var SystemSQLCodec = MakeSQLCodec(roachpb.SystemTenantID)
 
