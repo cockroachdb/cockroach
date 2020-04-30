@@ -12,6 +12,8 @@ syntax = "proto3";
 package cockroach.geopb;
 option go_package = "geopb";
 
+import "gogoproto/gogo.proto";
+
 // Shape is the type of a spatial shape. Each of these corresponds to a
 // different representation and serialization format. For example, a Point is a
 // pair of float64s (or more than that for geometries with Z or N), a LineString
@@ -27,7 +29,16 @@ enum Shape {
   MultiPolygon = 6;
   // Geometry can contain any type.
   Geometry = 7;
-  // GeometryCollection can contain any multi* type.
+  // GeometryCollection can contain a list of any above type except for Geometry.
   GeometryCollection = 8;
 }
 
+// SpatialObject represents a serialization of a Geospatial type.
+message SpatialObject {
+  // EWKB is the EWKB representation of the spatial object.
+  bytes ewkb = 1 [(gogoproto.customname)="EWKB",(gogoproto.casttype)="EWKB"];
+  // SRID is the denormalized SRID derived from the EWKB.
+  int32 srid = 2 [(gogoproto.customname)="SRID",(gogoproto.casttype)="SRID"];
+  // Shape is denormalized Shape derived from the EWKB.
+  Shape shape = 3;
+}

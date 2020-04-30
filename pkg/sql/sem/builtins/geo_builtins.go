@@ -47,11 +47,11 @@ var geometryFromText = makeBuiltin(
 	defProps(),
 	stringOverload1(
 		func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-			g, err := geo.ParseEWKT(geopb.EWKT(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
+			g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
 			if err != nil {
 				return nil, err
 			}
-			return tree.NewDGeometry(geo.NewGeometry(g)), nil
+			return tree.NewDGeometry(g), nil
 		},
 		types.Geometry,
 		infoBuilder{info: "Returns the Geometry from a WKT or EWKT representation."}.String(),
@@ -62,11 +62,11 @@ var geometryFromText = makeBuiltin(
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			s := string(tree.MustBeDString(args[0]))
 			srid := geopb.SRID(tree.MustBeDInt(args[1]))
-			g, err := geo.ParseEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
+			g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
 			if err != nil {
 				return nil, err
 			}
-			return tree.NewDGeometry(geo.NewGeometry(g)), nil
+			return tree.NewDGeometry(g), nil
 		},
 		Info: infoBuilder{
 			info: `Returns the Geometry from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.`,
@@ -79,11 +79,11 @@ var geographyFromText = makeBuiltin(
 	defProps(),
 	stringOverload1(
 		func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-			g, err := geo.ParseEWKT(geopb.EWKT(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
+			g, err := geo.ParseGeographyFromEWKT(geopb.EWKT(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
 			if err != nil {
 				return nil, err
 			}
-			return tree.NewDGeography(geo.NewGeography(g)), nil
+			return tree.NewDGeography(g), nil
 		},
 		types.Geography,
 		infoBuilder{info: "Returns the Geography from a WKT or EWKT representation."}.String(),
@@ -94,11 +94,11 @@ var geographyFromText = makeBuiltin(
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			s := string(tree.MustBeDString(args[0]))
 			srid := geopb.SRID(tree.MustBeDInt(args[1]))
-			g, err := geo.ParseEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
+			g, err := geo.ParseGeographyFromEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
 			if err != nil {
 				return nil, err
 			}
-			return tree.NewDGeography(geo.NewGeography(g)), nil
+			return tree.NewDGeography(g), nil
 		},
 		Info: infoBuilder{
 			info: `Returns the Geography from a WKT or EWKT representation with an SRID. If the SRID is present in both the EWKT and the argument, the argument value is used.`,
@@ -117,11 +117,11 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		stringOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseEWKT(geopb.EWKT(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
+				g, err := geo.ParseGeometryFromEWKT(geopb.EWKT(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDGeometry(geo.NewGeometry(g)), nil
+				return tree.NewDGeometry(g), nil
 			},
 			types.Geometry,
 			infoBuilder{info: "Returns the Geometry from an EWKT representation."}.String(),
@@ -131,11 +131,11 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		bytesOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseWKB([]byte(s), geopb.DefaultGeometrySRID)
+				g, err := geo.ParseGeometryFromWKB([]byte(s), geopb.DefaultGeometrySRID)
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDGeometry(geo.NewGeometry(g)), nil
+				return tree.NewDGeometry(g), nil
 			},
 			types.Geometry,
 			infoBuilder{info: "Returns the Geometry from a WKB representation."}.String(),
@@ -146,11 +146,11 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				b := string(tree.MustBeDBytes(args[0]))
 				srid := geopb.SRID(tree.MustBeDInt(args[1]))
-				g, err := geo.ParseWKB(geopb.WKB(b), srid)
+				g, err := geo.ParseGeometryFromWKB(geopb.WKB(b), srid)
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDGeometry(geo.NewGeometry(g)), nil
+				return tree.NewDGeometry(g), nil
 			},
 			Info: infoBuilder{
 				info: `Returns the Geometry from a WKB representation with the given SRID set.`,
@@ -161,11 +161,11 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		bytesOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseEWKB([]byte(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
+				g, err := geo.ParseGeometryFromEWKB([]byte(s))
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDGeometry(geo.NewGeometry(g)), nil
+				return tree.NewDGeometry(g), nil
 			},
 			types.Geometry,
 			infoBuilder{info: "Returns the Geometry from an EWKB representation."}.String(),
@@ -175,11 +175,11 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		stringOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseGeoJSON([]byte(s), geopb.DefaultGeometrySRID)
+				g, err := geo.ParseGeometryFromGeoJSON([]byte(s))
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDGeometry(geo.NewGeometry(g)), nil
+				return tree.NewDGeometry(g), nil
 			},
 			types.Geometry,
 			infoBuilder{info: "Returns the Geometry from an GeoJSON representation."}.String(),
@@ -194,11 +194,11 @@ var geoBuiltins = map[string]builtinDefinition{
 				if asString == nil {
 					return tree.DNull, nil
 				}
-				g, err := geo.ParseGeoJSON([]byte(*asString), geopb.DefaultGeometrySRID)
+				g, err := geo.ParseGeometryFromGeoJSON([]byte(*asString))
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDGeometry(geo.NewGeometry(g)), nil
+				return tree.NewDGeometry(g), nil
 			},
 			types.Geometry,
 			infoBuilder{info: "Returns the Geometry from an GeoJSON representation."}.String(),
@@ -215,11 +215,11 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		stringOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseEWKT(geopb.EWKT(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
+				g, err := geo.ParseGeographyFromEWKT(geopb.EWKT(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDGeography(geo.NewGeography(g)), nil
+				return tree.NewDGeography(g), nil
 			},
 			types.Geography,
 			infoBuilder{info: "Returns the Geography from an EWKT representation."}.String(),
@@ -229,11 +229,11 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		bytesOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseWKB([]byte(s), geopb.DefaultGeographySRID)
+				g, err := geo.ParseGeographyFromWKB([]byte(s), geopb.DefaultGeographySRID)
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDGeography(geo.NewGeography(g)), nil
+				return tree.NewDGeography(g), nil
 			},
 			types.Geography,
 			infoBuilder{info: "Returns the Geography from a WKB representation."}.String(),
@@ -244,11 +244,11 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				b := string(tree.MustBeDBytes(args[0]))
 				srid := geopb.SRID(tree.MustBeDInt(args[1]))
-				g, err := geo.ParseWKB(geopb.WKB(b), srid)
+				g, err := geo.ParseGeographyFromWKB(geopb.WKB(b), srid)
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDGeography(geo.NewGeography(g)), nil
+				return tree.NewDGeography(g), nil
 			},
 			Info: infoBuilder{
 				info: `Returns the Geography from a WKB representation with the given SRID set.`,
@@ -259,11 +259,11 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		bytesOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseEWKB([]byte(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
+				g, err := geo.ParseGeographyFromEWKB([]byte(s))
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDGeography(geo.NewGeography(g)), nil
+				return tree.NewDGeography(g), nil
 			},
 			types.Geography,
 			infoBuilder{info: "Returns the Geography from an EWKB representation."}.String(),
@@ -273,11 +273,11 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		stringOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseGeoJSON([]byte(s), geopb.DefaultGeographySRID)
+				g, err := geo.ParseGeographyFromGeoJSON([]byte(s))
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDGeography(geo.NewGeography(g)), nil
+				return tree.NewDGeography(g), nil
 			},
 			types.Geography,
 			infoBuilder{info: "Returns the Geography from an GeoJSON representation."}.String(),
@@ -292,11 +292,11 @@ var geoBuiltins = map[string]builtinDefinition{
 				if asString == nil {
 					return tree.DNull, nil
 				}
-				g, err := geo.ParseGeoJSON([]byte(*asString), geopb.DefaultGeographySRID)
+				g, err := geo.ParseGeographyFromGeoJSON([]byte(*asString))
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDGeography(geo.NewGeography(g)), nil
+				return tree.NewDGeography(g), nil
 			},
 			types.Geography,
 			infoBuilder{info: "Returns the Geography from an GeoJSON representation."}.String(),

@@ -391,10 +391,15 @@ func (v *Value) SetFloat(f float64) {
 
 // SetGeo encodes the specified geo value into the bytes field of the
 // receiver, sets the tag and clears the checksum.
-func (v *Value) SetGeo(ewkb geopb.EWKB) {
-	v.ensureRawBytes(headerSize + len(ewkb))
-	copy(v.dataBytes(), ewkb)
+func (v *Value) SetGeo(so geopb.SpatialObject) error {
+	bytes, err := protoutil.Marshal(&so)
+	if err != nil {
+		return err
+	}
+	v.ensureRawBytes(headerSize + len(bytes))
+	copy(v.dataBytes(), bytes)
 	v.setTag(ValueType_GEO)
+	return nil
 }
 
 // SetBool encodes the specified bool value into the bytes field of the
@@ -525,11 +530,13 @@ func (v Value) GetFloat() (float64, error) {
 
 // GetGeo decodes a geo value from the bytes field of the receiver. If the
 // tag is not GEO an error will be returned.
-func (v Value) GetGeo() (geopb.EWKB, error) {
+func (v Value) GetGeo() (geopb.SpatialObject, error) {
 	if tag := v.GetTag(); tag != ValueType_GEO {
-		return nil, fmt.Errorf("value type is not %s: %s", ValueType_GEO, tag)
+		return geopb.SpatialObject{}, fmt.Errorf("value type is not %s: %s", ValueType_GEO, tag)
 	}
-	return geopb.EWKB(v.dataBytes()), nil
+	var ret geopb.SpatialObject
+	err := protoutil.Unmarshal(v.dataBytes(), &ret)
+	return ret, err
 }
 
 // GetBool decodes a bool value from the bytes field of the receiver. If the
