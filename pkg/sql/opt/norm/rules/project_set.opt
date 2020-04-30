@@ -14,14 +14,11 @@
 # and outputs nulls to pad shorter arrays. It also supports correlation between
 # the array arguments and the input expression.
 [ConvertZipArraysToValues, Normalize]
-(ProjectSet
-    $input:*
-    $zip:* & (CanConstructValuesFromZips $zip)
-)
+(ProjectSet $input:* $zip:* & (CanConstructValuesFromZips $zip))
 =>
 (InnerJoinApply
-        $input
-        (ConstructValuesFromZips $zip)
-        []
-        (EmptyJoinPrivate)
+    $input
+    (ConstructValuesFromZips $zip)
+    []
+    (EmptyJoinPrivate)
 )
