@@ -1586,7 +1586,7 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 		if err != nil {
 			return nil, err
 		}
-		return innerBld.factory.ConstructPlan(plan.root, innerBld.subqueries, innerBld.postqueries)
+		return innerBld.factory.ConstructPlan(plan.root, innerBld.subqueries, innerBld.cascades, innerBld.checks)
 	}
 
 	label := fmt.Sprintf("working buffer (%s)", rec.Name)
@@ -1602,18 +1602,13 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 }
 
 func (b *Builder) buildWithScan(withScan *memo.WithScanExpr) (execPlan, error) {
-	withID := withScan.With
-	var e *builtWithExpr
-	for i := range b.withExprs {
-		if b.withExprs[i].id == withID {
-			e = &b.withExprs[i]
-			break
-		}
-	}
+	e := b.findBuiltWithExpr(withScan.With)
 	if e == nil {
-		err := errors.Errorf("couldn't find WITH expression %q with ID %d", withScan.Name, withID)
-		return execPlan{}, errors.WithHint(
-			err, "references to WITH expressions from correlated subqueries are unsupported")
+		err := errors.WithHint(
+			errors.Errorf("couldn't find WITH expression %q with ID %d", withScan.Name, withScan.With),
+			"references to WITH expressions from correlated subqueries are unsupported",
+		)
+		return execPlan{}, err
 	}
 
 	var label bytes.Buffer

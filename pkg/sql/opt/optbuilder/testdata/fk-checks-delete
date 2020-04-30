@@ -134,22 +134,3 @@ delete doublechild
       │    └── columns: c:4!null p1:5 p2:6
       └── filters
            └── p1:5 = 10
-
-exec-ddl
-CREATE TABLE child_cascade (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE)
-----
-
-# Fall back to the exec-style checks in the presence of CASCADE.
-build
-DELETE FROM parent WHERE p = 1
-----
-delete parent
- ├── columns: <none>
- ├── fetch columns: x:4 parent.p:5 parent.other:6
- ├── fk-fallback
- └── select
-      ├── columns: x:4 parent.p:5!null parent.other:6
-      ├── scan parent
-      │    └── columns: x:4 parent.p:5!null parent.other:6
-      └── filters
-           └── parent.p:5 = 1

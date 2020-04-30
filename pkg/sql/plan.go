@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -298,9 +299,12 @@ type planTop struct {
 	// subqueryPlans contains all the sub-query plans.
 	subqueryPlans []subquery
 
-	// postqueryPlans contains all the plans for subqueries that are to be
-	// executed after the main query (for example, foreign key checks).
-	postqueryPlans []postquery
+	// cascades contains metadata for all cascades.
+	cascades []exec.Cascade
+
+	// checkPlans contains all the plans for queries that are to be executed after
+	// the main query (for example, foreign key checks).
+	checkPlans []checkPlan
 
 	// auditEvents becomes non-nil if any of the descriptors used by
 	// current statement is causing an auditing event. See exec_log.go.
@@ -322,9 +326,9 @@ type planTop struct {
 	distSQLDiagrams []execinfrapb.FlowDiagram
 }
 
-// postquery is a query tree that is executed after the main one. It can only
+// checkPlan is a query tree that is executed after the main one. It can only
 // return an error (for example, foreign key violation).
-type postquery struct {
+type checkPlan struct {
 	plan planNode
 }
 
@@ -352,10 +356,10 @@ func (p *planTop) close(ctx context.Context) {
 		}
 	}
 
-	for i := range p.postqueryPlans {
-		if p.postqueryPlans[i].plan != nil {
-			p.postqueryPlans[i].plan.Close(ctx)
-			p.postqueryPlans[i].plan = nil
+	for i := range p.checkPlans {
+		if p.checkPlans[i].plan != nil {
+			p.checkPlans[i].plan.Close(ctx)
+			p.checkPlans[i].plan = nil
 		}
 	}
 }
@@ -510,6 +514,6 @@ func (pi *planInstrumentation) savePlanInfo(ctx context.Context, curPlan *planTo
 	}
 
 	if pi.savePlanString {
-		pi.planString = planToString(ctx, curPlan.plan, curPlan.subqueryPlans, curPlan.postqueryPlans)
+		pi.planString = planToString(ctx, curPlan)
 	}
 }

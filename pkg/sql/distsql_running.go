@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -1019,29 +1020,91 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	return dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 }
 
-// PlanAndRunPostqueries returns false if an error was encountered and sets
-// that error in the provided receiver.
+// PlanAndRunPostqueries runs any cascade and check queries.
+//
+// Returns false if an error was encountered and sets that error in the provided
+// receiver.
 func (dsp *DistSQLPlanner) PlanAndRunPostqueries(
 	ctx context.Context,
 	planner *planner,
 	evalCtxFactory func() *extendedEvalContext,
-	postqueryPlans []postquery,
+	cascades []exec.Cascade,
+	checkPlans []checkPlan,
 	recv *DistSQLReceiver,
 	maybeDistribute bool,
 ) bool {
 	prevSteppingMode := planner.Txn().ConfigureStepping(ctx, kv.SteppingEnabled)
 	defer func() { _ = planner.Txn().ConfigureStepping(ctx, prevSteppingMode) }()
-	for _, postqueryPlan := range postqueryPlans {
-		// We place a sequence point before every postquery, so
-		// that each subsequent postquery can observe the writes
+
+	for i := range cascades {
+		cascade := &cascades[i]
+
+		// The original bufferNode is stored in c.Buffer; we can refer to it
+		// directly.
+		buf := cascade.Buffer.(*bufferNode)
+		if buf.bufferedRows.Len() == 0 {
+			// No rows were actually modified.
+			continue
+		}
+
+		// We place a sequence point before every cascade, so
+		// that each subsequent cascade can observe the writes
 		// by the previous step.
 		if err := planner.Txn().Step(ctx); err != nil {
 			recv.SetError(err)
 			return false
 		}
+
+		evalCtx := evalCtxFactory()
+		execFactory := makeExecFactory(planner)
+		cascadePlan, err := cascade.PlanFn(
+			ctx, &planner.semaCtx, &evalCtx.EvalContext, &execFactory, buf, buf.bufferedRows.Len(),
+		)
+		if err != nil {
+			recv.SetError(err)
+			return false
+		}
+		cp := cascadePlan.(*planTop)
+		if len(cp.cascades) > 0 {
+			// TODO(radu): append cascade, effectively making this a queue.
+			recv.SetError(errors.Newf("cascading not implemented yet"))
+			return false
+		}
+		if len(cp.checkPlans) > 0 {
+			// TODO(radu): append to checkPlans. But we need to make sure that it will
+			// be properly cleaned up at the end.
+			recv.SetError(errors.Newf("cascades with checks not implemented yet"))
+			return false
+		}
+
 		if err := dsp.planAndRunPostquery(
 			ctx,
-			postqueryPlan,
+			cp.plan,
+			planner,
+			evalCtx,
+			recv,
+			maybeDistribute,
+		); err != nil {
+			recv.SetError(err)
+			return false
+		}
+	}
+
+	if len(checkPlans) == 0 {
+		return true
+	}
+
+	// We place a sequence point before the checks, so that they observe the
+	// writes of the main query and/or any cascades.
+	if err := planner.Txn().Step(ctx); err != nil {
+		recv.SetError(err)
+		return false
+	}
+
+	for _, checkPlan := range checkPlans {
+		if err := dsp.planAndRunPostquery(
+			ctx,
+			checkPlan.plan,
 			planner,
 			evalCtxFactory(),
 			recv,
@@ -1055,9 +1118,10 @@ func (dsp *DistSQLPlanner) PlanAndRunPostqueries(
 	return true
 }
 
+// planAndRunPostquery runs a cascade or check query.
 func (dsp *DistSQLPlanner) planAndRunPostquery(
 	ctx context.Context,
-	postqueryPlan postquery,
+	postqueryPlan planNode,
 	planner *planner,
 	evalCtx *extendedEvalContext,
 	recv *DistSQLReceiver,
@@ -1082,7 +1146,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	var distributePostquery bool
 	if maybeDistribute {
 		distributePostquery = shouldDistributePlan(
-			ctx, planner.SessionData().DistSQLMode, dsp, postqueryPlan.plan)
+			ctx, planner.SessionData().DistSQLMode, dsp, postqueryPlan)
 	}
 	if distributePostquery {
 		postqueryPlanCtx = dsp.NewPlanningCtx(ctx, evalCtx, planner.txn)
@@ -1100,7 +1164,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 		}
 	}
 
-	postqueryPhysPlan, err := dsp.createPlanForNode(postqueryPlanCtx, postqueryPlan.plan)
+	postqueryPhysPlan, err := dsp.createPlanForNode(postqueryPlanCtx, postqueryPlan)
 	if err != nil {
 		return err
 	}

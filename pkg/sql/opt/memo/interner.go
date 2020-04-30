@@ -484,6 +484,12 @@ func (h *hasher) HashJoinFlags(val JoinFlags) {
 	h.HashUint64(uint64(val))
 }
 
+func (h *hasher) HashFKCascades(val FKCascades) {
+	for i := range val {
+		h.HashUint64(uint64(reflect.ValueOf(val[i].Builder).Pointer()))
+	}
+}
+
 func (h *hasher) HashExplainOptions(val tree.ExplainOptions) {
 	h.HashUint64(uint64(val.Mode))
 	hash := h.hash
@@ -839,6 +845,19 @@ func (h *hasher) IsScanFlagsEqual(l, r ScanFlags) bool {
 
 func (h *hasher) IsJoinFlagsEqual(l, r JoinFlags) bool {
 	return l == r
+}
+
+func (h *hasher) IsFKCascadesEqual(l, r FKCascades) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		// It's sufficient to compare the CascadeBuilder instances.
+		if l[i].Builder != r[i].Builder {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *hasher) IsExplainOptionsEqual(l, r tree.ExplainOptions) bool {
