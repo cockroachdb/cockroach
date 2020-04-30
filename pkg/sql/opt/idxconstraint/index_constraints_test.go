@@ -133,10 +133,6 @@ func TestIndexConstraints(t *testing.T) {
 					d.Fatalf(t, "%v", err)
 				}
 
-				varNames := make([]string, len(varTypes))
-				for i := range varNames {
-					varNames[i] = fmt.Sprintf("@%d", i+1)
-				}
 				var ic idxconstraint.Instance
 				ic.Init(filters, optionalFilters, indexCols, notNullCols, invertedIndex, &evalCtx, &f)
 				result := ic.Constraint()
