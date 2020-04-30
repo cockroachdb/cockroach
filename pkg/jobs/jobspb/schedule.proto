@@ -49,7 +49,7 @@ message ScheduleDetails {
 
 // ExecutionArguments describes data needed to execute scheduled jobs.
 message ExecutionArguments {
-  google.protobuf.Any args = 1  [(gogoproto.nullable) = false];
+  google.protobuf.Any args = 1;
 }
 
 // ScheduleChangeInfo describes the reasons for schedule changes.
@@ -61,3 +61,7 @@ message ScheduleChangeInfo {
   repeated Change changes = 1  [(gogoproto.nullable) = false];
 }
 
+// Message representing sql statement to executo.
+message SqlStatementExecutionArg {
+  string statement = 1;
+}
