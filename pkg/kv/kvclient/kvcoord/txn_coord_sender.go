@@ -781,24 +781,35 @@ func (tc *TxnCoordSender) updateStateLocked(
 	}
 
 	// This is the non-retriable error case.
+
+	// Most errors cause the transaction to not accept further requests (except a
+	// rollback), but some errors are safe to allow continuing (in particular
+	// ConditionFailedError). In particular, SQL can recover by rolling back to a
+	// savepoint.
+	if roachpb.ErrPriority(pErr.GetDetail()) != roachpb.ErrorScoreUnambiguousError {
+		tc.mu.txnState = txnError
+		tc.mu.storedErr = roachpb.NewError(&roachpb.TxnAlreadyEncounteredErrorError{
+			PrevError: pErr.String(),
+		})
+	}
+
+	// Update our transaction with any information the error has.
 	if errTxn := pErr.GetTxn(); errTxn != nil {
-		// Most errors cause the transaction to not accept further requests (except
-		// a rollback), but some errors are safe to allow continuing (in particular
-		// ConditionFailedError). In particular, SQL can recover by rolling back to
-		// a savepoint.
-		if roachpb.ErrPriority(pErr.GetDetail()) != roachpb.ErrorScoreUnambiguousError {
-			tc.mu.txnState = txnError
-			tc.mu.storedErr = roachpb.NewError(&roachpb.TxnAlreadyEncounteredErrorError{
-				PrevError: pErr.String(),
-			})
+		// Sanity checks. Finalized transactions are not supposed to get here.
+		if errTxn.Status != roachpb.PENDING {
+			if errTxn.Status == roachpb.COMMITTED {
+				// Finding out about our transaction being committed indicates a serious
+				// bug. Requests are not supposed to be sent on transactions after they
+				// are committed.
+				log.Fatalf(ctx, "transaction unexpectedly committed: %s. ba: %s. txn: %s.", pErr, ba, errTxn)
+			}
+			// We only expect TransactionAbortedError to carry an aborted txn. In
+			// particular, the heartbeater doesn't like running when the transaction
+			// is know to be aborted.
+			log.Fatalf(ctx, "unexpected error with ABORTED txn: (%T) %s. ba: %s. txn: %s.", pErr.GoError(), pErr, ba, errTxn)
 		}
 
 		tc.mu.txn.Update(errTxn)
-		if errTxn.Status != roachpb.PENDING {
-			// We only expect TransactionAbortedError to carry an aborted txn.
-			log.Errorf(ctx, "programming error: ABORTED txn in error: %s. txn: %s", pErr, errTxn)
-			tc.cleanupTxnLocked(ctx)
-		}
 	}
 	return pErr
 }
