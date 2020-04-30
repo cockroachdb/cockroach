@@ -1,4 +1,4 @@
-# LogicTest: local local-vec fakedist fakedist-metadata fakedist-vec fakedist-vec-disk 5node-default-configs
+# LogicTest: default-configs 5node-default-configs
 
 statement ok
 CREATE TABLE kv (

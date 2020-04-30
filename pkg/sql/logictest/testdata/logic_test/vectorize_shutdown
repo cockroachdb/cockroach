@@ -1,4 +1,4 @@
-# LogicTest: fakedist-vec
+# LogicTest: fakedist
 
 # This is a regression test for #43269 - incomplete shutdown of the vectorized
 # flows with wrapped processors.

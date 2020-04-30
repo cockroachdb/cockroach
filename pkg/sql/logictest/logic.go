@@ -450,10 +450,10 @@ var logicTestConfigs = []testClusterConfig{
 		disableUpgrade:      true,
 	},
 	{
-		name:              "local-vec",
+		name:              "local-vec-auto",
 		numNodes:          1,
 		overrideAutoStats: "false",
-		overrideVectorize: "on",
+		overrideVectorize: "201auto",
 	},
 	{
 		name:                "fakedist",
@@ -480,20 +480,20 @@ var logicTestConfigs = []testClusterConfig{
 		overrideVectorize:   "off",
 	},
 	{
-		name:                "fakedist-vec",
+		name:                "fakedist-vec-auto",
 		numNodes:            3,
 		useFakeSpanResolver: true,
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
-		overrideVectorize:   "on",
+		overrideVectorize:   "201auto",
 	},
 	{
-		name:                "fakedist-vec-disk",
+		name:                "fakedist-vec-auto-disk",
 		numNodes:            3,
 		useFakeSpanResolver: true,
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
-		overrideVectorize:   "on",
+		overrideVectorize:   "201auto",
 		sqlExecUseDisk:      true,
 		skipShort:           true,
 	},
@@ -522,18 +522,18 @@ var logicTestConfigs = []testClusterConfig{
 		overrideAutoStats:   "false",
 	},
 	{
-		name:                "5node-vec",
+		name:                "5node-vec-auto",
 		numNodes:            5,
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
-		overrideVectorize:   "on",
+		overrideVectorize:   "201auto",
 	},
 	{
-		name:                "5node-vec-disk",
+		name:                "5node-vec-disk-auto",
 		numNodes:            5,
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
-		overrideVectorize:   "on",
+		overrideVectorize:   "201auto",
 		sqlExecUseDisk:      true,
 		skipShort:           true,
 	},
@@ -573,14 +573,16 @@ func parseTestConfig(names []string) []logicTestConfigIdx {
 }
 
 var (
+	// defaultConfigName is a special alias for the default configs.
+	defaultConfigName  = "default-configs"
 	defaultConfigNames = []string{
 		"local",
 		"local-vec-off",
-		"local-vec",
+		"local-vec-auto",
 		"fakedist",
 		"fakedist-vec-off",
-		"fakedist-vec",
-		"fakedist-vec-disk",
+		"fakedist-vec-auto",
+		"fakedist-vec-auto-disk",
 		"fakedist-metadata",
 		"fakedist-disk",
 	}
@@ -588,8 +590,8 @@ var (
 	fiveNodeDefaultConfigName  = "5node-default-configs"
 	fiveNodeDefaultConfigNames = []string{
 		"5node",
-		"5node-vec",
-		"5node-vec-disk",
+		"5node-vec-auto",
+		"5node-vec-disk-auto",
 		"5node-metadata",
 		"5node-disk",
 	}
@@ -1278,20 +1280,15 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		}
 	}
 
-	if cfg.overrideVectorize == "" || cfg.overrideVectorize == "on" {
-		// vectorize is set to a mode that respects the vectorize row count
-		// threshold. We override the vectorize row count threshold so that all
-		// logic tests when run through the vectorized engine do not pay attention
-		// to whether there are stats on the tables. This will force execution of
-		// all supported queries (relative to the mode) through the vectorized
-		// engine.
+	if strings.Compare(cfg.overrideVectorize, "off") != 0 {
+		// Always override the vectorize row count threshold. This runs all supported
+		// queries (relative to the mode) through the vectorized execution engine.
 		if _, err := t.cluster.ServerConn(0).Exec(
 			"SET CLUSTER SETTING sql.defaults.vectorize_row_count_threshold = 0",
 		); err != nil {
 			t.Fatal(err)
 		}
-	}
-	if strings.Compare(cfg.overrideVectorize, "off") != 0 {
+
 		if _, err := t.cluster.ServerConn(0).Exec(
 			fmt.Sprintf("SET CLUSTER SETTING sql.testing.vectorize.batch_size to %d",
 				t.randomizedVectorizedBatchSize),
@@ -1387,10 +1384,14 @@ func readTestFileConfigs(t *testing.T, path string) []logicTestConfigIdx {
 			for _, configName := range fields[2:] {
 				idx, ok := findLogicTestConfig(configName)
 				if !ok {
-					if configName != fiveNodeDefaultConfigName {
+					switch configName {
+					case defaultConfigName:
+						configs = append(configs, defaultConfig...)
+					case fiveNodeDefaultConfigName:
+						configs = append(configs, fiveNodeDefaultConfig...)
+					default:
 						t.Fatalf("%s: unknown config name %s", path, configName)
 					}
-					configs = append(configs, fiveNodeDefaultConfig...)
 				} else {
 					configs = append(configs, idx)
 				}
