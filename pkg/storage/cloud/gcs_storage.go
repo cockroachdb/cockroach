@@ -167,32 +167,52 @@ type resumingGoogleStorageReader struct {
 	ctx    context.Context   // Reader context
 	bucket *gcs.BucketHandle // Bucket to read the data from
 	object string            // Object to read
-	data   io.ReadCloser     // Currently opened object data stream
+	data   *gcs.Reader       // Currently opened object data stream
 	pos    int64             // How much data was received so far
 }
 
 var _ io.ReadCloser = &resumingGoogleStorageReader{}
 
-func (r *resumingGoogleStorageReader) Read(p []byte) (n int, err error) {
-	for retries := 0; n == 0 && err == nil; retries++ {
-		n, err = r.data.Read(p)
-		r.pos += int64(n)
+func (r *resumingGoogleStorageReader) openStream() error {
+	return delayedRetry(r.ctx, func() error {
+		var readErr error
+		r.data, readErr = r.bucket.Object(r.object).NewRangeReader(r.ctx, r.pos, -1)
+		return readErr
+	})
+}
 
-		if err != nil && !errors.IsAny(err, io.EOF, io.ErrUnexpectedEOF) {
-			log.Errorf(r.ctx, "GCS:Read err: %s", err)
+func (r *resumingGoogleStorageReader) Read(p []byte) (int, error) {
+	var lastErr error
+
+	for retries := 0; lastErr == nil; retries++ {
+		if r.data == nil {
+			lastErr = r.openStream()
 		}
 
-		if isResumableHTTPError(err) {
-			log.Errorf(r.ctx, "GCS:Retry: error %s", err)
-			if retries > maxNoProgressReads {
-				err = errors.Wrap(err, "multiple Read calls return no data")
-				return
+		if lastErr == nil {
+			n, readErr := r.data.Read(p)
+			if readErr == nil {
+				r.pos += int64(n)
+				return n, nil
 			}
-			err = r.doRead()
+			lastErr = readErr
+		}
+
+		if !errors.IsAny(lastErr, io.EOF, io.ErrUnexpectedEOF) {
+			log.Errorf(r.ctx, "GCS:Read err: %s", lastErr)
+		}
+
+		if isResumableHTTPError(lastErr) {
+			if retries > maxNoProgressReads {
+				return 0, errors.Wrap(lastErr, "multiple Read calls return no data")
+			}
+			log.Errorf(r.ctx, "GCS:Retry: error %s", lastErr)
+			lastErr = nil
+			r.data = nil
 		}
 	}
 
-	return
+	return 0, lastErr
 }
 
 func (r *resumingGoogleStorageReader) Close() error {
@@ -202,29 +222,13 @@ func (r *resumingGoogleStorageReader) Close() error {
 	return nil
 }
 
-func (r *resumingGoogleStorageReader) doRead() error {
-	if r.data != nil {
-		if err := r.data.Close(); err != nil {
-			return err
-		}
-	}
-
-	return delayedRetry(r.ctx, func() error {
-		var readErr error
-		r.data, readErr = r.bucket.Object(r.object).NewRangeReader(r.ctx, r.pos, -1)
-		return readErr
-	})
-}
-
 func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
-	var rc io.ReadCloser
-	err := delayedRetry(ctx, func() error {
-		var readErr error
-		rc, readErr = g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)
-		return readErr
-	})
-	return rc, err
+	return &resumingGoogleStorageReader{
+		ctx:    ctx,
+		bucket: g.bucket,
+		object: path.Join(g.prefix, basename),
+	}, nil
 }
 
 func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
