@@ -1,4 +1,3 @@
-
 exec-ddl
 CREATE TABLE parent (p INT PRIMARY KEY)
 ----
@@ -126,3 +125,57 @@ TABLE child_multicol_full
  │    ├── q int not null
  │    └── r int not null
  └── CONSTRAINT fk FOREIGN KEY child_multicol_full (p, q, r) REFERENCES parent_multicol (p, q, r) MATCH FULL
+
+exec-ddl
+DROP TABLE child
+----
+
+exec-ddl
+SHOW CREATE parent
+----
+TABLE parent
+ ├── p int not null
+ └── INDEX primary
+      └── p int not null
+
+exec-ddl
+DROP TABLE child_multicol
+----
+
+exec-ddl
+SHOW CREATE parent_multicol
+----
+TABLE parent_multicol
+ ├── p int not null
+ ├── q int not null
+ ├── r int not null
+ ├── INDEX primary
+ │    ├── p int not null
+ │    ├── q int not null
+ │    └── r int not null
+ └── REFERENCED BY CONSTRAINT fk FOREIGN KEY child_multicol_full (p, q, r) REFERENCES parent_multicol (p, q, r) MATCH FULL
+
+exec-ddl
+DROP TABLE child_multicol_full
+----
+
+exec-ddl
+SHOW CREATE parent_multicol
+----
+TABLE parent_multicol
+ ├── p int not null
+ ├── q int not null
+ ├── r int not null
+ └── INDEX primary
+      ├── p int not null
+      ├── q int not null
+      └── r int not null
+
+# Verify we can drop a self-referencing table.
+exec-ddl
+CREATE TABLE self (a INT PRIMARY KEY, b INT REFERENCES self(a) ON DELETE CASCADE)
+----
+
+exec-ddl
+DROP TABLE self
+----
