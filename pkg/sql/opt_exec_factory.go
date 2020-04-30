@@ -950,7 +950,7 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 
 // ConstructPlan is part of the exec.Factory interface.
 func (ef *execFactory) ConstructPlan(
-	root exec.Node, subqueries []exec.Subquery, postqueries []exec.Node,
+	root exec.Node, subqueries []exec.Subquery, cascades []exec.Cascade, checks []exec.Node,
 ) (exec.Plan, error) {
 	// No need to spool at the root.
 	if spool, ok := root.(*spoolNode); ok {
@@ -986,10 +986,11 @@ func (ef *execFactory) ConstructPlan(
 			out.plan = in.Root.(planNode)
 		}
 	}
-	if len(postqueries) > 0 {
-		res.postqueryPlans = make([]postquery, len(postqueries))
-		for i := range res.postqueryPlans {
-			res.postqueryPlans[i].plan = postqueries[i].(planNode)
+	res.cascades = cascades
+	if len(checks) > 0 {
+		res.checkPlans = make([]checkPlan, len(checks))
+		for i := range checks {
+			res.checkPlans[i].plan = checks[i].(planNode)
 		}
 	}
 
@@ -1142,12 +1143,13 @@ func (ef *execFactory) ConstructExplain(
 	switch options.Mode {
 	case tree.ExplainDistSQL:
 		return &explainDistSQLNode{
-			options:        options,
-			plan:           p.plan,
-			subqueryPlans:  p.subqueryPlans,
-			postqueryPlans: p.postqueryPlans,
-			analyze:        analyzeSet,
-			stmtType:       stmtType,
+			options:       options,
+			plan:          p.plan,
+			subqueryPlans: p.subqueryPlans,
+			cascades:      p.cascades,
+			checkPlans:    p.checkPlans,
+			analyze:       analyzeSet,
+			stmtType:      stmtType,
 		}, nil
 
 	case tree.ExplainVec:
@@ -1167,7 +1169,8 @@ func (ef *execFactory) ConstructExplain(
 			options,
 			p.plan,
 			p.subqueryPlans,
-			p.postqueryPlans,
+			p.cascades,
+			p.checkPlans,
 			stmtType,
 		)
 

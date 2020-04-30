@@ -97,7 +97,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 		insertOrds,
 		returnOrds,
 		checkOrds,
-		b.allowAutoCommit && len(ins.Checks) == 0,
+		b.allowAutoCommit && len(ins.Checks) == 0 && len(ins.FKCascades) == 0,
 		disableExecFKs,
 	)
 	if err != nil {
@@ -319,7 +319,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		returnColOrds,
 		checkOrds,
 		passthroughCols,
-		b.allowAutoCommit && len(upd.Checks) == 0,
+		b.allowAutoCommit && len(upd.Checks) == 0 && len(upd.FKCascades) == 0,
 		disableExecFKs,
 	)
 	if err != nil {
@@ -394,7 +394,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		updateColOrds,
 		returnColOrds,
 		checkOrds,
-		b.allowAutoCommit && len(ups.Checks) == 0,
+		b.allowAutoCommit && len(ups.Checks) == 0 && len(ups.FKCascades) == 0,
 		disableExecFKs,
 	)
 	if err != nil {
@@ -445,7 +445,7 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 		tab,
 		fetchColOrds,
 		returnColOrds,
-		b.allowAutoCommit && len(del.Checks) == 0,
+		b.allowAutoCommit && len(del.Checks) == 0 && len(del.FKCascades) == 0,
 		disableExecFKs,
 	)
 	if err != nil {
@@ -453,6 +453,10 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	}
 
 	if err := b.buildFKChecks(del.Checks); err != nil {
+		return execPlan{}, err
+	}
+
+	if err := b.buildFKCascades(del.WithID, del.FKCascades); err != nil {
 		return execPlan{}, err
 	}
 
@@ -517,7 +521,7 @@ func (b *Builder) buildDeleteRange(del *memo.DeleteExpr) (execPlan, error) {
 		needed,
 		scan.Constraint,
 		maxKeys,
-		b.allowAutoCommit && len(del.Checks) == 0,
+		b.allowAutoCommit && len(del.Checks) == 0 && len(del.FKCascades) == 0,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -604,7 +608,7 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 		if err != nil {
 			return err
 		}
-		b.postqueries = append(b.postqueries, node)
+		b.checks = append(b.checks, node)
 	}
 	return nil
 }
@@ -694,6 +698,20 @@ func mkFKCheckErr(md *opt.Metadata, c *memo.FKChecksItem, keyVals tree.Datums) e
 		pgerror.Newf(pgcode.ForeignKeyViolation, "%s", msg.String()),
 		details.String(),
 	)
+}
+
+func (b *Builder) buildFKCascades(withID opt.WithID, cascades memo.FKCascades) error {
+	if len(cascades) == 0 {
+		return nil
+	}
+	cb, err := makeCascadeBuilder(b, withID)
+	if err != nil {
+		return err
+	}
+	for i := range cascades {
+		b.cascades = append(b.cascades, cb.setupCascade(&cascades[i]))
+	}
+	return nil
 }
 
 // canAutoCommit determines if it is safe to auto commit the mutation contained

@@ -21,12 +21,26 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// buildFKChecks* methods populate mb.checks with queries that check the
-// integrity of foreign key relations that involve modified rows.
+// This file contains methods that populate mutationBuilder.checks and cascades.
+//
+// -- Checks --
 //
 // The foreign key checks are queries that run after the statement (including
-// the relevant mutation) completes; any row that is returned by these
-// FK check queries indicates a foreign key violation.
+// the relevant mutation) completes. They check the integrity of the foreign key
+// relations that involve modified rows; any row that is returned by these FK
+// check queries indicates a foreign key violation.
+//
+// -- Cacades --
+//
+// The foreign key cascades are "potential" future queries that perform
+// cascading mutations of child tables. These queries are constructed later as
+// necessary; mb.cascades stores metadata that include CascadeBuilder instances
+// which are used to construct these queries.
+
+// buildFKChecksForInsert builds FK check queries for an insert.
+//
+// See the comment at the top of the file for general information on checks and
+// cascades.
 //
 // In the case of insert, each FK check query is an anti-join with the left side
 // being a WithScan of the mutation input and the right side being the
@@ -49,7 +63,6 @@ import (
 //                        └── column2:5 = parent.p:6
 //
 // See testdata/fk-checks-insert for more examples.
-//
 func (mb *mutationBuilder) buildFKChecksForInsert() {
 	if mb.tab.OutboundForeignKeyCount() == 0 {
 		// No relevant FKs.
@@ -75,12 +88,12 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 	telemetry.Inc(sqltelemetry.ForeignKeyChecksUseCounter)
 }
 
-// buildFKChecks* methods populate mb.checks with queries that check the
-// integrity of foreign key relations that involve modified rows.
+// buildFKChecksAndCascadesForDelete builds FK check and cascades for a delete.
 //
-// The foreign key checks are queries that run after the statement (including
-// the relevant mutation) completes; any row that is returned by these
-// FK check queries indicates a foreign key violation.
+// See the comment at the top of the file for general information on checks and
+// cascades.
+//
+// -- Checks --
 //
 // In the case of delete, each FK check query is a semi-join with the left side
 // being a WithScan of the mutation input and the right side being the
@@ -103,7 +116,11 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 //
 // See testdata/fk-checks-delete for more examples.
 //
-func (mb *mutationBuilder) buildFKChecksForDelete() {
+// -- Cascades --
+//
+// See deleteCascadeBuilder for details.
+//
+func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 	if mb.tab.InboundForeignKeyCount() == 0 {
 		// No relevant FKs.
 		return
@@ -121,8 +138,28 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 		if !h.initWithInboundFK(mb, i) {
 			continue
 		}
-
+		// The action dictates how a foreign key reference is handled:
+		//  - with Cascade/SetNull/SetDefault, we create a cascading mutation to
+		//    modify or delete "orphaned" rows in the child table.
+		//  - with Restrict/NoAction, we create a check that causes an error if
+		//    there are any "orhpaned" rows in the child table.
 		if a := h.fk.DeleteReferenceAction(); a != tree.Restrict && a != tree.NoAction {
+			if mb.b.evalCtx.SessionData.OptimizerFKCascades && a == tree.Cascade {
+				cols := make(opt.ColList, len(h.tabOrdinals))
+				for i := range cols {
+					cols[i] = mb.scopeOrdToColID(mb.fetchOrds[h.tabOrdinals[i]])
+				}
+
+				mb.cascades = append(mb.cascades, memo.FKCascade{
+					FKName:    h.fk.Name(),
+					Builder:   newDeleteCascadeBuilder(mb.tab, i, h.otherTab),
+					WithID:    mb.withID,
+					OldValues: cols,
+					NewValues: nil,
+				})
+				continue
+			}
+
 			// Bail, so that exec FK checks pick up on FK checks and perform them.
 			mb.checks = nil
 			mb.fkFallback = true
@@ -137,12 +174,10 @@ func (mb *mutationBuilder) buildFKChecksForDelete() {
 	telemetry.Inc(sqltelemetry.ForeignKeyChecksUseCounter)
 }
 
-// buildFKChecks* methods populate mb.checks with queries that check the
-// integrity of foreign key relations that involve modified rows.
+// buildFKChecksForUpdate builds FK check queries for an update.
 //
-// The foreign key checks are queries that run after the statement (including
-// the relevant mutation) completes; any row that is returned by these
-// FK check queries indicates a foreign key violation.
+// See the comment at the top of the file for general information on checks and
+// cascades.
 //
 // In the case of update, there are two types of FK check queries:
 //
@@ -306,12 +341,10 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 	telemetry.Inc(sqltelemetry.ForeignKeyChecksUseCounter)
 }
 
-// buildFKChecks* methods populate mb.checks with queries that check the
-// integrity of foreign key relations that involve modified rows.
+// buildFKChecksForUpsert builds FK check queries for an upsert.
 //
-// The foreign key checks are queries that run after the statement (including
-// the relevant mutation) completes; any row that is returned by these
-// FK check queries indicates a foreign key violation.
+// See the comment at the top of the file for general information on checks and
+// cascades.
 //
 // The case of upsert is very similar to update; see buildFKChecksForUpdate.
 // The main difference is that for update, the "new" values were readily

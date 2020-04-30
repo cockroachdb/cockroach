@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/pmezard/go-difflib/difflib"
@@ -188,6 +189,9 @@ type Flags struct {
 	// File specifies the name of the file to import. This field is only used by
 	// the import command.
 	File string
+
+	// CascadeLevels limits the depth of recursive cascades for build-cascades.
+	CascadeLevels int
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -237,6 +241,11 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //
 //    Builds an expression tree from a SQL query, fully optimizes it using the
 //    memo, and then outputs the lowest cost tree.
+//
+//  - build-cascades [flags]
+//
+//    Builds a query and then recursively builds cascading queries. Outputs all
+//    unoptimized plans.
 //
 //  - optsteps [flags]
 //
@@ -346,6 +355,9 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //  - file: used to set the name of the file to be imported. This is used by
 //    the import command.
 //
+//  - cascade-levels: used to limit the depth of recursive cascades for
+//    build-cascades.
+//
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
 	for _, a := range d.CmdArgs {
@@ -419,6 +431,55 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 		ot.postProcess(tb, d, e)
 		return ot.FormatExpr(e)
+
+	case "build-cascades":
+		o := ot.makeOptimizer()
+		o.DisableOptimizations()
+		if err := ot.buildExpr(o.Factory()); err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		e := o.Memo().RootExpr()
+
+		var buildCascades func(e opt.Expr, tp treeprinter.Node, level int)
+		buildCascades = func(e opt.Expr, tp treeprinter.Node, level int) {
+			if ot.Flags.CascadeLevels != 0 && level > ot.Flags.CascadeLevels {
+				return
+			}
+			if opt.IsMutationOp(e) {
+				p := e.Private().(*memo.MutationPrivate)
+
+				for _, c := range p.FKCascades {
+					// We use the same memo to build the cascade. This makes the entire
+					// tree easier to read (e.g. the column IDs won't overlap).
+					cascade, err := c.Builder.Build(
+						context.Background(),
+						&ot.semaCtx,
+						&ot.evalCtx,
+						ot.catalog,
+						o.Factory(),
+						c.WithID,
+						e.Child(0).(memo.RelExpr).Relational(),
+						c.OldValues,
+						c.NewValues,
+					)
+					if err != nil {
+						d.Fatalf(tb, "error building cascade: %+v", err)
+					}
+					n := tp.Child("cascade")
+					n.Child(strings.TrimRight(ot.FormatExpr(cascade), "\n"))
+					buildCascades(cascade, n, level+1)
+				}
+			}
+			for i := 0; i < e.ChildCount(); i++ {
+				buildCascades(e.Child(i), tp, level)
+			}
+		}
+		tp := treeprinter.New()
+		root := tp.Child("root")
+		root.Child(strings.TrimRight(ot.FormatExpr(e), "\n"))
+		buildCascades(e, root, 1)
+
+		return tp.String()
 
 	case "optsteps":
 		result, err := ot.OptSteps()
@@ -698,6 +759,16 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			return fmt.Errorf("file requires one argument")
 		}
 		f.File = arg.Vals[0]
+
+	case "cascade-levels":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("cascade-levels requires a single argument")
+		}
+		levels, err := strconv.ParseInt(arg.Vals[0], 10, 64)
+		if err != nil {
+			return errors.Wrap(err, "cascade-levels")
+		}
+		f.CascadeLevels = int(levels)
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
