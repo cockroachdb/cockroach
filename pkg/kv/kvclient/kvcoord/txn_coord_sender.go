@@ -801,7 +801,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 				// Finding out about our transaction being committed indicates a serious
 				// bug. Requests are not supposed to be sent on transactions after they
 				// are committed.
-				log.Fatalf(ctx, "transaction unexpectedly committed: %s. ba: %s. txn: %s.", pErr, ba, errTxn)
+				log.Errorf(ctx, "transaction unexpectedly committed: %s. ba: %s. txn: %s.", pErr, ba, errTxn)
 			}
 			// We only expect TransactionAbortedError to carry an aborted txn. In
 			// particular, the heartbeater doesn't like running when the transaction
