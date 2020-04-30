@@ -135,7 +135,7 @@ func GenerateSubzoneSpans(
 
 	// NB: This assumes that none of the indexes are interleaved, which is
 	// checked in PartitionDescriptor validation.
-	sharedPrefix := keys.TODOSQLCodec.TablePrefix(uint32(tableDesc.ID))
+	sharedPrefix := codec.TablePrefix(uint32(tableDesc.ID))
 
 	var subzoneSpans []zonepb.SubzoneSpan
 	for _, r := range ranges {
