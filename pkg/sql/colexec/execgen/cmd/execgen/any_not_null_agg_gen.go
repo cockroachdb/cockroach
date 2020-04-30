@@ -29,16 +29,17 @@ func genAnyNotNullAgg(wr io.Writer) error {
 
 	s := string(t)
 
-	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
-	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
-	s = strings.Replace(s, "_TYPE", "{{.LTyp}}", -1)
-	s = strings.Replace(s, "TemplateType", "{{.LTyp}}", -1)
+	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
+	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "_GOTYPESLICE", "{{.GoTypeSliceName}}")
+	s = strings.ReplaceAll(s, "_GOTYPE", "{{.GoType}}")
+	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
+	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
 
 	findAnyNotNull := makeFunctionRegex("_FIND_ANY_NOT_NULL", 4)
-	s = findAnyNotNull.ReplaceAllString(s, `{{template "findAnyNotNull" buildDict "Global" . "LTyp" .LTyp "HasNulls" $4}}`)
+	s = findAnyNotNull.ReplaceAllString(s, `{{template "findAnyNotNull" buildDict "Global" . "HasNulls" $4}}`)
 
-	s = replaceManipulationFuncs(".LTyp", s)
+	s = replaceManipulationFuncs(s)
 
 	tmpl, err := template.New("any_not_null_agg").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {

@@ -50,24 +50,24 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 
 	s := string(d)
 
-	// Replace the template variables.
-	s = strings.Replace(s, "_GOTYPESLICE", "{{.LTyp.GoTypeSliceName}}", -1)
-	s = strings.Replace(s, "_GOTYPE", "{{.LTyp.GoTypeName}}", -1)
-	s = strings.Replace(s, "_TYPES_T", "coltypes.{{.LTyp}}", -1)
-	s = strings.Replace(s, "TemplateType", "{{.LTyp}}", -1)
-	s = strings.Replace(s, "_L_SEL_IND", "{{$sel.LSelString}}", -1)
-	s = strings.Replace(s, "_R_SEL_IND", "{{$sel.RSelString}}", -1)
-	s = strings.Replace(s, "_IS_L_SEL", "{{$sel.IsLSel}}", -1)
-	s = strings.Replace(s, "_IS_R_SEL", "{{$sel.IsRSel}}", -1)
-	s = strings.Replace(s, "_SEL_ARG", "$sel", -1)
-	s = strings.Replace(s, "_JOIN_TYPE_STRING", "{{$.JoinType.String}}", -1)
-	s = strings.Replace(s, "_JOIN_TYPE", "$.JoinType", -1)
-	s = strings.Replace(s, "_OVERLOAD", "$overload", -1)
-	s = strings.Replace(s, "_L_HAS_NULLS", "$.lHasNulls", -1)
-	s = strings.Replace(s, "_R_HAS_NULLS", "$.rHasNulls", -1)
-	s = strings.Replace(s, "_HAS_NULLS", "$.HasNulls", -1)
-	s = strings.Replace(s, "_HAS_SELECTION", "$.HasSelection", -1)
-	s = strings.Replace(s, "_SEL_PERMUTATION", "$.SelPermutation", -1)
+	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
+	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
+	s = strings.ReplaceAll(s, "_GOTYPESLICE", "{{.GoTypeSliceName}}")
+	s = strings.ReplaceAll(s, "_GOTYPE", "{{.GoType}}")
+	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
+
+	s = strings.ReplaceAll(s, "_L_SEL_IND", "{{$sel.LSelString}}")
+	s = strings.ReplaceAll(s, "_R_SEL_IND", "{{$sel.RSelString}}")
+	s = strings.ReplaceAll(s, "_IS_L_SEL", "{{$sel.IsLSel}}")
+	s = strings.ReplaceAll(s, "_IS_R_SEL", "{{$sel.IsRSel}}")
+	s = strings.ReplaceAll(s, "_SEL_ARG", "$sel")
+	s = strings.ReplaceAll(s, "_JOIN_TYPE_STRING", "{{$.JoinType.String}}")
+	s = strings.ReplaceAll(s, "_JOIN_TYPE", "$.JoinType")
+	s = strings.ReplaceAll(s, "_L_HAS_NULLS", "$.lHasNulls")
+	s = strings.ReplaceAll(s, "_R_HAS_NULLS", "$.rHasNulls")
+	s = strings.ReplaceAll(s, "_HAS_NULLS", "$.HasNulls")
+	s = strings.ReplaceAll(s, "_HAS_SELECTION", "$.HasSelection")
+	s = strings.ReplaceAll(s, "_SEL_PERMUTATION", "$.SelPermutation")
 
 	leftUnmatchedGroupSwitch := makeFunctionRegex("_LEFT_UNMATCHED_GROUP_SWITCH", 1)
 	s = leftUnmatchedGroupSwitch.ReplaceAllString(s, `{{template "leftUnmatchedGroupSwitch" buildDict "Global" $ "JoinType" $1}}`)
@@ -81,11 +81,11 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 	nullFromRightSwitch := makeFunctionRegex("_NULL_FROM_RIGHT_SWITCH", 1)
 	s = nullFromRightSwitch.ReplaceAllString(s, `{{template "nullFromRightSwitch" buildDict "Global" $ "JoinType" $1}}`)
 
-	incrementLeftSwitch := makeFunctionRegex("_INCREMENT_LEFT_SWITCH", 4)
-	s = incrementLeftSwitch.ReplaceAllString(s, `{{template "incrementLeftSwitch" buildDict "Global" $ "LTyp" .LTyp "JoinType" $1 "SelPermutation" $2 "Overload" $3 "lHasNulls" $4}}`)
+	incrementLeftSwitch := makeFunctionRegex("_INCREMENT_LEFT_SWITCH", 3)
+	s = incrementLeftSwitch.ReplaceAllString(s, `{{template "incrementLeftSwitch" buildDict "Global" . "JoinType" $1 "SelPermutation" $2 "lHasNulls" $3}}`)
 
-	incrementRightSwitch := makeFunctionRegex("_INCREMENT_RIGHT_SWITCH", 4)
-	s = incrementRightSwitch.ReplaceAllString(s, `{{template "incrementRightSwitch" buildDict "Global" $ "LTyp" .LTyp "JoinType" $1 "SelPermutation" $2 "Overload" $3 "rHasNulls" $4}}`)
+	incrementRightSwitch := makeFunctionRegex("_INCREMENT_RIGHT_SWITCH", 3)
+	s = incrementRightSwitch.ReplaceAllString(s, `{{template "incrementRightSwitch" buildDict "Global" . "JoinType" $1 "SelPermutation" $2 "rHasNulls" $3}}`)
 
 	processNotLastGroupInColumnSwitch := makeFunctionRegex("_PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH", 1)
 	s = processNotLastGroupInColumnSwitch.ReplaceAllString(s, `{{template "processNotLastGroupInColumnSwitch" buildDict "Global" $ "JoinType" $1}}`)
@@ -108,7 +108,7 @@ func genMergeJoinOps(wr io.Writer, jti joinTypeInfo) error {
 	assignLtRe := makeFunctionRegex("_ASSIGN_CMP", 3)
 	s = assignLtRe.ReplaceAllString(s, makeTemplateFunctionCall("Compare", 3))
 
-	s = replaceManipulationFuncs(".LTyp", s)
+	s = replaceManipulationFuncs(s)
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("mergejoin_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)

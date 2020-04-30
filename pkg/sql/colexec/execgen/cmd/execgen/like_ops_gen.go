@@ -15,7 +15,7 @@ import (
 	"io"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/col/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // likeTemplate depends on the selConstOp template from selection_ops_gen. We
@@ -56,61 +56,70 @@ func genLikeOps(wr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	overloads := []overload{
-		{
-			Name:    "Prefix",
-			LTyp:    coltypes.Bytes,
-			RTyp:    coltypes.Bytes,
-			RGoType: "[]byte",
-			AssignFunc: func(_ overload, target, l, r string) string {
-				return fmt.Sprintf("%s = bytes.HasPrefix(%s, %s)", target, l, r)
+	bytesRepresentation := toPhysicalRepresentation(types.BytesFamily, anyWidth)
+	makeOverload := func(name string, rightGoType string, assignFunc func(target, l, r string) string) *twoArgsResolvedOverload {
+		base := &overloadBase{
+			Name: name,
+		}
+		leftTypeOverload := &argTypeOverload{
+			overloadBase:        base,
+			argTypeOverloadBase: newArgTypeOverloadBase(types.BytesFamily),
+		}
+		leftWidthOverload := &argWidthOverload{
+			argTypeOverload: leftTypeOverload,
+			argWidthOverloadBase: &argWidthOverloadBase{
+				argTypeOverloadBase: leftTypeOverload.argTypeOverloadBase,
+				Width:               anyWidth,
+				VecMethod:           toVecMethod(types.BytesFamily, anyWidth),
+				GoType:              bytesRepresentation,
 			},
-		},
-		{
-			Name:    "Suffix",
-			LTyp:    coltypes.Bytes,
-			RTyp:    coltypes.Bytes,
-			RGoType: "[]byte",
-			AssignFunc: func(_ overload, target, l, r string) string {
-				return fmt.Sprintf("%s = bytes.HasSuffix(%s, %s)", target, l, r)
+		}
+		rightTypeOverload := &lastArgTypeOverload{
+			overloadBase:        base,
+			argTypeOverloadBase: leftTypeOverload.argTypeOverloadBase,
+			WidthOverloads:      make([]*lastArgWidthOverload, 1),
+		}
+		rightWidthOverload := &lastArgWidthOverload{
+			lastArgTypeOverload: rightTypeOverload,
+			argWidthOverloadBase: &argWidthOverloadBase{
+				argTypeOverloadBase: rightTypeOverload.argTypeOverloadBase,
+				Width:               anyWidth,
+				VecMethod:           toVecMethod(types.BytesFamily, anyWidth),
+				GoType:              rightGoType,
 			},
-		},
-		{
-			Name:    "Regexp",
-			LTyp:    coltypes.Bytes,
-			RTyp:    coltypes.Bytes,
-			RGoType: "*regexp.Regexp",
-			AssignFunc: func(_ overload, target, l, r string) string {
-				return fmt.Sprintf("%s = %s.Match(%s)", target, r, l)
+			RetType:      types.Bool,
+			RetVecMethod: toVecMethod(types.BoolFamily, anyWidth),
+			RetGoType:    toPhysicalRepresentation(types.BoolFamily, anyWidth),
+			AssignFunc: func(_ *lastArgWidthOverload, target, l, r string) string {
+				return assignFunc(target, l, r)
 			},
-		},
-		{
-			Name:    "NotPrefix",
-			LTyp:    coltypes.Bytes,
-			RTyp:    coltypes.Bytes,
-			RGoType: "[]byte",
-			AssignFunc: func(_ overload, target, l, r string) string {
-				return fmt.Sprintf("%s = !bytes.HasPrefix(%s, %s)", target, l, r)
-			},
-		},
-		{
-			Name:    "NotSuffix",
-			LTyp:    coltypes.Bytes,
-			RTyp:    coltypes.Bytes,
-			RGoType: "[]byte",
-			AssignFunc: func(_ overload, target, l, r string) string {
-				return fmt.Sprintf("%s = !bytes.HasSuffix(%s, %s)", target, l, r)
-			},
-		},
-		{
-			Name:    "NotRegexp",
-			LTyp:    coltypes.Bytes,
-			RTyp:    coltypes.Bytes,
-			RGoType: "*regexp.Regexp",
-			AssignFunc: func(_ overload, target, l, r string) string {
-				return fmt.Sprintf("%s = !%s.Match(%s)", target, r, l)
-			},
-		},
+		}
+		rightTypeOverload.WidthOverloads[0] = rightWidthOverload
+		return &twoArgsResolvedOverload{
+			overloadBase: base,
+			Left:         leftWidthOverload,
+			Right:        rightWidthOverload,
+		}
+	}
+	overloads := []*twoArgsResolvedOverload{
+		makeOverload("Prefix", bytesRepresentation, func(target, l, r string) string {
+			return fmt.Sprintf("%s = bytes.HasPrefix(%s, %s)", target, l, r)
+		}),
+		makeOverload("Suffix", bytesRepresentation, func(target, l, r string) string {
+			return fmt.Sprintf("%s = bytes.HasSuffix(%s, %s)", target, l, r)
+		}),
+		makeOverload("Regexp", "*regexp.Regexp", func(target, l, r string) string {
+			return fmt.Sprintf("%s = %s.Match(%s)", target, r, l)
+		}),
+		makeOverload("NotPrefix", bytesRepresentation, func(target, l, r string) string {
+			return fmt.Sprintf("%s = !bytes.HasPrefix(%s, %s)", target, l, r)
+		}),
+		makeOverload("NotSuffix", bytesRepresentation, func(target, l, r string) string {
+			return fmt.Sprintf("%s = !bytes.HasSuffix(%s, %s)", target, l, r)
+		}),
+		makeOverload("NotRegexp", "*regexp.Regexp", func(target, l, r string) string {
+			return fmt.Sprintf("%s = !%s.Match(%s)", target, r, l)
+		}),
 	}
 	return tmpl.Execute(wr, overloads)
 }
