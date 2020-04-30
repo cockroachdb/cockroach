@@ -540,14 +540,17 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 func TestSystemConfigGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(ctx)
 	ts := s.(*TestServer)
-	ctx := context.TODO()
 
 	key := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, keys.MaxReservedDescID)
-	valAt := func(i int) *sqlbase.DatabaseDescriptor {
-		return &sqlbase.DatabaseDescriptor{Name: "foo", ID: sqlbase.ID(i)}
+	valAt := func(i int) *sqlbase.Descriptor {
+		return sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{
+			ID:   sqlbase.ID(i),
+			Name: "foo",
+		})
 	}
 
 	// Register a callback for gossip updates.
@@ -598,12 +601,18 @@ func TestSystemConfigGossip(t *testing.T) {
 		}
 
 		// Make sure the returned value is valAt(2).
-		got := new(sqlbase.DatabaseDescriptor)
-		if err := val.GetProto(got); err != nil {
+		var got sqlbase.Descriptor
+		if err := val.GetProto(&got); err != nil {
 			return err
 		}
-		if expected := valAt(2); !reflect.DeepEqual(got, expected) {
-			return errors.Errorf("mismatch: expected %+v, got %+v", *expected, *got)
+
+		expected := valAt(2).GetDatabase()
+		db := got.GetDatabase()
+		if db == nil {
+			panic(errors.Errorf("found nil database: %v", got))
+		}
+		if !reflect.DeepEqual(*db, *expected) {
+			panic(errors.Errorf("mismatch: expected %+v, got %+v", *expected, *db))
 		}
 		return nil
 	})
