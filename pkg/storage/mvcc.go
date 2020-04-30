@@ -787,6 +787,7 @@ func mvccGet(
 		inconsistent:     opts.Inconsistent,
 		tombstones:       opts.Tombstones,
 		failOnMoreRecent: opts.FailOnMoreRecent,
+		isGet:            true,
 	}
 
 	mvccScanner.init(opts.Txn)

@@ -117,6 +117,7 @@ type pebbleMVCCScanner struct {
 	inconsistent, tombstones bool
 	failOnMoreRecent         bool
 	checkUncertainty         bool
+	isGet                    bool
 	keyBuf                   []byte
 	savedBuf                 []byte
 	// cur* variables store the "current" record we're pointing to. Updated in
@@ -216,7 +217,7 @@ func (p *pebbleMVCCScanner) decrementItersBeforeSeek() {
 // Try to read from the current value's intent history. Assumes p.meta has been
 // unmarshalled already. Returns true if a value was read and added to the
 // result set.
-func (p *pebbleMVCCScanner) getFromIntentHistory() bool {
+func (p *pebbleMVCCScanner) getFromIntentHistory() (found bool, value []byte) {
 	intentHistory := p.meta.IntentHistory
 	// upIdx is the index of the first intent in intentHistory with a sequence
 	// number greater than our transaction's sequence number. Subtract 1 from it
@@ -238,13 +239,10 @@ func (p *pebbleMVCCScanner) getFromIntentHistory() bool {
 		// It is possible that no intent exists such that the sequence is less
 		// than the read sequence, and is not ignored by this transaction.
 		// In this case, we cannot read a value from the intent history.
-		return false
+		return false, nil
 	}
 	intent := p.meta.IntentHistory[upIdx-1]
-	if len(intent.Value) > 0 || p.tombstones {
-		p.results.put(p.curMVCCKey(), intent.Value)
-	}
-	return true
+	return true, intent.Value
 }
 
 // Returns a write too old error with the specified timestamp.
@@ -408,19 +406,8 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		// numbers) that we should read. If there exists a value in the intent
 		// history that has a sequence number equal to or less than the read
 		// sequence, read that value.
-		if p.getFromIntentHistory() {
-			if p.targetBytes > 0 && p.results.bytes >= p.targetBytes {
-				// When the target bytes are met or exceeded, stop producing more
-				// keys. We implement this by reducing maxKeys to the current
-				// number of keys.
-				//
-				// TODO(bilal): see if this can be implemented more transparently.
-				p.maxKeys = p.results.count
-			}
-			if p.maxKeys > 0 && p.results.count == p.maxKeys {
-				return false
-			}
-			return p.advanceKey()
+		if found, value := p.getFromIntentHistory(); found {
+			return p.addAndAdvance(value)
 		}
 		// 11. If no value in the intent history has a sequence number equal to
 		// or less than the read, we must ignore the intents laid down by the
@@ -521,6 +508,9 @@ func (p *pebbleMVCCScanner) prevKey(key []byte) bool {
 
 // advanceKey advances to the next key in the iterator's direction.
 func (p *pebbleMVCCScanner) advanceKey() bool {
+	if p.isGet {
+		return false
+	}
 	if p.reverse {
 		return p.prevKey(p.curKey)
 	}
