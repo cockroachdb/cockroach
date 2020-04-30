@@ -80,7 +80,7 @@ project
       └── a10.since:9 [as=formula159_0_:11, outer=(9)]
 
 exec-ddl
-drop table Person, Phone, phone_register;
+drop table phone_register, Person, Phone;
 ----
 
 # ------------------------------------------------------------------------------
