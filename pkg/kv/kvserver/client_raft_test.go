@@ -2198,16 +2198,11 @@ func TestQuotaPool(t *testing.T) {
 // as active for the purpose of proposal throttling.
 func TestWedgedReplicaDetection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if testing.Short() {
-		// Takes 10s to run - #33654.
-		t.Skip("short flag")
-	}
 
 	const numReplicas = 3
 	const rangeID = 1
 
 	sc := kvserver.TestStoreConfig(nil)
-	sc.Clock = nil // manual clock
 	// Suppress timeout-based elections to avoid leadership changes in ways
 	// this test doesn't expect.
 	sc.RaftElectionTimeoutTicks = 100000
@@ -2252,10 +2247,11 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	wg.Wait()
 	defer followerRepl.RaftUnlock()
 
+	// TODO(andrei): The test becomes flaky with a lower threshold because the
+	// follower is considered inactive just below. Figure out how to switch the
+	// test to a manual clock. The activity tracking for followers uses the
+	// physical clock.
 	inactivityThreshold := time.Second
-
-	// Increment leader's clock close to inactivityThreshold, but not past it.
-	mtc.manualClock.Increment(inactivityThreshold.Nanoseconds() - 1)
 
 	// Send a request to the leader replica. followerRepl is locked so it will
 	// not respond.
@@ -2282,9 +2278,6 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	// would bump the last active timestamp on the leader. Because of this,
 	// we check whether the follower is eventually considered inactive.
 	testutils.SucceedsSoon(t, func() error {
-		// Increment leader's clock past inactivityThreshold
-		mtc.manualClock.Increment(inactivityThreshold.Nanoseconds() + 1)
-
 		// Send another request to the leader replica. followerRepl is locked
 		// so it will not respond.
 		if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
