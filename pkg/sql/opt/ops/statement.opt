@@ -11,7 +11,6 @@ define CreateTable {
     # statement. If it was not used, then the Input is a dummy zero row, zero
     # column Values expression (and nil inputs are not allowed).
     Input RelExpr
-
     _ CreateTablePrivate
 }
 
@@ -38,13 +37,9 @@ define CreateView {
 define CreateViewPrivate {
     # Schema is the ID of the catalog schema into which the new table goes.
     Schema SchemaID
-
     ViewName string
-
     Temporary bool
-
     IfNotExists bool
-
     Replace bool
 
     # ViewQuery contains the query for the view; data sources are always fully
@@ -64,7 +59,6 @@ define CreateViewPrivate {
 [Relational]
 define Explain {
     Input RelExpr
-
     _ ExplainPrivate
 }
 
@@ -147,7 +141,6 @@ define AlterTableSplit {
     # ranges are eligible for automatic merging (or Null if there is no
     # expiration).
     Expiration ScalarExpr
-
     _ AlterTableSplitPrivate
 }
 
@@ -174,7 +167,6 @@ define AlterTableSplitPrivate {
 [Relational, Mutation]
 define AlterTableUnsplit {
     Input RelExpr
-
     _ AlterTableSplitPrivate
 }
 
@@ -190,14 +182,12 @@ define AlterTableRelocate {
     # The input expression provides values for the index columns (or a prefix of
     # them).
     Input RelExpr
-
     _ AlterTableRelocatePrivate
 }
 
 [Private]
 define AlterTableRelocatePrivate {
     RelocateLease bool
-
     _ AlterTableSplitPrivate
 }
 
@@ -206,7 +196,6 @@ define AlterTableRelocatePrivate {
 define ControlJobs {
     # The input expression returns job IDs (as integers).
     Input RelExpr
-
     _ ControlJobsPrivate
 }
 
@@ -214,8 +203,8 @@ define ControlJobs {
 define ControlJobsPrivate {
     # Props stores the required physical properties for the input
     # expression.
-    Props    PhysProps
-    Command  JobCommand
+    Props PhysProps
+    Command JobCommand
 }
 
 # CancelQueries represents a `CANCEL QUERIES` statement.
@@ -223,7 +212,6 @@ define ControlJobsPrivate {
 define CancelQueries {
     # The input expression returns query IDs (as strings).
     Input RelExpr
-
     _ CancelPrivate
 }
 
@@ -242,7 +230,6 @@ define CancelPrivate {
 define CancelSessions {
     # The input expression returns session IDs (as strings).
     Input RelExpr
-
     _ CancelPrivate
 }
 
@@ -250,13 +237,11 @@ define CancelSessions {
 [Relational]
 define Export {
     # Input is the relational expression for the data we are exporting.
-    Input    RelExpr
+    Input RelExpr
 
     # FileName is the string URI for the output file.
     FileName ScalarExpr
-
-    Options  KVOptionsExpr
-
+    Options KVOptionsExpr
     _ ExportPrivate
 }
 

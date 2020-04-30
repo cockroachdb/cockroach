@@ -1661,6 +1661,7 @@ bins = \
   bin/protoc-gen-gogoroach \
   bin/publish-artifacts \
   bin/publish-provisional-artifacts \
+  bin/optfmt \
   bin/optgen \
   bin/returncheck \
   bin/roachvet \
@@ -1681,6 +1682,7 @@ testbins = \
 # Mappings for binaries that don't live in pkg/cmd.
 execgen-package = ./pkg/sql/colexec/execgen/cmd/execgen
 langgen-package = ./pkg/sql/opt/optgen/cmd/langgen
+optfmt-package = ./pkg/sql/opt/optgen/cmd/optfmt
 optgen-package = ./pkg/sql/opt/optgen/cmd/optgen
 logictest-package = ./pkg/sql/logictest
 logictestccl-package = ./pkg/ccl/logictestccl
