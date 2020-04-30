@@ -1318,9 +1318,6 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		return
 	}
 	md := c.e.mem.Metadata()
-	if md.Table(scanPrivate.Table).IsVirtualTable() {
-		return
-	}
 	inputProps := input.Relational()
 
 	leftEq, rightEq := memo.ExtractJoinEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, on)
