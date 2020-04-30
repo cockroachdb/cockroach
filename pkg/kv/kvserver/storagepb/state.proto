@@ -57,7 +57,7 @@ message ReplicaState {
   // gcThreshold is the GC threshold of the Range, typically updated when keys
   // are garbage collected. Reads and writes at timestamps <= this time will
   // not be served.
-  util.hlc.Timestamp gc_threshold = 6 [(gogoproto.customname) = "GCThreshold", (gogoproto.moretags) = "cockroachdb:\"randnullable\""];
+  util.hlc.Timestamp gc_threshold = 6 [(gogoproto.customname) = "GCThreshold"];
   storage.enginepb.MVCCStats stats = 7;
   // using_applied_state_key specifies whether the Range has been upgraded
   // to begin using the RangeAppliedState key. This key holds a combination
