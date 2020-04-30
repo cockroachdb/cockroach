@@ -7,24 +7,14 @@
 # join).
 # If any join hints are specified, we keep the order in the query.
 [CommuteJoin, Explore]
-(InnerJoin | FullJoin
-    $left:*
-    $right:*
-    $on:*
-    $private:*
-)
+(InnerJoin | FullJoin $left:* $right:* $on:* $private:*)
 =>
 ((OpName) $right $left $on (CommuteJoinFlags $private))
 
 # CommuteLeftJoin creates a Join with the left and right inputs swapped.
 # This is symmetric with the CommuteRightJoin normalization rule.
 [CommuteLeftJoin, Explore]
-(LeftJoin
-    $left:*
-    $right:*
-    $on:*
-    $private:*
-)
+(LeftJoin $left:* $right:* $on:* $private:*)
 =>
 (RightJoin $right $left $on (CommuteJoinFlags $private))
 
@@ -79,7 +69,10 @@
             $right
             []
             (MakeGrouping
-                (IntersectionCols (OutputCols $right) (FilterOuterCols $on))
+                (IntersectionCols
+                    (OutputCols $right)
+                    (FilterOuterCols $on)
+                )
                 (EmptyOrdering)
             )
         )
@@ -117,16 +110,29 @@
 [GenerateGeoLookupJoins, Explore]
 (InnerJoin | SemiJoin | AntiJoin
     $left:*
-    (Scan $scanPrivate:*) & (IsCanonicalScan $scanPrivate) & (HasInvertedIndexes $scanPrivate)
+    (Scan $scanPrivate:*) &
+        (IsCanonicalScan $scanPrivate) &
+        (HasInvertedIndexes $scanPrivate)
     $on:[
-      ...
-      (FiltersItem $fn:(Function) & (IsGeoIndexFunction $fn) & (HasAllVariableArgs $fn))
-      ...
+        ...
+        (FiltersItem
+            $fn:(Function) &
+                (IsGeoIndexFunction $fn) &
+                (HasAllVariableArgs $fn)
+        )
+        ...
     ]
     $private:*
 )
 =>
-(GenerateGeoLookupJoins (OpName) $left $scanPrivate $on $private $fn)
+(GenerateGeoLookupJoins
+    (OpName)
+    $left
+    $scanPrivate
+    $on
+    $private
+    $fn
+)
 
 # GenerateZigzagJoins creates ZigzagJoin operators for all index pairs (of the
 # Scan table) where the prefix column(s) of both indexes is/are fixed to
@@ -161,7 +167,10 @@
 # should be possible to lift this restriction.
 [GenerateInvertedIndexZigzagJoins, Explore]
 (Select
-    (Scan $scan:*) & (IsCanonicalScan $scan) & ^(IsLocking $scan) & (HasInvertedIndexes $scan)
+    (Scan $scan:*) &
+        (IsCanonicalScan $scan) &
+        ^(IsLocking $scan) &
+        (HasInvertedIndexes $scan)
     $filters:*
 )
 =>
@@ -181,7 +190,13 @@
     $private:*
 )
 =>
-(GenerateLookupJoins (OpName) $left $scanPrivate (ConcatFilters $on $filters) $private)
+(GenerateLookupJoins
+    (OpName)
+    $left
+    $scanPrivate
+    (ConcatFilters $on $filters)
+    $private
+)
 
 # AssociateJoin applies the rule of join associativity. It converts an
 # expression like:
@@ -220,8 +235,6 @@
         )
         (EmptyJoinPrivate)
     )
-    (SortFilters
-        (ExtractUnboundConditions $newOn $cols)
-    )
+    (SortFilters (ExtractUnboundConditions $newOn $cols))
     (EmptyJoinPrivate)
 )

@@ -21,7 +21,6 @@
 define Insert {
     Input RelExpr
     Checks FKChecksExpr
-
     _ MutationPrivate
 }
 
@@ -155,7 +154,6 @@ define MutationPrivate {
 define Update {
     Input RelExpr
     Checks FKChecksExpr
-
     _ MutationPrivate
 }
 
@@ -179,7 +177,6 @@ define Update {
 define Upsert {
     Input RelExpr
     Checks FKChecksExpr
-
     _ MutationPrivate
 }
 
@@ -192,7 +189,6 @@ define Upsert {
 define Delete {
     Input RelExpr
     Checks FKChecksExpr
-
     _ MutationPrivate
 }
 
@@ -207,13 +203,12 @@ define FKChecks {
 [Scalar, ListItem]
 define FKChecksItem {
     Check RelExpr
-
     _ FKChecksItemPrivate
 }
 
 [Private]
 define FKChecksItemPrivate {
-    OriginTable     TableID
+    OriginTable TableID
     ReferencedTable TableID
 
     # If FKOutbound is true: this item checks that a new value in the origin
@@ -224,7 +219,7 @@ define FKChecksItemPrivate {
     # referenced table doesn't orphan references to it from the origin table.
     # The FK constraint is InboundForeignKey(FKOrdinal) on the referenced table.
     FKOutbound bool
-    FKOrdinal  int
+    FKOrdinal int
 
     # KeyCols are the columns in the Check query that form the value tuple shown
     # in the error message.
