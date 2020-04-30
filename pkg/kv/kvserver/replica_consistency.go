@@ -167,7 +167,7 @@ func (r *Replica) CheckConsistency(
 		}
 
 		if isQueue {
-			log.Error(ctx, buf.String())
+			log.Errorf(ctx, "%v", buf.String())
 		}
 		res.Detail += buf.String()
 	} else {

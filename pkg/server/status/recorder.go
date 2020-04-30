@@ -380,7 +380,7 @@ func (mr *MetricsRecorder) getNetworkActivity(
 			address, err := mr.gossip.GetNodeIDAddress(nodeID)
 			if err != nil {
 				if entry.IsLive {
-					log.Warning(ctx, err.Error())
+					log.Warningf(ctx, "%v", err)
 				}
 				continue
 			}
@@ -427,7 +427,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 
 	systemMemory, _, err := GetTotalMemoryWithoutLogging()
 	if err != nil {
-		log.Error(ctx, "could not get total system memory:", err)
+		log.Errorf(ctx, "could not get total system memory: %v", err)
 	}
 
 	// Generate a node status with no store data.
@@ -563,7 +563,7 @@ func eachRecordableValue(reg *metric.Registry, fn func(string, float64)) {
 		} else {
 			val, err := extractValue(mtr)
 			if err != nil {
-				log.Warning(context.TODO(), err)
+				log.Warningf(context.TODO(), "%v", err)
 				return
 			}
 			fn(name, val)

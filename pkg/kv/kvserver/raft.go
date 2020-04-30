@@ -290,6 +290,6 @@ func traceProposals(r *Replica, ids []storagebase.CmdIDKey, event string) {
 	}
 	r.mu.RUnlock()
 	for _, ctx := range ctxs {
-		log.Event(ctx, event)
+		log.Eventf(ctx, "%v", event)
 	}
 }

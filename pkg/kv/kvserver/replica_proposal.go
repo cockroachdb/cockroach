@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/kr/pretty"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 	"golang.org/x/time/rate"
 )
 
@@ -276,7 +275,7 @@ A file preventing this node from restarting was placed at:
 `, r, auxDir, path)
 
 			if err := ioutil.WriteFile(path, []byte(preventStartupMsg), 0644); err != nil {
-				log.Warning(ctx, err)
+				log.Warningf(ctx, "%v", err)
 			}
 
 			if p := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.OnBadChecksumFatal; p != nil {
@@ -289,7 +288,7 @@ A file preventing this node from restarting was placed at:
 
 	}); err != nil {
 		defer snap.Close()
-		log.Error(ctx, errors.Wrapf(err, "could not run async checksum computation (ID = %s)", cc.ChecksumID))
+		log.Errorf(ctx, "could not run async checksum computation (ID = %s): %v", cc.ChecksumID, err)
 		// Set checksum to nil.
 		r.computeChecksumDone(ctx, cc.ChecksumID, nil, nil)
 	}
@@ -446,10 +445,10 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 	// range lease that is only reacquired extremely infrequently.
 	if iAmTheLeaseHolder {
 		if err := r.MaybeGossipSystemConfig(ctx); err != nil {
-			log.Error(ctx, err)
+			log.Errorf(ctx, "%v", err)
 		}
 		if err := r.MaybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
-			log.Error(ctx, err)
+			log.Errorf(ctx, "%v", err)
 		}
 
 		// Emit an MLAI on the leaseholder replica, as follower will be looking
@@ -662,21 +661,21 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 
 	if lResult.MaybeGossipSystemConfig {
 		if err := r.MaybeGossipSystemConfig(ctx); err != nil {
-			log.Error(ctx, err)
+			log.Errorf(ctx, "%v", err)
 		}
 		lResult.MaybeGossipSystemConfig = false
 	}
 
 	if lResult.MaybeGossipSystemConfigIfHaveFailure {
 		if err := r.MaybeGossipSystemConfigIfHaveFailure(ctx); err != nil {
-			log.Error(ctx, err)
+			log.Errorf(ctx, "%v", err)
 		}
 		lResult.MaybeGossipSystemConfigIfHaveFailure = false
 	}
 
 	if lResult.MaybeGossipNodeLiveness != nil {
 		if err := r.MaybeGossipNodeLiveness(ctx, *lResult.MaybeGossipNodeLiveness); err != nil {
-			log.Error(ctx, err)
+			log.Errorf(ctx, "%v", err)
 		}
 		lResult.MaybeGossipNodeLiveness = nil
 	}

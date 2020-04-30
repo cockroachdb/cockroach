@@ -864,7 +864,7 @@ func (l *DockerCluster) ExecCLI(ctx context.Context, i int, cmd []string) (strin
 func (l *DockerCluster) Cleanup(ctx context.Context, preserveLogs bool) {
 	volumes, err := ioutil.ReadDir(l.volumesDir)
 	if err != nil {
-		log.Warning(ctx, err)
+		log.Warningf(ctx, "%v", err)
 		return
 	}
 	for _, v := range volumes {
@@ -872,7 +872,7 @@ func (l *DockerCluster) Cleanup(ctx context.Context, preserveLogs bool) {
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(l.volumesDir, v.Name())); err != nil {
-			log.Warning(ctx, err)
+			log.Warningf(ctx, "%v", err)
 		}
 	}
 }

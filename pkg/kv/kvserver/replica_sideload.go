@@ -214,7 +214,7 @@ func assertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 	var command storagepb.RaftCommand
 	_, data := DecodeRaftCommand(ent.Data)
 	if err := protoutil.Unmarshal(data, &command); err != nil {
-		log.Fatal(ctx, err)
+		log.Fatalf(ctx, "%v", err)
 	}
 
 	if len(command.ReplicatedEvalResult.AddSSTable.Data) == 0 {

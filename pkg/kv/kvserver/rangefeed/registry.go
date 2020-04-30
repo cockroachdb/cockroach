@@ -235,7 +235,7 @@ func (r *registration) outputLoop(ctx context.Context) error {
 	if r.catchupIter != nil {
 		if err := r.runCatchupScan(); err != nil {
 			err = errors.Wrap(err, "catch-up scan failed")
-			log.Error(ctx, err)
+			log.Errorf(ctx, "%v", err)
 			return err
 		}
 	}

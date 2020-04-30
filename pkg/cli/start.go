@@ -119,7 +119,7 @@ var maxSizePerProfile = envutil.EnvOrDefaultInt64(
 func gcProfiles(dir, prefix string, maxSize int64) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
-		log.Warning(context.Background(), err)
+		log.Warningf(context.Background(), "%v", err)
 		return
 	}
 	var sum int64
@@ -142,7 +142,7 @@ func gcProfiles(dir, prefix string, maxSize int64) {
 			continue
 		}
 		if err := os.Remove(filepath.Join(dir, f.Name())); err != nil {
-			log.Info(context.Background(), err)
+			log.Infof(context.Background(), "%v", err)
 		}
 	}
 }
@@ -648,20 +648,20 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	// DelayedBoostrapFn will be called if the boostrap process is
 	// taking a bit long.
 	serverCfg.DelayedBootstrapFn = func() {
-		msg := `The server appears to be unable to contact the other nodes in the cluster. Please try:
+		const msg = `The server appears to be unable to contact the other nodes in the cluster. Please try:
 
 - starting the other nodes, if you haven't already;
 - double-checking that the '--join' and '--listen'/'--advertise' flags are set up correctly;
 - running the 'cockroach init' command if you are trying to initialize a new cluster.
 
-If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.html") + "."
-
+If problems persist, please see %s.`
+		docLink := base.DocsURL("cluster-setup-troubleshooting.html")
 		if !startCtx.inBackground {
-			log.Shout(context.Background(), log.Severity_WARNING, msg)
+			log.Shoutf(context.Background(), log.Severity_WARNING, msg, docLink)
 		} else {
 			// Don't shout to stderr since the server will have detached by
 			// the time this function gets called.
-			log.Warning(ctx, msg)
+			log.Warningf(ctx, msg, docLink)
 		}
 	}
 
@@ -1020,8 +1020,9 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	case sig := <-signalCh:
 		// This new signal is not welcome, as it interferes with the graceful
 		// shutdown process.
-		log.Shout(shutdownCtx, log.Severity_ERROR, fmt.Sprintf(
-			"received signal '%s' during shutdown, initiating hard shutdown%s", sig, hardShutdownHint))
+		log.Shoutf(shutdownCtx, log.Severity_ERROR,
+			"received signal '%s' during shutdown, initiating hard shutdown%s",
+			log.Safe(sig), log.Safe(hardShutdownHint))
 		handleSignalDuringShutdown(sig)
 		panic("unreachable")
 
@@ -1047,12 +1048,12 @@ func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
 
 	if !listenAddrSpecified && !advAddrSpecified {
 		host, _, _ := net.SplitHostPort(serverCfg.AdvertiseAddr)
-		log.Shout(ctx, log.Severity_WARNING,
+		log.Shoutf(ctx, log.Severity_WARNING,
 			"neither --listen-addr nor --advertise-addr was specified.\n"+
-				"The server will advertise "+fmt.Sprintf("%q", host)+" to other nodes, is this routable?\n\n"+
+				"The server will advertise %q to other nodes, is this routable?\n\n"+
 				"Consider using:\n"+
 				"- for local-only servers:  --listen-addr=localhost\n"+
-				"- for multi-node clusters: --advertise-addr=<host/IP addr>\n")
+				"- for multi-node clusters: --advertise-addr=<host/IP addr>\n", host)
 	}
 }
 
@@ -1082,7 +1083,7 @@ func checkTzDatabaseAvailability(ctx context.Context) error {
 		if envutil.EnvOrDefaultBool("COCKROACH_INCONSISTENT_TIME_ZONES", false) {
 			// The user tells us they really know what they want.
 			reportedErr := &formattedError{err: reportedErr}
-			log.Shout(ctx, log.Severity_WARNING, reportedErr.Error())
+			log.Shoutf(ctx, log.Severity_WARNING, "%v", reportedErr)
 		} else {
 			// Prevent a successful start.
 			//
@@ -1123,7 +1124,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		} else {
 			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
 		}
-		log.Warning(ctx, buf.String())
+		log.Warningf(ctx, "%s", buf.String())
 	}
 
 	// Check that the total suggested "max" memory is well below the available memory.
@@ -1131,9 +1132,9 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		requestedMem := serverCfg.CacheSize + serverCfg.SQLMemoryPoolSize
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {
-			log.Shout(ctx, log.Severity_WARNING, fmt.Sprintf(
+			log.Shoutf(ctx, log.Severity_WARNING,
 				"the sum of --max-sql-memory (%s) and --cache (%s) is larger than 75%% of total RAM (%s).\nThis server is running at increased risk of memory-related failures.",
-				sqlSizeValue, cacheSizeValue, humanizeutil.IBytes(maxRecommendedMem)))
+				sqlSizeValue, cacheSizeValue, humanizeutil.IBytes(maxRecommendedMem))
 		}
 	}
 }
@@ -1251,13 +1252,14 @@ func setupAndInitializeLoggingAndProfiling(
 		if addr == "" {
 			addr = "<all your IP addresses>"
 		}
-		log.Shout(context.Background(), log.Severity_WARNING,
+		log.Shoutf(context.Background(), log.Severity_WARNING,
 			"RUNNING IN INSECURE MODE!\n\n"+
-				"- Your cluster is open for any client that can access "+addr+".\n"+
+				"- Your cluster is open for any client that can access %s.\n"+
 				"- Any user, even root, can log in without providing a password.\n"+
 				"- Any user, connecting as root, can read or write any data in your cluster.\n"+
 				"- There is no network encryption nor authentication, and thus no confidentiality.\n\n"+
-				"Check out how to secure your cluster: "+base.DocsURL("secure-a-cluster.html"))
+				"Check out how to secure your cluster: %s",
+			addr, log.Safe(base.DocsURL("secure-a-cluster.html")))
 	}
 
 	maybeWarnMemorySizes(ctx)
@@ -1265,7 +1267,7 @@ func setupAndInitializeLoggingAndProfiling(
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
 	info := build.GetInfo()
-	log.Info(ctx, info.Short())
+	log.Infof(ctx, "%s", info.Short())
 
 	initMemProfile(ctx, outputDirectory)
 	initCPUProfile(ctx, outputDirectory)

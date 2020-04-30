@@ -111,7 +111,7 @@ type pebbleTempEngine struct {
 func (r *pebbleTempEngine) Close() {
 	err := r.db.Close()
 	if err != nil {
-		log.Fatal(context.TODO(), err)
+		log.Fatalf(context.TODO(), "%v", err)
 	}
 }
 

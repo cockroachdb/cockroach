@@ -2311,40 +2311,45 @@ project
 
 # With an ordering.
 norm expect=TryDecorrelateScalarGroupBy
-SELECT i, ARRAY(SELECT y FROM xy WHERE xy.y = a.k OR xy.y = NULL ORDER BY y) FROM a
+SELECT i, ARRAY(SELECT y FROM xy WHERE xy.y = a.k OR xy.y IS NULL ORDER BY y) FROM a
 ----
 project
  ├── columns: i:2 array:9
  ├── group-by
- │    ├── columns: k:1!null i:2 y:7 array_agg:10
+ │    ├── columns: k:1!null i:2 canary:10 array_agg:11
  │    ├── grouping columns: k:1!null
  │    ├── internal-ordering: +7
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,7,10)
+ │    ├── fd: (1)-->(2,10,11)
  │    ├── sort
- │    │    ├── columns: k:1!null i:2 y:7
+ │    │    ├── columns: k:1!null i:2 y:7 canary:10
  │    │    ├── fd: (1)-->(2)
  │    │    ├── ordering: +7
  │    │    └── left-join (cross)
- │    │         ├── columns: k:1!null i:2 y:7
+ │    │         ├── columns: k:1!null i:2 y:7 canary:10
  │    │         ├── fd: (1)-->(2)
  │    │         ├── scan a
  │    │         │    ├── columns: k:1!null i:2
  │    │         │    ├── key: (1)
  │    │         │    └── fd: (1)-->(2)
- │    │         ├── scan xy
- │    │         │    └── columns: y:7
+ │    │         ├── project
+ │    │         │    ├── columns: canary:10!null y:7
+ │    │         │    ├── fd: ()-->(10)
+ │    │         │    ├── scan xy
+ │    │         │    │    └── columns: y:7
+ │    │         │    └── projections
+ │    │         │         └── true [as=canary:10]
  │    │         └── filters
- │    │              └── (y:7 = k:1) OR NULL [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+ │    │              └── (y:7 = k:1) OR (y:7 IS NULL) [outer=(1,7)]
  │    └── aggregations
- │         ├── array-agg [as=array_agg:10, outer=(7)]
+ │         ├── array-agg [as=array_agg:11, outer=(7)]
  │         │    └── y:7
  │         ├── const-agg [as=i:2, outer=(2)]
  │         │    └── i:2
- │         └── any-not-null-agg [as=y:7, outer=(7)]
- │              └── y:7
+ │         └── any-not-null-agg [as=canary:10, outer=(10)]
+ │              └── canary:10
  └── projections
-      └── COALESCE(CASE WHEN y:7 IS NOT NULL THEN array_agg:10 END, ARRAY[]) [as=array:9, outer=(7,10)]
+      └── COALESCE(CASE WHEN canary:10 IS NOT NULL THEN array_agg:11 END, ARRAY[]) [as=array:9, outer=(10,11)]
 
 # Nest scalar decorrelation within scalar decorrelation, using IS NULL to force
 # use of left joins.

@@ -22,7 +22,7 @@
 (Join
     $left:*
     $right:*
-    $on:[ ... (FiltersItem (And | True | False | Null)) ... ] & ^(IsFilterFalse $on)
+    $on:[ ... $item:(FiltersItem (And | True | False | Null | Or )) & ^(IsUnsimplifiableOr $item) ... ] & ^(IsFilterFalse $on)
     $private:*
 )
 =>

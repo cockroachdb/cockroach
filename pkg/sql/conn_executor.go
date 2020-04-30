@@ -794,8 +794,8 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 			cutStmt = cutStmt[:panicLogOutputCutoffChars] + " [...]"
 		}
 
-		log.Shout(ctx, log.Severity_ERROR,
-			fmt.Sprintf("a SQL panic has occurred while executing %q: %s", cutStmt, recovered))
+		log.Shoutf(ctx, log.Severity_ERROR,
+			"a SQL panic has occurred while executing %q: %s", cutStmt, recovered)
 
 		ex.close(ctx, panicClose)
 
@@ -2112,7 +2112,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 					advInfo.txnEvent.String()+ //the event is included like this so that it doesn't get sanitized
 					" generated even though res.Err() has been set to: %s",
 				res.Err())
-			log.Error(ex.Ctx(), err)
+			log.Errorf(ex.Ctx(), "%v", err)
 			errorutil.SendReport(ex.Ctx(), &ex.server.cfg.Settings.SV, err)
 			return advanceInfo{}, err
 		}

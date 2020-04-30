@@ -277,7 +277,7 @@ func (rq *replicateQueue) process(
 				// declined reservation or the remote node being unavailable. In either
 				// case we don't want to wait another scanner cycle before reconsidering
 				// the range.
-				log.Info(ctx, err)
+				log.Infof(ctx, "%v", err)
 				break
 			}
 
@@ -287,7 +287,7 @@ func (rq *replicateQueue) process(
 
 			if testingAggressiveConsistencyChecks {
 				if err := rq.store.consistencyQueue.process(ctx, repl, sysCfg); err != nil {
-					log.Warning(ctx, err)
+					log.Warningf(ctx, "%v", err)
 				}
 			}
 

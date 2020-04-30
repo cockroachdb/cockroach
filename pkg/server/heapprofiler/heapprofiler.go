@@ -126,7 +126,7 @@ func (o *HeapProfiler) gcProfiles(ctx context.Context, dir, prefix string) {
 	maxCount := maxProfiles.Get(&o.st.SV)
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
-		log.Warning(ctx, err)
+		log.Warningf(ctx, "%v", err)
 		return
 	}
 
@@ -154,7 +154,7 @@ func (o *HeapProfiler) gcProfiles(ctx context.Context, dir, prefix string) {
 			continue
 		}
 		if err := os.Remove(filepath.Join(dir, f.Name())); err != nil {
-			log.Info(ctx, err)
+			log.Infof(ctx, "%v", err)
 		}
 	}
 }

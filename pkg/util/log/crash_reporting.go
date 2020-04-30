@@ -530,7 +530,7 @@ func SendReport(
 	eventID, ch := raven.DefaultClient.Capture(packet, tags)
 	select {
 	case <-ch:
-		Shout(ctx, Severity_ERROR, "Reported as error "+eventID)
+		Shoutf(ctx, Severity_ERROR, "Reported as error %v", eventID)
 	case <-time.After(10 * time.Second):
 		Shout(ctx, Severity_ERROR, "Time out trying to submit crash report")
 	}

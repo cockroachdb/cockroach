@@ -201,7 +201,7 @@ func (s *SpanSet) MaxProtectedTimestamp() hlc.Timestamp {
 // only the span boundaries are checked.
 func (s *SpanSet) AssertAllowed(access SpanAccess, span roachpb.Span) {
 	if err := s.CheckAllowed(access, span); err != nil {
-		log.Fatal(context.TODO(), err)
+		log.Fatalf(context.TODO(), "%v", err)
 	}
 }
 

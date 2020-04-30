@@ -608,7 +608,7 @@ func (l *leaseTransferTest) sendRead(storeIdx int) *roachpb.Error {
 		getArgs(l.leftKey),
 	)
 	if pErr != nil {
-		log.Warning(context.TODO(), pErr)
+		log.Warningf(context.TODO(), "%v", pErr)
 	}
 	return pErr
 }

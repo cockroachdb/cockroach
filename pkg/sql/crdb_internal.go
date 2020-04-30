@@ -980,7 +980,7 @@ func populateTransactionsTable(
 		}
 	}
 	for _, rpcErr := range response.Errors {
-		log.Warning(ctx, rpcErr.Message)
+		log.Warningf(ctx, "%v", rpcErr.Message)
 		if rpcErr.NodeID != 0 {
 			// Add a row with this node ID, the error for the txn string,
 			// and nulls for all other columns.
@@ -1138,7 +1138,7 @@ func populateQueriesTable(
 	}
 
 	for _, rpcErr := range response.Errors {
-		log.Warning(ctx, rpcErr.Message)
+		log.Warningf(ctx, "%v", rpcErr.Message)
 		if rpcErr.NodeID != 0 {
 			// Add a row with this node ID, the error for query, and
 			// nulls for all other columns.
@@ -1276,7 +1276,7 @@ func populateSessionsTable(
 	}
 
 	for _, rpcErr := range response.Errors {
-		log.Warning(ctx, rpcErr.Message)
+		log.Warningf(ctx, "%v", rpcErr.Message)
 		if rpcErr.NodeID != 0 {
 			// Add a row with this node ID, error in active queries, and nulls
 			// for all other columns.

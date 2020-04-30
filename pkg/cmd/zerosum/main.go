@@ -110,7 +110,7 @@ func (z *zeroSum) run(workers, monkeys int) {
 func (z *zeroSum) setup() uint32 {
 	db := z.Nodes[0].DB()
 	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS zerosum"); err != nil {
-		log.Fatal(context.Background(), err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 
 	accounts := `
@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 )
 `
 	if _, err := db.Exec(accounts); err != nil {
-		log.Fatal(context.Background(), err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 
 	tableIDQuery := `
@@ -130,7 +130,7 @@ SELECT tables.id FROM system.namespace tables
 `
 	var tableID uint32
 	if err := db.QueryRow(tableIDQuery, "zerosum", "accounts").Scan(&tableID); err != nil {
-		log.Fatal(context.Background(), err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 	return tableID
 }
@@ -150,7 +150,7 @@ func (z *zeroSum) maybeLogError(err error) {
 	if localcluster.IsUnavailableError(err) || strings.Contains(err.Error(), "range is frozen") {
 		return
 	}
-	log.Error(context.Background(), err)
+	log.Errorf(context.Background(), "%v", err)
 	atomic.AddUint64(&z.stats.errors, 1)
 }
 
@@ -181,7 +181,7 @@ func (z *zeroSum) worker() {
 				var id uint64
 				var balance int64
 				if err = rows.Scan(&id, &balance); err != nil {
-					log.Fatal(context.Background(), err)
+					log.Fatalf(context.Background(), "%v", err)
 				}
 				switch id {
 				case from:

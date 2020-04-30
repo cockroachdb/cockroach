@@ -182,7 +182,7 @@ func outputDotFile(
 		quiescent = false
 		nodeID, err := strconv.Atoi(strings.Split(key, ":")[0])
 		if err != nil {
-			log.Fatal(context.TODO(), err)
+			log.Fatalf(context.TODO(), "%v", err)
 		}
 		outgoingMap.addEdge(roachpb.NodeID(nodeID), e)
 		delete(edgeSet, key)

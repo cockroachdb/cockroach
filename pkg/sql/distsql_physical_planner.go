@@ -703,9 +703,9 @@ func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) er
 	}
 
 	if drainingInfo.Draining {
-		errMsg := fmt.Sprintf("not using n%d because it is draining", nodeID)
-		log.VEvent(ctx, 1, errMsg)
-		return errors.New(errMsg)
+		err := errors.Newf("not using n%d because it is draining", log.Safe(nodeID))
+		log.VEventf(ctx, 1, "%v", err)
+		return err
 	}
 
 	return nil
@@ -2421,7 +2421,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 
 	if dsp.shouldPlanTestMetadata() {
 		if err := plan.CheckLastStagePost(); err != nil {
-			log.Fatal(planCtx.ctx, err)
+			log.Fatalf(planCtx.ctx, "%v", err)
 		}
 		plan.AddNoGroupingStageWithCoreFunc(
 			func(_ int, _ *physicalplan.Processor) execinfrapb.ProcessorCoreUnion {

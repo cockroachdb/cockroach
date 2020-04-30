@@ -357,7 +357,7 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 				if replErr != nil {
 					// RangeNotFoundErrors are expected here; nothing else is.
 					if _, ok := replErr.(*roachpb.RangeNotFoundError); !ok {
-						log.Error(ctx, replErr)
+						log.Errorf(ctx, "%v", replErr)
 					}
 					return nil
 				}
@@ -398,7 +398,7 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 				if replErr != nil {
 					// RangeNotFoundErrors are expected here; nothing else is.
 					if _, ok := replErr.(*roachpb.RangeNotFoundError); !ok {
-						log.Error(ctx, replErr)
+						log.Errorf(ctx, "%v", replErr)
 					}
 					return nil
 				}
@@ -536,7 +536,7 @@ func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 	r := (*Replica)(value)
 	exists, err := r.tick(livenessMap)
 	if err != nil {
-		log.Error(ctx, err)
+		log.Errorf(ctx, "%v", err)
 	}
 	s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(start).Nanoseconds())
 	return exists // ready

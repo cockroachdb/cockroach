@@ -40,7 +40,7 @@ Ken,Thompson,ken
 			break
 		}
 		if err != nil {
-			log.Fatal(ctx, err)
+			log.Fatalf(ctx, "%v", err)
 		}
 
 		fmt.Println(record)
@@ -68,7 +68,7 @@ Ken;Thompson;ken
 
 	records, err := r.ReadAll()
 	if err != nil {
-		log.Fatal(ctx, err)
+		log.Fatalf(ctx, "%v", err)
 	}
 
 	fmt.Print(records)
@@ -87,7 +87,7 @@ Ken,Thompson,ken
 
 	records, err := r.ReadAll()
 	if err != nil {
-		log.Fatal(ctx, err)
+		log.Fatalf(ctx, "%v", err)
 	}
 
 	fmt.Print(records)
@@ -116,7 +116,7 @@ func ExampleWriter() {
 	w.Flush()
 
 	if err := w.Error(); err != nil {
-		log.Fatal(ctx, err)
+		log.Fatalf(ctx, "%v", err)
 	}
 	// Output:
 	// first_name,last_name,username

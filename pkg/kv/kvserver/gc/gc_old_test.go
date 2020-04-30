@@ -159,7 +159,7 @@ func runGCOld(
 								// safe to continue because we bumped the GC
 								// thresholds. We may leave some inconsistent history
 								// behind, but nobody can read it.
-								log.Warning(ctx, err)
+								log.Warningf(ctx, "%v", err)
 								return
 							}
 						}

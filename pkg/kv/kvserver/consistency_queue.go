@@ -132,8 +132,9 @@ func (q *consistencyQueue) process(
 		if !shouldQuiesce || !grpcutil.IsClosedConnection(pErr.GoError()) {
 			// Suppress noisy errors about closed GRPC connections when the
 			// server is quiescing.
-			log.Error(ctx, pErr.GoError())
-			return pErr.GoError()
+			err := pErr.GoError()
+			log.Errorf(ctx, "%v", err)
+			return err
 		}
 		return nil
 	}

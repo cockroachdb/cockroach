@@ -35,6 +35,16 @@ var requireConstMsg = map[string]bool{
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented.NewWithIssueDetail": true,
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire.newAdminShutdownErr": true,
+
+	"github.com/cockroachdb/cockroach/pkg/util/log.Shout":     true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.Info":      true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.Warning":   true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.Error":     true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.Event":     true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.VEvent":    true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.VErrEvent": true,
+
+	"(*github.com/cockroachdb/cockroach/pkg/sql.optPlanningCtx).log": true,
 }
 
 // requireConstFmt records functions for which the string arg
@@ -48,6 +58,7 @@ var requireConstFmt = map[string]bool{
 	"(*log.Logger).Panicf": true,
 	"(*log.Logger).Printf": true,
 
+	"github.com/cockroachdb/cockroach/pkg/util/log.Shoutf":          true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.Infof":           true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.Warningf":        true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.Errorf":          true,
@@ -109,6 +120,7 @@ var requireConstFmt = map[string]bool{
 	"(*github.com/cockroachdb/cockroach/pkg/sql/logictest.logicTest).Fatalf": true,
 
 	"(*github.com/cockroachdb/cockroach/pkg/server.adminServer).serverErrorf": true,
+	"github.com/cockroachdb/cockroach/pkg/server.guaranteedExitFatal":         true,
 
 	"(*github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.kafkaLogAdapter).Printf": true,
 

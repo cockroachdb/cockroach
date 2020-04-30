@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 // DefaultSucceedsSoonDuration is the maximum amount of time unittests
@@ -47,7 +46,7 @@ func SucceedsSoonError(fn func() error) error {
 	wrappedFn := func() error {
 		err := fn()
 		if timeutil.Since(tBegin) > 3*time.Second && err != nil {
-			log.InfoDepth(context.Background(), 4, errors.Wrap(err, "SucceedsSoon"))
+			log.InfofDepth(context.Background(), 4, "SucceedsSoon: %v", err)
 		}
 		return err
 	}
