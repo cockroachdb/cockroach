@@ -47,7 +47,7 @@ var geometryFromText = makeBuiltin(
 	defProps(),
 	stringOverload1(
 		func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-			g, err := geo.ParseEWKT(geopb.EWKT(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
+			g, err := geo.SpatialObjectFromEWKT(geopb.EWKT(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
 			if err != nil {
 				return nil, err
 			}
@@ -62,7 +62,7 @@ var geometryFromText = makeBuiltin(
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			s := string(tree.MustBeDString(args[0]))
 			srid := geopb.SRID(tree.MustBeDInt(args[1]))
-			g, err := geo.ParseEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
+			g, err := geo.SpatialObjectFromEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
 			if err != nil {
 				return nil, err
 			}
@@ -79,7 +79,7 @@ var geographyFromText = makeBuiltin(
 	defProps(),
 	stringOverload1(
 		func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-			g, err := geo.ParseEWKT(geopb.EWKT(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
+			g, err := geo.SpatialObjectFromEWKT(geopb.EWKT(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
 			if err != nil {
 				return nil, err
 			}
@@ -94,7 +94,7 @@ var geographyFromText = makeBuiltin(
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			s := string(tree.MustBeDString(args[0]))
 			srid := geopb.SRID(tree.MustBeDInt(args[1]))
-			g, err := geo.ParseEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
+			g, err := geo.SpatialObjectFromEWKT(geopb.EWKT(s), srid, geo.DefaultSRIDShouldOverwrite)
 			if err != nil {
 				return nil, err
 			}
@@ -117,7 +117,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		stringOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseEWKT(geopb.EWKT(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
+				g, err := geo.SpatialObjectFromEWKT(geopb.EWKT(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
 				if err != nil {
 					return nil, err
 				}
@@ -131,7 +131,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		bytesOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseWKB([]byte(s), geopb.DefaultGeometrySRID)
+				g, err := geo.SpatialObjectFromWKB([]byte(s), geopb.DefaultGeometrySRID)
 				if err != nil {
 					return nil, err
 				}
@@ -146,7 +146,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				b := string(tree.MustBeDBytes(args[0]))
 				srid := geopb.SRID(tree.MustBeDInt(args[1]))
-				g, err := geo.ParseWKB(geopb.WKB(b), srid)
+				g, err := geo.SpatialObjectFromWKB(geopb.WKB(b), srid)
 				if err != nil {
 					return nil, err
 				}
@@ -161,7 +161,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		bytesOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseEWKB([]byte(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
+				g, err := geo.SpatialObjectFromEWKB([]byte(s), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
 				if err != nil {
 					return nil, err
 				}
@@ -175,7 +175,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		stringOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseGeoJSON([]byte(s), geopb.DefaultGeometrySRID)
+				g, err := geo.SpatialObjectFromGeoJSON([]byte(s), geopb.DefaultGeometrySRID)
 				if err != nil {
 					return nil, err
 				}
@@ -194,7 +194,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				if asString == nil {
 					return tree.DNull, nil
 				}
-				g, err := geo.ParseGeoJSON([]byte(*asString), geopb.DefaultGeometrySRID)
+				g, err := geo.SpatialObjectFromGeoJSON([]byte(*asString), geopb.DefaultGeometrySRID)
 				if err != nil {
 					return nil, err
 				}
@@ -215,7 +215,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		stringOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseEWKT(geopb.EWKT(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
+				g, err := geo.SpatialObjectFromEWKT(geopb.EWKT(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
 				if err != nil {
 					return nil, err
 				}
@@ -229,7 +229,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		bytesOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseWKB([]byte(s), geopb.DefaultGeographySRID)
+				g, err := geo.SpatialObjectFromWKB([]byte(s), geopb.DefaultGeographySRID)
 				if err != nil {
 					return nil, err
 				}
@@ -244,7 +244,7 @@ var geoBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				b := string(tree.MustBeDBytes(args[0]))
 				srid := geopb.SRID(tree.MustBeDInt(args[1]))
-				g, err := geo.ParseWKB(geopb.WKB(b), srid)
+				g, err := geo.SpatialObjectFromWKB(geopb.WKB(b), srid)
 				if err != nil {
 					return nil, err
 				}
@@ -259,7 +259,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		bytesOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseEWKB([]byte(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
+				g, err := geo.SpatialObjectFromEWKB([]byte(s), geopb.DefaultGeographySRID, geo.DefaultSRIDIsHint)
 				if err != nil {
 					return nil, err
 				}
@@ -273,7 +273,7 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		stringOverload1(
 			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseGeoJSON([]byte(s), geopb.DefaultGeographySRID)
+				g, err := geo.SpatialObjectFromGeoJSON([]byte(s), geopb.DefaultGeographySRID)
 				if err != nil {
 					return nil, err
 				}
@@ -292,7 +292,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				if asString == nil {
 					return tree.DNull, nil
 				}
-				g, err := geo.ParseGeoJSON([]byte(*asString), geopb.DefaultGeographySRID)
+				g, err := geo.SpatialObjectFromGeoJSON([]byte(*asString), geopb.DefaultGeographySRID)
 				if err != nil {
 					return nil, err
 				}

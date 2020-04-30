@@ -41,6 +41,3 @@ type WKB []byte
 
 // EWKB is the Extended Well Known Bytes form of a spatial object.
 type EWKB []byte
-
-// UnvalidatedEWKB is the unvalidated Extended Well Known Bytes form of a spatial object.
-type UnvalidatedEWKB []byte
