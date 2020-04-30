@@ -156,7 +156,10 @@ func (s *s2GeometryIndex) convertToGeomTAndTryClip(g *geo.Geometry) (geom.T, boo
 		}
 		gt = nil
 		if clippedEWKB != nil {
-			g = geo.NewGeometry(clippedEWKB)
+			g, err = geo.ParseGeometryFromEWKBRaw(clippedEWKB)
+			if err != nil {
+				return nil, false, err
+			}
 			if g == nil {
 				return nil, false, errors.Errorf("internal error: clippedWKB cannot be parsed")
 			}

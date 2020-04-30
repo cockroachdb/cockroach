@@ -13,10 +13,9 @@ package geo
 
 import (
 	"encoding/binary"
-	"encoding/hex"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s2"
 	"github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/encoding/ewkb"
@@ -25,76 +24,27 @@ import (
 // EWKBEncodingFormat is the encoding format for EWKB.
 var EWKBEncodingFormat = binary.LittleEndian
 
-// spatialObjectBase is the base for spatial objects.
-type spatialObjectBase struct {
-	ewkb geopb.EWKB
-}
-
-// EWKB returns the EWKB form of the data type.
-func (b *spatialObjectBase) EWKB() geopb.EWKB {
-	return b.ewkb
-}
-
-// SRID returns the SRID of the given spatial object.
-func (b *spatialObjectBase) SRID() geopb.SRID {
-	// We always assume EWKB is little endian and valid.
-	// Mask the 5th byte and check if it has the SRID bit set.
-	if b.ewkb[4]&0x20 == 0 {
-		return 0
-	}
-	// Read the next 4 bytes as little endian.
-	return geopb.SRID(
-		int32(b.ewkb[5]) +
-			(int32(b.ewkb[6]) << 8) +
-			(int32(b.ewkb[7]) << 16) +
-			(int32(b.ewkb[8]) << 24),
-	)
-}
-
-// EWKBHex returns the EWKB-hex version of this data type
-func (b *spatialObjectBase) EWKBHex() string {
-	return strings.ToUpper(hex.EncodeToString(b.ewkb))
-}
-
-// makeSpatialObjectBase creates a spatialObjectBase from an unvalidated EWKB.
-func makeSpatialObjectBase(in geopb.UnvalidatedEWKB) (spatialObjectBase, error) {
-	t, err := ewkb.Unmarshal(in)
-	if err != nil {
-		return spatialObjectBase{}, err
-	}
-	ret, err := ewkb.Marshal(t, EWKBEncodingFormat)
-	if err != nil {
-		return spatialObjectBase{}, err
-	}
-	return spatialObjectBase{ewkb: geopb.EWKB(ret)}, nil
-}
+//
+// Geometry
+//
 
 // Geometry is planar spatial object.
 type Geometry struct {
-	spatialObjectBase
+	geopb.SpatialObject
 }
 
 // NewGeometry returns a new Geometry. Assumes the input EWKB is validated and in little endian.
-func NewGeometry(ewkb geopb.EWKB) *Geometry {
-	return &Geometry{spatialObjectBase{ewkb: ewkb}}
-}
-
-// NewGeometryFromUnvalidatedEWKB returns a new Geometry from an unvalidated EWKB.
-func NewGeometryFromUnvalidatedEWKB(ewkb geopb.UnvalidatedEWKB) (*Geometry, error) {
-	base, err := makeSpatialObjectBase(ewkb)
-	if err != nil {
-		return nil, err
-	}
-	return &Geometry{base}, nil
+func NewGeometry(spatialObject geopb.SpatialObject) *Geometry {
+	return &Geometry{SpatialObject: spatialObject}
 }
 
 // ParseGeometry parses a Geometry from a given text.
 func ParseGeometry(str string) (*Geometry, error) {
-	ewkb, err := parseAmbiguousTextToEWKB(str, geopb.DefaultGeometrySRID)
+	spatialObject, err := parseAmbiguousText(str, geopb.DefaultGeometrySRID)
 	if err != nil {
 		return nil, err
 	}
-	return NewGeometry(ewkb), nil
+	return NewGeometry(spatialObject), nil
 }
 
 // MustParseGeometry behaves as ParseGeometry, but panics if there is an error.
@@ -106,69 +56,203 @@ func MustParseGeometry(str string) *Geometry {
 	return g
 }
 
+// ParseGeometryFromEWKT parses the EWKT into a Geometry.
+func ParseGeometryFromEWKT(
+	ewkt geopb.EWKT, srid geopb.SRID, defaultSRIDOverwriteSetting defaultSRIDOverwriteSetting,
+) (*Geometry, error) {
+	g, err := parseEWKT(ewkt, srid, defaultSRIDOverwriteSetting)
+	if err != nil {
+		return nil, err
+	}
+	return NewGeometry(g), nil
+}
+
+// ParseGeometryFromEWKB parses the EWKB into a Geometry.
+func ParseGeometryFromEWKB(ewkb geopb.EWKB) (*Geometry, error) {
+	g, err := parseEWKB(ewkb, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
+	if err != nil {
+		return nil, err
+	}
+	return NewGeometry(g), nil
+}
+
+// ParseGeometryFromWKB parses the WKB into a given Geometry.
+func ParseGeometryFromWKB(wkb geopb.WKB, srid geopb.SRID) (*Geometry, error) {
+	g, err := parseWKB(wkb, srid)
+	if err != nil {
+		return nil, err
+	}
+	return NewGeometry(g), nil
+}
+
+// ParseGeometryFromGeoJSON parses the GeoJSON into a given Geometry.
+func ParseGeometryFromGeoJSON(json []byte) (*Geometry, error) {
+	g, err := parseGeoJSON(json, geopb.DefaultGeometrySRID)
+	if err != nil {
+		return nil, err
+	}
+	return NewGeometry(g), nil
+}
+
+// ParseGeometryFromEWKBRaw returns a new Geometry from an EWKB, without any SRID checks.
+// You should only do this if you trust the EWKB is setup correctly.
+// You must likely want geo.ParseGeometryFromEWKB instead.
+func ParseGeometryFromEWKBRaw(ewkb geopb.EWKB) (*Geometry, error) {
+	base, err := parseEWKBRaw(ewkb)
+	if err != nil {
+		return nil, err
+	}
+	return &Geometry{SpatialObject: base}, nil
+}
+
+// MustParseGeometryFromEWKBRaw behaves as ParseGeometryFromEWKBRaw, but panics if an error occurs.
+func MustParseGeometryFromEWKBRaw(ewkb geopb.EWKB) *Geometry {
+	ret, err := ParseGeometryFromEWKBRaw(ewkb)
+	if err != nil {
+		panic(err)
+	}
+	return ret
+}
+
 // AsGeography converts a given Geometry to it's Geography form.
 func (g *Geometry) AsGeography() (*Geography, error) {
 	if g.SRID() != 0 {
 		// TODO(otan): check SRID is latlng
-		return NewGeography(g.ewkb), nil
+		return NewGeography(g.SpatialObject), nil
 	}
 
 	// Set a default SRID if one is not already set.
-	geom, err := ewkb.Unmarshal(g.ewkb)
+	t, err := ewkb.Unmarshal(g.EWKB())
 	if err != nil {
 		return nil, err
 	}
-	adjustGeomSRID(geom, geopb.DefaultGeographySRID)
-	ret, err := ewkb.Marshal(geom, EWKBEncodingFormat)
+	adjustGeomSRID(t, geopb.DefaultGeographySRID)
+	spatialObject, err := spatialObjectFromGeom(t)
 	if err != nil {
 		return nil, err
 	}
-	return NewGeography(geopb.EWKB(ret)), nil
+	return NewGeography(spatialObject), nil
 }
 
 // AsGeomT returns the geometry as a geom.T object.
 func (g *Geometry) AsGeomT() (geom.T, error) {
-	return ewkb.Unmarshal(g.ewkb)
+	return ewkb.Unmarshal(g.SpatialObject.EWKB)
 }
+
+// EWKB returns the EWKB representation of the Geometry.
+func (g *Geometry) EWKB() geopb.EWKB {
+	return g.SpatialObject.EWKB
+}
+
+// SRID returns the SRID representation of the Geometry.
+func (g *Geometry) SRID() geopb.SRID {
+	return g.SpatialObject.SRID
+}
+
+//
+// Geography
+//
 
 // Geography is a spherical spatial object.
 type Geography struct {
-	spatialObjectBase
+	geopb.SpatialObject
 }
 
 // NewGeography returns a new Geography. Assumes the input EWKB is validated and in little endian.
-func NewGeography(ewkb geopb.EWKB) *Geography {
-	return &Geography{spatialObjectBase{ewkb: ewkb}}
-}
-
-// NewGeographyFromUnvalidatedEWKB returns a new Geography from an unvalidated EWKB.
-func NewGeographyFromUnvalidatedEWKB(ewkb geopb.UnvalidatedEWKB) (*Geography, error) {
-	base, err := makeSpatialObjectBase(ewkb)
-	if err != nil {
-		return nil, err
-	}
-	return &Geography{base}, nil
+func NewGeography(spatialObject geopb.SpatialObject) *Geography {
+	return &Geography{SpatialObject: spatialObject}
 }
 
 // ParseGeography parses a Geography from a given text.
 func ParseGeography(str string) (*Geography, error) {
-	// TODO(otan): set SRID of EWKB to 4326.
-	ewkb, err := parseAmbiguousTextToEWKB(str, geopb.DefaultGeographySRID)
+	spatialObject, err := parseAmbiguousText(str, geopb.DefaultGeographySRID)
 	if err != nil {
 		return nil, err
 	}
-	return NewGeography(ewkb), nil
+	return NewGeography(spatialObject), nil
+}
+
+// ParseGeographyFromEWKT parses the EWKT into a Geography.
+func ParseGeographyFromEWKT(
+	ewkt geopb.EWKT, srid geopb.SRID, defaultSRIDOverwriteSetting defaultSRIDOverwriteSetting,
+) (*Geography, error) {
+	g, err := parseEWKT(ewkt, srid, defaultSRIDOverwriteSetting)
+	if err != nil {
+		return nil, err
+	}
+	return NewGeography(g), nil
+}
+
+// ParseGeographyFromEWKB parses the EWKB into a Geography.
+func ParseGeographyFromEWKB(ewkb geopb.EWKB) (*Geography, error) {
+	g, err := parseEWKB(ewkb, geopb.DefaultGeographySRID, DefaultSRIDIsHint)
+	if err != nil {
+		return nil, err
+	}
+	return NewGeography(g), nil
+}
+
+// ParseGeographyFromWKB parses the WKB into a given Geography.
+func ParseGeographyFromWKB(wkb geopb.WKB, srid geopb.SRID) (*Geography, error) {
+	g, err := parseWKB(wkb, srid)
+	if err != nil {
+		return nil, err
+	}
+	return NewGeography(g), nil
+}
+
+// ParseGeographyFromGeoJSON parses the GeoJSON into a given Geography.
+func ParseGeographyFromGeoJSON(json []byte) (*Geography, error) {
+	g, err := parseGeoJSON(json, geopb.DefaultGeographySRID)
+	if err != nil {
+		return nil, err
+	}
+	return NewGeography(g), nil
+}
+
+// ParseGeographyFromEWKBRaw returns a new Geography from an EWKB, without any SRID checks.
+// You should only do this if you trust the EWKB is setup correctly.
+// You must likely want ParseGeographyFromEWKB instead.
+func ParseGeographyFromEWKBRaw(ewkb geopb.EWKB) (*Geography, error) {
+	base, err := parseEWKBRaw(ewkb)
+	if err != nil {
+		return nil, err
+	}
+	return &Geography{SpatialObject: base}, nil
+}
+
+// MustParseGeographyFromEWKBRaw behaves as ParseGeographyFromEWKBRaw, but panics if an error occurs.
+func MustParseGeographyFromEWKBRaw(ewkb geopb.EWKB) *Geography {
+	ret, err := ParseGeographyFromEWKBRaw(ewkb)
+	if err != nil {
+		panic(err)
+	}
+	return ret
 }
 
 // AsGeometry converts a given Geography to it's Geometry form.
 func (g *Geography) AsGeometry() *Geometry {
-	return NewGeometry(g.ewkb)
+	return NewGeometry(g.SpatialObject)
+}
+
+// AsGeomT returns the Geography as a geom.T object.
+func (g *Geography) AsGeomT() (geom.T, error) {
+	return ewkb.Unmarshal(g.SpatialObject.EWKB)
+}
+
+// EWKB returns the EWKB representation of the Geography.
+func (g *Geography) EWKB() geopb.EWKB {
+	return g.SpatialObject.EWKB
+}
+
+// SRID returns the SRID representation of the Geography.
+func (g *Geography) SRID() geopb.SRID {
+	return g.SpatialObject.SRID
 }
 
 // AsS2 converts a given Geography into it's S2 form.
 func (g *Geography) AsS2() ([]s2.Region, error) {
-	// TODO(otan): parse EWKB ourselves.
-	geomRepr, err := ewkb.Unmarshal(g.ewkb)
+	geomRepr, err := g.AsGeomT()
 	if err != nil {
 		return nil, err
 	}
@@ -275,4 +359,43 @@ func s2RegionsFromGeom(geomRepr geom.T) []s2.Region {
 		}
 	}
 	return regions
+}
+
+//
+// common
+//
+
+// spatialObjectFromGeom creates a geopb.SpatialObject from a geom.T.
+func spatialObjectFromGeom(t geom.T) (geopb.SpatialObject, error) {
+	ret, err := ewkb.Marshal(t, EWKBEncodingFormat)
+	if err != nil {
+		return geopb.SpatialObject{}, err
+	}
+	var shape geopb.Shape
+	switch t := t.(type) {
+	case *geom.Point:
+		shape = geopb.Shape_Point
+	case *geom.LineString:
+		shape = geopb.Shape_LineString
+	case *geom.Polygon:
+		shape = geopb.Shape_Polygon
+	case *geom.MultiPoint:
+		shape = geopb.Shape_MultiPoint
+	case *geom.MultiLineString:
+		shape = geopb.Shape_MultiLineString
+	case *geom.MultiPolygon:
+		shape = geopb.Shape_MultiPolygon
+	case *geom.GeometryCollection:
+		shape = geopb.Shape_GeometryCollection
+	default:
+		return geopb.SpatialObject{}, errors.Newf("unknown shape: %T", t)
+	}
+	if t.Layout() != geom.XY {
+		return geopb.SpatialObject{}, errors.Newf("only 2D objects are currently supported")
+	}
+	return geopb.SpatialObject{
+		EWKB:  geopb.EWKB(ret),
+		SRID:  geopb.SRID(t.SRID()),
+		Shape: shape,
+	}, nil
 }
