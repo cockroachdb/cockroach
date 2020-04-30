@@ -24,7 +24,7 @@
     &:hover
       text-decoration underline
 
-.sql-highlight.hljs
+.sql-highlight:global(.hljs)
   color $colors--neutral-2
   overflow-x auto
   font-family SFMono-Semibold
@@ -32,23 +32,23 @@
   line-height: 1.57;
   white-space pre-wrap
   word-wrap break-word
-  .hljs-label
+  :global(.hljs-label)
     padding-left 8px
-  .hljs-keyword
+  :global(.hljs-keyword)
     color $colors--functional-purple-1
 
-  .hljs-string
-  .hljs-built_in
+  :global(.hljs-string)
+  :global(.hljs-built_in)
     color $colors--functional-orange-3
 
-.ant-tooltip.hljs
-  .ant-tooltip-content
+:global(.ant-tooltip):global(.hljs)
+  :global(.ant-tooltip-content)
     width 535px
-  .ant-tooltip-inner, .sql-highlight.hljs
+  :global(.ant-tooltip-inner), .sql-highlight:global(.hljs)
     background-color $colors--neutral-8
-  .ant-tooltip-inner
+  :global(.ant-tooltip-inner)
     padding 8px
-  .sql-highlight.hljs
+  .sql-highlight:global(.hljs)
     padding 0
     margin 0
 
