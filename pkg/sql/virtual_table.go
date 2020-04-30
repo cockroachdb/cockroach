@@ -13,6 +13,9 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -178,4 +181,135 @@ func (n *virtualTableNode) Close(ctx context.Context) {
 	if n.cleanup != nil {
 		n.cleanup()
 	}
+}
+
+// vTableLookupJoinNode implements lookup join into a virtual table that has a
+// virtual index on the equality columns. For each row of the input, a virtual
+// table index lookup is performed, and the rows are joined together.
+//
+// Only inner joins are supported at this time.
+type vTableLookupJoinNode struct {
+	input planNode
+
+	dbName string
+	db     *sqlbase.DatabaseDescriptor
+	table  *sqlbase.TableDescriptor
+	index  *sqlbase.IndexDescriptor
+	// eqCol is the single equality column ordinal into the lookup table. Virtual
+	// indexes only support a single indexed column currently.
+	eqCol             int
+	virtualTableEntry virtualDefEntry
+
+	// rows contains the output rows of the join.
+	rows *rowcontainer.RowContainer
+	// columns is the join's output schema.
+	columns sqlbase.ResultColumns
+	// pred contains the join's on condition, if any.
+	pred *joinPredicate
+	// inputCols is the schema of the input to this lookup join.
+	inputCols sqlbase.ResultColumns
+	// vtableCols is the schema of the virtual table we're looking up rows from,
+	// before any projection.
+	vtableCols sqlbase.ResultColumns
+	// lookupCols is the projection on vtableCols to apply.
+	lookupCols exec.TableColumnOrdinalSet
+
+	keyCtx constraint.KeyContext
+
+	scratch struct {
+		indexKeyDatums []tree.Datum
+		row            tree.Datums
+		params         *runParams
+	}
+}
+
+var _ planNode = &vTableLookupJoinNode{}
+var _ rowPusher = &vTableLookupJoinNode{}
+
+// startExec implements the planNode interface.
+func (v *vTableLookupJoinNode) startExec(params runParams) error {
+	v.keyCtx = constraint.KeyContext{EvalCtx: params.EvalContext()}
+	v.rows = rowcontainer.NewRowContainer(params.EvalContext().Mon.MakeBoundAccount(),
+		sqlbase.ColTypeInfoFromResCols(v.columns), 0)
+	v.scratch.indexKeyDatums = make(tree.Datums, len(v.columns))
+	var err error
+	v.db, err = params.p.LogicalSchemaAccessor().GetDatabaseDesc(params.ctx, params.p.txn,
+		v.dbName, tree.DatabaseLookupFlags{Required: true, AvoidCached: params.p.avoidCachedDescriptors})
+	return err
+}
+
+// Next implements the planNode interface.
+func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
+	// Keep a pointer to runParams around so we can reference it later from
+	// pushRow, which can't take any extra arguments.
+	v.scratch.params = &params
+	for {
+		// Check if there are any rows left to emit from the last input row.
+		if v.rows.Len() > 0 {
+			v.scratch.row = v.rows.At(0)
+			v.rows.PopFirst()
+			return true, nil
+		}
+
+		// Lookup more rows from the virtual table.
+		ok, err := v.input.Next(params)
+		if !ok || err != nil {
+			return ok, err
+		}
+		inputRow := v.input.Values()
+		var span constraint.Span
+		datum := inputRow[v.eqCol]
+		// Generate an index constraint from the equality column of the input.
+		key := constraint.MakeKey(datum)
+		span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+		var idxConstraint constraint.Constraint
+		idxConstraint.InitSingleSpan(&v.keyCtx, &span)
+
+		// Create the generation function for the index constraint.
+		genFunc := v.virtualTableEntry.makeConstrainedRowsGenerator(params.ctx,
+			params.p, v.db, v.index,
+			v.scratch.indexKeyDatums,
+			v.table.ColumnIdxMap(),
+			&idxConstraint,
+			v.vtableCols,
+		)
+		// Add the input row to the left of the scratch row.
+		v.scratch.row = append(v.scratch.row[:0], inputRow...)
+		// Finally, we're ready to do the lookup. This invocation will push all of
+		// the looked-up rows into v.rows.
+		if err := genFunc(v); err != nil {
+			return false, err
+		}
+	}
+}
+
+// pushRow implements the rowPusher interface.
+func (v *vTableLookupJoinNode) pushRow(lookedUpRow ...tree.Datum) error {
+	// Reset our output row to just the contents of the input row.
+	v.scratch.row = v.scratch.row[:len(v.inputCols)]
+	// Append the looked up row to the right of the input row.
+	for i, ok := v.lookupCols.Next(0); ok; i, ok = v.lookupCols.Next(i + 1) {
+		// Subtract 1 from the requested column position, to avoid the virtual
+		// table's fake primary key which won't be present in the row.
+		v.scratch.row = append(v.scratch.row, lookedUpRow[i-1])
+	}
+	// Run the predicate and exit if we don't match, or if there was an error.
+	if ok, err := v.pred.eval(v.scratch.params.EvalContext(),
+		v.scratch.row[:len(v.inputCols)],
+		v.scratch.row[len(v.inputCols):]); !ok || err != nil {
+		return err
+	}
+	_, err := v.rows.AddRow(v.scratch.params.ctx, v.scratch.row)
+	return err
+}
+
+// Values implements the planNode interface.
+func (v *vTableLookupJoinNode) Values() tree.Datums {
+	return v.scratch.row
+}
+
+// Close implements the planNode interface.
+func (v *vTableLookupJoinNode) Close(ctx context.Context) {
+	v.input.Close(ctx)
+	v.rows.Close(ctx)
 }
