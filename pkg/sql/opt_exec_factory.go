@@ -120,6 +120,7 @@ func (ef *execFactory) ConstructScan(
 	if err != nil {
 		return nil, err
 	}
+	scan.isFull = len(scan.spans) == 1 && scan.spans[0].EqualValue(scan.desc.IndexSpan(scan.index.ID))
 	for i := range reqOrdering {
 		if reqOrdering[i].ColIdx >= len(colCfg.wantedColumns) {
 			return nil, errors.Errorf("invalid reqOrdering: %v", reqOrdering)

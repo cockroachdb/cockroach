@@ -87,6 +87,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
+	scan.isFull = true
 
 	p, err := dsp.createTableReaders(planCtx, &scan, nil /* overrideResultColumns */)
 	if err != nil {

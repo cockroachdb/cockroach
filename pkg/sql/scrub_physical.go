@@ -117,6 +117,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	if err != nil {
 		return err
 	}
+	scan.isFull = true
 
 	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
 	physPlan, err := params.extendedEvalCtx.DistSQLPlanner.createScrubPhysicalCheck(

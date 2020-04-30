@@ -99,6 +99,10 @@ type scanNode struct {
 	// Should be set to true if sqlbase.ParallelScans is true.
 	parallelScansEnabled bool
 
+	// Is this a full scan of an index?
+	isFull bool
+
+	// Is this a scan of a secondary index?
 	isSecondaryIndex bool
 
 	// Indicates if this scanNode will do a physical data check. This is
