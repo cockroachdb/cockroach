@@ -90,7 +90,7 @@ func (ef *execFactory) ConstructScan(
 	scan := ef.planner.Scan()
 	colCfg := makeScanColumnsConfig(table, needed)
 
-	sb := span.MakeBuilder(tabDesc.TableDesc(), indexDesc)
+	sb := span.MakeBuilder(ef.planner.ExecCfg().Codec, tabDesc.TableDesc(), indexDesc)
 
 	// initTable checks that the current user has the correct privilege to access
 	// the table. However, the privilege has already been checked in optbuilder,
@@ -120,6 +120,9 @@ func (ef *execFactory) ConstructScan(
 	if err != nil {
 		return nil, err
 	}
+	scan.isFull = len(scan.spans) == 1 && scan.spans[0].EqualValue(
+		scan.desc.IndexSpan(ef.planner.ExecCfg().Codec, scan.index.ID),
+	)
 	for i := range reqOrdering {
 		if reqOrdering[i].ColIdx >= len(colCfg.wantedColumns) {
 			return nil, errors.Errorf("invalid reqOrdering: %v", reqOrdering)
@@ -1226,7 +1229,7 @@ func (ef *execFactory) ConstructInsert(
 	}
 	// Create the table inserter, which does the bulk of the work.
 	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, tabDesc, colDescs, checkFKs, fkTables, &ef.planner.alloc,
+		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, colDescs, checkFKs, fkTables, &ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1291,7 +1294,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 
 	// Create the table inserter, which does the bulk of the work.
 	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, tabDesc, colDescs, row.SkipFKs, nil /* fkTables */, &ef.planner.alloc,
+		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, colDescs, row.SkipFKs, nil /* fkTables */, &ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1395,6 +1398,7 @@ func (ef *execFactory) ConstructUpdate(
 	ru, err := row.MakeUpdater(
 		ctx,
 		ef.planner.txn,
+		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		fkTables,
 		updateColDescs,
@@ -1541,7 +1545,14 @@ func (ef *execFactory) ConstructUpsert(
 
 	// Create the table inserter, which does the bulk of the insert-related work.
 	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, tabDesc, insertColDescs, checkFKs, fkTables, &ef.planner.alloc,
+		ctx,
+		ef.planner.txn,
+		ef.planner.ExecCfg().Codec,
+		tabDesc,
+		insertColDescs,
+		checkFKs,
+		fkTables,
+		&ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1551,6 +1562,7 @@ func (ef *execFactory) ConstructUpsert(
 	ru, err := row.MakeUpdater(
 		ctx,
 		ef.planner.txn,
+		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		fkTables,
 		updateColDescs,
@@ -1668,6 +1680,7 @@ func (ef *execFactory) ConstructDelete(
 	rd, err := row.MakeDeleter(
 		ctx,
 		ef.planner.txn,
+		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		fkTables,
 		fetchColDescs,
@@ -1728,7 +1741,7 @@ func (ef *execFactory) ConstructDeleteRange(
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := &tabDesc.PrimaryIndex
-	sb := span.MakeBuilder(tabDesc.TableDesc(), indexDesc)
+	sb := span.MakeBuilder(ef.planner.ExecCfg().Codec, tabDesc.TableDesc(), indexDesc)
 
 	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
 		return nil, err

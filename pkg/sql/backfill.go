@@ -119,7 +119,7 @@ func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) histor
 	runner := func(ctx context.Context, retryable scTxnFn) error {
 		return sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
 			// We need to re-create the evalCtx since the txn may retry.
-			evalCtx := createSchemaChangeEvalCtx(ctx, readAsOf, sc.ieFactory)
+			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, readAsOf, sc.ieFactory)
 			return retryable(ctx, txn, &evalCtx)
 		})
 	}
@@ -185,7 +185,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 					needColumnBackfill = true
 				}
 			case *sqlbase.DescriptorMutation_Index:
-				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(t.Index.ID))
+				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, t.Index.ID))
 			case *sqlbase.DescriptorMutation_Constraint:
 				switch t.Constraint.ConstraintType {
 				case sqlbase.ConstraintToUpdate_CHECK:
@@ -628,7 +628,15 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 
 				rd, err := row.MakeDeleter(
-					ctx, txn, tableDesc, nil, nil, row.SkipFKs, nil /* *tree.EvalContext */, alloc,
+					ctx,
+					txn,
+					sc.execCfg.Codec,
+					tableDesc,
+					nil,
+					nil,
+					row.SkipFKs,
+					nil, /* *tree.EvalContext */
+					alloc,
 				)
 				if err != nil {
 					return err
@@ -852,7 +860,7 @@ func (sc *SchemaChanger) distBackfill(
 				return nil
 			}
 			cbw := metadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
-			evalCtx := createSchemaChangeEvalCtx(ctx, txn.ReadTimestamp(), sc.ieFactory)
+			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, txn.ReadTimestamp(), sc.ieFactory)
 			recv := MakeDistSQLReceiver(
 				ctx,
 				&cbw,
@@ -1060,8 +1068,9 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 			// distributed execution and avoid bypassing the SQL decoding
 			start := timeutil.Now()
 			var idxLen int64
-			key := tableDesc.IndexSpan(idx.ID).Key
-			endKey := tableDesc.IndexSpan(idx.ID).EndKey
+			span := tableDesc.IndexSpan(sc.execCfg.Codec, idx.ID)
+			key := span.Key
+			endKey := span.EndKey
 			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, _ *extendedEvalContext) error {
 				for {
 					kvs, err := txn.Scan(ctx, key, endKey, 1000000)
@@ -1354,7 +1363,7 @@ func runSchemaChangesInTxn(
 				doneColumnBackfill = true
 
 			case *sqlbase.DescriptorMutation_Index:
-				if err := indexBackfillInTxn(ctx, planner.Txn(), immutDesc, traceKV); err != nil {
+				if err := indexBackfillInTxn(ctx, planner.Txn(), planner.EvalContext(), immutDesc, traceKV); err != nil {
 					return err
 				}
 
@@ -1416,7 +1425,7 @@ func runSchemaChangesInTxn(
 
 			case *sqlbase.DescriptorMutation_Index:
 				if err := indexTruncateInTxn(
-					ctx, planner.Txn(), planner.ExecCfg(), immutDesc, t.Index, traceKV,
+					ctx, planner.Txn(), planner.ExecCfg(), planner.EvalContext(), immutDesc, t.Index, traceKV,
 				); err != nil {
 					return err
 				}
@@ -1687,7 +1696,7 @@ func columnBackfillInTxn(
 		}
 		otherTableDescs = append(otherTableDescs, t.ImmutableTableDescriptor)
 	}
-	sp := tableDesc.PrimaryIndexSpan()
+	sp := tableDesc.PrimaryIndexSpan(evalCtx.Codec)
 	for sp.Key != nil {
 		var err error
 		sp.Key, err = backfiller.RunColumnBackfillChunk(ctx,
@@ -1706,13 +1715,17 @@ func columnBackfillInTxn(
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
 func indexBackfillInTxn(
-	ctx context.Context, txn *kv.Txn, tableDesc *sqlbase.ImmutableTableDescriptor, traceKV bool,
+	ctx context.Context,
+	txn *kv.Txn,
+	evalCtx *tree.EvalContext,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	traceKV bool,
 ) error {
 	var backfiller backfill.IndexBackfiller
-	if err := backfiller.Init(tableDesc); err != nil {
+	if err := backfiller.Init(evalCtx, tableDesc); err != nil {
 		return err
 	}
-	sp := tableDesc.PrimaryIndexSpan()
+	sp := tableDesc.PrimaryIndexSpan(evalCtx.Codec)
 	for sp.Key != nil {
 		var err error
 		sp.Key, err = backfiller.RunIndexBackfillChunk(ctx,
@@ -1731,6 +1744,7 @@ func indexTruncateInTxn(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
+	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	idx *sqlbase.IndexDescriptor,
 	traceKV bool,
@@ -1739,13 +1753,13 @@ func indexTruncateInTxn(
 	var sp roachpb.Span
 	for done := false; !done; done = sp.Key == nil {
 		rd, err := row.MakeDeleter(
-			ctx, txn, tableDesc, nil, nil, row.SkipFKs, nil /* *tree.EvalContext */, alloc,
+			ctx, txn, execCfg.Codec, tableDesc, nil, nil, row.SkipFKs, evalCtx, alloc,
 		)
 		if err != nil {
 			return err
 		}
 		td := tableDeleter{rd: rd, alloc: alloc}
-		if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
+		if err := td.init(ctx, txn, evalCtx); err != nil {
 			return err
 		}
 		sp, err = td.deleteIndex(

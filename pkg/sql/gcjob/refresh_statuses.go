@@ -104,7 +104,7 @@ func updateStatusForGCElements(
 
 		// Update the status of the table if the table was dropped.
 		if table.Dropped() {
-			deadline := updateTableStatus(ctx, int64(tableTTL), protectedtsCache, table, tableDropTimes, progress)
+			deadline := updateTableStatus(ctx, execCfg, int64(tableTTL), protectedtsCache, table, tableDropTimes, progress)
 			if timeutil.Until(deadline) < 0 {
 				expired = true
 			} else if deadline.Before(earliestDeadline) {
@@ -113,7 +113,7 @@ func updateStatusForGCElements(
 		}
 
 		// Update the status of any indexes waiting for GC.
-		indexesExpired, deadline := updateIndexesStatus(ctx, tableTTL, table, protectedtsCache, placeholder, indexDropTimes, progress)
+		indexesExpired, deadline := updateIndexesStatus(ctx, execCfg, tableTTL, table, protectedtsCache, placeholder, indexDropTimes, progress)
 		if indexesExpired {
 			expired = true
 		}
@@ -134,6 +134,7 @@ func updateStatusForGCElements(
 // expired.
 func updateTableStatus(
 	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
 	ttlSeconds int64,
 	protectedtsCache protectedts.Cache,
 	table *sqlbase.TableDescriptor,
@@ -141,7 +142,7 @@ func updateTableStatus(
 	progress *jobspb.SchemaChangeGCProgress,
 ) time.Time {
 	deadline := timeutil.Unix(0, int64(math.MaxInt64))
-	sp := table.TableSpan()
+	sp := table.TableSpan(execCfg.Codec)
 
 	for i, t := range progress.Tables {
 		droppedTable := &progress.Tables[i]
@@ -179,6 +180,7 @@ func updateTableStatus(
 // index should be GC'd, if any, otherwise MaxInt.
 func updateIndexesStatus(
 	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
 	tableTTL int32,
 	table *sqlbase.TableDescriptor,
 	protectedtsCache protectedts.Cache,
@@ -194,7 +196,7 @@ func updateIndexesStatus(
 			continue
 		}
 
-		sp := table.IndexSpan(idxProgress.IndexID)
+		sp := table.IndexSpan(execCfg.Codec, idxProgress.IndexID)
 
 		ttlSeconds := getIndexTTL(tableTTL, placeholder, idxProgress.IndexID)
 

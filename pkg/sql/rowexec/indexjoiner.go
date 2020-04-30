@@ -99,6 +99,7 @@ func newIndexJoiner(
 	}
 	var fetcher row.Fetcher
 	if _, _, err := initRowFetcher(
+		flowCtx,
 		&fetcher,
 		&ij.desc,
 		0, /* primary index */
@@ -122,7 +123,7 @@ func newIndexJoiner(
 		ij.fetcher = &fetcher
 	}
 
-	ij.spanBuilder = span.MakeBuilder(&spec.Table, &spec.Table.PrimaryIndex)
+	ij.spanBuilder = span.MakeBuilder(flowCtx.Codec(), &spec.Table, &spec.Table.PrimaryIndex)
 	ij.spanBuilder.SetNeededColumns(ij.Out.NeededColumns())
 
 	return ij, nil

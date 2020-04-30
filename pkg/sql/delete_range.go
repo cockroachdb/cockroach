@@ -92,8 +92,7 @@ func maybeCreateDeleteFastNode(
 	}
 
 	// Check whether the source plan is "simple": that it contains no remaining
-	// filtering, limiting, sorting, etc. Note that this logic must be kept in
-	// sync with the logic for setting scanNode.isDeleteSource (see doExpandPlan.)
+	// filtering, limiting, sorting, etc.
 	// TODO(dt): We could probably be smarter when presented with an
 	// index-join, but this goes away anyway once we push-down more of
 	// SQL.
@@ -185,6 +184,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		}
 	}
 	if err := d.fetcher.Init(
+		params.ExecCfg().Codec,
 		false, /* reverse */
 		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
 		// strength here. Consider hooking this in to the same knob that will

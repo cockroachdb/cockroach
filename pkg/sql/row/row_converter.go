@@ -277,6 +277,7 @@ func NewDatumRowConverter(
 	ri, err := MakeInserter(
 		ctx,
 		nil, /* txn */
+		evalCtx.Codec,
 		immutDesc,
 		cols,
 		SkipFKs,

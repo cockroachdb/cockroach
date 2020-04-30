@@ -956,7 +956,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 	if jobExists {
 		spanList = job.Details().(jobspb.SchemaChangeDetails).ResumeSpanList
 	}
-	span := tableDesc.PrimaryIndexSpan()
+	span := tableDesc.PrimaryIndexSpan(p.ExecCfg().Codec)
 	for i := len(tableDesc.ClusterVersion.Mutations) + len(spanList); i < len(tableDesc.Mutations); i++ {
 		spanList = append(spanList,
 			jobspb.ResumeSpanList{

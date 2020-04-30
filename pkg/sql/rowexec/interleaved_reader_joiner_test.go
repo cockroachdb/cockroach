@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -35,7 +36,7 @@ import (
 // min and max are inclusive bounds on the root table's ID.
 // If min and/or max is -1, then no bound is used for that endpoint.
 func makeSpanWithRootBound(desc *sqlbase.TableDescriptor, min int, max int) roachpb.Span {
-	keyPrefix := sqlbase.MakeIndexKeyPrefix(desc, desc.PrimaryIndex.ID)
+	keyPrefix := sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PrimaryIndex.ID)
 
 	startKey := roachpb.Key(append([]byte(nil), keyPrefix...))
 	if min != -1 {
@@ -132,12 +133,12 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			{
 				Desc:     *pd,
 				Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
-				Spans:    []execinfrapb.TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
+				Spans:    []execinfrapb.TableReaderSpan{{Span: pd.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 			},
 			{
 				Desc:     *cd1,
 				Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
-				Spans:    []execinfrapb.TableReaderSpan{{Span: cd1.PrimaryIndexSpan()}},
+				Spans:    []execinfrapb.TableReaderSpan{{Span: cd1.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 			},
 		},
 		Type: sqlbase.InnerJoin,
@@ -150,10 +151,10 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 
 	pdCd2Spec := copySpec(pdCd1Spec)
 	pdCd2Spec.Tables[1].Desc = *cd2
-	pdCd2Spec.Tables[1].Spans = []execinfrapb.TableReaderSpan{{Span: cd2.PrimaryIndexSpan()}}
+	pdCd2Spec.Tables[1].Spans = []execinfrapb.TableReaderSpan{{Span: cd2.PrimaryIndexSpan(keys.SystemSQLCodec)}}
 	pdCd3Spec := copySpec(pdCd1Spec)
 	pdCd3Spec.Tables[1].Desc = *cd3
-	pdCd3Spec.Tables[1].Spans = []execinfrapb.TableReaderSpan{{Span: cd3.PrimaryIndexSpan()}}
+	pdCd3Spec.Tables[1].Spans = []execinfrapb.TableReaderSpan{{Span: cd3.PrimaryIndexSpan(keys.SystemSQLCodec)}}
 
 	testCases := []struct {
 		spec     execinfrapb.InterleavedReaderJoinerSpec
@@ -476,12 +477,12 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 					{
 						Desc:     *pd,
 						Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
-						Spans:    []execinfrapb.TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
+						Spans:    []execinfrapb.TableReaderSpan{{Span: pd.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 					},
 					{
 						Desc:     *cd,
 						Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_DESC}}},
-						Spans:    []execinfrapb.TableReaderSpan{{Span: cd.PrimaryIndexSpan()}},
+						Spans:    []execinfrapb.TableReaderSpan{{Span: cd.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 					},
 				},
 				Type: sqlbase.InnerJoin,
@@ -495,7 +496,7 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 					{
 						Desc:     *pd,
 						Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
-						Spans:    []execinfrapb.TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
+						Spans:    []execinfrapb.TableReaderSpan{{Span: pd.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 					},
 				},
 				Type: sqlbase.InnerJoin,
@@ -509,12 +510,12 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 					{
 						Desc:     *cd,
 						Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
-						Spans:    []execinfrapb.TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
+						Spans:    []execinfrapb.TableReaderSpan{{Span: pd.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 					},
 					{
 						Desc:     *gcd,
 						Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
-						Spans:    []execinfrapb.TableReaderSpan{{Span: gcd.PrimaryIndexSpan()}},
+						Spans:    []execinfrapb.TableReaderSpan{{Span: gcd.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 					},
 				},
 				Type: sqlbase.InnerJoin,
@@ -599,12 +600,12 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 			{
 				Desc:     *pd,
 				Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
-				Spans:    []execinfrapb.TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
+				Spans:    []execinfrapb.TableReaderSpan{{Span: pd.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 			},
 			{
 				Desc:     *cd,
 				Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
-				Spans:    []execinfrapb.TableReaderSpan{{Span: cd.PrimaryIndexSpan()}},
+				Spans:    []execinfrapb.TableReaderSpan{{Span: cd.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 			},
 		},
 		Type: sqlbase.InnerJoin,

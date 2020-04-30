@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -53,7 +54,7 @@ func TestServer(t *testing.T) {
 		Table:    *td,
 		IndexIdx: 0,
 		Reverse:  false,
-		Spans:    []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+		Spans:    []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 	}
 	post := execinfrapb.PostProcessSpec{
 		Filter:        execinfrapb.Expression{Expr: "@1 != 2"}, // a != 2

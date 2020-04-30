@@ -99,6 +99,10 @@ type scanNode struct {
 	// Should be set to true if sqlbase.ParallelScans is true.
 	parallelScansEnabled bool
 
+	// Is this a full scan of an index?
+	isFull bool
+
+	// Is this a scan of a secondary index?
 	isSecondaryIndex bool
 
 	// Indicates if this scanNode will do a physical data check. This is
@@ -108,9 +112,6 @@ type scanNode struct {
 	// maxResults, if greater than 0, is the maximum number of results that a
 	// scan is guaranteed to return.
 	maxResults uint64
-
-	// Indicates if this scan is the source for a delete node.
-	isDeleteSource bool
 
 	// estimatedRowCount is the estimated number of rows that this scanNode will
 	// output. When there are no statistics to make the estimation, it will be

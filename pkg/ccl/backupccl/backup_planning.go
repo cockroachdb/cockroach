@@ -87,14 +87,14 @@ type tableAndIndex struct {
 // spansForAllTableIndexes returns non-overlapping spans for every index and
 // table passed in. They would normally overlap if any of them are interleaved.
 func spansForAllTableIndexes(
-	tables []*sqlbase.TableDescriptor, revs []BackupManifest_DescriptorRevision,
+	codec keys.SQLCodec, tables []*sqlbase.TableDescriptor, revs []BackupManifest_DescriptorRevision,
 ) []roachpb.Span {
 
 	added := make(map[tableAndIndex]bool, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
 	for _, table := range tables {
 		for _, index := range table.AllNonDropIndexes() {
-			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(index.ID)), false); err != nil {
+			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(codec, index.ID)), false); err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 			}
 			added[tableAndIndex{tableID: table.ID, indexID: index.ID}] = true
@@ -108,7 +108,7 @@ func spansForAllTableIndexes(
 			for _, idx := range tbl.AllNonDropIndexes() {
 				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}
 				if !added[key] {
-					if err := sstIntervalTree.Insert(intervalSpan(tbl.IndexSpan(idx.ID)), false); err != nil {
+					if err := sstIntervalTree.Insert(intervalSpan(tbl.IndexSpan(codec, idx.ID)), false); err != nil {
 						panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 					}
 					added[key] = true
@@ -528,7 +528,7 @@ func backupPlanHook(
 			}
 		}
 
-		spans := spansForAllTableIndexes(tables, revs)
+		spans := spansForAllTableIndexes(p.ExecCfg().Codec, tables, revs)
 
 		if len(prevBackups) > 0 {
 			tablesInPrev := make(map[sqlbase.ID]struct{})

@@ -112,11 +112,12 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 		return err
 	}
 	scan.index = scan.specifiedIndex
-	sb := span.MakeBuilder(o.tableDesc.TableDesc(), o.indexDesc)
-	scan.spans, err = sb.UnconstrainedSpans(false /* forDelete */)
+	sb := span.MakeBuilder(params.ExecCfg().Codec, o.tableDesc.TableDesc(), o.indexDesc)
+	scan.spans, err = sb.UnconstrainedSpans()
 	if err != nil {
 		return err
 	}
+	scan.isFull = true
 
 	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
 	physPlan, err := params.extendedEvalCtx.DistSQLPlanner.createScrubPhysicalCheck(

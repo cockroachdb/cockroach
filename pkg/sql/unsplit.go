@@ -43,7 +43,7 @@ func (n *unsplitNode) Next(params runParams) (bool, error) {
 	}
 
 	row := n.rows.Values()
-	rowKey, err := getRowKey(n.tableDesc, n.index, row)
+	rowKey, err := getRowKey(params.ExecCfg().Codec, n.tableDesc, n.index, row)
 	if err != nil {
 		return false, err
 	}

@@ -245,6 +245,7 @@ type cFetcher struct {
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
 func (rf *cFetcher) Init(
+	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
 	reverse bool,
 	lockStr sqlbase.ScanLockingStrength,
@@ -323,7 +324,7 @@ func (rf *cFetcher) Init(
 	}
 	sort.Ints(table.neededColsList)
 
-	table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(table.desc.TableDesc(), table.index.ID))
+	table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(codec, table.desc.TableDesc(), table.index.ID))
 
 	var indexColumnIDs []sqlbase.ColumnID
 	indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()

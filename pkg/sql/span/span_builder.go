@@ -25,6 +25,7 @@ import (
 
 // Builder is a single struct for generating key spans from Constraints, Datums and encDatums.
 type Builder struct {
+	codec         keys.SQLCodec
 	table         *sqlbase.TableDescriptor
 	index         *sqlbase.IndexDescriptor
 	indexColTypes []types.T
@@ -48,11 +49,14 @@ var _ = (*Builder).SetNeededFamilies
 var _ = (*Builder).UnsetNeededFamilies
 
 // MakeBuilder creates a Builder for a table and index.
-func MakeBuilder(table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor) *Builder {
+func MakeBuilder(
+	codec keys.SQLCodec, table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+) *Builder {
 	s := &Builder{
+		codec:          codec,
 		table:          table,
 		index:          index,
-		KeyPrefix:      sqlbase.MakeIndexKeyPrefix(table, index.ID),
+		KeyPrefix:      sqlbase.MakeIndexKeyPrefix(codec, table, index.ID),
 		interstices:    make([][]byte, len(index.ColumnDirections)+len(index.ExtraColumnIDs)+1),
 		neededFamilies: nil,
 	}
@@ -219,8 +223,8 @@ func (s *Builder) SpansFromConstraint(
 
 // UnconstrainedSpans returns the full span corresponding to the Builder's
 // table and index.
-func (s *Builder) UnconstrainedSpans(forDelete bool) (roachpb.Spans, error) {
-	return s.SpansFromConstraint(nil, exec.TableColumnOrdinalSet{}, forDelete)
+func (s *Builder) UnconstrainedSpans() (roachpb.Spans, error) {
+	return s.SpansFromConstraint(nil, exec.TableColumnOrdinalSet{}, false /* forDelete */)
 }
 
 // appendSpansFromConstraintSpan converts a constraint.Span to one or more
@@ -266,7 +270,7 @@ func (s *Builder) appendSpansFromConstraintSpan(
 	// last parent key. If cs.End.Inclusive is true, we also advance the key as
 	// necessary.
 	endInclusive := cs.EndBoundary() == constraint.IncludeBoundary
-	span.EndKey, err = sqlbase.AdjustEndKeyForInterleave(s.table, s.index, span.EndKey, endInclusive)
+	span.EndKey, err = sqlbase.AdjustEndKeyForInterleave(s.codec, s.table, s.index, span.EndKey, endInclusive)
 	if err != nil {
 		return nil, err
 	}
