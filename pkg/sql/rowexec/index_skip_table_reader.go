@@ -125,6 +125,7 @@ func newIndexSkipTableReader(
 	}
 
 	if err := t.fetcher.Init(
+		flowCtx.Codec(),
 		t.reverse,
 		spec.LockingStrength,
 		true,  /* returnRangeInfo */

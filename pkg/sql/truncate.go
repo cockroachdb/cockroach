@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -406,7 +407,11 @@ func reassignComments(
 // can even eliminate the need to use a transaction for each chunk at a later
 // stage if it proves inefficient).
 func ClearTableDataInChunks(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *kv.DB, traceKV bool,
+	ctx context.Context,
+	db *kv.DB,
+	codec keys.SQLCodec,
+	tableDesc *sqlbase.TableDescriptor,
+	traceKV bool,
 ) error {
 	const chunkSize = TableTruncateChunkSize
 	var resume roachpb.Span
@@ -420,6 +425,7 @@ func ClearTableDataInChunks(
 			rd, err := row.MakeDeleter(
 				ctx,
 				txn,
+				codec,
 				sqlbase.NewImmutableTableDescriptor(*tableDesc),
 				nil,
 				nil,

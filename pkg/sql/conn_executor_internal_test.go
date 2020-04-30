@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -266,6 +267,7 @@ func startConnExecutor(
 			NodeID:    nodeID,
 			ClusterID: func() uuid.UUID { return uuid.UUID{} },
 		},
+		Codec: keys.SystemSQLCodec,
 		DistSQLPlanner: NewDistSQLPlanner(
 			ctx, execinfra.Version, st, roachpb.NodeDescriptor{NodeID: 1},
 			nil, /* rpcCtx */

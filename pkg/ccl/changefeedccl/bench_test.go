@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -184,7 +185,7 @@ func createBenchmarkChangefeed(
 	database, table string,
 ) (*benchSink, func() error, error) {
 	tableDesc := sqlbase.GetTableDescriptor(s.DB(), database, table)
-	spans := []roachpb.Span{tableDesc.PrimaryIndexSpan()}
+	spans := []roachpb.Span{tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)}
 	details := jobspb.ChangefeedDetails{
 		Targets: jobspb.ChangefeedTargets{tableDesc.ID: jobspb.ChangefeedTarget{
 			StatementTimeName: tableDesc.Name,
@@ -232,7 +233,8 @@ func createBenchmarkChangefeed(
 		NeedsInitialScan: needsInitialScan,
 	}
 
-	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), details, buf.Get)
+	rowsFn := kvsToRows(s.ExecutorConfig().(sql.ExecutorConfig).Codec,
+		s.LeaseManager().(*sql.LeaseManager), details, buf.Get)
 	sf := span.MakeFrontier(spans...)
 	tickFn := emitEntries(s.ClusterSettings(), details, hlc.Timestamp{}, sf,
 		encoder, sink, rowsFn, TestingKnobs{}, metrics)

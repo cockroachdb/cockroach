@@ -710,9 +710,10 @@ func importPlanHook(
 
 		// Prepare the protected timestamp record.
 		var spansToProtect []roachpb.Span
+		codec := p.(sql.PlanHookState).ExecCfg().Codec
 		for i := range tableDetails {
 			if td := &tableDetails[i]; !td.IsNew {
-				spansToProtect = append(spansToProtect, td.Desc.TableSpan())
+				spansToProtect = append(spansToProtect, td.Desc.TableSpan(codec))
 			}
 		}
 		if len(spansToProtect) > 0 {
@@ -1260,9 +1261,8 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, phs interface{}) err
 	telemetry.Count("import.total.failed")
 
 	cfg := phs.(sql.PlanHookState).ExecCfg()
-	jr := cfg.JobRegistry
 	return cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := r.dropTables(ctx, jr, txn); err != nil {
+		if err := r.dropTables(ctx, txn, cfg); err != nil {
 			return err
 		}
 		return r.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
@@ -1289,7 +1289,9 @@ func (r *importResumer) releaseProtectedTimestamp(
 }
 
 // dropTables implements the OnFailOrCancel logic.
-func (r *importResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn *kv.Txn) error {
+func (r *importResumer) dropTables(
+	ctx context.Context, txn *kv.Txn, execCfg *sql.ExecutorConfig,
+) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 
 	// Needed to trigger the schema change manager.
@@ -1325,7 +1327,7 @@ func (r *importResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn *
 			return errors.Errorf("invalid pre-IMPORT time to rollback")
 		}
 		ts := hlc.Timestamp{WallTime: details.Walltime}.Prev()
-		if err := sql.RevertTables(ctx, txn.DB(), revert, ts, sql.RevertTableDefaultBatchSize); err != nil {
+		if err := sql.RevertTables(ctx, txn.DB(), execCfg, revert, ts, sql.RevertTableDefaultBatchSize); err != nil {
 			return errors.Wrap(err, "rolling back partially completed IMPORT")
 		}
 	}
@@ -1382,7 +1384,7 @@ func (r *importResumer) dropTables(ctx context.Context, jr *jobs.Registry, txn *
 		Progress:      jobspb.SchemaChangeGCProgress{},
 		NonCancelable: true,
 	}
-	if _, err := jr.CreateJobWithTxn(ctx, gcJobRecord, txn); err != nil {
+	if _, err := execCfg.JobRegistry.CreateJobWithTxn(ctx, gcJobRecord, txn); err != nil {
 		return err
 	}
 

@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
@@ -67,7 +68,7 @@ func TestClusterFlow(t *testing.T) {
 	desc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 	makeIndexSpan := func(start, end int) execinfrapb.TableReaderSpan {
 		var span roachpb.Span
-		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(desc, desc.Indexes[0].ID))
+		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.Indexes[0].ID))
 		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
 		span.EndKey = append(span.EndKey, prefix...)
 		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)

@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -168,7 +169,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 
 	makeIndexSpan := func(td *sqlbase.TableDescriptor, start, end int) execinfrapb.TableReaderSpan {
 		var span roachpb.Span
-		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(td, td.PrimaryIndex.ID))
+		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, td, td.PrimaryIndex.ID))
 		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
 		span.EndKey = append(span.EndKey, prefix...)
 		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
@@ -187,7 +188,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "SimpleForward",
 			tableDesc: td1,
 			spec: execinfrapb.IndexSkipTableReaderSpec{
-				Spans: []execinfrapb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
+				Spans: []execinfrapb.TableReaderSpan{{Span: td1.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 			},
 			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
@@ -200,7 +201,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "InterleavedParent",
 			tableDesc: td5,
 			spec: execinfrapb.IndexSkipTableReaderSpec{
-				Spans: []execinfrapb.TableReaderSpan{{Span: td5.PrimaryIndexSpan()}},
+				Spans: []execinfrapb.TableReaderSpan{{Span: td5.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 			},
 			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
@@ -213,7 +214,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "InterleavedChild",
 			tableDesc: td6,
 			spec: execinfrapb.IndexSkipTableReaderSpec{
-				Spans: []execinfrapb.TableReaderSpan{{Span: td6.PrimaryIndexSpan()}},
+				Spans: []execinfrapb.TableReaderSpan{{Span: td6.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 			},
 			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
@@ -253,7 +254,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "Filter",
 			tableDesc: td1,
 			spec: execinfrapb.IndexSkipTableReaderSpec{
-				Spans: []execinfrapb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
+				Spans: []execinfrapb.TableReaderSpan{{Span: td1.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 			},
 			post: execinfrapb.PostProcessSpec{
 				Filter:        execinfrapb.Expression{Expr: "@1 > 3 AND @1 < 7"},
@@ -267,7 +268,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "MultipleOutputCols",
 			tableDesc: td2,
 			spec: execinfrapb.IndexSkipTableReaderSpec{
-				Spans: []execinfrapb.TableReaderSpan{{Span: td2.PrimaryIndexSpan()}},
+				Spans: []execinfrapb.TableReaderSpan{{Span: td2.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 			},
 			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
@@ -280,7 +281,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "Nulls",
 			tableDesc: td3,
 			spec: execinfrapb.IndexSkipTableReaderSpec{
-				Spans: []execinfrapb.TableReaderSpan{{Span: td3.PrimaryIndexSpan()}},
+				Spans: []execinfrapb.TableReaderSpan{{Span: td3.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 			},
 			post: execinfrapb.PostProcessSpec{
 				Projection:    true,
@@ -293,7 +294,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "SecondaryIdx",
 			tableDesc: td4,
 			spec: execinfrapb.IndexSkipTableReaderSpec{
-				Spans:    []execinfrapb.TableReaderSpan{{Span: td4.IndexSpan(2)}},
+				Spans:    []execinfrapb.TableReaderSpan{{Span: td4.IndexSpan(keys.SystemSQLCodec, 2)}},
 				IndexIdx: 1,
 			},
 			post: execinfrapb.PostProcessSpec{
@@ -307,7 +308,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "SimpleReverse",
 			tableDesc: td1,
 			spec: execinfrapb.IndexSkipTableReaderSpec{
-				Spans:   []execinfrapb.TableReaderSpan{{Span: td1.PrimaryIndexSpan()}},
+				Spans:   []execinfrapb.TableReaderSpan{{Span: td1.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 				Reverse: true,
 			},
 			post: execinfrapb.PostProcessSpec{
@@ -350,7 +351,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "InterleavedParentReverse",
 			tableDesc: td5,
 			spec: execinfrapb.IndexSkipTableReaderSpec{
-				Spans:   []execinfrapb.TableReaderSpan{{Span: td5.PrimaryIndexSpan()}},
+				Spans:   []execinfrapb.TableReaderSpan{{Span: td5.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 				Reverse: true,
 			},
 			post: execinfrapb.PostProcessSpec{
@@ -378,7 +379,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "InterleavedChildReverse",
 			tableDesc: td6,
 			spec: execinfrapb.IndexSkipTableReaderSpec{
-				Spans:   []execinfrapb.TableReaderSpan{{Span: td6.PrimaryIndexSpan()}},
+				Spans:   []execinfrapb.TableReaderSpan{{Span: td6.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 				Reverse: true,
 			},
 			post: execinfrapb.PostProcessSpec{
@@ -392,7 +393,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "IndexMultipleNulls",
 			tableDesc: td7,
 			spec: execinfrapb.IndexSkipTableReaderSpec{
-				Spans:    []execinfrapb.TableReaderSpan{{Span: td7.IndexSpan(2)}},
+				Spans:    []execinfrapb.TableReaderSpan{{Span: td7.IndexSpan(keys.SystemSQLCodec, 2)}},
 				IndexIdx: 1,
 			},
 			post: execinfrapb.PostProcessSpec{
@@ -406,7 +407,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 			desc:      "IndexAllNulls",
 			tableDesc: td7,
 			spec: execinfrapb.IndexSkipTableReaderSpec{
-				Spans:    []execinfrapb.TableReaderSpan{{Span: td7.IndexSpan(3)}},
+				Spans:    []execinfrapb.TableReaderSpan{{Span: td7.IndexSpan(keys.SystemSQLCodec, 3)}},
 				IndexIdx: 2,
 			},
 			post: execinfrapb.PostProcessSpec{
@@ -502,7 +503,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 		NodeID:  nodeID,
 	}
 	spec := execinfrapb.IndexSkipTableReaderSpec{
-		Spans: []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
+		Spans: []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 		Table: *td,
 	}
 	post := execinfrapb.PostProcessSpec{
@@ -630,7 +631,7 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 			b.Run(fmt.Sprintf("TableReader+Distinct-rows=%d-ratio=%d", numRows, valueRatio), func(b *testing.B) {
 				spec := execinfrapb.TableReaderSpec{
 					Table: *tableDesc,
-					Spans: []execinfrapb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+					Spans: []execinfrapb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 				}
 				post := execinfrapb.PostProcessSpec{
 					Projection:    true,
@@ -668,7 +669,7 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 			b.Run(fmt.Sprintf("IndexSkipTableReader-rows=%d-ratio=%d", numRows, valueRatio), func(b *testing.B) {
 				spec := execinfrapb.IndexSkipTableReaderSpec{
 					Table: *tableDesc,
-					Spans: []execinfrapb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+					Spans: []execinfrapb.TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)}},
 				}
 				post := execinfrapb.PostProcessSpec{
 					OutputColumns: []uint32{0},

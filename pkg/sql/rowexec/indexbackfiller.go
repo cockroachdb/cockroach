@@ -78,7 +78,7 @@ func newIndexBackfiller(
 	}
 	ib.backfiller.chunks = ib
 
-	if err := ib.IndexBackfiller.Init(ib.desc); err != nil {
+	if err := ib.IndexBackfiller.Init(flowCtx.NewEvalCtx(), ib.desc); err != nil {
 		return nil, err
 	}
 

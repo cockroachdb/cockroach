@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -964,7 +965,7 @@ func TestingMakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roa
 		colIDToRowIndex[index.ColumnIDs[i]] = i
 	}
 
-	keyPrefix := MakeIndexKeyPrefix(desc, index.ID)
+	keyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, index.ID)
 	key, _, err := EncodeIndexKey(desc, index, colIDToRowIndex, datums, keyPrefix)
 	if err != nil {
 		return nil, err

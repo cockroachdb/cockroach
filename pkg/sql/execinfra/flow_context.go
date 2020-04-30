@@ -13,6 +13,7 @@
 package execinfra
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -80,4 +81,9 @@ func (ctx *FlowCtx) TestingKnobs() TestingKnobs {
 // Stopper returns the stopper for this flowCtx.
 func (ctx *FlowCtx) Stopper() *stop.Stopper {
 	return ctx.Cfg.Stopper
+}
+
+// Codec returns the SQL codec for this flowCtx.
+func (ctx *FlowCtx) Codec() keys.SQLCodec {
+	return ctx.EvalCtx.Codec
 }
