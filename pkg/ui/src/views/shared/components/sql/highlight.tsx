@@ -10,12 +10,9 @@
 
 import * as hljs from "highlight.js";
 import React from "react";
-import * as protos from "src/js/protos";
-
-interface SqlBoxProps {
-  value: string;
-  zone?: protos.cockroach.server.serverpb.DatabaseDetailsResponse;
-}
+import cn from "classnames";
+import styles from "./sqlhighlight.module.styl";
+import { SqlBoxProps } from "./box";
 
 export class Highlight extends React.Component<SqlBoxProps> {
 
@@ -40,7 +37,7 @@ export class Highlight extends React.Component<SqlBoxProps> {
     const { zone } = this.props;
     const zoneConfig = zone.zone_config;
     return (
-      <span className="sql-highlight hljs">
+      <span className={cn(styles[`sql-highlight`], "hljs")}>
         <span className="hljs-keyword">CONFIGURE ZONE USING</span>
         <br />
         <span className="hljs-label">range_min_bytes = </span>
@@ -70,12 +67,12 @@ export class Highlight extends React.Component<SqlBoxProps> {
     const { value, zone } = this.props;
     return (
       <>
-        <span className="sql-highlight" ref={this.preNode}>
+        <span className={styles[`sql-highlight`]} ref={this.preNode}>
           {value}
         </span>
         {zone && (
           <>
-            <div className="higlight-divider" />
+            <div className={styles[`higlight-divider`]} />
             {this.renderZone()}
           </>
         )}

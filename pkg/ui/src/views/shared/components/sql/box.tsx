@@ -10,18 +10,19 @@
 
 import React from "react";
 import { Highlight } from "./highlight";
-import "./sqlhighlight.styl";
+import styles from "./sqlhighlight.module.styl";
+import * as protos from "src/js/protos";
 
-interface SqlBoxProps {
+export interface SqlBoxProps {
   value: string;
+  zone?: protos.cockroach.server.serverpb.DatabaseDetailsResponse;
 }
 class SqlBox extends React.Component<SqlBoxProps> {
   preNode: React.RefObject<HTMLPreElement> = React.createRef();
   render() {
-    const { value } = this.props;
     return (
-      <div className="box-highlight">
-        <Highlight value={value} />
+      <div className={styles[`box-highlight`]}>
+        <Highlight {...this.props} />
       </div>
     );
   }
