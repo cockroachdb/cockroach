@@ -15,15 +15,21 @@
 # case.
 # =============================================================================
 
-
 # InlineProjectConstants finds variable references in Projections expressions
 # that refer to constant input values, and then inlines those constant values
 # in place of the corresponding variable references. This sometimes allows
 # further simplifications such as constant folding or Project merging.
 [InlineProjectConstants, Normalize]
 (Project
-    $input:* & ^(ColsAreEmpty $constCols:(FindInlinableConstants $input))
-    $projections:[ ... $item:* & (ColsIntersect (OuterCols $item) $constCols) ... ]
+    $input:* &
+        ^(ColsAreEmpty
+            $constCols:(FindInlinableConstants $input)
+        )
+    $projections:[
+        ...
+        $item:* & (ColsIntersect (OuterCols $item) $constCols)
+        ...
+    ]
     $passthrough:*
 )
 =>
@@ -39,8 +45,15 @@
 # simplifications such as constant folding or generation of constrained scans.
 [InlineSelectConstants, Normalize]
 (Select
-    $input:* & ^(ColsAreEmpty $constCols:(FindInlinableConstants $input))
-    $filters:[ ... $item:* & (ColsIntersect (OuterCols $item) $constCols) ... ]
+    $input:* &
+        ^(ColsAreEmpty
+            $constCols:(FindInlinableConstants $input)
+        )
+    $filters:[
+        ...
+        $item:* & (ColsIntersect (OuterCols $item) $constCols)
+        ...
+    ]
 )
 =>
 (Select
@@ -55,9 +68,14 @@
 # pushdown.
 [InlineJoinConstantsLeft, Normalize]
 (Join
-    $left:* & ^(ColsAreEmpty $constCols:(FindInlinableConstants $left))
+    $left:* &
+        ^(ColsAreEmpty $constCols:(FindInlinableConstants $left))
     $right:*
-    $on:[ ... $item:* & (ColsIntersect (OuterCols $item) $constCols) ... ]
+    $on:[
+        ...
+        $item:* & (ColsIntersect (OuterCols $item) $constCols)
+        ...
+    ]
     $private:*
 )
 =>
@@ -76,8 +94,15 @@
 [InlineJoinConstantsRight, Normalize]
 (Join
     $left:*
-    $right:* & ^(ColsAreEmpty $constCols:(FindInlinableConstants $right))
-    $on:[ ... $item:* & (ColsIntersect (OuterCols $item) $constCols) ... ]
+    $right:* &
+        ^(ColsAreEmpty
+            $constCols:(FindInlinableConstants $right)
+        )
+    $on:[
+        ...
+        $item:* & (ColsIntersect (OuterCols $item) $constCols)
+        ...
+    ]
     $private:*
 )
 =>
@@ -114,10 +139,7 @@
 )
 =>
 (Project
-    (Select
-        $input
-        (InlineSelectProject $filters $projections)
-    )
+    (Select $input (InlineSelectProject $filters $projections))
     $projections
     $passthrough
 )
@@ -141,7 +163,11 @@
     $input:(Project * $innerProjections:*)
     $projections:*
     $passthrough:* &
-        ^(HasDuplicateRefs $projections $passthrough (ProjectionCols $innerProjections))
+        ^(HasDuplicateRefs
+            $projections
+            $passthrough
+            (ProjectionCols $innerProjections)
+        )
 )
 =>
 (InlineProjectProject $input $projections $passthrough)

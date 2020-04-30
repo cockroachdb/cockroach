@@ -11,11 +11,7 @@
 # included as passthrough columns in the generated Project because they do not
 # need to be projected. All other column IDs are added to the ProjectionsExpr.
 [EliminateUnionAllLeft, Normalize]
-(UnionAll
-    $left:*
-    $right:* & (HasZeroRows $right)
-    $colmap:*
-)
+(UnionAll $left:* $right:* & (HasZeroRows $right) $colmap:*)
 =>
 (Project
     $left
@@ -29,11 +25,7 @@
 # See the comment above EliminateUnionAllLeft which describes when columns are
 # projected vs. passed-through.
 [EliminateUnionAllRight, Normalize]
-(UnionAll
-    $left:* & (HasZeroRows $left)
-    $right:*
-    $colmap:*
-)
+(UnionAll $left:* & (HasZeroRows $left) $right:* $colmap:*)
 =>
 (Project
     $right

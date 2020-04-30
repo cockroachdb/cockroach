@@ -2,14 +2,18 @@
 # groupby.opt contains exploration rules for the groupby operators
 # =============================================================================
 
-
 # ReplaceScalarMinMaxWithLimit replaces a min or max group by aggregation with a
 # limit 1 on an ordered set. This rule may result in a lower cost plan if the
 # aggregated column (e.g. the "x" in min(x)) is indexed.
 [ReplaceScalarMinMaxWithLimit, Explore]
 (ScalarGroupBy
     $input:*
-    [ (AggregationsItem $agg:(Min | Max $variable:(Variable $col:*)) $aggPrivate:*) ]
+    [
+        (AggregationsItem
+            $agg:(Min | Max $variable:(Variable $col:*))
+            $aggPrivate:*
+        )
+    ]
     $groupingPrivate:* & (IsCanonicalGroupBy $groupingPrivate)
 )
 =>
@@ -48,10 +52,12 @@
 (GroupBy
     $input:*
     $aggregations:[
-        ...
-        $item:(AggregationsItem (Min $variable:(Variable $col:*)))
-        ...
-    ] &
+            ...
+            $item:(AggregationsItem
+                (Min $variable:(Variable $col:*))
+            )
+            ...
+        ] &
         (IsColNotNull $col $input) &
         (OtherAggsAreConst $aggregations $item)
     $groupingPrivate:* &
@@ -75,10 +81,13 @@
 (GroupBy
     $input:*
     $aggregations:[
-        ...
-        $item:(AggregationsItem (Max $variable:(Variable $col:*)))
-        ...
-    ] & (OtherAggsAreConst $aggregations $item)
+            ...
+            $item:(AggregationsItem
+                (Max $variable:(Variable $col:*))
+            )
+            ...
+        ] &
+        (OtherAggsAreConst $aggregations $item)
     $groupingPrivate:* &
         (IsCanonicalGroupBy $groupingPrivate) &
         (ColsAreConst (GroupingCols $groupingPrivate) $input)

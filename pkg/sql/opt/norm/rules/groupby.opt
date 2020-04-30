@@ -5,11 +5,7 @@
 # ConvertGroupByToDistinct converts a GroupBy operator that has no aggregations
 # to an equivalent DistinctOn operator.
 [ConvertGroupByToDistinct, Normalize]
-(GroupBy
-    $input:*
-    $aggregations:[]
-    $groupingPrivate:*
-)
+(GroupBy $input:* $aggregations:[] $groupingPrivate:*)
 =>
 (DistinctOn $input $aggregations $groupingPrivate)
 
@@ -25,30 +21,28 @@
 (DistinctOn | EnsureDistinctOn
     $input:*
     $aggs:*
-    $groupingPrivate:* & (ColsAreStrictKey (GroupingCols $groupingPrivate) $input)
+    $groupingPrivate:* &
+        (ColsAreStrictKey (GroupingCols $groupingPrivate) $input)
 )
 =>
-(Project
-  $input
-  []
-  (GroupingOutputCols $groupingPrivate $aggs)
-)
+(Project $input [] (GroupingOutputCols $groupingPrivate $aggs))
 
 # EliminateGroupByProject discards a nested Project operator that is only
 # removing columns from its input (and not synthesizing new ones). That's
 # something the GroupBy operators can do on their own.
 [EliminateGroupByProject, Normalize]
-(GroupBy | ScalarGroupBy | DistinctOn | EnsureDistinctOn | UpsertDistinctOn
-    $input:(Project $innerInput:*) & (ColsAreSubset (OutputCols $input) (OutputCols $innerInput))
+(GroupBy | ScalarGroupBy | DistinctOn | EnsureDistinctOn
+        | UpsertDistinctOn
+    $input:(Project $innerInput:*) &
+        (ColsAreSubset
+            (OutputCols $input)
+            (OutputCols $innerInput)
+        )
     $aggregations:*
     $groupingPrivate:*
 )
 =>
-((OpName)
-    $innerInput
-    $aggregations
-    $groupingPrivate
-)
+((OpName) $innerInput $aggregations $groupingPrivate)
 
 # ReduceGroupingCols eliminates redundant grouping columns from the GroupBy
 # operator and replaces them by ConstAgg aggregate functions. A grouping
@@ -66,7 +60,12 @@
     $input:*
     $aggregations:*
     $groupingPrivate:* &
-        ^(ColsAreEmpty $redundantCols:(RedundantCols $input (GroupingCols $groupingPrivate)))
+        ^(ColsAreEmpty
+            $redundantCols:(RedundantCols
+                $input
+                (GroupingCols $groupingPrivate)
+            )
+        )
 )
 =>
 ((OpName)
@@ -92,7 +91,10 @@
     $groupingPrivate:* &
         ^(ColsAreEmpty
             $redundantCols:(IntersectionCols
-                (RedundantCols $input (GroupingCols $groupingPrivate))
+                (RedundantCols
+                    $input
+                    (GroupingCols $groupingPrivate)
+                )
                 (NotNullCols $input)
             )
         )
@@ -109,13 +111,17 @@
 [EliminateAggDistinctForKeys, Normalize]
 (GroupBy | ScalarGroupBy
     $input:* & (HasStrictKey $input)
-    $aggregations:
-    [
+    $aggregations:[
         ...
         $item:(AggregationsItem (AggDistinct $agg:*))
         ...
     ]
-    $groupingPrivate:* & (CanRemoveAggDistinctForKeys $input $groupingPrivate $agg)
+    $groupingPrivate:* &
+        (CanRemoveAggDistinctForKeys
+            $input
+            $groupingPrivate
+            $agg
+        )
 )
 =>
 ((OpName)
@@ -129,18 +135,28 @@
 [EliminateAggFilteredDistinctForKeys, Normalize]
 (GroupBy | ScalarGroupBy
     $input:* & (HasStrictKey $input)
-    $aggregations:
-    [
+    $aggregations:[
         ...
-        $item:(AggregationsItem (AggFilter (AggDistinct $agg:*) $filter:*))
+        $item:(AggregationsItem
+            (AggFilter (AggDistinct $agg:*) $filter:*)
+        )
         ...
     ]
-    $groupingPrivate:* & (CanRemoveAggDistinctForKeys $input $groupingPrivate $agg)
+    $groupingPrivate:* &
+        (CanRemoveAggDistinctForKeys
+            $input
+            $groupingPrivate
+            $agg
+        )
 )
 =>
 ((OpName)
     $input
-    (ReplaceAggregationsItem $aggregations $item (AggFilter $agg $filter))
+    (ReplaceAggregationsItem
+        $aggregations
+        $item
+        (AggFilter $agg $filter)
+    )
     $groupingPrivate
 )
 
@@ -156,11 +172,17 @@
 (DistinctOn | UpsertDistinctOn
     $input:*
     $aggregations:*
-    $groupingPrivate:* & (HasNoGroupingCols $groupingPrivate) & ^(RaisesErrorOnDup $groupingPrivate)
+    $groupingPrivate:* &
+        (HasNoGroupingCols $groupingPrivate) &
+        ^(RaisesErrorOnDup $groupingPrivate)
 )
 =>
 (ConstructProjectionFromDistinctOn
-    (Limit $input (Const 1) (GroupingInputOrdering $groupingPrivate))
+    (Limit
+        $input
+        (Const 1)
+        (GroupingInputOrdering $groupingPrivate)
+    )
     (MakeEmptyColSet)
     $aggregations
 )
@@ -174,7 +196,9 @@
 (EnsureDistinctOn | UpsertDistinctOn
     $input:*
     $aggregations:*
-    $groupingPrivate:* & (HasNoGroupingCols $groupingPrivate) & (RaisesErrorOnDup $groupingPrivate)
+    $groupingPrivate:* &
+        (HasNoGroupingCols $groupingPrivate) &
+        (RaisesErrorOnDup $groupingPrivate)
 )
 =>
 (ConstructProjectionFromDistinctOn
@@ -199,7 +223,11 @@
     $input:*
     $aggregations:*
     $groupingPrivate:* &
-        (AreValuesDistinct $input (GroupingCols $groupingPrivate) (NullsAreDistinct (OpName)))
+        (AreValuesDistinct
+            $input
+            (GroupingCols $groupingPrivate)
+            (NullsAreDistinct (OpName))
+        )
 )
 =>
 (ConstructProjectionFromDistinctOn
@@ -226,7 +254,10 @@
     (DistinctOn
         $input
         []
-        (MakeGrouping (ExtractAggInputColumns $agg) (EmptyOrdering))
+        (MakeGrouping
+            (ExtractAggInputColumns $agg)
+            (EmptyOrdering)
+        )
     )
     [ (AggregationsItem $agg $aggColID) ]
     $groupingPrivate
@@ -261,14 +292,12 @@
 [ConvertCountToCountRows, Normalize]
 (GroupBy | ScalarGroupBy
     $input:*
-    $aggregations:
-    [
+    $aggregations:[
         ...
         $item:(AggregationsItem
-            (Count
-                (Variable $inputColID:*)
-            )
-        ) & (IsColNotNull $inputColID $input)
+                (Count (Variable $inputColID:*))
+            ) &
+            (IsColNotNull $inputColID $input)
         ...
     ]
     $groupingPrivate:*

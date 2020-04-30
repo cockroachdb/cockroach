@@ -307,10 +307,13 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	// TestTabsInOptgen verifies tabs aren't used in optgen (.opt) files.
-	t.Run("TestTabsInOptgen", func(t *testing.T) {
+	t.Run("TestOptfmt", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-nE", "^ *\t", "--", "*.opt")
+		if pkgSpecified {
+			t.Skip("PKG specified")
+		}
+
+		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files", "*.opt", ":!*/testdata/*")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -319,10 +322,22 @@ func TestLint(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf(`%s <- tab detected, use spaces instead`, s)
-		}); err != nil {
+		var buf bytes.Buffer
+		if err := stream.ForEach(
+			stream.Sequence(
+				filter,
+				stream.Map(func(s string) string {
+					return filepath.Join(pkgDir, s)
+				}),
+				stream.Xargs("optfmt", "-l"),
+			), func(s string) {
+				fmt.Fprintln(&buf, s)
+			}); err != nil {
 			t.Error(err)
+		}
+		errs := buf.String()
+		if len(errs) > 0 {
+			t.Errorf("\n%s", errs)
 		}
 
 		if err := cmd.Wait(); err != nil {
