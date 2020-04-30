@@ -229,3 +229,17 @@ project
  │    └── columns: k:1!null v:2
  └── projections
       └── ((v:2, v:2, v:2) AS a, b, c) [as=x:3]
+
+# Regression test for #48179. Star expansion of un-labeled tuple must project
+# all columns from the tuple.
+build
+SELECT (b).* FROM (VALUES (((1, 2)))) as a(b)
+----
+project
+ ├── columns: "?column?":2 "?column?":3
+ ├── values
+ │    ├── columns: column1:1
+ │    └── ((1, 2),)
+ └── projections
+      ├── (column1:1).@1 [as="?column?":2]
+      └── (column1:1).@2 [as="?column?":3]

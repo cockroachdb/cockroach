@@ -316,6 +316,7 @@ func (r *Replica) evaluateWriteBatch(
 	ba *roachpb.BatchRequest,
 	latchSpans *spanset.SpanSet,
 ) (storage.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
+	log.Event(ctx, "executing read-write batch")
 
 	// If the transaction has been pushed but it can commit at the higher
 	// timestamp, let's evaluate the batch at the bumped timestamp. This will
