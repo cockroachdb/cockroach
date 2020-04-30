@@ -85,7 +85,7 @@ func RandomZeroInsertingVisitor(v reflect.Value) {
 		}
 		actual, loaded := insertZero.LoadOrStore(key, flipCoin())
 		if !loaded {
-			fmt.Printf("inserting null for (%v).%v: %t", typ, typ.Field(i).Name, actual)
+			fmt.Printf("inserting null for (%v).%v: %t\n", typ, typ.Field(i).Name, actual)
 		}
 		if b := actual.(bool); b {
 			hookInsertZero(v, i)
