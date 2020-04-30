@@ -5916,6 +5916,7 @@ bool Lease::MergePartialFromCodedStream(
         break;
       }
 
+      // .cockroach.util.hlc.Timestamp expiration = 2;
       case 2: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
@@ -5938,6 +5939,7 @@ bool Lease::MergePartialFromCodedStream(
         break;
       }
 
+      // .cockroach.util.hlc.Timestamp deprecated_start_stasis = 4;
       case 4: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
@@ -6018,6 +6020,7 @@ void Lease::SerializeWithCachedSizes(
       1, this->_internal_start(), output);
   }
 
+  // .cockroach.util.hlc.Timestamp expiration = 2;
   if (this->has_expiration()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       2, this->_internal_expiration(), output);
@@ -6028,6 +6031,7 @@ void Lease::SerializeWithCachedSizes(
       3, this->_internal_replica(), output);
   }
 
+  // .cockroach.util.hlc.Timestamp deprecated_start_stasis = 4;
   if (this->has_deprecated_start_stasis()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       4, this->_internal_deprecated_start_stasis(), output);
@@ -6064,6 +6068,7 @@ size_t Lease::ByteSizeLong() const {
         *start_);
   }
 
+  // .cockroach.util.hlc.Timestamp expiration = 2;
   if (this->has_expiration()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
@@ -6076,6 +6081,7 @@ size_t Lease::ByteSizeLong() const {
         *replica_);
   }
 
+  // .cockroach.util.hlc.Timestamp deprecated_start_stasis = 4;
   if (this->has_deprecated_start_stasis()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(

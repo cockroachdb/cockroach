@@ -2698,6 +2698,7 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::cockroach::util::hlc::Timestamp* mutable_start();
   void set_allocated_start(::cockroach::util::hlc::Timestamp* start);
 
+  // .cockroach.util.hlc.Timestamp expiration = 2;
   bool has_expiration() const;
   void clear_expiration();
   static const int kExpirationFieldNumber = 2;
@@ -2720,6 +2721,7 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::cockroach::roachpb::ReplicaDescriptor* mutable_replica();
   void set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica);
 
+  // .cockroach.util.hlc.Timestamp deprecated_start_stasis = 4;
   bool has_deprecated_start_stasis() const;
   void clear_deprecated_start_stasis();
   static const int kDeprecatedStartStasisFieldNumber = 4;
@@ -5713,6 +5715,7 @@ inline void Lease::set_allocated_start(::cockroach::util::hlc::Timestamp* start)
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.start)
 }
 
+// .cockroach.util.hlc.Timestamp expiration = 2;
 inline bool Lease::has_expiration() const {
   return this != internal_default_instance() && expiration_ != NULL;
 }
@@ -5807,6 +5810,7 @@ inline void Lease::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.replica)
 }
 
+// .cockroach.util.hlc.Timestamp deprecated_start_stasis = 4;
 inline bool Lease::has_deprecated_start_stasis() const {
   return this != internal_default_instance() && deprecated_start_stasis_ != NULL;
 }
