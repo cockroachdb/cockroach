@@ -275,7 +275,7 @@ func readPostgresCreateTable(
 				}
 				for _, constraint := range constraints {
 					if err := sql.ResolveFK(
-						evalCtx.Ctx(), nil /* txn */, fks.resolver, desc, constraint, backrefs, sql.NewTable, tree.ValidationDefault, p.ExecCfg().Settings,
+						evalCtx.Ctx(), nil /* txn */, fks.resolver, desc, constraint, backrefs, sql.NewTable, tree.ValidationDefault, evalCtx,
 					); err != nil {
 						return nil, err
 					}

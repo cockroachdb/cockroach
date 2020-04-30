@@ -202,7 +202,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// We're checking to see if a user is trying add a non-nullable column without a default to a
 			// non empty table by scanning the primary index span with a limit of 1 to see if any key exists.
 			if !col.Nullable && (col.DefaultExpr == nil && !col.IsComputed()) {
-				kvs, err := params.p.txn.Scan(params.ctx, n.tableDesc.PrimaryIndexSpan().Key, n.tableDesc.PrimaryIndexSpan().EndKey, 1)
+				span := n.tableDesc.PrimaryIndexSpan(params.ExecCfg().Codec)
+				kvs, err := params.p.txn.Scan(params.ctx, span.Key, span.EndKey, 1)
 				if err != nil {
 					return err
 				}
@@ -342,7 +343,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 					// Check whether the table is empty, and pass the result to resolveFK(). If
 					// the table is empty, then resolveFK will automatically add the necessary
 					// index for a fk constraint if the index does not exist.
-					kvs, scanErr := params.p.txn.Scan(params.ctx, n.tableDesc.PrimaryIndexSpan().Key, n.tableDesc.PrimaryIndexSpan().EndKey, 1)
+					span := n.tableDesc.PrimaryIndexSpan(params.ExecCfg().Codec)
+					kvs, scanErr := params.p.txn.Scan(params.ctx, span.Key, span.EndKey, 1)
 					if scanErr != nil {
 						err = scanErr
 						return

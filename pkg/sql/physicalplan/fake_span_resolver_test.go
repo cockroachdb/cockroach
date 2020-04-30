@@ -56,7 +56,7 @@ func TestFakeSpanResolver(t *testing.T) {
 	tableDesc := sqlbase.GetTableDescriptor(db, "test", "t")
 	primIdxValDirs := sqlbase.IndexKeyValDirs(&tableDesc.PrimaryIndex)
 
-	span := tableDesc.PrimaryIndexSpan()
+	span := tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 
 	// Make sure we see all the nodes. It will not always happen (due to
 	// randomness) but it should happen most of the time.

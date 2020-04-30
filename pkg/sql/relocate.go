@@ -112,7 +112,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 	// TODO(a-robinson): Get the lastRangeStartKey via the ReturnRangeInfo option
 	// on the BatchRequest Header. We can't do this until v2.2 because admin
 	// requests don't respect the option on versions earlier than v2.1.
-	rowKey, err := getRowKey(n.tableDesc, n.index, data[1:])
+	rowKey, err := getRowKey(params.ExecCfg().Codec, n.tableDesc, n.index, data[1:])
 	if err != nil {
 		return false, err
 	}

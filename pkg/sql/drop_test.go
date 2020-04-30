@@ -187,7 +187,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	tableSpan := tbDesc.TableSpan()
+	tableSpan := tbDesc.TableSpan(keys.SystemSQLCodec)
 	tests.CheckKeyCount(t, kvDB, tableSpan, 6)
 
 	if _, err := sqlDB.Exec(`DROP DATABASE t RESTRICT`); !testutils.IsError(err,
@@ -360,8 +360,8 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	}
 	tb2Desc := desc.Table(ts)
 
-	tableSpan := tbDesc.TableSpan()
-	table2Span := tb2Desc.TableSpan()
+	tableSpan := tbDesc.TableSpan(keys.SystemSQLCodec)
+	table2Span := tb2Desc.TableSpan(keys.SystemSQLCodec)
 	tests.CheckKeyCount(t, kvDB, tableSpan, 6)
 	tests.CheckKeyCount(t, kvDB, table2Span, 6)
 
@@ -538,12 +538,12 @@ func TestDropIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
-	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(), 3*numRows)
+	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(keys.SystemSQLCodec), 3*numRows)
 	idx, _, err := tableDesc.FindIndexByName("foo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	indexSpan := tableDesc.IndexSpan(idx.ID)
+	indexSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, idx.ID)
 	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 	if _, err := sqlDB.Exec(`DROP INDEX t.kv@foo`); err != nil {
 		t.Fatal(err)
@@ -555,7 +555,7 @@ func TestDropIndex(t *testing.T) {
 	}
 	// Index data hasn't been deleted.
 	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
-	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(), 3*numRows)
+	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(keys.SystemSQLCodec), 3*numRows)
 
 	// TODO (lucy): Maybe this test API should use an offset starting
 	// from the most recent job instead.
@@ -580,9 +580,9 @@ func TestDropIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	newIdxSpan := tableDesc.IndexSpan(newIdx.ID)
+	newIdxSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, newIdx.ID)
 	tests.CheckKeyCount(t, kvDB, newIdxSpan, numRows)
-	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(), 4*numRows)
+	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(keys.SystemSQLCodec), 4*numRows)
 
 	clearIndexAttempt = true
 	// Add a zone config for the table.
@@ -616,7 +616,7 @@ func TestDropIndex(t *testing.T) {
 
 	tests.CheckKeyCount(t, kvDB, newIdxSpan, numRows)
 	tests.CheckKeyCount(t, kvDB, indexSpan, 0)
-	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(), 3*numRows)
+	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(keys.SystemSQLCodec), 3*numRows)
 }
 
 func TestDropIndexWithZoneConfigOSS(t *testing.T) {
@@ -642,7 +642,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	indexSpan := tableDesc.IndexSpan(indexDesc.ID)
+	indexSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, indexDesc.ID)
 	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 
 	// Hack in zone configs for the primary and secondary indexes. (You need a CCL
@@ -698,7 +698,7 @@ func TestDropIndexInterleaved(t *testing.T) {
 	tests.CreateKVInterleavedTable(t, sqlDB, numRows)
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
-	tableSpan := tableDesc.TableSpan()
+	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
 
 	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
 
@@ -750,7 +750,7 @@ func TestDropTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tableSpan := tableDesc.TableSpan()
+	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
 	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
 	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)
@@ -837,7 +837,7 @@ func TestDropTableDeleteData(t *testing.T) {
 			t.Fatalf("Name entry %q does not exist", nameKey)
 		}
 
-		tableSpan := descs[i].TableSpan()
+		tableSpan := descs[i].TableSpan(keys.SystemSQLCodec)
 		tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
 
 		if _, err := sqlDB.Exec(fmt.Sprintf(`DROP TABLE t.%s`, tableName)); err != nil {
@@ -855,7 +855,7 @@ func TestDropTableDeleteData(t *testing.T) {
 		if err := descExists(sqlDB, true, descs[i].ID); err != nil {
 			t.Fatal(err)
 		}
-		tableSpan := descs[i].TableSpan()
+		tableSpan := descs[i].TableSpan(keys.SystemSQLCodec)
 		tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
 
 		if err := jobutils.VerifySystemJob(t, sqlRun, 2*i+1+migrationJobOffset, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
@@ -884,7 +884,7 @@ func TestDropTableDeleteData(t *testing.T) {
 
 			return zoneExists(sqlDB, nil, descs[i].ID)
 		})
-		tableSpan := descs[i].TableSpan()
+		tableSpan := descs[i].TableSpan(keys.SystemSQLCodec)
 		tests.CheckKeyCount(t, kvDB, tableSpan, 0)
 
 		// Ensure that the job is marked as succeeded.
@@ -923,7 +923,7 @@ func TestDropTableDeleteData(t *testing.T) {
 			checkTableGCed(i)
 		} else {
 			// Data still present for tables past barrier.
-			tableSpan := descs[i].TableSpan()
+			tableSpan := descs[i].TableSpan(keys.SystemSQLCodec)
 			tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
 		}
 	}
@@ -985,7 +985,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tableSpan := tableDesc.TableSpan()
+	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
 	tests.CheckKeyCount(t, kvDB, tableSpan, numRows)
 
 	sqlDB.Exec(t, `DROP TABLE test.t`)
@@ -1035,7 +1035,7 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	tableDescInterleaved := sqlbase.GetTableDescriptor(kvDB, "t", "intlv")
-	tableSpan := tableDesc.TableSpan()
+	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
 
 	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
 	if _, err := sqlDB.Exec(`DROP TABLE t.intlv`); err != nil {

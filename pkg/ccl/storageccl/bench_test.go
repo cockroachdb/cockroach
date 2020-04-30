@@ -178,7 +178,7 @@ func BenchmarkImport(b *testing.B) {
 					if tableDesc == nil || tableDesc.ParentID == keys.SystemDatabaseID {
 						b.Fatalf("bad table descriptor: %+v", tableDesc)
 					}
-					oldStartKey = sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+					oldStartKey = sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc, tableDesc.PrimaryIndex.ID)
 					newDesc := *tableDesc
 					newDesc.ID = id
 					newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(&newDesc))

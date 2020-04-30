@@ -205,7 +205,7 @@ func newJoinReader(
 
 	var fetcher row.Fetcher
 	_, _, err = initRowFetcher(
-		&fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
+		flowCtx, &fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
 		neededRightCols, false /* isCheck */, &jr.alloc, spec.Visibility, spec.LockingStrength,
 	)
 	if err != nil {
@@ -219,7 +219,7 @@ func newJoinReader(
 		jr.fetcher = &fetcher
 	}
 
-	jr.spanBuilder = span.MakeBuilder(&jr.desc, jr.index)
+	jr.spanBuilder = span.MakeBuilder(flowCtx.Codec(), &jr.desc, jr.index)
 	jr.spanBuilder.SetNeededColumns(jr.neededRightCols())
 
 	ctx := flowCtx.EvalCtx.Ctx()

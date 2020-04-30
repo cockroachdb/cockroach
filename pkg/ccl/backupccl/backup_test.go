@@ -1046,7 +1046,7 @@ func TestBackupRestoreResume(t *testing.T) {
 
 	t.Run("backup", func(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(outerDB.DB)
-		backupStartKey := backupTableDesc.PrimaryIndexSpan().Key
+		backupStartKey := backupTableDesc.PrimaryIndexSpan(keys.SystemSQLCodec).Key
 		backupEndKey, err := sqlbase.TestingMakePrimaryIndexKey(backupTableDesc, numAccounts/2)
 		if err != nil {
 			t.Fatal(err)

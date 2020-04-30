@@ -31,6 +31,7 @@ const RevertTableDefaultBatchSize = 500000
 func RevertTables(
 	ctx context.Context,
 	db *kv.DB,
+	execCfg *ExecutorConfig,
 	tables []*sqlbase.TableDescriptor,
 	targetTime hlc.Timestamp,
 	batchSize int64,
@@ -64,7 +65,7 @@ func RevertTables(
 				}
 			}
 		}
-		spans = append(spans, tables[i].TableSpan())
+		spans = append(spans, tables[i].TableSpan(execCfg.Codec))
 	}
 
 	for i := range tables {

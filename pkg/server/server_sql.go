@@ -135,11 +135,12 @@ type sqlServerArgs struct {
 	// other things.
 	clock *hlc.Clock
 
-	// The executorConfig uses the provider.
-	protectedtsProvider protectedts.Provider
 	// DistSQLCfg holds on to this to check for node CPU utilization in
 	// samplerProcessor.
 	runtime execinfra.RuntimeStats
+
+	// The tenant that the SQL server runs on the behalf of.
+	tenantID roachpb.TenantID
 
 	// SQL uses KV, both for non-DistSQL and DistSQL execution.
 	db *kv.DB
@@ -160,10 +161,15 @@ type sqlServerArgs struct {
 	// pointer to an empty struct in this configuration, which newSQLServer
 	// fills.
 	jobRegistry *jobs.Registry
+
+	// The executorConfig uses the provider.
+	protectedtsProvider protectedts.Provider
 }
 
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	execCfg := &sql.ExecutorConfig{}
+	codec := keys.MakeSQLCodec(cfg.tenantID)
+
 	var jobAdoptionStopFile string
 	for _, spec := range cfg.Stores.Specs {
 		if !spec.InMemory && spec.Path != "" {
@@ -290,13 +296,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		AmbientContext: cfg.AmbientCtx,
 		Settings:       cfg.Settings,
 		RuntimeStats:   cfg.runtime,
+		ClusterID:      &cfg.rpcContext.ClusterID,
+		ClusterName:    cfg.ClusterName,
+		NodeID:         cfg.nodeIDContainer,
+		Codec:          codec,
 		DB:             cfg.db,
 		Executor:       cfg.circularInternalExecutor,
 		RPCContext:     cfg.rpcContext,
 		Stopper:        cfg.stopper,
-		NodeID:         cfg.nodeIDContainer,
-		ClusterID:      &cfg.rpcContext.ClusterID,
-		ClusterName:    cfg.ClusterName,
 
 		TempStorage:     tempEngine,
 		TempStoragePath: cfg.TempStorageConfig.Path,
@@ -362,6 +369,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	*execCfg = sql.ExecutorConfig{
 		Settings:                cfg.Settings,
 		NodeInfo:                nodeInfo,
+		Codec:                   codec,
 		DefaultZoneConfig:       &cfg.DefaultZoneConfig,
 		Locality:                cfg.Locality,
 		AmbientCtx:              cfg.AmbientCtx,

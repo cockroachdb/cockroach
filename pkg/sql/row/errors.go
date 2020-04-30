@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -73,10 +74,15 @@ func NewUniquenessConstraintViolationError(
 	key roachpb.Key,
 	value *roachpb.Value,
 ) error {
-	// TODO(dan): There's too much internal knowledge of the sql table
-	// encoding here (and this callsite is the only reason
-	// DecodeIndexKeyPrefix is exported). Refactor this bit out.
-	indexID, _, err := sqlbase.DecodeIndexKeyPrefix(tableDesc.TableDesc(), key)
+	// Strip the tenant prefix and pretend use the system tenant's SQL codec for
+	// the rest of this function. This is safe because the key is just used to
+	// decode the corresponding datums and never escapes this function.
+	codec := keys.SystemSQLCodec
+	key, _, err := keys.DecodeTenantPrefix(key)
+	if err != nil {
+		return err
+	}
+	indexID, _, err := sqlbase.DecodeIndexKeyPrefix(codec, tableDesc.TableDesc(), key)
 	if err != nil {
 		return err
 	}
@@ -109,6 +115,7 @@ func NewUniquenessConstraintViolationError(
 		ValNeededForCol:  valNeededForCol,
 	}
 	if err := rf.Init(
+		codec,
 		false, /* reverse */
 		sqlbase.ScanLockingStrength_FOR_NONE,
 		false, /* returnRangeInfo */

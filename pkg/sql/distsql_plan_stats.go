@@ -82,11 +82,12 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
-	sb := span.MakeBuilder(desc.TableDesc(), scan.index)
-	scan.spans, err = sb.UnconstrainedSpans(scan.isDeleteSource)
+	sb := span.MakeBuilder(planCtx.planner.ExecCfg().Codec, desc.TableDesc(), scan.index)
+	scan.spans, err = sb.UnconstrainedSpans()
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
+	scan.isFull = true
 
 	p, err := dsp.createTableReaders(planCtx, &scan, nil /* overrideResultColumns */)
 	if err != nil {

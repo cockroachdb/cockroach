@@ -13,6 +13,7 @@ package row
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -290,6 +291,7 @@ func spanForIndexValues(
 // the request to the referencing table.
 func batchRequestForIndexValues(
 	ctx context.Context,
+	codec keys.SQLCodec,
 	referencedIndex *sqlbase.IndexDescriptor,
 	referencingTable *sqlbase.ImmutableTableDescriptor,
 	referencingIndex *sqlbase.IndexDescriptor,
@@ -299,7 +301,7 @@ func batchRequestForIndexValues(
 ) (roachpb.BatchRequest, map[sqlbase.ColumnID]int, error) {
 
 	//TODO(bram): consider caching some of these values
-	keyPrefix := sqlbase.MakeIndexKeyPrefix(referencingTable.TableDesc(), referencingIndex.ID)
+	keyPrefix := sqlbase.MakeIndexKeyPrefix(codec, referencingTable.TableDesc(), referencingIndex.ID)
 	prefixLen := len(referencingIndex.ColumnIDs)
 	if len(referencedIndex.ColumnIDs) < prefixLen {
 		prefixLen = len(referencedIndex.ColumnIDs)
@@ -343,6 +345,7 @@ func batchRequestForIndexValues(
 // spanForPKValues creates a span against the primary index of a table and is
 // used to fetch rows for cascading.
 func spanForPKValues(
+	codec keys.SQLCodec,
 	table *sqlbase.ImmutableTableDescriptor,
 	fetchColIDtoRowIndex map[sqlbase.ColumnID]int,
 	values tree.Datums,
@@ -354,7 +357,7 @@ func spanForPKValues(
 		sqlbase.ForeignKeyReference_SIMPLE, /* primary key lookup can always use MATCH SIMPLE */
 		fetchColIDtoRowIndex,
 		values,
-		sqlbase.MakeIndexKeyPrefix(table.TableDesc(), table.PrimaryIndex.ID),
+		sqlbase.MakeIndexKeyPrefix(codec, table.TableDesc(), table.PrimaryIndex.ID),
 	)
 }
 
@@ -362,6 +365,7 @@ func spanForPKValues(
 // a table and is used to fetch rows for cascading.
 func batchRequestForPKValues(
 	ctx context.Context,
+	codec keys.SQLCodec,
 	table *sqlbase.ImmutableTableDescriptor,
 	fetchColIDtoRowIndex map[sqlbase.ColumnID]int,
 	values *rowcontainer.RowContainer,
@@ -369,7 +373,7 @@ func batchRequestForPKValues(
 ) (roachpb.BatchRequest, error) {
 	var req roachpb.BatchRequest
 	for i := 0; i < values.Len(); i++ {
-		span, err := spanForPKValues(table, fetchColIDtoRowIndex, values.At(i))
+		span, err := spanForPKValues(codec, table, fetchColIDtoRowIndex, values.At(i))
 		if err != nil {
 			return roachpb.BatchRequest{}, err
 		}
@@ -414,6 +418,7 @@ func (c *cascader) addIndexPKRowFetcher(
 	isSecondary := table.PrimaryIndex.ID != index.ID
 	var rowFetcher Fetcher
 	if err := rowFetcher.Init(
+		c.evalCtx.Codec,
 		false, /* reverse */
 		sqlbase.ScanLockingStrength_FOR_NONE,
 		false, /* returnRangeInfo */
@@ -455,6 +460,7 @@ func (c *cascader) addRowDeleter(
 	rowDeleter, err := makeRowDeleterWithoutCascader(
 		ctx,
 		c.txn,
+		c.evalCtx.Codec,
 		table,
 		c.fkTables,
 		nil, /* requestedCol */
@@ -479,6 +485,7 @@ func (c *cascader) addRowDeleter(
 	}
 	var rowFetcher Fetcher
 	if err := rowFetcher.Init(
+		c.evalCtx.Codec,
 		false, /* reverse */
 		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
 		// strength here. Consider hooking this in to the same knob that will
@@ -519,6 +526,7 @@ func (c *cascader) addRowUpdater(
 	rowUpdater, err := makeUpdaterWithoutCascader(
 		ctx,
 		c.txn,
+		c.evalCtx.Codec,
 		table,
 		c.fkTables,
 		table.Columns,
@@ -545,6 +553,7 @@ func (c *cascader) addRowUpdater(
 	}
 	var rowFetcher Fetcher
 	if err := rowFetcher.Init(
+		c.evalCtx.Codec,
 		false, /* reverse */
 		// TODO(nvanbenschoten): it might make sense to use a FOR_UPDATE locking
 		// strength here. Consider hooking this in to the same knob that will
@@ -585,7 +594,7 @@ func (c *cascader) deleteRows(
 		)
 	}
 	req, _, err := batchRequestForIndexValues(
-		ctx, referencedIndex, referencingTable, referencingIndex, match, values, traceKV,
+		ctx, c.evalCtx.Codec, referencedIndex, referencingTable, referencingIndex, match, values, traceKV,
 	)
 	if err != nil {
 		return nil, nil, 0, err
@@ -649,7 +658,7 @@ func (c *cascader) deleteRows(
 	// Create a batch request to get all the spans of the primary keys that need
 	// to be deleted.
 	pkLookupReq, err := batchRequestForPKValues(
-		ctx, referencingTable, indexPKRowFetcherColIDToRowIndex, primaryKeysToDelete, traceKV,
+		ctx, c.evalCtx.Codec, referencingTable, indexPKRowFetcherColIDToRowIndex, primaryKeysToDelete, traceKV,
 	)
 	if err != nil {
 		return nil, nil, 0, err
@@ -836,7 +845,7 @@ func (c *cascader) updateRows(
 
 		// Extract a single value to update at a time.
 		req, valueColIDtoRowIndex, err := batchRequestForIndexValues(
-			ctx, referencedIndex, referencingTable, referencingIndex, match, cascadeQueueElement{
+			ctx, c.evalCtx.Codec, referencedIndex, referencingTable, referencingIndex, match, cascadeQueueElement{
 				startIndex:      i,
 				endIndex:        i + 1,
 				originalValues:  values.originalValues,
@@ -902,7 +911,7 @@ func (c *cascader) updateRows(
 		// Create a batch request to get all the spans of the primary keys that need
 		// to be updated.
 		pkLookupReq, err := batchRequestForPKValues(
-			ctx, referencingTable, indexPKRowFetcherColIDToRowIndex, primaryKeysToUpdate, traceKV,
+			ctx, c.evalCtx.Codec, referencingTable, indexPKRowFetcherColIDToRowIndex, primaryKeysToUpdate, traceKV,
 		)
 		if err != nil {
 			return nil, nil, nil, 0, err

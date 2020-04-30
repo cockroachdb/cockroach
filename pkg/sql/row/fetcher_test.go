@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -69,9 +70,11 @@ func initFetcher(
 ) (fetcher *Fetcher, err error) {
 	fetcher = &Fetcher{}
 
+	fetcherCodec := keys.SystemSQLCodec
 	fetcherArgs := makeFetcherArgs(entries)
 
 	if err := fetcher.Init(
+		fetcherCodec,
 		reverseScan,
 		sqlbase.ScanLockingStrength_FOR_NONE,
 		false, /* returnRangeInfo */
@@ -166,7 +169,7 @@ func TestNextRowSingle(t *testing.T) {
 			if err := rf.StartScan(
 				context.TODO(),
 				kv.NewTxn(ctx, kvDB, 0),
-				roachpb.Spans{tableDesc.IndexSpan(tableDesc.PrimaryIndex.ID)},
+				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.PrimaryIndex.ID)},
 				false, /*limitBatches*/
 				0,     /*limitHint*/
 				false, /*traceKV*/
@@ -286,7 +289,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 			if err := rf.StartScan(
 				context.TODO(),
 				kv.NewTxn(ctx, kvDB, 0),
-				roachpb.Spans{tableDesc.IndexSpan(tableDesc.PrimaryIndex.ID)},
+				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.PrimaryIndex.ID)},
 				true,  /*limitBatches*/
 				10,    /*limitHint*/
 				false, /*traceKV*/
@@ -406,7 +409,7 @@ INDEX(c)
 	// We'll make the first span go to some random key in the middle of the
 	// key space (by appending a number to the index's start key) and the
 	// second span go from that key to the end of the index.
-	indexSpan := tableDesc.IndexSpan(tableDesc.PrimaryIndex.ID)
+	indexSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.PrimaryIndex.ID)
 	endKey := indexSpan.EndKey
 	midKey := encoding.EncodeUvarintAscending(indexSpan.Key, uint64(100))
 	indexSpan.EndKey = midKey
@@ -578,7 +581,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			if err := rf.StartScan(
 				context.TODO(),
 				kv.NewTxn(ctx, kvDB, 0),
-				roachpb.Spans{tableDesc.IndexSpan(tableDesc.Indexes[0].ID)},
+				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.Indexes[0].ID)},
 				false, /*limitBatches*/
 				0,     /*limitHint*/
 				false, /*traceKV*/
@@ -920,7 +923,7 @@ func TestNextRowInterleaved(t *testing.T) {
 
 				// We take every entry's index span (primary or
 				// secondary) and use it to start our scan.
-				lookupSpans[i] = tableDesc.IndexSpan(indexID)
+				lookupSpans[i] = tableDesc.IndexSpan(keys.SystemSQLCodec, indexID)
 
 				args[i] = initFetcherArgs{
 					tableDesc:       tableDesc,
@@ -1059,7 +1062,7 @@ func TestRowFetcherReset(t *testing.T) {
 
 	fetcherArgs := makeFetcherArgs(args)
 	if err := resetFetcher.Init(
-		false /*reverse*/, 0 /* todo */, false /* returnRangeInfo */, false /* isCheck */, &da, fetcherArgs...,
+		keys.SystemSQLCodec, false /*reverse*/, 0 /* todo */, false /* returnRangeInfo */, false /* isCheck */, &da, fetcherArgs...,
 	); err != nil {
 		t.Fatal(err)
 	}

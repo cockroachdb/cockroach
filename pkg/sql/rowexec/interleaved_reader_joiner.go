@@ -367,7 +367,7 @@ func newInterleavedReaderJoiner(
 	}
 
 	if err := irj.initRowFetcher(
-		spec.Tables, tables, spec.Reverse, spec.LockingStrength, &irj.alloc,
+		flowCtx, spec.Tables, tables, spec.Reverse, spec.LockingStrength, &irj.alloc,
 	); err != nil {
 		return nil, err
 	}
@@ -400,6 +400,7 @@ func newInterleavedReaderJoiner(
 }
 
 func (irj *interleavedReaderJoiner) initRowFetcher(
+	flowCtx *execinfra.FlowCtx,
 	tables []execinfrapb.InterleavedReaderJoinerSpec_Table,
 	tableInfos []tableInfo,
 	reverseScan bool,
@@ -427,6 +428,7 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 	}
 
 	return irj.fetcher.Init(
+		flowCtx.Codec(),
 		reverseScan,
 		lockStr,
 		true, /* returnRangeInfo */

@@ -13,6 +13,7 @@ package row
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -36,6 +37,7 @@ type fkExistenceCheckForDelete struct {
 func makeFkExistenceCheckHelperForDelete(
 	ctx context.Context,
 	txn *kv.Txn,
+	codec keys.SQLCodec,
 	table *sqlbase.ImmutableTableDescriptor,
 	otherTables FkTableMetadata,
 	colMap map[sqlbase.ColumnID]int,
@@ -83,7 +85,7 @@ func makeFkExistenceCheckHelperForDelete(
 			return fkExistenceCheckForDelete{}, errors.NewAssertionErrorWithWrappedErrf(
 				err, "failed to find a suitable index on table %d for deletion", ref.ReferencedTableID)
 		}
-		fk, err := makeFkExistenceCheckBaseHelper(txn, otherTables, fakeRef, searchIdx, mutatedIdx, colMap, alloc,
+		fk, err := makeFkExistenceCheckBaseHelper(txn, codec, otherTables, fakeRef, searchIdx, mutatedIdx, colMap, alloc,
 			CheckDeletes)
 		if err == errSkipUnusedFK {
 			continue

@@ -537,13 +537,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Config:                   &cfg, // NB: s.cfg has a populated AmbientContext.
 		stopper:                  stopper,
 		clock:                    clock,
-		protectedtsProvider:      protectedtsProvider,
 		runtime:                  runtimeSampler,
+		tenantID:                 roachpb.SystemTenantID,
 		db:                       db,
 		registry:                 registry,
 		sessionRegistry:          sessionRegistry,
 		circularInternalExecutor: internalExecutor,
 		jobRegistry:              jobRegistry,
+		protectedtsProvider:      protectedtsProvider,
 	})
 	if err != nil {
 		return nil, err

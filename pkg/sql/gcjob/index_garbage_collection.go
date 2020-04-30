@@ -52,7 +52,7 @@ func gcIndexes(
 		}
 
 		indexDesc := sqlbase.IndexDescriptor{ID: index.IndexID}
-		if err := clearIndex(ctx, execCfg.DB, parentTable, indexDesc); err != nil {
+		if err := clearIndex(ctx, execCfg, parentTable, indexDesc); err != nil {
 			return false, errors.Wrapf(err, "clearing index %d", indexDesc.ID)
 		}
 
@@ -76,14 +76,17 @@ func gcIndexes(
 
 // clearIndexes issues Clear Range requests over all specified indexes.
 func clearIndex(
-	ctx context.Context, db *kv.DB, tableDesc *sqlbase.TableDescriptor, index sqlbase.IndexDescriptor,
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	tableDesc *sqlbase.TableDescriptor,
+	index sqlbase.IndexDescriptor,
 ) error {
 	log.Infof(ctx, "clearing index %d from table %d", index.ID, tableDesc.ID)
 	if index.IsInterleaved() {
 		return errors.Errorf("unexpected interleaved index %d", index.ID)
 	}
 
-	sp := tableDesc.IndexSpan(index.ID)
+	sp := tableDesc.IndexSpan(execCfg.Codec, index.ID)
 
 	// ClearRange cannot be run in a transaction, so create a
 	// non-transactional batch to send the request.
@@ -94,7 +97,7 @@ func clearIndex(
 			EndKey: sp.EndKey,
 		},
 	})
-	return db.Run(ctx, b)
+	return execCfg.DB.Run(ctx, b)
 }
 
 // completeDroppedIndexes updates the mutations of the table descriptor to
