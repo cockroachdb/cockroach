@@ -109,9 +109,6 @@ type scanNode struct {
 	// scan is guaranteed to return.
 	maxResults uint64
 
-	// Indicates if this scan is the source for a delete node.
-	isDeleteSource bool
-
 	// estimatedRowCount is the estimated number of rows that this scanNode will
 	// output. When there are no statistics to make the estimation, it will be
 	// set to zero.

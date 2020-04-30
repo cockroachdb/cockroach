@@ -219,8 +219,8 @@ func (s *Builder) SpansFromConstraint(
 
 // UnconstrainedSpans returns the full span corresponding to the Builder's
 // table and index.
-func (s *Builder) UnconstrainedSpans(forDelete bool) (roachpb.Spans, error) {
-	return s.SpansFromConstraint(nil, exec.TableColumnOrdinalSet{}, forDelete)
+func (s *Builder) UnconstrainedSpans() (roachpb.Spans, error) {
+	return s.SpansFromConstraint(nil, exec.TableColumnOrdinalSet{}, false /* forDelete */)
 }
 
 // appendSpansFromConstraintSpan converts a constraint.Span to one or more

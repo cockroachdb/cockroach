@@ -83,7 +83,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		return PhysicalPlan{}, err
 	}
 	sb := span.MakeBuilder(desc.TableDesc(), scan.index)
-	scan.spans, err = sb.UnconstrainedSpans(scan.isDeleteSource)
+	scan.spans, err = sb.UnconstrainedSpans()
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
