@@ -69,7 +69,12 @@ func declareKeysEndTxn(
 		header.Txn.AssertInitialized(context.TODO())
 		minTxnTS = header.Txn.MinTimestamp
 		abortSpanAccess := spanset.SpanReadOnly
-		if !et.Commit && et.Poison {
+		if !et.Commit {
+			// Rollback EndTxn requests may write to the abort span, either if
+			// their Poison flag is set, in which case they will add an abort
+			// span entry, or if their Poison flag is not set and an abort span
+			// entry already exists on this Range, in which case they will clear
+			// that entry.
 			abortSpanAccess = spanset.SpanReadWrite
 		}
 		latchSpans.AddNonMVCC(abortSpanAccess, roachpb.Span{
