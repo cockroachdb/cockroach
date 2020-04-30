@@ -394,7 +394,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will remove all data in that column")
 			}
 
-			col, dropped, err := n.tableDesc.FindColumnByName(t.Column)
+			colToDrop, dropped, err := n.tableDesc.FindColumnByName(t.Column)
 			if err != nil {
 				if t.IfExists {
 					// Noop.
@@ -407,19 +407,19 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			// If the dropped column uses a sequence, remove references to it from that sequence.
-			if len(col.UsesSequenceIds) > 0 {
-				if err := params.p.removeSequenceDependencies(params.ctx, n.tableDesc, col); err != nil {
+			if len(colToDrop.UsesSequenceIds) > 0 {
+				if err := params.p.removeSequenceDependencies(params.ctx, n.tableDesc, colToDrop); err != nil {
 					return err
 				}
 			}
 
 			// You can't remove a column that owns a sequence that is depended on
 			// by another column
-			if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, n.tableDesc, col, t.DropBehavior); err != nil {
+			if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, n.tableDesc, colToDrop, t.DropBehavior); err != nil {
 				return err
 			}
 
-			if err := params.p.dropSequencesOwnedByCol(params.ctx, col); err != nil {
+			if err := params.p.dropSequencesOwnedByCol(params.ctx, colToDrop); err != nil {
 				return err
 			}
 
@@ -428,7 +428,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			for _, ref := range n.tableDesc.DependedOnBy {
 				found := false
 				for _, colID := range ref.ColumnIDs {
-					if colID == col.ID {
+					if colID == colToDrop.ID {
 						found = true
 						break
 					}
@@ -448,20 +448,22 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
-				droppedViews, err = params.p.removeDependentView(params.ctx, n.tableDesc, viewDesc)
+				jobDesc := fmt.Sprintf("removing view %q dependent on column %q which is being dropped",
+					viewDesc.Name, colToDrop.ColName())
+				droppedViews, err = params.p.removeDependentView(params.ctx, n.tableDesc, viewDesc, jobDesc)
 				if err != nil {
 					return err
 				}
 			}
 
 			// We cannot remove this column if there are computed columns that use it.
-			if err := checkColumnHasNoComputedColDependencies(n.tableDesc, col); err != nil {
+			if err := checkColumnHasNoComputedColDependencies(n.tableDesc, colToDrop); err != nil {
 				return err
 			}
 
-			if n.tableDesc.PrimaryIndex.ContainsColumnID(col.ID) {
+			if n.tableDesc.PrimaryIndex.ContainsColumnID(colToDrop.ID) {
 				return pgerror.Newf(pgcode.InvalidColumnReference,
-					"column %q is referenced by the primary key", col.Name)
+					"column %q is referenced by the primary key", colToDrop.Name)
 			}
 			for _, idx := range n.tableDesc.AllNonDropIndexes() {
 				// We automatically drop indexes on that column that only
@@ -487,7 +489,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 				// Analyze the index.
 				for _, id := range idx.ColumnIDs {
-					if id == col.ID {
+					if id == colToDrop.ID {
 						containsThisColumn = true
 					} else {
 						containsOnlyThisColumn = false
@@ -502,7 +504,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						// sufficient reason to reject the DROP.
 						continue
 					}
-					if id == col.ID {
+					if id == colToDrop.ID {
 						containsThisColumn = true
 					}
 				}
@@ -510,7 +512,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				// loop below is for the new encoding (where the STORING columns are
 				// always in the value part of a KV).
 				for _, id := range idx.StoreColumnIDs {
-					if id == col.ID {
+					if id == colToDrop.ID {
 						containsThisColumn = true
 					}
 				}
@@ -518,16 +520,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 				// Perform the DROP.
 				if containsThisColumn {
 					if containsOnlyThisColumn || t.DropBehavior == tree.DropCascade {
+						jobDesc := fmt.Sprintf("removing index %q dependent on column %q which is being"+
+							" dropped; full details: %s", idx.Name, colToDrop.ColName(),
+							tree.AsStringWithFQNames(n.n, params.Ann()))
 						if err := params.p.dropIndexByName(
 							params.ctx, tn, tree.UnrestrictedName(idx.Name), n.tableDesc, false,
-							t.DropBehavior, ignoreIdxConstraint,
-							tree.AsStringWithFQNames(n.n, params.Ann()),
+							t.DropBehavior, ignoreIdxConstraint, jobDesc,
 						); err != nil {
 							return err
 						}
 					} else {
 						return pgerror.Newf(pgcode.InvalidColumnReference,
-							"column %q is referenced by existing index %q", col.Name, idx.Name)
+							"column %q is referenced by existing index %q", colToDrop.Name, idx.Name)
 					}
 				}
 			}
@@ -538,7 +542,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// indexes in the same way, FKs will have to be dropped separately here.
 			validChecks := n.tableDesc.Checks[:0]
 			for _, check := range n.tableDesc.AllActiveAndInactiveChecks() {
-				if used, err := check.UsesColumn(n.tableDesc.TableDesc(), col.ID); err != nil {
+				if used, err := check.UsesColumn(n.tableDesc.TableDesc(), colToDrop.ID); err != nil {
 					return err
 				} else if used {
 					if check.Validity == sqlbase.ConstraintValidity_Validating {
@@ -558,14 +562,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			if err := params.p.removeColumnComment(params.ctx, n.tableDesc.ID, col.ID); err != nil {
+			if err := params.p.removeColumnComment(params.ctx, n.tableDesc.ID, colToDrop.ID); err != nil {
 				return err
 			}
 
 			found := false
 			for i := range n.tableDesc.Columns {
-				if n.tableDesc.Columns[i].ID == col.ID {
-					n.tableDesc.AddColumnMutation(col, sqlbase.DescriptorMutation_DROP)
+				if n.tableDesc.Columns[i].ID == colToDrop.ID {
+					n.tableDesc.AddColumnMutation(colToDrop, sqlbase.DescriptorMutation_DROP)
 					// Use [:i:i] to prevent reuse of existing slice, or outstanding refs
 					// to ColumnDescriptors may unexpectedly change.
 					n.tableDesc.Columns = append(n.tableDesc.Columns[:i:i], n.tableDesc.Columns[i+1:]...)

@@ -163,14 +163,13 @@ func (p *planner) canRemoveDependentViewGeneric(
 // Returns the names of any additional views that were also dropped
 // due to `cascade` behavior.
 func (p *planner) removeDependentView(
-	ctx context.Context, tableDesc, viewDesc *sqlbase.MutableTableDescriptor,
+	ctx context.Context, tableDesc, viewDesc *sqlbase.MutableTableDescriptor, jobDesc string,
 ) ([]string, error) {
 	// In the table whose index is being removed, filter out all back-references
 	// that refer to the view that's being removed.
 	tableDesc.DependedOnBy = removeMatchingReferences(tableDesc.DependedOnBy, viewDesc.ID)
 	// Then proceed to actually drop the view and log an event for it.
-	// TODO (lucy): Have more consistent/informative names for dependent jobs.
-	return p.dropViewImpl(ctx, viewDesc, true /* queueJob */, "dropping dependent view", tree.DropCascade)
+	return p.dropViewImpl(ctx, viewDesc, true /* queueJob */, jobDesc, tree.DropCascade)
 }
 
 // dropViewImpl does the work of dropping a view (and views that depend on it
