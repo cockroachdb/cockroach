@@ -659,6 +659,7 @@ system         public              role_options                       BASE TABLE
 system         public              statement_bundle_chunks            BASE TABLE   YES                 1
 system         public              statement_diagnostics_requests     BASE TABLE   YES                 1
 system         public              statement_diagnostics              BASE TABLE   YES                 1
+system         public              scheduled_jobs                     BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -801,6 +802,12 @@ system              public             primary                  system         p
 system              public             630200280_33_1_not_null  system         public        role_options                     CHECK            NO             NO
 system              public             630200280_33_2_not_null  system         public        role_options                     CHECK            NO             NO
 system              public             primary                  system         public        role_options                     PRIMARY KEY      NO             NO
+system              public             630200280_37_1_not_null  system         public        scheduled_jobs                   CHECK            NO             NO
+system              public             630200280_37_2_not_null  system         public        scheduled_jobs                   CHECK            NO             NO
+system              public             630200280_37_3_not_null  system         public        scheduled_jobs                   CHECK            NO             NO
+system              public             630200280_37_8_not_null  system         public        scheduled_jobs                   CHECK            NO             NO
+system              public             630200280_37_9_not_null  system         public        scheduled_jobs                   CHECK            NO             NO
+system              public             primary                  system         public        scheduled_jobs                   PRIMARY KEY      NO             NO
 system              public             630200280_6_1_not_null   system         public        settings                         CHECK            NO             NO
 system              public             630200280_6_2_not_null   system         public        settings                         CHECK            NO             NO
 system              public             630200280_6_3_not_null   system         public        settings                         CHECK            NO             NO
@@ -943,6 +950,11 @@ system              public             630200280_36_1_not_null  id IS NOT NULL
 system              public             630200280_36_2_not_null  statement_fingerprint IS NOT NULL
 system              public             630200280_36_3_not_null  statement IS NOT NULL
 system              public             630200280_36_4_not_null  collected_at IS NOT NULL
+system              public             630200280_37_1_not_null  schedule_id IS NOT NULL
+system              public             630200280_37_2_not_null  schedule_name IS NOT NULL
+system              public             630200280_37_3_not_null  created IS NOT NULL
+system              public             630200280_37_8_not_null  executor_type IS NOT NULL
+system              public             630200280_37_9_not_null  execution_args IS NOT NULL
 system              public             630200280_3_1_not_null   id IS NOT NULL
 system              public             630200280_4_1_not_null   username IS NOT NULL
 system              public             630200280_4_3_not_null   isRole IS NOT NULL
@@ -997,6 +1009,7 @@ system         public        role_members                     member          sy
 system         public        role_members                     role            system              public             primary
 system         public        role_options                     option          system              public             primary
 system         public        role_options                     username        system              public             primary
+system         public        scheduled_jobs                   schedule_id     system              public             primary
 system         public        settings                         name            system              public             primary
 system         public        statement_bundle_chunks          id              system              public             primary
 system         public        statement_diagnostics            id              system              public             primary
@@ -1186,6 +1199,16 @@ system         public        role_members                     role              
 system         public        role_options                     option                    2
 system         public        role_options                     username                  1
 system         public        role_options                     value                     3
+system         public        scheduled_jobs                   created                   3
+system         public        scheduled_jobs                   execution_args            9
+system         public        scheduled_jobs                   executor_type             8
+system         public        scheduled_jobs                   next_run                  5
+system         public        scheduled_jobs                   owner                     4
+system         public        scheduled_jobs                   schedule_changes          10
+system         public        scheduled_jobs                   schedule_details          7
+system         public        scheduled_jobs                   schedule_expr             6
+system         public        scheduled_jobs                   schedule_id               1
+system         public        scheduled_jobs                   schedule_name             2
 system         public        settings                         lastUpdated               3
 system         public        settings                         name                      1
 system         public        settings                         value                     2
@@ -1811,6 +1834,16 @@ NULL     root     system         public              role_options               
 NULL     root     system         public              role_options                       INSERT          NULL          NO
 NULL     root     system         public              role_options                       SELECT          NULL          YES
 NULL     root     system         public              role_options                       UPDATE          NULL          NO
+NULL     admin    system         public              scheduled_jobs                     DELETE          NULL          NO
+NULL     admin    system         public              scheduled_jobs                     GRANT           NULL          NO
+NULL     admin    system         public              scheduled_jobs                     INSERT          NULL          NO
+NULL     admin    system         public              scheduled_jobs                     SELECT          NULL          YES
+NULL     admin    system         public              scheduled_jobs                     UPDATE          NULL          NO
+NULL     root     system         public              scheduled_jobs                     DELETE          NULL          NO
+NULL     root     system         public              scheduled_jobs                     GRANT           NULL          NO
+NULL     root     system         public              scheduled_jobs                     INSERT          NULL          NO
+NULL     root     system         public              scheduled_jobs                     SELECT          NULL          YES
+NULL     root     system         public              scheduled_jobs                     UPDATE          NULL          NO
 NULL     admin    system         public              settings                           DELETE          NULL          NO
 NULL     admin    system         public              settings                           GRANT           NULL          NO
 NULL     admin    system         public              settings                           INSERT          NULL          NO
@@ -2258,6 +2291,16 @@ NULL     root     system         public              statement_diagnostics      
 NULL     root     system         public              statement_diagnostics              INSERT          NULL          NO
 NULL     root     system         public              statement_diagnostics              SELECT          NULL          YES
 NULL     root     system         public              statement_diagnostics              UPDATE          NULL          NO
+NULL     admin    system         public              scheduled_jobs                     DELETE          NULL          NO
+NULL     admin    system         public              scheduled_jobs                     GRANT           NULL          NO
+NULL     admin    system         public              scheduled_jobs                     INSERT          NULL          NO
+NULL     admin    system         public              scheduled_jobs                     SELECT          NULL          YES
+NULL     admin    system         public              scheduled_jobs                     UPDATE          NULL          NO
+NULL     root     system         public              scheduled_jobs                     DELETE          NULL          NO
+NULL     root     system         public              scheduled_jobs                     GRANT           NULL          NO
+NULL     root     system         public              scheduled_jobs                     INSERT          NULL          NO
+NULL     root     system         public              scheduled_jobs                     SELECT          NULL          YES
+NULL     root     system         public              scheduled_jobs                     UPDATE          NULL          NO
 
 statement ok
 CREATE TABLE other_db.xyz (i INT)

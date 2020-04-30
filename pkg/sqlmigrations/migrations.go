@@ -326,6 +326,13 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: clusterversion.VersionByKey(
 			clusterversion.VersionAlterSystemJobsAddCreatedByColumns),
 	},
+	{
+		// Introduced in v20.2.
+		name:                "create new system.scheduled_jobs table",
+		workFn:              createScheduledJobsTable,
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionAddScheduledJobsTable),
+		newDescriptorIDs:    staticIDs(keys.ScheduledJobsTableID),
+	},
 }
 
 func staticIDs(
@@ -1883,4 +1890,8 @@ STORING (status)
 
 	_, err := r.sqlExecutor.ExecEx(ctx, "add-jobs-idx", nil, asNode, addIdxStmt)
 	return err
+}
+
+func createScheduledJobsTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.ScheduledJobsTable)
 }
