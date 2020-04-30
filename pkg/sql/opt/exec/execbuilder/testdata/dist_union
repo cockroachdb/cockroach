@@ -10,7 +10,7 @@ query TTT
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
 ·          distributed  true
-·          vectorized   false
+·          vectorized   true
 union      ·            ·
  ├── scan  ·            ·
  │         table        uniontest@primary
@@ -52,7 +52,7 @@ query TTTTT
 EXPLAIN (VERBOSE) (SELECT a FROM abc ORDER BY b) INTERSECT (SELECT a FROM abc ORDER BY c) ORDER BY a
 ----
 ·                    distributed  true         ·       ·
-·                    vectorized   false        ·       ·
+·                    vectorized   true         ·       ·
 sort                 ·            ·            (a)     +a
  │                   order        +a           ·       ·
  └── union           ·            ·            (a)     ·
@@ -72,7 +72,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM ((SELECT '' AS a , '') EXCEPT ALL (SELECT '', ''))
 ----
 ·                      distributed    true             ·                         ·
-·                      vectorized     false            ·                         ·
+·                      vectorized     true             ·                         ·
 render                 ·              ·                (a)                       ·
  │                     render 0       a                ·                         ·
  └── union             ·              ·                (a, a)                    ·
@@ -94,7 +94,7 @@ EXPLAIN (VERBOSE) ((SELECT '', '', 'x' WHERE false))
 UNION ALL ((SELECT '', '', 'x') EXCEPT (VALUES ('', '', 'x')))
 ----
 ·                      distributed    true              ·                                     ·
-·                      vectorized     false             ·                                     ·
+·                      vectorized     true              ·                                     ·
 render                 ·              ·                 ("?column?", "?column?", "?column?")  ·
  │                     render 0       "?column?"        ·                                     ·
  │                     render 1       "?column?"        ·                                     ·
