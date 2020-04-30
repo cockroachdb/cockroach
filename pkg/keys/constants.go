@@ -379,6 +379,8 @@ const (
 	StatementDiagnosticsRequestsTableID = 35
 	StatementDiagnosticsTableID         = 36
 
+	ScheduledJobsTableID = 37
+
 	// CommentType is type for system.comments
 	DatabaseCommentType = 0
 	TableCommentType    = 1
