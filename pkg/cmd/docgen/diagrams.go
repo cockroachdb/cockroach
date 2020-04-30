@@ -945,10 +945,10 @@ var specs = []stmtSpec{
 	{
 		name:   "restore",
 		stmt:   "restore_stmt",
-		inline: []string{"as_of_clause", "opt_with_options"},
+		inline: []string{"opt_as_of_clause", "opt_with_options", "as_of_clause"},
 		replace: map[string]string{
-			"a_expr":                     "timestamp",
-			"string_or_placeholder_list": "full_backup_location ( | incremental_backup_location ( ',' incremental_backup_location )*)",
+			"a_expr":                  "timestamp",
+			"partitioned_backup_list": "full_backup_location ( | incremental_backup_location ( ',' incremental_backup_location )*)",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'": "",
 			"targets": "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 		},
@@ -1145,7 +1145,7 @@ var specs = []stmtSpec{
 		name:    "show_backup",
 		stmt:    "show_backup_stmt",
 		match:   []*regexp.Regexp{regexp.MustCompile("'SHOW' 'BACKUP'")},
-		replace: map[string]string{"string_or_placeholder": "location ( | 'WITH' privileges )"},
+		replace: map[string]string{"string_or_placeholder opt_with_options": "location ( | 'WITH' kv_option_list )"},
 		unlink:  []string{"location"},
 	},
 	{
