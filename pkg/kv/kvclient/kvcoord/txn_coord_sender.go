@@ -795,21 +795,12 @@ func (tc *TxnCoordSender) updateStateLocked(
 
 	// Update our transaction with any information the error has.
 	if errTxn := pErr.GetTxn(); errTxn != nil {
-		// Sanity checks. Finalized transactions are not supposed to get here.
-		if errTxn.Status != roachpb.PENDING {
-			if errTxn.Status == roachpb.COMMITTED {
-				// Finding out about our transaction being committed indicates a serious
-				// bug. Requests are not supposed to be sent on transactions after they
-				// are committed.
-				log.Errorf(ctx, "transaction unexpectedly committed: %s. ba: %s. txn: %s.", pErr, ba, errTxn)
-			} else if errTxn.Status == roachpb.ABORTED {
-				// We only expect TransactionAbortedError to carry an aborted txn. In
-				// particular, the heartbeater doesn't like running when the transaction
-				// is know to be aborted.
-				log.Fatalf(ctx, "unexpected error with ABORTED txn: (%T) %s. ba: %s. txn: %s.", pErr.GoError(), pErr, ba, errTxn)
-			}
+		if errTxn.Status == roachpb.COMMITTED {
+			// Finding out about our transaction being committed indicates a serious
+			// bug. Requests are not supposed to be sent on transactions after they
+			// are committed.
+			log.Errorf(ctx, "transaction unexpectedly committed: %s. ba: %s. txn: %s.", pErr, ba, errTxn)
 		}
-
 		tc.mu.txn.Update(errTxn)
 	}
 	return pErr

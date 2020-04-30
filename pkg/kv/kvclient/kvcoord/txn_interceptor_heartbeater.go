@@ -287,9 +287,12 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	}
 
 	if h.mu.txn.Status != roachpb.PENDING {
-		log.Fatalf(ctx,
-			"txn committed or aborted but heartbeat loop hasn't been signaled to stop. txn: %s",
-			h.mu.txn)
+		if h.mu.txn.Status == roachpb.COMMITTED {
+			log.Fatalf(ctx, "txn committed but heartbeat loop hasn't been signaled to stop: %s", h.mu.txn)
+		}
+		// If the transaction is aborted, there's no point in heartbeating. The
+		// client needs to send a rollback.
+		return false
 	}
 
 	// Clone the txn in order to put it in the heartbeat request.
