@@ -1436,9 +1436,15 @@ var pgurlCmd = &cobra.Command{
 
 		var urls []string
 		for i, ip := range ips {
+			if ip == "" {
+				return errors.Errorf("empty ip: %v", ips)
+			}
 			urls = append(urls, c.Impl.NodeURL(c, ip, c.Impl.NodePort(c, nodes[i])))
 		}
 		fmt.Println(strings.Join(urls, " "))
+		if len(urls) != len(nodes) {
+			return errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)
+		}
 		return nil
 	}),
 }

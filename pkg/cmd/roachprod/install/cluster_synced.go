@@ -148,7 +148,14 @@ func (c *SyncedCluster) GetInternalIP(index int) (string, error) {
 			"GetInternalIP: failed to execute hostname on %s:%d:\n(stdout) %s\n(stderr) %s",
 			c.Name, index, stdout.String(), stderr.String())
 	}
-	return strings.TrimSpace(stdout.String()), nil
+	ip := strings.TrimSpace(stdout.String())
+	if ip == "" {
+		return "", errors.Errorf(
+			"empty internal IP returned, stdout:\n%s\nstderr:\n%s",
+			stdout.String(), stderr.String(),
+		)
+	}
+	return ip, nil
 }
 
 // Start TODO(peter): document
