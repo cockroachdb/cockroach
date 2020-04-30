@@ -369,38 +369,29 @@ render                        ·            ·
 query TTT
 EXPLAIN SHOW CONSTRAINTS FROM foo
 ----
-·                                                      distributed         false
-·                                                      vectorized          false
-render                                                 ·                   ·
- └── sort                                              ·                   ·
-      │                                                order               +conname
-      └── render                                       ·                   ·
-           └── hash-join                               ·                   ·
-                │                                      type                inner
-                │                                      equality            (oid) = (relnamespace)
-                ├── filter                             ·                   ·
-                │    │                                 filter              nspname = 'public'
-                │    └── render                        ·                   ·
-                │         └── virtual table            ·                   ·
-                │                                      source              pg_namespace@primary
-                └── merge-join                         ·                   ·
-                     │                                 type                inner
-                     │                                 equality            (conrelid) = (oid)
-                     │                                 left cols are key   ·
-                     │                                 right cols are key  ·
-                     │                                 mergeJoinOrder      +"(conrelid=oid)"
-                     ├── sort                          ·                   ·
-                     │    │                            order               +conrelid
-                     │    └── render                   ·                   ·
-                     │         └── virtual table       ·                   ·
-                     │                                 source              pg_constraint@pg_constraint_conrelid_idx
-                     └── filter                        ·                   ·
-                          │                            filter              relname = 'foo'
-                          └── sort                     ·                   ·
-                               │                       order               +oid
-                               └── render              ·                   ·
-                                    └── virtual table  ·                   ·
-·                                                      source              pg_class@pg_class_oid_idx
+·                                                 distributed  false
+·                                                 vectorized   false
+render                                            ·            ·
+ └── sort                                         ·            ·
+      │                                           order        +conname
+      └── render                                  ·            ·
+           └── hash-join                          ·            ·
+                │                                 type         inner
+                │                                 equality     (oid) = (relnamespace)
+                ├── filter                        ·            ·
+                │    │                            filter       nspname = 'public'
+                │    └── render                   ·            ·
+                │         └── virtual table       ·            ·
+                │                                 source       pg_namespace@primary
+                └── virtual-table-lookup-join     ·            ·
+                     │                            table        pg_constraint@pg_constraint_conrelid_idx
+                     │                            type         inner
+                     │                            equality     (oid) = (conrelid)
+                     └── filter                   ·            ·
+                          │                       filter       relname = 'foo'
+                          └── render              ·            ·
+                               └── virtual table  ·            ·
+·                                                 source       pg_class@primary
 
 query TTT
 EXPLAIN SHOW USERS

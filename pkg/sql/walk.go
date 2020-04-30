@@ -291,6 +291,24 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		}
 		n.input = v.visit(n.input)
 
+	case *vTableLookupJoinNode:
+		if v.observer.attr != nil {
+			v.observer.attr(name, "table", fmt.Sprintf("%s@%s", n.table.Name, n.index.Name))
+			v.observer.attr(name, "type", joinTypeStr(n.joinType))
+			var b bytes.Buffer
+			b.WriteByte('(')
+			inputCols := planColumns(n.input)
+			b.WriteString(inputCols[n.eqCol].Name)
+			b.WriteString(") = (")
+			b.WriteString(n.index.ColumnNames[0])
+			b.WriteByte(')')
+			v.observer.attr(name, "equality", b.String())
+		}
+		if v.observer.expr != nil && n.pred.onCond != nil && n.pred.onCond != tree.DBoolTrue {
+			v.expr(name, "pred", -1, n.pred.onCond)
+		}
+		n.input = v.visit(n.input)
+
 	case *zigzagJoinNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "type", joinTypeStr(sqlbase.InnerJoin))
@@ -926,6 +944,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&upsertNode{}):            "upsert",
 	reflect.TypeOf(&valuesNode{}):            "values",
 	reflect.TypeOf(&virtualTableNode{}):      "virtual table values",
+	reflect.TypeOf(&vTableLookupJoinNode{}):  "virtual-table-lookup-join",
 	reflect.TypeOf(&windowNode{}):            "window",
 	reflect.TypeOf(&zeroNode{}):              "norows",
 	reflect.TypeOf(&zigzagJoinNode{}):        "zigzag-join",
