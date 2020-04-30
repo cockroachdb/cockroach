@@ -2126,8 +2126,20 @@ func (c *cluster) pgURL(ctx context.Context, node nodeListOption, external bool)
 		c.t.Fatal(errors.Wrapf(cmd.err, "failed to get pgurl for nodes: %s", nodes))
 	}
 	urls := strings.Split(strings.TrimSpace(cmd.stdout), " ")
+	if len(urls) != len(node) {
+		c.t.Fatalf(
+			"pgurl for nodes %v got urls %v from stdout:\n%s\nstderr:\n%s",
+			node, urls, cmd.stdout, cmd.stderr,
+		)
+	}
 	for i := range urls {
 		urls[i] = strings.Trim(urls[i], "'")
+		if urls[i] == "" {
+			c.t.Fatalf(
+				"pgurl for nodes %s empty: %v from\nstdout:\n%s\nstderr:\n%s",
+				urls, node, cmd.stdout, cmd.stderr,
+			)
+		}
 	}
 	return urls
 }
