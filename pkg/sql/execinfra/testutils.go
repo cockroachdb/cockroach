@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -77,6 +78,57 @@ func (r *RepeatableRowSource) ConsumerDone() {}
 
 // ConsumerClosed is part of the RowSource interface.
 func (r *RepeatableRowSource) ConsumerClosed() {}
+
+type RowGeneratingSource struct {
+	types              []types.T
+	fn                 sqlutils.GenRowFn
+	scratchEncDatumRow sqlbase.EncDatumRow
+
+	rowIdx  int
+	maxRows int
+}
+
+// NewRowGeneratingSource creates a new RowGeneratingSource with the given fn
+// and a maximum number of rows to generate. Can be reset using Reset.
+func NewRowGeneratingSource(
+	types []types.T, fn sqlutils.GenRowFn, maxRows int,
+) *RowGeneratingSource {
+	return &RowGeneratingSource{types: types, fn: fn, rowIdx: 1, maxRows: maxRows}
+}
+
+func (r *RowGeneratingSource) OutputTypes() []types.T { return r.types }
+
+func (r *RowGeneratingSource) Start(ctx context.Context) context.Context { return ctx }
+
+func (r *RowGeneratingSource) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if r.rowIdx > r.maxRows {
+		// Done.
+		return nil, nil
+	}
+
+	datumRow := r.fn(r.rowIdx)
+	if cap(r.scratchEncDatumRow) < len(datumRow) {
+		r.scratchEncDatumRow = make(sqlbase.EncDatumRow, len(datumRow))
+	} else {
+		r.scratchEncDatumRow = r.scratchEncDatumRow[:len(datumRow)]
+	}
+
+	for i := range r.scratchEncDatumRow {
+		r.scratchEncDatumRow[i] = sqlbase.DatumToEncDatum(&r.types[i], datumRow[i])
+	}
+	r.rowIdx++
+	return r.scratchEncDatumRow, nil
+}
+
+// Reset resets this RowGeneratingSource so that the next rowIdx passed to the
+// generating function is 1.
+func (r *RowGeneratingSource) Reset() {
+	r.rowIdx = 1
+}
+
+func (r *RowGeneratingSource) ConsumerDone() {}
+
+func (r *RowGeneratingSource) ConsumerClosed() {}
 
 // NewTestMemMonitor creates and starts a new memory monitor to be used in
 // tests.
@@ -143,7 +195,10 @@ func GenerateValuesSpec(
 }
 
 // RowDisposer is a RowReceiver that discards any rows Push()ed.
-type RowDisposer struct{}
+type RowDisposer struct {
+	bufferedMeta    []execinfrapb.ProducerMetadata
+	numRowsDisposed int
+}
 
 var _ RowReceiver = &RowDisposer{}
 
@@ -151,6 +206,11 @@ var _ RowReceiver = &RowDisposer{}
 func (r *RowDisposer) Push(
 	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) ConsumerStatus {
+	if row != nil {
+		r.numRowsDisposed++
+	} else if meta != nil {
+		r.bufferedMeta = append(r.bufferedMeta, *meta)
+	}
 	return NeedMoreRows
 }
 
@@ -160,4 +220,16 @@ func (r *RowDisposer) ProducerDone() {}
 // Types is part of the RowReceiver interface.
 func (r *RowDisposer) Types() []types.T {
 	return nil
+}
+
+func (r *RowDisposer) ResetNumRowsDisposed() {
+	r.numRowsDisposed = 0
+}
+
+func (r *RowDisposer) NumRowsDisposed() int {
+	return r.numRowsDisposed
+}
+
+func (r *RowDisposer) DrainMeta(context.Context) []execinfrapb.ProducerMetadata {
+	return r.bufferedMeta
 }
