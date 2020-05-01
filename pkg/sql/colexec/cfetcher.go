@@ -367,6 +367,21 @@ func (rf *cFetcher) Init(
 			}
 		}
 	}
+	// Unique secondary indexes contain the extra column IDs as part of
+	// the value component. We process these separately, so we need to know
+	// what extra columns are composite or not.
+	if table.isSecondaryIndex && table.index.Unique {
+		for _, id := range table.index.ExtraColumnIDs {
+			colIdx, ok := tableArgs.ColIdxMap[id]
+			if ok && neededCols.Contains(int(id)) {
+				if compositeColumnIDs.Contains(int(id)) {
+					table.compositeIndexColOrdinals.Add(colIdx)
+				} else {
+					table.neededValueColsByIdx.Remove(colIdx)
+				}
+			}
+		}
+	}
 
 	// - If there are interleaves, we need to read the index key in order to
 	//   determine whether this row is actually part of the index we're scanning.
@@ -1106,6 +1121,14 @@ func (rf *cFetcher) processValueBytes(
 		}
 		rf.machine.prettyValueBuf.Reset()
 	}
+
+	// Composite columns that are key encoded in the value (like the pk columns
+	// in a unique secondary index) have gotten removed from the set of
+	// remaining value columns. So, we need to add them back in here in case
+	// they have full value encoded composite values.
+	rf.table.compositeIndexColOrdinals.ForEach(func(i int) {
+		rf.machine.remainingValueColsByIdx.Add(i)
+	})
 
 	var (
 		colIDDiff          uint32
