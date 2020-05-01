@@ -43,10 +43,38 @@ query II
 SELECT * FROM child
 ----
 
+# Delete cascade which itself has a check.
 statement ok
+CREATE TABLE grandchild (
+  g INT PRIMARY KEY,
+  c INT REFERENCES child(c)
+);
+INSERT INTO parent VALUES (1), (2);
+INSERT INTO child VALUES (10, 1), (11, 1), (20, 2), (21, 2);
+INSERT INTO grandchild VALUES (100, 10), (101, 10), (110, 11);
+
+statement ok
+DELETE FROM parent WHERE p = 2
+
+statement error delete on table "child" violates foreign key constraint "fk_c_ref_child" on table "grandchild"\nDETAIL: Key \(c\)\=\(1[01]\) is still referenced from table "grandchild"
+DELETE FROM parent WHERE p = 1
+
+statement ok
+DELETE FROM grandchild WHERE c = 10
+
+statement error delete on table "child" violates foreign key constraint "fk_c_ref_child" on table "grandchild"\nDETAIL: Key \(c\)=\(11\) is still referenced from table "grandchild"
+DELETE FROM parent WHERE p = 1
+
+statement ok
+DELETE FROM grandchild WHERE c = 11
+
+statement ok
+DELETE FROM parent WHERE p = 1
+
+statement ok
+DROP TABLE grandchild;
 DROP TABLE child;
 DROP TABLE parent
-
 
 # Delete cascade with multiple columns and multiple child tables.
 statement ok

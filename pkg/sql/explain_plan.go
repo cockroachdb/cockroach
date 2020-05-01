@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -43,17 +42,7 @@ const (
 type explainPlanNode struct {
 	explainer explainer
 
-	// plan is the sub-node being explained.
-	plan planNode
-
-	// subqueryPlans contains the subquery plans for the explained query.
-	subqueryPlans []subquery
-
-	// cascades contains metadata for any cascades.
-	cascades []exec.Cascade
-
-	// checkPlans contains the check plans for the explained query.
-	checkPlans []checkPlan
+	plan planComponents
 
 	stmtType tree.StatementType
 
@@ -63,13 +52,7 @@ type explainPlanNode struct {
 // makeExplainPlanNodeWithPlan instantiates a planNode that EXPLAINs an
 // underlying plan.
 func (p *planner) makeExplainPlanNodeWithPlan(
-	ctx context.Context,
-	opts *tree.ExplainOptions,
-	plan planNode,
-	subqueryPlans []subquery,
-	cascades []exec.Cascade,
-	checkPlans []checkPlan,
-	stmtType tree.StatementType,
+	ctx context.Context, opts *tree.ExplainOptions, plan *planComponents, stmtType tree.StatementType,
 ) (planNode, error) {
 	flags := explainFlags{
 		symbolicVars: opts.Flags[tree.ExplainFlagSymVars],
@@ -114,12 +97,9 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 	}
 
 	node := &explainPlanNode{
-		explainer:     e,
-		plan:          plan,
-		subqueryPlans: subqueryPlans,
-		cascades:      cascades,
-		checkPlans:    checkPlans,
-		stmtType:      stmtType,
+		explainer: e,
+		plan:      *plan,
+		stmtType:  stmtType,
 		run: explainPlanRun{
 			results: p.newContainerValuesNode(columns, 0),
 		},
@@ -134,23 +114,19 @@ type explainPlanRun struct {
 }
 
 func (e *explainPlanNode) startExec(params runParams) error {
-	return populateExplain(
-		params, &e.explainer, e.run.results,
-		e.plan, e.subqueryPlans, e.cascades, e.checkPlans,
-		e.stmtType,
-	)
+	return populateExplain(params, &e.explainer, e.run.results, &e.plan, e.stmtType)
 }
 
 func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
 func (e *explainPlanNode) Values() tree.Datums                 { return e.run.results.Values() }
 
 func (e *explainPlanNode) Close(ctx context.Context) {
-	e.plan.Close(ctx)
-	for i := range e.subqueryPlans {
-		e.subqueryPlans[i].plan.Close(ctx)
+	e.plan.main.Close(ctx)
+	for i := range e.plan.subqueryPlans {
+		e.plan.subqueryPlans[i].plan.Close(ctx)
 	}
-	for i := range e.checkPlans {
-		e.checkPlans[i].plan.Close(ctx)
+	for i := range e.plan.checkPlans {
+		e.plan.checkPlans[i].plan.Close(ctx)
 	}
 	e.run.results.Close(ctx)
 }
@@ -208,26 +184,19 @@ type explainer struct {
 // The subquery plans, if any are known to the planner, are printed
 // at the bottom.
 func populateExplain(
-	params runParams,
-	e *explainer,
-	v *valuesNode,
-	plan planNode,
-	subqueryPlans []subquery,
-	cascades []exec.Cascade,
-	checkPlans []checkPlan,
-	stmtType tree.StatementType,
+	params runParams, e *explainer, v *valuesNode, plan *planComponents, stmtType tree.StatementType,
 ) error {
 	// Determine the "distributed" and "vectorized" values, which we will emit as
 	// special rows.
 	var isDistSQL, isVec bool
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	isDistSQL, _ = willDistributePlan(distSQLPlanner, plan, params)
+	isDistSQL, _ = willDistributePlan(distSQLPlanner, plan.main, params)
 	outerSubqueries := params.p.curPlan.subqueryPlans
-	planCtx := makeExplainVecPlanningCtx(distSQLPlanner, params, stmtType, subqueryPlans, isDistSQL)
+	planCtx := makeExplainVecPlanningCtx(distSQLPlanner, params, stmtType, plan.subqueryPlans, isDistSQL)
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
-	physicalPlan, err := makePhysicalPlan(planCtx, distSQLPlanner, plan)
+	physicalPlan, err := makePhysicalPlan(planCtx, distSQLPlanner, plan.main)
 	if err == nil {
 		// There might be an issue making the physical plan, but that should not
 		// cause an error or panic, so swallow the error. See #40677 for example.
@@ -296,17 +265,12 @@ func populateExplain(
 		return err
 	}
 
-	e.populateEntries(params.ctx, plan, subqueryPlans, cascades, checkPlans, explainSubqueryFmtFlags)
+	e.populateEntries(params.ctx, plan, explainSubqueryFmtFlags)
 	return e.emitRows(emitRow)
 }
 
 func (e *explainer) populateEntries(
-	ctx context.Context,
-	plan planNode,
-	subqueryPlans []subquery,
-	cascades []exec.Cascade,
-	checkPlans []checkPlan,
-	subqueryFmtFlags tree.FmtFlags,
+	ctx context.Context, plan *planComponents, subqueryFmtFlags tree.FmtFlags,
 ) {
 	e.entries = nil
 	observer := planObserver{
@@ -317,39 +281,34 @@ func (e *explainer) populateEntries(
 		leaveNode: e.leaveNode,
 	}
 	// observePlan never returns an error when returnError is false.
-	_ = observePlan(
-		ctx, plan, subqueryPlans, cascades, checkPlans,
-		observer, false /* returnError */, subqueryFmtFlags,
-	)
+	_ = observePlan(ctx, plan, observer, false /* returnError */, subqueryFmtFlags)
 }
 
 // observePlan walks the plan tree, executing the appropriate functions in the
 // planObserver.
 func observePlan(
 	ctx context.Context,
-	plan planNode,
-	subqueryPlans []subquery,
-	cascades []exec.Cascade,
-	checkPlans []checkPlan,
+	plan *planComponents,
 	observer planObserver,
 	returnError bool,
 	subqueryFmtFlags tree.FmtFlags,
 ) error {
 	// If there are any subqueries, cascades, or checks in the plan, we
 	// enclose everything as children of a virtual "root" node.
-	if len(subqueryPlans) > 0 || len(cascades) > 0 || len(checkPlans) > 0 {
-		if _, err := observer.enterNode(ctx, "root", plan); err != nil && returnError {
+	if len(plan.subqueryPlans) > 0 || len(plan.cascades) > 0 || len(plan.checkPlans) > 0 {
+		if _, err := observer.enterNode(ctx, "root", plan.main); err != nil && returnError {
 			return err
 		}
 	}
 
 	// Explain the main plan.
-	if err := walkPlan(ctx, plan, observer); err != nil && returnError {
+	if err := walkPlan(ctx, plan.main, observer); err != nil && returnError {
 		return err
 	}
 
 	// Explain the subqueries.
-	for i := range subqueryPlans {
+	for i := range plan.subqueryPlans {
+		s := &plan.subqueryPlans[i]
 		if _, err := observer.enterNode(ctx, "subquery", nil /* plan */); err != nil && returnError {
 			return err
 		}
@@ -359,15 +318,15 @@ func observePlan(
 		observer.attr(
 			"subquery",
 			"original sql",
-			tree.AsStringWithFlags(subqueryPlans[i].subquery, subqueryFmtFlags),
+			tree.AsStringWithFlags(s.subquery, subqueryFmtFlags),
 		)
-		observer.attr("subquery", "exec mode", rowexec.SubqueryExecModeNames[subqueryPlans[i].execMode])
-		if subqueryPlans[i].plan != nil {
-			if err := walkPlan(ctx, subqueryPlans[i].plan, observer); err != nil && returnError {
+		observer.attr("subquery", "exec mode", rowexec.SubqueryExecModeNames[s.execMode])
+		if s.plan != nil {
+			if err := walkPlan(ctx, s.plan, observer); err != nil && returnError {
 				return err
 			}
-		} else if subqueryPlans[i].started {
-			observer.expr(observeAlways, "subquery", "result", -1, subqueryPlans[i].result)
+		} else if s.started {
+			observer.expr(observeAlways, "subquery", "result", -1, s.result)
 		}
 		if err := observer.leaveNode("subquery", nil /* plan */); err != nil && returnError {
 			return err
@@ -375,24 +334,24 @@ func observePlan(
 	}
 
 	// Explain the cascades.
-	for i := range cascades {
+	for i := range plan.cascades {
 		if _, err := observer.enterNode(ctx, "fk-cascade", nil); err != nil && returnError {
 			return err
 		}
-		observer.attr("cascade", "fk", cascades[i].FKName)
-		observer.attr("cascade", "input", cascades[i].Buffer.(*bufferNode).label)
+		observer.attr("cascade", "fk", plan.cascades[i].FKName)
+		observer.attr("cascade", "input", plan.cascades[i].Buffer.(*bufferNode).label)
 		if err := observer.leaveNode("cascade", nil); err != nil && returnError {
 			return err
 		}
 	}
 
 	// Explain the checks.
-	for i := range checkPlans {
+	for i := range plan.checkPlans {
 		if _, err := observer.enterNode(ctx, "fk-check", nil /* plan */); err != nil && returnError {
 			return err
 		}
-		if checkPlans[i].plan != nil {
-			if err := walkPlan(ctx, checkPlans[i].plan, observer); err != nil && returnError {
+		if plan.checkPlans[i].plan != nil {
+			if err := walkPlan(ctx, plan.checkPlans[i].plan, observer); err != nil && returnError {
 				return err
 			}
 		}
@@ -401,8 +360,8 @@ func observePlan(
 		}
 	}
 
-	if len(subqueryPlans) > 0 || len(checkPlans) > 0 {
-		if err := observer.leaveNode("root", plan); err != nil && returnError {
+	if len(plan.subqueryPlans) > 0 || len(plan.cascades) > 0 || len(plan.checkPlans) > 0 {
+		if err := observer.leaveNode("root", plan.main); err != nil && returnError {
 			return err
 		}
 	}
@@ -466,9 +425,8 @@ func planToString(ctx context.Context, p *planTop) string {
 		return nil
 	}
 
-	e.populateEntries(
-		ctx, p.plan, p.subqueryPlans, p.cascades, p.checkPlans, explainSubqueryFmtFlags,
-	)
+	e.populateEntries(ctx, &p.planComponents, explainSubqueryFmtFlags)
+
 	// Our emitRow function never returns errors, so neither will emitRows().
 	_ = e.emitRows(emitRow)
 	_ = tw.Flush()
