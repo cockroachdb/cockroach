@@ -22,6 +22,7 @@ option go_package = "execinfrapb";
 import "sql/sqlbase/structured.proto";
 import "sql/sqlbase/join_type.proto";
 import "sql/sqlbase/locking.proto";
+import "sql/types/types.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";
 import "gogoproto/gogo.proto";
@@ -634,7 +635,7 @@ message ProjectSetSpec {
   repeated Expression exprs = 1 [(gogoproto.nullable) = false];
 
   // Column types for the generated values
-  repeated bytes generated_columns = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/types.T"];
+  repeated sql.sem.types.T generated_columns = 2 [(gogoproto.nullable) = false];
 
   // The number of columns each expression returns. Same length as exprs.
   repeated uint32 num_cols_per_gen = 3;

@@ -374,7 +374,7 @@ func verifyReplacingViewColumns(oldColumns, newColumns []sqlbase.ColumnDescripto
 				newCol.Name,
 			)
 		}
-		if !newCol.Type.Equal(oldCol.Type) {
+		if !newCol.Type.Identical(&oldCol.Type) {
 			return pgerror.Newf(
 				pgcode.InvalidTableDefinition,
 				`cannot change type of view column %q from %s to %s`,
