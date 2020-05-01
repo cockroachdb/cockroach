@@ -2597,7 +2597,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	var useSeenAdd atomic.Value
 	useSeenAdd.Store(false)
 	seenAdd := make(chan struct{}, 1)
-	responseFilter := func(ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
+	responseFilter := func(ctx context.Context, ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
 		if ba.IsSingleRequest() {
 			changeReplicas, ok := ba.Requests[0].GetInner().(*roachpb.AdminChangeReplicasRequest)
 			if ok && changeReplicas.Changes()[0].ChangeType == roachpb.ADD_REPLICA && useSeenAdd.Load().(bool) {

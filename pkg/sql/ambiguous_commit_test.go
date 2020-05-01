@@ -120,7 +120,9 @@ func TestAmbiguousCommit(t *testing.T) {
 
 		if ambiguousSuccess {
 			params.Knobs.Store = &kvserver.StoreTestingKnobs{
-				TestingResponseFilter: func(args roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
+				TestingResponseFilter: func(
+					ctx context.Context, args roachpb.BatchRequest, _ *roachpb.BatchResponse,
+				) *roachpb.Error {
 					if req, ok := args.GetArg(roachpb.ConditionalPut); ok {
 						return maybeRPCError(req.(*roachpb.ConditionalPutRequest))
 					}

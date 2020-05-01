@@ -111,7 +111,7 @@ func (r *Replica) sendWithRangeID(
 		log.Eventf(ctx, "replica.Send got error: %s", pErr)
 	} else {
 		if filter := r.store.cfg.TestingKnobs.TestingResponseFilter; filter != nil {
-			pErr = filter(*ba, br)
+			pErr = filter(ctx, *ba, br)
 		}
 	}
 	return br, pErr
