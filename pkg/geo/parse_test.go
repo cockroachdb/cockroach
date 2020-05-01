@@ -22,28 +22,32 @@ func TestParseWKB(t *testing.T) {
 		desc          string
 		b             []byte
 		defaultSRID   geopb.SRID
-		expected      geopb.EWKB
+		expected      geopb.SpatialObject
 		expectedError string
 	}{
 		{
 			"EWKB should make this error",
 			[]byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 			4326,
-			[]byte(""),
+			geopb.SpatialObject{},
 			"wkb: unknown type: 536870913",
 		},
 		{
 			"Normal WKB should take the SRID",
 			[]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 			4326,
-			[]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+			geopb.SpatialObject{
+				EWKB:  []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+				SRID:  4326,
+				Shape: geopb.Shape_Point,
+			},
 			"",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			ret, err := ParseWKB(tc.b, tc.defaultSRID)
+			ret, err := parseWKB(tc.b, tc.defaultSRID)
 			if tc.expectedError != "" {
 				require.Error(t, err)
 				require.EqualError(t, err, tc.expectedError)
@@ -61,27 +65,35 @@ func TestParseEWKB(t *testing.T) {
 		b           []byte
 		defaultSRID geopb.SRID
 		overwrite   defaultSRIDOverwriteSetting
-		expected    geopb.EWKB
+		expected    geopb.SpatialObject
 	}{
 		{
 			"SRID 4326 is hint; EWKB has 3857",
 			[]byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 			4326,
 			DefaultSRIDIsHint,
-			[]byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+			geopb.SpatialObject{
+				EWKB:  []byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+				SRID:  3857,
+				Shape: geopb.Shape_Point,
+			},
 		},
 		{
 			"Overwrite SRID 3857 with 4326",
 			[]byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 			4326,
 			DefaultSRIDShouldOverwrite,
-			[]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+			geopb.SpatialObject{
+				EWKB:  []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+				SRID:  4326,
+				Shape: geopb.Shape_Point,
+			},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			ret, err := ParseEWKB(tc.b, tc.defaultSRID, tc.overwrite)
+			ret, err := parseEWKB(tc.b, tc.defaultSRID, tc.overwrite)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, ret)
 		})
@@ -94,27 +106,35 @@ func TestParseEWKT(t *testing.T) {
 		wkt         geopb.EWKT
 		defaultSRID geopb.SRID
 		overwrite   defaultSRIDOverwriteSetting
-		expected    geopb.EWKB
+		expected    geopb.SpatialObject
 	}{
 		{
 			"SRID 4326 is hint; EWKT has 3857",
 			"SRID=3857;POINT(1.0 1.0)",
 			4326,
 			DefaultSRIDIsHint,
-			[]byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+			geopb.SpatialObject{
+				EWKB:  []byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+				SRID:  3857,
+				Shape: geopb.Shape_Point,
+			},
 		},
 		{
 			"Overwrite SRID 3857 with 4326",
 			"SRID=3857;POINT(1.0 1.0)",
 			4326,
 			DefaultSRIDShouldOverwrite,
-			[]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+			geopb.SpatialObject{
+				EWKB:  []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+				SRID:  4326,
+				Shape: geopb.Shape_Point,
+			},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			ret, err := ParseEWKT(tc.wkt, tc.defaultSRID, tc.overwrite)
+			ret, err := parseEWKT(tc.wkt, tc.defaultSRID, tc.overwrite)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, ret)
 		})
@@ -123,58 +143,85 @@ func TestParseEWKT(t *testing.T) {
 
 func TestParseGeometry(t *testing.T) {
 	testCases := []struct {
-		str          string
-		expected     *Geometry
-		expectedErr  string
-		expectedSRID geopb.SRID
+		str         string
+		expected    *Geometry
+		expectedErr string
 	}{
 		{
 			"0101000000000000000000F03F000000000000F03F",
-			NewGeometry(geopb.EWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			&Geometry{
+				SpatialObject: geopb.SpatialObject{
+					EWKB:  []byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+					SRID:  0,
+					Shape: geopb.Shape_Point,
+				},
+			},
 			"",
-			0,
 		},
 		{
 			"0101000020E6100000000000000000F03F000000000000F03F",
-			NewGeometry(geopb.EWKB([]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			&Geometry{
+				SpatialObject: geopb.SpatialObject{
+					EWKB:  []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+					SRID:  4326,
+					Shape: geopb.Shape_Point,
+				},
+			},
 			"",
-			4326,
 		},
 		{
 			"POINT(1.0 1.0)",
-			NewGeometry(geopb.EWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			&Geometry{
+				SpatialObject: geopb.SpatialObject{
+					EWKB:  []byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+					SRID:  0,
+					Shape: geopb.Shape_Point,
+				},
+			},
 			"",
-			0,
 		},
 		{
 			"SRID=3857;POINT(1.0 1.0)",
-			NewGeometry(geopb.EWKB([]byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			&Geometry{
+				SpatialObject: geopb.SpatialObject{
+					EWKB:  []byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+					SRID:  3857,
+					Shape: geopb.Shape_Point,
+				},
+			},
 			"",
-			3857,
 		},
 		{
 			"\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f",
-			NewGeometry(geopb.EWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			&Geometry{
+				SpatialObject: geopb.SpatialObject{
+					EWKB:  []byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+					SRID:  0,
+					Shape: geopb.Shape_Point,
+				},
+			},
 			"",
-			0,
 		},
 		{
 			`{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [1.0, 1.0] }, "properties": { "name": "┳━┳ ヽ(ಠل͜ಠ)ﾉ" } }`,
-			NewGeometry(geopb.EWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			&Geometry{
+				SpatialObject: geopb.SpatialObject{
+					EWKB:  []byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+					SRID:  0,
+					Shape: geopb.Shape_Point,
+				},
+			},
 			"",
-			0,
 		},
 		{
 			"invalid",
 			nil,
 			"geos error: ParseException: Unknown type: 'INVALID'",
-			0,
 		},
 		{
 			"",
 			nil,
 			"geo: parsing empty string to geo type",
-			0,
 		},
 	}
 
@@ -186,7 +233,7 @@ func TestParseGeometry(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.Equal(t, tc.expected, g)
-				require.Equal(t, tc.expectedSRID, g.SRID())
+				require.Equal(t, tc.expected.SRID(), g.SpatialObject.SRID)
 			}
 		})
 	}
@@ -194,78 +241,120 @@ func TestParseGeometry(t *testing.T) {
 
 func TestParseGeography(t *testing.T) {
 	testCases := []struct {
-		str          string
-		expected     *Geography
-		expectedErr  string
-		expectedSRID geopb.SRID
+		str         string
+		expected    *Geography
+		expectedErr string
 	}{
 		{
 			// Even forcing an SRID to 0 using EWKB will make it 4326.
 			"0101000000000000000000F03F000000000000F03F",
-			NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			&Geography{
+				SpatialObject: geopb.SpatialObject{
+					EWKB:  []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+					SRID:  4326,
+					Shape: geopb.Shape_Point,
+				},
+			},
 			"",
-			4326,
 		},
 		{
 			"0101000020E6100000000000000000F03F000000000000F03F",
-			NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			&Geography{
+				SpatialObject: geopb.SpatialObject{
+					EWKB:  []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+					SRID:  4326,
+					Shape: geopb.Shape_Point,
+				},
+			},
 			"",
-			4326,
 		},
 		{
 			"0101000020110F0000000000000000F03F000000000000F03F",
-			NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			&Geography{
+				SpatialObject: geopb.SpatialObject{
+					EWKB:  []byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+					SRID:  3857,
+					Shape: geopb.Shape_Point,
+				},
+			},
 			"",
-			3857,
 		},
 		{
 			"POINT(1.0 1.0)",
-			NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			&Geography{
+				SpatialObject: geopb.SpatialObject{
+					EWKB:  []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+					SRID:  4326,
+					Shape: geopb.Shape_Point,
+				},
+			},
 			"",
-			4326,
 		},
 		{
 			// Even forcing an SRID to 0 using WKT will make it 4326.
 			"SRID=0;POINT(1.0 1.0)",
-			NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			&Geography{
+				SpatialObject: geopb.SpatialObject{
+					EWKB:  []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+					SRID:  4326,
+					Shape: geopb.Shape_Point,
+				},
+			},
 			"",
-			4326,
 		},
 		{
 			"SRID=3857;POINT(1.0 1.0)",
-			NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			&Geography{
+				SpatialObject: geopb.SpatialObject{
+					EWKB:  []byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+					SRID:  3857,
+					Shape: geopb.Shape_Point,
+				},
+			},
 			"",
-			3857,
 		},
 		{
 			"\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f",
-			NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			&Geography{
+				SpatialObject: geopb.SpatialObject{
+					EWKB:  []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+					SRID:  4326,
+					Shape: geopb.Shape_Point,
+				},
+			},
 			"",
-			4326,
 		},
 		{
 			"\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f",
-			NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			&Geography{
+				SpatialObject: geopb.SpatialObject{
+					EWKB:  []byte("\x01\x01\x00\x00\x20\x11\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+					SRID:  3857,
+					Shape: geopb.Shape_Point,
+				},
+			},
 			"",
-			3857,
 		},
 		{
 			`{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [1.0, 1.0] }, "properties": { "name": "┳━┳ ヽ(ಠل͜ಠ)ﾉ" } }`,
-			NewGeography(geopb.EWKB([]byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"))),
+			&Geography{
+				SpatialObject: geopb.SpatialObject{
+					EWKB:  []byte("\x01\x01\x00\x00\x20\xe6\x10\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
+					SRID:  4326,
+					Shape: geopb.Shape_Point,
+				},
+			},
 			"",
-			4326,
 		},
 		{
 			"invalid",
 			nil,
 			"geos error: ParseException: Unknown type: 'INVALID'",
-			0,
 		},
 		{
 			"",
 			nil,
 			"geo: parsing empty string to geo type",
-			0,
 		},
 	}
 
@@ -277,7 +366,7 @@ func TestParseGeography(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.Equal(t, tc.expected, g)
-				require.Equal(t, tc.expectedSRID, g.SRID())
+				require.Equal(t, tc.expected.SRID(), g.SpatialObject.SRID)
 			}
 		})
 	}

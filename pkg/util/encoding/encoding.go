@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1925,17 +1926,21 @@ func EncodeUntaggedTimeTZValue(appendTo []byte, t timetz.TimeTZ) []byte {
 	return EncodeNonsortingStdlibVarint(appendTo, int64(t.OffsetSecs))
 }
 
-// EncodeGeoValue encodes a geopb.EWKB value with its value tag, appends it to
+// EncodeGeoValue encodes a geopb.SpatialObject value with its value tag, appends it to
 // the supplied buffer, and returns the final buffer.
-func EncodeGeoValue(appendTo []byte, colID uint32, ewkb geopb.EWKB) []byte {
+func EncodeGeoValue(appendTo []byte, colID uint32, so geopb.SpatialObject) ([]byte, error) {
 	appendTo = EncodeValueTag(appendTo, colID, Geo)
-	return EncodeUntaggedGeoValue(appendTo, ewkb)
+	return EncodeUntaggedGeoValue(appendTo, so)
 }
 
-// EncodeUntaggedGeoValue encodes a geopb.EWKB value, appends it to the supplied buffer,
+// EncodeUntaggedGeoValue encodes a geopb.SpatialObject value, appends it to the supplied buffer,
 // and returns the final buffer.
-func EncodeUntaggedGeoValue(appendTo []byte, ewkb geopb.EWKB) []byte {
-	return EncodeUntaggedBytesValue(appendTo, ewkb)
+func EncodeUntaggedGeoValue(appendTo []byte, so geopb.SpatialObject) ([]byte, error) {
+	bytes, err := protoutil.Marshal(&so)
+	if err != nil {
+		return nil, err
+	}
+	return EncodeUntaggedBytesValue(appendTo, bytes), nil
 }
 
 // EncodeDecimalValue encodes an apd.Decimal value with its value tag, appends
@@ -2206,13 +2211,16 @@ func DecodeDecimalValue(b []byte) (remaining []byte, d apd.Decimal, err error) {
 }
 
 // DecodeUntaggedGeoValue decodes a value encoded by EncodeUntaggedGeoValue.
-func DecodeUntaggedGeoValue(b []byte) (remaining []byte, ewkb geopb.EWKB, err error) {
+func DecodeUntaggedGeoValue(
+	b []byte,
+) (remaining []byte, spatialObject geopb.SpatialObject, err error) {
 	var data []byte
 	remaining, data, err = DecodeUntaggedBytesValue(b)
 	if err != nil {
-		return b, nil, err
+		return b, geopb.SpatialObject{}, err
 	}
-	return remaining, geopb.EWKB(data), err
+	err = protoutil.Unmarshal(data, &spatialObject)
+	return remaining, spatialObject, err
 }
 
 // DecodeUntaggedDecimalValue decodes a value encoded by EncodeUntaggedDecimalValue.

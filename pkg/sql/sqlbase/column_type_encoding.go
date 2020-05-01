@@ -384,9 +384,9 @@ func EncodeTableValue(
 	case *tree.DDate:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), t.UnixEpochDaysWithOrig()), nil
 	case *tree.DGeography:
-		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.EWKB()), nil
+		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.SpatialObject)
 	case *tree.DGeometry:
-		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.EWKB()), nil
+		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.SpatialObject)
 	case *tree.DTime:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
 	case *tree.DTimeTZ:
@@ -630,13 +630,13 @@ func MarshalColumnValue(col *ColumnDescriptor, val tree.Datum) (roachpb.Value, e
 		}
 	case types.GeographyFamily:
 		if v, ok := val.(*tree.DGeography); ok {
-			r.SetGeo(v.EWKB())
-			return r, nil
+			err := r.SetGeo(v.SpatialObject)
+			return r, err
 		}
 	case types.GeometryFamily:
 		if v, ok := val.(*tree.DGeometry); ok {
-			r.SetGeo(v.EWKB())
-			return r, nil
+			err := r.SetGeo(v.SpatialObject)
+			return r, err
 		}
 	case types.TimeFamily:
 		if v, ok := val.(*tree.DTime); ok {
@@ -1179,9 +1179,9 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 	case *tree.DDate:
 		return encoding.EncodeUntaggedIntValue(b, t.UnixEpochDaysWithOrig()), nil
 	case *tree.DGeography:
-		return encoding.EncodeUntaggedGeoValue(b, t.EWKB()), nil
+		return encoding.EncodeUntaggedGeoValue(b, t.SpatialObject)
 	case *tree.DGeometry:
-		return encoding.EncodeUntaggedGeoValue(b, t.EWKB()), nil
+		return encoding.EncodeUntaggedGeoValue(b, t.SpatialObject)
 	case *tree.DTime:
 		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
 	case *tree.DTimeTZ:
