@@ -729,7 +729,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	var cols sqlbase.ResultColumns
 	if stmt.AST.StatementType() == tree.Rows {
-		cols = planColumns(planner.curPlan.plan)
+		cols = planColumns(planner.curPlan.main)
 	}
 	if err := ex.initStatementResult(ctx, res, stmt, cols); err != nil {
 		res.SetError(err)
@@ -740,7 +740,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	distributePlan := false
 	if _, noMultiTenancy := planner.execCfg.NodeID.OptionalNodeID(); noMultiTenancy {
 		distributePlan = shouldDistributePlan(
-			ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.plan)
+			ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.main)
 	}
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan)
 
@@ -889,7 +889,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	// We pass in whether or not we wanted to distribute this plan, which tells
 	// the planner whether or not to plan remote table readers.
 	cleanup := ex.server.cfg.DistSQLPlanner.PlanAndRun(
-		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.plan, recv,
+		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.main, recv,
 	)
 	// Note that we're not cleaning up right away because postqueries might
 	// need to have access to the main query tree.
@@ -898,11 +898,9 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		return recv.bytesRead, recv.rowsRead, recv.commErr
 	}
 
-	if len(planner.curPlan.checkPlans) > 0 || len(planner.curPlan.cascades) > 0 {
-		ex.server.cfg.DistSQLPlanner.PlanAndRunPostqueries(
-			ctx, planner, evalCtxFactory, planner.curPlan.cascades, planner.curPlan.checkPlans, recv, distribute,
-		)
-	}
+	ex.server.cfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
+		ctx, planner, evalCtxFactory, &planner.curPlan.planComponents, recv, distribute,
+	)
 
 	return recv.bytesRead, recv.rowsRead, recv.commErr
 }

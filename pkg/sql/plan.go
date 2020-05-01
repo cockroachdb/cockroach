@@ -281,8 +281,7 @@ type planTop struct {
 	// stmt is a reference to the current statement (AST and other metadata).
 	stmt *Statement
 
-	// plan is the top-level node of the logical plan.
-	plan planNode
+	planComponents
 
 	// mem/catalog retains the memo and catalog that were used to create the
 	// plan.
@@ -295,16 +294,6 @@ type planTop struct {
 	// This is (currently) used by CREATE VIEW.
 	// TODO(knz): Remove this in favor of a better encapsulated mechanism.
 	deps planDependencies
-
-	// subqueryPlans contains all the sub-query plans.
-	subqueryPlans []subquery
-
-	// cascades contains metadata for all cascades.
-	cascades []exec.Cascade
-
-	// checkPlans contains all the plans for queries that are to be executed after
-	// the main query (for example, foreign key checks).
-	checkPlans []checkPlan
 
 	// auditEvents becomes non-nil if any of the descriptors used by
 	// current statement is causing an auditing event. See exec_log.go.
@@ -326,25 +315,41 @@ type planTop struct {
 	distSQLDiagrams []execinfrapb.FlowDiagram
 }
 
+// planComponents groups together the various components of the entire query
+// plan.
+type planComponents struct {
+	// subqueryPlans contains all the sub-query plans.
+	subqueryPlans []subquery
+
+	// plan for the main query.
+	main planNode
+
+	// cascades contains metadata for all cascades.
+	cascades []cascadeMetadata
+
+	// checkPlans contains all the plans for queries that are to be executed after
+	// the main query (for example, foreign key checks).
+	checkPlans []checkPlan
+}
+
+type cascadeMetadata struct {
+	exec.Cascade
+	// plan for the cascade. This plan is not populated upfront; it is created
+	// only when it needs to run, after the main query (and previous cascades).
+	plan planNode
+}
+
 // checkPlan is a query tree that is executed after the main one. It can only
 // return an error (for example, foreign key violation).
 type checkPlan struct {
 	plan planNode
 }
 
-// init resets planTop to point to a given statement; used at the start of the
-// planning process.
-func (p *planTop) init(stmt *Statement, appStats *appStats) {
-	*p = planTop{stmt: stmt}
-	p.instrumentation.init(appStats)
-}
-
-// close ensures that the plan's resources have been deallocated.
-func (p *planTop) close(ctx context.Context) {
-	if p.plan != nil {
-		p.instrumentation.savePlanInfo(ctx, p)
-		p.plan.Close(ctx)
-		p.plan = nil
+// close calls Close on all plan trees.
+func (p *planComponents) close(ctx context.Context) {
+	if p.main != nil {
+		p.main.Close(ctx)
+		p.main = nil
 	}
 
 	for i := range p.subqueryPlans {
@@ -356,12 +361,34 @@ func (p *planTop) close(ctx context.Context) {
 		}
 	}
 
+	for i := range p.cascades {
+		if p.cascades[i].plan != nil {
+			p.cascades[i].plan.Close(ctx)
+			p.cascades[i].plan = nil
+		}
+	}
+
 	for i := range p.checkPlans {
 		if p.checkPlans[i].plan != nil {
 			p.checkPlans[i].plan.Close(ctx)
 			p.checkPlans[i].plan = nil
 		}
 	}
+}
+
+// init resets planTop to point to a given statement; used at the start of the
+// planning process.
+func (p *planTop) init(stmt *Statement, appStats *appStats) {
+	*p = planTop{stmt: stmt}
+	p.instrumentation.init(appStats)
+}
+
+// close ensures that the plan's resources have been deallocated.
+func (p *planTop) close(ctx context.Context) {
+	if p.main != nil {
+		p.instrumentation.savePlanInfo(ctx, p)
+	}
+	p.planComponents.close(ctx)
 }
 
 // formatOptPlan returns a visual representation of the optimizer plan that was

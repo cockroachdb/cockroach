@@ -110,8 +110,7 @@ func planToTree(ctx context.Context, top *planTop) *roachpb.ExplainTreePlanNode 
 	}
 
 	if err := observePlan(
-		ctx, top.plan, top.subqueryPlans, top.cascades, top.checkPlans,
-		observer, true /* returnError */, sampledLogicalPlanFmtFlags,
+		ctx, &top.planComponents, observer, true /* returnError */, sampledLogicalPlanFmtFlags,
 	); err != nil {
 		panic(fmt.Sprintf("error while walking plan to save it to statement stats: %s", err.Error()))
 	}
