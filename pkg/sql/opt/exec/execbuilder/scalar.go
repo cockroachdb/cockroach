@@ -205,6 +205,20 @@ func (b *Builder) buildBoolean(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree
 	case opt.RangeOp:
 		return b.buildScalar(ctx, scalar.Child(0).(opt.ScalarExpr))
 
+	case opt.IsTupleNullOp:
+		expr, err := b.buildScalar(ctx, scalar.Child(0).(opt.ScalarExpr))
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewTypedIsNullExpr(expr), nil
+
+	case opt.IsTupleNotNullOp:
+		expr, err := b.buildScalar(ctx, scalar.Child(0).(opt.ScalarExpr))
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewTypedIsNotNullExpr(expr), nil
+
 	default:
 		panic(errors.AssertionFailedf("invalid op %s", log.Safe(scalar.Op())))
 	}
@@ -221,6 +235,19 @@ func (b *Builder) buildComparison(
 	if err != nil {
 		return nil, err
 	}
+
+	// When the operator is an IsOp, the right is NULL, and the left is not a
+	// tuple, return the unary tree.IsNullExpr.
+	if scalar.Op() == opt.IsOp && right == tree.DNull && left.ResolvedType().Family() != types.TupleFamily {
+		return tree.NewTypedIsNullExpr(left), nil
+	}
+
+	// When the operator is an IsNotOp, the right is NULL, and the left is not a
+	// tuple, return the unary tree.IsNotNullExpr.
+	if scalar.Op() == opt.IsNotOp && right == tree.DNull && left.ResolvedType().Family() != types.TupleFamily {
+		return tree.NewTypedIsNotNullExpr(left), nil
+	}
+
 	operator := opt.ComparisonOpReverseMap[scalar.Op()]
 	return tree.NewTypedComparisonExpr(operator, left, right), nil
 }
