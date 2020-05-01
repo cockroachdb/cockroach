@@ -11,15 +11,115 @@
 package geo
 
 import (
+	"encoding/hex"
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 	"github.com/golang/geo/s2"
 	"github.com/stretchr/testify/require"
+	"github.com/twpayne/go-geom"
 )
+
+func mustDecodeEWKBFromString(t *testing.T, h string) geopb.EWKB {
+	decoded, err := hex.DecodeString(h)
+	require.NoError(t, err)
+	return geopb.EWKB(decoded)
+}
+
+func TestSpatialObjectFromGeom(t *testing.T) {
+	point := geom.NewPointFlat(geom.XY, []float64{1.0, 2.0})
+	linestring := geom.NewLineStringFlat(geom.XY, []float64{1.0, 1.0, 2.0, 2.0})
+	linestring.SetSRID(4326)
+	polygon := geom.NewPolygonFlat(geom.XY, []float64{1.0, 1.0, 2.0, 2.0, 1.0, 2.0, 1.0, 1.0}, []int{8})
+	multipoint := geom.NewMultiPointFlat(geom.XY, []float64{1.0, 1.0, 2.0, 2.0})
+	multilinestring := geom.NewMultiLineStringFlat(geom.XY, []float64{1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0}, []int{4, 8})
+	multipolygon := geom.NewMultiPolygon(geom.XY)
+	require.NoError(t, multipolygon.Push(polygon))
+	require.NoError(t, multipolygon.Push(geom.NewPolygonFlat(geom.XY, []float64{3.0, 3.0, 4.0, 4.0, 3.0, 4.0, 3.0, 3.0}, []int{8})))
+	geometrycollection := geom.NewGeometryCollection()
+	require.NoError(t, geometrycollection.Push(point, multipoint))
+
+	testCases := []struct {
+		desc string
+		g    geom.T
+		ret  geopb.SpatialObject
+	}{
+		{
+			"point",
+			point,
+			geopb.SpatialObject{
+				EWKB:  mustDecodeEWKBFromString(t, "0101000000000000000000F03F0000000000000040"),
+				SRID:  0,
+				Shape: geopb.Shape_Point,
+			},
+		},
+		{
+			"linestring",
+			linestring,
+			geopb.SpatialObject{
+				EWKB:  mustDecodeEWKBFromString(t, "0102000020E610000002000000000000000000F03F000000000000F03F00000000000000400000000000000040"),
+				SRID:  4326,
+				Shape: geopb.Shape_LineString,
+			},
+		},
+		{
+			"polygon",
+			polygon,
+			geopb.SpatialObject{
+				EWKB:  mustDecodeEWKBFromString(t, "01030000000100000004000000000000000000F03F000000000000F03F00000000000000400000000000000040000000000000F03F0000000000000040000000000000F03F000000000000F03F"),
+				SRID:  0,
+				Shape: geopb.Shape_Polygon,
+			},
+		},
+		{
+			"multipoint",
+			multipoint,
+			geopb.SpatialObject{
+				EWKB:  mustDecodeEWKBFromString(t, "0104000000020000000101000000000000000000F03F000000000000F03F010100000000000000000000400000000000000040"),
+				SRID:  0,
+				Shape: geopb.Shape_MultiPoint,
+			},
+		},
+		{
+			"multilinestring",
+			multilinestring,
+			geopb.SpatialObject{
+				EWKB:  mustDecodeEWKBFromString(t, "010500000002000000010200000002000000000000000000F03F000000000000F03F000000000000004000000000000000400102000000020000000000000000000840000000000000084000000000000010400000000000001040"),
+				SRID:  0,
+				Shape: geopb.Shape_MultiLineString,
+			},
+		},
+		{
+			"multipolygon",
+			multipolygon,
+			geopb.SpatialObject{
+				EWKB:  mustDecodeEWKBFromString(t, "01060000000200000001030000000100000004000000000000000000F03F000000000000F03F00000000000000400000000000000040000000000000F03F0000000000000040000000000000F03F000000000000F03F0103000000010000000400000000000000000008400000000000000840000000000000104000000000000010400000000000000840000000000000104000000000000008400000000000000840"),
+				SRID:  0,
+				Shape: geopb.Shape_MultiPolygon,
+			},
+		},
+		{
+			"geometrycollection",
+			geometrycollection,
+			geopb.SpatialObject{
+				EWKB:  mustDecodeEWKBFromString(t, "0107000000020000000101000000000000000000F03F00000000000000400104000000020000000101000000000000000000F03F000000000000F03F010100000000000000000000400000000000000040"),
+				SRID:  0,
+				Shape: geopb.Shape_GeometryCollection,
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			so, err := spatialObjectFromGeom(tc.g)
+			require.NoError(t, err)
+			require.Equal(t, tc.ret, so)
+		})
+	}
+}
 
 func TestGeographyAsS2(t *testing.T) {
 	testCases := []struct {
@@ -261,7 +361,7 @@ func TestClipEWKBByRect(t *testing.T) {
 			d.ScanArgs(t, "xmax", &xMax)
 			d.ScanArgs(t, "ymax", &yMax)
 			ewkb, err := geos.ClipEWKBByRect(
-				g.ewkb, float64(xMin), float64(yMin), float64(xMax), float64(yMax))
+				g.EWKB(), float64(xMin), float64(yMin), float64(xMax), float64(yMax))
 			if err != nil {
 				return err.Error()
 			}
@@ -270,9 +370,9 @@ func TestClipEWKBByRect(t *testing.T) {
 			// - expand test with more inputs
 			return fmt.Sprintf(
 				"%d => %d (srid: %d)",
-				len(g.ewkb),
+				len(g.EWKB()),
 				len(ewkb),
-				(&spatialObjectBase{ewkb: ewkb}).SRID(),
+				g.SRID(),
 			)
 		default:
 			return fmt.Sprintf("unknown command: %s", d.Cmd)

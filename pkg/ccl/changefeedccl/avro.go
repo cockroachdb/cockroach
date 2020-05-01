@@ -181,7 +181,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 			return []byte(d.(*tree.DGeography).EWKB()), nil
 		}
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			g, err := geo.NewGeographyFromUnvalidatedEWKB(geopb.UnvalidatedEWKB(x.([]byte)))
+			g, err := geo.ParseGeographyFromEWKBRaw(geopb.EWKB(x.([]byte)))
 			if err != nil {
 				return nil, err
 			}
@@ -193,7 +193,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 			return []byte(d.(*tree.DGeometry).EWKB()), nil
 		}
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			g, err := geo.NewGeometryFromUnvalidatedEWKB(geopb.UnvalidatedEWKB(x.([]byte)))
+			g, err := geo.ParseGeometryFromEWKBRaw(geopb.EWKB(x.([]byte)))
 			if err != nil {
 				return nil, err
 			}

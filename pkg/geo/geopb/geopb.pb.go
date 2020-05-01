@@ -7,6 +7,8 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
+import io "io"
+
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
 var _ = fmt.Errorf
@@ -34,7 +36,7 @@ const (
 	Shape_MultiPolygon    Shape = 6
 	// Geometry can contain any type.
 	Shape_Geometry Shape = 7
-	// GeometryCollection can contain any multi* type.
+	// GeometryCollection can contain a list of any above type except for Geometry.
 	Shape_GeometryCollection Shape = 8
 )
 
@@ -65,29 +67,374 @@ func (x Shape) String() string {
 	return proto.EnumName(Shape_name, int32(x))
 }
 func (Shape) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_geopb_f6b0056574ab753d, []int{0}
+	return fileDescriptor_geopb_68bd0b88952d27ee, []int{0}
 }
+
+// SpatialObject represents a serialization of a Geospatial type.
+type SpatialObject struct {
+	// EWKB is the EWKB representation of the spatial object.
+	EWKB EWKB `protobuf:"bytes,1,opt,name=ewkb,proto3,casttype=EWKB" json:"ewkb,omitempty"`
+	// SRID is the denormalized SRID derived from the EWKB.
+	SRID SRID `protobuf:"varint,2,opt,name=srid,proto3,casttype=SRID" json:"srid,omitempty"`
+	// Shape is denormalized Shape derived from the EWKB.
+	Shape Shape `protobuf:"varint,3,opt,name=shape,proto3,enum=cockroach.geopb.Shape" json:"shape,omitempty"`
+}
+
+func (m *SpatialObject) Reset()         { *m = SpatialObject{} }
+func (m *SpatialObject) String() string { return proto.CompactTextString(m) }
+func (*SpatialObject) ProtoMessage()    {}
+func (*SpatialObject) Descriptor() ([]byte, []int) {
+	return fileDescriptor_geopb_68bd0b88952d27ee, []int{0}
+}
+func (m *SpatialObject) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SpatialObject) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SpatialObject) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SpatialObject.Merge(dst, src)
+}
+func (m *SpatialObject) XXX_Size() int {
+	return m.Size()
+}
+func (m *SpatialObject) XXX_DiscardUnknown() {
+	xxx_messageInfo_SpatialObject.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SpatialObject proto.InternalMessageInfo
 
 func init() {
+	proto.RegisterType((*SpatialObject)(nil), "cockroach.geopb.SpatialObject")
 	proto.RegisterEnum("cockroach.geopb.Shape", Shape_name, Shape_value)
 }
+func (m *SpatialObject) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
 
-func init() { proto.RegisterFile("geo/geopb/geopb.proto", fileDescriptor_geopb_f6b0056574ab753d) }
+func (m *SpatialObject) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.EWKB) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintGeopb(dAtA, i, uint64(len(m.EWKB)))
+		i += copy(dAtA[i:], m.EWKB)
+	}
+	if m.SRID != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintGeopb(dAtA, i, uint64(m.SRID))
+	}
+	if m.Shape != 0 {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintGeopb(dAtA, i, uint64(m.Shape))
+	}
+	return i, nil
+}
 
-var fileDescriptor_geopb_f6b0056574ab753d = []byte{
-	// 220 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x12, 0x4d, 0x4f, 0xcd, 0xd7,
-	0x4f, 0x4f, 0xcd, 0x2f, 0x48, 0x82, 0x90, 0x7a, 0x05, 0x45, 0xf9, 0x25, 0xf9, 0x42, 0xfc, 0xc9,
-	0xf9, 0xc9, 0xd9, 0x45, 0xf9, 0x89, 0xc9, 0x19, 0x7a, 0x60, 0x61, 0xad, 0xe9, 0x8c, 0x5c, 0xac,
-	0xc1, 0x19, 0x89, 0x05, 0xa9, 0x42, 0x9c, 0x5c, 0xac, 0xa1, 0x79, 0xc5, 0xa9, 0x25, 0x02, 0x0c,
-	0x20, 0x66, 0x40, 0x7e, 0x66, 0x5e, 0x89, 0x00, 0xa3, 0x10, 0x1f, 0x17, 0x97, 0x4f, 0x66, 0x5e,
-	0x6a, 0x70, 0x49, 0x51, 0x66, 0x5e, 0xba, 0x00, 0x93, 0x10, 0x37, 0x17, 0x7b, 0x40, 0x7e, 0x4e,
-	0x65, 0x7a, 0x7e, 0x9e, 0x00, 0x33, 0x48, 0xd2, 0xb7, 0x34, 0xa7, 0x24, 0x13, 0xa2, 0x98, 0x45,
-	0x48, 0x98, 0x8b, 0x1f, 0xcc, 0x47, 0xd2, 0xc1, 0x2a, 0x24, 0xc0, 0xc5, 0x03, 0x55, 0x04, 0xd1,
-	0xc6, 0x26, 0xc4, 0xc3, 0xc5, 0xe1, 0x9e, 0x9a, 0x9f, 0x9b, 0x5a, 0x52, 0x54, 0x29, 0xc0, 0x2e,
-	0x24, 0xc6, 0x25, 0x04, 0xe3, 0x39, 0xe7, 0xe7, 0xe4, 0xa4, 0x26, 0x97, 0x64, 0xe6, 0xe7, 0x09,
-	0x70, 0x38, 0xa9, 0x9f, 0x78, 0x28, 0xc7, 0x70, 0xe2, 0x91, 0x1c, 0xe3, 0x85, 0x47, 0x72, 0x8c,
-	0x37, 0x1e, 0xc9, 0x31, 0x3e, 0x78, 0x24, 0xc7, 0x38, 0xe1, 0xb1, 0x1c, 0xc3, 0x85, 0xc7, 0x72,
-	0x0c, 0x37, 0x1e, 0xcb, 0x31, 0x44, 0xb1, 0x82, 0xbd, 0x90, 0xc4, 0x06, 0xf6, 0x9a, 0x31, 0x20,
-	0x00, 0x00, 0xff, 0xff, 0x15, 0xf5, 0x4b, 0x5c, 0xf3, 0x00, 0x00, 0x00,
+func encodeVarintGeopb(dAtA []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		dAtA[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	dAtA[offset] = uint8(v)
+	return offset + 1
+}
+func (m *SpatialObject) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.EWKB)
+	if l > 0 {
+		n += 1 + l + sovGeopb(uint64(l))
+	}
+	if m.SRID != 0 {
+		n += 1 + sovGeopb(uint64(m.SRID))
+	}
+	if m.Shape != 0 {
+		n += 1 + sovGeopb(uint64(m.Shape))
+	}
+	return n
+}
+
+func sovGeopb(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozGeopb(x uint64) (n int) {
+	return sovGeopb(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *SpatialObject) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowGeopb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SpatialObject: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SpatialObject: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EWKB", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGeopb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthGeopb
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.EWKB = append(m.EWKB[:0], dAtA[iNdEx:postIndex]...)
+			if m.EWKB == nil {
+				m.EWKB = []byte{}
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SRID", wireType)
+			}
+			m.SRID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGeopb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.SRID |= (SRID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Shape", wireType)
+			}
+			m.Shape = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGeopb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Shape |= (Shape(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipGeopb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthGeopb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func skipGeopb(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return 0, ErrIntOverflowGeopb
+			}
+			if iNdEx >= l {
+				return 0, io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		wireType := int(wire & 0x7)
+		switch wireType {
+		case 0:
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowGeopb
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				iNdEx++
+				if dAtA[iNdEx-1] < 0x80 {
+					break
+				}
+			}
+			return iNdEx, nil
+		case 1:
+			iNdEx += 8
+			return iNdEx, nil
+		case 2:
+			var length int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowGeopb
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				length |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			iNdEx += length
+			if length < 0 {
+				return 0, ErrInvalidLengthGeopb
+			}
+			return iNdEx, nil
+		case 3:
+			for {
+				var innerWire uint64
+				var start int = iNdEx
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return 0, ErrIntOverflowGeopb
+					}
+					if iNdEx >= l {
+						return 0, io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					innerWire |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				innerWireType := int(innerWire & 0x7)
+				if innerWireType == 4 {
+					break
+				}
+				next, err := skipGeopb(dAtA[start:])
+				if err != nil {
+					return 0, err
+				}
+				iNdEx = start + next
+			}
+			return iNdEx, nil
+		case 4:
+			return iNdEx, nil
+		case 5:
+			iNdEx += 4
+			return iNdEx, nil
+		default:
+			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
+		}
+	}
+	panic("unreachable")
+}
+
+var (
+	ErrInvalidLengthGeopb = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowGeopb   = fmt.Errorf("proto: integer overflow")
+)
+
+func init() { proto.RegisterFile("geo/geopb/geopb.proto", fileDescriptor_geopb_68bd0b88952d27ee) }
+
+var fileDescriptor_geopb_68bd0b88952d27ee = []byte{
+	// 322 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x5c, 0x90, 0x4f, 0x4b, 0xc3, 0x30,
+	0x18, 0x87, 0x9b, 0x6d, 0xdd, 0xe6, 0xeb, 0xdc, 0x42, 0xd4, 0x31, 0x3c, 0xc4, 0x21, 0x82, 0x43,
+	0xa4, 0x03, 0xfd, 0x06, 0x53, 0x11, 0x51, 0x71, 0xb4, 0x88, 0xe0, 0xad, 0xad, 0xa1, 0x8b, 0xab,
+	0x7d, 0x4b, 0x17, 0x91, 0x7d, 0x04, 0x6f, 0xde, 0xfc, 0x4a, 0x3b, 0xee, 0xb8, 0x93, 0x68, 0xf7,
+	0x2d, 0x76, 0x92, 0xa6, 0x15, 0xc4, 0x4b, 0xde, 0x3f, 0xcf, 0xf3, 0x83, 0x24, 0xb0, 0x1d, 0x08,
+	0xec, 0x07, 0x02, 0x63, 0x2f, 0x3f, 0xad, 0x38, 0x41, 0x85, 0xac, 0xe5, 0xa3, 0x3f, 0x4e, 0xd0,
+	0xf5, 0x47, 0x96, 0x5e, 0xef, 0x6c, 0x05, 0x18, 0xa0, 0x66, 0xfd, 0xac, 0xcb, 0xb5, 0xbd, 0x37,
+	0x02, 0x1b, 0x4e, 0xec, 0x2a, 0xe9, 0x86, 0xb7, 0xde, 0x93, 0xf0, 0x15, 0xdb, 0x87, 0x8a, 0x78,
+	0x1d, 0x7b, 0x1d, 0xd2, 0x25, 0xbd, 0xc6, 0x80, 0xa6, 0x9f, 0xbb, 0x95, 0xf3, 0xfb, 0xab, 0xc1,
+	0xaa, 0xa8, 0xb6, 0xa6, 0x99, 0x35, 0x49, 0xe4, 0x63, 0xa7, 0xd4, 0x25, 0x3d, 0x33, 0xb7, 0x1c,
+	0xfb, 0xf2, 0x6c, 0x55, 0x54, 0x5b, 0x53, 0x76, 0x04, 0xe6, 0x64, 0xe4, 0xc6, 0xa2, 0x53, 0xee,
+	0x92, 0x5e, 0xf3, 0xb8, 0x6d, 0xfd, 0xbb, 0x94, 0xe5, 0x64, 0xd4, 0xce, 0xa5, 0xc3, 0x0f, 0x02,
+	0xa6, 0x5e, 0xb0, 0x35, 0x30, 0xef, 0xa2, 0x89, 0x50, 0xd4, 0xc8, 0xda, 0x21, 0xca, 0x48, 0x51,
+	0xc2, 0x9a, 0x00, 0xd7, 0x32, 0x12, 0x8e, 0x4a, 0x64, 0x14, 0xd0, 0x12, 0x5b, 0x87, 0xda, 0x10,
+	0xc3, 0x69, 0x80, 0x11, 0x2d, 0x67, 0xf0, 0xe6, 0x25, 0x54, 0x32, 0x97, 0x2b, 0x6c, 0x13, 0x5a,
+	0x7a, 0xfe, 0x93, 0x30, 0x19, 0x85, 0x46, 0x21, 0xe5, 0xb1, 0x2a, 0x6b, 0x40, 0xfd, 0x42, 0xe0,
+	0xb3, 0x50, 0xc9, 0x94, 0xd6, 0x58, 0x1b, 0xd8, 0xef, 0x74, 0x8a, 0x61, 0x28, 0x7c, 0x25, 0x31,
+	0xa2, 0xf5, 0xc1, 0xc1, 0xec, 0x9b, 0x1b, 0xb3, 0x94, 0x93, 0x79, 0xca, 0xc9, 0x22, 0xe5, 0xe4,
+	0x2b, 0xe5, 0xe4, 0x7d, 0xc9, 0x8d, 0xf9, 0x92, 0x1b, 0x8b, 0x25, 0x37, 0x1e, 0x4c, 0xfd, 0x1e,
+	0xaf, 0xaa, 0x7f, 0xf5, 0xe4, 0x27, 0x00, 0x00, 0xff, 0xff, 0x16, 0x69, 0xe3, 0x3a, 0x95, 0x01,
+	0x00, 0x00,
 }
