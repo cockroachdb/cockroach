@@ -410,6 +410,8 @@ func (ag *hashAggregator) close() {
 				ag.buckets[bucket].close(ag.Ctx)
 			}
 		}
+		// Make sure to release any remaining memory under 'buckets'.
+		ag.buckets = nil
 		// Note that we should be closing accounts only after closing all the
 		// buckets since the latter might be releasing some precisely tracked
 		// memory, and if we were to close the accounts first, there would be
@@ -657,7 +659,23 @@ func (ag *hashAggregator) emitRow() (
 	bucket := ag.bucketsIter[0]
 	ag.bucketsIter = ag.bucketsIter[1:]
 
-	return ag.getAggResults(ag.buckets[bucket])
+	// Once we get the results from the bucket, we can delete it from the map.
+	// This will allow us to return the memory to the system before the hash
+	// aggregator is fully done (which matters when we have many buckets).
+	// NOTE: accounting for the memory under aggregate builtins in the bucket
+	// is updated in getAggResults (the bucket will be closed), however, we
+	// choose to not reduce our estimate of the map's internal footprint
+	// because it is error-prone to estimate the new footprint (we don't
+	// whether and when Go runtime will release some of the underlying memory).
+	// This behavior is ok, though, since actual usage of buckets will be lower
+	// than what we accounted for - in the worst case, the query might hit a
+	// memory budget limit and error out when it might actually be within the
+	// limit. However, we might be under accounting memory usage in other
+	// places, so having some over accounting here might be actually beneficial
+	// as a defensive mechanism against OOM crashes.
+	state, row, meta := ag.getAggResults(ag.buckets[bucket])
+	delete(ag.buckets, bucket)
+	return state, row, meta
 }
 
 // emitRow constructs an output row from an accumulated bucket and returns it.
