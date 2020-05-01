@@ -403,7 +403,7 @@ upsert nullablecols
       │    └── filters
       │         └── i:6 = c1:15 [outer=(6,15), constraints=(/6: (/NULL - ]; /15: (/NULL - ]), fd=(6)==(15), (15)==(6)]
       └── projections
-           └── CASE WHEN rowid:18 IS NULL THEN i:6 ELSE 1 END [as=upsert_c3:22, outer=(6,18)]
+           └── CASE WHEN rowid:18 IS NOT DISTINCT FROM NULL THEN i:6 ELSE 1 END [as=upsert_c3:22, outer=(6,18)]
 
 # Don't eliminate project if it computes extra column(s).
 norm expect-not=EliminateGroupByProject
@@ -605,7 +605,7 @@ upsert xy
       │    └── filters
       │         └── y:4 = x:6 [outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
       └── projections
-           └── CASE WHEN x:6 IS NULL THEN column5:5 ELSE 1 END [as=upsert_y:10, outer=(5,6)]
+           └── CASE WHEN x:6 IS NOT DISTINCT FROM NULL THEN column5:5 ELSE 1 END [as=upsert_y:10, outer=(5,6)]
 
 # UpsertDistinctOn should not reduce nullable constant grouping column.
 norm expect-not=ReduceNotNullGroupingCols
@@ -647,7 +647,7 @@ upsert xy
       │    │    │    │    ├── scan xy
       │    │    │    │    │    └── columns: y:4
       │    │    │    │    └── filters
-      │    │    │    │         └── y:4 IS NULL [outer=(4), constraints=(/4: [/NULL - /NULL]; tight), fd=()-->(4)]
+      │    │    │    │         └── y:4 IS NOT DISTINCT FROM NULL [outer=(4), constraints=(/4: [/NULL - /NULL]; tight), fd=()-->(4)]
       │    │    │    └── projections
       │    │    │         └── CAST(NULL AS INT8) [as=column5:5]
       │    │    └── aggregations
@@ -660,7 +660,7 @@ upsert xy
       │    └── filters
       │         └── y:4 = x:6 [outer=(4,6), constraints=(/4: (/NULL - ]; /6: (/NULL - ]), fd=(4)==(6), (6)==(4)]
       └── projections
-           └── CASE WHEN x:6 IS NULL THEN column5:5 ELSE 1 END [as=upsert_y:10, outer=(5,6)]
+           └── CASE WHEN x:6 IS NOT DISTINCT FROM NULL THEN column5:5 ELSE 1 END [as=upsert_y:10, outer=(5,6)]
 
 # Test removal of 2/3 grouping columns.
 norm expect=ReduceNotNullGroupingCols
@@ -766,7 +766,7 @@ upsert abc
       │         ├── b:5 = b:9 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
       │         └── c:6 = c:10 [outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
       └── projections
-           └── CASE WHEN a:8 IS NULL THEN c:6 ELSE 2 END [as=upsert_c:14, outer=(6,8)]
+           └── CASE WHEN a:8 IS NOT DISTINCT FROM NULL THEN c:6 ELSE 2 END [as=upsert_c:14, outer=(6,8)]
 
 # --------------------------------------------------
 # EliminateAggDistinctForKeys
@@ -1238,7 +1238,7 @@ insert a
            │    │    └── filters
            │    │         └── i:7 = i:16 [outer=(7,16), constraints=(/7: (/NULL - ]; /16: (/NULL - ]), fd=(7)==(16), (16)==(7)]
            │    └── filters
-           │         └── s:18 IS NULL [outer=(18), constraints=(/18: [/NULL - /NULL]; tight), fd=()-->(18)]
+           │         └── s:18 IS NOT DISTINCT FROM NULL [outer=(18), constraints=(/18: [/NULL - /NULL]; tight), fd=()-->(18)]
            └── 1
 
 # --------------------------------------------------
@@ -1340,7 +1340,7 @@ upsert a
       │         ├── i:7 = i:16 [outer=(7,16), constraints=(/7: (/NULL - ]; /16: (/NULL - ]), fd=(7)==(16), (16)==(7)]
       │         └── "?column?":12 = s:18 [outer=(12,18), constraints=(/12: (/NULL - ]; /18: (/NULL - ]), fd=(12)==(18), (18)==(12)]
       └── projections
-           └── CASE WHEN k:15 IS NULL THEN column13:13 ELSE 1.1 END [as=upsert_f:23, outer=(13,15)]
+           └── CASE WHEN k:15 IS NOT DISTINCT FROM NULL THEN column13:13 ELSE 1.1 END [as=upsert_f:23, outer=(13,15)]
 
 # --------------------------------------------------
 # EliminateDistinctOnValues
@@ -1664,7 +1664,7 @@ upsert a
       │         ├── column3:8 = i:12 [outer=(8,12), constraints=(/8: (/NULL - ]; /12: (/NULL - ]), fd=(8)==(12), (12)==(8)]
       │         └── column2:7 = s:14 [outer=(7,14), constraints=(/7: (/NULL - ]; /14: (/NULL - ]), fd=(7)==(14), (14)==(7)]
       └── projections
-           └── CASE WHEN k:11 IS NULL THEN column9:9 ELSE 1.0 END [as=upsert_f:19, outer=(9,11)]
+           └── CASE WHEN k:11 IS NOT DISTINCT FROM NULL THEN column9:9 ELSE 1.0 END [as=upsert_f:19, outer=(9,11)]
 
 # UpsertDistinctOn is not removed when there are duplicates.
 norm expect-not=EliminateDistinctOnValues
@@ -1730,7 +1730,7 @@ upsert a
       │         ├── column3:8 = i:12 [outer=(8,12), constraints=(/8: (/NULL - ]; /12: (/NULL - ]), fd=(8)==(12), (12)==(8)]
       │         └── column2:7 = s:14 [outer=(7,14), constraints=(/7: (/NULL - ]; /14: (/NULL - ]), fd=(7)==(14), (14)==(7)]
       └── projections
-           └── CASE WHEN k:11 IS NULL THEN column9:9 ELSE 1.0 END [as=upsert_f:19, outer=(9,11)]
+           └── CASE WHEN k:11 IS NOT DISTINCT FROM NULL THEN column9:9 ELSE 1.0 END [as=upsert_f:19, outer=(9,11)]
 
 # DO NOTHING case where all distinct ops can be removed.
 norm expect=EliminateDistinctOnValues
@@ -1787,7 +1787,7 @@ insert a
            │    │    │    │    │    └── filters
            │    │    │    │    │         └── column1:6 = k:11 [outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
            │    │    │    │    └── filters
-           │    │    │    │         └── k:11 IS NULL [outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
+           │    │    │    │         └── k:11 IS NOT DISTINCT FROM NULL [outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
            │    │    │    ├── scan a
            │    │    │    │    ├── columns: i:17!null s:19!null
            │    │    │    │    └── key: (17,19)
@@ -1795,7 +1795,7 @@ insert a
            │    │    │         ├── column2:7 = s:19 [outer=(7,19), constraints=(/7: (/NULL - ]; /19: (/NULL - ]), fd=(7)==(19), (19)==(7)]
            │    │    │         └── column3:8 = i:17 [outer=(8,17), constraints=(/8: (/NULL - ]; /17: (/NULL - ]), fd=(8)==(17), (17)==(8)]
            │    │    └── filters
-           │    │         └── s:19 IS NULL [outer=(19), constraints=(/19: [/NULL - /NULL]; tight), fd=()-->(19)]
+           │    │         └── s:19 IS NOT DISTINCT FROM NULL [outer=(19), constraints=(/19: [/NULL - /NULL]; tight), fd=()-->(19)]
            │    ├── scan a
            │    │    ├── columns: i:22!null f:23
            │    │    └── lax-key: (22,23)
@@ -1803,7 +1803,7 @@ insert a
            │         ├── column4:9 = f:23 [outer=(9,23), constraints=(/9: (/NULL - ]; /23: (/NULL - ]), fd=(9)==(23), (23)==(9)]
            │         └── column3:8 = i:22 [outer=(8,22), constraints=(/8: (/NULL - ]; /22: (/NULL - ]), fd=(8)==(22), (22)==(8)]
            └── filters
-                └── i:22 IS NULL [outer=(22), constraints=(/22: [/NULL - /NULL]; tight), fd=()-->(22)]
+                └── i:22 IS NOT DISTINCT FROM NULL [outer=(22), constraints=(/22: [/NULL - /NULL]; tight), fd=()-->(22)]
 
 # DO NOTHING case where one distinct op can be removed (k), but two others
 # can't: (s, i) and (f, i).
@@ -1871,7 +1871,7 @@ insert a
       │    │    │    │    │    │    │    └── filters
       │    │    │    │    │    │    │         └── column1:6 = k:11 [outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
       │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         └── k:11 IS NULL [outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
+      │    │    │    │    │    │         └── k:11 IS NOT DISTINCT FROM NULL [outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
       │    │    │    │    │    ├── scan a
       │    │    │    │    │    │    ├── columns: i:17!null s:19!null
       │    │    │    │    │    │    └── key: (17,19)
@@ -1879,7 +1879,7 @@ insert a
       │    │    │    │    │         ├── column2:7 = s:19 [outer=(7,19), constraints=(/7: (/NULL - ]; /19: (/NULL - ]), fd=(7)==(19), (19)==(7)]
       │    │    │    │    │         └── column9:9 = i:17 [outer=(9,17), constraints=(/9: (/NULL - ]; /17: (/NULL - ]), fd=(9)==(17), (17)==(9)]
       │    │    │    │    └── filters
-      │    │    │    │         └── s:19 IS NULL [outer=(19), constraints=(/19: [/NULL - /NULL]; tight), fd=()-->(19)]
+      │    │    │    │         └── s:19 IS NOT DISTINCT FROM NULL [outer=(19), constraints=(/19: [/NULL - /NULL]; tight), fd=()-->(19)]
       │    │    │    └── aggregations
       │    │    │         ├── first-agg [as=column1:6, outer=(6)]
       │    │    │         │    └── column1:6
@@ -1894,7 +1894,7 @@ insert a
       │    │         ├── column3:8 = f:23 [outer=(8,23), constraints=(/8: (/NULL - ]; /23: (/NULL - ]), fd=(8)==(23), (23)==(8)]
       │    │         └── column9:9 = i:22 [outer=(9,22), constraints=(/9: (/NULL - ]; /22: (/NULL - ]), fd=(9)==(22), (22)==(9)]
       │    └── filters
-      │         └── i:22 IS NULL [outer=(22), constraints=(/22: [/NULL - /NULL]; tight), fd=()-->(22)]
+      │         └── i:22 IS NOT DISTINCT FROM NULL [outer=(22), constraints=(/22: [/NULL - /NULL]; tight), fd=()-->(22)]
       └── aggregations
            ├── first-agg [as=column1:6, outer=(6)]
            │    └── column1:6
@@ -1978,7 +1978,7 @@ insert a
            │    │    │    │    │    │    └── filters
            │    │    │    │    │    │         └── column1:6 = k:11 [outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
            │    │    │    │    │    └── filters
-           │    │    │    │    │         └── k:11 IS NULL [outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
+           │    │    │    │    │         └── k:11 IS NOT DISTINCT FROM NULL [outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
            │    │    │    │    └── aggregations
            │    │    │    │         ├── first-agg [as=column2:7, outer=(7)]
            │    │    │    │         │    └── column2:7
@@ -1995,7 +1995,7 @@ insert a
            │    │    │         ├── column2:7 = s:19 [outer=(7,19), constraints=(/7: (/NULL - ]; /19: (/NULL - ]), fd=(7)==(19), (19)==(7)]
            │    │    │         └── column3:8 = i:17 [outer=(8,17), constraints=(/8: (/NULL - ]; /17: (/NULL - ]), fd=(8)==(17), (17)==(8)]
            │    │    └── filters
-           │    │         └── s:19 IS NULL [outer=(19), constraints=(/19: [/NULL - /NULL]; tight), fd=()-->(19)]
+           │    │         └── s:19 IS NOT DISTINCT FROM NULL [outer=(19), constraints=(/19: [/NULL - /NULL]; tight), fd=()-->(19)]
            │    ├── scan a
            │    │    ├── columns: i:22!null f:23
            │    │    └── lax-key: (22,23)
@@ -2003,7 +2003,7 @@ insert a
            │         ├── column4:9 = f:23 [outer=(9,23), constraints=(/9: (/NULL - ]; /23: (/NULL - ]), fd=(9)==(23), (23)==(9)]
            │         └── column3:8 = i:22 [outer=(8,22), constraints=(/8: (/NULL - ]; /22: (/NULL - ]), fd=(8)==(22), (22)==(8)]
            └── filters
-                └── i:22 IS NULL [outer=(22), constraints=(/22: [/NULL - /NULL]; tight), fd=()-->(22)]
+                └── i:22 IS NOT DISTINCT FROM NULL [outer=(22), constraints=(/22: [/NULL - /NULL]; tight), fd=()-->(22)]
 
 # DO NOTHING case with explicit conflict columns (only add upsert-distinct-on
 # for one index).
@@ -2053,7 +2053,7 @@ insert a
       │    │    └── filters
       │    │         └── i:7 = i:15 [outer=(7,15), constraints=(/7: (/NULL - ]; /15: (/NULL - ]), fd=(7)==(15), (15)==(7)]
       │    └── filters
-      │         └── s:17 IS NULL [outer=(17), constraints=(/17: [/NULL - /NULL]; tight), fd=()-->(17)]
+      │         └── s:17 IS NOT DISTINCT FROM NULL [outer=(17), constraints=(/17: [/NULL - /NULL]; tight), fd=()-->(17)]
       └── aggregations
            ├── first-agg [as=column12:12, outer=(12)]
            │    └── column12:12

@@ -128,7 +128,7 @@ render                                  ·            ·
       │                                 order        -column18,-started
       └── render                        ·            ·
            └── filter                   ·            ·
-                │                       filter       ((job_type IS NULL) OR (job_type != 'AUTO CREATE STATS')) AND ((finished IS NULL) OR (finished > (now() - '12:00:00')))
+                │                       filter       ((job_type IS NOT DISTINCT FROM NULL) OR (job_type != 'AUTO CREATE STATS')) AND ((finished IS NOT DISTINCT FROM NULL) OR (finished > (now() - '12:00:00')))
                 └── render              ·            ·
                      └── virtual table  ·            ·
 ·                                       source       jobs@primary

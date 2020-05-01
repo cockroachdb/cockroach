@@ -38,7 +38,7 @@ tree                  field               description
 ·                     vectorized          true
 render                ·                   ·
  └── filter           ·                   ·
-      │               filter              z IS NULL
+      │               filter              z IS NOT DISTINCT FROM NULL
       └── merge-join  ·                   ·
            │          type                left outer
            │          equality            (a_z, a_y, a_x) = (z, y, x)
@@ -47,7 +47,7 @@ render                ·                   ·
            ├── scan   ·                   ·
            │          table               b@idx
            │          spans               /!NULL-
-           │          filter              (a_y IS NOT NULL) AND (a_x IS NOT NULL)
+           │          filter              (a_y IS DISTINCT FROM NULL) AND (a_x IS DISTINCT FROM NULL)
            └── scan   ·                   ·
 ·                     table               a@primary
 ·                     spans               FULL SCAN

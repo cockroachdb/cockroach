@@ -1070,7 +1070,7 @@ scalar-group-by
  │         ├── scan kv
  │         │    └── columns: k:1!null v:2 w:3 s:4
  │         └── filters
- │              └── s:4 IS NULL
+ │              └── s:4 IS NOT DISTINCT FROM NULL
  └── aggregations
       └── array-agg [as=array_agg:5]
            └── s:4
@@ -3152,8 +3152,8 @@ project
       │         └── const-agg [as=array_agg:7]
       │              └── array_agg:7
       └── projections
-           ├── CASE WHEN count:8 IS NULL THEN 0 ELSE count:8 END [as=count:5]
-           └── CASE WHEN count_rows:9 IS NULL THEN 0 ELSE count_rows:9 END [as=count_rows:6]
+           ├── CASE WHEN count:8 IS NOT DISTINCT FROM NULL THEN 0 ELSE count:8 END [as=count:5]
+           └── CASE WHEN count_rows:9 IS NOT DISTINCT FROM NULL THEN 0 ELSE count_rows:9 END [as=count_rows:6]
 
 # Testing aggregations as window when group by has a projection.
 build

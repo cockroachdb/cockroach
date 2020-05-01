@@ -101,7 +101,7 @@ root                                            ·                      ·
                 │                               equality cols are key  ·
                 │                               parallel               ·
                 └── filter                      ·                      ·
-                     │                          filter                 column2 IS NOT NULL
+                     │                          filter                 column2 IS DISTINCT FROM NULL
                      └── render                 ·                      ·
                           └── scan buffer node  ·                      ·
 ·                                               label                  buffer 1
@@ -141,7 +141,7 @@ root                                            ·                      ·
                 │                               equality cols are key  ·
                 │                               parallel               ·
                 └── filter                      ·                      ·
-                     │                          filter                 (column2 IS NOT NULL) AND (column3 IS NOT NULL)
+                     │                          filter                 (column2 IS DISTINCT FROM NULL) AND (column3 IS DISTINCT FROM NULL)
                      └── render                 ·                      ·
                           └── scan buffer node  ·                      ·
 ·                                               label                  buffer 1
@@ -185,7 +185,7 @@ root                                            ·                      ·
  │              │                               equality cols are key  ·
  │              │                               parallel               ·
  │              └── filter                      ·                      ·
- │                   │                          filter                 column2 IS NOT NULL
+ │                   │                          filter                 column2 IS DISTINCT FROM NULL
  │                   └── render                 ·                      ·
  │                        └── scan buffer node  ·                      ·
  │                                              label                  buffer 1
@@ -198,7 +198,7 @@ root                                            ·                      ·
                 │                               equality cols are key  ·
                 │                               parallel               ·
                 └── filter                      ·                      ·
-                     │                          filter                 (column3 IS NOT NULL) AND (column4 IS NOT NULL)
+                     │                          filter                 (column3 IS DISTINCT FROM NULL) AND (column4 IS DISTINCT FROM NULL)
                      └── render                 ·                      ·
                           └── scan buffer node  ·                      ·
 ·                                               label                  buffer 1

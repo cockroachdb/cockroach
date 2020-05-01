@@ -340,9 +340,9 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── (f:3 IN (3.0, 4.0)) AND (f:3 IS NOT NULL) [outer=(3), constraints=(/3: [/3.0 - /3.0] [/4.0 - /4.0]; tight)]
+      ├── (f:3 IN (3.0, 4.0)) AND (f:3 IS DISTINCT FROM NULL) [outer=(3), constraints=(/3: [/3.0 - /3.0] [/4.0 - /4.0]; tight)]
       ├── i:2 NOT IN (1, 2) [outer=(2)]
-      └── s:4 IS NULL [outer=(4), constraints=(/4: [/NULL - /NULL]; tight), fd=()-->(4)]
+      └── s:4 IS NOT DISTINCT FROM NULL [outer=(4), constraints=(/4: [/NULL - /NULL]; tight), fd=()-->(4)]
 
 # Like comparisons.
 norm expect=NegateComparison

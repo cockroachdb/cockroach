@@ -209,24 +209,46 @@ render     ·            ·                                                     
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NULL AS r FROM t
 ----
-·          distributed  false      ·    ·
-·          vectorized   true       ·    ·
-render     ·            ·          (r)  ·
- │         render 0     a IS NULL  ·    ·
- └── scan  ·            ·          (a)  ·
-·          table        t@primary  ·    ·
-·          spans        FULL SCAN  ·    ·
+·          distributed  false                        ·    ·
+·          vectorized   true                         ·    ·
+render     ·            ·                            (r)  ·
+ │         render 0     a IS NOT DISTINCT FROM NULL  ·    ·
+ └── scan  ·            ·                            (a)  ·
+·          table        t@primary                    ·    ·
+·          spans        FULL SCAN                    ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NOT DISTINCT FROM NULL AS r FROM t
 ----
-·          distributed  false      ·    ·
-·          vectorized   true       ·    ·
-render     ·            ·          (r)  ·
- │         render 0     a IS NULL  ·    ·
- └── scan  ·            ·          (a)  ·
-·          table        t@primary  ·    ·
-·          spans        FULL SCAN  ·    ·
+·          distributed  false                        ·    ·
+·          vectorized   true                         ·    ·
+render     ·            ·                            (r)  ·
+ │         render 0     a IS NOT DISTINCT FROM NULL  ·    ·
+ └── scan  ·            ·                            (a)  ·
+·          table        t@primary                    ·    ·
+·          spans        FULL SCAN                    ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT (a, b) IS NULL AS r FROM t
+----
+·          distributed  false           ·       ·
+·          vectorized   false           ·       ·
+render     ·            ·               (r)     ·
+ │         render 0     (a, b) IS NULL  ·       ·
+ └── scan  ·            ·               (a, b)  ·
+·          table        t@primary       ·       ·
+·          spans        FULL SCAN       ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT (a, b) IS NOT DISTINCT FROM NULL AS r FROM t
+----
+·          distributed  false                             ·       ·
+·          vectorized   false                             ·       ·
+render     ·            ·                                 (r)     ·
+ │         render 0     (a, b) IS NOT DISTINCT FROM NULL  ·       ·
+ └── scan  ·            ·                                 (a, b)  ·
+·          table        t@primary                         ·       ·
+·          spans        FULL SCAN                         ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NOT DISTINCT FROM b AS r FROM t
@@ -242,24 +264,46 @@ render     ·            ·                         (r)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS NOT NULL AS r FROM t
 ----
-·          distributed  false          ·    ·
-·          vectorized   true           ·    ·
-render     ·            ·              (r)  ·
- │         render 0     a IS NOT NULL  ·    ·
- └── scan  ·            ·              (a)  ·
-·          table        t@primary      ·    ·
-·          spans        FULL SCAN      ·    ·
+·          distributed  false                    ·    ·
+·          vectorized   true                     ·    ·
+render     ·            ·                        (r)  ·
+ │         render 0     a IS DISTINCT FROM NULL  ·    ·
+ └── scan  ·            ·                        (a)  ·
+·          table        t@primary                ·    ·
+·          spans        FULL SCAN                ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS DISTINCT FROM NULL AS r FROM t
 ----
-·          distributed  false          ·    ·
-·          vectorized   true           ·    ·
-render     ·            ·              (r)  ·
- │         render 0     a IS NOT NULL  ·    ·
- └── scan  ·            ·              (a)  ·
-·          table        t@primary      ·    ·
-·          spans        FULL SCAN      ·    ·
+·          distributed  false                    ·    ·
+·          vectorized   true                     ·    ·
+render     ·            ·                        (r)  ·
+ │         render 0     a IS DISTINCT FROM NULL  ·    ·
+ └── scan  ·            ·                        (a)  ·
+·          table        t@primary                ·    ·
+·          spans        FULL SCAN                ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT (a, b) IS NOT NULL AS r FROM t
+----
+·          distributed  false               ·       ·
+·          vectorized   false               ·       ·
+render     ·            ·                   (r)     ·
+ │         render 0     (a, b) IS NOT NULL  ·       ·
+ └── scan  ·            ·                   (a, b)  ·
+·          table        t@primary           ·       ·
+·          spans        FULL SCAN           ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT (a, b) IS DISTINCT FROM NULL AS r FROM t
+----
+·          distributed  false                         ·       ·
+·          vectorized   false                         ·       ·
+render     ·            ·                             (r)     ·
+ │         render 0     (a, b) IS DISTINCT FROM NULL  ·       ·
+ └── scan  ·            ·                             (a, b)  ·
+·          table        t@primary                     ·       ·
+·          spans        FULL SCAN                     ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a IS DISTINCT FROM b AS r FROM t

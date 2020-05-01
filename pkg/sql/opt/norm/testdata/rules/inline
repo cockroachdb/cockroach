@@ -297,7 +297,7 @@ project
  │    │    ├── columns: k:1!null
  │    │    └── key: (1)
  │    └── filters
- │         └── (k:1 = 1) IS NULL [outer=(1)]
+ │         └── (k:1 = 1) IS NOT DISTINCT FROM NULL [outer=(1)]
  └── projections
       └── k:1 = 1 [as=expr:6, outer=(1)]
 
@@ -346,9 +346,9 @@ project
  │    ├── scan a
  │    │    └── columns: f:3
  │    └── filters
- │         └── (f:3 IS NULL) OR (f:3 != 10.5) [outer=(3), constraints=(/3: [/NULL - /10.499999999999998] [/10.500000000000002 - ]; tight)]
+ │         └── (f:3 IS NOT DISTINCT FROM NULL) OR (f:3 != 10.5) [outer=(3), constraints=(/3: [/NULL - /10.499999999999998] [/10.500000000000002 - ]; tight)]
  └── projections
-      └── (f:3 IS NULL) OR (f:3 != 10.5) [as=expr:6, outer=(3)]
+      └── (f:3 IS NOT DISTINCT FROM NULL) OR (f:3 != 10.5) [as=expr:6, outer=(3)]
 
 # Reference the expression to inline multiple times.
 norm expect=PushSelectIntoInlinableProject
@@ -459,7 +459,7 @@ project
       │              ├── case
       │              │    ├── true
       │              │    ├── when
-      │              │    │    ├── c1:7 IS NOT NULL
+      │              │    │    ├── c1:7 IS DISTINCT FROM NULL
       │              │    │    └── function: extract
       │              │    │         ├── case
       │              │    │         │    ├── true
@@ -471,7 +471,7 @@ project
       │              │    │         │    │    │         ├── scan ref_1
       │              │    │         │    │    │         │    └── columns: ref_1.config_yaml:10!null
       │              │    │         │    │    │         └── filters
-      │              │    │         │    │    │              └── c0:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │              │    │         │    │    │              └── c0:6 IS DISTINCT FROM NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
       │              │    │         │    │    └── version()
       │              │    │         │    └── version()
       │              │    │         └── current_date()
@@ -630,7 +630,7 @@ project
  │         └── const-not-null-agg [as=true_agg:11, outer=(10)]
  │              └── true:10
  └── projections
-      └── true_agg:11 IS NOT NULL [as=exists:9, outer=(11)]
+      └── true_agg:11 IS DISTINCT FROM NULL [as=exists:9, outer=(11)]
 
 # After c is replaced with k+2, (k+2) > 2 should be simplified to k > 0.
 norm

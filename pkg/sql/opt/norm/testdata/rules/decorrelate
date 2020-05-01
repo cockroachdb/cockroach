@@ -133,8 +133,8 @@ upsert xy
       │    └── filters
       │         └── u:7 = column1:3 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
       └── projections
-           ├── CASE WHEN x:5 IS NULL THEN column1:3 ELSE u:7 END [as=upsert_x:9, outer=(3,5,7)]
-           └── CASE WHEN x:5 IS NULL THEN column2:4 ELSE v:8 END [as=upsert_y:10, outer=(4,5,8)]
+           ├── CASE WHEN x:5 IS NOT DISTINCT FROM NULL THEN column1:3 ELSE u:7 END [as=upsert_x:9, outer=(3,5,7)]
+           └── CASE WHEN x:5 IS NOT DISTINCT FROM NULL THEN column2:4 ELSE v:8 END [as=upsert_y:10, outer=(4,5,8)]
 
 # Decorrelate DELETE statement.
 norm expect=DecorrelateJoin
@@ -897,16 +897,16 @@ project
  │    │    │    │    │    ├── key: (6)
  │    │    │    │    │    └── fd: (6)-->(7)
  │    │    │    │    └── filters
- │    │    │    │         └── (y:7 = 5) IS NOT false [outer=(7)]
+ │    │    │    │         └── (y:7 = 5) IS DISTINCT FROM false [outer=(7)]
  │    │    │    └── projections
- │    │    │         └── y:7 IS NOT NULL [as=notnull:9, outer=(7)]
+ │    │    │         └── y:7 IS DISTINCT FROM NULL [as=notnull:9, outer=(7)]
  │    │    └── filters
  │    │         └── x:6 = k:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    └── aggregations
  │         └── bool-or [as=bool_or:10, outer=(9)]
  │              └── notnull:9
  └── projections
-      └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=r:8, outer=(10)]
+      └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NOT DISTINCT FROM NULL THEN false END [as=r:8, outer=(10)]
 
 # Left join caused by zero or one cardinality subquery.
 norm expect=TryDecorrelateProjectSelect
@@ -978,16 +978,16 @@ project
  │    │    │    │    │    ├── key: (6)
  │    │    │    │    │    └── fd: (6)-->(7)
  │    │    │    │    └── filters
- │    │    │    │         └── (y:7 = 5) IS NOT false [outer=(7)]
+ │    │    │    │         └── (y:7 = 5) IS DISTINCT FROM false [outer=(7)]
  │    │    │    └── projections
- │    │    │         └── y:7 IS NOT NULL [as=notnull:9, outer=(7)]
+ │    │    │         └── y:7 IS DISTINCT FROM NULL [as=notnull:9, outer=(7)]
  │    │    └── filters
  │    │         └── x:6 = k:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    └── aggregations
  │         └── bool-or [as=bool_or:10, outer=(9)]
  │              └── notnull:9
  └── projections
-      └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=r:8, outer=(10)]
+      └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NOT DISTINCT FROM NULL THEN false END [as=r:8, outer=(10)]
 
 # Any clause with variable.
 norm expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
@@ -1017,17 +1017,17 @@ project
  │    │    │    │    ├── key: (6)
  │    │    │    │    └── fd: (6)-->(7)
  │    │    │    └── projections
- │    │    │         └── y:7 IS NOT NULL [as=notnull:9, outer=(7)]
+ │    │    │         └── y:7 IS DISTINCT FROM NULL [as=notnull:9, outer=(7)]
  │    │    └── filters
  │    │         ├── x:6 = k:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── (i:2 = y:7) IS NOT false [outer=(2,7)]
+ │    │         └── (i:2 = y:7) IS DISTINCT FROM false [outer=(2,7)]
  │    └── aggregations
  │         ├── bool-or [as=bool_or:10, outer=(9)]
  │         │    └── notnull:9
  │         └── const-agg [as=i:2, outer=(2)]
  │              └── i:2
  └── projections
-      └── CASE WHEN bool_or:10 AND (i:2 IS NOT NULL) THEN true WHEN bool_or:10 IS NULL THEN false END [as=r:8, outer=(2,10)]
+      └── CASE WHEN bool_or:10 AND (i:2 IS DISTINCT FROM NULL) THEN true WHEN bool_or:10 IS NOT DISTINCT FROM NULL THEN false END [as=r:8, outer=(2,10)]
 
 # Any clause with more complex expression that must be cached.
 norm expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
@@ -1063,17 +1063,17 @@ project
  │    │    │    │    ├── key: (6)
  │    │    │    │    └── fd: (6)-->(7)
  │    │    │    └── projections
- │    │    │         └── y:7 IS NOT NULL [as=notnull:10, outer=(7)]
+ │    │    │         └── y:7 IS DISTINCT FROM NULL [as=notnull:10, outer=(7)]
  │    │    └── filters
  │    │         ├── x:6 = k:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── (scalar:9 = y:7) IS NOT false [outer=(7,9)]
+ │    │         └── (scalar:9 = y:7) IS DISTINCT FROM false [outer=(7,9)]
  │    └── aggregations
  │         ├── bool-or [as=bool_or:11, outer=(10)]
  │         │    └── notnull:10
  │         └── const-agg [as=scalar:9, outer=(9)]
  │              └── scalar:9
  └── projections
-      └── CASE WHEN bool_or:11 AND (scalar:9 IS NOT NULL) THEN true WHEN bool_or:11 IS NULL THEN false END [as=r:8, outer=(9,11)]
+      └── CASE WHEN bool_or:11 AND (scalar:9 IS DISTINCT FROM NULL) THEN true WHEN bool_or:11 IS NOT DISTINCT FROM NULL THEN false END [as=r:8, outer=(9,11)]
 
 # --------------------------------------------------
 # TryDecorrelateProject
@@ -1759,7 +1759,7 @@ project
       │    │    │    │    ├── key: (5)
       │    │    │    │    └── fd: (5)-->(6)
       │    │    │    └── filters
-      │    │    │         └── i:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │         └── i:6 IS DISTINCT FROM NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
       │    │    └── filters
       │    │         └── k:5 = x:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │    └── aggregations
@@ -2195,7 +2195,7 @@ project
  │    │    │    │    │    ├── key: (7)
  │    │    │    │    │    └── fd: (7)-->(8)
  │    │    │    │    └── filters
- │    │    │    │         └── y:8 IS NOT NULL [outer=(8), constraints=(/8: (/NULL - ]; tight)]
+ │    │    │    │         └── y:8 IS DISTINCT FROM NULL [outer=(8), constraints=(/8: (/NULL - ]; tight)]
  │    │    │    └── filters
  │    │    │         └── x:7 = i:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
  │    │    └── aggregations
@@ -2237,7 +2237,7 @@ project
  │         └── any-not-null-agg [as=y:7, outer=(7)]
  │              └── y:7
  └── projections
-      └── CASE WHEN y:7 IS NOT NULL THEN array_agg:10 END [as=array_agg:9, outer=(7,10)]
+      └── CASE WHEN y:7 IS DISTINCT FROM NULL THEN array_agg:10 END [as=array_agg:9, outer=(7,10)]
 
 # With multiple columns. Without LATERAL these tests are a bit verbose.
 norm expect=TryDecorrelateScalarGroupBy
@@ -2269,7 +2269,7 @@ project
  │         └── any-not-null-agg [as=y:7, outer=(7)]
  │              └── y:7
  └── projections
-      └── (CASE WHEN y:7 IS NOT NULL THEN array_agg:12 END, max:9) [as="?column?":11, outer=(7,9,12)]
+      └── (CASE WHEN y:7 IS DISTINCT FROM NULL THEN array_agg:12 END, max:9) [as="?column?":11, outer=(7,9,12)]
 
 
 # With an aggregate that can't ignore nulls and when a non-nullable column must be synthesized.
@@ -2300,14 +2300,14 @@ project
  │    │    │    └── projections
  │    │    │         └── true [as=canary:10]
  │    │    └── filters
- │    │         └── (y:7 = i:2) OR (y:7 IS NULL) [outer=(2,7)]
+ │    │         └── (y:7 = i:2) OR (y:7 IS NOT DISTINCT FROM NULL) [outer=(2,7)]
  │    └── aggregations
  │         ├── array-agg [as=array_agg:11, outer=(7)]
  │         │    └── y:7
  │         └── any-not-null-agg [as=canary:10, outer=(10)]
  │              └── canary:10
  └── projections
-      └── COALESCE(CASE WHEN canary:10 IS NOT NULL THEN array_agg:11 END, ARRAY[]) [as=array:9, outer=(10,11)]
+      └── COALESCE(CASE WHEN canary:10 IS DISTINCT FROM NULL THEN array_agg:11 END, ARRAY[]) [as=array:9, outer=(10,11)]
 
 # With an ordering.
 norm expect=TryDecorrelateScalarGroupBy
@@ -2340,7 +2340,7 @@ project
  │    │         │    └── projections
  │    │         │         └── true [as=canary:10]
  │    │         └── filters
- │    │              └── (y:7 = k:1) OR (y:7 IS NULL) [outer=(1,7)]
+ │    │              └── (y:7 = k:1) OR (y:7 IS NOT DISTINCT FROM NULL) [outer=(1,7)]
  │    └── aggregations
  │         ├── array-agg [as=array_agg:11, outer=(7)]
  │         │    └── y:7
@@ -2349,7 +2349,7 @@ project
  │         └── any-not-null-agg [as=canary:10, outer=(10)]
  │              └── canary:10
  └── projections
-      └── COALESCE(CASE WHEN canary:10 IS NOT NULL THEN array_agg:11 END, ARRAY[]) [as=array:9, outer=(10,11)]
+      └── COALESCE(CASE WHEN canary:10 IS DISTINCT FROM NULL THEN array_agg:11 END, ARRAY[]) [as=array:9, outer=(10,11)]
 
 # Nest scalar decorrelation within scalar decorrelation, using IS NULL to force
 # use of left joins.
@@ -2414,7 +2414,7 @@ project
       │    │    │         └── const-agg [as=y:7, outer=(7)]
       │    │    │              └── y:7
       │    │    └── filters
-      │    │         └── max:10 IS NULL [outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
+      │    │         └── max:10 IS NOT DISTINCT FROM NULL [outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
       │    └── aggregations
       │         ├── max [as=max:11, outer=(7)]
       │         │    └── y:7
@@ -2427,7 +2427,7 @@ project
       │         └── const-agg [as=j:5, outer=(5)]
       │              └── j:5
       └── filters
-           └── max:11 IS NULL [outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
+           └── max:11 IS NOT DISTINCT FROM NULL [outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
 
 # ScalarGroupBy with non-null ignoring and a non-nullable column.
 norm expect=TryDecorrelateScalarGroupBy
@@ -2479,7 +2479,7 @@ project
       │    │         └── any-not-null-agg [as=x:3, outer=(3)]
       │    │              └── x:3
       │    └── projections
-      │         └── CASE WHEN x:3 IS NOT NULL THEN array_agg:6 END [as=array_agg:5, outer=(3,6)]
+      │         └── CASE WHEN x:3 IS DISTINCT FROM NULL THEN array_agg:6 END [as=array_agg:5, outer=(3,6)]
       └── filters
            └── array_agg:5 = ARRAY[] [outer=(5), constraints=(/5: [/ARRAY[] - /ARRAY[]]; tight), fd=()-->(5)]
 
@@ -2538,7 +2538,7 @@ project
       │    │         └── any-not-null-agg [as=canary:10, outer=(10)]
       │    │              └── canary:10
       │    └── projections
-      │         └── CASE WHEN canary:10 IS NOT NULL THEN concat_agg:11 END [as=concat_agg:9, outer=(10,11)]
+      │         └── CASE WHEN canary:10 IS DISTINCT FROM NULL THEN concat_agg:11 END [as=concat_agg:9, outer=(10,11)]
       └── filters
            └── concat_agg:9 = 'foo' [outer=(9), constraints=(/9: [/'foo' - /'foo']; tight), fd=()-->(9)]
 
@@ -2634,7 +2634,7 @@ group-by
  │    │    │    │    │    ├── scan a
  │    │    │    │    │    │    └── columns: i:9 f:10
  │    │    │    │    │    └── filters
- │    │    │    │    │         └── i:9 IS NOT NULL [outer=(9), constraints=(/9: (/NULL - ]; tight)]
+ │    │    │    │    │         └── i:9 IS DISTINCT FROM NULL [outer=(9), constraints=(/9: (/NULL - ]; tight)]
  │    │    │    │    └── filters (true)
  │    │    │    └── filters
  │    │    │         └── column14:14 = f:10 [outer=(10,14), constraints=(/10: (/NULL - ]; /14: (/NULL - ]), fd=(10)==(14), (14)==(10)]
@@ -3920,7 +3920,7 @@ project
       │         └── const-agg [as=j:5, outer=(5)]
       │              └── j:5
       └── filters
-           └── (i:2 = 1) OR (true_agg:9 IS NOT NULL) [outer=(2,9)]
+           └── (i:2 = 1) OR (true_agg:9 IS DISTINCT FROM NULL) [outer=(2,9)]
 
 # Any with IS NULL.
 norm expect=HoistSelectSubquery
@@ -3960,10 +3960,10 @@ project
       │    │    │    │    │    ├── key: (6)
       │    │    │    │    │    └── fd: (6)-->(7)
       │    │    │    │    └── projections
-      │    │    │    │         └── y:7 IS NOT NULL [as=notnull:8, outer=(7)]
+      │    │    │    │         └── y:7 IS DISTINCT FROM NULL [as=notnull:8, outer=(7)]
       │    │    │    └── filters
       │    │    │         ├── x:6 = k:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      │    │    │         └── (i:2 = y:7) IS NOT false [outer=(2,7)]
+      │    │    │         └── (i:2 = y:7) IS DISTINCT FROM false [outer=(2,7)]
       │    │    └── aggregations
       │    │         ├── bool-or [as=bool_or:9, outer=(8)]
       │    │         │    └── notnull:8
@@ -3976,9 +3976,9 @@ project
       │    │         └── const-agg [as=j:5, outer=(5)]
       │    │              └── j:5
       │    └── projections
-      │         └── CASE WHEN bool_or:9 AND (i:2 IS NOT NULL) THEN true WHEN bool_or:9 IS NULL THEN false END [as=case:10, outer=(2,9)]
+      │         └── CASE WHEN bool_or:9 AND (i:2 IS DISTINCT FROM NULL) THEN true WHEN bool_or:9 IS NOT DISTINCT FROM NULL THEN false END [as=case:10, outer=(2,9)]
       └── filters
-           └── case:10 IS NULL [outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
+           └── case:10 IS NOT DISTINCT FROM NULL [outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
 
 # Any with uncorrelated subquery (should not be hoisted).
 norm
@@ -4034,10 +4034,10 @@ project
  │    │    │    │    ├── key: (6)
  │    │    │    │    └── fd: (6)-->(7)
  │    │    │    └── projections
- │    │    │         └── y:7 IS NOT NULL [as=notnull:10, outer=(7)]
+ │    │    │         └── y:7 IS DISTINCT FROM NULL [as=notnull:10, outer=(7)]
  │    │    └── filters
  │    │         ├── x:6 = k:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── (scalar:9 >= y:7) IS NOT false [outer=(7,9)]
+ │    │         └── (scalar:9 >= y:7) IS DISTINCT FROM false [outer=(7,9)]
  │    └── aggregations
  │         ├── bool-or [as=bool_or:11, outer=(10)]
  │         │    └── notnull:10
@@ -4046,7 +4046,7 @@ project
  │         └── const-agg [as=scalar:9, outer=(9)]
  │              └── scalar:9
  └── projections
-      └── NOT CASE WHEN bool_or:11 AND (scalar:9 IS NOT NULL) THEN true WHEN bool_or:11 IS NULL THEN false END [as=r:8, outer=(9,11)]
+      └── NOT CASE WHEN bool_or:11 AND (scalar:9 IS DISTINCT FROM NULL) THEN true WHEN bool_or:11 IS NOT DISTINCT FROM NULL THEN false END [as=r:8, outer=(9,11)]
 
 # Regress issue #32270: Panic when expression contains both correlated and
 # uncorrelated subquery.
@@ -4110,7 +4110,7 @@ project
                 │         │    ├── fd: (6)-->(7)
                 │         │    └── limit hint: 1.00
                 │         └── 1
-                └── true_agg:11 IS NOT NULL
+                └── true_agg:11 IS DISTINCT FROM NULL
 
 # --------------------------------------------------
 # HoistProjectSubquery
@@ -4272,7 +4272,7 @@ project
  │         └── const-not-null-agg [as=true_agg:10, outer=(9)]
  │              └── true:9
  └── projections
-      └── true_agg:10 IS NOT NULL [as=exists:8, outer=(10)]
+      └── true_agg:10 IS DISTINCT FROM NULL [as=exists:8, outer=(10)]
 
 # Any in projection list.
 norm expect=HoistProjectSubquery
@@ -4300,16 +4300,16 @@ project
  │    │    │    │    ├── scan xy
  │    │    │    │    │    └── columns: y:7
  │    │    │    │    └── filters
- │    │    │    │         └── (y:7 > 5) IS NOT false [outer=(7)]
+ │    │    │    │         └── (y:7 > 5) IS DISTINCT FROM false [outer=(7)]
  │    │    │    └── projections
- │    │    │         └── y:7 IS NOT NULL [as=notnull:9, outer=(7)]
+ │    │    │         └── y:7 IS DISTINCT FROM NULL [as=notnull:9, outer=(7)]
  │    │    └── filters
  │    │         └── y:7 = i:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
  │    └── aggregations
  │         └── bool-or [as=bool_or:10, outer=(9)]
  │              └── notnull:9
  └── projections
-      └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=r:8, outer=(10)]
+      └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NOT DISTINCT FROM NULL THEN false END [as=r:8, outer=(10)]
 
 # Correlated subquery nested in uncorrelated subquery.
 norm expect=HoistProjectSubquery
@@ -4449,7 +4449,7 @@ project
       │    │         └── const-not-null-agg [as=true_agg:11, outer=(10)]
       │    │              └── true:10
       │    └── projections
-      │         └── true_agg:11 IS NOT NULL [as=exists:12, outer=(11)]
+      │         └── true_agg:11 IS DISTINCT FROM NULL [as=exists:12, outer=(11)]
       └── filters
            └── exists:12 OR (k:1 = x:6) [outer=(1,6,12)]
 
@@ -4496,11 +4496,11 @@ project
       │    │    │    │    │    ├── key: (8)
       │    │    │    │    │    └── fd: (8)-->(9)
       │    │    │    │    └── projections
-      │    │    │    │         └── v:9 IS NOT NULL [as=notnull:10, outer=(9)]
+      │    │    │    │         └── v:9 IS DISTINCT FROM NULL [as=notnull:10, outer=(9)]
       │    │    │    └── filters
       │    │    │         ├── u:8 = y:7 [outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(7)==(8), (8)==(7)]
       │    │    │         ├── v:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
-      │    │    │         └── (x:6 = v:9) IS NOT false [outer=(6,9)]
+      │    │    │         └── (x:6 = v:9) IS DISTINCT FROM false [outer=(6,9)]
       │    │    └── aggregations
       │    │         ├── bool-or [as=bool_or:11, outer=(10)]
       │    │         │    └── notnull:10
@@ -4509,9 +4509,9 @@ project
       │    │         └── const-agg [as=j:5, outer=(5)]
       │    │              └── j:5
       │    └── projections
-      │         └── CASE WHEN bool_or:11 AND (x:6 IS NOT NULL) THEN true WHEN bool_or:11 IS NULL THEN false END [as=case:12, outer=(6,11)]
+      │         └── CASE WHEN bool_or:11 AND (x:6 IS DISTINCT FROM NULL) THEN true WHEN bool_or:11 IS NOT DISTINCT FROM NULL THEN false END [as=case:12, outer=(6,11)]
       └── filters
-           └── case:12 OR (x:6 IS NULL) [outer=(6,12)]
+           └── case:12 OR (x:6 IS NOT DISTINCT FROM NULL) [outer=(6,12)]
 
 
 # --------------------------------------------------
@@ -4641,7 +4641,7 @@ project
  │    │    │    │         └── const-not-null-agg [as=true_agg:10, outer=(9)]
  │    │    │    │              └── true:9
  │    │    │    └── projections
- │    │    │         └── true_agg:10 IS NOT NULL [as=exists:11, outer=(10)]
+ │    │    │         └── true_agg:10 IS DISTINCT FROM NULL [as=exists:11, outer=(10)]
  │    │    ├── values
  │    │    │    ├── columns: column1:8
  │    │    │    ├── outer: (11)
@@ -4713,15 +4713,15 @@ project
  │    │    │    │    │    │    │    │    └── fd: (6)-->(7)
  │    │    │    │    │    │    │    └── filters
  │    │    │    │    │    │    │         ├── x:6 = k:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │    │    │    │    │    │         └── (y:7 = 5) IS NOT false [outer=(7)]
+ │    │    │    │    │    │    │         └── (y:7 = 5) IS DISTINCT FROM false [outer=(7)]
  │    │    │    │    │    │    └── projections
- │    │    │    │    │    │         └── y:7 IS NOT NULL [as=notnull:9, outer=(7)]
+ │    │    │    │    │    │         └── y:7 IS DISTINCT FROM NULL [as=notnull:9, outer=(7)]
  │    │    │    │    │    └── filters (true)
  │    │    │    │    └── aggregations
  │    │    │    │         └── bool-or [as=bool_or:10, outer=(9)]
  │    │    │    │              └── notnull:9
  │    │    │    └── projections
- │    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NULL THEN false END [as=case:11, outer=(10)]
+ │    │    │         └── CASE WHEN bool_or:10 THEN true WHEN bool_or:10 IS NOT DISTINCT FROM NULL THEN false END [as=case:11, outer=(10)]
  │    │    ├── values
  │    │    │    ├── columns: column1:8
  │    │    │    ├── outer: (11)
@@ -5124,7 +5124,7 @@ project
       │         └── const-agg [as=updated_at:9, outer=(9)]
       │              └── updated_at:9
       └── filters
-           └── true_agg:17 IS NOT NULL [outer=(17), constraints=(/17: (/NULL - ]; tight)]
+           └── true_agg:17 IS DISTINCT FROM NULL [outer=(17), constraints=(/17: (/NULL - ]; tight)]
 
 norm expect=TryDecorrelateProjectSet
 SELECT id FROM articles WHERE title = ANY(
@@ -5304,7 +5304,7 @@ anti-join (cross)
  ├── scan xy
  │    └── columns: y:7
  └── filters
-      └── (i:2 = y:7) IS NOT false [outer=(2,7)]
+      └── (i:2 = y:7) IS DISTINCT FROM false [outer=(2,7)]
 
 # NOT ANY is one of several conjuncts. Note that i > ALL(...) gets mapped to
 # NOT i <= ANY(...) by optbuilder.
@@ -5330,7 +5330,7 @@ anti-join (cross)
  ├── scan xy
  │    └── columns: y:7
  └── filters
-      └── (i:2 <= y:7) IS NOT false [outer=(2,7)]
+      └── (i:2 <= y:7) IS DISTINCT FROM false [outer=(2,7)]
 
 # Multiple NOT ANY conjuncts.
 norm expect=NormalizeSelectNotAnyFilter
@@ -5355,11 +5355,11 @@ anti-join (cross)
  │    │    └── projections
  │    │         └── xy.y:9::STRING [as=y:10, outer=(9)]
  │    └── filters
- │         └── (s:4 = y:10) IS NOT false [outer=(4,10)]
+ │         └── (s:4 = y:10) IS DISTINCT FROM false [outer=(4,10)]
  ├── scan xy
  │    └── columns: xy.y:7
  └── filters
-      └── (i:2 >= xy.y:7) IS NOT false [outer=(2,7)]
+      └── (i:2 >= xy.y:7) IS DISTINCT FROM false [outer=(2,7)]
 
 # Don't hoist uncorrelated NOT ANY (but rewrite it to NOT EXISTS).
 norm expect=NormalizeSelectNotAnyFilter
@@ -5388,7 +5388,7 @@ select
                      │    │    ├── columns: y:7
                      │    │    └── limit hint: 3.00
                      │    └── filters
-                     │         └── (y:7 = 5) IS NOT false [outer=(7)]
+                     │         └── (y:7 = 5) IS DISTINCT FROM false [outer=(7)]
                      └── 1
 
 # NOT ANY in Join On condition.
@@ -5410,7 +5410,7 @@ inner-join (hash)
  │    ├── scan uv
  │    │    └── columns: v:9
  │    └── filters
- │         └── (i:2 = v:9) IS NOT false [outer=(2,9)]
+ │         └── (i:2 = v:9) IS DISTINCT FROM false [outer=(2,9)]
  ├── scan xy
  │    ├── columns: x:6!null y:7
  │    ├── key: (6)
@@ -5443,7 +5443,7 @@ semi-join (hash)
  │    │    └── projections
  │    │         └── xy.y:9::STRING [as=y:10, outer=(9)]
  │    └── filters
- │         └── (s:4 = y:10) IS NOT false [outer=(4,10)]
+ │         └── (s:4 = y:10) IS DISTINCT FROM false [outer=(4,10)]
  ├── scan xy
  │    └── columns: xy.y:7
  └── filters

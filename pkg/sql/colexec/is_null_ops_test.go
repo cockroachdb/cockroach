@@ -44,37 +44,37 @@ func TestIsNullProjOp(t *testing.T) {
 		negate       bool
 	}{
 		{
-			desc:         "SELECT c, c IS NULL FROM t -- both",
+			desc:         "SELECT c, c IS NOT DISTINCT FROM NULL FROM t -- both",
 			inputTuples:  tuples{{0}, {nil}, {1}, {2}, {nil}},
 			outputTuples: tuples{{0, false}, {nil, true}, {1, false}, {2, false}, {nil, true}},
 			negate:       false,
 		},
 		{
-			desc:         "SELECT c, c IS NULL FROM t -- no NULLs",
+			desc:         "SELECT c, c IS NOT DISTINCT FROM NULL FROM t -- no NULLs",
 			inputTuples:  tuples{{0}, {1}, {2}},
 			outputTuples: tuples{{0, false}, {1, false}, {2, false}},
 			negate:       false,
 		},
 		{
-			desc:         "SELECT c, c IS NULL FROM t -- only NULLs",
+			desc:         "SELECT c, c IS NOT DISTINCT FROM NULL FROM t -- only NULLs",
 			inputTuples:  tuples{{nil}, {nil}},
 			outputTuples: tuples{{nil, true}, {nil, true}},
 			negate:       false,
 		},
 		{
-			desc:         "SELECT c, c IS NOT NULL FROM t -- both",
+			desc:         "SELECT c, c IS DISTINCT FROM NULL FROM t -- both",
 			inputTuples:  tuples{{0}, {nil}, {1}, {2}, {nil}},
 			outputTuples: tuples{{0, true}, {nil, false}, {1, true}, {2, true}, {nil, false}},
 			negate:       true,
 		},
 		{
-			desc:         "SELECT c, c IS NOT NULL FROM t -- no NULLs",
+			desc:         "SELECT c, c IS DISTINCT FROM NULL FROM t -- no NULLs",
 			inputTuples:  tuples{{0}, {1}, {2}},
 			outputTuples: tuples{{0, true}, {1, true}, {2, true}},
 			negate:       true,
 		},
 		{
-			desc:         "SELECT c, c IS NOT NULL FROM t -- only NULLs",
+			desc:         "SELECT c, c IS DISTINCT FROM NULL FROM t -- only NULLs",
 			inputTuples:  tuples{{nil}, {nil}},
 			outputTuples: tuples{{nil, false}, {nil, false}},
 			negate:       true,
@@ -84,9 +84,9 @@ func TestIsNullProjOp(t *testing.T) {
 	for _, c := range testCases {
 		t.Run(c.desc, func(t *testing.T) {
 			opConstructor := func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-				projExpr := "IS NULL"
+				projExpr := "IS NOT DISTINCT FROM NULL"
 				if c.negate {
-					projExpr = "IS NOT NULL"
+					projExpr = "IS DISTINCT FROM NULL"
 				}
 				return createTestProjectingOperator(
 					ctx, flowCtx, input[0], []*types.T{types.Int},
@@ -118,37 +118,37 @@ func TestIsNullSelOp(t *testing.T) {
 		negate       bool
 	}{
 		{
-			desc:         "SELECT c FROM t WHERE c IS NULL -- both",
+			desc:         "SELECT c FROM t WHERE c IS NOT DISTINCT FROM NULL -- both",
 			inputTuples:  tuples{{0}, {nil}, {1}, {2}, {nil}},
 			outputTuples: tuples{{nil}, {nil}},
 			negate:       false,
 		},
 		{
-			desc:         "SELECT c FROM t WHERE c IS NULL -- no NULLs",
+			desc:         "SELECT c FROM t WHERE c IS NOT DISTINCT FROM NULL -- no NULLs",
 			inputTuples:  tuples{{0}, {1}, {2}},
 			outputTuples: tuples{},
 			negate:       false,
 		},
 		{
-			desc:         "SELECT c FROM t WHERE c IS NULL -- only NULLs",
+			desc:         "SELECT c FROM t WHERE c IS NOT DISTINCT FROM NULL -- only NULLs",
 			inputTuples:  tuples{{nil}, {nil}},
 			outputTuples: tuples{{nil}, {nil}},
 			negate:       false,
 		},
 		{
-			desc:         "SELECT c FROM t WHERE c IS NOT NULL -- both",
+			desc:         "SELECT c FROM t WHERE c IS DISTINCT FROM NULL -- both",
 			inputTuples:  tuples{{0}, {nil}, {1}, {2}, {nil}},
 			outputTuples: tuples{{0}, {1}, {2}},
 			negate:       true,
 		},
 		{
-			desc:         "SELECT c FROM t WHERE c IS NOT NULL -- no NULLs",
+			desc:         "SELECT c FROM t WHERE c IS DISTINCT FROM NULL -- no NULLs",
 			inputTuples:  tuples{{0}, {1}, {2}},
 			outputTuples: tuples{{0}, {1}, {2}},
 			negate:       true,
 		},
 		{
-			desc:         "SELECT c FROM t WHERE c IS NOT NULL -- only NULLs",
+			desc:         "SELECT c FROM t WHERE c IS DISTINCT FROM NULL -- only NULLs",
 			inputTuples:  tuples{{nil}, {nil}},
 			outputTuples: tuples{},
 			negate:       true,
@@ -158,9 +158,9 @@ func TestIsNullSelOp(t *testing.T) {
 	for _, c := range testCases {
 		t.Run(c.desc, func(t *testing.T) {
 			opConstructor := func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-				selExpr := "IS NULL"
+				selExpr := "IS NOT DISTINCT FROM NULL"
 				if c.negate {
-					selExpr = "IS NOT NULL"
+					selExpr = "IS DISTINCT FROM NULL"
 				}
 				spec := &execinfrapb.ProcessorSpec{
 					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: []*types.T{types.Int}}},

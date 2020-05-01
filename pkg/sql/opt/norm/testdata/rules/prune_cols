@@ -1554,7 +1554,7 @@ explain
                 │    └── fd: (1)-->(2,3), (2,3)~~>(1)
                 └── filters
                      ├── b:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-                     └── c:3 IS NOT NULL [outer=(3), constraints=(/3: (/NULL - ]; tight)]
+                     └── c:3 IS DISTINCT FROM NULL [outer=(3), constraints=(/3: (/NULL - ]; tight)]
 
 # --------------------------------------------------
 # PruneProjectSetCols
@@ -1993,7 +1993,7 @@ upsert a
       │    │         └── k:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
       │    └── filters (true)
       └── projections
-           └── CASE WHEN k:9 IS NULL THEN column7:7 ELSE i:10 + 1 END [as=upsert_i:15, outer=(7,9,10)]
+           └── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column7:7 ELSE i:10 + 1 END [as=upsert_i:15, outer=(7,9,10)]
 
 # Prune update columns replaced by upsert columns.
 # TODO(andyk): Need to also prune output columns.
@@ -2049,10 +2049,10 @@ upsert a
       │    │         └── k:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
       │    └── filters (true)
       └── projections
-           ├── CASE WHEN k:9 IS NULL THEN column1:5 ELSE k:9 END [as=upsert_k:14, outer=(5,9)]
-           ├── CASE WHEN k:9 IS NULL THEN column7:7 ELSE i:10 + 1 END [as=upsert_i:15, outer=(7,9,10)]
-           ├── CASE WHEN k:9 IS NULL THEN column8:8 ELSE f:11 END [as=upsert_f:16, outer=(8,9,11)]
-           └── CASE WHEN k:9 IS NULL THEN column2:6 ELSE s:12 END [as=upsert_s:17, outer=(6,9,12)]
+           ├── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE k:9 END [as=upsert_k:14, outer=(5,9)]
+           ├── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column7:7 ELSE i:10 + 1 END [as=upsert_i:15, outer=(7,9,10)]
+           ├── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column8:8 ELSE f:11 END [as=upsert_f:16, outer=(8,9,11)]
+           └── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column2:6 ELSE s:12 END [as=upsert_s:17, outer=(6,9,12)]
 
 # Prune column in column family that is not updated.
 norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
@@ -2153,9 +2153,9 @@ project
            │    │         └── a:11 = 1 [outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
            │    └── filters (true)
            └── projections
-                ├── CASE WHEN a:11 IS NULL THEN column1:6 ELSE a:11 END [as=upsert_a:17, outer=(6,11)]
-                ├── CASE WHEN a:11 IS NULL THEN column3:8 ELSE 10 END [as=upsert_c:19, outer=(8,11)]
-                └── CASE WHEN a:11 IS NULL THEN column5:10 ELSE e:15 END [as=upsert_e:21, outer=(10,11,15)]
+                ├── CASE WHEN a:11 IS NOT DISTINCT FROM NULL THEN column1:6 ELSE a:11 END [as=upsert_a:17, outer=(6,11)]
+                ├── CASE WHEN a:11 IS NOT DISTINCT FROM NULL THEN column3:8 ELSE 10 END [as=upsert_c:19, outer=(8,11)]
+                └── CASE WHEN a:11 IS NOT DISTINCT FROM NULL THEN column5:10 ELSE e:15 END [as=upsert_e:21, outer=(10,11,15)]
 
 # Do not prune column in same secondary family as updated column. But prune
 # non-key column in primary family.
@@ -2205,7 +2205,7 @@ upsert "family"
       │    │         └── a:11 = 1 [outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
       │    └── filters (true)
       └── projections
-           └── CASE WHEN a:11 IS NULL THEN column4:9 ELSE 10 END [as=upsert_d:20, outer=(9,11)]
+           └── CASE WHEN a:11 IS NOT DISTINCT FROM NULL THEN column4:9 ELSE 10 END [as=upsert_d:20, outer=(9,11)]
 
 # Prune upsert columns when mutation columns/indexes exist.
 norm expect=(PruneMutationInputCols)
@@ -2254,7 +2254,7 @@ upsert mutation
       │    │         └── a:10 = 1 [outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
       │    └── filters (true)
       └── projections
-           └── CASE WHEN a:10 IS NULL THEN column2:7 ELSE 10 END [as=upsert_b:17, outer=(7,10)]
+           └── CASE WHEN a:10 IS NOT DISTINCT FROM NULL THEN column2:7 ELSE 10 END [as=upsert_b:17, outer=(7,10)]
 
 # ------------------------------------------------------------------------------
 # PruneMutationReturnCols
@@ -2601,10 +2601,10 @@ project
            │    │         └── a:14 = 1 [outer=(14), constraints=(/14: [/1 - /1]; tight), fd=()-->(14)]
            │    └── filters (true)
            └── projections
-                ├── CASE WHEN rowid:21 IS NULL THEN column1:9 ELSE column1:9 + a:14 END [as=upsert_a:23, outer=(9,14,21)]
-                ├── CASE WHEN rowid:21 IS NULL THEN column2:10 ELSE b:15 END [as=upsert_b:24, outer=(10,15,21)]
-                ├── CASE WHEN rowid:21 IS NULL THEN column3:11 ELSE c:16 END [as=upsert_c:25, outer=(11,16,21)]
-                └── CASE WHEN rowid:21 IS NULL THEN column13:13 ELSE rowid:21 END [as=upsert_rowid:30, outer=(13,21)]
+                ├── CASE WHEN rowid:21 IS NOT DISTINCT FROM NULL THEN column1:9 ELSE column1:9 + a:14 END [as=upsert_a:23, outer=(9,14,21)]
+                ├── CASE WHEN rowid:21 IS NOT DISTINCT FROM NULL THEN column2:10 ELSE b:15 END [as=upsert_b:24, outer=(10,15,21)]
+                ├── CASE WHEN rowid:21 IS NOT DISTINCT FROM NULL THEN column3:11 ELSE c:16 END [as=upsert_c:25, outer=(11,16,21)]
+                └── CASE WHEN rowid:21 IS NOT DISTINCT FROM NULL THEN column13:13 ELSE rowid:21 END [as=upsert_rowid:30, outer=(13,21)]
 
 norm
 DELETE FROM returning_test WHERE a < b + d RETURNING a, b, d
@@ -2708,8 +2708,8 @@ project
            │    └── filters
            │         └── column13:13 = rowid:21 [outer=(13,21), constraints=(/13: (/NULL - ]; /21: (/NULL - ]), fd=(13)==(21), (21)==(13)]
            └── projections
-                ├── CASE WHEN rowid:21 IS NULL THEN column12:12 ELSE d:17 END [as=upsert_d:22, outer=(12,17,21)]
-                └── CASE WHEN rowid:21 IS NULL THEN column13:13 ELSE rowid:21 END [as=upsert_rowid:26, outer=(13,21)]
+                ├── CASE WHEN rowid:21 IS NOT DISTINCT FROM NULL THEN column12:12 ELSE d:17 END [as=upsert_d:22, outer=(12,17,21)]
+                └── CASE WHEN rowid:21 IS NOT DISTINCT FROM NULL THEN column13:13 ELSE rowid:21 END [as=upsert_rowid:26, outer=(13,21)]
 
 # Make sure the passthrough columns of an UPDATE ... FROM query are pruned.
 norm

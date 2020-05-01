@@ -70,7 +70,7 @@ upsert c1
  │    │    └── filters
  │    │         └── column1:4 = c:7
  │    └── projections
- │         └── CASE WHEN c:7 IS NULL THEN column1:4 ELSE c:7 END [as=upsert_c:10]
+ │         └── CASE WHEN c:7 IS NOT DISTINCT FROM NULL THEN column1:4 ELSE c:7 END [as=upsert_c:10]
  └── f-k-checks
       └── f-k-checks-item: c1(p) -> p(p)
            └── anti-join (hash)
@@ -122,9 +122,9 @@ upsert c1
  │    │    └── filters
  │    │         └── column1:4 = c:7
  │    └── projections
- │         ├── CASE WHEN c:7 IS NULL THEN column1:4 ELSE c:7 END [as=upsert_c:10]
- │         ├── CASE WHEN c:7 IS NULL THEN column5:5 ELSE c1.p:8 END [as=upsert_p:11]
- │         └── CASE WHEN c:7 IS NULL THEN column6:6 ELSE i:9 END [as=upsert_i:12]
+ │         ├── CASE WHEN c:7 IS NOT DISTINCT FROM NULL THEN column1:4 ELSE c:7 END [as=upsert_c:10]
+ │         ├── CASE WHEN c:7 IS NOT DISTINCT FROM NULL THEN column5:5 ELSE c1.p:8 END [as=upsert_p:11]
+ │         └── CASE WHEN c:7 IS NOT DISTINCT FROM NULL THEN column6:6 ELSE i:9 END [as=upsert_i:12]
  └── f-k-checks
       └── f-k-checks-item: c1(p) -> p(p)
            └── anti-join (hash)
@@ -179,7 +179,7 @@ upsert c1
  │    │    └── filters
  │    │         └── x:4 = c:10
  │    └── projections
- │         └── CASE WHEN c:10 IS NULL THEN x:4 ELSE c:10 END [as=upsert_c:13]
+ │         └── CASE WHEN c:10 IS NOT DISTINCT FROM NULL THEN x:4 ELSE c:10 END [as=upsert_c:13]
  └── f-k-checks
       └── f-k-checks-item: c1(p) -> p(p)
            └── anti-join (hash)
@@ -236,9 +236,9 @@ upsert c1
  │    │    └── projections
  │    │         └── column2:5 + 1 [as=column10:10]
  │    └── projections
- │         ├── CASE WHEN c:7 IS NULL THEN column1:4 ELSE c:7 END [as=upsert_c:11]
- │         ├── CASE WHEN c:7 IS NULL THEN column2:5 ELSE column10:10 END [as=upsert_p:12]
- │         └── CASE WHEN c:7 IS NULL THEN column6:6 ELSE i:9 END [as=upsert_i:13]
+ │         ├── CASE WHEN c:7 IS NOT DISTINCT FROM NULL THEN column1:4 ELSE c:7 END [as=upsert_c:11]
+ │         ├── CASE WHEN c:7 IS NOT DISTINCT FROM NULL THEN column2:5 ELSE column10:10 END [as=upsert_p:12]
+ │         └── CASE WHEN c:7 IS NOT DISTINCT FROM NULL THEN column6:6 ELSE i:9 END [as=upsert_i:13]
  └── f-k-checks
       └── f-k-checks-item: c1(p) -> p(p)
            └── anti-join (hash)
@@ -295,9 +295,9 @@ upsert c1
  │    │    └── projections
  │    │         └── c:8 + 1 [as=column11:11]
  │    └── projections
- │         ├── CASE WHEN c:8 IS NULL THEN u:4 ELSE c:8 END [as=upsert_c:12]
- │         ├── CASE WHEN c:8 IS NULL THEN v:5 ELSE c1.p:9 END [as=upsert_p:13]
- │         └── CASE WHEN c:8 IS NULL THEN column7:7 ELSE column11:11 END [as=upsert_i:14]
+ │         ├── CASE WHEN c:8 IS NOT DISTINCT FROM NULL THEN u:4 ELSE c:8 END [as=upsert_c:12]
+ │         ├── CASE WHEN c:8 IS NOT DISTINCT FROM NULL THEN v:5 ELSE c1.p:9 END [as=upsert_p:13]
+ │         └── CASE WHEN c:8 IS NOT DISTINCT FROM NULL THEN column7:7 ELSE column11:11 END [as=upsert_i:14]
  └── f-k-checks
       └── f-k-checks-item: c1(p) -> p(p)
            └── anti-join (hash)
@@ -347,7 +347,7 @@ upsert c2
  │    │    └── projections
  │    │         └── 1 [as=column4:4]
  │    └── projections
- │         └── CASE WHEN c:3 IS NULL THEN column1:2 ELSE column4:4 END [as=upsert_c:5]
+ │         └── CASE WHEN c:3 IS NOT DISTINCT FROM NULL THEN column1:2 ELSE column4:4 END [as=upsert_c:5]
  └── f-k-checks
       └── f-k-checks-item: c2(c) -> p(p)
            └── anti-join (hash)
@@ -399,7 +399,7 @@ upsert c3
  │    │    └── filters
  │    │         └── column1:3 = c:5
  │    └── projections
- │         └── CASE WHEN c:5 IS NULL THEN column1:3 ELSE c:5 END [as=upsert_c:7]
+ │         └── CASE WHEN c:5 IS NOT DISTINCT FROM NULL THEN column1:3 ELSE c:5 END [as=upsert_c:7]
  └── f-k-checks
       └── f-k-checks-item: c3(p) -> p(p)
            └── anti-join (hash)
@@ -411,7 +411,7 @@ upsert c3
                 │    │    └── mapping:
                 │    │         └──  column2:4 => column2:8
                 │    └── filters
-                │         └── column2:8 IS NOT NULL
+                │         └── column2:8 IS DISTINCT FROM NULL
                 ├── scan p
                 │    └── columns: p.p:9!null
                 └── filters
@@ -451,8 +451,8 @@ upsert c3
  │    │    └── filters
  │    │         └── column1:3 = c:5
  │    └── projections
- │         ├── CASE WHEN c:5 IS NULL THEN column1:3 ELSE c:5 END [as=upsert_c:7]
- │         └── CASE WHEN c:5 IS NULL THEN column4:4 ELSE c3.p:6 END [as=upsert_p:8]
+ │         ├── CASE WHEN c:5 IS NOT DISTINCT FROM NULL THEN column1:3 ELSE c:5 END [as=upsert_c:7]
+ │         └── CASE WHEN c:5 IS NOT DISTINCT FROM NULL THEN column4:4 ELSE c3.p:6 END [as=upsert_p:8]
  └── f-k-checks
       └── f-k-checks-item: c3(p) -> p(p)
            └── anti-join (hash)
@@ -464,7 +464,7 @@ upsert c3
                 │    │    └── mapping:
                 │    │         └──  upsert_p:8 => upsert_p:9
                 │    └── filters
-                │         └── upsert_p:9 IS NOT NULL
+                │         └── upsert_p:9 IS DISTINCT FROM NULL
                 ├── scan p
                 │    └── columns: p.p:10!null
                 └── filters
@@ -513,9 +513,9 @@ upsert c4
  │    │    └── projections
  │    │         └── 1 [as=column12:12]
  │    └── projections
- │         ├── CASE WHEN c:9 IS NULL THEN x:4 ELSE c:9 END [as=upsert_c:13]
- │         ├── CASE WHEN c:9 IS NULL THEN y:5 ELSE a:10 END [as=upsert_a:14]
- │         └── CASE WHEN c:9 IS NULL THEN z:6 ELSE column12:12 END [as=upsert_other:15]
+ │         ├── CASE WHEN c:9 IS NOT DISTINCT FROM NULL THEN x:4 ELSE c:9 END [as=upsert_c:13]
+ │         ├── CASE WHEN c:9 IS NOT DISTINCT FROM NULL THEN y:5 ELSE a:10 END [as=upsert_a:14]
+ │         └── CASE WHEN c:9 IS NOT DISTINCT FROM NULL THEN z:6 ELSE column12:12 END [as=upsert_other:15]
  └── f-k-checks
       └── f-k-checks-item: c4(a) -> p(p)
            └── anti-join (hash)
@@ -527,7 +527,7 @@ upsert c4
                 │    │    └── mapping:
                 │    │         └──  upsert_a:14 => upsert_a:16
                 │    └── filters
-                │         └── upsert_a:16 IS NOT NULL
+                │         └── upsert_a:16 IS DISTINCT FROM NULL
                 ├── scan p
                 │    └── columns: p:17!null
                 └── filters
@@ -572,9 +572,9 @@ upsert c4
  │    │    └── projections
  │    │         └── 5 [as=column12:12]
  │    └── projections
- │         ├── CASE WHEN c:9 IS NULL THEN x:4 ELSE c:9 END [as=upsert_c:13]
- │         ├── CASE WHEN c:9 IS NULL THEN y:5 ELSE column12:12 END [as=upsert_a:14]
- │         └── CASE WHEN c:9 IS NULL THEN z:6 ELSE c4.other:11 END [as=upsert_other:15]
+ │         ├── CASE WHEN c:9 IS NOT DISTINCT FROM NULL THEN x:4 ELSE c:9 END [as=upsert_c:13]
+ │         ├── CASE WHEN c:9 IS NOT DISTINCT FROM NULL THEN y:5 ELSE column12:12 END [as=upsert_a:14]
+ │         └── CASE WHEN c:9 IS NOT DISTINCT FROM NULL THEN z:6 ELSE c4.other:11 END [as=upsert_other:15]
  └── f-k-checks
       └── f-k-checks-item: c4(a) -> p(p)
            └── anti-join (hash)
@@ -586,7 +586,7 @@ upsert c4
                 │    │    └── mapping:
                 │    │         └──  upsert_a:14 => upsert_a:16
                 │    └── filters
-                │         └── upsert_a:16 IS NOT NULL
+                │         └── upsert_a:16 IS DISTINCT FROM NULL
                 ├── scan p
                 │    └── columns: p:17!null
                 └── filters
@@ -658,7 +658,7 @@ upsert cpq
  │    │    └── filters
  │    │         └── column1:5 = c:9
  │    └── projections
- │         └── CASE WHEN c:9 IS NULL THEN column1:5 ELSE c:9 END [as=upsert_c:13]
+ │         └── CASE WHEN c:9 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE c:9 END [as=upsert_c:13]
  └── f-k-checks
       └── f-k-checks-item: cpq(p,q) -> pq(p,q)
            └── anti-join (hash)
@@ -715,7 +715,7 @@ upsert cpq
  │    │    └── filters
  │    │         └── x:5 = c:10
  │    └── projections
- │         └── CASE WHEN c:10 IS NULL THEN x:5 ELSE c:10 END [as=upsert_c:14]
+ │         └── CASE WHEN c:10 IS NOT DISTINCT FROM NULL THEN x:5 ELSE c:10 END [as=upsert_c:14]
  └── f-k-checks
       └── f-k-checks-item: cpq(p,q) -> pq(p,q)
            └── anti-join (hash)
@@ -728,8 +728,8 @@ upsert cpq
                 │    │         ├──  xyzw.y:6 => y:15
                 │    │         └──  xyzw.z:7 => z:16
                 │    └── filters
-                │         ├── y:15 IS NOT NULL
-                │         └── z:16 IS NOT NULL
+                │         ├── y:15 IS DISTINCT FROM NULL
+                │         └── z:16 IS DISTINCT FROM NULL
                 ├── scan pq
                 │    └── columns: pq.p:18 pq.q:19
                 └── filters
@@ -779,9 +779,9 @@ upsert cpq
  │    │    └── filters
  │    │         └── x:5 = c:12
  │    └── projections
- │         ├── CASE WHEN c:12 IS NULL THEN x:5 ELSE c:12 END [as=upsert_c:16]
- │         ├── CASE WHEN c:12 IS NULL THEN column10:10 ELSE cpq.q:14 END [as=upsert_q:17]
- │         └── CASE WHEN c:12 IS NULL THEN column11:11 ELSE cpq.other:15 END [as=upsert_other:18]
+ │         ├── CASE WHEN c:12 IS NOT DISTINCT FROM NULL THEN x:5 ELSE c:12 END [as=upsert_c:16]
+ │         ├── CASE WHEN c:12 IS NOT DISTINCT FROM NULL THEN column10:10 ELSE cpq.q:14 END [as=upsert_q:17]
+ │         └── CASE WHEN c:12 IS NOT DISTINCT FROM NULL THEN column11:11 ELSE cpq.other:15 END [as=upsert_other:18]
  └── f-k-checks
       └── f-k-checks-item: cpq(p,q) -> pq(p,q)
            └── anti-join (hash)
@@ -794,8 +794,8 @@ upsert cpq
                 │    │         ├──  xyzw.y:6 => y:19
                 │    │         └──  upsert_q:17 => upsert_q:20
                 │    └── filters
-                │         ├── y:19 IS NOT NULL
-                │         └── upsert_q:20 IS NOT NULL
+                │         ├── y:19 IS DISTINCT FROM NULL
+                │         └── upsert_q:20 IS DISTINCT FROM NULL
                 ├── scan pq
                 │    └── columns: pq.p:22 pq.q:23
                 └── filters
@@ -844,10 +844,10 @@ upsert cpq
  │    │    └── filters
  │    │         └── x:5 = c:13
  │    └── projections
- │         ├── CASE WHEN c:13 IS NULL THEN x:5 ELSE c:13 END [as=upsert_c:17]
- │         ├── CASE WHEN c:13 IS NULL THEN column10:10 ELSE cpq.p:14 END [as=upsert_p:18]
- │         ├── CASE WHEN c:13 IS NULL THEN column11:11 ELSE cpq.q:15 END [as=upsert_q:19]
- │         └── CASE WHEN c:13 IS NULL THEN column12:12 ELSE cpq.other:16 END [as=upsert_other:20]
+ │         ├── CASE WHEN c:13 IS NOT DISTINCT FROM NULL THEN x:5 ELSE c:13 END [as=upsert_c:17]
+ │         ├── CASE WHEN c:13 IS NOT DISTINCT FROM NULL THEN column10:10 ELSE cpq.p:14 END [as=upsert_p:18]
+ │         ├── CASE WHEN c:13 IS NOT DISTINCT FROM NULL THEN column11:11 ELSE cpq.q:15 END [as=upsert_q:19]
+ │         └── CASE WHEN c:13 IS NOT DISTINCT FROM NULL THEN column12:12 ELSE cpq.other:16 END [as=upsert_other:20]
  └── f-k-checks
       └── f-k-checks-item: cpq(p,q) -> pq(p,q)
            └── anti-join (hash)
@@ -860,8 +860,8 @@ upsert cpq
                 │    │         ├──  upsert_p:18 => upsert_p:21
                 │    │         └──  upsert_q:19 => upsert_q:22
                 │    └── filters
-                │         ├── upsert_p:21 IS NOT NULL
-                │         └── upsert_q:22 IS NOT NULL
+                │         ├── upsert_p:21 IS DISTINCT FROM NULL
+                │         └── upsert_q:22 IS DISTINCT FROM NULL
                 ├── scan pq
                 │    └── columns: pq.p:24 pq.q:25
                 └── filters
@@ -916,7 +916,7 @@ upsert cpq
  │    │    └── filters
  │    │         └── x:5 = c:13
  │    └── projections
- │         └── CASE WHEN c:13 IS NULL THEN x:5 ELSE c:13 END [as=upsert_c:17]
+ │         └── CASE WHEN c:13 IS NOT DISTINCT FROM NULL THEN x:5 ELSE c:13 END [as=upsert_c:17]
  └── f-k-checks
       └── f-k-checks-item: cpq(p,q) -> pq(p,q)
            └── anti-join (hash)
@@ -980,10 +980,10 @@ upsert cpq
  │    │    └── projections
  │    │         └── 10 [as=column13:13]
  │    └── projections
- │         ├── CASE WHEN c:9 IS NULL THEN column1:5 ELSE c:9 END [as=upsert_c:14]
- │         ├── CASE WHEN c:9 IS NULL THEN column6:6 ELSE column13:13 END [as=upsert_p:15]
- │         ├── CASE WHEN c:9 IS NULL THEN column7:7 ELSE cpq.q:11 END [as=upsert_q:16]
- │         └── CASE WHEN c:9 IS NULL THEN column8:8 ELSE cpq.other:12 END [as=upsert_other:17]
+ │         ├── CASE WHEN c:9 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE c:9 END [as=upsert_c:14]
+ │         ├── CASE WHEN c:9 IS NOT DISTINCT FROM NULL THEN column6:6 ELSE column13:13 END [as=upsert_p:15]
+ │         ├── CASE WHEN c:9 IS NOT DISTINCT FROM NULL THEN column7:7 ELSE cpq.q:11 END [as=upsert_q:16]
+ │         └── CASE WHEN c:9 IS NOT DISTINCT FROM NULL THEN column8:8 ELSE cpq.other:12 END [as=upsert_other:17]
  └── f-k-checks
       └── f-k-checks-item: cpq(p,q) -> pq(p,q)
            └── anti-join (hash)
@@ -996,7 +996,7 @@ upsert cpq
                 │    │         ├──  upsert_p:15 => upsert_p:18
                 │    │         └──  upsert_q:16 => upsert_q:19
                 │    └── filters
-                │         └── upsert_q:19 IS NOT NULL
+                │         └── upsert_q:19 IS DISTINCT FROM NULL
                 ├── scan pq
                 │    └── columns: pq.p:21 pq.q:22
                 └── filters
@@ -1057,8 +1057,8 @@ upsert cmulti
  │    │         ├── x:5 = a:10
  │    │         └── y:6 = b:11
  │    └── projections
- │         ├── CASE WHEN a:10 IS NULL THEN x:5 ELSE a:10 END [as=upsert_a:14]
- │         └── CASE WHEN a:10 IS NULL THEN y:6 ELSE b:11 END [as=upsert_b:15]
+ │         ├── CASE WHEN a:10 IS NOT DISTINCT FROM NULL THEN x:5 ELSE a:10 END [as=upsert_a:14]
+ │         └── CASE WHEN a:10 IS NOT DISTINCT FROM NULL THEN y:6 ELSE b:11 END [as=upsert_b:15]
  └── f-k-checks
       ├── f-k-checks-item: cmulti(a) -> p(p)
       │    └── anti-join (hash)
@@ -1126,9 +1126,9 @@ upsert cmulti
  │    │         ├── x:5 = a:11
  │    │         └── y:6 = b:12
  │    └── projections
- │         ├── CASE WHEN a:11 IS NULL THEN x:5 ELSE a:11 END [as=upsert_a:15]
- │         ├── CASE WHEN a:11 IS NULL THEN y:6 ELSE b:12 END [as=upsert_b:16]
- │         └── CASE WHEN a:11 IS NULL THEN column10:10 ELSE d:14 END [as=upsert_d:17]
+ │         ├── CASE WHEN a:11 IS NOT DISTINCT FROM NULL THEN x:5 ELSE a:11 END [as=upsert_a:15]
+ │         ├── CASE WHEN a:11 IS NOT DISTINCT FROM NULL THEN y:6 ELSE b:12 END [as=upsert_b:16]
+ │         └── CASE WHEN a:11 IS NOT DISTINCT FROM NULL THEN column10:10 ELSE d:14 END [as=upsert_d:17]
  └── f-k-checks
       ├── f-k-checks-item: cmulti(a) -> p(p)
       │    └── anti-join (hash)
@@ -1213,7 +1213,7 @@ upsert p1
       │    └── filters
       │         └── column1:3 = p:5
       └── projections
-           └── CASE WHEN p:5 IS NULL THEN column1:3 ELSE p:5 END [as=upsert_p:7]
+           └── CASE WHEN p:5 IS NOT DISTINCT FROM NULL THEN column1:3 ELSE p:5 END [as=upsert_p:7]
 
 # This statement can modify existing values of p so we need to perform the FK
 # check.
@@ -1253,8 +1253,8 @@ upsert p1
  │    │    └── projections
  │    │         └── column1:3 + 1 [as=column7:7]
  │    └── projections
- │         ├── CASE WHEN p1.p:5 IS NULL THEN column1:3 ELSE column7:7 END [as=upsert_p:8]
- │         └── CASE WHEN p1.p:5 IS NULL THEN column2:4 ELSE other:6 END [as=upsert_other:9]
+ │         ├── CASE WHEN p1.p:5 IS NOT DISTINCT FROM NULL THEN column1:3 ELSE column7:7 END [as=upsert_p:8]
+ │         └── CASE WHEN p1.p:5 IS NOT DISTINCT FROM NULL THEN column2:4 ELSE other:6 END [as=upsert_other:9]
  └── f-k-checks
       └── f-k-checks-item: p1c(p) -> p1(p)
            └── semi-join (hash)
@@ -1312,8 +1312,8 @@ upsert p1
       │    └── projections
       │         └── other:6 + 1 [as=column7:7]
       └── projections
-           ├── CASE WHEN p:5 IS NULL THEN column1:3 ELSE p:5 END [as=upsert_p:8]
-           └── CASE WHEN p:5 IS NULL THEN column2:4 ELSE column7:7 END [as=upsert_other:9]
+           ├── CASE WHEN p:5 IS NOT DISTINCT FROM NULL THEN column1:3 ELSE p:5 END [as=upsert_p:8]
+           └── CASE WHEN p:5 IS NOT DISTINCT FROM NULL THEN column2:4 ELSE column7:7 END [as=upsert_other:9]
 
 # Similar tests when the FK column is not the PK.
 exec-ddl
@@ -1356,7 +1356,7 @@ upsert p2
  │    │    └── filters
  │    │         └── column1:3 = p:5
  │    └── projections
- │         └── CASE WHEN p:5 IS NULL THEN column1:3 ELSE p:5 END [as=upsert_p:7]
+ │         └── CASE WHEN p:5 IS NOT DISTINCT FROM NULL THEN column1:3 ELSE p:5 END [as=upsert_p:7]
  └── f-k-checks
       └── f-k-checks-item: p2c(fk) -> p2(fk)
            └── semi-join (hash)
@@ -1415,8 +1415,8 @@ upsert p2
       │    └── projections
       │         └── column1:3 + 1 [as=column7:7]
       └── projections
-           ├── CASE WHEN p:5 IS NULL THEN column1:3 ELSE column7:7 END [as=upsert_p:8]
-           └── CASE WHEN p:5 IS NULL THEN column2:4 ELSE fk:6 END [as=upsert_fk:9]
+           ├── CASE WHEN p:5 IS NOT DISTINCT FROM NULL THEN column1:3 ELSE column7:7 END [as=upsert_p:8]
+           └── CASE WHEN p:5 IS NOT DISTINCT FROM NULL THEN column2:4 ELSE fk:6 END [as=upsert_fk:9]
 
 # This statement can change existing values of the fk column, so the FK check
 # is needed.
@@ -1456,8 +1456,8 @@ upsert p2
  │    │    └── projections
  │    │         └── column2:4 + 1 [as=column7:7]
  │    └── projections
- │         ├── CASE WHEN p:5 IS NULL THEN column1:3 ELSE p:5 END [as=upsert_p:8]
- │         └── CASE WHEN p:5 IS NULL THEN column2:4 ELSE column7:7 END [as=upsert_fk:9]
+ │         ├── CASE WHEN p:5 IS NOT DISTINCT FROM NULL THEN column1:3 ELSE p:5 END [as=upsert_p:8]
+ │         └── CASE WHEN p:5 IS NOT DISTINCT FROM NULL THEN column2:4 ELSE column7:7 END [as=upsert_fk:9]
  └── f-k-checks
       └── f-k-checks-item: p2c(fk) -> p2(fk)
            └── semi-join (hash)
@@ -1516,8 +1516,8 @@ upsert p2
       │    └── projections
       │         └── column1:3 + 1 [as=column7:7]
       └── projections
-           ├── CASE WHEN p:5 IS NULL THEN column1:3 ELSE column7:7 END [as=upsert_p:8]
-           └── CASE WHEN p:5 IS NULL THEN column2:4 ELSE fk:6 END [as=upsert_fk:9]
+           ├── CASE WHEN p:5 IS NOT DISTINCT FROM NULL THEN column1:3 ELSE column7:7 END [as=upsert_p:8]
+           └── CASE WHEN p:5 IS NOT DISTINCT FROM NULL THEN column2:4 ELSE fk:6 END [as=upsert_fk:9]
 
 build
 INSERT INTO p2 VALUES (1, 1), (2, 2) ON CONFLICT (fk) DO UPDATE SET fk = excluded.fk + 1
@@ -1555,8 +1555,8 @@ upsert p2
  │    │    └── projections
  │    │         └── column2:4 + 1 [as=column7:7]
  │    └── projections
- │         ├── CASE WHEN p:5 IS NULL THEN column1:3 ELSE p:5 END [as=upsert_p:8]
- │         └── CASE WHEN p:5 IS NULL THEN column2:4 ELSE column7:7 END [as=upsert_fk:9]
+ │         ├── CASE WHEN p:5 IS NOT DISTINCT FROM NULL THEN column1:3 ELSE p:5 END [as=upsert_p:8]
+ │         └── CASE WHEN p:5 IS NOT DISTINCT FROM NULL THEN column2:4 ELSE column7:7 END [as=upsert_fk:9]
  └── f-k-checks
       └── f-k-checks-item: p2c(fk) -> p2(fk)
            └── semi-join (hash)
@@ -1613,8 +1613,8 @@ upsert p2
       │    └── filters
       │         └── column1:3 = p:5
       └── projections
-           ├── CASE WHEN p:5 IS NULL THEN column1:3 ELSE p:5 END [as=upsert_p:7]
-           └── CASE WHEN p:5 IS NULL THEN column4:4 ELSE fk:6 END [as=upsert_fk:8]
+           ├── CASE WHEN p:5 IS NOT DISTINCT FROM NULL THEN column1:3 ELSE p:5 END [as=upsert_p:7]
+           └── CASE WHEN p:5 IS NOT DISTINCT FROM NULL THEN column4:4 ELSE fk:6 END [as=upsert_fk:8]
 
 # ------------------------------------------
 # Inbound FK tests with multiple FK columns
@@ -1660,7 +1660,7 @@ upsert pq
  │    │    └── filters
  │    │         └── column1:5 = k:9
  │    └── projections
- │         └── CASE WHEN k:9 IS NULL THEN column1:5 ELSE k:9 END [as=upsert_k:13]
+ │         └── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE k:9 END [as=upsert_k:13]
  └── f-k-checks
       ├── f-k-checks-item: cpq(p,q) -> pq(p,q)
       │    └── semi-join (hash)
@@ -1743,10 +1743,10 @@ upsert pq
       │    └── filters
       │         └── column1:5 = k:7
       └── projections
-           ├── CASE WHEN k:7 IS NULL THEN column1:5 ELSE k:7 END [as=upsert_k:11]
-           ├── CASE WHEN k:7 IS NULL THEN column6:6 ELSE p:8 END [as=upsert_p:12]
-           ├── CASE WHEN k:7 IS NULL THEN column6:6 ELSE q:9 END [as=upsert_q:13]
-           └── CASE WHEN k:7 IS NULL THEN column6:6 ELSE other:10 END [as=upsert_other:14]
+           ├── CASE WHEN k:7 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE k:7 END [as=upsert_k:11]
+           ├── CASE WHEN k:7 IS NOT DISTINCT FROM NULL THEN column6:6 ELSE p:8 END [as=upsert_p:12]
+           ├── CASE WHEN k:7 IS NOT DISTINCT FROM NULL THEN column6:6 ELSE q:9 END [as=upsert_q:13]
+           └── CASE WHEN k:7 IS NOT DISTINCT FROM NULL THEN column6:6 ELSE other:10 END [as=upsert_other:14]
 
 build
 UPSERT INTO pq (k,q) VALUES (1, 1), (2, 2)
@@ -1788,9 +1788,9 @@ upsert pq
  │    │    └── filters
  │    │         └── column1:5 = k:8
  │    └── projections
- │         ├── CASE WHEN k:8 IS NULL THEN column1:5 ELSE k:8 END [as=upsert_k:12]
- │         ├── CASE WHEN k:8 IS NULL THEN column7:7 ELSE pq.p:9 END [as=upsert_p:13]
- │         └── CASE WHEN k:8 IS NULL THEN column7:7 ELSE pq.other:11 END [as=upsert_other:14]
+ │         ├── CASE WHEN k:8 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE k:8 END [as=upsert_k:12]
+ │         ├── CASE WHEN k:8 IS NOT DISTINCT FROM NULL THEN column7:7 ELSE pq.p:9 END [as=upsert_p:13]
+ │         └── CASE WHEN k:8 IS NOT DISTINCT FROM NULL THEN column7:7 ELSE pq.other:11 END [as=upsert_other:14]
  └── f-k-checks
       ├── f-k-checks-item: cpq(p,q) -> pq(p,q)
       │    └── semi-join (hash)
@@ -1878,10 +1878,10 @@ upsert pq
       │    └── projections
       │         └── k:9 + 1 [as=column13:13]
       └── projections
-           ├── CASE WHEN k:9 IS NULL THEN column1:5 ELSE column13:13 END [as=upsert_k:14]
-           ├── CASE WHEN k:9 IS NULL THEN column2:6 ELSE p:10 END [as=upsert_p:15]
-           ├── CASE WHEN k:9 IS NULL THEN column3:7 ELSE q:11 END [as=upsert_q:16]
-           └── CASE WHEN k:9 IS NULL THEN column4:8 ELSE other:12 END [as=upsert_other:17]
+           ├── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE column13:13 END [as=upsert_k:14]
+           ├── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column2:6 ELSE p:10 END [as=upsert_p:15]
+           ├── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column3:7 ELSE q:11 END [as=upsert_q:16]
+           └── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column4:8 ELSE other:12 END [as=upsert_other:17]
 
 build
 INSERT INTO pq VALUES (1, 1, 1, 1), (2, 2, 2, 2) ON CONFLICT (p,q) DO UPDATE SET p = pq.p + 1
@@ -1924,10 +1924,10 @@ upsert pq
  │    │    └── projections
  │    │         └── pq.p:10 + 1 [as=column13:13]
  │    └── projections
- │         ├── CASE WHEN k:9 IS NULL THEN column1:5 ELSE k:9 END [as=upsert_k:14]
- │         ├── CASE WHEN k:9 IS NULL THEN column2:6 ELSE column13:13 END [as=upsert_p:15]
- │         ├── CASE WHEN k:9 IS NULL THEN column3:7 ELSE pq.q:11 END [as=upsert_q:16]
- │         └── CASE WHEN k:9 IS NULL THEN column4:8 ELSE pq.other:12 END [as=upsert_other:17]
+ │         ├── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE k:9 END [as=upsert_k:14]
+ │         ├── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column2:6 ELSE column13:13 END [as=upsert_p:15]
+ │         ├── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column3:7 ELSE pq.q:11 END [as=upsert_q:16]
+ │         └── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column4:8 ELSE pq.other:12 END [as=upsert_other:17]
  └── f-k-checks
       ├── f-k-checks-item: cpq(p,q) -> pq(p,q)
       │    └── semi-join (hash)
@@ -2016,10 +2016,10 @@ upsert pq
       │    └── projections
       │         └── 5 [as=column13:13]
       └── projections
-           ├── CASE WHEN k:9 IS NULL THEN column1:5 ELSE k:9 END [as=upsert_k:14]
-           ├── CASE WHEN k:9 IS NULL THEN column2:6 ELSE p:10 END [as=upsert_p:15]
-           ├── CASE WHEN k:9 IS NULL THEN column3:7 ELSE q:11 END [as=upsert_q:16]
-           └── CASE WHEN k:9 IS NULL THEN column4:8 ELSE column13:13 END [as=upsert_other:17]
+           ├── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE k:9 END [as=upsert_k:14]
+           ├── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column2:6 ELSE p:10 END [as=upsert_p:15]
+           ├── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column3:7 ELSE q:11 END [as=upsert_q:16]
+           └── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column4:8 ELSE column13:13 END [as=upsert_other:17]
 
 build
 INSERT INTO pq VALUES (1, 1, 1, 1), (2, 2, 2, 2) ON CONFLICT (k) DO UPDATE SET q = 5
@@ -2063,10 +2063,10 @@ upsert pq
  │    │    └── projections
  │    │         └── 5 [as=column13:13]
  │    └── projections
- │         ├── CASE WHEN k:9 IS NULL THEN column1:5 ELSE k:9 END [as=upsert_k:14]
- │         ├── CASE WHEN k:9 IS NULL THEN column2:6 ELSE pq.p:10 END [as=upsert_p:15]
- │         ├── CASE WHEN k:9 IS NULL THEN column3:7 ELSE column13:13 END [as=upsert_q:16]
- │         └── CASE WHEN k:9 IS NULL THEN column4:8 ELSE pq.other:12 END [as=upsert_other:17]
+ │         ├── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE k:9 END [as=upsert_k:14]
+ │         ├── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column2:6 ELSE pq.p:10 END [as=upsert_p:15]
+ │         ├── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column3:7 ELSE column13:13 END [as=upsert_q:16]
+ │         └── CASE WHEN k:9 IS NOT DISTINCT FROM NULL THEN column4:8 ELSE pq.other:12 END [as=upsert_other:17]
  └── f-k-checks
       ├── f-k-checks-item: cpq(p,q) -> pq(p,q)
       │    └── semi-join (hash)
@@ -2175,7 +2175,7 @@ upsert tab2
  │    │    └── filters
  │    │         └── column1:4 = c:7
  │    └── projections
- │         └── CASE WHEN c:7 IS NULL THEN column1:4 ELSE c:7 END [as=upsert_c:10]
+ │         └── CASE WHEN c:7 IS NOT DISTINCT FROM NULL THEN column1:4 ELSE c:7 END [as=upsert_c:10]
  └── f-k-checks
       ├── f-k-checks-item: tab2(d) -> tab1(b)
       │    └── anti-join (hash)
@@ -2187,7 +2187,7 @@ upsert tab2
       │         │    │    └── mapping:
       │         │    │         └──  column2:5 => column2:11
       │         │    └── filters
-      │         │         └── column2:11 IS NOT NULL
+      │         │         └── column2:11 IS DISTINCT FROM NULL
       │         ├── scan tab1
       │         │    └── columns: b:13
       │         └── filters
@@ -2250,9 +2250,9 @@ upsert tab2
  │    │    └── projections
  │    │         └── tab2.e:9 + 1 [as=column10:10]
  │    └── projections
- │         ├── CASE WHEN c:7 IS NULL THEN column1:4 ELSE c:7 END [as=upsert_c:11]
- │         ├── CASE WHEN c:7 IS NULL THEN column2:5 ELSE d:8 END [as=upsert_d:12]
- │         └── CASE WHEN c:7 IS NULL THEN column3:6 ELSE column10:10 END [as=upsert_e:13]
+ │         ├── CASE WHEN c:7 IS NOT DISTINCT FROM NULL THEN column1:4 ELSE c:7 END [as=upsert_c:11]
+ │         ├── CASE WHEN c:7 IS NOT DISTINCT FROM NULL THEN column2:5 ELSE d:8 END [as=upsert_d:12]
+ │         └── CASE WHEN c:7 IS NOT DISTINCT FROM NULL THEN column3:6 ELSE column10:10 END [as=upsert_e:13]
  └── f-k-checks
       ├── f-k-checks-item: tab2(d) -> tab1(b)
       │    └── anti-join (hash)
@@ -2264,7 +2264,7 @@ upsert tab2
       │         │    │    └── mapping:
       │         │    │         └──  upsert_d:12 => upsert_d:14
       │         │    └── filters
-      │         │         └── upsert_d:14 IS NOT NULL
+      │         │         └── upsert_d:14 IS DISTINCT FROM NULL
       │         ├── scan tab1
       │         │    └── columns: b:16
       │         └── filters
@@ -2328,9 +2328,9 @@ upsert tab2
  │    │    └── projections
  │    │         └── d:8 + 1 [as=column10:10]
  │    └── projections
- │         ├── CASE WHEN c:7 IS NULL THEN column1:4 ELSE c:7 END [as=upsert_c:11]
- │         ├── CASE WHEN c:7 IS NULL THEN column2:5 ELSE column10:10 END [as=upsert_d:12]
- │         └── CASE WHEN c:7 IS NULL THEN column3:6 ELSE e:9 END [as=upsert_e:13]
+ │         ├── CASE WHEN c:7 IS NOT DISTINCT FROM NULL THEN column1:4 ELSE c:7 END [as=upsert_c:11]
+ │         ├── CASE WHEN c:7 IS NOT DISTINCT FROM NULL THEN column2:5 ELSE column10:10 END [as=upsert_d:12]
+ │         └── CASE WHEN c:7 IS NOT DISTINCT FROM NULL THEN column3:6 ELSE e:9 END [as=upsert_e:13]
  └── f-k-checks
       └── f-k-checks-item: tab2(d) -> tab1(b)
            └── anti-join (hash)
@@ -2342,7 +2342,7 @@ upsert tab2
                 │    │    └── mapping:
                 │    │         └──  upsert_d:12 => upsert_d:14
                 │    └── filters
-                │         └── upsert_d:14 IS NOT NULL
+                │         └── upsert_d:14 IS DISTINCT FROM NULL
                 ├── scan tab1
                 │    └── columns: b:16
                 └── filters
@@ -2400,8 +2400,8 @@ upsert self
  │    │         ├── x:5 = a:10
  │    │         └── y:6 = self.b:11
  │    └── projections
- │         ├── CASE WHEN a:10 IS NULL THEN x:5 ELSE a:10 END [as=upsert_a:14]
- │         └── CASE WHEN a:10 IS NULL THEN y:6 ELSE self.b:11 END [as=upsert_b:15]
+ │         ├── CASE WHEN a:10 IS NOT DISTINCT FROM NULL THEN x:5 ELSE a:10 END [as=upsert_a:14]
+ │         └── CASE WHEN a:10 IS NOT DISTINCT FROM NULL THEN y:6 ELSE self.b:11 END [as=upsert_b:15]
  └── f-k-checks
       ├── f-k-checks-item: self(a,b) -> self(b,d)
       │    └── anti-join (hash)
@@ -2426,7 +2426,7 @@ upsert self
       │         │    │    └── mapping:
       │         │    │         └──  xyzw.w:8 => w:22
       │         │    └── filters
-      │         │         └── w:22 IS NOT NULL
+      │         │         └── w:22 IS DISTINCT FROM NULL
       │         ├── scan self
       │         │    └── columns: self.c:25
       │         └── filters

@@ -302,12 +302,12 @@ index-join  ·            ·                            (a, b)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b IS NULL
 ----
-·     distributed  false      ·       ·
-·     vectorized   false      ·       ·
-scan  ·            ·          (a, b)  ·
-·     table        d@primary  ·       ·
-·     spans        FULL SCAN  ·       ·
-·     filter       b IS NULL  ·       ·
+·     distributed  false                        ·       ·
+·     vectorized   false                        ·       ·
+scan  ·            ·                            (a, b)  ·
+·     table        d@primary                    ·       ·
+·     spans        FULL SCAN                    ·       ·
+·     filter       b IS NOT DISTINCT FROM NULL  ·       ·
 
 query TTT
 EXPLAIN SELECT * from d where b @> '{"a": []}' ORDER BY a;
@@ -530,12 +530,12 @@ norows  ·            ·      (a, b)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b IS NULL
 ----
-·     distributed  false      ·       ·
-·     vectorized   false      ·       ·
-scan  ·            ·          (a, b)  ·
-·     table        e@primary  ·       ·
-·     spans        FULL SCAN  ·       ·
-·     filter       b IS NULL  ·       ·
+·     distributed  false                        ·       ·
+·     vectorized   false                        ·       ·
+scan  ·            ·                            (a, b)  ·
+·     table        e@primary                    ·       ·
+·     spans        FULL SCAN                    ·       ·
+·     filter       b IS NOT DISTINCT FROM NULL  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1,2]

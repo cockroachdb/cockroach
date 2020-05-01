@@ -309,7 +309,7 @@ EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NULL
 scan  ·            ·
 ·     table        p2@p2_id
 ·     spans        /1/#/55/2/NULL-
-·     filter       d IS NULL
+·     filter       d IS NOT DISTINCT FROM NULL
 
 # IS NOT NULL
 
@@ -321,7 +321,7 @@ EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NOT NULL
 scan  ·            ·
 ·     table        p2@p2_id
 ·     spans        /1/#/55/2/!NULL-
-·     filter       d IS NOT NULL
+·     filter       d IS DISTINCT FROM NULL
 
 # String table
 

@@ -1150,11 +1150,11 @@ project
  │    │    │    │    │    │    ├── scan history
  │    │    │    │    │    │    │    └── columns: h_data:28
  │    │    │    │    │    │    └── filters
- │    │    │    │    │    │         └── h_data:28 IS NOT NULL [outer=(28), constraints=(/28: (/NULL - ]; tight)]
+ │    │    │    │    │    │         └── h_data:28 IS DISTINCT FROM NULL [outer=(28), constraints=(/28: (/NULL - ]; tight)]
  │    │    │    │    │    └── projections
  │    │    │    │    │         └── true [as=true:39]
  │    │    │    │    └── filters
- │    │    │    │         └── ol_dist_info:19 IS NOT NULL [outer=(19), constraints=(/19: (/NULL - ]; tight)]
+ │    │    │    │         └── ol_dist_info:19 IS DISTINCT FROM NULL [outer=(19), constraints=(/19: (/NULL - ]; tight)]
  │    │    │    └── aggregations
  │    │    │         ├── const-not-null-agg [as=true_agg:40, outer=(39)]
  │    │    │         │    └── true:39
@@ -1162,7 +1162,7 @@ project
  │    │    │              └── ol_dist_info:19
  │    │    └── filters
  │    │         └── or [outer=(40), subquery]
- │    │              ├── true_agg:40 IS NOT NULL
+ │    │              ├── true_agg:40 IS DISTINCT FROM NULL
  │    │              └── is-not
  │    │                   ├── subquery
  │    │                   │    └── limit
@@ -2521,8 +2521,8 @@ inner-join (cross)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
  └── filters
-      ├── (k:1 = y:7) IS true [outer=(1,7)]
-      └── (i:2 = x:6) IS false [outer=(2,6)]
+      ├── (k:1 = y:7) IS NOT DISTINCT FROM true [outer=(1,7)]
+      └── (i:2 = x:6) IS NOT DISTINCT FROM false [outer=(2,6)]
 
 # --------------------------------------------------
 # ExtractJoinEqualities

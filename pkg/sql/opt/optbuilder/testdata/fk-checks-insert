@@ -59,7 +59,7 @@ insert child
  │    │         │    └── filters
  │    │         │         └── column1:3 = c:5
  │    │         └── filters
- │    │              └── c:5 IS NULL
+ │    │              └── c:5 IS NOT DISTINCT FROM NULL
  │    └── aggregations
  │         └── first-agg [as=column2:4]
  │              └── column2:4
@@ -137,7 +137,7 @@ insert child_nullable
                 │    │    └── mapping:
                 │    │         └──  column2:4 => column2:5
                 │    └── filters
-                │         └── column2:5 IS NOT NULL
+                │         └── column2:5 IS DISTINCT FROM NULL
                 ├── scan parent
                 │    └── columns: parent.p:6!null
                 └── filters
@@ -201,7 +201,7 @@ insert child_nullable_full
                 │    │    └── mapping:
                 │    │         └──  column2:4 => column2:5
                 │    └── filters
-                │         └── column2:5 IS NOT NULL
+                │         └── column2:5 IS DISTINCT FROM NULL
                 ├── scan parent
                 │    └── columns: parent.p:6!null
                 └── filters
@@ -248,9 +248,9 @@ insert multi_col_child
                 │    │         ├──  column3:7 => column3:10
                 │    │         └──  column4:8 => column4:11
                 │    └── filters
-                │         ├── column2:9 IS NOT NULL
-                │         ├── column3:10 IS NOT NULL
-                │         └── column4:11 IS NOT NULL
+                │         ├── column2:9 IS DISTINCT FROM NULL
+                │         ├── column3:10 IS DISTINCT FROM NULL
+                │         └── column4:11 IS DISTINCT FROM NULL
                 ├── scan multi_col_parent
                 │    └── columns: multi_col_parent.p:12!null multi_col_parent.q:13!null multi_col_parent.r:14!null
                 └── filters
@@ -287,8 +287,8 @@ insert multi_col_child
                 │    │         ├──  column3:7 => column3:10
                 │    │         └──  column4:8 => column4:11
                 │    └── filters
-                │         ├── column2:9 IS NOT NULL
-                │         └── column3:10 IS NOT NULL
+                │         ├── column2:9 IS DISTINCT FROM NULL
+                │         └── column3:10 IS DISTINCT FROM NULL
                 ├── scan multi_col_parent
                 │    └── columns: multi_col_parent.p:12!null multi_col_parent.q:13!null multi_col_parent.r:14!null
                 └── filters
@@ -364,7 +364,7 @@ insert multi_col_child_full
                 │    │         ├──  column3:7 => column3:10
                 │    │         └──  column4:8 => column4:11
                 │    └── filters
-                │         └── ((column2:9 IS NOT NULL) OR (column3:10 IS NOT NULL)) OR (column4:11 IS NOT NULL)
+                │         └── ((column2:9 IS DISTINCT FROM NULL) OR (column3:10 IS DISTINCT FROM NULL)) OR (column4:11 IS DISTINCT FROM NULL)
                 ├── scan multi_col_parent
                 │    └── columns: multi_col_parent.p:12!null multi_col_parent.q:13!null multi_col_parent.r:14!null
                 └── filters
@@ -481,7 +481,7 @@ insert multi_ref_child
       │         │    │    └── mapping:
       │         │    │         └──  column2:6 => column2:9
       │         │    └── filters
-      │         │         └── column2:9 IS NOT NULL
+      │         │         └── column2:9 IS DISTINCT FROM NULL
       │         ├── scan multi_ref_parent_a
       │         │    └── columns: multi_ref_parent_a.a:10!null
       │         └── filters
@@ -497,8 +497,8 @@ insert multi_ref_child
                 │    │         ├──  column3:7 => column3:12
                 │    │         └──  column4:8 => column4:13
                 │    └── filters
-                │         ├── column3:12 IS NOT NULL
-                │         └── column4:13 IS NOT NULL
+                │         ├── column3:12 IS DISTINCT FROM NULL
+                │         └── column4:13 IS DISTINCT FROM NULL
                 ├── scan multi_ref_parent_bc
                 │    └── columns: multi_ref_parent_bc.b:14!null multi_ref_parent_bc.c:15!null
                 └── filters

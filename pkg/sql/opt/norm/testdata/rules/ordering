@@ -197,8 +197,8 @@ ordinality
            │    ├── key: (1)
            │    └── fd: (1)-->(2-5), (2,3)~~>(1,4,5)
            └── filters
-                ├── b:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
-                └── c:3 IS NOT NULL [outer=(3), constraints=(/3: (/NULL - ]; tight)]
+                ├── b:2 IS DISTINCT FROM NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
+                └── c:3 IS DISTINCT FROM NULL [outer=(3), constraints=(/3: (/NULL - ]; tight)]
 
 # --------------------------------------------------
 # SimplifyExplainOrdering

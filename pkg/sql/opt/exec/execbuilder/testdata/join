@@ -616,7 +616,7 @@ SELECT *
 ·               distributed  false
 ·               vectorized   true
 filter          ·            ·
- │              filter       ((n IS NULL) OR (n > 1)) AND ((n IS NULL) OR (a < sq))
+ │              filter       ((n IS NOT DISTINCT FROM NULL) OR (n > 1)) AND ((n IS NOT DISTINCT FROM NULL) OR (a < sq))
  └── hash-join  ·            ·
       │         type         left outer
       │         equality     (b) = (sq)
@@ -646,7 +646,7 @@ render               ·            ·
  │                   render 2     n
  │                   render 3     sq
  └── filter          ·            ·
-      │              filter       ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
+      │              filter       ((a IS NOT DISTINCT FROM NULL) OR (a > 2)) AND ((a IS NOT DISTINCT FROM NULL) OR (a < sq))
       └── hash-join  ·            ·
            │         type         left outer
            │         equality     (sq) = (b)
@@ -676,7 +676,7 @@ hash-join  ·            ·
  ├── scan  ·            ·
  │         table        pairs@primary
  │         spans        FULL SCAN
- │         filter       ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
+ │         filter       ((a > 1) AND ((a IS NOT DISTINCT FROM NULL) OR (a > 2))) AND ((a IS NOT DISTINCT FROM NULL) OR (a < b))
  └── scan  ·            ·
 ·          table        square@primary
 ·          spans        /2-/5/#
@@ -1651,7 +1651,7 @@ EXPLAIN SELECT * FROM zigzag2 WHERE a = 1 AND b = 2 AND c IS NULL
 ·                distributed  false
 ·                vectorized   true
 filter           ·            ·
- │               filter       c IS NULL
+ │               filter       c IS NOT DISTINCT FROM NULL
  └── index-join  ·            ·
       │          table        zigzag2@primary
       │          key columns  rowid

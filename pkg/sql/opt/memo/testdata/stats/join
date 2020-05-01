@@ -782,7 +782,7 @@ select
  │    └── filters
  │         └── x:1 = u:5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── filters
-      └── s:3 IS NOT NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+      └── s:3 IS DISTINCT FROM NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
 
 # Do a full join on a condition that results in 0 rows on one side. All null counts
 # on the right side should be greater due to expected null-extension of columns.

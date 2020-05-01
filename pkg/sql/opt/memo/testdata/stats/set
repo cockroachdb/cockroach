@@ -891,7 +891,7 @@ except
  │    │    ├── (NULL, 1) [type=tuple{int, int}]
  │    │    └── (2, NULL) [type=tuple{int, int}]
  │    └── filters
- │         └── column1:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+ │         └── column1:1 IS NOT DISTINCT FROM NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
  └── select
       ├── columns: column1:3(int!null) column2:4(int!null)
       ├── cardinality: [0 - 3]
@@ -905,7 +905,7 @@ except
       │    ├── (2, 3) [type=tuple{int, int}]
       │    └── (3, 4) [type=tuple{int, int}]
       └── filters
-           └── column1:3 IS NULL [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+           └── column1:3 IS NOT DISTINCT FROM NULL [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
 
 # Make sure that we estimate at least 1 row for the intersect.
 opt

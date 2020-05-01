@@ -141,7 +141,7 @@ select
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── filters
-      └── (x:1 IS DISTINCT FROM y:2) AND (x:1 IS NULL) [type=bool]
+      └── (x:1 IS DISTINCT FROM y:2) AND (x:1 IS NOT DISTINCT FROM NULL) [type=bool]
 
 # Bitand, Bitor, Bitxor
 build
@@ -422,7 +422,7 @@ project
  │         └── const-not-null-agg [as=true_agg:8, type=bool]
  │              └── true:7 [type=bool]
  └── projections
-      └── true_agg:8 IS NOT NULL [as=exists:6, type=bool]
+      └── true_agg:8 IS DISTINCT FROM NULL [as=exists:6, type=bool]
 
 # Cast
 build

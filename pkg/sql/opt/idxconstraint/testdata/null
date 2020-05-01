@@ -17,7 +17,7 @@ index-constraints vars=(int, int) index=(@1, @2)
 @1 >= 1 AND @2 IS NULL
 ----
 [/1/NULL - ]
-Remaining filter: @2 IS NULL
+Remaining filter: @2 IS NOT DISTINCT FROM NULL
 
 index-constraints vars=(int) index=(@1)
 @1 IS NOT DISTINCT FROM NULL

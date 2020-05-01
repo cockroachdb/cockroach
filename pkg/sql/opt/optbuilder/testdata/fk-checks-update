@@ -361,7 +361,7 @@ update fam
                 │    │         ├──  column13:13 => column13:14
                 │    │         └──  fam.d:10 => d:15
                 │    └── filters
-                │         └── d:15 IS NOT NULL
+                │         └── d:15 IS DISTINCT FROM NULL
                 ├── scan two
                 │    └── columns: two.a:16!null two.b:17!null
                 └── filters
@@ -395,7 +395,7 @@ update fam
                 │    │         ├──  fam.c:9 => c:14
                 │    │         └──  column13:13 => column13:15
                 │    └── filters
-                │         └── c:14 IS NOT NULL
+                │         └── c:14 IS DISTINCT FROM NULL
                 ├── scan two
                 │    └── columns: two.a:16!null two.b:17!null
                 └── filters

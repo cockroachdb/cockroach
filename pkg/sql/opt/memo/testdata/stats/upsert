@@ -170,9 +170,9 @@ with &1
  │         │    └── projections
  │         │         └── 5 [as=column12:12, type=int]
  │         └── projections
- │              ├── CASE WHEN xyz.x:9 IS NULL THEN b:5 ELSE xyz.x:9 END [as=upsert_x:13, type=string, outer=(5,9)]
- │              ├── CASE WHEN xyz.x:9 IS NULL THEN a:4 ELSE column12:12 END [as=upsert_y:14, type=int, outer=(4,9,12)]
- │              └── CASE WHEN xyz.x:9 IS NULL THEN column8:8 ELSE xyz.z:11 END [as=upsert_z:15, type=float, outer=(8,9,11)]
+ │              ├── CASE WHEN xyz.x:9 IS NOT DISTINCT FROM NULL THEN b:5 ELSE xyz.x:9 END [as=upsert_x:13, type=string, outer=(5,9)]
+ │              ├── CASE WHEN xyz.x:9 IS NOT DISTINCT FROM NULL THEN a:4 ELSE column12:12 END [as=upsert_y:14, type=int, outer=(4,9,12)]
+ │              └── CASE WHEN xyz.x:9 IS NOT DISTINCT FROM NULL THEN column8:8 ELSE xyz.z:11 END [as=upsert_z:15, type=float, outer=(8,9,11)]
  └── select
       ├── columns: x:16(string!null) y:17(int!null) z:18(float)
       ├── stats: [rows=9.94974874, distinct(17)=0.994974874, null(17)=0]
@@ -303,8 +303,8 @@ upsert uv
       │    └── projections
       │         └── 1 [as=column10:10, type=int]
       └── projections
-           ├── CASE WHEN u:8 IS NULL THEN column7:7 ELSE u:8 END [as=upsert_u:11, type=int, outer=(7,8)]
-           └── CASE WHEN u:8 IS NULL THEN z:6 ELSE column10:10 END [as=upsert_v:12, type=int, outer=(6,8,10)]
+           ├── CASE WHEN u:8 IS NOT DISTINCT FROM NULL THEN column7:7 ELSE u:8 END [as=upsert_u:11, type=int, outer=(7,8)]
+           └── CASE WHEN u:8 IS NOT DISTINCT FROM NULL THEN z:6 ELSE column10:10 END [as=upsert_v:12, type=int, outer=(6,8,10)]
 
 # Multiple conflict columns.
 # TODO(andyk): The null counts for the left join are surprisingly high. It's due
@@ -371,6 +371,6 @@ upsert mno
       │    └── projections
       │         └── 5 [as=column10:10, type=int]
       └── projections
-           ├── CASE WHEN m:7 IS NULL THEN m:4 ELSE m:7 END [as=upsert_m:11, type=int, outer=(4,7)]
-           ├── CASE WHEN m:7 IS NULL THEN n:5 ELSE n:8 END [as=upsert_n:12, type=int, outer=(5,7,8)]
-           └── CASE WHEN m:7 IS NULL THEN o:6 ELSE column10:10 END [as=upsert_o:13, type=int, outer=(6,7,10)]
+           ├── CASE WHEN m:7 IS NOT DISTINCT FROM NULL THEN m:4 ELSE m:7 END [as=upsert_m:11, type=int, outer=(4,7)]
+           ├── CASE WHEN m:7 IS NOT DISTINCT FROM NULL THEN n:5 ELSE n:8 END [as=upsert_n:12, type=int, outer=(5,7,8)]
+           └── CASE WHEN m:7 IS NOT DISTINCT FROM NULL THEN o:6 ELSE column10:10 END [as=upsert_o:13, type=int, outer=(6,7,10)]

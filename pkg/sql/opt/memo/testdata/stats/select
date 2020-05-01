@@ -141,7 +141,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters
-      └── x:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+      └── x:1 IS NOT DISTINCT FROM NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
 
 norm
 SELECT sum(x) FROM b WHERE x > 1000 AND x <= 2000 GROUP BY z
@@ -1214,7 +1214,7 @@ project
       │    ├── key: (3)
       │    └── fd: (3)-->(1,2)
       └── filters
-           └── x:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+           └── x:1 IS NOT DISTINCT FROM NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
 
 
 # Regression test for #34440. Ensure the null count for x is less than or equal

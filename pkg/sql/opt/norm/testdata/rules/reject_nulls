@@ -192,7 +192,7 @@ left-join (cross)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4)
  │    └── filters
- │         └── i:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │         └── i:2 IS DISTINCT FROM NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
  ├── scan xy
  │    ├── columns: x:5!null y:6
  │    ├── key: (5)
@@ -271,7 +271,7 @@ project
       │    │    │    ├── scan xy
       │    │    │    │    └── columns: y:6
       │    │    │    └── filters
-      │    │    │         └── y:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │         └── y:6 IS DISTINCT FROM NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
       │    │    └── filters (true)
       │    └── aggregations
       │         └── agg-distinct [as=sum:7, outer=(6)]
@@ -381,7 +381,7 @@ project
       │    │    │    ├── scan xy
       │    │    │    │    └── columns: y:6
       │    │    │    └── filters
-      │    │    │         └── y:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │         └── y:6 IS DISTINCT FROM NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
       │    │    └── filters (true)
       │    └── aggregations
       │         ├── agg-distinct [as=sum:7, outer=(6)]
@@ -439,7 +439,7 @@ select
  │    │    │    │    ├── key: (3)
  │    │    │    │    └── fd: (3)-->(4)
  │    │    │    └── filters
- │    │    │         └── v:4 IS NOT NULL [outer=(4), constraints=(/4: (/NULL - ]; tight)]
+ │    │    │         └── v:4 IS DISTINCT FROM NULL [outer=(4), constraints=(/4: (/NULL - ]; tight)]
  │    │    └── filters (true)
  │    └── aggregations
  │         ├── sum [as=sum:5, outer=(4)]
@@ -577,7 +577,7 @@ project
  │    │    │         └── const-not-null-agg [as=true_agg:15, outer=(14)]
  │    │    │              └── true:14
  │    │    └── projections
- │    │         └── true_agg:15 IS NOT NULL [as=exists:16, outer=(15)]
+ │    │         └── true_agg:15 IS DISTINCT FROM NULL [as=exists:16, outer=(15)]
  │    └── filters
  │         └── exists:16 [outer=(16), constraints=(/16: [/true - /true]; tight), fd=()-->(16)]
  └── projections
@@ -620,7 +620,7 @@ project
       │    │    │    │    │    ├── key: (3)
       │    │    │    │    │    └── fd: (3)-->(6)
       │    │    │    │    └── filters
-      │    │    │    │         └── s:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │    │         └── s:6 IS DISTINCT FROM NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
       │    │    │    └── filters (true)
       │    │    └── projections
       │    │         └── ',' [as=column7:7]

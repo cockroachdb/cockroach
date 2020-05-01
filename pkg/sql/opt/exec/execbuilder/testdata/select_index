@@ -990,12 +990,12 @@ render           ·            ·            (x)                 ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM NULL
 ----
-·     distributed  false          ·       ·
-·     vectorized   true           ·       ·
-scan  ·            ·              (x, y)  ·
-·     table        xy@primary     ·       ·
-·     spans        FULL SCAN      ·       ·
-·     filter       y IS NOT NULL  ·       ·
+·     distributed  false                    ·       ·
+·     vectorized   true                     ·       ·
+scan  ·            ·                        (x, y)  ·
+·     table        xy@primary               ·       ·
+·     spans        FULL SCAN                ·       ·
+·     filter       y IS DISTINCT FROM NULL  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM 4

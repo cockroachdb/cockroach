@@ -130,10 +130,10 @@ upsert abc
       │    └── projections
       │         └── b:11 + 1 [as=column15:15]
       └── projections
-           ├── CASE WHEN rowid:13 IS NULL THEN x:5 ELSE column14:14 END [as=upsert_a:16]
-           ├── CASE WHEN rowid:13 IS NULL THEN y:6 ELSE b:11 END [as=upsert_b:17]
-           ├── CASE WHEN rowid:13 IS NULL THEN column9:9 ELSE column15:15 END [as=upsert_c:18]
-           └── CASE WHEN rowid:13 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:19]
+           ├── CASE WHEN rowid:13 IS NOT DISTINCT FROM NULL THEN x:5 ELSE column14:14 END [as=upsert_a:16]
+           ├── CASE WHEN rowid:13 IS NOT DISTINCT FROM NULL THEN y:6 ELSE b:11 END [as=upsert_b:17]
+           ├── CASE WHEN rowid:13 IS NOT DISTINCT FROM NULL THEN column9:9 ELSE column15:15 END [as=upsert_c:18]
+           └── CASE WHEN rowid:13 IS NOT DISTINCT FROM NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:19]
 
 # Set all columns, multi-column conflict.
 build
@@ -201,10 +201,10 @@ project
            │    └── projections
            │         └── column14:14 + 1 [as=column16:16]
            └── projections
-                ├── CASE WHEN rowid:12 IS NULL THEN x:5 ELSE column13:13 END [as=upsert_a:17]
-                ├── CASE WHEN rowid:12 IS NULL THEN y:6 ELSE column14:14 END [as=upsert_b:18]
-                ├── CASE WHEN rowid:12 IS NULL THEN column8:8 ELSE column16:16 END [as=upsert_c:19]
-                └── CASE WHEN rowid:12 IS NULL THEN z:7 ELSE column15:15 END [as=upsert_rowid:20]
+                ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN x:5 ELSE column13:13 END [as=upsert_a:17]
+                ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN y:6 ELSE column14:14 END [as=upsert_b:18]
+                ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column8:8 ELSE column16:16 END [as=upsert_c:19]
+                └── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN z:7 ELSE column15:15 END [as=upsert_rowid:20]
 
 # UPDATE + WHERE clause.
 build
@@ -266,16 +266,16 @@ upsert abc
       │    │    │    │    └── filters
       │    │    │    │         └── x:5 = a:10
       │    │    │    └── filters
-      │    │    │         └── (rowid:13 IS NULL) OR (a:10 > 0)
+      │    │    │         └── (rowid:13 IS NOT DISTINCT FROM NULL) OR (a:10 > 0)
       │    │    └── projections
       │    │         └── 10 [as=column14:14]
       │    └── projections
       │         └── column14:14 + 1 [as=column15:15]
       └── projections
-           ├── CASE WHEN rowid:13 IS NULL THEN x:5 ELSE a:10 END [as=upsert_a:16]
-           ├── CASE WHEN rowid:13 IS NULL THEN y:6 ELSE column14:14 END [as=upsert_b:17]
-           ├── CASE WHEN rowid:13 IS NULL THEN column9:9 ELSE column15:15 END [as=upsert_c:18]
-           └── CASE WHEN rowid:13 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:19]
+           ├── CASE WHEN rowid:13 IS NOT DISTINCT FROM NULL THEN x:5 ELSE a:10 END [as=upsert_a:16]
+           ├── CASE WHEN rowid:13 IS NOT DISTINCT FROM NULL THEN y:6 ELSE column14:14 END [as=upsert_b:17]
+           ├── CASE WHEN rowid:13 IS NOT DISTINCT FROM NULL THEN column9:9 ELSE column15:15 END [as=upsert_c:18]
+           └── CASE WHEN rowid:13 IS NOT DISTINCT FROM NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:19]
 
 # Use RETURNING INSERT..ON CONFLICT as a FROM clause.
 build
@@ -349,10 +349,10 @@ sort
       │              │    └── projections
       │              │         └── column13:13 + 1 [as=column14:14]
       │              └── projections
-      │                   ├── CASE WHEN rowid:12 IS NULL THEN column1:5 ELSE abc.a:9 END [as=upsert_a:15]
-      │                   ├── CASE WHEN rowid:12 IS NULL THEN column2:6 ELSE column13:13 END [as=upsert_b:16]
-      │                   ├── CASE WHEN rowid:12 IS NULL THEN column8:8 ELSE column14:14 END [as=upsert_c:17]
-      │                   └── CASE WHEN rowid:12 IS NULL THEN column7:7 ELSE rowid:12 END [as=upsert_rowid:18]
+      │                   ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE abc.a:9 END [as=upsert_a:15]
+      │                   ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column2:6 ELSE column13:13 END [as=upsert_b:16]
+      │                   ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column8:8 ELSE column14:14 END [as=upsert_c:17]
+      │                   └── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column7:7 ELSE rowid:12 END [as=upsert_rowid:18]
       └── with-scan &1
            ├── columns: a:19!null b:20!null c:21!null
            └── mapping:
@@ -420,10 +420,10 @@ upsert tab
       │    └── projections
       │         └── b:10 + 1 [as=column14:14]
       └── projections
-           ├── CASE WHEN rowid:12 IS NULL THEN column1:5 ELSE column13:13 END [as=upsert_a:15]
-           ├── CASE WHEN rowid:12 IS NULL THEN column2:6 ELSE b:10 END [as=upsert_b:16]
-           ├── CASE WHEN rowid:12 IS NULL THEN column8:8 ELSE column14:14 END [as=upsert_c:17]
-           └── CASE WHEN rowid:12 IS NULL THEN column7:7 ELSE rowid:12 END [as=upsert_rowid:18]
+           ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE column13:13 END [as=upsert_a:15]
+           ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column2:6 ELSE b:10 END [as=upsert_b:16]
+           ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column8:8 ELSE column14:14 END [as=upsert_c:17]
+           └── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column7:7 ELSE rowid:12 END [as=upsert_rowid:18]
 
 # Conflict columns are in different order than index key columns.
 build
@@ -484,10 +484,10 @@ upsert abc
       │    └── projections
       │         └── b:10 + 1 [as=column14:14]
       └── projections
-           ├── CASE WHEN rowid:12 IS NULL THEN column1:5 ELSE column13:13 END [as=upsert_a:15]
-           ├── CASE WHEN rowid:12 IS NULL THEN column2:6 ELSE b:10 END [as=upsert_b:16]
-           ├── CASE WHEN rowid:12 IS NULL THEN column8:8 ELSE column14:14 END [as=upsert_c:17]
-           └── CASE WHEN rowid:12 IS NULL THEN column7:7 ELSE rowid:12 END [as=upsert_rowid:18]
+           ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE column13:13 END [as=upsert_a:15]
+           ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column2:6 ELSE b:10 END [as=upsert_b:16]
+           ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column8:8 ELSE column14:14 END [as=upsert_c:17]
+           └── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column7:7 ELSE rowid:12 END [as=upsert_rowid:18]
 
 # Conflict columns don't match unique index (too few columns).
 build
@@ -568,7 +568,7 @@ insert xyz
       │         │    │    │         │    │    │         │    └── filters
       │         │    │    │         │    │    │         │         └── column1:4 = x:7
       │         │    │    │         │    │    │         └── filters
-      │         │    │    │         │    │    │              └── x:7 IS NULL
+      │         │    │    │         │    │    │              └── x:7 IS NOT DISTINCT FROM NULL
       │         │    │    │         │    │    └── aggregations
       │         │    │    │         │    │         ├── first-agg [as=column2:5]
       │         │    │    │         │    │         │    └── column2:5
@@ -580,7 +580,7 @@ insert xyz
       │         │    │    │         │         ├── column2:5 = y:11
       │         │    │    │         │         └── column3:6 = z:12
       │         │    │    │         └── filters
-      │         │    │    │              └── x:10 IS NULL
+      │         │    │    │              └── x:10 IS NOT DISTINCT FROM NULL
       │         │    │    └── aggregations
       │         │    │         └── first-agg [as=column1:4]
       │         │    │              └── column1:4
@@ -590,7 +590,7 @@ insert xyz
       │         │         ├── column3:6 = z:15
       │         │         └── column2:5 = y:14
       │         └── filters
-      │              └── x:13 IS NULL
+      │              └── x:13 IS NOT DISTINCT FROM NULL
       └── aggregations
            └── first-agg [as=column1:4]
                 └── column1:4
@@ -626,7 +626,7 @@ insert xyz
       │         │         ├── column2:5 = y:8
       │         │         └── column3:6 = z:9
       │         └── filters
-      │              └── x:7 IS NULL
+      │              └── x:7 IS NOT DISTINCT FROM NULL
       └── aggregations
            └── first-agg [as=column1:4]
                 └── column1:4
@@ -685,15 +685,15 @@ project
  │         │    │    │         ├── column2:5 = y:8
  │         │    │    │         └── column3:6 = z:9
  │         │    │    └── filters
- │         │    │         └── (x:7 IS NULL) OR (column2:5 > y:8)
+ │         │    │         └── (x:7 IS NOT DISTINCT FROM NULL) OR (column2:5 > y:8)
  │         │    └── projections
  │         │         ├── column1:4 + 1 [as=column10:10]
  │         │         ├── column2:5 * y:8 [as=column11:11]
  │         │         └── column1:4 - column3:6 [as=column12:12]
  │         └── projections
- │              ├── CASE WHEN x:7 IS NULL THEN column1:4 ELSE column10:10 END [as=upsert_x:13]
- │              ├── CASE WHEN x:7 IS NULL THEN column2:5 ELSE column11:11 END [as=upsert_y:14]
- │              └── CASE WHEN x:7 IS NULL THEN column3:6 ELSE column12:12 END [as=upsert_z:15]
+ │              ├── CASE WHEN x:7 IS NOT DISTINCT FROM NULL THEN column1:4 ELSE column10:10 END [as=upsert_x:13]
+ │              ├── CASE WHEN x:7 IS NOT DISTINCT FROM NULL THEN column2:5 ELSE column11:11 END [as=upsert_y:14]
+ │              └── CASE WHEN x:7 IS NOT DISTINCT FROM NULL THEN column3:6 ELSE column12:12 END [as=upsert_z:15]
  └── projections
       ├── x:1 * 2 [as="?column?":16]
       └── y:2 + z:3 [as="?column?":17]
@@ -793,10 +793,10 @@ upsert abc
       │    └── projections
       │         └── x:13 + 1 [as=column17:17]
       └── projections
-           ├── CASE WHEN rowid:12 IS NULL THEN column1:5 ELSE "?column?":16 END [as=upsert_a:18]
-           ├── CASE WHEN rowid:12 IS NULL THEN column2:6 ELSE x:13 END [as=upsert_b:19]
-           ├── CASE WHEN rowid:12 IS NULL THEN column8:8 ELSE column17:17 END [as=upsert_c:20]
-           └── CASE WHEN rowid:12 IS NULL THEN column7:7 ELSE rowid:12 END [as=upsert_rowid:21]
+           ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE "?column?":16 END [as=upsert_a:18]
+           ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column2:6 ELSE x:13 END [as=upsert_b:19]
+           ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column8:8 ELSE column17:17 END [as=upsert_c:20]
+           └── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column7:7 ELSE rowid:12 END [as=upsert_rowid:21]
 
 # Default expressions.
 build
@@ -860,10 +860,10 @@ upsert abc
       │    └── projections
       │         └── column14:14 + 1 [as=column15:15]
       └── projections
-           ├── CASE WHEN rowid:12 IS NULL THEN column1:5 ELSE column13:13 END [as=upsert_a:16]
-           ├── CASE WHEN rowid:12 IS NULL THEN column2:6 ELSE column14:14 END [as=upsert_b:17]
-           ├── CASE WHEN rowid:12 IS NULL THEN column8:8 ELSE column15:15 END [as=upsert_c:18]
-           └── CASE WHEN rowid:12 IS NULL THEN column7:7 ELSE rowid:12 END [as=upsert_rowid:19]
+           ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE column13:13 END [as=upsert_a:16]
+           ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column2:6 ELSE column14:14 END [as=upsert_b:17]
+           ├── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column8:8 ELSE column15:15 END [as=upsert_c:18]
+           └── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column7:7 ELSE rowid:12 END [as=upsert_rowid:19]
 
 # ------------------------------------------------------------------------------
 # Test mutation columns.
@@ -931,9 +931,9 @@ upsert mutation
       │    │    └── projections
       │    │         └── column8:8 + n:11 [as=column16:16]
       │    └── projections
-      │         ├── CASE WHEN m:10 IS NULL THEN column1:6 ELSE column15:15 END [as=upsert_m:17]
-      │         ├── CASE WHEN m:10 IS NULL THEN column2:7 ELSE n:11 END [as=upsert_n:18]
-      │         └── CASE WHEN m:10 IS NULL THEN column9:9 ELSE column16:16 END [as=upsert_p:19]
+      │         ├── CASE WHEN m:10 IS NOT DISTINCT FROM NULL THEN column1:6 ELSE column15:15 END [as=upsert_m:17]
+      │         ├── CASE WHEN m:10 IS NOT DISTINCT FROM NULL THEN column2:7 ELSE n:11 END [as=upsert_n:18]
+      │         └── CASE WHEN m:10 IS NOT DISTINCT FROM NULL THEN column9:9 ELSE column16:16 END [as=upsert_p:19]
       └── projections
            └── upsert_m:17 > 0 [as=check1:20]
 
@@ -978,7 +978,7 @@ upsert xyz
       │    └── filters
       │         └── column1:4 = x:6
       └── projections
-           └── CASE WHEN x:6 IS NULL THEN column1:4 ELSE x:6 END [as=upsert_x:9]
+           └── CASE WHEN x:6 IS NOT DISTINCT FROM NULL THEN column1:4 ELSE x:6 END [as=upsert_x:9]
 
 # Test multi-column primary key that contains all columns in table.
 build
@@ -1052,7 +1052,7 @@ with &1
  │              │    └── filters
  │              │         └── column7:7 = rowid:12
  │              └── projections
- │                   └── CASE WHEN rowid:12 IS NULL THEN column7:7 ELSE rowid:12 END [as=upsert_rowid:13]
+ │                   └── CASE WHEN rowid:12 IS NOT DISTINCT FROM NULL THEN column7:7 ELSE rowid:12 END [as=upsert_rowid:13]
  └── with-scan &1
       ├── columns: a:14!null b:15!null c:16!null
       └── mapping:
@@ -1096,7 +1096,7 @@ upsert xyz
       │    └── filters
       │         └── column2:5 = x:7
       └── projections
-           └── CASE WHEN x:7 IS NULL THEN column2:5 ELSE x:7 END [as=upsert_x:10]
+           └── CASE WHEN x:7 IS NOT DISTINCT FROM NULL THEN column2:5 ELSE x:7 END [as=upsert_x:10]
 
 # Use explicitly specified column names with no secondary indexes present.
 # Upsert implemented with blind Puts is possible.
@@ -1166,7 +1166,7 @@ upsert checks
       │    │    └── filters
       │    │         └── column1:5 = a:9
       │    └── projections
-      │         └── CASE WHEN a:9 IS NULL THEN column1:5 ELSE a:9 END [as=upsert_a:13]
+      │         └── CASE WHEN a:9 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE a:9 END [as=upsert_a:13]
       └── projections
            ├── column2:6 < column8:8 [as=check1:14]
            └── upsert_a:13 > 0 [as=check2:15]
@@ -1224,7 +1224,7 @@ upsert mutation
       │    │    └── filters
       │    │         └── column1:6 = m:10
       │    └── projections
-      │         └── CASE WHEN m:10 IS NULL THEN column1:6 ELSE m:10 END [as=upsert_m:15]
+      │         └── CASE WHEN m:10 IS NOT DISTINCT FROM NULL THEN column1:6 ELSE m:10 END [as=upsert_m:15]
       └── projections
            └── upsert_m:15 > 0 [as=check1:16]
 
@@ -1281,7 +1281,7 @@ upsert mutation
       │    │    └── filters
       │    │         └── column1:6 = m:10
       │    └── projections
-      │         └── CASE WHEN m:10 IS NULL THEN column1:6 ELSE m:10 END [as=upsert_m:15]
+      │         └── CASE WHEN m:10 IS NOT DISTINCT FROM NULL THEN column1:6 ELSE m:10 END [as=upsert_m:15]
       └── projections
            └── upsert_m:15 > 0 [as=check1:16]
 
@@ -1359,10 +1359,10 @@ upsert checks
       │    │    └── projections
       │    │         └── column14:14 + 1 [as=column15:15]
       │    └── projections
-      │         ├── CASE WHEN a:9 IS NULL THEN column1:5 ELSE a:9 END [as=upsert_a:16]
-      │         ├── CASE WHEN a:9 IS NULL THEN column2:6 ELSE column13:13 END [as=upsert_b:17]
-      │         ├── CASE WHEN a:9 IS NULL THEN column7:7 ELSE column14:14 END [as=upsert_c:18]
-      │         └── CASE WHEN a:9 IS NULL THEN column8:8 ELSE column15:15 END [as=upsert_d:19]
+      │         ├── CASE WHEN a:9 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE a:9 END [as=upsert_a:16]
+      │         ├── CASE WHEN a:9 IS NOT DISTINCT FROM NULL THEN column2:6 ELSE column13:13 END [as=upsert_b:17]
+      │         ├── CASE WHEN a:9 IS NOT DISTINCT FROM NULL THEN column7:7 ELSE column14:14 END [as=upsert_c:18]
+      │         └── CASE WHEN a:9 IS NOT DISTINCT FROM NULL THEN column8:8 ELSE column15:15 END [as=upsert_d:19]
       └── projections
            ├── upsert_b:17 < upsert_d:19 [as=check1:20]
            └── upsert_a:16 > 0 [as=check2:21]
@@ -1411,7 +1411,7 @@ insert checks
       │    │         │    └── filters
       │    │         │         └── column1:5 = a:9
       │    │         └── filters
-      │    │              └── a:9 IS NULL
+      │    │              └── a:9 IS NOT DISTINCT FROM NULL
       │    └── aggregations
       │         ├── first-agg [as=column2:6]
       │         │    └── column2:6
@@ -1481,9 +1481,9 @@ upsert checks
       │    │    └── projections
       │    │         └── c:11 + 1 [as=column13:13]
       │    └── projections
-      │         ├── CASE WHEN a:9 IS NULL THEN column1:5 ELSE a:9 END [as=upsert_a:14]
-      │         ├── CASE WHEN a:9 IS NULL THEN column7:7 ELSE c:11 END [as=upsert_c:15]
-      │         └── CASE WHEN a:9 IS NULL THEN column8:8 ELSE column13:13 END [as=upsert_d:16]
+      │         ├── CASE WHEN a:9 IS NOT DISTINCT FROM NULL THEN column1:5 ELSE a:9 END [as=upsert_a:14]
+      │         ├── CASE WHEN a:9 IS NOT DISTINCT FROM NULL THEN column7:7 ELSE c:11 END [as=upsert_c:15]
+      │         └── CASE WHEN a:9 IS NOT DISTINCT FROM NULL THEN column8:8 ELSE column13:13 END [as=upsert_d:16]
       └── projections
            ├── column2:6 < upsert_d:16 [as=check1:17]
            └── upsert_a:14 > 0 [as=check2:18]
@@ -1567,9 +1567,9 @@ upsert checks
       │    │    └── projections
       │    │         └── checks.c:13 + 1 [as=column19:19]
       │    └── projections
-      │         ├── CASE WHEN checks.a:11 IS NULL THEN abc.b:6 ELSE column18:18 END [as=upsert_b:20]
-      │         ├── CASE WHEN checks.a:11 IS NULL THEN column9:9 ELSE checks.c:13 END [as=upsert_c:21]
-      │         └── CASE WHEN checks.a:11 IS NULL THEN column10:10 ELSE column19:19 END [as=upsert_d:22]
+      │         ├── CASE WHEN checks.a:11 IS NOT DISTINCT FROM NULL THEN abc.b:6 ELSE column18:18 END [as=upsert_b:20]
+      │         ├── CASE WHEN checks.a:11 IS NOT DISTINCT FROM NULL THEN column9:9 ELSE checks.c:13 END [as=upsert_c:21]
+      │         └── CASE WHEN checks.a:11 IS NOT DISTINCT FROM NULL THEN column10:10 ELSE column19:19 END [as=upsert_d:22]
       └── projections
            ├── upsert_b:20 < upsert_d:22 [as=check1:23]
            └── abc.a:5 > 0 [as=check2:24]
@@ -1617,9 +1617,9 @@ upsert xyz
       │    └── projections
       │         └── 5 [as=column11:11]
       └── projections
-           ├── CASE WHEN x:8 IS NULL THEN a:4 ELSE x:8 END [as=upsert_x:12]
-           ├── CASE WHEN x:8 IS NULL THEN b:5 ELSE column11:11 END [as=upsert_y:13]
-           └── CASE WHEN x:8 IS NULL THEN c:6 ELSE z:10 END [as=upsert_z:14]
+           ├── CASE WHEN x:8 IS NOT DISTINCT FROM NULL THEN a:4 ELSE x:8 END [as=upsert_x:12]
+           ├── CASE WHEN x:8 IS NOT DISTINCT FROM NULL THEN b:5 ELSE column11:11 END [as=upsert_y:13]
+           └── CASE WHEN x:8 IS NOT DISTINCT FROM NULL THEN c:6 ELSE z:10 END [as=upsert_z:14]
 
 # ------------------------------------------------------------------------------
 # Test decimal column truncation.
@@ -1669,8 +1669,8 @@ upsert decimals
       │    │    │              └── d:12
       │    │    └── filters (true)
       │    └── projections
-      │         ├── CASE WHEN decimals.a:13 IS NULL THEN a:8 ELSE decimals.a:13 END [as=upsert_a:20]
-      │         ├── CASE WHEN decimals.a:13 IS NULL THEN d:12 ELSE crdb_internal.round_decimal_values(decimals.a:13 + decimals.c:15, 1) END [as=upsert_d:22]
+      │         ├── CASE WHEN decimals.a:13 IS NOT DISTINCT FROM NULL THEN a:8 ELSE decimals.a:13 END [as=upsert_a:20]
+      │         ├── CASE WHEN decimals.a:13 IS NOT DISTINCT FROM NULL THEN d:12 ELSE crdb_internal.round_decimal_values(decimals.a:13 + decimals.c:15, 1) END [as=upsert_d:22]
       │         └── crdb_internal.round_decimal_values(b:9, 1) [as=b:17]
       └── projections
            ├── upsert_a:20 = round(upsert_a:20) [as=check1:23]
@@ -1719,9 +1719,9 @@ upsert decimals
       │    │    │              └── d:12
       │    │    └── filters (true)
       │    └── projections
-      │         ├── CASE WHEN decimals.a:13 IS NULL THEN a:8 ELSE decimals.a:13 END [as=upsert_a:19]
-      │         ├── CASE WHEN decimals.a:13 IS NULL THEN b:9 ELSE decimals.b:14 END [as=upsert_b:20]
-      │         └── CASE WHEN decimals.a:13 IS NULL THEN d:12 ELSE crdb_internal.round_decimal_values(decimals.a:13 + decimals.c:15, 1) END [as=upsert_d:22]
+      │         ├── CASE WHEN decimals.a:13 IS NOT DISTINCT FROM NULL THEN a:8 ELSE decimals.a:13 END [as=upsert_a:19]
+      │         ├── CASE WHEN decimals.a:13 IS NOT DISTINCT FROM NULL THEN b:9 ELSE decimals.b:14 END [as=upsert_b:20]
+      │         └── CASE WHEN decimals.a:13 IS NOT DISTINCT FROM NULL THEN d:12 ELSE crdb_internal.round_decimal_values(decimals.a:13 + decimals.c:15, 1) END [as=upsert_d:22]
       └── projections
            ├── upsert_a:19 = round(upsert_a:19) [as=check1:23]
            └── upsert_b:20[0] > 1 [as=check2:24]
@@ -1772,9 +1772,9 @@ upsert decimals
       │    │    │              └── d:12
       │    │    └── filters (true)
       │    └── projections
-      │         ├── CASE WHEN decimals.a:13 IS NULL THEN a:8 ELSE decimals.a:13 END [as=upsert_a:21]
-      │         ├── CASE WHEN decimals.a:13 IS NULL THEN b:9 ELSE crdb_internal.round_decimal_values(ARRAY[0.99], 1) END [as=upsert_b:22]
-      │         └── CASE WHEN decimals.a:13 IS NULL THEN d:12 ELSE crdb_internal.round_decimal_values(decimals.a:13 + decimals.c:15, 1) END [as=upsert_d:24]
+      │         ├── CASE WHEN decimals.a:13 IS NOT DISTINCT FROM NULL THEN a:8 ELSE decimals.a:13 END [as=upsert_a:21]
+      │         ├── CASE WHEN decimals.a:13 IS NOT DISTINCT FROM NULL THEN b:9 ELSE crdb_internal.round_decimal_values(ARRAY[0.99], 1) END [as=upsert_b:22]
+      │         └── CASE WHEN decimals.a:13 IS NOT DISTINCT FROM NULL THEN d:12 ELSE crdb_internal.round_decimal_values(decimals.a:13 + decimals.c:15, 1) END [as=upsert_d:24]
       └── projections
            ├── upsert_a:21 = round(upsert_a:21) [as=check1:25]
            └── upsert_b:22[0] > 1 [as=check2:26]

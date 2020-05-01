@@ -252,4 +252,4 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── filters
-      └── ((s:3 = 'foo') OR (s:3 = 'bar')) AND (s:3 IS NOT NULL) [type=bool, outer=(3), constraints=(/3: [/'bar' - /'bar'] [/'foo' - /'foo']; tight)]
+      └── ((s:3 = 'foo') OR (s:3 = 'bar')) AND (s:3 IS DISTINCT FROM NULL) [type=bool, outer=(3), constraints=(/3: [/'bar' - /'bar'] [/'foo' - /'foo']; tight)]

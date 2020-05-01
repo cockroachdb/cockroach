@@ -1291,7 +1291,7 @@ select
  │         └── filters
  │              └── ((b:2 = sq:5) AND (a:1 > 1)) AND (n:4 < 6)
  └── filters
-      └── ((b:2 > 1) AND ((n:4 IS NULL) OR (n:4 > 1))) AND ((n:4 IS NULL) OR (a:1 < sq:5))
+      └── ((b:2 > 1) AND ((n:4 IS NOT DISTINCT FROM NULL) OR (n:4 > 1))) AND ((n:4 IS NOT DISTINCT FROM NULL) OR (a:1 < sq:5))
 
 build
 SELECT *
@@ -1311,7 +1311,7 @@ select
  │         └── filters
  │              └── ((b:2 = sq:5) AND (a:1 > 1)) AND (n:4 < 6)
  └── filters
-      └── (((a:1 IS NULL) OR (a:1 > 2)) AND (n:4 > 1)) AND ((a:1 IS NULL) OR (a:1 < sq:5))
+      └── (((a:1 IS NOT DISTINCT FROM NULL) OR (a:1 > 2)) AND (n:4 > 1)) AND ((a:1 IS NOT DISTINCT FROM NULL) OR (a:1 < sq:5))
 
 # The simpler plan for an inner join, to compare.
 build
@@ -1332,7 +1332,7 @@ select
  │         └── filters
  │              └── ((b:2 = sq:5) AND (a:1 > 1)) AND (n:4 < 6)
  └── filters
-      └── (((a:1 IS NULL) OR (a:1 > 2)) AND (n:4 > 1)) AND ((a:1 IS NULL) OR (a:1 < sq:5))
+      └── (((a:1 IS NOT DISTINCT FROM NULL) OR (a:1 > 2)) AND (n:4 > 1)) AND ((a:1 IS NOT DISTINCT FROM NULL) OR (a:1 < sq:5))
 
 
 exec-ddl
