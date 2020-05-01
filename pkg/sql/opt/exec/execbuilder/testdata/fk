@@ -35,7 +35,7 @@ WHERE
 ----
 tree                  field               description
 ·                     distributed         false
-·                     vectorized          false
+·                     vectorized          true
 render                ·                   ·
  └── filter           ·                   ·
       │               filter              z IS NULL
@@ -67,6 +67,6 @@ WHERE
 ----
 tree         field        description
 ·            distributed  false
-·            vectorized   false
+·            vectorized   true
 render       ·            ·
  └── norows  ·            ·
