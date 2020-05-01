@@ -917,8 +917,8 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 		}
 	}
 
-	switch err {
-	case nil:
+	switch {
+	case err == nil:
 		// Do we have multiple lines of input?
 		lines := strings.Split(l, "\n")
 		if len(lines) > 1 {
@@ -929,7 +929,7 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 		}
 		// In any case, process one line.
 
-	case readline.ErrInterrupted:
+	case errors.Is(err, readline.ErrInterrupted):
 		if !cliCtx.isInteractive {
 			// Ctrl+C terminates non-interactive shells in all cases.
 			c.exitErr = err
@@ -952,7 +952,7 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 		c.exitErr = err
 		return cliStop
 
-	case io.EOF:
+	case errors.Is(err, io.EOF):
 		c.atEOF = true
 
 		if cliCtx.isInteractive {

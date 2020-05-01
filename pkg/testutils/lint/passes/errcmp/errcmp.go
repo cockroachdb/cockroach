@@ -43,6 +43,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	nodeFilter := []ast.Node{
 		(*ast.BinaryExpr)(nil),
 		(*ast.TypeAssertExpr)(nil),
+		(*ast.SwitchStmt)(nil),
 	}
 
 	// Now traverse the ASTs.
@@ -66,9 +67,19 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			checkErrCast(pass, cmp)
 			return
 		}
+		if cmp, ok := n.(*ast.SwitchStmt); ok {
+			checkErrSwitch(pass, cmp)
+			return
+		}
 	})
 
 	return nil, nil
+}
+
+func checkErrSwitch(pass *analysis.Pass, s *ast.SwitchStmt) {
+	if pass.TypesInfo.Types[s.Tag].Type == errorType {
+		pass.Reportf(s.Switch, "use errors.Is, errors.IsAny or errors.If")
+	}
 }
 
 func checkErrCast(pass *analysis.Pass, texpr *ast.TypeAssertExpr) {

@@ -288,12 +288,13 @@ func run() error {
 				atomic.LoadInt32(&runs), atomic.LoadInt32(&fails),
 				roundToSeconds(timeutil.Since(startTime)))
 
-			switch err := ctx.Err(); err {
+			err := ctx.Err()
+			switch {
 			// A context timeout in this case is indicative of no failures
 			// being detected in the allotted duration.
-			case context.DeadlineExceeded:
+			case errors.Is(err, context.DeadlineExceeded):
 				return nil
-			case context.Canceled:
+			case errors.Is(err, context.Canceled):
 				if *flagMaxRuns > 0 && int(atomic.LoadInt32(&runs)) >= *flagMaxRuns {
 					return nil
 				}

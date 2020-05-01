@@ -1650,6 +1650,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`pkg/ccl/changefeedccl/errors\.go:.*use errors\.HasType, errors\.HasInterface, errors\.As or errors\.If`),
 			// TODO(knz): remove the code in log and replace by the errors' own redact code
 			stream.GrepNot(`pkg/util/log/crash_reporting\.go:.*use errors\.HasType, errors\.HasInterface, errors\.As or errors\.If`),
+			stream.GrepNot(`pkg/util/log/crash_reporting\.go:.*use errors\.Is, errors\.IsAny or errors\.If`),
 		}
 
 		roachlint, err := exec.LookPath("roachvet")
