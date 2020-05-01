@@ -143,3 +143,22 @@ index-constraints vars=(string, int) index=(@1, @2)
 [/e'europe-west2\x00' - /'us-east1')
 [/e'us-east1\x00' - /'us-west1')
 [/e'us-west1\x00' - ]
+
+# The spans for @3 are applied after that for @2, so we lose information that
+# [/1/76/10 - /1/76/10] and [/3/76/5 - /3/76/5] are not possible.
+index-constraints vars=(int, int, int) index=(@1 not null, @2 not null, @3 not null)
+((@1 = 1 AND @3 = 5) OR (@1 = 3 AND @3 = 10)) AND (@2 = 76)
+----
+[/1/76/5 - /1/76/5]
+[/1/76/10 - /1/76/10]
+[/3/76/5 - /3/76/5]
+[/3/76/10 - /3/76/10]
+Remaining filter: ((@1 = 1) AND (@3 = 5)) OR ((@1 = 3) AND (@3 = 10))
+
+# Unlike the previous example, we can generate 2 column spans for the individual
+# ORed sub-expressions, so the spans are tight.
+index-constraints vars=(int, int, int) index=(@1 not null, @2 not null, @3 not null)
+((@1 = 1 AND @2 = 5) OR (@1 = 3 AND @2 = 10)) AND (@3 = 76)
+----
+[/1/5/76 - /1/5/76]
+[/3/10/76 - /3/10/76]
