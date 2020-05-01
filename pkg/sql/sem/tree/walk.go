@@ -433,6 +433,28 @@ func (expr *NotExpr) Walk(v Visitor) Expr {
 }
 
 // Walk implements the Expr interface.
+func (expr *IsNullExpr) Walk(v Visitor) Expr {
+	e, changed := WalkExpr(v, expr.Expr)
+	if changed {
+		exprCopy := *expr
+		exprCopy.Expr = e
+		return &exprCopy
+	}
+	return expr
+}
+
+// Walk implements the Expr interface.
+func (expr *IsNotNullExpr) Walk(v Visitor) Expr {
+	e, changed := WalkExpr(v, expr.Expr)
+	if changed {
+		exprCopy := *expr
+		exprCopy.Expr = e
+		return &exprCopy
+	}
+	return expr
+}
+
+// Walk implements the Expr interface.
 func (expr *NullIfExpr) Walk(v Visitor) Expr {
 	e1, changed1 := WalkExpr(v, expr.Expr1)
 	e2, changed2 := WalkExpr(v, expr.Expr2)
