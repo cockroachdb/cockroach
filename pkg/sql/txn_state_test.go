@@ -211,7 +211,7 @@ func TestTransitions(t *testing.T) {
 	testCon := makeTestContext()
 	tranCtx := transitionCtx{
 		db:             testCon.mockDB,
-		nodeID:         roachpb.NodeID(5),
+		nodeIDOrZero:   roachpb.NodeID(5),
 		clock:          testCon.clock,
 		tracer:         tracing.NewTracer(),
 		connMon:        &testCon.mon,
