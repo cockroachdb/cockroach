@@ -14,7 +14,7 @@ import (
 	"encoding/binary"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Helpers here are split out of storage/engine since that package also contains

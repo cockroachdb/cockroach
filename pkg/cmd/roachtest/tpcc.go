@@ -29,9 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/ttycolor"
 	"github.com/lib/pq"
-	"github.com/pkg/errors"
 )
 
 type tpccOptions struct {

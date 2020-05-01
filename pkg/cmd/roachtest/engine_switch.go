@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
-	"github.com/pkg/errors"
 	"golang.org/x/exp/rand"
 )
 

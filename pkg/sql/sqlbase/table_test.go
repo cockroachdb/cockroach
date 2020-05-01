@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type indexKeyTest struct {

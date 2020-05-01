@@ -22,7 +22,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/apd"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // EncodeDecimalAscending returns the resulting byte slice with the encoded decimal

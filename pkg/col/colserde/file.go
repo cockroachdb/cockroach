@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 	mmap "github.com/edsrzf/mmap-go"
 	flatbuffers "github.com/google/flatbuffers/go"
-	"github.com/pkg/errors"
 )
 
 const fileMagic = `ARROW1`

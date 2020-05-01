@@ -17,10 +17,10 @@ import (
 	"io"
 	"reflect"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"github.com/pkg/errors"
 )
 
 var _ gwruntime.Marshaler = (*JSONPb)(nil)

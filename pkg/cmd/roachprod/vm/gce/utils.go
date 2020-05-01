@@ -21,7 +21,7 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 const (

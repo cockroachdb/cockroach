@@ -10,7 +10,7 @@
 
 package search
 
-import "github.com/pkg/errors"
+import "github.com/cockroachdb/errors"
 
 // A Predicate is a funcation that returns whether a given search value "passes"
 // or not. It assumes that that within the search domain of [min, max) provided

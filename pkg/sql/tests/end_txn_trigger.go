@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // CheckEndTxnTrigger verifies that an EndTxnRequest that includes intents for

@@ -17,7 +17,7 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Short returns the first eight characters of the output of String().

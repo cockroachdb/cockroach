@@ -13,7 +13,7 @@ package encoding
 import (
 	"math"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // EncodeFloatAscending returns the resulting byte slice with the encoded float64

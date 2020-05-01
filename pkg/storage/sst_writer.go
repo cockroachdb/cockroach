@@ -15,8 +15,8 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
-	"github.com/pkg/errors"
 )
 
 // SSTWriter writes SSTables.

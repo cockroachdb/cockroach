@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	crdberrors "github.com/cockroachdb/errors"
-	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft/raftpb"
 	"golang.org/x/time/rate"
 )
