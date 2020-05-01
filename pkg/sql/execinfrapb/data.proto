@@ -127,7 +127,7 @@ message InputSyncSpec {
   repeated StreamEndpointSpec streams = 3 [(gogoproto.nullable) = false];
 
   // Schema for the streams entering this synchronizer.
-  repeated sql.sem.types.T column_types = 4 [(gogoproto.nullable) = false];
+  repeated sql.sem.types.T column_types = 4;
 }
 
 // OutputRouterSpec is the specification for the output router of a processor;
@@ -191,7 +191,7 @@ message OutputRouterSpec {
 
 message DatumInfo {
   optional sqlbase.DatumEncoding encoding = 1 [(gogoproto.nullable) = false];
-  optional sql.sem.types.T type = 2 [(gogoproto.nullable) = false];
+  optional sql.sem.types.T type = 2;
 }
 
 // ProducerHeader is a message that is sent once at the beginning of a stream.
