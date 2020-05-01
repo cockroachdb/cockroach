@@ -684,7 +684,11 @@ func (db *DB) Run(ctx context.Context, b *Batch) error {
 
 // NewTxn creates a new RootTxn.
 func (db *DB) NewTxn(ctx context.Context, debugName string) *Txn {
-	txn := NewTxn(ctx, db, db.ctx.NodeID.Get())
+	// Observed timestamps don't work with multi-tenancy. See:
+	//
+	// https://github.com/cockroachdb/cockroach/issues/48008
+	nodeID, _ := db.ctx.NodeID.OptionalNodeID() // zero if not available
+	txn := NewTxn(ctx, db, nodeID)
 	txn.SetDebugName(debugName)
 	return txn
 }
@@ -698,7 +702,11 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	// TODO(radu): we should open a tracing Span here (we need to figure out how
 	// to use the correct tracer).
 
-	txn := NewTxn(ctx, db, db.ctx.NodeID.Get())
+	// Observed timestamps don't work with multi-tenancy. See:
+	//
+	// https://github.com/cockroachdb/cockroach/issues/48008
+	nodeID, _ := db.ctx.NodeID.OptionalNodeID() // zero if not available
+	txn := NewTxn(ctx, db, nodeID)
 	txn.SetDebugName("unnamed")
 	err := txn.exec(ctx, func(ctx context.Context, txn *Txn) error {
 		return retryable(ctx, txn)
