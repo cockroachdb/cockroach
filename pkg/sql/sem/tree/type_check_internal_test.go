@@ -357,6 +357,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	intType := types.Int
 	boolType := types.Bool
+	semaCtx := tree.MakeSemaContext()
 
 	testData := []struct {
 		initArgs  tree.PlaceholderTypes
@@ -519,7 +520,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			args := d.initArgs
 			stmt := &tree.ValuesClause{Rows: []tree.Exprs{d.stmtExprs}}
-			if err := tree.ProcessPlaceholderAnnotations(stmt, args); err != nil {
+			if err := tree.ProcessPlaceholderAnnotations(&semaCtx, stmt, args); err != nil {
 				t.Errorf("%d: unexpected error returned from ProcessPlaceholderAnnotations: %v", i, err)
 			} else if !reflect.DeepEqual(args, d.desired) {
 				t.Errorf(
@@ -535,6 +536,7 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	intType := types.Int
 	floatType := types.Float
+	semaCtx := tree.MakeSemaContext()
 
 	testData := []struct {
 		initArgs  tree.PlaceholderTypes
@@ -604,7 +606,7 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 	for i, d := range testData {
 		args := d.initArgs
 		stmt := &tree.ValuesClause{Rows: []tree.Exprs{d.stmtExprs}}
-		if err := tree.ProcessPlaceholderAnnotations(stmt, args); !testutils.IsError(err, d.expected) {
+		if err := tree.ProcessPlaceholderAnnotations(&semaCtx, stmt, args); !testutils.IsError(err, d.expected) {
 			t.Errorf("%d: expected '%s', got '%v'", i, d.expected, err)
 		}
 	}

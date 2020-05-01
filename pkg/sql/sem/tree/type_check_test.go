@@ -27,6 +27,14 @@ import (
 
 func TestTypeCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	typeMap := map[string]*types.T{
+		"d.t1":   types.Int,
+		"t2":     types.String,
+		"d.s.t3": types.Decimal,
+	}
+	mapResolver := tree.MakeTestingMapTypeResolver(typeMap)
+
 	testData := []struct {
 		expr string
 		// The expected serialized expression after type-checking. This tests both
@@ -174,6 +182,14 @@ func TestTypeCheck(t *testing.T) {
 		{`'-NaN'::decimal`, `'NaN':::DECIMAL::DECIMAL`},
 		{`'Inf'::decimal`, `'Infinity':::DECIMAL::DECIMAL`},
 		{`'-Inf'::decimal`, `'-Infinity':::DECIMAL::DECIMAL`},
+
+		// Test type checking with some types to resolve.
+		// Because the resolvable types right now are just aliases, the
+		// pre-resolution name is not going to get formatted.
+		{`1:::d.t1`, `1:::INT8`},
+		{`1:::d.s.t3 + 1.4`, `1:::DECIMAL + 1.4:::DECIMAL`},
+		{`1 IS OF (d.t1, t2)`, `1:::INT8 IS OF (d.t1, t2)`},
+		{`1::d.t1`, `1:::INT8::d.t1`},
 	}
 	for _, d := range testData {
 		t.Run(d.expr, func(t *testing.T) {
@@ -185,6 +201,7 @@ func TestTypeCheck(t *testing.T) {
 			if err := ctx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */); err != nil {
 				t.Fatal(err)
 			}
+			ctx.TypeResolver = mapResolver
 			typeChecked, err := tree.TypeCheck(expr, &ctx, types.Any)
 			if err != nil {
 				t.Fatalf("%s: unexpected error %s", d.expr, err)
@@ -198,6 +215,14 @@ func TestTypeCheck(t *testing.T) {
 
 func TestTypeCheckError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	typeMap := map[string]*types.T{
+		"d.t1":   types.Int,
+		"t2":     types.String,
+		"d.s.t3": types.Decimal,
+	}
+	mapResolver := tree.MakeTestingMapTypeResolver(typeMap)
+
 	testData := []struct {
 		expr     string
 		expected string
@@ -276,16 +301,38 @@ func TestTypeCheckError(t *testing.T) {
 			`(pg_get_keywords()).foo`,
 			`could not identify column "foo" in tuple{string AS word, string AS catcode, string AS catdesc}`,
 		},
+		{
+			`1::d.notatype`,
+			`type "d.notatype" does not exist`,
+		},
+		{
+			`1 + 2::d.s.typ`,
+			`type "d.s.typ" does not exist`,
+		},
 	}
 	for _, d := range testData {
 		t.Run(d.expr, func(t *testing.T) {
-			expr, err := parser.ParseExpr(d.expr)
-			if err != nil {
-				t.Fatalf("%s: %v", d.expr, err)
-			}
-			if _, err := tree.TypeCheck(expr, nil, types.Any); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
-				t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
-			}
+			// Test with a nil and non-nil semaCtx.
+			t.Run("semaCtx not nil", func(t *testing.T) {
+				ctx := tree.MakeSemaContext()
+				ctx.TypeResolver = mapResolver
+				expr, err := parser.ParseExpr(d.expr)
+				if err != nil {
+					t.Fatalf("%s: %v", d.expr, err)
+				}
+				if _, err := tree.TypeCheck(expr, &ctx, types.Any); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
+					t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
+				}
+			})
+			t.Run("semaCtx is nil", func(t *testing.T) {
+				expr, err := parser.ParseExpr(d.expr)
+				if err != nil {
+					t.Fatalf("%s: %v", d.expr, err)
+				}
+				if _, err := tree.TypeCheck(expr, nil, types.Any); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
+					t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
+				}
+			})
 		})
 	}
 }

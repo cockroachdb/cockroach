@@ -264,7 +264,7 @@ const (
 // statement.
 type ColumnTableDef struct {
 	Name     Name
-	Type     *types.T
+	Type     ResolvableTypeReference
 	IsSerial bool
 	Nullable struct {
 		Nullability    Nullability
@@ -307,7 +307,16 @@ type ColumnTableDefCheckExpr struct {
 	ConstraintName Name
 }
 
-func processCollationOnType(name Name, typ *types.T, c ColumnCollation) (*types.T, error) {
+func processCollationOnType(
+	name Name, ref ResolvableTypeReference, c ColumnCollation,
+) (*types.T, error) {
+	// At the moment, only string types can be collated. User defined types
+	//  like enums don't support collations, so check this at parse time.
+	typ, ok := GetStaticallyKnownType(ref)
+	if !ok {
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch,
+			"COLLATE declaration for non-string-typed column %q", name)
+	}
 	switch typ.Family() {
 	case types.StringFamily:
 		return types.MakeCollatedString(typ, string(c)), nil
@@ -328,11 +337,14 @@ func processCollationOnType(name Name, typ *types.T, c ColumnCollation) (*types.
 
 // NewColumnTableDef constructs a column definition for a CreateTable statement.
 func NewColumnTableDef(
-	name Name, typ *types.T, isSerial bool, qualifications []NamedColumnQualification,
+	name Name,
+	typRef ResolvableTypeReference,
+	isSerial bool,
+	qualifications []NamedColumnQualification,
 ) (*ColumnTableDef, error) {
 	d := &ColumnTableDef{
 		Name:     name,
-		Type:     typ,
+		Type:     typRef,
 		IsSerial: isSerial,
 	}
 	d.Nullable.Nullability = SilentNull
@@ -344,10 +356,11 @@ func NewColumnTableDef(
 			if err != nil {
 				return nil, pgerror.Wrapf(err, pgcode.Syntax, "invalid locale %s", locale)
 			}
-			d.Type, err = processCollationOnType(name, d.Type, t)
+			collatedTyp, err := processCollationOnType(name, d.Type, t)
 			if err != nil {
 				return nil, err
 			}
+			d.Type = collatedTyp
 		case *ColumnDefault:
 			if d.HasDefaultExpr() {
 				return nil, pgerror.Newf(pgcode.Syntax,
@@ -528,7 +541,10 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 func (node *ColumnTableDef) columnTypeString() string {
 	if node.IsSerial {
 		// Map INT types to SERIAL keyword.
-		switch node.Type.Width() {
+		// TODO (rohany): This should be pushed until type resolution occurs.
+		//  However, the argument is that we deal with serial at parse time only,
+		//  so we handle those cases here.
+		switch MustBeStaticallyKnownType(node.Type).Width() {
 		case 16:
 			return "SERIAL2"
 		case 32:

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -523,8 +524,12 @@ func constructTableMetadata(rows *sqlRows, md basicMetadata) (tableMetadata, err
 		if err != nil {
 			return tableMetadata{}, fmt.Errorf("type %s is not a valid CockroachDB type", typ)
 		}
-		coltyp := stmt.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAlterColumnType).ToType
+		ref := stmt.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAlterColumnType).ToType
 
+		coltyp, ok := tree.GetStaticallyKnownType(ref)
+		if !ok {
+			return tableMetadata{}, unimplemented.NewWithIssue(47765, "user defined types are unsupported")
+		}
 		coltypes[name] = coltyp
 		if colnames.Len() > 0 {
 			colnames.WriteString(", ")
