@@ -2030,7 +2030,7 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 	ident, err := ReadStoreIdent(ctx, eng)
 	if err == nil {
 		return errors.Errorf("engine already initialized as %s", ident.String())
-	} else if !errors.Is(errors.Cause(err), &NotBootstrappedError{}) {
+	} else if !errors.HasType(err, (*NotBootstrappedError)(nil)) {
 		return errors.Wrap(err, "unable to read store ident")
 	}
 
