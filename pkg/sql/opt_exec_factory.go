@@ -957,13 +957,13 @@ func (ef *execFactory) ConstructPlan(
 		root = spool.source
 	}
 	res := &planTop{
-		plan: root.(planNode),
 		// TODO(radu): these fields can be modified by planning various opaque
 		// statements. We should have a cleaner way of plumbing these.
 		avoidBuffering:  ef.planner.curPlan.avoidBuffering,
 		auditEvents:     ef.planner.curPlan.auditEvents,
 		instrumentation: ef.planner.curPlan.instrumentation,
 	}
+	res.main = root.(planNode)
 	if len(subqueries) > 0 {
 		res.subqueryPlans = make([]subquery, len(subqueries))
 		for i := range subqueries {
@@ -1143,19 +1143,16 @@ func (ef *execFactory) ConstructExplain(
 	switch options.Mode {
 	case tree.ExplainDistSQL:
 		return &explainDistSQLNode{
-			options:       options,
-			plan:          p.plan,
-			subqueryPlans: p.subqueryPlans,
-			cascades:      p.cascades,
-			checkPlans:    p.checkPlans,
-			analyze:       analyzeSet,
-			stmtType:      stmtType,
+			options:  options,
+			plan:     p.planComponents,
+			analyze:  analyzeSet,
+			stmtType: stmtType,
 		}, nil
 
 	case tree.ExplainVec:
 		return &explainVecNode{
 			options:       options,
-			plan:          p.plan,
+			plan:          p.main,
 			subqueryPlans: p.subqueryPlans,
 			stmtType:      stmtType,
 		}, nil
@@ -1167,10 +1164,7 @@ func (ef *execFactory) ConstructExplain(
 		return ef.planner.makeExplainPlanNodeWithPlan(
 			context.TODO(),
 			options,
-			p.plan,
-			p.subqueryPlans,
-			p.cascades,
-			p.checkPlans,
+			&p.planComponents,
 			stmtType,
 		)
 

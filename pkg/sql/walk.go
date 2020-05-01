@@ -642,7 +642,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		}
 
 	case *explainDistSQLNode:
-		n.plan = v.visit(n.plan)
+		n.plan.main = v.visit(n.plan.main)
 
 	case *explainVecNode:
 		n.plan = v.visit(n.plan)
@@ -666,7 +666,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		n.plan = v.visit(n.plan)
 
 	case *explainPlanNode:
-		n.plan = v.visit(n.plan)
+		n.plan.main = v.visit(n.plan.main)
 
 	case *cancelQueriesNode:
 		n.rows = v.visit(n.rows)

@@ -123,6 +123,6 @@ func (dsp *DistSQLPlanner) Exec(
 	planCtx.planner = p
 	planCtx.stmtType = recv.stmtType
 
-	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.plan, recv)()
+	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.main, recv)()
 	return rw.Err()
 }

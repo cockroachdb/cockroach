@@ -1079,7 +1079,7 @@ func (dsp *DistSQLPlanner) PlanAndRunPostqueries(
 
 		if err := dsp.planAndRunPostquery(
 			ctx,
-			cp.plan,
+			cp.main,
 			planner,
 			evalCtx,
 			recv,
