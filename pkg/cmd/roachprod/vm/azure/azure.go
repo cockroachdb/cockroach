@@ -668,7 +668,8 @@ func (p *Provider) createVNets(
 		if err == nil {
 			return group, true, nil
 		}
-		if detail, ok := err.(autorest.DetailedError); ok {
+		var detail autorest.DetailedError
+		if errors.As(err, &detail) {
 			if code, ok := detail.StatusCode.(int); ok {
 				if code == 404 {
 					return resources.Group{}, false, nil

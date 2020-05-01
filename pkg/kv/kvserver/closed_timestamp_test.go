@@ -82,7 +82,7 @@ func TestClosedTimestampCanServe(t *testing.T) {
 		var found bool
 		for _, repl := range repls {
 			resp, pErr := repl.Send(ctx, baWrite)
-			if _, ok := pErr.GoError().(*roachpb.NotLeaseHolderError); ok {
+			if errors.HasType(pErr.GoError(), (*roachpb.NotLeaseHolderError)(nil)) {
 				continue
 			} else if pErr != nil {
 				t.Fatal(pErr)

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -138,7 +139,7 @@ func TestSavepoints(t *testing.T) {
 					[]byte(td.CmdArgs[1].Key),
 					expVal,
 				); err != nil {
-					if _, ok := err.(*roachpb.ConditionFailedError); ok {
+					if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
 						// Print an easier to match message.
 						fmt.Fprintf(&buf, "(%T) unexpected value\n", err)
 					} else {

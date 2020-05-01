@@ -43,7 +43,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	// Our analyzer just wants to see comparisons and casts.
 	nodeFilter := []ast.Node{
 		(*ast.BinaryExpr)(nil),
-		// (*ast.TypeAssertExpr)(nil),
+		(*ast.TypeAssertExpr)(nil),
 	}
 
 	// Now traverse the ASTs.
@@ -63,11 +63,26 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			checkErrCmp(pass, cmp)
 			return
 		}
-		// At a cast.
-		// TBD
+		if cmp, ok := n.(*ast.TypeAssertExpr); ok {
+			checkErrCast(pass, cmp)
+			return
+		}
 	})
 
 	return nil, nil
+}
+
+func checkErrCast(pass *analysis.Pass, texpr *ast.TypeAssertExpr) {
+	if pass.TypesInfo.Types[texpr.X].Type == errorType {
+		pass.Reportf(texpr.Lparen, escNl(`invalid direct cast on error object
+Alternatives:
+   if _, ok := err.(*T); ok        ->   if errors.HasType(err, (*T)(nil)
+   if _, ok := err.(I); ok         ->   if errors.HasInterface(err, (*I)(nil))
+   if myErr, ok := err.(*T); ok    ->   if myErr := (*T)(nil); errors.As(err, &myErr)
+   if myErr, ok := err.(I); ok     ->   if myErr := (I)(nil); errors.As(err, &myErr)
+   switch err.(type) { case *T:... ->   switch { case errors.HasType(err, (*T)(nil): ...
+`))
+	}
 }
 
 func isEOFError(e ast.Expr) bool {

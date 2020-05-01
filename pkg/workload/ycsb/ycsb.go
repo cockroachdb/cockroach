@@ -679,18 +679,15 @@ func (yw *ycsbWorker) scanRows(ctx context.Context) error {
 }
 
 func errIsRetryable(err error) bool {
-	switch t := err.(type) {
-	case *pq.Error:
+	if t := (*pq.Error)(nil); errors.As(err, &t) {
 		// We look for either:
 		//  - the standard PG errcode SerializationFailureError:40001 or
 		//  - the Cockroach extension errcode RetriableError:CR000. This extension
 		//    has been removed server-side, but support for it has been left here for
 		//    now to maintain backwards compatibility.
 		return t.Code == "CR000" || t.Code == "40001"
-
-	default:
-		return false
 	}
+	return false
 }
 
 func (yw *ycsbWorker) readModifyWriteRow(ctx context.Context) error {

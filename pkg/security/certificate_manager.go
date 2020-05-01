@@ -300,6 +300,7 @@ func (cm *CertificateManager) ClientCerts() map[string]*CertInfo {
 }
 
 // Error is the error type for this package.
+// TODO(knz): make this an error wrapper.
 type Error struct {
 	Message string
 	Err     error

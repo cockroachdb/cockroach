@@ -23,7 +23,8 @@ import (
 func SplitHostPort(v string, defaultPort string) (addr string, port string, err error) {
 	addr, port, err = net.SplitHostPort(v)
 	if err != nil {
-		if aerr, ok := err.(*net.AddrError); ok {
+		var aerr *net.AddrError
+		if errors.As(err, &aerr) {
 			if strings.HasPrefix(aerr.Err, "too many colons") {
 				// Maybe this was an IPv6 address using the deprecated syntax
 				// without '[...]'? Try that to help the user with a hint.

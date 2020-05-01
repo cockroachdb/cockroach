@@ -1106,7 +1106,7 @@ func removeDeadReplicas(
 			return nil, errors.Wrap(err, "loading MVCCStats")
 		}
 		err = storage.MVCCPutProto(ctx, batch, &ms, key, clock.Now(), nil /* txn */, &desc)
-		if wiErr, ok := err.(*roachpb.WriteIntentError); ok {
+		if wiErr := (*roachpb.WriteIntentError)(nil); errors.As(err, &wiErr) {
 			if len(wiErr.Intents) != 1 {
 				return nil, errors.Errorf("expected 1 intent, found %d: %s", len(wiErr.Intents), wiErr)
 			}

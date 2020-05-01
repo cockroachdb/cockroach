@@ -951,7 +951,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 			tc.repl.store.Engine().NewBatch,
 			func() {},
 		)
-		if _, ok := errors.Cause(err).(*errMustRetrySnapshotDueToTruncation); !ok {
+		if !errors.HasType(err, (*errMustRetrySnapshotDueToTruncation)(nil)) {
 			t.Fatal(err)
 		}
 	}()

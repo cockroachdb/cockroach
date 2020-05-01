@@ -200,8 +200,9 @@ func Reduce(
 		// means there were no more interesting variants found starting
 		// from the passed varState.
 		if err := g.Wait(); err != nil {
-			if err, ok := err.(errInteresting); ok {
-				vs := varState(err)
+			var ierr errInteresting
+			if errors.As(err, &ierr) {
+				vs := varState(ierr)
 				log("\tpass %d of %d (%s): %d bytes\n", vs.pi+1, len(passList), passList[vs.pi].Name(), vs.f.Size())
 				return &vs, nil
 			}

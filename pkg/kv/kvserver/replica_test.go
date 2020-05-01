@@ -6427,7 +6427,7 @@ func TestReplicaDanglingMetaIntent(t *testing.T) {
 
 		// Switch to consistent lookups, which should run into the intent.
 		_, _, err = kv.RangeLookup(ctx, tc.Sender(), newKey, roachpb.CONSISTENT, 0, reverse)
-		if _, ok := err.(*roachpb.WriteIntentError); !ok {
+		if !errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
 			t.Fatalf("expected WriteIntentError, not %s", err)
 		}
 	})

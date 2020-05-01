@@ -72,15 +72,15 @@ func WrapError(code string, err error) *Error {
 
 // IsScrubError checks if an error is a Error.
 func IsScrubError(err error) bool {
-	_, ok := err.(*Error)
-	return ok
+	return errors.HasType(err, (*Error)(nil))
 }
 
 // UnwrapScrubError gets the underlying error if err is a scrub.Error.
 // If err is not a scrub.Error nil is returned.
 func UnwrapScrubError(err error) error {
-	if IsScrubError(err) {
-		return err.(*Error).underlying
+	var e *Error
+	if errors.As(err, &e) {
+		return e.underlying
 	}
 	return err
 }

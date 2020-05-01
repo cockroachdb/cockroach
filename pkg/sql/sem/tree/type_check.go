@@ -225,7 +225,7 @@ func (sc *SemaContext) GetTypeResolver() TypeReferenceResolver {
 
 func placeholderTypeAmbiguityError(idx PlaceholderIdx) error {
 	return pgerror.WithCandidateCode(
-		placeholderTypeAmbiguityErr{idx},
+		&placeholderTypeAmbiguityErr{idx},
 		pgcode.InvalidParameterValue)
 }
 
@@ -233,7 +233,7 @@ type placeholderTypeAmbiguityErr struct {
 	idx PlaceholderIdx
 }
 
-func (err placeholderTypeAmbiguityErr) Error() string {
+func (err *placeholderTypeAmbiguityErr) Error() string {
 	return fmt.Sprintf("could not determine data type of placeholder %s", err.idx)
 }
 
@@ -243,10 +243,10 @@ func unexpectedTypeError(expr Expr, want, got *types.T) error {
 }
 
 func decorateTypeCheckError(err error, format string, a ...interface{}) error {
-	if e, ok := errors.UnwrapAll(err).(placeholderTypeAmbiguityErr); ok {
-		return e
+	if !errors.HasType(err, (*placeholderTypeAmbiguityErr)(nil)) {
+		return pgerror.Wrapf(err, pgcode.InvalidParameterValue, format, a...)
 	}
-	return pgerror.Wrapf(err, pgcode.InvalidParameterValue, format, a...)
+	return errors.WithStack(err)
 }
 
 // TypeCheck performs type checking on the provided expression tree, returning

@@ -378,7 +378,7 @@ func (r *Replica) handleIndeterminateCommitError(
 	// stuck transaction. Retry immediately if successful.
 	if _, err := r.store.recoveryMgr.ResolveIndeterminateCommit(ctx, t); err != nil {
 		// Do not propagate ambiguous results; assume success and retry original op.
-		if _, ok := err.(*roachpb.AmbiguousResultError); ok {
+		if errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
 			return nil
 		}
 		// Propagate new error. Preserve the error index.

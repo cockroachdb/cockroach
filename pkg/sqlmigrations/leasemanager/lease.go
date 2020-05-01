@@ -165,7 +165,7 @@ func (m *LeaseManager) ExtendLease(ctx context.Context, l *Lease) error {
 		return err
 	}
 	if err := m.db.CPut(ctx, l.key, &newRaw, &l.val.leaseRaw); err != nil {
-		if _, ok := err.(*roachpb.ConditionFailedError); ok {
+		if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
 			// Something is wrong - immediately expire the local lease state.
 			l.val.lease.Expiration = hlc.Timestamp{}
 			return errors.Wrapf(err, "local lease state %v out of sync with DB state", l.val.lease)

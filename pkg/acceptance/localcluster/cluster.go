@@ -588,7 +588,8 @@ func (n *Node) startAsyncInnerLocked(ctx context.Context, joins ...string) error
 
 		log.Infof(ctx, "process %d: %s", cmd.Process.Pid, cmd.ProcessState)
 
-		execErr, _ := waitErr.(*exec.ExitError)
+		var execErr *exec.ExitError
+		_ = errors.As(waitErr, &execErr)
 		n.Lock()
 		n.setNotRunningLocked(execErr)
 		n.Unlock()

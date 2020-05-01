@@ -582,10 +582,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	appTask.SetMaxBatchSize(r.store.TestingKnobs().MaxApplicationBatchSize)
 	defer appTask.Close()
 	if err := appTask.Decode(ctx, rd.CommittedEntries); err != nil {
-		return stats, err.(*nonDeterministicFailure).safeExpl, err
+		return stats, getNonDeterministicFailureExplanation(err), err
 	}
 	if err := appTask.AckCommittedEntriesBeforeApplication(ctx, lastIndex); err != nil {
-		return stats, err.(*nonDeterministicFailure).safeExpl, err
+		return stats, getNonDeterministicFailureExplanation(err), err
 	}
 
 	// Separate the MsgApp messages from all other Raft message types so that we
@@ -764,15 +764,13 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	if len(rd.CommittedEntries) > 0 {
 		err := appTask.ApplyCommittedEntries(ctx)
 		stats.applyCommittedEntriesStats = sm.moveStats()
-		switch err {
-		case nil:
-		case apply.ErrRemoved:
+		if errors.Is(err, apply.ErrRemoved) {
 			// We know that our replica has been removed. All future calls to
 			// r.withRaftGroup() will return errRemoved so no future Ready objects
 			// will be processed by this Replica.
 			return stats, "", err
-		default:
-			return stats, err.(*nonDeterministicFailure).safeExpl, err
+		} else if err != nil {
+			return stats, getNonDeterministicFailureExplanation(err), err
 		}
 
 		// etcd raft occasionally adds a nil entry (our own commands are never
@@ -1614,7 +1612,7 @@ func (r *Replica) acquireSplitLock(
 		rightReplDesc.GetType() == roachpb.LEARNER)
 	// If getOrCreateReplica returns RaftGroupDeletedError we know that the RHS
 	// has already been removed. This case is handled properly in splitPostApply.
-	if _, isRaftGroupDeletedError := err.(*roachpb.RaftGroupDeletedError); isRaftGroupDeletedError {
+	if errors.HasType(err, (*roachpb.RaftGroupDeletedError)(nil)) {
 		return func() {}, nil
 	}
 	if err != nil {
@@ -1815,4 +1813,11 @@ func maybeCampaignAfterConfChange(
 		log.VEventf(ctx, 3, "leader got removed by conf change; campaigning")
 		_ = raftGroup.Campaign()
 	}
+}
+
+func getNonDeterministicFailureExplanation(err error) string {
+	if nd := (*nonDeterministicFailure)(nil); errors.As(err, &nd) {
+		return nd.safeExpl
+	}
+	return "???"
 }

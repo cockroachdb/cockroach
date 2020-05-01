@@ -29,21 +29,10 @@ func WithCandidateCode(err error, code string) error {
 	return &withCandidateCode{cause: err, code: code}
 }
 
-// IsCandidateCode returns true iff the error (not its causes)
-// has a candidate pg error code.
-func IsCandidateCode(err error) bool {
-	_, ok := err.(*withCandidateCode)
-	return ok
-}
-
 // HasCandidateCode returns tue iff the error or one of its causes
 // has a candidate pg error code.
 func HasCandidateCode(err error) bool {
-	_, ok := errors.If(err, func(err error) (v interface{}, ok bool) {
-		v, ok = err.(*withCandidateCode)
-		return
-	})
-	return ok
+	return errors.HasType(err, (*withCandidateCode)(nil))
 }
 
 // GetPGCodeInternal retrieves a code for the error. It operates by

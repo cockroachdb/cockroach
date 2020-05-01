@@ -272,7 +272,7 @@ func (e *Error) checkTxnStatusValid() {
 	if e.TransactionRestart == TransactionRestart_NONE {
 		return
 	}
-	if _, ok := err.(*TransactionAbortedError); ok {
+	if errors.HasType(err, (*TransactionAbortedError)(nil)) {
 		return
 	}
 	if txn.Status.IsFinalized() {

@@ -292,7 +292,8 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 // for errors.
 func (s WorkerSetup) failure(ctx context.Context, initSQL, stmt string, err error) error {
 	var message, stack string
-	if pqerr, ok := err.(pgx.PgError); ok {
+	var pqerr pgx.PgError
+	if errors.As(err, &pqerr) {
 		stack = pqerr.Detail
 		message = pqerr.Message
 	} else {

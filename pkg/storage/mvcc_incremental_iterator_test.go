@@ -715,7 +715,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 		for it.SeekGE(MVCCKey{Key: keys.MinKey}); ; it.Next() {
 			ok, err := it.Valid()
 			if err != nil {
-				if _, ok = err.(*roachpb.WriteIntentError); ok {
+				if errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
 					// This is the write intent error we were expecting.
 					return
 				}

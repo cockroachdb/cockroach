@@ -719,8 +719,8 @@ func dumpTableDataForZip(
 			if cErr := z.createError(name, err); cErr != nil {
 				return cErr
 			}
-			pqErr, ok := errors.UnwrapAll(err).(*pq.Error)
-			if !ok {
+			var pqErr *pq.Error
+			if !errors.As(err, &pqErr) {
 				// Not a SQL error. Nothing to retry.
 				break
 			}

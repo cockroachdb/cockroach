@@ -256,7 +256,7 @@ func TestPGUnwrapError(t *testing.T) {
 	if _, err := db.Exec(stmt); err == nil {
 		t.Fatalf("expected %s to error", stmt)
 	} else {
-		if _, ok := err.(*pq.Error); !ok {
+		if !errors.HasType(err, (*pq.Error)(nil)) {
 			t.Fatalf("pgwire should be surfacing a pq.Error")
 		}
 	}

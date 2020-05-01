@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 // indexBackfiller is a processor that backfills new indexes.
@@ -121,8 +122,8 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 	if orig == nil {
 		return nil
 	}
-	typed, ok := orig.(storagebase.DuplicateKeyError)
-	if !ok {
+	var typed *storagebase.DuplicateKeyError
+	if !errors.As(orig, &typed) {
 		return orig
 	}
 

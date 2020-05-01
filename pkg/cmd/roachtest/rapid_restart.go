@@ -75,8 +75,7 @@ func runRapidRestart(ctx context.Context, t *test, c *cluster) {
 					t.l.Printf("no exit status yet, killing again")
 				}
 			}
-			cause := errors.Cause(err)
-			if exitErr, ok := cause.(*exec.ExitError); ok {
+			if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
 				switch status := sysutil.ExitStatus(exitErr); status {
 				case -1:
 					// Received SIGINT before setting up our own signal handlers or

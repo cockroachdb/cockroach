@@ -54,12 +54,10 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		val, err = kv.IncrementValRetryable(
 			ctx, p.txn.DB(), seqValueKey, seqOpts.Increment)
 		if err != nil {
-			switch err.(type) {
-			case *roachpb.IntegerOverflowError:
+			if errors.HasType(err, (*roachpb.IntegerOverflowError)(nil)) {
 				return 0, boundsExceededError(descriptor)
-			default:
-				return 0, err
 			}
+			return 0, err
 		}
 		if val > seqOpts.MaxValue || val < seqOpts.MinValue {
 			return 0, boundsExceededError(descriptor)

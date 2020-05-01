@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/pgtype"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
@@ -404,7 +405,8 @@ VALUES ($1, 'StatusRunning', repeat('a', $2)::BYTES, repeat('a', $2)::BYTES)`, i
 		if err == nil {
 			t.Fatalf("Expected \"%s\" to consume too much memory, found no error", statement)
 		}
-		if pErr, ok := err.(*pq.Error); !ok || pErr.Code != pgcode.OutOfMemory {
+		if pErr := (*pq.Error)(nil); !(errors.As(err, &pErr) &&
+			pErr.Code == pgcode.OutOfMemory) {
 			t.Fatalf("Expected \"%s\" to consume too much memory, found unexpected error %+v", statement, pErr)
 		}
 	})

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 )
 
@@ -66,7 +67,9 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 			t.Fatalf("unexpected error %v\n", err)
 		}
 		// The bundle url is inside the error detail.
-		checkBundle(t, fmt.Sprintf("%+v", err.(*pq.Error).Detail), base)
+		var pqErr *pq.Error
+		_ = errors.As(err, &pqErr)
+		checkBundle(t, fmt.Sprintf("%+v", pqErr.Detail), base)
 	})
 
 	// Verify that we can issue the statement with prepare (which can happen

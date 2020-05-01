@@ -353,7 +353,7 @@ func TestCancelIfExists(t *testing.T) {
 }
 
 func isClientsideQueryCanceledErr(err error) bool {
-	if pqErr, ok := errors.UnwrapAll(err).(*pq.Error); ok {
+	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
 		return pqErr.Code == pgcode.QueryCanceled
 	}
 	return pgerror.GetPGCode(err) == pgcode.QueryCanceled

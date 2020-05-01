@@ -52,9 +52,6 @@ func TestPGCode(t *testing.T) {
 					tt.CheckEqual(err.Error(), t.innerErr.Error())
 
 					tt.Check(pgerror.HasCandidateCode(err))
-					if _, ok := errors.If(err, func(err error) (interface{}, bool) { return nil, pgerror.IsCandidateCode(err) }); !ok {
-						tt.Error("woops")
-					}
 
 					code := pgerror.GetPGCodeInternal(err, pgerror.ComputeDefaultCode)
 					tt.CheckEqual(code, t.expectedCode)

@@ -637,9 +637,15 @@ type grpcGatewayServer interface {
 // the main Cockroach port or the HTTP port, so that the CLI can instruct the
 // user on what might have gone wrong.
 type ListenError struct {
-	error
-	Addr string
+	cause error
+	Addr  string
 }
+
+// Error implements error.
+func (l *ListenError) Error() string { return l.cause.Error() }
+
+// Unwrap is because ListenError is a wrapper.
+func (l *ListenError) Unwrap() error { return l.cause }
 
 // inspectEngines goes through engines and populates in initDiskState. It also
 // calls SynthesizeClusterVersionFromEngines, which selects and backfills the
@@ -656,7 +662,7 @@ func inspectEngines(
 
 	for _, eng := range engines {
 		storeIdent, err := kvserver.ReadStoreIdent(ctx, eng)
-		if _, notBootstrapped := err.(*kvserver.NotBootstrappedError); notBootstrapped {
+		if errors.HasType(err, (*kvserver.NotBootstrappedError)(nil)) {
 			state.newEngines = append(state.newEngines, eng)
 			continue
 		} else if err != nil {
@@ -2064,8 +2070,8 @@ func listen(
 ) (net.Listener, error) {
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
-		return nil, ListenError{
-			error: err,
+		return nil, &ListenError{
+			cause: err,
 			Addr:  *addr,
 		}
 	}

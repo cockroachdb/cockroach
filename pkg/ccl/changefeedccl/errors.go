@@ -10,7 +10,10 @@ package changefeedccl
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
+
+	"github.com/cockroachdb/errors"
 )
 
 const retryableErrorString = "retryable changefeed error"
@@ -40,40 +43,46 @@ func (e *retryableError) Unwrap() error { return e.wrapped }
 // IsRetryableError returns true if the supplied error, or any of its parent
 // causes, is a IsRetryableError.
 func IsRetryableError(err error) bool {
-	for {
-		if err == nil {
-			return false
-		}
-		if _, ok := err.(*retryableError); ok {
-			return true
-		}
-		errStr := err.Error()
-		if strings.Contains(errStr, retryableErrorString) {
-			// If a RetryableError occurs on a remote node, DistSQL serializes it such
-			// that we can't recover the structure and we have to rely on this
-			// unfortunate string comparison.
-			return true
-		}
-		if strings.Contains(errStr, `rpc error`) {
-			// When a crdb node dies, any DistSQL flows with processors scheduled on
-			// it get an error with "rpc error" in the message from the call to
-			// `(*DistSQLPlanner).Run`.
-			return true
-		}
-		if e, ok := err.(interface{ Unwrap() error }); ok {
-			err = e.Unwrap()
-			continue
-		}
+	if err == nil {
 		return false
 	}
+	if errors.HasType(err, (*retryableError)(nil)) {
+		return true
+	}
+
+	// TODO(knz): this is a bad implementation. Make it go away
+	// by avoiding string comparisons.
+
+	errStr := err.Error()
+	if strings.Contains(errStr, retryableErrorString) {
+		// If a RetryableError occurs on a remote node, DistSQL serializes it such
+		// that we can't recover the structure and we have to rely on this
+		// unfortunate string comparison.
+		return true
+	}
+	if strings.Contains(errStr, `rpc error`) {
+		// When a crdb node dies, any DistSQL flows with processors scheduled on
+		// it get an error with "rpc error" in the message from the call to
+		// `(*DistSQLPlanner).Run`.
+		return true
+	}
+	return false
 }
 
 // MaybeStripRetryableErrorMarker performs some minimal attempt to clean the
 // RetryableError marker out. This won't do anything if the RetryableError
 // itself has been wrapped, but that's okay, we'll just have an uglier string.
 func MaybeStripRetryableErrorMarker(err error) error {
-	if e, ok := err.(*retryableError); ok {
-		err = e.wrapped
+	// The following is a hack to work around the error cast linter.
+	// What we're doing here is really not kosher; this function
+	// has no business in assuming that the retryableError{} wrapper
+	// has not been wrapped already. We could even expect that
+	// it gets wrapped in the common case.
+	// TODO(knz): Remove/replace this.
+	if reflect.TypeOf(err) == retryableErrorType {
+		err = errors.UnwrapOnce(err)
 	}
 	return err
 }
+
+var retryableErrorType = reflect.TypeOf((*retryableError)(nil))
