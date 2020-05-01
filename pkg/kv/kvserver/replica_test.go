@@ -9335,6 +9335,7 @@ type testQuiescer struct {
 	mergeInProgress bool
 	isDestroyed     bool
 	livenessMap     IsLiveMap
+	pendingQuota    bool
 }
 
 func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
@@ -9355,6 +9356,10 @@ func (q *testQuiescer) hasRaftReadyRLocked() bool {
 
 func (q *testQuiescer) hasPendingProposalsRLocked() bool {
 	return q.numProposals > 0
+}
+
+func (q *testQuiescer) hasPendingProposalQuotaRLocked() bool {
+	return q.pendingQuota
 }
 
 func (q *testQuiescer) ownsValidLeaseRLocked(ts hlc.Timestamp) bool {
@@ -9430,6 +9435,10 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
 		q.numProposals = 1
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.pendingQuota = true
 		return q
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {

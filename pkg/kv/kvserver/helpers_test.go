@@ -317,10 +317,12 @@ func (r *Replica) QuotaReleaseQueueLen() int {
 	return len(r.mu.quotaReleaseQueue)
 }
 
-func (r *Replica) IsFollowerActive(ctx context.Context, followerID roachpb.ReplicaID) bool {
+func (r *Replica) IsFollowerActiveSince(
+	ctx context.Context, followerID roachpb.ReplicaID, threshold time.Duration,
+) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.lastUpdateTimes.isFollowerActive(ctx, followerID, timeutil.Now())
+	return r.mu.lastUpdateTimes.isFollowerActiveSince(ctx, followerID, timeutil.Now(), threshold)
 }
 
 // GetTSCacheHighWater returns the high water mark of the replica's timestamp

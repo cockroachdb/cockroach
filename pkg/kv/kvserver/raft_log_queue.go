@@ -203,7 +203,11 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	log.Eventf(ctx, "raft status before lastUpdateTimes check: %+v", raftStatus.Progress)
 	log.Eventf(ctx, "lastUpdateTimes: %+v", r.mu.lastUpdateTimes)
 	updateRaftProgressFromActivity(
-		ctx, raftStatus.Progress, r.descRLocked().Replicas().All(), r.mu.lastUpdateTimes, now,
+		ctx, raftStatus.Progress, r.descRLocked().Replicas().All(),
+		func(replicaID roachpb.ReplicaID) bool {
+			return r.mu.lastUpdateTimes.isFollowerActiveSince(
+				ctx, replicaID, now, r.store.cfg.RangeLeaseActiveDuration())
+		},
 	)
 	log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)
 	r.mu.RUnlock()
@@ -233,8 +237,7 @@ func updateRaftProgressFromActivity(
 	ctx context.Context,
 	prs map[uint64]tracker.Progress,
 	replicas []roachpb.ReplicaDescriptor,
-	lastUpdate lastUpdateTimesMap,
-	now time.Time,
+	replicaActive func(roachpb.ReplicaID) bool,
 ) {
 	for _, replDesc := range replicas {
 		replicaID := replDesc.ReplicaID
@@ -242,7 +245,7 @@ func updateRaftProgressFromActivity(
 		if !ok {
 			continue
 		}
-		pr.RecentActive = lastUpdate.isFollowerActive(ctx, replicaID, now)
+		pr.RecentActive = replicaActive(replicaID)
 		// Override this field for safety since we don't use it. Instead, we use
 		// pendingSnapshotIndex from above which is also populated for preemptive
 		// snapshots.

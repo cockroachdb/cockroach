@@ -339,8 +339,35 @@ func (r *Replica) numPendingProposalsRLocked() int {
 	return len(r.mu.proposals) + r.mu.proposalBuf.Len()
 }
 
+// hasPendingProposalsRLocked is part of the quiescer interface.
+// It returns true if this node has any outstanding proposals. A client might be
+// waiting for the outcome of these proposals, so we definitely don't want to
+// quiesce while such proposals are in-flight.
+//
+// Note that this method says nothing about other node's outstanding proposals:
+// if this node is the current leaseholders, previous leaseholders might have
+// proposals on which they're waiting. If this node is not the current
+// leaseholder, then obviously whoever is the current leaseholder might have
+// pending proposals. This method is called in two places: on the current
+// leaseholder when deciding whether the leaseholder should attempt to quiesce
+// the range, and then on every follower to confirm that the range can indeed be
+// quiesced.
 func (r *Replica) hasPendingProposalsRLocked() bool {
 	return r.numPendingProposalsRLocked() > 0
+}
+
+// hasPendingProposalQuotaRLocked is part of the quiescer interface. It returns
+// true if there are any commands that haven't completed replicating that are
+// tracked by this node's quota pool (i.e. commands that haven't been acked by
+// all live replicas).
+// We can't quiesce while there's outstanding quota because the respective quota
+// would not be released while quiesced, and it might prevent the range from
+// unquiescing (leading to deadlock). See #46699.
+func (r *Replica) hasPendingProposalQuotaRLocked() bool {
+	if r.mu.proposalQuota == nil {
+		return true
+	}
+	return !r.mu.proposalQuota.Full()
 }
 
 var errRemoved = errors.New("replica removed")
@@ -1497,10 +1524,10 @@ func (m lastUpdateTimesMap) updateOnBecomeLeader(descs []roachpb.ReplicaDescript
 	}
 }
 
-// isFollowerActive returns whether the specified follower has made
-// communication with the leader in the last MaxQuotaReplicaLivenessDuration.
-func (m lastUpdateTimesMap) isFollowerActive(
-	ctx context.Context, replicaID roachpb.ReplicaID, now time.Time,
+// isFollowerActiveSince returns whether the specified follower has made
+// communication with the leader recently (since threshold).
+func (m lastUpdateTimesMap) isFollowerActiveSince(
+	ctx context.Context, replicaID roachpb.ReplicaID, now time.Time, threshold time.Duration,
 ) bool {
 	lastUpdateTime, ok := m[replicaID]
 	if !ok {
@@ -1509,7 +1536,7 @@ func (m lastUpdateTimesMap) isFollowerActive(
 		// replicas were updated).
 		return false
 	}
-	return now.Sub(lastUpdateTime) <= MaxQuotaReplicaLivenessDuration
+	return now.Sub(lastUpdateTime) <= threshold
 }
 
 // maybeAcquireSnapshotMergeLock checks whether the incoming snapshot subsumes

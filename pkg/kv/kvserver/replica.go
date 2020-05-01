@@ -439,10 +439,13 @@ type Replica struct {
 		// released as the base index moves up by one, etc.
 		proposalQuotaBaseIndex uint64
 
-		// Once the leader observes a proposal come 'out of Raft', we add the
-		// size of the associated command to a queue of quotas we have yet to
-		// release back to the quota pool. We only do so when all replicas have
-		// persisted the corresponding entry into their logs.
+		// Once the leader observes a proposal come 'out of Raft', we add the size
+		// of the associated command to a queue of quotas we have yet to release
+		// back to the quota pool. At that point ownership of the quota is
+		// transferred from r.mu.proposals to this queue.
+		// We'll release the respective quota once all replicas have persisted the
+		// corresponding entry into their logs (or once we give up waiting on some
+		// replica because it looks like it's dead).
 		quotaReleaseQueue []*quotapool.IntAlloc
 
 		// Counts calls to Replica.tick()
