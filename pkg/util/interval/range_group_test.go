@@ -13,11 +13,11 @@ package interval
 import (
 	"bytes"
 	"crypto/rand"
-	"errors"
 	"reflect"
 	"testing"
 
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
+	"github.com/cockroachdb/errors"
 )
 
 func forEachRangeGroupImpl(t *testing.T, fn func(t *testing.T, rg RangeGroup)) {

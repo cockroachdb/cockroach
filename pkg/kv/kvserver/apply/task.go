@@ -12,8 +12,8 @@ package apply
 
 import (
 	"context"
-	"errors"
 
+	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/raftpb"
 )
 
