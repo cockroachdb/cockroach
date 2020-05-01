@@ -826,10 +826,18 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 			return ba.CreateReply(), nil
 		})
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	dbCtx := kv.DefaultDBContext()
-	dbCtx.NodeID = &base.NodeIDContainer{}
-	db := kv.NewDBWithContext(testutils.MakeAmbientCtx(), factory, clock, dbCtx)
+	setup := func(nodeID roachpb.NodeID) *kv.DB {
+		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+		dbCtx := kv.DefaultDBContext()
+		var c base.NodeIDContainer
+		if nodeID != 0 {
+			c.Set(context.Background(), nodeID)
+		}
+		dbCtx.NodeID = base.NewSQLIDContainer(0, &c, true /* exposed */)
+
+		db := kv.NewDBWithContext(testutils.MakeAmbientCtx(), factory, clock, dbCtx)
+		return db
+	}
 	ctx := context.Background()
 
 	// Verify direct creation of Txns.
@@ -845,6 +853,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 	}
 	for i, test := range directCases {
 		t.Run(fmt.Sprintf("direct-txn-%d", i), func(t *testing.T) {
+			db := setup(test.nodeID)
 			now := db.Clock().Now()
 			kvTxn := roachpb.MakeTransaction("unnamed", nil /*baseKey*/, roachpb.NormalUserPriority, now, db.Clock().MaxOffset().Nanoseconds())
 			txn := kv.NewTxnFromProto(ctx, db, test.nodeID, now, test.typ, &kvTxn)
@@ -865,9 +874,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 	}
 	for i, test := range indirectCases {
 		t.Run(fmt.Sprintf("indirect-txn-%d", i), func(t *testing.T) {
-			if test.nodeID != 0 {
-				dbCtx.NodeID.Set(ctx, test.nodeID)
-			}
+			db := setup(test.nodeID)
 			if err := db.Txn(
 				ctx, func(_ context.Context, txn *kv.Txn) error {
 					ots := txn.TestingCloneTxn().ObservedTimestamps

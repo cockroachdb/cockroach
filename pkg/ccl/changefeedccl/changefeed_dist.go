@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
@@ -107,7 +108,7 @@ func distChangefeedFlow(
 
 	// Changefeed flows handle transactional consistency themselves.
 	var noTxn *kv.Txn
-	gatewayNodeID := execCfg.NodeID.Get()
+	gatewayNodeID := execCfg.NodeID.DeprecatedNodeID(distsql.MultiTenancyIssueNo)
 	dsp := phs.DistSQLPlanner()
 	evalCtx := phs.ExtendedEvalContext()
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, noTxn)

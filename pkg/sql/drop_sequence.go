@@ -82,7 +82,7 @@ func (n *dropSequenceNode) startExec(params runParams) error {
 			params.p.txn,
 			EventLogDropSequence,
 			int32(droppedDesc.ID),
-			int32(params.extendedEvalCtx.NodeID),
+			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 			struct {
 				SequenceName string
 				Statement    string

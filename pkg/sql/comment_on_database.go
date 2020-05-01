@@ -76,7 +76,7 @@ func (n *commentOnDatabaseNode) startExec(params runParams) error {
 		params.p.txn,
 		EventLogCommentOnDatabase,
 		int32(n.dbDesc.ID),
-		int32(params.extendedEvalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 		struct {
 			DatabaseName string
 			Statement    string

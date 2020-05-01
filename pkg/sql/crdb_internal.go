@@ -116,7 +116,7 @@ CREATE TABLE crdb_internal.node_build_info (
 )`,
 	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		execCfg := p.ExecCfg()
-		nodeID := tree.NewDInt(tree.DInt(int64(execCfg.NodeID.Get())))
+		nodeID, _ := execCfg.NodeID.OptionalNodeID() // zero if not available
 
 		info := build.GetInfo()
 		for k, v := range map[string]string{
@@ -128,7 +128,7 @@ CREATE TABLE crdb_internal.node_build_info (
 			"Channel":      info.Channel,
 		} {
 			if err := addRow(
-				nodeID,
+				tree.NewDInt(tree.DInt(nodeID)),
 				tree.NewDString(k),
 				tree.NewDString(v),
 			); err != nil {
@@ -677,7 +677,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				"cannot access sql statistics from this context")
 		}
 
-		nodeID := tree.NewDInt(tree.DInt(int64(p.execCfg.NodeID.Get())))
+		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
 
 		// Retrieve the application names and sort them to ensure the
 		// output is deterministic.
@@ -719,7 +719,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					errString = tree.NewDString(s.data.SensitiveInfo.LastErr)
 				}
 				err := addRow(
-					nodeID,
+					tree.NewDInt(tree.DInt(nodeID)),
 					tree.NewDString(appName),
 					tree.NewDString(stmtKey.flags()),
 					tree.NewDString(stmtKey.stmt),
@@ -778,7 +778,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
 				"cannot access sql statistics from this context")
 		}
 
-		nodeID := tree.NewDInt(tree.DInt(int64(p.execCfg.NodeID.Get())))
+		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
 
 		// Retrieve the application names and sort them to ensure the
 		// output is deterministic.
@@ -794,7 +794,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
 			appStats := sqlStats.getStatsForApplication(appName)
 			txnCount, txnTimeAvg, txnTimeVar, committedCount, implicitCount := appStats.txns.getStats()
 			err := addRow(
-				nodeID,
+				tree.NewDInt(tree.DInt(nodeID)),
 				tree.NewDString(appName),
 				tree.NewDInt(tree.DInt(txnCount)),
 				tree.NewDFloat(tree.DFloat(txnTimeAvg)),

@@ -14,6 +14,7 @@ import (
 	"crypto/sha512"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -204,7 +205,10 @@ func evalExport(
 		}
 
 		if exportStore != nil {
-			exported.Path = fmt.Sprintf("%d.sst", builtins.GenerateUniqueInt(cArgs.EvalCtx.NodeID()))
+			// TODO(dt): don't reach out into a SQL builtin here; this code lives in KV.
+			// Create a unique int differently.
+			nodeID := cArgs.EvalCtx.NodeID()
+			exported.Path = fmt.Sprintf("%d.sst", builtins.GenerateUniqueInt(base.SQLInstanceID(nodeID)))
 			if err := exportStore.WriteFile(ctx, exported.Path, bytes.NewReader(data)); err != nil {
 				return result.Result{}, err
 			}

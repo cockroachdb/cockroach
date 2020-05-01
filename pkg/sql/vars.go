@@ -716,7 +716,8 @@ var varGen = map[string]sessionVar{
 	// CockroachDB extension.
 	`node_id`: {
 		Get: func(evalCtx *extendedEvalContext) string {
-			return fmt.Sprintf("%d", evalCtx.NodeID)
+			nodeID, _ := evalCtx.NodeID.OptionalNodeID() // zero if unavailable
+			return fmt.Sprintf("%d", nodeID)
 		},
 	},
 

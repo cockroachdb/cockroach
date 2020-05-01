@@ -116,7 +116,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 		params.p.txn,
 		EventLogAlterIndex,
 		int32(n.tableDesc.ID),
-		int32(params.extendedEvalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 		struct {
 			TableName  string
 			IndexName  string

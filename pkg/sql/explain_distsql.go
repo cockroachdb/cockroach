@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -204,7 +205,11 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		}
 		diagram.AddSpans(spans)
 	} else {
-		flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
+		nodeID, err := params.extendedEvalCtx.NodeID.OptionalNodeIDErr(distsql.MultiTenancyIssueNo)
+		if err != nil {
+			return err
+		}
+		flows := plan.GenerateFlowSpecs(nodeID)
 		showInputTypes := n.options.Flags[tree.ExplainFlagTypes]
 		diagram, err = execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows, showInputTypes)
 		if err != nil {

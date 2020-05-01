@@ -138,7 +138,7 @@ func storedLeaseExpiration(expiration hlc.Timestamp) tree.DTimestamp {
 // LeaseStore implements the operations for acquiring and releasing leases and
 // publishing a new version of a descriptor. Exported only for testing.
 type LeaseStore struct {
-	nodeIDContainer  *base.NodeIDContainer
+	nodeIDContainer  *base.SQLIDContainer
 	db               *kv.DB
 	clock            *hlc.Clock
 	internalExecutor sqlutil.InternalExecutor
@@ -228,7 +228,7 @@ func (s LeaseStore) acquire(
 			return err
 		}
 
-		nodeID := s.nodeIDContainer.Get()
+		nodeID := s.nodeIDContainer.SQLInstanceID()
 		if nodeID == 0 {
 			panic("zero nodeID")
 		}
@@ -270,7 +270,7 @@ func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, lease *s
 	// NodeUnavailableErrors.
 	for r := retry.Start(retryOptions); r.Next(); {
 		log.VEventf(ctx, 2, "LeaseStore releasing lease %+v", lease)
-		nodeID := s.nodeIDContainer.Get()
+		nodeID := s.nodeIDContainer.SQLInstanceID()
 		if nodeID == 0 {
 			panic("zero nodeID")
 		}
@@ -1426,7 +1426,7 @@ const leaseConcurrencyLimit = 5
 // stopper is used to run async tasks. Can be nil in tests.
 func NewLeaseManager(
 	ambientCtx log.AmbientContext,
-	nodeIDContainer *base.NodeIDContainer,
+	nodeIDContainer *base.SQLIDContainer,
 	db *kv.DB,
 	clock *hlc.Clock,
 	internalExecutor sqlutil.InternalExecutor,
@@ -1920,7 +1920,9 @@ func (m *LeaseManager) DeleteOrphanedLeases(timeThreshold int64) {
 	if m.testingKnobs.DisableDeleteOrphanedLeases {
 		return
 	}
-	nodeID := m.LeaseStore.nodeIDContainer.Get()
+	// TODO(asubiotto): clear up the nodeID naming here and in the table below,
+	// tracked as https://github.com/cockroachdb/cockroach/issues/48271.
+	nodeID := m.LeaseStore.nodeIDContainer.SQLInstanceID()
 	if nodeID == 0 {
 		panic("zero nodeID")
 	}

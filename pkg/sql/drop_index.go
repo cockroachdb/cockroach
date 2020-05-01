@@ -505,7 +505,7 @@ func (p *planner) dropIndexByName(
 		p.txn,
 		EventLogDropIndex,
 		int32(tableDesc.ID),
-		int32(p.extendedEvalCtx.NodeID),
+		int32(p.extendedEvalCtx.NodeID.SQLInstanceID()),
 		struct {
 			TableName           string
 			IndexName           string

@@ -682,7 +682,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			params.p.txn,
 			eventLogType,
 			int32(targetID),
-			int32(params.extendedEvalCtx.NodeID),
+			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 			info,
 		)
 	}

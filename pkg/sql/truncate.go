@@ -136,7 +136,7 @@ func (t *truncateNode) startExec(params runParams) error {
 			p.txn,
 			EventLogTruncateTable,
 			int32(id),
-			int32(p.extendedEvalCtx.NodeID),
+			int32(p.extendedEvalCtx.NodeID.SQLInstanceID()),
 			struct {
 				TableName string
 				Statement string

@@ -237,6 +237,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// bootstrapped; otherwise a new one is allocated in Node.
 	nodeIDContainer := &base.NodeIDContainer{}
 	cfg.AmbientCtx.AddLogTag("n", nodeIDContainer)
+	const sqlInstanceID = base.SQLInstanceID(0)
+	idContainer := base.NewSQLIDContainer(sqlInstanceID, nodeIDContainer, true /* exposed */)
 
 	ctx := cfg.AmbientCtx.AnnotateCtx(context.Background())
 
@@ -329,7 +331,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, distSender)
 
 	dbCtx := kv.DefaultDBContext()
-	dbCtx.NodeID = nodeIDContainer
+	dbCtx.NodeID = idContainer
 	dbCtx.Stopper = stopper
 	db := kv.NewDBWithContext(cfg.AmbientCtx, tcsFactory, clock, dbCtx)
 
@@ -529,7 +531,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			nodeDialer:             nodeDialer,
 			grpcServer:             grpcServer.Server,
 			recorder:               recorder,
-			nodeIDContainer:        nodeIDContainer,
+			nodeIDContainer:        idContainer,
 			externalStorage:        externalStorage,
 			externalStorageFromURI: externalStorageFromURI,
 			isMeta1Leaseholder:     node.stores.IsMeta1Leaseholder,

@@ -248,7 +248,12 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			}
 			defer es.Close()
 
-			part := fmt.Sprintf("n%d.%d", sp.flowCtx.EvalCtx.NodeID, chunk)
+			nodeID, err := sp.flowCtx.EvalCtx.NodeID.OptionalNodeIDErr(47970)
+			if err != nil {
+				return err
+			}
+
+			part := fmt.Sprintf("n%d.%d", nodeID, chunk)
 			chunk++
 			filename := writer.FileName(sp.spec, part)
 			// Close writer to ensure buffer and any compression footer is flushed.

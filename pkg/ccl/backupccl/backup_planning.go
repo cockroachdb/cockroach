@@ -570,6 +570,11 @@ func backupPlanHook(
 			}
 		}
 
+		nodeID, err := p.ExecCfg().NodeID.OptionalNodeIDErr(47970)
+		if err != nil {
+			return err
+		}
+
 		// if CompleteDbs is lost by a 1.x node, FormatDescriptorTrackingVersion
 		// means that a 2.0 node will disallow `RESTORE DATABASE foo`, but `RESTORE
 		// foo.table1, foo.table2...` will still work. MVCCFilter would be
@@ -588,7 +593,7 @@ func backupPlanHook(
 			IntroducedSpans:    newSpans,
 			FormatVersion:      BackupFormatDescriptorTrackingVersion,
 			BuildInfo:          build.GetInfo(),
-			NodeID:             p.ExecCfg().NodeID.Get(),
+			NodeID:             nodeID,
 			ClusterID:          p.ExecCfg().ClusterID(),
 			Statistics:         tableStatistics,
 			DescriptorCoverage: backupStmt.DescriptorCoverage,

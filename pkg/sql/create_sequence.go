@@ -144,7 +144,7 @@ func doCreateSequence(
 		params.p.txn,
 		EventLogCreateSequence,
 		int32(desc.ID),
-		int32(params.extendedEvalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 		struct {
 			SequenceName string
 			Statement    string

@@ -118,7 +118,7 @@ type sqlServerOptionalArgs struct {
 	// For the temporaryObjectCleaner.
 	isMeta1Leaseholder func(hlc.Timestamp) (bool, error)
 	// DistSQL, lease management, and others want to know the node they're on.
-	nodeIDContainer *base.NodeIDContainer
+	nodeIDContainer *base.SQLIDContainer
 
 	// Used by backup/restore.
 	externalStorage        cloud.ExternalStorageFactory
@@ -400,7 +400,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 			cfg.rpcContext,
 			distSQLServer,
 			cfg.distSender,
-			cfg.gossip.Deprecated(distsql.GossipIssueNo),
+			cfg.gossip.Deprecated(distsql.MultiTenancyIssueNo),
 			cfg.stopper,
 			cfg.nodeLiveness,
 			cfg.nodeDialer,
@@ -609,7 +609,7 @@ func (s *sqlServer) start(
 		&migrationsExecutor,
 		s.execCfg.Clock,
 		mmKnobs,
-		s.execCfg.NodeID.String(), // TODO(tbg): set yet?
+		s.execCfg.NodeID.SQLInstanceID().String(),
 		s.execCfg.Settings,
 		s.jobRegistry,
 	)

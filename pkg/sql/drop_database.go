@@ -257,7 +257,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		p.txn,
 		EventLogDropDatabase,
 		int32(n.dbDesc.ID),
-		int32(params.extendedEvalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 		struct {
 			DatabaseName         string
 			Statement            string

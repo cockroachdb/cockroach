@@ -87,7 +87,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	var id = sqlbase.ID(keys.MinNonPredefinedUserDescID + 1 /* skip over DB ID */)
-	var node = roachpb.NodeID(2)
+	var instance = base.SQLInstanceID(2)
 	stopper := stop.NewStopper()
 	cfg := base.NewLeaseManagerConfig()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
@@ -105,7 +105,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
 	defer stopper.Stop(context.TODO())
 	changer := sql.NewSchemaChangerForTesting(
-		id, 0, node, *kvDB, leaseMgr, jobRegistry, &execCfg, cluster.MakeTestingClusterSettings())
+		id, 0, instance, *kvDB, leaseMgr, jobRegistry, &execCfg, cluster.MakeTestingClusterSettings())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -140,7 +140,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	index.ID = tableDesc.NextIndexID
 	tableDesc.NextIndexID++
 	changer = sql.NewSchemaChangerForTesting(
-		id, tableDesc.NextMutationID, node, *kvDB, leaseMgr, jobRegistry,
+		id, tableDesc.NextMutationID, instance, *kvDB, leaseMgr, jobRegistry,
 		&execCfg, cluster.MakeTestingClusterSettings(),
 	)
 	tableDesc.Mutations = append(tableDesc.Mutations, sqlbase.DescriptorMutation{

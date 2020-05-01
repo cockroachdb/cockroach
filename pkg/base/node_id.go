@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -66,3 +67,103 @@ func (n *NodeIDContainer) Set(ctx context.Context, val roachpb.NodeID) {
 func (n *NodeIDContainer) Reset(val roachpb.NodeID) {
 	atomic.StoreInt32(&n.nodeID, int32(val))
 }
+
+// A SQLInstanceID is an ephemeral ID assigned to a running instance of the SQL
+// server. This is distinct from a NodeID, which is a long-lived identifier
+// assigned to a node in the KV layer which is unique across all KV nodes in the
+// cluster and persists across restarts. Instead, a SQLInstance is similar to a
+// process ID from the unix world: an integer assigned to the SQL server
+// on process start which is unique across all SQL server processes running
+// on behalf of the tenant, while the SQL server is running.
+//
+// NB: until https://github.com/cockroachdb/cockroach/issues/47899 is addressed,
+// the properties of the SQLInstanceID hold trivially due to the constraint that
+// only one SQL server must be running on behalf of the tenant at any given
+// time. After that, it's likely that we'll allocate these IDs off a counter,
+// so they will be completely unique (per tenant).
+type SQLInstanceID int32
+
+func (s SQLInstanceID) String() string {
+	return strconv.FormatInt(int64(s), 10)
+}
+
+// SQLIDContainer wraps a SQLInstanceID and optionally a NodeID.
+type SQLIDContainer struct {
+	w             errorutil.TenantSQLDeprecatedWrapper // NodeID
+	sqlInstanceID SQLInstanceID
+}
+
+// NewSQLIDContainer sets up an SQLIDContainer wrapping the (positive) SQLInstanceID
+// and a NodeID. See errorutil.TenantSQLDeprecatedWrapper for an explanation of
+// the nodeIDExposed parameter.
+//
+// As a special case, a zero sqlInstanceID in conjunction with
+// nodeIDExposed==true falls back to the NodeID in SQLInstanceID(). This is used
+// in single-tenant deployments.
+func NewSQLIDContainer(
+	sqlInstanceID SQLInstanceID, nodeID *NodeIDContainer, nodeIDExposed bool,
+) *SQLIDContainer {
+	if !nodeIDExposed && sqlInstanceID == 0 {
+		panic("sqlInstanceID must not be zero")
+	}
+	return &SQLIDContainer{
+		w:             errorutil.MakeTenantSQLDeprecatedWrapper(nodeID, nodeIDExposed),
+		sqlInstanceID: sqlInstanceID,
+	}
+}
+
+// OptionalNodeID returns the NodeID and true, if the former is exposed.
+// Otherwise, returns zero and false.
+func (c *SQLIDContainer) OptionalNodeID() (roachpb.NodeID, bool) {
+	v, ok := c.w.Optional()
+	if !ok {
+		return 0, false
+	}
+	return v.(*NodeIDContainer).Get(), true
+}
+
+// OptionalNodeIDErr is like OptionalNodeID, but returns an error (referring to
+// the optionally supplied Github issues) if the ID is not present.
+func (c *SQLIDContainer) OptionalNodeIDErr(issueNos ...int) (roachpb.NodeID, error) {
+	v, err := c.w.OptionalErr(issueNos...)
+	if err != nil {
+		return 0, err
+	}
+	return v.(*NodeIDContainer).Get(), nil
+}
+
+// DeprecatedNodeID returns the NodeID. This call is deprecated: removal of all
+// call sites is the goal, at which point this method will be removed. Calls to
+// this method reflect essential functionality which needs to be reworked in
+// order to enable multi-tenancy.
+func (c *SQLIDContainer) DeprecatedNodeID(issueNo int) roachpb.NodeID {
+	return c.w.Deprecated(issueNo).(*NodeIDContainer).Get()
+}
+
+// SQLInstanceID returns the wrapped SQLInstanceID.
+func (c *SQLIDContainer) SQLInstanceID() SQLInstanceID {
+	if n, ok := c.OptionalNodeID(); ok {
+		return SQLInstanceID(n)
+	}
+	return c.sqlInstanceID
+}
+
+// Get is a temporary method to aid refactoring.
+//
+// TODO(tbg): remove.
+func (c *SQLIDContainer) Get() roachpb.NodeID {
+	// Silence staticcheck.
+	var _ = (*SQLIDContainer)(nil).OptionalNodeID
+	var _ = (*SQLIDContainer)(nil).OptionalNodeIDErr
+	var _ = (*SQLIDContainer)(nil).SQLInstanceID
+	return c.DeprecatedNodeID(-12131415)
+
+}
+
+// TestingIDContainer is an SQLIDContainer with hard-coded SQLInstanceID of 10 and
+// NodeID of 1.
+var TestingIDContainer = func() *SQLIDContainer {
+	var c NodeIDContainer
+	c.Set(context.Background(), 1)
+	return NewSQLIDContainer(10, &c, true /* exposed */)
+}()
