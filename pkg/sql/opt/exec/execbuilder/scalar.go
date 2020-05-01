@@ -205,6 +205,13 @@ func (b *Builder) buildBoolean(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree
 	case opt.RangeOp:
 		return b.buildScalar(ctx, scalar.Child(0).(opt.ScalarExpr))
 
+	case opt.IsTupleNullOp:
+		expr, err := b.buildScalar(ctx, scalar.Child(0).(opt.ScalarExpr))
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewTypedIsNullExpr(expr), nil
+
 	default:
 		panic(errors.AssertionFailedf("invalid op %s", log.Safe(scalar.Op())))
 	}

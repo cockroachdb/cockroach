@@ -321,6 +321,62 @@ values
  └── (false,)
 
 norm expect=FoldNonNullIsNull
+SELECT (1, 2, 3) IS NOT DISTINCT FROM NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,)
+
+norm expect=FoldNonNullIsNull
+SELECT (1, NULL) IS NOT DISTINCT FROM NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,)
+
+norm expect=FoldNonNullIsNull
+SELECT (NULL, NULL) IS NOT DISTINCT FROM NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,)
+
+# --------------------------------------------------
+# FoldNullTupleIsTupleNull
+# --------------------------------------------------
+norm expect=FoldNullTupleIsTupleNull
+SELECT (NULL, NULL) IS NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
+norm expect-not=FoldNullTupleIsTupleNull
+SELECT (NULL, k) IS NULL FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── fd: ()-->(7)
+ ├── scan a
+ └── projections
+      └── false [as="?column?":7]
+
+# --------------------------------------------------
+# FoldNonNullTupleIsTupleNull
+# --------------------------------------------------
+norm expect=FoldNonNullTupleIsTupleNull
 SELECT (1, 2, 3) IS NULL AS r
 ----
 values
@@ -329,6 +385,26 @@ values
  ├── key: ()
  ├── fd: ()-->(1)
  └── (false,)
+
+norm expect=FoldNonNullTupleIsTupleNull
+SELECT (1, NULL) IS NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,)
+
+norm expect=FoldNonNullTupleIsTupleNull
+SELECT (1, k) IS NULL FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── fd: ()-->(7)
+ ├── scan a
+ └── projections
+      └── false [as="?column?":7]
 
 # --------------------------------------------------
 # FoldIsNotNull
@@ -365,7 +441,27 @@ project
       └── i:2 IS NOT NULL [as=t:9, outer=(2)]
 
 norm expect=FoldNonNullIsNotNull
-SELECT (1, 2, 3) IS NOT NULL AS r
+SELECT (1, 2, 3) IS DISTINCT FROM NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
+norm expect=FoldNonNullIsNotNull
+SELECT (1, NULL) IS DISTINCT FROM NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
+norm expect=FoldNonNullIsNotNull
+SELECT (1, NULL) IS DISTINCT FROM NULL AS r
 ----
 values
  ├── columns: r:1!null

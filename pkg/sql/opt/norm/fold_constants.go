@@ -66,6 +66,29 @@ func (c *CustomFuncs) IsConstValueOrTuple(input opt.ScalarExpr) bool {
 	return memo.CanExtractConstDatum(input)
 }
 
+// IsNullTuple returns true if the input tuple has all null elements.
+func (c *CustomFuncs) IsNullTuple(input opt.ScalarExpr) bool {
+	tup := input.(*memo.TupleExpr)
+	for _, e := range tup.Elems {
+		if e.Op() != opt.NullOp {
+			return false
+		}
+	}
+	return true
+}
+
+// IsNonNullTuple returns true if the input tuple has one non-null constant
+// value.
+func (c *CustomFuncs) IsNonNullTuple(input opt.ScalarExpr) bool {
+	tup := input.(*memo.TupleExpr)
+	for _, e := range tup.Elems {
+		if opt.IsConstValueOp(e) && e.Op() != opt.NullOp {
+			return true
+		}
+	}
+	return true
+}
+
 // FoldBinary evaluates a binary expression with constant inputs. It returns
 // a constant expression as long as it finds an appropriate overload function
 // for the given operator and input types, and the evaluation causes no error.

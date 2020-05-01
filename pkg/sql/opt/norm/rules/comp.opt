@@ -152,6 +152,20 @@
 =>
 (False)
 
+# FoldNullTupleIsTupleNull replaces x IS NULL with True if x is a tuple with
+# all Null constants.
+[FoldNullTupleIsTupleNull, Normalize]
+(IsTupleNull $input:* & (IsNullTuple $input))
+=>
+(True)
+
+# FoldNonNullTupleIsTupleNull replaces x IS NULL with False if x is a tuple
+# with at least one non-Null constant.
+[FoldNonNullTupleIsTupleNull, Normalize]
+(IsTupleNull $input:* & (IsNonNullTuple $input))
+=>
+(False)
+
 # FoldIsNotNull replaces NULL IS NOT NULL with False.
 [FoldIsNotNull, Normalize]
 (IsNot (Null) (Null)) => (False)

@@ -276,3 +276,129 @@ eval
 1 IS NOT OF (BOOL, INT)
 ----
 false
+
+# Tuple with no NULLS.
+
+eval
+(1, 1) IS NULL
+----
+false
+
+eval
+(1, 1) IS NOT NULL
+----
+true
+
+eval
+(1, 1) IS NOT DISTINCT FROM NULL
+----
+false
+
+eval
+(1, 1) IS DISTINCT FROM NULL
+----
+true
+
+eval
+NOT ((1, 1) IS NULL)
+----
+true
+
+eval
+NOT ((1, 1) IS NOT NULL)
+----
+false
+
+eval
+NOT ((1, 1) IS NOT DISTINCT FROM NULL)
+----
+true
+
+eval
+NOT ((1, 1) IS DISTINCT FROM NULL)
+----
+false
+
+# Tuple with some NULLS.
+
+eval
+(1, NULL) IS NULL
+----
+false
+
+eval
+(1, NULL) IS NOT NULL
+----
+false
+
+eval
+(1, NULL) IS NOT DISTINCT FROM NULL
+----
+false
+
+eval
+(1, NULL) IS DISTINCT FROM NULL
+----
+true
+
+eval
+NOT ((1, NULL) IS NULL)
+----
+true
+
+eval
+NOT ((1, NULL) IS NOT NULL)
+----
+true
+
+eval
+NOT ((1, NULL) IS NOT DISTINCT FROM NULL)
+----
+true
+
+eval
+NOT ((1, NULL) IS DISTINCT FROM NULL)
+----
+false
+
+# Tuple with all NULLS.
+
+eval
+(NULL, NULL) IS NULL
+----
+true
+
+eval
+(NULL, NULL) IS NOT NULL
+----
+false
+
+eval
+(NULL, NULL) IS NOT DISTINCT FROM NULL
+----
+false
+
+eval
+(NULL, NULL) IS DISTINCT FROM NULL
+----
+true
+
+eval
+NOT ((NULL, NULL) IS NULL)
+----
+false
+
+eval
+NOT ((NULL, NULL) IS NOT NULL)
+----
+true
+
+eval
+NOT ((NULL, NULL) IS NOT DISTINCT FROM NULL)
+----
+true
+
+eval
+NOT ((NULL, NULL) IS DISTINCT FROM NULL)
+----
+false

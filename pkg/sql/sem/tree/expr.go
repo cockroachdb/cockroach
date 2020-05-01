@@ -90,6 +90,7 @@ type operatorExpr interface {
 var _ operatorExpr = &AndExpr{}
 var _ operatorExpr = &OrExpr{}
 var _ operatorExpr = &NotExpr{}
+var _ operatorExpr = &IsNullExpr{}
 var _ operatorExpr = &BinaryExpr{}
 var _ operatorExpr = &UnaryExpr{}
 var _ operatorExpr = &ComparisonExpr{}
@@ -258,6 +259,34 @@ func NewTypedNotExpr(expr TypedExpr) *NotExpr {
 
 // TypedInnerExpr returns the NotExpr's inner expression as a TypedExpr.
 func (node *NotExpr) TypedInnerExpr() TypedExpr {
+	return node.Expr.(TypedExpr)
+}
+
+// IsNullExpr represents an IS NULL expression.
+type IsNullExpr struct {
+	Expr Expr
+
+	typeAnnotation
+}
+
+func (*IsNullExpr) operatorExpr() {}
+
+// Format implements the NodeFormatter interface.
+func (node *IsNullExpr) Format(ctx *FmtCtx) {
+	exprFmtWithParen(ctx, node.Expr)
+	ctx.WriteString(" IS NULL")
+}
+
+// NewTypedIsNullExpr returns a new IsNullExpr that is verified to be
+// well-typed.
+func NewTypedIsNullExpr(expr TypedExpr) *IsNullExpr {
+	node := &IsNullExpr{Expr: expr}
+	node.typ = types.Bool
+	return node
+}
+
+// TypedInnerExpr returns the IsNullExpr's inner expression as a TypedExpr.
+func (node *IsNullExpr) TypedInnerExpr() TypedExpr {
 	return node.Expr.(TypedExpr)
 }
 
@@ -1773,6 +1802,7 @@ func (node *IsOfTypeExpr) String() string     { return AsString(node) }
 func (node *Name) String() string             { return AsString(node) }
 func (node *UnrestrictedName) String() string { return AsString(node) }
 func (node *NotExpr) String() string          { return AsString(node) }
+func (node *IsNullExpr) String() string       { return AsString(node) }
 func (node *NullIfExpr) String() string       { return AsString(node) }
 func (node *NumVal) String() string           { return AsString(node) }
 func (node *OrExpr) String() string           { return AsString(node) }

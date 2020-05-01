@@ -8234,11 +8234,11 @@ a_expr:
   }
 | a_expr IS NULL %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.IsNotDistinctFrom, Left: $1.expr(), Right: tree.DNull}
+    $$.val = &tree.IsNullExpr{Expr: $1.expr()}
   }
 | a_expr ISNULL %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.IsNotDistinctFrom, Left: $1.expr(), Right: tree.DNull}
+    $$.val = &tree.IsNullExpr{Expr: $1.expr()}
   }
 | a_expr IS NOT NULL %prec IS
   {
