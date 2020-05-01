@@ -635,7 +635,7 @@ message ProjectSetSpec {
   repeated Expression exprs = 1 [(gogoproto.nullable) = false];
 
   // Column types for the generated values
-  repeated sql.sem.types.T generated_columns = 2 [(gogoproto.nullable) = false];
+  repeated sql.sem.types.T generated_columns = 2;
 
   // The number of columns each expression returns. Same length as exprs.
   repeated uint32 num_cols_per_gen = 3;

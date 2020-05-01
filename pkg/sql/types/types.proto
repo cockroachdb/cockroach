@@ -298,7 +298,7 @@ enum Family {
     // construct tuples using the ROW function or tuple construction syntax.
     //
     //   Oid          : T_record
-    //   TupleContents: []types.T of each tuple field
+    //   TupleContents: []*types.T of each tuple field
     //   TupleLabels  : []string of each tuple label
     //
     // Examples:
@@ -468,7 +468,7 @@ message InternalType {
 
     // TupleContents returns a slice containing the type of each tuple field. This
     // is nil for non-TUPLE types.
-    repeated T tuple_contents = 8 [(gogoproto.nullable) = false];
+    repeated T tuple_contents = 8;
 
     // TupleLabels returns a slice containing the labels of each tuple field. This
     // is nil for non-TUPLE types, or if the TUPLE type does not specify labels.
