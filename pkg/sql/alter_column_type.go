@@ -13,7 +13,6 @@ package sql
 import (
 	"errors"
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 var usingExpressionNotSupportedErr = unimplemented.NewWithIssuef(
@@ -43,6 +43,7 @@ func AlterColumnType(
 	col *sqlbase.ColumnDescriptor,
 	t *tree.AlterTableAlterColumnType,
 	params runParams,
+	tableName tree.TableName,
 ) error {
 	typ, err := tree.ResolveType(t.ToType, params.p.semaCtx.GetTypeResolver())
 	if err != nil {
@@ -97,7 +98,7 @@ func AlterColumnType(
 	case schemachange.ColumnConversionTrivial:
 		col.Type = *typ
 	case schemachange.ColumnConversionGeneral:
-		if err := alterColumnTypeGeneral(tableDesc, col, t, params); err != nil {
+		if err := alterColumnTypeGeneral(tableDesc, col, t, params, tableName); err != nil {
 			return err
 		}
 		if err := params.p.createOrUpdateSchemaChangeJob(params.ctx, tableDesc, "alter column type", tableDesc.ClusterVersion.NextMutationID); err != nil {
@@ -119,6 +120,7 @@ func alterColumnTypeGeneral(
 	col *sqlbase.ColumnDescriptor,
 	t *tree.AlterTableAlterColumnType,
 	params runParams,
+	tableName tree.TableName,
 ) error {
 	// Make sure that all nodes in the cluster are able to perform general alter column type conversions.
 	if !params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionAlterColumnTypeGeneral) {
@@ -241,6 +243,11 @@ func alterColumnTypeGeneral(
 		return err
 	}
 
+	// Rewrite the check constraints on the new column casting wherever necessary.
+	if err := copyCheckConstraints(params, tableDesc, col, &newCol, toType, tableName); err != nil {
+		return err
+	}
+
 	swapArgs := &sqlbase.ComputedColumnSwap{
 		OldColumnId: col.ID,
 		NewColumnId: newCol.ID,
@@ -249,4 +256,91 @@ func alterColumnTypeGeneral(
 	tableDesc.AddComputedColumnSwapMutation(swapArgs)
 
 	return nil
+}
+
+// copyCheckConstraints copies the constraints for column col for newCol
+// while casting all comparisons to the col name to toType.
+// Example: if the original constraint was (x > 0) and x is casted to string,
+// the new constraint will be (x > 0::STRING).
+func copyCheckConstraints(params runParams, tableDesc *MutableTableDescriptor, col, newCol *sqlbase.ColumnDescriptor, toType *types.T, tableName tree.TableName) error {
+	info, err := tableDesc.GetConstraintInfo(params.ctx, nil)
+	if err != nil {
+		return err
+	}
+	inuseNames := make(map[string]struct{}, len(info))
+	for k := range info {
+		inuseNames[k] = struct{}{}
+	}
+
+	for _, check := range tableDesc.AllActiveAndInactiveChecks() {
+		if used, err := check.UsesColumn(tableDesc.TableDesc(), col.ID); err != nil {
+			return err
+		} else if used {
+			if check.Validity == sqlbase.ConstraintValidity_Validating {
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"referencing constraint %q in the middle of being added, try again later", check.Name)
+			}
+
+			copy := protoutil.Clone(check).(*sqlbase.TableDescriptor_CheckConstraint)
+			expr, err := sqlbase.RenameColumnInExpr(copy.Expr, (*tree.Name)(&col.Name), (*tree.Name)(&newCol.Name))
+			if err != nil {
+				return err
+			}
+			expr, err = castComparisonsToNewType(expr, toType, newCol.Name)
+			if err != nil {
+				return err
+			}
+			copy.Expr = expr
+
+			// Cannot have duplicate constraint names.
+			// Need to store old name somewhere to change the constraint name
+			// back once the old column is dropped.
+			copy.Name = sqlbase.GenerateUniqueConstraintName(check.Name, func(name string) bool {
+				_, ok := inuseNames[name]
+				return ok
+			})
+
+			ckExpr, err := parser.ParseExpr(copy.Expr)
+			if err != nil {
+				return err
+			}
+			if err != nil {
+				return err
+			}
+			ckDef := tree.CheckConstraintTableDef{
+				Name:   tree.Name(copy.Name),
+				Expr:   ckExpr,
+				Hidden: copy.Hidden,
+			}
+
+			c, err := MakeCheckConstraint(params.ctx, tableDesc, &ckDef, inuseNames, &params.p.semaCtx, tableName)
+			if err != nil {
+				return err
+			}
+			c.Validity = sqlbase.ConstraintValidity_Validating
+			tableDesc.AddCheckMutation(c, sqlbase.DescriptorMutation_ADD)
+		}
+	}
+
+	return nil
+}
+
+func castComparisonsToNewType(expr string, toType *types.T, colName string) (string, error) {
+	castExprs := func(expression string) (string, error) {
+		parsed, err := parser.ParseExpr(expression)
+		if err != nil {
+			return "", err
+		}
+
+		v := tree.CastTypeVisitor{
+			ColName: colName,
+			ToType:  toType,
+		}
+
+		newExpr, _ := tree.WalkExpr(&v, parsed)
+
+		return newExpr.String(), nil
+	}
+
+	return castExprs(expr)
 }

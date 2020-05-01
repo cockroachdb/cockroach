@@ -545,18 +545,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// Note that foreign key constraints are dropped as part of dropping
 			// indexes on the column. In the future, when FKs no longer depend on
 			// indexes in the same way, FKs will have to be dropped separately here.
-			validChecks := n.tableDesc.Checks[:0]
-			for _, check := range n.tableDesc.AllActiveAndInactiveChecks() {
-				if used, err := check.UsesColumn(n.tableDesc.TableDesc(), colToDrop.ID); err != nil {
-					return err
-				} else if used {
-					if check.Validity == sqlbase.ConstraintValidity_Validating {
-						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-							"referencing constraint %q in the middle of being added, try again later", check.Name)
-					}
-				} else {
-					validChecks = append(validChecks, check)
-				}
+			validChecks, err := n.tableDesc.DropCheckConstraints(colToDrop.ID)
+			if err != nil {
+				return err
 			}
 
 			if len(validChecks) != len(n.tableDesc.Checks) {
@@ -693,7 +684,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"column %q in the middle of being dropped", t.GetColumn())
 			}
 			// Apply mutations to copy of column descriptor.
-			if err := applyColumnMutation(n.tableDesc, col, t, params); err != nil {
+			if err := applyColumnMutation(n.tableDesc, col, t, params, *tn); err != nil {
 				return err
 			}
 			descriptorChanged = true
@@ -892,10 +883,11 @@ func applyColumnMutation(
 	col *sqlbase.ColumnDescriptor,
 	mut tree.ColumnMutationCmd,
 	params runParams,
+	tableName tree.TableName,
 ) error {
 	switch t := mut.(type) {
 	case *tree.AlterTableAlterColumnType:
-		return AlterColumnType(tableDesc, col, t, params)
+		return AlterColumnType(tableDesc, col, t, params, tableName)
 
 	case *tree.AlterTableSetDefault:
 		if len(col.UsesSequenceIds) > 0 {

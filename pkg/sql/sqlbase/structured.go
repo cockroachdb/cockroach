@@ -3180,6 +3180,7 @@ func (desc *MutableTableDescriptor) performComputedColumnSwap(swap *ComputedColu
 
 	// Remember the name of oldCol, because newCol will take it.
 	oldColName := oldCol.Name
+	newColName := newCol.Name
 
 	// Rename old column to this new name, and rename newCol to oldCol's name.
 	desc.RenameColumnDescriptor(oldCol, uniqueName)
@@ -3230,6 +3231,24 @@ func (desc *MutableTableDescriptor) performComputedColumnSwap(swap *ComputedColu
 	oldColCopy := protoutil.Clone(oldCol).(*ColumnDescriptor)
 	newColCopy := protoutil.Clone(newCol).(*ColumnDescriptor)
 	desc.AddColumnMutation(oldColCopy, DescriptorMutation_DROP)
+
+	// Drop the check constraints of the old column.
+	validChecks, err := desc.DropCheckConstraints(oldCol.ID)
+	if err != nil {
+		return err
+	}
+
+	desc.Checks = validChecks
+
+	// Rename new column to old column in checks.
+	for _, check := range desc.Checks {
+		expr, err := RenameColumnInExpr(check.Expr, (*tree.Name)(&newColName), (*tree.Name)(&oldColName))
+		if err != nil {
+			return err
+		}
+
+		check.Expr = expr
+	}
 
 	// Remove the new column from the TableDescriptor first so we can reinsert
 	// it into the position where the old column is.
@@ -3453,6 +3472,37 @@ func ColumnNeedsBackfill(desc *ColumnDescriptor) bool {
 		return false
 	}
 	return desc.HasDefault() || !desc.Nullable || desc.IsComputed()
+}
+
+// DropCheckConstraints drops check constraints that reference the column.
+func (desc *TableDescriptor) DropCheckConstraints(colID ColumnID) ([]*TableDescriptor_CheckConstraint, error) {
+	// Drop check constraints which reference the column.
+	// Note that foreign key constraints are dropped as part of dropping
+	// indexes on the column. In the future, when FKs no longer depend on
+	// indexes in the same way, FKs will have to be dropped separately here.
+
+	// Adding a constraint and dropping a column in the same mutation will result
+	// in the check being in both desc.Checks and desc.Mutations.
+	// Need to ensure that the check is only added once in this case.
+	validChecks := desc.Checks[:0]
+	added := make(map[string]bool)
+	for _, check := range desc.AllActiveAndInactiveChecks() {
+		if used, err := check.UsesColumn(desc, colID); err != nil {
+			return nil, err
+		} else if used {
+			if check.Validity == ConstraintValidity_Validating {
+				return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"referencing constraint %q in the middle of being added, try again later", check.Name)
+			}
+		} else {
+			if !added[check.Name] {
+				validChecks = append(validChecks, check)
+				added[check.Name] = true
+			}
+		}
+	}
+
+	return validChecks, nil
 }
 
 // HasPrimaryKey returns true if the table has a primary key.
@@ -4311,4 +4361,40 @@ func (desc ColumnDescriptor) GetLogicalColumnID() ColumnID {
 	}
 
 	return desc.ID
+}
+
+// RenameColumnInExpr takes an expr as a string and replaces all references of
+// a ColumnItem with newName to oldName.
+func RenameColumnInExpr(expr string, oldName, newName *tree.Name) (string, error) {
+	preFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if vBase, ok := expr.(tree.VarName); ok {
+			v, err := vBase.NormalizeVarName()
+			if err != nil {
+				return false, nil, err
+			}
+			if c, ok := v.(*tree.ColumnItem); ok {
+				if string(c.ColumnName) == string(*oldName) {
+					c.ColumnName = *newName
+				}
+			}
+			return false, v, nil
+		}
+		return true, expr, nil
+	}
+
+	renameIn := func(expression string) (string, error) {
+		parsed, err := parser.ParseExpr(expression)
+		if err != nil {
+			return "", err
+		}
+
+		renamed, err := tree.SimpleVisit(parsed, preFn)
+		if err != nil {
+			return "", err
+		}
+
+		return renamed.String(), nil
+	}
+
+	return renameIn(expr)
 }

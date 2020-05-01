@@ -413,7 +413,39 @@ type ComparisonExpr struct {
 	Left, Right Expr
 
 	typeAnnotation
+	leftOpRightExpr
 	fn *CmpOp
+}
+
+// GetLeft returns the ComparisonExpr's left expression as an Expr.
+func (node *ComparisonExpr) GetLeft() Expr {
+	return node.Left
+}
+
+// GetRight returns the ComparisonExpr's Right expression as an Expr.
+func (node *ComparisonExpr) GetRight() Expr {
+	return node.Right
+}
+
+// SetLeft set's the ComparisonExpr's Left Expr to expr.
+func (node *ComparisonExpr) SetLeft(expr Expr) {
+	node.Left = expr
+}
+
+// SetRight set's the ComparisonExpr's Right Expr to expr.
+func (node *ComparisonExpr) SetRight(expr Expr) {
+	node.Right = expr
+}
+
+// Clone returns a copy of the ComparisonExpr.
+func (node *ComparisonExpr) Clone() leftOpRightExpr {
+	cp := *node
+	return &cp
+}
+
+// HasSubOperator returns if the ComparisonExpr has a sub operator.
+func (node *ComparisonExpr) HasSubOperator() bool {
+	return node.Operator == Any || node.Operator == All || node.Operator == Some
 }
 
 func (*ComparisonExpr) operatorExpr() {}
@@ -1085,13 +1117,58 @@ func (i BinaryOperator) String() string {
 	return binaryOpName[i]
 }
 
+// leftOpRightExpr represents an expression that has an operator,
+// left expr and right expr.
+type leftOpRightExpr interface {
+	Expr
+
+	GetLeft() Expr
+	GetRight() Expr
+	SetLeft(Expr)
+	SetRight(Expr)
+	Clone() leftOpRightExpr
+	HasSubOperator() bool
+}
+
 // BinaryExpr represents a binary value expression.
 type BinaryExpr struct {
 	Operator    BinaryOperator
 	Left, Right Expr
 
 	typeAnnotation
+	leftOpRightExpr
 	fn *BinOp
+}
+
+// GetLeft returns the BinaryExpr's left expression as an Expr.
+func (node *BinaryExpr) GetLeft() Expr {
+	return node.Left
+}
+
+// GetRight returns the BinaryExpr's right expression as an Expr.
+func (node *BinaryExpr) GetRight() Expr {
+	return node.Right
+}
+
+// SetLeft set's the BinaryExpr's Left Expr to expr.
+func (node *BinaryExpr) SetLeft(expr Expr) {
+	node.Left = expr
+}
+
+// SetRight set's the BinaryExpr's Right Expr to expr.
+func (node *BinaryExpr) SetRight(expr Expr) {
+	node.Right = expr
+}
+
+// Clone returns a copy of the BinaryExpr.
+func (node *BinaryExpr) Clone() leftOpRightExpr {
+	cp := *node
+	return &cp
+}
+
+// HasSubOperator always returns false for BinaryExpr.
+func (node *BinaryExpr) HasSubOperator() bool {
+	return false
 }
 
 // TypedLeft returns the BinaryExpr's left expression as a TypedExpr.

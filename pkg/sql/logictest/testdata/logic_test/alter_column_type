@@ -330,3 +330,61 @@ CREATE TABLE t11 (x INT)
 
 statement error pq: unimplemented: alter column type using expression is not supported\nHINT: You have attempted to use a feature that is not yet implemented.\nSee: https://github.com/cockroachdb/cockroach/issues/47706
 ALTER TABLE t11 ALTER COLUMN x TYPE STRING USING CAST(x AS STRING)
+
+# Ensure an error is given if the check constraint cannot be properly cast to support the new column type.
+statement ok
+CREATE TABLE t12 (x INT CHECK(x + 5 > 10))
+
+statement error pq: unsupported binary operator: <string> \+ <string>
+ALTER TABLE t12 ALTER COLUMN x TYPE STRING
+
+statement ok
+CREATE TABLE t13 (x STRING CHECK(x ~ '1'));
+
+statement error pq: unsupported comparison operator: <int> ~ <int>
+ALTER TABLE t13 ALTER COLUMN x TYPE INT
+
+# Check that check constraints get rewritten for the new column and type casts are applied for Exprs being compared to the column.
+statement ok
+CREATE TABLE t14 (x INT CHECK(x + 10 > 15))
+
+statement ok
+ALTER TABLE t14 ALTER COLUMN x TYPE FLOAT
+
+query TTTTB
+SHOW CONSTRAINTS FROM t14
+----
+t14  check_x_1  CHECK  CHECK (((x + 10.0:::FLOAT8::FLOAT8) > 15.0:::FLOAT8::FLOAT8))  true
+
+# Check that sub operators (ANY, SOME, ALL) are converted properly for check constraints.
+
+statement ok
+CREATE TABLE t15 (x INT CHECK(x = ANY(ARRAY[1,2,3,4])));
+ALTER TABLE t15 ALTER COLUMN x TYPE FLOAT
+
+query TTTTB
+SHOW CONSTRAINTS FROM t15
+----
+t15  check_x_1  CHECK  CHECK ((x = ANY ARRAY[1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8]:::INT8[]::FLOAT8[]))  true
+
+statement ok
+CREATE TABLE t16 (x INT CHECK(x = SOME(ARRAY[1,2,3,4])));
+ALTER TABLE t16 ALTER COLUMN x TYPE FLOAT
+
+query TTTTB
+SHOW CONSTRAINTS FROM t16
+----
+t16  check_x_1  CHECK  CHECK ((x = SOME ARRAY[1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8]:::INT8[]::FLOAT8[]))  true
+
+statement ok
+CREATE TABLE t17 (x INT CHECK(x = ALL(ARRAY[1,2,3,4])));
+ALTER TABLE t17 ALTER COLUMN x TYPE FLOAT
+
+query TTTTB
+SHOW CONSTRAINTS FROM t17
+----
+t17  check_x_1  CHECK  CHECK ((x = ALL ARRAY[1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8]:::INT8[]::FLOAT8[]))  true
+
+# Check that nested expressions are properly casted in the new check constraint.
+statement ok
+CREAT

@@ -1457,6 +1457,122 @@ func (v *debugVisitor) VisitPost(expr Expr) Expr {
 	return expr
 }
 
+type CastTypeVisitor struct {
+	ColName string
+	ToType  ResolvableTypeReference
+}
+
+type castSide int
+
+const (
+	Left  castSide = 0
+	Right castSide = 1
+)
+
+var _ Visitor = &CastTypeVisitor{}
+
+// castLeftOrRight takes a leftOpRightExpr and casts the specified side
+// to the specified type.
+func castLeftOrRight(expr leftOpRightExpr, side castSide, toType ResolvableTypeReference) leftOpRightExpr {
+	left := expr.GetLeft()
+	right := expr.GetRight()
+	if side == Left {
+		leftCasted := &CastExpr{Expr: left, Type: toType, SyntaxMode: CastShort}
+		expr.SetLeft(leftCasted)
+		expr.SetRight(right)
+	} else if side == Right {
+		rightCasted := &CastExpr{Expr: right, Type: toType, SyntaxMode: CastShort}
+		expr.SetLeft(left)
+		expr.SetRight(rightCasted)
+	}
+
+	return expr
+}
+
+// VisitPre applies a depth-first search to an expression and casts
+// all Exprs being used in a BinaryExpr or ComparisonExpr against the column
+// to the new type.
+// The base case is when the column is used in a BinaryExpr/Comparison expr,
+// without loss of generality, if the column is on the left side of a
+// BinaryExpr, the right side is casted to the type of the column.
+// If a BinaryExpr's left expr contains the column in a nested expression that
+// changes, the right Expr has to be casted to the type of the column as well.
+func (v *CastTypeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	switch lrExpr := expr.(type) {
+	// leftOpRightExpr can be a BinaryExpr or a ComparisonExpr.
+	case leftOpRightExpr:
+		left := lrExpr.GetLeft()
+		right := lrExpr.GetRight()
+
+		var changedLeft, changedRight bool
+
+		// First recurse on the left and right sides and see if the expr changes.
+		left, changedLeft = WalkExpr(v, left)
+		right, changedRight = WalkExpr(v, right)
+
+		lrExprCopy := lrExpr.Clone()
+		lrExprCopy.SetLeft(left)
+		lrExprCopy.SetRight(right)
+
+		// If either side's expression changes, the other side has to be casted.
+		if changedLeft && !changedRight {
+			castLeftOrRight(lrExprCopy, Right, v.ToType)
+		} else if changedRight && !changedLeft {
+			lrExprCopy = castLeftOrRight(lrExprCopy, Left, v.ToType)
+		}
+
+		// castColumnRelatedExprs takes a leftOpRightExpr and checks if the
+		// Expr on the specified side is the ColumnItem. If so, the opposite
+		// side is casted to the specified type to allow the binary operator
+		// or comparison operator to act on the Expr with the new column type.
+		castColumnRelatedExprs := func(expr leftOpRightExpr, side castSide,
+			toType ResolvableTypeReference, colName string) leftOpRightExpr {
+			// We perform a cast on the Left side if the Right side is the column
+			// and vice versa. Thus we check the opposite side for the column.
+			var childExpr Expr
+			if side == Left {
+				childExpr = expr.GetRight()
+			} else if side == Right {
+				childExpr = expr.GetLeft()
+			}
+
+			if varName, ok := childExpr.(VarName); ok {
+				varName, err := varName.NormalizeVarName()
+				if err != nil {
+					return nil
+				}
+
+				if col, ok := varName.(*ColumnItem); ok {
+					if string(col.ColumnName) == colName {
+						if expr.HasSubOperator() {
+							castLeftOrRight(expr, side, &ArrayTypeReference{toType})
+						} else {
+							castLeftOrRight(expr, side, toType)
+						}
+					}
+				}
+			}
+
+			return expr
+		}
+
+		castColumnRelatedExprs(lrExprCopy, Left, v.ToType, v.ColName)
+		castColumnRelatedExprs(lrExprCopy, Right, v.ToType, v.ColName)
+
+		return false, lrExprCopy
+	default:
+		// If the expr is not a ComparisonExpr or BinaryExpr, walk to the children
+		// of the expr.
+		newExpr = expr.Walk(v)
+	}
+
+	return false, newExpr
+}
+
+func (v *CastTypeVisitor) VisitPost(expr Expr) Expr {
+	return expr
+}
+
 // ExprDebugString generates a multi-line debug string with one node per line in
 // Go format.
 func ExprDebugString(expr Expr) string {
