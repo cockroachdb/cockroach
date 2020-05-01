@@ -15,6 +15,7 @@ package main
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/descriptormarshal"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/fmtsafe"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/hash"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/nocopy"
@@ -57,6 +58,7 @@ func main() {
 		timer.Analyzer,
 		unconvert.Analyzer,
 		fmtsafe.Analyzer,
+		errcmp.Analyzer,
 
 		// Standard go vet analyzers:
 		asmdecl.Analyzer,

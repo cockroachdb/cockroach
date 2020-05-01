@@ -1066,7 +1066,7 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 	// "snapshot accepted" message.
 	expectedErr := errors.Errorf("")
 	stream := fakeSnapshotStream{nil, expectedErr}
-	if err := mtc.stores[1].HandleSnapshot(&header, stream); err != expectedErr {
+	if err := mtc.stores[1].HandleSnapshot(&header, stream); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected error %s, but found %v", expectedErr, err)
 	}
 	if n := mtc.stores[1].ReservationCount(); n != 0 {

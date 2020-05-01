@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // LockTableLivenessPushDelay sets the delay before pushing in order to detect
@@ -278,7 +279,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				pushCtx, pushCancel := context.WithCancel(ctx)
 				go w.watchForNotifications(pushCtx, pushCancel, newStateC)
 				err = w.pushRequestTxn(pushCtx, req, timerWaitingState)
-				if pushCtx.Err() == context.Canceled {
+				if errors.Is(pushCtx.Err(), context.Canceled) {
 					// Ignore the context canceled error. If this was for the
 					// parent context then we'll notice on the next select.
 					err = nil

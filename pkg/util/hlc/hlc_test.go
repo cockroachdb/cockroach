@@ -539,7 +539,7 @@ func TestResetAndRefreshHLCUpperBound(t *testing.T) {
 			// Test Reset Upper Bound
 			err = c.ResetHLCUpperBound(persistFn)
 			a.True(
-				test.persistErr == err,
+				errors.Is(test.persistErr, err),
 				fmt.Sprintf(
 					"expected err %v not equal to actual err %v",
 					test.persistErr,

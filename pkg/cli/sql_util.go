@@ -173,7 +173,7 @@ func (c *sqlConn) getServerMetadata() (
 ) {
 	// Retrieve the node ID and server build info.
 	rows, err := c.Query("SELECT * FROM crdb_internal.node_build_info", nil)
-	if err == driver.ErrBadConn {
+	if errors.Is(err, driver.ErrBadConn) {
 		return 0, "", "", err
 	}
 	if err != nil {
@@ -241,7 +241,7 @@ func (c *sqlConn) checkServerMetadata() error {
 	}
 
 	_, newServerVersion, newClusterID, err := c.getServerMetadata()
-	if err == driver.ErrBadConn {
+	if errors.Is(err, driver.ErrBadConn) {
 		return err
 	}
 	if err != nil {
@@ -394,7 +394,7 @@ func (c *sqlConn) Exec(query string, args []driver.Value) error {
 	}
 	_, err := c.conn.Exec(query, args)
 	c.flushNotices()
-	if err == driver.ErrBadConn {
+	if errors.Is(err, driver.ErrBadConn) {
 		c.reconnecting = true
 		c.Close()
 	}
@@ -409,7 +409,7 @@ func (c *sqlConn) Query(query string, args []driver.Value) (*sqlRows, error) {
 		fmt.Fprintln(stderr, ">", query)
 	}
 	rows, err := c.conn.Query(query, args)
-	if err == driver.ErrBadConn {
+	if errors.Is(err, driver.ErrBadConn) {
 		c.reconnecting = true
 		c.Close()
 	}
@@ -447,7 +447,7 @@ func (c *sqlConn) Close() {
 	c.flushNotices()
 	if c.conn != nil {
 		err := c.conn.Close()
-		if err != nil && err != driver.ErrBadConn {
+		if err != nil && !errors.Is(err, driver.ErrBadConn) {
 			log.Infof(context.TODO(), "%v", err)
 		}
 		c.conn = nil
@@ -485,7 +485,7 @@ func (r *sqlRows) Tag() string {
 func (r *sqlRows) Close() error {
 	r.conn.flushNotices()
 	err := r.rows.Close()
-	if err == driver.ErrBadConn {
+	if errors.Is(err, driver.ErrBadConn) {
 		r.conn.reconnecting = true
 		r.conn.Close()
 	}
@@ -498,7 +498,7 @@ func (r *sqlRows) Close() error {
 // (since this is unobvious and unexpected behavior) outweigh.
 func (r *sqlRows) Next(values []driver.Value) error {
 	err := r.rows.Next(values)
-	if err == driver.ErrBadConn {
+	if errors.Is(err, driver.ErrBadConn) {
 		r.conn.reconnecting = true
 		r.conn.Close()
 	}

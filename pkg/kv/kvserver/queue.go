@@ -202,8 +202,7 @@ var (
 )
 
 func isExpectedQueueError(err error) bool {
-	cause := errors.Cause(err)
-	return err == nil || cause == errQueueDisabled
+	return err == nil || errors.Is(err, errQueueDisabled)
 }
 
 // shouldQueueAgain is a helper function to determine whether the

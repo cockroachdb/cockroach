@@ -110,7 +110,7 @@ func (m *mysqldumpReader) readFile(
 		if err == io.EOF {
 			break
 		}
-		if err == mysql.ErrEmpty {
+		if errors.Is(err, mysql.ErrEmpty) {
 			continue
 		}
 		if err != nil {
@@ -300,7 +300,7 @@ func readMysqlCreateTable(
 		if err == io.EOF {
 			break
 		}
-		if err == mysql.ErrEmpty {
+		if errors.Is(err, mysql.ErrEmpty) {
 			continue
 		}
 		if err != nil {

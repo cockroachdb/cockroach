@@ -412,7 +412,7 @@ func (p *Provider) List() (vm.List, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := p.fillNetworkDetails(ctx, &m, nicID); err == vm.ErrBadNetwork {
+		if err := p.fillNetworkDetails(ctx, &m, nicID); errors.Is(err, vm.ErrBadNetwork) {
 			m.Errors = append(m.Errors, err)
 		} else if err != nil {
 			return nil, err

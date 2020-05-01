@@ -1061,7 +1061,7 @@ func TestBaseQueueDisable(t *testing.T) {
 	}
 
 	// Add the range directly, bypassing shouldQueue.
-	if _, err := bq.testingAdd(ctx, r, 1.0); err != errQueueDisabled {
+	if _, err := bq.testingAdd(ctx, r, 1.0); !errors.Is(err, errQueueDisabled) {
 		t.Fatal(err)
 	}
 

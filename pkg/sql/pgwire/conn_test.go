@@ -924,7 +924,7 @@ func TestReadTimeoutConnExits(t *testing.T) {
 	default:
 	}
 	cancel()
-	if err := <-errChan; err != context.Canceled {
+	if err := <-errChan; !errors.Is(err, context.Canceled) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

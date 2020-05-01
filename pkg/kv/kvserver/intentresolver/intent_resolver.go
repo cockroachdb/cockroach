@@ -405,7 +405,7 @@ func (ir *IntentResolver) runAsyncTask(
 		taskFn,
 	)
 	if err != nil {
-		if err == stop.ErrThrottled {
+		if errors.Is(err, stop.ErrThrottled) {
 			ir.Metrics.IntentResolverAsyncThrottled.Inc(1)
 			if allowSyncProcessing {
 				// A limited task was not available. Rather than waiting for

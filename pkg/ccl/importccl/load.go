@@ -74,7 +74,7 @@ func getDescriptorFromDB(
 			keys.RootNamespaceID,
 			dbName,
 		).Scan(&dbDescBytes); err != nil {
-			if err == gosql.ErrNoRows {
+			if errors.Is(err, gosql.ErrNoRows) {
 				continue
 			}
 			return nil, errors.Wrap(err, "fetch database descriptor")

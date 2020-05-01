@@ -78,7 +78,7 @@ func splitSQLSemicolon(data []byte, atEOF bool) (advance int, token []byte, err 
 func (p *postgreStream) Next() (interface{}, error) {
 	if p.copy != nil {
 		row, err := p.copy.Next()
-		if err == errCopyDone {
+		if errors.Is(err, errCopyDone) {
 			p.copy = nil
 			return errCopyDone, nil
 		}
@@ -125,8 +125,8 @@ func (p *postgreStream) Next() (interface{}, error) {
 		}
 	}
 	if err := p.s.Err(); err != nil {
-		if err == bufio.ErrTooLong {
-			err = errors.New("line too long")
+		if errors.Is(err, bufio.ErrTooLong) {
+			err = errors.HandledWithMessage(err, "line too long")
 		}
 		return nil, err
 	}

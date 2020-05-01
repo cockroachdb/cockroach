@@ -126,7 +126,7 @@ func getShowZoneConfigRow(
 	subZoneIdx := uint32(0)
 	zoneID, zone, subzone, err := GetZoneConfigInTxn(ctx, p.txn,
 		uint32(targetID), index, partition, false /* getInheritedDefault */)
-	if err == errNoZoneConfigApplies {
+	if errors.Is(err, errNoZoneConfigApplies) {
 		// TODO(benesch): This shouldn't be the caller's responsibility;
 		// GetZoneConfigInTxn should just return the default zone config if no zone
 		// config applies.

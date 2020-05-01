@@ -279,7 +279,7 @@ func TestCleanupIntentsAsyncThrottled(t *testing.T) {
 	// Running with allowSyncProcessing = false should result in an error and no
 	// requests being sent.
 	err := ir.CleanupIntentsAsync(context.Background(), testIntents, false)
-	assert.Equal(t, errors.Cause(err), stop.ErrThrottled)
+	assert.True(t, errors.Is(err, stop.ErrThrottled))
 	// Running with allowSyncProcessing = true should result in the synchronous
 	// processing of the intents resulting in no error and the consumption of the
 	// sendFuncs.

@@ -2527,7 +2527,7 @@ func (m *monitor) wait(args ...string) error {
 		cmd.Stdout = io.MultiWriter(pipeW, monL.stdout)
 		cmd.Stderr = monL.stderr
 		if err := cmd.Run(); err != nil {
-			if err != context.Canceled && !strings.Contains(err.Error(), "killed") {
+			if !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "killed") {
 				// The expected reason for an error is that the monitor was killed due
 				// to the context being canceled. Any other error is an actual error.
 				setMonitorCmdErr(err)

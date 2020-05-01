@@ -382,7 +382,7 @@ func (c *PartitionableConn) copyFromBuffer(
 			}
 		} else if err == nil {
 			err = io.EOF
-		} else if err == errEAgain {
+		} else if errors.Is(err, errEAgain) {
 			continue
 		}
 		if err != nil {
