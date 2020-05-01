@@ -15,6 +15,7 @@ option go_package = "sqlbase";
 
 import "util/hlc/timestamp.proto";
 import "sql/sqlbase/privilege.proto";
+import "sql/types/types.proto";
 import "geo/geoindex/config.proto";
 import "gogoproto/gogo.proto";
 
@@ -114,7 +115,7 @@ message ColumnDescriptor {
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ColumnID"];
-  optional bytes type = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/types.T"];
+  optional sql.sem.types.T type = 3 [(gogoproto.nullable) = false];
   optional bool nullable = 4 [(gogoproto.nullable) = false];
   reserved 8;
   // Default expression to use to populate the column on insert if no

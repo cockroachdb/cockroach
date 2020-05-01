@@ -74,7 +74,7 @@ func nativeToDatum(
 	case float64:
 		d = tree.NewDFloat(tree.DFloat(v))
 	case []byte:
-		if targetT.Equal(*types.Bytes) {
+		if targetT.Identical(types.Bytes) {
 			d = tree.NewDBytes(tree.DBytes(v))
 		} else {
 			// []byte arrays are hard.  Sometimes we want []bytes, sometimes

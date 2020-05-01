@@ -154,14 +154,6 @@ import (
 //
 // When these types are themselves made into arrays, the Oids become T__int2vector and
 // T__oidvector, respectively.
-//
-type T struct {
-	// InternalType should never be directly referenced outside this package. The
-	// only reason it is exported is because gogoproto panics when printing the
-	// string representation of an unexported field. This is a problem when this
-	// struct is embedded in a larger struct (like a ColumnDescriptor).
-	InternalType InternalType
-}
 
 // Convenience list of pre-constructed types. Caller code can use any of these
 // types, or use the MakeXXX methods to construct a custom type that is not
@@ -1506,8 +1498,8 @@ func (t *T) Identical(other *T) bool {
 }
 
 // Equal is for use in generated protocol buffer code only.
-func (t *T) Equal(other T) bool {
-	return t.Identical(&other)
+func (t *T) Equal(other *T) bool {
+	return t.Identical(other)
 }
 
 // Size returns the size, in bytes, of this type once it has been marshaled to
@@ -1524,16 +1516,6 @@ func (t *T) Size() (n int) {
 		panic(errors.AssertionFailedf("error during Size call: %v", err))
 	}
 	return temp.InternalType.Size()
-}
-
-// ProtoMessage is the protobuf marker method. It is part of the
-// protoutil.Message interface.
-func (t *T) ProtoMessage() {}
-
-// Reset clears the type instance. It is part of the protoutil.Message
-// interface.
-func (t *T) Reset() {
-	*t = T{}
 }
 
 // Identical is the internal implementation for T.Identical. See that comment
