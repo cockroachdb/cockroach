@@ -15,11 +15,12 @@
 package sysutil
 
 import (
-	"net"
 	"os"
 	"os/exec"
 	"os/signal"
 	"syscall"
+
+	"github.com/cockroachdb/errors"
 )
 
 // Signal is syscall.Signal.
@@ -64,10 +65,5 @@ func RefreshSignaledChan() <-chan os.Signal {
 // IsErrConnectionReset returns true if an
 // error is a "connection reset by peer" error.
 func IsErrConnectionReset(err error) bool {
-	if opErr, ok := err.(*net.OpError); ok {
-		if sysErr, ok := opErr.Err.(*os.SyscallError); ok {
-			return sysErr.Err == syscall.ECONNRESET
-		}
-	}
-	return false
+	return errors.Is(err, syscall.ECONNRESET)
 }

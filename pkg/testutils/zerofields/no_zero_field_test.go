@@ -10,7 +10,11 @@
 
 package zerofields
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cockroachdb/errors"
+)
 
 func TestNoZeroField(t *testing.T) {
 	type foo struct {
@@ -31,12 +35,12 @@ func TestNoZeroField(t *testing.T) {
 	}
 	testFoo = testFooNonZero
 	testFoo.Y = 0
-	if err, exp := NoZeroField(&testFoo), (zeroFieldErr{"Y"}); err != exp {
+	if err, exp := NoZeroField(&testFoo), (zeroFieldErr{"Y"}); !errors.Is(err, exp) {
 		t.Fatalf("expected error %v, found %v", exp, err)
 	}
 	testFoo = testFooNonZero
 	testFoo.Z.B = 0
-	if err, exp := NoZeroField(&testFoo), (zeroFieldErr{"Z.B"}); err != exp {
+	if err, exp := NoZeroField(&testFoo), (zeroFieldErr{"Z.B"}); !errors.Is(err, exp) {
 		t.Fatalf("expected error %v, found %v", exp, err)
 	}
 }

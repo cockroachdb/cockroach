@@ -1297,7 +1297,7 @@ func (ex *connExecutor) run(
 
 		var err error
 		if err = ex.execCmd(ex.Ctx()); err != nil {
-			if err == io.EOF || err == errDrainingComplete {
+			if errors.IsAny(err, io.EOF, errDrainingComplete) {
 				return nil
 			}
 			return err

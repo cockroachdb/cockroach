@@ -223,7 +223,7 @@ func lookupDescriptorByID(
 		var err error
 		desc, err = lookupFn()
 		if err != nil {
-			if err == sqlbase.ErrDescriptorNotFound {
+			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 				continue
 			}
 			return nil, false, err

@@ -1395,7 +1395,7 @@ func (m *multiTestContext) heartbeatLiveness(ctx context.Context, store int) err
 	}
 
 	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 5}); r.Next(); {
-		if err = nl.Heartbeat(ctx, l); err != kvserver.ErrEpochIncremented {
+		if err = nl.Heartbeat(ctx, l); !errors.Is(err, kvserver.ErrEpochIncremented) {
 			break
 		}
 	}

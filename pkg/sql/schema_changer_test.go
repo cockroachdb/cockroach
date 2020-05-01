@@ -4020,7 +4020,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 			_, err = sqlbase.GetTableDescFromID(ctx, txn, tableDesc.ID)
 			return err
 		}); err != nil {
-			if err == sqlbase.ErrDescriptorNotFound {
+			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 				return nil
 			}
 			return err
@@ -4761,7 +4761,7 @@ func TestCancelSchemaChangeContext(t *testing.T) {
 			t.Error(err)
 		}
 		if _, err := conn.ExecContext(
-			ctx, `CREATE INDEX foo ON t.public.test (v)`); err != driver.ErrBadConn {
+			ctx, `CREATE INDEX foo ON t.public.test (v)`); !errors.Is(err, driver.ErrBadConn) {
 			t.Errorf("unexpected err = %+v", err)
 		}
 	}()

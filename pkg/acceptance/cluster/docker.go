@@ -388,7 +388,7 @@ func (cli resilientDockerClient) ContainerStart(
 
 		// Keep going if ContainerStart timed out, but client's context is not
 		// expired.
-		if errors.Cause(err) == context.DeadlineExceeded && clientCtx.Err() == nil {
+		if errors.Is(err, context.DeadlineExceeded) && clientCtx.Err() == nil {
 			log.Warningf(clientCtx, "ContainerStart timed out, retrying")
 			continue
 		}

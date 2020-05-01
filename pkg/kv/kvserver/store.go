@@ -1625,7 +1625,7 @@ func (s *Store) startGossip() {
 						annotatedCtx := repl.AnnotateCtx(ctx)
 						if err := gossipFn.fn(annotatedCtx, repl); err != nil {
 							log.Warningf(annotatedCtx, "could not gossip %s: %+v", gossipFn.description, err)
-							if err != errPeriodicGossipsDisabled {
+							if !errors.Is(err, errPeriodicGossipsDisabled) {
 								continue
 							}
 						}

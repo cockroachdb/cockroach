@@ -744,7 +744,7 @@ func TestTruncateLog(t *testing.T) {
 	tc.repl.mu.Lock()
 	_, err = tc.repl.raftEntriesLocked(indexes[4], indexes[9], math.MaxUint64)
 	tc.repl.mu.Unlock()
-	if err != raft.ErrCompacted {
+	if !errors.Is(err, raft.ErrCompacted) {
 		t.Errorf("expected ErrCompacted, got %s", err)
 	}
 
@@ -763,7 +763,7 @@ func TestTruncateLog(t *testing.T) {
 	tc.repl.mu.Lock()
 	_, err = tc.repl.raftTermRLocked(indexes[3])
 	tc.repl.mu.Unlock()
-	if err != raft.ErrCompacted {
+	if !errors.Is(err, raft.ErrCompacted) {
 		t.Errorf("expected ErrCompacted, got %s", err)
 	}
 

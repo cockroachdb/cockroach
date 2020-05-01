@@ -166,7 +166,7 @@ func (p *postgreStreamCopy) Next() (copyData, error) {
 	// Attempt to read an entire line.
 	scanned := p.s.Scan()
 	if err := p.s.Err(); err != nil {
-		if err == bufio.ErrTooLong {
+		if errors.Is(err, bufio.ErrTooLong) {
 			err = errors.New("line too long")
 		}
 		return nil, err

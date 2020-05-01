@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -90,7 +91,7 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 	_, recRemains := mkJobAndRecord()
 	ensureNotExists := func(ctx context.Context, txn *kv.Txn, ptsID uuid.UUID) (err error) {
 		_, err = ptp.GetRecord(ctx, txn, ptsID)
-		if err == protectedts.ErrNotExists {
+		if errors.Is(err, protectedts.ErrNotExists) {
 			return nil
 		}
 		return fmt.Errorf("waiting for %v, got %v", protectedts.ErrNotExists, err)

@@ -45,7 +45,7 @@ func TestRunWithTimeout(t *testing.T) {
 	if !netError.Timeout() || !netError.Temporary() {
 		t.Fatal("RunWithTimeout should return a timeout and temporary error")
 	}
-	if errors.Cause(err) != context.DeadlineExceeded {
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("RunWithTimeout should return an error with a DeadlineExceeded cause")
 	}
 
@@ -64,7 +64,7 @@ func TestRunWithTimeout(t *testing.T) {
 	if !netError.Timeout() || !netError.Temporary() {
 		t.Fatal("RunWithTimeout should return a timeout and temporary error")
 	}
-	if errors.Cause(err) != context.DeadlineExceeded {
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("RunWithTimeout should return an error with a DeadlineExceeded cause")
 	}
 }
@@ -88,7 +88,7 @@ func TestRunWithTimeoutWithoutDeadlineExceeded(t *testing.T) {
 	if !netError.Timeout() || !netError.Temporary() {
 		t.Fatal("RunWithTimeout should return a timeout and temporary error")
 	}
-	if errors.Cause(err) != notContextDeadlineExceeded {
+	if !errors.Is(err, notContextDeadlineExceeded) {
 		t.Fatalf("RunWithTimeout should return an error caused by the underlying " +
 			"returned error")
 	}

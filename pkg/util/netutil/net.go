@@ -153,9 +153,7 @@ func (s *Server) ServeWith(
 // IsClosedConnection returns true if err is cmux.ErrListenerClosed,
 // grpc.ErrServerStopped, io.EOF, or the net package's errClosed.
 func IsClosedConnection(err error) bool {
-	return err == cmux.ErrListenerClosed ||
-		err == grpc.ErrServerStopped ||
-		err == io.EOF ||
+	return errors.IsAny(err, cmux.ErrListenerClosed, grpc.ErrServerStopped, io.EOF) ||
 		strings.Contains(err.Error(), "use of closed network connection")
 }
 

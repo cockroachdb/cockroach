@@ -664,12 +664,12 @@ func (w *interleavedPartitioned) fetchSessionID(
 	start := timeutil.Now()
 	baseSessionID := randomSessionID(rng, locality, localPercent)
 	var sessionID string
-	if err := w.findSessionIDStatement1.QueryRowContext(ctx, baseSessionID).Scan(&sessionID); err != nil && err != gosql.ErrNoRows {
+	if err := w.findSessionIDStatement1.QueryRowContext(ctx, baseSessionID).Scan(&sessionID); err != nil && !errors.Is(err, gosql.ErrNoRows) {
 		return "", err
 	}
 	// Didn't find a next session ID, let's try the other way.
 	if len(sessionID) == 0 {
-		if err := w.findSessionIDStatement2.QueryRowContext(ctx, baseSessionID).Scan(&sessionID); err != nil && err != gosql.ErrNoRows {
+		if err := w.findSessionIDStatement2.QueryRowContext(ctx, baseSessionID).Scan(&sessionID); err != nil && !errors.Is(err, gosql.ErrNoRows) {
 			return "", err
 		}
 	}

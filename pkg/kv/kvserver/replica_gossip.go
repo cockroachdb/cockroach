@@ -93,7 +93,7 @@ func (r *Replica) MaybeGossipSystemConfig(ctx context.Context) error {
 	// TODO(marc): check for bad split in the middle of the SystemConfig span.
 	loadedCfg, err := r.loadSystemConfig(ctx)
 	if err != nil {
-		if err == errSystemConfigIntent {
+		if errors.Is(err, errSystemConfigIntent) {
 			log.VEventf(ctx, 2, "not gossiping system config because intents were found on SystemConfigSpan")
 			r.markSystemConfigGossipFailed()
 			return nil

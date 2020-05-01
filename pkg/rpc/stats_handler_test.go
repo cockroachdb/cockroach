@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/stats"
 )
 
@@ -134,7 +135,7 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 	// Wait for the connection & successful heartbeat.
 	testutils.SucceedsSoon(t, func() error {
 		err := clientCtx.TestingConnHealth(remoteAddr, serverNodeID)
-		if err != nil && err != ErrNotHeartbeated {
+		if err != nil && !errors.Is(err, ErrNotHeartbeated) {
 			t.Fatal(err)
 		}
 		return err

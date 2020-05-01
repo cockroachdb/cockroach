@@ -59,7 +59,7 @@ func (s *Store) getOrCreateReplica(
 			creatingReplica,
 			isLearner,
 		)
-		if err == errRetry {
+		if errors.Is(err, errRetry) {
 			continue
 		}
 		if err != nil {

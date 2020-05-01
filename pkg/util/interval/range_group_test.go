@@ -533,7 +533,7 @@ func TestRangeGroupForEach(t *testing.T) {
 			expRngs := test.rngs
 			if throwingErr {
 				expRngs = test.rngs[:test.errAfter]
-				if errSaw != errToThrow {
+				if !errors.Is(errSaw, errToThrow) {
 					t.Errorf("expected error %v from RangeGroup.ForEach, found %v", errToThrow, errSaw)
 				}
 			} else {

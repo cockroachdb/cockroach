@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 // virtualTableGenerator is the function signature for the virtualTableNode
@@ -107,7 +108,7 @@ func setupGenerator(
 		err := worker(funcRowPusher(addRow))
 		// If the query was canceled, next() will already return a
 		// QueryCanceledError, so just exit here.
-		if err == sqlbase.QueryCanceledError {
+		if errors.Is(err, sqlbase.QueryCanceledError) {
 			return
 		}
 

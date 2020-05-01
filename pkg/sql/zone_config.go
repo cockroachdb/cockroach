@@ -156,7 +156,7 @@ func ZoneConfigHook(
 	}
 	zoneID, zone, _, placeholder, err := getZoneConfig(
 		id, getKey, false /* getInheritedDefault */)
-	if err == errNoZoneConfigApplies {
+	if errors.Is(err, errNoZoneConfigApplies) {
 		return nil, nil, true, nil
 	} else if err != nil {
 		return nil, nil, false, err
@@ -274,7 +274,7 @@ func resolveZone(ctx context.Context, txn *kv.Txn, zs *tree.ZoneSpecifier) (sqlb
 		},
 	)
 	if err != nil {
-		if err == errMissingKey {
+		if errors.Is(err, errMissingKey) {
 			return 0, zoneSpecifierNotFoundError(*zs)
 		}
 		return 0, err

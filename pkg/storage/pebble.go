@@ -610,7 +610,7 @@ func (p *Pebble) Get(key MVCCKey) ([]byte, error) {
 		ret = retCopy
 		closer.Close()
 	}
-	if err == pebble.ErrNotFound || len(ret) == 0 {
+	if errors.Is(err, pebble.ErrNotFound) || len(ret) == 0 {
 		return nil, nil
 	}
 	return ret, err
@@ -642,7 +642,7 @@ func (p *Pebble) GetProto(
 		closer.Close()
 		return true, keyBytes, valBytes, err
 	}
-	if err == pebble.ErrNotFound {
+	if errors.Is(err, pebble.ErrNotFound) {
 		return false, 0, 0, nil
 	}
 	return false, 0, 0, err
@@ -1243,7 +1243,7 @@ func (p *pebbleSnapshot) Get(key MVCCKey) ([]byte, error) {
 		ret = retCopy
 		closer.Close()
 	}
-	if err == pebble.ErrNotFound || len(ret) == 0 {
+	if errors.Is(err, pebble.ErrNotFound) || len(ret) == 0 {
 		return nil, nil
 	}
 	return ret, err
@@ -1267,7 +1267,7 @@ func (p *pebbleSnapshot) GetProto(
 		closer.Close()
 		return true, keyBytes, valBytes, err
 	}
-	if err == pebble.ErrNotFound {
+	if errors.Is(err, pebble.ErrNotFound) {
 		return false, 0, 0, nil
 	}
 	return false, 0, 0, err

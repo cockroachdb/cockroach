@@ -651,7 +651,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	// flow canceled error.
 
 	_, meta := right.Next()
-	if meta.Err != sqlbase.QueryCanceledError {
+	if !errors.Is(meta.Err, sqlbase.QueryCanceledError) {
 		t.Fatal("expected query canceled, found", meta.Err)
 	}
 
@@ -660,7 +660,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 
 	_, _ = left.Next()
 	_, meta = left.Next()
-	if meta.Err != sqlbase.QueryCanceledError {
+	if !errors.Is(meta.Err, sqlbase.QueryCanceledError) {
 		t.Fatal("expected query canceled, found", meta.Err)
 	}
 }

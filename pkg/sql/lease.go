@@ -1166,8 +1166,7 @@ func purgeOldVersions(
 	// active lease, so that it doesn't get released when removeInactives()
 	// is called below. Release this lease after calling removeInactives().
 	table, _, err := t.findForTimestamp(ctx, m.clock.Now())
-	if _, ok := err.(*inactiveTableError); ok || err == nil {
-		isInactive := ok
+	if isInactive := errors.HasType(err, (*inactiveTableError)(nil)); err == nil || isInactive {
 		removeInactives(isInactive)
 		if table != nil {
 			s, err := t.release(&table.ImmutableTableDescriptor, m.removeOnceDereferenced())

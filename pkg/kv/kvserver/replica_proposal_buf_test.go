@@ -180,7 +180,7 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 				pd, data := newPropData(false)
 				mlai, err := b.Insert(pd, data)
 				if err != nil {
-					if err == dsErr {
+					if errors.Is(err, dsErr) {
 						return nil
 					}
 					return errors.Wrap(err, "Insert")

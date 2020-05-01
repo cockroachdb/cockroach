@@ -243,7 +243,7 @@ func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]str
 
 	for {
 		attrs, err := it.Next()
-		if err == iterator.Done {
+		if errors.Is(err, iterator.Done) {
 			break
 		}
 		if err != nil {

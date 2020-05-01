@@ -674,7 +674,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		if row != nil {
 			t.Fatalf("row was pushed unexpectedly: %s", row.String(sqlbase.OneIntCol))
 		}
-		if meta.Err != expectedMetaErr {
+		if !errors.Is(meta.Err, expectedMetaErr) {
 			t.Fatalf("unexpected error in metadata: %v", meta.Err)
 		}
 

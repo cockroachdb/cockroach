@@ -104,7 +104,7 @@ func (t *TimeoutError) Format(s fmt.State, verb rune) { errors.FormatError(t, s,
 // FormatError implements errors.Formatter.
 func (t *TimeoutError) FormatError(p errors.Printer) error {
 	p.Printf("operation %q timed out after %s", t.operation, t.duration)
-	if t.cause != context.DeadlineExceeded {
+	if errors.UnwrapOnce(t.cause) != nil {
 		// If there were details (wrappers, stack trace etc.) ensure
 		// they get printed.
 		return t.cause
@@ -133,7 +133,7 @@ func RunWithTimeout(
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	err := fn(ctx)
-	if err != nil && ctx.Err() == context.DeadlineExceeded {
+	if err != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		err = &TimeoutError{
 			operation: op,
 			duration:  timeout,

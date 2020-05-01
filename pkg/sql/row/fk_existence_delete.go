@@ -87,7 +87,7 @@ func makeFkExistenceCheckHelperForDelete(
 		}
 		fk, err := makeFkExistenceCheckBaseHelper(txn, codec, otherTables, fakeRef, searchIdx, mutatedIdx, colMap, alloc,
 			CheckDeletes)
-		if err == errSkipUnusedFK {
+		if errors.Is(err, errSkipUnusedFK) {
 			continue
 		}
 		if err != nil {

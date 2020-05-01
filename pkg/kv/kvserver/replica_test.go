@@ -6817,7 +6817,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	}
 
 	// Verify that the intent trips up loading the SystemConfig data.
-	if _, err := repl.loadSystemConfig(context.Background()); err != errSystemConfigIntent {
+	if _, err := repl.loadSystemConfig(context.Background()); !errors.Is(err, errSystemConfigIntent) {
 		t.Fatal(err)
 	}
 
@@ -7099,7 +7099,7 @@ func TestEntries(t *testing.T) {
 		if tc.expError == nil && err != nil {
 			t.Errorf("%d: expected no error, got %s", i, err)
 			continue
-		} else if err != tc.expError {
+		} else if !errors.Is(err, tc.expError) {
 			t.Errorf("%d: expected error %s, got %s", i, tc.expError, err)
 			continue
 		}
@@ -7166,10 +7166,10 @@ func TestTerm(t *testing.T) {
 	}
 
 	// Truncated logs should return an ErrCompacted error.
-	if _, err := tc.repl.raftTermRLocked(indexes[1]); err != raft.ErrCompacted {
+	if _, err := tc.repl.raftTermRLocked(indexes[1]); !errors.Is(err, raft.ErrCompacted) {
 		t.Errorf("expected ErrCompacted, got %s", err)
 	}
-	if _, err := tc.repl.raftTermRLocked(indexes[3]); err != raft.ErrCompacted {
+	if _, err := tc.repl.raftTermRLocked(indexes[3]); !errors.Is(err, raft.ErrCompacted) {
 		t.Errorf("expected ErrCompacted, got %s", err)
 	}
 
@@ -7198,10 +7198,10 @@ func TestTerm(t *testing.T) {
 	}
 
 	// Terms for after the last index should return ErrUnavailable.
-	if _, err := tc.repl.raftTermRLocked(lastIndex + 1); err != raft.ErrUnavailable {
+	if _, err := tc.repl.raftTermRLocked(lastIndex + 1); !errors.Is(err, raft.ErrUnavailable) {
 		t.Errorf("expected ErrUnavailable, got %s", err)
 	}
-	if _, err := tc.repl.raftTermRLocked(indexes[9] + 1000); err != raft.ErrUnavailable {
+	if _, err := tc.repl.raftTermRLocked(indexes[9] + 1000); !errors.Is(err, raft.ErrUnavailable) {
 		t.Errorf("expected ErrUnavailable, got %s", err)
 	}
 }

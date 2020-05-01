@@ -1389,7 +1389,7 @@ func (c *cliState) configurePreShellDefaults() (cleanupFn func(), err error) {
 		c.ins, c.exitErr = readline.InitFiles("cockroach",
 			true, /* wideChars */
 			stdin, os.Stdout, stderr)
-		if c.exitErr == readline.ErrWidecharNotSupported {
+		if errors.Is(c.exitErr, readline.ErrWidecharNotSupported) {
 			log.Warning(context.TODO(), "wide character support disabled")
 			c.ins, c.exitErr = readline.InitFiles("cockroach",
 				false, stdin, os.Stdout, stderr)
