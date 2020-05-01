@@ -35,17 +35,22 @@ func ParseType(typeStr string) (*types.T, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "cannot parse %s as a type", typeStr)
 		}
-		colTypes := parsed.AST.(*tree.Prepare).Types
-		contents := make([]types.T, len(colTypes))
-		for i := range colTypes {
-			contents[i] = *colTypes[i]
+		colTypesRefs := parsed.AST.(*tree.Prepare).Types
+		colTypes := make([]types.T, len(colTypesRefs))
+		for i := range colTypesRefs {
+			colTypes[i] = *tree.MustBeStaticallyKnownType(colTypesRefs[i])
 		}
-		return types.MakeTuple(contents), nil
+		return types.MakeTuple(colTypes), nil
 	}
-	return parser.ParseType(typeStr)
+	typ, err := parser.ParseType(typeStr)
+	if err != nil {
+		return nil, err
+	}
+	return tree.MustBeStaticallyKnownType(typ), nil
 }
 
-// ParseTypes parses a list of types.
+// ParseTypes parses a list of types. Note that it does not support
+// user defined types.
 func ParseTypes(colStrs []string) ([]*types.T, error) {
 	res := make([]*types.T, len(colStrs))
 	for i, s := range colStrs {

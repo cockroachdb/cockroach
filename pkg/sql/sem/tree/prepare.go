@@ -10,15 +10,12 @@
 
 package tree
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/lex"
 
 // Prepare represents a PREPARE statement.
 type Prepare struct {
 	Name      Name
-	Types     []*types.T
+	Types     []ResolvableTypeReference
 	Statement Statement
 }
 

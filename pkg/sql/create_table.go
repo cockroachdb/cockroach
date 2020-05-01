@@ -1261,8 +1261,15 @@ func MakeTableDesc(
 
 	for i, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
+			// MakeTableDesc is called sometimes with a nil SemaCtx (for example
+			// during bootstrapping). In order to not panic, pass a nil TypeResolver
+			// when attempting to resolve the columns type.
+			defType, err := tree.ResolveType(d.Type, semaCtx.GetTypeResolver())
+			if err != nil {
+				return sqlbase.MutableTableDescriptor{}, err
+			}
 			if !desc.IsVirtualTable() {
-				switch d.Type.Oid() {
+				switch defType.Oid() {
 				case oid.T_int2vector, oid.T_oidvector:
 					return desc, pgerror.Newf(
 						pgcode.FeatureNotSupported,
@@ -1270,13 +1277,13 @@ func MakeTableDesc(
 					)
 				}
 			}
-			if supported, err := isTypeSupportedInVersion(version, d.Type); err != nil {
+			if supported, err := isTypeSupportedInVersion(version, defType); err != nil {
 				return desc, err
 			} else if !supported {
 				return desc, pgerror.Newf(
 					pgcode.FeatureNotSupported,
 					"type %s is not supported until version upgrade is finalized",
-					d.Type.SQLString(),
+					defType.SQLString(),
 				)
 			}
 			if d.PrimaryKey.Sharded {
@@ -2245,8 +2252,12 @@ func validateComputedColumn(
 		return err
 	}
 
+	defType, err := tree.ResolveType(d.Type, semaCtx.GetTypeResolver())
+	if err != nil {
+		return err
+	}
 	if _, err := sqlbase.SanitizeVarFreeExpr(
-		replacedExpr, d.Type, "computed column", semaCtx, false, /* allowImpure */
+		replacedExpr, defType, "computed column", semaCtx, false, /* allowImpure */
 	); err != nil {
 		return err
 	}
@@ -2347,7 +2358,9 @@ func MakeCheckConstraint(
 // incTelemetryForNewColumn increments relevant telemetry every time a new column
 // is added to a table.
 func incTelemetryForNewColumn(d *tree.ColumnTableDef) {
-	telemetry.Inc(sqltelemetry.SchemaNewTypeCounter(d.Type.TelemetryName()))
+	if typ, ok := tree.GetStaticallyKnownType(d.Type); ok {
+		telemetry.Inc(sqltelemetry.SchemaNewTypeCounter(typ.TelemetryName()))
+	}
 	if d.IsComputed() {
 		telemetry.Inc(sqltelemetry.SchemaNewColumnTypeQualificationCounter("computed"))
 	}

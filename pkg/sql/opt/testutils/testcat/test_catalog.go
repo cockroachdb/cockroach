@@ -39,6 +39,7 @@ const (
 
 // Catalog implements the cat.Catalog interface for testing purposes.
 type Catalog struct {
+	tree.TypeReferenceResolver
 	testSchema Schema
 	counter    int
 }
@@ -993,10 +994,11 @@ func (ts *TableStat) Histogram() []cat.HistogramBucket {
 	if ts.js.HistogramColumnType == "" || ts.js.HistogramBuckets == nil {
 		return nil
 	}
-	colType, err := parser.ParseType(ts.js.HistogramColumnType)
+	colTypeRef, err := parser.ParseType(ts.js.HistogramColumnType)
 	if err != nil {
 		panic(err)
 	}
+	colType := tree.MustBeStaticallyKnownType(colTypeRef)
 	histogram := make([]cat.HistogramBucket, len(ts.js.HistogramBuckets))
 	for i := range histogram {
 		bucket := &ts.js.HistogramBuckets[i]

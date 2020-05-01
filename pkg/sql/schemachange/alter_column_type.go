@@ -228,10 +228,9 @@ func ClassifyConversion(oldType *types.T, newType *types.T) (ColumnConversionKin
 	}
 
 	// Cook up a cast expression using the placeholder.
-	if cast, err := tree.NewTypedCastExpr(fromPlaceholder, newType); err == nil {
-		if _, err := cast.TypeCheck(&ctx, nil); err == nil {
-			return ColumnConversionGeneral, nil
-		}
+	cast := tree.NewTypedCastExpr(fromPlaceholder, newType)
+	if _, err := cast.TypeCheck(&ctx, nil); err == nil {
+		return ColumnConversionGeneral, nil
 	}
 
 	return ColumnConversionImpossible,
