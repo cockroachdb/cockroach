@@ -518,9 +518,7 @@ func TestInitializeEngineErrors(t *testing.T) {
 	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.
-	switch err := errors.Cause(store.Start(ctx, stopper)); err.(type) {
-	case *NotBootstrappedError:
-	default:
+	if err := store.Start(ctx, stopper); !errors.HasType(err, (*NotBootstrappedError)(nil)) {
 		t.Errorf("unexpected error initializing un-bootstrapped store: %+v", err)
 	}
 

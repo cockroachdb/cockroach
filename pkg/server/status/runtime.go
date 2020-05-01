@@ -415,7 +415,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, ms GoMemSt
 
 	fds := gosigar.ProcFDUsage{}
 	if err := fds.Get(pid); err != nil {
-		if _, ok := err.(gosigar.ErrNotImplemented); ok {
+		if gosigar.IsNotImplemented(err) {
 			if !rsr.fdUsageNotImplemented {
 				rsr.fdUsageNotImplemented = true
 				log.Warningf(ctx, "unable to get file descriptor usage (will not try again): %s", err)

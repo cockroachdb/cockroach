@@ -225,13 +225,7 @@ var ErrNotEnoughQuota = fmt.Errorf("not enough quota available")
 
 // HasErrClosed returns true if this error is or contains an ErrClosed error.
 func HasErrClosed(err error) bool {
-	_, hasErrClosed := errors.If(err, func(err error) (unwrapped interface{}, ok bool) {
-		if _, hasErrClosed := err.(*ErrClosed); hasErrClosed {
-			return err, hasErrClosed
-		}
-		return nil, false
-	})
-	return hasErrClosed
+	return errors.HasType(err, (*ErrClosed)(nil))
 }
 
 // PoolInfo represents the information that the IntRequestFunc gets about the current quota pool conditions.

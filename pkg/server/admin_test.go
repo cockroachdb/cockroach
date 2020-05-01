@@ -223,7 +223,8 @@ func TestAdminDebugRedirect(t *testing.T) {
 	}
 
 	resp, err := client.Get(origURL)
-	if urlError, ok := err.(*url.Error); ok && errors.Is(urlError.Err, redirectAttemptedError) {
+	if urlError := (*url.Error)(nil); errors.As(err, &urlError) &&
+		errors.Is(urlError.Err, redirectAttemptedError) {
 		// Ignore the redirectAttemptedError.
 		err = nil
 	}

@@ -174,7 +174,7 @@ func TestErrorReporting(t *testing.T) {
 			checked := checkAndMaybeShoutTo(tt.err, got.Log)
 			assert.Equal(t, tt.err, checked, "should return error unchanged")
 			assert.Equal(t, tt.wantSeverity, got.Severity, "wrong severity log")
-			_, gotCLI := got.Err.(*cliError)
+			gotCLI := errors.HasType(got.Err, (*cliError)(nil))
 			if tt.wantCLICause {
 				assert.True(t, gotCLI, "logged cause should be *cliError, got %T", got.Err)
 			} else {

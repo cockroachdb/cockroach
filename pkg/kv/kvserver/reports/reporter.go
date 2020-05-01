@@ -218,7 +218,7 @@ func (stats *Reporter) update(
 		ctx, &rangeIter, stats.latestConfig,
 		&constraintConfVisitor, &localityStatsVisitor, &replicationStatsVisitor,
 	); err != nil {
-		if _, ok := err.(visitorError); ok {
+		if errors.HasType(err, (*visitorError)(nil)) {
 			log.Errorf(ctx, "some reports have not been generated: %s", err)
 		} else {
 			return errors.Wrap(err, "failed to compute constraint conformance report")
@@ -529,7 +529,7 @@ type visitorError struct {
 	errs []error
 }
 
-func (e visitorError) Error() string {
+func (e *visitorError) Error() string {
 	s := make([]string, len(e.errs))
 	for i, err := range e.errs {
 		s[i] = fmt.Sprintf("%d: %s", i, err)
@@ -603,7 +603,7 @@ func visitRanges(
 		}
 	}
 	if len(visitorErrs) > 0 {
-		return visitorError{errs: visitorErrs}
+		return &visitorError{errs: visitorErrs}
 	}
 	return nil
 }
@@ -731,9 +731,7 @@ func (r *meta2RangeIter) readBatch(ctx context.Context) (retErr error) {
 }
 
 func errIsRetriable(err error) bool {
-	err = errors.UnwrapAll(err)
-	_, retriable := err.(*roachpb.TransactionRetryWithProtoRefreshError)
-	return retriable
+	return errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil))
 }
 
 // handleErr manipulates the iterator's state in response to an error.

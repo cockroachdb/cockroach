@@ -199,7 +199,7 @@ func TestStopperQuiesce(t *testing.T) {
 			// Wait until Quiesce() is called.
 			<-qc
 			err := thisStopper.RunTask(ctx, "test", func(context.Context) {})
-			if _, ok := err.(*roachpb.NodeUnavailableError); !ok {
+			if !errors.HasType(err, (*roachpb.NodeUnavailableError)(nil)) {
 				t.Error(err)
 			}
 			// Make the stoppers call Stop().

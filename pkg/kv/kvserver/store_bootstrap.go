@@ -36,7 +36,7 @@ func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIden
 	if err == nil {
 		return errors.Errorf("engine %s is already bootstrapped with ident %s", eng, exIdent.String())
 	}
-	if _, ok := err.(*NotBootstrappedError); !ok {
+	if !errors.HasType(err, (*NotBootstrappedError)(nil)) {
 		return err
 	}
 

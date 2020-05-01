@@ -326,16 +326,14 @@ func (mq *mergeQueue) process(
 	_, pErr := lhsRepl.AdminMerge(ctx, roachpb.AdminMergeRequest{
 		RequestHeader: roachpb.RequestHeader{Key: lhsRepl.Desc().StartKey.AsRawKey()},
 	}, reason)
-	switch err := pErr.GoError(); err.(type) {
-	case nil:
-	case *roachpb.ConditionFailedError:
+	if err := pErr.GoError(); errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
 		// ConditionFailedErrors are an expected outcome for range merge
 		// attempts because merges can race with other descriptor modifications.
 		// On seeing a ConditionFailedError, don't return an error and enqueue
 		// this replica again in case it still needs to be merged.
 		log.Infof(ctx, "merge saw concurrent descriptor modification; maybe retrying")
 		mq.MaybeAddAsync(ctx, lhsRepl, now)
-	default:
+	} else if err != nil {
 		// While range merges are unstable, be extra cautious and mark every error
 		// as purgatory-worthy.
 		return rangeMergePurgatoryError{err}

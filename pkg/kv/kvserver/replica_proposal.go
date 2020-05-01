@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/time/rate"
@@ -553,8 +554,8 @@ func addSSTablePreApply(
 				// going to be surfaced.
 				ingestErrMsg := ingestErr.Error()
 				isSeqNoErr := strings.Contains(ingestErrMsg, seqNoMsg) || strings.Contains(ingestErrMsg, seqNoOnReIngest)
-				if _, ok := ingestErr.(*storage.Error); !ok || !isSeqNoErr {
-					log.Fatalf(ctx, "while ingesting %s: %s", ingestPath, ingestErr)
+				if ingestErr := (*storage.Error)(nil); !errors.As(err, &ingestErr) || !isSeqNoErr {
+					log.Fatalf(ctx, "while ingesting %s: %v", ingestPath, ingestErr)
 				}
 			}
 		}

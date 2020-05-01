@@ -69,7 +69,7 @@ func (f *formattedError) Error() string {
 
 	// Extract the fields.
 	var message, code, hint, detail, location string
-	if pqErr, ok := errors.UnwrapAll(f.err).(*pq.Error); ok {
+	if pqErr := (*pq.Error)(nil); errors.As(f.err, &pqErr) {
 		if pqErr.Severity != "" {
 			severity = pqErr.Severity
 		}

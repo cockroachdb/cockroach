@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/causer"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -961,30 +960,19 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 }
 
 type benignError struct {
-	error
+	cause error
 }
 
-var _ causer.Causer = &benignError{}
-
-func (be *benignError) Cause() error {
-	return be.error
-}
+func (be *benignError) Error() string { return be.cause.Error() }
+func (be *benignError) Cause() error  { return be.cause }
 
 func isBenign(err error) bool {
-	return causer.Visit(err, func(err error) bool {
-		_, ok := err.(*benignError)
-		return ok
-	})
+	return errors.HasType(err, (*benignError)(nil))
 }
 
 func isPurgatoryError(err error) (purgatoryError, bool) {
 	var purgErr purgatoryError
-	ok := causer.Visit(err, func(err error) bool {
-		var ok bool
-		purgErr, ok = err.(purgatoryError)
-		return ok
-	})
-	return purgErr, ok
+	return purgErr, errors.As(err, &purgErr)
 }
 
 // assertInvariants codifies the guarantees upheld by the data structures in the

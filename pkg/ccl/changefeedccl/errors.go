@@ -11,6 +11,8 @@ package changefeedccl
 import (
 	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/errors"
 )
 
 const retryableErrorString = "retryable changefeed error"
@@ -40,32 +42,30 @@ func (e *retryableError) Unwrap() error { return e.wrapped }
 // IsRetryableError returns true if the supplied error, or any of its parent
 // causes, is a IsRetryableError.
 func IsRetryableError(err error) bool {
-	for {
-		if err == nil {
-			return false
-		}
-		if _, ok := err.(*retryableError); ok {
-			return true
-		}
-		errStr := err.Error()
-		if strings.Contains(errStr, retryableErrorString) {
-			// If a RetryableError occurs on a remote node, DistSQL serializes it such
-			// that we can't recover the structure and we have to rely on this
-			// unfortunate string comparison.
-			return true
-		}
-		if strings.Contains(errStr, `rpc error`) {
-			// When a crdb node dies, any DistSQL flows with processors scheduled on
-			// it get an error with "rpc error" in the message from the call to
-			// `(*DistSQLPlanner).Run`.
-			return true
-		}
-		if e, ok := err.(interface{ Unwrap() error }); ok {
-			err = e.Unwrap()
-			continue
-		}
+	if err == nil {
 		return false
 	}
+	if errors.HasType(err, (*retryableError)(nil)) {
+		return true
+	}
+
+	// TODO(knz): this is a bad implementation. Make it go away
+	// by avoiding string comparisons.
+
+	errStr := err.Error()
+	if strings.Contains(errStr, retryableErrorString) {
+		// If a RetryableError occurs on a remote node, DistSQL serializes it such
+		// that we can't recover the structure and we have to rely on this
+		// unfortunate string comparison.
+		return true
+	}
+	if strings.Contains(errStr, `rpc error`) {
+		// When a crdb node dies, any DistSQL flows with processors scheduled on
+		// it get an error with "rpc error" in the message from the call to
+		// `(*DistSQLPlanner).Run`.
+		return true
+	}
+	return false
 }
 
 // MaybeStripRetryableErrorMarker performs some minimal attempt to clean the

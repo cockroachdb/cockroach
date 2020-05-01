@@ -156,7 +156,7 @@ func (p *Provider) runCommand(args []string) ([]byte, error) {
 	cmd.Stderr = &stderrBuf
 	output, err := cmd.Output()
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
 			log.Println(string(exitErr.Stderr))
 		}
 		return nil, errors.Wrapf(err, "failed to run: aws %s: stderr: %v",

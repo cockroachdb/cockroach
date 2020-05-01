@@ -62,7 +62,7 @@ func runJSONCommand(args []string, parsed interface{}) error {
 	rawJSON, err := cmd.Output()
 	if err != nil {
 		var stderr []byte
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
 			stderr = exitErr.Stderr
 		}
 		// TODO(peter,ajwerner): Remove this hack once gcloud behaves when adding

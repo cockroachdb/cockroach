@@ -1641,6 +1641,15 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`^#`), // comment line
 			// This exception is for the colexec generated files.
 			stream.GrepNot(`pkg/sql/colexec/.*\.eg.go:[0-9:]+: self-assignment of .* to .*`),
+			// Roachpb generated switch on `error`.
+			stream.GrepNot(`pkg/roachpb/batch_generated\.go:.*use errors\.HasType, errors\.HasInterface, errors\.As or errors\.If`),
+			stream.GrepNot(`pkg/roachpb/errors\.go:.*use errors\.HasType, errors\.HasInterface, errors\.As or errors\.If`),
+			// pgerror also knows what it's doing.
+			stream.GrepNot(`pkg/sql/pgwire/pgerror/pgcode\.go:.*use errors\.HasType, errors\.HasInterface, errors\.As or errors\.If`),
+			// changefeedccl also knows what it's doing.
+			stream.GrepNot(`pkg/ccl/changefeedccl/errors\.go:.*use errors\.HasType, errors\.HasInterface, errors\.As or errors\.If`),
+			// TODO(knz): remove the code in log and replace by the errors' own redact code
+			stream.GrepNot(`pkg/util/log/crash_reporting\.go:.*use errors\.HasType, errors\.HasInterface, errors\.As or errors\.If`),
 		}
 
 		roachlint, err := exec.LookPath("roachvet")
