@@ -58,6 +58,7 @@ func (r *Replica) Metrics(
 	desc := r.mu.state.Desc
 	zone := r.mu.zone
 	raftLogSize := r.mu.raftLogSize
+	raftLogSizeTrusted := r.mu.raftLogSizeTrusted
 	r.mu.RUnlock()
 
 	r.store.unquiescedReplicas.Lock()
@@ -82,6 +83,7 @@ func (r *Replica) Metrics(
 		latchInfoLocal,
 		latchInfoGlobal,
 		raftLogSize,
+		raftLogSizeTrusted,
 	)
 }
 
@@ -101,6 +103,7 @@ func calcReplicaMetrics(
 	latchInfoLocal storagepb.LatchManagerInfo,
 	latchInfoGlobal storagepb.LatchManagerInfo,
 	raftLogSize int64,
+	raftLogSizeTrusted bool,
 ) ReplicaMetrics {
 	var m ReplicaMetrics
 
@@ -129,7 +132,8 @@ func calcReplicaMetrics(
 	m.LatchInfoGlobal = latchInfoGlobal
 
 	const raftLogTooLargeMultiple = 4
-	m.RaftLogTooLarge = raftLogSize > (raftLogTooLargeMultiple * raftCfg.RaftLogTruncationThreshold)
+	m.RaftLogTooLarge = raftLogSize > (raftLogTooLargeMultiple*raftCfg.RaftLogTruncationThreshold) &&
+		raftLogSizeTrusted
 
 	return m
 }
