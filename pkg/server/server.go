@@ -1208,10 +1208,15 @@ func (s *Server) Start(ctx context.Context) error {
 		listenHTTP:   s.cfg.HTTPAdvertiseAddr,
 	}.Iter()
 
+	if err := s.debug.AddLSMVisualizationDebugForEngines(s.cfg.Stores.Specs, s.engines); err != nil {
+		return err
+	}
+
 	for _, storeSpec := range s.cfg.Stores.Specs {
 		if storeSpec.InMemory {
 			continue
 		}
+
 		for name, val := range listenerFiles {
 			file := filepath.Join(storeSpec.Path, name)
 			if err := ioutil.WriteFile(file, []byte(val), 0644); err != nil {
