@@ -10,7 +10,7 @@ query TTT
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
 ·          distributed  false
-·          vectorized   false
+·          vectorized   true
 union      ·            ·
  ├── scan  ·            ·
  │         table        uniontest@primary
@@ -52,7 +52,7 @@ query TTTTT
 EXPLAIN (VERBOSE) (SELECT a FROM abc ORDER BY b) INTERSECT (SELECT a FROM abc ORDER BY c) ORDER BY a
 ----
 ·                    distributed  false        ·       ·
-·                    vectorized   false        ·       ·
+·                    vectorized   true         ·       ·
 sort                 ·            ·            (a)     +a
  │                   order        +a           ·       ·
  └── union           ·            ·            (a)     ·
