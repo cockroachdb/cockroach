@@ -254,8 +254,7 @@ func startConnExecutor(
 		})
 	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
 	st := cluster.MakeTestingClusterSettings()
-	nodeID := &base.NodeIDContainer{}
-	nodeID.Set(ctx, 1)
+	nodeID := base.TestingIDContainer
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
 	cfg := &ExecutorConfig{
 		AmbientCtx:      testutils.MakeAmbientCtx(),
