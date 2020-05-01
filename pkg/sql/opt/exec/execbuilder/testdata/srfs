@@ -201,7 +201,7 @@ root                             ·             ·                              
  │         └── scan              ·             ·                                     (z)                   ·
  │                               table         xz@primary                            ·                     ·
  │                               spans         FULL SCAN                             ·                     ·
- └── subquery                    ·             ·                                     (generate_series)     ·
+ └── subquery                    ·             ·                                     ·                     ·
       │                          id            @S1                                   ·                     ·
       │                          original sql  (SELECT unnest(ARRAY[x, y]) FROM xy)  ·                     ·
       │                          exec mode     one row                               ·                     ·
