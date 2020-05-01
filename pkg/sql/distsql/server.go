@@ -135,10 +135,11 @@ func (ds *ServerImpl) Drain(
 // setDraining changes the node's draining state through gossip to the provided
 // state.
 func (ds *ServerImpl) setDraining(drain bool) error {
-	nodeID, err := ds.ServerConfig.NodeID.OptionalNodeIDErr(MultiTenancyIssueNo)
-	if err != nil {
+	nodeID, ok := ds.ServerConfig.NodeID.OptionalNodeID()
+	if !ok {
 		// Ignore draining requests when running on behalf of a tenant.
 		// NB: intentionally swallow the error or the server will fatal.
+		_ = MultiTenancyIssueNo // related issue
 		return nil
 	}
 	return ds.ServerConfig.Gossip.Deprecated(MultiTenancyIssueNo).AddInfoProto(
@@ -181,10 +182,6 @@ func (ds *ServerImpl) setupFlow(
 		)
 		log.Warningf(ctx, "%v", err)
 		return ctx, nil, err
-	}
-	nodeID := ds.ServerConfig.NodeID.DeprecatedNodeID(47902)
-	if nodeID == 0 {
-		return nil, nil, errors.AssertionFailedf("setupFlow called before the NodeID was resolved")
 	}
 
 	const opName = "flow"
@@ -304,7 +301,7 @@ func (ds *ServerImpl) setupFlow(
 			SessionData: sd,
 			ClusterID:   ds.ServerConfig.ClusterID.Get(),
 			ClusterName: ds.ServerConfig.ClusterName,
-			NodeID:      nodeID,
+			NodeID:      ds.ServerConfig.NodeID,
 			Codec:       ds.ServerConfig.Codec,
 			ReCache:     ds.regexpCache,
 			Mon:         &monitor,
@@ -331,13 +328,14 @@ func (ds *ServerImpl) setupFlow(
 				*req.EvalContext.SeqState.LastSeqIncremented)
 		}
 	}
+
 	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := execinfra.FlowCtx{
 		AmbientContext: ds.AmbientContext,
 		Cfg:            &ds.ServerConfig,
 		ID:             req.Flow.FlowID,
 		EvalCtx:        evalCtx,
-		NodeID:         nodeID,
+		NodeID:         ds.ServerConfig.NodeID,
 		TraceKV:        req.TraceKV,
 		Local:          localState.IsLocal,
 	}
@@ -355,6 +353,7 @@ func (ds *ServerImpl) setupFlow(
 		// to use the RootTxn.
 		opt = flowinfra.FuseAggressively
 	}
+
 	var err error
 	if ctx, err = f.Setup(ctx, &req.Flow, opt); err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)

@@ -196,7 +196,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			txn,
 			EventLogSetClusterSetting,
 			0, /* no target */
-			int32(params.extendedEvalCtx.NodeID),
+			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 			EventLogSetClusterSettingDetail{n.name, reportedValue, params.SessionData().User},
 		)
 	}); err != nil {

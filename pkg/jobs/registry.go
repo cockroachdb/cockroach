@@ -258,7 +258,7 @@ func (r *Registry) makeCtx() (context.Context, func()) {
 }
 
 func (r *Registry) makeJobID() int64 {
-	return int64(builtins.GenerateUniqueInt(r.nodeID.DeprecatedNodeID(multiTenancyIssueNo)))
+	return int64(builtins.GenerateUniqueInt(r.nodeID.SQLInstanceID()))
 }
 
 // CreateAndStartJob creates and asynchronously starts a job from record. An

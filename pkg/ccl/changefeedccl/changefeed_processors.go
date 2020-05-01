@@ -157,8 +157,12 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 
 	spans, sf := ca.setupSpans()
 	timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf, initialInclusiveLowerBound: ca.spec.Feed.StatementTime}
-	nodeID := ca.flowCtx.EvalCtx.NodeID
-	var err error
+	nodeID, err := ca.flowCtx.EvalCtx.NodeID.OptionalNodeIDErr(48274)
+	if err != nil {
+		ca.MoveToDraining(err)
+		return ctx
+	}
+
 	if ca.sink, err = getSink(
 		ctx, ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.Opts, ca.spec.Feed.Targets,
 		ca.flowCtx.Cfg.Settings, timestampOracle, ca.flowCtx.Cfg.ExternalStorageFromURI,
@@ -540,8 +544,11 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	// early returns if errors are detected.
 	ctx = cf.StartInternal(ctx, changeFrontierProcName)
 
-	nodeID := cf.flowCtx.EvalCtx.NodeID
-	var err error
+	nodeID, err := cf.flowCtx.EvalCtx.NodeID.OptionalNodeIDErr(48274)
+	if err != nil {
+		cf.MoveToDraining(err)
+		return ctx
+	}
 	// Pass a nil oracle because this sink is only used to emit resolved timestamps
 	// but the oracle is only used when emitting row updates.
 	var nilOracle timestampLowerBoundOracle

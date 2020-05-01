@@ -1541,7 +1541,7 @@ func createSchemaChangeEvalCtx(
 			TestingKnobs:       execCfg.EvalContextTestingKnobs,
 			ClusterID:          execCfg.ClusterID(),
 			ClusterName:        execCfg.RPCContext.ClusterName(),
-			NodeID:             execCfg.NodeID.Get(),
+			NodeID:             execCfg.NodeID,
 			Codec:              execCfg.Codec,
 			Locality:           execCfg.Locality,
 		},

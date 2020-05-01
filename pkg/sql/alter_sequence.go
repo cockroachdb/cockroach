@@ -72,7 +72,7 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 		params.p.txn,
 		EventLogAlterSequence,
 		int32(n.seqDesc.ID),
-		int32(params.extendedEvalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 		struct {
 			SequenceName string
 			Statement    string
