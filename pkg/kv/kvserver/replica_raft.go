@@ -295,7 +295,7 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (index int64, pE
 	}
 	// Encode body of command.
 	data = data[:preLen+cmdLen]
-	if _, err := protoutil.MarshalToWithoutFuzzing(p.command, data[preLen:]); err != nil {
+	if _, err := protoutil.MarshalTo(p.command, data[preLen:]); err != nil {
 		return 0, roachpb.NewError(err)
 	}
 

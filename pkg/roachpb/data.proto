@@ -614,13 +614,13 @@ message Lease {
 
   // The expiration is a timestamp at which the lease expires. This means that
   // a new lease can be granted for a later timestamp.
-  util.hlc.Timestamp expiration = 2 [(gogoproto.moretags) = "cockroachdb:\"randnullable\""];
+  util.hlc.Timestamp expiration = 2;
 
   // The address of the would-be lease holder.
   ReplicaDescriptor replica = 3 [(gogoproto.nullable) = false];
 
   // The start of the lease stasis period. This field is deprecated.
-  util.hlc.Timestamp deprecated_start_stasis = 4 [(gogoproto.moretags) = "cockroachdb:\"randnullable\""];
+  util.hlc.Timestamp deprecated_start_stasis = 4;
 
   // The current timestamp when this lease has been proposed. Used after a
   // transfer and after a node restart to enforce that a node only uses leases
