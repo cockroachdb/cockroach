@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	kv2 "github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type kvInterface interface {

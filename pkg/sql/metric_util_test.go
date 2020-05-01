@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // initializeQueryCounter returns a queryCounter that accounts for system

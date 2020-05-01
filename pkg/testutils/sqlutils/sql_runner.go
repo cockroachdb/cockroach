@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // SQLRunner wraps a testing.TB and *gosql.DB connection and provides

@@ -14,7 +14,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // EmbeddedCertsDir is the certs directory inside embedded assets.

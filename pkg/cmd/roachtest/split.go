@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 	humanize "github.com/dustin/go-humanize"
 	_ "github.com/lib/pq"
-	"github.com/pkg/errors"
 )
 
 type splitParams struct {

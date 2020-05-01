@@ -30,8 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stacktrace"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	raven "github.com/getsentry/raven-go"
-	"github.com/pkg/errors"
+	pkgErr "github.com/pkg/errors"
 )
 
 // The call stack here is usually:
@@ -579,7 +580,7 @@ func RegisterTagFn(key string, value func(context.Context) string) {
 // that information (i.e. if it is an errors.withStack). Returns "" otherwise.
 func ErrorSource(i interface{}) string {
 	type stackTracer interface {
-		StackTrace() errors.StackTrace
+		StackTrace() pkgErr.StackTrace
 	}
 	if e, ok := i.(stackTracer); ok {
 		tr := e.StackTrace()

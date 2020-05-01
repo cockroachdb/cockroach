@@ -21,9 +21,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 	"github.com/lib/pq"
-	"github.com/pkg/errors"
 )
 
 // Conn holds gosql and pgx connections and provides some utility methods.

@@ -52,9 +52,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
-	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 )
 

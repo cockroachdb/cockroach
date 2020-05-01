@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // DropRoleNode deletes entries from the system.users table.

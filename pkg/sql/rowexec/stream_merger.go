@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // We define a group to be a set of rows from a given source with the same

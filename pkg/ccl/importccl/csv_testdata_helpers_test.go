@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 var rewriteCSVTestData = envutil.EnvOrDefaultBool("COCKROACH_REWRITE_CSV_TESTDATA", false)

@@ -15,7 +15,7 @@ import (
 	crypto_rand "crypto/rand"
 	"crypto/sha256"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/crypto/pbkdf2"
 )
 

@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // ToBackup creates an enterprise backup in `dir`.

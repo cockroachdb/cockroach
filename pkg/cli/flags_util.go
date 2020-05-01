@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
+	"github.com/cockroachdb/errors"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
-	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
 

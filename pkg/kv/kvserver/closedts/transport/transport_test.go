@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
-	"github.com/pkg/errors"
 )
 
 // NewTestContainer sets up an environment suitable for black box testing the

@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
-	"github.com/pkg/errors"
 )
 
 // DefaultStorageEngine represents the default storage engine to use.

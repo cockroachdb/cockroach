@@ -34,9 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	workloadrand "github.com/cockroachdb/cockroach/pkg/workload/rand"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
 

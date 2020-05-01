@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // StartOpts TODO(peter): document

@@ -16,7 +16,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // A Cluster is an abstraction away from a concrete cluster deployment (i.e.

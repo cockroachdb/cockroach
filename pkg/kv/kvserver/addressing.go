@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 type metaAction func(*kv.Batch, roachpb.Key, *roachpb.RangeDescriptor)

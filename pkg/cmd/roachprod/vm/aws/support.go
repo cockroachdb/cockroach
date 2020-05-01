@@ -20,7 +20,7 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // Both M5 and I3 machines expose their EBS or local SSD volumes as NVMe block

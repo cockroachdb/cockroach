@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // streamGroupAccumulator groups input rows coming from src into groups dictated

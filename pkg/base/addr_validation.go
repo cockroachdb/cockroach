@@ -21,7 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // ValidateAddrs controls the address fields in the Config object

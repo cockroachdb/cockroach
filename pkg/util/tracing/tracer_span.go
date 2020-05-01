@@ -23,13 +23,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	proto "github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	jaegerjson "github.com/jaegertracing/jaeger/model/json"
 	opentracing "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
-	"github.com/pkg/errors"
 	"golang.org/x/net/trace"
 )
 

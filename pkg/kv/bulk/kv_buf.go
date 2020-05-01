@@ -14,7 +14,7 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // kvBuf collects []byte key-value pairs in a sortable buffer.

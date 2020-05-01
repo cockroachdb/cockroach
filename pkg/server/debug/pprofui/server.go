@@ -25,9 +25,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/google/pprof/driver"
 	"github.com/google/pprof/profile"
-	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
 

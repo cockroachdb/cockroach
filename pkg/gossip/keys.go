@@ -16,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // separator is used to separate the non-prefix components of a

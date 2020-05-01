@@ -55,9 +55,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 var leaseStatusLogLimiter = log.Every(5 * time.Second)

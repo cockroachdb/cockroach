@@ -29,7 +29,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/metadata"
 )
 

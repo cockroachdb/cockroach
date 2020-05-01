@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/install"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 func initDirs() error {

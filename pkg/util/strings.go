@@ -13,7 +13,7 @@ package util
 import (
 	"unicode/utf8"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // GetSingleRune decodes the string s as a single rune if possible.

@@ -46,10 +46,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	// Import postgres driver.
 	_ "github.com/lib/pq"
-	"github.com/pkg/errors"
 )
 
 func repoRoot() string {

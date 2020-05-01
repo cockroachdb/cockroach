@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // TODO(tamird): why does rocksdb not link jemalloc,snappy statically?

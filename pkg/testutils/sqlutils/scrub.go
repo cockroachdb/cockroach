@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // ScrubResult is the go struct for the row results for an

@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // PrettyScanner implements  a partial right inverse to keys.PrettyPrint(): it

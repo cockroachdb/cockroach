@@ -39,10 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	crdberrors "github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.etcd.io/etcd/raft/tracker"
@@ -2139,7 +2138,7 @@ func (s *Store) relocateOne(
 	if len(rangeReplicas) != len(desc.Replicas().Voters()) {
 		// The caller removed all the learners, so there shouldn't be anything but
 		// voters.
-		return nil, nil, crdberrors.AssertionFailedf(
+		return nil, nil, errors.AssertionFailedf(
 			`range %s had non-voter replicas: %v`, desc, desc.Replicas())
 	}
 
