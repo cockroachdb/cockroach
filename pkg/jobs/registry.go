@@ -100,7 +100,7 @@ type Registry struct {
 	db         *kv.DB
 	ex         sqlutil.InternalExecutor
 	clock      *hlc.Clock
-	nodeID     *base.NodeIDContainer
+	nodeID     *base.SQLIDContainer
 	settings   *cluster.Settings
 	planFn     planHookMaker
 	metrics    Metrics
@@ -178,7 +178,7 @@ func MakeRegistry(
 	nl NodeLiveness,
 	db *kv.DB,
 	ex sqlutil.InternalExecutor,
-	nodeID *base.NodeIDContainer,
+	nodeID *base.SQLIDContainer,
 	settings *cluster.Settings,
 	histogramWindowInterval time.Duration,
 	planFn planHookMaker,

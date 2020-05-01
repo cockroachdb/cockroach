@@ -36,11 +36,9 @@ import (
 func makeTestPlanner() *planner {
 	// Initialize an Executorconfig sufficiently for the purposes of creating a
 	// planner.
-	var nodeID base.NodeIDContainer
-	nodeID.Set(context.TODO(), 1)
 	execCfg := ExecutorConfig{
 		NodeInfo: NodeInfo{
-			NodeID: &nodeID,
+			NodeID: base.TestingIDContainer,
 			ClusterID: func() uuid.UUID {
 				return uuid.MakeV4()
 			},
