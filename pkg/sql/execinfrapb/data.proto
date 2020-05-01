@@ -27,6 +27,7 @@ import "errorspb/errors.proto";
 import "sql/pgwire/pgerror/errors.proto";
 import "sql/sqlbase/structured.proto";
 import "sql/sqlbase/encoded_datum.proto";
+import "sql/types/types.proto";
 import "util/tracing/recorded_span.proto";
 import "gogoproto/gogo.proto";
 
@@ -126,7 +127,7 @@ message InputSyncSpec {
   repeated StreamEndpointSpec streams = 3 [(gogoproto.nullable) = false];
 
   // Schema for the streams entering this synchronizer.
-  repeated bytes column_types = 4 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/types.T"];
+  repeated sql.sem.types.T column_types = 4 [(gogoproto.nullable) = false];
 }
 
 // OutputRouterSpec is the specification for the output router of a processor;
@@ -190,7 +191,7 @@ message OutputRouterSpec {
 
 message DatumInfo {
   optional sqlbase.DatumEncoding encoding = 1 [(gogoproto.nullable) = false];
-  optional bytes type = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/types.T"];
+  optional sql.sem.types.T type = 2 [(gogoproto.nullable) = false];
 }
 
 // ProducerHeader is a message that is sent once at the beginning of a stream.
