@@ -69,8 +69,7 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 		return
 	}
 	if !mb.b.evalCtx.SessionData.OptimizerFKChecks {
-		mb.fkFallback = true
-		telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
+		mb.setFKFallback()
 		return
 	}
 
@@ -126,8 +125,7 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 		return
 	}
 	if !mb.b.evalCtx.SessionData.OptimizerFKChecks {
-		mb.fkFallback = true
-		telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
+		mb.setFKFallback()
 		return
 	}
 
@@ -161,10 +159,8 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 			}
 
 			// Bail, so that exec FK checks pick up on FK checks and perform them.
-			mb.checks = nil
-			mb.fkFallback = true
+			mb.setFKFallback()
 			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
-			telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
 			return
 		}
 
@@ -236,8 +232,7 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 		return
 	}
 	if !mb.b.evalCtx.SessionData.OptimizerFKChecks {
-		mb.fkFallback = true
-		telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
+		mb.setFKFallback()
 		return
 	}
 
@@ -289,10 +284,8 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 
 		if a := h.fk.UpdateReferenceAction(); a != tree.Restrict && a != tree.NoAction {
 			// Bail, so that exec FK checks pick up on FK checks and perform them.
-			mb.checks = nil
-			mb.fkFallback = true
+			mb.setFKFallback()
 			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
-			telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
 			return
 		}
 
@@ -367,8 +360,7 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 	}
 
 	if !mb.b.evalCtx.SessionData.OptimizerFKChecks {
-		mb.fkFallback = true
-		telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
+		mb.setFKFallback()
 		return
 	}
 
@@ -394,10 +386,8 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 
 		if a := h.fk.UpdateReferenceAction(); a != tree.Restrict && a != tree.NoAction {
 			// Bail, so that exec FK checks pick up on FK checks and perform them.
-			mb.checks = nil
-			mb.fkFallback = true
+			mb.setFKFallback()
 			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
-			telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
 			return
 		}
 
@@ -762,4 +752,14 @@ func (h *fkCheckHelper) buildDeletionCheck(
 		KeyCols:         deleteCols,
 		OpName:          h.mb.opName,
 	})
+}
+
+// setFKFallback enables fallback to the legacy foreign key checks and
+// cascade path.
+func (mb *mutationBuilder) setFKFallback() {
+	// Clear out any checks or cascades that may have been built already.
+	mb.checks = nil
+	mb.cascades = nil
+	mb.fkFallback = true
+	telemetry.Inc(sqltelemetry.ForeignKeyLegacyUseCounter)
 }
