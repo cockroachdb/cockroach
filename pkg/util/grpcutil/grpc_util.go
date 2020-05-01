@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
@@ -77,13 +77,11 @@ func IsClosedConnection(err error) bool {
 // TODO(bdarnell): Replace this with a cleaner mechanism when/if
 // https://github.com/grpc/grpc-go/issues/1443 is resolved.
 func RequestDidNotStart(err error) bool {
-	if _, ok := err.(connectionNotReadyError); ok {
+	if errors.HasType(err, connectionNotReadyError{}) ||
+		errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) {
 		return true
 	}
-	if _, ok := err.(*netutil.InitialHeartbeatFailedError); ok {
-		return true
-	}
-	s, ok := status.FromError(err)
+	s, ok := status.FromError(errors.Cause(err))
 	if !ok {
 		// This is a non-gRPC error; assume nothing.
 		return false

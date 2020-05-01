@@ -37,6 +37,10 @@ ignored = [
   revision = "470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4"
 
 [[constraint]]
+  name = "github.com/cockroachdb/errors"
+  branch = "v1.2.4-cockroach20.1"
+
+[[constraint]]
   name = "go.etcd.io/etcd"
   # The last time this was bumped forward, it was for a targeted fix of #40207,
   # which temporarily prevented us from being compatible with etcd's HEAD. The
