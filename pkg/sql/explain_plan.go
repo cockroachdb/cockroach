@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
@@ -231,7 +232,11 @@ func populateExplain(
 		// There might be an issue making the physical plan, but that should not
 		// cause an error or panic, so swallow the error. See #40677 for example.
 		distSQLPlanner.FinalizePlan(planCtx, &physicalPlan)
-		flows := physicalPlan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
+		nodeID, err := params.extendedEvalCtx.NodeID.OptionalNodeIDErr(distsql.MultiTenancyIssueNo)
+		if err != nil {
+			return err
+		}
+		flows := physicalPlan.GenerateFlowSpecs(nodeID)
 		flowCtx := makeFlowCtx(planCtx, physicalPlan, params)
 		flowCtx.Cfg.ClusterID = &distSQLPlanner.rpcCtx.ClusterID
 

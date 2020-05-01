@@ -1972,7 +1972,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			TestingKnobs:       ex.server.cfg.EvalContextTestingKnobs,
 			ClusterID:          ex.server.cfg.ClusterID(),
 			ClusterName:        ex.server.cfg.RPCContext.ClusterName(),
-			NodeID:             ex.server.cfg.NodeID.Get(),
+			NodeID:             ex.server.cfg.NodeID,
 			Codec:              ex.server.cfg.Codec,
 			Locality:           ex.server.cfg.Locality,
 			ReCache:            ex.server.reCache,

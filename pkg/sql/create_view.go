@@ -207,7 +207,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		params.p.txn,
 		EventLogCreateView,
 		int32(newDesc.ID),
-		int32(params.extendedEvalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 		struct {
 			ViewName  string
 			ViewQuery string
