@@ -90,6 +90,8 @@ type operatorExpr interface {
 var _ operatorExpr = &AndExpr{}
 var _ operatorExpr = &OrExpr{}
 var _ operatorExpr = &NotExpr{}
+var _ operatorExpr = &IsNullExpr{}
+var _ operatorExpr = &IsNotNullExpr{}
 var _ operatorExpr = &BinaryExpr{}
 var _ operatorExpr = &UnaryExpr{}
 var _ operatorExpr = &ComparisonExpr{}
@@ -261,6 +263,62 @@ func (node *NotExpr) TypedInnerExpr() TypedExpr {
 	return node.Expr.(TypedExpr)
 }
 
+// IsNullExpr represents an IS NULL expression.
+type IsNullExpr struct {
+	Expr Expr
+
+	typeAnnotation
+}
+
+func (*IsNullExpr) operatorExpr() {}
+
+// Format implements the NodeFormatter interface.
+func (node *IsNullExpr) Format(ctx *FmtCtx) {
+	exprFmtWithParen(ctx, node.Expr)
+	ctx.WriteString(" IS NULL")
+}
+
+// NewTypedIsNullExpr returns a new IsNullExpr that is verified to be
+// well-typed.
+func NewTypedIsNullExpr(expr TypedExpr) *IsNullExpr {
+	node := &IsNullExpr{Expr: expr}
+	node.typ = types.Bool
+	return node
+}
+
+// TypedInnerExpr returns the IsNullExpr's inner expression as a TypedExpr.
+func (node *IsNullExpr) TypedInnerExpr() TypedExpr {
+	return node.Expr.(TypedExpr)
+}
+
+// IsNotNullExpr represents an IS NOT NULL expression.
+type IsNotNullExpr struct {
+	Expr Expr
+
+	typeAnnotation
+}
+
+func (*IsNotNullExpr) operatorExpr() {}
+
+// Format implements the NodeFormatter interface.
+func (node *IsNotNullExpr) Format(ctx *FmtCtx) {
+	exprFmtWithParen(ctx, node.Expr)
+	ctx.WriteString(" IS NOT NULL")
+}
+
+// NewTypedIsNotNullExpr returns a new IsNotNullExpr that is verified to be
+// well-typed.
+func NewTypedIsNotNullExpr(expr TypedExpr) *IsNotNullExpr {
+	node := &IsNotNullExpr{Expr: expr}
+	node.typ = types.Bool
+	return node
+}
+
+// TypedInnerExpr returns the IsNotNullExpr's inner expression as a TypedExpr.
+func (node *IsNotNullExpr) TypedInnerExpr() TypedExpr {
+	return node.Expr.(TypedExpr)
+}
+
 // ParenExpr represents a parenthesized expression.
 type ParenExpr struct {
 	Expr Expr
@@ -421,9 +479,9 @@ func (*ComparisonExpr) operatorExpr() {}
 // Format implements the NodeFormatter interface.
 func (node *ComparisonExpr) Format(ctx *FmtCtx) {
 	opStr := node.Operator.String()
-	if node.Operator == IsDistinctFrom && (node.Right == DNull || node.Right == DBoolTrue || node.Right == DBoolFalse) {
+	if node.Operator == IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 		opStr = "IS NOT"
-	} else if node.Operator == IsNotDistinctFrom && (node.Right == DNull || node.Right == DBoolTrue || node.Right == DBoolFalse) {
+	} else if node.Operator == IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 		opStr = "IS"
 	}
 	if node.Operator.hasSubOperator() {
@@ -1774,6 +1832,8 @@ func (node *IsOfTypeExpr) String() string     { return AsString(node) }
 func (node *Name) String() string             { return AsString(node) }
 func (node *UnrestrictedName) String() string { return AsString(node) }
 func (node *NotExpr) String() string          { return AsString(node) }
+func (node *IsNullExpr) String() string       { return AsString(node) }
+func (node *IsNotNullExpr) String() string    { return AsString(node) }
 func (node *NullIfExpr) String() string       { return AsString(node) }
 func (node *NumVal) String() string           { return AsString(node) }
 func (node *OrExpr) String() string           { return AsString(node) }

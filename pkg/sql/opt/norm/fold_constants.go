@@ -66,6 +66,62 @@ func (c *CustomFuncs) IsConstValueOrTuple(input opt.ScalarExpr) bool {
 	return memo.CanExtractConstDatum(input)
 }
 
+// HasOneNullElement returns true if the input tuple has one constant, null
+// element. Note that it only returns true if one element is known to be null.
+// For example, given the tuple (1, x), it will return false because x is not
+// guaranteed to be null.
+func (c *CustomFuncs) HasOneNullElement(input opt.ScalarExpr) bool {
+	tup := input.(*memo.TupleExpr)
+	for _, e := range tup.Elems {
+		if e.Op() == opt.NullOp {
+			return true
+		}
+	}
+	return false
+}
+
+// HasAllNullElements returns true if the input tuple has only constant, null
+// elements. Note that it only returns true if all elements are known to be
+// null. For example, given the tuple (NULL, x), it will return false because x
+// is not guaranteed to be null.
+func (c *CustomFuncs) HasAllNullElements(input opt.ScalarExpr) bool {
+	tup := input.(*memo.TupleExpr)
+	for _, e := range tup.Elems {
+		if e.Op() != opt.NullOp {
+			return false
+		}
+	}
+	return true
+}
+
+// HasOneNonNullElement returns true if the input tuple has one constant,
+// non-null element. Note that it only returns true if one element is known to
+// be non-null. For example, given the tuple (NULL, x), it will return false
+// because x is not guaranteed to be non-null.
+func (c *CustomFuncs) HasOneNonNullElement(input opt.ScalarExpr) bool {
+	tup := input.(*memo.TupleExpr)
+	for _, e := range tup.Elems {
+		if e.Op() != opt.NullOp && (opt.IsConstValueOp(e) || e.Op() == opt.TupleOp || e.Op() == opt.ArrayOp) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasAllNonNullElements returns true if the input tuple has all constant,
+// non-null elements. Note that it only returns true if all elements are known
+// to be non-null. For example, given the tuple (1, x), it will return false
+// because x is not guaranteed to be non-null.
+func (c *CustomFuncs) HasAllNonNullElements(input opt.ScalarExpr) bool {
+	tup := input.(*memo.TupleExpr)
+	for _, e := range tup.Elems {
+		if e.Op() == opt.NullOp || !(opt.IsConstValueOp(e) || e.Op() == opt.TupleOp || e.Op() == opt.ArrayOp) {
+			return false
+		}
+	}
+	return true
+}
+
 // FoldBinary evaluates a binary expression with constant inputs. It returns
 // a constant expression as long as it finds an appropriate overload function
 // for the given operator and input types, and the evaluation causes no error.
