@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -44,15 +43,6 @@ type explainPlanNode struct {
 	explainer explainer
 
 	plan planComponents
-
-	// subqueryPlans contains the subquery plans for the explained query.
-	subqueryPlans []subquery
-
-	// cascades contains metadata for any cascades.
-	cascades []exec.Cascade
-
-	// checkPlans contains the check plans for the explained query.
-	checkPlans []checkPlan
 
 	stmtType tree.StatementType
 
@@ -132,10 +122,10 @@ func (e *explainPlanNode) Values() tree.Datums                 { return e.run.re
 
 func (e *explainPlanNode) Close(ctx context.Context) {
 	e.plan.main.Close(ctx)
-	for i := range e.subqueryPlans {
+	for i := range e.plan.subqueryPlans {
 		e.plan.subqueryPlans[i].plan.Close(ctx)
 	}
-	for i := range e.checkPlans {
+	for i := range e.plan.checkPlans {
 		e.plan.checkPlans[i].plan.Close(ctx)
 	}
 	e.run.results.Close(ctx)

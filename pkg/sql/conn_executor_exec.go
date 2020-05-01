@@ -898,11 +898,9 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		return recv.bytesRead, recv.rowsRead, recv.commErr
 	}
 
-	if len(planner.curPlan.checkPlans) > 0 || len(planner.curPlan.cascades) > 0 {
-		ex.server.cfg.DistSQLPlanner.PlanAndRunPostqueries(
-			ctx, planner, evalCtxFactory, planner.curPlan.cascades, planner.curPlan.checkPlans, recv, distribute,
-		)
-	}
+	ex.server.cfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
+		ctx, planner, evalCtxFactory, &planner.curPlan.planComponents, recv, distribute,
+	)
 
 	return recv.bytesRead, recv.rowsRead, recv.commErr
 }

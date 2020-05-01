@@ -237,12 +237,11 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			},
 			params.extendedEvalCtx.Tracing,
 		)
-		if !distSQLPlanner.PlanAndRunPostqueries(
+		if !distSQLPlanner.PlanAndRunCascadesAndChecks(
 			planCtx.ctx,
 			params.p,
 			params.extendedEvalCtx.copy,
-			nil, /* cascades */
-			n.plan.checkPlans,
+			&n.plan,
 			recv,
 			true,
 		) {
