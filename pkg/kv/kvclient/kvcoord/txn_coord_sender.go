@@ -796,14 +796,29 @@ func (tc *TxnCoordSender) updateStateLocked(
 	// Update our transaction with any information the error has.
 	if errTxn := pErr.GetTxn(); errTxn != nil {
 		if errTxn.Status == roachpb.COMMITTED {
-			// Finding out about our transaction being committed indicates a serious
-			// bug. Requests are not supposed to be sent on transactions after they
-			// are committed.
-			log.Errorf(ctx, "transaction unexpectedly committed: %s. ba: %s. txn: %s.", pErr, ba, errTxn)
+			sanityCheckCommittedErr(ctx, pErr, ba)
 		}
 		tc.mu.txn.Update(errTxn)
 	}
 	return pErr
+}
+
+func sanityCheckCommittedErr(ctx context.Context, pErr *roachpb.Error, ba roachpb.BatchRequest) {
+	errTxn := pErr.GetTxn()
+	if errTxn == nil || errTxn.Status != roachpb.COMMITTED {
+		// We shouldn't have been called.
+		return
+	}
+	// The only case in which an error can have a COMMITTED transaction in it is
+	// when the request was a rollback. Rollbacks can race with commits if a
+	// context timeout expires while a commit request is in flight.
+	if ba.IsSingleAbortTxnRequest() {
+		return
+	}
+	// Finding out about our transaction being committed indicates a serious bug.
+	// Requests are not supposed to be sent on transactions after they are
+	// committed.
+	log.Fatalf(ctx, "transaction unexpectedly committed: %s. ba: %s. txn: %s.", pErr, ba, errTxn)
 }
 
 // setTxnAnchorKey sets the key at which to anchor the transaction record. The
