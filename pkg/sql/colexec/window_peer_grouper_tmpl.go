@@ -40,7 +40,7 @@ import (
 func NewWindowPeerGrouper(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
-	typs []types.T,
+	typs []*types.T,
 	orderingCols []execinfrapb.Ordering_Column,
 	partitionColIdx int,
 	outputColIdx int,

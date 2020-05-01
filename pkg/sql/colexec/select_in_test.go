@@ -101,7 +101,7 @@ func TestSelectInInt64(t *testing.T) {
 
 func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
-	typs := []types.T{*types.Int}
+	typs := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatch(typs)
 	col1 := batch.ColVec(0).Int64()
 
@@ -221,13 +221,13 @@ func TestProjectInInt64(t *testing.T) {
 					if err != nil {
 						return nil, err
 					}
-					p := &mockTypeContext{typs: []types.T{*types.Int, *types.MakeTuple([]types.T{*types.Int})}}
+					p := &mockTypeContext{typs: []*types.T{types.Int, types.MakeTuple([]*types.T{types.Int})}}
 					typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarContainer: p}, types.Any)
 					if err != nil {
 						return nil, err
 					}
 					spec := &execinfrapb.ProcessorSpec{
-						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: []types.T{*types.Int}}},
+						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: []*types.T{types.Int}}},
 						Core: execinfrapb.ProcessorCoreUnion{
 							Noop: &execinfrapb.NoopCoreSpec{},
 						},

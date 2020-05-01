@@ -654,9 +654,9 @@ func (c *CustomFuncs) inBetweenFilters(
 func (c *CustomFuncs) columnComparison(
 	tabID opt.TableID, index cat.Index, values tree.Datums, comp int,
 ) opt.ScalarExpr {
-	colTypes := make([]types.T, len(values))
+	colTypes := make([]*types.T, len(values))
 	for i := range values {
-		colTypes[i] = *values[i].ResolvedType()
+		colTypes[i] = values[i].ResolvedType()
 	}
 
 	columnVariables := make(memo.ScalarListExpr, len(values))
@@ -1774,7 +1774,7 @@ func eqColsForZigzag(
 // not constrained to a constant.
 func (c *CustomFuncs) fixedColsForZigzag(
 	index cat.Index, tabID opt.TableID, filters memo.FiltersExpr,
-) (fixedCols opt.ColList, vals memo.ScalarListExpr, typs []types.T) {
+) (fixedCols opt.ColList, vals memo.ScalarListExpr, typs []*types.T) {
 	for i, cnt := 0, index.ColumnCount(); i < cnt; i++ {
 		colID := tabID.ColumnID(index.Column(i).Ordinal)
 		val := memo.ExtractValueForConstColumn(filters, c.e.mem, c.e.evalCtx, colID)
@@ -1783,13 +1783,13 @@ func (c *CustomFuncs) fixedColsForZigzag(
 		}
 		if vals == nil {
 			vals = make(memo.ScalarListExpr, 0, cnt-i)
-			typs = make([]types.T, 0, cnt-i)
+			typs = make([]*types.T, 0, cnt-i)
 			fixedCols = make(opt.ColList, 0, cnt-i)
 		}
 
 		dt := val.ResolvedType()
 		vals = append(vals, c.e.f.ConstructConstVal(val, dt))
-		typs = append(typs, *dt)
+		typs = append(typs, dt)
 		fixedCols = append(fixedCols, colID)
 	}
 	return fixedCols, vals, typs
@@ -2098,9 +2098,9 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		// Get constant values from each constraint. Add them to FixedVals as
 		// tuples, with associated Column IDs in both {Left,Right}FixedCols.
 		leftVals := make(memo.ScalarListExpr, minPrefix)
-		leftTypes := make([]types.T, minPrefix)
+		leftTypes := make([]*types.T, minPrefix)
 		rightVals := make(memo.ScalarListExpr, minPrefix)
-		rightTypes := make([]types.T, minPrefix)
+		rightTypes := make([]*types.T, minPrefix)
 
 		zigzagJoin.LeftFixedCols = make(opt.ColList, minPrefix)
 		zigzagJoin.RightFixedCols = make(opt.ColList, minPrefix)
@@ -2109,9 +2109,9 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			rightVal := constraint2.Spans.Get(0).StartKey().Value(i)
 
 			leftVals[i] = c.e.f.ConstructConstVal(leftVal, leftVal.ResolvedType())
-			leftTypes[i] = *leftVal.ResolvedType()
+			leftTypes[i] = leftVal.ResolvedType()
 			rightVals[i] = c.e.f.ConstructConstVal(rightVal, rightVal.ResolvedType())
-			rightTypes[i] = *rightVal.ResolvedType()
+			rightTypes[i] = rightVal.ResolvedType()
 			zigzagJoin.LeftFixedCols[i] = constraint.Columns.Get(i).ID()
 			zigzagJoin.RightFixedCols[i] = constraint.Columns.Get(i).ID()
 		}

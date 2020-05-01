@@ -35,7 +35,7 @@ type distinct struct {
 	execinfra.ProcessorBase
 
 	input            execinfra.RowSource
-	types            []types.T
+	types            []*types.T
 	haveLastGroupKey bool
 	lastGroupKey     sqlbase.EncDatumRow
 	arena            stringarena.Arena
@@ -166,7 +166,7 @@ func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 	}
 	for _, colIdx := range d.orderedCols {
 		res, err := d.lastGroupKey[colIdx].Compare(
-			&d.types[colIdx], &d.datumAlloc, d.EvalCtx, &row[colIdx],
+			d.types[colIdx], &d.datumAlloc, d.EvalCtx, &row[colIdx],
 		)
 		if res != 0 || err != nil {
 			return false, err
@@ -196,7 +196,7 @@ func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, err
 			continue
 		}
 
-		appendTo, err = datum.Fingerprint(&d.types[i], &d.datumAlloc, appendTo)
+		appendTo, err = datum.Fingerprint(d.types[i], &d.datumAlloc, appendTo)
 		if err != nil {
 			return nil, err
 		}

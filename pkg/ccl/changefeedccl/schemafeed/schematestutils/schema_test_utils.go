@@ -42,7 +42,7 @@ func MakeColumnDesc(id sqlbase.ColumnID) *sqlbase.ColumnDescriptor {
 	return &sqlbase.ColumnDescriptor{
 		Name:        "c" + strconv.Itoa(int(id)),
 		ID:          id,
-		Type:        *types.Bool,
+		Type:        types.Bool,
 		DefaultExpr: proto.String("true"),
 	}
 }

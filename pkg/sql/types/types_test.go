@@ -473,14 +473,14 @@ func TestTypes(t *testing.T) {
 
 		// TUPLE
 		{MakeTuple(nil), EmptyTuple},
-		{MakeTuple([]T{*Any}), AnyTuple},
-		{MakeTuple([]T{*Int}), &T{InternalType: InternalType{
-			Family: TupleFamily, Oid: oid.T_record, TupleContents: []T{*Int}, Locale: &emptyLocale}}},
-		{MakeTuple([]T{*Int, *String}), &T{InternalType: InternalType{
-			Family: TupleFamily, Oid: oid.T_record, TupleContents: []T{*Int, *String}, Locale: &emptyLocale}}},
+		{MakeTuple([]*T{Any}), AnyTuple},
+		{MakeTuple([]*T{Int}), &T{InternalType: InternalType{
+			Family: TupleFamily, Oid: oid.T_record, TupleContents: []*T{Int}, Locale: &emptyLocale}}},
+		{MakeTuple([]*T{Int, String}), &T{InternalType: InternalType{
+			Family: TupleFamily, Oid: oid.T_record, TupleContents: []*T{Int, String}, Locale: &emptyLocale}}},
 
-		{MakeLabeledTuple([]T{*Int, *String}, []string{"foo", "bar"}), &T{InternalType: InternalType{
-			Family: TupleFamily, Oid: oid.T_record, TupleContents: []T{*Int, *String},
+		{MakeLabeledTuple([]*T{Int, String}, []string{"foo", "bar"}), &T{InternalType: InternalType{
+			Family: TupleFamily, Oid: oid.T_record, TupleContents: []*T{Int, String},
 			TupleLabels: []string{"foo", "bar"}, Locale: &emptyLocale}}},
 
 		// UNKNOWN
@@ -584,15 +584,15 @@ func TestEquivalent(t *testing.T) {
 		{Int, IntArray, false},
 
 		// TUPLE
-		{MakeTuple([]T{}), MakeTuple([]T{}), true},
-		{MakeTuple([]T{*Int, *String}), MakeTuple([]T{*Int4, *VarChar}), true},
-		{MakeTuple([]T{*Int, *String}), AnyTuple, true},
-		{AnyTuple, MakeTuple([]T{*Int, *String}), true},
-		{MakeTuple([]T{*Int, *String}),
-			MakeLabeledTuple([]T{*Int4, *VarChar}, []string{"label2", "label1"}), true},
-		{MakeLabeledTuple([]T{*Int, *String}, []string{"label1", "label2"}),
-			MakeLabeledTuple([]T{*Int4, *VarChar}, []string{"label2", "label1"}), true},
-		{MakeTuple([]T{*String, *Int}), MakeTuple([]T{*Int, *String}), false},
+		{MakeTuple([]*T{}), MakeTuple([]*T{}), true},
+		{MakeTuple([]*T{Int, String}), MakeTuple([]*T{Int4, VarChar}), true},
+		{MakeTuple([]*T{Int, String}), AnyTuple, true},
+		{AnyTuple, MakeTuple([]*T{Int, String}), true},
+		{MakeTuple([]*T{Int, String}),
+			MakeLabeledTuple([]*T{Int4, VarChar}, []string{"label2", "label1"}), true},
+		{MakeLabeledTuple([]*T{Int, String}, []string{"label1", "label2"}),
+			MakeLabeledTuple([]*T{Int4, VarChar}, []string{"label2", "label1"}), true},
+		{MakeTuple([]*T{String, Int}), MakeTuple([]*T{Int, String}), false},
 
 		// UNKNOWN
 		{Unknown, &T{InternalType: InternalType{

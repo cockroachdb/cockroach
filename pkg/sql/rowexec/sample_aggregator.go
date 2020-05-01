@@ -41,7 +41,7 @@ type sampleAggregator struct {
 
 	spec    *execinfrapb.SampleAggregatorSpec
 	input   execinfra.RowSource
-	inTypes []types.T
+	inTypes []*types.T
 	sr      stats.SampleReservoir
 
 	// memAcc accounts for memory accumulated throughout the life of the
@@ -133,7 +133,7 @@ func newSampleAggregator(
 	s.sr.Init(int(spec.SampleSize), input.OutputTypes()[:rankCol], &s.memAcc, sampleCols)
 
 	if err := s.Init(
-		nil, post, []types.T{}, flowCtx, processorID, output, memMonitor,
+		nil, post, []*types.T{}, flowCtx, processorID, output, memMonitor,
 		execinfra.ProcStateOpts{
 			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
 				s.close()
@@ -287,7 +287,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 		s.sketches[sketchIdx].numNulls += numNulls
 
 		// Decode the sketch.
-		if err := row[s.sketchCol].EnsureDecoded(&s.inTypes[s.sketchCol], &da); err != nil {
+		if err := row[s.sketchCol].EnsureDecoded(s.inTypes[s.sketchCol], &da); err != nil {
 			return false, err
 		}
 		d := row[s.sketchCol].Datum
@@ -329,7 +329,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			var histogram *stats.HistogramData
 			if si.spec.GenerateHistogram && len(s.sr.Get()) != 0 {
 				colIdx := int(si.spec.Columns[0])
-				typ := &s.inTypes[colIdx]
+				typ := s.inTypes[colIdx]
 
 				h, err := s.generateHistogram(
 					ctx,

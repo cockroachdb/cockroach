@@ -35,14 +35,14 @@ import (
 )
 
 type callbackRemoteComponentCreator struct {
-	newOutboxFn func(*colmem.Allocator, colexecbase.Operator, []types.T, []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
-	newInboxFn  func(allocator *colmem.Allocator, typs []types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
+	newOutboxFn func(*colmem.Allocator, colexecbase.Operator, []*types.T, []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
+	newInboxFn  func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
 
 func (c callbackRemoteComponentCreator) newOutbox(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
-	typs []types.T,
+	typs []*types.T,
 	metadataSources []execinfrapb.MetadataSource,
 	toClose []colexec.IdempotentCloser,
 ) (*colrpc.Outbox, error) {
@@ -50,15 +50,15 @@ func (c callbackRemoteComponentCreator) newOutbox(
 }
 
 func (c callbackRemoteComponentCreator) newInbox(
-	allocator *colmem.Allocator, typs []types.T, streamID execinfrapb.StreamID,
+	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
 ) (*colrpc.Inbox, error) {
 	return c.newInboxFn(allocator, typs, streamID)
 }
 
-func intCols(numCols int) []types.T {
-	cols := make([]types.T, numCols)
+func intCols(numCols int) []*types.T {
+	cols := make([]*types.T, numCols)
 	for i := range cols {
-		cols[i] = *types.Int
+		cols[i] = types.Int
 	}
 	return cols
 }
@@ -182,13 +182,13 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 		},
 	}
 
-	inboxToNumInputTypes := make(map[*colrpc.Inbox][]types.T)
+	inboxToNumInputTypes := make(map[*colrpc.Inbox][]*types.T)
 	outboxCreated := false
 	componentCreator := callbackRemoteComponentCreator{
 		newOutboxFn: func(
 			allocator *colmem.Allocator,
 			op colexecbase.Operator,
-			typs []types.T,
+			typs []*types.T,
 			sources []execinfrapb.MetadataSource,
 		) (*colrpc.Outbox, error) {
 			require.False(t, outboxCreated)
@@ -201,7 +201,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			require.Len(t, inboxToNumInputTypes[sources[0].(*colrpc.Inbox)], numInputTypesToOutbox)
 			return colrpc.NewOutbox(allocator, op, typs, sources, nil /* toClose */)
 		},
-		newInboxFn: func(allocator *colmem.Allocator, typs []types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
+		newInboxFn: func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
 			inbox, err := colrpc.NewInbox(allocator, typs, streamID)
 			inboxToNumInputTypes[inbox] = typs
 			return inbox, err

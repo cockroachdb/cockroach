@@ -38,7 +38,7 @@ func DecodeIndexKeyToCols(
 	desc *sqlbase.ImmutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	indexColIdx []int,
-	types []types.T,
+	types []*types.T,
 	colDirs []sqlbase.IndexDescriptor_Direction,
 	key roachpb.Key,
 ) (remainingKey roachpb.Key, matches bool, foundNull bool, _ error) {
@@ -135,7 +135,7 @@ func DecodeKeyValsToCols(
 	vecs []coldata.Vec,
 	idx int,
 	indexColIdx []int,
-	types []types.T,
+	types []*types.T,
 	directions []sqlbase.IndexDescriptor_Direction,
 	unseen *util.FastIntSet,
 	key []byte,
@@ -156,7 +156,7 @@ func DecodeKeyValsToCols(
 				unseen.Remove(i)
 			}
 			var isNull bool
-			key, isNull, err = decodeTableKeyToCol(vecs[i], idx, &types[j], key, enc)
+			key, isNull, err = decodeTableKeyToCol(vecs[i], idx, types[j], key, enc)
 			foundNull = isNull || foundNull
 		}
 		if err != nil {

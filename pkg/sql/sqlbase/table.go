@@ -163,7 +163,7 @@ func MakeColumnDefDescs(
 	if err := ValidateColumnDefType(resType); err != nil {
 		return nil, nil, nil, err
 	}
-	col.Type = *resType
+	col.Type = resType
 
 	var typedExpr tree.TypedExpr
 	if d.HasDefaultExpr() {
@@ -289,8 +289,8 @@ func EncodeColumns(
 }
 
 // GetColumnTypes returns the types of the columns with the given IDs.
-func GetColumnTypes(desc *TableDescriptor, columnIDs []ColumnID) ([]types.T, error) {
-	types := make([]types.T, len(columnIDs))
+func GetColumnTypes(desc *TableDescriptor, columnIDs []ColumnID) ([]*types.T, error) {
+	types := make([]*types.T, len(columnIDs))
 	for i, id := range columnIDs {
 		col, err := desc.FindActiveColumnByID(id)
 		if err != nil {

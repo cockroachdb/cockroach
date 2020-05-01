@@ -49,7 +49,7 @@ func setupRouter(
 	evalCtx *tree.EvalContext,
 	diskMonitor *mon.BytesMonitor,
 	spec execinfrapb.OutputRouterSpec,
-	inputTypes []types.T,
+	inputTypes []*types.T,
 	streams []execinfra.RowReceiver,
 ) (router, *sync.WaitGroup) {
 	r, err := makeRouter(&spec, streams)
@@ -183,7 +183,7 @@ func TestRouters(t *testing.T) {
 							for _, row2 := range r2 {
 								equal := true
 								for _, c := range tc.spec.HashColumns {
-									cmp, err := row[c].Compare(&types[c], alloc, evalCtx, &row2[c])
+									cmp, err := row[c].Compare(types[c], alloc, evalCtx, &row2[c])
 									if err != nil {
 										t.Fatal(err)
 									}
@@ -218,7 +218,7 @@ func TestRouters(t *testing.T) {
 
 						equal := true
 						for j, c := range row {
-							cmp, err := c.Compare(&types[j], alloc, evalCtx, &row2[j])
+							cmp, err := c.Compare(types[j], alloc, evalCtx, &row2[j])
 							if err != nil {
 								t.Fatal(err)
 							}
@@ -242,7 +242,7 @@ func TestRouters(t *testing.T) {
 				var alloc sqlbase.DatumAlloc
 				for bIdx := range rows {
 					for _, row := range rows[bIdx] {
-						data, err := row[enc.Column].Encode(&types[enc.Column], &alloc, enc.Encoding, nil)
+						data, err := row[enc.Column].Encode(types[enc.Column], &alloc, enc.Encoding, nil)
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -328,7 +328,7 @@ func TestConsumerStatus(t *testing.T) {
 				tc.spec.Streams[i] = execinfrapb.StreamEndpointSpec{StreamID: execinfrapb.StreamID(i)}
 			}
 
-			colTypes := []types.T{*types.Int}
+			colTypes := []*types.T{types.Int}
 			router, wg := setupRouter(t, st, evalCtx, diskMonitor, tc.spec, colTypes, recvs)
 
 			// row0 will be a row that the router sends to the first stream, row1 to
@@ -348,9 +348,9 @@ func TestConsumerStatus(t *testing.T) {
 			case *rangeRouter:
 				// Use 0 and MaxInt32 to route rows based on testRangeRouterSpec's spans.
 				d := tree.NewDInt(0)
-				row0 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(&colTypes[0], d)}
+				row0 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(colTypes[0], d)}
 				d = tree.NewDInt(math.MaxInt32)
-				row1 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(&colTypes[0], d)}
+				row1 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(colTypes[0], d)}
 			default:
 				rng, _ := randutil.NewPseudoRand()
 				vals := sqlbase.RandEncDatumRowsOfTypes(rng, 1 /* numRows */, colTypes)
@@ -427,7 +427,7 @@ func TestConsumerStatus(t *testing.T) {
 // preimageAttack finds a row that hashes to a particular output stream. It's
 // assumed that hr is configured for rows with one column.
 func preimageAttack(
-	colTypes []types.T, hr *hashRouter, streamIdx int, numStreams int,
+	colTypes []*types.T, hr *hashRouter, streamIdx int, numStreams int,
 ) (sqlbase.EncDatumRow, error) {
 	rng, _ := randutil.NewPseudoRand()
 	for {
@@ -593,7 +593,7 @@ func TestRouterBlocks(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			colTypes := []types.T{*types.Int}
+			colTypes := []*types.T{types.Int}
 			chans := make([]execinfra.RowChannel, 2)
 			recvs := make([]execinfra.RowReceiver, 2)
 			tc.spec.Streams = make([]execinfrapb.StreamEndpointSpec, 2)
@@ -887,7 +887,7 @@ func TestRangeRouterInit(t *testing.T) {
 				Type:            execinfrapb.OutputRouterSpec_BY_RANGE,
 				RangeRouterSpec: tc.spec,
 			}
-			colTypes := []types.T{*types.Int}
+			colTypes := []*types.T{types.Int}
 			chans := make([]execinfra.RowChannel, 2)
 			recvs := make([]execinfra.RowReceiver, 2)
 			spec.Streams = make([]execinfrapb.StreamEndpointSpec, 2)

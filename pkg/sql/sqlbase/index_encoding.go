@@ -204,7 +204,7 @@ func (d directions) get(i int) (encoding.Direction, error) {
 // /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
 func MakeSpanFromEncDatums(
 	values EncDatumRow,
-	types []types.T,
+	types []*types.T,
 	dirs []IndexDescriptor_Direction,
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
@@ -390,7 +390,7 @@ func SplitSpanIntoSeparateFamilies(
 // /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
 func makeKeyFromEncDatums(
 	values EncDatumRow,
-	types []types.T,
+	types []*types.T,
 	dirs []IndexDescriptor_Direction,
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
@@ -472,7 +472,7 @@ func findColumnValue(column ColumnID, colMap map[ColumnID]int, values []tree.Dat
 // the datums at the end of the given roachpb.Key.
 func appendEncDatumsToKey(
 	key roachpb.Key,
-	types []types.T,
+	types []*types.T,
 	values EncDatumRow,
 	dirs []IndexDescriptor_Direction,
 	alloc *DatumAlloc,
@@ -486,7 +486,7 @@ func appendEncDatumsToKey(
 			containsNull = true
 		}
 		var err error
-		key, err = val.Encode(&types[i], alloc, encoding, key)
+		key, err = val.Encode(types[i], alloc, encoding, key)
 		if err != nil {
 			return nil, false, err
 		}
@@ -585,7 +585,7 @@ func DecodeIndexKey(
 	codec keys.SQLCodec,
 	desc *TableDescriptor,
 	index *IndexDescriptor,
-	types []types.T,
+	types []*types.T,
 	vals []EncDatum,
 	colDirs []IndexDescriptor_Direction,
 	key []byte,
@@ -607,7 +607,7 @@ func DecodeIndexKey(
 func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 	desc *TableDescriptor,
 	index *IndexDescriptor,
-	types []types.T,
+	types []*types.T,
 	vals []EncDatum,
 	colDirs []IndexDescriptor_Direction,
 	key []byte,
@@ -678,7 +678,7 @@ func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 // used will default to encoding.Ascending.
 // DecodeKeyVals returns whether or not NULL was encountered in the key.
 func DecodeKeyVals(
-	types []types.T, vals []EncDatum, directions []IndexDescriptor_Direction, key []byte,
+	types []*types.T, vals []EncDatum, directions []IndexDescriptor_Direction, key []byte,
 ) ([]byte, bool, error) {
 	if directions != nil && len(directions) != len(vals) {
 		return nil, false, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
@@ -691,7 +691,7 @@ func DecodeKeyVals(
 			enc = DatumEncoding_DESCENDING_KEY
 		}
 		var err error
-		vals[j], key, err = EncDatumFromBuffer(&types[j], enc, key)
+		vals[j], key, err = EncDatumFromBuffer(types[j], enc, key)
 		if err != nil {
 			return nil, false, err
 		}
@@ -783,14 +783,14 @@ func ExtractIndexKey(
 
 	decodedValues := make([]tree.Datum, len(values)+len(extraValues))
 	for i, value := range values {
-		err := value.EnsureDecoded(&indexTypes[i], a)
+		err := value.EnsureDecoded(indexTypes[i], a)
 		if err != nil {
 			return nil, err
 		}
 		decodedValues[i] = value.Datum
 	}
 	for i, value := range extraValues {
-		err := value.EnsureDecoded(&extraTypes[i], a)
+		err := value.EnsureDecoded(extraTypes[i], a)
 		if err != nil {
 			return nil, err
 		}

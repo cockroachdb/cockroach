@@ -74,14 +74,14 @@ func getDiskQueueCfgAndMemoryTestCases(
 // getDataAndFullSelection is a test helper that generates tuples representing
 // a batch with single int64 column where each element is its ordinal and an
 // accompanying selection vector that selects every index in tuples.
-func getDataAndFullSelection() (tuples, []types.T, []int) {
+func getDataAndFullSelection() (tuples, []*types.T, []int) {
 	data := make(tuples, coldata.BatchSize())
 	fullSelection := make([]int, coldata.BatchSize())
 	for i := range data {
 		data[i] = tuple{i}
 		fullSelection[i] = i
 	}
-	return data, []types.T{*types.Int}, fullSelection
+	return data, []*types.T{types.Int}, fullSelection
 }
 
 func TestRouterOutputAddBatch(t *testing.T) {
@@ -382,7 +382,7 @@ func TestRouterOutputRandom(t *testing.T) {
 		outputSize       = 1 + rng.Intn(maxValues-1)
 	)
 
-	typs := []types.T{*types.Int, *types.Int}
+	typs := []*types.T{types.Int, types.Int}
 
 	dataLen := 1 + rng.Intn(maxValues-1)
 	data := make(tuples, dataLen)
@@ -565,7 +565,7 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		expectedNumVals = []int{273, 252, 287, 212}
 		numOutputs      = 4
 		valsPushed      = make([]int, numOutputs)
-		typs            = []types.T{*types.Int}
+		typs            = []*types.T{types.Int}
 	)
 
 	outputs := make([]routerOutput, numOutputs)
@@ -624,7 +624,7 @@ func TestHashRouterCancellation(t *testing.T) {
 		}
 	}
 
-	typs := []types.T{*types.Int}
+	typs := []*types.T{types.Int}
 	// Never-ending input of 0s.
 	batch := testAllocator.NewMemBatch(typs)
 	batch.SetLength(coldata.BatchSize())
@@ -790,7 +790,7 @@ func TestHashRouterRandom(t *testing.T) {
 		numOutputs       = 1 + rng.Intn(maxOutputs-1)
 	)
 
-	typs := []types.T{*types.Int, *types.Int}
+	typs := []*types.T{types.Int, types.Int}
 	dataLen := 1 + rng.Intn(maxValues-1)
 	data := make(tuples, dataLen)
 	for i := range data {
@@ -931,7 +931,7 @@ func BenchmarkHashRouter(b *testing.B) {
 
 	// Use only one type. Note: the more types you use, the more you inflate the
 	// numbers.
-	typs := []types.T{*types.Int}
+	typs := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatch(typs)
 	batch.SetLength(coldata.BatchSize())
 	input := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)

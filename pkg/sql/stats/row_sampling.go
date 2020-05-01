@@ -44,7 +44,7 @@ type SampledRow struct {
 // at least as large as this reservoir.
 type SampleReservoir struct {
 	samples  []SampledRow
-	colTypes []types.T
+	colTypes []*types.T
 	da       sqlbase.DatumAlloc
 	ra       sqlbase.EncDatumRowAlloc
 	memAcc   *mon.BoundAccount
@@ -59,7 +59,7 @@ var _ heap.Interface = &SampleReservoir{}
 
 // Init initializes a SampleReservoir.
 func (sr *SampleReservoir) Init(
-	numSamples int, colTypes []types.T, memAcc *mon.BoundAccount, sampleCols util.FastIntSet,
+	numSamples int, colTypes []*types.T, memAcc *mon.BoundAccount, sampleCols util.FastIntSet,
 ) {
 	sr.samples = make([]SampledRow, 0, numSamples)
 	sr.colTypes = colTypes
@@ -148,11 +148,11 @@ func (sr *SampleReservoir) copyRow(
 		// the encoded bytes. The encoded bytes would have been scanned in a batch
 		// of ~10000 rows, so we must delete the reference to allow the garbage
 		// collector to release the memory from the batch.
-		if err := src[i].EnsureDecoded(&sr.colTypes[i], &sr.da); err != nil {
+		if err := src[i].EnsureDecoded(sr.colTypes[i], &sr.da); err != nil {
 			return err
 		}
 		beforeSize := dst[i].Size()
-		dst[i] = sqlbase.DatumToEncDatum(&sr.colTypes[i], src[i].Datum)
+		dst[i] = sqlbase.DatumToEncDatum(sr.colTypes[i], src[i].Datum)
 		afterSize := dst[i].Size()
 
 		// If the datum is too large, truncate it (this also performs a copy).

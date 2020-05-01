@@ -189,7 +189,7 @@ func MakeSequenceTableDesc(
 		{
 			ID:   1,
 			Name: sequenceColumnName,
-			Type: *types.Int,
+			Type: types.Int,
 		},
 	}
 	desc.PrimaryIndex = sqlbase.IndexDescriptor{

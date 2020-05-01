@@ -240,7 +240,7 @@ func TestHashJoinerError(t *testing.T) {
 }
 
 func checkExpectedRows(
-	types []types.T, expectedRows sqlbase.EncDatumRows, results *distsqlutils.RowBuffer,
+	types []*types.T, expectedRows sqlbase.EncDatumRows, results *distsqlutils.RowBuffer,
 ) error {
 	var expected []string
 	for _, row := range expectedRows {

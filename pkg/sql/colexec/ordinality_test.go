@@ -40,27 +40,27 @@ func TestOrdinality(t *testing.T) {
 	tcs := []struct {
 		tuples     []tuple
 		expected   []tuple
-		inputTypes []types.T
+		inputTypes []*types.T
 	}{
 		{
 			tuples:     tuples{{1}},
 			expected:   tuples{{1, 1}},
-			inputTypes: []types.T{*types.Int},
+			inputTypes: []*types.T{types.Int},
 		},
 		{
 			tuples:     tuples{{}, {}, {}, {}, {}},
 			expected:   tuples{{1}, {2}, {3}, {4}, {5}},
-			inputTypes: []types.T{},
+			inputTypes: []*types.T{},
 		},
 		{
 			tuples:     tuples{{5}, {6}, {7}, {8}},
 			expected:   tuples{{5, 1}, {6, 2}, {7, 3}, {8, 4}},
-			inputTypes: []types.T{*types.Int},
+			inputTypes: []*types.T{types.Int},
 		},
 		{
 			tuples:     tuples{{5, 'a'}, {6, 'b'}, {7, 'c'}, {8, 'd'}},
 			expected:   tuples{{5, 'a', 1}, {6, 'b', 2}, {7, 'c', 3}, {8, 'd', 4}},
-			inputTypes: []types.T{*types.Int, *types.String},
+			inputTypes: []*types.T{types.Int, types.String},
 		},
 	}
 
@@ -84,11 +84,11 @@ func BenchmarkOrdinality(b *testing.B) {
 		},
 	}
 
-	typs := []types.T{*types.Int, *types.Int, *types.Int}
+	typs := []*types.T{types.Int, types.Int, types.Int}
 	batch := testAllocator.NewMemBatch(typs)
 	batch.SetLength(coldata.BatchSize())
 	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
-	ordinality, err := createTestOrdinalityOperator(ctx, flowCtx, source, []types.T{*types.Int, *types.Int, *types.Int})
+	ordinality, err := createTestOrdinalityOperator(ctx, flowCtx, source, []*types.T{types.Int, types.Int, types.Int})
 	require.NoError(b, err)
 	ordinality.Init()
 
@@ -99,7 +99,10 @@ func BenchmarkOrdinality(b *testing.B) {
 }
 
 func createTestOrdinalityOperator(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, input colexecbase.Operator, inputTypes []types.T,
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	input colexecbase.Operator,
+	inputTypes []*types.T,
 ) (colexecbase.Operator, error) {
 	spec := &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},

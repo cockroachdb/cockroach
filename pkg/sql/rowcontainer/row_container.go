@@ -120,7 +120,7 @@ type RowIterator interface {
 // EncDatumRows and facilitating sorting.
 type MemRowContainer struct {
 	RowContainer
-	types         []types.T
+	types         []*types.T
 	invertSorting bool // Inverts the sorting predicate.
 	ordering      sqlbase.ColumnOrdering
 	scratchRow    tree.Datums
@@ -137,7 +137,7 @@ var _ IndexedRowContainer = &MemRowContainer{}
 // Init initializes the MemRowContainer. The MemRowContainer uses evalCtx.Mon
 // to track memory usage.
 func (mc *MemRowContainer) Init(
-	ordering sqlbase.ColumnOrdering, types []types.T, evalCtx *tree.EvalContext,
+	ordering sqlbase.ColumnOrdering, types []*types.T, evalCtx *tree.EvalContext,
 ) {
 	mc.InitWithMon(ordering, types, evalCtx, evalCtx.Mon, 0 /* rowCapacity */)
 }
@@ -146,7 +146,7 @@ func (mc *MemRowContainer) Init(
 // use this if the default MemRowContainer.Init() function is insufficient.
 func (mc *MemRowContainer) InitWithMon(
 	ordering sqlbase.ColumnOrdering,
-	types []types.T,
+	types []*types.T,
 	evalCtx *tree.EvalContext,
 	mon *mon.BytesMonitor,
 	rowCapacity int,
@@ -161,7 +161,7 @@ func (mc *MemRowContainer) InitWithMon(
 }
 
 // Types returns the MemRowContainer's types.
-func (mc *MemRowContainer) Types() []types.T {
+func (mc *MemRowContainer) Types() []*types.T {
 	return mc.types
 }
 
@@ -179,7 +179,7 @@ func (mc *MemRowContainer) Less(i, j int) bool {
 func (mc *MemRowContainer) EncRow(idx int) sqlbase.EncDatumRow {
 	datums := mc.At(idx)
 	for i, d := range datums {
-		mc.scratchEncRow[i] = sqlbase.DatumToEncDatum(&mc.types[i], d)
+		mc.scratchEncRow[i] = sqlbase.DatumToEncDatum(mc.types[i], d)
 	}
 	return mc.scratchEncRow
 }
@@ -190,7 +190,7 @@ func (mc *MemRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(mc.types))
 	}
 	for i := range row {
-		err := row[i].EnsureDecoded(&mc.types[i], &mc.datumAlloc)
+		err := row[i].EnsureDecoded(mc.types[i], &mc.datumAlloc)
 		if err != nil {
 			return err
 		}
@@ -231,7 +231,7 @@ func (mc *MemRowContainer) MaybeReplaceMax(ctx context.Context, row sqlbase.EncD
 	if cmp < 0 {
 		// row is smaller than the max; replace.
 		for i := range row {
-			if err := row[i].EnsureDecoded(&mc.types[i], &mc.datumAlloc); err != nil {
+			if err := row[i].EnsureDecoded(mc.types[i], &mc.datumAlloc); err != nil {
 				return err
 			}
 			mc.scratchRow[i] = row[i].Datum
@@ -373,7 +373,7 @@ var _ ReorderableRowContainer = &DiskBackedRowContainer{}
 //    in-memory container should be preallocated for.
 func (f *DiskBackedRowContainer) Init(
 	ordering sqlbase.ColumnOrdering,
-	types []types.T,
+	types []*types.T,
 	evalCtx *tree.EvalContext,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
@@ -533,7 +533,7 @@ type DiskBackedIndexedRowContainer struct {
 	*DiskBackedRowContainer
 
 	scratchEncRow sqlbase.EncDatumRow
-	storedTypes   []types.T
+	storedTypes   []*types.T
 	datumAlloc    sqlbase.DatumAlloc
 	rowAlloc      sqlbase.EncDatumRowAlloc
 	idx           uint64 // the index of the next row to be added into the container
@@ -577,7 +577,7 @@ var _ IndexedRowContainer = &DiskBackedIndexedRowContainer{}
 //    should be preallocated for.
 func NewDiskBackedIndexedRowContainer(
 	ordering sqlbase.ColumnOrdering,
-	typs []types.T,
+	typs []*types.T,
 	evalCtx *tree.EvalContext,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
@@ -587,9 +587,9 @@ func NewDiskBackedIndexedRowContainer(
 	d := DiskBackedIndexedRowContainer{}
 
 	// We will be storing an index of each row as the last INT column.
-	d.storedTypes = make([]types.T, len(typs)+1)
+	d.storedTypes = make([]*types.T, len(typs)+1)
 	copy(d.storedTypes, typs)
-	d.storedTypes[len(d.storedTypes)-1] = *types.Int
+	d.storedTypes[len(d.storedTypes)-1] = types.Int
 	d.scratchEncRow = make(sqlbase.EncDatumRow, len(d.storedTypes))
 	d.DiskBackedRowContainer = &DiskBackedRowContainer{}
 	d.DiskBackedRowContainer.Init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, diskMonitor, rowCapacity)
@@ -713,7 +713,7 @@ func (f *DiskBackedIndexedRowContainer) GetRow(
 					return nil, err
 				}
 				for i := range rowWithIdx {
-					if err := rowWithIdx[i].EnsureDecoded(&f.storedTypes[i], &f.datumAlloc); err != nil {
+					if err := rowWithIdx[i].EnsureDecoded(f.storedTypes[i], &f.datumAlloc); err != nil {
 						return nil, err
 					}
 				}
@@ -848,7 +848,7 @@ func (f *DiskBackedIndexedRowContainer) getRowWithoutCache(
 				panic(err)
 			}
 			for i := range rowWithIdx {
-				if err := rowWithIdx[i].EnsureDecoded(&f.storedTypes[i], &f.datumAlloc); err != nil {
+				if err := rowWithIdx[i].EnsureDecoded(f.storedTypes[i], &f.datumAlloc); err != nil {
 					panic(err)
 				}
 			}

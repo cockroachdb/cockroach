@@ -92,7 +92,7 @@ func valueEncodePartitionTuple(
 		}
 
 		var semaCtx tree.SemaContext
-		typedExpr, err := sqlbase.SanitizeVarFreeExpr(expr, &cols[i].Type, "partition",
+		typedExpr, err := sqlbase.SanitizeVarFreeExpr(expr, cols[i].Type, "partition",
 			&semaCtx, false /* allowImpure */)
 		if err != nil {
 			return nil, err
@@ -362,7 +362,7 @@ func selectPartitionExprsByName(
 			if err != nil {
 				return err
 			}
-			colVars[i] = tree.NewTypedOrdinalReference(int(col.ID), &col.Type)
+			colVars[i] = tree.NewTypedOrdinalReference(int(col.ID), col.Type)
 		}
 	}
 
@@ -389,9 +389,9 @@ func selectPartitionExprsByName(
 
 				// When len(allDatums) < len(colVars), the missing elements are DEFAULTs, so
 				// we can simply exclude them from the expr.
-				typContents := make([]types.T, len(allDatums))
+				typContents := make([]*types.T, len(allDatums))
 				for i, d := range allDatums {
-					typContents[i] = *d.ResolvedType()
+					typContents[i] = d.ResolvedType()
 				}
 				tupleTyp := types.MakeTuple(typContents)
 				partValueExpr := tree.NewTypedComparisonExpr(tree.EQ,

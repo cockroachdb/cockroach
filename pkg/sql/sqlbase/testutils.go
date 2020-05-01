@@ -212,7 +212,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 	case types.TupleFamily:
 		tuple := tree.DTuple{D: make(tree.Datums, len(typ.TupleContents()))}
 		for i := range typ.TupleContents() {
-			tuple.D[i] = RandDatum(rng, &typ.TupleContents()[i], true)
+			tuple.D[i] = RandDatum(rng, typ.TupleContents()[i], true)
 		}
 		return &tuple
 	case types.BitFamily:
@@ -747,9 +747,9 @@ func randType(rng *rand.Rand, typs []*types.T) *types.T {
 	case types.TupleFamily:
 		// Generate tuples between 0 and 4 datums in length
 		len := rng.Intn(5)
-		contents := make([]types.T, len)
+		contents := make([]*types.T, len)
 		for i := range contents {
-			contents[i] = *RandType(rng)
+			contents[i] = RandType(rng)
 		}
 		return types.MakeTuple(contents)
 	}
@@ -769,10 +769,10 @@ func RandColumnType(rng *rand.Rand) *types.T {
 
 // RandColumnTypes returns a slice of numCols random types. These types must be
 // legal table column types.
-func RandColumnTypes(rng *rand.Rand, numCols int) []types.T {
-	types := make([]types.T, numCols)
+func RandColumnTypes(rng *rand.Rand, numCols int) []*types.T {
+	types := make([]*types.T, numCols)
 	for i := range types {
-		types[i] = *RandColumnType(rng)
+		types[i] = RandColumnType(rng)
 	}
 	return types
 }
@@ -788,10 +788,10 @@ func RandSortingType(rng *rand.Rand) *types.T {
 
 // RandSortingTypes returns a slice of numCols random ColumnType values
 // which are key-encodable.
-func RandSortingTypes(rng *rand.Rand, numCols int) []types.T {
-	types := make([]types.T, numCols)
+func RandSortingTypes(rng *rand.Rand, numCols int) []*types.T {
+	types := make([]*types.T, numCols)
 	for i := range types {
-		types[i] = *RandSortingType(rng)
+		types[i] = RandSortingType(rng)
 	}
 	return types
 }
@@ -822,7 +822,7 @@ func RandEncodableType(rng *rand.Rand) *types.T {
 
 		case types.TupleFamily:
 			for i := range t.TupleContents() {
-				if !isEncodableType(&t.TupleContents()[i]) {
+				if !isEncodableType(t.TupleContents()[i]) {
 					return false
 				}
 			}
@@ -843,12 +843,12 @@ func RandEncodableType(rng *rand.Rand) *types.T {
 //
 // TODO(andyk): Remove this workaround once #36736 is resolved. Replace calls to
 // it with calls to RandColumnTypes.
-func RandEncodableColumnTypes(rng *rand.Rand, numCols int) []types.T {
-	types := make([]types.T, numCols)
+func RandEncodableColumnTypes(rng *rand.Rand, numCols int) []*types.T {
+	types := make([]*types.T, numCols)
 	for i := range types {
 		for {
-			types[i] = *RandEncodableType(rng)
-			if err := ValidateColumnDefType(&types[i]); err == nil {
+			types[i] = RandEncodableType(rng)
+			if err := ValidateColumnDefType(types[i]); err == nil {
 				break
 			}
 		}
@@ -878,36 +878,36 @@ func RandSortingEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, *types.T
 // random type which is key-encodable.
 func RandSortingEncDatumSlices(
 	rng *rand.Rand, numSets, numValsPerSet int,
-) ([][]EncDatum, []types.T) {
+) ([][]EncDatum, []*types.T) {
 	vals := make([][]EncDatum, numSets)
-	types := make([]types.T, numSets)
+	types := make([]*types.T, numSets)
 	for i := range vals {
 		val, typ := RandSortingEncDatumSlice(rng, numValsPerSet)
-		vals[i], types[i] = val, *typ
+		vals[i], types[i] = val, typ
 	}
 	return vals, types
 }
 
 // RandEncDatumRowOfTypes generates a slice of random EncDatum values for the
 // corresponding type in types.
-func RandEncDatumRowOfTypes(rng *rand.Rand, types []types.T) EncDatumRow {
+func RandEncDatumRowOfTypes(rng *rand.Rand, types []*types.T) EncDatumRow {
 	vals := make([]EncDatum, len(types))
 	for i := range types {
-		vals[i] = DatumToEncDatum(&types[i], RandDatum(rng, &types[i], true))
+		vals[i] = DatumToEncDatum(types[i], RandDatum(rng, types[i], true))
 	}
 	return vals
 }
 
 // RandEncDatumRows generates EncDatumRows where all rows follow the same random
 // []ColumnType structure.
-func RandEncDatumRows(rng *rand.Rand, numRows, numCols int) (EncDatumRows, []types.T) {
+func RandEncDatumRows(rng *rand.Rand, numRows, numCols int) (EncDatumRows, []*types.T) {
 	types := RandEncodableColumnTypes(rng, numCols)
 	return RandEncDatumRowsOfTypes(rng, numRows, types), types
 }
 
 // RandEncDatumRowsOfTypes generates EncDatumRows, each row with values of the
 // corresponding type in types.
-func RandEncDatumRowsOfTypes(rng *rand.Rand, numRows int, types []types.T) EncDatumRows {
+func RandEncDatumRowsOfTypes(rng *rand.Rand, numRows int, types []*types.T) EncDatumRows {
 	vals := make(EncDatumRows, numRows)
 	for i := range vals {
 		vals[i] = RandEncDatumRowOfTypes(rng, types)
@@ -1340,20 +1340,20 @@ func randIndexTableDefFromCols(
 // The following variables are useful for testing.
 var (
 	// OneIntCol is a slice of one IntType.
-	OneIntCol = []types.T{*types.Int}
+	OneIntCol = []*types.T{types.Int}
 	// TwoIntCols is a slice of two IntTypes.
-	TwoIntCols = []types.T{*types.Int, *types.Int}
+	TwoIntCols = []*types.T{types.Int, types.Int}
 	// ThreeIntCols is a slice of three IntTypes.
-	ThreeIntCols = []types.T{*types.Int, *types.Int, *types.Int}
+	ThreeIntCols = []*types.T{types.Int, types.Int, types.Int}
 	// FourIntCols is a slice of four IntTypes.
-	FourIntCols = []types.T{*types.Int, *types.Int, *types.Int, *types.Int}
+	FourIntCols = []*types.T{types.Int, types.Int, types.Int, types.Int}
 )
 
 // MakeIntCols makes a slice of numCols IntTypes.
-func MakeIntCols(numCols int) []types.T {
-	ret := make([]types.T, numCols)
+func MakeIntCols(numCols int) []*types.T {
+	ret := make([]*types.T, numCols)
 	for i := 0; i < numCols; i++ {
-		ret[i] = *types.Int
+		ret[i] = types.Int
 	}
 	return ret
 }

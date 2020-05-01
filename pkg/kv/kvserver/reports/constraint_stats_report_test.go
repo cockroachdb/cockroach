@@ -932,7 +932,7 @@ func makeTableDesc(t table, tableID int, dbID int) (sqlbase.TableDescriptor, err
 		desc.Columns = append(desc.Columns, sqlbase.ColumnDescriptor{
 			Name: fmt.Sprintf("col%d", i),
 			ID:   sqlbase.ColumnID(i),
-			Type: *types.Int,
+			Type: types.Int,
 		})
 	}
 

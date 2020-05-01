@@ -319,13 +319,13 @@ type batchSchemaPrefixEnforcer struct {
 	NonExplainable
 
 	allocator *colmem.Allocator
-	typs      []types.T
+	typs      []*types.T
 }
 
 var _ colexecbase.Operator = &batchSchemaPrefixEnforcer{}
 
 func newBatchSchemaPrefixEnforcer(
-	allocator *colmem.Allocator, input colexecbase.Operator, typs []types.T,
+	allocator *colmem.Allocator, input colexecbase.Operator, typs []*types.T,
 ) *batchSchemaPrefixEnforcer {
 	return &batchSchemaPrefixEnforcer{
 		OneInputNode: NewOneInputNode(input),
@@ -343,8 +343,8 @@ func (e *batchSchemaPrefixEnforcer) Next(ctx context.Context) coldata.Batch {
 	if b.Length() == 0 {
 		return b
 	}
-	for i := range e.typs {
-		e.allocator.MaybeAppendColumn(b, &e.typs[i], i)
+	for i, typ := range e.typs {
+		e.allocator.MaybeAppendColumn(b, typ, i)
 	}
 	return b
 }

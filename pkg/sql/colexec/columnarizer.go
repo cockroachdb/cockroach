@@ -48,7 +48,7 @@ type Columnarizer struct {
 	batch           coldata.Batch
 	accumulatedMeta []execinfrapb.ProducerMetadata
 	ctx             context.Context
-	typs            []types.T
+	typs            []*types.T
 }
 
 var _ colexecbase.Operator = &Columnarizer{}
@@ -125,7 +125,7 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 
 	// Write each column into the output batch.
 	for idx, ct := range columnTypes {
-		err := EncDatumRowsToColVec(c.allocator, c.buffered[:nRows], c.batch.ColVec(idx), idx, &ct, &c.da)
+		err := EncDatumRowsToColVec(c.allocator, c.buffered[:nRows], c.batch.ColVec(idx), idx, ct, &c.da)
 		if err != nil {
 			colexecerror.InternalError(err)
 		}

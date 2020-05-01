@@ -192,7 +192,7 @@ type mergeJoinInput struct {
 
 	// sourceTypes specify the types of the input columns of the source table for
 	// the merge joiner.
-	sourceTypes []types.T
+	sourceTypes []*types.T
 	// canonicalTypeFamilies stores the canonical type families from
 	// sourceTypes. It is stored explicitly rather than being converted at
 	// runtime because that conversion would occur in tight loops and
@@ -237,8 +237,8 @@ func newMergeJoinOp(
 	joinType sqlbase.JoinType,
 	left colexecbase.Operator,
 	right colexecbase.Operator,
-	leftTypes []types.T,
-	rightTypes []types.T,
+	leftTypes []*types.T,
+	rightTypes []*types.T,
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
@@ -300,8 +300,8 @@ func newMergeJoinBase(
 	joinType sqlbase.JoinType,
 	left colexecbase.Operator,
 	right colexecbase.Operator,
-	leftTypes []types.T,
-	rightTypes []types.T,
+	leftTypes []*types.T,
+	rightTypes []*types.T,
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
@@ -442,7 +442,7 @@ func (o *mergeJoinBase) Init() {
 }
 
 func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
-	outputTypes := append([]types.T{}, o.left.sourceTypes...)
+	outputTypes := append([]*types.T{}, o.left.sourceTypes...)
 	if o.joinType != sqlbase.LeftSemiJoin && o.joinType != sqlbase.LeftAntiJoin {
 		outputTypes = append(outputTypes, o.right.sourceTypes...)
 	}
@@ -461,16 +461,16 @@ func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
 		o.diskQueueCfg, o.fdSemaphore, coldata.BatchSize(), o.diskAcc,
 	)
 	o.proberState.lBufferedGroup.firstTuple = make([]coldata.Vec, len(o.left.sourceTypes))
-	for colIdx := range o.left.sourceTypes {
-		o.proberState.lBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(&o.left.sourceTypes[colIdx], 1)
+	for colIdx, t := range o.left.sourceTypes {
+		o.proberState.lBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(t, 1)
 	}
 	o.proberState.rBufferedGroup.spillingQueue = newRewindableSpillingQueue(
 		o.unlimitedAllocator, o.right.sourceTypes, o.memoryLimit,
 		o.diskQueueCfg, o.fdSemaphore, coldata.BatchSize(), o.diskAcc,
 	)
 	o.proberState.rBufferedGroup.firstTuple = make([]coldata.Vec, len(o.right.sourceTypes))
-	for colIdx := range o.right.sourceTypes {
-		o.proberState.rBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(&o.right.sourceTypes[colIdx], 1)
+	for colIdx, t := range o.right.sourceTypes {
+		o.proberState.rBufferedGroup.firstTuple[colIdx] = o.unlimitedAllocator.NewMemColumn(t, 1)
 	}
 
 	o.builderState.lGroups = make([]group, 1)
@@ -503,7 +503,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	var (
 		bufferedGroup *mjBufferedGroup
 		scratchBatch  coldata.Batch
-		sourceTypes   []types.T
+		sourceTypes   []*types.T
 	)
 	if input == &o.left {
 		sourceTypes = o.left.sourceTypes

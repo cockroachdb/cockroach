@@ -655,7 +655,7 @@ func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Typ
 
 	// Otherwise, let the expression be, it's probably more complex.
 	// Just annotate the type of the result properly.
-	expr.typ = &resolvedType.TupleContents()[expr.ColIndex]
+	expr.typ = resolvedType.TupleContents()[expr.ColIndex]
 	return expr, nil
 }
 
@@ -1277,18 +1277,18 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, err
 	}
 
 	var labels []string
-	contents := make([]types.T, len(expr.Exprs))
+	contents := make([]*types.T, len(expr.Exprs))
 	for i, subExpr := range expr.Exprs {
 		desiredElem := types.Any
 		if desired.Family() == types.TupleFamily && len(desired.TupleContents()) > i {
-			desiredElem = &desired.TupleContents()[i]
+			desiredElem = desired.TupleContents()[i]
 		}
 		typedExpr, err := subExpr.TypeCheck(ctx, desiredElem)
 		if err != nil {
 			return nil, err
 		}
 		expr.Exprs[i] = typedExpr
-		contents[i] = *typedExpr.ResolvedType()
+		contents[i] = typedExpr.ResolvedType()
 	}
 	// Copy the labels if there are any.
 	if len(expr.Labels) > 0 {
@@ -1509,7 +1509,7 @@ func (d dNull) TypeCheck(_ *SemaContext, desired *types.T) (TypedExpr, error) { 
 func typeCheckAndRequireTupleElems(
 	ctx *SemaContext, expr TypedExpr, tuple *Tuple, op ComparisonOperator,
 ) (TypedExpr, error) {
-	tuple.typ = types.MakeTuple(make([]types.T, len(tuple.Exprs)))
+	tuple.typ = types.MakeTuple(make([]*types.T, len(tuple.Exprs)))
 	for i, subExpr := range tuple.Exprs {
 		// Require that the sub expression is comparable to the required type.
 		_, rightTyped, _, _, err := typeCheckComparisonOp(ctx, op, expr, subExpr)
@@ -1517,7 +1517,7 @@ func typeCheckAndRequireTupleElems(
 			return nil, err
 		}
 		tuple.Exprs[i] = rightTyped
-		tuple.typ.TupleContents()[i] = *rightTyped.ResolvedType()
+		tuple.typ.TupleContents()[i] = rightTyped.ResolvedType()
 	}
 	return tuple, nil
 }
@@ -1647,7 +1647,7 @@ func typeCheckComparisonOpWithSubOperator(
 				// purposes of computing the correct comparison function below, since
 				// if two datum types are comparable, it's legal to call .Compare on
 				// one with the other.
-				cmpTypeRight = &rightReturn.TupleContents()[0]
+				cmpTypeRight = rightReturn.TupleContents()[0]
 			}
 		default:
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right,
@@ -1677,7 +1677,7 @@ func typeCheckSubqueryWithIn(left, right *types.T) error {
 			return pgerror.Newf(pgcode.InvalidParameterValue,
 				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
 		}
-		if !left.Equivalent(&right.TupleContents()[0]) {
+		if !left.Equivalent(right.TupleContents()[0]) {
 			return pgerror.Newf(pgcode.InvalidParameterValue,
 				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
 		}
@@ -1718,10 +1718,10 @@ func typeCheckComparisonOp(
 		typedLeft := typedSubExprs[0]
 		typedSubExprs = typedSubExprs[1:]
 
-		rightTuple.typ = types.MakeTuple(make([]types.T, len(typedSubExprs)))
+		rightTuple.typ = types.MakeTuple(make([]*types.T, len(typedSubExprs)))
 		for i, typedExpr := range typedSubExprs {
 			rightTuple.Exprs[i] = typedExpr
-			rightTuple.typ.TupleContents()[i] = *retType
+			rightTuple.typ.TupleContents()[i] = retType
 		}
 		if switched {
 			return rightTuple, typedLeft, fn, false, nil
@@ -1744,7 +1744,7 @@ func typeCheckComparisonOp(
 				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sig)
 		}
 
-		desired := types.MakeTuple([]types.T{*typ})
+		desired := types.MakeTuple([]*types.T{typ})
 		typedRight, err := foldedRight.TypeCheck(ctx, desired)
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
@@ -2084,8 +2084,8 @@ func typeCheckTupleComparison(
 	if err := checkTupleHasLength(right, tupLen); err != nil {
 		return nil, nil, err
 	}
-	left.typ = types.MakeTuple(make([]types.T, tupLen))
-	right.typ = types.MakeTuple(make([]types.T, tupLen))
+	left.typ = types.MakeTuple(make([]*types.T, tupLen))
+	right.typ = types.MakeTuple(make([]*types.T, tupLen))
 	for elemIdx := range left.Exprs {
 		leftSubExpr := left.Exprs[elemIdx]
 		rightSubExpr := right.Exprs[elemIdx]
@@ -2096,9 +2096,9 @@ func typeCheckTupleComparison(
 				&exps, elemIdx+1, err)
 		}
 		left.Exprs[elemIdx] = leftSubExprTyped
-		left.typ.TupleContents()[elemIdx] = *leftSubExprTyped.ResolvedType()
+		left.typ.TupleContents()[elemIdx] = leftSubExprTyped.ResolvedType()
 		right.Exprs[elemIdx] = rightSubExprTyped
-		right.typ.TupleContents()[elemIdx] = *rightSubExprTyped.ResolvedType()
+		right.typ.TupleContents()[elemIdx] = rightSubExprTyped.ResolvedType()
 	}
 	return left, right, nil
 }
@@ -2130,7 +2130,7 @@ func typeCheckSameTypedTupleExprs(
 	}
 
 	// All expressions within tuples at the same indexes must be the same type.
-	resTypes := types.MakeTuple(make([]types.T, firstLen))
+	resTypes := types.MakeTuple(make([]*types.T, firstLen))
 	sameTypeExprs := make([]Expr, 0, len(exprs))
 	// We will be skipping nulls, so we need to keep track at which indices in
 	// exprs are the non-null tuples.
@@ -2147,7 +2147,7 @@ func typeCheckSameTypedTupleExprs(
 		}
 		desiredElem := types.Any
 		if len(desired.TupleContents()) > elemIdx {
-			desiredElem = &desired.TupleContents()[elemIdx]
+			desiredElem = desired.TupleContents()[elemIdx]
 		}
 		typedSubExprs, resType, err := TypeCheckSameTypedExprs(ctx, desiredElem, sameTypeExprs...)
 		if err != nil {
@@ -2157,7 +2157,7 @@ func typeCheckSameTypedTupleExprs(
 			tupleIdx := sameTypeExprsIndices[j]
 			exprs[tupleIdx].(*Tuple).Exprs[elemIdx] = typedExpr
 		}
-		resTypes.TupleContents()[elemIdx] = *resType
+		resTypes.TupleContents()[elemIdx] = resType
 	}
 	for tupleIdx, expr := range exprs {
 		if expr != DNull {

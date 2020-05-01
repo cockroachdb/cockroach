@@ -24,7 +24,7 @@ import (
 func TestBatchReset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	resetAndCheck := func(b coldata.Batch, typs []types.T, n int, shouldReuse bool) {
+	resetAndCheck := func(b coldata.Batch, typs []*types.T, n int, shouldReuse bool) {
 		t.Helper()
 		// Use the data backing the ColVecs slice as a proxy for when things get
 		// reallocated.
@@ -68,9 +68,9 @@ func TestBatchReset(t *testing.T) {
 		}
 	}
 
-	typsInt := []types.T{*types.Int}
-	typsBytes := []types.T{*types.Bytes}
-	typsIntBytes := []types.T{*types.Int, *types.Bytes}
+	typsInt := []*types.T{types.Int}
+	typsBytes := []*types.T{types.Bytes}
+	typsIntBytes := []*types.T{types.Int, types.Bytes}
 	var b coldata.Batch
 
 	// Simple case, reuse

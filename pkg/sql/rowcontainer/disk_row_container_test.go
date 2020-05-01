@@ -36,7 +36,7 @@ import (
 // is invalid. Note that the comparison is only performed on the ordering
 // columns.
 func compareRows(
-	lTypes []types.T,
+	lTypes []*types.T,
 	l, r sqlbase.EncDatumRow,
 	e *tree.EvalContext,
 	d *sqlbase.DatumAlloc,
@@ -44,7 +44,7 @@ func compareRows(
 ) (int, error) {
 	for _, orderInfo := range ordering {
 		col := orderInfo.ColIdx
-		cmp, err := l[col].Compare(&lTypes[col], d, e, &r[orderInfo.ColIdx])
+		cmp, err := l[col].Compare(lTypes[col], d, e, &r[orderInfo.ColIdx])
 		if err != nil {
 			return 0, err
 		}
@@ -119,9 +119,9 @@ func TestDiskRowContainer(t *testing.T) {
 			// Test with different orderings so that we have a mix of key and
 			// value encodings.
 			for _, ordering := range orderings {
-				typs := make([]types.T, numCols)
+				typs := make([]*types.T, numCols)
 				for i := range typs {
-					typs[i] = *sqlbase.RandSortingType(rng)
+					typs[i] = sqlbase.RandSortingType(rng)
 				}
 				row := sqlbase.RandEncDatumRowOfTypes(rng, typs)
 				func() {
@@ -150,14 +150,14 @@ func TestDiskRowContainer(t *testing.T) {
 					// Ensure the datum fields are set and no errors occur when
 					// decoding.
 					for i, encDatum := range readRow {
-						if err := encDatum.EnsureDecoded(&typs[i], &d.datumAlloc); err != nil {
+						if err := encDatum.EnsureDecoded(typs[i], &d.datumAlloc); err != nil {
 							t.Fatal(err)
 						}
 					}
 
 					// Check equality of the row we wrote and the row we read.
 					for i := range row {
-						if cmp, err := readRow[i].Compare(&typs[i], &d.datumAlloc, &evalCtx, &row[i]); err != nil {
+						if cmp, err := readRow[i].Compare(typs[i], &d.datumAlloc, &evalCtx, &row[i]); err != nil {
 							t.Fatal(err)
 						} else if cmp != 0 {
 							t.Fatalf("encoded %s but decoded %s", row.String(typs), readRow.String(typs))
@@ -213,7 +213,7 @@ func TestDiskRowContainer(t *testing.T) {
 					// Ensure datum fields are set and no errors occur when
 					// decoding.
 					for i, encDatum := range row {
-						if err := encDatum.EnsureDecoded(&types[i], &d.datumAlloc); err != nil {
+						if err := encDatum.EnsureDecoded(types[i], &d.datumAlloc); err != nil {
 							t.Fatal(err)
 						}
 					}
@@ -265,7 +265,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 
 	d := MakeDiskRowContainer(
 		&monitor,
-		[]types.T{*types.Int},
+		[]*types.T{types.Int},
 		sqlbase.ColumnOrdering{sqlbase.ColumnOrderInfo{ColIdx: 0, Direction: encoding.Ascending}},
 		tempEngine,
 	)

@@ -49,7 +49,7 @@ func DefaultProcessorTestConfig() ProcessorTestConfig {
 // schema that can be converted to sqlbase.EncDatumRows.
 type ProcessorTestCaseRows struct {
 	Rows  [][]interface{}
-	Types []types.T
+	Types []*types.T
 }
 
 // toEncDatum converts a go value to an EncDatum.
@@ -82,7 +82,7 @@ func (r ProcessorTestCaseRows) toEncDatumRows() sqlbase.EncDatumRows {
 		}
 		result[i] = make(sqlbase.EncDatumRow, len(row))
 		for j, col := range row {
-			result[i][j] = toEncDatum(&r.Types[j], col)
+			result[i][j] = toEncDatum(r.Types[j], col)
 		}
 	}
 	return result

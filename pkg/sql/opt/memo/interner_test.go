@@ -33,12 +33,12 @@ func TestInterner(t *testing.T) {
 	json2, _ := tree.ParseDJSON(`{"a": 5, "b": [1, 2]}`)
 	json3, _ := tree.ParseDJSON(`[1, 2]`)
 
-	tupTyp1 := types.MakeLabeledTuple([]types.T{*types.Int, *types.String}, []string{"a", "b"})
-	tupTyp2 := types.MakeLabeledTuple([]types.T{*types.Int, *types.String}, []string{"a", "b"})
-	tupTyp3 := types.MakeTuple([]types.T{*types.Int, *types.String})
-	tupTyp4 := types.MakeTuple([]types.T{*types.Int, *types.String, *types.Bool})
-	tupTyp5 := types.MakeLabeledTuple([]types.T{*types.Int, *types.String}, []string{"c", "d"})
-	tupTyp6 := types.MakeLabeledTuple([]types.T{*types.String, *types.Int}, []string{"c", "d"})
+	tupTyp1 := types.MakeLabeledTuple([]*types.T{types.Int, types.String}, []string{"a", "b"})
+	tupTyp2 := types.MakeLabeledTuple([]*types.T{types.Int, types.String}, []string{"a", "b"})
+	tupTyp3 := types.MakeTuple([]*types.T{types.Int, types.String})
+	tupTyp4 := types.MakeTuple([]*types.T{types.Int, types.String, types.Bool})
+	tupTyp5 := types.MakeLabeledTuple([]*types.T{types.Int, types.String}, []string{"c", "d"})
+	tupTyp6 := types.MakeLabeledTuple([]*types.T{types.String, types.Int}, []string{"c", "d"})
 
 	tup1 := tree.NewDTuple(tupTyp1, tree.NewDInt(100), tree.NewDString("foo"))
 	tup2 := tree.NewDTuple(tupTyp2, tree.NewDInt(100), tree.NewDString("foo"))

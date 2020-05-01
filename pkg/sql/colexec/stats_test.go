@@ -101,7 +101,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		mergeJoiner, err := newMergeJoinOp(
 			testAllocator, defaultMemoryLimit, queueCfg,
 			colexecbase.NewTestingSemaphore(4), sqlbase.InnerJoin, leftInput, rightInput,
-			[]types.T{*types.Int}, []types.T{*types.Int},
+			[]*types.T{types.Int}, []*types.T{types.Int},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			testDiskAcc,
@@ -144,7 +144,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 }
 
 func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) colexecbase.Operator {
-	typs := []types.T{*types.Int}
+	typs := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatchWithSize(typs, batchSize)
 	vec := batch.ColVec(0).Int64()
 	for i := 0; i < batchSize; i++ {

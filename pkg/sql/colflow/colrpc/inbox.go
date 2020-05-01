@@ -47,7 +47,7 @@ type flowStreamServer interface {
 // closing the stream.
 type Inbox struct {
 	colexecbase.ZeroInputNode
-	typs []types.T
+	typs []*types.T
 
 	converter  *colserde.ArrowBatchConverter
 	serializer *colserde.RecordBatchSerializer
@@ -118,7 +118,7 @@ var _ colexecbase.Operator = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(
-	allocator *colmem.Allocator, typs []types.T, streamID execinfrapb.StreamID,
+	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
 ) (*Inbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {

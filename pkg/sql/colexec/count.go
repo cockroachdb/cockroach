@@ -38,7 +38,7 @@ func NewCountOp(allocator *colmem.Allocator, input colexecbase.Operator) colexec
 	c := &countOp{
 		OneInputNode: NewOneInputNode(input),
 	}
-	c.internalBatch = allocator.NewMemBatchWithSize([]types.T{*types.Int}, 1)
+	c.internalBatch = allocator.NewMemBatchWithSize([]*types.T{types.Int}, 1)
 	return c
 }
 

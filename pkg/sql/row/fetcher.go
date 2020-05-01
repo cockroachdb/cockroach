@@ -91,8 +91,8 @@ type tableInfo struct {
 
 	// -- Fields updated during a scan --
 
-	keyValTypes []types.T
-	extraTypes  []types.T
+	keyValTypes []*types.T
+	extraTypes  []*types.T
 	keyVals     []sqlbase.EncDatum
 	extraVals   []sqlbase.EncDatum
 	row         sqlbase.EncDatumRow
@@ -734,10 +734,10 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	}
 }
 
-func (rf *Fetcher) prettyEncDatums(types []types.T, vals []sqlbase.EncDatum) string {
+func (rf *Fetcher) prettyEncDatums(types []*types.T, vals []sqlbase.EncDatum) string {
 	var buf strings.Builder
 	for i, v := range vals {
-		if err := v.EnsureDecoded(&types[i], rf.alloc); err != nil {
+		if err := v.EnsureDecoded(types[i], rf.alloc); err != nil {
 			buf.WriteString("error decoding: ")
 			buf.WriteString(err.Error())
 		}
@@ -1027,7 +1027,7 @@ func (rf *Fetcher) processValueSingle(
 			if len(kv.Value.RawBytes) == 0 {
 				return prettyKey, "", nil
 			}
-			typ := &table.cols[idx].Type
+			typ := table.cols[idx].Type
 			// TODO(arjun): The value is a directly marshaled single value, so we
 			// unmarshal it eagerly here. This can potentially be optimized out,
 			// although that would require changing UnmarshalColumnValue to operate
@@ -1107,7 +1107,7 @@ func (rf *Fetcher) processValueBytes(
 			return "", "", err
 		}
 		if rf.traceKV {
-			err := encValue.EnsureDecoded(&table.cols[idx].Type, rf.alloc)
+			err := encValue.EnsureDecoded(table.cols[idx].Type, rf.alloc)
 			if err != nil {
 				return "", "", err
 			}
@@ -1213,7 +1213,7 @@ func (rf *Fetcher) NextRowDecoded(
 			rf.rowReadyTable.decodedRow[i] = tree.DNull
 			continue
 		}
-		if err := encDatum.EnsureDecoded(&rf.rowReadyTable.cols[i].Type, rf.alloc); err != nil {
+		if err := encDatum.EnsureDecoded(rf.rowReadyTable.cols[i].Type, rf.alloc); err != nil {
 			return nil, nil, nil, err
 		}
 		rf.rowReadyTable.decodedRow[i] = encDatum.Datum
@@ -1267,7 +1267,7 @@ func (rf *Fetcher) NextRowWithErrors(ctx context.Context) (sqlbase.EncDatumRow, 
 			rf.rowReadyTable.decodedRow[i] = tree.DNull
 			continue
 		}
-		if err := row[i].EnsureDecoded(&rf.rowReadyTable.cols[i].Type, rf.alloc); err != nil {
+		if err := row[i].EnsureDecoded(rf.rowReadyTable.cols[i].Type, rf.alloc); err != nil {
 			return nil, err
 		}
 		rf.rowReadyTable.decodedRow[i] = row[i].Datum
@@ -1439,7 +1439,7 @@ func (rf *Fetcher) finalizeRow() error {
 				var indexColValues []string
 				for _, idx := range table.indexColIdx {
 					if idx != -1 {
-						indexColValues = append(indexColValues, table.row[idx].String(&table.cols[idx].Type))
+						indexColValues = append(indexColValues, table.row[idx].String(table.cols[idx].Type))
 					} else {
 						indexColValues = append(indexColValues, "?")
 					}

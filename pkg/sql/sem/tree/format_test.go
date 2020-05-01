@@ -300,13 +300,13 @@ func TestFormatExpr2(t *testing.T) {
 		// Ensure that nulls get properly type annotated when printed in an
 		// enclosing tuple that has a type for their position within the tuple.
 		{tree.NewDTuple(
-			types.MakeTuple([]types.T{*types.Int, *types.String}),
+			types.MakeTuple([]*types.T{types.Int, types.String}),
 			tree.DNull, tree.NewDString("foo")),
 			tree.FmtParsable,
 			`(NULL::INT8, 'foo':::STRING)`,
 		},
 		{tree.NewDTuple(
-			types.MakeTuple([]types.T{*types.Unknown, *types.String}),
+			types.MakeTuple([]*types.T{types.Unknown, types.String}),
 			tree.DNull, tree.NewDString("foo")),
 			tree.FmtParsable,
 			`(NULL, 'foo':::STRING)`,

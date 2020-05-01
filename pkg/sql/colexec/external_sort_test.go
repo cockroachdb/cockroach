@@ -138,9 +138,9 @@ func TestExternalSortRandomized(t *testing.T) {
 	nTups := coldata.BatchSize()*4 + 1
 	maxCols := 2
 	// TODO(yuzefovich): randomize types as well.
-	typs := make([]types.T, maxCols)
+	typs := make([]*types.T, maxCols)
 	for i := range typs {
-		typs[i] = *types.Int
+		typs[i] = types.Int
 	}
 
 	const numForcedRepartitions = 3
@@ -254,9 +254,9 @@ func BenchmarkExternalSort(b *testing.B) {
 					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
 					// batch) * nCols (number of columns / row).
 					b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
-					typs := make([]types.T, nCols)
+					typs := make([]*types.T, nCols)
 					for i := range typs {
-						typs[i] = *types.Int
+						typs[i] = types.Int
 					}
 					batch := testAllocator.NewMemBatch(typs)
 					batch.SetLength(coldata.BatchSize())
@@ -311,7 +311,7 @@ func createDiskBackedSorter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	input []colexecbase.Operator,
-	typs []types.T,
+	typs []*types.T,
 	ordCols []execinfrapb.Ordering_Column,
 	matchLen int,
 	k int,

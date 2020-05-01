@@ -299,7 +299,7 @@ type IndexBackfiller struct {
 	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
 	colIdxMap map[sqlbase.ColumnID]int
 
-	types   []types.T
+	types   []*types.T
 	rowVals tree.Datums
 	evalCtx *tree.EvalContext
 }
@@ -352,7 +352,7 @@ func (ib *IndexBackfiller) Init(
 		}
 	}
 
-	ib.types = make([]types.T, len(cols))
+	ib.types = make([]*types.T, len(cols))
 	for i := range cols {
 		ib.types[i] = cols[i].Type
 	}

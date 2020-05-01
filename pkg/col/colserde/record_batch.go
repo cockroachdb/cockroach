@@ -69,7 +69,7 @@ type RecordBatchSerializer struct {
 // NewRecordBatchSerializer creates a new RecordBatchSerializer according to
 // typs. Note that Serializing or Deserializing data that does not follow the
 // passed in schema results in undefined behavior.
-func NewRecordBatchSerializer(typs []types.T) (*RecordBatchSerializer, error) {
+func NewRecordBatchSerializer(typs []*types.T) (*RecordBatchSerializer, error) {
 	if len(typs) == 0 {
 		return nil, errors.Errorf("zero length schema unsupported")
 	}
@@ -77,8 +77,8 @@ func NewRecordBatchSerializer(typs []types.T) (*RecordBatchSerializer, error) {
 		numBuffers: make([]int, len(typs)),
 		builder:    flatbuffers.NewBuilder(flatbufferBuilderInitialCapacity),
 	}
-	for i := range typs {
-		s.numBuffers[i] = numBuffersForType(&typs[i])
+	for i, t := range typs {
+		s.numBuffers[i] = numBuffersForType(t)
 	}
 	// s.scratch.padding is used to align metadata to an 8 byte boundary, so
 	// doesn't need to be larger than 7 bytes.
