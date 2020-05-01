@@ -227,7 +227,7 @@ func (b *propBuf) Insert(p *ProposalData, data []byte) (uint64, error) {
 
 	preLen := len(data)
 	p.encodedCommand = data[:preLen+footerLen]
-	if _, err := protoutil.MarshalToWithoutFuzzing(f, p.encodedCommand[preLen:]); err != nil {
+	if _, err := protoutil.MarshalTo(f, p.encodedCommand[preLen:]); err != nil {
 		return 0, err
 	}
 

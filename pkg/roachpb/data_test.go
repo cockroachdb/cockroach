@@ -1045,14 +1045,6 @@ func TestLeaseEqual(t *testing.T) {
 	}
 }
 
-func TestLeaseFuzzNullability(t *testing.T) {
-	var l Lease
-	protoutil.Walk(&l, protoutil.ZeroInsertingVisitor)
-	if l.Expiration == nil {
-		t.Fatal("unexpectedly nil expiration")
-	}
-}
-
 func TestSpanOverlaps(t *testing.T) {
 	sA := Span{Key: []byte("a")}
 	sD := Span{Key: []byte("d")}

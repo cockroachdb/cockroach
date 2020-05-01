@@ -10,11 +10,7 @@
 
 package protoutil
 
-import (
-	"reflect"
-
-	"github.com/gogo/protobuf/proto"
-)
+import "github.com/gogo/protobuf/proto"
 
 // Message extends the proto.Message interface with the MarshalTo and Size
 // methods we tell gogoproto to generate for us.
@@ -25,32 +21,6 @@ type Message interface {
 	Size() int
 }
 
-// MaybeFuzz takes the given proto and, if nullability fuzzing is enabled, walks it using a
-// RandomZeroInsertingVisitor. A suitable copy is made and returned if fuzzing took place.
-func MaybeFuzz(pb Message) Message {
-	if fuzzEnabled {
-		_, noClone := uncloneable(pb)
-		if !noClone {
-			pb = Clone(pb).(Message)
-		} else {
-			// Perform a more expensive clone. Unfortunately this is the code path
-			// hit by anything that holds a UUID (most things).
-			b, err := proto.Marshal(pb)
-			if err != nil {
-				panic(err)
-			}
-			typ := reflect.TypeOf(pb).Elem()
-			target := reflect.New(typ).Interface().(Message)
-			if err := proto.Unmarshal(b, target); err != nil {
-				panic(err)
-			}
-			pb = target
-		}
-		Walk(pb, RandomZeroInsertingVisitor)
-	}
-	return pb
-}
-
 // Interceptor will be called with every proto before it is marshaled.
 // Interceptor is not safe to modify concurrently with calls to Marshal.
 var Interceptor = func(_ Message) {}
@@ -58,18 +28,16 @@ var Interceptor = func(_ Message) {}
 // Marshal encodes pb into the wire format. It is used throughout the code base
 // to intercept calls to proto.Marshal.
 func Marshal(pb Message) ([]byte, error) {
-	pb = MaybeFuzz(pb)
-
 	dest := make([]byte, pb.Size())
-	if _, err := MarshalToWithoutFuzzing(pb, dest); err != nil {
+	if _, err := MarshalTo(pb, dest); err != nil {
 		return nil, err
 	}
 	return dest, nil
 }
 
-// MarshalToWithoutFuzzing encodes pb into the wire format. It is used throughout the code base to
-// intercept calls to pb.MarshalTo.
-func MarshalToWithoutFuzzing(pb Message, dest []byte) (int, error) {
+// MarshalTo encodes pb into the wire format. It is used throughout the code
+// base to intercept calls to pb.MarshalTo.
+func MarshalTo(pb Message, dest []byte) (int, error) {
 	Interceptor(pb)
 	return pb.MarshalTo(dest)
 }
