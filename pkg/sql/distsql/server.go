@@ -135,8 +135,14 @@ func (ds *ServerImpl) Drain(
 // setDraining changes the node's draining state through gossip to the provided
 // state.
 func (ds *ServerImpl) setDraining(drain bool) error {
+	nodeID, err := ds.ServerConfig.NodeID.OptionalNodeIDErr(MultiTenancyIssueNo)
+	if err != nil {
+		// Ignore draining requests when running on behalf of a tenant.
+		// NB: intentionally swallow the error or the server will fatal.
+		return nil
+	}
 	return ds.ServerConfig.Gossip.Deprecated(MultiTenancyIssueNo).AddInfoProto(
-		gossip.MakeDistSQLDrainingKey(ds.ServerConfig.NodeID.Get()),
+		gossip.MakeDistSQLDrainingKey(nodeID),
 		&execinfrapb.DistSQLDrainingInfo{
 			Draining: drain,
 		},
@@ -176,7 +182,7 @@ func (ds *ServerImpl) setupFlow(
 		log.Warningf(ctx, "%v", err)
 		return ctx, nil, err
 	}
-	nodeID := ds.ServerConfig.NodeID.Get()
+	nodeID := ds.ServerConfig.NodeID.DeprecatedNodeID(47902)
 	if nodeID == 0 {
 		return nil, nil, errors.AssertionFailedf("setupFlow called before the NodeID was resolved")
 	}
