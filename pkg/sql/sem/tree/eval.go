@@ -2831,7 +2831,7 @@ type EvalContext struct {
 	Settings    *cluster.Settings
 	ClusterID   uuid.UUID
 	ClusterName string
-	NodeID      roachpb.NodeID
+	NodeID      *base.SQLIDContainer
 	Codec       keys.SQLCodec
 
 	// Locality contains the location of the current node as a set of user-defined
@@ -2946,6 +2946,7 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 		Txn:         &kv.Txn{},
 		SessionData: &sessiondata.SessionData{},
 		Settings:    st,
+		NodeID:      base.TestingIDContainer,
 	}
 	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	ctx.Mon = monitor

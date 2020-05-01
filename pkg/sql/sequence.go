@@ -47,7 +47,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 	seqOpts := descriptor.SequenceOpts
 	var val int64
 	if seqOpts.Virtual {
-		rowid := builtins.GenerateUniqueInt(p.EvalContext().NodeID)
+		rowid := builtins.GenerateUniqueInt(p.EvalContext().NodeID.SQLInstanceID())
 		val = int64(rowid)
 	} else {
 		seqValueKey := keys.TODOSQLCodec.SequenceKey(uint32(descriptor.ID))

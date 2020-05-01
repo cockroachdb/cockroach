@@ -88,7 +88,7 @@ type ServerConfig struct {
 	ClusterName string
 
 	// NodeID is the id of the node on which this Server is running.
-	NodeID *base.NodeIDContainer
+	NodeID *base.SQLIDContainer
 
 	// Codec is capable of encoding and decoding sql table keys.
 	Codec keys.SQLCodec

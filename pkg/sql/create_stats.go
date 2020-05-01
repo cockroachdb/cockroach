@@ -461,7 +461,7 @@ func (r *createStatsResumer) Resume(
 			txn,
 			EventLogCreateStatistics,
 			int32(details.Table.ID),
-			int32(evalCtx.NodeID),
+			int32(evalCtx.NodeID.SQLInstanceID()),
 			struct {
 				TableName string
 				Statement string

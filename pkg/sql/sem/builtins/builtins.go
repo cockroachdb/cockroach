@@ -31,6 +31,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1531,7 +1532,7 @@ CockroachDB supports the following flags:
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDInt(GenerateUniqueInt(ctx.NodeID)), nil
+				return tree.NewDInt(GenerateUniqueInt(ctx.NodeID.SQLInstanceID())), nil
 			},
 			Info: "Returns a unique ID used by CockroachDB to generate unique row IDs if a " +
 				"Primary Key isn't defined for the table. The value is a combination of the " +
@@ -4620,19 +4621,19 @@ func overlay(s, to string, pos, size int) (tree.Datum, error) {
 const NodeIDBits = 15
 
 // GenerateUniqueInt creates a unique int composed of the current time at a
-// 10-microsecond granularity and the node-id. The node-id is stored in the
+// 10-microsecond granularity and the instance-id. The instance-id is stored in the
 // lower 15 bits of the returned value and the timestamp is stored in the upper
 // 48 bits. The top-bit is left empty so that negative values are not returned.
 // The 48-bit timestamp field provides for 89 years of timestamps. We use a
 // custom epoch (Jan 1, 2015) in order to utilize the entire timestamp range.
 //
-// Note that GenerateUniqueInt() imposes a limit on node IDs while
+// Note that GenerateUniqueInt() imposes a limit on instance IDs while
 // generateUniqueBytes() does not.
 //
 // TODO(pmattis): Do we have to worry about persisting the milliseconds value
 // periodically to avoid the clock ever going backwards (e.g. due to NTP
 // adjustment)?
-func GenerateUniqueInt(nodeID roachpb.NodeID) tree.DInt {
+func GenerateUniqueInt(instanceID base.SQLInstanceID) tree.DInt {
 	const precision = uint64(10 * time.Microsecond)
 
 	nowNanos := timeutil.Now().UnixNano()
@@ -4649,15 +4650,15 @@ func GenerateUniqueInt(nodeID roachpb.NodeID) tree.DInt {
 	uniqueIntState.timestamp = timestamp
 	uniqueIntState.Unlock()
 
-	return GenerateUniqueID(int32(nodeID), timestamp)
+	return GenerateUniqueID(int32(instanceID), timestamp)
 }
 
 // GenerateUniqueID encapsulates the logic to generate a unique number from
 // a nodeID and timestamp.
-func GenerateUniqueID(nodeID int32, timestamp uint64) tree.DInt {
-	// We xor in the nodeID so that nodeIDs larger than 32K will flip bits in the
-	// timestamp portion of the final value instead of always setting them.
-	id := (timestamp << NodeIDBits) ^ uint64(nodeID)
+func GenerateUniqueID(instanceID int32, timestamp uint64) tree.DInt {
+	// We xor in the instanceID so that instanceIDs larger than 32K will flip bits
+	// in the timestamp portion of the final value instead of always setting them.
+	id := (timestamp << NodeIDBits) ^ uint64(instanceID)
 	return tree.DInt(id)
 }
 

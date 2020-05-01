@@ -47,6 +47,9 @@ import (
 
 const defaultLeniencySetting = 60 * time.Second
 
+// See https://github.com/cockroachdb/cockroach/issues/47892.
+const multiTenancyIssueNo = 47892
+
 var (
 	nodeLivenessLogLimiter = log.Every(5 * time.Second)
 	// LeniencySetting is the amount of time to defer any attempts to
@@ -100,7 +103,7 @@ type Registry struct {
 	db         *kv.DB
 	ex         sqlutil.InternalExecutor
 	clock      *hlc.Clock
-	nodeID     *base.NodeIDContainer
+	nodeID     *base.SQLIDContainer
 	settings   *cluster.Settings
 	planFn     planHookMaker
 	metrics    Metrics
@@ -178,7 +181,7 @@ func MakeRegistry(
 	nl NodeLiveness,
 	db *kv.DB,
 	ex sqlutil.InternalExecutor,
-	nodeID *base.NodeIDContainer,
+	nodeID *base.SQLIDContainer,
 	settings *cluster.Settings,
 	histogramWindowInterval time.Duration,
 	planFn planHookMaker,
@@ -255,7 +258,7 @@ func (r *Registry) makeCtx() (context.Context, func()) {
 }
 
 func (r *Registry) makeJobID() int64 {
-	return int64(builtins.GenerateUniqueInt(r.nodeID.Get()))
+	return int64(builtins.GenerateUniqueInt(r.nodeID.SQLInstanceID()))
 }
 
 // CreateAndStartJob creates and asynchronously starts a job from record. An
@@ -1026,10 +1029,10 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 
 			// Don't try to start any more jobs unless we're really live,
 			// otherwise we'd just immediately cancel them.
-			if liveness.NodeID == r.nodeID.Get() {
+			if liveness.NodeID == r.nodeID.DeprecatedNodeID(multiTenancyIssueNo) {
 				if !liveness.IsLive(r.clock.Now().GoTime()) {
 					return errors.Errorf(
-						"trying to adopt jobs on node %d which is not live", r.nodeID.Get())
+						"trying to adopt jobs on node %d which is not live", liveness.NodeID)
 				}
 			}
 		}
@@ -1107,7 +1110,9 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		_, runningOnNode := r.mu.jobs[*id]
 		r.mu.Unlock()
 
-		if notLeaseHolder := payload.Lease.NodeID != r.nodeID.Get(); notLeaseHolder {
+		if notLeaseHolder := payload.Lease.NodeID != r.nodeID.DeprecatedNodeID(
+			multiTenancyIssueNo,
+		); notLeaseHolder {
 			// Another node holds the lease on the job, see if we should steal it.
 			if runningOnNode {
 				// If we are currently running a job that another node has the lease on,
@@ -1209,7 +1214,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 }
 
 func (r *Registry) newLease() *jobspb.Lease {
-	nodeID := r.nodeID.Get()
+	nodeID := r.nodeID.DeprecatedNodeID(multiTenancyIssueNo)
 	if nodeID == 0 {
 		panic("jobs.Registry has empty node ID")
 	}

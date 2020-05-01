@@ -84,7 +84,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 		params.p.txn,
 		EventLogCommentOnColumn,
 		int32(n.tableDesc.ID),
-		int32(params.extendedEvalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 		struct {
 			TableName  string
 			ColumnName string

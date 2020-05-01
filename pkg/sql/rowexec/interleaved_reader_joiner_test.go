@@ -403,7 +403,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 				// Run in a RootTxn so that there's no txn metadata produced.
 				Txn:    kv.NewTxn(ctx, s.DB(), s.NodeID()),
-				NodeID: s.NodeID(),
+				NodeID: evalCtx.NodeID,
 			}
 
 			out := &distsqlutils.RowBuffer{}
@@ -533,7 +533,7 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 				// Run in a RootTxn so that there's no txn metadata produced.
 				Txn:    kv.NewTxn(ctx, s.DB(), s.NodeID()),
-				NodeID: s.NodeID(),
+				NodeID: evalCtx.NodeID,
 			}
 
 			out := &distsqlutils.RowBuffer{}
@@ -592,7 +592,7 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 		Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 		// Run in a LeafTxn so that txn metadata is produced.
 		Txn:    leafTxn,
-		NodeID: s.NodeID(),
+		NodeID: evalCtx.NodeID,
 	}
 
 	innerJoinSpec := execinfrapb.InterleavedReaderJoinerSpec{

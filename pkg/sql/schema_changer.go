@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -72,7 +73,7 @@ type SchemaChanger struct {
 	tableID           sqlbase.ID
 	mutationID        sqlbase.MutationID
 	droppedDatabaseID sqlbase.ID
-	nodeID            roachpb.NodeID
+	sqlInstanceID     base.SQLInstanceID
 	db                *kv.DB
 	leaseMgr          *LeaseManager
 
@@ -96,7 +97,7 @@ type SchemaChanger struct {
 func NewSchemaChangerForTesting(
 	tableID sqlbase.ID,
 	mutationID sqlbase.MutationID,
-	nodeID roachpb.NodeID,
+	sqlInstanceID base.SQLInstanceID,
 	db kv.DB,
 	leaseMgr *LeaseManager,
 	jobRegistry *jobs.Registry,
@@ -104,14 +105,14 @@ func NewSchemaChangerForTesting(
 	settings *cluster.Settings,
 ) SchemaChanger {
 	return SchemaChanger{
-		tableID:     tableID,
-		mutationID:  mutationID,
-		nodeID:      nodeID,
-		db:          &db,
-		leaseMgr:    leaseMgr,
-		jobRegistry: jobRegistry,
-		settings:    settings,
-		execCfg:     execCfg,
+		tableID:       tableID,
+		mutationID:    mutationID,
+		sqlInstanceID: sqlInstanceID,
+		db:            &db,
+		leaseMgr:      leaseMgr,
+		jobRegistry:   jobRegistry,
+		settings:      settings,
+		execCfg:       execCfg,
 	}
 }
 
@@ -959,7 +960,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 			txn,
 			schemaChangeEventType,
 			int32(sc.tableID),
-			int32(sc.nodeID),
+			int32(sc.sqlInstanceID),
 			struct {
 				MutationID uint32
 			}{uint32(sc.mutationID)},
@@ -1193,7 +1194,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 			txn,
 			EventLogReverseSchemaChange,
 			int32(sc.tableID),
-			int32(sc.nodeID),
+			int32(sc.sqlInstanceID),
 			struct {
 				Error      string
 				MutationID uint32
@@ -1540,7 +1541,7 @@ func createSchemaChangeEvalCtx(
 			TestingKnobs:       execCfg.EvalContextTestingKnobs,
 			ClusterID:          execCfg.ClusterID(),
 			ClusterName:        execCfg.RPCContext.ClusterName(),
-			NodeID:             execCfg.NodeID.Get(),
+			NodeID:             execCfg.NodeID,
 			Codec:              execCfg.Codec,
 			Locality:           execCfg.Locality,
 		},
@@ -1583,7 +1584,7 @@ func (r schemaChangeResumer) Resume(
 			tableID:              tableID,
 			mutationID:           mutationID,
 			droppedDatabaseID:    droppedDatabaseID,
-			nodeID:               p.ExecCfg().NodeID.Get(),
+			sqlInstanceID:        p.ExecCfg().NodeID.SQLInstanceID(),
 			db:                   p.ExecCfg().DB,
 			leaseMgr:             p.ExecCfg().LeaseManager,
 			testingKnobs:         p.ExecCfg().SchemaChangerTestingKnobs,
@@ -1690,7 +1691,7 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, phs interface{}
 	sc := SchemaChanger{
 		tableID:              details.TableID,
 		mutationID:           details.MutationID,
-		nodeID:               p.ExecCfg().NodeID.Get(),
+		sqlInstanceID:        p.ExecCfg().NodeID.SQLInstanceID(),
 		db:                   p.ExecCfg().DB,
 		leaseMgr:             p.ExecCfg().LeaseManager,
 		testingKnobs:         p.ExecCfg().SchemaChangerTestingKnobs,

@@ -132,7 +132,7 @@ func TestTableReader(t *testing.T) {
 					EvalCtx: &evalCtx,
 					Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 					Txn:     kv.NewTxn(ctx, s.DB(), s.NodeID()),
-					NodeID:  s.NodeID(),
+					NodeID:  evalCtx.NodeID,
 				}
 
 				var out execinfra.RowReceiver
@@ -212,12 +212,12 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 	st := tc.Server(0).ClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	nodeID := tc.Server(0).NodeID()
+
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: st},
-		Txn:     kv.NewTxn(ctx, tc.Server(0).DB(), nodeID),
-		NodeID:  nodeID,
+		Txn:     kv.NewTxn(ctx, tc.Server(0).DB(), tc.Server(0).NodeID()),
+		NodeID:  evalCtx.NodeID,
 	}
 	spec := execinfrapb.TableReaderSpec{
 		Spans: []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)}},
@@ -322,7 +322,7 @@ func TestLimitScans(t *testing.T) {
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 		Txn:     kv.NewTxn(ctx, kvDB, s.NodeID()),
-		NodeID:  s.NodeID(),
+		NodeID:  evalCtx.NodeID,
 	}
 	spec := execinfrapb.TableReaderSpec{
 		Table: *tableDesc,
@@ -426,7 +426,7 @@ func BenchmarkTableReader(b *testing.B) {
 			EvalCtx: &evalCtx,
 			Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 			Txn:     kv.NewTxn(ctx, s.DB(), s.NodeID()),
-			NodeID:  s.NodeID(),
+			NodeID:  evalCtx.NodeID,
 		}
 
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {

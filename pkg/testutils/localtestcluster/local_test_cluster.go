@@ -130,7 +130,11 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		dbCtx.Stopper = ltc.Stopper
 		ltc.DBContext = &dbCtx
 	}
-	ltc.DBContext.NodeID.Set(context.Background(), nodeID)
+	{
+		var c base.NodeIDContainer
+		c.Set(context.Background(), nodeID)
+		ltc.DBContext.NodeID = base.NewSQLIDContainer(0, &c, true /* exposed */)
+	}
 	ltc.DB = kv.NewDBWithContext(cfg.AmbientCtx, factory, ltc.Clock, *ltc.DBContext)
 	transport := kvserver.NewDummyRaftTransport(cfg.Settings)
 	// By default, disable the replica scanner and split queue, which

@@ -91,7 +91,7 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 			params.p.txn,
 			EventLogCreateDatabase,
 			int32(desc.ID),
-			int32(params.extendedEvalCtx.NodeID),
+			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 			struct {
 				DatabaseName string
 				Statement    string

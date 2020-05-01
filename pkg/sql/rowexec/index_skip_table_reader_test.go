@@ -429,7 +429,7 @@ func TestIndexSkipTableReader(t *testing.T) {
 				EvalCtx: &evalCtx,
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 				Txn:     kv.NewTxn(ctx, s.DB(), s.NodeID()),
-				NodeID:  s.NodeID(),
+				NodeID:  evalCtx.NodeID,
 			}
 
 			tr, err := newIndexSkipTableReader(&flowCtx, 0 /* processorID */, &ts, &c.post, nil)
@@ -500,7 +500,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 		EvalCtx: &evalCtx,
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		Txn:     kv.NewTxn(ctx, tc.Server(0).DB(), nodeID),
-		NodeID:  nodeID,
+		NodeID:  evalCtx.NodeID,
 	}
 	spec := execinfrapb.IndexSkipTableReaderSpec{
 		Spans: []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)}},
@@ -625,7 +625,7 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 				EvalCtx: &evalCtx,
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 				Txn:     kv.NewTxn(ctx, s.DB(), s.NodeID()),
-				NodeID:  s.NodeID(),
+				NodeID:  evalCtx.NodeID,
 			}
 
 			b.Run(fmt.Sprintf("TableReader+Distinct-rows=%d-ratio=%d", numRows, valueRatio), func(b *testing.B) {
@@ -662,7 +662,7 @@ func BenchmarkIndexScanTableReader(b *testing.B) {
 				EvalCtx: &evalCtx,
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 				Txn:     kv.NewTxn(ctx, s.DB(), s.NodeID()),
-				NodeID:  s.NodeID(),
+				NodeID:  evalCtx.NodeID,
 			}
 
 			// run the index skip table reader

@@ -71,7 +71,8 @@ func newIndexSkipTableReader(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (*indexSkipTableReader, error) {
-	if flowCtx.NodeID == 0 {
+	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
+	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 
@@ -183,9 +184,12 @@ func (t *indexSkipTableReader) Next() (sqlbase.EncDatumRow, *execinfrapb.Produce
 		// Range info resets once a scan begins, so we need to maintain
 		// the range info we get after each scan.
 		if !t.ignoreMisplannedRanges {
-			ranges := execinfra.MisplannedRanges(t.Ctx, t.fetcher.GetRangesInfo(), t.FlowCtx.NodeID)
-			for _, r := range ranges {
-				t.misplannedRanges = roachpb.InsertRangeInfo(t.misplannedRanges, r)
+			nodeID, ok := t.FlowCtx.NodeID.OptionalNodeID()
+			if ok {
+				ranges := execinfra.MisplannedRanges(t.Ctx, t.fetcher.GetRangesInfo(), nodeID)
+				for _, r := range ranges {
+					t.misplannedRanges = roachpb.InsertRangeInfo(t.misplannedRanges, r)
+				}
 			}
 		}
 

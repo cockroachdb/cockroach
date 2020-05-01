@@ -355,7 +355,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		params.p.txn,
 		EventLogCreateTable,
 		int32(desc.ID),
-		int32(params.extendedEvalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 		struct {
 			TableName string
 			Statement string
