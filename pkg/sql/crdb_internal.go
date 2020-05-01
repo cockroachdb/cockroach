@@ -116,7 +116,8 @@ CREATE TABLE crdb_internal.node_build_info (
 )`,
 	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		execCfg := p.ExecCfg()
-		nodeID := tree.NewDInt(tree.DInt(int64(execCfg.NodeID.Get())))
+		nodeID, _ := execCfg.NodeID.OptionalNodeID()
+		dNodeID := tree.NewDInt(tree.DInt(nodeID))
 
 		info := build.GetInfo()
 		for k, v := range map[string]string{
@@ -128,7 +129,7 @@ CREATE TABLE crdb_internal.node_build_info (
 			"Channel":      info.Channel,
 		} {
 			if err := addRow(
-				nodeID,
+				dNodeID,
 				tree.NewDString(k),
 				tree.NewDString(v),
 			); err != nil {
