@@ -46,3 +46,23 @@ func minChordAngle(a s1.ChordAngle, b s1.ChordAngle) s1.ChordAngle {
 	}
 	return b
 }
+
+// maybeClosestPointToEdge projects the point onto the infinite line represented
+// by the edge. This will return the point on the line closest to the edge.
+// It will return the closest point on the line, as well as a bool representing
+// whether the point that is projected lies directly on the edge as a segment.
+func maybeClosestPointToEdge(edge s2.Edge, point s2.Point) (s2.Point, bool) {
+	// Project the point onto the normal of the edge. A great circle passing through
+	// the normal and the point will intersect with the great circle represented
+	// by the given edge.
+	normal := edge.V0.Vector.Cross(edge.V1.Vector).Normalize()
+	// To find the point where the great circle represented by the edge and the
+	// great circle represented by (normal, point), we project the point
+	// onto the normal and subtract it.
+	normalScaledToPoint := normal.Mul(normal.Dot(point.Vector))
+	closestPoint := s2.Point{Vector: point.Vector.Sub(normalScaledToPoint).Normalize()}
+	// We then check whether the given point lies on the geodesic of the edge,
+	// as the above algorithm only generates a point on the great circle
+	// represented by the edge.
+	return closestPoint, (&s2.Polyline{edge.V0, edge.V1}).IntersectsCell(s2.CellFromPoint(closestPoint))
+}
