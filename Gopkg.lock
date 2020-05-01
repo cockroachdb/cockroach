@@ -406,7 +406,7 @@
 
 [[projects]]
   branch = "v1.2.4-cockroach20.1"
-  digest = "1:f4441cc580b6f69ff82a4130589b43cf4b14883e9f090db66f9c4ad337b41ee4"
+  digest = "1:f3e110587a7cde6152fe8861a5873ffb552232b8a91ce444075397f4ebabd4cd"
   name = "github.com/cockroachdb/errors"
   packages = [
     ".",
@@ -429,7 +429,7 @@
     "withstack",
   ]
   pruneopts = "UT"
-  revision = "5f3a6d1e1cf5d5d6212d56dc3833d6d57c7545e4"
+  revision = "fcfc812fae48db497f9fb1dbc7b4d4041caa06fa"
 
 [[projects]]
   digest = "1:a44e537b3e080ff297315d166956dba9607f070644a89be78b59af6c54876b64"
@@ -2265,6 +2265,7 @@
     "golang.org/x/tools/go/ast/inspector",
     "golang.org/x/tools/go/buildutil",
     "golang.org/x/tools/go/packages",
+    "golang.org/x/tools/go/types/typeutil",
     "google.golang.org/api/iterator",
     "google.golang.org/api/option",
     "google.golang.org/grpc",
