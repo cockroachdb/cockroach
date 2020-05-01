@@ -29,6 +29,11 @@ func (r *Replica) quiesceLocked() bool {
 		}
 		return false
 	}
+	// Note that we're not calling r.hasPendingProposalQuotaRLocked(). That has
+	// been checked on the leaseholder before deciding to quiesce. There's no
+	// point in checking it followers since the quota is reset when the lease
+	// changes.
+
 	if !r.mu.quiescent {
 		if log.V(3) {
 			log.Infof(ctx, "quiescing %d", r.RangeID)
@@ -161,6 +166,7 @@ type quiescer interface {
 	raftLastIndexLocked() (uint64, error)
 	hasRaftReadyRLocked() bool
 	hasPendingProposalsRLocked() bool
+	hasPendingProposalQuotaRLocked() bool
 	ownsValidLeaseRLocked(ts hlc.Timestamp) bool
 	mergeInProgressRLocked() bool
 	isDestroyedRLocked() (DestroyReason, error)
@@ -170,6 +176,28 @@ type quiescer interface {
 // access to Replica internals are gated by the quiescer interface to
 // facilitate testing. Returns the raft.Status and true on success, and (nil,
 // false) on failure.
+//
+// Deciding to quiesce can race with requests being evaluated and their
+// proposals. Any proposal happening after the range has quiesced will
+// un-quiesce the range.
+//
+// A replica should quiesce if all the following hold:
+// a) The leaseholder and the leader are collocated. We don't want to quiesce
+// otherwise as we don't want to quiesce while a leader election is in progress,
+// and also we don't want to quiesce if another replica might have commands
+// pending that require this leader for proposing them. Note that, after the
+// leaseholder decides to quiesce, followers can still refuse quiescing if they
+// have pending commands.
+// b) There are no commands in-flight proposed by this leaseholder. Clients can
+// be waiting for results while there's pending proposals.
+// c) There is no outstanding proposal quota. Quiescing while there's quota
+// outstanding can lead to deadlock. See #46699.
+// d) All the live followers are caught up. We don't want to quiesce when
+// followers are behind because then they might not catch up until we
+// un-quiesce. We like it when everybody is caught up because otherwise
+// failovers can take longer.
+//
+// NOTE: The last 3 conditions are fairly, but not completely, overlapping.
 func shouldReplicaQuiesce(
 	ctx context.Context, q quiescer, now hlc.Timestamp, livenessMap IsLiveMap,
 ) (*raft.Status, bool) {
@@ -179,6 +207,16 @@ func shouldReplicaQuiesce(
 	if q.hasPendingProposalsRLocked() {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: proposals pending")
+		}
+		return nil, false
+	}
+	// Don't quiesce if there's outstanding quota - it can lead to deadlock. This
+	// condition is largely subsumed by the upcoming replication state check,
+	// except that the conditions for replica availability are different, and the
+	// timing of releasing quota is unrelated to this function.
+	if q.hasPendingProposalQuotaRLocked() {
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: replication quota outstanding")
 		}
 		return nil, false
 	}

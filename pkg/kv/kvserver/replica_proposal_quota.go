@@ -24,11 +24,6 @@ import (
 	"go.etcd.io/etcd/raft/tracker"
 )
 
-// MaxQuotaReplicaLivenessDuration is the maximum duration that a replica
-// can remain inactive while still being counting against the range's
-// available proposal quota.
-const MaxQuotaReplicaLivenessDuration = 10 * time.Second
-
 func (r *Replica) maybeAcquireProposalQuota(
 	ctx context.Context, quota uint64,
 ) (*quotapool.IntAlloc, error) {
@@ -145,8 +140,17 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			return
 		}
 
-		// Only consider followers that are active.
-		if !r.mu.lastUpdateTimes.isFollowerActive(ctx, rep.ReplicaID, now) {
+		// Only consider followers that are active. Inactive ones don't decrease
+		// minIndex - i.e. they don't hold up releasing quota.
+		//
+		// The policy for determining who's active is more strict than the one used
+		// for purposes of quiescing. Failure to consider a dead/stuck node as such
+		// for the purposes of releasing quota can have bad consequences (writes
+		// will stall), whereas for quiescing the downside is lower.
+
+		if !r.mu.lastUpdateTimes.isFollowerActiveSince(
+			ctx, rep.ReplicaID, now, r.store.cfg.RangeLeaseActiveDuration(),
+		) {
 			return
 		}
 
