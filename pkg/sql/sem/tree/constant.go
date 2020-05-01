@@ -73,10 +73,10 @@ func typeCheckConstant(c Constant, ctx *SemaContext, desired *types.T) (ret Type
 	if desired.Family() == types.IntFamily {
 		if n, ok := c.(*NumVal); ok {
 			_, err := n.AsInt64()
-			switch err {
-			case errConstOutOfRange64:
+			switch {
+			case errors.Is(err, errConstOutOfRange64):
 				return nil, err
-			case errConstNotInt:
+			case errors.Is(err, errConstNotInt):
 			default:
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error")
 			}

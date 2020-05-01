@@ -1722,6 +1722,7 @@ func TestLint(t *testing.T) {
 			// TODO(knz): remove the code in log and replace by the errors'
 			// own redact code.
 			stream.GrepNot(`pkg/util/log/crash_reporting\.go:.*invalid direct cast on error object`),
+			stream.GrepNot(`pkg/util/log/crash_reporting\.go:.*invalid direct comparison of error object`),
 		}
 
 		roachlint, err := exec.LookPath("roachvet")

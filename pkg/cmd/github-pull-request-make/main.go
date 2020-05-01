@@ -74,9 +74,9 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 	var inPrefix bool
 	for reader := bufio.NewReader(r); ; {
 		line, isPrefix, err := reader.ReadLine()
-		switch err {
-		case nil:
-		case io.EOF:
+		switch {
+		case err == nil:
+		case err == io.EOF:
 			return pkgs, nil
 		default:
 			return nil, err
